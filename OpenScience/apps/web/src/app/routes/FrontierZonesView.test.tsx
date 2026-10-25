@@ -66,9 +66,13 @@ describe("证据专区 opens in place", () => {
     const facts = expectComposed(document.body, { tablists: 1, stepRail: false, toolbar: true });
     expect(screen.getByRole("heading", { level: 1, name: "前沿动态" })).toBeInTheDocument();
     expect(within(facts.toolbars[0]).getByRole("tab", { name: "证据专区" })).toHaveAttribute("aria-selected", "true");
-    const scope = within(facts.toolbars[0]).getByRole("group", { name: "专区范围" });
-    expect(within(scope).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["全部专区", "我创建的", "我关注的"]);
-    expect(within(scope).getByRole("button", { name: "全部专区" })).toHaveAttribute("aria-pressed", "true");
+    // The scope is a menu on the views' own row (owner, 2026-10-25: one row of controls).
+    const scope = within(facts.toolbars[0]).getByRole("button", { name: "专区范围" });
+    expect(scope).toHaveTextContent("全部专区");
+    await userEvent.click(scope);
+    expect(screen.getAllByRole("menuitemradio").map((item) => item.textContent)).toEqual(["全部专区", "我创建的", "我关注的"]);
+    expect(screen.getByRole("menuitemradio", { name: "全部专区" })).toHaveAttribute("aria-checked", "true");
+    await userEvent.keyboard("{Escape}");
     expect(within(facts.toolbars[0]).getByRole("searchbox", { name: "搜索" })).toBeInTheDocument();
     // The feed is not read for the directory.
     expect(client.listFrontierItems.mock.calls.filter(([query]) => !query.safety)).toHaveLength(1);
@@ -77,9 +81,11 @@ describe("证据专区 opens in place", () => {
   it("switches scope in the toolbar, keeps it in the address and reads the other list", async () => {
     mount();
     await screen.findByRole("link", { name: "急诊医学" });
-    await userEvent.click(within(screen.getByRole("group", { name: "专区范围" })).getByRole("button", { name: "我创建的" }));
+    await userEvent.click(screen.getByRole("button", { name: "专区范围" }));
+    await userEvent.click(screen.getByRole("menuitemradio", { name: "我创建的" }));
     await waitFor(() => expect(zones.listEvidenceZones).toHaveBeenLastCalledWith("", null, "owned"));
     expect(where()).toBe("/app/frontier?view=zones&scope=owned");
+    expect(screen.getByRole("button", { name: "专区范围：我创建的" })).toHaveTextContent("我创建的");
     // Another view lets go of the zones' scope.
     await userEvent.click(screen.getByRole("tab", { name: "全部" }));
     expect(where()).toBe("/app/frontier?view=all");

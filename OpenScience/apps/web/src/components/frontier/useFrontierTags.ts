@@ -115,3 +115,46 @@ export function useTagSuggestions(text: string, enabled: boolean): FrontierTagCo
   }, [words]);
   return words && found.words === words ? found.tags : [];
 }
+
+/** Which kinds of follow `useFollowSet` answers for: the ones a reader makes from the band (a specialty in 「筛选」, a search's words). */
+export type BandFollowKind = "specialty" | "topic";
+
+/**
+ * Whether the reader follows a specialty or a topic (null while that is not known), and 「关注」 it — for the 「筛选」 panel's chosen
+ * specialties and a search's 「关注“<词>”」. One read of the follows, again whenever a follow changes anywhere; a failure leaves every
+ * answer unknown, and no 「关注」 is offered rather than a wrong one.
+ */
+export function useFollowSet(enabled: boolean): {
+  followed: (kind: BandFollowKind, key: string) => boolean | null;
+  pending: (kind: BandFollowKind, key: string) => boolean;
+  follow: (kind: BandFollowKind, key: string, label: string) => void;
+} {
+  const [held, setHeld] = useState<Set<string> | null>(null);
+  const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    if (!enabled) return undefined;
+    let active = true;
+    const read = () => {
+      listFrontierFollows().then(
+        (follows) => { if (active) setHeld(new Set(follows.filter((entry) => !entry.muted).map((entry) => `${entry.kind}:${entry.key.toLowerCase()}`))); },
+        () => { if (active) setHeld(null); },
+      );
+    };
+    read();
+    window.addEventListener(FRONTIER_FOLLOWS_CHANGED, read);
+    return () => { active = false; window.removeEventListener(FRONTIER_FOLLOWS_CHANGED, read); };
+  }, [enabled]);
+  const id = (kind: BandFollowKind, key: string) => `${kind}:${key.toLowerCase()}`;
+  const followed = useCallback((kind: BandFollowKind, key: string) => (held ? held.has(id(kind, key)) : null), [held]);
+  const pending = useCallback((kind: BandFollowKind, key: string) => busy.has(id(kind, key)), [busy]);
+  const follow = useCallback((kind: BandFollowKind, key: string, label: string) => {
+    const at = id(kind, key);
+    if (busy.has(at)) return;
+    setBusy((current) => new Set([...current, at]));
+    addFrontierFollow({ kind, key, label }).then(
+      () => { setHeld((current) => new Set([...(current ?? []), at])); toast.success("已关注"); },
+      (error: unknown) => toast.error(frontierErrorMessage(error)),
+    ).finally(() => setBusy((current) => { const next = new Set(current); next.delete(at); return next; }));
+  }, [busy]);
+  return { followed, pending, follow };
+}

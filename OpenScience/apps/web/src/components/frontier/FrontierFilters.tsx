@@ -1,6 +1,5 @@
-import { X } from "lucide-react";
 import type { FilterOption } from "@/components/ui/FilterChips";
-import type { ToolbarFilter, ToolbarPanel } from "@/components/ui/Toolbar";
+import type { ToolbarAction, ToolbarFilter, ToolbarPanel, ToolbarToken } from "@/components/ui/Toolbar";
 import {
   FRONTIER_CHANNEL_FILTERS,
   FRONTIER_EVIDENCE_TYPES,
@@ -95,20 +94,25 @@ export const NO_FILTERS: Omit<FrontierFilterValue, "byTime"> = Object.freeze({
   channel: "", lane: "", specialties: [], tag: "", evidence: "", starred: false, unread: false, window: "",
 }) as Omit<FrontierFilterValue, "byTime">;
 
-/** 「专科」's chip: the one chosen (「肿瘤」), or the first and how many (「肿瘤 等 3 个」). */
+/** 「专科」's token: the one chosen (「肿瘤」), or the first and how many (「肿瘤 等 3 个」). */
 export function specialtyChoice(specialties: readonly string[]): string | undefined {
   if (specialties.length === 0) return undefined;
   const first = SPECIALTY_LABELS[specialties[0]] ?? specialties[0];
   return specialties.length === 1 ? first : `${first} 等 ${specialties.length} 个`;
 }
 
-/** The 「专科」 panel's second level: the chosen specialties' tags most used in 30 days — still being read, or read. */
+/** A specialty's name as the reader sees it. */
+export function specialtyLabel(key: string): string {
+  return SPECIALTY_LABELS[key] ?? key;
+}
+
+/** 专科's second level: the chosen specialties' tags most used in 30 days — still being read, or read. */
 export interface HotTags {
   loading: boolean;
   tags: readonly FrontierTagCount[];
 }
 
-/** The chosen tag's chip and its 「关注」. */
+/** The chosen tag's token and its 「关注」. */
 export interface ChosenTag {
   slug: string;
   /** Its name, once known; the slug until then. */
@@ -120,39 +124,42 @@ export interface ChosenTag {
 }
 
 /**
- * The feed's filters (owner, 2026-10-23), declared for the page's `Toolbar`, which draws them on the band's second row:
+ * The feed's filters (owner, 2026-10-25: 「不要横着罗列着，顶上弄好几行」), declared for the page's `Toolbar`, which keeps every one of
+ * them inside its one 「筛选」 (`folded`) and says what is on as tokens on the views' own row. The panel, in the order a reader narrows
+ * by (NN/g: the general first):
  *
- *  - 栏目 as a row of chips, one choice that applies at once — all nine in sight on a wide screen, a row that scrolls on a phone;
- *  - 「专科 ▾」, a panel of the thirty specialties grouped as the domain groups them (several at once) and, once one is chosen, their
- *    「热门标签」 (one at once, which sets the tag); the chip reads the choice (「肿瘤 等 3 个」) and the panel has its 「清除」;
- *  - 「更多筛选 ▾」, a panel of 来源 (the old 全部渠道), 证据类型, 时间 (in 全部) and the switches 只看收藏 and 只看未读;
- *  - the chosen tag, 「#肝细胞癌 ×」 (a press lets go of it), with 「关注」 beside it;
- *  - while searching, 「按时间」.
+ *  - 栏目, one choice that applies at once;
+ *  - 专科, the thirty grouped as the domain groups them, several at once, each chosen one with its 「关注」 / 「已关注」
+ *    (`specialtyFollow`); once one is chosen their 热门标签 (one at once, which sets the tag — the page's own token, so the group is
+ *    quiet);
+ *  - 来源, 证据类型, 时间 (in 全部) and the switch 只看收藏.
  *
- * On a phone the 栏目 row and the chosen tag stay on the row and the rest fold into the toolbar's one 「筛选」 sheet, where 专科 keeps
- * its groups and 热门标签, 来源, 证据类型, 时间 and the switches follow.
+ * 只看未读 is not here: it is on the list's first day header (`FeedList`), as AIHOT's timeline has it. While searching, 「按时间」 is a
+ * toggle on the row. The chosen tag is the page's token (`tagToken`), with its 「关注」.
  */
-export function feedFilters({ value, showWindow, searching, onChange, tag, hotTags }: {
+export function feedFilters({ value, showWindow, searching, onChange, hotTags, specialtyFollow }: {
   value: FrontierFilterValue;
   showWindow: boolean;
   searching: boolean;
   onChange: (next: Partial<FrontierFilterValue>) => void;
-  /** The chosen tag, or null. */
-  tag: ChosenTag | null;
   hotTags: HotTags;
+  /** A chosen specialty's 「关注」, or null where the reader's follows are not known. */
+  specialtyFollow?: (key: string) => ToolbarAction | null;
 }): ToolbarFilter[] {
   const hot = hotTags.tags.map((entry) => ({ value: entry.slug, label: `#${entry.name}` }));
   const specialty: ToolbarPanel = {
     kind: "panel",
     label: "专科",
-    chosen: specialtyChoice(value.specialties),
+    folded: true,
     groups: [
-      { kind: "chips", multi: true, label: "专科", options: SPECIALTY_OPTIONS, sections: SPECIALTY_SECTIONS, value: value.specialties, onChange: (specialties: string[]) => onChange({ specialties }) },
+      { kind: "chips", multi: true, label: "专科", options: SPECIALTY_OPTIONS, sections: SPECIALTY_SECTIONS, value: value.specialties,
+        onChange: (specialties: string[]) => onChange({ specialties }), chosenAction: specialtyFollow },
       ...(value.specialties.length > 0 ? [{
         kind: "chips" as const,
         label: "热门标签",
         options: hot,
-        // Pressed only where it is one of them: a tag chosen elsewhere is its own chip on the row.
+        quiet: true,
+        // Pressed only where it is one of them: a tag chosen elsewhere is the row's own token.
         value: hot.some((option) => option.value === value.tag) ? value.tag : "",
         neutral: "",
         placeholder: hotTags.loading ? "正在读取" : "暂无热门标签",
@@ -161,33 +168,24 @@ export function feedFilters({ value, showWindow, searching, onChange, tag, hotTa
     ],
     onClear: () => onChange({ specialties: [], tag: "" }),
   };
-  const more: ToolbarPanel = {
-    kind: "panel",
-    label: "更多筛选",
-    groups: [
-      { kind: "chips", label: "来源", options: CHANNEL_OPTIONS, value: value.channel, neutral: "", onChange: (channel: string) => onChange({ channel: readChannel(channel) }) },
-      { kind: "chips", label: "证据类型", options: EVIDENCE_OPTIONS, value: value.evidence, neutral: "", onChange: (evidence: string) => onChange({ evidence: readEvidence(evidence) }) },
-      ...(showWindow ? [{ kind: "chips" as const, label: "时间", options: WINDOW_OPTIONS, value: value.window, neutral: "", onChange: (window: string) => onChange({ window: (FRONTIER_WINDOWS.includes(window as FrontierWindow) ? window : "") as FrontierWindow | "" }) }] : []),
-      { kind: "toggle", label: "只看收藏", pressed: value.starred, onChange: (starred: boolean) => onChange({ starred }) },
-      { kind: "toggle", label: "只看未读", pressed: value.unread, onChange: (unread: boolean) => onChange({ unread }) },
-    ],
-    onClear: () => onChange({ channel: "", evidence: "", window: "", starred: false, unread: false }),
-  };
   return [
-    // Pinned: on a phone the nine chips stay on the row as a row that scrolls, and only the panels fold.
-    { kind: "chips", label: "栏目", pinned: true, scroll: true, options: LANE_OPTIONS, value: value.lane, neutral: "", onChange: (lane) => onChange({ lane }) },
+    { kind: "chips", label: "栏目", folded: true, options: LANE_OPTIONS, value: value.lane, neutral: "", onChange: (lane) => onChange({ lane }) },
     specialty,
-    more,
-    ...(tag ? [{
-      kind: "toggle" as const,
-      label: `#${tag.name}`,
-      icon: X,
-      iconEnd: true,
-      pressed: true,
-      pinned: true,
-      onChange: () => onChange({ tag: "" }),
-      action: tag.followed === null ? undefined : { label: tag.followed ? "已关注" : "关注", disabled: tag.followed || tag.following, onClick: tag.onFollow },
-    }] : []),
+    { kind: "chips", label: "来源", folded: true, options: CHANNEL_OPTIONS, value: value.channel, neutral: "", onChange: (channel: string) => onChange({ channel: readChannel(channel) }) },
+    { kind: "chips", label: "证据类型", folded: true, options: EVIDENCE_OPTIONS, value: value.evidence, neutral: "", onChange: (evidence: string) => onChange({ evidence: readEvidence(evidence) }) },
+    ...(showWindow ? [{ kind: "chips" as const, label: "时间", folded: true, options: WINDOW_OPTIONS, value: value.window, neutral: "",
+      onChange: (window: string) => onChange({ window: (FRONTIER_WINDOWS.includes(window as FrontierWindow) ? window : "") as FrontierWindow | "" }) }] : []),
+    { kind: "toggle", label: "只看收藏", folded: true, pressed: value.starred, onChange: (starred: boolean) => onChange({ starred }) },
     ...(searching ? [{ kind: "toggle" as const, label: "按时间", pressed: value.byTime, onChange: (pressed: boolean) => onChange({ byTime: pressed }) }] : []),
   ];
+}
+
+/** The chosen tag as the row's token: a press lets go of it, and 「关注」 / 「已关注」 beside it once the reader's follows are known. */
+export function tagToken(tag: ChosenTag, onRemove: () => void): ToolbarToken {
+  return {
+    label: `#${tag.name}`,
+    filter: true,
+    onRemove,
+    action: tag.followed === null ? undefined : { label: tag.followed ? "已关注" : "关注", disabled: tag.followed || tag.following, onClick: tag.onFollow },
+  };
 }

@@ -1,9 +1,10 @@
-import { Fragment, useId, useLayoutEffect, useRef, useState, type CSSProperties, type InputHTMLAttributes, type KeyboardEvent, type ReactNode, type RefObject } from "react";
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type InputHTMLAttributes, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { cn } from "@/lib/cn";
-import type { LucideIcon } from "lucide-react";
+import { Search, SlidersHorizontal, X, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/ui/Drawer";
 import { FilterChip, FilterChips, FilterSelect, type FilterOption } from "@/components/ui/FilterChips";
+import { IconButton, iconButtonClasses } from "@/components/ui/IconButton";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Switch } from "@/components/ui/Switch";
 import { Tabs, type TabItem } from "@/components/ui/Tabs";
@@ -36,9 +37,16 @@ import { useNarrow } from "@/lib/useMediaQuery";
  * be one long menu that stacked 全部栏目 over 全部专科 as one list of thirty-odd lines.
  *
  * In the sticky band (`inBand`, which `PageShell` sets) a row is one row, always: a module's band is the same height on every tab
- * (DESIGN.md rule 9). With `controlsBelow` the views and the search are the first row and the filters, the count and the actions a
- * second one under it, drawn only where the open view has any (前沿动态, whose feed has a dimension of nine chips: 2026-10-23). A
- * `scroll` chip group gives way to the rest of its row by scrolling sideways rather than folding.
+ * (DESIGN.md rule 9). A `scroll` chip group gives way to the rest of its row by scrolling sideways rather than folding.
+ *
+ * **One row with a filter button** (`oneRow`, 前沿动态; owner, 2026-10-25: 「不要横着罗列着，顶上弄好几行」). The views at the left and,
+ * at the right of the same row, the open view's controls, then what is applied, 「筛选」 and the search last. A filter declared
+ * `folded` stays inside 「筛选」 at every width; what is on in it is said on the row as tokens — each a press that lets go of it, at
+ * most two and then 「+N」, which opens the panel, and none once the row is short, when the chip's count (「筛选 · 2」, with the accent
+ * mark) says it alone. The page's own applied things (`tokens`: a chosen tag with its 「关注」) are tokens of the same kind. On a phone
+ * the row is the scrolling views with 「筛选」 and the search as icons — the search opens over the row, the keyboard up — and one more
+ * line under it only while something narrows the list (the tokens) or a `pinned` control has to stay in sight; the rest is the
+ * sheet, whose first section may be the page's (`sheetLead`). 「/」 puts the cursor in the search (`searchShortcut`).
  *
  * `onClear` makes a 「清除筛选」 chip appear while any filter or the search is on, and lets go of all of them; `onReset` (or `onClear`)
  * is the folded panel's 「重置」. `data-toolbar` is what the walk and `pageComposition.test.tsx` read: the first toolbar must come
@@ -64,6 +72,10 @@ export interface ToolbarSelect {
   allLabel?: string;
   /** A contextual View selector stays explicit when other filters fold. */
   pinned?: boolean;
+  /** Inside 「筛选」 at every width (`oneRow`). */
+  folded?: boolean;
+  /** The chip's text while nothing is chosen, where it is not the dimension's name (「全部专区 ▾」). Default `label`. */
+  emptyText?: string;
 }
 
 interface ToolbarChipsBase {
@@ -85,6 +97,13 @@ interface ToolbarChipsBase {
   sections?: readonly { label: string; values: readonly string[] }[];
   /** In a panel: what the group says while it has no options (「暂无热门标签」). Without it an empty group is not drawn. */
   placeholder?: string;
+  /** Inside 「筛选」 at every width (`oneRow`). */
+  folded?: boolean;
+  /**
+   * Not counted on 「筛选」 and no token of its own: what it chooses the page says elsewhere (热门标签 sets the chosen tag, which is the
+   * page's own token).
+   */
+  quiet?: boolean;
 }
 
 /** One value. Pressing the chosen chip again lets go of it where no option stands for 「全部」 (a tag). */
@@ -104,10 +123,19 @@ export interface ToolbarMultiChips extends ToolbarChipsBase {
   multi: true;
   value: readonly string[];
   onChange(value: string[]): void;
+  /** In a panel: a small button beside each chosen value, under the chips (「肿瘤 关注」, 「心血管 已关注」). */
+  chosenAction?: (value: string) => ToolbarAction | null;
 }
 
 /** Either kind of chip group, as the toolbar draws them. */
 type AnyChips = ToolbarChips | ToolbarMultiChips;
+
+/** A small text button beside a chip or a token (「关注」 a chosen tag). */
+export interface ToolbarAction {
+  label: string;
+  onClick(): void;
+  disabled?: boolean;
+}
 
 export interface ToolbarToggle {
   kind: "toggle";
@@ -119,8 +147,10 @@ export interface ToolbarToggle {
   iconEnd?: boolean;
   /** Stays on the row when the others fold (a chosen tag, 「#肝细胞癌 ×」). */
   pinned?: boolean;
+  /** Inside 「筛选」 at every width (`oneRow`), as a switch. */
+  folded?: boolean;
   /** A small text button beside the chip (「关注」 a chosen tag). */
-  action?: { label: string; onClick(): void; disabled?: boolean };
+  action?: ToolbarAction;
 }
 
 /** A group inside a panel: a choice, several, or an on/off switch. */
@@ -137,9 +167,24 @@ export interface ToolbarPanel {
   /** Lets go of everything in the panel at once (its 「清除」). Without it each group is let go of in turn. */
   onClear?: () => void;
   pinned?: boolean;
+  /** Its groups inside 「筛选」 at every width (`oneRow`). */
+  folded?: boolean;
 }
 
 export type ToolbarFilter = ToolbarSelect | ToolbarChips | ToolbarToggle | ToolbarPanel;
+
+/**
+ * Something applied to the list that the row says as a token (`oneRow`), beside the tokens of what is on in 「筛选」: a press lets go
+ * of it. The page's own — a chosen tag with its 「关注」, the one follow a list is narrowed to.
+ */
+export interface ToolbarToken {
+  /** What it says (「#肝细胞癌」, 「只看：肿瘤」); the press is named 「移除筛选：…」. */
+  label: string;
+  onRemove(): void;
+  action?: ToolbarAction;
+  /** One of the filters `onReset` lets go of (a chosen tag), so 「清除」 takes it with the others. */
+  filter?: boolean;
+}
 
 /** The words a search box offers to complete (前沿动态's tags): a list under the box while it is typed in. */
 export interface ToolbarSuggestions {
@@ -180,8 +225,16 @@ export interface ToolbarProps {
   className?: string;
   /** The toolbar stands in the sticky band, so its row never wraps: what does not fit folds (`PageShell` sets it). */
   inBand?: boolean;
-  /** With `views`: the views and the search on the first row, the filters, the count and the actions on a second under it. */
-  controlsBelow?: boolean;
+  /** With `views`: one row at every width, with a filter button that holds the `folded` filters (see the module note). */
+  oneRow?: boolean;
+  /** `oneRow`: the page's own applied things, said as tokens before 「筛选」. */
+  tokens?: readonly ToolbarToken[];
+  /** `oneRow`: the first section of the phone's 「筛选」 sheet (关注's followed things); `close` closes the sheet. */
+  sheetLead?: (close: () => void) => ReactNode;
+  /** How many items the filters leave, where the list says it: the panel's 「共 N 条」 and the sheet's 「查看 N 条」. Never guessed. */
+  resultCount?: number;
+  /** 「/」 anywhere outside a text field puts the cursor in the search. */
+  searchShortcut?: boolean;
 }
 
 /* ---------------------------------------------------------------- state */
@@ -198,10 +251,37 @@ function groupActive(filter: ToolbarPanelGroup): boolean {
   return filter.value !== chipsNeutral(filter);
 }
 
+/** Whether a group is on and says so: a `quiet` group's choice is the page's to say. */
+function groupCounted(filter: ToolbarPanelGroup): boolean {
+  return groupActive(filter) && !(filter.kind === "chips" && filter.quiet);
+}
+
 /** How many of a filter's dimensions are on: a panel counts its groups. */
 function activeCount(filter: ToolbarFilter): number {
-  if (filter.kind === "panel") return filter.groups.filter(groupActive).length;
-  return groupActive(filter) ? 1 : 0;
+  if (filter.kind === "panel") return filter.groups.filter(groupCounted).length;
+  return groupCounted(filter) ? 1 : 0;
+}
+
+/** A filter's groups: a panel's own, or the filter itself. */
+function groupsOf(filters: readonly ToolbarFilter[]): ToolbarPanelGroup[] {
+  return filters.flatMap((filter) => (filter.kind === "panel" ? filter.groups : [filter]));
+}
+
+function optionLabel(options: readonly FilterOption[], value: string): string {
+  return options.find((option) => option.value === value)?.label ?? value;
+}
+
+/** What a group that is on says as a token, and how it lets go: 「临床证据」, 「肿瘤 等 3 个」, 「只看收藏」. */
+function groupToken(filter: ToolbarPanelGroup): ToolbarToken | null {
+  if (!groupCounted(filter)) return null;
+  const onRemove = () => clearGroup(filter);
+  if (filter.kind === "toggle") return { label: filter.label, onRemove, filter: true };
+  if (filter.kind === "select") return { label: optionLabel(filter.options, filter.value ?? ""), onRemove, filter: true };
+  if (filter.multi) {
+    const first = optionLabel(filter.options, filter.value[0] ?? "");
+    return { label: filter.value.length > 1 ? `${first} 等 ${filter.value.length} 个` : first, onRemove, filter: true };
+  }
+  return { label: optionLabel(filter.options, filter.value), onRemove, filter: true };
 }
 
 /** Lets go of one group. */
@@ -322,6 +402,29 @@ function ChipGroup({ filter }: { filter: AnyChips }) {
       ) : (
         <div className="-ml-3 flex flex-wrap gap-1"><ChipButtons filter={filter} /></div>
       )}
+      {filter.multi && filter.chosenAction && filter.value.length > 0 && <ChosenActions filter={filter} />}
+    </div>
+  );
+}
+
+/** Under a group of several: each chosen value with its own small button (「肿瘤 关注」, 「心血管 已关注」). */
+function ChosenActions({ filter }: { filter: ToolbarMultiChips }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <span className={GROUP_LABEL}>已选</span>
+      {filter.value.map((value) => {
+        const label = optionLabel(filter.options, value);
+        const action = filter.chosenAction?.(value) ?? null;
+        return (
+          <span key={value} className="inline-flex items-center gap-1 text-ui text-text">
+            {label}
+            {action && (
+              <Button variant="text" size="sm" className="text-accent" disabled={action.disabled} aria-label={`${action.label}：${label}`}
+                onClick={action.onClick}>{action.label}</Button>
+            )}
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -350,6 +453,8 @@ function PanelGroups({ filters }: { filters: readonly ToolbarFilter[] }) {
 
 /** The floating layer a panel opens in on a wide screen: a card under its chip, on the popover tier. */
 const POPOVER = "z-popover w-[min(36rem,calc(100vw-2rem))] max-h-[min(32rem,calc(100vh-8rem))] overflow-y-auto rounded-card border border-border bg-surface p-4 shadow-e2 outline-none animate-menu-in";
+/** `oneRow`'s 「筛选」 holds every dimension of the list (the thirty specialties among them): as tall as the window allows, so its last groups are not hidden under a scroll. */
+const POPOVER_TALL = cn(POPOVER, "max-h-[min(48rem,calc(100vh-7rem))]");
 
 /** 「专科 ▾」: a chip that opens its groups under it; every choice applies at once, and 「清除」 lets go of all of them. */
 function PanelChip({ panel }: { panel: ToolbarPanel }) {
@@ -378,18 +483,39 @@ function PanelChip({ panel }: { panel: ToolbarPanel }) {
 /**
  * 「筛选」: what folded. On a phone a sheet from the bottom with every folded dimension, 「重置」 and 「查看结果」 (the choices apply at
  * once; it only closes); where a wide band's row ran out of room, the same groups in a card under the chip.
+ *
+ * With `oneRow` the chip carries the accent mark while anything in it is on, the phone's trigger is an icon, the sheet may begin with
+ * the page's own section (`lead`) and end with the view's buttons (`extra`), and the open state is the toolbar's, so 「+N」 opens it.
  */
-function FoldChip({ filters, count, narrow, onReset, stepOut }: {
+function FoldChip({ filters, count, resettable = count, narrow, onReset, stepOut, open, onOpenChange, mark = false, icon = false, align = "start", lead, extra, resultCount }: {
   filters: readonly ToolbarFilter[];
   count: number;
+  /** How many of what is counted 「重置」 / 「清除」 lets go of (a narrowed follow is not a filter). Default `count`. */
+  resettable?: number;
   narrow: boolean;
   onReset: () => void;
   stepOut: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  mark?: boolean;
+  icon?: boolean;
+  align?: "start" | "end";
+  lead?: (close: () => void) => ReactNode;
+  extra?: ReactNode;
+  resultCount?: number;
 }) {
-  const [open, setOpen] = useState(false);
-  const chip = (
+  const name = count > 0 ? `筛选，已选 ${count} 项` : "筛选";
+  const close = () => onOpenChange(false);
+  const chip = icon ? (
+    <button type="button" aria-haspopup="dialog" aria-expanded={open} aria-label={name} onClick={() => onOpenChange(true)}
+      className={iconButtonClasses({ size: "sm", active: count > 0 })}>
+      <SlidersHorizontal size={16} aria-hidden="true" />
+      {mark && count > 0 && <span aria-hidden="true" data-filter-mark="" className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-accent" />}
+    </button>
+  ) : (
     <FilterChip menu className={stepOut ? "-ml-3" : undefined} pressed={count > 0} aria-haspopup="dialog" aria-expanded={open}
-      aria-label={count > 0 ? `筛选，已选 ${count} 项` : "筛选"} onClick={narrow ? () => setOpen(true) : undefined}>
+      aria-label={name} onClick={narrow ? () => onOpenChange(true) : undefined}>
+      {mark && count > 0 && <span aria-hidden="true" data-filter-mark="" className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />}
       {count > 0 ? `筛选 · ${count}` : "筛选"}
     </FilterChip>
   );
@@ -398,28 +524,35 @@ function FoldChip({ filters, count, narrow, onReset, stepOut }: {
       <>
         {chip}
         {open && (
-          <Drawer title="筛选" placement="bottom" onClose={() => setOpen(false)} footer={(
+          <Drawer title="筛选" placement="bottom" onClose={close} footer={(
             <div className="flex gap-2">
-              <Button variant="secondary" className="flex-1" disabled={count === 0} onClick={onReset}>重置</Button>
-              <Button className="flex-1" onClick={() => setOpen(false)}>查看结果</Button>
+              <Button variant="secondary" className="flex-1" disabled={resettable === 0} onClick={onReset}>重置</Button>
+              <Button className="flex-1" onClick={close}>{resultCount !== undefined ? `查看 ${resultCount.toLocaleString("zh-CN")} 条` : "查看结果"}</Button>
             </div>
           )}>
-            <PanelGroups filters={filters} />
+            {lead || extra ? (
+              <div className="space-y-5">
+                {lead?.(close)}
+                {filters.length > 0 && <PanelGroups filters={filters} />}
+                {extra && <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">{extra}</div>}
+              </div>
+            ) : <PanelGroups filters={filters} />}
           </Drawer>
         )}
       </>
     );
   }
   return (
-    <Popover.Root open={open} onOpenChange={setOpen}>
+    <Popover.Root open={open} onOpenChange={onOpenChange}>
       <Popover.Trigger asChild>{chip}</Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content aria-label="筛选" align="start" side="bottom" sideOffset={4} collisionPadding={8} className={POPOVER}
+        <Popover.Content aria-label="筛选" align={align} side="bottom" sideOffset={4} collisionPadding={8} className={mark ? POPOVER_TALL : POPOVER}
           onEscapeKeyDown={(event) => event.stopPropagation()}>
           <PanelGroups filters={filters} />
-          {count > 0 && (
-            <div className="mt-4 flex justify-end border-t border-border pt-3">
-              <Button variant="text" size="sm" onClick={onReset}>清除</Button>
+          {(resettable > 0 || resultCount !== undefined) && (
+            <div className={cn("mt-4 flex items-center border-t border-border pt-3", resultCount !== undefined ? "justify-between" : "justify-end")}>
+              {resettable > 0 ? <Button variant="text" size="sm" onClick={onReset}>清除</Button> : <span />}
+              {resultCount !== undefined && <span className="text-caption tabular-nums text-text-3">共 {resultCount.toLocaleString("zh-CN")} 条</span>}
             </div>
           )}
         </Popover.Content>
@@ -428,11 +561,27 @@ function FoldChip({ filters, count, narrow, onReset, stepOut }: {
   );
 }
 
+/** A token: what is applied, as the selected chip's look with a ×, a press letting go of it; and its own small button after it. */
+function TokenChip({ token }: { token: ToolbarToken }) {
+  return (
+    <span className="inline-flex shrink-0 items-center">
+      {/* A press removes it: a button, not a toggle, so it has no pressed state of its own. */}
+      <FilterChip pressed aria-pressed={undefined} icon={X} iconEnd aria-label={`移除筛选：${token.label}`} className="max-w-48" onClick={token.onRemove}>
+        <span className="min-w-0 truncate">{token.label}</span>
+      </FilterChip>
+      {token.action && (
+        <Button variant="text" size="sm" className="shrink-0 text-accent" disabled={token.action.disabled} aria-label={`${token.action.label}：${token.label}`}
+          onClick={token.action.onClick}>{token.action.label}</Button>
+      )}
+    </span>
+  );
+}
+
 /* ---------------------------------------------------------------- inline */
 
 function Inline({ filter }: { filter: ToolbarFilter }) {
   if (filter.kind === "select") {
-    return <FilterSelect label={filter.label} allLabel={filter.allLabel} options={filter.options} value={filter.value} onChange={filter.onChange} />;
+    return <FilterSelect label={filter.label} emptyText={filter.emptyText} allLabel={filter.allLabel} options={filter.options} value={filter.value} onChange={filter.onChange} />;
   }
   if (filter.kind === "panel") return <PanelChip panel={filter} />;
   if (filter.kind === "chips") {
@@ -477,8 +626,22 @@ function Inline({ filter }: { filter: ToolbarFilter }) {
  * list): the arrow keys move through them, Enter takes the one marked or, with none marked, searches the words now; Escape closes
  * the list first and empties the box after.
  */
-function SearchBox({ search }: { search: ToolbarSearch }) {
+function SearchBox({ search, inputRef, focusOnMount = false, shortcut = false, onEscapeEmpty }: {
+  search: ToolbarSearch;
+  inputRef?: RefObject<HTMLInputElement | null>;
+  /** Opened over a phone's row by a press on its icon: the cursor in it at once, the keyboard up. */
+  focusOnMount?: boolean;
+  /** 「/」 reaches it (said to assistive technology). */
+  shortcut?: boolean;
+  /** Escape in an empty box (the phone's search over the row closes). */
+  onEscapeEmpty?: () => void;
+}) {
   const listId = useId();
+  const own = useRef<HTMLInputElement>(null);
+  const input = inputRef ?? own;
+  useEffect(() => {
+    if (focusOnMount) input.current?.focus();
+  }, [focusOnMount, input]);
   const [focused, setFocused] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [active, setActive] = useState(-1);
@@ -512,6 +675,10 @@ function SearchBox({ search }: { search: ToolbarSearch }) {
       event.preventDefault();
       event.stopPropagation();
       setDismissed(true);
+    } else if (event.key === "Escape" && onEscapeEmpty && search.value === "") {
+      event.preventDefault();
+      event.stopPropagation();
+      onEscapeEmpty();
     }
   };
   const combobox = search.suggestions ? {
@@ -524,7 +691,9 @@ function SearchBox({ search }: { search: ToolbarSearch }) {
   return (
     <div className="relative flex min-w-0 flex-1 sm:w-56 sm:flex-none">
       <SearchInput
+        ref={input}
         size="sm"
+        aria-keyshortcuts={shortcut ? "/" : undefined}
         label={search.label}
         value={search.value}
         maxLength={search.maxLength}
@@ -608,6 +777,39 @@ function useCrowded(row: RefObject<HTMLDivElement | null>, enabled: boolean, bes
   return enabled && crowded;
 }
 
+/**
+ * `oneRow`: whether the views beside the row's controls no longer all show (the tab list scrolls), measured from the layout — so a test
+ * without one (jsdom) never says so. Both the row and the tab list are watched (a token joining the row shrinks the list, not the row);
+ * a change of what the row holds (`resetKey`) tries again from the start, and otherwise only a row grown past the width at which it last
+ * did not fit does.
+ */
+function useViewsCrowded(root: RefObject<HTMLDivElement | null>, enabled: boolean, resetKey: string): boolean {
+  const [crowded, setCrowded] = useState(false);
+  const failedAt = useRef(0);
+  const lastKey = useRef(resetKey);
+  useLayoutEffect(() => {
+    const element = root.current;
+    if (!enabled || !element) { if (crowded) setCrowded(false); return undefined; }
+    if (lastKey.current !== resetKey) { lastKey.current = resetKey; failedAt.current = 0; }
+    const list = element.querySelector<HTMLElement>('[role="tablist"]');
+    const check = () => {
+      const width = element.clientWidth;
+      if (!crowded) {
+        if (list && list.scrollWidth > list.clientWidth + 1) { failedAt.current = width; setCrowded(true); }
+      } else if (width > failedAt.current + 8) {
+        setCrowded(false);
+      }
+    };
+    check();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(check);
+    observer.observe(element);
+    if (list) observer.observe(list);
+    return () => observer.disconnect();
+  }, [root, enabled, crowded, resetKey]);
+  return enabled && crowded;
+}
+
 /** A clipped count stays on one line; keyboard/hover and touch can read its complete text without changing the band's height. */
 function BandSummary({ text, className }: { text: string; className: string }) {
   const line = useRef<HTMLSpanElement | HTMLButtonElement>(null);
@@ -633,18 +835,30 @@ function BandSummary({ text, className }: { text: string; className: string }) {
 
 /* ---------------------------------------------------------------- toolbar */
 
-export function Toolbar({ label = "筛选与操作", views, filters: declared = [], onClear, onReset, search, summary, actions, className, inBand = false, controlsBelow = false }: ToolbarProps) {
+export function Toolbar({ label = "筛选与操作", views, filters: declared = [], onClear, onReset, search, summary, actions, className, inBand = false,
+  oneRow = false, tokens: given = [], sheetLead, resultCount, searchShortcut = false }: ToolbarProps) {
   const narrow = useNarrow();
   const row = useRef<HTMLDivElement>(null);
   const root = useRef<HTMLDivElement>(null);
-  const below = Boolean(views) && controlsBelow;
-  // A row of its own is crowded when it wraps (or, under the views, runs past its edge); the tab row (`Tabs` lays its trailing controls
-  // out) when its views no longer all show.
-  const crowded = useCrowded(views && !below ? root : row, inBand && !narrow, Boolean(views) && !below, below);
-  const fold = narrow || crowded;
-  // On a phone, and where the band's row is full, the filters fold into one chip — all but the pinned ones, which stay as they are.
-  const kept = fold ? declared.filter((filter) => filter.pinned) : [];
-  const filters = fold ? declared.filter((filter) => !kept.includes(filter)) : declared;
+  const searchInput = useRef<HTMLInputElement>(null);
+  const [foldOpen, setFoldOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const one = oneRow && Boolean(views);
+  // A row of its own is crowded when it wraps; the tab row (`Tabs` lays its trailing controls out) when its views no longer all show.
+  const crowded = useCrowded(views ? root : row, inBand && !narrow && !one, Boolean(views));
+  // `oneRow`: the tokens give way first — two, then one, then none and the chip's count alone — and then the controls that are not
+  // pinned fold as well.
+  const declaredKey = declared.map((filter) => `${filter.kind}:${filter.label}`).join("|");
+  const tokenKey = `${declaredKey}#${given.map((token) => token.label).join("|")}#${groupsOf(declared.filter((filter) => filter.folded)).filter(groupCounted).length}`;
+  const twoCrowded = useViewsCrowded(root, one && inBand && !narrow, tokenKey);
+  const tokensCrowded = useViewsCrowded(root, one && inBand && !narrow && twoCrowded, tokenKey);
+  const controlsCrowded = useViewsCrowded(root, one && inBand && !narrow && tokensCrowded, tokenKey);
+  const fold = one ? narrow || controlsCrowded : narrow || crowded;
+  // On a phone, and where the band's row is full, the filters fold into one chip — all but the pinned ones, which stay as they are; a
+  // `folded` one is in it at every width.
+  const isFolded = (filter: ToolbarFilter) => Boolean(filter.folded) || (fold && !filter.pinned);
+  const kept = declared.filter((filter) => !isFolded(filter));
+  const filters = declared.filter(isFolded);
   const folded = filters.reduce((sum, filter) => sum + activeCount(filter), 0);
   // What 「清除筛选」 lets go of is every filter that is on, the pinned ones too.
   const active = folded + kept.reduce((sum, filter) => sum + activeCount(filter), 0);
@@ -652,62 +866,136 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
   const reset = onReset ?? onClear ?? (() => filters.forEach((filter) => (filter.kind === "panel" ? clearPanel(filter) : clearGroup(filter))));
   const shrinkSummary = inBand && summary != null;
   const summaryClass = cn("text-caption tabular-nums text-text-3 sm:shrink-0", search || shrinkSummary ? "min-w-0 truncate max-sm:flex-1 sm:flex-none" : "shrink-0");
-  const controls = (
-    <>
-      {/* Keep pinned controls in the same child slot when late filters fold or unfold the row, including an open menu's focus. */}
-      {declared.map((filter, index) => (!fold || kept.includes(filter)
-        ? <Fragment key={`${filter.kind}-${filter.label}-${index}`}><Inline filter={filter} /></Fragment> : null))}
-      {fold && filters.length > 0 && (
-        // Under the tabs (a phone) the folded chip is the row's first thing, and its text is 12 px in from its ground: it steps out so
-        // the text stands on the page's left edge. Without views (or on a row of its own) the whole row does (below).
-        <FoldChip filters={filters} count={folded} narrow={narrow} onReset={reset} stepOut={Boolean(views) && !below && narrow && kept.length === 0} />
-      )}
-      {/* On a phone's second row the sheet's 「重置」 is the way out of the filters, and the box's ✕ the way out of the search. */}
-      {onClear && (active > 0 || searching) && !(below && narrow) && <FilterChip className="shrink-0" onClick={onClear}>清除筛选</FilterChip>}
-    </>
-  );
-  const searchBox = search && <SearchBox search={search} />;
-  // On a phone the search takes what the row has left, in the same row: it used to take a row of its own, and a module's band was
-  // 36 px taller on the tabs with a search than on the others (the walk's module-chrome, 循证 GEO at 390 px, r19-guards2).
-  const end = (withSearch: boolean) => ((withSearch && search) || summary != null || actions) && (
-    <div className={cn("ml-auto flex min-w-0 items-center gap-2", ((withSearch && search) || shrinkSummary) && "max-sm:flex-1", below && "shrink-0")}>
-      {withSearch && searchBox}
-      {/* In the band or beside a search, the count gives way before the mobile controls do; its full text remains accessible. */}
-      {summary != null && (shrinkSummary && typeof summary === "string" ? <BandSummary text={summary} className={summaryClass} /> : <span className={summaryClass}>{summary}</span>)}
-      {actions}
-    </div>
-  );
-  if (views && below) {
-    const second = declared.length > 0 || summary != null || Boolean(actions) || (onClear && searching && !narrow);
+
+  const hasSearch = Boolean(search);
+  useEffect(() => {
+    if (!searchShortcut || !hasSearch) return undefined;
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented) return;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+      // A dialog over the page has the keyboard.
+      if (document.querySelector('[aria-modal="true"]')) return;
+      event.preventDefault();
+      if (one && narrow) setSearchOpen(true);
+      else searchInput.current?.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [searchShortcut, hasSearch, one, narrow]);
+
+  if (one && views) {
+    // What is applied: the page's own tokens, then what is on in 「筛选」 (those of the `folded` filters, and on a phone whatever folded).
+    const applied = [...given, ...groupsOf(filters).map(groupToken).filter((token): token is ToolbarToken => token !== null)];
+    const count = folded + given.length;
+    // On a phone the line under the row scrolls sideways, so it holds two; on a wide row as many as fit of two.
+    const shown = applied.slice(0, !narrow && twoCrowded ? 1 : 2);
+    const hidden = applied.length - shown.length;
+    const clearable = applied.length >= 2 && applied.some((token) => token.filter) && !(twoCrowded && !narrow);
+    const searchToken: ToolbarToken | null = narrow && !searchOpen && search?.value
+      ? { label: `搜索：${search.value}`, onRemove: () => (search.onClear ? search.onClear() : search.onChange("")) } : null;
+    const tokenNodes = (
+      <>
+        {searchToken && <TokenChip token={searchToken} />}
+        {shown.map((token, index) => <TokenChip key={`${token.label}-${index}`} token={token} />)}
+        {hidden > 0 && <FilterChip className="shrink-0 tabular-nums" aria-label={`另有 ${hidden} 项筛选，打开筛选`} onClick={() => setFoldOpen(true)}>+{hidden}</FilterChip>}
+        {clearable && <FilterChip className="shrink-0" onClick={reset}>清除</FilterChip>}
+      </>
+    );
+    const inline = kept.map((filter, index) => <Fragment key={`${filter.kind}-${filter.label}-${index}`}><Inline filter={filter} /></Fragment>);
+    // On a phone the view's buttons and its count are in the sheet, after the filters.
+    const extra = narrow && (summary != null || actions) ? <>{summary != null && <span className="text-caption tabular-nums text-text-3">{summary}</span>}{actions}</> : undefined;
+    const trigger = (filters.length > 0 || (narrow && (sheetLead || extra))) && (
+      <FoldChip filters={filters} count={count} resettable={folded + given.filter((token) => token.filter).length} narrow={narrow} onReset={reset} stepOut={false} open={foldOpen} onOpenChange={setFoldOpen}
+        mark icon={narrow} align="end" lead={narrow ? sheetLead : undefined} extra={extra} resultCount={resultCount} />
+    );
+    if (!narrow) {
+      return (
+        <div ref={root} data-toolbar="" role="group" aria-label={label} className={className}>
+          <Tabs label={views.label} items={views.items} value={views.value} onChange={views.onChange} panelId={views.panelId} trailing={(
+            <>
+              {inline}
+              {!tokensCrowded && tokenNodes}
+              {trigger}
+              {summary != null && (typeof summary === "string" ? <BandSummary text={summary} className={summaryClass} /> : <span className={summaryClass}>{summary}</span>)}
+              {actions}
+              {search && <SearchBox search={search} inputRef={searchInput} shortcut={searchShortcut} />}
+            </>
+          )} />
+        </div>
+      );
+    }
+    const second = kept.length > 0 || applied.length > 0 || Boolean(searchToken);
     return (
       <div ref={root} data-toolbar="" role="group" aria-label={label} className={className}>
-        <Tabs label={views.label} items={views.items} value={views.value} onChange={views.onChange} panelId={views.panelId} trailing={search ? (
-          <div className="flex min-w-0 flex-1 items-center sm:flex-none">{searchBox}</div>
-        ) : undefined} />
+        <div className="flex items-end gap-2 border-b border-border">
+          {/* The views stay in the document while the search is open over them: the page's panel is named by its tab. */}
+          <div className={cn("min-w-0 flex-1", searchOpen && "hidden")}>
+            <Tabs label={views.label} items={views.items} value={views.value} onChange={views.onChange} panelId={views.panelId} className="border-b-0" />
+          </div>
+          {searchOpen && search ? (
+            // As tall as the views' row: 40 px, the last of them over the row's rule, as a tab's underline is.
+            <div className="-mb-px flex h-10 min-w-0 flex-1 items-center gap-2">
+              <SearchBox search={search} inputRef={searchInput} focusOnMount shortcut={searchShortcut} onEscapeEmpty={() => setSearchOpen(false)} />
+              <Button variant="text" size="sm" className="shrink-0" onClick={() => setSearchOpen(false)}>取消</Button>
+            </div>
+          ) : (
+            <div className="flex shrink-0 items-center gap-1 pb-1.5">
+              {trigger}
+              {search && <IconButton icon={Search} label={search.label} size="sm" aria-keyshortcuts={searchShortcut ? "/" : undefined} onClick={() => setSearchOpen(true)} />}
+            </div>
+          )}
+        </div>
         {second && (
-          // The second row: one line whatever the data — a `scroll` group gives way by scrolling, and what still does not fit folds.
-          <div ref={row} data-toolbar-row="" className="-ml-3 flex min-h-11 flex-nowrap items-center gap-x-1 py-2">
-            {controls}
-            {end(false)}
+          // One line, only while something narrows the list or a pinned control has to stay in sight: it scrolls sideways rather than wrap.
+          <div data-toolbar-row="" className="-ml-3 flex min-h-11 flex-nowrap items-center gap-1 overflow-x-auto py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {inline}
+            {tokenNodes}
           </div>
         )}
       </div>
     );
   }
+
+  const controls = (
+    <>
+      {/* Keep pinned controls in the same child slot when late filters fold or unfold the row, including an open menu's focus. */}
+      {declared.map((filter, index) => (!isFolded(filter)
+        ? <Fragment key={`${filter.kind}-${filter.label}-${index}`}><Inline filter={filter} /></Fragment> : null))}
+      {filters.length > 0 && (
+        // Under the tabs (a phone) the folded chip is the row's first thing, and its text is 12 px in from its ground: it steps out so
+        // the text stands on the page's left edge. Without views (or on a row of its own) the whole row does (below).
+        <FoldChip filters={filters} count={folded} narrow={narrow} onReset={reset} open={foldOpen} onOpenChange={setFoldOpen}
+          stepOut={Boolean(views) && narrow && declared.every((filter) => isFolded(filter))} />
+      )}
+      {onClear && (active > 0 || searching) && <FilterChip className="shrink-0" onClick={onClear}>清除筛选</FilterChip>}
+    </>
+  );
+  const searchBox = search && <SearchBox search={search} inputRef={searchInput} shortcut={searchShortcut} />;
+  // On a phone the search takes what the row has left, in the same row: it used to take a row of its own, and a module's band was
+  // 36 px taller on the tabs with a search than on the others (the walk's module-chrome, 循证 GEO at 390 px, r19-guards2).
+  const end = (search || summary != null || actions) && (
+    <div className={cn("ml-auto flex min-w-0 items-center gap-2", (search || shrinkSummary) && "max-sm:flex-1")}>
+      {searchBox}
+      {/* In the band or beside a search, the count gives way before the mobile controls do; its full text remains accessible. */}
+      {summary != null && (shrinkSummary && typeof summary === "string" ? <BandSummary text={summary} className={summaryClass} /> : <span className={summaryClass}>{summary}</span>)}
+      {actions}
+    </div>
+  );
   return (
     <div ref={root} data-toolbar="" role="group" aria-label={label} className={className}>
       {views ? (
         <Tabs label={views.label} items={views.items} value={views.value} onChange={views.onChange} panelId={views.panelId} trailing={(
           <>
             {controls}
-            {end(true)}
+            {end}
           </>
         )} />
       ) : (
         // A chip's text is 12 px in from its ground: the row steps out by that much so the text stands on the page's left edge.
         <div ref={row} className="-ml-3 flex min-h-sm flex-wrap items-center gap-x-1 gap-y-2">
           {controls}
-          {end(true)}
+          {end}
         </div>
       )}
     </div>

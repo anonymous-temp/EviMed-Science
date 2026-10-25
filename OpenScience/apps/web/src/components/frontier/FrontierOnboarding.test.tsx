@@ -40,7 +40,8 @@ describe("the onboarding card", () => {
     expect(client.listFrontierTags).toHaveBeenCalledWith(expect.objectContaining({ specialties: ["cardiology", "oncology", "endocrinology"] }));
     fireEvent.click(screen.getByRole("button", { name: "#SGLT2 抑制剂" }));
     fireEvent.click(screen.getByRole("button", { name: "完成" }));
-    await waitFor(() => expect(close).toHaveBeenCalledWith(true));
+    // The answer as the server keeps it goes with the close: the page makes the first follows of it.
+    await waitFor(() => expect(close).toHaveBeenCalledWith(true, expect.objectContaining({ onboardedAt: "2026-10-24T08:00:00Z" })));
     expect(prefs.saveFrontierPrefs).toHaveBeenCalledWith({ role: "pharmacist", specialties: ["cardiology", "oncology", "endocrinology"], interests: ["sglt2"], done: true });
     expect(tracking.trackFrontierOnboarding).toHaveBeenCalledWith("onboarding-done", undefined);
   });
@@ -55,7 +56,7 @@ describe("the onboarding card", () => {
     await waitFor(() => expect(prefs.saveFrontierPrefs).toHaveBeenCalledTimes(1));
     expect(close).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "跳过" }));
-    await waitFor(() => expect(close).toHaveBeenCalledWith(true));
+    await waitFor(() => expect(close).toHaveBeenCalledWith(true, expect.anything()));
     expect(prefs.saveFrontierPrefs).toHaveBeenLastCalledWith({ role: "researcher", skipped: true });
     expect(tracking.trackFrontierOnboarding).toHaveBeenCalledWith("onboarding-skipped", "specialties");
   });

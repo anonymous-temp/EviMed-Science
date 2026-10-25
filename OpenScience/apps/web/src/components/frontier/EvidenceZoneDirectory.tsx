@@ -178,7 +178,11 @@ export function zoneDirectoryControls({ scope, onScope, query, directory, choose
   chooser?: boolean;
 }): { filters: ToolbarFilter[]; summary: string | undefined } {
   return {
-    filters: chooser ? [] : [{ kind: "chips", label: "专区范围", options: ZONE_SCOPES, value: scope, onChange: (next) => onScope(readZoneScope(next)) }],
+    // A menu on the views' row (owner, 2026-10-25: one row of controls): 「全部专区 ▾」, then 我创建的 or 我关注的 once chosen.
+    filters: chooser ? [] : [{
+      kind: "select", label: "专区范围", emptyText: "全部专区", allLabel: "全部专区", options: ZONE_SCOPES.filter((option) => option.value !== "public"),
+      value: scope === "public" ? null : scope, onChange: (next) => onScope(readZoneScope(next)),
+    }],
     summary: query && directory.total !== null ? `${directory.total} 个匹配专区` : undefined,
   };
 }

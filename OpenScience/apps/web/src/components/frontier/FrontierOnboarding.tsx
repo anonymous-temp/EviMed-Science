@@ -22,7 +22,8 @@ const QUESTIONS: Record<Step, string> = { role: "你的角色", specialties: "�
 const TAGS_OFFERED = 12;
 
 /**
- * 与我相关's onboarding (ct-track, 2026-10-24; the owner approved it as a skippable step): an inline card at the top of the block —
+ * 关注's onboarding (ct-track, 2026-10-24; the owner approved it as a skippable step; in 关注 since 2026-10-25, where it is the
+ * empty state of a reader who follows nothing, and its answers become their first follows): an inline card at the top of the block —
  * never a dialog — that asks three things, one at a time: 角色, 专科 (one to three), and a few tags (offered from the tree for the
  * chosen specialties). 跳过 is always there, and whatever was chosen before it is kept. Finished or skipped, the card is gone for
  * good; the answer is changed later in 「管理关注」 (`mode="edit"`, the same card with 取消 instead of 跳过). The ranking that reads
@@ -33,8 +34,8 @@ export function FrontierOnboarding({ initial = null, mode = "first", onClose }: 
   initial?: FrontierPrefs | null;
   /** `first`: shown in 与我相关 until finished or skipped; `edit`: opened from 「管理关注」. */
   mode?: "first" | "edit";
-  /** The card is done: saved (`saved` true) or let go. */
-  onClose: (saved: boolean) => void;
+  /** The card is done: saved (`saved` true, with the answer as the server keeps it) or let go. */
+  onClose: (saved: boolean, answer?: FrontierPrefs) => void;
 }) {
   const [step, setStep] = useState<Step>("role");
   const [role, setRole] = useState<string | null>(initial?.role ?? null);
@@ -57,11 +58,11 @@ export function FrontierOnboarding({ initial = null, mode = "first", onClose }: 
     setSaving(true);
     try {
       // Skipping keeps what was already chosen: a role told is a role known, a tag picked is a tag of interest.
-      await saveFrontierPrefs(finish ? { role, specialties, interests, done: true }
+      const answer = await saveFrontierPrefs(finish ? { role, specialties, interests, done: true }
         : { ...(role ? { role } : {}), ...(specialties.length ? { specialties } : {}), ...(interests.length ? { interests } : {}), skipped: true });
       // Changing an answer later is not onboarding: only the first card counts.
       if (mode === "first") trackFrontierOnboarding(finish ? "onboarding-done" : "onboarding-skipped", finish ? undefined : step);
-      onClose(true);
+      onClose(true, answer);
     } catch (error) {
       toast.error(frontierErrorMessage(error));
     } finally {

@@ -73,9 +73,12 @@ export function FilterSelect<V extends string>({
   value,
   onChange,
   allLabel,
+  emptyText,
 }: {
   /** The chip's text while nothing is chosen, and the menu's name. */
   label: string;
+  /** The chip's text while nothing is chosen, where it is not the menu's name (「全部专区」). Default `label`. */
+  emptyText?: string;
   options: readonly FilterOption<V>[];
   value: V | null;
   onChange: (value: V | null) => void;
@@ -92,7 +95,7 @@ export function FilterSelect<V extends string>({
       ]}
     >
       <FilterChip menu pressed={chosen !== null} aria-label={chosen ? `${label}：${chosen.label}` : label}>
-        {chosen?.label ?? label}
+        {chosen?.label ?? emptyText ?? label}
       </FilterChip>
     </Menu>
   );
