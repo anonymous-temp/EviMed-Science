@@ -23,7 +23,11 @@
  *  6. **Recount and re-measure** (G2): every stored answer counted again under
  *     the registry as it now stands — no model asked — and every measured
  *     round of the project re-measured, in the order they finished, with the
- *     headline numbers before and after.
+ *     headline numbers before and after. A round that heard no answer is not
+ *     measured, and the empty cells the metrics loop wrote for such rounds
+ *     before 2026-10-25 (209 a day for a sentinel whose engines were all
+ *     paused) are removed: they are derived, all without a value, and the
+ *     loop no longer writes them.
  *
  * Runs against the tables the running server migrated; it migrates first
  * outside its transaction (a DDL lock held for the length of the fix would
@@ -264,9 +268,13 @@ export async function runGeoDataFixes({ database, geoProjectId, apply = false, d
     // 6. Every stored answer counted again under the registry as it now stands, every round measured again.
     const recount = await recountRegistryFacts({ store: measure, config: {}, now, force: true, geoProjectIds: [geoProjectId],
       state: /** @type {any} */ ({ recountAt: 0 }) });
-    const rounds = (await db.query(`SELECT id FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind = ANY($2::text[]) AND status IN ('done', 'partial')
-      ORDER BY finished_at NULLS LAST, created_at`, [geoProjectId, [...GEO_METRIC_ROUND_KINDS]])).rows.map((/** @type {any} */ entry) => String(entry.id));
+    const answered = `EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.round_id = r.id AND s.status IN ('valid', 'refusal'))`;
+    const rounds = (await db.query(`SELECT r.id FROM evimed_geo.rounds r WHERE r.geo_project_id = $1 AND r.kind = ANY($2::text[]) AND r.status IN ('done', 'partial')
+      AND ${answered} ORDER BY r.finished_at NULLS LAST, r.created_at`, [geoProjectId, [...GEO_METRIC_ROUND_KINDS]])).rows.map((/** @type {any} */ entry) => String(entry.id));
     for (const roundId of rounds) await measureRound({ store: measure, now }, roundId);
+    const cleared = (await db.query(`DELETE FROM evimed_geo.metrics m USING evimed_geo.rounds r WHERE m.round_id = r.id AND r.geo_project_id = $1
+      AND m.geo_project_id = $1 AND r.status IN ('done', 'partial') AND NOT ${answered} RETURNING m.round_id`, [geoProjectId])).rows;
+    report.emptyRounds = { rounds: new Set(cleared.map((/** @type {any} */ entry) => String(entry.round_id))).size, cells: cleared.length };
     const contextAfter = await measure.projectContext(geoProjectId);
     report.registryAfter = contextAfter ? registryKey(brandRegistry(contextAfter.project.product, contextAfter.project.competitors), contextAfter.owned) : null;
     report.recounted = recount.facts;
