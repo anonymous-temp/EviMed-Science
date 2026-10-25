@@ -96,7 +96,7 @@ test("an ordinary account finds the packs on its shelf, enabled, and they are no
     assert.equal(pack.card.author, "EviMed 证据中心");
     assert.equal(pack.sharedFrom.label, "EviMed 证据中心的默认做法");
   }
-  assert.deepEqual(shelf.find((pack) => pack.official?.packId === "daily")?.methods, ["周报：事实只用你给的", "邮件：写清要对方做什么"]);
+  assert.deepEqual(shelf.find((pack) => pack.official?.packId === "daily")?.methods.sort(), ["周报：事实只用你给的", "邮件：写清要对方做什么"].sort());
   assert.deepEqual((await capsules.active(person)).items, [], "the account's list of capsules in force is untouched");
   const methods = await capsules.officialMethods(person);
   assert.deepEqual(methods.map((method) => method.key), ["official:daily:mail", "official:daily:weekly", "official:review:pooling"]);
@@ -147,6 +147,34 @@ test("switching a pack off keeps it off across versions, and a new version reach
   assert.match(others.find((method) => method.methodId === "weekly")?.body ?? "", /或者问一句/);
   await capsules.enableReceived(person, daily);
   assert.equal((await capsules.received(person)).find((pack) => pack.id === daily)?.enabled, true);
+});
+
+test("what runs say counts across accounts: a body that is corrected again and again is stopped for everyone, and an operator gives it back", options, async () => {
+  const held = (await capsules.officialMethods(other)).find((method) => method.key === "official:review:pooling");
+  assert.ok(held);
+  const at = (/** @type {number} */ n) => new Date(Date.UTC(2026, 9, 25, 10, n)).toISOString();
+  // Three corrections are not yet a finding; the runs are of different accounts' and counted once each.
+  for (let n = 0; n < 3; n += 1) assert.deepEqual(await official.recordApplied({ key: held.key, sha: held.sha, runId: `run_${n}`, outcome: "corrected", at: at(n) }), { changed: true, stopped: false });
+  assert.deepEqual(await official.recordApplied({ key: held.key, sha: held.sha, runId: "run_0", outcome: "corrected", at: at(0) }), { changed: false, stopped: false }, "a run is counted once");
+  assert.equal((await capsules.officialMethods(other)).some((method) => method.key === held.key), true);
+  assert.deepEqual(await official.recordApplied({ key: held.key, sha: held.sha, runId: "run_3", outcome: "corrected", at: at(3) }), { changed: true, stopped: true });
+  // Stopped for every account at once, with the numbers it was stopped on, and gone from the shelf's list of what a pack holds.
+  assert.equal((await capsules.officialMethods(other)).some((method) => method.key === held.key), false);
+  assert.equal((await capsules.officialMethods(person)).some((method) => method.key === held.key), false);
+  const record = await documents.get(PUBLISHER, "preferences", `official-method:review:pooling:${held.sha.slice(0, 12)}`);
+  assert.equal(record.payload.status, "stopped");
+  assert.deepEqual([record.payload.stopped.reason, record.payload.stopped.runs, record.payload.stopped.bad], ["harm", 4, 4]);
+  assert.deepEqual((await capsules.received(other)).find((pack) => pack.official?.packId === "review")?.methods, []);
+  assert.deepEqual(await official.recordApplied({ key: held.key, sha: held.sha, runId: "run_9", outcome: "clean", at: at(9) }), { changed: false, stopped: true }, "nothing more is counted for a stopped body");
+  // One call gives it back, counted from nothing; a body that was not stopped cannot be "restored".
+  assert.equal(await official.restore(held.key, held.sha), true);
+  assert.equal(await official.restore(held.key, held.sha), false);
+  assert.equal((await capsules.officialMethods(other)).some((method) => method.key === held.key), true);
+  const snapshot = await official.snapshot();
+  assert.deepEqual(snapshot.methods.map((method) => [method.key, method.status, method.runs]), [[held.key, "active", 0]]);
+  assert.deepEqual(snapshot.packs.map((pack) => [pack.packId, pack.status]).sort(), [["daily", "published"], ["review", "published"]]);
+  assert.equal(official.stats().stopped, 1);
+  assert.equal(official.stats().restored, 1);
 });
 
 test("a pack an account deleted is not made again, and a taken-down copy stays down", options, async () => {

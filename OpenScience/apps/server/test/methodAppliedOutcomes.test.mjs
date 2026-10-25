@@ -145,3 +145,35 @@ test("four corrected runs of the answer line stop the method at the next pass, w
   const [proposal] = await f.learning.retirementProposals("u1", { nowMs: NOW });
   assert.deepEqual({ id: proposal.document.id, code: proposal.proposal.code, immediate: proposal.proposal.immediate }, { id: f.grade.id, code: "harm", immediate: true });
 });
+
+// 2026-10-25: a run that opened one of the platform's official methods (`officialPacks.mjs`) is read the same way, and recorded in the platform's own
+// record of that body — never in the account's methods, which it is not one of.
+test("what the researcher did after a run that opened an official method goes to the platform's record of that body, by the same reading", async () => {
+  const official = { key: "official:daily-writing:status-report", name: "official-daily-writing-status-report", sha: "a".repeat(64), digest: `sha256:${"b".repeat(64)}` };
+  const events = [];
+  const recorded = [];
+  const runs = [
+    { id: "run_x", status: "succeeded", methodsInvoked: [{ name: official.name, digest: official.digest }] },
+    { id: "run_y", status: "succeeded", methodsInvoked: [{ name: official.name, digest: official.digest }] },
+    { id: "run_z", status: "succeeded", methodsInvoked: [{ name: official.name, digest: `sha256:${"c".repeat(64)}` }] },
+    { id: "run_w", status: "succeeded", methodsInvoked: [{ name: official.name, digest: official.digest }] },
+  ];
+  const event = (/** @type {string} */ runId, /** @type {any} */ detail) => events.push({ id: `e${events.length}`, userId: "u1", projectId: "p1", runId, trigger: "learning-evidence",
+    subject: { type: "run", id: runId }, detail: { sessionId: "s1", at: "2026-10-23T11:00:00.000Z", ...detail }, occurredAt: "2026-10-23T11:00:00.000Z" });
+  event("run_x", { evidence: "follow-up", verdict: "correction", quote: "不对", concerns: [{ id: official.key, digest: official.digest }] });
+  event("run_y", { evidence: "silent", verdict: "none", concerns: [] });
+  event("run_z", { evidence: "silent", verdict: "none", concerns: [] });
+  event("run_w", { evidence: "follow-up", verdict: "correction", quote: "不对", concerns: [] });
+  const settle = createMethodAppliedOutcomes({
+    learning: { approvedMethods: async () => [], recordApplied: async () => { throw new Error("an official method is not one of the account's"); } },
+    feedback: { async list() { return { items: events, nextCursor: null }; } },
+    resolveProject: async (_user, projectId) => ({ id: projectId }),
+    runsOf: async () => runs,
+    now: () => NOW,
+    official: { methods: async () => [official], recordApplied: async (applied) => { recorded.push(applied); return { changed: true }; } },
+  });
+  const result = await settle.settleUser("u1");
+  assert.deepEqual(result, { runs: 4, corrected: 1, clean: 1, unattributed: 1, stale: 1, failed: 0 });
+  assert.deepEqual(recorded.map(({ runId, outcome }) => [runId, outcome]).sort(), [["run_x", "corrected"], ["run_y", "clean"]]);
+  assert.ok(recorded.every((applied) => applied.key === official.key && applied.sha === official.sha));
+});

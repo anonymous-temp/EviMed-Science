@@ -41,6 +41,11 @@ export function takenEntries<T extends { id: string }>(entries: readonly T[], sc
   return entries.filter((entry) => !left.has(entry.id));
 }
 
+/** The sender of one of the platform's own packs, as its row says it: 「EviMed 证据中心提供」. */
+export function providedBy(author: string): string {
+  return `${author}提供`;
+}
+
 /** 「来自 …」 with a typed space only before Latin text: 「来自李主任」, 「来自 Alice」. */
 export function fromSender(author: string): string {
   return /^[A-Za-z0-9]/.test(author) ? `来自 ${author}` : `来自${author}`;

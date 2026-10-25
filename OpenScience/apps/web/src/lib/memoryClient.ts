@@ -185,6 +185,8 @@ export interface ReceivedCapsule {
   sharedFrom?: { label: string; authorName: string | null; channel: string | null } | null;
   /** Taken down by its author or the operator: out of force everywhere, and never put back. */
   takenDown?: { by: "author" | "operator"; at: string; reason: string | null } | null;
+  /** One of the platform's own starter packs (「EviMed 证据中心」): on every account's shelf, switched on until the person switches it off. */
+  official?: { packId: string } | null;
 }
 
 export function fetchReceivedCapsules() {

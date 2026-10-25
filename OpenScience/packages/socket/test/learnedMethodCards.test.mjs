@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { buildDelegation, buildInlineMethod } from '../src/runPolicy.mjs'
-import { isLearnedMethod, learnedMethodCardLines, splitMountedMethods } from '../src/learnedMethods.mjs'
+import { isLearnedMethod, isOfficialMethod, learnedMethodCardLines, splitMountedMethods } from '../src/learnedMethods.mjs'
 
 // Incident 2026-09-28 (evals/method-quality/incidents/2026-09-28-learned-method-invoked-zero.json):
 // learned methods were inlined whole under 「用户自己的方法（优先于平台默认流程）」,
@@ -102,4 +102,48 @@ test('a card block is a small fraction of the bodies it replaces', () => {
   const request = buildDelegation({ manifest, item, briefExcerpt: '', skillBodies: [], capsuleMethods: [heavy], inputs: {}, toolFilter: [] })
   const inlined = buildDelegation({ manifest, item, briefExcerpt: '', skillBodies: [], capsuleMethods: [{ ...heavy, path: '' }], inputs: {}, toolFilter: [] })
   assert.ok(request.prompt.length + 9_000 < inlined.prompt.length, `${request.prompt.length} vs ${inlined.prompt.length}`)
+})
+
+// 2026-10-25: the platform's own starter methods (`_om…`) are the lowest tier. They travel as cards too — a conversation is not handed a dozen
+// bodies — but they are said to be the platform's defaults, not an inference about this user, and to yield to anything of the user's.
+const OFFICIAL_DIR = `_om${'c'.repeat(32)}`
+const official = {
+  name: 'official-daily-writing-status-report',
+  description: '周报与进展汇报：事实只用你给的',
+  whenToUse: '用户让你写周报、月报、进展汇报或项目简报时。',
+  body: '---\nname: official-daily-writing-status-report\n---\n\nOFFICIAL-BODY-STAYS-IN-ITS-FILE\n',
+  directory: OFFICIAL_DIR,
+  path: `/runtime/capsule-methods/${OFFICIAL_DIR}/SKILL.md`,
+  digest: 'sha256:y',
+}
+
+test('an official method is recognised by its mounted directory, and is not a learned one', () => {
+  assert.equal(isOfficialMethod(official), true)
+  assert.equal(isLearnedMethod(official), false)
+  assert.equal(isOfficialMethod(learned), false)
+  assert.equal(isOfficialMethod({ directory: '_omnothex' }), false)
+  assert.equal(isOfficialMethod(null), false)
+})
+
+test('an official method travels as a card in a block of its own, below the learned ones, and yields to the user\'s', () => {
+  const split = splitMountedMethods([ownEntry, learned, official])
+  assert.deepEqual(split.cards.map((method) => method.name), ['pre-submission-freeze-check', 'official-daily-writing-status-report'])
+  assert.deepEqual(split.inline.map((method) => method.name), ['quote-first'])
+  const text = learnedMethodCardLines(split.cards).join('\n')
+  assert.ok(text.indexOf('## EviMed 学到的做法') < text.indexOf('## EviMed 的默认做法'), 'what was learnt from the user comes first')
+  assert.match(text, /EviMed 平台给每位用户的默认做法/)
+  assert.match(text, /与用户自己的做法或上面的方法冲突时，以那些为准/)
+  assert.match(text, new RegExp(`全文：/runtime/capsule-methods/${OFFICIAL_DIR}/SKILL\\.md`))
+  assert.doesNotMatch(text, /OFFICIAL-BODY-STAYS-IN-ITS-FILE/)
+  // The learned block still says only what is true of learned methods.
+  const learnedBlock = text.slice(0, text.indexOf('## EviMed 的默认做法'))
+  assert.doesNotMatch(learnedBlock, /official-daily-writing-status-report/)
+  assert.deepEqual(learnedMethodCardLines([official]).filter((line) => line.startsWith('## ')), ['## EviMed 的默认做法（适用时再读）'], 'an official method alone makes no learned block')
+})
+
+test('a delegated child is handed the official method as a card, never whole', () => {
+  const request = buildDelegation({ manifest, item, briefExcerpt: '', skillBodies: [], capsuleMethods: [official], inputs: {}, toolFilter: [] })
+  assert.doesNotMatch(request.prompt, /OFFICIAL-BODY-STAYS-IN-ITS-FILE/)
+  assert.doesNotMatch(request.prompt, /### official-daily-writing-status-report/, 'never presented as the user\'s own rule')
+  assert.match(request.prompt, /## EviMed 的默认做法（适用时再读）/)
 })
