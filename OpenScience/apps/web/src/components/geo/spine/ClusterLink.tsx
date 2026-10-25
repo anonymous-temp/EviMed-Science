@@ -1,7 +1,8 @@
+import { useGeoDestinationPath } from "../useGeoPath";
 import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router";
 import { cn } from "@/lib/cn";
-import { geoDestinationPath, type GeoTabKey } from "../geoTabs";
+import { type GeoTabKey } from "../geoTabs";
 import { GEO_ACTION_PARAM, GEO_DRAWER_ENGINE_PARAM, GEO_ERROR_PARAM, GEO_GROUP_PARAM, searchWith } from "./drawerParams";
 
 /**
@@ -31,6 +32,7 @@ export function ClusterLink({
   className?: string;
   children: ReactNode;
 }) {
+  const geoDestinationPath = useGeoDestinationPath();
   const location = useLocation();
   if (!groupId) return <span className={className}>{children}</span>;
   const to = tab && geoId

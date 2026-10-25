@@ -1,6 +1,6 @@
 import path from "node:path";
 import { sourceOriginOf, workspaceLayout } from "@evimed/domain";
-import { chunkDocument, embeddingText, estimateTokens, passageQuery, trigramTerms, tsqueryLiteral, tsvectorLiteral } from "./kbChunker.mjs";
+import { KB_INDEX_METHOD, chunkDocument, embeddingInputReceipt, embeddingText, estimateTokens, passageQuery, trigramTerms, tsqueryLiteral, tsvectorLiteral } from "./kbChunker.mjs";
 import { migrateKnowledgeBaseIndex } from "./kbPersistence.mjs";
 import { searchTokens } from "./memoryRecallPolicy.mjs";
 import { HttpError } from "./security.mjs";
@@ -68,6 +68,14 @@ const DERIVABLE_SQL = `EXISTS (SELECT 1 FROM evimed_product.documents d WHERE d.
  *  through; $2–$5 are the held keys' user, sha256, revision and text digest. */
 const HELD_SQL = `EXISTS (SELECT 1 FROM unnest($2::text[], $3::text[], $4::text[], $5::text[]) AS h(user_id, sha256, parser_revision, text_sha256)
   WHERE h.user_id=k.user_id AND h.sha256=k.sha256 AND h.parser_revision=k.parser_revision AND h.text_sha256=k.text_sha256)`;
+
+/** Every indexed read re-proves the parent and the input selected by readiness. */
+const PROVEN_JOIN = `JOIN evimed_kb.documents d ON d.user_id=c.user_id AND d.sha256=c.sha256
+  AND d.parser_revision=c.parser_revision AND d.text_sha256=c.text_sha256
+  AND d.index_method='${KB_INDEX_METHOD}' AND d.embedding_input_sha256=scope.expected_input_sha256`;
+const SCOPE_CTE = "WITH scope AS (SELECT * FROM unnest($2::text[],$3::text[],$4::text[],$5::text[]) AS s(sha256,parser_revision,text_sha256,expected_input_sha256))";
+/** @param {any} row */
+function candidateOf(row) { return `${keyOf(row)}\u0000${row.ordinal}\u0000${row.embedding_input_sha256}`; }
 
 /** How much of a chunk the line of a page's search result quotes around the match, before and after it. */
 const PASSAGE_BEFORE = 40;
@@ -160,15 +168,6 @@ export class KnowledgeBaseIndex {
 
   async ready() {
     const capabilities = await migrateKnowledgeBaseIndex(this.database, { dimension: this.dimension });
-    if (!this.capabilities && capabilities.vector && this.embedder?.configured) {
-      // A model or width change since the vectors were written: those vectors
-      // are not comparable with a new query's, so they are cleared for
-      // re-embedding rather than searched.
-      await this.database.query(`UPDATE evimed_kb.chunks c SET embedding=NULL FROM evimed_kb.documents d
-        WHERE c.user_id=d.user_id AND c.sha256=d.sha256 AND c.parser_revision=d.parser_revision AND c.text_sha256=d.text_sha256
-        AND d.embedding_model IS NOT NULL AND d.embedding_model<>$1 AND c.embedding IS NOT NULL`, [this.embedder.modelKey]);
-      await this.database.query("UPDATE evimed_kb.documents SET embedding_model=NULL WHERE embedding_model IS NOT NULL AND embedding_model<>$1", [this.embedder.modelKey]);
-    }
     this.capabilities = capabilities;
     return capabilities;
   }
@@ -225,6 +224,34 @@ export class KnowledgeBaseIndex {
    */
   async sync({ userId = null, limit = 10 } = {}) {
     const capabilities = await this.ready();
+    limit = Number.isSafeInteger(limit) && limit > 0 ? limit : 10;
+    const targetModel = this.embedder?.modelKey ?? null;
+    const excluded = [...this.backoff].filter(([, until]) => until > Date.now()).map(([key]) => key);
+    // Select old index rows directly: detached library copies have no capture.
+    const maintenance = (await this.database.query(`SELECT * FROM evimed_kb.documents
+      WHERE ($1::text IS NULL OR user_id=$1)
+      AND (index_method IS DISTINCT FROM $2 OR embedding_input_sha256 IS NULL OR embedding_model IS DISTINCT FROM $3)
+      AND NOT ((user_id || chr(1) || sha256 || chr(1) || parser_revision || chr(1) || text_sha256)=ANY($4::text[]))
+      ORDER BY indexed_at,user_id,sha256,parser_revision,text_sha256 LIMIT $5`,
+    [userId, KB_INDEX_METHOD, targetModel, excluded.map(key => key.replaceAll("\u0000", "\u0001")), limit])).rows;
+    let repaired = 0;
+    let modelReset = 0;
+    let failed = 0;
+    for (const row of maintenance) {
+      const backoffKey = `${row.user_id}\u0000${keyOf(row)}`;
+      try {
+        const result = await this.#maintainDocument(row, capabilities.vector, targetModel);
+        repaired += result.repaired;
+        modelReset += result.modelReset;
+        this.backoff.delete(backoffKey);
+      } catch (error) {
+        failed += 1;
+        this.counters.indexFailures += 1;
+        this.lastError = error?.code ?? "kb_index_repair_failed";
+        this.report(this.lastError);
+        this.backoff.set(backoffKey, Date.now() + FAILURE_BACKOFF_MS);
+      }
+    }
     const pending = await this.database.query(`SELECT d.user_id, d.id, d.project_id, d.payload, d.revision FROM evimed_product.documents d
       WHERE d.kind='source' AND d.deleted_at IS NULL AND ${SOURCE_READABLE_SQL}
         AND d.payload->'analysis'->>'textSha256' IS NOT NULL
@@ -233,10 +260,9 @@ export class KnowledgeBaseIndex {
           AND k.text_sha256=d.payload->'analysis'->>'textSha256' AND k.parser_revision=${REVISION_SQL})
       ORDER BY d.updated_at, d.id LIMIT $2`, [userId, Math.max(1, limit * 4)]);
     let indexed = 0;
-    let failed = 0;
     const seen = new Set();
     for (const row of pending.rows) {
-      if (indexed + failed >= limit) break;
+      if (indexed + repaired + modelReset + failed >= limit) break;
       const key = keyOf({ sha256: row.payload.fingerprint?.sha256, parserRevision: sourceParserRevision(row.payload.analysis), textSha256: row.payload.analysis?.textSha256 });
       const backoffKey = `${row.user_id}\u0000${key}`;
       if (seen.has(backoffKey) || (this.backoff.get(backoffKey) ?? 0) > Date.now()) continue;
@@ -255,8 +281,65 @@ export class KnowledgeBaseIndex {
     const embedded = capabilities.vector && this.embedder?.configured ? await this.#embedMissing(userId) : 0;
     const removed = await this.#collect(userId);
     const library = this.library ? await this.library.syncCopies({ userId }).catch(() => null) : null;
-    if (!failed) this.lastError = null;
-    return { indexed, failed, embedded, removed, ...(library ? { library } : {}) };
+    const remaining = await this.#remaining(userId, targetModel, capabilities.vector);
+    if (!failed && !remaining.unproven && !remaining.pendingModelReset && !(remaining.pendingEmbedding && this.embedder?.configured)) this.lastError = null;
+    return { indexed, repaired, modelReset, failed, embedded, removed, ...remaining, ...(library ? { library } : {}) };
+  }
+
+  /** Remaining unproven rows and pending target resets; neither means complete.
+   * @param {string|null} userId @param {string|null} targetModel @param {boolean} vector */
+  async #remaining(userId, targetModel, vector) {
+    const row = (await this.database.query(`SELECT
+      count(*) FILTER (WHERE index_method IS DISTINCT FROM $2 OR embedding_input_sha256 IS NULL)::integer AS unproven,
+      count(*) FILTER (WHERE embedding_model IS DISTINCT FROM $3)::integer AS "pendingModelReset"
+      FROM evimed_kb.documents WHERE ($1::text IS NULL OR user_id=$1)`, [userId, KB_INDEX_METHOD, targetModel])).rows[0];
+    const pendingEmbedding = vector ? (await this.database.query(`SELECT count(*)::integer AS n FROM evimed_kb.chunks c
+      JOIN evimed_kb.documents d USING (user_id,sha256,parser_revision,text_sha256)
+      WHERE ($1::text IS NULL OR c.user_id=$1) AND d.index_method=$2 AND d.embedding_input_sha256 IS NOT NULL
+      AND d.embedding_model IS NOT DISTINCT FROM $3 AND c.embedding IS NULL`, [userId,KB_INDEX_METHOD,targetModel])).rows[0].n : 0;
+    return { unproven: row.unproven, pendingModelReset: row.pendingModelReset, pendingEmbedding };
+  }
+
+  /** Repair only from preserved chunk bodies, never from metadata-bearing library files.
+   * The same lock serializes fresh indexing, repair, model reset and vector CAS.
+   * @param {any} selected @param {boolean} vector @param {string|null} targetModel */
+  async #maintainDocument(selected, vector, targetModel) {
+    return this.database.transaction(async client => {
+      const args = [selected.user_id, selected.sha256, selected.parser_revision, selected.text_sha256];
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`kb:${args.join(":")}`]);
+      const document = (await client.query(`SELECT * FROM evimed_kb.documents
+        WHERE user_id=$1 AND sha256=$2 AND parser_revision=$3 AND text_sha256=$4`, args)).rows[0];
+      if (!document) return { repaired: 0, modelReset: 0 };
+      const legacy = document.index_method !== KB_INDEX_METHOD || !document.embedding_input_sha256;
+      const reset = document.embedding_model !== targetModel;
+      if (!legacy && !reset) return { repaired: 0, modelReset: 0 };
+      let receipt = document.embedding_input_sha256;
+      if (legacy) {
+        const chunks = (await client.query(`SELECT ordinal,start_offset,end_offset,content FROM evimed_kb.chunks
+          WHERE user_id=$1 AND sha256=$2 AND parser_revision=$3 AND text_sha256=$4 ORDER BY ordinal`, args)).rows;
+        let previousEnd = 0;
+        if (chunks.length !== document.chunk_count || chunks.some((chunk, ordinal) => {
+          const valid = chunk.ordinal === ordinal && Number.isSafeInteger(chunk.start_offset) && Number.isSafeInteger(chunk.end_offset)
+            && chunk.start_offset >= previousEnd && chunk.end_offset >= chunk.start_offset && chunk.end_offset <= document.char_count
+            && typeof chunk.content === "string" && chunk.content.length === chunk.end_offset - chunk.start_offset;
+          previousEnd = chunk.end_offset;
+          return !valid;
+        })) throw new HttpError(409, "kb_legacy_chunks_invalid", "The preserved index chunks cannot prove their content offsets.");
+        for (let at = 0; at < chunks.length; at += INSERT_BATCH) {
+          const batch = chunks.slice(at, at + INSERT_BATCH);
+          await client.query(`UPDATE evimed_kb.chunks c SET context_prefix='',heading_path='',lexemes=x.lexemes::tsvector
+            FROM unnest($5::integer[],$6::text[]) AS x(ordinal,lexemes)
+            WHERE c.user_id=$1 AND c.sha256=$2 AND c.parser_revision=$3 AND c.text_sha256=$4 AND c.ordinal=x.ordinal`,
+          [...args, batch.map(chunk => chunk.ordinal), batch.map(chunk => tsvectorLiteral(chunk.content))]);
+        }
+        receipt = embeddingInputReceipt(chunks.map(chunk => ({ ordinal: chunk.ordinal, prefix: "", content: chunk.content })));
+      }
+      if (vector) await client.query(`UPDATE evimed_kb.chunks SET embedding=NULL
+        WHERE user_id=$1 AND sha256=$2 AND parser_revision=$3 AND text_sha256=$4`, args);
+      await client.query(`UPDATE evimed_kb.documents SET title='',index_method=$5,embedding_input_sha256=$6,embedding_model=$7
+        WHERE user_id=$1 AND sha256=$2 AND parser_revision=$3 AND text_sha256=$4`, [...args, KB_INDEX_METHOD, receipt, targetModel]);
+      return { repaired: legacy ? 1 : 0, modelReset: !legacy && reset ? 1 : 0 };
+    });
   }
 
   /**
@@ -269,8 +352,7 @@ export class KnowledgeBaseIndex {
     const capture = await this.sources.loadCapture(row.user_id, source);
     if (!capture) throw new HttpError(409, "kb_capture_unavailable", "The source has no current capture to index.");
     const text = capture.input.text;
-    const title = String(row.payload.metadata?.title || path.posix.basename(String(row.payload.paths?.[0] ?? row.id))).slice(0, 1000);
-    const chunks = chunkDocument({ text, pageMap: capture.pageMap, title }).map((chunk) => {
+    const chunks = chunkDocument({ text, pageMap: capture.pageMap }).map((chunk) => {
       const content = text.slice(chunk.start, chunk.end);
       return { ...chunk, content, lexemes: tsvectorLiteral(`${chunk.prefix}\n${content}`) };
     });
@@ -279,8 +361,8 @@ export class KnowledgeBaseIndex {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`kb:${row.user_id}:${key.sha256}:${key.revision}:${key.textSha256}`]);
       await client.query("DELETE FROM evimed_kb.documents WHERE user_id=$1 AND sha256=$2 AND parser_revision=$3 AND text_sha256=$4",
         [row.user_id, key.sha256, key.revision, key.textSha256]);
-      await client.query(`INSERT INTO evimed_kb.documents(user_id,sha256,parser_revision,text_sha256,title,char_count,token_estimate,chunk_count)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, [row.user_id, key.sha256, key.revision, key.textSha256, title, text.length, estimateTokens(text), chunks.length]);
+      await client.query(`INSERT INTO evimed_kb.documents(user_id,sha256,parser_revision,text_sha256,title,char_count,token_estimate,chunk_count,index_method,embedding_input_sha256,embedding_model)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [row.user_id, key.sha256, key.revision, key.textSha256, "", text.length, estimateTokens(text), chunks.length, KB_INDEX_METHOD, embeddingInputReceipt(chunks), this.embedder?.modelKey ?? null]);
       for (let at = 0; at < chunks.length; at += INSERT_BATCH) {
         const batch = chunks.slice(at, at + INSERT_BATCH);
         await client.query(`INSERT INTO evimed_kb.chunks(user_id,sha256,parser_revision,text_sha256,ordinal,start_offset,end_offset,page,heading_path,context_prefix,content,lexemes)
@@ -296,33 +378,41 @@ export class KnowledgeBaseIndex {
     return { chunks: chunks.length };
   }
 
-  /** Vectors for chunks that have none, a bounded batch per pass; a document
-   *  is marked embedded once its last chunk is. @param {string | null} userId */
+  /** Provider awaits happen outside transactions; the selected receipt and target
+   * model must still match after the await. @param {string | null} userId */
   async #embedMissing(userId) {
-    const rows = (await this.database.query(`SELECT c.user_id, c.sha256, c.parser_revision, c.text_sha256, c.ordinal, c.context_prefix, c.content
-      FROM evimed_kb.chunks c JOIN evimed_kb.documents d USING (user_id, sha256, parser_revision, text_sha256)
-      WHERE c.embedding IS NULL AND d.embedding_model IS NULL AND ($1::text IS NULL OR c.user_id=$1)
-      ORDER BY d.indexed_at, c.ordinal LIMIT $2`, [userId, EMBED_BATCH])).rows;
+    const embedder = this.embedder;
+    const model = embedder.modelKey;
+    const rows = (await this.database.query(`SELECT c.user_id,c.sha256,c.parser_revision,c.text_sha256,c.ordinal,c.context_prefix,c.content,
+        d.index_method,d.embedding_input_sha256,d.embedding_model
+      FROM evimed_kb.chunks c JOIN evimed_kb.documents d USING (user_id,sha256,parser_revision,text_sha256)
+      WHERE c.embedding IS NULL AND d.index_method=$3 AND d.embedding_input_sha256 IS NOT NULL AND d.embedding_model=$4
+      AND ($1::text IS NULL OR c.user_id=$1) ORDER BY d.indexed_at,c.ordinal LIMIT $2`,
+    [userId, EMBED_BATCH, KB_INDEX_METHOD, model])).rows;
     if (!rows.length) return 0;
     let vectors;
-    try {
-      vectors = await this.embedder.embedDocuments(rows.map((row) => embeddingText({ prefix: row.context_prefix }, row.content)));
-    } catch (error) {
-      // Keyword search already works for these chunks; vectors wait for the next pass.
-      this.lastError = typeof error?.code === "string" ? error.code : "kb_embedding_failed";
+    try { vectors = await embedder.embedDocuments(rows.map(row => embeddingText({ prefix: row.context_prefix }, row.content))); }
+    catch (error) {
+      this.lastError = error?.code ?? "kb_embedding_failed";
       return 0;
     }
-    await this.database.transaction(async (client) => {
+    const embedded = await this.database.transaction(async client => {
+      const locks = [...new Set(rows.map(row => `kb:${row.user_id}:${row.sha256}:${row.parser_revision}:${row.text_sha256}`))].sort();
+      for (const lock of locks) await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [lock]);
+      let affected = 0;
       for (const [index, row] of rows.entries()) {
-        await client.query(`UPDATE evimed_kb.chunks SET embedding=$6::vector WHERE user_id=$1 AND sha256=$2 AND parser_revision=$3 AND text_sha256=$4 AND ordinal=$5`,
-          [row.user_id, row.sha256, row.parser_revision, row.text_sha256, row.ordinal, `[${vectors[index].join(",")}]`]);
+        const result = await client.query(`UPDATE evimed_kb.chunks c SET embedding=$6::vector FROM evimed_kb.documents d
+          WHERE c.user_id=$1 AND c.sha256=$2 AND c.parser_revision=$3 AND c.text_sha256=$4 AND c.ordinal=$5 AND c.embedding IS NULL
+          AND d.user_id=c.user_id AND d.sha256=c.sha256 AND d.parser_revision=c.parser_revision AND d.text_sha256=c.text_sha256
+          AND d.index_method=$7 AND d.embedding_input_sha256=$8 AND d.embedding_model=$9`,
+        [row.user_id,row.sha256,row.parser_revision,row.text_sha256,row.ordinal,`[${vectors[index].join(",")}]`,
+          row.index_method,row.embedding_input_sha256,row.embedding_model]);
+        affected += result.rowCount ?? 0;
       }
-      await client.query(`UPDATE evimed_kb.documents d SET embedding_model=$1 WHERE d.embedding_model IS NULL AND ($2::text IS NULL OR d.user_id=$2)
-        AND NOT EXISTS (SELECT 1 FROM evimed_kb.chunks c WHERE c.user_id=d.user_id AND c.sha256=d.sha256
-          AND c.parser_revision=d.parser_revision AND c.text_sha256=d.text_sha256 AND c.embedding IS NULL)`, [this.embedder.modelKey, userId]);
+      return affected;
     });
-    this.counters.embeddedChunks += rows.length;
-    return rows.length;
+    this.counters.embeddedChunks += embedded;
+    return embedded;
   }
 
   /** Drop index documents no live source names any more, except those the
@@ -355,15 +445,22 @@ export class KnowledgeBaseIndex {
         AND (${DERIVABLE_SQL} OR NOT ${HELD_SQL})`, [scope, ...held]);
     }
     this.backoff.clear();
-    const totals = { indexed: 0, failed: 0, embedded: 0 };
+    const totals = { indexed: 0, repaired: 0, modelReset: 0, failed: 0, embedded: 0, unproven: 0, pendingModelReset: 0, pendingEmbedding: 0 };
     for (const scope of userIds ?? [null]) {
+      let remaining = { unproven: 0, pendingModelReset: 0, pendingEmbedding: 0 };
       for (let pass = 0; pass < 10_000; pass += 1) {
         const result = await this.sync({ userId: scope, limit: 20 });
         totals.indexed += result.indexed;
         totals.failed += result.failed;
         totals.embedded += result.embedded;
-        if (!result.indexed && !result.embedded) break;
+        totals.repaired += result.repaired;
+        totals.modelReset += result.modelReset;
+        remaining = result;
+        if (!result.indexed && !result.embedded && !result.repaired && !result.modelReset) break;
       }
+      totals.unproven += remaining.unproven;
+      totals.pendingModelReset += remaining.pendingModelReset;
+      totals.pendingEmbedding += remaining.pendingEmbedding;
     }
     return totals;
   }
@@ -373,12 +470,16 @@ export class KnowledgeBaseIndex {
    * library, each with the path a run reads it at. The library answers for its
    * own entries — a copy it holds is searchable even once no project does.
    * @param {string} userId @param {string} projectId @param {string[] | null} sourceIds
+   * @param {{ includeLibrary?: boolean, acceptSource?: ((source:any)=>Promise<boolean>) | null }} options
    */
-  async #scope(userId, projectId, sourceIds) {
-    const rows = (await this.database.query(`SELECT id, project_id, payload FROM evimed_product.documents
+  async #scope(userId, projectId, sourceIds, { includeLibrary = true, acceptSource = null } = {}) {
+    const rows = (await this.database.query(`SELECT id, project_id, payload, revision FROM evimed_product.documents
       WHERE user_id=$1 AND project_id=$2 AND kind='source' AND deleted_at IS NULL
       ORDER BY created_at, id`, [userId, projectId])).rows;
-    const project = rows.map((row) => {
+    const admitted = [];
+    for (const row of rows) if (!acceptSource || await acceptSource({ id: row.id, kind: 'source', userId, projectId: row.project_id,
+      revision: row.revision, payload: row.payload, deletedAt: null }) === true) admitted.push(row);
+    const project = admitted.map((row) => {
       const payload = row.payload;
       const artifact = typeof payload.outputs?.artifactPath === "string" ? payload.outputs.artifactPath : "";
       const readPath = artifact.startsWith("knowledge-base/") ? `${workspaceLayout.knowledgeDir}/${artifact.slice("knowledge-base/".length)}` : null;
@@ -396,7 +497,7 @@ export class KnowledgeBaseIndex {
       };
     });
     /** @type {any[]} */
-    const library = this.library ? (await this.library.searchScope(userId)).map((/** @type {any} */ entry) => ({ ...entry, origin: "library" })) : [];
+    const library = includeLibrary && this.library ? (await this.library.searchScope(userId)).map((/** @type {any} */ entry) => ({ ...entry, origin: "library" })) : [];
     const wanted = sourceIds === null ? null : new Set(sourceIds);
     /** @param {{ sourceId: string }} entry */
     const named = (entry) => !wanted || wanted.has(entry.sourceId);
@@ -426,10 +527,10 @@ export class KnowledgeBaseIndex {
    * What it returns is by document content (`sha256`): the list says which rows hold those bytes, and a document the index
    * has not indexed yet is simply not there — the list's own search still finds it by its name and summary.
    *
-   * @param {{ userId: string, projectId: string | null, shared: boolean, q: string }} request
+   * @param {{ userId: string, projectId: string | null, shared: boolean, q: string, acceptSource?: ((source:any)=>Promise<boolean>) | null }} request
    * @returns {Promise<{ shas: string[], bySha: Record<string, { page: number | null, snippet: string, start: number, end: number }[]> } | null>}
    */
-  async passages({ userId, projectId, shared, q }) {
+  async passages({ userId, projectId, shared, q, acceptSource = null }) {
     const query = passageQuery(q);
     if (!query || !userId) return null;
     await this.ready();
@@ -439,25 +540,29 @@ export class KnowledgeBaseIndex {
       documents = (this.library ? await this.library.searchScope(userId) : [])
         .filter((/** @type {any} */ entry) => entry.searchable && entry.sha256 && entry.parserRevision && entry.textSha256);
     } else if (projectId) {
-      const rows = (await this.database.query(`SELECT payload FROM evimed_product.documents
+      const rows = (await this.database.query(`SELECT id, payload, revision FROM evimed_product.documents
         WHERE user_id=$1 AND project_id=$2 AND kind='source' AND deleted_at IS NULL`, [userId, projectId])).rows;
-      documents = rows.map((/** @type {{ payload: any }} */ row) => ({ sha256: row.payload.fingerprint?.sha256, parserRevision: sourceParserRevision(row.payload.analysis),
+      const admitted = [];
+      for (const row of rows) if (!acceptSource || await acceptSource({ id: row.id, kind: 'source', userId, projectId,
+        revision: row.revision, payload: row.payload, deletedAt: null }) === true) admitted.push(row);
+      documents = admitted.map((/** @type {{ payload: any }} */ row) => ({ sha256: row.payload.fingerprint?.sha256, parserRevision: sourceParserRevision(row.payload.analysis),
         textSha256: row.payload.analysis?.textSha256, readable: sourceReadable(row.payload) }))
         .filter((/** @type {any} */ entry) => entry.readable && entry.sha256 && entry.parserRevision && entry.textSha256);
     }
     if (!documents.length) return null;
-    const indexed = new Set((await this.database.query(`SELECT sha256, parser_revision, text_sha256 FROM evimed_kb.documents
-      WHERE user_id=$1 AND sha256=ANY($2::text[])`, [userId, documents.map((entry) => entry.sha256)])).rows.map(keyOf));
-    /** @type {Map<string, { sha256: string, parserRevision: string, textSha256: string }>} */
+    const indexed = new Map((await this.database.query(`SELECT sha256,parser_revision,text_sha256,embedding_input_sha256 FROM evimed_kb.documents
+      WHERE user_id=$1 AND sha256=ANY($2::text[]) AND index_method=$3 AND embedding_input_sha256 IS NOT NULL`,
+    [userId, documents.map(entry => entry.sha256), KB_INDEX_METHOD])).rows.map(row => [keyOf(row), row.embedding_input_sha256]));
+    /** @type {Map<string, { sha256: string, parserRevision: string, textSha256: string, embedding_input_sha256: string }>} */
     const ready = new Map();
-    for (const entry of documents) if (indexed.has(keyOf(entry)) && !ready.has(keyOf(entry))) ready.set(keyOf(entry), entry);
+    for (const entry of documents) if (indexed.has(keyOf(entry)) && !ready.has(keyOf(entry))) ready.set(keyOf(entry), { ...entry, embedding_input_sha256: indexed.get(keyOf(entry)) });
     if (!ready.size) return null;
     const scope = [...ready.values()];
-    const rows = (await this.database.query(`WITH scope AS (SELECT * FROM unnest($2::text[], $3::text[], $4::text[]) AS s(sha256, parser_revision, text_sha256))
-      SELECT c.sha256, c.ordinal, c.start_offset, c.page, c.content FROM evimed_kb.chunks c JOIN scope USING (sha256, parser_revision, text_sha256)
-      WHERE c.user_id=$1 AND c.lexemes @@ $5::tsquery AND strpos(lower(c.content), $6::text) > 0
-      ORDER BY ts_rank(c.lexemes, $5::tsquery, 1) DESC, c.sha256, c.ordinal LIMIT $7`,
-    [userId, scope.map((entry) => entry.sha256), scope.map((entry) => entry.parserRevision), scope.map((entry) => entry.textSha256),
+    const rows = (await this.database.query(`${SCOPE_CTE}
+      SELECT c.sha256, c.ordinal, c.start_offset, c.page, c.content FROM evimed_kb.chunks c JOIN scope USING (sha256, parser_revision, text_sha256) ${PROVEN_JOIN}
+      WHERE c.user_id=$1 AND c.lexemes @@ $6::tsquery AND strpos(lower(c.content), $7::text) > 0
+      ORDER BY ts_rank(c.lexemes, $6::tsquery, 1) DESC, c.sha256, c.ordinal LIMIT $8`,
+    [userId, scope.map((entry) => entry.sha256), scope.map((entry) => entry.parserRevision), scope.map((entry) => entry.textSha256), scope.map(entry => entry.embedding_input_sha256),
       query.tsquery, query.needles[0], PASSAGE_CHUNKS])).rows;
     /** @type {Map<string, { ordinal: number, page: number | null, snippet: string, start: number, end: number }[]>} */
     const found = new Map();
@@ -488,22 +593,24 @@ export class KnowledgeBaseIndex {
 
   /**
    * Answer one `kb_search`.
-   * @param {{ userId: string, projectId: string, query: string, limit?: number, sourceIds?: string[] | null }} request
+   * @param {{ userId: string, projectId: string, query: string, limit?: number, sourceIds?: string[] | null,
+   * includeLibrary?: boolean, acceptSource?: ((source:any)=>Promise<boolean>) | null }} request
    */
-  async search({ userId, projectId, query, limit = 8, sourceIds = null }) {
+  async search({ userId, projectId, query, limit = 8, sourceIds = null, includeLibrary = true, acceptSource = null }) {
     this.counters.searches += 1;
     try {
-      return await this.#search({ userId, projectId, query, limit, sourceIds });
+      return await this.#search({ userId, projectId, query, limit, sourceIds, includeLibrary, acceptSource });
     } catch (error) {
       this.counters.searchFailures += 1;
       throw error;
     }
   }
 
-  /** @param {{ userId: string, projectId: string, query: string, limit: number, sourceIds: string[] | null }} request */
-  async #search({ userId, projectId, query, limit, sourceIds }) {
+  /** @param {{ userId: string, projectId: string, query: string, limit: number, sourceIds: string[] | null,
+   * includeLibrary: boolean, acceptSource: ((source:any)=>Promise<boolean>) | null }} request */
+  async #search({ userId, projectId, query, limit, sourceIds, includeLibrary, acceptSource }) {
     const capabilities = await this.ready();
-    const scope = await this.#scope(userId, projectId, sourceIds);
+    const scope = await this.#scope(userId, projectId, sourceIds, { includeLibrary, acceptSource });
     const searchable = scope.filter((entry) => entry.searchable);
     const waiting = scope.filter((entry) => !entry.searchable).map((entry) => ({ sourceId: entry.sourceId, title: entry.title, status: entry.status }));
     const tokens = searchable.reduce((sum, entry) => sum + entry.tokens, 0);
@@ -519,51 +626,57 @@ export class KnowledgeBaseIndex {
           ...(entry.pages ? { pages: entry.pages } : {}), origin: entry.origin })),
         note: `This knowledge base is small (about ${tokens} tokens in ${searchable.length} documents): read the listed files directly instead of searching — a search would only show fragments of what reading gives whole.` };
     }
-    const indexed = new Set((await this.database.query(`SELECT sha256, parser_revision, text_sha256 FROM evimed_kb.documents
-      WHERE user_id=$1 AND sha256=ANY($2::text[])`, [userId, searchable.map((entry) => entry.sha256)])).rows.map(keyOf));
-    const ready = searchable.filter((entry) => indexed.has(keyOf(entry)));
+    const indexed = new Map((await this.database.query(`SELECT sha256,parser_revision,text_sha256,embedding_input_sha256 FROM evimed_kb.documents
+      WHERE user_id=$1 AND sha256=ANY($2::text[]) AND index_method=$3 AND embedding_input_sha256 IS NOT NULL`,
+    [userId, searchable.map(entry => entry.sha256), KB_INDEX_METHOD])).rows.map(row => [keyOf(row), row.embedding_input_sha256]));
+    const ready = searchable.filter(entry => indexed.has(keyOf(entry))).map(entry => ({ ...entry, embedding_input_sha256: indexed.get(keyOf(entry)) }));
     const indexing = searchable.filter((entry) => !indexed.has(keyOf(entry)))
       .map((entry) => ({ sourceId: entry.sourceId, title: entry.title, status: "indexing", path: entry.path }));
     if (!ready.length) {
       return { mode: "indexing", query, library, hits: [], waiting: [...waiting, ...indexing],
         note: "The index is still being built for these documents; read them directly at the listed paths for now." };
     }
-    const scopeArrays = [ready.map((entry) => entry.sha256), ready.map((entry) => entry.parserRevision), ready.map((entry) => entry.textSha256)];
-    const scopeCte = "WITH scope AS (SELECT * FROM unnest($2::text[], $3::text[], $4::text[]) AS s(sha256, parser_revision, text_sha256))";
+    const scopeArrays = [ready.map(entry => entry.sha256),ready.map(entry => entry.parserRevision),ready.map(entry => entry.textSha256),ready.map(entry => entry.embedding_input_sha256)];
     /** @type {Record<string, string[]>} */
     const legs = {};
     const tsquery = tsqueryLiteral(query);
     if (tsquery) {
-      legs.keyword = (await this.database.query(`${scopeCte}
-        SELECT c.sha256, c.parser_revision, c.text_sha256, c.ordinal FROM evimed_kb.chunks c JOIN scope USING (sha256, parser_revision, text_sha256)
-        WHERE c.user_id=$1 AND c.lexemes @@ $5::tsquery
-        ORDER BY ts_rank(c.lexemes, $5::tsquery, 1) DESC, c.sha256, c.ordinal LIMIT $6`, [userId, ...scopeArrays, tsquery, LEG_LIMIT]))
-        .rows.map((row) => `${keyOf(row)}\u0000${row.ordinal}`);
+      legs.keyword = (await this.database.query(`${SCOPE_CTE}
+        SELECT c.sha256,c.parser_revision,c.text_sha256,c.ordinal,d.embedding_input_sha256
+        FROM evimed_kb.chunks c JOIN scope USING (sha256,parser_revision,text_sha256) ${PROVEN_JOIN}
+        WHERE c.user_id=$1 AND c.lexemes @@ $6::tsquery
+        ORDER BY ts_rank(c.lexemes,$6::tsquery,1) DESC,c.sha256,c.ordinal LIMIT $7`,
+      [userId,...scopeArrays,tsquery,LEG_LIMIT])).rows.map(candidateOf);
     }
     const words = trigramTerms(query);
     if (capabilities.trigram && words.length) {
-      legs.trigram = (await this.database.query(`${scopeCte}
-        SELECT c.sha256, c.parser_revision, c.text_sha256, c.ordinal, max(word_similarity(t.term, c.content)) AS score
-        FROM evimed_kb.chunks c JOIN scope USING (sha256, parser_revision, text_sha256) JOIN unnest($5::text[]) AS t(term) ON t.term <% c.content
-        WHERE c.user_id=$1 GROUP BY c.sha256, c.parser_revision, c.text_sha256, c.ordinal
-        ORDER BY score DESC, c.sha256, c.ordinal LIMIT $6`, [userId, ...scopeArrays, words, LEG_LIMIT]))
-        .rows.map((row) => `${keyOf(row)}\u0000${row.ordinal}`);
+      legs.trigram = (await this.database.query(`${SCOPE_CTE}
+        SELECT c.sha256,c.parser_revision,c.text_sha256,c.ordinal,d.embedding_input_sha256,max(word_similarity(t.term,c.content)) AS score
+        FROM evimed_kb.chunks c JOIN scope USING (sha256,parser_revision,text_sha256) ${PROVEN_JOIN}
+        JOIN unnest($6::text[]) AS t(term) ON t.term <% c.content
+        WHERE c.user_id=$1 GROUP BY c.sha256,c.parser_revision,c.text_sha256,c.ordinal,d.embedding_input_sha256
+        ORDER BY score DESC,c.sha256,c.ordinal LIMIT $7`, [userId,...scopeArrays,words,LEG_LIMIT])).rows.map(candidateOf);
     }
     let vectorNote = null;
-    if (capabilities.vector && this.embedder?.configured) {
-      try {
-        const vector = await this.embedder.embedQuery(query);
-        legs.vector = await this.database.transaction(async (client) => {
+    const embedder = this.embedder;
+    if (capabilities.vector && embedder?.configured) {
+      const model = embedder.modelKey;
+      // Avoid a provider call when no proven vector of the target model exists.
+      const available = await this.database.query(`${SCOPE_CTE} SELECT 1 FROM evimed_kb.chunks c
+        JOIN scope USING (sha256,parser_revision,text_sha256) ${PROVEN_JOIN}
+        WHERE c.user_id=$1 AND c.embedding IS NOT NULL AND d.embedding_model=$6 LIMIT 1`, [userId,...scopeArrays,model]);
+      if (available.rowCount) try {
+        const vector = await embedder.embedQuery(query);
+        legs.vector = await this.database.transaction(async client => {
           if (capabilities.iterativeScan) await client.query("SET LOCAL hnsw.iterative_scan = relaxed_order");
-          const rows = (await client.query(`${scopeCte}
-            SELECT c.sha256, c.parser_revision, c.text_sha256, c.ordinal FROM evimed_kb.chunks c JOIN scope USING (sha256, parser_revision, text_sha256)
-            WHERE c.user_id=$1 AND c.embedding IS NOT NULL ORDER BY c.embedding <=> $5::vector LIMIT $6`,
-          [userId, ...scopeArrays, `[${vector.join(",")}]`, LEG_LIMIT])).rows;
-          return rows.map((row) => `${keyOf(row)}\u0000${row.ordinal}`);
+          const rows = (await client.query(`${SCOPE_CTE}
+            SELECT c.sha256,c.parser_revision,c.text_sha256,c.ordinal,d.embedding_input_sha256
+            FROM evimed_kb.chunks c JOIN scope USING (sha256,parser_revision,text_sha256) ${PROVEN_JOIN}
+            WHERE c.user_id=$1 AND c.embedding IS NOT NULL AND d.embedding_model=$8
+            ORDER BY c.embedding <=> $6::vector LIMIT $7`, [userId,...scopeArrays,`[${vector.join(",")}]`,LEG_LIMIT,model])).rows;
+          return rows.map(candidateOf);
         });
-      } catch (error) {
-        vectorNote = typeof error?.code === "string" ? error.code : "kb_embedding_failed";
-      }
+      } catch (error) { vectorNote = error?.code ?? "kb_embedding_failed"; }
     }
     /** @type {Map<string, { score: number, first: number }>} */
     const fused = new Map();
@@ -584,11 +697,12 @@ export class KnowledgeBaseIndex {
         note: "Nothing in the searched documents matched; this is not evidence the documents are silent on it — read them if the question needs certainty." };
     }
     const keys = ordered.map(([candidate]) => candidate.split("\u0000"));
-    const rows = (await this.database.query(`SELECT c.sha256, c.parser_revision, c.text_sha256, c.ordinal, c.start_offset, c.end_offset, c.page, c.context_prefix, c.content
-      FROM evimed_kb.chunks c JOIN unnest($2::text[], $3::text[], $4::text[], $5::integer[]) AS k(sha256, parser_revision, text_sha256, ordinal)
-        USING (sha256, parser_revision, text_sha256, ordinal) WHERE c.user_id=$1`,
-    [userId, keys.map((key) => key[0]), keys.map((key) => key[1]), keys.map((key) => key[2]), keys.map((key) => Number(key[3]))])).rows;
-    const byCandidate = new Map(rows.map((row) => [`${keyOf(row)}\u0000${row.ordinal}`, row]));
+    const rows = (await this.database.query(`SELECT c.sha256,c.parser_revision,c.text_sha256,c.ordinal,c.start_offset,c.end_offset,c.page,c.context_prefix,c.content,d.embedding_input_sha256
+      FROM evimed_kb.chunks c
+      JOIN unnest($2::text[],$3::text[],$4::text[],$5::integer[],$6::text[]) AS scope(sha256,parser_revision,text_sha256,ordinal,expected_input_sha256)
+        USING (sha256,parser_revision,text_sha256,ordinal) ${PROVEN_JOIN} WHERE c.user_id=$1`,
+    [userId,keys.map(key => key[0]),keys.map(key => key[1]),keys.map(key => key[2]),keys.map(key => Number(key[3])),keys.map(key => key[4])])).rows;
+    const byCandidate = new Map(rows.map(row => [candidateOf(row), row]));
     const candidates = ordered.map(([candidate, entry]) => ({ candidate, score: entry.score, row: byCandidate.get(candidate) })).filter((item) => item.row);
     let order = candidates.map((_, index) => index);
     let reranked = false;

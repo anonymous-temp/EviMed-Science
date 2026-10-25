@@ -340,6 +340,7 @@ export function geoActionEntry(entry) {
   const value = record(entry)
   const what = value.what && typeof value.what === 'object' ? record(value.what) : null
   return {
+    work: value.work ?? null, timing: value.timing ?? null, effort: value.effort ?? null, estimate: value.estimate ?? null, sequence: finite(value.sequence),
     gapId: text(value.gapId),
     groupId: text(value.groupId),
     group: text(value.group),
@@ -350,7 +351,7 @@ export function geoActionEntry(entry) {
     engines: list(value.engines).map(String).filter(Boolean),
     sources: list(value.sources).filter((source) => source && typeof source === 'object').map((source) => {
       const domain = text(record(source).domain)
-      return { domain: domain ? bareDomain(domain) : null, why: text(record(source).why) }
+      return { url: text(record(source).url), domain: domain ? bareDomain(domain) : null, why: text(record(source).why) }
     }).filter((source) => source.domain),
     promise: text(value.promise),
     basis: text(value.basis),
@@ -367,7 +368,7 @@ export function geoActionEntry(entry) {
  *
  * @param {ReadonlyArray<Record<string, any>>} candidates @param {{ swapped: string | null,
  *   placed: ReadonlyArray<{ domain: string, orderId: string | null, name?: string | null, price?: number | null }>,
- *   modelSources: ReadonlyArray<{ domain: string | null, why: string | null }>, info?: Record<string, Record<string, any>> }} choice
+ *   modelSources: ReadonlyArray<{ domain: string | null, why: string | null, url?: string | null }>, info?: Record<string, Record<string, any>> }} choice
  */
 function rankedSources(candidates, { swapped, placed, modelSources, info = {} }) {
   /** @type {Map<string, Record<string, any>>} */
@@ -398,6 +399,7 @@ function rankedSources(candidates, { swapped, placed, modelSources, info = {} })
     const swappedTo = swapped ? bareDomain(swapped) : null
     return {
       domain,
+      url: domain ? modelSources.find(entry => entry.domain === domain)?.url ?? null : null,
       channel: text(candidate.channel),
       name: text(candidate.name),
       kind: text(candidate.kind),
@@ -714,6 +716,7 @@ export function deriveGeoActions(input) {
         safetyPinned: gap?.safetyPinned === true,
         handoff: text(gap?.handoff ?? gap?.handoffTo),
       },
+      work: entry?.work ?? null, timing: entry?.timing ?? null, effort: entry?.effort ?? null, estimate: entry?.estimate ?? null, sequence: entry?.sequence ?? null,
       what: { layer, title: entry?.what?.title ?? text(latestArticle?.title), channel, channelNote: channel ? null : text(latestArticle?.channelNote) },
       engines,
       sources,
@@ -1080,10 +1083,12 @@ export function geoErrorsByClaim(errors) {
   }
   const severityRank = (/** @type {string | null} */ severity) => (severity ? GEO_SEVERITIES.indexOf(/** @type {any} */ (severity)) : -1)
   return [...byClaim.entries()].map(([fingerprint, rows]) => {
-    const severity = rows.map((row) => text(row.severity)).filter(Boolean).sort((left, right) => severityRank(right) - severityRank(left))[0] ?? null
-    const status = rows.map((row) => String(row.status)).sort((left, right) => statusRank.indexOf(left) - statusRank.indexOf(right))[0] ?? 'open'
+    const active = rows.filter(row => row.judgmentState !== 'withdrawn');
+    const judged = active.length ? active : rows;
+    const severity = judged.map((row) => text(row.severity)).filter(Boolean).sort((left, right) => severityRank(right) - severityRank(left))[0] ?? null
+    const status = judged.map((row) => String(row.status)).sort((left, right) => statusRank.indexOf(left) - statusRank.indexOf(right))[0] ?? 'open'
     // The answer opened for the claim is the most severe live one's: its row leads.
-    const lead = [...rows].sort((left, right) => (severityRank(text(right.severity)) - severityRank(text(left.severity)))
+    const lead = [...judged].sort((left, right) => (severityRank(text(right.severity)) - severityRank(text(left.severity)))
       || (statusRank.indexOf(String(left.status)) - statusRank.indexOf(String(right.status))))[0]
     return {
       fingerprint,
@@ -1097,7 +1102,7 @@ export function geoErrorsByClaim(errors) {
       snapshotId: text(lead.firstSnapshotId) ?? text(lead.snapshotId),
       citedSources: rows.map((row) => record(row.citedSource)).filter((source) => text(source.attribute) || text(source.domain)),
       actions: [...new Set(rows.map((row) => text(row.action)).filter(Boolean))],
-      urgent: rows.some((row) => GEO_URGENT_SEVERITIES.includes(/** @type {any} */ (row.severity)) && row.status !== 'closed'),
+      urgent: active.some((row) => GEO_URGENT_SEVERITIES.includes(/** @type {any} */ (row.severity)) && row.status !== 'closed'),
     }
   }).sort((left, right) => (severityRank(right.severity) - severityRank(left.severity)) || (statusRank.indexOf(left.status) - statusRank.indexOf(right.status))
     || right.count - left.count)

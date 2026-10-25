@@ -550,7 +550,9 @@ test('a record whose reference is malformed, or a controller with no host path f
 
 // --- the route, through the controller's own socket ---------------------------
 
-test('the controller serves the intake operations at protocol 11 and refuses anything else', async t => {
+test('the controller serves the intake operations at the current protocol and refuses anything else', async t => {
+  const originalReadFile = fs.readFile;
+  t.mock.method(fs, 'readFile', async (file, ...args) => file === '/proc/meminfo' ? 'MemAvailable: 8388608 kB\n' : originalReadFile(file, ...args));
   const f = await fixture(t);
   const shortRoot = await fs.realpath(await fs.mkdtemp(path.join('/tmp', 'vi-')));
   t.after(() => fs.rm(shortRoot, { recursive: true, force: true }));
@@ -562,8 +564,7 @@ test('the controller serves the intake operations at protocol 11 and refuses any
   t.after(() => server.close());
   await server.listen();
   const client = new RuntimeControllerClient({ runtimeControllerSocket: socketPath, runtimeControllerTimeoutMs: 5_000, vcrIntakeTimeoutMs: 20_000 });
-  assert.equal(RUNTIME_CONTROLLER_PROTOCOL_VERSION, 14);
-  assert.equal((await client.health()).protocolVersion, 14);
+  assert.equal((await client.health()).protocolVersion, RUNTIME_CONTROLLER_PROTOCOL_VERSION);
 
   const record = recordReference();
   assert.deepEqual(await client.runVcrIntake('extract', record), { finished: true });

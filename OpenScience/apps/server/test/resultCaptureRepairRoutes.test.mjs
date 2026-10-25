@@ -32,3 +32,14 @@ test("ordinary artifact refresh resolves the session user's project and cannot s
   await assert.rejects(other.route(req("/api/agent-runs/r/artifacts/refresh", { projectId: "p", expectedTranscriptSha256: "a".repeat(64) }), res()), { status: 403 });
   assert.ok(other.calls.every(call => !Array.isArray(call) || call[0] !== "refresh"));
 });
+
+test('owned artifact refresh uses its injected targeted reconciliation with exact public fields', async () => {
+  const calls = [];
+  const route = createResultCaptureRepairRoutes({ store: { ensureSessionUser: async () => ({ user: { id: 'owner' } }), assertCsrf: async () => calls.push('csrf'), requireProject: async () => ({ id: 'project', userId: 'owner' }) },
+    runs: { refreshArtifacts: async () => { throw new Error('Targeted operation owns refresh ordering'); } }, service: null, config: {}, maxJsonBytes: 4096,
+    refreshAndReconcile: async (project, runId, body) => { calls.push([project, runId, body]); return { id: runId }; } });
+  await route(req('/api/agent-runs/run/artifacts/refresh', { projectId: 'project', expectedTranscriptSha256: 'a'.repeat(64) }), res());
+  assert.deepEqual(calls, ['csrf', [{ id: 'project', userId: 'owner' }, 'run', { expectedTranscriptSha256: 'a'.repeat(64) }]]);
+  await assert.rejects(route(req('/api/agent-runs/run/artifacts/refresh', { projectId: 'project', expectedTranscriptSha256: 'a'.repeat(64), versions: [] }), res()), { code: 'invalid_payload' });
+  assert.equal(calls.length, 3, 'Unknown fields fail before reconciliation');
+});

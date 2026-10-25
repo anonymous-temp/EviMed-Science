@@ -34,6 +34,7 @@ export function ClaimRow({
   onOpen: () => void;
   onCorrect: () => void;
 }) {
+  const withdrawn = claim.rows.every(row => row.judgmentState === "withdrawn");
   const lead = corrections[0] ?? null;
   const trace = traceLine(claim);
   const times = claim.count > claim.engines.length ? `共 ${claim.count} 次` : null;
@@ -41,19 +42,19 @@ export function ClaimRow({
     showEngines ? claim.engines.map(engineName).join("、") : null,
     showEngines ? times : null,
     trace,
-    GEO_ERROR_STATUS_WORDS[claim.status] ?? null,
+    withdrawn ? "原判定已撤回" : GEO_ERROR_STATUS_WORDS[claim.status] ?? null,
     lead ? `纠错稿：${statusWord(lead.status)}${corrections.length > 1 ? `等 ${corrections.length} 条` : ""}` : null,
   ].filter(Boolean).join(" · ");
   return (
     <ListRow
       title={<span className="line-clamp-2 max-w-measure">“{claim.statement}”</span>}
       titleProps={{ "data-geo-claim": claim.key }}
-      leading={claim.severity ? <SeverityBadge level={claim.severity} /> : undefined}
+      leading={!withdrawn && claim.severity ? <SeverityBadge level={claim.severity} /> : undefined}
       onOpen={onOpen}
       selected={selected}
-      muted={claim.status === "closed"}
+      muted={withdrawn || claim.status === "closed"}
       meta={meta}
-      actions={!lead && canRun && claim.status !== "closed" ? (
+      actions={!withdrawn && !lead && canRun && claim.status !== "closed" ? (
         <Button variant="secondary" size="sm" loading={busy} onClick={onCorrect}>
           {!busy && <PenLine size={16} aria-hidden="true" />}
           写纠错稿

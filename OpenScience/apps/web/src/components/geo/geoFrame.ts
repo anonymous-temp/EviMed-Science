@@ -1,8 +1,9 @@
 import { createContext, useContext, useLayoutEffect } from "react";
-import type { GeoProject } from "@/lib/geoClient";
+import type { GeoProject, GeoStepKey } from "@/lib/geoClient";
 import type { ToolbarProps } from "@/components/ui/Toolbar";
 import type { GeoDataCache } from "./geoProjectData";
 import type { GeoTabKey } from "./geoTabs";
+import type { GeoReadScope } from "@/lib/geoReadScope";
 
 /**
  * What the project's layout (`app/routes/GeoProjectPage.tsx`) gives the tab it holds (R19, plan §5.4; audit C A.1).
@@ -23,8 +24,19 @@ export interface GeoFrameApi {
    * header's 「对话」 opens, and every 「写纠错稿」 or 「问 AI」 below it that names none.
    */
   conversation: string | null;
+  /** The business workbench currently viewed; unrelated background work never overrides it. */
+  step?: GeoStepKey | null;
+  refreshError?: string;
+  /** One analytical scope; work queues and publication state remain current state. */
+  scope?: GeoReadScope;
+  scopePending?: boolean;
+  scopeError?: string;
   /** Read the project again now: after a start, a budget, a tier, anything that moves the rail or the to-dos. */
   reload(): void;
+  /** Explicitly leave an outdated saved selection, keeping its resolved range, then read current observations. */
+  refreshScope?(): void;
+  /** Open the existing range/comparison dialog from a scoped analytical action. */
+  openAnalysisScope?(): void;
   /**
    * Open one of the page's own panels over the tab: the project's name, its members, who speaks for the product, the budget. A tab
    * that asks does not own the dialog, and the layout does not navigate for it.
@@ -44,6 +56,10 @@ export const GeoFrameContext = createContext<GeoFrameApi | null>(null);
 /** The layout this component is in, or null outside one. */
 export function useGeoFrame(): GeoFrameApi | null {
   return useContext(GeoFrameContext);
+}
+
+export function useGeoReadScope(): GeoReadScope | undefined {
+  return useContext(GeoFrameContext)?.scope;
 }
 
 /**

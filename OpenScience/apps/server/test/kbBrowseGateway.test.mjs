@@ -179,6 +179,26 @@ test("overview of the wiki is its own table of contents, and the default root", 
   assert.equal(cut.truncated, true);
 });
 
+test("shared wiki overview lists permitted pages when its exact manifest has no index", async t => {
+  const { resources, roots } = await engine(), indexUri = `${roots.wiki}/index.md`;
+  let forbiddenReads = 0;
+  const scoped = Object.create(resources);
+  scoped.roots = () => ({ ...roots, library: null });
+  scoped.inScope = (userId, projectId, uri) => uri !== indexUri && resources.inScope(userId, projectId, uri);
+  scoped.read = async (userId, uri, options) => {
+    if (uri === indexUri) { forbiddenReads++; throw new Error("Excluded index must not be read"); }
+    return resources.read(userId, uri, options);
+  };
+  scoped.tree = async (...args) => (await resources.tree(...args)).filter(entry => entry.uri !== indexUri);
+  const context = { kind: "geo-project", includeLibrary: false, resources: scoped, current: async () => {}, acceptSource: async () => true, neutral: value => String(value) };
+  const { ok, call } = await withGateway(t, { resources, dependencies: { contextFor: async () => context } });
+  const result = await ok({ op: "overview", root: "wiki" });
+  assert.equal(result.compiled, true); assert.ok(result.entries.length > 0);
+  assert.ok(result.entries.every(entry => entry.path !== "index.md"));
+  assert.equal((await call({ op: "read", root: "wiki", path: "index.md" })).status, 400);
+  assert.equal(forbiddenReads, 0);
+});
+
 test("list names one directory's entries: directories first, pages by their title and type, the sidecars never", async (t) => {
   const { resources } = await engine();
   const { ok } = await withGateway(t, { resources });

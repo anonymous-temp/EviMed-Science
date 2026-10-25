@@ -35,6 +35,8 @@ export const OPENVIKING_MEMORY_TEMPLATES_DIR = "/app/memory-templates";
 export const OPENVIKING_MEMORY_TYPES = Object.freeze([
   "profile", "preferences", "entities", "corrections", "project_context", "decisions", "follow_ups", "project_facts",
 ]);
+/** Shared project extraction never writes a person's profile or preferences. */
+export const OPENVIKING_PROJECT_MEMORY_TYPES = Object.freeze(OPENVIKING_MEMORY_TYPES.filter(type => !['profile', 'preferences'].includes(type)));
 
 /** Where the account-shared skills are installed; a compile names one as `<root>/<name>`. */
 export const OPENVIKING_SKILLS_ROOT = "viking://agent/skills";
@@ -66,6 +68,17 @@ export function openVikingPeerId(projectId) {
 /** A capsule's segment (`capsuleSegment` in the client validates its inputs). */
 export function openVikingScopedId(prefix, value, purpose) {
   return scopedId(prefix, value, purpose);
+}
+
+/** Trusted control-plane identities, including exact database incarnations.
+ * Membership, runtime generation and conversation do not change project memory.
+ * @param {{ownerId:string,ownerCreatedAt:string,projectId:string,projectCreatedAt:string}} input */
+export function projectNativeMemoryNamespace(input) {
+  const keys = ['ownerId', 'ownerCreatedAt', 'projectId', 'projectCreatedAt'];
+  if (!input || keys.some(key => typeof input[key] !== 'string' || !input[key] || input[key].length > 200 || /[\r\n\0]/.test(input[key]))) throw new Error('Invalid project memory identity');
+  const { ownerId, ownerCreatedAt, projectId, projectCreatedAt } = input;
+  const id = openVikingScopedId('gp', JSON.stringify(keys.map(key => input[key])), 'project-native-memory');
+  return Object.freeze({ kind: 'project', ownerId, ownerCreatedAt, projectId, projectCreatedAt, id, engineUser: id });
 }
 
 /** Everything one account holds in the engine. */

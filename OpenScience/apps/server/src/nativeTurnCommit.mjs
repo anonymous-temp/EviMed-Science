@@ -3,6 +3,8 @@ import { isPlatformStartedRun } from "./memoryAdmission.mjs";
 import { recordRuntimeWithoutGateway, recordTurnCommit } from "./nativeMemoryMetrics.mjs";
 import { endedBeforeReset } from "./researchMemory.mjs";
 import { PLUGIN_SESSION_PREFIX } from "./openVikingSessions.mjs";
+import { openVikingUserId } from './openVikingLayout.mjs';
+import { HttpError } from './security.mjs';
 
 /**
  * Commits a native account's conversation to the memory engine a few seconds after each attended turn.
@@ -57,7 +59,7 @@ const CONVERSATION = /^[A-Za-z0-9_-]{1,160}$/;
 
 /**
  * @typedef {{
- *   userId: string, project: any, engineSessionId: string, sessionId: string, timer: any, endedAt: string | null,
+ *   userId: string, project: any, engineSessionId: string, sessionId: string, timer: any, context: any, namespaceId: string, endedAt: string | null,
  * }} Armed
  */
 
@@ -70,6 +72,7 @@ export class NativeTurnCommit {
    *   admission: { admit: (caller: { user: any, project: any, engineSessionId?: string | null }) => Promise<import("./memoryAdmission.mjs").MemoryAdmission> },
    *   conversations: { runsOf: (project: any, sessionId: string) => Promise<any[]> },
    *   commit: import("./memoryGateway.mjs").MemoryGatewayCommitSession,
+   *   memoryContexts?: import("./geoNativeMemoryContext.mjs").GeoNativeMemoryContext | null,
    *   setTimer?: (fn: () => void, ms: number) => any, clearTimer?: (timer: any) => void, wait?: (ms: number) => Promise<void>,
    *   runtimeWithoutGateway?: ((project: any) => boolean) | null,
    *   report?: (line: string) => void,
@@ -78,13 +81,14 @@ export class NativeTurnCommit {
    *   project's live runtime was launched without the memory gateway's address, which only counts (D2 of the 2026-10-23 review:
    *   an account switched to the engine under an open runtime is learned from by nobody, and nothing said so).
    */
-  constructor({ config, researchMemory, sessions, admission, conversations, commit, setTimer = null, clearTimer = null, wait = null, runtimeWithoutGateway = null, report = () => {} }) {
+  constructor({ config, researchMemory, sessions, admission, conversations, commit, memoryContexts = null, setTimer = null, clearTimer = null, wait = null, runtimeWithoutGateway = null, report = () => {} }) {
     this.config = config ?? {};
     this.researchMemory = researchMemory;
     this.sessions = sessions;
     this.admission = admission;
     this.conversations = conversations;
     this.commit = commit;
+    this.memoryContexts = memoryContexts;
     this.runtimeWithoutGateway = runtimeWithoutGateway;
     this.setTimer = setTimer ?? ((fn, ms) => { const timer = setTimeout(fn, ms); timer.unref?.(); return timer; });
     this.clearTimer = clearTimer ?? ((timer) => clearTimeout(timer));
@@ -95,7 +99,7 @@ export class NativeTurnCommit {
     this.attempts = Math.max(1, Math.trunc(Number(this.config.nativeMemoryTurnCommitAttempts ?? 4)));
     this.concurrency = Math.max(1, Math.trunc(Number(this.config.nativeMemoryTurnCommitConcurrency ?? 2)));
     this.maxScheduled = Math.max(1, Math.trunc(Number(this.config.nativeMemoryTurnCommitMaxScheduled ?? 1_000)));
-    /** Conversations waiting for their quiet, by account and conversation. @type {Map<string, Armed>} */
+    /** Conversations waiting for their quiet, by account, namespace and conversation. @type {Map<string, Armed>} */
     this.armed = new Map();
     /** Conversations whose quiet has passed and that wait for a free slot, oldest first. @type {Armed[]} */
     this.queue = [];
@@ -111,7 +115,7 @@ export class NativeTurnCommit {
   }
 
   /** Whether the engine session of a conversation is waiting for its quiet, for readiness and tests. @param {string} userId @param {string} sessionId */
-  isArmed(userId, sessionId) { return this.armed.has(`${userId}\u0000${sessionId}`); }
+  isArmed(userId, sessionId, { namespaceId = openVikingUserId(userId) } = {}) { return this.armed.has(JSON.stringify([userId, namespaceId, sessionId])); }
 
   /**
    * A run reached a terminal state. Arms (or re-arms) the commit of its conversation when it was an attended turn of an
@@ -129,20 +133,25 @@ export class NativeTurnCommit {
       if (isPlatformStartedRun(run)) { recordTurnCommit("platform_started"); return; }
       // A legacy account is untouched; the answer is one settings read, cached by the store's row.
       if (await this.researchMemory.memoryEngine(String(project.userId)) !== "native") return;
-      // The turn that just ended may have had no memory plugin at all: its runtime was launched before the account moved to
-      // the engine. Counted here for the turns that pass through no dispatch (typed in the kernel's own frame); the next
-      // dispatch replaces such a runtime.
+      if (this.closed) return;
+      const context = this.memoryContexts ? await this.memoryContexts.forProject(project) : null;
+      if (this.memoryContexts && (!context || context.ownerId !== project.userId || context.projectId !== project.id
+        || typeof context.namespaceId !== 'string' || !context.namespaceId || typeof context.sessions?.readSession !== 'function')) {
+        throw new HttpError(403, 'memory_scope_denied', 'The conversation memory context is unavailable.');
+      }
+      if (this.closed) return;
       if (this.runtimeWithoutGateway?.(project) === true) recordRuntimeWithoutGateway("turn_end");
-      this.#arm(project, sessionId, String(run?.finishedAt ?? run?.startedAt ?? "") || null);
+      this.#arm(project, sessionId, context, String(run?.finishedAt ?? run?.startedAt ?? "") || null);
     } catch (error) {
       this.report(`native turn commit: ${this.#codeOf(error)}`);
     }
   }
 
-  /** @param {any} project @param {string} sessionId @param {string | null} endedAt when the turn that armed it ended */
-  #arm(project, sessionId, endedAt) {
+  /** @param {any} project @param {string} sessionId @param {any} context @param {string | null} endedAt */
+  #arm(project, sessionId, context, endedAt) {
     const userId = String(project.userId);
-    const key = `${userId}\u0000${sessionId}`;
+    const namespaceId = context?.namespaceId ?? openVikingUserId(userId);
+    const key = JSON.stringify([userId, namespaceId, sessionId]);
     const held = this.armed.get(key);
     if (held) {
       // The person went on within the quiet: one commit for both turns.
@@ -154,7 +163,7 @@ export class NativeTurnCommit {
       return;
     }
     /** @type {Armed} */
-    const entry = { userId, project, sessionId, engineSessionId: `${PLUGIN_SESSION_PREFIX}${sessionId}`, timer: null, endedAt };
+    const entry = { userId, project, sessionId, engineSessionId: `${PLUGIN_SESSION_PREFIX}${sessionId}`, timer: null, namespaceId, context, endedAt };
     entry.timer = this.setTimer(() => { this.armed.delete(key); this.queue.push(entry); this.#pump(); }, this.debounceMs);
     this.armed.set(key, entry);
     recordTurnCommit("scheduled");
@@ -195,6 +204,7 @@ export class NativeTurnCommit {
   /** @param {Armed} entry */
   async #run(entry) {
     if (this.closed) return;
+    if (entry.context) await this.memoryContexts.assertLive(entry.context);
     if (await this.#personIsTyping(entry)) { recordTurnCommit("conversation_running"); return; }
     // A turn that was over before the account reset its memory is not committed after it: the reset deleted the engine's sessions
     // (and with them what was pending), and the plugin's replay of an old message must not make a session to commit from.
@@ -205,6 +215,10 @@ export class NativeTurnCommit {
     // asks again at the moment it commits.
     const admitted = await this.admission.admit({ user, project: entry.project, engineSessionId: entry.engineSessionId });
     if (!admitted.native || (!admitted.learn && admitted.learnReason !== "automated_run")) { recordTurnCommit("not_learning"); return; }
+    if (entry.context?.kind === 'geo-project' && !await this.memoryContexts.noteCapture(entry.context, entry.engineSessionId)) {
+      recordTurnCommit('not_learning'); return;
+    }
+    const sessions = entry.context?.sessions ?? this.sessions;
 
     /** @type {{ pending: number, count: number } | null} */
     let previous = null;
@@ -216,7 +230,8 @@ export class NativeTurnCommit {
       let pending = 0;
       let count = 0;
       try {
-        const state = (await this.sessions.readSession(entry.userId, entry.engineSessionId))?.result ?? {};
+        if (entry.context) await this.memoryContexts.assertLive(entry.context);
+        const state = (await sessions.readSession(entry.userId, entry.engineSessionId))?.result ?? {};
         pending = Number(state.pending_tokens) || 0;
         count = Number(state.message_count) || 0;
         failure = null;
@@ -241,7 +256,8 @@ export class NativeTurnCommit {
   async #commitNow(entry, user) {
     // The person may have written again while the reads settled: that turn's own end commits it.
     if (await this.#personIsTyping(entry)) { recordTurnCommit("conversation_running"); return; }
-    const answer = await this.commit({ user, project: entry.project, engineSessionId: entry.engineSessionId });
+    if (entry.context) await this.memoryContexts.assertLive(entry.context);
+    const answer = await this.commit({ user, project: entry.project, engineSessionId: entry.engineSessionId, context: entry.context });
     recordTurnCommit(answer.commit === "accepted" ? "committed" : answer.commit);
   }
 

@@ -1,0 +1,158 @@
+{
+  "upstreamCommit": "c2dea8005f851ce064223b78c2c7d5634807b9fb",
+  "evidenceKind": "pinned-lifecycle-startup-config",
+  "botInMemoryRead": false,
+  "files": [
+    {
+      "path": "deploy/docker/openviking-entrypoint.sh",
+      "installedPath": "/usr/local/bin/openviking-entrypoint",
+      "gitBlob": "32361038b692cb7e8311872dbb206f31431f1a28",
+      "sha256": "45f9b5b0651e4a0c5ab16c8a9a54a82845a7a84d171bc2e0cd86ffa6080577f0"
+    },
+    {
+      "path": "openviking/server/bootstrap.py",
+      "installedPath": "/app/.venv/lib/python3.13/site-packages/openviking/server/bootstrap.py",
+      "gitBlob": "b85deca763bcf35acd4d58fc862a65ae4dafc912",
+      "sha256": "43a3bce7eb0d0d39286b0f818aa95dd9027a98490d9c58236d5e4ce8e51cd323"
+    },
+    {
+      "path": "openviking_cli/utils/config/open_viking_config.py",
+      "installedPath": "/app/.venv/lib/python3.13/site-packages/openviking_cli/utils/config/open_viking_config.py",
+      "gitBlob": "faf905f20bcd34a4a2c80bbb3356c7e570dabd72",
+      "sha256": "50e010853c0e4e14be6bdf770725dd17867cbb1e619df4e91f26876c72d138e0"
+    },
+    {
+      "path": "openviking/config/config_file.py",
+      "installedPath": "/app/.venv/lib/python3.13/site-packages/openviking/config/config_file.py",
+      "gitBlob": "8a000bbff8e8ca63029f33f2c8f77ceb6770bb1b",
+      "sha256": "9fcb81912b633d02b7ae4d790d8a01df249886ae2237eab128177154b790de5f"
+    },
+    {
+      "path": "openviking/server/routers/skills.py",
+      "installedPath": "/app/.venv/lib/python3.13/site-packages/openviking/server/routers/skills.py",
+      "gitBlob": "5ed325154c2fa546385486484175d3e0044828b2",
+      "sha256": "4dbd00ff7c33018591386b90e67420a2e92d682188d721ede777389b8e644459"
+    },
+    {
+      "path": "bot/vikingbot/cli/commands.py",
+      "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/cli/commands.py",
+      "gitBlob": "f97f9bf410f5505128acf61c264b43fa1944cfc5",
+      "sha256": "81d7baacf50785dcf60759eb71c3964babbea01152a0d932d7861e977484eae3"
+    },
+    {
+      "path": "bot/vikingbot/config/loader.py",
+      "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/config/loader.py",
+      "gitBlob": "8bf74e40cf6ee263c471fe3f7e9adfd4a4a01229",
+      "sha256": "7ae45c4e72249f6d3e74ad3b39de4d09133ecc6b43ecd839611e20ce37cf2cfa"
+    },
+    {
+      "path": "bot/vikingbot/config/schema.py",
+      "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/config/schema.py",
+      "gitBlob": "0c3b4e64d2f2346244409daf1767a8091dc106e0",
+      "sha256": "ce11352f84e67a144de832721ff4684de6c71edd0364bc21a26c524870f6ac7a"
+    },
+    {
+      "path": "bot/vikingbot/compile/service.py",
+      "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/service.py",
+      "gitBlob": "fc38dbc00eeed9c2034bb6923febeef7abc1af76",
+      "sha256": "3ae68507a4c9fd6154edc714c2dd430937ada98c4402591ad494372bb87af9b1"
+    },
+    {
+      "path": "bot/vikingbot/compile/pipeline_agent.py",
+      "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/pipeline_agent.py",
+      "gitBlob": "fd336760368307cf7709c9c1f9b1b89e7df57360",
+      "sha256": "a40c74b7bda2183c23dec082810233055151d63782333fe3eb19a9fe92b3b3a3"
+    },
+    {
+      "path": "bot/vikingbot/compile/entry.py",
+      "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/entry.py",
+      "gitBlob": "8768dceb8d42f2290aa15b71d18fa2037348c8cb",
+      "sha256": "edb31ee90faf3103a8e9bf6c067050dbe5b7b4bf9e1a6cb3f8e0688d689f1cf6"
+    },
+    {
+      "path": "bot/vikingbot/compile/file_ops.py",
+      "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/file_ops.py",
+      "gitBlob": "f759140aa27731286f94d5c5332d5d269f9a18be",
+      "sha256": "300efc256ea9e6f4fe6acf4c42db24e46b86d9a378bdfd642d1396b459b7018d"
+    },
+    {
+      "path": "bot/vikingbot/compile/models.py",
+      "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/models.py",
+      "gitBlob": "ebb503528f749dcae18894cf2c552fc63c5f4cae",
+      "sha256": "fe68e1ab806fde34bdde5b1d0d459746c91225919390738f2caf1e7a3a15e5fe"
+    },
+    {
+      "path": "bot/vikingbot/compile/ops/finalize.py",
+      "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/ops/finalize.py",
+      "gitBlob": "47b5f0169581baabe85017e43a03431ac42d1947",
+      "sha256": "7ee0d330d86dbd8beaebf333979e833f20821ea1446a854fc5314ebf7c98ff16"
+    },
+    {
+      "path": "bot/vikingbot/compile/ops/map.py",
+      "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/ops/map.py",
+      "gitBlob": "519563d73add733f4c44b69f47d5b76d6e01d568",
+      "sha256": "9aef28035a261c6da1726e7cab6b0c93479632b2f6167486fede404fb959c160"
+    },
+    {
+      "path": "bot/vikingbot/compile/ops/reduce.py",
+      "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/ops/reduce.py",
+      "gitBlob": "eb7af8d550cd795af9081fd2067a182990d04eb1",
+      "sha256": "0e7a93335270f970db2e426b81029bca15263a5c650b27201a719ac062f44f62"
+    },
+    {
+      "path": "bot/vikingbot/compile/ops/shuffle.py",
+      "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/ops/shuffle.py",
+      "gitBlob": "31f196b6d6277d3042279837f5adf7818d5716e9",
+      "sha256": "5e2ae9bc43f71ea398224a3f0a64b830128908d894fd154c5ebf89663e9048ff"
+    },
+    {
+      "path": "bot/vikingbot/compile/pipeline.py",
+      "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/pipeline.py",
+      "gitBlob": "a53b2a92ec24431c915467fb22d8f014770a142a",
+      "sha256": "2cca7925c508173952257fa25fa73ffc4589d9bdbddae48ab29761b16b200dc7"
+    },
+    {
+      "path": "bot/vikingbot/compile/pipeline_io.py",
+      "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/pipeline_io.py",
+      "gitBlob": "8171933610e78cfe96e5009e25a368ab71c1128b",
+      "sha256": "0d1aa54c685dcbbbaadeeb664c15bdd1884c71bacffe0eb1b49e7fdc36541233"
+    },
+    {
+      "path": "bot/vikingbot/compile/plan.py",
+      "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/plan.py",
+      "gitBlob": "a08396c48769cbba99636b9f0a412424dd6def75",
+      "sha256": "41baaaa0743168f45e233b209fddf66a218142b6f3eb3f0afee0c03d03bedb11"
+    },
+    {
+      "path": "bot/vikingbot/compile/review.py",
+      "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/review.py",
+      "gitBlob": "09bcecc96ffd06d077bb8cd589f1bb0ce55fa780",
+      "sha256": "3a8225ea81989b58d3c105d948316267f8e5f46e1eb9c79beb6f6daad941a401"
+    },
+    {
+      "path": "bot/vikingbot/compile/router.py",
+      "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/router.py",
+      "gitBlob": "27cb1d2dd6bdc112aa8e6f55df59cebea80efeef",
+      "sha256": "20cf5fdaa9cec429aec8646286c0a75f5d60aba3ffcba92b7d1a156ad4073d5f"
+    },
+    {
+      "path": "bot/vikingbot/compile/sandbox.py",
+      "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/sandbox.py",
+      "gitBlob": "9a933551d6a402d929efb70f0a6dac2b612bbcdf",
+      "sha256": "47c98c5763cfe16bedfd0d37bba6177737fe7c4d60c1dd87842811b40ac8cf33"
+    },
+    {
+      "path": "bot/vikingbot/compile/skill_resources.py",
+      "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/skill_resources.py",
+      "gitBlob": "796ae05e7a80340f79bd7724a0772d8fe1ca110a",
+      "sha256": "f2a24434148f782193b7200c87570207eefca7364b96971353cd57b49769d2b7"
+    },
+    {
+      "path": "bot/vikingbot/compile/renderer.py",
+      "installedPath": "/app/.venv/lib/python3.13/site-packages/vikingbot/compile/renderer.py",
+      "gitBlob": "f22c1212bd71fd1ef6f58829642b7d513b711fa9",
+      "sha256": "4f85342a71b9ccba9d72515f3144119d820e4ed4991ba5d74578305d83d2caf9"
+    }
+  ],
+  "imageDigest": "sha256:551b1ae00f59fd7b1a2434ecc10a4860be34aae8b7627f5f57240be355b23217"
+}

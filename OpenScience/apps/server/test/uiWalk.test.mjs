@@ -2381,6 +2381,10 @@ test("the event page's 深入研究 is read at the hand-off: the title, a link t
   const before = { path: "/app/frontier/events/ev_1", title: "某事件", button: true };
   const after = { path: "/app/chat", intent: { keys: ["draft", "kind", "projectId", "requestId", "sessionId"], kind: "create", draft, requestId: "req_1" } };
   assert.deepEqual(handoffFindings(before, after, before.path), { failures: [], notices: [] });
+  const selected = withState({ runtimeUiIntent: { ...intent, scope: { kind: "geo", geoProjectId: "geo", sessionId: "s" }, geoPlanContext: { referenceId: "gpc_selected" } } });
+  assert.deepEqual(selected.intent.keys, [...after.intent.keys, "geoPlanContext", "scope"].sort());
+  assert.deepEqual(handoffFindings(before, selected, before.path), { failures: [], notices: [] });
+  assert.equal(selected.intent.draft, draft, "the observer preserves the unsent draft without treating its context reference as a send");
   assert.deepEqual(handoffFindings({ ...before, button: false }, null, null).notices, ["frontier-event@desktop: not observable: the event page has no 深入研究 button, so the hand-off to the conversation was not read"]);
   assert.deepEqual(handoffFindings(null, null, null).notices.length, 1);
   assert.deepEqual(handoffFindings(before, { path: "/app/frontier/events/ev_1", intent: null }, null).notices, ["frontier-event@desktop: not observable: 深入研究 did not go to the conversation (/app/frontier/events/ev_1), so its draft was not read"]);

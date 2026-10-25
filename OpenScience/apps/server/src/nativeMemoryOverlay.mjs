@@ -4,6 +4,7 @@ import {
   NATIVE_COMMIT_ORIGINS, NATIVE_REVISION_ACTORS, NATIVE_REVISION_CHANGES, NATIVE_TEXT_LIMIT, migrateNativeMemory,
 } from "./nativeMemoryPersistence.mjs";
 import { HttpError } from "./security.mjs";
+import { OPENVIKING_MEMORY_TYPES, userRootUri } from './openVikingLayout.mjs';
 
 /**
  * The overlay store of the native memory engine (`nativeMemoryPersistence.mjs` says what it holds and why).
@@ -59,6 +60,24 @@ function owner(userId) {
   const text = String(userId ?? "");
   if (!USER_ID.test(text)) throw new HttpError(400, "memory_user_invalid", "The memory owner is invalid.");
   return text;
+}
+
+/** Callers supply only a root resolved by the trusted context registry. This
+ * syntactic check keeps the SQL prefix literal; it is not namespace authority.
+ */
+function scopedRoot(value) {
+  if (typeof value !== 'string' || !/^viking:\/\/user\/(?:u|gp)-[a-f0-9]{24}$/.test(value)) {
+    throw new HttpError(403, 'memory_scope_denied', 'A canonical native memory root is required.');
+  }
+  return value;
+}
+
+/** Rejections share the existing table but never cross native namespaces. */
+export function nativeMemoryRejectionType(memoryType, namespaceId = null) {
+  if (!OPENVIKING_MEMORY_TYPES.includes(memoryType) || namespaceId !== null && !/^gp-[a-f0-9]{24}$/.test(namespaceId)) {
+    throw new HttpError(403, 'memory_scope_denied', 'The memory rejection scope is invalid.');
+  }
+  return namespaceId === null ? memoryType : `${namespaceId}:${memoryType}`;
 }
 
 /** @param {any} row */
@@ -305,14 +324,16 @@ export class NativeMemoryOverlay {
   }
 
   /** Every commit the ledger holds of one engine session, oldest first. @param {string} userId @param {string} engineSession */
-  async commitsOfSession(userId, engineSession) {
-    const result = await this.#query("SELECT * FROM evimed_memory.native_commits WHERE user_id=$1 AND engine_session=$2 ORDER BY created_at", [owner(userId), String(engineSession)]);
+  async commitsOfSession(userId, engineSession, { userRoot = userRootUri(userId) } = {}) {
+    const result = await this.#query("SELECT * FROM evimed_memory.native_commits WHERE user_id=$1 AND engine_session=$2 AND archive_uri LIKE $3 || '/sessions/%' ORDER BY created_at",
+      [owner(userId), String(engineSession), scopedRoot(userRoot)]);
     return result.rows.map(publicCommit);
   }
 
   /** The archives of one account the ledger already holds. @param {string} userId @returns {Promise<Set<string>>} */
-  async knownArchives(userId) {
-    const result = await this.#query("SELECT archive_uri FROM evimed_memory.native_commits WHERE user_id=$1", [owner(userId)]);
+  async knownArchives(userId, { userRoot = null } = {}) {
+    const result = await this.#query("SELECT archive_uri FROM evimed_memory.native_commits WHERE user_id=$1 AND ($2::text IS NULL OR archive_uri LIKE $2 || '/sessions/%')",
+      [owner(userId), userRoot == null ? null : scopedRoot(userRoot)]);
     return new Set(result.rows.map((/** @type {any} */ row) => String(row.archive_uri)));
   }
 
@@ -329,9 +350,10 @@ export class NativeMemoryOverlay {
   }
 
   /** The commits of one account still being worked on, newest first: what the page shows as 「正在记住」. @param {string} userId */
-  async pendingCommits(userId, { origins = ["page"], limit = 20 } = {}) {
+  async pendingCommits(userId, { origins = ["page"], limit = 20, userRoot = null } = {}) {
     const result = await this.#query(`SELECT * FROM evimed_memory.native_commits WHERE user_id=$1 AND state IN ('pending', 'failed') AND origin = ANY($2::text[])
-      ORDER BY created_at DESC LIMIT $3`, [owner(userId), origins, limit]);
+      AND ($4::text IS NULL OR archive_uri LIKE $4 || '/sessions/%')
+      ORDER BY created_at DESC LIMIT $3`, [owner(userId), origins, limit, userRoot == null ? null : scopedRoot(userRoot)]);
     return result.rows.map(publicCommit);
   }
 
@@ -462,12 +484,15 @@ export class NativeMemoryOverlay {
     return byUri;
   }
 
-  /** What changed by itself since a moment, newest first. @param {string} userId @param {{ since?: string | null, engineSession?: string | null, actors?: string[], limit?: number }} [options] */
-  async recentRevisions(userId, { since = null, engineSession = null, actors = ["engine"], limit = 20 } = {}) {
+  /** What changed by itself since a moment, newest first. A bare session retains
+   * personal-engine semantics; project callers pass their registered root.
+   * @param {string} userId @param {{ since?: string | null, engineSession?: string | null, actors?: string[], limit?: number, userRoot?: string | null }} [options] */
+  async recentRevisions(userId, { since = null, engineSession = null, actors = ["engine"], limit = 20, userRoot = engineSession == null ? null : userRootUri(userId) } = {}) {
+    const root = engineSession != null || userRoot != null ? scopedRoot(userRoot) : null;
     const result = await this.#query(`SELECT * FROM evimed_memory.native_revisions
       WHERE user_id=$1 AND ($2::timestamptz IS NULL OR changed_at > $2) AND ($3::text IS NULL OR engine_session = $3) AND actor = ANY($4::text[])
-        AND undone_at IS NULL
-      ORDER BY id DESC LIMIT $5`, [owner(userId), since, engineSession, actors, Math.max(1, Math.min(100, Math.trunc(Number(limit)) || 20))]);
+        AND undone_at IS NULL AND ($6::text IS NULL OR uri LIKE $6 || '/%')
+      ORDER BY id DESC LIMIT $5`, [owner(userId), since, engineSession, actors, Math.max(1, Math.min(100, Math.trunc(Number(limit)) || 20)), root]);
     return result.rows.map(publicRevision);
   }
 
@@ -596,11 +621,12 @@ export class NativeMemoryOverlay {
   }
 
   /** The project an engine session was held in: as noted when it began, else as its earlier commits recorded. @param {string} userId @param {string} engineSession */
-  async projectOfSession(userId, engineSession) {
+  async projectOfSession(userId, engineSession, { userRoot = userRootUri(userId) } = {}) {
+    const root = scopedRoot(userRoot);
     const result = await this.#query(`SELECT project_id FROM (
-        SELECT project_id, 0 AS rank, created_at FROM evimed_memory.native_sessions WHERE user_id=$1 AND engine_session=$2
-        UNION ALL SELECT project_id, 1, created_at FROM evimed_memory.native_commits WHERE user_id=$1 AND engine_session=$2) found
-      WHERE project_id IS NOT NULL ORDER BY rank, created_at DESC LIMIT 1`, [owner(userId), String(engineSession)]);
+        SELECT project_id, 0 AS rank, created_at FROM evimed_memory.native_sessions WHERE user_id=$1 AND engine_session=$2 AND $4::boolean
+        UNION ALL SELECT project_id, 1, created_at FROM evimed_memory.native_commits WHERE user_id=$1 AND engine_session=$2 AND archive_uri LIKE $3 || '/sessions/%') found
+      WHERE project_id IS NOT NULL ORDER BY rank, created_at DESC LIMIT 1`, [owner(userId), String(engineSession), root, root === userRootUri(userId)]);
     return result.rows[0]?.project_id ?? null;
   }
 
@@ -623,9 +649,11 @@ export class NativeMemoryOverlay {
   }
 
   /** The engine sessions of one project, as the gateway and the ledger saw them. @param {string} userId @param {string} projectId @returns {Promise<string[]>} */
-  async projectSessions(userId, projectId) {
-    const result = await this.#query(`SELECT engine_session FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2
-      UNION SELECT engine_session FROM evimed_memory.native_sessions WHERE user_id=$1 AND project_id=$2`, [owner(userId), String(projectId)]);
+  async projectSessions(userId, projectId, { userRoot = userRootUri(userId) } = {}) {
+    const root = scopedRoot(userRoot);
+    const result = await this.#query(`SELECT engine_session FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2 AND archive_uri LIKE $3 || '/sessions/%'
+      UNION SELECT engine_session FROM evimed_memory.native_sessions WHERE user_id=$1 AND project_id=$2 AND $4::boolean`,
+    [owner(userId), String(projectId), root, root === userRootUri(userId)]);
     return result.rows.map((/** @type {any} */ row) => String(row.engine_session));
   }
 
@@ -744,19 +772,46 @@ export class NativeMemoryOverlay {
     return { files: files.rowCount ?? 0, revisions: revisions.rowCount ?? 0, commits: commits.rowCount ?? 0 };
   }
 
-  /** A project was deleted: what the overlay holds of its files and its conversations. @param {string} userId @param {string} projectId */
+  /** One registered project namespace was removed from the engine. The caller
+   * resolves its authority before invoking this URI-scoped cleanup; the public
+   * project id and native session name are deliberately not deletion keys.
+   */
+  async purgeNamespace(userId, userRoot) {
+    const id = owner(userId), root = scopedRoot(userRoot);
+    if (!root.startsWith('viking://user/gp-')) throw new HttpError(403, 'memory_scope_denied', 'Only a registered project namespace may be purged here.');
+    await this.migrate();
+    return this.database.transaction(async client => {
+      const values = [id, root];
+      const files = await client.query("DELETE FROM evimed_memory.native_files WHERE user_id=$1 AND uri LIKE $2 || '/%'", values);
+      const revisions = await client.query("DELETE FROM evimed_memory.native_revisions WHERE user_id=$1 AND uri LIKE $2 || '/%'", values);
+      const commits = await client.query("DELETE FROM evimed_memory.native_commits WHERE user_id=$1 AND archive_uri LIKE $2 || '/sessions/%'", values);
+      await client.query("DELETE FROM evimed_memory.native_sources WHERE user_id=$1 AND uri LIKE $2 || '/%'", values);
+      await client.query("DELETE FROM evimed_memory.native_rejections WHERE user_id=$1 AND (uri LIKE $2 || '/%' OR memory_type LIKE $3 || ':%')", [id, root, root.split('/').at(-1)]);
+      return { files: files.rowCount ?? 0, revisions: revisions.rowCount ?? 0, commits: commits.rowCount ?? 0 };
+    });
+  }
+
+  /** The personal engine's legacy project tags. Registered project namespaces
+   * have their own exact cleanup and cannot be selected by a reused public id.
+   * @param {string} userId @param {string} projectId
+   */
   async purgeProject(userId, projectId) {
-    const id = owner(userId);
-    const files = await this.#query("DELETE FROM evimed_memory.native_files WHERE user_id=$1 AND project_id=$2 RETURNING uri", [id, String(projectId)]);
-    const uris = files.rows.map((/** @type {any} */ row) => String(row.uri));
-    if (uris.length) {
-      await this.#query("DELETE FROM evimed_memory.native_sources WHERE user_id=$1 AND uri = ANY($2::text[])", [id, uris]);
-      await this.#query("DELETE FROM evimed_memory.native_revisions WHERE user_id=$1 AND uri = ANY($2::text[])", [id, uris]);
-    }
-    await this.#query("DELETE FROM evimed_memory.native_admissions WHERE user_id=$1 AND project_id=$2", [id, String(projectId)]);
-    await this.#query("DELETE FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2", [id, String(projectId)]);
-    await this.#query("DELETE FROM evimed_memory.native_sessions WHERE user_id=$1 AND project_id=$2", [id, String(projectId)]);
-    return { files: uris };
+    const id = owner(userId), values = [id, String(projectId), userRootUri(userId)];
+    await this.migrate();
+    return this.database.transaction(async client => {
+      const files = await client.query("DELETE FROM evimed_memory.native_files WHERE user_id=$1 AND project_id=$2 AND uri LIKE $3 || '/memories/%' RETURNING uri", values);
+      const uris = files.rows.map((/** @type {any} */ row) => String(row.uri));
+      if (uris.length) {
+        await client.query("DELETE FROM evimed_memory.native_sources WHERE user_id=$1 AND uri = ANY($2::text[])", [id, uris]);
+        await client.query("DELETE FROM evimed_memory.native_revisions WHERE user_id=$1 AND uri = ANY($2::text[])", [id, uris]);
+      }
+      await client.query("DELETE FROM evimed_memory.native_revisions WHERE user_id=$1 AND project_id=$2 AND uri LIKE $3 || '/memories/%'", values);
+      // The external-memory admissions of the project's notes (2026-10-23): personal-engine rows, labelled with the project only.
+      await client.query("DELETE FROM evimed_memory.native_admissions WHERE user_id=$1 AND project_id=$2", values.slice(0, 2));
+      await client.query("DELETE FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2 AND archive_uri LIKE $3 || '/sessions/%'", values);
+      await client.query("DELETE FROM evimed_memory.native_sessions WHERE user_id=$1 AND project_id=$2", values.slice(0, 2));
+      return { files: uris };
+    });
   }
 }
 

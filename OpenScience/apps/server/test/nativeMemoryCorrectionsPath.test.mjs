@@ -32,6 +32,8 @@ test("the store reads both places as corrections: the page's kind, the type, and
   ]);
   const sessions = {
     configured: true,
+    engineUser: () => "u1",
+    userRoot: () => "viking://user/u1",
     memoryRoot: () => ROOT,
     async tree() { return [...files].map(([uri, body]) => ({ uri, isDir: false, size: Buffer.byteLength(body), modTime: "2026-10-23T01:00:00Z", tags: [] })); },
     async read(_user, uri) { return files.get(uri) ?? null; },

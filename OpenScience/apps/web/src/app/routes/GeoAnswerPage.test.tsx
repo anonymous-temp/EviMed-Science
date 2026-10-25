@@ -55,6 +55,19 @@ beforeEach(() => {
 });
 
 describe("one answer", () => {
+  it("keeps the selected dates, multi-platform scope and session through day, engine and return links", async () => {
+    renderAnswer("snap_deepseek", "?from=2026-09-01&engines=deepseek&engines=yuanbao&session=s1");
+    await screen.findByRole("heading", { level: 2, name: "打了减重针一直恶心，要不要停药？" });
+    const back = new URL(screen.getByRole("link", { name: "返回准确与安全" }).getAttribute("href")!, "https://example.test");
+    expect(back.searchParams.getAll("engines")).toEqual(["deepseek", "yuanbao"]);
+    expect(back.searchParams.get("session")).toBe("s1");
+    await userEvent.click(screen.getByRole("button", { name: /测量日期/ }));
+    await userEvent.click(screen.getByRole("menuitemradio", { name: "9月22日" }));
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("from=2026-09-01"));
+    const sibling = within(screen.getByRole("navigation", { name: "AI 引擎" })).getByRole("link", { name: /元宝/ });
+    expect(sibling.getAttribute("href")).toContain("session=s1");
+    expect(sibling.getAttribute("href")).toContain("engines=deepseek&engines=yuanbao");
+  });
   it("heads the page with the way back, the question and its one action; the date switcher and the screenshot are the band's toolbar", async () => {
     renderAnswer();
     expect(await screen.findByRole("heading", { level: 2, name: "打了减重针一直恶心，要不要停药？" })).toBeInTheDocument();
@@ -191,7 +204,7 @@ describe("one answer", () => {
     expect(record).toHaveTextContent("它需要每天注射一次");
     expect(record.querySelector("[data-geo-error-basis]")).toHaveTextContent("依据：玛仕度肽注射液说明书（国家药监局 2025）");
     expect(record.querySelector("[data-geo-error-source='baike.baidu.com']")).not.toBeNull();
-    expect(record).toHaveTextContent("修改百科词条");
+    expect(record).toHaveTextContent("baike.baidu.com");
     // the engines' words are the way to the answers; the one on this page leads back here
     expect(within(record).getByRole("link", { name: /它需要每天注射一次/ })).toHaveAttribute("href", "/app/geo/geo_1/answers/snap_deepseek");
   });
@@ -213,7 +226,7 @@ describe("one answer", () => {
     await userEvent.click(await screen.findByRole("button", { name: "写纠错稿" }));
     await waitFor(() => expect(conversation.open).toHaveBeenCalledTimes(1));
     const [target, brief] = conversation.open.mock.calls[0] as unknown as [{ projectId: string; sessionId: string | null }, string];
-    expect(target).toEqual({ projectId: "prj_geo_1", sessionId: null });
+    expect(target).toEqual({ projectId: "prj_geo_1", sessionId: "ses_geo_1" });
     expect(brief).toContain("它需要每天注射一次");
   });
 
@@ -334,7 +347,7 @@ describe("one answer", () => {
     };
     client.getGeoAnswer.mockResolvedValue({ ...answerFilled, errors: [...answerFilled.errors, earlier] });
     renderAnswer();
-    const summary = await screen.findByText("更早的回答里也出现过（1 条）");
+    const summary = await screen.findByText("历史讲错记录（1 条）");
     const folded = summary.closest("details") as HTMLElement;
     expect(folded).not.toHaveAttribute("open");
     expect(folded).toHaveTextContent("“孕妇可以放心使用”");

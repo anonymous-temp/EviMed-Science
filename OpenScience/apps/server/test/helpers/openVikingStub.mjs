@@ -132,7 +132,8 @@ export class OpenVikingStub {
       const session = this.#session(user, id);
       if (!session) return send(404, fail("NOT_FOUND", `Session not found: ${id}`));
       if (!action && req.method === "GET") {
-        return send(200, ok({ session_id: id, message_count: session.messages.length, commit_count: session.commitCount, pending_tokens: session.messages.length * 50, uri: `${own}/sessions/${id}` }));
+        return send(200, ok({ session_id: id, message_count: session.messages.length, commit_count: session.commitCount, pending_tokens: session.messages.length * 50, uri: `${own}/sessions/${id}`,
+          user: { account_id: this.account, user_id: user } }));
       }
       if (!action && req.method === "DELETE") { this.sessions.delete(`${user}/${id}`); return send(200, ok({ session_id: id })); }
       if (action === "messages" && req.method === "POST") {

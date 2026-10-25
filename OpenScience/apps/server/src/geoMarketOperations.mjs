@@ -134,3 +134,6 @@ export class GeoMarketOperations {
     summary: row.summary, entries: detail.items, nextCursor: detail.nextCursor, reconciliations: row.reconciliations };
   }
 }
+
+// Project-level read views use the same validated, microsecond-precise cursor contract.
+export { pageOptions as geoMarketReadPageOptions, page as geoMarketReadPage, timestamp as geoMarketReadTimestamp };

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 /**
  * A project's knowledge base as an Obsidian vault (2026-10-12, knowledge base P0): one Markdown note per document, an
  * `index.md` that links them all, and — where the project has them — its knowledge pages, in one zip.
@@ -184,14 +185,16 @@ export class KnowledgeVaultExport {
    * `sources` lists a project's documents (`SourceService.list`), `documents` reads the understanding each one is
    * current at, and `readText` reads a file of the project's base folder — a note's text, a knowledge page — as text, or
    * null where it cannot be read. `maxEntries` and `maxBytes` are the archive limits.
-   * @param {{ sources: { list: (userId: string, options: any) => Promise<{ items: any[], nextCursor?: string | null }> },
+   * @param {{ sources: { get?: (userId:string, id:string)=>Promise<any>, list: (userId: string, options: any) => Promise<{ items: any[], nextCursor?: string | null }> },
    *   documents: { get: (userId: string, kind: string, id: string) => Promise<any> },
    *   readText?: ((project: any, relativePath: string) => Promise<string | null>) | null,
+   *   contextFor?: any,
    *   roots?: ((userId: string, projectId: string) => { wiki: string, kg: string }) | null,
    *   maxEntries?: number, maxBytes?: number, report?: (code: string) => void }} dependencies
    *   `roots`: the engine addresses of the project's wiki and graph, by which a page's absolute links to another page are read
    */
-  constructor({ sources, documents, readText = null, roots = null, maxEntries = 10_000, maxBytes = 1024 * 1024 * 1024, report = () => {} }) {
+  constructor({ sources, documents, readText = null, roots = null, contextFor = null, maxEntries = 10_000, maxBytes = 1024 * 1024 * 1024, report = () => {} }) {
+    this.contextFor = contextFor;
     this.sources = sources; this.documents = documents; this.readText = readText; this.roots = roots;
     this.maxEntries = maxEntries; this.maxBytes = maxBytes; this.report = report;
   }
@@ -226,8 +229,27 @@ export class KnowledgeVaultExport {
    * @returns {Promise<{ bytes: Uint8Array, filename: string, mimeType: string, notes: number, pages: number }>}
    */
   async export(userId, project) {
-    const listed = (await this.#listAll(userId, project.id)).filter((source) => sourceReadable(source.payload));
-    const path0 = (/** @type {any} */ source) => String(source.payload?.paths?.[0] ?? "");
+    const policy = this.contextFor ? await this.contextFor({ ...project, userId }) : null;
+    if (this.contextFor && !["owned", "geo-project"].includes(policy?.kind)) throw new HttpError(503, "knowledge_scope_unavailable", "The project knowledge policy is unavailable.");
+    const sharedContext = policy?.kind === "geo-project" ? policy : null;
+    if (sharedContext && sharedContext.inputs.length + (sharedContext.selected?.outputs.length ?? 0) + 1 > this.maxEntries) throw this.#tooLarge("entries");
+    // Source IDs address bytes; identical bytes can have several selected
+    // logical paths. The output manifest, not a source-ID map, owns the files.
+    const outputOf = new Map(), sourceRows = new Map();
+    const selectedPages = sharedContext ? await inBatches(sharedContext.selected?.outputs ?? [], async output => {
+      const id = output.source.sourceId;
+      if (!sourceRows.has(id)) sourceRows.set(id, this.sources.get(userId, id));
+      const source = await sourceRows.get(id);
+      if (!source) throw new HttpError(409, "knowledge_mirror_changed", "The selected knowledge mirror is unavailable.");
+      const entry = { ...source };
+      outputOf.set(entry, output);
+      return entry;
+    }) : [];
+    const listed = sharedContext ? [...sharedContext.inputs.map(input => input.source), ...selectedPages]
+      : (await this.#listAll(userId, project.id)).filter(source => sourceReadable(source.payload));
+    const path0 = (/** @type {any} */ source) => outputOf.has(source)
+      ? `knowledge-base/${outputOf.get(source).tree}/${outputOf.get(source).mirrorRel}`
+      : sharedContext ? sharedContext.sourcePath(source) || source.payload.paths[0] : String(source.payload?.paths?.[0] ?? "");
     // The mirror of what the engine compiled — the wiki and the graph — goes in as it is; everything else is a document's note.
     const pages = listed.filter((source) => knowledgeMirrorPathOf(path0(source)));
     const documents = listed.filter((source) => !knowledgeMirrorPathOf(path0(source)));
@@ -248,15 +270,20 @@ export class KnowledgeVaultExport {
       const display = sourceDisplayOf(source);
       const note = display.origin === "note";
       const title = clean(display.title) || "资料";
-      const authored = note && this.readText ? await this.readText(project, path0(source)).catch((/** @type {any} */ error) => { this.report(typeof error?.code === "string" ? error.code : "knowledge_vault_read_failed"); return null; }) : null;
+      const authored = sharedContext ? sharedContext.inputs.find(input => input.receipt.sourceId === source.id)?.captureText ?? "" : note && this.readText ? await this.readText(project, path0(source)).catch((/** @type {any} */ error) => { this.report(typeof error?.code === "string" ? error.code : "knowledge_vault_read_failed"); return null; }) : null;
       return { source, metadata, display, title, authored, understanding: authored === null ? await this.#understanding(userId, source) : null };
     });
     const entries = read.map((item) => ({ ...item, name: claim("sources", noteName(item.title, "资料")) }));
     const wikiEntries = (await inBatches(pages, async (source) => {
       const text = this.readText ? await this.readText(project, path0(source)).catch(() => null) : null;
+      if (sharedContext) {
+        const output = outputOf.get(source);
+        if (!output || text === null || createHash("sha256").update(text).digest("hex") !== output.displayedBytesSha256) throw new HttpError(409, "knowledge_mirror_changed", "The selected knowledge mirror changed before export.");
+      }
       return text === null ? null : { source, text };
     })).filter((item) => item !== null).map((item) => {
-      const where = /** @type {{ tree: "wiki" | "kg", rel: string }} */ (knowledgeMirrorPathOf(path0(item.source)));
+      const output = outputOf.get(item.source);
+      const where = output ? { tree: output.tree, rel: output.path } : /** @type {{ tree: "wiki" | "kg", rel: string }} */ (knowledgeMirrorPathOf(path0(item.source)));
       // A file keeps its place and its extension; only what a vault cannot hold in a name is taken out of it.
       const extension = /\.[A-Za-z0-9]+$/.exec(where.rel)?.[0] ?? "";
       const relative = where.rel.slice(0, where.rel.length - extension.length);
@@ -265,7 +292,7 @@ export class KnowledgeVaultExport {
     });
     const noteFiles = new Map(entries.map((entry) => [entry.source.id, `sources/${entry.name}.md`]));
     const pageFiles = new Map(wikiEntries.map((page) => [`${page.tree}/${page.rel}`, page.file]));
-    const engineRoots = this.roots ? this.roots(userId, project.id) : null;
+    const engineRoots = sharedContext ? sharedContext.resources.roots() : this.roots ? this.roots(userId, project.id) : null;
     /** A compiled file is found by its path, by its path with `.md` (a link that lost it), or by its name alone. @param {"wiki" | "kg"} tree @param {string} rel */
     /** @type {Map<string, string | null>} a tree and a file name to the one file of that name; null where two share it */
     const pageByName = new Map();
@@ -287,9 +314,9 @@ export class KnowledgeVaultExport {
     /** @param {number} index */
     const relatedTo = (index) => {
       /** @type {Map<number, number>} */
-      const shared = new Map();
-      for (const holders of byKeyword.values()) if (holders.includes(index)) for (const other of holders) if (other !== index) shared.set(other, (shared.get(other) ?? 0) + 1);
-      return [...shared.entries()].sort((left, right) => right[1] - left[1] || left[0] - right[0]).slice(0, RELATED).map(([other]) => other);
+      const sharedKeywords = new Map();
+      for (const holders of byKeyword.values()) if (holders.includes(index)) for (const other of holders) if (other !== index) sharedKeywords.set(other, (sharedKeywords.get(other) ?? 0) + 1);
+      return [...sharedKeywords.entries()].sort((left, right) => right[1] - left[1] || left[0] - right[0]).slice(0, RELATED).map(([other]) => other);
     };
 
     const home = noteName(project.name, "知识库");
@@ -342,6 +369,7 @@ export class KnowledgeVaultExport {
         ? `## 知识图谱\n\n${wikiEntries.filter((page) => page.tree === "kg" && page.file.endsWith(".md")).map((page) => `- ${link("kg", page.name, page.title)}`).join("\n")}\n` : ""].join("\n"));
 
     if (Object.keys(files).length > this.maxEntries) throw this.#tooLarge("entries");
+    if (sharedContext) await sharedContext.current();
     return { bytes: zipSync(files, { level: 6 }), filename: "evimed-knowledge-base.zip", mimeType: "application/zip", notes: entries.length, pages: wikiEntries.length };
   }
 

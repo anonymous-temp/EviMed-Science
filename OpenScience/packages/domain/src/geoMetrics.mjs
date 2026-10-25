@@ -15,7 +15,9 @@
  *   hard lines), and a golden test holds this port equal to that script's
  *   output cell by cell on a synthetic batch. Where the script and the yaml
  *   disagree, this port follows the script — it is what the owner's tests pin —
- *   and the disagreements are listed in the package M report.
+ *   and the disagreements are listed in the package M report. GEO V3's
+ *   geo-measurement-2 explicitly corrects mixed correct/unknown answers and
+ *   carries assessment coverage; the golden names those accuracy/index changes.
  * - **No fake numbers.** A metric that cannot be computed is
  *   `not_measurable` with a reason code, never 0: no retrieval means no
  *   citation rate, an unregistered owned domain means no hit rate, an
@@ -107,7 +109,7 @@ import sanityTable from './geo/sanity.json' with { type: 'json' }
  */
 /**
  * One adjudicated statement about our product (`facts.statements[]`).
- * @typedef {{ text: string, verdict?: string|null, claimId?: string|null, errorType?: string|null, severity?: string|null, evidence?: string|null }} GeoStatement
+ * @typedef {{ text?: string, verdict?: string|null, claimId?: string|null, errorType?: string|null, severity?: string|null, evidence?: string|null }} GeoStatement
  */
 /**
  * The facts row of a snapshot. Counts and presence come from `brands`; the
@@ -116,6 +118,10 @@ import sanityTable from './geo/sanity.json' with { type: 'json' }
  * lack `safetyTermsHit` gets M-12 `not_measurable`, never 0.
  * @typedef {object} GeoFacts
  * @property {GeoBrandMention[]} [brands]
+ * @property {string|null} [judgedAt]
+ * @property {string|null} [parserVersion]
+ * @property {{ judgementCoverage?: GeoJudgementCoverage, answerCut?: { chars: number, shown: number } }} [checks]
+ * @property {{ entityMentions?: number, genericMentions?: Array<{ name: string, count: number, matchedNames: string[], ours: boolean, competitor: boolean, productAttributed: boolean }> }} [judgeExtract]
  * @property {boolean|null} [firstOurs]      our product is the first registered brand in the answer
  * @property {number|null} [positionOurs]    1-based rank of our product among the registered brands
  * @property {boolean|null} [recommendedOurs]
@@ -174,9 +180,11 @@ import sanityTable from './geo/sanity.json' with { type: 'json' }
  * @property {string|null} reason         a code when the status is not ok (`no_retrieval`, `coverage_below_min`, …)
  * @property {'measured'|'derived'} dataType
  * @property {number} snapshotCount       snapshots in the scope, repeats excluded
+ * @property {GeoAssessmentCounts} [assessment]  answer-level completeness for the measured property
  */
 /**
  * @typedef {object} GeoMetricsOptions
+ * @property {string|null} [samplingMode] Explicit one-shot observations have descriptive rates without inferential intervals.
  * @property {string[]} [pools]            pools to compute (default: every pool of the table)
  * @property {string[]} [engines]          the project's engines; one with no snapshot is `absent`
  * @property {Array<{ id: string, pool: string }>} [groups]  groups to compute (default: those in the rows)
@@ -315,7 +323,7 @@ export function wilsonInterval(numerator, denominator) {
 
 /**
  * @typedef {{ value: number|null, measurable: boolean, numerator: number|null, denominator: number|null, reason: string|null,
- *   thin?: boolean }} CoreCell
+ *   thin?: boolean, assessment?: GeoAssessmentCounts }} CoreCell
  *   `thin`: a cell derived from cells that are `insufficient` is itself (a ratio carries the two rates, not the answers they were
  *   taken over, so the floor that holds a rate cannot see its denominators).
  */
@@ -379,6 +387,7 @@ function finish(metricId, core, where, snapshotCount) {
     reason: core.measurable ? null : core.reason,
     dataType: definition.channel === 'derived' ? 'derived' : 'measured',
     snapshotCount,
+    ...(core.assessment ? { assessment: core.assessment } : {}),
   }
 }
 
@@ -419,7 +428,8 @@ function emptyCell(metricId, where, status, reason) {
  * @property {Array<{ domain: string, ours: boolean, inBody: boolean|null }>} citations
  * @property {boolean} traceable  some citation carries a link
  * @property {Set<string>} ownedDomains
- * @property {string[]} verdicts
+ * @property {'correct'|'wrong'|'partial'|'unknown'} accuracy
+ * @property {'complete'|'partial'|'unknown'} judgementCoverage
  * @property {string[]} wrongTexts
  * @property {number} redFlagExpected
  * @property {number} redFlagHits
@@ -494,6 +504,41 @@ function citationIsOurs(citation, owned) {
  * @typedef {{ owned: OwnedSources, display: (engine: string) => string }} Context
  */
 
+/**
+ * @typedef {{ status: 'complete'|'partial'|'unknown', reasons: string[], answerChars: number, assessedChars: number }} GeoJudgementCoverage
+ * @typedef {{ methodVersion: string, completeAnswers: number, partialAnswers: number, unknownAnswers: number, decidableAnswers?: number }} GeoAssessmentCounts
+ */
+export const GEO_MEASUREMENT_METHOD_VERSION = 'geo-measurement-2'
+
+/**
+ * Missing historical metadata is unknown, never retroactively complete. The
+ * old explicit cut remains usable evidence of partial coverage.
+ * @param {GeoFacts} facts
+ * @returns {'complete'|'partial'|'unknown'}
+ */
+export function geoJudgementCoverage(facts) {
+  if (facts.checks?.answerCut) return 'partial'
+  const status = facts.checks?.judgementCoverage?.status
+  if (facts.judgedAt === null) return 'unknown'
+  return status === 'complete' || status === 'partial' ? status : 'unknown'
+}
+
+/**
+ * Answer-level fact accuracy. A known wrong statement settles the answer;
+ * correct requires every applicable statement and the full assessment.
+ * @param {GeoFacts} facts
+ * @returns {'correct'|'wrong'|'partial'|'unknown'}
+ */
+export function geoAnswerAccuracy(facts) {
+  const statements = Array.isArray(facts.statements) ? facts.statements : []
+  if (statements.some((statement) => statement?.verdict === 'wrong')) return 'wrong'
+  const coverage = geoJudgementCoverage(facts)
+  if (coverage === 'partial') return 'partial'
+  if (coverage === 'unknown' || !statements.length) return 'unknown'
+  if (statements.every((statement) => statement?.verdict === 'correct')) return 'correct'
+  return statements.some((statement) => statement?.verdict === 'correct') ? 'partial' : 'unknown'
+}
+
 /** @param {GeoFactRow} row @param {Context} ctx @returns {GeoItem|null} null when a valid snapshot has no facts yet */
 function prepare(row, ctx) {
   if (!row || typeof row !== 'object') throw new TypeError('a GEO metric row must be an object')
@@ -519,7 +564,7 @@ function prepare(row, ctx) {
   const roundKind = row.roundKind ?? null
   return {
     row,
-    question: String(row.questionId ?? null),
+    question: `${row.roundId ?? ''}\u0000${row.questionId ?? null}`,
     engine: String(row.engine ?? ''),
     pool: row.pool || null,
     groupId: row.groupId || null,
@@ -530,7 +575,7 @@ function prepare(row, ctx) {
     noise: roundKind === PLATFORM.noise_round_kind,
     inclusion: row.surface?.mode === PLATFORM.inclusion_surface_mode,
     selfMentions: brands.filter((brand) => brand.ours).reduce((sum, brand) => sum + count(brand), 0),
-    entityMentions: brands.reduce((sum, brand) => sum + count(brand), 0),
+    entityMentions: isNumber(facts.judgeExtract?.entityMentions) ? facts.judgeExtract.entityMentions : brands.reduce((sum, brand) => sum + count(brand), 0),
     rivalCounts,
     withAnyBrand: brands.some((brand) => (brand.ours || brand.competitor) && count(brand) > 0),
     selfFirst: Boolean(facts.firstOurs),
@@ -544,11 +589,33 @@ function prepare(row, ctx) {
     // it is left out of the citation family, never read as a miss (G8).
     traceable: citations.some((citation) => citation.domain !== ''),
     ownedDomains: new Set(citations.filter((citation) => citation.ours && citation.domain).map((citation) => citation.domain)),
-    verdicts: judged.map((statement) => /** @type {string} */ (statement.verdict)),
+    accuracy: geoAnswerAccuracy(facts),
+    judgementCoverage: geoJudgementCoverage(facts),
     wrongTexts: judged.filter((statement) => statement.verdict === 'wrong').map((statement) => String(statement.text ?? '')),
     redFlagExpected: Array.isArray(facts.redFlagExpected) ? facts.redFlagExpected.length : 0,
     redFlagHits: Array.isArray(facts.redFlagHits) ? facts.redFlagHits.length : 0,
     safetyHit: Array.isArray(facts.safetyTermsHit) ? facts.safetyTermsHit.length > 0 : null,
+  }
+}
+
+/** A refusal stays in a recommendation rate even when no semantic facts were extracted. @param {GeoItem} item */
+function recommendationEligible(item) {
+  return item.judgementCoverage === 'complete' || item.status === 'refusal'
+}
+
+/** The shared denominator sets, used by computation and contributor reads. @param {GeoItem[]} items @param {Context} ctx */
+function contributionSets(items, ctx) {
+  const baseline = items.filter((item) => !item.excluded)
+  const valid = baseline.filter((item) => item.inDenominator)
+  const mentioned = valid.filter((item) => item.selfMentions > 0)
+  const retrieval = valid.filter((item) => item.retrieval)
+  return { baseline, valid, mentioned, retrieval,
+    withAnyBrand: valid.filter((item) => item.withAnyBrand),
+    semantic: valid.filter(recommendationEligible),
+    adjudicated: valid.filter((item) => item.status !== 'refusal' && (item.accuracy === 'correct' || item.accuracy === 'wrong')),
+    positioned: mentioned.filter((item) => Boolean(item.selfPosition)),
+    traced: retrieval.filter((item) => item.traceable),
+    inline: retrieval.filter((item) => ctx.display(item.engine) === 'inline_marker' && item.traceable),
   }
 }
 
@@ -561,12 +628,8 @@ function prepare(row, ctx) {
  * @param {GeoItem[]} items @param {Context} ctx @returns {Record<string, CoreCell>}
  */
 function scopeMetrics(items, ctx) {
-  const baseline = items.filter((item) => !item.excluded)
-  const valid = baseline.filter((item) => item.inDenominator)
+  const { valid, mentioned, withAnyBrand, retrieval, semantic, traced, inline, positioned, adjudicated: decided } = contributionSets(items, ctx)
   const nValid = valid.length
-  const mentioned = valid.filter((item) => item.selfMentions > 0)
-  const withAnyBrand = valid.filter((item) => item.withAnyBrand)
-  const retrieval = valid.filter((item) => item.retrieval)
 
   const selfTotal = valid.reduce((sum, item) => sum + item.selfMentions, 0)
   const rivalTotal = valid.reduce((sum, item) => sum + Object.values(item.rivalCounts).reduce((a, b) => a + b, 0), 0)
@@ -575,27 +638,30 @@ function scopeMetrics(items, ctx) {
   const coverage = entityTotal ? brandTotal / entityTotal : null
 
   let right = 0
-  let wrong = 0
   const wrongTexts = new Set()
-  for (const item of valid) {
+  for (const item of decided) {
     for (const text of item.wrongTexts) wrongTexts.add(text)
-    if (!item.verdicts.length) continue
-    if (item.verdicts.includes('wrong')) wrong += 1
-    else if (item.verdicts.includes('correct')) right += 1
+    if (item.accuracy === 'correct') right += 1
   }
-  const adjudicated = right + wrong
+  const adjudicated = decided.length
+  const semanticAssessment = {
+    methodVersion: GEO_MEASUREMENT_METHOD_VERSION,
+    completeAnswers: valid.filter((item) => item.judgementCoverage === 'complete').length,
+    partialAnswers: valid.filter((item) => item.judgementCoverage === 'partial').length,
+    unknownAnswers: valid.filter((item) => item.judgementCoverage === 'unknown').length,
+  }
+  // A verified error settles correctness without proving every part was read.
+  const assessment = { ...semanticAssessment, decidableAnswers: adjudicated }
 
   /** @type {number[]} */
   const positions = []
-  for (const item of mentioned) if (item.selfPosition) positions.push(item.selfPosition)
+  for (const item of positioned) positions.push(/** @type {number} */ (item.selfPosition))
   const positionSum = positions.reduce((sum, position) => sum + position, 0)
-  const expectedFlags = valid.reduce((sum, item) => sum + item.redFlagExpected, 0)
-  const hitFlags = valid.reduce((sum, item) => sum + item.redFlagHits, 0)
-  const safetyExtracted = valid.some((item) => item.safetyHit !== null)
-  const inline = retrieval.filter((item) => ctx.display(item.engine) === 'inline_marker' && item.traceable)
+  const expectedFlags = semantic.reduce((sum, item) => sum + item.redFlagExpected, 0)
+  const hitFlags = semantic.reduce((sum, item) => sum + item.redFlagHits, 0)
+  const safetyExtracted = semantic.some((item) => item.safetyHit !== null)
   // The citation family counts only what can be traced; retrieval with no
   // link at all is 「引用不可测」, not 0 %.
-  const traced = retrieval.filter((item) => item.traceable)
   const untraceable = retrieval.length > 0 && traced.length === 0
   const suspects = items.filter((item) => item.status === 'suspect').length
 
@@ -603,7 +669,7 @@ function scopeMetrics(items, ctx) {
   const out = {
     'M-01': rate(mentioned.length, nValid, 'no_valid_answers'),
     'M-02': rate(withAnyBrand.filter((item) => item.selfFirst).length, withAnyBrand.length, 'no_brand_mentioned'),
-    'M-03': rate(valid.filter((item) => item.recommended).length, nValid, 'no_valid_answers'),
+    'M-03': { ...rate(semantic.filter((item) => item.recommended).length, semantic.length, nValid ? 'judgement_incomplete' : 'no_valid_answers'), assessment: semanticAssessment },
     'M-04': coverage !== null && coverage >= SOV_COVERAGE_MIN
       ? rate(selfTotal, brandTotal, 'no_brand_mentions')
       : unmeasurable(coverage !== null ? 'coverage_below_min' : 'no_drug_entities'),
@@ -611,7 +677,7 @@ function scopeMetrics(items, ctx) {
     'M-05': positions.length
       ? measured(positionSum / positions.length, { numerator: positionSum, denominator: positions.length })
       : unmeasurable('not_mentioned'),
-    'M-06': rate(right, adjudicated, 'not_adjudicated'),
+    'M-06': { ...rate(right, adjudicated, 'not_adjudicated'), assessment },
     'M-07': adjudicated ? measured(wrongTexts.size, { numerator: wrongTexts.size }) : unmeasurable('not_adjudicated'),
     'M-08': !ctx.owned.registered
       ? unmeasurable('owned_not_registered')
@@ -631,11 +697,25 @@ function scopeMetrics(items, ctx) {
       : inline.length
         ? rate(inline.filter((item) => item.citations.some((c) => c.ours && c.inBody === true)).length, inline.length, 'no_inline_citation_engine')
         : unmeasurable('no_inline_citation_engine'),
-    'M-11': rate(hitFlags, expectedFlags, 'no_red_flag_expectations'),
-    'M-12': nValid && !safetyExtracted
+    'M-11': { ...rate(hitFlags, expectedFlags, semantic.length ? 'no_red_flag_expectations' : 'judgement_incomplete'), assessment: semanticAssessment },
+    'M-12': !semantic.length && nValid ? { ...unmeasurable('judgement_incomplete'), assessment: semanticAssessment } : nValid && !safetyExtracted
       ? unmeasurable('not_extracted')
-      : rate(valid.filter((item) => item.safetyHit === true).length, nValid, 'no_valid_answers'),
+      : { ...rate(semantic.filter((item) => item.safetyHit === true).length, semantic.length, 'no_valid_answers'), assessment: semanticAssessment },
     'M-20': rate(nValid, nValid + suspects, 'no_snapshots'),
+  }
+  // The entity universe comes from model extraction, unlike literal registered
+  // brand matching. A partial/unknown answer cannot certify the registry floor
+  // or share of voice, even when every observed name is registered. Keep the
+  // observed counts and coverage without presenting them as a complete rate.
+  if (valid.some((item) => item.status !== 'refusal' && item.judgementCoverage !== 'complete')) {
+    for (const id of ['M-04', 'M-04C']) {
+      out[id] = { ...unmeasurable('entity_extraction_incomplete'),
+        numerator: id === 'M-04' ? selfTotal : brandTotal,
+        denominator: id === 'M-04' ? brandTotal : entityTotal, assessment: semanticAssessment }
+    }
+  } else {
+    out['M-04'].assessment = semanticAssessment
+    out['M-04C'].assessment = semanticAssessment
   }
   // Rates over questions answered a different number of times are not one
   // rate: a pool whose questions have 3 and 5 valid answers averages two
@@ -930,7 +1010,7 @@ export function computeGeoMetrics(rows, options = {}) {
     if (item) items.push(item)
     else unparsed += 1
   }
-  const pooledAll = items.filter((item) => item.pool)
+  const pooledAll = items.filter((item) => item.pool || oneShotObservation(item.row, options.samplingMode))
   const pooled = pooledAll.filter((item) => !item.inclusion)
 
   const competitors = options.competitors ?? [...new Set(pooled.flatMap((item) => Object.keys(item.rivalCounts)))].sort()
@@ -1113,6 +1193,17 @@ export function computeGeoMetrics(rows, options = {}) {
     }
   }
 
+  if (['one_shot', 'mixed'].includes(options.samplingMode ?? '')) {
+    for (const cell of cells) {
+      cell.ciLow = null
+      cell.ciHigh = null
+      if (cell.value != null && ['ok', 'insufficient'].includes(cell.status) && cell.numerator != null && cell.denominator != null && cell.denominator > 0) {
+        cell.status = 'ok'
+        cell.reason = options.samplingMode === 'mixed' ? 'mixed_contract_descriptive' : 'one_shot_descriptive'
+      }
+    }
+  }
+
   const baselineAll = items.filter((item) => !item.excluded)
   return {
     cells,
@@ -1152,11 +1243,13 @@ function armsOf(items, arms) {
  * The snapshot rows behind one cell, for 「点开这条回答」: the same selection
  * {@link computeGeoMetrics} made (repeats excluded, probes outside the question
  * map excluded). Pass the `arms` used for the batch when the cell is an arm's.
- * @param {GeoFactRow[]} rows @param {GeoMetricCell} cell @param {{ arms?: GeoMetricsOptions['arms'] }} [options]
+ * @param {GeoFactRow[]} rows @param {GeoMetricCell} cell @param {{ arms?: GeoMetricsOptions['arms'], samplingMode?: string | null }} [options]
  * @returns {GeoFactRow[]}
  */
 export function geoCellRows(rows, cell, options = {}) {
-  const inScope = rows.filter((row) => row.pool && !(row.roundKind && EXCLUDED_ROUND_KINDS.has(row.roundKind)))
+  const unclassifiedScope = cell.scope === 'engine' || cell.scope === 'project' && cell.metricId === 'M-20'
+  const unclassified = (/** @type {GeoFactRow} */ row) => unclassifiedScope && oneShotObservation(row, options.samplingMode)
+  const inScope = rows.filter((row) => (row.pool || unclassified(row)) && !(row.roundKind && EXCLUDED_ROUND_KINDS.has(row.roundKind)))
   const pools = cell.pool ? [cell.pool] : cell.scope === 'engine' ? GEO_METRIC_POOL_IDS : (METRIC_INDEX.get(cell.metricId)?.pools ?? GEO_METRIC_POOL_IDS)
   let armGroups = null
   if (cell.arm) {
@@ -1165,11 +1258,46 @@ export function geoCellRows(rows, cell, options = {}) {
       ? new Set(arms[cell.arm] ?? [])
       : new Set(inScope.filter((row) => row.groupId && Boolean(row.isControl) === (cell.arm === 'control')).map((row) => row.groupId))
   }
-  return inScope.filter((row) => pools.includes(/** @type {string} */ (row.pool))
+  return inScope.filter((row) => (pools.includes(/** @type {string} */ (row.pool)) || unclassified(row) && !row.pool)
     && (cell.engine === null || row.engine === cell.engine)
     && (cell.groupId === null || row.groupId === cell.groupId)
     && (armGroups === null || (row.groupId != null && armGroups.has(row.groupId)))
     && (cell.scope === 'engine' || cell.scope === 'pool_engine' || row.surface?.mode !== PLATFORM.inclusion_surface_mode))
+}
+
+/**
+ * Exact contributing snapshots of a computed cell. Counts of mentions, flags,
+ * citations and derived inputs are deliberately not labelled answer counts.
+ * Input rows must already be balanced for cross-engine metrics, as in the job.
+ * @param {GeoFactRow[]} rows @param {GeoMetricCell} cell @param {GeoMetricsOptions} [options]
+ */
+export function geoMetricMembers(rows, cell, options = {}) {
+  const ctx = { owned: ownedSources(options.owned), display: (/** @type {string} */ engine) =>
+    options.citationDisplay?.[engine] ?? TABLE.engines[engine]?.citation_display ?? 'unknown' }
+  const items = geoCellRows(rows, cell, options).map((row) => prepare(row, ctx)).filter((item) => item !== null)
+  const sets = contributionSets(items, ctx)
+  let members = sets.valid
+  let unit = 'answers'
+  switch (cell.metricId) {
+    case 'M-02': members = sets.withAnyBrand; break
+    case 'M-03': case 'M-12': case 'M-15': members = sets.semantic; break
+    case 'M-04': case 'M-17': members = sets.valid.filter((item) => item.selfMentions + Object.values(item.rivalCounts).reduce((a, b) => a + b, 0) > 0); unit = 'brand_mentions'; break
+    case 'M-04C': members = sets.valid.filter((item) => item.entityMentions > 0); unit = 'entity_mentions'; break
+    case 'M-05': members = sets.positioned; break
+    case 'M-06': members = sets.adjudicated; break
+    case 'M-07': members = sets.adjudicated.filter((item) => item.wrongTexts.length > 0); unit = 'unique_statements'; break
+    case 'M-08': members = ctx.owned.registered ? sets.traced : []; break
+    case 'M-08B': members = ctx.owned.registered ? sets.inline : []; break
+    case 'M-08S': members = ctx.owned.registered ? sets.valid.filter((item) => !item.retrieval || item.traceable) : []; break
+    case 'M-09': members = ctx.owned.registered ? sets.valid.filter((item) => item.ownedDomains.size > 0) : []; unit = 'unique_domains'; break
+    case 'M-09S': members = ctx.owned.registered ? sets.valid.filter((item) => item.citations.some((citation) => citation.domain)) : []; unit = 'citations'; break
+    case 'M-11': members = sets.semantic.filter((item) => item.redFlagExpected > 0); unit = 'expected_flags'; break
+    case 'M-13': case 'M-19': unit = 'derived_inputs'; break
+    case 'M-20': members = cell.variant === 'refusal' ? sets.valid : sets.baseline.filter((item) => item.inDenominator || item.status === 'suspect'); unit = 'asks'; break
+    default: break
+  }
+  if (cell.reason === 'not_applicable' || cell.reason === 'inclusion_surface') members = []
+  return { rows: members.map((item) => item.row), unit, basis: unit === 'derived_inputs' ? 'inputs' : 'denominator' }
 }
 
 // ------------------------------------------------------------------ noise, trend, net effect
@@ -1212,7 +1340,7 @@ export function noiseBand(noiseRows, { metricId = 'M-01' } = {}) {
   const byRepeat = new Map()
   for (const row of noiseRows) {
     const item = prepare(row, ctx)
-    if (!item || !item.inDenominator || item.inclusion || !item.pool) continue
+    if (!item || !item.inDenominator || item.inclusion || !item.pool || (metricId === 'M-03' && !recommendationEligible(item))) continue
     const index = isNumber(row.repeatIndex) ? row.repeatIndex : 0
     const bucket = byRepeat.get(index) ?? []
     bucket.push(item)
@@ -1475,4 +1603,11 @@ function deepFreeze(value) {
     for (const child of Object.values(value)) deepFreeze(child)
   }
   return value
+}
+
+/** Row provenance takes precedence over the selection default, so mixed windows cannot admit unclassified recurring rows.
+ * @param {GeoFactRow} row @param {string | null | undefined} mode */
+function oneShotObservation(row, mode) {
+  const contract = /** @type {{ samplingMode?: string } | undefined} */ (row.surface?.measurementContract)
+  return contract ? contract.samplingMode === 'one_shot' : mode === 'one_shot'
 }

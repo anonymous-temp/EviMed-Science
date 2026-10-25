@@ -234,3 +234,33 @@ test('the model documents convert to Word and HTML with their tables, their not-
     assert.ok((await fs.stat(path.join(dir, `${kind}.docx`))).size > 5_000, `${kind}: a Word file was written`);
   }
 });
+
+test('typed export tables preserve string identity and reject inferred numeric values or nonfinite constants', async()=>{
+  const {validateTypedExportTable}=await import('../src/documentExport.mjs');
+  const table={columns:[{key:'id',label:'ID',type:'text'},{key:'value',label:'Value',type:'number'}],rows:[{id:'00123',value:0},{id:'=1+1',value:null}]};
+  assert.doesNotThrow(()=>validateTypedExportTable(table));
+  for(const value of ['12',NaN,Infinity]) assert.throws(()=>validateTypedExportTable({...table,rows:[{id:'001',value}]}));
+  assert.throws(()=>validateTypedExportTable({...table,columns:[...table.columns,table.columns[0]]}));
+  assert.throws(()=>validateTypedExportTable({...table,rows:[{id:123,value:1}]}));
+});
+
+
+test('exact selected export identity recovers the first frozen read time without dropping provenance', async()=>{
+  const {frozenDocumentIdentity}=await import('../src/documentExport.mjs');
+  const document={rendererImage:'image-one',cover:{analysis:{digest:'exact',asOf:{readAt:'first',observedFrom:'2026-10-01'}}}};
+  const later={...document,cover:{analysis:{...document.cover.analysis,asOf:{...document.cover.analysis.asOf,readAt:'later'}}}};
+  const reference={kind:'geo-selected-analysis'};
+  assert.equal(frozenDocumentIdentity(document,reference),frozenDocumentIdentity(later,reference));
+  assert.notEqual(frozenDocumentIdentity(document,reference),frozenDocumentIdentity({...later,rendererImage:'image-two'},reference));
+  assert.notEqual(frozenDocumentIdentity(document,{}),frozenDocumentIdentity(later,{}));
+});
+
+test('frozen conversion validates selected formats as a client error before inspecting sources or the renderer',async()=>{
+  const {DocumentExportService}=await import('../src/documentExport.mjs');
+  let inspected=0;
+  const service=new DocumentExportService({config:{},documents:{database:{}},jobs:{},controller:{inspectRuntimeImage:async()=>{inspected++;throw new Error('must not inspect');}},resolveSource:async()=>assert.fail(),authorize:async()=>{}});
+  for(const formats of [[],['exe'],'csv',null,['csv','docx','xlsx','pdf','html','csv']]) {
+    await assert.rejects(service.requestFrozen({id:'reader'},null,formats),error=>error.status===400&&error.code==='document_export_format_invalid');
+  }
+  assert.equal(inspected,0);
+});

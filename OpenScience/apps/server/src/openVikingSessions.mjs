@@ -1,4 +1,4 @@
-import { OPENVIKING_MEMORY_TYPES, nativeMemoryRoot, openVikingUserId, userRootUri } from "./openVikingLayout.mjs";
+import { OPENVIKING_MEMORY_TYPES, OPENVIKING_PROJECT_MEMORY_TYPES, nativeMemoryRoot, openVikingUserId, userRootUri, projectNativeMemoryNamespace } from "./openVikingLayout.mjs";
 import { HttpError } from "./security.mjs";
 
 /**
@@ -113,32 +113,75 @@ function sessionSegment(value) {
 }
 
 /** The full policy a settings PATCH carries, whatever it is changing. @param {boolean} learning */
-export function memoryPolicy(learning) {
-  return { self: { enabled: Boolean(learning) }, memory_types: [...OPENVIKING_MEMORY_TYPES] };
+export function memoryPolicy(learning, memoryTypes = OPENVIKING_MEMORY_TYPES) {
+  return { self: { enabled: Boolean(learning) }, memory_types: [...memoryTypes] };
+}
+
+/** Bind the existing request primitive even for gateway calls through .client.
+ * The real platform owner remains the accounting/overlay identity; only the
+ * native engine's trusted user changes. No bearer or second engine is created.
+ */
+function namespaceClient(client, namespace) {
+  const assertOwner = userId => {
+    if (userId !== namespace.ownerId) throw new HttpError(403, 'memory_scope_denied', 'The project memory owner does not match.');
+  };
+  return {
+    get configured() { return client.configured; },
+    get account() { return client.account; },
+    async request(input) {
+      if (input.authenticated !== undefined && typeof input.authenticated !== 'boolean') throw new HttpError(403, 'memory_scope_denied', 'Authentication must be explicit and boolean.');
+      if (input.authenticated === false) {
+        if (input.path !== '/health') throw new HttpError(403, 'memory_scope_denied', 'Only engine health is unauthenticated.');
+        return client.request(input);
+      }
+      assertOwner(input.userId);
+      if (input.openVikingUser != null && input.openVikingUser !== namespace.engineUser) throw new HttpError(403, 'memory_scope_denied', 'The project memory identity cannot be replaced.');
+      return client.request({ ...input, openVikingUser: namespace.engineUser });
+    },
+    async remove(userId, uri, options = {}) {
+      assertOwner(userId);
+      if (options.openVikingUser != null && options.openVikingUser !== namespace.engineUser) throw new HttpError(403, 'memory_scope_denied', 'The project memory identity cannot be replaced.');
+      return client.remove(userId, uri, { ...options, openVikingUser: namespace.engineUser });
+    },
+  };
 }
 
 export class OpenVikingSessions {
   /**
    * @param {any} client an `OpenVikingClient`
-   * @param {{ timeoutMs?: number, fastTimeoutMs?: number }} [options] `fastTimeoutMs` is the deadline of the calls a
+   * @param {{ timeoutMs?: number, fastTimeoutMs?: number, namespace?: any }} [options] `fastTimeoutMs` is the deadline of the calls a
    *   new kernel waits on (health, the MCP handshake, session start): a memory service that hangs delays the first
    *   prompt of a conversation by eighteen seconds, one that refuses costs nothing.
    */
-  constructor(client, { timeoutMs = 4_000, fastTimeoutMs = 1_500 } = {}) {
-    this.client = client;
+  constructor(client, { timeoutMs = 4_000, fastTimeoutMs = 1_500, namespace = null } = {}) {
+    if (namespace) {
+      const expected = projectNativeMemoryNamespace(namespace);
+      if (Object.keys(namespace).length !== Object.keys(expected).length || Object.entries(expected).some(([key, value]) => namespace[key] !== value)) throw new HttpError(403, 'memory_scope_denied', 'Invalid project memory namespace.');
+      namespace = expected;
+    }
+    this.rootClient = client; this.namespace = namespace;
+    this.client = namespace ? namespaceClient(client, namespace) : client;
+    this.memoryTypes = namespace ? OPENVIKING_PROJECT_MEMORY_TYPES : OPENVIKING_MEMORY_TYPES;
     this.timeoutMs = Math.max(250, Number(timeoutMs) || 4_000);
     this.fastTimeoutMs = Math.max(250, Math.min(this.timeoutMs, Number(fastTimeoutMs) || 1_500));
   }
 
   get configured() { return Boolean(this.client?.configured); }
+  forNamespace(namespace) {
+    if (!namespace || this.namespace && this.namespace.id !== namespace.id) throw new HttpError(403, 'memory_scope_denied', 'The project memory namespace cannot be removed or replaced.');
+    return new OpenVikingSessions(this.rootClient, { timeoutMs: this.timeoutMs, fastTimeoutMs: this.fastTimeoutMs, namespace });
+  }
   /** @param {string} userId */
-  engineUser(userId) { return openVikingUserId(userId); }
+  engineUser(userId) {
+    if (this.namespace && userId !== this.namespace.ownerId) throw new HttpError(403, 'memory_scope_denied', 'The project memory owner does not match.');
+    return this.namespace?.engineUser ?? openVikingUserId(userId);
+  }
   /** @param {string} userId */
-  memoryRoot(userId) { return nativeMemoryRoot(userId); }
+  memoryRoot(userId) { return this.namespace ? `${this.userRoot(userId)}/memories` : nativeMemoryRoot(userId); }
   /** @param {string} userId */
-  userRoot(userId) { return userRootUri(userId); }
+  userRoot(userId) { return this.namespace ? `viking://user/${this.engineUser(userId)}` : userRootUri(userId); }
   /** @param {string} userId @param {string} sessionId the engine's */
-  sessionUri(userId, sessionId) { return `${userRootUri(userId)}/sessions/${sessionSegment(sessionId)}`; }
+  sessionUri(userId, sessionId) { return `${this.userRoot(userId)}/sessions/${sessionSegment(sessionId)}`; }
 
   /** Liveness and version, with no identity (a request that names a user registers it). */
   async health() {
@@ -327,7 +370,7 @@ export class OpenVikingSessions {
     try {
       await this.client.request({
         method: "POST", path: `/api/v1/admin/accounts/${this.client.account}/users`, userId,
-        body: { user_id: openVikingUserId(userId), role: "user" }, timeoutMs: this.timeoutMs,
+        body: { user_id: this.engineUser(userId), role: "user" }, timeoutMs: this.timeoutMs,
       });
       return true;
     } catch (error) {
@@ -339,7 +382,7 @@ export class OpenVikingSessions {
   /** The account's own policy as the engine holds it, or null before it is registered. */
   async settings(userId) {
     try {
-      const body = await this.client.request({ path: `/api/v1/admin/accounts/${this.client.account}/users/${openVikingUserId(userId)}/settings`, userId, timeoutMs: this.timeoutMs });
+      const body = await this.client.request({ path: `/api/v1/admin/accounts/${this.client.account}/users/${this.engineUser(userId)}/settings`, userId, timeoutMs: this.timeoutMs });
       const policy = body?.result?.memory_policy ?? {};
       return { learning: policy?.self?.enabled !== false, memoryTypes: Array.isArray(policy?.memory_types) ? policy.memory_types.map(String).sort() : [] };
     } catch (error) {
@@ -352,8 +395,8 @@ export class OpenVikingSessions {
   async setLearning(userId, learning) {
     await this.register(userId);
     const body = await this.client.request({
-      method: "PATCH", path: `/api/v1/admin/accounts/${this.client.account}/users/${openVikingUserId(userId)}/settings`, userId,
-      body: { memory_policy: memoryPolicy(learning) }, timeoutMs: this.timeoutMs,
+      method: "PATCH", path: `/api/v1/admin/accounts/${this.client.account}/users/${this.engineUser(userId)}/settings`, userId,
+      body: { memory_policy: memoryPolicy(learning, this.memoryTypes) }, timeoutMs: this.timeoutMs,
     });
     const policy = body?.result?.memory_policy ?? {};
     return { learning: policy?.self?.enabled !== false, memoryTypes: Array.isArray(policy?.memory_types) ? policy.memory_types.map(String).sort() : [] };
@@ -373,7 +416,7 @@ export class OpenVikingSessions {
       if (/** @type {any} */ (error)?.code !== "memory_index_precondition_failed") throw error;
     });
     try {
-      await this.client.request({ method: "DELETE", path: `/api/v1/admin/accounts/${this.client.account}/users/${openVikingUserId(userId)}`, userId, timeoutMs: this.timeoutMs });
+      await this.client.request({ method: "DELETE", path: `/api/v1/admin/accounts/${this.client.account}/users/${this.engineUser(userId)}`, userId, timeoutMs: this.timeoutMs });
     } catch (error) {
       const code = /** @type {any} */ (error)?.code;
       if (code === "memory_index_not_found") return { deleted: false, pending: false };
@@ -382,10 +425,12 @@ export class OpenVikingSessions {
     const deadline = Date.now() + Math.max(0, Number(waitMs) || 0);
     for (;;) {
       try {
-        await this.client.request({ path: "/api/v1/fs/ls", userId, query: { uri: nativeMemoryRoot(userId) }, timeoutMs: this.timeoutMs });
+        await this.client.request({ path: "/api/v1/fs/ls", userId, query: { uri: this.memoryRoot(userId) }, timeoutMs: this.timeoutMs });
         return { deleted: true, pending: false };
       } catch (error) {
-        if (/** @type {any} */ (error)?.code !== "memory_index_precondition_failed") return { deleted: true, pending: false };
+        const code = /** @type {any} */ (error)?.code;
+        if (code === "memory_index_not_found") return { deleted: true, pending: false };
+        if (code !== "memory_index_precondition_failed") throw error;
       }
       if (Date.now() >= deadline) return { deleted: true, pending: true };
       await sleep(pollMs);
@@ -396,7 +441,7 @@ export class OpenVikingSessions {
   async exportPack(userId) {
     const answer = await this.client.request({
       method: "POST", path: "/api/v1/pack/export", userId, responseType: "bytes", timeoutMs: Math.max(this.timeoutMs, 30_000),
-      body: { uri: nativeMemoryRoot(userId), include_vectors: false },
+      body: { uri: this.memoryRoot(userId), include_vectors: false },
     });
     return /** @type {Buffer} */ (answer.bytes);
   }

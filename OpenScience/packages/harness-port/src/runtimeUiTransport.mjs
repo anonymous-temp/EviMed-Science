@@ -2,7 +2,7 @@
  * Browser-only official transport hooks. Keep the installer self-contained:
  * the control plane serializes it into the parser-blocking frame bootstrap.
  * No module import, browser fetch replacement, or Host-ownership claim is used.
- * @param {{version:number, frameId:string, projectId:string, prefix:string, shellOrigin:string, assets?:string, muxResponseMaxBytes:number}} frame
+ * @param {{version:number, frameId:string, projectId:string, prefix:string, shellOrigin:string, assets?:string, access?:{type:string,owner:boolean,grants:any[]}, muxResponseMaxBytes:number}} frame
  *   `assets`, when present, is the path every frame shares for the kernel
  *   application's content-addressed files (`/__evimed/k/`): a plugin bundle
  *   named by revision loads from there, so the browser keeps one copy for
@@ -15,6 +15,16 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
   if (frame.assets !== undefined && frame.assets !== '/__evimed/k/') throw new Error('Invalid runtime frame');
   if (!Number.isSafeInteger(frame.muxResponseMaxBytes) || frame.muxResponseMaxBytes <= 0) throw new Error('Invalid runtime receive limit');
   if (target.__DSH_TRANSPORT__) throw new Error('Runtime transport already installed');
+  if (frame.access !== undefined) {
+    if (frame.access?.type !== 'baseline' || frame.access.owner !== false || !Array.isArray(frame.access.grants)) throw new Error('Invalid scoped runtime access');
+    const access = Object.freeze({ type: 'baseline', owner: false, grants: Object.freeze(frame.access.grants.map(grant => Object.freeze({
+      resource: Object.freeze({ ...grant.resource }), actions: Object.freeze([...grant.actions]),
+    }))) });
+    // The pinned index assigns its owner snapshot after this blocking bootstrap.
+    // Keep the scoped snapshot through that assignment without changing bundles
+    // or briefly advertising owner controls. This is a UI hint, not authority.
+    Object.defineProperty(target, '__DSH_REMOTE_ACCESS__', { get: () => access, set: () => {}, configurable: false });
+  }
   const origin = target.location.origin;
   const nativeFetch = target.fetch.bind(target);
   const streams = new Map();
@@ -39,12 +49,12 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
     stage(value) {
       if (!value || !/^[A-Za-z0-9_-]{1,160}$/.test(value.sessionId)
         || !/^rr_[a-f0-9]{64}$/.test(value.referenceId)
-        || typeof value.draft !== 'string' || !value.draft || value.draft.length > 100_000) throw failure('Invalid result revision reference');
+        || typeof value.draft !== 'string' || value.draft.length > 100_000) throw failure('Invalid result revision reference');
       stagedRevision = { ...value }; sentRevision = null;
     },
     clear() { stagedRevision = null; sentRevision = null; },
   };
-  /** Attach only to the submitted native request for this session and draft.
+  /** Attach the selected input to the actual submitted words in this session.
    * The control plane strips this envelope before calling the kernel.
    * @param {string} method @param {any} payload */
   function revisionPayload(method, payload) {
@@ -66,6 +76,43 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
     }
     if (!referenceId) return payload;
     return { ...payload, args: { ...payload.args, request: { ...request, evimedResultRevision: { referenceId } } } };
+  }
+
+  /** @type {{sessionId:string,referenceId:string,draft:string} | null} */ let stagedGeoPlan = null;
+  /** @type {{sessionId:string,requestId:string,text:string,referenceId:string} | null} */ let sentGeoPlan = null;
+  const geoPlans = {
+    /** Bound by the authenticated shell bridge, never by document selection alone.
+     * @param {{sessionId:string,referenceId:string,draft:string}} value */
+    stage(value) {
+      if (!value || !/^[A-Za-z0-9_-]{1,160}$/.test(value.sessionId)
+        || !/^gpc_[a-f0-9]{64}$/.test(value.referenceId)
+        || typeof value.draft !== 'string' || value.draft.length > 100_000) throw failure('Invalid GEO plan reference');
+      stagedGeoPlan = { ...value }; sentGeoPlan = null;
+    },
+    clear() { stagedGeoPlan = null; sentGeoPlan = null; },
+  };
+  /** Attach only to the submitted native request for this session and draft.
+   * The control plane strips this envelope before calling the kernel.
+   * @param {string} method @param {any} payload */
+  function geoPlanPayload(method, payload) {
+    if (method === 'session/cancel') { geoPlans.clear(); return payload; }
+    if (method !== 'session/prompt') return payload;
+    const request = payload?.args?.request;
+    if (!request || typeof request.sessionId !== 'string' || typeof request.requestId !== 'string') return payload;
+    const content = request.content;
+    const text = Array.isArray(content) ? content.filter(part => part?.type === 'text' && typeof part.text === 'string').map(part => part.text).join('\n') : '';
+    let referenceId;
+    if (sentGeoPlan && sentGeoPlan.sessionId === request.sessionId && sentGeoPlan.requestId === request.requestId && sentGeoPlan.text === text) referenceId = sentGeoPlan.referenceId;
+    else if (stagedGeoPlan) {
+      const staged = stagedGeoPlan;
+      geoPlans.clear();
+      if (staged.sessionId === request.sessionId && text.trim()) {
+        referenceId = staged.referenceId;
+        sentGeoPlan = { sessionId: request.sessionId, requestId: request.requestId, text, referenceId };
+      }
+    }
+    if (!referenceId) return payload;
+    return { ...payload, args: { ...payload.args, request: { ...request, geoPlanContext: { referenceId } } } };
   }
 
 
@@ -192,10 +239,10 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
         let body;
         try { body = JSON.parse(init.body); } catch { /* the server rejects malformed native RPCs */ }
         if (body?.type === 'client-request' && body.method === 'session/prompt') {
-          const payload = revisionPayload(body.method, body.payload);
+          const payload = geoPlanPayload(body.method, revisionPayload(body.method, body.payload));
           if (payload !== body.payload) outgoing = { ...init, body: JSON.stringify({ ...body, payload }) };
         }
-      } else if (url.pathname.endsWith('/session/cancel')) revisions.clear();
+      } else if (url.pathname.endsWith('/session/cancel')) { revisions.clear(); geoPlans.clear(); }
       return nativeFetch(scopedUrl(input, '/api/'), { ...outgoing, credentials: 'same-origin', redirect: 'error' });
     },
     /** @param {string} input */
@@ -273,7 +320,7 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
           if (signal.aborted) cancel();
         });
         if (signal.aborted) throw signal.reason;
-        send(socket, { type: 'open', streamId: id, endpoint, payload: revisionPayload(endpoint, payload) }); opened = true;
+        send(socket, { type: 'open', streamId: id, endpoint, payload: geoPlanPayload(endpoint, revisionPayload(endpoint, payload)) }); opened = true;
         while (true) {
           if (failed) throw error;
           if (!queue.length) await new Promise(resolve => { wake = () => resolve(undefined); });
@@ -319,6 +366,7 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
     },
   };
   Object.defineProperty(target, '__EVIMED_RESULT_REVISION__', { value: Object.freeze(revisions) });
+  Object.defineProperty(target, '__EVIMED_GEO_PLAN__', { value: Object.freeze(geoPlans) });
   Object.defineProperty(target, '__DSH_TRANSPORT__', { value: Object.freeze(hooks) });
   Object.defineProperty(target, '__DSH_FILE_UPLOAD__', { value: Object.freeze(uploads) });
   target.addEventListener('pagehide', hooks.dispose, { once: true });

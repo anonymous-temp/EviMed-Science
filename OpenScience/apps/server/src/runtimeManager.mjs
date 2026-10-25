@@ -1,6 +1,9 @@
+import { contextGenerationPaths, prepareContextGeneration, verifyContextGeneration, remediateStartupContext } from './runtimeContextGeneration.mjs';
+import { contextPolicyIdentity, sameContextPolicy } from './geoContextItems.mjs';
 import { PLATFORM_SKILLS_RUNTIME_DIR, platformSkillGenerationRoot, verifyPlatformSkillGeneration } from "./platformSkillSupply.mjs";
 import {assertExtensionAssessmentAuthority} from './extensionAssessmentAuthority.mjs';
 import { RUNTIME_YIELDED_CODE, backgroundRuntimeLimit, isInternalProjectOf, isEvolutionProject } from "./internalProjects.mjs";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { Buffer } from "node:buffer";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
@@ -2586,6 +2589,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
   personalSkillImageId = null,
   extensionGeneration = null,
   extensionImageId = null,
+  contextGeneration = null,
 } = {}) {
   const modelGatewayUrl = releaseGateModelGatewayUrl(config, project, modelGatewayProfile);
   const sandboxMode = config.runtimeSandboxMode;
@@ -2642,16 +2646,18 @@ export function buildRuntimeLaunchPlan(config, project, port, {
     // event per launch and counts it, and `readinessRelease` fails the
     // readiness check, which is what stops `host-release-switch.sh`.
     const releaseProvenance = runtimeReleasePolicyError(config);
-    const runtimeRoot = containerRuntimeRoot(project);
+    const sharedPaths = contextGeneration ? contextGenerationPaths(config, project, contextGeneration.reference ?? contextGeneration) : null;
+    const runtimeRoot = sharedPaths?.stateDirectory ?? containerRuntimeRoot(project);
     const xdgConfigDir = path.join(runtimeRoot, "xdg-config");
     // Written by the control plane before either side builds a plan; read here
     // so the hosted controller, which builds its own, reaches the same answer.
-    const capsuleMethodsDir = capsuleMethodsHostDir(project);
+    const capsuleMethodsDir = sharedPaths ? path.join(sharedPaths.directory, "methods") : capsuleMethodsHostDir(project);
     const capsuleMethodCount = mountedCapsuleMethodCount(capsuleMethodsDir);
     // A directory with nothing in it is mounted too: a launch keeps one, so that the methods a later refresh writes
     // (`refreshCapsuleMethods`) are in front of the runtime that is already up and not only of the next one.
     const capsuleMethodsLive = capsuleMethodsDirectoryPresent(capsuleMethodsDir);
     const capsuleMethodsRuntimeDir = capsuleMethodsRuntimePath({ capsuleMethodCount, capsuleMethodsLive });
+    if (sharedPaths && (personalSkillGeneration || extensionGeneration)) throw new HttpError(409, "runtime_context_unverified", "Shared runtimes cannot mount personal extension generations.");
     const extensionReference = extensionGeneration ? validateExtensionGenerationReference(project, extensionGeneration) : null;
     if (extensionReference && !/^sha256:[a-f0-9]{64}$/.test(String(extensionImageId))) throw new HttpError(400, "extension_contract_invalid", "An immutable extension runtime image is required.");
     if (extensionImageId && personalSkillImageId && extensionImageId !== personalSkillImageId) throw new HttpError(400, "extension_contract_invalid", "Runtime generation images must agree.");
@@ -2675,7 +2681,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
     const socketPath = path.join(controlDir, RUNTIME_SOCKET_FILE_NAME);
     assertConnectableSocketPath(socketPath, isolatedControlMount);
     const containerName = runtimeContainerName(project);
-    const readOnlyViews = readOnlyWorkspaceViews(config, project);
+    const readOnlyViews = readOnlyWorkspaceViews(config, project, {projectOnly:Boolean(sharedPaths)});
     return {
       sandboxMode,
       modelGatewayProfile,
@@ -2813,6 +2819,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
         // runtime reads rather than a name it failed to find.
         "--env",
         `${MEMORY_GATEWAY_URL_ENV}=${memoryGatewayUrl}`,
+        ...(sharedPaths ? ["--env", `OPENVIKING_PENDING_DIR=${sharedPaths.pendingDirectory}`] : []),
         // Every deployment-owned setting of the plugins the preset
         // mounts. A profile patch cannot reach a preset's rows —
         // DSH reports the target as unmatched on stderr and drops
@@ -2883,10 +2890,11 @@ export function buildRuntimeLaunchPlan(config, project, port, {
       proxyWorkspaceDir: "/workspace",
       // The other half of the `--env` above, for the profile patch (`dshProfileInput` reads the plan).
       memoryGatewayUrl,
+      contextGeneration,
       geoSkills: geoSkills === true,
       runtimeUrl: `http://${RUNTIME_AUTHORITY}`,
       socketPath,
-      socketTrustRoot: isolatedControlMount ? config.dataDir : project.rootDir,
+      socketTrustRoot: isolatedControlMount || sharedPaths ? config.dataDir : project.rootDir,
       xdgConfigDir,
       // Host path for `/runtime/dsh-home` (see `runtimeDshHome`): the control
       // plane writes the generated profile patch and credentials file here,
@@ -2908,6 +2916,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
         path.join(runtimeRoot, "home"),
         path.join(runtimeRoot, "dsh-home"),
         path.join(runtimeRoot, "tmp"),
+        ...(sharedPaths ? [sharedPaths.pendingHostDirectory] : []),
       ],
     };
   }
@@ -3117,21 +3126,26 @@ function realDirectory(target) {
  * The knowledge base is the project's source material (plan §3.2 #3, §3.1 #4):
  * a run reads it and cites it, and a run that could rewrite it could make a
  * quotation true after the fact — the verbatim-quote gate reads the same
- * bytes. It is mounted only where it already sits inside the mounted
- * workspace (a scratch sub-workspace for a verification or a source reading
- * never contained it and gains no view of it here).
+ * bytes. It is the base project's directory, mounted whenever it exists —
+ * also when the active workspace is a sub-directory of the project (since
+ * 2026-10-23: a conversation in a sub-workspace reads and cites the same
+ * sources, and `runtimeUploadRelativePath` maps an upload into this view the
+ * same way).
  *
  * The library is mounted only once it exists; the knowledge-base stream creates
- * it with the first entry. Both sides of the controller boundary decide from
+ * it with the first entry. A launch over a shared, sealed project context
+ * (`projectOnly`, a 「循证 GEO」 project's context generation) never gets the
+ * account-wide library. Both sides of the controller boundary decide from
  * the filesystem, the way the capsule methods mount does, so the privileged
  * controller and the API build the same argv from the same facts.
  *
  * @param {Record<string, any>} config @param {Record<string, any>} project
+ * @param {{projectOnly?:boolean}} [options] shared launches cannot add an account-wide library
  * @returns {{ knowledgeBase: string | null, library: string | null }}
  */
-export function readOnlyWorkspaceViews(config, project) {
+export function readOnlyWorkspaceViews(config, project, {projectOnly=false} = {}) {
   const knowledgeBase = project.baseDir ? path.join(project.baseDir, KNOWLEDGE_BASE_DIR) : null;
-  const library = config.dataDir && project.userId ? personalLibraryDir(config, project.userId) : null;
+  const library = !projectOnly && config.dataDir && project.userId ? personalLibraryDir(config, project.userId) : null;
   return {
     knowledgeBase: knowledgeBase && realDirectory(knowledgeBase) ? knowledgeBase : null,
     library: library && realDirectory(library) ? library : null,
@@ -3233,7 +3247,7 @@ export function runtimeNetworkRequiresEgressOptIn(mode, internalNetworkName = ""
  *
  * @typedef {object} RuntimeProvider
  * @property {'docker'|'agentbay'} name
- * @property {(project: Record<string, any>, input: { port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?: any, personalSkillGeneration?: any, extensionGeneration?: any, memoryGatewayUrl?: string, geoSkills?: boolean, modelGatewayProfile?: string }) => Promise<Record<string, any>>} prepare
+ * @property {(project: Record<string, any>, input: { port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?: any, personalSkillGeneration?: any, extensionGeneration?: any, memoryGatewayUrl?: string, geoSkills?: boolean, modelGatewayProfile?: string, contextGeneration?:any }) => Promise<Record<string, any>>} prepare
  *   the launch plan: `sandboxMode`, `runtimeUrl`, `socketPath`, `proxyWorkspaceDir`, `containerName`, …
  * @property {(project: Record<string, any>, plan: Record<string, any>, options: { budgetScope?: any }) => Promise<Record<string, any>>} bootstrap
  *   writes the profile patch, the credentials and the tokens where the kernel reads them
@@ -3295,9 +3309,10 @@ export class DockerRuntimeProvider {
     if (checked.status !== 0 || checked.stdout.trim() !== imageId) throw new HttpError(503, 'runtime_image_unavailable', 'The pinned personal-skill runtime image is unavailable.');
   }
 
-  /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?:any, personalSkillGeneration?:any, extensionGeneration?:any, memoryGatewayUrl?: string, geoSkills?: boolean, modelGatewayProfile?: string }} input */
-  async prepare(project, { port, pluginConfig, capsuleMethodsMounted, platformSkillGeneration = null, personalSkillGeneration = null, extensionGeneration = null, memoryGatewayUrl = "", geoSkills = false, modelGatewayProfile = "" }) {
+  /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?:any, personalSkillGeneration?:any, extensionGeneration?:any, memoryGatewayUrl?: string, geoSkills?: boolean, modelGatewayProfile?: string, contextGeneration?:any }} input */
+  async prepare(project, { port, pluginConfig, capsuleMethodsMounted, platformSkillGeneration = null, personalSkillGeneration = null, extensionGeneration = null, memoryGatewayUrl = "", geoSkills = false, modelGatewayProfile = "", contextGeneration = null }) {
     const manager = this.manager;
+    if (contextGeneration) contextGeneration = await verifyContextGeneration(this.config, project, contextGeneration.reference);
     // Before the plan, for the same reason as the capsule methods: the
     // read-only view of the knowledge base is mounted when the directory
     // exists, and a project whose first source arrives while its runtime runs
@@ -3314,7 +3329,7 @@ export class DockerRuntimeProvider {
     }
     const plan = buildRuntimeLaunchPlan(this.config, project, port, { pluginConfig, platformSkillGeneration: platformSkillGeneration?.reference ?? null, personalSkillGeneration: personal?.reference ?? null,
       personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extensionGeneration?.reference ?? null,
-      extensionImageId: extensionGeneration?.identity.baseRuntimeImageDigest ?? null, memoryGatewayUrl, geoSkills, modelGatewayProfile });
+      extensionImageId: extensionGeneration?.identity.baseRuntimeImageDigest ?? null, memoryGatewayUrl, geoSkills, modelGatewayProfile, contextGeneration });
     plan.platformSkillGeneration = platformSkillGeneration;
     plan.personalSkillGeneration = personalSkillGeneration;
     plan.extensionGeneration = extensionGeneration;
@@ -3372,7 +3387,7 @@ export class DockerRuntimeProvider {
   /** The kernel's bootstrap files, written host-side into the directory the
    *  container mounts as `$DSH_HOME` before it starts. */
   bootstrap(project, plan, { budgetScope = null } = {}) {
-    return syncRuntimeDshProfile(this.config, project, plan, { budgetScope });
+    return syncRuntimeDshProfile(this.config, plan.contextGeneration ? {...project, rootDir:this.config.dataDir} : project, plan, { budgetScope });
   }
 
   async launch(project, plan, { port, password }) {
@@ -3393,6 +3408,7 @@ export class DockerRuntimeProvider {
         String(plan.memoryGatewayUrl ?? ""),
         plan.geoSkills === true,
         plan.modelGatewayProfile,
+        plan.contextGeneration?.reference ?? null,
       );
       child = new RemoteRuntimeProcess(
         manager.runtimeController,
@@ -3477,7 +3493,7 @@ export class DockerRuntimeProvider {
   /** Docker's token lives in a host file the container mounts: rewritten in
    *  place, which is the whole renewal (`refreshEviMedWorkloadToken`). */
   writeWorkloadToken(project, runtime) {
-    return this.manager.workloadTokenWriter(this.config, project, runtime.workloadTokenFile);
+    return this.manager.workloadTokenWriter(this.config, runtime.contextGeneration ? {...project, rootDir:this.config.dataDir} : project, runtime.workloadTokenFile);
   }
 }
 
@@ -3551,6 +3567,12 @@ export class RuntimeManager {
      * @type {any}
      */
     this.capsuleService = null;
+    /** @type {any} Persistent policy/selection/receipt dependencies, assigned by the composition root. */
+    this.contextPolicies = null;
+    /** @type {any} */ this.contextItems = null;
+    /** @type {any} */ this.contextDocuments = null;
+    this.contextSharedProjects = new Set();
+    this.contextRefreshes = new Map();
     /** Which engine keeps an account's memory (`ResearchMemoryStore.memoryEngine`); assigned by the composition root.
      *  @type {((userId: string) => Promise<"legacy" | "native">) | null} */
     this.memoryEngineOf = null;
@@ -3637,6 +3659,10 @@ export class RuntimeManager {
     // lists as mounted, instead of selecting every capsule again per read.
     this.lastMountedCapsuleMethods = new Map();
     this.starts = new Map();
+    /** Cold callers enroll before policy/database reads; every waiter reauthorizes its own result. */
+    this.coldStartAttempts = new Map();
+    /** @type {AsyncLocalStorage<{key:string,promise:Promise<any>|null,attempt:any,open:boolean}>} */
+    this.runtimeStartScope = new AsyncLocalStorage();
     this.runtimeActivity = new Map();
     this.runtimeQuotaMonitors = new Map();
     this.runtimeQuotaStops = new Map();
@@ -3891,6 +3917,161 @@ export class RuntimeManager {
     return released;
   }
 
+  /** Persistent floor precedes every method/startup read, including owner and unattended starts. */
+  async contextPolicyFor(project) {
+    const key = this.key(project);
+    const policy = this.contextPolicies ? await this.contextPolicies.forProject(project) : null;
+    if (!this.contextPolicies && this.contextDocuments?.list) {
+      for (const deleted of [false,true]) {
+        const saved = await this.contextDocuments.list(project.userId,'geo-plan-context',{projectId:project.id,filter:{recordType:'geo-native-context-policy'},fields:{recordType:true},limit:1,deleted});
+        if (saved.items.length) this.contextSharedProjects.add(key);
+      }
+    }
+    if (policy?.kind === 'geo-project') {
+      if (policy.ownerId !== project.userId || policy.controlProjectId !== project.id || !policy.namespace?.id) throw new HttpError(409, 'runtime_context_unverified', 'The shared context policy is invalid.');
+      this.contextSharedProjects.add(key); return policy;
+    }
+    if (policy?.kind !== 'owned' && (this.contextSharedProjects.has(key) || this.runtimes.get(key)?.contextGeneration
+      || await this.geoProjectOf?.(String(project.userId), String(project.id)))) throw new HttpError(409, 'runtime_context_unverified', 'The persistent shared context policy is unavailable.');
+    if (this.contextSharedProjects.has(key)) throw new HttpError(409, 'runtime_context_unverified', 'A shared project cannot return to personal context.');
+    return policy ?? {kind:'owned',ownerId:project.userId,controlProjectId:project.id};
+  }
+
+  async prepareSharedContext(project, policy) {
+    const paused = await this.recallPausedFor(project);
+    return prepareContextGeneration(this.config, project, policy, (directory, trustRoot) => materializeCapsuleMethods({
+      capsules:paused ? null : this.capsuleService, learning:paused ? null : this.learningService,
+      learnedFamily:learnedMethodFamilyForRuntime({projectId:String(project.id),boundedRunId:this.boundedRuntimeScope(project)?.runId ?? null}),
+      contextPolicy:policy,contextItems:this.contextItems,project:{...project,rootDir:trustRoot},directory,keepDirectory:true,
+      // Shared mounts deliberately have no global keep and no actor/session-dependent ranking.
+      maxPromptBytes:this.config.mountedMethodPromptBytes,
+    }));
+  }
+
+  async assertSharedDesired(project, generation) {
+    const policy = await this.contextPolicyFor(project);
+    await verifyContextGeneration(this.config,project,generation.reference,policy);
+    const desired = await this.prepareSharedContext(project,policy);
+    if (desired.digest !== generation.digest) throw new HttpError(409,'runtime_context_unverified','Shared context authority changed before forwarding.');
+  }
+
+  /** Called under shared prompt admission: validation only, never an exclusive-lock upgrade or a steer exception. */
+  async assertContextPolicyGeneration(project, _request = {}) {
+    try {
+      const policy = await this.contextPolicyFor(project);
+      if (policy.kind !== 'geo-project') return null;
+      const runtime = this.runtimes.get(this.key(project)), receipt = runtime?.contextLaunchReceipt;
+      if (!runtime?.contextGeneration || !receipt || receipt.generation !== this.runtimeGeneration(project)
+        || receipt.digest !== runtime.contextGeneration.digest || receipt.policy.policyRef !== policy.referenceId
+        || canonicalJson(receipt.policy) !== canonicalJson(contextPolicyIdentity(policy))) throw new HttpError(409,'runtime_context_unverified','The runtime has no current shared context launch proof.');
+      const durable = await this.historicalContextReceipt(project,receipt.referenceId);
+      if (!durable || canonicalJson(durable)!==canonicalJson(receipt)) throw new HttpError(409,'runtime_context_unverified','The successful context receipt is unavailable or changed.');
+      await this.assertSharedDesired(project,runtime.contextGeneration);
+      if (this.runtimes.get(this.key(project)) !== runtime) throw new HttpError(409,'runtime_context_unverified','The runtime changed during context verification.');
+      return structuredClone(receipt);
+    } catch (error) { error.definitivelyRejected = true; throw error; }
+  }
+
+  /** Fresh proof for accepted-input producers; a runtime epoch alone is insufficient. */
+  async launchedContextReceipt(project) { return this.assertContextPolicyGeneration(project); }
+
+  /** Historical consumption proves the successfully launched bytes, not today's authority. */
+  async historicalContextReceipt(project, referenceId) {
+    if (!/^gcr_[a-f0-9]{64}$/.test(referenceId) || !this.contextDocuments) return null;
+    const row = await this.contextDocuments.get(project.userId,'geo-plan-context',referenceId);
+    const receipt = row?.payload;
+    if (row?.projectId !== project.id || receipt?.recordType !== 'geo-runtime-context-launch' || receipt.version !== 1
+      || receipt.referenceId !== referenceId || receipt.policy?.ownerId !== project.userId || receipt.policy.controlProjectId !== project.id
+      || receipt.state !== 'launched' || typeof receipt.generation !== 'string' || !/^[a-f0-9]{64}$/.test(receipt.digest)) return null;
+    const {referenceId: _ignored, ...identity} = receipt;
+    if (`gcr_${createHash('sha256').update(canonicalJson(identity)).digest('hex')}` !== referenceId) return null;
+    return structuredClone(receipt);
+  }
+
+  assertStartupRunning(runtime) {
+    if(runtime.spawnError)throw new HttpError(502,'runtime_spawn_failed','The runtime failed before startup completed.');
+    if(runtime.exitedAt||runtime.closedByManager||runtime.child?.exitCode!=null||runtime.child?.signalCode!=null)
+      throw new HttpError(502,'runtime_exited','The runtime exited before startup completed.');
+  }
+
+  async recordContextLaunch(project, runtime, plan, generation, remediation) {
+    if (!this.contextDocuments || !runtime.modelGatewayTokenJti) throw new HttpError(409,'runtime_context_unverified','Durable shared launch proof is unavailable.');
+    const database=this.contextDocuments.database;
+    if(!database?.transaction||!database?.withTransactionClient)throw new HttpError(409,'runtime_context_unverified','Transactional shared launch proof is unavailable.');
+    this.assertStartupRunning(runtime);
+    const mounts = [];
+    for (let index=0;index<plan.args.length;index+=1) if(plan.args[index]==='--mount') mounts.push(plan.args[index+1]);
+    const identity = {recordType:'geo-runtime-context-launch',version:1,state:'launched',generation:runtime.modelGatewayTokenJti,
+      digest:generation.digest,policy:structuredClone(generation.manifest.policy),reference:structuredClone(generation.reference),
+      contextDirectory:generation.directory,contextFiles:structuredClone(generation.manifest.files),items:structuredClone(generation.manifest.identities),
+      pendingDirectory:generation.pendingDirectory,pendingHostDirectory:generation.pendingHostDirectory,stateDirectory:generation.stateDirectory,
+      mounts,platformSkillReference:plan.platformSkillGeneration?.reference ?? null,remediation,
+      restrictions:{personalSkills:"excluded-until-shared-byte-authorization",personalExtensions:"excluded-until-shared-byte-authorization",platformSkills:"separate-published-generation"},
+      previousState:{directory:containerRuntimeRoot(project),action:'retained-outside-runtime',historicalTargets:'exact-target-refusal-without-migration-proof'}};
+    const referenceId=`gcr_${createHash('sha256').update(canonicalJson(identity)).digest('hex')}`;
+    const receipt={...identity,referenceId};
+    await database.transaction(client=>database.withTransactionClient(client,async()=>{
+      this.assertStartupRunning(runtime);
+      await this.contextDocuments.put(project.userId,'geo-plan-context',referenceId,receipt,{projectId:project.id,expectedRevision:0,transactionClient:client});
+      // An exit observed while the database write was pending rolls back the
+      // new proof. Previously successful launch history is never rewritten.
+      this.assertStartupRunning(runtime);
+    }));
+    return receipt;
+  }
+
+  /** An enclosing admission/transaction owns its client and locks until return.
+   * It may validate context but cannot detach for an exclusive replacement. */
+  contextTransactionHeld(project) {
+    const admission = this.pluginService?.admission?.getStore?.();
+    return Boolean(admission?.open && admission.projectKey === `${project.userId}:${project.id}`)
+      || Boolean(this.pluginService?.database?.transactionScope?.());
+  }
+
+  /** Prepare before admission. Only the existing exclusive plugin fence may replace an idle generation. */
+  async ensureContextPolicyGeneration(project) {
+    // Check before joining an outside refresh: its exclusive fence could itself
+    // be waiting for the transaction this caller still owns.
+    if (this.contextTransactionHeld(project)) {
+      await this.assertContextPolicyGeneration(project); return {adopted:false};
+    }
+    const key=this.key(project), previous=this.contextRefreshes.get(key) ?? Promise.resolve();
+    const task=previous.catch(()=>{}).then(async()=>{
+      const policy=await this.contextPolicyFor(project);
+      if(policy.kind!=='geo-project' || !this.runtimes.has(key)) return {adopted:false};
+      const desired=await this.prepareSharedContext(project,policy), runtime=this.runtimes.get(key);
+      if(runtime?.contextLaunchReceipt && runtime.contextGeneration?.digest===desired.digest
+        && runtime.contextLaunchReceipt.generation===this.runtimeGeneration(project)) {
+        await verifyContextGeneration(this.config,project,runtime.contextGeneration.reference,policy); return {adopted:false};
+      }
+      const refresh=async()=>{
+        if(this.runtimes.get(key)!==runtime || this.starts.has(key) || this.runtimeStops.has(key) || this.boundedRuntimeScope(project)
+          || await this.idleVerdict(project)!=='idle' || await this.pluginRuntimeBusy(project)
+          || this.pluginService && await this.pluginService.hasPendingPrompts(project)) return {adopted:false,pending:true};
+        const guard=async()=>this.runtimes.get(key)===runtime && await this.idleVerdict(project)==='idle'
+          && (!this.pluginService || !await this.pluginService.hasPendingPrompts(project));
+        let replaced=false;
+        await this.startAdmitted(project,{replaceRuntime:async()=>{
+          // Reauthorize after taking the fence and again in startKernel, before startup reads.
+          if(!sameContextPolicy(policy,await this.contextPolicyFor(project))) return false;
+          replaced=await this.stopIdleRuntime(project,{event:'shared_context_updated',evenIfConnected:true,guard});return replaced;
+        }});
+        return replaced?{adopted:true}:{adopted:false,pending:true};
+      };
+      if(!this.pluginService) throw new HttpError(409,'runtime_context_unverified','The shared context replacement fence is unavailable.');
+      const operation=()=>this.pluginService.database.transaction(async client=>{
+        const locked=await client.query('SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS acquired',[`plugin-project:${project.userId}:${project.id}`]);
+        if(!locked.rows[0]?.acquired)return{adopted:false,pending:true};
+        await this.pluginService.scope(project.userId,project,client);
+        // Reuse the fence client: selecting methods or recording the launch must work with a one-connection pool.
+        return this.pluginService.database.withTransactionClient(client,refresh);
+      });
+      return typeof this.pluginService.database.withoutTransactionClient==='function'?this.pluginService.database.withoutTransactionClient(operation):operation();
+    });
+    this.contextRefreshes.set(key,task);
+    try{return await task;}finally{if(this.contextRefreshes.get(key)===task)this.contextRefreshes.delete(key);}
+  }
+
   /**
    * Materialize the methods this project's runs may read: the approved
    * work-style entries of its active capsules, and the learned methods the
@@ -3933,6 +4114,8 @@ export class RuntimeManager {
    *   capsule: {id: string, directoryName: string, capsuleId: string, factKind: string, content: string}[] }>}
    */
   async syncCapsuleMethods(project, { query = null, scopeId = undefined, launch = true, keep = null } = {}) {
+    const policy = await this.contextPolicyFor(project);
+    if (policy.kind === "geo-project") return (await this.prepareSharedContext(project, policy)).mounted;
     const paused = await this.recallPausedFor(project);
     const mounted = await materializeCapsuleMethods({
       // Under a pause every source is dropped, which is also what clears the directory.
@@ -3982,8 +4165,9 @@ export class RuntimeManager {
    * conversations around it for nothing). What the runtime was given before stays on disk while it is approved, so that a conversation
    * that began earlier can still read the file its card names.
    *
-   * Never an error: a runtime that cannot be refreshed keeps what it has, and says why. A runtime that is not a container on
-   * this host (a remote session has its methods installed once) is left as it is.
+   * Ordinary refresh is optional: a failure leaves its current methods and says why. Shared refresh instead validates the
+   * immutable generation during admission, propagating any safety refusal; exclusive replacement happens before admission.
+   * An ordinary runtime outside this host keeps its launch-time selection.
    *
    * Called with no `query`, `scopeId` or `sessionId` (a method changed, a capsule was enabled; nobody is starting a conversation) it rewrites
    * for the conversation the runtime was last rewritten for, so what an open conversation was shown is not undone by the change.
@@ -4001,6 +4185,16 @@ export class RuntimeManager {
       if (!project || String(project.userId) !== String(userId)) continue;
       if (projectId !== null && String(project.id) !== String(projectId)) continue;
       const key = this.key(project);
+      const policy = await this.contextPolicyFor(project);
+      if (policy.kind === "geo-project") {
+        if (!this.contextTransactionHeld(project)) {
+          const result = await this.ensureContextPolicyGeneration(project);
+          if (result.pending) { skipped.push("runtime_context_pending"); continue; }
+        }
+        // Shared refresh under admission validates on the owned client. A stale
+        // generation is a refusal, never an optional refresh failure.
+        await this.assertContextPolicyGeneration(project); refreshed += 1; continue;
+      }
       if (runtime.kind !== RUNTIME_KERNEL_NAME || runtime.sandboxMode !== "docker") { skipped.push("not_a_live_container"); continue; }
       // The platform's own projects carry no researcher's method.
       if (learnedMethodFamilyForRuntime({ projectId: String(project.id), boundedRunId: this.boundedRuntimeScope(project)?.runId ?? null }) === null) { skipped.push("internal_project"); continue; }
@@ -4416,6 +4610,57 @@ export class RuntimeManager {
     return (await this.stop(project, { expectedGeneration })) !== false;
   }
 
+  /** Keep cold caller enrollment separate from the effectful startup promise.
+   * A queued policy read must not turn a cold waiter into a new warm admission.
+   * @param {Record<string, any>} project
+   * @param {any} options
+   * @param {(attempt: any) => Promise<any>} operation
+   */
+  async startRequest(project, options, operation) {
+    const key = this.key(project), pending = this.coldStartAttempts.get(key);
+    const held = this.contextTransactionHeld(project);
+    if (pending && (held || options.replaceRuntime)) throw new HttpError(409, "runtime_busy", "The runtime is starting; retry after its admission completes.");
+    if (!pending && (held || options.replaceRuntime || this.runtimes.has(key))) return operation(null);
+    this.assertBoundedStartOwnership(project, options.boundedScope ?? null);
+    const identity = canonicalJson({ userId: project.userId, id: project.id, workspaceDir: project.workspaceDir,
+      rootDir: project.rootDir ?? null, baseDir: project.baseDir ?? null, accountCreatedAt: project.accountCreatedAt ?? null });
+    if (pending && (pending.identity !== identity || pending.boundedScope !== (options.boundedScope ?? null))) {
+      throw new HttpError(409, "runtime_busy", "The pending runtime belongs to a different workspace or reservation.");
+    }
+    if (options.opening) this.openingStarts.add(key);
+    if (options.dispatch) this.dispatchStarts.add(key);
+    if (!options.speculative) this.speculativeStarts.delete(key);
+    else if (!pending && !options.opening) this.speculativeStarts.add(key);
+    let attempt = pending;
+    if (!attempt) {
+      attempt = { identity, boundedScope: options.boundedScope ?? null, promise: null };
+      attempt.promise = Promise.resolve().then(() => operation(attempt)).finally(() => {
+        if (this.coldStartAttempts.get(key) === attempt) this.coldStartAttempts.delete(key);
+        if (!this.starts.has(key)) {
+          this.startProgress.delete(key);
+          this.openingStarts.delete(key);
+          this.dispatchStarts.delete(key);
+          this.speculativeStarts.delete(key);
+        }
+      });
+      this.coldStartAttempts.set(key, attempt);
+    }
+    // Each caller owns both checks; neither a pending promise nor another
+    // actor's successful launch is a reusable authorization decision.
+    const [authorization, outcome] = await Promise.allSettled([this.contextPolicyFor(project), attempt.promise]);
+    if (authorization.status === "rejected") throw authorization.reason;
+    if (outcome.status === "rejected") throw outcome.reason;
+    const policy = authorization.value, runtime = outcome.value;
+    const current = await this.contextPolicyFor(project);
+    if (!sameContextPolicy(policy, current) || this.runtimes.get(key) !== runtime
+      || runtime?.workspaceDir !== project.workspaceDir || this.runtimeStops.has(key) || this.runtimeQuotaStops.has(key)) {
+      throw new HttpError(409, "runtime_context_unverified", "The runtime or project authority changed during startup.");
+    }
+    this.assertBoundedStartOwnership(project, options.boundedScope ?? null);
+    if (current.kind === "geo-project") await this.assertContextPolicyGeneration(project);
+    return runtime;
+  }
+
   /**
    * @param {Record<string, any>} project
    * @param {{ opening?: boolean, speculative?: boolean, dispatch?: boolean, boundedScope?: any, modelGatewayProfile?: string }} [options] `opening`: the researcher is
@@ -4434,7 +4679,18 @@ export class RuntimeManager {
    *   `dispatch`: a run is about to be sent here (`startWhenRoom` says so); see `makeRoomFor`.
    */
   async start(project, options = {}) {
+    return this.startRequest(project, options, attempt => this.startPrepared(project, options, attempt));
+  }
+
+  /** @param {Record<string, any>} project @param {any} options @param {any} attempt */
+  async startPrepared(project, options, attempt) {
     const key = this.key(project);
+    // An opening joins the already registered boot before any policy read can yield.
+    if (this.starts.has(key)) {
+      if (options.opening) this.openingStarts.add(key);
+      if (options.dispatch) this.dispatchStarts.add(key);
+      if (!options.speculative) this.speculativeStarts.delete(key);
+    }
     // Never retain a database admission connection while a shutdown needs one.
     for (let pending; (pending = this.runtimeStops.get(key));) {
       try { await pending; }
@@ -4450,12 +4706,20 @@ export class RuntimeManager {
     await this.runtimeQuotaStops.get(key);
     if (this.failedRuntimeStops.has(key)) await this.settleFailedStop(project, "The previous runtime needs a confirmed cleanup before replacement.");
     this.assertBoundedStartOwnership(project, options.boundedScope ?? null);
-    return this.startAdmitted(project, options, true);
+    const context = await this.ensureContextPolicyGeneration(project);
+    if (context.pending) throw new HttpError(409, "runtime_context_pending", "Shared context replacement awaits completed work.");
+    return this.startAdmittedPrepared(project, options, true, attempt);
   }
 
   /** @param {Record<string, any>} project @param {{ opening?: boolean, speculative?: boolean, dispatch?: boolean, boundedScope?: any, modelGatewayProfile?: string, replaceRuntime?: (()=>Promise<boolean|void>) | null }} [options] @param {boolean} [withPluginAdmission] */
-  async startAdmitted(project, { opening = false, speculative = false, dispatch = false, boundedScope = null, replaceRuntime = null, modelGatewayProfile = "" } = {}, withPluginAdmission = false) {
+  async startAdmitted(project, options = {}, withPluginAdmission = false) {
+    return this.startRequest(project, options, attempt => this.startAdmittedPrepared(project, options, withPluginAdmission, attempt));
+  }
+
+  /** @param {Record<string, any>} project @param {any} options @param {boolean} withPluginAdmission @param {any} attempt */
+  async startAdmittedPrepared(project, { opening = false, speculative = false, dispatch = false, boundedScope = null, replaceRuntime = null, modelGatewayProfile = "" }, withPluginAdmission, attempt) {
     const key = this.key(project);
+    const contextPolicy = await this.contextPolicyFor(project);
     if (this.runtimeStops.has(key) || this.runtimeQuotaStops.has(key)) throw new HttpError(409, "runtime_busy", "The runtime is stopping; retry shortly.");
     if (this.failedRuntimeStops.has(key)) throw this.cleanupRequired();
     this.assertBoundedStartOwnership(project, boundedScope);
@@ -4470,6 +4734,7 @@ export class RuntimeManager {
     // its quota monitor (`runtimeQuotaCheckIntervalMs`), which is what stops it
     // when the project goes over, whoever wrote the bytes.
     if (existing && existing.workspaceDir === project.workspaceDir && !replaceRuntime) {
+      if (contextPolicy.kind === "geo-project") await this.assertContextPolicyGeneration(project);
       const warm = () => { this.scheduleIdleStop(project); return existing; };
       return withPluginAdmission && this.pluginService ? this.pluginService.withAdmission(project, warm) : warm();
     }
@@ -4477,10 +4742,11 @@ export class RuntimeManager {
     if (dispatch) this.dispatchStarts.add(key);
     const pending = this.starts.get(key);
     if (pending) {
+      if (this.contextTransactionHeld(project)) throw new HttpError(409, "runtime_busy", "The runtime is starting outside this transaction.");
       if (!speculative) this.speculativeStarts.delete(key);
       return pending;
     }
-    if (speculative && !opening) this.speculativeStarts.add(key);
+    if (!attempt && speculative && !opening) this.speculativeStarts.add(key);
 
     let creationSkipped = false;
     // Register before either admission can wait. Concurrent cold readers join
@@ -4506,6 +4772,7 @@ export class RuntimeManager {
       const modelGatewayScope = this.pendingModelGatewayScopes.get(key) ?? null;
       if (this.config.runtimeMode === "kernel") {
         const runtime = await this.startKernel(project, modelGatewayScope, modelGatewayProfile);
+        if (attempt) { attempt.runtime = runtime; attempt.generation = typeof runtime.modelGatewayTokenJti === "string" ? runtime.modelGatewayTokenJti : null; }
         this.runtimes.set(key, runtime);
         this.yieldedRuntimes.delete(key);
         this.pendingModelGatewayScopes.delete(key);
@@ -4545,6 +4812,7 @@ export class RuntimeManager {
         project,
         modelGatewayScope,
       };
+      if (attempt) { attempt.runtime = runtime; attempt.generation = null; }
       this.runtimes.set(key, runtime);
       this.yieldedRuntimes.delete(key);
       this.pendingModelGatewayScopes.delete(key);
@@ -4567,8 +4835,12 @@ export class RuntimeManager {
       this.scheduleQuotaMonitor(project);
       return runtime;
     });
-    const started = Promise.resolve().then(() => withPluginAdmission && this.pluginService
-      ? this.pluginService.withAdmission(project, create) : create());
+    const startupScope = { key, promise: /** @type {Promise<any>|null} */ (null), attempt, open: true };
+    const started = Promise.resolve().then(() => this.runtimeStartScope.run(startupScope, async () => {
+      try { return await (withPluginAdmission && this.pluginService ? this.pluginService.withAdmission(project, create) : create()); }
+      finally { startupScope.open = false; }
+    }));
+    startupScope.promise = started;
     this.starts.set(key, started);
     try {
       const runtime = await started;
@@ -4601,16 +4873,21 @@ export class RuntimeManager {
       }
       throw error;
     } finally {
-      this.starts.delete(key);
-      this.startProgress.delete(key);
-      this.openingStarts.delete(key);
-      this.dispatchStarts.delete(key);
-      this.speculativeStarts.delete(key);
+      if (this.starts.get(key) === started) {
+        this.starts.delete(key);
+        this.startProgress.delete(key);
+        this.openingStarts.delete(key);
+        this.dispatchStarts.delete(key);
+        this.speculativeStarts.delete(key);
+      }
     }
   }
 
   async startKernel(project, modelGatewayScope = null, modelGatewayProfile = "") {
     const key = this.key(project);
+    const contextPolicy = await this.contextPolicyFor(project);
+    if (contextPolicy.kind === "geo-project" && this.config.runtimeProvider === "agentbay") throw new HttpError(409, "runtime_context_provider_unsupported", "The selected provider cannot prove an immutable shared context mount.");
+    const contextGeneration = contextPolicy.kind === "geo-project" ? await this.prepareSharedContext(project, contextPolicy) : null;
     const port = await freePort();
     // Only the controller protocol still carries this: its `startRuntime` field
     // is validated on the privileged side and the launch plan no longer uses
@@ -4627,13 +4904,13 @@ export class RuntimeManager {
     // the privileged controller decide whether to mount the directory by
     // looking at it. Rebuilt every launch, so a method retired between two runs
     // is gone from the next one.
-    const mountedMethods = await this.syncCapsuleMethods(project);
+    const mountedMethods = contextGeneration?.mounted ?? await this.syncCapsuleMethods(project);
     const capsuleMethodsMounted = mountedMethods.count;
     let personalSkillGeneration = this.personalSkillOverrides.get(key) ?? null;
     // An exclusive composite apply already froze its personal reference/pins.
     // First-boot personal reconciliation would write a new document revision
     // after that freeze and invalidate the worker's post-replacement guard.
-    if (!this.personalSkillOverrides.has(key) && !this.extensionGenerationOverrides.has(key) && this.personalSkillGenerations) {
+    if (!contextGeneration && !this.personalSkillOverrides.has(key) && !this.extensionGenerationOverrides.has(key) && this.personalSkillGenerations) {
       try { personalSkillGeneration = await this.personalSkillGenerations.prepareForRuntime(project); }
       catch {
         // Preparation failed before current identity compatibility could be
@@ -4642,10 +4919,11 @@ export class RuntimeManager {
       }
     }
     let extensionGeneration = this.extensionGenerationOverrides.get(key) ?? null;
-    if (!this.extensionGenerationOverrides.has(key) && this.extensionGenerationResolver) {
+    if (!contextGeneration && !this.extensionGenerationOverrides.has(key) && this.extensionGenerationResolver) {
       try { extensionGeneration = await this.extensionGenerationResolver(project); if (extensionGeneration) await this.prepareGeneration(project, extensionGeneration); }
       catch { extensionGeneration = null; }
     }
+    if (contextGeneration) { personalSkillGeneration = null; extensionGeneration = null; }
     if (extensionGeneration && !this.extensionGenerationOverrides.has(key)
       && !samePersonalPackages(extensionGeneration.projection.personal, personalSkillGeneration)) {
       // A fresh personal apply/removal must never be overwritten by an older
@@ -4679,7 +4957,8 @@ export class RuntimeManager {
     const memoryGatewayUrl = await this.memoryGatewayUrlFor(project);
     // And whether the project is a 「循证 GEO」 one: the method pack is mounted for it alone (`geoSkillsFor`).
     const geoSkills = await this.geoSkillsFor(project);
-    const plan = await this.provider.prepare(project, { port, pluginConfig, capsuleMethodsMounted, platformSkillGeneration, personalSkillGeneration, extensionGeneration, memoryGatewayUrl, geoSkills, modelGatewayProfile });
+    const remediation = contextGeneration ? await remediateStartupContext(this.config, project, contextPolicy) : [];
+    const plan = await this.provider.prepare(project, { port, pluginConfig, capsuleMethodsMounted, platformSkillGeneration, personalSkillGeneration, extensionGeneration, memoryGatewayUrl, geoSkills, modelGatewayProfile, contextGeneration });
 
     // Nothing is copied into a project any more: the image carries the skill
     // roots and the agent packages read-only, shared across every project. The
@@ -4795,6 +5074,7 @@ export class RuntimeManager {
     this.noteStartStage(project, "kernel");
     let child;
     try {
+      if (contextGeneration) await this.assertSharedDesired(project, contextGeneration);
       child = await this.independentWork(() => this.provider.launch(project, plan, { port, password }));
     } catch (error) {
       // A provider that holds something outside this process — a cloud
@@ -4820,6 +5100,8 @@ export class RuntimeManager {
     const browserSessionAuthority = new URL(runtimeUrl).host;
     const runtime = {
       pluginConfig: plan.pluginConfig,
+      contextGeneration: plan.contextGeneration ?? null,
+      contextLaunchReceipt: null,
       platformSkillGeneration,
       personalSkillGeneration,
       extensionGeneration,
@@ -4980,10 +5262,17 @@ export class RuntimeManager {
     }));
     try {
       await this.waitUntilReady(runtime);
+      this.assertStartupRunning(runtime);
       if (runtime.workloadTokenFile) {
         await this.provider.writeWorkloadToken(project, runtime);
+        this.assertStartupRunning(runtime);
       }
+      if (contextGeneration) {
+        await this.assertSharedDesired(project, contextGeneration);
+      }
+      this.assertStartupRunning(runtime);
       this.activateModelGatewayRuntime(project, runtime);
+      this.assertStartupRunning(runtime);
       await appendRuntimeEvent(project, "started", {
         kind: runtime.kind,
         sandboxMode: runtime.sandboxMode,
@@ -5010,6 +5299,12 @@ export class RuntimeManager {
         capsuleMethodsMounted: runtime.capsuleMethodsMounted,
         sandbox: runtime.sandbox,
       });
+      // Publish durable success only after activation and startup publication.
+      // A failed activation must leave no positive historical proof.
+      if (contextGeneration) {
+        await this.assertSharedDesired(project, contextGeneration);
+        runtime.contextLaunchReceipt = await this.recordContextLaunch(project, runtime, plan, contextGeneration, remediation);
+      }
     } catch (err) {
       this.deactivateModelGatewayRuntime(runtime);
       await runtime.close();
@@ -5627,6 +5922,8 @@ export class RuntimeManager {
 
   async dispatchPrompt(project, sessionId, input) {
     try {
+      const context = await this.ensureContextPolicyGeneration(project);
+      if (context.pending) { const error = new HttpError(409, "runtime_context_pending", "Shared context replacement awaits completed work."); error.definitivelyRejected = true; throw error; }
       return this.pluginService ? await this.pluginService.withAdmission(project, () => this.dispatchAdmittedPrompt(project, sessionId, input), { prompt: true })
         : await this.dispatchAdmittedPrompt(project, sessionId, input);
     } catch (error) {
@@ -5656,13 +5953,25 @@ export class RuntimeManager {
       throw error;
     }
     if (!allowBounded) this.assertInteractiveRuntimeAvailable(project);
+    const capturedGeneration = this.runtimeGeneration(project);
+    const sharedContext = (await this.contextPolicyFor(project)).kind === 'geo-project';
     await this.assertPersonalSkillPromptGeneration(project, { sessionId, mode });
+    const send = async (method, args, signal) => {
+      await this.assertContextPolicyGeneration(project);
+      if (this.runtimes.get(this.key(project)) !== runtime || this.runtimeGeneration(project) !== capturedGeneration) {
+        const error = new HttpError(409,'runtime_context_unverified','The runtime changed before forwarding.');
+        error.definitivelyRejected = true; throw error;
+      }
+      return this.callKernel(runtime,project,method,args,signal);
+    };
     // The methods this conversation is given are chosen by what it asks: the directory the runtime mounts is rewritten for the
-    // first message of a session (`refreshCapsuleMethods`), before the prompt that makes the plugin read it. A refresh that fails
-    // leaves the runtime with the methods it has.
+    // first message of a session (`refreshCapsuleMethods`), before the prompt that makes the plugin read it. Ordinary refresh
+    // may keep its previous methods on failure; shared context validation must refuse instead.
     if (mode !== "steer" && typeof text === "string" && text.trim()) {
-      await this.refreshCapsuleMethods({ userId: project.userId, projectId: project.id, sessionId, query: text,
-        ...(routedCapability === undefined ? {} : { scopeId: runScopeOf(routedCapability) }) }).catch(() => null);
+      const refresh = this.refreshCapsuleMethods({ userId: project.userId, projectId: project.id, sessionId, query: text,
+        ...(routedCapability === undefined ? {} : { scopeId: runScopeOf(routedCapability) }) });
+      if (sharedContext) await refresh;
+      else await refresh.catch(() => null);
     }
     if (typeof system === "string" && system.trim()) {
       await this.writeRunContextFile(project, system, { sessionId, required: strictContext });
@@ -5691,7 +6000,7 @@ export class RuntimeManager {
     this.beginProxy(project);
     try {
       await this.withRuntimeDeadline(
-        (signal) => this.callKernel(runtime, project, "session/create", {
+        (signal) => send("session/create", {
           request: {
             sessionId,
             cwd: runtime.proxyWorkspaceDir ?? project.workspaceDir,
@@ -5714,7 +6023,7 @@ export class RuntimeManager {
         try{await this.recordRuntimeEgressDispatch?.(project,runId,new Date().toISOString());}catch{/* Without a durable dispatch cutoff exposure remains unknown. */}
       }
       await this.withRuntimeDeadline(
-        (signal) => this.callKernel(runtime, project, "session/prompt", { request: promptRequest }, signal),
+        (signal) => send("session/prompt", { request: promptRequest }, signal),
         "runtime_prompt_acceptance_unknown",
         "Runtime prompt acceptance could not be confirmed.",
       );
@@ -6560,6 +6869,7 @@ export class RuntimeManager {
    * optional methods on a safe baseline never prevent ordinary research.
    * @param {any} project @param {{sessionId?:any,mode?:any}} request */
   async assertPersonalSkillPromptGeneration(project, { sessionId, mode } = {}) {
+    await this.assertContextPolicyGeneration(project);
     await this.assertExtensionPromptGeneration(project, { sessionId, mode });
     const runtime = this.runtimes.get(this.key(project));
     const pins = runtime?.personalSkillGeneration?.pins ?? [];
@@ -7028,15 +7338,16 @@ export class RuntimeManager {
     const requested = this.runtimes.get(key) ?? this.failedRuntimeStops.get(key)?.runtime ?? null;
     const generation = this.runtimes.has(key) ? this.runtimeGeneration(project) : this.failedRuntimeStops.get(key)?.generation ?? null;
     if ((expectedGeneration && generation !== expectedGeneration) || (guard && !guard())) return false;
-    const pendingStart = requested ? null : this.starts.get(key);
-    if (pendingStart) {
-      void pendingStart.then(async runtime => {
-        // Queue behind this stop, even when start settles while admission
-        // cleanup is awaiting its connection. Preserve that exact identity.
-        if (this.runtimes.get(key) === runtime) await this.stop(project, { guard: () => this.runtimes.get(key) === runtime, by });
-      }).catch(() => {});
+    const attempt = requested ? null : this.coldStartAttempts.get(key);
+    let pendingStart = requested ? null : attempt?.promise ?? this.starts.get(key);
+    const startup = this.runtimeStartScope.getStore();
+    // A replacement may stop its predecessor inside its own startup. That
+    // internal no-runtime stop must never join the startup that is awaiting it.
+    if (startup?.open && startup.key === key && (pendingStart === startup.promise || attempt && attempt === startup.attempt)) pendingStart = null;
+    if (pendingStart && this.contextTransactionHeld(project)) {
+      throw new HttpError(409, "runtime_busy", "Release the current transaction before waiting for runtime startup to stop.");
     }
-    return this.withRuntimeStop(project, async () => {
+    const stopped = await this.withRuntimeStop(project, async () => {
       const current = () => this.runtimes.get(key) ?? this.failedRuntimeStops.get(key)?.runtime ?? null;
       if (!requested) {
         await this.pluginService?.clearPromptAdmissions(project);
@@ -7068,6 +7379,17 @@ export class RuntimeManager {
       });
       return true;
     });
+    if (!pendingStart) return stopped;
+    // Release the initial stop fence before joining: startup itself may need
+    // that fence or the caller's admission connection in order to finish.
+    let runtime;
+    try { runtime = await pendingStart; } catch { return stopped; }
+    const startedGeneration = attempt?.runtime === runtime ? attempt.generation
+      : typeof runtime?.modelGatewayTokenJti === "string" ? runtime.modelGatewayTokenJti : null;
+    const ownsStartedRuntime = () => this.runtimes.get(key) === runtime
+      && this.runtimeGeneration(project) === startedGeneration && (!guard || guard());
+    if (!runtime || !ownsStartedRuntime()) return stopped;
+    return this.stop(project, { expectedGeneration: startedGeneration, terminalStatus, failureCode, guard: ownsStartedRuntime, by });
   }
 
   async closeAll() {
@@ -7076,7 +7398,7 @@ export class RuntimeManager {
     this.runtimeActivity.clear();
     for (const key of this.runtimeQuotaMonitors.keys()) this.clearQuotaMonitor(key);
     for (const key of this.evimedWorkloadRefreshTimers.keys()) this.clearEviMedWorkloadRefresh(key);
-    const pending = [...this.starts.values()];
+    const pending = [...new Set([...this.starts.values(), ...[...this.coldStartAttempts.values()].map(attempt => attempt.promise)])];
     this.starts.clear();
     await Promise.allSettled(pending);
     for (const key of this.runtimeActivity.keys()) this.clearIdleTimer(key);
@@ -7212,11 +7534,12 @@ export class RuntimeManager {
    * loopback for exactly this reason — out of reach of a remote caller.
    *
    * @param {Record<string, any>} project
+   * @param {{opening?: boolean}} [options] explicit module opens may yield idle connected runtimes
    * @returns {Promise<{ id: string, kernel: string }>}
    */
-  async createRuntimeSession(project) {
+  async createRuntimeSession(project, { opening = false } = {}) {
     this.assertInteractiveRuntimeAvailable(project);
-    const runtime = await this.start(project);
+    const runtime = await this.start(project, { opening });
     if (runtime.modelGatewayScope) this.assertInteractiveRuntimeAvailable(project);
     this.beginProxy(project);
     try {
@@ -7392,14 +7715,17 @@ export class RuntimeManager {
   /**
    * @param {any} req @param {any} res @param {Record<string, any>} project @param {string} suffix
    * @param {{ surface?: string, uiBasePath?: string, revalidate?: () => Promise<void>, uiAssetPrefix?: string | null,
-   *           immutable?: boolean, rebaseDocument?: boolean, fileBody?: boolean, beforeForward?: (() => Promise<void>) | null }} [options]
+   *           immutable?: boolean, rebaseDocument?: boolean, fileBody?: boolean, beforeForward?: (() => Promise<void>) | null,
+   *           observeResponse?: ((input:{body:Buffer,status:number,contentType:string})=>Promise<void>) | null,
+   *           observeFailure?: ((input:{status:number|null,errorCode:string})=>Promise<void>) | null,
+   *           transformResponse?: ((input:{body:Buffer,status:number,contentType:string})=>Promise<Buffer>) | null }} [options]
    *   `uiAssetPrefix` is the project's stable path for build assets the document
    *   is rewritten to reference; `immutable` marks a URL that names its content;
    *   `rebaseDocument: false` serves bytes as they are (an asset route);
    *   `fileBody` says the request carries a file, not an RPC: it is held to
    *   `maxFileBytes` instead of the JSON ceiling, and never parsed as JSON.
    */
-  async proxy(req, res, project, suffix, { surface = "runtime", uiBasePath = "/api/runtime-ui/", revalidate = undefined, uiAssetPrefix = null, immutable = false, rebaseDocument = true, fileBody = false, beforeForward = null } = {}) {
+  async proxy(req, res, project, suffix, { surface = "runtime", uiBasePath = "/api/runtime-ui/", revalidate = undefined, uiAssetPrefix = null, immutable = false, rebaseDocument = true, fileBody = false, beforeForward = null, transformResponse = null, observeResponse = null, observeFailure = null } = {}) {
     const startedAt = Date.now();
     const method = req.method ?? "GET";
     const target = surface === "ui" ? uiProxyAuditTarget(suffix) : proxyAuditTarget(suffix);
@@ -7492,12 +7818,12 @@ export class RuntimeManager {
         throw new HttpError(502, "runtime_unavailable", err instanceof Error ? err.message : "runtime unavailable");
       }
 
-      if (revalidate) await revalidate();
       status = upstreamRes.status;
       if (abortedSessionId && upstreamRes.status >= 200 && upstreamRes.status < 300) {
         await this.onSessionAbort(project, abortedSessionId);
       }
       streaming = (upstreamRes.headers.get("content-type") ?? "").toLowerCase().includes("text/event-stream");
+      if (streaming && transformResponse) throw new HttpError(403, "runtime_ui_method_denied", "This scoped frame uses the native multiplexed event stream.");
       const responseHeaders = sanitizedRuntimeResponseHeaders(upstreamRes, runtime, project, {
         surface,
         frameAncestors: frameAncestorsFor(this.config),
@@ -7527,10 +7853,14 @@ export class RuntimeManager {
           }, (bytes) => {
             responseBytes += bytes;
           });
+          if (observeResponse) await observeResponse({ body: payload, status: upstreamRes.status, contentType: upstreamRes.headers.get('content-type') ?? '' });
+          if (revalidate) await revalidate();
           if (!responseClosed && !res.destroyed && !res.writableEnded) {
+            const projected = transformResponse ? await transformResponse({ body: payload, status: upstreamRes.status, contentType: upstreamRes.headers.get('content-type') ?? '' }) : payload;
+            if (!Buffer.isBuffer(projected) || projected.length > this.config.maxJsonBytes) throw new HttpError(413, "runtime_proxy_response_too_large", "The scoped native response exceeds its bound.");
             const served = surface === "ui" && rebaseDocument
-              ? rebaseRuntimeUiDocument(payload, responseHeaders, uiBasePath, uiAssetPrefix)
-              : payload;
+              ? rebaseRuntimeUiDocument(projected, responseHeaders, uiBasePath, uiAssetPrefix)
+              : projected;
             if (served !== payload) responseHeaders["content-length"] = String(served.length);
             res.writeHead(upstreamRes.status, responseHeaders);
             responseEnded = true;
@@ -7547,6 +7877,7 @@ export class RuntimeManager {
         }
         return;
       }
+      if (revalidate) await revalidate();
       res.writeHead(upstreamRes.status, responseHeaders);
       const reader = upstreamRes.body.getReader();
       upstreamReader = reader;
@@ -7590,6 +7921,7 @@ export class RuntimeManager {
         status = status ?? 502;
         error = "runtime_proxy_error";
       }
+      if (observeFailure) await observeFailure({ status, errorCode: error });
       throw err;
     } finally {
       if (proxyActive) this.endProxy(project);
@@ -8064,7 +8396,16 @@ export class RuntimeManager {
    * session and endpoint policies. Capacity is reserved through socket close.
    * @param {any} req @param {any} socket @param {Buffer} head
    * @param {Record<string, any>} project @param {string} suffix
-   * @param {{ revalidate: () => Promise<void>, authorize: (endpoint: string) => Promise<void>, observe?: (endpoint: string, payload?: any) => Promise<void>, prepare?: (endpoint: string, payload?: any) => Promise<void> }} policy
+   * @param {{ revalidate: () => Promise<void>, authorize: (endpoint: string,payload?:any,context?:{streamId:string,signal:AbortSignal}) => Promise<void>, observe?: (endpoint: string, payload?: any) => Promise<void>, prepare?: (endpoint: string, payload?: any) => Promise<void>,
+   * projectItem?: (endpoint:string,payload:any,value:any,context?:{streamId:string,signal:AbortSignal})=>Promise<{forward:boolean,value?:any}>, onStreamClosed?: (endpoint:string,streamId?:string)=>void,
+   * onProjectionDiscarded?: (endpoint:string,streamId?:string)=>void,
+   * admitOperation?: (endpoint:string,payload:any,operation:()=>Promise<void>)=>Promise<void>,
+   * afterInputAdmission?: (payload:any,error:any)=>Promise<void>,
+   * admitInput?: (payload:any,operation:()=>Promise<void>)=>Promise<void>,
+   * beforeSend?: (endpoint:string,payload:any)=>Promise<void>,
+   * observeOutcome?: (endpoint:string,payload:any,outcome:any)=>void,
+   * promptDisposition?: (payload:any)=>unknown,
+   * withAuthority?: (operation:()=>Promise<void>)=>Promise<void> }} policy
    */
   async proxyUpgrade(req, socket, head, project, suffix, policy) {
     this.enforceUiProxyEnabled();
@@ -8088,12 +8429,18 @@ export class RuntimeManager {
         maxPayload: Math.max(1024, Number(this.config.maxJsonBytes) || 12 * 1024 * 1024),
         ...policy,
         admit: (endpoint, operation, payload) => {
-          if (endpoint !== "session/prompt") return operation();
+          if (endpoint !== "session/prompt") return policy.admitOperation ? policy.admitOperation(endpoint, payload, operation) : policy.withAuthority ? policy.withAuthority(operation) : operation();
           const prompt = async () => {
             await this.assertPersonalSkillPromptGeneration(project, payload?.args?.request ?? {});
             return operation();
           };
-          return this.pluginService ? this.pluginService.withAdmission(project, prompt, { prompt: true }) : prompt();
+          const authorized = () => policy.admitInput ? policy.admitInput(payload, prompt) : policy.withAuthority ? policy.withAuthority(prompt) : prompt();
+          const options = { prompt: true, ...(policy.promptDisposition ? { promptDisposition: () => policy.promptDisposition(payload) } : {}) };
+          const outcome = this.pluginService ? this.pluginService.withAdmission(project, authorized, options) : authorized();
+          return outcome.catch(async error => {
+            if (policy.afterInputAdmission) await policy.afterInputAdmission(payload, error);
+            throw error;
+          });
         },
       });
     } catch (error) {

@@ -312,6 +312,7 @@ export const GATE_CODE_TITLES_ZH = Object.freeze({
   run_files_changed_after_receipt: '回执之后又改动了交付文件',
   run_resubmit_not_dispatched: '补交回执的请求未能送达',
   run_partial_read: '部分子任务的记录无法读取',
+  run_input_attribution_incomplete: '部分任务输入的来源记录不完整',
   run_side_degraded: '运行中有环节未能正常生效',
   run_side_notice: '运行过程的技术提示',
   // The run side's own "degraded" lines, by the template each is written

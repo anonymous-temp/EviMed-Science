@@ -123,5 +123,39 @@ class DocumentRendererTest(unittest.TestCase):
             renderer.verified_assets(self.document, self.root)
 
 
+class TypedSelectedDataTest(unittest.TestCase):
+    def test_all_formats_share_typed_constants_and_frozen_basis(self):
+        import csv
+        import openpyxl
+        from pypdf import PdfReader
+        from docx import Document
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            document = {"version": 1, "rendererVersion": renderer.VERSION, "sourceDigest": "exact-digest", "title": "Selected analysis", "assets": [],
+                        "canonicalMarkdown": "# Selected analysis\n\n| value | state |\n|---|---|\n|0|known|\n| |no_data|\n", "formats": ["csv", "xlsx", "docx", "pdf", "html"],
+                        "sourceType": "typed-table", "cover": {"digest": "exact-digest", "scope": {"round": "r1"}, "method": "domain-method"},
+                        "typedTable": {"columns": [{"key": "id", "label": "ID", "type": "text"}, {"key": "value", "label": "Value", "type": "number"}, {"key": "state", "label": "State", "type": "text"}],
+                                       "rows": [{"id": "00123", "value": 0, "state": "known"}, {"id": "=1+1", "value": None, "state": "no_data"}, {"id": "\t@SUM(1)", "value": 12.125, "state": "known"}]}}
+            manifest = renderer.render(document, root, root / "output")
+            self.assertTrue(all(value["state"] == "ready" for value in manifest["formats"].values()), manifest)
+            with (root / "output/document.csv").open(encoding="utf-8-sig", newline="") as stream:
+                rows = list(csv.reader(stream))
+            self.assertEqual(rows[1], ["00123", "0", "known"])
+            self.assertEqual(rows[2], ["'=1+1", "", "no_data"])
+            self.assertEqual(rows[3][0], "'\t@SUM(1)")
+            book = openpyxl.load_workbook(root / "output/document.xlsx", data_only=False)
+            sheet = book["Selected data"]
+            self.assertEqual(sheet["A2"].value, "00123")
+            self.assertEqual(sheet["A3"].data_type, "s")
+            self.assertEqual(sheet["A3"].value, "=1+1")
+            self.assertEqual(sheet["B2"].value, 0)
+            self.assertIsNone(sheet["B3"].value)
+            self.assertEqual(sheet["B4"].value, 12.125)
+            self.assertEqual(json.loads(book["Basis"]["A1"].value), document["cover"])
+            self.assertEqual(Document(root / "output/document.docx").tables[0].cell(1, 0).text, "0")
+            self.assertIn("known", "".join(page.extract_text() for page in PdfReader(root / "output/document.pdf").pages))
+            self.assertIn("no_data", (root / "output/document.html").read_text())
+
+
 if __name__ == "__main__":
     unittest.main()

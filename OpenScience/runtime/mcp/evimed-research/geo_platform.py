@@ -44,18 +44,33 @@ import public_sources
 # them. `apps/server/test/evimedMcp.test.mjs` asks this server for the schemas
 # and holds these copies equal to the domain's.
 READ_WHATS = (
+    "analysis",
+    "signal",
+    "diagnosis_progress",
     "project", "claims", "questions", "journey", "diagnosis", "metrics", "snapshots", "errors", "sources",
     "strategy", "targets", "articles", "orders", "owned_links", "monitoring", "cards", "value", "research",
     "clusters", "actions",
 )
 WRITE_WHATS = (
-    "product", "claims", "questions", "lock_questions", "journey", "strategy", "sources", "targets",
+    "product", "claims", "questions", "preview_questions", "start_diagnosis", "recover_diagnosis", "lock_questions", "journey", "strategy", "sources", "targets",
     "articles", "placement_plan", "owned_links", "step", "value", "research", "actions",
 )
 ENGINES = ("doubao", "qianwen", "deepseek", "yuanbao", "kimi", "baidu")
 POOLS = ("P1", "P2", "P3", "P4")
 SOCIAL_PLATFORMS = ("xhs", "douyin", "zhihu", "weibo", "bilibili", "wechat_channels")
 SOCIAL_SORTS = ("hot", "latest")
+OWNED_SOURCE_METRIC_IDS = ("M-08", "M-08S")
+# Keep analysis resource admission closed before crossing the HTTP boundary.
+ANALYSIS_SCOPE_FIELDS = frozenset((
+    "round", "from", "to", "compareFrom", "compareTo", "comparisonMode", "engines", "questionVersion",
+    "groupIds", "pools", "clientTags", "timeZone", "timezone", "engine", "version", "pool", "groupId", "selectionRef",
+))
+ANALYSIS_VIEW_FIELDS = frozenset((
+    "viewId", "metricId", "dimension", "categoryMode", "timeGrain", "entityKind", "entityKey", "sourceType",
+    "sourceSearch", "sourceRelationship", "sourceLevel", "sourceFacet", "topN", "ownedMetricId", "evidenceKind",
+    "errorFacet", "errorView", "publicationFacet", "financeFacet", "strategyVersion", "targetVersion", "rowKey", "columnKey", "expectedDigest", "limit", "offset",
+))
+FROZEN_ANALYSIS_FIELDS = frozenset(("planContextRef", "limit", "offset", "rowKey", "columnKey"))
 READ_MAX_LIMIT = 50
 # An action's key (`kind:group:ref`), as the domain's `parseGeoActionKey` bounds it.
 ACTION_KEY_MAX = 240
@@ -97,11 +112,12 @@ def tool_definitions():
         {
             "name": "geo_read",
             "description": (
-                "Read this 循证 GEO project in the shapes its pages show. Cards carry checked quotes and citation ids. "
-                "Value holds scoped findings, research and coverage; research lists specialist tasks. "
-                "snapshots: engine answers. clusters: groups, k of n. "
-                "actions: lean rows plus counts to quote, never add up; filter.key or groupId reads one whole. "
-                "filter.version reads a prior value basis. Numeric cells keep denominators and status; unknown is never zero."
+                "循证 GEO pages: counts and unknowns. "
+                "Filters: inclusive dates (Asia/Shanghai), engines, questionVersion, groups, pools. "
+                "Reuse selectionRef and members.metric for exact snapshots. Comparisons are observational. "
+                "analysis gives exact tables/members. planContextRef pages frozen input. "
+                "signal reads bound inputs; targetKey pages 4000-character material parts. "
+                "Actions give lean rows; filter.key or groupId reads one whole. version reads old value."
             ),
             "inputSchema": {
                 "type": "object",
@@ -111,6 +127,67 @@ def tool_definitions():
                         "type": "object",
                         "properties": {
                             "version": {"type": "integer", "minimum": 1},
+                            "questionVersion": {"type": "integer", "minimum": 1},
+                            "from": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+                            "to": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+                            "compareFrom": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+                            "compareTo": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+                            "comparisonMode": {"type": "string", "enum": ["common", "separate"]},
+                            "timeZone": {"type": "string", "maxLength": 80},
+                            "timezone": {"type": "string", "maxLength": 80},
+                            "engines": {"type": "array", "items": {"type": "string", "enum": list(ENGINES)}, "maxItems": 100},
+                            "pools": {"type": "array", "items": {"type": "string", "enum": list(POOLS)}, "maxItems": 100},
+                            "groupIds": {"type": "array", "items": ID, "maxItems": 100},
+                            "clientTags": {"type": "array", "items": {"type": "string", "maxLength": 120}, "maxItems": 100},
+                            "selectionRef": ID,
+                            "viewId": {"type": "string", "enum": ["V01", "V02", "V03", "V04", "V05", "V06", "V07", "V08", "V09", "V10", "V11", "V12", "V13", "V14", "V15", "V16", "V17", "V18", "V19", "V20", "V21", "V22", "V23", "V24", "V25", "V26", "V27"]},
+                            "financeFacet": {"type": "string", "enum": ["ledger", "group"], "description": "V25 only: ledger entries or explicit pinned group attribution, in CNY."},
+                            "targetVersion": {"type": "integer", "minimum": 1, "description": "V26 only: assert the target version preserved by the exact strategy basis."},
+                            "publicationFacet": {"type": "string", "enum": ["group", "audience", "channel"], "description": "V23 only: exact need groups, intended audience or intended channel; actual publication platform remains separate."},
+                            "errorFacet": {"type": "string", "enum": ["type", "severity"], "description": "V13 only: group distinct preserved error records by type or severity."},
+                            "errorView": {"type": "string", "enum": ["active", "withdrawn", "all"], "description": "V13 only: current judgment state, separate from business handling."},
+                            "errorFingerprint": {"type": "string", "minLength": 1, "maxLength": 240, "description": "Diagnosis only: exact canonical error group, independent of list pagination."},
+                            "evidenceKind": {"type": "string", "enum": ["claims", "findings"], "description": "V16 only: exact claim/source support or separately counted finding-expression observations."},
+                            "metricId": {"type": "string", "pattern": "^M-[0-9]{2}[A-Z]?$"},
+                            "ownedMetricId": {"type": "string", "enum": list(OWNED_SOURCE_METRIC_IDS), "description": "V21 only: existing registered-owned metric; manual source annotations remain separate."},
+                            "dimension": {"type": "string", "enum": ["project", "engine", "group"]},
+                            "categoryMode": {"type": "string", "enum": ["original_group", "client_tags"]},
+                            "timeGrain": {"type": "string", "enum": ["day", "round"]},
+                            "entityKind": {"type": "string", "enum": ["brand", "generic"]},
+                            "entityKey": {"type": "string", "minLength": 1, "maxLength": 300},
+                            "sourceType": {"type": "string", "minLength": 1, "maxLength": 100},
+                            "sourceSearch": {"type": "string", "minLength": 1, "maxLength": 300},
+                            "sourceRelationship": {"type": "string", "enum": ["all", "wrong", "mentions"]},
+                            "sourceLevel": {"type": "string", "enum": ["domain", "page"]},
+                            "sourceFacet": {"type": "string", "enum": ["engine", "group"]},
+                            "topN": {"type": "integer", "minimum": 1, "maximum": 50},
+                            "rowKey": {"type": "string", "maxLength": 160},
+                            "columnKey": {"type": "string", "maxLength": 160},
+                            "expectedDigest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+                            "planContextRef": {"type": "string", "pattern": "^gpc_[a-f0-9]{64}$"},
+                            "targetKey": {"type": "string", "maxLength": 160},
+                            "strategyVersion": {"type": "integer", "minimum": 1},
+                            "url": {"type": "string", "maxLength": 2000},
+                            "sourceId": ID,
+                            "answerLimit": {"type": "integer", "minimum": 1, "maximum": 500},
+                            "answerOffset": {"type": "integer", "minimum": 0, "maximum": 20000},
+                            "errorTrace": {"type":"string","enum":["traced","unattributable","noRetrieval"]},
+                            "errorJudgmentState": {"type":"string","enum":["active","withdrawn"]},
+                            "errorStatuses": {"type": "array", "items": {"type": "string", "enum": ["open", "acting", "awaiting_remeasure", "closed"]}},
+                            "errorSeverities": {"type": "array", "items": {"type": "string", "enum": ["S0", "S1", "S2", "S3", "S4"]}},
+                            "errorTypes": {"type": "array", "items": {"type": "string", "enum": ["label_conflict", "number", "dropped_condition", "unfounded", "attribute_swap"]}},
+                            "errorSearch": {"type": "string", "maxLength": 240},
+                            "errorLimit": {"type": "integer", "minimum": 1, "maximum": 500},
+                            "errorOffset": {"type": "integer", "minimum": 0, "maximum": 100000},
+                            "member": {
+                                "type": "object", "description": "Copy members.metric from a cell to page its exact contributing snapshots.",
+                                "properties": {"metricId": {"type": "string"}, "scope": {"type": "string", "enum": ["project", "pool", "engine", "pool_engine", "group", "arm"]},
+                                               "observationRound": ID,
+                                    "observationDate": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+                                               **{key: {"type": ["string", "null"]} for key in ["engine", "pool", "groupId", "arm", "variant", "rival"]}},
+                                "required": ["metricId", "scope"], "additionalProperties": False,
+                            },
+
                             "audience": {"type": "string", "maxLength": 120},
                             "round": ID,
                             "engine": {"type": "string", "enum": list(ENGINES)},
@@ -119,7 +196,7 @@ def tool_definitions():
                             "questionId": ID,
                             "key": {"type": "string", "minLength": 1, "maxLength": ACTION_KEY_MAX},
                             "limit": {"type": "integer", "minimum": 1, "maximum": READ_MAX_LIMIT, "default": 20},
-                            "offset": {"type": "integer", "minimum": 0, "maximum": 10000},
+                            "offset": {"type": "integer", "minimum": 0, "maximum": 20000},
                         },
                         "additionalProperties": False,
                     },
@@ -131,20 +208,26 @@ def tool_definitions():
         {
             "name": "geo_write",
             "description": (
-                "Write this 循证 GEO project; items are refused one by one. "
-                "value merges findings by id. "
-                "questions merges groups into the latest map by name+pool (data.replace:true: whole map); "
-                "isMeasured:true marks probes for lock_questions; no answers needed. "
-                "research queues {capabilityId,question,context?,rationale?}, run after this one. "
-                "owned_links registers {url,platform,title,publishedAt,groupId?} or retires {id,status:retired}. "
-                "actions: per gap."
+                "Write this 循证 GEO project. questions: groups merge into the latest map by name+pool (replace:true = whole map); "
+                "rows+requestKey save original rows under a measurement contract. "
+                "start_diagnosis measures a saved version (check diagnosis_progress); recover_diagnosis retries failed cells once "
+                "with the same requestKey; acknowledgeUnknown only if the user accepts a possible billable duplicate. "
+                "value merges by id; research runs after this run."
             ),
             "inputSchema": {
                 "type": "object",
                 "properties": {
+                    "planContextRef": {"type": "string", "description": "Exact control-plane context from the submitted native request; attribution hint only."},
+                    "promptRequestId": {"type": "string", "description": "Actual submitted native request ID accompanying planContextRef."},
                     "what": {"type": "string", "enum": list(WRITE_WHATS)},
                     "items": {"type": "array", "minItems": 1, "maxItems": WRITE_MAX_ITEMS, "items": {"type": "object"}},
-                    "data": {"type": "object"},
+                    "data": {"type": "object", "description": (
+                        "Imported questions: rows[{text,originalId?,originalGroup?,clientTags?,kind?,sourceUrl?,collectedAt?,pool?,journeyStage?,audience?,isMeasured?,classificationStatus?}], "
+                        "contract{samplingMode:one_shot|recurring,engines,repeats(one_shot=1),metricIds,reportPresentation:summary|detailed,sourceBasis:answers|answers_and_project_sources},requestKey. "
+                        "Preserve original text; kind defaults client; real requires URL and date; classificationStatus is unclassified|suggested|confirmed. "
+                        "start_diagnosis:{version,requestKey}; recover_diagnosis:{roundId,requestKey,jobIds,acknowledgeUnknown?} for failed calls. "
+                        "Read diagnosis_progress with filter.round before recovery. Never default acknowledgeUnknown to true; preserve requestKey on retries."
+                    )},
                 },
                 "required": ["what"],
                 "additionalProperties": False,
@@ -257,7 +340,59 @@ def read(arguments: dict) -> dict:
     what = arguments.get("what")
     if what not in READ_WHATS:
         raise GeoPlatformError("geo_read_what_invalid", "what must be one of: %s." % ", ".join(READ_WHATS))
+    selector = arguments.get("filter")
+    if isinstance(selector, dict):
+        if "targetVersion" in selector and what != "analysis":
+            raise GeoPlatformError("geo_read_filter_invalid", "targetVersion requires a direct V26 analysis.")
+        if "publicationFacet" in selector and (what != "analysis" or selector.get("viewId") != "V23"
+                or selector["publicationFacet"] not in ("group", "audience", "channel") or "planContextRef" in selector):
+            raise GeoPlatformError("geo_read_filter_invalid", "publicationFacet requires a direct V23 analysis.")
+        if "financeFacet" in selector and (what != "analysis" or selector.get("viewId") != "V25" or selector["financeFacet"] not in ("ledger", "group")):
+            raise GeoPlatformError("geo_read_filter_invalid", "financeFacet requires a direct V25 analysis.")
+        if what == "analysis":
+            if selector.get("viewId") in ("V15", "V27"):
+                history_fields = ANALYSIS_SCOPE_FIELDS | frozenset((
+                    "viewId", "metricId", "dimension", "rowKey", "columnKey", "expectedDigest", "limit", "offset",
+                ))
+                if (not selector.keys() <= history_fields or selector.get("dimension", "project") != "project"
+                        or selector.get("viewId") == "V15" and "metricId" in selector
+                        or selector.get("viewId") == "V27" and selector.get("metricId") in ("M-16", "M-17", "M-18", "M-21")):
+                    raise GeoPlatformError("geo_read_filter_invalid", "Use the history view's exact observation scope and supported project metric.")
+            for key in ("strategyVersion", "targetVersion"):
+                value = selector.get(key)
+                if key in selector and (selector.get("viewId") != "V26" or type(value) is not int or value < 1):
+                    raise GeoPlatformError("geo_read_filter_invalid", "Plan version selectors require a direct V26 analysis.")
+            allowed = FROZEN_ANALYSIS_FIELDS if "planContextRef" in selector else ANALYSIS_SCOPE_FIELDS | ANALYSIS_VIEW_FIELDS
+            if not selector.keys() <= allowed:
+                raise GeoPlatformError("geo_read_filter_invalid", "Use only the selected analysis resource's supported fields.")
+            if "planContextRef" in selector and ("rowKey" in selector or "columnKey" in selector):
+                row_key = selector.get("rowKey")
+                if not isinstance(row_key, str) or not row_key or len(row_key) > 160 or selector.get("columnKey") != "objects":
+                    raise GeoPlatformError("geo_read_filter_invalid", "Choose an exact frozen object page.")
+        for field, choices in (("errorFacet", ("type", "severity")), ("errorView", ("active", "withdrawn", "all"))):
+            if field in selector and (what != "analysis" or selector.get("viewId") != "V13"
+                                      or selector[field] not in choices or "planContextRef" in selector):
+                raise GeoPlatformError("geo_read_filter_invalid", field + " requires a direct V13 analysis.")
+        if "errorFingerprint" in selector and (what != "diagnosis" or "planContextRef" in selector
+                or not isinstance(selector["errorFingerprint"], str)
+                or not selector["errorFingerprint"].strip() or len(selector["errorFingerprint"]) > 240
+                or any(ord(char) < 32 or ord(char) == 127 for char in selector["errorFingerprint"])):
+            raise GeoPlatformError("geo_read_filter_invalid", "errorFingerprint requires an exact diagnosis group.")
+    if isinstance(selector, dict) and "evidenceKind" in selector:
+        if (what != "analysis" or selector.get("viewId") != "V16"
+                or selector["evidenceKind"] not in ("claims", "findings") or "planContextRef" in selector):
+            raise GeoPlatformError("geo_read_filter_invalid", "evidenceKind requires a direct V16 analysis; frozen input cannot be replaced.")
+    if isinstance(selector, dict) and "ownedMetricId" in selector:
+        if (what != "analysis" or selector.get("viewId") != "V21"
+                or selector["ownedMetricId"] not in OWNED_SOURCE_METRIC_IDS or "planContextRef" in selector):
+            raise GeoPlatformError(
+                "geo_read_filter_invalid",
+                "ownedMetricId requires a direct V21 analysis with M-08 or M-08S; frozen input cannot be replaced.",
+            )
     payload = {"what": what}
+    for field in ("planContextRef", "promptRequestId"):
+        if arguments.get(field) is not None:
+            payload[field] = arguments[field]
     if isinstance(arguments.get("filter"), dict) and arguments["filter"]:
         payload["filter"] = arguments["filter"]
     try:
@@ -268,13 +403,18 @@ def read(arguments: dict) -> dict:
         raise
     warnings = []
     next_actions = []
-    if data.get("more") is True:
+    page, offset_field = data, "offset"
+    page_key = {"errors": "page", "diagnosis": "errorPage", "sources": "answerPage", "diagnosis_progress": "page"}.get(what)
+    if page_key and isinstance(data.get(page_key), dict):
+        page = data[page_key]
+        offset_field = {"errors": "errorOffset", "diagnosis": "errorOffset", "sources": "answerOffset"}.get(what, "offset")
+    if page.get("more") is True:
         warnings.append("More items exist than this answer holds.")
-        next_offset = data.get("nextOffset")
+        next_offset = page.get("nextOffset")
         if isinstance(next_offset, int) and not isinstance(next_offset, bool):
-            next_actions.append("Call again with filter.offset=%d to read the next page, or narrow the filter." % next_offset)
+            next_actions.append("Call again with filter.%s=%d to read the next page, or narrow the filter." % (offset_field, next_offset))
         else:
-            next_actions.append("Call again with filter.offset to read the next page, or narrow the filter.")
+            next_actions.append("Call again with filter.%s to read the next page, or narrow the filter." % offset_field)
     if what == "actions" and data.get("detail") == "lean":
         next_actions.append("Rows are lean; filter.key (or filter.groupId) reads an action whole: its judgment, expected points, why each source.")
     return {
@@ -293,7 +433,7 @@ def write(arguments: dict) -> dict:
     if "items" in arguments and "data" in arguments:
         raise GeoPlatformError("geo_write_payload_invalid", "A write carries items or data, not both.")
     payload = {"what": what}
-    for key in ("items", "data"):
+    for key in ("items", "data", "planContextRef", "promptRequestId"):
         if key in arguments:
             payload[key] = arguments[key]
     try:

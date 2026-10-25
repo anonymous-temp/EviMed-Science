@@ -1,5 +1,5 @@
 import { SOURCE_KINDS } from "@evimed/domain";
-import type { SourceKind, SourceScope } from "./sourceClient";
+import type { KnowledgePageAddress, SourceKind, SourceScope } from "./sourceClient";
 
 /**
  * Where the knowledge base is, said in its address (design reference §13.1, E-8 and E-19): the list's scope, type
@@ -99,6 +99,7 @@ export type ReaderTab = "content" | "original";
 
 /** What a document page shows beyond the document: which tab (when there is no room for both columns) and which page of the original. */
 export interface ReaderView {
+  knowledge?: KnowledgePageAddress | null;
   tab: ReaderTab | null;
   page: number | null;
 }
@@ -110,6 +111,7 @@ export function readReaderView(params: URLSearchParams): ReaderView {
   return {
     tab: tab === "content" || tab === "original" ? tab : null,
     page: Number.isInteger(page) && page > 0 && page <= 100_000 ? page : null,
+    ...(["kpProject", "kpTree", "kpPath", "kpGeneration", "kpId", "kpRevision"].some(key => params.has(key)) ? { knowledge: readReaderKnowledgeAddress(params) } : {}),
   };
 }
 
@@ -118,6 +120,10 @@ export function readerPath(sourceId: string, state: KnowledgeListState, view: Re
   const params = listParams(state);
   if (view.tab) params.set("tab", view.tab);
   if (view.page) params.set("page", String(view.page));
+  if (view.knowledge) {
+    params.set("kpProject", view.knowledge.projectId); params.set("kpTree", view.knowledge.tree); params.set("kpPath", view.knowledge.path);
+    params.set("kpGeneration", view.knowledge.generationId ?? ""); params.set("kpId", view.knowledge.pageId); params.set("kpRevision", String(view.knowledge.pageRevision));
+  }
   return withSearch(`/app/files/${encodeURIComponent(sourceId)}`, params);
 }
 
@@ -162,6 +168,16 @@ export function readKnowledgeAddress(params: URLSearchParams): KnowledgeAddress 
   if (!projectId || projectId.length > MAX_SCOPE_CHARS || (tree !== "wiki" && tree !== "kg")) return null;
   if (!path || path.length > MAX_PATH_CHARS || path.startsWith("/") || path.split("/").some((part) => part === ".." || part === "")) return null;
   return { projectId, tree, path };
+}
+
+/** A reader retains the addressed output receipt across reload/navigation. A
+ * malformed explicit receipt is null, never an instruction to use path zero. */
+export function readReaderKnowledgeAddress(params: URLSearchParams): KnowledgePageAddress | null {
+  const address = readKnowledgeAddress(new URLSearchParams({ project: params.get("kpProject") ?? "", tree: params.get("kpTree") ?? "", path: params.get("kpPath") ?? "" }));
+  const generationId = params.get("kpGeneration"), pageId = params.get("kpId"), revision = params.get("kpRevision") ?? "";
+  if (!address || generationId === null || generationId !== "" && !/^kg_[a-f0-9]{32}$/.test(generationId)
+    || !pageId || pageId.length > 200 || !/^[1-9][0-9]*$/.test(revision) || !Number.isSafeInteger(Number(revision))) return null;
+  return { ...address, generationId: generationId || null, pageId, pageRevision: Number(revision) };
 }
 
 /** The address of a compiled file. */

@@ -40,7 +40,9 @@ import {
   GEO_ENGINES, GEO_POOLS, GEO_READ_WHATS, GEO_SOCIAL_PLATFORMS, GEO_SOCIAL_SORTS, GEO_WRITE_WHATS, parseGeoActionKey,
 } from "@evimed/domain";
 import { geoRowIdShape, geoRuntimeWrite } from "./geoWrites.mjs";
-import { GEO_READ_MAX_ITEMS } from "./geoService.mjs";
+import { GEO_SCOPE_FIELDS, GEO_ERROR_FILTER_FIELDS, GEO_SOURCE_PAGE_FIELDS, geoReadPage, normalizeGeoMember, normalizeGeoReadScope, geoReadScopeInput, geoErrorFilters, geoSourcePage } from "./geoReadScope.mjs";
+import { GEO_ANALYSIS_FIELDS, normalizeGeoAnalysisView } from "./geoAnalysis.mjs";
+import { GEO_ANALYSIS_DESCRIPTOR_FIELDS } from "./geoAnalysisRegistry.mjs";
 import { HttpError } from "./security.mjs";
 import { SOCIAL_DEFAULT_LIMIT, SOCIAL_MAX_LIMIT, SOCIAL_MAX_QUERY_LENGTH } from "./socialCrawlClient.mjs";
 
@@ -51,9 +53,9 @@ const windowLimits = Object.freeze({ read: 120, write: 60, social: 12 });
 const requestLimits = Object.freeze({ read: 16 * 1024, write: 300 * 1024, social: 8 * 1024 });
 /** Reads and writes answer within ten seconds; a social crawl within the channel's own timeout. */
 const answerBudgetMs = 10_000;
-const readFilterFields = Object.freeze(["version", "audience", "round", "engine", "pool", "groupId", "questionId", "key", "limit", "offset"]);
+const readFilterFields = Object.freeze([...new Set([...GEO_ANALYSIS_FIELDS, ...GEO_SCOPE_FIELDS, ...GEO_ERROR_FILTER_FIELDS, ...GEO_SOURCE_PAGE_FIELDS, "audience", "questionId", "sourceId", "strategyVersion", "planContextRef", "targetKey", "url", "key", "limit", "offset", "member"])]);
 /** The write module's refusals of a whole call, which reach the run as they are. */
-const passThroughCodes = new Set(["geo_write_what_invalid", "geo_write_payload_invalid", "geo_write_rejected", "geo_request_too_large", "geo_read_what_invalid"]);
+const passThroughCodes = new Set(["geo_write_what_invalid", "geo_write_payload_invalid", "geo_write_rejected", "geo_request_too_large", "geo_read_what_invalid", "geo_read_filter_invalid"]);
 
 class GeoGatewayError extends Error {
   /** @param {number} status @param {string} code @param {string} message */
@@ -116,16 +118,26 @@ function readRequest(body) {
     throw gatewayError(400, "geo_read_what_invalid", `what must be one of: ${GEO_READ_WHATS.join(", ")}.`);
   }
   const raw = body.filter ?? {};
+  if(body.what==="analysis"&&Object.keys(raw).some(key=>![...GEO_SCOPE_FIELDS,...GEO_ANALYSIS_FIELDS,"planContextRef"].includes(key)))throw gatewayError(400,"geo_read_filter_invalid","Use only the supported analysis selectors.");
   if (!raw || typeof raw !== "object" || Array.isArray(raw) || Object.keys(raw).some((key) => !readFilterFields.includes(key))) {
     throw gatewayError(400, "geo_read_filter_invalid", `filter takes only: ${readFilterFields.join(", ")}.`);
   }
-  /** @type {{ version?: number, audience?: string, round?: string, engine?: string, pool?: string, groupId?: string, questionId?: string, key?: string, limit?: number, offset?: number }} */
+  if (body.what !== "analysis" && [...GEO_ANALYSIS_DESCRIPTOR_FIELDS.filter(key=>key!=="strategyVersion"), "rowKey", "columnKey", "expectedDigest"].some(key => raw[key] != null)) throw gatewayError(400, "geo_read_filter_invalid", "Analysis fields require what=analysis.");
+  /** @type {Record<string, any>} */
   const filter = {};
-  for (const key of ["round", "groupId", "questionId"]) {
+  for (const key of ["round", "groupId", "questionId", "sourceId"]) {
     if (raw[key] == null) continue;
     if (!geoRowIdShape(raw[key])) throw gatewayError(400, "geo_read_filter_invalid", `filter.${key} is not an id.`);
     /** @type {any} */ (filter)[key] = raw[key];
   }
+  for (const name of ["strategyVersion", "planContextRef", "url"]) if (raw[name] != null) filter[name] = raw[name];
+  if (raw.strategyVersion != null && (!Number.isSafeInteger(raw.strategyVersion) || raw.strategyVersion < 1)) throw gatewayError(400, "geo_read_filter_invalid", "strategyVersion must be positive.");
+  if (raw.planContextRef != null && !/^gpc_[a-f0-9]{64}$/.test(raw.planContextRef)) throw gatewayError(400, "geo_read_filter_invalid", "Invalid plan context.");
+  if (raw.targetKey != null) {
+    if (body.what !== "signal" || typeof raw.targetKey !== "string" || !raw.targetKey || raw.targetKey.length > 160) throw gatewayError(400, "geo_read_filter_invalid", "Choose an exact preserved signal target.");
+    filter.targetKey = raw.targetKey;
+  }
+  if (body.what === "signal" && (!raw.planContextRef || Object.keys(raw).some(key => !["planContextRef", "targetKey", "limit", "offset"].includes(key)))) throw gatewayError(400, "geo_read_filter_invalid", "Read only the bound signal input.");
   if (raw.version != null) {
     if (!Number.isSafeInteger(raw.version) || raw.version < 1) throw gatewayError(400, "geo_read_filter_invalid", "version must be a positive integer.");
     filter.version = raw.version;
@@ -144,29 +156,42 @@ function readRequest(body) {
     if (!GEO_POOLS.includes(raw.pool)) throw gatewayError(400, "geo_read_filter_invalid", `filter.pool must be one of: ${GEO_POOLS.join(", ")}.`);
     filter.pool = raw.pool;
   }
-  if (raw.limit != null) {
-    if (!Number.isSafeInteger(raw.limit) || raw.limit < 1 || raw.limit > GEO_READ_MAX_ITEMS) {
-      throw gatewayError(400, "geo_read_filter_invalid", `filter.limit must be a whole number from 1 to ${GEO_READ_MAX_ITEMS}.`);
-    }
-    filter.limit = raw.limit;
+  geoReadPage(raw);
+  if (raw.limit != null) filter.limit = raw.limit;
+  if (raw.offset != null) filter.offset = raw.offset;
+  normalizeGeoReadScope(geoReadScopeInput(raw));
+  geoErrorFilters(raw);
+  if(raw.errorFingerprint!=null&&body.what!=="diagnosis")throw gatewayError(400,"geo_read_filter_invalid","An exact error group belongs to diagnosis.");
+  if(body.what==="analysis"&&GEO_ERROR_FILTER_FIELDS.some(key=>raw[key]!=null))throw gatewayError(400,"geo_read_filter_invalid","Error list filters do not apply to analysis.");
+  geoSourcePage(raw);
+  for (const name of GEO_SOURCE_PAGE_FIELDS) if (raw[name] != null) filter[name] = raw[name];
+  for (const name of [...GEO_SCOPE_FIELDS, ...GEO_ERROR_FILTER_FIELDS]) if (raw[name] != null) filter[name] = raw[name];
+  if (body.what === "analysis" && raw.planContextRef) {
+    if (Object.keys(raw).some(key => !["planContextRef","limit","offset","rowKey","columnKey"].includes(key))
+      || (raw.rowKey != null || raw.columnKey != null) && (typeof raw.rowKey !== "string" || !raw.rowKey || raw.rowKey.length > 160 || raw.columnKey !== "objects"))
+      throw gatewayError(400, "geo_read_filter_invalid", "Read the frozen analysis without replacing its selection.");
+    if (raw.rowKey != null) { filter.rowKey = raw.rowKey; filter.columnKey = "objects"; }
   }
-  if (raw.offset != null) {
-    if (!Number.isSafeInteger(raw.offset) || raw.offset < 0 || raw.offset > 10_000) {
-      throw gatewayError(400, "geo_read_filter_invalid", "filter.offset must be a whole number from 0 to 10000.");
+  if (body.what === "analysis" && !raw.planContextRef) {
+    Object.assign(filter, normalizeGeoAnalysisView(Object.fromEntries(GEO_ANALYSIS_DESCRIPTOR_FIELDS.filter(key => raw[key] != null).map(key => [key, raw[key]]))));
+    for(const key of ["rowKey","columnKey"])if(raw[key]!=null){if(typeof raw[key]!=="string"||raw[key].length>160)throw gatewayError(400,"geo_read_filter_invalid","Invalid aggregate member.");filter[key]=raw[key];}
+    if (raw.expectedDigest != null) {
+      if (!/^[a-f0-9]{64}$/.test(raw.expectedDigest)) throw gatewayError(400, "geo_read_filter_invalid", "Invalid analysis digest.");
+      filter.expectedDigest = raw.expectedDigest;
     }
-    filter.offset = raw.offset;
   }
+  if (raw.member != null) filter.member = normalizeGeoMember(raw.member);
   return { what: body.what, filter };
 }
 
 /** @param {Record<string, any>} body */
 function writeRequest(body) {
-  onlyFields(body, ["what", "items", "data"]);
+  onlyFields(body, ["what", "items", "data", "planContextRef", "promptRequestId"]);
   if (typeof body.what !== "string" || !GEO_WRITE_WHATS.includes(body.what)) {
     throw gatewayError(400, "geo_write_what_invalid", `what must be one of: ${GEO_WRITE_WHATS.join(", ")}.`);
   }
   if (body.items != null && body.data != null) throw gatewayError(400, "geo_write_payload_invalid", "A write carries items or data, not both.");
-  return { what: body.what, body: { items: body.items, data: body.data } };
+  return { what: body.what, body: { items: body.items, data: body.data }, planContextRef: body.planContextRef, promptRequestId: body.promptRequestId };
 }
 
 /** @param {Record<string, any>} body */
@@ -269,7 +294,8 @@ export function createGeoGatewayHandler(config, runtimeManager, { geo, report = 
       } else if (operation === "write") {
         const request = writeRequest(body);
         work = async () => {
-          const result = await geoRuntimeWrite({ store: geo.store, project, what: request.what, body: request.body, renameProject: geo.renameProject ?? null,
+          if (request.planContextRef || ["strategy", "actions", "targets"].includes(request.what) && await geo.service.planContexts?.activeScoped(project)) throw gatewayError(409, "geo_plan_file_required", "Scoped plan writes require the producing run's strategy.json deliverable. Preserve it in the normal deliverable folder; run-end import binds the actual request. A project token cannot attest a native tool call's origin.");
+          const result = await geoRuntimeWrite({ inclusion: geo.service.inclusion ?? null, store: geo.store, project, what: request.what, body: request.body, renameProject: geo.renameProject ?? null,
             articleGate: geo.articleGate ?? null, articleExists: geo.articleExists ?? (async () => false),
             researchMaxOpen: Number.isSafeInteger(config.geoResearchMaxOpen) ? config.geoResearchMaxOpen : null });
           geo.service.counters.writes += 1;
@@ -304,12 +330,15 @@ export function createGeoGatewayHandler(config, runtimeManager, { geo, report = 
       // version the project does not have is the filter being wrong; nothing
       // else of theirs is a code the run's verdict knows.
       if (error instanceof HttpError) {
-        if (passThroughCodes.has(error.code)) {
+        if (error.status === 404) error = gatewayError(400, "geo_read_filter_invalid", error.message);
+        else if (["geo_question_import_invalid", "geo_diagnosis_invalid", "geo_contract_missing", "geo_request_key_conflict", "geo_recovery_invalid", "geo_recovery_exhausted", "geo_recovery_acknowledgment_required", "geo_round_empty", "geo_round_question_invalid"].includes(error.code)) {
+          error = gatewayError(error.status, "geo_write_payload_invalid", error.message);
+        } else if (passThroughCodes.has(error.code)) {
           // The run hears the refusal; which constraint of the database made it is the operator's.
           const underneath = /** @type {any} */ (error).cause?.code;
           if (typeof underneath === "string" && /^[A-Za-z0-9_]{1,64}$/.test(underneath)) report(underneath);
           error = gatewayError(error.status, error.code, error.message);
-        } else if (error.status === 404) error = gatewayError(400, "geo_read_filter_invalid", error.message);
+        }
       }
       const known = error instanceof GeoGatewayError;
       const status = known ? /** @type {any} */ (error).status : 503;

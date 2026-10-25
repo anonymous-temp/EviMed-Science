@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { nativeFileId } from "../src/nativeMemoryStore.mjs";
+import { nativeFileId, nativeConversationTitleKey } from "../src/nativeMemoryStore.mjs";
 import { nativeIntegration } from "./helpers/nativeFixture.mjs";
 
 const { options, fixture } = nativeIntegration();
@@ -13,7 +13,7 @@ const { options, fixture } = nativeIntegration();
 function titlesFrom(table, calls = []) {
   return async (userId, refs) => {
     calls.push(refs.map((ref) => `${ref.projectId}/${ref.sessionId}`));
-    return Object.fromEntries(refs.filter((ref) => Object.hasOwn(table, ref.sessionId)).map((ref) => [ref.sessionId, table[ref.sessionId]]));
+    return Object.fromEntries(refs.filter((ref) => Object.hasOwn(table, ref.sessionId)).map((ref) => [nativeConversationTitleKey(ref), table[ref.sessionId]]));
   };
 }
 
@@ -43,7 +43,9 @@ test("a memory file names the conversation whose commit wrote it, and the projec
     assert.equal(item.sourceType, "conversation");
     assert.ok(item.observedAt);
   }
-  assert.deepEqual(page.conversations, { session_aaaa: "给综述加引用", session_bbbb: "统一参考文献格式" });
+  assert.deepEqual(page.conversations, { session_aaaa: "给综述加引用", session_bbbb: "统一参考文献格式",
+    [nativeConversationTitleKey({ projectId: 'p_review', sessionId: 'session_aaaa' })]: "给综述加引用",
+    [nativeConversationTitleKey({ projectId: 'p_other', sessionId: 'session_bbbb' })]: "统一参考文献格式" });
   // The drawer's own reading of it.
   assert.match(record.evidence[0].sourceRef, /^sessions\/([^/]+)\//);
   // One resolver call for the page, however many records; a second page inside the minute reads nothing again.
@@ -115,7 +117,8 @@ test("a deleted conversation is not a source: the link to nothing is dropped, an
   assert.deepEqual(byFile("gone").evidence, [], "the person deleted that conversation");
   assert.equal(byFile("kept").evidence.length, 1);
   assert.equal(byFile("wild").evidence.length, 1, "an unknown conversation is still a link back, without a title");
-  assert.deepEqual(page.conversations, { session_kept: "保留的对话" });
+  assert.deepEqual(page.conversations, { session_kept: "保留的对话",
+    [nativeConversationTitleKey({ projectId: 'p_one', sessionId: 'session_kept' })]: "保留的对话" });
   assert.ok(root);
 
   // A resolver that fails: the page is served, the sources stay, and nothing is named.
@@ -141,7 +144,8 @@ test("a search carries the titles of the conversations behind its hits, and a st
   await worker.processCommits({ userId });
   const found = await store.search(userId, "numbered");
   assert.equal(found.items.length, 1);
-  assert.deepEqual(found.conversations, { session_ssss: "给综述加引用" });
+  assert.deepEqual(found.conversations, { session_ssss: "给综述加引用",
+    [nativeConversationTitleKey({ projectId: 'p_review', sessionId: 'session_ssss' })]: "给综述加引用" });
   assert.equal(found.items[0].evidence[0].conversationId, "session_ssss");
 
   const bare = await fixture(t, { extract: ({ user }) => ({ adds: [{ uri: `viking://user/${user}/memories/preferences/q.md`, memory_type: "preferences", after: "Q." }] }) });

@@ -31,7 +31,7 @@ export function KnowledgeOpenPage() {
         const page = await getKnowledgePageAt(address.projectId, address.tree, address.path);
         if (!active) return;
         const scope = address.projectId === getWebProjectId() ? null : address.projectId;
-        navigate(readerPath(page.sourceId, { scope: scope === SHARED_SCOPE ? null : scope, kind: "wiki", q: "" }), { replace: true });
+        navigate(readerPath(page.sourceId, { scope: scope === SHARED_SCOPE ? null : scope, kind: "wiki", q: "" }, { tab: null, page: null, ...(page.address ? { knowledge: page.address } : {}) }), { replace: true });
       } catch (failure) {
         if (!active) return;
         if (failure instanceof WebApiError && (failure.status === 404 || failure.status === 400)) setState({ phase: "missing" });

@@ -35,7 +35,7 @@
  */
 
 import {
-  LEARNING_CORRECTION_VERDICTS, LEARNING_EVIDENCE_VERDICTS, LEARNING_FOLLOW_UP_WINDOW_MS, hasSensitiveText, identifierShapesIn, isLearningCorrection,
+  LEARNING_CORRECTION_VERDICTS, LEARNING_EVIDENCE_VERDICTS, LEARNING_FOLLOW_UP_WINDOW_MS, hasSensitiveText, identifierShapesIn, isLearningCorrection, isResearcherOwnedWork,
 } from "@evimed/domain";
 import { readArtifactShapes } from "./artifactShapes.mjs";
 import { CONVERSATION_SCOPE, leftFiles, learningScopeOf, routineLessonFor, routinePeriodMs } from "./learningTriggers.mjs";
@@ -181,11 +181,13 @@ export class LearningEvidence {
    * @param {{ feedback: any, jobs: any, agentRuns: any, triggers: any, judge?: FollowUpJudge | null,
    *   methodsOpened?: ((project: any, run: any) => Promise<{ id: string, digest: string, title: string, whenToUse: string }[]>) | null,
    *   resolveProject?: ((userId: string, projectId: string) => Promise<any>) | null,
+   *   contextProvenance?: any,
    *   readShapes?: typeof readArtifactShapes, report?: (reason: string) => void, periodDays?: number, now?: () => Date }} dependencies
    */
   constructor({ feedback, jobs, agentRuns, triggers, judge = null, methodsOpened = null, resolveProject = null, readShapes = readArtifactShapes,
-    report = () => {}, periodDays = 90, now = () => new Date() }) {
+    report = () => {}, periodDays = 90, now = () => new Date(), contextProvenance = null }) {
     if (!feedback || !jobs || !agentRuns || !triggers) throw new TypeError("Learning evidence needs the feedback ledger, the job queue, the run ledger and the triggers.");
+    this.contextProvenance = contextProvenance;
     this.feedback = feedback;
     this.jobs = jobs;
     this.agentRuns = agentRuns;
@@ -231,13 +233,18 @@ export class LearningEvidence {
    * @param {any} project @param {any} run @param {{ guestInfluence?: boolean }} [options]
    */
   async afterRun(project, run, { guestInfluence = false } = {}) {
+    if (!isResearcherOwnedWork(run)) return {settle:null};
+    const policy = await this.contextProvenance?.policyFor(project);
+    const observation = policy?.kind === 'geo-project' ? await this.contextProvenance.observeRun(project, run) : null;
     for (const steer of Array.isArray(run.steers) ? run.steers : []) {
+      if (observation && !observation.humanText.includes(String(steer.text ?? ''))) continue;
       if (!steer?.text || unsafeToKeep(steer.text)) { if (steer?.text) this.#failed("sensitive"); continue; }
       await this.feedback.recordLearningEvidence(project.userId, {
         runId: run.id, projectId: project.id, key: String(steer.requestId ?? ""), occurredAt: steer.at,
-        detail: { evidence: "steer", quote: steer.text, sessionId: run.sessionId, at: steer.at ?? this.now().toISOString(), scope: learningScopeOf(run) },
+        detail: { ...(observation ? { inputReceiptRefs: observation.inputReceiptRefs, sourceRunIds: [run.id], sourceProjectId: project.id } : {}), evidence: "steer", quote: steer.text, sessionId: run.sessionId, at: steer.at ?? this.now().toISOString(), scope: learningScopeOf(run) },
       }).catch(() => this.#failed("record_failed"));
     }
+    if (observation) await this.#consumedFollowUp(project,run,observation).catch(()=>this.#failed('record_failed'));
     if (run.status !== "succeeded" || !leftFiles(run)) return { settle: null };
     const finished = Date.parse(String(run.finishedAt ?? ""));
     const due = new Date((Number.isFinite(finished) ? finished : this.now().getTime()) + LEARNING_FOLLOW_UP_WINDOW_MS);
@@ -251,6 +258,32 @@ export class LearningEvidence {
     }
   }
 
+  /** Shared follow-ups become observations only after their exact native
+   * turn consumed. Sequence identity chooses the predecessor, never time. */
+  async #consumedFollowUp(project, run, observation) {
+    if (!this.judge?.available || !Number.isSafeInteger(run.nativeTurn?.startSeq)) return;
+    const transcript=await this.contextProvenance.readTranscript(project,run);
+    const starts=[...new Set(transcript.messages.filter(message=>!message.sessionId||message.sessionId===run.sessionId)
+      .map(message=>message.turnStartSeq).filter(seq=>Number.isSafeInteger(seq)&&seq<run.nativeTurn.startSeq))];
+    if (!starts.length) return;
+    const predecessor=Math.max(...starts),runs=await this.agentRuns.list(project);
+    const matches=runs.filter(previous=>previous.sessionId===run.sessionId&&previous.nativeTurn?.startSeq===predecessor);
+    if (matches.length!==1 || matches[0].status!=='succeeded') return;
+    const previous=matches[0];
+    if (await this.#triggers.refusalFor(project,previous,{runs})) return;
+    const earlier=await this.contextProvenance.observeRun(project,previous),message=observation.humanText;
+    if (!message || unsafeToKeep(message)) return;
+    const answer=await this.judge.read({message,previousRequest:earlier.humanText,methods:[]},
+      {userId:project.userId,projectId:project.id,runId:previous.id});
+    if (answer===null)return;
+    const verdict=followUpVerdictFrom(answer,{message,methods:[]});
+    if ('failure' in verdict)return;
+    const {event}=await this.feedback.recordLearningEvidence(project.userId,{runId:previous.id,projectId:project.id,key:`consumed:${run.id}`,
+      detail:{evidence:'follow-up',...verdict,sessionId:run.sessionId,at:this.now().toISOString(),scope:learningScopeOf(previous),
+        sourceProjectId:project.id,sourceRunIds:[previous.id,run.id],inputReceiptRefs:[...new Set([...earlier.inputReceiptRefs,...observation.inputReceiptRefs])]}});
+    if (isLearningCorrection(event.detail)) await this.#triggers.afterCorrection(project,{event,runId:previous.id});
+  }
+
   /**
    * A result corrected in the page, counted as evidence for the run it was corrected in. The words are the researcher's own
    * (`detail.instruction`, absent when they carried something that must not be kept).
@@ -258,6 +291,9 @@ export class LearningEvidence {
    */
   async mirrorResultCorrected(project, { event, runId }) {
     const run = (await this.agentRuns.list(project).catch(() => [])).find((/** @type {any} */ item) => item?.id === runId);
+    const policy = await this.contextProvenance?.policyFor(project);
+    const observation = policy?.kind === 'geo-project' && run ? await this.contextProvenance.observeRun(project, run) : null;
+    if (policy?.kind === 'geo-project' && (!observation || !event?.detail?.instruction || !observation.humanText.includes(event.detail.instruction))) return null;
     const instruction = typeof event?.detail?.instruction === "string" && !unsafeToKeep(event.detail.instruction) ? event.detail.instruction : null;
     await this.feedback.recordLearningEvidence(project.userId, {
       runId, projectId: project.id, key: String(event?.id ?? ""), occurredAt: event?.occurredAt,
@@ -273,6 +309,9 @@ export class LearningEvidence {
    * @returns {Promise<{ recorded: boolean, reason?: string, verdict?: string, runId?: string, queued?: string[] }>}
    */
   async onNewTurn(project, { sessionId, text, requestId = "" }) {
+    // This callback runs before native consumption. Shared observations are
+    // recorded by afterRun once the authenticated input actually consumed.
+    if ((await this.contextProvenance?.policyFor(project))?.kind === 'geo-project') return { recorded: false, reason: 'input_not_consumed' };
     const message = String(text ?? "").trim();
     if (!message || !sessionId || !this.judge) return { recorded: false, reason: "no_judge" };
     const now = this.now().getTime();
@@ -358,13 +397,21 @@ export class LearningEvidence {
     const period = Math.floor(Date.parse(String(run.finishedAt ?? run.startedAt ?? "")) / this.periodMs);
     if (!Number.isFinite(period)) return { settled, routine: false };
     const resetAt = await this.#triggers.resetInstantOf?.(project.userId);
-    const family = (await this.feedback.cleanSettledRuns(project.userId, { scope, from: new Date(period * this.periodMs), to: new Date((period + 1) * this.periodMs) }))
+    const policy = await this.contextProvenance?.policyFor(project);
+    let family = (await this.feedback.cleanSettledRuns(project.userId, { scope,
+      ...(policy?.kind === 'geo-project' ? {projectId:policy.controlProjectId} : {}), from: new Date(period * this.periodMs), to: new Date((period + 1) * this.periodMs) }))
       // A run that ended before the account reset its memory is no peer of a routine, however recently it was settled (review M-11).
       .filter((member) => {
         if (!endedBeforeReset({ finishedAt: member.endedAt ?? member.at }, resetAt ?? null)) return true;
         recordSkippedBeforeReset("routine_peer");
         return false;
       });
+    if (policy?.kind === 'geo-project') family = family.filter(member => member.projectId === policy.controlProjectId);
+    else if (this.contextProvenance) {
+      const allowed = [];
+      for (const member of family) if (!member.projectId || (await this.contextProvenance.policyFor({userId:project.userId,id:member.projectId})).kind !== 'geo-project') allowed.push(member);
+      family = allowed;
+    }
     const guest = job.payload?.guestInfluence === true || await this.#triggers.guestInfluenced?.(project, run).catch(() => false) === true;
     const lesson = routineLessonFor({ run, scope, shape, family, guestInfluence: guest });
     const queued = lesson ? await this.#triggers.queue(project, run, lesson) : false;

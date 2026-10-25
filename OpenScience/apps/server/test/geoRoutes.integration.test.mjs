@@ -12,6 +12,7 @@ import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
+import { GEO_MEASUREMENT_METHOD_VERSION, geoCoverageDifference } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { GeoService, geoScreenshotPath } from "../src/geoService.mjs";
 import { GeoStore } from "../src/geoStore.mjs";
@@ -174,6 +175,44 @@ async function seededProject() {
   return { project, claims, questions, articles };
 }
 
+test("snapshot member pages reuse authorized exact day selections through HTTP", options, async () => {
+  const project = await store.createProject({ userId: ALICE, projectId: "http-members", engines: ["deepseek"], coverageDays: 90 });
+  await store.query(`INSERT INTO evimed_geo.question_groups (id,user_id,geo_project_id,set_version,pool,name) VALUES ('http-member-g',$1,$2,1,'P2','Group')`, [ALICE,project.id]);
+  await store.query(`INSERT INTO evimed_geo.questions (id,user_id,geo_project_id,group_id,set_version,pool,text)
+    SELECT 'http-member-q' || n,$1,$2,'http-member-g',1,'P2','Question ' || n FROM generate_series(1,3) n`, [ALICE,project.id]);
+  await store.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,finished_at,surface)
+    VALUES ('http-member-round',$1,$2,'baseline','done',1,'{deepseek}','2026-10-01','2026-10-02','{"mode":"web"}')`, [ALICE,project.id]);
+  await store.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,question_id,engine,status,asked_at,surface)
+    SELECT 'http-member-s' || n,$1,$2,'http-member-round','http-member-q' || n,'deepseek','valid',
+      CASE WHEN n < 3 THEN timestamp with time zone '2026-10-01T01:00Z' ELSE timestamp with time zone '2026-10-02T01:00Z' END,'{"mode":"web"}' FROM generate_series(1,3) n`, [ALICE,project.id]);
+  await store.query(`INSERT INTO evimed_geo.facts (snapshot_id,user_id,geo_project_id,judged_at,brands,checks)
+    SELECT 'http-member-s' || n,$1,$2,'2026-10-03','[{"name":"Ours","ours":true,"count":1}]','{"judgementCoverage":{"status":"complete"}}' FROM generate_series(1,3) n`, [ALICE,project.id]);
+  const view = await service.monitoring({ id: ALICE }, project.id, { from: "2026-10-01", to: "2026-10-02" });
+  const point = view.series.find((entry) => entry.key === "mention").points[0];
+  const query = new URLSearchParams({ selectionRef: point.members.selectionRef, member: JSON.stringify(point.members.metric), limit: "1" });
+  const url = `/api/geo/projects/${project.id}/snapshots`;
+  const first = await call("GET", `${url}?${query}`);
+  assert.equal(first.status, 200, JSON.stringify(first.payload));
+  assert.equal(first.payload.data.total, 2);
+  assert.equal(first.payload.data.items.length, 1);
+  query.set("offset", String(first.payload.data.nextOffset));
+  const second = await call("GET", `${url}?${query}`);
+  assert.equal(second.payload.data.more, false);
+  assert.notEqual(second.payload.data.items[0].id, first.payload.data.items[0].id);
+  refused(await call("GET", `${url}?${query}`, { user: MALLORY }), 404, "geo_project_not_found");
+  for (const bad of ["{", JSON.stringify({ ...point.members.metric, typo: true }), JSON.stringify({ ...point.members.metric, engine: 17 }),
+    JSON.stringify({ ...point.members.metric, observationDate: "2026-02-30" }), JSON.stringify({ ...point.members.metric, observationDate: "" })]) {
+    const malformed = new URLSearchParams(query); malformed.set("member", bad);
+    refused(await call("GET", `${url}?${malformed}`), 400, "geo_read_filter_invalid");
+  }
+  for (const [key,value] of [["limit","51"],["offset","20001"]]) {
+    const malformed = new URLSearchParams(query); malformed.set(key,value);
+    refused(await call("GET", `${url}?${malformed}`), 400, "geo_read_filter_invalid");
+  }
+  await store.query(`UPDATE evimed_geo.snapshots SET answer_text = 'Changed' WHERE id = 'http-member-s1'`);
+  refused(await call("GET", `${url}?${query}`), 409, "geo_read_filter_invalid");
+});
+
 test("off, every GEO path answers 404 geo_not_enabled, and an account outside the audience gets the same", options, async () => {
   const off = createGeoRoutes({ store: { async ensureSessionUser() { return { user: { id: ALICE } }; }, async assertCsrf() {} },
     service, config: { ...config, geoEnabled: false }, maxJsonBytes: 1024 });
@@ -265,7 +304,7 @@ test("the project page, its tabs and its actions answer in the spec's shapes fro
   assert.equal(map.sets[0].measuredCount, 48);
   assert.ok(map.sets[0].lockedAt);
   assert.equal(map.groups.length, 12);
-  assert.deepEqual(Object.keys(map.groups[0].questions[0]).sort(), ["answers", "id", "isMeasured", "kind", "platform", "sourceUrl", "text"]);
+  assert.deepEqual(Object.keys(map.groups[0].questions[0]).sort(), ["answers", "classificationStatus", "clientTags", "collectedAt", "id", "isMeasured", "kind", "originalGroup", "originalId", "originalRowIndex", "platform", "pool", "sourceUrl", "text"]);
   const target = map.groups[0].questions[0].id;
   const moved = (await call("POST", `/api/geo/projects/${id}/questions/${target}/unmeasure`, { body: {} })).payload.data;
   assert.equal(moved.version, 2);
@@ -395,7 +434,7 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
   assert.deepEqual(diagnosis.round.linklessEngines, [], "deepseek's citation carries its link");
   const deepseek = diagnosis.byEngine.find((/** @type {any} */ row) => row.engine === "deepseek");
   assert.deepEqual(deepseek.mention, { value: 0.42, numerator: 20, denominator: 48, ciLow: null, ciHigh: null, status: "ok", dataType: "measured",
-    reason: null, snapshotIds: [`s1-${id}`] }, "a cell names the answers it rests on (the suspect one is out)");
+    reason: null, methodVersion: null, snapshotIds: [], members: { exact: false, total: null, shown: 0, more: false, basis: "historical_unknown", unit: null } }, "a historical cell keeps its value but never claims an exact denominator under the current method");
   assert.equal(deepseek.retrieval.status, "absent", "an unmeasured cell is absent, never zero");
   const doubao = diagnosis.byEngine.find((/** @type {any} */ row) => row.engine === "doubao");
   assert.deepEqual([doubao.retrieval.status, doubao.retrieval.reason, doubao.retrieval.value], ["not_measurable", "no_retrieval", null]);
@@ -405,13 +444,14 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
   assert.equal(p1.topCompetitor, "替尔泊肽");
   assert.equal(p1.mainIssue, "讲错我方", "the page's words, never the code");
   assert.deepEqual(Object.fromEntries(Object.entries(diagnosis.failureModes).map(([mode, cell]) => [mode, [/** @type {any} */ (cell).numerator,
-    /** @type {any} */ (cell).denominator]])), { omitted: [0, 1], correct: [0, 1], wrongOurs: [1, 1], wrongCompetitor: [0, 1] },
-  "a suspect answer is out of the tally");
+    /** @type {any} */ (cell).denominator]])), { omitted: [0, 1], correct: [0, 1], wrongOurs: [1, 1], wrongCompetitor: [0, 1],
+      unknown: [0, 1], partial: [0, 1], refused: [0, 1] },
+  "the known wrong answer remains wrong and the suspect is excluded from every tally");
   assert.deepEqual(diagnosis.failureModes.wrongOurs.snapshotIds, [`s1-${id}`], "a failure mode opens on its answers");
   assert.equal(diagnosis.errors[0].stability, "stable");
   assert.equal(diagnosis.errors[0].snapshotId, `s1-${id}`);
   assert.equal(diagnosis.errors[0].firstSnapshotId, `s1-${id}`, "where the quoted sentence was first said");
-  assert.deepEqual(diagnosis.errorCounts, { total: 1, open: 1, acting: 0, awaiting_remeasure: 0, closed: 0, severe: 1 });
+  assert.deepEqual(diagnosis.errorCounts, { total: 1, open: 1, acting: 0, awaiting_remeasure: 0, closed: 0, severe: 1, withdrawn: 0 });
   assert.deepEqual(diagnosis.noise, { band: 0.04, measuredAt: diagnosis.noise.measuredAt });
   assert.deepEqual(diagnosis.more.map((/** @type {any} */ row) => [row.metricId, row.variant]), [["M-01S", "top1"], ["M-05", null]],
     "headline, NET and NOISE rows are not repeated under 更多; a variant is");
@@ -444,7 +484,7 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
   const page = (await call("GET", `/api/geo/projects/${id}`)).payload.data;
   const [gvi, mention, accuracy, citation] = page.overview.metrics;
   assert.equal(gvi.cell.value, 31.5);
-  assert.deepEqual(gvi.trend, [{ date: "2026-09-24", value: 31.5, n: null, coverage: "v1|P1|deepseek|web;fast;newchat" }], "a point carries the sample it rests on, and what its round measured");
+  assert.deepEqual(gvi.trend, [{ date: "2026-09-24", value: 31.5, n: null, coverage: null }], "historical values remain, but an unrecorded method is not comparable");
   assert.deepEqual([mention.cell.numerator, mention.cell.denominator], [56, 310], "the plain M-01S, not its top1 variant");
   assert.equal(accuracy.cell.status, "insufficient");
   assert.equal(citation.cell.status, "absent");
@@ -460,9 +500,9 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
   assert.equal(row.headline.mention.denominator, 310);
 
   const monitoring = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data;
-  assert.deepEqual(monitoring.series[0], { key: "gvi", points: [{ date: "2026-09-24", value: 31.5, n: null, k: null, coverage: "v1|P1|deepseek|web;fast;newchat" }] });
-  assert.deepEqual(monitoring.arms.pilot, [{ date: "2026-09-24", value: 33.2, coverage: "v1|P1|deepseek|web;fast;newchat" }], "the arm-scope index at pool null");
-  assert.deepEqual(monitoring.arms.control, [{ date: "2026-09-24", value: 30.1, coverage: "v1|P1|deepseek|web;fast;newchat" }]);
+  assert.deepEqual(monitoring.series[0], { key: "gvi", points: [{ date: "2026-09-24", value: 31.5, n: null, k: null, coverage: null }] });
+  assert.deepEqual(monitoring.arms.pilot, [{ date: "2026-09-24", value: 33.2, coverage: null }], "the arm-scope index at pool null");
+  assert.deepEqual(monitoring.arms.control, [{ date: "2026-09-24", value: 30.1, coverage: null }]);
   assert.equal(monitoring.arms.netEffect.value, 0.06);
   assert.equal(monitoring.arms.netEffect.noiseBand, 0.04);
   assert.equal(monitoring.arms.netEffect.noiseMeasured, null, "a row written before it kept its band says nothing about it");
@@ -472,7 +512,7 @@ test("measured rows become the diagnosis, the answer page, the overview and moni
     const stored = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data.arms.netEffect;
     assert.deepEqual([stored.noiseBand, stored.noiseMeasured], [band, measured]);
   }
-  assert.deepEqual(monitoring.byEngine.find((/** @type {any} */ entry) => entry.engine === "deepseek").points, [{ date: "2026-09-24", value: 0.42, coverage: "v1|P1|deepseek|web;fast;newchat" }]);
+  assert.deepEqual(monitoring.byEngine.find((/** @type {any} */ entry) => entry.engine === "deepseek").points, [{ date: "2026-09-24", value: 0.42, coverage: null }]);
   assert.equal(monitoring.newErrors[0].id, `e-${id}`);
   assert.equal(monitoring.next.kind, "weekly", "past a baseline, the next is the weekly round");
   // G6: a confirmation round in the queue is not the next measurement; the
@@ -520,8 +560,9 @@ test("distribution reads the orders; budget, cancel, run and export go to their 
   assert.equal(view.suggestedBudgetCny, 2000, "the chosen tier's budget");
   assert.deepEqual(view.market, { configured: false });
   assert.equal(view.orders.length, 3);
-  assert.deepEqual(Object.keys(view.orders[0]).sort(), ["articleId", "articleTitle", "cancellable", "checks", "domain", "id", "layer", "media",
-    "priceCny", "publishedUrl", "state", "updatedAt"]);
+  assert.deepEqual(Object.keys(view.orders[0]).sort(), ["articleDigest", "articleId", "articleResultVersionId", "articleTitle", "cancellable", "checks", "domain", "id", "layer", "media",
+    "priceCny", "publishedAt", "publishedUrl", "state", "updatedAt"]);
+  assert.ok(view.orders.every(order => order.articleResultVersionId === null && order.articleDigest === null), "unrecorded historical versions remain unknown");
   assert.equal(view.orders.find((/** @type {any} */ order) => order.id === `o1-${id}`).media, "生命时报");
 
   hooks.market = null;
@@ -712,10 +753,10 @@ test("a rival's mention rate over full measurements is a series of its own; the 
   await round(`rw2-${id}`, "weekly", "2026-09-28");
   await round(`rs-${id}`, "sentinel", "2026-09-29");
   const metric = (/** @type {string} */ key, /** @type {Record<string, any>} */ row) => insert(`INSERT INTO evimed_geo.metrics (id, user_id, geo_project_id,
-      round_id, scope, engine, metric_id, rival, numerator, denominator, value, status, computed_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      round_id, scope, engine, metric_id, rival, numerator, denominator, value, status, computed_at, method_version)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
   [`${key}-${id}`, ALICE, id, row.round, row.scope ?? "project", row.engine ?? null, row.metricId, row.rival ?? null, row.k ?? null, row.n ?? null,
-    row.value ?? null, row.status ?? "ok", row.at]);
+    row.value ?? null, row.status ?? "ok", row.at, GEO_MEASUREMENT_METHOD_VERSION]);
   await metric("r1", { round: `rw1-${id}`, metricId: "M-16", rival: "替尔泊肽", k: 31, n: 100, value: 31, at: "2026-09-21T10:00:00Z" });
   await metric("r2", { round: `rw2-${id}`, metricId: "M-16", rival: "替尔泊肽", k: 34, n: 100, value: 34, at: "2026-09-28T10:00:00Z" });
   // A sentinel's sliver never draws a point.
@@ -735,7 +776,8 @@ test("a rival's mention rate over full measurements is a series of its own; the 
   const monitoring = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data;
   // The first full round has no answer to name a coverage from (null: not equal to anything); the second heard from 千问 on a risk question.
   assert.deepEqual(monitoring.rivals, [{ name: "替尔泊肽", points: [
-    { date: "2026-09-21", value: 31, n: 100, k: 31, coverage: null }, { date: "2026-09-28", value: 34, n: 100, k: 34, coverage: "v1|P4|qianwen|web;fast;newchat" }] }]);
+    { date: "2026-09-21", value: 31, n: 100, k: 31, coverage: null }, { date: "2026-09-28", value: 34, n: 100, k: 34,
+      coverage: null }] }]);
 
   const sources = (await call("GET", `/api/geo/projects/${id}/sources`)).payload.data;
   const deepseek = sources.expectations.find((/** @type {any} */ row) => row.engine === "deepseek");
@@ -828,6 +870,11 @@ test("a source's detail lists the answers its row counts: the three numbers are 
   assert.deepEqual([sourceRow(listed, "idle.example.org").wrongOurs, sourceRow(listed, "idle.example.org").cited], [0, {}], "a site the round did not cite has nothing counted");
 
   const detail = (await call("GET", `/api/geo/projects/${id}/sources/${row.id}`)).payload.data;
+  const page = (await call("GET", `/api/geo/projects/${id}/sources/${row.id}?selectionRef=${detail.selection.reference}&answerLimit=1`)).payload.data;
+  assert.equal(page.answers.length, 1);
+  assert.equal(page.answerPage.total, detail.answers.length);
+  const next = (await call("GET", `/api/geo/projects/${id}/sources/${row.id}?selectionRef=${detail.selection.reference}&answerLimit=1&answerOffset=${page.answerPage.nextOffset}`)).payload.data;
+  assert.notEqual(next.answers[0].snapshotId, page.answers[0].snapshotId);
   assert.equal(detail.source.domain, "news.example.org");
   assert.deepEqual(detail.round, { id: `new-${id}`, kind: "weekly", sampleDate: "2026-09-21" });
   assert.deepEqual(detail.counts, { cited: 3, wrongOurs: row.wrongOurs, mentionsOurs: row.mentionsOurs }, "the detail's numbers are the row's");
@@ -859,7 +906,7 @@ test("a source's detail lists the answers its row counts: the three numbers are 
   assert.deepEqual([after.cited, after.wrongOurs, after.mentionsOurs], [row.cited, row.wrongOurs, row.mentionsOurs]);
 
   refused(await call("GET", `/api/geo/projects/${id}/sources/gsrc_missing`), 404, "geo_source_not_found");
-  refused(await call("GET", `/api/geo/projects/${id}/sources/${row.id}?engine=${encodeURIComponent("../x")}`), 400, "geo_engines_invalid");
+  refused(await call("GET", `/api/geo/projects/${id}/sources/${row.id}?engine=${encodeURIComponent("../x")}`), 400, "geo_read_filter_invalid");
   refused(await call("GET", `/api/geo/projects/${id}/sources/${row.id}`, { user: MALLORY }), 404, "geo_project_not_found");
   const other2 = await seededProject();
   refused(await call("GET", `/api/geo/projects/${other2.project.id}/sources/${row.id}`), 404, "geo_source_not_found");
@@ -887,7 +934,7 @@ async function weeklyRounds(id, plan) {
       await insert(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, question_id, engine, asked_at, status, answer_text, citations)
         VALUES ($1, $2, $3, $4, $5, $6, $7::timestamptz, 'valid', '回答', $8::jsonb)`,
       [key, ALICE, roundId, id, plan.questionId, engine, `${day}T08:00:00Z`, JSON.stringify(plan.cites(index + 1, engine))]);
-      await insert(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, failure_mode, mentions_ours) VALUES ($1, $2, $3, $4, true)`,
+      await insert(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, failure_mode, mentions_ours, judged_at) VALUES ($1, $2, $3, $4, true, now())`,
         [key, ALICE, id, plan.wrong?.(index + 1, engine) ? "wrong_ours" : "none"]);
     }
   }
@@ -958,9 +1005,9 @@ test("every point of a trend carries the coverage key of its round, and a change
   const { rounds } = await weeklyRounds(id, { questionId: question.id, cites: () => [] });
   const insert = (/** @type {string} */ sql, /** @type {unknown[]} */ values) => database.query(sql, values);
   const metric = (/** @type {string} */ key, /** @type {Record<string, any>} */ row) => insert(`INSERT INTO evimed_geo.metrics (id, user_id, geo_project_id,
-      round_id, scope, engine, metric_id, rival, numerator, denominator, value, status, computed_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'ok', $12)`,
-  [`${key}-${id}`, ALICE, id, row.round, row.scope ?? "project", row.engine ?? null, row.metricId, row.rival ?? null, row.k ?? null, row.n ?? null, row.value, row.at]);
+      round_id, scope, engine, metric_id, rival, numerator, denominator, value, status, computed_at, method_version)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'ok', $12, $13)`,
+  [`${key}-${id}`, ALICE, id, row.round, row.scope ?? "project", row.engine ?? null, row.metricId, row.rival ?? null, row.k ?? null, row.n ?? null, row.value, row.at, GEO_MEASUREMENT_METHOD_VERSION]);
   for (const [index, round] of rounds.entries()) {
     const at = `${["2026-09-07", "2026-09-14", "2026-09-21", "2026-09-28"][index]}T13:00:00Z`;
     await metric(`g${index}`, { round, metricId: "M-19", value: 50 - index * 3, n: 100, k: 50, at });
@@ -976,8 +1023,8 @@ test("every point of a trend carries the coverage key of its round, and a change
   assert.equal(gvi.trend.length, 4);
   assert.equal(shape(keys(gvi.trend)), "0010", "the key moves once, where the engine set did");
   assert.ok(gvi.trend.every((/** @type {any} */ point) => typeof point.coverage === "string" && point.coverage.startsWith("v1|")));
-  assert.match(gvi.trend[0].coverage, /\|deepseek,kimi\|web;fast;newchat$/);
-  assert.match(gvi.trend[3].coverage, /\|deepseek,doubao,kimi\|web;fast;newchat$/);
+  assert.ok(gvi.trend[0].coverage.includes(`|deepseek,kimi|web;fast;newchat;method=${GEO_MEASUREMENT_METHOD_VERSION};questions=`));
+  assert.ok(gvi.trend[3].coverage.includes(`|deepseek,doubao,kimi|web;fast;newchat;method=${GEO_MEASUREMENT_METHOD_VERSION};questions=`));
 
   const watch = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data;
   assert.equal(shape(keys(watch.series.find((/** @type {any} */ line) => line.key === "gvi").points)), "0010");
@@ -986,5 +1033,106 @@ test("every point of a trend carries the coverage key of its round, and a change
   // An engine's own series is of that engine alone: the others joining the sample is not a change of what it covers.
   const kimi = watch.byEngine.find((/** @type {any} */ line) => line.engine === "kimi");
   assert.equal(shape(keys(kimi.points)), "0000");
-  assert.match(kimi.points[0].coverage, /\|kimi\|web;fast;newchat$/);
+  assert.ok(kimi.points[0].coverage.includes(`|kimi|web;fast;newchat;method=${GEO_MEASUREMENT_METHOD_VERSION};questions=`));
+  await database.query("UPDATE evimed_geo.metrics SET method_version = $1 WHERE round_id = $2", ["another-measurement-method", rounds[3]]);
+  const changed = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data;
+  const changedPoints = changed.series.find((/** @type {any} */ line) => line.key === "gvi").points;
+  assert.equal(geoCoverageDifference(changedPoints[2].coverage, changedPoints[3].coverage).comparable, false,
+    "the same engines and questions do not make different calculation methods comparable");
+  await database.query("UPDATE evimed_geo.metrics SET method_version = NULL WHERE round_id = $1", [rounds[3]]);
+  const legacy = (await call("GET", `/api/geo/projects/${id}/monitoring`)).payload.data;
+  assert.equal(legacy.series.find((/** @type {any} */ line) => line.key === "gvi").points[3].coverage, null);
+});
+
+test("HTTP original import, scoped planned questions, diagnosis progress and recovery enforce project membership", options, async () => {
+  const created = await call("POST", "/api/geo/projects", { body: { brandName: "Original import" } });
+  const id = created.payload.data.id;
+  const root = `/api/geo/projects/${id}`;
+  const contract = { samplingMode: "one_shot", engines: ["deepseek"], repeats: 1, metricIds: ["M-01"], reportPresentation: "summary", sourceBasis: "answers" };
+  const input = { requestKey: "http-import", rows: [{ text: "  Exact original?\n", originalId: "01" }], contract };
+  assert.equal((await call("POST", `${root}/questions/preview`, { body: input })).payload.data.plannedCalls, 1);
+  const saved = await call("POST", `${root}/questions`, { body: input });
+  assert.equal(saved.status, 200, JSON.stringify(saved.payload));
+  const started = await call("POST", `${root}/diagnosis/start`, { body: { version: 1, requestKey: "http-start" } });
+  const roundId = started.payload.data.roundId;
+  const progressPath = `${root}/diagnosis/${roundId}/progress`;
+  const progress = (await call("GET", progressPath)).payload.data;
+  assert.equal(progress.cells.length, 1);
+  assert.equal(progress.cells[0].text, input.rows[0].text);
+  const questions = (await call("GET", `${root}/questions?round=${roundId}&engines=deepseek`)).payload.data;
+  assert.equal(questions.selection.counts.planned, 1);
+  assert.equal(questions.groups[0].questions[0].originalRowIndex, 0);
+  refused(await call("GET", progressPath, { user: MALLORY }), 404, "geo_project_not_found");
+  await store.addMember({ geoId: id, userId: MALLORY, role: "viewer", invitedBy: ALICE });
+  assert.equal((await call("GET", progressPath, { user: MALLORY })).status, 200);
+  await store.query("UPDATE evimed_geo.probe_jobs SET status='failed' WHERE round_id=$1", [roundId]);
+  const recovery = { requestKey: "http-recover", jobIds: [progress.cells[0].jobId], acknowledgeUnknown: true };
+  refused(await call("POST", `${root}/diagnosis/${roundId}/recover`, { user: MALLORY, body: recovery }), 403, "geo_member_forbidden");
+  const recovered = await call("POST", `${root}/diagnosis/${roundId}/recover`, { body: recovery });
+  assert.equal(recovered.status, 200, JSON.stringify(recovered.payload));
+  assert.equal((await call("GET", progressPath)).payload.data.cells[0].recoverable, false);
+});
+
+test("large diagnosis progress pages share native and HTTP continuation while retaining whole-round counts", options, async () => {
+  const created = await call("POST", "/api/geo/projects", { body: { brandName: "Progress pagination" } });
+  const id = created.payload.data.id;
+  const root = `/api/geo/projects/${id}`;
+  const contract = { samplingMode: "recurring", engines: ["deepseek", "kimi"], repeats: 20, metricIds: ["M-01"], reportPresentation: "summary", sourceBasis: "answers" };
+  const saved = await service.saveQuestions({ id: ALICE }, id, { requestKey: "large-progress", contract, rows: Array.from({ length: 40 }, (_, index) => ({ text: `${index}`.padEnd(4000, "q") })) });
+  assert.equal(saved.actualRows, 40);
+  const started = await call("POST", `${root}/diagnosis/start`, { body: { version: 1, requestKey: "start-large-progress" } });
+  const roundId = started.payload.data.roundId;
+  const endpoint = `${root}/diagnosis/${roundId}/progress`;
+  const first = (await call("GET", `${endpoint}?limit=1&offset=100`)).payload.data;
+  assert.equal(first.cells.length, 1);
+  assert.equal(first.total, 1600);
+  assert.equal(first.counts.queued, 1600);
+  assert.equal(first.page.nextOffset, 101);
+  assert.deepEqual(first.absentEngines, []);
+  assert.ok(Buffer.byteLength(JSON.stringify(first)) < 32_000);
+  const p = await store.getProject(ALICE, id);
+  const native = await service.runtimeRead(p, "diagnosis_progress", { round: roundId, limit: 1, offset: 100 });
+  assert.deepEqual(native, first);
+  const next = (await call("GET", `${endpoint}?limit=1&offset=${first.page.nextOffset}`)).payload.data;
+  assert.notEqual(next.cells[0].jobId, first.cells[0].jobId);
+  const last = (await call("GET", `${endpoint}?limit=500&offset=1500`)).payload.data;
+  assert.equal(last.cells.length, 100);
+  assert.equal(last.page.nextOffset, null);
+  assert.equal(last.counts.queued, 1600);
+  refused(await call("GET", `${endpoint}?limit=501`), 400, "geo_read_filter_invalid");
+  refused(await call("GET", `${endpoint}?engines=deepseek`), 400, "geo_read_filter_invalid");
+});
+
+test("article release carries the version and digest the reviewer observed over HTTP", options, async () => {
+  const { project } = await seededProject();
+  const path = "deliverables/review/article.md";
+  const [articleId] = await store.registerArticles(ALICE, project.id, [{ path, layer: "popular", claimIds: [], gate: "passed", safety: "open", contentSha256: "a".repeat(64), runId: "review-v0" }]);
+  const original = { versionId: `rv_${"a".repeat(64)}`, digest: "a".repeat(64), path, producer: { runId: "review-v0", sessionId: "review-session" } };
+  await store.linkArticleVersion(project.id, articleId, { version: original });
+  await store.query(`UPDATE evimed_geo.articles SET status='published' WHERE id=$1`, [articleId]);
+  const observed = (await call("GET", `/api/geo/projects/${project.id}/articles`)).payload.data.articles.find(article => article.id === articleId);
+  assert.equal(observed.currentResultVersionId, original.versionId); assert.equal(observed.contentSha256, original.digest);
+  const route = `/api/geo/projects/${project.id}/articles/${articleId}/release`;
+  refused(await call("POST", route, { body: {} }), 409, "geo_article_review_stale");
+  refused(await call("POST", route, { body: { expectedResultVersionId: original.versionId } }), 400, "geo_article_review_invalid");
+  refused(await call("POST", route, { body: { expectedResultVersionId: original.versionId, expectedDigest: "b".repeat(64) } }), 409, "geo_article_review_stale");
+  const next = { versionId: `rv_${"b".repeat(64)}`, digest: "b".repeat(64), path: "artifacts/result-revisions/review/output/article.md", supersedesVersionId: original.versionId,
+    producer: { runId: "review-v1", sessionId: "review-session" } };
+  await store.linkArticleVersion(project.id, articleId, { version: next, expectedHeadVersionId: original.versionId });
+  refused(await call("POST", route, { body: { expectedResultVersionId: original.versionId, expectedDigest: original.digest } }), 409, "geo_article_review_stale");
+  assert.equal((await store.getArticle(project.id, articleId)).safety, "open");
+  const native = await geoRuntimeWrite({ store, project, what: "articles", body: { items: [{ path: next.path, layer: "popular", claimIds: [], safety: "released", contentSha256: next.digest }] } });
+  assert.equal(native.ids.length, 0); assert.ok(native.issues.some(issue => issue.field === "safety" && issue.code === "unknown_value"));
+  const released = await call("POST", route, { body: { expectedResultVersionId: next.versionId, expectedDigest: next.digest } });
+  assert.equal(released.status, 200); assert.equal(released.payload.data.safety, "released");
+});
+
+test('plan context creation enforces the ordinary JSON byte limit before staging', options, async () => {
+  const previous = service.planContexts;
+  let staged = 0;
+  service.planContexts = /** @type {any} */ ({ stage: async () => { staged++; return { referenceId: 'unexpected' }; } });
+  try {
+    const response = await call('POST', '/api/geo/projects/context-limit/strategy/context', { body: { note: 'x'.repeat(70_000) } });
+    refused(response, 413, 'body_too_large'); assert.equal(staged, 0);
+  } finally { service.planContexts = previous; }
 });

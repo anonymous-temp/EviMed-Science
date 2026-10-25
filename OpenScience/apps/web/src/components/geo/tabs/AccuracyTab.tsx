@@ -1,3 +1,4 @@
+import { GeoAnalysisWorkbench } from "../GeoAnalysisWorkbench";
 import { useMemo, useState } from "react";
 import {
   readGeoCell,
@@ -9,15 +10,15 @@ import {
 } from "@/lib/geoClient";
 import { Button } from "@/components/ui/Button";
 import { Delta } from "@/components/ui/Delta";
-import { Drawer } from "@/components/ui/Drawer";
 import type { FilterOption } from "@/components/ui/FilterChips";
 import { List } from "@/components/ui/ListRow";
 import { Note } from "@/components/ui/Note";
 import { Section } from "@/components/ui/Section";
 import { StatBand, StatTile } from "@/components/ui/StatTile";
 import type { ShareSegment } from "@/components/charts/ShareBar";
+import { useGeoErrorPages } from "../useGeoErrorPages";
 import { useGeoToolbar } from "../geoFrame";
-import { useGeoDiagnosis, useGeoMonitoring } from "../geoProjectData";
+import { useGeoDiagnosis } from "../geoProjectData";
 import { formatGeoValue, geoCellPhrase } from "../GeoCellText";
 import { coverageNotice, denominatorLine, readingChange, shownDelta, tileValue } from "../geoOverviewModel";
 import { engineName, GEO_ERROR_TYPE_WORDS, groupName } from "../geoText";
@@ -25,7 +26,7 @@ import { GEO_VIEW_PARAM, geoSectionId } from "../geoTabs";
 import { ClaimRow } from "../spine/ClaimRow";
 import { ClusterDrawerHost } from "../spine/ClusterDrawerHost";
 import { GEO_CLUSTER_FILTER_PARAM, GEO_ENGINE_PARAM, useGeoDrawerAddress, useGeoSearchChange, useGeoSearchParam } from "../spine/drawerParams";
-import { ErrorDrawer } from "../spine/ErrorDrawer";
+import { GeoErrorGroupDrawer } from "../GeoErrorGroupDrawer";
 import {
   claimRows,
   claimRowsOfEngine,
@@ -89,31 +90,27 @@ const TRACE_PARAM = "trace";
 
 export function AccuracyTab({ geoId, project }: { geoId: string; project: GeoProject }) {
   const diagnosis = useGeoDiagnosis(geoId);
-  const monitoring = useGeoMonitoring(geoId);
+  const change = useGeoSearchChange();
+  const refresh = () => { change({ selectionRef: null }); diagnosis.reload(); };
   if (diagnosis.state.kind === "loading") return <TabSkeleton />;
-  if (diagnosis.state.kind === "error") return <TabError message={diagnosis.state.message} onRetry={diagnosis.reload} />;
+  if (diagnosis.state.kind === "error") return <TabError message={diagnosis.state.message} onRetry={refresh} />;
   const diag = diagnosis.state.data;
-  const fresh = monitoring.state.kind === "ready" ? monitoring.state.data.newErrors : [];
-  return <Accuracy geoId={geoId} project={project} diagnosis={diag} fresh={Array.isArray(fresh) ? fresh : []} />;
+  return <><Accuracy geoId={geoId} project={project} diagnosis={diag} refresh={refresh} /><GeoAnalysisWorkbench embedded geoId={geoId} project={project} initialView="V12"/></>;
 }
 
 function Accuracy({
   geoId,
   project,
   diagnosis,
-  fresh,
+  refresh,
 }: {
   geoId: string;
   project: GeoProject;
   diagnosis: GeoDiagnosis;
-  fresh: GeoErrorRow[];
+  refresh: () => void;
 }) {
   const denominator = denominatorLine(project, diagnosis);
-  const known = new Set((Array.isArray(diagnosis.errors) ? diagnosis.errors : []).map((error) => error?.id));
-  const errors = [
-    ...(Array.isArray(diagnosis.errors) ? diagnosis.errors : []),
-    ...fresh.filter((error) => error && error.id && !known.has(error.id)),
-  ].filter((error) => error && error.id);
+  const errors = useMemo(() => Array.isArray(diagnosis.errors) ? diagnosis.errors : [], [diagnosis.errors]);
   const counts = errorTotals(diagnosis, errors);
   const accuracy = project.overview.metrics.find((metric) => metric.key === "accuracy") ?? null;
   // The accuracy rate's change is stated by the one rule: where its two readings were measured over different things there is no
@@ -124,6 +121,9 @@ function Accuracy({
   const wrongOurs = readGeoCell(modes?.wrongOurs);
   const omitted = readGeoCell(modes?.omitted);
   const wrongRival = readGeoCell(modes?.wrongCompetitor);
+  const partial = readGeoCell(modes?.partial);
+  const unknown = readGeoCell(modes?.unknown);
+  const refused = readGeoCell(modes?.refused);
 
   const tiles = [
     {
@@ -176,6 +176,9 @@ function Accuracy({
     { key: "omitted", label: "漏提我方", value: omitted.numerator ?? 0, tone: "quiet" },
     { key: "wrongOurs", label: "讲错我方", value: wrongOurs.numerator ?? 0, tone: "s3" },
     { key: "wrongRival", label: "讲错竞品", value: wrongRival.numerator ?? 0, tone: "s1" },
+    { key: "partial", label: "部分可判定", value: partial.numerator ?? 0, tone: "rival-2" },
+    { key: "unknown", label: "尚无法判定", value: unknown.numerator ?? 0, tone: "rival-3" },
+    { key: "refused", label: "明确拒答", value: refused.numerator ?? 0, tone: "quiet" },
   ];
 
   // ---- the selection the charts and the list share, kept in the address so the way back from an answer returns to the list as it was
@@ -206,31 +209,24 @@ function Accuracy({
   const wanted = ERROR_SHOWS.find((key) => key === showParam);
   const show: ErrorShow = wanted && showOptions.some((option) => option.value === wanted) ? wanted : counts.severe > 0 ? "severe" : "all";
 
-  const engines = enginesOf(errors);
+  const engines = diagnosis.selection?.engines ?? project.engines;
   const engine = engineParam && engines.includes(engineParam) ? engineParam : null;
-  const type = (Object.keys(GEO_ERROR_TYPE_WORDS) as GeoErrorType[]).find((key) => key === typeParam) ?? null;
+  const type = typeParam === "unknown" ? "unknown" : (Object.keys(GEO_ERROR_TYPE_WORDS) as GeoErrorType[]).find((key) => key === typeParam) ?? null;
   const trace = (["traced", "unattributable", "noRetrieval"] as const).find((key) => key === traceParam) ?? null;
   // The groups that have a wrong claim told in answers to their questions: a filter offers only what is there.
-  const groupsWithErrors = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const error of errors) {
-      const group = error.questionId ? groupOf.get(error.questionId) : undefined;
-      if (group) seen.set(group.id, group.name);
-    }
-    return [...seen.entries()].map(([value, name]) => ({ value, label: groupName(name) || "未命名问题群" }));
-  }, [errors, groupOf]);
+  const groupsWithErrors = useMemo(() => [...new Map([...groupOf.values()].map(group => [group.id, { value: group.id, label: groupName(group.name) || "未命名问题群" }])).values()], [groupOf]);
   const cluster = clusterParam && groupsWithErrors.some((entry) => entry.value === clusterParam) ? clusterParam : null;
-  const questions = useMemo(() => {
-    if (!cluster) return null;
-    return new Set([...groupOf.entries()].filter(([, group]) => group.id === cluster).map(([id]) => id));
-  }, [cluster, groupOf]);
-
-  const filtered = useMemo(() => filterErrors(errors, { show, engine, type, trace, questions, query }), [errors, show, engine, type, trace, questions, query]);
+  const pages = useGeoErrorPages(geoId, diagnosis, {
+    ...(show === "all" ? {} : { errorJudgmentState: "active" }),
+    ...(show === "severe" ? { errorSeverities: ["S3", "S4"], errorStatuses: ["open", "acting", "awaiting_remeasure"] }
+      : show === "open" ? { errorStatuses: ["open"] } : show === "acting" ? { errorStatuses: ["acting", "awaiting_remeasure"] } : {}),
+    ...(type ? { errorTypes: [type] } : {}), ...(trace ? { errorTrace: trace } : {}), errorSearch: query.trim(),
+  }, refresh);
+  const filtered = useMemo(() => filterErrors(pages.data?.errors ?? [], { show, engine, type, trace, query, questions: cluster ? new Set([...groupOf.entries()].filter(([, group]) => group.id === cluster).map(([id]) => id)) : null }), [pages.data, show, engine, type, trace, query, cluster, groupOf]);
   const claims = useMemo(() => claimRows(filtered), [filtered]);
-  const everyClaim = useMemo(() => claimRows(errors), [errors]);
   const narrowed = engine !== null || type !== null || trace !== null || cluster !== null || query.trim() !== "";
   // The server counts every row; the page carries a capped list. Said only while the list is the status chip alone.
-  const unlisted = narrowed ? 0 : Math.max(0, sizes[show] - filtered.length);
+  const total = pages.data?.errorPage?.total ?? null;
   const sections = useMemo(
     () => (view === "engines" ? enginesOf(filtered).map((name) => ({ engine: name, claims: claimRowsOfEngine(filtered, name) })) : []),
     [view, filtered],
@@ -266,12 +262,12 @@ function Accuracy({
         value: cluster,
         onChange: setClusterParam,
       }] : []),
-      ...(type ? [{ kind: "toggle" as const, label: `类型：${GEO_ERROR_TYPE_WORDS[type]} ×`, pressed: true, onChange: () => setTypeParam(null) }] : []),
+      ...(type ? [{ kind: "toggle" as const, label: `类型：${type === "unknown" ? "未知" : GEO_ERROR_TYPE_WORDS[type]} ×`, pressed: true, onChange: () => setTypeParam(null) }] : []),
       ...(trace ? [{ kind: "toggle" as const, label: `出处：${ERROR_TRACE_WORDS[trace]} ×`, pressed: true, onChange: () => setTraceParam(null) }] : []),
     ],
     search: { label: "搜索说法", value: query, maxLength: 80, onChange: setQuery, onClear: () => setQuery("") },
     onClear: narrowed ? clearAll : undefined,
-    summary: `${claims.length} 条说法 · ${filtered.length} 条讲错`,
+    summary: total == null ? "正在读取讲错清单" : `共 ${total} 条讲错 · 已读取 ${filtered.length} 条，归为 ${claims.length} 条说法`,
   } : null);
 
   const product = project.product?.brandName || project.product?.genericName || project.name;
@@ -279,11 +275,8 @@ function Accuracy({
   const canRun = !abilities || abilities.includes("run");
   const correctClaim = (claim: ClaimModel) => {
     setBusyClaim(claim.key);
-    // A request about one wrong statement opens a fresh conversation: the project's latest may be a strategy run's own session
-    // (r19-geos hand-off §9.5c).
-    void open({ projectId: project.projectId, sessionId: null }, correctionBrief(claim, product)).finally(() => setBusyClaim(null));
+    void open({ projectId: project.projectId, sessionId: project.sessionId }, correctionBrief(claim, product)).finally(() => setBusyClaim(null));
   };
-  const opened = drawer.error ? everyClaim.find((claim) => claim.key === drawer.error) ?? null : null;
 
   const rowOf = (claim: ClaimModel, showEngines: boolean) => (
     <ClaimRow
@@ -298,7 +291,7 @@ function Accuracy({
       onCorrect={() => correctClaim(claim)}
     />
   );
-  const headingNote = unlisted > 0 ? `这里列出了 ${filtered.length} 条讲错，还有 ${unlisted} 条没有列出。` : null;
+
 
   return (
     <div data-geo-tab="accuracy" className="flex flex-col gap-6">
@@ -321,12 +314,14 @@ function Accuracy({
 
       <ErrorCharts
         errors={errors}
+        summary={pages.data?.activeErrorSummary ?? diagnosis.activeErrorSummary ?? pages.data?.errorSummary ?? diagnosis.scopeErrorSummary ?? diagnosis.errorSummary}
         composition={composition}
         compositionTitle={correct.numerator != null && wrongOurs.numerator != null
-          // Counted by answer, beside a rate counted by statement: the heading says which.
+          // Composition is answer-level, with assessment uncertainty visible beside it.
           ? `按回答计，讲错我方 ${wrongOurs.numerator.toLocaleString("zh-CN")} 次、讲对 ${correct.numerator.toLocaleString("zh-CN")} 次`
           : "这一轮的回答里我方出现在哪些位置"}
         denominator={denominator}
+        historical={accuracy?.cell.methodVersion === null}
         selection={{
           engine,
           type,
@@ -342,10 +337,11 @@ function Accuracy({
         <div id={geoSectionId("errors")}>
           <Section
             title={view === "claims" ? "讲错清单，按严重度排序" : "讲错清单，按引擎"}
-            count={`${claims.length} 条说法`}
+            count={total == null ? undefined : `共 ${total} 条讲错 · 本页 ${claims.length} 条说法`}
             level="section"
           >
-            {flat.length === 0 ? (
+            {pages.error && <Note action={<Button variant="secondary" size="sm" onClick={pages.retry}>{pages.stale ? "刷新范围" : "重试"}</Button>}>{pages.stale ? "判定或测量范围已经变化，请刷新后继续。" : pages.error}</Note>}
+            {pages.loading && !pages.data ? <TabSkeleton /> : flat.length === 0 ? (
               <Note action={narrowed ? <Button variant="secondary" size="sm" onClick={clearAll}>清除筛选</Button> : undefined}>
                 {narrowed ? "没有符合的说法。" : "这一类里没有讲错。"}
               </Note>
@@ -369,19 +365,16 @@ function Accuracy({
                   })
                 )}
                 <ShowMore remaining={remaining} unit="条说法" onMore={more} />
+                {remaining === 0 && pages.data?.errorPage?.more && <Button variant="secondary" size="sm" loading={pages.loading} onClick={pages.more}>读取更多讲错</Button>}
               </div>
             )}
-            {headingNote && <p className="pt-2 text-caption text-text-3">{headingNote}</p>}
+
           </Section>
         </div>
       )}
 
-      {drawer.error && opened && (
-        <ErrorDrawer geoId={geoId} project={project} claim={opened} actions={everyAction} groupOf={groupOf} onClose={drawer.close} />
-      )}
-      {drawer.error && !opened && (
-        <ErrorDrawerGone onClose={drawer.close} />
-      )}
+      {drawer.error && <GeoErrorGroupDrawer geoId={geoId} project={project} fingerprint={drawer.error}
+        selectionRef={diagnosis.selection?.reference} actions={everyAction} groupOf={groupOf} onClose={drawer.close} onRefreshScope={refresh}/>}
       <ClusterDrawerHost geoId={geoId} project={project} />
     </div>
   );
@@ -398,20 +391,9 @@ export function errorTotals(diagnosis: GeoDiagnosis, rows: readonly GeoErrorRow[
   }
   return {
     total: rows.length,
-    open: rows.filter((error) => error.status === "open").length,
-    working: rows.filter((error) => error.status === "acting" || error.status === "awaiting_remeasure").length,
-    closed: rows.filter((error) => error.status === "closed").length,
+    open: rows.filter((error) => error.judgmentState !== "withdrawn" && error.status === "open").length,
+    working: rows.filter((error) => error.judgmentState !== "withdrawn" && (error.status === "acting" || error.status === "awaiting_remeasure")).length,
+    closed: rows.filter((error) => error.judgmentState !== "withdrawn" && error.status === "closed").length,
     severe: rows.filter(isSevereError).length,
   };
-}
-
-/** A link to a claim the list no longer holds (the round moved on, or it was closed and trimmed): said, and the way back. */
-function ErrorDrawerGone({ onClose }: { onClose: () => void }) {
-  return (
-    <Drawer title="这条说法已经不在清单里了" onClose={onClose}>
-      <Note action={<Button variant="secondary" size="sm" onClick={onClose}>回到清单</Button>}>
-        新的一轮测量里没有再测到它，或者它已经关闭。
-      </Note>
-    </Drawer>
-  );
 }

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const network = vi.hoisted(() => ({ productRequest: vi.fn() }));
 vi.mock("./productClient", () => ({ productRequest: network.productRequest }));
 
-import { exportGeo, getGeoProgrammeRuns, runGeoStep } from "./geoClient";
+import { exportGeo, getGeoProgrammeRuns, releaseGeoArticle, runGeoStep } from "./geoClient";
 
 beforeEach(() => network.productRequest.mockReset());
 
@@ -32,8 +32,17 @@ describe("starting work, and reading what the programme did", () => {
     expect(runs[1].at).toMatch(/^(2026-09-14|9月14日)$/);
     expect(runs[2].at).toBeNull();
     // Nothing the page would print is an id.
-    expect(JSON.stringify(runs)).not.toMatch(/run_|geo:/);
+    expect(runs.map(run => run.runId)).toEqual(['run_1', 'run_2', 'run_3']);
+    expect(JSON.stringify(runs.map(run => [run.label, run.at]))).not.toMatch(/run_|geo:/);
     network.productRequest.mockResolvedValue({});
     expect(await getGeoProgrammeRuns("geo_1")).toEqual([]);
   });
+});
+
+
+it("sends the observed immutable article version and digest with a release", async () => {
+  network.productRequest.mockResolvedValue({ safety: "released" });
+  const observed = { expectedResultVersionId: `rv_${"a".repeat(64)}`, expectedDigest: "a".repeat(64) };
+  await releaseGeoArticle("geo_1", "article_1", observed);
+  expect(network.productRequest).toHaveBeenCalledWith("/geo/projects/geo_1/articles/article_1/release", "POST", observed);
 });

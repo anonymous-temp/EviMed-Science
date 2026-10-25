@@ -126,6 +126,7 @@ import {
   stepPolicy,
   submissionVerdict,
   toolPolicy,
+  selectedGeoInputReadAllowed,
   unmetDependencies,
   NATIVE_CHILD_TOOL_DENY,
   CANCELLED_JOB_STOP_WAIT_MS,
@@ -746,6 +747,17 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     const entry = sessionState(String(agent.session.id ?? ''))
     entry.assembled = true
     let changed = false
+    if (entry.nativeRouteNeedsReset || claimed.turn > 0 && entry.nativeRouteTurn !== claimed.turn) {
+      entry.nativeRouteNeedsReset = false
+      entry.nativeRouteTurn = claimed.turn
+      if (entry.nativeGeoContextRef) {
+        entry.nativeGeoContextRef = null
+        entry.nativeGeoAnalysisRead = null
+        entry.nativeCapability = undefined
+        entry.inlineCapabilities.clear()
+        changed = applyRootNarrowing(agent, [])
+      }
+    }
     try {
       const revision = entry.contextRevision
       await loadBrief(ctx, agent, sessionState, config)
@@ -754,25 +766,38 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         entry.inlineCapabilities.clear()
         changed = applyRootNarrowing(agent, [])
       }
-      if (claimed.inputs.length) {
+      if (claimed.inputs.length && !entry.nativeGeoContextRef) {
         const resolve = ctx.get('evimedNativeRoute')
         if (typeof resolve === 'function') {
           const inputs = await Promise.all(claimed.inputs.map(async (input) => ({ requestId: input.requestId, textDigest: await sha256Hex(input.text) })))
           const contexts = await resolve(entry.sessionId, inputs)
-          if (claimed.signal?.aborted) return false
+          if (claimed.signal?.aborted) return changed
           const matching = contexts.filter((/** @type {any} */ item) => inputs.some(input => input.requestId === item?.requestId && input.textDigest === item?.textDigest)
             && /^[a-f0-9]{64}$/.test(item?.digest ?? '') && typeof item?.route?.effectiveAgentId === 'string')
-          const ids = [...new Set(matching.map((/** @type {any} */ item) => item.route.effectiveAgentId))]
-          if (ids.length === 1) {
-            const manifest = inlineManifest(entry, ids[0])
+          // Adoption uses the initiating input, never a union of queued requests or a later matching route.
+          const selected = matching.find((/** @type {any} */ item) => item.requestId === inputs[0]?.requestId && item.textDigest === inputs[0]?.textDigest)
+          const capabilityId = selected?.route.effectiveAgentId
+          if (capabilityId) {
+            const manifest = inlineManifest(entry, capabilityId)
             // An ordinary route is also authoritative: it removes a former
             // capability's tools. Unknown/internal ids never authorize tools.
-            if (ids[0] === 'open-domain-answer' || (manifest && manifest.visibility !== 'internal')) {
-              entry.nativeCapability = ids[0] === 'open-domain-answer' ? '' : ids[0]
+            if (capabilityId === 'open-domain-answer' || (manifest && manifest.visibility !== 'internal')) {
+              entry.nativeCapability = capabilityId === 'open-domain-answer' ? '' : capabilityId
               entry.nativeManagedDispatch = Boolean(entry.routedCapability && (revision !== entry.contextRevision
                 || inputs.some(input => input.requestId === entry.contextRevision)))
               entry.inlineCapabilities.clear()
               changed = applyRootNarrowing(agent, []) || changed
+              entry.nativeGeoContextRef = /^gpc_[a-f0-9]{64}$/.test(selected.route.geoContextRef ?? '') ? selected.route.geoContextRef : null
+              entry.nativeGeoAnalysisRead = null
+              const generalized = selected.route.geoInputRead
+              const legacy = selected.route.geoAnalysisRead
+              const read = generalized ?? (legacy && typeof legacy === 'object' && Object.keys(legacy).length === 1 ? { referenceId: legacy.referenceId, what: 'analysis' } : null)
+              if (!entry.nativeManagedDispatch && capabilityId === 'open-domain-answer' && entry.nativeGeoContextRef
+                && read && typeof read === 'object' && Object.keys(read).length === 2 && ['analysis', 'signal'].includes(read.what)
+                && read.referenceId === entry.nativeGeoContextRef && (!generalized || !legacy)) {
+                entry.nativeGeoAnalysisRead = { referenceId: read.referenceId, what: read.what }
+                changed = applyRootNarrowing(agent, [`${MCP_TOOL_PREFIX}geo_read`]) || changed
+              }
             }
           }
         }
@@ -1086,6 +1111,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   ))
 
   ctx.effect(() => onSessionEvent(ctx, (session, event) => {
+    if (!session.subagent && ['turn/start', 'turn/end'].includes(event.type)) sessionState(session.sessionId).nativeRouteNeedsReset = true
     if (event.type !== 'assistant/message') return
     // Child work is represented by its subagent receipt and evidence rows.
     // Writing a child entry under the parent's runId would replace the root
@@ -1205,6 +1231,10 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   // ---- policy: path guard, budget, attempt ceiling ------------------------
   ctx.effect(() => onToolPolicy(ctx, (call) => {
     const { entry } = ownedSessionState(call.sessionId)
+    if (call.sessionId === entry.sessionId && entry.nativeGeoAnalysisRead && !entry.nativeManagedDispatch && !entry.nativeCapability
+      && call.name === `${MCP_TOOL_PREFIX}geo_read` && !selectedGeoInputReadAllowed(call.args, entry.nativeGeoAnalysisRead)) {
+      return { allow: false, code: 'geo_read_filter_invalid', reason: '请读取本次已选择的内容，使用绑定的 planContextRef 和分页参数。' }
+    }
     let writers = writersByRun.get(entry.runId)
     if (!writers) {
       writers = new Map()
@@ -3320,6 +3350,8 @@ function resetRunState(entry, runId) {
   entry.wakeSuppressed = false
   entry.completed = false
   entry.inlineCapabilities = new Set()
+  entry.nativeGeoContextRef = null
+  entry.nativeGeoAnalysisRead = null
   entry.frozen = false
 }
 

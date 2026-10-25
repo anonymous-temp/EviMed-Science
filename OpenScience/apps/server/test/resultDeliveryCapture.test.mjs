@@ -430,3 +430,28 @@ test("every version of a run carries the run's clinical-safety findings and its 
   const quiet = await captureResultDelivery({ ...f, run: { id: "run-quiet", sessionId: "session", qualityFindings: [{ code: "x", message: "never read" }] }, receipt: null, files: [f.reportPath] });
   assert.deepEqual(runFindings(quiet.items[0]), []);
 });
+
+test("a receipt for A bytes cannot give concurrently overwritten B bytes A's native-session ownership", async t => {
+  const f = await fixture(t);
+  const contentB = "# Session B\nA different conversation overwrote this file.\n";
+  await writeFile(path.join(f.project.workspaceDir, f.reportPath), contentB);
+  const runA = { ...f.run, status: "succeeded", sessionId: "session-a", outputFiles: [f.reportPath] };
+  const captured = await captureFinishedRun({ results: f.results, project: f.project, run: runA, readReceipt: async () => f.receipt });
+  const report = captured.items.find(item => item.path === f.reportPath);
+  assert.equal(report.digest, sha(contentB));
+  assert.equal(report.producer.kind, "workspace"); assert.equal(report.producer.sessionId, null);
+  assert.equal((await f.results.query("owner", "p", { producer: { sessionId: "session-a" } })).items.some(item => item.path === f.reportPath && item.digest === sha(contentB)), false);
+  assert.equal((await f.results.raw("owner", "p", report.versionId)).bytes.toString(), contentB);
+});
+
+test("an independent bound same-run write is retained when its bytes differ from the earlier delivery receipt", async t => {
+  const f = await fixture(t);
+  const contentB = "# Corrected by this run\nA later owned write.\n";
+  await writeFile(path.join(f.project.workspaceDir, f.reportPath), contentB);
+  const witness = await f.results.captureFile({ userId: "owner", project: f.project, relativePath: f.reportPath, expectedDigest: sha(contentB),
+    producer: { kind: "tool", runId: f.run.id, sessionId: f.run.sessionId, callId: "owned-write-b" } });
+  const captured = await captureFinishedRun({ results: f.results, project: f.project, run: { ...f.run, status: "succeeded", outputFiles: [f.reportPath] }, readReceipt: async () => f.receipt });
+  const report = captured.items.find(item => item.path === f.reportPath);
+  assert.equal(report.versionId, witness.versionId); assert.equal(report.producer.kind, "tool");
+  assert.equal(report.coverage.producer, "bound"); assert.equal(report.digest, sha(contentB));
+});

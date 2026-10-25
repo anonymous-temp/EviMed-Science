@@ -159,7 +159,7 @@ export function articleMeta(article: GeoArticle): string {
 
 /** 「已发布 · 已被 AI 引用」. */
 export function articleStatusLine(article: GeoArticle): string {
-  const word = GEO_ARTICLE_STATUS_WORDS[article.status] ?? "—";
+  const word = (GEO_ARTICLE_STATUS_WORDS[article.status] ?? "—") + (article.onlineUpdateNeeded ? " · 线上内容待更新" : "");
   return article.cited ? `${word} · 已被 AI 引用` : word;
 }
 

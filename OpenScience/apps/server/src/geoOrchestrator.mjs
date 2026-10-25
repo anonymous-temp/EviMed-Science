@@ -1,3 +1,4 @@
+import { withGeoSignalLease } from "./geoSignalProgress.mjs";
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
 import { GEO_RESEARCH_CAPABILITIES, GEO_ENGINE_LABELS_ZH, GEO_POOL_LABELS_ZH, GEO_STALE_PLACEMENT_WEEKS, GEO_STEP_LABELS_ZH, GEO_STEPS, allowanceWaitingNote, canonicalGeoUrl, geoGroupShort, geoPlacementStale, geoPoolTarget, geoValueActive, geoValueList, geoValueText, geoVisibleQuestion, stepWaitingFor } from "@evimed/domain";
 import { geoProjectFromRow } from "./geoStore.mjs";
@@ -605,19 +606,20 @@ export class GeoOrchestrator {
    * @param {string} loop @param {() => Promise<unknown>} work
    */
   async leaseLoop(loop, work) {
-    const key = `lease:${loop}`;
+    const key = `lease:${loop}`, token = randomId();
     const got = await this.store.query(`INSERT INTO evimed_geo.schedule_marks (geo_project_id, key, user_id, kind, state, detail)
-      VALUES ('_platform', $1, '_platform', 'request', 'running', jsonb_build_object('owner', $2::text))
-      ON CONFLICT (geo_project_id, key) DO UPDATE SET state = 'running', detail = jsonb_build_object('owner', $2::text), done_at = NULL, updated_at = now()
+      VALUES ('_platform', $1, '_platform', 'request', 'running', jsonb_build_object('owner', $2::text, 'token', $4::text))
+      ON CONFLICT (geo_project_id, key) DO UPDATE SET state = 'running', detail = jsonb_build_object('owner', $2::text, 'token', $4::text), done_at = NULL, updated_at = now()
         WHERE schedule_marks.state <> 'running' OR schedule_marks.updated_at < now() - make_interval(secs => $3)
           OR schedule_marks.detail ->> 'owner' = $2
-      RETURNING key`, [key, this.owner, this.leaseSeconds]);
+      RETURNING key`, [key, this.owner, this.leaseSeconds, token]);
     if (!got.rows.length) return { acquired: false };
     try {
-      return { acquired: true, value: await work() };
+      return { acquired: true, value: await (loop === "signals"
+        ? withGeoSignalLease(this.store.database, { key, owner: this.owner, token, seconds: this.leaseSeconds }, work) : work()) };
     } finally {
       await this.store.query(`UPDATE evimed_geo.schedule_marks SET state = 'done', done_at = now(), updated_at = now()
-        WHERE geo_project_id = '_platform' AND key = $1 AND detail ->> 'owner' = $2`, [key, this.owner]).catch(() => {});
+        WHERE geo_project_id = '_platform' AND key = $1 AND detail ->> 'owner' = $2 AND detail ->> 'token' = $3`, [key, this.owner, token]).catch(() => {});
     }
   }
 
@@ -956,7 +958,8 @@ export class GeoOrchestrator {
 
   /** The latest locked question set and its map, or null. @param {string} geoId */
   async #lockedSet(geoId) {
-    const set = (await this.store.questionSets(geoId)).find((entry) => entry.lockedAt);
+    const sets = await this.store.questionSets(geoId);
+    const set = sets[0]?.contract?.samplingMode === "recurring" ? sets[0] : sets.find((entry) => entry.lockedAt);
     return set ? { version: set.version, groups: await this.store.questionMap(geoId, set.version) } : null;
   }
 
@@ -968,6 +971,9 @@ export class GeoOrchestrator {
    * @returns {Promise<string | null>} the round id, or null when not enqueued now
    */
   async #enqueueOnce(project, key, spec) {
+    const latestSet = (await this.store.query(`SELECT contract, version FROM evimed_geo.question_sets WHERE geo_project_id=$1 ORDER BY version DESC LIMIT 1`, [project.id])).rows[0];
+    const agreement = latestSet?.contract;
+    if (agreement?.samplingMode === "one_shot") return null;
     const existing = await this.#mark(project.id, key);
     if (existing && existing.state !== "claimed") return existing.round_id ?? null;
     if (!this.enqueueRound) return null;
@@ -982,7 +988,7 @@ export class GeoOrchestrator {
     try {
       const out = await this.enqueueRound({ geoProjectId: project.id, kind: spec.kind,
         ...(spec.questionIds ? { questionIds: spec.questionIds } : {}), ...(spec.engines ? { engines: spec.engines } : {}),
-        ...(spec.repeat ? { repeat: spec.repeat } : {}), ref: { ...(spec.ref ?? {}), scheduleKey: key } });
+        ...(agreement ? { engines: agreement.engines, repeat: agreement.repeats, contract: { ...agreement, questionVersion: Number(latestSet.version) } } : spec.repeat ? { repeat: spec.repeat } : {}), ref: { ...(spec.ref ?? {}), scheduleKey: key } });
       const roundId = typeof out === "string" ? out : String(out?.roundId ?? out?.id ?? out?.round?.id ?? "") || null;
       await this.#update(project.id, key, { state: "done", roundId });
       this.counters.roundsEnqueued += 1;
@@ -1047,7 +1053,7 @@ export class GeoOrchestrator {
         return project;
       }
       const current = await this.#step(project, "diagnosis", { status: questions === "minimal" ? "minimal" : "done", roundId: String(round.id) });
-      const wrong = Number((await this.store.query(`SELECT count(*)::integer AS n FROM evimed_geo.errors WHERE geo_project_id = $1 AND status <> 'closed'`,
+      const wrong = Number((await this.store.query(`SELECT count(*)::integer AS n FROM evimed_geo.errors WHERE geo_project_id = $1 AND status <> 'closed' AND judgment_state = 'active'`,
         [project.id])).rows[0]?.n ?? 0);
       const engines = Array.isArray(round.engines) && round.engines.length ? round.engines.length : project.engines.length;
       await this.#notice(current, `notice:diagnosis:${round.id}`,
@@ -1375,7 +1381,7 @@ export class GeoOrchestrator {
    */
   async #openErrors(project, assigned, limit, roundId = null, skipped = new Set()) {
     const rows = (await this.store.query(`SELECT e.id, e.engine, e.statement FROM evimed_geo.errors e
-      WHERE e.geo_project_id = $1 AND e.status IN ('open', 'acting')
+      WHERE e.geo_project_id = $1 AND e.status IN ('open', 'acting') AND e.judgment_state = 'active'
         AND ($2::text IS NULL OR EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.id = e.last_snapshot_id AND s.round_id = $2))
       ORDER BY e.severity DESC NULLS LAST, e.created_at LIMIT 100`, [project.id, roundId])).rows;
     return rows.filter((/** @type {any} */ row) => !skipped.has(String(row.id)) && (roundId || !assigned.has(String(row.id)))).slice(0, limit)
@@ -1531,9 +1537,19 @@ export class GeoOrchestrator {
       if (!["running"].includes(current.steps[step]?.status)) current = await this.#step(current, step, { status: "queued" });
     }
     try {
-      const policy = await this.policies.resolve("geo", { supplements: [] });
-      const supplements = policy.policy.supplements.filter((item) => item.capabilityId === spec.capabilityId).map((item) => item.text);
-      const brief = supplements.length ? `${spec.brief}\n\nPlatform strategy supplements (${policy.revisionId}):\n${supplements.join("\n")}` : spec.brief;
+      let policyContext = mark.detail?.policyContext;
+      if (policyContext?.dispatchId !== mark.dispatch_id || policyContext?.capabilityId !== spec.capabilityId) {
+        const policy = await this.policies.resolve("geo", { supplements: [] });
+        policyContext = { dispatchId: mark.dispatch_id, capabilityId: spec.capabilityId, revisionId: policy.revisionId,
+          supplements: policy.policy.supplements.filter((item) => item.capabilityId === spec.capabilityId).map((item) => item.text) };
+        if (!await this.#update(project.id, spec.key, { detail: { policyContext,
+          policyRevisionId: policyContext.supplements.length ? policyContext.revisionId : null } }, ["claimed"])) return { busy: true };
+      }
+      if (policyContext.supplements.length && this.policies.revisionUsable && !await this.policies.revisionUsable('geo', policyContext.revisionId)) {
+        await this.#update(project.id, spec.key, { state: 'pending', detail: { policyContext: null, policyRevisionId: null } }, ['claimed']);
+        return { deferred: 'policy_basis_changed' };
+      }
+      const brief = policyContext.supplements.length ? `${spec.brief}\n\nPlatform strategy supplements (${policyContext.revisionId}):\n${policyContext.supplements.join("\n")}` : spec.brief;
       const out = await /** @type {NonNullable<GeoOrchestrator["dispatchRun"]>} */ (this.dispatchRun)({
         userId: project.userId, projectId: project.projectId, geoProjectId: project.id, capabilityId: spec.capabilityId,
         dispatchId: String(mark.dispatch_id), reason: spec.reason, brief, question: spec.question,
@@ -1595,7 +1611,7 @@ export class GeoOrchestrator {
   async #notices(project) {
     if (!this.notifier) return;
     // An error the measurement already told (`notified_at`, its S3+ notice) is not told twice.
-    const errors = (await this.store.query(`SELECT e.* FROM evimed_geo.errors e WHERE e.geo_project_id = $1 AND e.status <> 'closed'
+    const errors = (await this.store.query(`SELECT e.* FROM evimed_geo.errors e WHERE e.geo_project_id = $1 AND e.status <> 'closed' AND e.judgment_state = 'active'
         AND e.notified_at IS NULL AND e.created_at >= now() - make_interval(days => $2)
         AND NOT EXISTS (SELECT 1 FROM evimed_geo.schedule_marks m WHERE m.geo_project_id = e.geo_project_id AND m.key = 'notice:error:' || e.id)
       ORDER BY e.severity DESC NULLS LAST, e.created_at LIMIT $3`, [project.id, GEO_RUN_RULES.noticeScanDays, GEO_RUN_RULES.noticesPerTick])).rows;

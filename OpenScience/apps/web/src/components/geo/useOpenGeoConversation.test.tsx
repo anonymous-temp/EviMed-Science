@@ -1,175 +1,74 @@
 import { useState } from "react";
-import { act, render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getWebProjectId, webErrorMessage, WebApiError } from "@/lib/apiClient";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, useLocation } from "react-router";
 import { useProjectStore } from "@/lib/projects";
 import { useToastStore } from "@/lib/toast";
-import type { GeoProject } from "@/lib/geoClient";
-import { GeoFrameContext, type GeoFrameApi } from "./geoFrame";
-import { useOpenGeoConversation } from "./useOpenGeoConversation";
+import { useOpenGeoConversation, type GeoConversationTarget } from "./useOpenGeoConversation";
 
-const mocks = vi.hoisted(() => ({
-  projects: [] as Array<{ id: string; name: string }>,
-  listWebProjects: vi.fn(),
-  fetchWebMe: vi.fn(),
-  listGeoProjects: vi.fn(),
-  getGeoProject: vi.fn(),
-}));
+const mocks=vi.hoisted(()=>({open:vi.fn(),list:vi.fn()}));
+vi.mock("@/lib/geoNativeClient",()=>({openGeoConversation:mocks.open}));
+vi.mock("@/lib/geoClient",async original=>({...await original<typeof import("@/lib/geoClient")>(),listGeoProjects:mocks.list}));
+vi.mock("@/lib/runtimeWarm",()=>({warmWebRuntime:vi.fn()}));
 
-vi.mock("@/lib/apiClient", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/apiClient")>()),
-  hasWebApi: true,
-  listWebProjects: mocks.listWebProjects,
-  fetchWebMe: mocks.fetchWebMe,
-}));
-
-vi.mock("@/lib/geoClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/geoClient")>()), listGeoProjects: mocks.listGeoProjects, getGeoProject: mocks.getGeoProject }));
-
-vi.mock("@/lib/runtimeWarm", () => ({ warmWebRuntime: vi.fn() }));
-
-function Opener({ sessionId, draft }: { sessionId: string | null; draft?: string }) {
-  const open = useOpenGeoConversation();
-  const [result, setResult] = useState("");
-  return (
-    <>
-      <button type="button" onClick={() => { void open({ projectId: "p-new", sessionId }, draft).then((opened) => setResult(String(opened))); }}>open</button>
-      <span data-testid="result">{result}</span>
-    </>
-  );
+function Opener({target,draft}:{target:GeoConversationTarget;draft?:string}) {
+  const open=useOpenGeoConversation(),location=useLocation();
+  const [result,setResult]=useState("");
+  return <><button type="button" onClick={()=>{void open(target,draft).then(value=>setResult(String(value)));}}>open</button>
+    <pre data-testid="location">{JSON.stringify({path:location.pathname,search:location.search,intent:location.state?.runtimeUiIntent})}</pre><span data-testid="result">{result}</span></>;
 }
-
-function Probe() {
-  const location = useLocation();
-  return <pre data-testid="probe">{JSON.stringify({ path: location.pathname, intent: location.state?.runtimeUiIntent ?? null })}</pre>;
+const target={geoId:"geo-owned",projectId:"same-id",sessionId:null};
+const descriptor=(sessionId="native-root")=>({projectId:"same-id",projectName:"Shared project",sessionId,scope:{kind:"geo",geoProjectId:"geo-owned",sessionId}});
+const current=()=>JSON.parse(screen.getByTestId("location").textContent!);
+function setup(value:GeoConversationTarget=target,draft?:string,initial="/app/geo/geo-owned/overview") {
+  render(<MemoryRouter initialEntries={[initial]}><Opener target={value} draft={draft}/></MemoryRouter>);
 }
+beforeEach(()=>{vi.clearAllMocks();useProjectStore.setState({currentId:"default",projects:[{id:"same-id",name:"Personal project"}],switching:null});useToastStore.setState({toasts:[]});mocks.open.mockImplementation(async(_geoId,selected)=>descriptor(selected.sessionId??"native-root"));mocks.list.mockResolvedValue([{id:"geo-owned",projectId:"same-id"}]);});
+afterEach(()=>useProjectStore.getState().clear());
 
-function renderOpener(props: { sessionId: string | null; draft?: string }, page?: { projectId: string; conversation: string | null }) {
-  // A project's page around the opener: the frame names the conversation it holds (`GeoFrameApi.conversation`).
-  const frame = page ? ({ project: { projectId: page.projectId } as GeoProject, conversation: page.conversation } as GeoFrameApi) : null;
-  render(
-    <MemoryRouter initialEntries={["/app/geo"]}>
-      <GeoFrameContext.Provider value={frame}>
-        <Routes><Route path="*" element={<><Opener {...props} /><Probe /></>} /></Routes>
-      </GeoFrameContext.Provider>
-    </MemoryRouter>,
-  );
-}
-
-const probe = () => JSON.parse(screen.getByTestId("probe").textContent!) as { path: string; intent: Record<string, unknown> | null };
-
-beforeEach(() => {
-  vi.clearAllMocks();
-  mocks.listGeoProjects.mockResolvedValue([{ id: "geo_new", projectId: "p-new" }]);
-  mocks.getGeoProject.mockResolvedValue({ id: "geo_new", projectId: "p-new", sessionId: null });
-  window.sessionStorage.clear();
-  // The remembered project is the next test's current one otherwise, and a switch to it would not be a switch.
-  window.localStorage.clear();
-  useToastStore.setState({ toasts: [] });
-  useProjectStore.getState().clear();
-  mocks.projects = [{ id: "default", name: "我的研究" }];
-  mocks.listWebProjects.mockImplementation(async () => mocks.projects);
-  mocks.fetchWebMe.mockImplementation(async ({ projectId }: { projectId?: string } = {}) => ({
-    user: { id: "u", name: "u" }, project: { id: projectId ?? getWebProjectId(), name: "x" }, projects: mocks.projects,
-  }));
-});
-
-afterEach(() => useProjectStore.getState().clear());
-
-describe("opening a GEO project's conversation", () => {
-  it("switches the shell to the GEO project first, then opens the conversation with the draft unsent", async () => {
-    // Created a moment ago: not in the list the shell read at start.
-    mocks.projects = [...mocks.projects, { id: "p-new", name: "玛仕度肽注射液" }];
-    renderOpener({ sessionId: "ses_new", draft: "品牌提及率：18%" });
-    await userEvent.click(screen.getByRole("button", { name: "open" }));
-    await waitFor(() => expect(probe().path).toBe("/app/geo/geo_new/chat/ses_new"));
-    expect(probe().intent).toMatchObject({ kind: "create", projectId: "p-new", sessionId: "ses_new", draft: "品牌提及率：18%" });
-    expect(useProjectStore.getState().currentId).toBe("p-new");
-    expect(getWebProjectId()).toBe("p-new");
-    expect(mocks.listWebProjects).toHaveBeenCalled();
-    expect(mocks.fetchWebMe).toHaveBeenCalledWith({ projectId: "p-new" });
-    expect(screen.getByTestId("result")).toHaveTextContent("true");
-    expect(useToastStore.getState().toasts).toEqual([]);
-  });
-
-  it("opens a new conversation in the project when it has none yet", async () => {
-    mocks.projects = [...mocks.projects, { id: "p-new", name: "玛仕度肽注射液" }];
-    renderOpener({ sessionId: null });
-    await userEvent.click(screen.getByRole("button", { name: "open" }));
-    await waitFor(() => expect(probe().path).toMatch(/^\/app\/geo\/geo_new\/chat\/[^/]+$/));
-    const intent = probe().intent!;
-    expect(intent).toMatchObject({ kind: "create", projectId: "p-new" });
-    expect(intent.draft).toBeUndefined();
-    expect(typeof intent.sessionId).toBe("string");
-  });
-
-  it("says so in one toast, in Chinese, when the project cannot be proved — and resolves false, still where it was", async () => {
-    mocks.projects = [...mocks.projects, { id: "p-new", name: "玛仕度肽注射液" }];
-    const refusal = new WebApiError("offline", { status: 503, code: "service_unavailable" });
-    mocks.fetchWebMe.mockRejectedValue(refusal);
-    renderOpener({ sessionId: "ses_new", draft: "品牌提及率：18%" });
-    await userEvent.click(screen.getByRole("button", { name: "open" }));
-    await waitFor(() => expect(screen.getByTestId("result")).toHaveTextContent("false"));
-    const toasts = useToastStore.getState().toasts;
-    expect(toasts.map((toast) => toast.tone)).toEqual(["error"]);
-    expect(toasts[0].message).toBe(webErrorMessage(refusal, { fallback: "对话暂时无法打开，请稍后重试。" }));
-    expect(toasts[0].message).toMatch(/[一-鿿]/);
-    expect(toasts[0].message).not.toMatch(/offline/);
-    expect(probe().path).toBe("/app/geo");
+describe("opening the exact GEO native descriptor",()=>{
+  it("keeps actor project selection while opening owner scope with an unsent draft",async()=>{
+    setup(target,"Preserve the denominator");await userEvent.click(screen.getByRole("button",{name:"open"}));
+    await waitFor(()=>expect(current().path).toBe("/app/geo/geo-owned/chat/native-root"));
+    expect(mocks.open).toHaveBeenCalledWith("geo-owned",{kind:"primary"});
+    expect(current().intent).toMatchObject({kind:"open",projectId:"same-id",sessionId:"native-root",draft:"Preserve the denominator",scope:descriptor().scope});
     expect(useProjectStore.getState().currentId).toBe("default");
   });
-
-  it("says the fallback sentence when the account cannot open the project and the refusal carries no code", async () => {
-    mocks.projects = [...mocks.projects, { id: "p-new", name: "玛仕度肽注射液" }];
-    // The server answered for another project: the store refuses with a plain error.
-    mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "x" }, projects: mocks.projects });
-    renderOpener({ sessionId: null });
-    await userEvent.click(screen.getByRole("button", { name: "open" }));
-    await waitFor(() => expect(screen.getByTestId("result")).toHaveTextContent("false"));
-    expect(useToastStore.getState().toasts.map((toast) => toast.message)).toEqual(["对话暂时无法打开，请稍后重试。"]);
-    expect(probe().path).toBe("/app/geo");
+  it("resumes the exact handling session despite another session in the URL",async()=>{
+    setup({...target,sessionId:"historical",exactSession:true},undefined,"/app/geo/geo-owned/overview?session=other");
+    await userEvent.click(screen.getByRole("button",{name:"open"}));
+    await waitFor(()=>expect(current().path).toBe("/app/geo/geo-owned/chat/historical"));
+    expect(mocks.open).toHaveBeenCalledWith("geo-owned",{kind:"session",sessionId:"historical"});
   });
-  it("abandons a pending GEO lookup when a later project switch wins", async () => {
-    let resolveProject!: (value: { id: string; projectId: string; sessionId: null }) => void;
-    mocks.projects = [...mocks.projects, { id: "p-new", name: "GEO" }, { id: "p-later", name: "Later" }];
-    mocks.getGeoProject.mockReturnValue(new Promise((resolve) => { resolveProject = resolve; }));
-    renderOpener({ sessionId: "ses_new" });
-    await userEvent.click(screen.getByRole("button", { name: "open" }));
-    await waitFor(() => expect(mocks.getGeoProject).toHaveBeenCalled());
-    await act(async () => { await useProjectStore.getState().select("p-later"); });
-    await act(async () => { resolveProject({ id: "geo_new", projectId: "p-new", sessionId: null }); });
-    await waitFor(() => expect(screen.getByTestId("result")).toHaveTextContent("false"));
-    expect(useProjectStore.getState().currentId).toBe("p-later");
-    expect(probe().path).toBe("/app/geo");
-    expect(useToastStore.getState().toasts).toEqual([]);
+  it("preserves selected planning and result references until native submission",async()=>{
+    const geoPlanContext={referenceId:`gpc_${"a".repeat(64)}`},resultRevision={referenceId:`rr_${"b".repeat(64)}`};
+    setup({...target,sessionId:"historical",geoPlanContext,resultRevision},"Review this article");
+    await userEvent.click(screen.getByRole("button",{name:"open"}));
+    await waitFor(()=>expect(current().intent).toMatchObject({kind:"open",geoPlanContext,resultRevision,draft:"Review this article"}));
   });
-
-  it("opens the conversation the page holds when the target names none — not the project's own, which another may have become", async () => {
-    mocks.projects = [...mocks.projects, { id: "p-new", name: "玛仕度肽注射液" }];
-    mocks.getGeoProject.mockResolvedValue({ id: "geo_new", projectId: "p-new", sessionId: "ses_project" });
-    renderOpener({ sessionId: null, draft: "写纠错稿" }, { projectId: "p-new", conversation: "ses_held" });
-    await userEvent.click(screen.getByRole("button", { name: "open" }));
-    await waitFor(() => expect(probe().path).toBe("/app/geo/geo_new/chat/ses_held"));
-    expect(probe().intent).toMatchObject({ projectId: "p-new", sessionId: "ses_held", draft: "写纠错稿" });
+  it("shows a failed exact target and never creates a replacement",async()=>{
+    mocks.open.mockRejectedValue(new Error("Historical session unavailable"));setup({...target,sessionId:"historical",exactSession:true});
+    await userEvent.click(screen.getByRole("button",{name:"open"}));await waitFor(()=>expect(screen.getByTestId("result")).toHaveTextContent("false"));
+    expect(current().path).toBe("/app/geo/geo-owned/overview");expect(mocks.open).toHaveBeenCalledTimes(1);expect(useToastStore.getState().toasts).toHaveLength(1);
   });
-
-  it("does not take another project's held conversation: a target in another project opens that project's own", async () => {
-    mocks.projects = [...mocks.projects, { id: "p-new", name: "玛仕度肽注射液" }];
-    mocks.getGeoProject.mockResolvedValue({ id: "geo_new", projectId: "p-new", sessionId: "ses_project" });
-    renderOpener({ sessionId: null }, { projectId: "p-other", conversation: "ses_held" });
-    await userEvent.click(screen.getByRole("button", { name: "open" }));
-    await waitFor(() => expect(probe().path).toBe("/app/geo/geo_new/chat/ses_project"));
+  it("refuses a returned session or project that differs from the selected target",async()=>{
+    mocks.open.mockResolvedValue({...descriptor(),projectId:"foreign"});setup({...target,sessionId:"historical",exactSession:true});
+    await userEvent.click(screen.getByRole("button",{name:"open"}));await waitFor(()=>expect(screen.getByTestId("result")).toHaveTextContent("false"));
+    expect(current().intent).toBeUndefined();
   });
-
-  it("refuses a GEO response for a different control-plane project", async () => {
-    mocks.projects = [...mocks.projects, { id: "p-new", name: "GEO" }];
-    mocks.getGeoProject.mockResolvedValue({ id: "geo_new", projectId: "p-other", sessionId: null });
-    renderOpener({ sessionId: "ses_new" });
-    await userEvent.click(screen.getByRole("button", { name: "open" }));
-    await waitFor(() => expect(screen.getByTestId("result")).toHaveTextContent("false"));
-    expect(mocks.fetchWebMe).not.toHaveBeenCalled();
-    expect(probe().path).toBe("/app/geo");
+  it("discards a descriptor that arrives after a newer request",async()=>{
+    let first:(value:ReturnType<typeof descriptor>)=>void=()=>{};
+    mocks.open.mockImplementationOnce(()=>new Promise(resolve=>{first=resolve;})).mockResolvedValueOnce(descriptor("new-root"));setup();
+    await userEvent.click(screen.getByRole("button",{name:"open"}));await userEvent.click(screen.getByRole("button",{name:"open"}));
+    await waitFor(()=>expect(current().path).toBe("/app/geo/geo-owned/chat/new-root"));first(descriptor("old-root"));
+    await waitFor(()=>expect(current().path).toBe("/app/geo/geo-owned/chat/new-root"));
   });
+});
 
+it("never substitutes the URL session for an unavailable exact handling root",async()=>{
+  setup({...target,sessionId:null,exactSession:true},undefined,"/app/geo/geo-owned/overview?session=other");
+  await userEvent.click(screen.getByRole("button",{name:"open"}));
+  await waitFor(()=>expect(screen.getByTestId("result")).toHaveTextContent("false"));
+  expect(mocks.open).not.toHaveBeenCalled();expect(current().intent).toBeUndefined();
 });

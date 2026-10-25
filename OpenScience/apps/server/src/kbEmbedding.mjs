@@ -97,21 +97,22 @@ export class KbEmbedder {
       throw new HttpError(502, "kb_embedding_response_invalid", "The embedding service returned an unusable answer.");
     }
     const rows = Array.isArray(parsed?.output?.embeddings) ? parsed.output.embeddings : [];
+    if (rows.length !== texts.length) {
+      this.counters.failures += 1;
+      throw new HttpError(502, "kb_embedding_response_invalid", "The embedding service returned the wrong number of vectors.");
+    }
     /** @type {number[][]} */
     const vectors = new Array(texts.length);
     for (const row of rows) {
       const index = row?.text_index;
       const vector = row?.embedding;
-      if (!Number.isInteger(index) || index < 0 || index >= texts.length || !Array.isArray(vector) || vector.length !== this.dimension
+      if (!Number.isInteger(index) || index < 0 || index >= texts.length || Object.hasOwn(vectors, index)
+        || !Array.isArray(vector) || vector.length !== this.dimension
         || !vector.every(Number.isFinite)) {
         this.counters.failures += 1;
         throw new HttpError(502, "kb_embedding_response_invalid", "The embedding service returned vectors of the wrong shape.");
       }
       vectors[index] = vector;
-    }
-    if (vectors.some((vector) => !vector)) {
-      this.counters.failures += 1;
-      throw new HttpError(502, "kb_embedding_response_invalid", "The embedding service left texts without vectors.");
     }
     this.counters.texts += texts.length;
     this.counters.tokens += Number(parsed?.usage?.total_tokens ?? parsed?.usage?.input_tokens ?? 0) || 0;

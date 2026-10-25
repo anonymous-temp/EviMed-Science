@@ -5,6 +5,16 @@ import vm from 'node:vm';
 import { RUNTIME_UI_MUX_RESPONSE_MAX_BYTES } from '@evimed/domain';
 import { installRuntimeUiTransport } from '../src/runtimeUiTransport.mjs';
 
+test('scoped bootstrap retains its non-owner hint through the pinned index assignment', () => {
+  const { target } = browser();
+  const access = { type: 'baseline', owner: false, grants: [{ resource: { kind: 'session', id: 'root' }, actions: ['session/prompt'] }] };
+  installRuntimeUiTransport({ ...frame, access }, target);
+  target.__DSH_REMOTE_ACCESS__ = { type: 'baseline', owner: true };
+  assert.deepEqual(target.__DSH_REMOTE_ACCESS__, access);
+  assert.throws(() => target.__DSH_REMOTE_ACCESS__.grants[0].actions.push('session/selectModel'));
+  assert.throws(() => installRuntimeUiTransport({ ...frame, access: { ...access, owner: true } }, browser().target), /Invalid scoped runtime access/);
+});
+
 const frame = { version: 1, frameId: 'frame-a', projectId: 'project-a', shellOrigin: 'https://app.example', prefix: '/__evimed/f/frame-a/', muxResponseMaxBytes: RUNTIME_UI_MUX_RESPONSE_MAX_BYTES };
 function browser() {
   /** @type {any[]} */ const sockets = [];
@@ -332,3 +342,58 @@ test('draft replacement, another session, cancellation and navigation clearing c
   hooks.dispose();
 });
 function settleTransport() { return new Promise(resolve => setImmediate(resolve)); }
+
+test('whole-file optional context uses the native words with no required draft prefix', async () => {
+  const { target, calls } = browser(); const hooks = installRuntimeUiTransport(frame, target);
+  const referenceId = `rr_${'c'.repeat(64)}`;
+  target.__EVIMED_RESULT_REVISION__.stage({ sessionId: 'session-a', referenceId, draft: '' });
+  const request = { sessionId: 'session-a', requestId: 'request-a', content: [{ type: 'text', text: 'Make the second paragraph clearer.' }] };
+  await hooks.fetch(new URL('https://app.example:8443/api/remote/session/prompt'), { method: 'POST', body: JSON.stringify({ type: 'client-request', method: 'session/prompt', payload: { args: { request } } }) });
+  const forwarded = JSON.parse(calls[0][1].body).payload.args.request;
+  assert.deepEqual(forwarded.evimedResultRevision, { referenceId }); assert.deepEqual(forwarded.content, request.content);
+  hooks.dispose();
+});
+
+test('a GEO context and artifact revision coexist only on the matching request, and retries retain both', async () => {
+  const { target, calls, sockets } = browser(); const hooks = installRuntimeUiTransport(frame, target);
+  const referenceId = `gpc_${'b'.repeat(64)}`, revisionId = `rr_${'a'.repeat(64)}`;
+  target.__EVIMED_GEO_PLAN__.stage({ sessionId: 's', referenceId, draft: 'Selected plan: ' });
+  target.__EVIMED_RESULT_REVISION__.stage({ sessionId: 's', referenceId: revisionId, draft: 'Selected plan: ' });
+  const request = { sessionId:'s',requestId:'r',content:[{type:'text',text:'Selected plan: revise this file'}] };
+  const body = JSON.stringify({type:'client-request',method:'session/prompt',payload:{args:{request}}});
+  await hooks.fetch(new URL('https://app.example:8443/api/remote/session/prompt'),{method:'POST',body});
+  const sent = JSON.parse(calls[0][1].body).payload.args.request;
+  assert.deepEqual(sent.geoPlanContext,{referenceId}); assert.deepEqual(sent.evimedResultRevision,{referenceId:revisionId});
+  const stream = hooks.openStream('session/prompt',{args:{request}},new AbortController().signal)[Symbol.asyncIterator]();
+  const pending = stream.next(); sockets[0].open(); await settleTransport();
+  assert.deepEqual(sockets[0].sent[0].payload.args.request.geoPlanContext,{referenceId});
+  sockets[0].message({type:'end',streamId:sockets[0].sent[0].streamId}); await pending;
+  await hooks.fetch(new URL('https://app.example:8443/api/remote/session/prompt'),{method:'POST',body:body.replace('"r"','"next"')});
+  assert.equal(JSON.parse(calls[1][1].body).payload.args.request.geoPlanContext,undefined);
+  target.__EVIMED_GEO_PLAN__.stage({sessionId:'s',referenceId,draft:'Selected plan: '});
+  await hooks.fetch(new URL('https://app.example:8443/api/remote/session/prompt'),{method:'POST',body:body.replace('Selected plan: revise this file','An unrelated draft')});
+  assert.deepEqual(JSON.parse(calls[2][1].body).payload.args.request.geoPlanContext,{referenceId},'editing the native draft retains the explicitly selected input');
+  hooks.dispose();
+});
+
+test('GEO selection survives normal draft edits but clears on cancellation, explicit removal and another session', async () => {
+  const { target, calls } = browser(); const hooks = installRuntimeUiTransport(frame, target);
+  const referenceId = `gpc_${'c'.repeat(64)}`;
+  const stage = () => target.__EVIMED_GEO_PLAN__.stage({ sessionId: 's', referenceId, draft: 'Use the selected plan.' });
+  let requestIndex = 0;
+  const submit = async (/** @type {string} */ text, sessionId = 's') => {
+    await hooks.fetch(new URL('https://app.example:8443/api/remote/session/prompt'), { method: 'POST', body: JSON.stringify({ type: 'client-request', method: 'session/prompt', payload: { args: { request: { sessionId, requestId: `edited-${requestIndex++}`, content: [{ type: 'text', text }] } } } }) });
+    return JSON.parse(calls.at(-1)[1].body).payload.args.request;
+  };
+  for (const text of ['Please focus on adults. Use the selected plan.', 'Use the selected evidence to compare options.']) {
+    stage(); const sent = await submit(text);
+    assert.deepEqual(sent.geoPlanContext, { referenceId }); assert.equal(sent.content[0].text, text);
+    assert.equal((await submit(text)).geoPlanContext, undefined, 'the next request cannot reuse a consumed selection');
+  }
+  stage(); target.__EVIMED_GEO_PLAN__.clear(); assert.equal((await submit('Use the selected plan.')).geoPlanContext, undefined);
+  stage(); await hooks.fetch(new URL('https://app.example:8443/api/remote/session/cancel'), {});
+  assert.equal((await submit('Use the selected plan.')).geoPlanContext, undefined);
+  stage(); assert.equal((await submit('Use the selected plan.', 'other')).geoPlanContext, undefined);
+  assert.equal((await submit('Use the selected plan.')).geoPlanContext, undefined);
+  hooks.dispose();
+});

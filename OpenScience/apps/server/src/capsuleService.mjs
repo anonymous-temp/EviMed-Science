@@ -1,3 +1,4 @@
+import { CONTEXT_ITEM_FIELDS } from "./geoContextItems.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import { CAPSULE_FACT_KINDS, CAPSULE_FACT_ORIGINS, CAPSULE_FACT_STATES, CAPSULE_LAYERS, capsuleActivationMode, stripPlatformTags } from "@evimed/domain";
 import { CapsuleScanner } from "./capsuleScan.mjs";
@@ -282,7 +283,8 @@ export class CapsuleService {
   /** @param {string} userId @param {string} capsuleId @param {Record<string,any>} options */
   async entries(userId, capsuleId, options = {}) {
     await this.get(userId, capsuleId);
-    return this.documents.list(userId, "fact", { limit: options.limit, cursor: options.cursor, filter: { capsuleId } });
+    return this.documents.list(userId, "fact", { limit: options.limit, cursor: options.cursor, projectId: options.projectId,
+      fields: options.fields, filter: { capsuleId } });
   }
 
   /** Generated/inferred entries are candidates; the user approves them explicitly.
@@ -816,8 +818,8 @@ export class CapsuleService {
    * named school at a time. The caller has checked that each is this account's
    * own; the eight-capsule bound applies to it as to the active list.
    * @param {string} userId @param {{ query: string, projectId?: string|null, limit?: number, factKinds?: string[], since?: string|null, scope?: string, accountCreatedAt?:string,
-   *   selection?: { capsuleId: string, mode: string }[] | null }} input */
-  async recall(userId, { query, projectId = null, limit = 10, factKinds = [], since = null, scope = "all", accountCreatedAt = undefined, selection: named = null }) {
+   *   projectOnly?:boolean, authorizeEntry?:Function|null, selection?: { capsuleId: string, mode: string }[] | null }} input */
+  async recall(userId, { query, projectId = null, limit = 10, factKinds = [], since = null, scope = "all", accountCreatedAt = undefined, selection: named = null, projectOnly = false, authorizeEntry = null }) {
     const needle = text(query, "query", 2000);
     if (!["all", "capsule"].includes(scope)) throw new HttpError(400, "capsule_scope_unavailable", "This memory scope is unavailable.");
     if (!Array.isArray(factKinds) || factKinds.length > CAPSULE_FACT_KINDS.length) throw new HttpError(400, "capsule_payload_invalid", "Invalid memory kinds.");
@@ -825,6 +827,7 @@ export class CapsuleService {
     productInteger(limit, 1, 30);
     const listed = Array.isArray(named) ? named : (await this.active(userId)).items;
     const active = listed.filter((x, i, all) => all.findIndex((y) => y.capsuleId === x.capsuleId) === i).slice(0, ACTIVE_CAPSULE_LIMIT);
+    if (projectOnly) return this.#projectRecall(userId, { needle, active, limit, factKinds, since, projectId, authorizeEntry });
     if (this.indexing && active.length) {
       try {
         const semantic = await this.#semanticRecall(userId, { needle, active, limit, factKinds, since, projectId, accountCreatedAt });
@@ -868,6 +871,51 @@ export class CapsuleService {
       });
     }
     return { items: matches.slice(0, limit), mode: "lexical", contextOnly: true };
+  }
+
+  /** Shared lookup never nominates whole capsule roots. Metadata authorization
+   * precedes exact-project SQL text search, and activation/revision are rechecked. */
+  async #projectRecall(userId, {needle,active,limit,factKinds,since,projectId,authorizeEntry}) {
+    const items=[], snapshots=new Map();
+    if (!projectId || typeof authorizeEntry !== "function") return {items,mode:"lexical",contextOnly:true};
+    for (const selection of active) {
+      if (!await this.inForce(userId,selection.capsuleId)) continue;
+      const capsule=await this.get(userId,selection.capsuleId);
+      let cursor=null; const seen=new Set();
+      do {
+        const page=await this.entries(userId,capsule.id,{limit:100,cursor,projectId,fields:CONTEXT_ITEM_FIELDS});
+        const permitted=[];
+        for (const row of page.items) if (row.projectId===projectId && row.payload.projectId===projectId
+          && row.payload.status==="approved" && await authorizeEntry(selection,row)) permitted.push(row);
+        if (permitted.length) {
+          const found=await this.documents.search(userId,"fact",needle,{limit:100,projectId,ids:permitted.map(row=>row.id),
+            expectedRevisions:permitted.map(row=>({id:row.id,revision:row.revision})),
+            filter:{capsuleId:capsule.id,status:"approved"},since,any:{field:"factKind",values:factKinds}});
+          for (const row of found) {
+            const nominated=permitted.find(item=>item.id===row.id);
+            if (!nominated || nominated.revision!==row.revision || row.projectId!==projectId || row.payload.projectId!==projectId
+              || !await authorizeEntry(selection,row) || !await this.inForce(userId,capsule.id)) continue;
+            snapshots.set(row.id,{row,selection});
+            items.push({id:row.id,capsuleId:capsule.id,capsuleTitle:capsule.payload.title,mode:selection.mode,
+              factKind:row.payload.factKind,layer:row.payload.layer,content:row.payload.content,origin:row.payload.origin,
+              provenance:row.payload.provenance,revision:row.revision,contextOnly:true,...labelled(capsule,row.payload)});
+          }
+        }
+        cursor=page.nextCursor;
+        if(cursor && seen.has(cursor)) throw new HttpError(503,"capsule_unavailable","Capsule listing did not advance.");
+        seen.add(cursor);
+      } while(cursor);
+    }
+    // A later page or authorizer may observe revocation of an earlier capsule.
+    const current=(await this.active(userId)).items.slice(0,ACTIVE_CAPSULE_LIMIT);
+    const result=[];
+    for(const item of items) {
+      const snapshot=snapshots.get(item.id);
+      if(current.some(selection=>selection.capsuleId===item.capsuleId) && await this.inForce(userId,item.capsuleId)
+        && await authorizeEntry(snapshot.selection,snapshot.row)) result.push(item);
+      if(result.length===limit) break;
+    }
+    return {items:result,mode:"lexical",contextOnly:true};
   }
 
   /**

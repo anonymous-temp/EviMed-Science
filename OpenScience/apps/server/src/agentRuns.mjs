@@ -1,3 +1,4 @@
+import { mergeInputAttribution } from "./geoNativeInputs.mjs";
 import { PLATFORM_SKILL_GENERATION_MAX_PINS } from './platformSkillLimits.mjs';
 import { createPlatformSkillTelemetry } from './platformSkillTelemetry.mjs';
 import { reviewDeliveredRegister } from "./reportRegisterJudge.mjs";
@@ -840,6 +841,7 @@ function foldEvents(events) {
       runs.set(id, Object.freeze({
         ...current,
         ...(!current.promptDispatchStartedAt&&typeof event.promptDispatchStartedAt==='string'&&Number.isFinite(Date.parse(event.promptDispatchStartedAt))?{promptDispatchStartedAt:event.promptDispatchStartedAt}:{}),
+        ...(event.inputAttribution ? { inputAttribution: mergeInputAttribution(current.inputAttribution,event.inputAttribution) } : {}),
         ...(event.transcript ? { transcript: normalizeTranscriptReceipt(event.transcript) } : {}),
         ...(event.capabilityHandbooks ? { capabilityHandbooks: normalizeCapabilityHandbooks(event.capabilityHandbooks) } : {}),
         ...(event.methodsLoaded ? { methodsLoaded: normalizeMethodDigests(event.methodsLoaded) } : {}),
@@ -1333,7 +1335,14 @@ function normalizeSteer(event) {
   const requestId = typeof event.steerRequestId === "string" && event.steerRequestId ? event.steerRequestId
     : Array.isArray(event.requestIds) && typeof event.requestIds[0] === "string" ? event.requestIds[0] : "";
   const at = Number.isFinite(Date.parse(String(event.steerAt ?? ""))) ? new Date(event.steerAt).toISOString() : new Date(0).toISOString();
-  return { requestId: requestId.slice(0, 512), text: event.steerText.trim().slice(0, STEER_TEXT_CHARS), at };
+  const input = event.inputReceipt;
+  const receipt = input && /^gni_[a-f0-9]{64}$/u.test(input.referenceId ?? '') && input.actor?.kind === "human"
+    && typeof input.actor.id === "string" && typeof input.actor.createdAt === "string" && Number.isSafeInteger(input.inputSeq)
+    && Number.isSafeInteger(input.turnStartSeq) && /^[a-f0-9]{64}$/u.test(input.originalTextDigest ?? "")
+    ? { referenceId: input.referenceId, actor: {kind:"human",id:input.actor.id,createdAt:input.actor.createdAt},
+      inputSeq:input.inputSeq,turnStartSeq:input.turnStartSeq,originalTextDigest:input.originalTextDigest } : null;
+  return { requestId: requestId.slice(0, 512), text: event.steerText.trim().slice(0, STEER_TEXT_CHARS), at,
+    ...(receipt ? {inputReceipt:receipt} : {}) };
 }
 
 /** Native request identities are opaque strings, not our short resource ids. */
@@ -4380,6 +4389,7 @@ export function isResearcherRun(run) {
 export class AgentRunStore {
   constructor(researchSessions, options = {}) {
     this.researchSessions = researchSessions;
+    this.nativeInputs = options.nativeInputs ?? null;
     this.agentRegistry = Promise.resolve(options.agentRegistry);
     // The same registry, once it has loaded, for the one synchronous reader:
     // a pushed `run/state` describes its artifacts like the list does.
@@ -5460,6 +5470,7 @@ export class AgentRunStore {
         id: runId,
         at: this.now().toISOString(),
         ...(current.promptDispatchStartedAt ? { promptDispatchStartedAt: current.promptDispatchStartedAt } : {}),
+        ...(patch.inputAttribution ? { inputAttribution: mergeInputAttribution(current.inputAttribution,patch.inputAttribution) } : current.inputAttribution ? { inputAttribution: current.inputAttribution } : {}),
         ...(patch.transcript ? { transcript: patch.transcript } : current.transcript ? { transcript: current.transcript } : {}),
         ...(patch.appendCapabilityHandbooks || patch.capabilityHandbooks ? { capabilityHandbooks: normalizeCapabilityHandbooks(
           (patch.appendCapabilityHandbooks ? [...(current.capabilityHandbooks ?? []), ...patch.appendCapabilityHandbooks] : patch.capabilityHandbooks)
@@ -7852,6 +7863,22 @@ export class AgentRunStore {
     });
   }
 
+  async recordConsumedInput(project, runId, input, parts) {
+    return withProjectStorageMutation(project, async () => {
+      const events = parseEvents(await readLedgerText(project, this.maxBytes));
+      const run = foldEvents(events).get(runId);
+      if (!run || run.automated || !run.inputAttribution?.inputs?.some(item => item.referenceId === input.referenceId && item.inputSeq === input.inputSeq)
+        || events.some(event => event.event === "kernel-request" && event.id === runId && event.steerRequestId === input.sourceRequestId)
+        || (run.corrections ?? 0) >= MAX_RUN_CORRECTIONS) return run;
+      const text = parts.slice(0, input.originalParts).filter(part => part.type === "text").map(part => part.text).join("\n");
+      if (!text || createHash("sha256").update(JSON.stringify(text)).digest("hex") !== input.originalTextDigest) return run;
+      const event = { event: "kernel-request", id: runId, kind: "steer", source: "native-consumed", steerRequestId: storedKernelRequestId(input.sourceRequestId),
+        inputReceipt: {referenceId:input.referenceId,actor:input.actor,inputSeq:input.inputSeq,turnStartSeq:run.nativeTurn.startSeq,originalTextDigest:input.originalTextDigest},
+        ...(steerTextOf(text) ? { steerText: steerTextOf(text), steerAt: new Date().toISOString() } : {}) };
+      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
+      return foldEvents([...events, event]).get(runId);
+    });
+  }
   /** Persist a repair's native request identity before sending it. */
   async recordKernelRequest(project, runId, requestId) {
     return withProjectStorageMutation(project, async () => {
@@ -8006,7 +8033,19 @@ export class AgentRunStore {
         const routed = legacy ? {} : continuation ? { ...previous, effectiveRouteReason: "loopx-continuation" }
           : reply ? { ...previous, effectiveRouteReason: "ask-user-reply" }
           : await routeTurn(question, { requestIds });
-        const reservation = await this.reserveRun(project, binding ?? {
+        // Like a module step dispatched over a conversation's binding, an authenticated request-local
+        // route pins this run to its actual capability. The persistent research-session record is unchanged.
+        // The server sets routedOverBinding only after reading the immutable selected-input route.
+        const requestLocal = routed.routedOverBinding === true || Boolean((continuation || reply) && previous);
+        const selected = binding?.mode === "specialist" && !requestLocal ? {
+          ...routed,
+          effectiveAgentId: binding.agentId, effectiveAgentVersion: binding.agentVersion,
+          effectiveRuntimeAgent: binding.runtimeAgent, effectiveRouteReason: continuation || reply ? routed.effectiveRouteReason : "session-binding",
+        } : routed;
+        const pinned = requestLocal && binding?.mode === "specialist" ? { ...binding,
+          agentId: selected.effectiveAgentId, agentVersion: selected.effectiveAgentVersion, runtimeAgent: selected.effectiveRuntimeAgent,
+        } : binding;
+        const reservation = await this.reserveRun(project, pinned ?? {
           sessionId, mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null,
         }, {
           baselineCursor: `seq_${first.seq}`,
@@ -8017,12 +8056,12 @@ export class AgentRunStore {
           question: (continuation || reply) && previous?.question ? previous.question : questionPreview(reply ? replyAnswerText(question) : question),
           automated: continuation,
           ...(goalId ? { goal: { id: goalId, runId: previous?.id ?? null } } : {}),
-          estimatedMinutes: routed.estimatedMinutes ?? null,
+          estimatedMinutes: selected.estimatedMinutes ?? null,
           forkedFrom: source,
-          effectiveAgentId: routed.effectiveAgentId ?? binding?.agentId ?? null,
-          effectiveAgentVersion: routed.effectiveAgentVersion ?? binding?.agentVersion ?? null,
-          effectiveRuntimeAgent: routed.effectiveRuntimeAgent ?? binding?.runtimeAgent ?? null,
-          effectiveRouteReason: `${adoptedRouteReason}${routed.effectiveRouteReason ? `:${routed.effectiveRouteReason}` : ""}`.slice(0, 64),
+          effectiveAgentId: selected.effectiveAgentId ?? binding?.agentId ?? null,
+          effectiveAgentVersion: selected.effectiveAgentVersion ?? binding?.agentVersion ?? null,
+          effectiveRuntimeAgent: selected.effectiveRuntimeAgent ?? binding?.runtimeAgent ?? null,
+          effectiveRouteReason: `${adoptedRouteReason}${selected.effectiveRouteReason ? `:${selected.effectiveRouteReason}` : ""}`.slice(0, 64),
         });
         run = reservation.run;
         // The first run of a fork is named after the line it branched from,
@@ -8058,6 +8097,22 @@ export class AgentRunStore {
           await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
           return foldEvents([...events, event]).get(current.id);
         });
+      }
+      if (this.nativeInputs) {
+        try {
+          const attribution = await this.nativeInputs.reconcileTurn(project, transcript, turn, run);
+          if (attribution) {
+            run = await this.recordLearning(project, run.id, { inputAttribution: attribution }) ?? run;
+            // Only consumed, proved human inputs after the initiator contribute correction words.
+            for (const input of attribution.inputs.filter(item => item.actor.kind === "human" && item.inputSeq !== first.seq)) {
+              const message = turn.inputs.find(item => item.seq === input.inputSeq && item.sourceRequestId === input.sourceRequestId);
+              if (message) await this.recordConsumedInput(project, run.id, input, message.parts);
+            }
+          }
+        } catch {
+          // Attribution is optional evidence. Ordinary finished work remains deliverable.
+          await this.appendQualityNotices(project, run.id, [runNotice("run_input_attribution_incomplete", "Some native inputs could not be attributed.")], { unchecked: true });
+        }
       }
       if (run.status === "running" && !(run.dispatchStatus === "dispatching" && this.dispatchOwners.has(run.id))) {
         const runProject = await this.resolveRunProject(project, run);

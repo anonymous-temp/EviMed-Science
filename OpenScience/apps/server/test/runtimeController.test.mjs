@@ -655,19 +655,32 @@ test("a 循证 GEO project's runtime is launched with the method pack, any other
       runtimeControllerMode: "socket", runtimeControllerTimeoutMs: 2_000, runtimeControllerPollMs: 100, allowDirectDockerControl: false,
       runtimeProxyConnectTimeoutMs: 3_000, runtimeSkillDirs: [], maxProjectBytes: 1024 * 1024, maxProjectUsageScanEntries: 1_000,
       runtimeIdleTimeoutMs: 0, runtimeQuotaCheckIntervalMs: 0, maxLogFileBytes: 1024 * 1024,
-      geoEnabled: true, geoAudience: "all",
+      geoEnabled: true, geoAudience: "all", modelGatewaySigningSecret: "shared-context-test-signing-secret",
     }));
     const launches = async () => (await readFile(dockerLog, "utf8")).trim().split("\n").map((line) => JSON.parse(line)).filter((args) => args[0] === "run");
     let isGeo = true;
     manager.geoProjectOf = async (userId, projectId) => { assert.deepEqual([userId, projectId], [project.userId, project.id]); return isGeo; };
+    const policy = {kind:'geo-project',ownerId:project.userId,controlProjectId:project.id,geoProjectId:'geo',ownerCreatedAt:'2026-01-01',
+      projectCreatedAt:'2026-01-02',policyVersion:1,revision:1,referenceId:'policy',namespace:{id:'namespace'}};
+    manager.contextPolicies = {forProject:async()=>policy};
+    const library=path.join(dataDir,'users',project.userId,'library');
+    await mkdir(library,{recursive:true});await writeFile(path.join(library,'foreign.md'),'PRIVATE OWNER LIBRARY');
+    const receipts = new Map();
+    manager.contextDocuments = {database:{transaction:async operation=>{const previous=new Map(receipts);try{return await operation({});}catch(error){receipts.clear();for(const [key,value] of previous)receipts.set(key,value);throw error;}},withTransactionClient:async(_client,operation)=>operation()},put:async(user,kind,id,payload,options)=>receipts.set(id,{kind,id,payload,projectId:options.projectId}),get:async(user,kind,id)=>receipts.get(id)};
     const first = await manager.start(project);
     assert.equal(first.geoSkills, true, "the runtime record says what it was launched with");
+    const receipt = await manager.launchedContextReceipt(project);
+    assert.ok(receipt.mounts.some(mount=>mount.includes('dst=/runtime/capsule-methods') && mount.endsWith(',readonly')));
+    assert.ok((await launches())[0].includes(`OPENVIKING_PENDING_DIR=${receipt.pendingDirectory}`));
     await manager.stop(project);
     isGeo = false;
     const second = await manager.start(project);
     assert.equal(second.geoSkills, false);
+    assert.equal((await manager.launchedContextReceipt(project)).policy.namespaceId, "namespace", "the persistent privacy floor survives disabling the method pack");
     const runs = await launches();
     assert.equal(runs.length, 2);
+    assert.ok(runs.every(args=>!args.some(arg=>arg.includes('dst=/workspace/library'))),"the controller also excludes the owner library from every shared launch");
+    assert.equal(await readFile(path.join(library,'foreign.md'),'utf8'),'PRIVATE OWNER LIBRARY');
     assert.ok(runs[0].includes("EVIMED_GEO_SKILLS=1"), "the GEO project's container is given the pack's switch on");
     assert.equal(runs[0].includes("EVIMED_GEO_SKILLS=0"), false);
     assert.ok(runs[1].includes("EVIMED_GEO_SKILLS=0"), "the same project, no longer a GEO project, is given it off");

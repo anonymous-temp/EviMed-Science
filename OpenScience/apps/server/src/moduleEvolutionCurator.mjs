@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
 
+// The extractor describes a task; only the evaluator controls its evidence and holdout status.
+const EXTRACTED_FIELDS = ['id', 'sourceQuotes', 'taskFamily', 'screen', 'edit', 'expect', 'question', 'claims', 'competitors', 'careFlags',
+  'agenda', 'progress', 'stopAllowed', 'equivalentVariant', 'abstentionExpected', 'curatorReview'];
+
 /** Frozen public snapshots come from the preservation gateway; extraction has a separate identity from proposal.
  * Missing preservation or source-root/date proofs produce no confirmation task.
  *
@@ -43,9 +47,11 @@ export function createModuleEvolutionCurator({ taskPool, readSnapshots, extractT
           const item = await extractTask({moduleId:input.moduleId,source,curatorOnly:true});
           if (!item || item.curatorIndependent !== true || !item.id || !Array.isArray(item.sourceQuotes)
             || !item.sourceQuotes.length || item.sourceQuotes.some((quote) => typeof quote !== "string" || !quote || !source.sourceText.includes(quote))) continue;
-          await taskPool.add({...item,moduleId:input.moduleId,sourceRoot:source.sourceRoot,sourceHash:source.sourceHash,
+          const extracted = Object.fromEntries(EXTRACTED_FIELDS.filter(field => item[field] !== undefined).map(field => [field, item[field]]));
+          await taskPool.add({...extracted,moduleId:input.moduleId,sourceRoot:source.sourceRoot,sourceHash:source.sourceHash,
             studyFamilyId:source.studyFamilyId ?? source.sourceRoot,sourceAliases:source.sourceAliases ?? source.aliases ?? [],quarter:input.quarter??null,pool:input.pool??"confirmation",scope:"public",firstPublicAt:source.firstPublicAt,firstPublicEvidenceId:source.firstPublicEvidenceId,
             curatorIndependent:true,epoch:input.epoch,provenanceEvidence:source.provenanceEvidence ?? [],
+            sourceAssetRef:source.sourceAssetRef ?? null,sourceIdentifiers:source.sourceIdentifiers ?? [],
             equivalentVariant:item.equivalentVariant ?? null,abstentionExpected:item.abstentionExpected === true});
           exposed.add(source.sourceRoot); added++;
         }

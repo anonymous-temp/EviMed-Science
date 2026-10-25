@@ -14,6 +14,9 @@
  *
  * It needs the configuration the server runs with (database, DashScope key).
  * Without an embedding key the index is rebuilt keyword-only and says so.
+ * Release constraint: stop/drain every old server and rebuild CLI writer before
+ * serving the new shared-content policy. Old binaries do not obey receipt CAS;
+ * additive columns alone do not make mixed old/new rolling writers safe.
  */
 import path from "node:path";
 import process from "node:process";
@@ -36,15 +39,23 @@ function parseArguments(argv) {
   return { users, all };
 }
 
+/** The CLI and tests compose the same existing source/library services without
+ * loading operator configuration or credentials in an importing process. */
+export async function createRebuildIndex({ database, config, embedder }) {
+  const [{ ProductDocuments }, { SourceService }, { KnowledgeBaseIndex }, { LibraryService, userLibraryDir }] = await Promise.all([
+    import("../../apps/server/src/productStore.mjs"), import("../../apps/server/src/sourceService.mjs"),
+    import("../../apps/server/src/kbIndex.mjs"), import("../../apps/server/src/libraryService.mjs"),
+  ]);
+  const documents = new ProductDocuments(database);
+  const sources = new SourceService(documents, { enqueue: async () => null });
+  const library = new LibraryService({ documents, sources, libraryDir: userId => userLibraryDir(config, userId), maxItems: config.libraryMaxItems });
+  return new KnowledgeBaseIndex({ database, sources, embedder, dimension: config.kbEmbeddingDimension }).useLibrary(library);
+}
+
 async function main() {
   const options = parseArguments(process.argv.slice(2));
-  const [{ loadConfig }, { createStore }, { ProductDocuments }, { SourceService }, { KnowledgeBaseIndex }, { KbEmbedder }] = await Promise.all([
-    import("../../apps/server/src/config.mjs"),
-    import("../../apps/server/src/store.mjs"),
-    import("../../apps/server/src/productStore.mjs"),
-    import("../../apps/server/src/sourceService.mjs"),
-    import("../../apps/server/src/kbIndex.mjs"),
-    import("../../apps/server/src/kbEmbedding.mjs"),
+  const [{ loadConfig }, { createStore }, { KbEmbedder }] = await Promise.all([
+    import("../../apps/server/src/config.mjs"), import("../../apps/server/src/store.mjs"), import("../../apps/server/src/kbEmbedding.mjs"),
   ]);
   const config = loadConfig();
   if (!config.kbSearchEnabled) {
@@ -60,19 +71,18 @@ async function main() {
       process.exitCode = 1;
       return;
     }
-    // Captures are only read here; nothing is queued, so the job queue is a stub.
-    const sources = new SourceService(new ProductDocuments(database), { enqueue: async () => null });
     const embedder = new KbEmbedder({ apiKey: config.dashscopeApiKey, model: config.kbEmbeddingModel,
       dimension: config.kbEmbeddingDimension, apiBase: config.kbEmbeddingApiBase, timeoutMs: config.kbEmbeddingTimeoutMs });
-    const index = new KnowledgeBaseIndex({ database, sources, embedder, dimension: config.kbEmbeddingDimension });
+    const index = await createRebuildIndex({ database, config, embedder });
     const capabilities = await index.ready();
     const started = Date.now();
     const totals = await index.rebuild({ userIds: options.all ? null : options.users });
     const summary = {
-      ok: totals.failed === 0,
+      ok: totals.failed === 0 && totals.unproven === 0 && totals.pendingModelReset === 0
+        && (!capabilities.vector || !embedder.configured || totals.pendingEmbedding === 0),
       scope: options.all ? "all" : options.users,
       ...totals,
-      vectors: capabilities.vector ? (embedder.configured ? "embedded" : "skipped: no DashScope key") : "skipped: pgvector is not installed",
+      vectors: capabilities.vector ? (embedder.configured ? (totals.pendingEmbedding ? "pending: embedding work remains" : "embedded") : "skipped: no DashScope key") : "skipped: pgvector is not installed",
       trigram: capabilities.trigram,
       ms: Date.now() - started,
     };

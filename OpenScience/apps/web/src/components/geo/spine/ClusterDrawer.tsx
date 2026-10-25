@@ -1,3 +1,4 @@
+import { useGeoDestinationPath } from "../useGeoPath";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { pythonRound } from "@evimed/domain";
@@ -14,7 +15,6 @@ import { List, ListRow } from "@/components/ui/ListRow";
 import { Note } from "@/components/ui/Note";
 import { Section } from "@/components/ui/Section";
 import { Tag } from "@/components/ui/Tag";
-import { geoDestinationPath } from "../geoTabs";
 import {
   engineName,
   GEO_ARTICLE_STATUS_WORDS,
@@ -205,6 +205,7 @@ function Questions({
 /* --------------------------------------------------------------- answering */
 
 function Answering({ geoId, view, engines, focus }: { geoId: string; view: GeoClusterView; engines: readonly GeoEngine[]; focus: string | null }) {
+  const geoDestinationPath = useGeoDestinationPath();
   const group = view.group;
   const reading = mentionText(group);
   const wrong = groupTally(group).wrong;
@@ -292,6 +293,7 @@ function Answering({ geoId, view, engines, focus }: { geoId: string; view: GeoCl
 /* ------------------------------------------------------------------- doing */
 
 function Doing({ geoId, project, view }: { geoId: string; project: GeoProject; view: GeoClusterView }) {
+  const geoDestinationPath = useGeoDestinationPath();
   const openArticle = useOpenArticle(project);
   const { actions, articles, orders, ownedLinks } = view;
   const control = view.group.isControl;

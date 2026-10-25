@@ -279,6 +279,24 @@ test("documents, revisions and usage share one PostgreSQL snapshot while the acc
   await db.transaction(client => client.query("SELECT id FROM evimed_control.users WHERE id=$1 FOR UPDATE NOWAIT", [f.owner]));
 });
 
+test('native pack registry reads can borrow the exact account snapshot and cannot retain its client after export', options, async t => {
+  const f = await fixture(t), db = f.app.store.database, user = await authenticatedGeneration(f);
+  let retained;
+  await withAccountExportSnapshot(db, user, f.app.config, async snapshot => {
+    const frozen = JSON.parse(snapshot.data.toString());
+    await f.documents.put(f.owner, 'fact', 'fact-one', { capsuleId: 'capsule-one', content: 'changed after snapshot', status: 'approved' }, { expectedRevision: 2 });
+    retained = snapshot.withDatabaseSnapshot;
+    const old = await snapshot.withDatabaseSnapshot(() => f.documents.get(f.owner, 'fact', 'fact-one'));
+    assert.equal(old.payload.content, frozen.documents.find(row => row.kind === 'fact').payload.content);
+    assert.equal(old.revision, 2);
+    assert.equal(db.transactionScope(), null, 'borrowing is limited to the native collection callback');
+  });
+  assert.equal((await f.documents.get(f.owner, 'fact', 'fact-one')).payload.content, 'changed after snapshot');
+  let entered = false;
+  await assert.rejects(retained(async () => { entered = true; }), error => error.code === 'account_export_snapshot_closed');
+  assert.equal(entered, false);
+});
+
 test("customer-state row and byte caps reject complete exports instead of returning truncated pages", options, async t => {
   const f = await fixture(t);
   const user = await authenticatedGeneration(f);

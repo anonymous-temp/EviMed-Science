@@ -184,18 +184,18 @@ test("the product merges field by field, a competitor is refused alone, and a br
   // is refused leaves the registered rivals alone, and only [] clears them.
   await write(/** @type {any} */ (merged), "product", { data: { competitors: [{ brandName: "穆峰达", genericName: "替尔泊肽注射液", aliases: ["替尔泊肽", "Mounjaro"] }] } });
   const aliased = await store.getProject(USER, project.id);
-  // One rule on both sides (ruling 2026-09-26): a generic that more than one
-  // holder may market — or one nobody said is single-source — names no brand.
+  // One literal-brand rule on both sides: generic forms stay separate,
+  // whether or not the project records single-source product attribution.
   assert.deepEqual(brandRegistry(aliased?.product, aliased?.competitors).filter((entry) => entry.competitor).map((entry) => entry.aliases),
     [["穆峰达", "mounjaro"]], "folded, as the parser matches them; the generic's short form is not the brand's");
   const single = await write(/** @type {any} */ (aliased), "product", { data: { singleSource: true, misspellings: [], approvalNo: "国药准字H20250037",
     competitors: [{ brandName: "穆峰达", genericName: "替尔泊肽注射液", aliases: ["替尔泊肽", "Mounjaro"], singleSource: true }] } });
   assert.deepEqual(single.issues, [], "the identity is complete");
   const counted = await store.getProject(USER, project.id);
-  assert.deepEqual(brandRegistry(counted?.product, counted?.competitors).map((entry) => [entry.name, entry.aliases]), [
-    ["玛仕度肽", ["玛仕度肽", "信尔美", "玛仕度肽注射液"]],
-    ["穆峰达", ["穆峰达", "替尔泊肽", "mounjaro", "替尔泊肽注射液"]],
-  ], "a single-source generic counts on both sides");
+  assert.deepEqual(brandRegistry(counted?.product, counted?.competitors).map((entry) => [entry.name, entry.aliases, entry.genericAliases, entry.singleSource]), [
+    ["玛仕度肽", ["玛仕度肽", "信尔美"], ["玛仕度肽注射液"], true],
+    ["穆峰达", ["穆峰达", "mounjaro"], ["替尔泊肽注射液", "替尔泊肽"], true],
+  ], "both products retain separate literal brand aliases, generic forms and single-source attribution");
   const refused = await write(/** @type {any} */ (aliased), "product", { data: { competitors: [{ name: "诺和盈" }] } });
   assert.ok(refused.issues.some((/** @type {any} */ issue) => issue.code === "missing"));
   assert.deepEqual((await store.getProject(USER, project.id))?.competitors.map((/** @type {any} */ entry) => entry.brandName), ["穆峰达"]);
@@ -216,16 +216,15 @@ test("a question map is a new unlocked version; invalid groups and questions are
   assert.equal(result.ids.length, 2);
   assert.deepEqual(result.issues.map((/** @type {any} */ issue) => [issue.group ?? null, issue.index ?? null, issue.field ?? null, issue.code]), [
     [0, 1, "text", "missing"], [0, 2, "platform", "unknown_value"], [null, 1, "pool", "unknown_value"], [2, 0, "sourceUrl", "invalid"],
-    [null, null, "collectedAt", "notice"],
+    [2, 1, "sourceUrl", "notice"],
   ]);
   const map = await store.questionMap(project.id, 1);
   assert.deepEqual(map.map((group) => [group.name, group.questions.map((question) => question.text)]), [["用法", ["怎么打"]], ["对比", ["哪个好"]]]);
-  // A real phrasing written without its day is dated to the write (G9); one with its day keeps it.
-  const real = map[1].questions[0];
-  assert.equal(real.kind, "real");
-  assert.ok(real.collectedAt && Date.now() - Date.parse(real.collectedAt) < 60_000);
+  // Unknown provenance is never stamped as collected reality; model suggestions stay typical.
+  assert.equal(map[0].questions[0].kind, "typical");
+  assert.equal(map[0].questions[0].collectedAt, null);
   const dated = await write(project, "questions", { data: { groups: [{ pool: "P1", name: "P1-03 与其他减重药怎么选",
-    questions: [{ text: "和替尔泊肽哪个好", kind: "real", platform: "zhihu", collectedAt: "2026-09-25T09:40:00Z" }] }] } });
+    questions: [{ text: "和替尔泊肽哪个好", kind: "real", platform: "zhihu", sourceUrl: "https://www.zhihu.com/question/1", collectedAt: "2026-09-25T09:40:00Z" }] }] } });
   assert.deepEqual(dated.issues, []);
   const group = (await store.questionMap(project.id, dated.version)).find((entry) => entry.id === dated.ids[0]);
   assert.equal(group?.name, "与其他减重药怎么选", "the method's internal group number is not part of the name a reader sees");
@@ -880,4 +879,16 @@ test("a project holds at most five hundred live owned links; a page already live
   ] });
   assert.deepEqual(result.issues.map((/** @type {any} */ issue) => [issue.index, issue.code]).filter(([, code]) => code !== "notice"), [[0, "limit"]]);
   assert.deepEqual(result.registered, [`gol_cap_${project.id}_7`]);
+});
+
+test('both action writers retain supported planning fields and leave unsupported amounts and foreign revision targets unknown', options, async () => {
+  const project = await measured(await freshProject());
+  const body = {items:[{gapId:'bad',kind:'fill_gap',what:{layer:'popular',title:'Useful supported prose'},work:{mode:'modify_existing',articleId:'foreign-article',resultVersionId:'foreign-result',digest:'a'.repeat(64),outputs:['article.md']},sequence:3,
+    effort:{unit:'hours',low:-1,high:2,basis:'Invalid workload'},timing:{durationDays:{low:4,high:2},basis:'Inverted'},estimate:{currency:'CNY',low:1,high:3,basis:[{kind:'source_price',id:'unpreserved-price',digest:'b'.repeat(64)}]}}]};
+  const result = await write(project,'actions',body);
+  const saved = await store.latestStrategy(project.id);
+  assert.equal(saved.actions[0].sequence,3);assert.equal(saved.actions[0].what.title,'Useful supported prose');
+  assert.equal(saved.actions[0].work,null);assert.equal(saved.actions[0].estimate,null);
+  assert.equal(saved.actions[0].effort,undefined);assert.equal(saved.actions[0].timing,undefined);
+  assert.ok(result.issues.some(issue=>issue.field==='actions.estimate'));
 });

@@ -23,6 +23,7 @@ import {
 } from "../src/runtimeManager.mjs";
 import { FRONTIER_LANES, FRONTIER_SPECIALTIES, GEO_ENGINES, GEO_POOLS, GEO_READ_WHATS, GEO_SOCIAL_PLATFORMS, GEO_SOCIAL_SORTS, GEO_WRITE_WHATS,
   MCP_SERVER_NAME, MCP_TOOL_BASE_NAMES, MCP_TOOL_PREFIX } from "@evimed/domain";
+import { GEO_ANALYSIS_REGISTRY } from "../src/geoAnalysisRegistry.mjs";
 import { GEO_READ_FILTER_FIELDS } from "../src/geoGateway.mjs";
 import { GEO_READ_MAX_ITEMS } from "../src/geoService.mjs";
 import { SOCIAL_DEFAULT_LIMIT, SOCIAL_MAX_LIMIT, SOCIAL_MAX_QUERY_LENGTH } from "../src/socialCrawlClient.mjs";
@@ -1199,6 +1200,8 @@ test("the GEO tools offer exactly the domain's vocabularies and the gateway's ow
   assert.equal(read.properties.filter.properties.limit.maximum, GEO_READ_MAX_ITEMS);
   // a filter field offered and not accepted (or accepted and never offered) is a read the model cannot make or is refused for
   assert.deepEqual(Object.keys(read.properties.filter.properties).sort(), [...GEO_READ_FILTER_FIELDS].sort());
+  assert.deepEqual([...read.properties.filter.properties.viewId.enum].sort(), Object.keys(GEO_ANALYSIS_REGISTRY).sort());
+  assert.deepEqual(read.properties.filter.properties.ownedMetricId.enum, ["M-08", "M-08S"]);
   assert.equal(read.properties.filter.properties.key.type, "string");
   assert.deepEqual(tools.geo_write.inputSchema.properties.what.enum, [...GEO_WRITE_WHATS]);
   const social = tools.social_posts_search.inputSchema;

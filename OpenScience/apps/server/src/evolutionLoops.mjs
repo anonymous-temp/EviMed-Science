@@ -2,8 +2,11 @@ import {evolutionMonthlyObservations} from './evolutionMonthlyObservations.mjs';
 import {createEvolutionPairedAudit} from './evolutionPairedAudit.mjs';
 import {withEvolutionUsage} from './evolutionUsage.mjs';
 import {createEvolutionGrowth, evolutionRecordedFailures} from './evolutionGrowth.mjs';
+import {evolutionTriggersCurrent} from './evolutionSignalTriggers.mjs';
 import {calibrateModuleSourceJudge} from './moduleEvolutionCalibration.mjs';
-import {createModuleEvolutionPreparation} from './moduleEvolutionPreparation.mjs';
+import {createModuleEvolutionPreparation,readGeoCalibrationCases} from './moduleEvolutionPreparation.mjs';
+import {createEvolutionPolicyBasis} from './evolutionPolicyBasis.mjs';
+import {evolutionRecordPin} from './evolutionRecordPins.mjs';
 import {createModuleEvolutionOfflineEvaluators} from './moduleEvolutionOfflineEvaluators.mjs';
 import { createEvolutionPublicProvenance } from './evolutionPublicProvenance.mjs';
 import { evolutionProgress } from './evolutionProgress.mjs';
@@ -14,7 +17,7 @@ import { createEvolutionSignals } from './evolutionSignals.mjs';
 import { evolutionAccountFloors } from './evolutionAccountClasses.mjs';
 import { createEvolutionCapabilityMap } from './evolutionCapabilityMap.mjs';
 import { createEvolutionTaskPool } from './evolutionTaskPool.mjs';
-import { createEvolutionMissions, evolutionFailureReproductionHash, EVOLUTION_OBSERVED_FAILURE_KINDS } from './evolutionMissions.mjs';
+import { createEvolutionMissions, evolutionFailureReproductionHash, validEvolutionFailureReproduction, EVOLUTION_OBSERVED_FAILURE_KINDS } from './evolutionMissions.mjs';
 import { createEvolutionTransfer } from './evolutionTransfer.mjs';
 import { createModuleEvolutionPolicies } from './moduleEvolutionPolicies.mjs';
 import { createModuleEvolutionAdapters, moduleProposalWithFacts } from './moduleEvolutionAdapters.mjs';
@@ -30,15 +33,22 @@ import { evolutionKey } from './evolutionService.mjs';
 /** Compose all three loops. Missing observations are durable waits, not successful synthetic evaluations.
  * @param {{service:any,integration?:any,fetchImpl?:typeof fetch,loadReleaseSource?:any,config:any,database:any,registry:any,model:(system:string,input:any)=>Promise<any>,webReader?:any}} dependencies */
 export function createEvolutionLoops({ service, config, database, registry, model, fetchImpl, loadReleaseSource, webReader = null }) {
+  /** @type {any} */
+  let moduleDependencies = {};
+  const policyBasis = createEvolutionPolicyBasis({ service, sourceChanges: () => moduleDependencies.sourceChanges,
+    calibrationCases: readGeoCalibrationCases, verifyReproduction: validEvolutionFailureReproduction });
+  service.callbacks.policyBasis = policyBasis;
+  service.callbacks.reconcileModulePolicyBasis = () => policyBasis.reconcile();
   const provenance=createEvolutionPublicProvenance({service,fetchImpl,loadReleaseSource,now:()=>service.now()});
   const policy = createEvolutionPolicy({ service, now: () => service.now(), propose: async input => {
     const messages = evolutionPolicyProposalMessages(input);
     return model(messages[0].content, JSON.parse(messages[1].content));
   } });
   const policies = createModuleEvolutionPolicies({ readPolicy: async moduleId => {
+    if (moduleId === 'geo') return policyBasis.readActive();
     const row = await service.get(`evolution-module-policy-${moduleId}`);
     return row?.payload.status === 'active' ? { revisionId: `${row.id}:${row.revision}`, policy: row.payload.policy } : null;
-  } });
+  }, validateRevision: async (moduleId, revisionId) => moduleId !== 'geo' || policyBasis.revisionUsable(revisionId) });
   // Researchers and operators are counted apart (`evolutionAccountClasses.mjs`): the operator class has its own floor, so a deployment with a
   // handful of accounts still learns from the operators' own work.
   const floors = evolutionAccountFloors(config), operatorIds = () => config.operatorUsers ?? [];
@@ -98,8 +108,6 @@ export function createEvolutionLoops({ service, config, database, registry, mode
       cheapestNextStep: 'replay-recorded-platform-problem', failureHypotheses: ['mechanism-may-not-transfer'] }) });
 
   /** All runners inherit mission attribution and purpose evolution, including nested review calls. */
-  /** @type {any} */
-  let moduleDependencies = {};
   /** @type {Record<string, any>} */
   let moduleRunners = {};
   function configureModules(dependencies) {
@@ -124,7 +132,11 @@ export function createEvolutionLoops({ service, config, database, registry, mode
     // aggregate of a repair signal): the platform's own check saw it, the model does not get to say so. The count is the one `collect` opened the opportunity by.
     const recordedModuleFailure = async (/** @type {any} */ mission) => {
       if (!(mission?.sources ?? []).includes('repair') || !mission.opportunityId) return false;
+      const receipt = mission.failureReproductionReceiptId ? await service.get(mission.failureReproductionReceiptId) : null;
+      if (validEvolutionFailureReproduction(receipt?.payload, { missionId: mission.id, moduleId: mission.moduleId,
+        baseline: mission.preparedCandidateState?.baseline ?? mission.baseline })) return true;
       const dossier = await service.get(mission.opportunityId);
+      if (!await evolutionTriggersCurrent(service, { ...dossier?.payload, ...(mission.triggerRefs?.length ? { triggerRefs: mission.triggerRefs } : {}) })) return false;
       for (const root of dossier?.payload?.evidenceRoots ?? []) {
         const row = await service.get(root);
         if (row?.payload?.moduleId === mission.moduleId && evolutionRecordedFailures(row.payload) > 0) return true;
@@ -178,19 +190,28 @@ export function createEvolutionLoops({ service, config, database, registry, mode
       &&['public','generated'].includes(row.payload.scope)
       &&(!input.taskFamily||hash(row.payload.taskFamily)===hash(input.taskFamily)));
     for(const task of tasks.slice(0,4)){
+      if(input.moduleId==='geo'&&!(await policyBasis.checkTask(task,{role:'reproduction'})).usable)continue;
       const id=`evolution-failure-reproduction-${evolutionKey([input.missionId,baselineHash,task.id])}`;
-      if(await service.get(id))return {status:'reproduced',receiptId:id};
+      const existing=await service.get(id);
+      if(existing){
+        if(input.moduleId==='geo'&&!(await policyBasis.checkReproduction({mission,baseline:input.baseline,receipt:existing})).usable)continue;
+        return {status:'reproduced',receiptId:id};
+      }
       const results=[];
+      const firstCheckpoint=await service.get(`${id}-attempt-0`);
+      const taskRef=firstCheckpoint?.payload.taskRef??evolutionRecordPin(task);
+      if(input.moduleId==='geo'&&firstCheckpoint&&(!firstCheckpoint.payload.taskRef||!(await policyBasis.checkTask(task,{role:'reproduction',reference:taskRef})).usable))continue;
       for(let repeat=0;repeat<2;repeat++){
         const checkpointId=`${id}-attempt-${repeat}`,saved=await service.get(checkpointId);
+        if(input.moduleId==='geo'&&saved&&(!saved.payload.taskRef||hash(saved.payload.taskRef)!==hash(taskRef)))return{status:'waiting_resource',reason:'public-replay-input-unpinned'};
         const measured=saved?.payload.result??await runner({...context,missionId:input.missionId,moduleId:input.moduleId,
           candidate:input.baseline,arm:'baseline',pool:'development',repeat,batch:[{...task.payload,id:task.id}],
           userId:await service.owner(),projectId:EVOLUTION_PROJECT_ID});
-        if(!saved)await service.save('failure-replay',checkpointId,{result:measured,at:service.now().toISOString()});
+        if(!saved)await service.save('failure-replay',checkpointId,{taskRef,result:measured,at:service.now().toISOString()});
         results.push(measured);
       }
       if(!results.every(result=>result.units?.length>0&&result.units.some(unit=>unit.id===task.id&&unit.sourceHash===task.payload.sourceHash&&(unit.groupId??unit.id)===task.id&&Number.isFinite(unit.score)&&unit.score>=0&&unit.score<1)))continue;
-      const proof={missionId:input.missionId,moduleId:input.moduleId,baselineHash,taskId:task.id,sourceRoot:task.payload.sourceRoot,
+      const proof={missionId:input.missionId,moduleId:input.moduleId,baselineHash,taskId:task.id,taskRef,sourceRoot:task.payload.sourceRoot,
         sourceHash:task.payload.sourceHash,scope:task.payload.scope,independent:true,executed:true,baselineFailed:true,referenceVerified:true,
         executionReceiptHash:hash(results),at:service.now().toISOString()};
       await service.save('failure-reproduction',id,{...proof,receiptHash:evolutionFailureReproductionHash(proof)});
@@ -310,5 +331,5 @@ export function createEvolutionLoops({ service, config, database, registry, mode
     return service.save('heldout-audit',id,{month,quarter,records,epoch,at:service.now().toISOString()},await service.get(id));
   }
 
-  return {growth,recordResumedResearchCompleted:growth.recordResumedResearchCompleted,provenance,prepareModuleTasks,policy,policies,signals,map,taskPool,missions,transfers,selfResearch,configureModules,observe,weekly,monthly,audit,cost,environment,progress};
+  return {growth,recordResumedResearchCompleted:growth.recordResumedResearchCompleted,provenance,prepareModuleTasks,policy,policies,policyBasis,signals,map,taskPool,missions,transfers,selfResearch,configureModules,observe,weekly,monthly,audit,cost,environment,progress};
 }

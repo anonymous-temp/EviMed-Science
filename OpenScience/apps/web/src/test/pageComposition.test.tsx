@@ -231,11 +231,12 @@ describe("the GEO project page, as a module page (T3) and its overview as a data
     );
   }
 
-  it.each(GEO_TABS)("$label: compact workflow and result selectors replace repeated navigation bars", async ({ key, label }) => {
+  it.each(GEO_TABS)("$label: one workflow rail keeps result views inside their workbench", async ({ key }) => {
     const { container } = renderGeo(key === "overview" ? "/app/geo/geo_masi" : `/app/geo/geo_masi/${key}`);
     await waitFor(() => expect(container.querySelector("[data-geo-tab]")).not.toBeNull(), { timeout: 4000 });
     // The tab's own read has landed when its page-level toolbar (where it has one) is drawn; settle the layout effects.
-    await waitFor(() => expect(screen.getByRole("button", { name: `查看：${label}` })).toBeInTheDocument());
+    await screen.findByRole("button", { name: "项目总览" });
+    expect(screen.queryByRole("button", { name: /^查看：/ })).not.toBeInTheDocument();
     const facts = expectComposed(container, { stepRail: true, tablists: 0 });
     expect(facts.stepRails).toHaveLength(1);
     expect(facts.stepRails[0].querySelectorAll("[data-rail-step]")).toHaveLength(8);
@@ -246,11 +247,9 @@ describe("the GEO project page, as a module page (T3) and its overview as a data
 
   // The rail's click and a 「需要你」 row end in `#geo-<block>`; a tab that is rebuilt without the id leaves the link landing at the top
   // of the tab and nothing says so (the live walk found three: 诊断, 监测 and 去放行). The table of what a tab promises is data.
-  it.each(GEO_TABS.filter((tab) => GEO_TAB_SECTIONS[tab.key].length > 0))("$label has the blocks the rail and 「需要你」 scroll to", async ({ key }) => {
-    const { container } = renderGeo(`/app/geo/geo_masi/${key}`);
-    for (const section of GEO_TAB_SECTIONS[key]) {
-      await waitFor(() => expect(container.querySelector(`#${geoSectionId(section)}`), `${key}: #${geoSectionId(section)}`).not.toBeNull(), { timeout: 4000 });
-    }
+  it.each(GEO_TABS.flatMap(tab => GEO_TAB_SECTIONS[tab.key].map(section => ({ key: tab.key, label: tab.label, section }))))("$label opens its promised $section block in the owning workbench", async ({ key, section }) => {
+    const { container } = renderGeo(`/app/geo/geo_masi/${key}#${geoSectionId(section)}`);
+    await waitFor(() => expect(container.querySelector(`#${geoSectionId(section)}`), `${key}: #${geoSectionId(section)}`).not.toBeNull(), { timeout: 4000 });
   });
 
   it("总览 reads sentence → the numbers → what is asked → the trend, in that order, with the band above all of it", async () => {
@@ -276,7 +275,7 @@ describe("the GEO project page, as a module page (T3) and its overview as a data
  * search; the result's picture comes first in the body; every row's group name is a link (the same drawer, from anywhere); and a
  * control that filters is never under the rows it filters.
  */
-describe("the GEO 行动 page as a list with a chart on top", () => {
+describe("the GEO content and monitoring workbenches", () => {
   beforeEach(() => {
     geo.useGeoFeature.mockReturnValue("on");
     geo.getGeoProject.mockResolvedValue(GEO_PROJECT);
@@ -292,7 +291,7 @@ describe("the GEO 行动 page as a list with a chart on top", () => {
     geo.getGeoCluster.mockImplementation(async (_geoId: string, id: string) => clusterViewFixture(id));
   });
 
-  it("reads band → toolbar → the result's chart → the work, with the filters above all of it and no control under a row", async () => {
+  it("reads band → toolbar → content work without unrelated effect or budget panels", async () => {
     const { container } = render(
       <MemoryRouter initialEntries={["/app/geo/geo_masi/actions"]}>
         <Routes>
@@ -304,10 +303,11 @@ describe("the GEO 行动 page as a list with a chart on top", () => {
     );
     await waitFor(() => expect(container.querySelector("[data-geo-actions]")).not.toBeNull(), { timeout: 4000 });
     const facts = expectComposed(container, { stepRail: true, tablists: 0, toolbar: true });
-    const chart = container.querySelector("[data-geo-effect]") as HTMLElement;
+    expect(container.querySelector("[data-geo-effect]")).toBeNull();
+    expect(container.querySelector("[data-geo-budget]")).toBeNull();
     const list = container.querySelector("[data-geo-actions]") as HTMLElement;
     const toolbar = facts.toolbars[0];
-    for (const [earlier, later] of [[facts.chrome!, chart], [toolbar, chart], [chart, list]] as const) {
+    for (const [earlier, later] of [[facts.chrome!, list], [toolbar, list]] as const) {
       expect(precedes(earlier, later)).toBe(true);
     }
     // The group's name is a link on its row; the status chips are the toolbar's, in the band.
@@ -315,6 +315,17 @@ describe("the GEO 行动 page as a list with a chart on top", () => {
     expect(facts.chrome!.contains(toolbar)).toBe(true);
     expect(list.querySelectorAll("[data-toolbar]")).toHaveLength(0);
     expect(facts.clickableTags).toEqual([]);
+  });
+
+  it("keeps optional effect history in monitoring with no invisible action-list filters", async () => {
+    const { container } = render(<MemoryRouter initialEntries={["/app/geo/geo_masi/actions?step=monitoring"]}>
+      <Routes><Route path="/app/geo/:geoId" element={<GeoProjectLayout />}><Route path=":tab" element={null} /></Route></Routes>
+    </MemoryRouter>);
+    await waitFor(() => expect(container.querySelector("[data-geo-effect]")).not.toBeNull());
+    const facts = expectComposed(container, { stepRail: true, tablists: 0, toolbar: true });
+    expect(precedes(facts.chrome!, container.querySelector("[data-geo-effect]") as HTMLElement)).toBe(true);
+    expect(container.querySelector("[data-geo-actions]")).toBeNull();
+    expect(screen.queryByRole("searchbox", { name: "搜索行动" })).not.toBeInTheDocument();
   });
 });
 
@@ -403,6 +414,6 @@ describe("the GEO lists, data pages and reading page, each by its template", () 
     expect(facts.chrome!.contains(facts.toolbars[0])).toBe(true);
     expect(facts.headerPrimaryActions.length).toBeLessThanOrEqual(1);
     // the one question's tab stays selected under the answer
-    expect(screen.getByRole("button", { name: "查看：问题与回答" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^问题/ })).toHaveAttribute("aria-current", "step");
   });
 });

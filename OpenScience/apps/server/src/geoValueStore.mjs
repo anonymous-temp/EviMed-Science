@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { GEO_RESEARCH_CAPABILITIES, GEO_VALUE_COLLECTIONS, geoValueCanonical, geoValueImpacts, geoValueObject, mergeGeoValue } from "@evimed/domain";
+import { HttpError } from "./security.mjs";
 
 /** The knowledge-base replacement hook reuses exact source links; it never invalidates unrelated findings. @param {any} store @param {any} event */
 export async function geoValueSourceReplaced(store, event) {
@@ -64,41 +65,83 @@ export const GEO_VALUE_OBSERVATIONS_SHOWN = 20;
  * (`judge_extract.valueCoverage`), read where it is stored. One entry per finding per answer: 400 answers and 20 findings
  * are eight thousand entries and nearly three megabytes of JSON, which the runtime's client refuses past four (D-08) — so
  * the counts are taken in SQL, grouped by the profile version each answer was judged against and by status, and only the
- * first `GEO_VALUE_OBSERVATIONS_SHOWN` entries of each version come back, those that say something (any status but
- * `not_applicable`) before those that do not, the most recent answers first.
+ * first `GEO_VALUE_OBSERVATIONS_SHOWN` entries of each version come back, observed statements before unknown or inapplicable
+ * entries, the most recent answers first. Incomplete assessments cannot establish whole-answer absence or inapplicability:
+ * those stored interpretations are returned as uncertain with their original status and coverage, without rewriting history.
  * @param {any} store @param {string} geoId @param {{ engine?: string | null, groupId?: string | null, audience?: string | null }} [filter]
- * @returns {Promise<{ counts: Array<{ basisVersion: number | null, status: string | null, n: number }>,
- *   sample: Array<Record<string, any> & { basisVersion: number | null }> }>}
+ * Selected analysis passes its authorized project and selection in the final argument. An explicit empty selection
+ * remains empty; its complete observation relation is bounded before hydration and never substitutes the latest round.
+ * @param {{project?: any, selected?: any} | null} [admission]
+ * @returns {Promise<{ counts: Array<{ basisVersion: number | null, status: string | null, n: number, judgementCoverage: string }>,
+ *   sample: Array<Record<string, any> & { basisVersion: number | null }>, observations?: Array<Record<string, any>> }>}
  */
-export async function readGeoValueCoverage(store, geoId, { engine = null, groupId = null, audience = null } = {}) {
+export async function readGeoValueCoverage(store, geoId, { engine = null, groupId = null, audience = null } = {}, admission = null) {
+  const selectedMode = admission !== null;
+  const ownerId = admission?.project?.userId ?? null;
+  let snapshotIds = null;
+  if (selectedMode) {
+    if (admission?.project?.id !== geoId || typeof ownerId !== 'string' || !ownerId || !Array.isArray(admission?.selected?.rows))
+      throw new HttpError(422, 'geo_read_filter_invalid', 'An authorized project selection is required.');
+    snapshotIds = [...new Set(admission.selected.rows.map(row => row.snapshotId))];
+    if (snapshotIds.length > 20000 || snapshotIds.some(id => typeof id !== 'string' || !id))
+      throw new HttpError(422, 'geo_read_filter_invalid', 'Narrow the selected answers to at most 20,000.');
+  }
   const basis = `CASE WHEN jsonb_typeof(f.judge_extract -> 'valueBasisVersion') = 'number' THEN (f.judge_extract ->> 'valueBasisVersion')::numeric END`;
-  const from = `FROM evimed_geo.facts f JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id
+  const from = `FROM evimed_geo.facts f JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id AND s.geo_project_id=f.geo_project_id AND s.user_id=f.user_id
+    JOIN evimed_geo.rounds r ON r.id=s.round_id AND r.geo_project_id=s.geo_project_id AND r.user_id=s.user_id
     CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(f.judge_extract -> 'valueCoverage') = 'array'
       THEN f.judge_extract -> 'valueCoverage' ELSE '[]'::jsonb END) WITH ORDINALITY AS obs(entry, position)
     WHERE f.geo_project_id = $1 AND f.judged_at IS NOT NULL AND jsonb_typeof(obs.entry) = 'object'
       AND ($2::text IS NULL OR s.engine = $2)
-      AND ($3::text IS NULL OR s.question_id IN (SELECT id FROM evimed_geo.questions WHERE geo_project_id = $1 AND group_id = $3))
-      AND ($4::text IS NULL OR s.question_id IN (SELECT q.id FROM evimed_geo.questions q JOIN evimed_geo.question_groups g ON g.id = q.group_id WHERE q.geo_project_id = $1 AND g.audience = $4))
-      AND s.round_id =
-        (SELECT id FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind IN ('baseline', 'weekly', 'single_step')
-          AND status IN ('done', 'partial') ORDER BY created_at DESC LIMIT 1)`;
-  const parameters = [geoId, engine, groupId, audience];
-  const [counted, shown] = await Promise.all([
-    store.query(`SELECT ${basis} AS basis, obs.entry ->> 'status' AS status, count(*)::integer AS n ${from} GROUP BY 1, 2`, parameters),
-    store.query(`SELECT * FROM (
-        SELECT obs.entry, ${basis} AS basis, f.judge_extract -> 'rubricVersion' AS rubric, s.engine, s.round_id, s.asked_at,
-          row_number() OVER (PARTITION BY ${basis}
-            ORDER BY (coalesce(obs.entry ->> 'status', '') = 'not_applicable'), s.asked_at DESC NULLS LAST, s.id, obs.position) AS place
-        ${from}) ranked
-      WHERE place <= ${GEO_VALUE_OBSERVATIONS_SHOWN} ORDER BY basis DESC NULLS LAST, place`, parameters),
-  ]);
+      AND ($3::text IS NULL OR s.question_id IN (SELECT id FROM evimed_geo.questions WHERE geo_project_id = $1 AND user_id=s.user_id AND group_id = $3))
+      AND ($4::text IS NULL OR s.question_id IN (SELECT q.id FROM evimed_geo.questions q JOIN evimed_geo.question_groups g ON g.id=q.group_id AND g.geo_project_id=q.geo_project_id AND g.user_id=q.user_id WHERE q.geo_project_id=$1 AND q.user_id=s.user_id AND g.audience=$4))
+      AND ($5::text IS NULL OR f.user_id=$5)
+      AND ${selectedMode ? 's.id=ANY($6::text[])' : `s.round_id=(SELECT id FROM evimed_geo.rounds WHERE geo_project_id=$1 AND user_id=s.user_id
+        AND kind IN ('baseline','weekly','single_step') AND status IN ('done','partial') ORDER BY created_at DESC,id DESC LIMIT 1)`}`;
+  // One read-time interpretation feeds both counts and sampled observations.
+  // Historical rows with no coverage remain unknown; the older explicit cut
+  // is sufficient evidence of partial coverage. Supported observed text stays.
+  const cte = `WITH observations AS (
+      SELECT obs.entry, obs.position, ${basis} AS basis, f.judge_extract -> 'rubricVersion' AS rubric,
+        f.checks, f.judged_at, s.engine, s.round_id, s.question_id, s.asked_at, s.id AS snapshot_id, char_length(coalesce(s.answer_text, '')) AS answer_chars,
+        CASE WHEN f.checks -> 'answerCut' IS NOT NULL AND f.checks -> 'answerCut' <> 'null'::jsonb THEN 'partial'
+          WHEN f.checks #>> '{judgementCoverage,status}' IN ('complete', 'partial') THEN f.checks #>> '{judgementCoverage,status}'
+          ELSE 'unknown' END AS coverage_status
+      ${from}
+    ), interpreted AS (
+      SELECT observations.*, CASE WHEN coverage_status <> 'complete' AND entry ->> 'status' IN ('not_addressed', 'not_applicable')
+        THEN 'uncertain' ELSE entry ->> 'status' END AS status FROM observations
+    )`;
+  const parameters = [geoId, engine, groupId, audience, ownerId, ...(selectedMode ? [snapshotIds] : [])];
+  const counted = await store.query(`${cte} SELECT basis, status, coverage_status, count(*)::integer AS n FROM interpreted GROUP BY 1, 2, 3`, parameters);
+  const total = counted.rows.reduce((sum, row) => sum + Number(row.n), 0);
+  if (selectedMode && total > 20000)
+    throw new HttpError(422, 'geo_read_filter_invalid', 'Narrow the selection to at most 20,000 finding observations.');
+  const shown = await store.query(`${cte} SELECT * FROM (
+        SELECT interpreted.*, row_number() OVER (PARTITION BY basis
+          ORDER BY (coalesce(status, '') IN ('not_applicable', 'uncertain')), asked_at DESC NULLS LAST, snapshot_id, position) AS place
+        FROM interpreted) ranked
+      ${selectedMode ? '' : `WHERE place <= ${GEO_VALUE_OBSERVATIONS_SHOWN}`} ORDER BY basis DESC NULLS LAST, place ${selectedMode ? 'LIMIT 20001' : ''}`, parameters);
+  if (selectedMode && (shown.rows.length > 20000 || shown.rows.length !== total))
+    throw new HttpError(409, 'geo_read_filter_invalid', 'The selected observations changed. Refresh the analysis.');
+  const observation = (row) => {
+    const basisVersion = row.basis == null ? null : Number(row.basis);
+    const coverage = geoValueObject(row.checks?.judgementCoverage) ? row.checks.judgementCoverage : {};
+    const cut = row.checks?.answerCut;
+    const judgementCoverage = { ...coverage, status: row.coverage_status,
+      reasons: [...new Set([...(Array.isArray(coverage.reasons) ? coverage.reasons : row.coverage_status === "unknown" ? ["historical_coverage_unknown"] : []), ...(cut ? ["answer_truncated"] : [])])],
+      answerChars: Number(coverage.answerChars ?? cut?.chars ?? row.answer_chars), assessedChars: Number(coverage.assessedChars ?? cut?.shown ?? 0) };
+    return { ...row.entry, status: row.status, recordedStatus: row.entry.status ?? null, judgementCoverage,
+      id: JSON.stringify([row.snapshot_id, Number(row.position)]), snapshotId: row.snapshot_id, position: Number(row.position), questionId: row.question_id,
+      engine: row.engine, roundId: row.round_id, basisVersion, rubricVersion: row.rubric ?? null,
+      judgedAt: row.judged_at ? new Date(row.judged_at).toISOString() : null,
+      askedAt: row.asked_at ? new Date(row.asked_at).toISOString() : null };
+  };
   return {
-    counts: counted.rows.map((/** @type {any} */ row) => ({ basisVersion: row.basis == null ? null : Number(row.basis), status: row.status ?? null, n: Number(row.n) })),
-    sample: shown.rows.map((/** @type {any} */ row) => {
-      const basisVersion = row.basis == null ? null : Number(row.basis);
-      return { ...row.entry, engine: row.engine, roundId: row.round_id, basisVersion, rubricVersion: row.rubric ?? null,
-        askedAt: row.asked_at ? new Date(row.asked_at).toISOString() : null };
-    }),
+    counts: counted.rows.map((/** @type {any} */ row) => ({ basisVersion: row.basis == null ? null : Number(row.basis), status: row.status ?? null,
+      n: Number(row.n), judgementCoverage: row.coverage_status })),
+    sample: shown.rows.filter(row => Number(row.place) <= GEO_VALUE_OBSERVATIONS_SHOWN).map(observation),
+    ...(selectedMode ? { observations: shown.rows.map(observation) } : {}),
   };
 }
 

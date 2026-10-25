@@ -16,7 +16,8 @@ It prints one JSON report. Exit status: 0 the package is as declared, 1 it is no
 What it does not do: it runs, imports and installs nothing from the package, opens no network connection and writes no
 file. Reading a .zip never extracts it. It is standard library only (hashlib, json, zipfile) so there is nothing to
 install, and it drops the package directory from the import path before it imports anything, so a package that ships
-a json.py or a hashlib.py is not run by it. `-I` does the same from the outside; use it.
+a json.py or a hashlib.py is not imported by the script. Python startup hooks run before this filter; `-I` also
+ignores PYTHONPATH and startup customizations. Always use it.
 
 What a pass does not mean: the hashes show the files are the ones the manifest lists, not that the manifest is the
 one the platform wrote. Someone who rewrites the files and the manifest together passes. Take the manifest digest this
@@ -34,8 +35,8 @@ import sys
 # A package is untrusted input, and Python puts the running script's directory first on the import path: a package that
 # ships its own json.py would be imported in place of the standard library. Drop that entry before anything is imported
 # (os and sys are loaded by the interpreter itself and cannot be shadowed).
-_HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path[:] = [entry for entry in sys.path if entry not in ("", ".") and os.path.abspath(entry) != _HERE]
+_HERE = os.path.dirname(os.path.realpath(__file__))
+sys.path[:] = [entry for entry in sys.path if entry not in ("", ".") and os.path.realpath(entry) != _HERE]
 sys.dont_write_bytecode = True
 
 import argparse  # noqa: E402

@@ -1,3 +1,4 @@
+import { GeoAnalysisWorkbench } from "../GeoAnalysisWorkbench";
 import { useMemo, useState } from "react";
 import {
   readGeoCell,
@@ -15,13 +16,14 @@ import type { FilterOption } from "@/components/ui/FilterChips";
 import { TrendChart } from "@/components/charts/TrendChart";
 import { OWN_COLOR, TARGET_COLOR } from "@/components/charts/trendModel";
 import { GeoSparkline } from "../GeoSparkline";
+import { GeoComparison } from "../GeoComparison";
 import { useGeoToolbar } from "../geoFrame";
 import { nextMeasurement } from "../geoBand";
 import { readFailure, useGeoDiagnosis, useGeoMonitoring, type ReadFailure } from "../geoProjectData";
 import { ClusterDrawerHost } from "../spine/ClusterDrawerHost";
 import { clusterName } from "../spine/clusterModel";
 import { GEO_CLUSTER_FILTER_PARAM, GEO_ENGINE_PARAM, GEO_POOL_PARAM, useGeoDrawerAddress, useGeoSearchChange, useGeoSearchParam } from "../spine/drawerParams";
-import { useGeoClusters } from "../spine/spineData";
+import { useGeoClusters, useGeoQuestionCatalog } from "../spine/spineData";
 import { formatGeoValue, GeoCellText, geoCellWord } from "../GeoCellText";
 import {
   actionMarkers,
@@ -57,6 +59,7 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
   const monitoring = useGeoMonitoring(geoId);
   const diagnosis = useGeoDiagnosis(geoId);
   const clusters = useGeoClusters(geoId);
+  const catalog = useGeoQuestionCatalog(geoId);
   const drawer = useGeoDrawerAddress();
   const [engineParam, setEngineParam] = useGeoSearchParam(GEO_ENGINE_PARAM);
   const [poolParam] = useGeoSearchParam(GEO_POOL_PARAM);
@@ -72,19 +75,23 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
   const groups = useMemo(() => orderedGroups(clusters.state.kind === "ready" && Array.isArray(clusters.state.data?.groups) ? clusters.state.data.groups : []), [clusters.state]);
   const groupEngines = (clusters.state.kind === "ready" && Array.isArray(clusters.state.data?.engines) && clusters.state.data.engines.length > 0 ? clusters.state.data.engines : project.engines) as GeoEngine[];
   const engines = useMemo(() => {
-    const seen = [...(Array.isArray(diag?.byEngine) ? diag.byEngine.map((row) => row.engine) : []), ...groupEngines];
+    const seen = [...project.engines, ...(Array.isArray(diag?.byEngine) ? diag.byEngine.map((row) => row.engine) : []), ...groupEngines];
     return seen.filter((engine, at) => engine && seen.indexOf(engine) === at);
-  }, [diag, groupEngines]);
+  }, [project.engines, diag, groupEngines]);
   const engine = engineParam && engines.includes(engineParam as GeoEngine) ? engineParam : null;
-  const pools = useMemo(() => poolsOf(groups), [groups]);
+  const catalogGroups = useMemo(() => [...new Map([
+    ...(catalog.state.kind === "ready" ? catalog.state.data.groups : []), ...groups,
+  ].map(group => [group.id, group])).values()], [catalog.state, groups]);
+  const pools = useMemo(() => poolsOf(catalogGroups), [catalogGroups]);
   const pool = poolParam && pools.some((entry) => entry.value === poolParam) ? (poolParam as GeoPool) : null;
   const inPool = useMemo(() => (pool ? groups.filter((row) => row.pool === pool) : groups), [groups, pool]);
-  const cluster = clusterParam && inPool.some((row) => row.id === clusterParam) ? clusterParam : null;
+  const groupOptions = useMemo(() => pool ? catalogGroups.filter(row => row.pool === pool) : catalogGroups, [catalogGroups, pool]);
+  const cluster = clusterParam && groupOptions.some(row => row.id === clusterParam) ? clusterParam : null;
   const shownGroups = useMemo(() => (cluster ? inPool.filter((row) => row.id === cluster) : inPool), [inPool, cluster]);
   const narrowed = engine !== null || pool !== null || cluster !== null;
   const metric = line ? line.key : null;
 
-  useGeoToolbar(options.length > 1 || engines.length > 1 || pools.length > 1 || groups.length > 1 ? {
+  useGeoToolbar(options.length > 1 || engines.length > 1 || pools.length > 1 || groupOptions.length > 1 ? {
     filters: [
       ...(options.length > 1 ? [{ kind: "chips" as const, label: "指标", options, value: metric ?? options[0].value, onChange: setKey }] : []),
       ...(engines.length > 1 ? [{
@@ -95,7 +102,7 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
         value: engine,
         onChange: setEngineParam,
       }] : []),
-      ...(pools.length > 1 ? [{
+      ...(pools.length > 1 || pool ? [{
         kind: "select" as const,
         label: "问句池",
         allLabel: "全部问句池",
@@ -104,11 +111,11 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
         // a pool takes the group it holds with it, in one step
         onChange: (value: string | null) => change({ [GEO_POOL_PARAM]: value, [GEO_CLUSTER_FILTER_PARAM]: null }),
       }] : []),
-      ...(inPool.length > 1 ? [{
+      ...(groupOptions.length > 1 || cluster ? [{
         kind: "select" as const,
         label: "问题群",
         allLabel: "全部问题群",
-        options: inPool.map((row) => ({ value: row.id, label: clusterName(row) })),
+        options: groupOptions.map((row) => ({ value: row.id, label: clusterName(row) })),
         value: cluster,
         onChange: setClusterParam,
       }] : []),
@@ -129,6 +136,8 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
 
   return (
     <div data-geo-tab="visibility" className="flex flex-col gap-6">
+      <GeoComparison geoId={geoId} view={project} />
+      <GeoAnalysisWorkbench geoId={geoId} project={project} initialView="V02" />
       <MetricTrend
         project={project}
         watch={watch}
@@ -139,6 +148,7 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
         loading={monitoring.state.kind === "loading"}
         error={monitoringFailed}
       />
+      <PoolRivalTrends project={project} rivals={watch?.rivals} />
       <EngineHeatCard project={project} diagnosis={diag} loading={diagnosis.state.kind === "loading"} metric={metric} engine={engine} error={diagnosisFailed} />
       {isEngineBarMetric(metric)
         ? <EngineMetricCard diagnosis={diag} metric={metric} selected={engine} onSelect={setEngineParam} />
@@ -189,7 +199,7 @@ function MetricTrend({
     own: { name: project.product?.brandName || project.name, values: points.map(statedValue) },
     // Rivals are measured on our mention rate's own questions (M-16 beside
     // M-01S), so they are drawn on that chart and on no other.
-    rivals: line?.key === "mention" ? rivalLines(watch?.rivals, points.map((point) => point.date)) : [],
+    rivals: line?.key === "mention" ? rivalLines(watch?.rivals?.filter(rival => !rival.pool), points.map((point) => point.date)) : [],
     target,
     targetLabel: target === null ? null : `目标 ${format(target)}`,
     markers: withCoverageMarker(actionMarkers(points.map((point) => point.date), watch), points),
@@ -466,4 +476,20 @@ function MoreMetrics({ geoId, diagnosis }: { geoId: string; diagnosis: GeoDiagno
       </ul>
     </Disclosure>
   );
+}
+
+/** Pool-qualified competitors use their own paired denominator, never the global mention curve. */
+function PoolRivalTrends({project,rivals}:{project:GeoProject;rivals:GeoMonitoring["rivals"]}) {
+ return <>{(rivals??[]).filter(rival=>rival.pool&&rival.ownPoints).map(rival=>{
+  const points=rival.points,own=rival.ownPoints??[],labels=points.map(point=>monthDay(point.date)??point.date),known=points.some(point=>point.value!==null)||own.some(point=>point.value!==null);
+  return <ChartCard key={`${rival.entityKey}-${rival.pool}`} title={rival.label??`${rival.name} · ${rival.pool}`} state={known?"content":"empty"} emptyText="这个问句池尚无足够的可测回答；历史缺席保留未知。">
+   <TrendChart label={`${rival.name} ${rival.pool} 同口径趋势`} input={{labels,own:{name:project.product?.brandName??project.name,values:points.map(point=>own.find(item=>item.date===point.date)?.value??null)},rivals:[{name:rival.name,values:points.map(point=>point.value)}]}}/>
+   <DataTable label={`${rival.name} ${rival.pool} 同口径读数`} rows={points} rowKey={point=>point.date} columns={[
+    {key:"date",header:"实测日期",rowHeader:true,cell:point=>point.date},
+    {key:"own",header:"本品提及率",cell:point=>{const ownPoint=own.find(item=>item.date===point.date);return ownPoint?.value==null?"未知或样本不足":`${ownPoint.value}%`; }},
+    {key:"rival",header:"竞品提及率",cell:point=>point.value==null?"未知或样本不足":`${point.value}%`},
+    {key:"n",header:"共同合资格回答",cell:point=>point.n??"未知"},
+   ]}/>
+  </ChartCard>;
+ })}</>;
 }

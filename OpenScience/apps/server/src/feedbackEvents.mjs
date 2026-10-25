@@ -500,16 +500,18 @@ export class FeedbackEvents {
    * over. A run that was corrected at any time, by a steer, a follow-up or a result corrected in the page, is not in it, however
    * late the correction came.
    *
-   * @param {string} userId @param {{ scope: string, from: Date, to: Date, limit?: number }} window
+   * @param {string} userId @param {{ scope: string, from: Date, to: Date, limit?: number, projectId?: string|null }} window
    * @returns {Promise<{ runId: string, projectId: string | null, at: string, endedAt: string | null, shape: any[] }[]>}
    */
-  async cleanSettledRuns(userId, { scope, from, to, limit = 200 }) {
+  async cleanSettledRuns(userId, { scope, from, to, limit = 200, projectId = undefined }) {
     productInteger(limit, 1, 1000);
+    if (projectId != null) productId(projectId,"project");
     await migrateProductStore(this.database);
     const result = await this.database.query(`SELECT DISTINCT ON (e.subject_id) e.subject_id, e.project_id, e.occurred_at, e.detail->>'endedAt' AS ended_at, e.detail->'shape' AS shape
       FROM evimed_product.feedback_events e
       WHERE e.user_id=$1 AND e.trigger_kind='learning-evidence' AND e.subject_type='run' AND e.detail->>'scope'=$2
         AND e.occurred_at >= $3 AND e.occurred_at < $4
+        AND ($6::boolean=false OR e.project_id IS NOT DISTINCT FROM $7::text)
         AND (e.detail->>'evidence'='silent' OR (e.detail->>'evidence'='follow-up' AND e.detail->>'verdict' <> ALL($5::text[])))
         AND e.detail ? 'shape'
         AND NOT EXISTS (SELECT 1 FROM evimed_product.feedback_events c
@@ -517,7 +519,7 @@ export class FeedbackEvents {
             AND (c.detail->>'evidence' IN ('steer','result-corrected')
               OR (c.detail->>'evidence'='follow-up' AND c.detail->>'verdict'=ANY($5::text[]))))
       ORDER BY e.subject_id, e.occurred_at, e.id`,
-    [productId(userId, "user"), scope, from.toISOString(), to.toISOString(), [...LEARNING_CORRECTION_VERDICTS]]);
+    [productId(userId, "user"), scope, from.toISOString(), to.toISOString(), [...LEARNING_CORRECTION_VERDICTS],projectId!==undefined,projectId??null]);
     return result.rows
       .map((/** @type {any} */ row) => ({ runId: String(row.subject_id), projectId: row.project_id ?? null, at: new Date(row.occurred_at).toISOString(),
         endedAt: Number.isFinite(Date.parse(String(row.ended_at ?? ""))) ? new Date(row.ended_at).toISOString() : null, shape: Array.isArray(row.shape) ? row.shape : [] }))

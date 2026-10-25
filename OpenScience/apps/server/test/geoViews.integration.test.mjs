@@ -104,12 +104,16 @@ test("the counts of errors are taken over every row, severe means live S3 or S4,
   const { project } = await seededProject();
   const map = await store.questionMap(project.id, 1);
   const question = map[0].questions[0];
+  const roundId = `errors-round-${project.id}`;
+  const snapshotId = `errors-snapshot-${project.id}`;
+  await insertRound(roundId, project.id, "baseline");
+  await insertSnapshot(snapshotId, project.id, roundId, question.id, "deepseek", "valid", "2026-09-24T00:00:00Z");
   let n = 0;
   const addError = (/** @type {string} */ status, /** @type {string} */ severity, /** @type {string | null} */ last = null) => {
     n += 1;
     return database.query(`INSERT INTO evimed_geo.errors (id, user_id, geo_project_id, fingerprint, engine, question_id, statement, error_type, severity, status,
         first_snapshot_id, last_snapshot_id, updated_at) VALUES ($1, $2, $3, $4, 'deepseek', $5, $6, 'number', $7, $8, NULL, $9, now() + ($10 || ' seconds')::interval)`,
-    [`e-${run}-${project.id}-${n}`, ALICE, project.id, `fp-${n}`, question.id, `讲错第 ${n} 句`, severity, status, last, String(n)]);
+    [`e-${run}-${project.id}-${n}`, ALICE, project.id, `fp-${n}`, question.id, `讲错第 ${n} 句`, severity, status, last ?? snapshotId, String(n)]);
   };
   // 6 open (one S4, one S3), 2 acting (one S3), 1 awaiting a remeasure (S3), 3 closed (one S4): 12 rows against a list of 5.
   await addError("open", "S4"); await addError("open", "S3");
@@ -119,7 +123,7 @@ test("the counts of errors are taken over every row, severe means live S3 or S4,
   await addError("closed", "S4"); await addError("closed", "S1"); await addError("closed", "S2");
 
   const diagnosis = await service.diagnosis(USER, project.id);
-  assert.deepEqual(diagnosis.errorCounts, { total: 12, open: 6, acting: 2, awaiting_remeasure: 1, closed: 3, severe: 4 },
+  assert.deepEqual(diagnosis.errorCounts, { total: 12, open: 6, acting: 2, awaiting_remeasure: 1, closed: 3, severe: 4, withdrawn: 0 },
     "S4 + S3 open, S3 acting, S3 awaiting a remeasure — the closed S4 is not live");
   assert.equal(diagnosis.errors.length, 5, "the list is capped (geoDiagnosisErrorLimit), the counts are not");
   assert.ok(diagnosis.errors.every((error) => error.status !== "closed"), "live errors come first, severe first");
@@ -254,11 +258,13 @@ test("the diagnosis says whether the two hard lines are met: accuracy only from 
 
   // Errors: seven open ones traced to a cited source (the list carries five), one the model's own, one traced but closed.
   const question = (await store.questionMap(project.id, 1))[0].questions[0];
+  const snapshotId = `hardline-snapshot-${project.id}`;
+  await insertSnapshot(snapshotId, project.id, roundId, question.id, "deepseek", "valid", "2026-09-24T00:00:00Z");
   let n = 0;
   const addError = (/** @type {string} */ status, /** @type {unknown} */ citedSource) => {
     n += 1;
-    return database.query(`INSERT INTO evimed_geo.errors (id, user_id, geo_project_id, fingerprint, engine, question_id, statement, error_type, severity, status, cited_source)
-      VALUES ($1, $2, $3, $4, 'deepseek', $5, $6, 'number', 'S3', $7, $8::jsonb)`, [`eh-${run}-${project.id}-${n}`, ALICE, project.id, `fph-${n}`, question.id, `讲错第 ${n} 句`, status, citedSource ? JSON.stringify(citedSource) : null]);
+    return database.query(`INSERT INTO evimed_geo.errors (id, user_id, geo_project_id, fingerprint, engine, question_id, statement, error_type, severity, status, cited_source, last_snapshot_id)
+      VALUES ($1, $2, $3, $4, 'deepseek', $5, $6, 'number', 'S3', $7, $8::jsonb, $9)`, [`eh-${run}-${project.id}-${n}`, ALICE, project.id, `fph-${n}`, question.id, `讲错第 ${n} 句`, status, citedSource ? JSON.stringify(citedSource) : null, snapshotId]);
   };
   await addError("open", null);
   await addError("closed", { url: "https://farm.example/x", domain: "farm.example", attribute: "farm" });

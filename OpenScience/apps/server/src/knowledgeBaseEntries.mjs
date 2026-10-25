@@ -155,6 +155,18 @@ export function createKnowledgeBaseEntries({ sources, write, readWeb, readFile, 
     const family = await sources.documents.list(user.id, "source", { projectId: current.projectId, filter: { familyId }, limit: 100 });
     for (const older of family.items) {
       if (older.id === current.id) continue;
+      const replacedPaths = new Set(current.payload.paths ?? []);
+      const remaining = (older.payload.paths ?? []).filter(file => !replacedPaths.has(file));
+      if (remaining.length) {
+        // One digest can be registered at several paths. Replacing one path
+        // does not retire the unchanged copies or their preserved capture.
+        if (remaining.length !== older.payload.paths.length) {
+          await sources.documents.put(user.id, "source", older.id,
+            { ...older.payload, paths: remaining, updatedAt: now().toISOString() },
+            { projectId: older.projectId, expectedRevision: older.revision });
+        }
+        continue;
+      }
       await sources.remove(user.id, older.id, { expectedRevision: older.revision, accountCreatedAt: user.accountCreatedAt });
     }
   }

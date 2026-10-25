@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router";
 import { ArrowLeft, FileQuestion, Loader2 } from "lucide-react";
 import { hasWebApi, listWebAgentRuns, webErrorMessage, type WebAgentRun } from "@/lib/apiClient";
@@ -19,6 +19,8 @@ import { ReportReader } from "@/components/report/ReportReader";
 import { EvidenceMatrixTable } from "@/components/report/EvidenceMatrixTable";
 import { useClaimMatrix } from "@/components/report/useClaimMatrix";
 import { ReportRunContext } from "@/components/report/ReportRunContext";
+import { ScopedResultVersionInspector } from "@/components/inspector/ResultVersionInspector";
+import { getGeoSignalResult, readGeoSignalResultBytes } from "@/lib/geoSignalsClient";
 
 const FilePreviewInspector = lazy(() => import("@/components/inspector/FilePreviewInspector").then((m) => ({ default: m.FilePreviewInspector })));
 
@@ -41,6 +43,34 @@ const CLAIM_ID = /^CLM-\d{3,6}$/;
  * 「未注明」 where the run would have spoken.
  */
 export function RunFilePage() {
+  const [search] = useSearchParams();
+  if (search.has('geoProject') || search.has('signal') || search.has('geoRun')) return <GeoSignalRunFile />;
+  return <OwnedRunFilePage />;
+}
+
+/** A module grant never falls back to an equally named account-owned workspace. */
+function GeoSignalRunFile() {
+  const params = useParams();
+  const [search] = useSearchParams();
+  const geoId = search.get('geoProject') ?? '', signalId = search.get('signal'), versionId = search.get('version') ?? '', runId = params.runId ?? '';
+  const path = decodedPath(params['*'] ?? '');
+  const read = useCallback(async () => {
+    const version = await getGeoSignalResult(geoId, signalId, runId, versionId);
+    if (version.versionId !== versionId || version.path !== path || version.producer.runId !== runId) throw new Error('所选结果与处理记录不一致。');
+    const bytes = await readGeoSignalResultBytes(geoId, signalId, runId, versionId);
+    return { version, bytes };
+  }, [geoId, signalId, runId, versionId, path]);
+  if (!path || !/^[A-Za-z0-9_-]{1,80}$/.test(geoId) || !(signalId ? /^gs_[a-f0-9]{64}$/.test(signalId) && !search.has('geoRun') : search.get('geoRun') === '1') || !/^rv_[a-f0-9]{64}$/.test(versionId) || !/^[A-Za-z0-9_-]{1,80}$/.test(runId)) {
+    return <p role="alert" className="p-6 text-ui text-error">结果链接不完整，请从原处理记录重新打开。</p>;
+  }
+  return <div className="mx-auto w-full max-w-page p-6">
+    <PageTitle page={path.split('/').at(-1) ?? '处理结果'} section="循证 GEO" />
+    <Link className="text-ui text-link hover:underline" to={`/app/geo/${encodeURIComponent(geoId)}${signalId ? `?signal=${encodeURIComponent(signalId)}` : ''}`}>返回处理记录</Link>
+    <ScopedResultVersionInspector path={path} runId={runId} versionId={versionId} read={read} />
+  </div>;
+}
+
+function OwnedRunFilePage() {
   const params = useParams();
   const runId = params.runId ?? "";
   const path = useMemo(() => decodedPath(params["*"] ?? ""), [params]);

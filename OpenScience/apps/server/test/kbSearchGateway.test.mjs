@@ -12,9 +12,9 @@ const runtimeManager = {
   },
 };
 
-async function withGateway(t, { config = {}, index = null, sourceScope = undefined } = {}) {
+async function withGateway(t, { config = {}, index = null, sourceScope = undefined, contextFor = null } = {}) {
   const failures = [];
-  const handler = createKbSearchGatewayHandler({ kbSearchEnabled: true, kbSearchTimeoutMs: 1_000, ...config }, runtimeManager, { index, sourceScope });
+  const handler = createKbSearchGatewayHandler({ kbSearchEnabled: true, kbSearchTimeoutMs: 1_000, ...config }, runtimeManager, { index, sourceScope, contextFor });
   const server = createServer((req, res) => { void handler(req, res, (failure) => failures.push(failure)); });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
@@ -40,6 +40,34 @@ test("the runtime's own token names the account and project searched, and the an
   const defaults = await call({ query: "q" });
   assert.equal(defaults.status, 200);
   assert.deepEqual(calls[1], { userId: "user-1", projectId: "project-1", query: "q", limit: 8, sourceIds: null });
+});
+
+test('trusted project context excludes library before search and proves saved session scope independently', async t => {
+  const calls = [], acceptSource = async () => true;
+  let ordinaryScope = 0;
+  const f = await withGateway(t, { index: { search: async input => { calls.push(input); return {}; } },
+    sourceScope: async () => { ordinaryScope += 1; return [SOURCE]; }, contextFor: async identity => {
+      assert.deepEqual(identity, { userId: 'user-1', projectId: 'project-1' });
+      return { kind: 'geo-project', acceptSource, sourceScope: async id => {
+        if (id !== 'proven-session') throw new Error('Session not proven');
+        return [];
+      } };
+    } });
+  assert.equal((await f.call({ query: 'q' })).status, 200);
+  assert.equal(calls[0].includeLibrary, false); assert.equal(calls[0].acceptSource, acceptSource);
+  assert.equal((await f.call({ query: 'q', sessionId: 'proven-session', sourceIds: [SOURCE] })).status, 200);
+  assert.deepEqual(calls[1].sourceIds, []);
+  assert.equal((await f.call({ query: 'q', sessionId: 'foreign-session' })).status, 503);
+  assert.equal(calls.length, 2); assert.equal(ordinaryScope, 0);
+  assert.equal((await f.call({ query: 'q', includeLibrary: true })).status, 400);
+});
+
+test('an unavailable project policy never falls back to the ordinary source scope', async t => {
+  for (const value of [null, {}, { kind: 'unknown' }, { kind: 'geo-project' }]) {
+    let searched = false;
+    const f = await withGateway(t, { index: { search: async () => { searched = true; return {}; } }, contextFor: async () => value });
+    assert.equal((await f.call({ query: 'q' })).status, 503); assert.equal(searched, false);
+  }
 });
 
 test("no token, a stale token, another route or another method is refused before the index is asked", async (t) => {

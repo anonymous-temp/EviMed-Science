@@ -47,7 +47,7 @@ const screenshotName = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.(?:png|jpg|jpeg|webp)
 /** Calls one project's runtime may make to the probe in a minute, unless the deployment sets another (`OPEN_SCIENCE_GEO_PROBE_CALLS_PER_MINUTE`). */
 export const GEO_PROBE_CALLS_PER_MINUTE = 12;
 
-const maxQuestionLength = 2_000;
+const maxQuestionLength = 4_000;
 const maxAnswerLength = 200_000;
 const maxJsonResponseBytes = 8 * 1024 * 1024;
 const maxScreenshotBytes = 8 * 1024 * 1024;
@@ -145,8 +145,8 @@ function validatedScreenshotName(value) {
  *  @param {{ question?: unknown, provider?: unknown, providers?: unknown, deep?: unknown, newChat?: unknown }} body
  *  @returns {{ question: string, providers: string[], deep: 0 | 1, newChat: 0 | 1 }} */
 function validatedAsk(body) {
-  const question = typeof body.question === "string" ? body.question.trim() : "";
-  if (!question || question.length > maxQuestionLength || /[\0]/.test(question)) {
+  const question = typeof body.question === "string" ? body.question : "";
+  if (!question.trim() || question.length > maxQuestionLength || /[\0]/.test(question)) {
     throw gatewayError(400, "geo_probe_question_invalid", "The GEO probe question is missing or malformed.");
   }
   const requested = body.providers == null

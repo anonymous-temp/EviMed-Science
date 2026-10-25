@@ -605,7 +605,7 @@
       "ownedGlobal": "__EVIMED_RESULT_REVISION__",
       "requestEnvelope": "args.request.evimedResultRevision.referenceId",
       "methods": ["stage", "clear"],
-      "note": "Control-plane-owned reference, staged after the native draft. The official fetch/openStream hooks attach it only to the same session/prompt whose text retains that draft prefix; replacement, navigation, cancellation and disposal clear it. Only an exact same requestId/text retry retains the submitted reference. The control plane reauthorizes the immutable target and removes this envelope before the upstream kernel receives the request. No new upstream service or composer subscription is used."
+      "note": "Control-plane-owned reference. Selected-text revisions retain their native draft prefix; optional whole-file context leaves the existing composer draft intact and attaches to the next actual request in that session. The official fetch/openStream hooks attach a selected-text reference only to the same session/prompt whose text retains that draft prefix; replacement, navigation, cancellation and disposal clear it. Only an exact same requestId/text retry retains the submitted reference. The control plane reauthorizes the immutable target and removes this envelope before the upstream kernel receives the request. No new upstream service or composer subscription is used."
     },
     "generation": "connection.generation",
     "failureMarker": "dshRemoteStreamFailure",

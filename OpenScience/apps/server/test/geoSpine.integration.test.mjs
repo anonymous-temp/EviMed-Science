@@ -216,6 +216,9 @@ async function seed() {
   [id("e1"), ALICE, geoId, id("g3q2"), id("s1"), id("claim1"), ago(8), id("e2"), id("e3"), id("g1q1")]);
   await q(`INSERT INTO evimed_geo.claims (id, user_id, geo_project_id, claim_key, version, statement, quote, source_ref, source_label, source_kind)
     VALUES ($1, $2, $3, 'C1', 1, '过敏者禁用', '对本品过敏者禁用', 'web-page:x', '说明书', 'label')`, [id("claim1"), ALICE, geoId]);
+  await q(`UPDATE evimed_geo.errors e SET last_snapshot_id = (SELECT s.id FROM evimed_geo.snapshots s
+    WHERE s.geo_project_id = e.geo_project_id AND s.question_id = e.question_id AND s.engine = e.engine AND s.round_id = $2 LIMIT 1)
+    WHERE e.geo_project_id = $1`, [geoId, id("r2")]);
   return { geoId, a2, a3 };
 }
 
@@ -560,4 +563,41 @@ test("with a market the sources carry its word on them: price, whether it would 
     service.spine.placementPreview = null;
     service.spine.marketConfigured = configuredBefore;
   }
+});
+
+
+test("narrative-only strategy tiers survive DTO and runtime reads with empty frozen targets and original version", options, async () => {
+  const project = await store.createProject({ userId: ALICE, projectId: id("rationale"), engines: ["deepseek"], coverageDays: 90 });
+  const summaries = [
+    "除平台硬线外不写效果预测：g1 仅 1 条回答且未判定，M-01、M-06 均为 not_measurable（0/0）；位置数与预算也未取得依据。",
+    "平台默认档位。除平台硬线外不写效果预测；位置数与预算无依据，保持未知。",
+    "除平台硬线外不写效果预测；位置数与预算无依据，保持未知。",
+  ];
+  const note = "平台准确率硬线 98%，不是本项目基线推算；g1 的 M-06 判定为 0/0（not_adjudicated），基线不可测。";
+  const basis = { groups: [], selection: { reference: "unavailable-historical-selection" }, scope: {}, focus: { sourceId: "original-source", url: "https://n09.example.invalid/g1" },
+    sources: [{ id: "original-source", url: "https://n09.example.invalid/g1", availability: "unknown" }], targets: { version: null, rows: [] }, readings: { selected: { cells: [], rounds: [] } } };
+  const original = await store.writeStrategy(ALICE, project.id, { runId: "original-run", basis, tiers: summaries.map((summary, index) => ({ tier: String(index + 1), summary,
+    targets: [{ metricId: "M-06", pool: "P2", note }] })) });
+  const response = await call("GET", `/api/geo/projects/${project.id}/strategy?strategyVersion=${original.version}`);
+  assert.equal(response.status, 200);
+  const plan = response.payload.data;
+  assert.equal(plan.version, original.version); assert.equal(plan.runId, "original-run"); assert.deepEqual(plan.basis, basis);
+  assert.deepEqual(plan.tiers.map(tier => tier.summary), summaries); assert.equal(plan.tiers.length, 3);
+  assert.deepEqual(plan.targets.rows, []);
+  for (const tier of plan.tiers) {
+    assert.deepEqual(tier.targetNotes, [{ metricId: "M-06", name: "事实准确率", pool: "P2", note }]);
+    assert.equal(tier.targetCount, 0); assert.equal(tier.budgetCny, null); assert.equal(tier.placements, null);
+  }
+  const runtime = await service.runtimeRead(project, "strategy", { strategyVersion: original.version });
+  assert.equal(runtime.strategy.version, original.version); assert.deepEqual(runtime.strategy.tiers.map(tier => tier.targets[0].note), [note, note, note]);
+  // A later plan cannot relabel the historical rationale or its original source focus.
+  await store.writeStrategy(ALICE, project.id, { tiers: [{ tier: "1", name: "Later plan" }] });
+  const historical = await call("GET", `/api/geo/projects/${project.id}/strategy?strategyVersion=${original.version}`);
+  assert.deepEqual(historical.payload.data.tiers, plan.tiers); assert.deepEqual(historical.payload.data.basis, basis);
+  assert.deepEqual((await store.latestTargets(project.id))?.rows ?? [], []);
+  const next = await store.writeStrategy(ALICE, project.id, { tiers: [{ tier: "1", summary: "Summary only" }, { tier: "2", targets: [{ metricId: "M-09", note: "Note only" }] }, { tier: "3", summary: " ", targets: [{ metricId: "M-06", note: "" }] }] });
+  const minimal = await call("GET", `/api/geo/projects/${project.id}/strategy?strategyVersion=${next.version}`);
+  assert.deepEqual(minimal.payload.data.tiers.map(tier => tier.tier), ["1", "2"]);
+  assert.deepEqual(minimal.payload.data.tiers[0].targetNotes, []); assert.equal(minimal.payload.data.tiers[1].targetNotes[0].pool, null);
+  assert.equal(minimal.payload.data.tiers[1].targetNotes[0].metricId, "M-09");
 });

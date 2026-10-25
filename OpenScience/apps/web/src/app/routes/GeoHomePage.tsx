@@ -87,7 +87,7 @@ export function GeoHomePage() {
     if (creating) return;
     setCreating(true);
     void createGeoProject({})
-      .then((created) => openConversation({ projectId: created.projectId, sessionId: created.sessionId }))
+      .then((created) => openConversation({ geoId: created.id, projectId: created.projectId, sessionId: created.sessionId }))
       .catch((error: unknown) => {
         if (isGeoOff(error)) setListing({ kind: "off" });
         else toast.error(webErrorMessage(error, { fallback: "无法新建项目，请稍后重试。" }));

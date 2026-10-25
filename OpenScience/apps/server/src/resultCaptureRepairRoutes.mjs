@@ -1,8 +1,8 @@
 import { HttpError, readJson, safeId, sendJson } from "./security.mjs";
 
 /** The owner may refresh an inventory; only signed-in deployment operators may plan and apply historical capture repairs.
- * @param {{store:any,runs:any,service:any,config:any,maxJsonBytes:number}} dependencies */
-export function createResultCaptureRepairRoutes({ store, runs, service, config, maxJsonBytes }) {
+ * @param {{store:any,runs:any,service:any,config:any,maxJsonBytes:number,refreshAndReconcile?:any}} dependencies */
+export function createResultCaptureRepairRoutes({ store, runs, service, config, maxJsonBytes, refreshAndReconcile = null }) {
   return async (/** @type {any} */ req, /** @type {any} */ res) => {
     const url = new URL(req.url ?? "/", "http://evimed.local");
     const ordinary = /^\/api\/agent-runs\/([^/]+)\/artifacts\/refresh$/.exec(url.pathname);
@@ -22,7 +22,7 @@ export function createResultCaptureRepairRoutes({ store, runs, service, config, 
       const project = await store.requireProject(user, projectId);
       let runId;
       try { runId = safeId(decodeURIComponent(ordinary[1]), "run id"); } catch { throw new HttpError(400, "invalid_payload", "Invalid run id."); }
-      data = await runs.refreshArtifacts(project, runId, { expectedTranscriptSha256: body.expectedTranscriptSha256 });
+      data = await (refreshAndReconcile ?? runs.refreshArtifacts.bind(runs))(project, runId, { expectedTranscriptSha256: body.expectedTranscriptSha256 });
     } else {
       if (!service) throw new HttpError(503, "result_storage_unavailable", "Result storage is temporarily unavailable.");
       const request = { userId: safeId(body.userId, "user id"), projectId, runId: safeId(body.runId, "run id"), requestedBy: user.id,

@@ -1,0 +1,45 @@
+{
+  "package": "@deepseek-ai/dsh-user-questions",
+  "version": "0.2.1-rc.2",
+  "sourceDigest": "e1c51afac2e31be8593c6426976e5f31dbe2a709b85ae1ea43ed406146f54265",
+  "hostDigest": "041f0620dc0fe93e1c7fdd65fc40ec518b4516a41cc78cb6edc6b73ec92feacd",
+  "callId": "call-native",
+  "questions": [
+    {
+      "id": "q",
+      "question": "Which?",
+      "header": "Choice",
+      "options": [
+        {
+          "label": "A"
+        },
+        {
+          "label": "B",
+          "description": "Other"
+        }
+      ],
+      "multiSelect": true
+    }
+  ],
+  "answers": [
+    {
+      "id": "q",
+      "selected": [
+        "A"
+      ],
+      "custom": "actual human custom answer"
+    }
+  ],
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"kind\":\"answer_to_pending_question\",\"tool\":\"ask_user_question\",\"callId\":\"call-native\",\"questions\":[{\"id\":\"q\",\"question\":\"Which?\",\"header\":\"Choice\",\"options\":[{\"label\":\"A\"},{\"label\":\"B\",\"description\":\"Other\"}],\"multiSelect\":true}],\"answers\":[{\"id\":\"q\",\"selected\":[\"A\"],\"custom\":\"actual human custom answer\"}]}"
+    }
+  ],
+  "source": {
+    "kind": "user-question-reply",
+    "callId": "call-native",
+    "outcome": "answered"
+  },
+  "accepted": true
+}

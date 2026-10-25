@@ -4674,7 +4674,7 @@ export function handoffProbe([action]) {
  * the two equal): none of them sends. `originReference` (where the conversation came from) was added there and not here, and every
  * event page's 深入研究 read as carrying a field a draft does not need (r19-guards2).
  */
-export const HANDOFF_FIELDS = ["draft", "kind", "originReference", "projectId", "references", "requestId", "resultRevision", "sessionId"];
+export const HANDOFF_FIELDS = ["draft", "geoPlanContext", "kind", "originReference", "projectId", "references", "requestId", "resultRevision", "scope", "sessionId"];
 
 /**
  * The event page's hand-off, judged (A01). `before` is the event page, `after` the address and state once 「深入研究」 was pressed, and

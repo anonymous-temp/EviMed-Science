@@ -45,8 +45,13 @@ function send(peer, data) {
  * heartbeat?: { intervalMs: number, timeoutMs: number },
  * admit?: (endpoint:string,operation:()=>Promise<void>,payload?:any) => Promise<void>,
  * observe?: (endpoint: string, payload?: any) => Promise<void>,
+ * beforeSend?: (endpoint:string,payload:any)=>Promise<void>,
+ * observeOutcome?: (endpoint:string,payload:any,outcome:any)=>void,
  * prepare?: (endpoint: string, payload?: any) => Promise<void>,
- * revalidate: () => Promise<void>, authorize: (endpoint: string, payload?:any) => Promise<void> }} options
+ * projectItem?: ((endpoint:string,payload:any,value:any,context?:{streamId:string,signal:AbortSignal})=>Promise<{forward:boolean,value?:any}>)|null,
+ * onStreamClosed?: ((endpoint:string,streamId?:string)=>void)|null,
+ * onProjectionDiscarded?: ((endpoint:string,streamId?:string)=>void)|null,
+ * revalidate: () => Promise<void>, authorize: (endpoint: string, payload?:any,context?:{streamId:string,signal:AbortSignal}) => Promise<void> }} options
  * `observe` sees an admitted prompt, and a `session/cancel` stop, immediately before it goes upstream; it
  * records, it never refuses.
  */
@@ -54,6 +59,11 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
   admit = async (_endpoint, operation) => operation(),
   observe = async () => {},
   prepare = async () => {},
+  beforeSend = async () => {},
+  observeOutcome = null,
+  projectItem = null,
+  onStreamClosed = null,
+  onProjectionDiscarded = null,
   heartbeat = { intervalMs: 15_000, timeoutMs: 10_000 } }) {
   const target = new URL("/api/remote.mux", runtime.url);
   target.protocol = target.protocol === "https:" ? "wss:" : "ws:";
@@ -66,6 +76,27 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
   /** @type {WebSocket | undefined} */
   let browser;
   let closed = false;
+  const streams = new Map();
+  const retiring = new Set();
+  const authorizing = new Set();
+  // Native cancellation has no terminal response; failure has only an error.
+  // Keep small tombstones for in-flight late frames, never payloads or active
+  // stream capacity. Never evict an identity on a live carrier: unread native
+  // frames could otherwise acquire a different endpoint's projection on reuse.
+  // Rotate the carrier before admitting more than this lifetime identity budget.
+  const MAX_LIFETIME_STREAMS = 4096;
+  const closedStreams = new Map();
+  const rememberClosed = (id, cancelled) => {
+    closedStreams.set(id, { streamId: id, cancelled, terminalError: !cancelled, finished: true });
+  };
+  const finishStream = operation => {
+    if (!operation || operation.finished) return;
+    operation.finished = true;
+    operation.controller?.abort();
+    retiring.delete(operation);
+    authorizing.delete(operation);
+    try { onStreamClosed?.(operation.endpoint, operation.streamId); } catch { /* Closing must still release both peers. */ }
+  };
   const acknowledgements = new Map();
   /** @type {NodeJS.Timeout | undefined} */
   let validationTimer;
@@ -79,7 +110,15 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
   const shutdown = (code = 1001, reason = "runtime_ui_closed") => {
     if (closed) return;
     closed = true;
-    for (const pending of acknowledgements.values()) pending.reject(new Error("Prompt acceptance is unknown."));
+    for (const operation of streams.values()) finishStream(operation);
+    for (const operation of retiring) finishStream(operation);
+    for (const operation of authorizing) finishStream(operation);
+    streams.clear();
+    closedStreams.clear();
+    for (const pending of acknowledgements.values()) {
+      if (observeOutcome) pending.resolve(pending.accepted ?? { state: 'unknown', authority: 'native-mux', reasonCode: 'transport_closed' });
+      else pending.reject(new Error('Prompt acceptance is unknown.'));
+    }
     acknowledgements.clear();
     clearInterval(validationTimer);
     clearInterval(heartbeatTimer);
@@ -135,12 +174,12 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
   }
 
   const client = browser;
-  const streams = new Set();
   let queuedBytes = 0;
   let queuedFrames = 0;
   let responseQueuedBytes = 0;
   let responseQueuedFrames = 0;
   let queue = Promise.resolve();
+  let responseQueue = Promise.resolve();
   let validating = false;
 
   /**
@@ -185,19 +224,26 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
     if (frame.type === "open") {
       // A duplicate ID cannot receive an independent error: it aliases an
       // already active stream, so the malformed connection is refused.
-      if (streams.has(frame.streamId)) { shutdown(1008, "runtime_ui_stream_duplicate"); return; }
+      if (streams.has(frame.streamId) || projectItem && closedStreams.has(frame.streamId)) { shutdown(1008, "runtime_ui_stream_duplicate"); return; }
+      if (projectItem && closedStreams.size + streams.size + authorizing.size >= MAX_LIFETIME_STREAMS) {
+        shutdown(1001, 'runtime_ui_generation_complete'); return;
+      }
+      const operation = { streamId: frame.streamId, endpoint: frame.endpoint, payload: frame.payload, controller: new AbortController(), cancelled: false, terminalError: false, finished: false };
+      authorizing.add(operation);
       try {
         if (streams.size >= MAX_STREAMS) throw new HttpError(429, "runtime_ui_stream_limit", "Too many active mux streams.");
-        await authorize(frame.endpoint, frame.payload);
+        await authorize(frame.endpoint, frame.payload, { streamId: frame.streamId, signal: operation.controller.signal });
       } catch (error) {
+        finishStream(operation);
         await rejectStream(frame.streamId, error);
         return;
       }
-      if (closed) return;
-      streams.add(frame.streamId);
+      if (closed) { finishStream(operation); return; }
+      authorizing.delete(operation);
+      streams.set(frame.streamId, operation);
     }
     // Preserve endpoint payloads and cancellation semantics byte-for-byte.
-    if (frame.type === "open" && frame.endpoint === "session/prompt") {
+    if (frame.type === "open" && (frame.endpoint === 'session/prompt' || observeOutcome && ['userQuestions/answer', '$events/result'].includes(frame.endpoint))) {
       try {
         await admit(frame.endpoint, async () => {
           // Target authorization is part of this operation, and a failure
@@ -206,16 +252,24 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
           // An observer that fails is the observer's to report; the prompt
           // is forwarded all the same.
           await Promise.resolve(observe(frame.endpoint, frame.payload)).catch(() => {});
-          const accepted = new Promise((resolve, reject) => { acknowledgements.set(frame.streamId, { resolve, reject }); });
+          const accepted = new Promise((resolve, reject) => { acknowledgements.set(frame.streamId, { resolve, reject, accepted: null }); });
+          void accepted.catch(() => {});
           const deadline = setTimeout(() => shutdown(1011, "runtime_prompt_acceptance_unknown"), 30000);
           try {
             const prepared = Buffer.from(JSON.stringify(frame));
             if (prepared.length > maxPayload) throw new HttpError(413, "runtime_ui_payload_limit", "The prepared native prompt is too large.");
-            await send(upstream, prepared); await accepted;
+            // Admission must read split item/end frames even while another projection is busy.
+            upstream.resume();
+            await beforeSend(frame.endpoint, frame.payload);
+            try { await send(upstream, prepared); }
+            catch (error) { observeOutcome?.(frame.endpoint, frame.payload, acknowledgements.get(frame.streamId)?.accepted ?? { state: 'unknown', authority: 'native-mux' }); throw error; }
+            const outcome = await accepted;
+            observeOutcome?.(frame.endpoint, frame.payload, outcome);
           }
           finally { clearTimeout(deadline); acknowledgements.delete(frame.streamId); }
         }, frame.payload);
       } catch (error) {
+        finishStream(streams.get(frame.streamId));
         streams.delete(frame.streamId);
         if (!closed) await rejectStream(frame.streamId, error);
       }
@@ -223,10 +277,22 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
       // A stop pressed in the kernel's own window is seen where it passes, before it goes upstream (review F4): who asked
       // is recorded first, so the run's own monitor reading the aborted turn cannot leave it unattributed. An observer
       // that fails never holds the stop back.
-      if (frame.type === "open" && frame.endpoint === "session/cancel") await Promise.resolve(observe(frame.endpoint, frame.payload)).catch(() => {});
-      await send(upstream, raw);
+      const forward = async () => {
+        if (frame.type === "open" && frame.endpoint === "session/cancel") await Promise.resolve(observe(frame.endpoint, frame.payload)).catch(() => {});
+        await send(upstream, raw);
+      };
+      if (frame.type === 'open') await admit(frame.endpoint, async () => {
+        if (frame.endpoint === 'session/cancel') await beforeSend(frame.endpoint, frame.payload);
+        await forward();
+      }, frame.payload);
+      else await forward();
     }
-    if (frame.type === "cancel") streams.delete(frame.streamId);
+    if (frame.type === "cancel") {
+      const operation = streams.get(frame.streamId);
+      finishStream(operation);
+      if (projectItem && operation) { operation.cancelled = true; rememberClosed(frame.streamId, true); }
+      streams.delete(frame.streamId);
+    }
   }
   client.on("message", (raw, binary) => {
     const data = Buffer.isBuffer(raw) ? raw : Buffer.from(/** @type {ArrayBuffer} */ (raw));
@@ -246,14 +312,29 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
   upstream.on("message", (raw, binary) => {
     if (closed) return;
     if (binary) { shutdown(1003, "runtime_ui_frame_invalid"); return; }
+    let frame, operation;
     try {
-      const frame = JSON.parse(raw.toString());
+      frame = JSON.parse(raw.toString());
       if (!nativeServerFrame(frame)) { shutdown(1008, "runtime_ui_frame_invalid"); return; }
+      operation = streams.get(frame.streamId) ?? (projectItem ? closedStreams.get(frame.streamId) : undefined);
+      if (projectItem && !operation) { shutdown(1008, "runtime_ui_stream_unbound"); return; }
+      if (projectItem && operation.cancelled && frame.type !== 'end') return;
+      if (projectItem && operation.terminalError && frame.type !== 'end') { shutdown(1008, 'runtime_ui_frame_invalid'); return; }
+      if (frame.type === 'item' && (operation?.endpoint === 'session/prompt' ? frame.value?.accepted === true : operation?.endpoint === 'userQuestions/answer' ? frame.value === true : operation?.endpoint === '$events/result')) {
+        const pending = acknowledgements.get(frame.streamId);
+        if (pending) pending.accepted = { state: 'accepted', authority: 'native-mux' };
+      }
       if (frame.type === "end" || frame.type === "error") {
+        if (projectItem && !operation.finished) retiring.add(operation);
+        if (projectItem) rememberClosed(frame.streamId, operation.cancelled);
+        if (projectItem && frame.type === 'error') {
+          operation.terminalError = true;
+        }
         streams.delete(frame.streamId);
-        // A valid terminal response proves acceptance or an explicit refusal;
-        // either releases admission. Transport loss retains pending authority.
-        acknowledgements.get(frame.streamId)?.resolve();
+        // Raw terminal frames release the operation independently of response
+        // projection. Only retained positive item data proves acceptance.
+        const pending = acknowledgements.get(frame.streamId);
+        pending?.resolve(pending.accepted ?? { state: 'unknown', authority: 'native-mux', reasonCode: 'terminal_without_acceptance' });
       }
     } catch { shutdown(1008, "runtime_ui_frame_invalid"); return; }
     const data = Buffer.isBuffer(raw) ? raw : Buffer.from(/** @type {ArrayBuffer} */ (raw));
@@ -264,10 +345,33 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
       shutdown(1009, "runtime_ui_queue_limit"); return;
     }
     responseQueuedBytes += data.length;
+    let charge = data.length;
     responseQueuedFrames++;
-    upstream.pause();
-    void send(client, data).catch(() => shutdown(1011, "runtime_ui_proxy_failed")).finally(() => {
-      responseQueuedBytes -= data.length;
+    if (!acknowledgements.size) upstream.pause();
+    responseQueue = responseQueue.then(async () => {
+      if (closed || operation?.cancelled && frame.type === 'item') return;
+      if (projectItem && frame.type === 'item') {
+        let projected;
+        try {
+          projected = await projectItem(operation.endpoint, operation.payload, frame.value,
+            { streamId: frame.streamId, signal: operation.controller.signal });
+        } finally {
+          if (closed || operation.cancelled) {
+            // Separate post-await reconciliation from the once-only lifecycle
+            // event. Legacy cleanup-only callbacks remain fail-closed too.
+            try { (onProjectionDiscarded ?? onStreamClosed)?.(operation.endpoint, operation.streamId); } catch { /* Peers are already closing or cancelled. */ }
+          }
+        }
+        if (closed || operation.cancelled) return;
+        if (!projected?.forward) return;
+        const projectedFrame = Buffer.from(JSON.stringify({ type: 'item', streamId: frame.streamId, ...('value' in projected ? { value: projected.value } : {}) }));
+        if (responseQueuedBytes - charge + projectedFrame.length > RUNTIME_UI_MUX_RESPONSE_MAX_BYTES) { shutdown(1009, 'runtime_ui_queue_limit'); return; }
+        responseQueuedBytes += projectedFrame.length - charge;
+        charge = projectedFrame.length;
+        await send(client, projectedFrame);
+      } else { if (frame.type !== 'item') finishStream(operation); await send(client, data); }
+    }).catch(() => shutdown(1011, "runtime_ui_proxy_failed")).finally(() => {
+      responseQueuedBytes -= charge;
       responseQueuedFrames--;
       if (!closed && responseQueuedFrames === 0) upstream.resume();
     });

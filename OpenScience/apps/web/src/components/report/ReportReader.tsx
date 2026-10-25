@@ -46,6 +46,8 @@ export function ReportReader({
   focusClaim = null,
   highlight = null,
   immutableVersion,
+  onDownload,
+  sourceRunId,
 }: {
   path: string;
   root?: FileRoot;
@@ -59,6 +61,10 @@ export function ReportReader({
   highlight?: string | null;
   /** Historical bytes may only read evidence captured for the same version. */
   immutableVersion?: ResultVersion;
+  /** A scoped reader supplies its authorized bytes; it never falls back to another workspace. */
+  onDownload?: () => void | Promise<void>;
+  /** Null suppresses ordinary workspace source links outside a scoped result grant. */
+  sourceRunId?: string | null;
 }) {
   const { document: matrix, verification, verified, verificationState, retry: retryChecks } = useClaimMatrix(path, root, !immutableVersion, immutableVersion);
   const [view, setView] = useState<"report" | "matrix">("report");
@@ -71,8 +77,8 @@ export function ReportReader({
 
   const safety = useMemo(() => safetyClaimIds(run?.qualityNotices), [run?.qualityNotices]);
   const reading: ClaimReading = useMemo(
-    () => ({ verified, runId: runId ?? run?.id ?? immutableVersion?.producer.runId ?? null, safety, pagesRead: run?.pagesRead }),
-    [verified, runId, run?.id, immutableVersion?.producer.runId, safety, run?.pagesRead],
+    () => ({ verified, runId: sourceRunId !== undefined ? sourceRunId : runId ?? run?.id ?? immutableVersion?.producer.runId ?? null, safety, pagesRead: run?.pagesRead }),
+    [verified, runId, run?.id, immutableVersion?.producer.runId, safety, run?.pagesRead, sourceRunId],
   );
   const statuses = useMemo(() => claimStatuses(verification), [verification]);
   const summary = claimVerificationSummary(verification);
@@ -132,7 +138,8 @@ export function ReportReader({
 
   const download = async () => {
     try {
-      if (immutableVersion) {
+      if (onDownload) await onDownload();
+      else if (immutableVersion) {
         const { readResultBytes, saveResultBlob } = await import("@/lib/resultProvenance");
         saveResultBlob(await readResultBytes(immutableVersion), filename);
       } else await downloadArtifact(path, root, filename);

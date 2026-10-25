@@ -183,6 +183,51 @@ test('an unacknowledged native prompt survives API restart and fences configurat
   assert.equal(await service.hasPendingPrompts(project),false);
 });
 
+test('explicit native disposition retains end-only and post-send 4xx outcomes but clears accepted response failures', options, async()=>{
+  const cases = [
+    { disposition: 'unknown', value: 'end without acceptance', pending: true },
+    { disposition: 'unknown', error: Object.assign(new Error('projection refused after send'), { status: 403 }), pending: true },
+    { disposition: 'accepted', error: Object.assign(new Error('browser response lost'), { status: 502 }), pending: false },
+    { disposition: 'refused', error: new Error('proven native refusal'), pending: false },
+  ];
+  for (const item of cases) {
+    let observations = 0;
+    const operation = async()=>{ if(item.error)throw item.error; return item.value; };
+    const result = service.withAdmission(project, operation, { prompt: true, promptDisposition: ()=>{ observations++; return item.disposition; } });
+    if(item.error) await assert.rejects(result, error=>error===item.error);
+    else assert.equal(await result,item.value);
+    assert.equal(observations,1);
+    assert.equal(await new PluginService(db).hasPendingPrompts(project),item.pending);
+    await service.clearPromptAdmissions(project);
+  }
+});
+
+test('invalid or unavailable explicit disposition remains unknown without changing the operation result', options, async()=>{
+  for (const promptDisposition of [undefined, null, ()=>true, ()=>{throw Error('observation lost');}]) {
+    assert.equal(await service.withAdmission(project, async()=>42, { prompt:true, promptDisposition }),42);
+    assert.equal(await service.hasPendingPrompts(project),true);
+    await service.clearPromptAdmissions(project);
+  }
+  // Legacy callers retain their existing return/error semantics.
+  assert.equal(await service.withAdmission(project,async()=>42,{prompt:true}),42);
+  assert.equal(await service.hasPendingPrompts(project),false);
+});
+
+test('explicit disposition borrows the admission connection with a one-connection pool', options, async()=>{
+  const limited = new ControlPlaneDatabase({databaseUrl,databasePoolMax:1,databaseConnectionTimeoutMs:1000});
+  const scoped = new PluginService(limited);
+  try {
+    await scoped.withAdmission(project,()=>scoped.withAdmission(project,async()=> 'accepted',{
+      prompt:true, promptDisposition:async()=>{
+        assert.equal((await limited.query('SELECT 1 AS value')).rows[0].value,1);
+        return 'unknown';
+      },
+    }));
+    assert.equal(await scoped.hasPendingPrompts(project),true);
+    await scoped.clearPromptAdmissions(project);
+  } finally { await limited.close(); }
+});
+
 test('nested runtime and prompt admission reuse one database connection without exhausting the pool', options, async()=>{
   const limited = new ControlPlaneDatabase({databaseUrl,databasePoolMax:1,databaseConnectionTimeoutMs:1000});
   const nested = new PluginService(limited);

@@ -273,7 +273,7 @@ export function createLearningRuntime({
   return {
     /**
      * @param {{job: any, dispatchId: string, capabilityId: string, contractKind: string, input: any, question: string,
-     *          userId: string, projectId: string}} request
+     *          userId: string, projectId: string, unprovenPriorDispatchId?: string}} request
      */
     async dispatch(request) {
       const { job, capabilityId, input, question } = request;
@@ -298,6 +298,16 @@ export function createLearningRuntime({
       // own limit. A delivery whose files a later step emptied before the
       // archive existed is spent as well: adopting it read ENOENT forever.
       const ledger = await agentRuns.list(project);
+      if(request.unprovenPriorDispatchId) {
+        const prior=request.unprovenPriorDispatchId;
+        learningArtifactDirectory(capabilityId,prior);
+        // No original-input receipt exists for this older schema. Every prior
+        // outcome is stale; neither adopting it nor buying it again is valid.
+        if(ledger.some(run=>run.dispatchId===prior||String(run.dispatchId??'').startsWith(prior)
+          && /^-a[1-9][0-9]*$/u.test(String(run.dispatchId).slice(prior.length)))) {
+          throw new HttpError(409,'geo_learning_input_stale','The original input of this shared learning dispatch cannot be verified.');
+        }
+      }
       const attempts = ledger
         .filter((run) => run.dispatchId === baseDispatchId || String(run.dispatchId ?? "").startsWith(`${baseDispatchId}-a`))
         .sort((left, right) => String(left.startedAt ?? left.createdAt ?? "").localeCompare(String(right.startedAt ?? right.createdAt ?? "")));

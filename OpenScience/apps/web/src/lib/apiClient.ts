@@ -615,6 +615,8 @@ export interface WebStructuredMemory {
     /** The project the conversation was held in, when the control plane knows it (a memory of the native engine names the
      *  conversation it came out of this way; it keeps no quotation, so `quote` is empty there). */
     projectId?: string | null;
+    /** Exact title correlation for native provenance; absent on older and legacy records. */
+    conversationTitleKey?: string;
   }>;
   revisions: Array<{
     version: number;
@@ -1415,9 +1417,9 @@ export interface WebRuntimeUiFrame {
 }
 
 /** Create one immutable native frame through the authenticated control plane. */
-export async function createWebRuntimeUiFrame(projectId: string): Promise<WebRuntimeUiFrame> {
+export async function createWebRuntimeUiFrame(projectId: string, scope?: {kind:"geo";geoProjectId:string;sessionId:string}): Promise<WebRuntimeUiFrame> {
   const res = await fetchWithWebAuth(apiUrl("/runtime-ui/frames"), {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId }),
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, ...(scope ? {scope} : {}) }),
   });
   return parseApiResponse<WebRuntimeUiFrame>(res);
 }
@@ -1746,8 +1748,8 @@ export interface PreservedConversationHistory {
   sessionId: string; capturedAt: string | null; partial: boolean;
   messages: Array<{ seq: number; role: "user" | "assistant"; text: string }>;
 }
-export async function getWebConversationHistory(sessionId: string, projectId: string): Promise<PreservedConversationHistory> {
-  const res = await fetchWithWebAuth(apiUrl(`/research-sessions/${encodeURIComponent(sessionId)}/history`), {
+export async function getWebConversationHistory(sessionId: string, projectId: string, runId?: string): Promise<PreservedConversationHistory> {
+  const res = await fetchWithWebAuth(apiUrl(`/research-sessions/${encodeURIComponent(sessionId)}/history${runId ? `?runId=${encodeURIComponent(runId)}` : ''}`), {
     headers: { "X-Open-Science-Project": projectId },
   });
   return parseApiResponse<PreservedConversationHistory>(res);
@@ -2457,11 +2459,11 @@ export async function restartWebRuntime(): Promise<string> {
  * retired pass-through cost us: with a proxied kernel the page had to know the
  * kernel's protocol, so every kernel change was a frontend change.
  */
-export async function createWebRuntimeSession(): Promise<{ id: string; kernel: string }> {
+export async function createWebRuntimeSession(projectId = getWebProjectId()): Promise<{ id: string; kernel: string }> {
   if (!hasWebApi) throw new BackendUnavailableError("runtime.session.create");
   const res = await fetchWithWebAuth(apiUrl("/runtime/sessions"), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Open-Science-Project": projectId },
     body: "{}",
   });
   return parseApiResponse<{ id: string; kernel: string }>(res);

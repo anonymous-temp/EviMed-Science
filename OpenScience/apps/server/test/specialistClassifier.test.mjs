@@ -324,3 +324,18 @@ test("a classification is charged to the question's account, as routing", async 
   assert.equal(trace.failure, "error_usage_payload_invalid");
   assert.equal(calls.length, 1, "no provider call without an account to charge it to");
 });
+
+
+test("a request-qualified catalogue reaches J3 and the incumbent with the same supplied requirements", async () => {
+  const query="Generate the selected GEO strategy.";
+  const catalog=[{id:"geo-strategy",title:"GEO Strategy",version:"1.2.0",runtimeAgent:"evimed-geo-strategy",description:"Selected strategy",requiredInputs:[],starterPrompts:[]}];
+  const fetchImpl=fetchReturning('{"agentId":"geo-strategy","confidence":0.95}');
+  const judgeService={judge:async(site,input)=>{
+    assert.equal(site,"J3");assert.equal(input.question,query);assert.deepEqual(input.capabilities[0].requiredInputs,[]);
+    return {outcome:"fallback"};
+  }};
+  const selected=await new SpecialistClassifier(baseConfig(),{fetchImpl,judgeService}).classify(query,catalog);
+  assert.equal(selected.agentId,"geo-strategy");
+  const human=JSON.parse(JSON.parse(fetchImpl.calls[0].init.body).messages.at(-1).content);
+  assert.equal(human.query,query);assert.deepEqual(human.specialists[0].requiredInputs,[]);
+});

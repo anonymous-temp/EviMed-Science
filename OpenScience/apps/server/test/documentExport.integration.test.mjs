@@ -384,3 +384,25 @@ test('additive migration admits export records and jobs on already-migrated depl
     assert.equal(queued.status,'queued');
   } finally { await connection.close(); await legacy.drop(); }
 });
+
+test('selected-data retry retains the first frozen read time and one job and quota reservation', options, async()=>{
+  const source={project,reference:{kind:'geo-selected-analysis',geoId:'geo-exact',selectionRef:'gsel_exact',digest:'same'},canonicalMarkdown:'# Selected data\n\n0 is known.',title:'Selected',revision:'same',assets:[],typedTable:{columns:[{key:'value',label:'Value',type:'number'}],rows:[{value:0}]},cover:{analysis:{digest:'same',asOf:{readAt:'first'}}}};
+  const first=await service.requestFrozen({id:'alice'},source,['csv','xlsx']);
+  const row=await documents.get('alice','document-export',first.id);
+  const next=await service.requestFrozen({id:'alice'},{...source,cover:{analysis:{digest:'same',asOf:{readAt:'later'}}}},['csv','xlsx']);
+  assert.equal(first.id,next.id);
+  assert.equal((await documents.get('alice','document-export',first.id)).payload.reservedBytes,row.payload.reservedBytes);
+  const frozen=JSON.parse(await fs.readFile(path.join(root,'users/alice/projects/project/.openscience/document-exports',first.id,'input/document.json'),'utf8'));
+  assert.equal(frozen.cover.analysis.asOf.readAt,'first');
+  assert.equal(Number((await database.query("SELECT count(*) FROM evimed_product.jobs WHERE id=$1",[row.payload.jobId])).rows[0].count),1);
+});
+
+test('conversion mutations request run ability while status remains readable',options,async()=>{
+  const requested=await request();
+  const observed=[];
+  const restricted=new DocumentExportService({...service,authorize:async(actor,_payload,ability)=>{observed.push(ability);if(actor.id==='bob'&&ability!=='read')throw new Error('read-only');}});
+  await restricted.status({id:'bob'},requested.id);
+  await assert.rejects(restricted.retry({id:'bob'},requested.id,'pdf'),{code:'document_export_unavailable'});
+  await assert.rejects(restricted.cancel({id:'bob'},requested.id),{code:'document_export_unavailable'});
+  assert.deepEqual(observed,['read','run','run']);
+});

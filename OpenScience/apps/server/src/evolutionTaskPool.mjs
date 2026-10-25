@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '@evimed/domain';
 import { evolutionKey } from './evolutionService.mjs';
+import { evolutionRecordPin, evolutionTaskDefinitionHash } from './evolutionRecordPins.mjs';
+import { EVOLUTION_PROJECT_ID } from './internalProjects.mjs';
 
 export const EVOLUTION_POOLS = Object.freeze(['development', 'confirmation', 'audit', 'prospective']);
 /** @param {any} value */
@@ -21,9 +23,28 @@ export function createEvolutionTaskPool({ service }) {
     if (task.scope !== 'public' && task.scope !== 'generated') throw new Error('Platform tasks cannot contain tenant data.');
     if (task.scope === 'generated' && task.truthVerified !== true) throw new Error('Generated tasks require executable truth and rejected wrong solutions.');
     const id = `evolution-task-${evolutionKey([task.moduleId, task.id, task.sourceHash])}`;
-    const previous = await service.get(id);
-    if (previous) return previous;
-    return service.save('task', id, { ...task, feedbackCount: 0, uses: [], addedAt: service.now().toISOString(), taskHash: hash(task) });
+    return atomic(`task:${id}`, async () => {
+      const definitionHash = evolutionTaskDefinitionHash(task), previous = await service.get(id);
+      if (previous) {
+        if (evolutionTaskDefinitionHash(previous.payload) !== definitionHash) throw new Error('The immutable task definition changed.');
+        const patch = {};
+        if (!previous.payload.sourceAssetRef && task.sourceAssetRef) {
+          const asset = await service.get(task.sourceAssetRef.id);
+          if (!asset || asset.projectId !== EVOLUTION_PROJECT_ID || asset.payload.scope !== 'public'
+            || asset.payload.recordType !== 'evolution-resource-asset' || asset.payload.sourceRoot !== task.sourceRoot
+            || typeof asset.payload.text !== 'string' || createHash('sha256').update(asset.payload.text).digest('hex') !== task.sourceHash
+            || hash(evolutionRecordPin(asset)) !== hash(task.sourceAssetRef)) throw new Error('The task source reference is not independently preserved.');
+          Object.assign(patch, { sourceAssetRef: task.sourceAssetRef, sourceKind: asset.payload.sourceKind });
+        }
+        if (typeof task.baselineKnownCorrect === 'boolean' && (task.baselineKnownCorrect !== previous.payload.baselineKnownCorrect || task.evaluatorVersion !== previous.payload.evaluatorVersion)) {
+          Object.assign(patch, { baselineKnownCorrect: task.baselineKnownCorrect, evaluatorVersion: task.evaluatorVersion });
+        }
+        return Object.keys(patch).length ? service.save('task', id, { ...previous.payload, ...patch }, previous) : previous;
+      }
+      const saved = await service.save('task', id, { ...task, feedbackCount: 0, uses: [], addedAt: service.now().toISOString(), taskHash: hash(task), definitionHash });
+      if (evolutionTaskDefinitionHash(saved.payload) !== definitionHash) throw new Error('The immutable task definition changed.');
+      return saved;
+    });
   }
   async function expose(tasks, { candidateId, lineageId, reason }) {
     return atomic('task-pools', async () => {
@@ -37,9 +58,11 @@ export function createEvolutionTaskPool({ service }) {
       }
     });
   }
+  const batchId = ({ candidateId, epoch }) => `evolution-confirmation-batch-${evolutionKey([candidateId, epoch])}`;
+  const findBatch = identity => service.get(batchId(identity));
   async function assemble({ candidateId, lineageId, moduleId, frozenAt, modelReleasedAt, epoch, minimum, slices = [] }) {
     return atomic('task-pools', async () => {
-      const id = `evolution-confirmation-batch-${evolutionKey([candidateId, epoch])}`;
+      const id = batchId({ candidateId, epoch });
       const existing = await service.get(id);
       if (existing) return existing;
       const tasks = await service.list('task');
@@ -51,6 +74,11 @@ export function createEvolutionTaskPool({ service }) {
       while(changed){changed=false;for(const row of [...tasks,...assets]){const keys=identities(row.payload);if(keys.some(key=>exposedRoots.has(key)))for(const key of keys)if(!exposedRoots.has(key)){exposedRoots.add(key);changed=true;}}}
       const eligible = tasks.filter(row => {
         const t = row.payload;
+        if (t.validationState && t.validationState !== 'valid') return false;
+        if (moduleId === 'geo') {
+          const source = assets.find(asset => asset.id === t.sourceAssetRef?.id);
+          if (!source || source.payload.validationState && source.payload.validationState !== 'valid') return false;
+        }
         if (t.moduleId !== moduleId || t.pool !== 'confirmation' || t.reservedFor || t.feedbackCount || identities(t).some(key=>exposedRoots.has(key))) return false;
         if (t.epoch && t.epoch !== epoch) return false;
         if (t.reservedHidden === true && t.curatorIndependent === true) return true;
@@ -72,6 +100,7 @@ export function createEvolutionTaskPool({ service }) {
       if (slices.some(slice => !chosen.some(row => row.payload.slices?.includes(slice)))) return { id: null, payload: { status: 'waiting', reason: 'preregistered-slice-missing' } };
       const batch = await service.save('confirmation-batch', id, { candidateId, lineageId, moduleId, epoch, frozenAt, assembledAt: service.now().toISOString(),
         taskIds: chosen.map(row => row.id), sourceRoots: chosen.map(row => row.payload.sourceRoot), taskHashes: chosen.map(row => row.payload.taskHash),
+        taskRefs: chosen.map(evolutionRecordPin),
         minimum, slices, status: 'sealed', attempt: 0, noiseAlgorithm: 'paired-three-baselines-two-sd-floor-0.02', selectionVersion: 'evolution-selection-2' });
       for (const row of chosen) await service.save('task', row.id, { ...row.payload, reservedFor: candidateId }, row);
       return batch;
@@ -133,7 +162,7 @@ export function createEvolutionTaskPool({ service }) {
     });
   }
 
-  return { add, expose, assemble, begin, executeUnit, finish, rotateAudit };
+  return { add, expose, findBatch, assemble, begin, executeUnit, finish, rotateAudit };
 }
 
 /** Development exercises are accepted only when executable truth separates correct and wrong answers.
