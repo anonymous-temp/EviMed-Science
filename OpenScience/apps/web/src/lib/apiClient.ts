@@ -1652,14 +1652,14 @@ export async function updateMemorySettings(
 }
 
 /** Deletes every memory this account holds; the switches stay. */
-export async function resetMemory(): Promise<{ structured: number }> {
+export async function resetMemory(): Promise<{ methods: number; handbooks: number; entries: number }> {
   if (!hasWebApi) throw new BackendUnavailableError("memory.reset");
   const res = await fetchWithWebAuth(apiUrl("/memory/reset"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ confirm: "reset" }),
   });
-  return parseApiResponse<{ structured: number }>(res);
+  return parseApiResponse<{ methods: number; handbooks: number; entries: number }>(res);
 }
 
 /**
