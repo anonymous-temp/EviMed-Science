@@ -70,12 +70,15 @@ it("keeps source filtering when switching between discovery and added", async ()
   expect(screen.queryByRole("button", { name: "科学绘图" })).not.toBeInTheDocument();
 });
 
-it.each(["全部", "清除筛选"])("clears a legacy plugin route's implicit type with %s", async label => {
+it.each(["全部类型", "清除筛选"])("clears a legacy plugin route's implicit type with %s", async label => {
   open("/app/extensions/plugins");
   await screen.findByText("暂无可添加的扩展");
-  await userEvent.click(screen.getByRole("button", { name: label }));
+  if (label === "全部类型") {
+    await userEvent.click(screen.getByRole("button", { name: "类型：插件" }));
+    await userEvent.click(screen.getByRole("menuitemradio", { name: label }));
+  } else await userEvent.click(screen.getByRole("button", { name: label }));
   expect(await screen.findByRole("button", { name: "科学绘图" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "全部" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "类型" })).toBeInTheDocument();
 });
 it("offers a real current-project switch and keeps a disabled preinstalled skill in Added", async () => {
   const updated = { ...project, revision: 4, payload: { disabled: [skill.id] }, items: [{ ...skill, enabled: false, effective: true }], activation: { ...activation, phase: "waiting", savedRevision: 4 } };

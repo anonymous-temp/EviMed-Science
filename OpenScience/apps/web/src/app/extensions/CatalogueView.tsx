@@ -36,7 +36,7 @@ export function CatalogueView({ entries, view }: { entries: CatalogueEntry[]; vi
   return <div aria-label={view === "installed" ? "已添加的技能与插件" : "发现技能与插件"}>{catalogueOrigins.map(origin => {
     const rows = entries.filter(entry => entry.origin === origin.value);
     if (!rows.length) return null;
-    return <Section key={origin.value} title={origin.label} count={rows.length}>
+    return <Section key={origin.value} title={origin.label} count={`${rows.length} 项`} compact>
       {view === "installed" ? <List label={`${origin.label}已添加的技能与插件`} divided>{rows.map(entry => {
         const Icon = entryIcon(entry);
         return <ListRow key={entry.id} title={entry.title} onOpen={entry.open} leading={<Icon size={20} aria-hidden className="text-text-3" />}

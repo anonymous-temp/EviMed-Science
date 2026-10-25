@@ -64,6 +64,11 @@ describe("FactList", () => {
 });
 
 describe("Section", () => {
+  it("keeps a compact catalogue group at the section heading level", () => {
+    render(<Section title="第三方" count="14 项" compact><p>扩展</p></Section>);
+    expect(screen.getByRole("heading", { level: 2, name: "第三方" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "第三方" })).toHaveTextContent("14 项");
+  });
   it("is a heading at the section rung with its count and the controls of that block alone", () => {
     render(<Section title="试验先例" count={12} toolbar={<button type="button">下载</button>}><p>表</p></Section>);
     const heading = screen.getByRole("heading", { level: 2, name: "试验先例" });

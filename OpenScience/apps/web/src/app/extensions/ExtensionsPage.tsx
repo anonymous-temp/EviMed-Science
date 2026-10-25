@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router";
-import { ChevronDown, Plus, Upload } from "lucide-react";
+import { ChevronDown, Folder, Plus, Upload } from "lucide-react";
 import { searchMatches } from "@evimed/domain";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
@@ -15,6 +15,7 @@ import { Switch } from "@/components/ui/Switch";
 import { extensionCatalogue, extensionInstallations, installExtension, inventory as loadInventoryOf, projectExtensions, projectBuiltinPlugins, saveProjectBuiltinPlugins, saveProjectExtensions, type BuiltinPluginPolicy, type CatalogueExtension, type Inventory } from "@/lib/extensionsClient";
 import { productErrorMessage } from "@/lib/productClient";
 import { useProjectStore } from "@/lib/projects";
+import { useNarrow } from "@/lib/useMediaQuery";
 import { toast } from "@/lib/toast";
 import { createPersonalSkill, listPersonalSkills, listPlatformSkills, projectPlatformSkills, projectSkills, saveProjectPlatformSkills, saveProjectSkills, type PendingSkillTransfer, type PersonalSkill, type PlatformSkill, type SkillWrite } from "@/lib/skillLibraryClient";
 import { CatalogueView, type CatalogueEntry } from "./CatalogueView";
@@ -40,6 +41,7 @@ const loadInstalled = () => allInstalledExtensions(extensionInstallations);
 /** Account discovery and project activation share a page, not an implied shared state. */
 function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; projectId: string }) {
   const navigate = useNavigate();
+  const narrow = useNarrow();
   const [params, setParams] = useSearchParams();
   const view: View = tab === "installed" || itemId ? "installed" : "discover";
   const rawType = params.get("type") ?? (tab === "skills" || tab === "plugins" ? tab : "all");
@@ -79,6 +81,7 @@ function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; 
     if (!value || value === "all") next.delete(key); else next.set(key, value);
     setParams(next, { replace: true });
   };
+  const clearFilters = () => setParams(tab === "skills" || tab === "plugins" ? { type: "all" } : {}, { replace: true });
   const act = async (id: string, work: () => Promise<unknown>) => {
     if (running.current) return;
     running.current = true; setBusy(id); setActionError(null);
@@ -226,17 +229,18 @@ function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; 
     { load: catalogue, label: "重试插件目录" }, { load: installed, label: "重试已添加插件" },
     { load: projectPlugins, label: "重试项目插件设置" }, { load: builtinPlugins, label: "重试内置插件设置" }, { load: inventory, label: "重试系统能力" },
   ];
-  return <PageShell title="插件与技能" meta={`当前项目：${projectName}`} width="wide" actions={<Menu label="导入与创建" items={[
-    { label: "导入技能", icon: Upload, onSelect: () => setOpen({ kind: "import" }) },
-    { label: "创建技能", icon: Plus, onSelect: () => setOpen({ kind: "create" }) },
-  ]}><Button variant="secondary" aria-label="导入与创建" className="gap-2"><Plus size={16} aria-hidden />添加技能<ChevronDown size={16} aria-hidden /></Button></Menu>}
-    tabs={{ label: "插件与技能", value: view, items: [{ value: "discover", label: "发现" }, { value: "installed", label: "已添加" }], onChange: next => { setOpen(null); navigate(`/app/extensions/${next}?${params}`); } }}
-    toolbar={{ label: "筛选与搜索",
-      filters: [{ kind: "chips", label: "类型", value: type, options: [{ value: "all", label: "全部" }, { value: "skills", label: "技能" }, { value: "plugins", label: "插件" }], onChange: next => { const changed = new URLSearchParams(params); changed.set("type", next); changed.delete("group"); setParams(changed, { replace: true }); } },
+  return <PageShell title="插件与技能" width="wide" meta={<span title={`当前项目：${projectName}`} className="inline-flex max-w-48 items-center gap-1.5 text-ui"><Folder size={16} aria-hidden /><span className="truncate">{projectName}</span></span>}
+    toolbar={{ label: "筛选与搜索", className: "pt-3",
+      views: { label: "插件与技能", value: view, items: [{ value: "discover", label: "发现" }, { value: "installed", label: "已添加" }], onChange: next => { setOpen(null); navigate(`/app/extensions/${next}?${params}`); } },
+      filters: [{ kind: "select", label: "类型", allLabel: "全部类型", value: type === "all" ? null : type, options: [{ value: "skills", label: "技能" }, { value: "plugins", label: "插件" }], onChange: next => { const changed = new URLSearchParams(params); changed.set("type", next ?? "all"); changed.delete("group"); setParams(changed, { replace: true }); } },
         { kind: "select", label: "来源", allLabel: "全部来源", value: origin === "all" ? null : origin, options: catalogueOrigins, onChange: next => setFilter("origin", next ?? "all") },
         ...(groups.length > 1 ? [{ kind: "select" as const, label: "分类", allLabel: "全部分类", value: group === "all" ? null : group, options: groups.map(name => ({ value: name, label: name })), onChange: (next: string | null) => setFilter("group", next ?? "all") }] : [])],
       search: { label: "搜索插件与技能", value: query, placeholder: "搜索名称、用途或作者", onChange: next => setFilter("q", next), onClear: () => setFilter("q", "") },
-      onClear: () => setParams(tab === "skills" || tab === "plugins" ? { type: "all" } : {}, { replace: true }) }}>
+      actions: <Menu label="导入与创建" items={[
+        { label: "导入技能", icon: Upload, onSelect: () => setOpen({ kind: "import" }) },
+        { label: "创建技能", icon: Plus, onSelect: () => setOpen({ kind: "create" }) },
+      ]}><Button size="sm" aria-label="导入与创建">添加技能<ChevronDown size={16} aria-hidden /></Button></Menu>,
+      onClear: narrow ? undefined : clearFilters, onReset: clearFilters }}>
     {actionError && open?.kind !== "create" && <LoadError message={actionError} onRetry={() => { setActionError(null); reloadSelections(); projectPlugins.reload(); }} />}
     {citation.error && controlled.some(item => item.control.kind === "switch" && item.control.setting === "dsh-cite") && <Note tone="warn" action={<Button size="sm" variant="text" disabled={citation.busy} onClick={() => void citation.reload()}>刷新引用设置</Button>}>{citation.error}</Note>}
     {failures.map(({ load, label }) => load.state.status === "error" && <Note key={label} tone="warn" action={<Button size="sm" variant="text" onClick={() => load.reload()}>{label}</Button>}>{load.state.message}</Note>)}
