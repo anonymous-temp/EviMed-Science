@@ -100,7 +100,7 @@ test("a 推荐理由 written on its own: its genre's lens, the edit's rules, che
     if (FRONTIER_REASON_LENSES_ZH[genre]) assert.ok(instructions.endsWith(`推荐理由写${FRONTIER_REASON_LENSES_ZH[genre]}。`), genre);
     else assert.match(instructions, /给空字符串。$/, genre);
   }
-  assert.match(FRONTIER_REASON_VERSION, /^frontier-reason-1\.[a-f0-9]{12}$/);
+  assert.match(FRONTIER_REASON_VERSION, /^frontier-reason-2\.[a-f0-9]{12}$/);
   const input = buildReasonInput({ sourceName: "Gilead 2027", titleRaw: "Deal", summaryZh: "吉利德以 12.75 亿美元收购，交易 2026 年完成。",
     text: "Gilead will pay $1.275 billion upfront." });
   assert.match(input, /导读（不要重复）：/);

@@ -16,7 +16,11 @@
  * - absence sentences: phrases of `ABSENCE_PHRASES` (a closed list, a metric only) — a sentence about what the source does not say;
  * - length against the source: a 导读's characters against what its source supports (`frontierLeadLimit`);
  * - field coverage: the 要点 fields written of those the genre has, and why each dropped part was dropped;
- * - genre: the edit's genre, code's decision, and whether it is one the case accepts.
+ * - genre: the edit's genre, code's decision, and whether it is one the case accepts;
+ * - style (c2-style, `style_metrics.mjs`): sentence architecture and the lieflat tells of the 导读 and of all prose, the title's
+ *   features (hooks, a site's name, named subject, result verb) and whether a Chinese source's title was kept, absolute numbers and
+ *   harms given → used, exemplar leakage, and the edit's sub-scores per genre (raw and on the scale).
+ * The swapped-order pairwise judge of two runs is `judge.mjs`; move coverage of the 导读 is `moves_report.mjs` (a notice metric).
  * Tokens and a cost at the reference price (`deepseek-flash`) are counted and the run stops at `--max-cny`. The key is read from
  * the file inside this process and never printed; nothing is metered (no usage ledger) and nothing is written but the result file.
  */
@@ -30,6 +34,10 @@ import { FRONTIER_EDITOR_VERSION, FRONTIER_REASON_VERSION, FrontierEditor, isChi
 import { FRONTIER_LEAD_VERSION, buildLeadInput, frontierLeadLimit, frontierWriteLead } from "../../apps/server/src/frontierLead.mjs";
 import { checkNumbers } from "../../apps/server/src/frontierNumbers.mjs";
 import { callModelForControlPlane } from "../../apps/server/src/modelGateway.mjs";
+import { RESULT_GENRES, givenUsed, leakage, proseStyle, scoreDistribution, styleRates, titleFeatures, titleHook } from "./style_metrics.mjs";
+
+/** The style cards' exemplars (none before the cards exist), for the leakage count. */
+const EXEMPLARS = await import("../../apps/server/src/frontierStyle.mjs").then((module) => module.frontierStyleExemplarTexts(), () => []);
 
 /** Openings of a 推荐理由 that say nothing (measured on production 2026-10-24: ~70% of reasons). A metric, never a check. */
 export const FORMULA_OPENINGS = Object.freeze(["可了解", "可帮助", "可据此", "有助于", "帮助", "可为", "可供", "为临床", "提示", "了解"]);
@@ -50,10 +58,10 @@ const formulaOpening = (text) => FORMULA_OPENINGS.find((phrase) => String(text ?
 
 /**
  * What one case's texts measure, against its source.
- * @param {{ lead?: string | null, reason?: string | null, summary?: string | null, brief?: any }} written
- * @param {{ source: string, limit: number, genre: string }} context
+ * @param {{ lead?: string | null, reason?: string | null, summary?: string | null, brief?: any, title?: string | null }} written
+ * @param {{ source: string, limit: number, genre: string, titleRaw?: string, chinese?: boolean }} context
  */
-export function metricsOf(written, { source, limit, genre }) {
+export function metricsOf(written, { source, limit, genre, titleRaw = "", chinese = false }) {
   const numbers = checkNumbers({ lead: written.lead ?? "", reason: written.reason ?? "", summary: written.summary ?? "",
     brief: briefText(written.brief) }, source);
   const shape = FRONTIER_BRIEF_FIELDS[/** @type {keyof typeof FRONTIER_BRIEF_FIELDS} */ (genre)] ?? null;
@@ -67,6 +75,12 @@ export function metricsOf(written, { source, limit, genre }) {
     numbersChecked: numbers.checked, numbersMissing: numbers.missing.map((entry) => `${entry.field}:${entry.raw}`),
     briefFields: fields, briefPresent: present, briefCoverage: fields ? Math.round((present / fields) * 100) / 100 : null,
     quoteVerbatim: written.brief?.quote ? quotationForm(source).includes(quotationForm(written.brief.quote.text)) : null,
+    leadStyle: proseStyle(written.lead ?? ""),
+    proseStyle: proseStyle([written.lead, written.summary, written.reason, briefText(written.brief)].filter(Boolean).join("\n")),
+    title: written.title ? { ...titleFeatures(written.title), chinese, kept: chinese ? written.title === titleRaw : null,
+      numbersMissing: checkNumbers({ title: written.title }, `${titleRaw}\n${source}`).missing.map((entry) => entry.raw) } : null,
+    givenUsed: RESULT_GENRES.includes(genre) ? givenUsed(source, [written.lead ?? "", briefText(written.brief)].join("\n")) : null,
+    leakage: leakage([written.title, written.lead, written.summary, written.reason, briefText(written.brief)].filter(Boolean).join("\n"), `${titleRaw}\n${source}`, EXEMPLARS),
   };
 }
 
@@ -161,13 +175,16 @@ async function runCase(editor, entry, skipEdit) {
   const [lead, brief] = await Promise.all([frontierWriteLead(editor, { ...input, genre, briefed: frontierBriefWanted(genre) }), frontierWriteBrief(editor, { ...input, genre })]);
   const source = readerNumberSource(buildLeadInput(input));
   const limit = frontierLeadLimit(entry.text);
-  const after = { genre, genreBasis: decided.basis, modelGenre: edited?.output?.genre ?? null,
+  const chinese = isChineseTitle(item.titleRaw);
+  const after = { genre, genreBasis: decided.basis, modelGenre: edited?.output?.genre ?? null, title: edited?.output?.titleZh ?? null,
+    scores: edited?.output?.scores ?? null, scoresRaw: edited?.output?.scoresRaw ?? null,
     summary: edited?.output?.summaryZh ?? null, reason: edited?.output?.reasonZh ?? null, lead: lead.lead, brief: brief.brief,
     editVerification: edited?.verification ?? null, leadVerification: lead.verification, briefDropped: brief.dropped, briefError: brief.error };
   return {
     id: entry.id, expectGenre: entry.expectGenre, genreAccepted: entry.acceptGenres.includes(genre), textChars: entry.textChars, textSource: kind,
     before: entry.before, after,
-    metrics: { before: metricsOf(entry.before, { source, limit, genre: entry.expectGenre }), after: metricsOf(after, { source, limit, genre }) },
+    metrics: { before: metricsOf({ ...entry.before, title: item.titleZh ?? (chinese ? item.titleRaw : null) }, { source, limit, genre: entry.expectGenre, titleRaw: item.titleRaw, chinese }),
+      after: metricsOf(after, { source, limit, genre, titleRaw: item.titleRaw, chinese }) },
   };
 }
 
@@ -186,6 +203,12 @@ export function summarize(results) {
       leadOverLimit: count((m) => m.leadOverLimit), leadCharsMean: Math.round(metrics.reduce((sum, m) => sum + m.leadChars, 0) / n),
       briefCoverageMean: side === "after" ? Math.round((metrics.reduce((sum, m) => sum + (m.briefCoverage ?? 0), 0) / n) * 100) / 100 : null,
       quotesVerbatim: side === "after" ? `${count((m) => m.quoteVerbatim === true)}/${count((m) => m.quoteVerbatim !== null)}` : null,
+      leadStyle: styleRates(metrics.map((m) => m.leadStyle).filter(Boolean)),
+      proseStyle: styleRates(metrics.map((m) => m.proseStyle).filter(Boolean)),
+      titles: titleSummary(metrics.map((m) => m.title).filter(Boolean)),
+      absoluteGivenUsed: `${count((m) => m.givenUsed?.absoluteGiven && m.givenUsed.absoluteUsed)}/${count((m) => m.givenUsed?.absoluteGiven)}`,
+      harmGivenUsed: `${count((m) => m.givenUsed?.harmGiven && m.givenUsed.harmUsed)}/${count((m) => m.givenUsed?.harmGiven)}`,
+      leakageCases: count((m) => (m.leakage?.length ?? 0) > 0),
     };
   };
   /** @type {Record<string, any>} */
@@ -197,8 +220,26 @@ export function summarize(results) {
   const dropped = /** @type {Record<string, number>} */ ({});
   for (const row of results) for (const part of row.after?.briefDropped ?? []) dropped[part.reason] = (dropped[part.reason] ?? 0) + 1;
   return { all: { before: tally(results, "before"), after: tally(results, "after"),
+    scores: scoreDistribution(results.filter((row) => row.after).map((row) => ({ genre: row.after.genre, scores: row.after.scores }))),
+    scoresRaw: scoreDistribution(results.filter((row) => row.after).map((row) => ({ genre: row.after.genre, scores: row.after.scoresRaw }))),
     genreAccepted: `${results.filter((row) => row.genreAccepted).length}/${results.length}`, errors: results.filter((row) => row.error).length, briefDropped: dropped },
   byGenre };
+}
+
+/**
+ * Titles by where they come from: a Chinese source's (kept or rewritten) and a translated one; the share with a hook (question,
+ * exclamation, hype word, a site's name), naming the subject, with a result verb, and numbers not in the source.
+ * @param {any[]} titles
+ */
+export function titleSummary(titles) {
+  /** @param {any[]} list */
+  const part = (list) => ({ n: list.length, hook: list.filter(titleHook).length, question: list.filter((t) => t.question).length,
+    exclamation: list.filter((t) => t.exclamation).length, hype: list.filter((t) => t.hype).length, siteSuffix: list.filter((t) => t.siteSuffix).length,
+    columnTag: list.filter((t) => t.columnTag).length, named: list.filter((t) => t.named).length, resultVerb: list.filter((t) => t.resultVerb).length,
+    numbersMissing: list.reduce((sum, t) => sum + t.numbersMissing.length, 0),
+    meanChars: list.length ? Math.round(list.reduce((sum, t) => sum + t.chars, 0) / list.length) : 0 });
+  const zh = titles.filter((t) => t.chinese);
+  return { chinese: { ...part(zh), kept: zh.filter((t) => t.kept).length }, translated: part(titles.filter((t) => !t.chinese)) };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();
