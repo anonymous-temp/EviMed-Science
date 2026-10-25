@@ -21,7 +21,7 @@ test('the schema closes the same words the domain names', () => {
   const source = readFileSync(new URL('../../../apps/server/src/frontierPersistence.mjs', import.meta.url), 'utf8')
   // The topic block (its role column, not another table's), from the topics table to the end of the schema.
   const ddl = source.slice(source.indexOf('CREATE TABLE IF NOT EXISTS evimed_frontier.topics ('))
-  const closed = (column) => {
+  const closed = (/** @type {string} */ column) => {
     const match = ddl.match(new RegExp(`CHECK \\(${column} IN \\(([^)]*)\\)\\)`))
     assert.ok(match, `no CHECK for ${column}`)
     return [...match[1].matchAll(/'([^']+)'/g)].map((m) => m[1]).sort()
