@@ -268,8 +268,9 @@ test("PostgreSQL shares tenants, auth sessions, projects, quotas, and research s
       assert.equal(await pathMissing(file), true, `${file} should not contain PostgreSQL control-plane state`);
     }
 
+    // The platform's own accounts (the publisher of the official starter packs and its evidence project, made at start) are not the tenants counted here.
     const rows = await admin.query(
-      "SELECT (SELECT count(*) FROM evimed_control.users WHERE auth_type <> 'platform')::integer AS users, (SELECT count(*) FROM evimed_control.auth_sessions)::integer AS sessions, (SELECT count(*) FROM evimed_control.projects)::integer AS projects",
+      "SELECT (SELECT count(*) FROM evimed_control.users WHERE auth_type <> 'platform')::integer AS users, (SELECT count(*) FROM evimed_control.auth_sessions)::integer AS sessions, (SELECT count(*) FROM evimed_control.projects WHERE user_id IN (SELECT id FROM evimed_control.users WHERE auth_type <> 'platform'))::integer AS projects",
     );
     assert.deepEqual(rows.rows[0], { users: 2, sessions: 2, projects: 3 });
   } finally {
