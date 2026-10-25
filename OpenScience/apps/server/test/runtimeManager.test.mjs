@@ -2473,22 +2473,6 @@ test("scheduled dispatch authority is session scoped and survives a steer only f
   assert.notEqual((await index()).unattended, true);
 });
 
-test("shared runtime task tools refuse an automated turn and recover for attended work", async (t) => {
-  const { rootDir, project, manager } = await dshDispatchFixture();
-  t.after(async () => { await manager.closeAll(); await rm(rootDir, { recursive: true, force: true }); });
-  let automated = true;
-  manager.hasUnattendedRuns = async (scope) => {
-    assert.equal(scope.userId, project.userId);
-    assert.equal(scope.id, project.id);
-    return automated;
-  };
-  const identity = { userId: project.userId, projectId: project.id };
-  await assert.rejects(() => manager.assertTaskToolsConversation(identity), { code: "task_tools_not_in_conversation" });
-  automated = false;
-  await manager.assertTaskToolsConversation(identity);
-  await assert.rejects(() => manager.assertTaskToolsConversation({ ...identity, runId: "bounded" }), { code: "task_tools_not_in_conversation" });
-});
-
 test("native attendance proof does not depend on optional learning and is mirrored before forwarding", async (t) => {
   const { rootDir, project, manager } = await dshDispatchFixture();
   t.after(async () => { await manager.closeAll(); await rm(rootDir, { recursive: true, force: true }); });

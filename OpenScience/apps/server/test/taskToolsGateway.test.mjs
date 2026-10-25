@@ -476,13 +476,25 @@ test("source references persist on creation and additive updates within the auth
   assert.equal((await real.list("owner", { projectId: "p1" })).items.length, before);
 });
 
-test("scheduler availability and trusted shared-runtime unattended guard deny mutations", async (t) => {
+test("scheduler availability denies mutations", async (t) => {
   const off = await fixture(t, { autopilotEnabled: false });
   const refused = await off.schedule({ instruction: said, schedule: weekly });
   assert.deepEqual([refused.status, refused.body.code], [503, "task_tools_disabled"]);
-  const background = await fixture(t, { conversationCheck: async () => { throw new HttpError(403, "task_tools_not_in_conversation", "A scheduled execution cannot make or change tasks."); } });
-  assert.equal((await background.schedule({ instruction: said, schedule: weekly })).status, 403);
-  assert.equal((await background.real.list("owner", { projectId: "p1" })).items.length, 0);
+});
+
+test("another automated run of the project (a LoopX goal, an evaluation driver) never refuses an attended conversation's task tools", async (t) => {
+  // What the project's run ledger says while the researcher talks: a LoopX continuation turn is running, recorded `automated`.
+  const ledger = [{ id: "run-goal", status: "running", automated: true, effectiveRouteReason: "loopx-continuation" }];
+  // The project-wide reading the gateway used to make. The shared token names no session, so it could not tell whose turn called;
+  // the signed attendance of the calling turn (the runtime's run policy) is the guard for an unattended one.
+  const projectWide = async () => {
+    if (ledger.some((run) => run.status === "running" && run.automated === true)) throw new HttpError(403, "task_tools_not_in_conversation", "An unattended execution cannot create or change scheduled tasks.");
+  };
+  const attended = await fixture(t, { conversationCheck: projectWide });
+  const made = await attended.schedule({ instruction: said, schedule: weekly });
+  assert.equal(made.status, 200, JSON.stringify(made.body));
+  assert.equal((await attended.update({ taskId: made.body.data.taskId, paused: true })).status, 200);
+  assert.equal((await attended.real.list("owner", { projectId: "p1" })).items.length, 1);
 });
 
 test("a task that moved under the call (edited on the page at the same moment) is read again once", async (t) => {

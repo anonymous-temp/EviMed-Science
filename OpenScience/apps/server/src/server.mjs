@@ -307,7 +307,7 @@ import { cancelAutopilotVerification, AutopilotService, VERIFICATION_ARTIFACT, V
   autopilotLogicalDispatchId, isUnsentAutopilotLeaseLoss, verificationEpisodeId, verificationPrompt, verificationWorkspacePath } from "./autopilotService.mjs";
 import { runUsageKeys } from "./runUsage.mjs";
 import { inspectAutopilotDispatch, reclaimUnsentAutopilotRuntime } from "./autopilotDispatchRecovery.mjs";
-import { createAutopilotRunScope, episodeContextBlock, episodePlacementCounts, episodeVisibleText, isUnattendedExecution, noteEpisodePlacement } from "./autopilotEpisodeScope.mjs";
+import { createAutopilotRunScope, episodeContextBlock, episodePlacementCounts, episodeVisibleText, noteEpisodePlacement } from "./autopilotEpisodeScope.mjs";
 import { createAutopilotRoutes } from "./autopilotRoutes.mjs";
 import { cancelScheduledRun } from "./autopilotRunCancellation.mjs";
 import { AutopilotWorker } from "./autopilotWorker.mjs";
@@ -3807,12 +3807,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // A runtime whose project still has a run in the ledger never yields its
     // slot to another project: the stop would close that run as cancelled.
     hasRunningRuns: async (project) => Boolean(agentRuns) && (await agentRuns.list(project)).some((run) => run.status === "running"),
-    hasUnattendedRuns: async (scope) => {
-      const user = await store.userById(scope.userId);
-      if (!user) throw new HttpError(401, "unauthorized", "Authentication required.");
-      const project = await store.requireProject(user, scope.id);
-      return Boolean(agentRuns) && (await agentRuns.list(project)).some(run => run.status === "running" && isUnattendedExecution(run));
-    },
     onRuntimeStart: (project, runtime) => {
       independentProductWork(() => {
         runtimeEventPump.attach(project, runtime);

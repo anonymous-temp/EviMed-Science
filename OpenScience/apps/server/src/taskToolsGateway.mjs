@@ -23,7 +23,9 @@
 //   platform's brief), and 「改到每周一 8 点」 said there means the task that execution belongs to.
 // - An execution of a task does not make or change tasks: a bounded runtime's token names a run, and a task that schedules tasks is
 //   a loop nobody asked for. That is `task_tools_not_in_conversation`. (An execution that runs in the researcher's own runtime
-//   carries no such mark; the runtime manager refuses calls while its trusted active turn is unattended.)
+//   carries no such mark; the runtime's run policy refuses the call inside an unattended turn, from the turn's signed attendance
+//   receipt. The shared token names no session, so no project-wide reading of the run ledger is made here: a LoopX goal, an
+//   evaluation driver or another automated run of the project never refuses an attended conversation — review F3, 2026-10-25.)
 // - The answer is facts only: id, title, the schedule as data and in words, the zone, the next run and the state. Nothing in it
 //   tells the model what to do next; that travels in the tool's own summary.
 // - A malformed or impossible call comes back as the run's to fix, with the project's tasks beside a wrong id so the next call can
@@ -300,7 +302,6 @@ export function createTaskToolsGateway({ config, runtimeManager, store, service,
       if (config.autopilotEnabled === false || !config.taskToolsEnabled || !service) {
         throw new HttpError(503, "task_tools_disabled", "Scheduling a task from a conversation is switched off for this deployment; the scheduler must be enabled before a task can run.");
       }
-      await runtimeManager.assertTaskToolsConversation?.(identity);
       const at = Date.now();
       for (const [key, window] of windows) if (window.until <= at) windows.delete(key);
       const key = `${identity.userId}\u0000${identity.projectId}`;

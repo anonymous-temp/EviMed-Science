@@ -3549,7 +3549,6 @@ export class RuntimeManager {
     onSessionAbort = async () => {},
     onRuntimeStart = () => {},
     hasRunningRuns = async () => false,
-    hasUnattendedRuns = async (/** @type {any} */ _project) => false,
     runtimeCreationMutation = async operation => operation(),
     agentbayClient = null,
   } = {}) {
@@ -3719,7 +3718,6 @@ export class RuntimeManager {
      * @type {(project: Record<string, any>) => Promise<boolean>}
      */
     this.hasRunningRuns = hasRunningRuns;
-    this.hasUnattendedRuns = hasUnattendedRuns;
     this.lastOrphanCleanup = null;
     /** Where each pending start is, by project key (`RUNTIME_START_STAGES`). */
     this.startProgress = new Map();
@@ -4331,15 +4329,6 @@ export class RuntimeManager {
       active.runtime?.modelGatewayToken !== token
     ) throw modelGatewayTokenError();
     return payload;
-  }
-
-  /** A shared runtime credential cannot authorize task creation during an unattended turn.
-   * The composition root checks the owned run ledger, never model-supplied prompt text.
-   * @param {{userId:string,projectId:string,runId?:string}} identity */
-  async assertTaskToolsConversation(identity) {
-    if (identity.runId != null || await this.hasUnattendedRuns({ userId: identity.userId, id: identity.projectId })) {
-      throw new HttpError(403, "task_tools_not_in_conversation", "An unattended execution cannot create or change scheduled tasks. Try from an attended conversation after it finishes.");
-    }
   }
 
   /**
