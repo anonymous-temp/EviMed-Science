@@ -16,8 +16,8 @@
  * - **A type's failures are the type's.** Each task type keeps its own
  *   consecutive-failure count (`taskTypeState`); two failures of one type pause
  *   that type — it is no longer offered to the next episode's decision — and
- *   the agenda goes on with the rest. An ordinary job keeps its routine intent
- *   and pauses with that type rather than rotating into research. An agenda whose every type is paused has
+ *   the agenda goes on with the rest. A task whose recorded intent is an ordinary
+ *   job (`taskIntent`) pauses with its routine type rather than rotating into research. An agenda whose every type is paused has
  *   nothing left it may run, and is paused with the reason; an agenda with one
  *   type (the common one) behaves exactly as before.
  * - **Only an episode that ran is an observation about the direction.** A
@@ -82,8 +82,8 @@ export function foldOutcome(payload, { episodeId, taskType, status, gatedClaims,
 
   const thread = directionVerdict({ episodesWithoutGatedClaim: without, consecutiveFailures: 0, daysSinceDigestOpened, userRejected });
   const threadStops = thread.action === "pause-thread" || thread.action === "park";
-  const taskIntent = taskType === ROUTINE_TASK_TYPE ? ROUTINE_TASK_TYPE : payload.taskIntent;
-  const typesExhausted = eligibleTaskTypes({ taskTypes: payload.taskTypes, taskTypeState, taskIntent }).length === 0;
+  // The intent is the researcher's or the model's explicit choice, recorded where it is made; an outcome never writes it.
+  const typesExhausted = eligibleTaskTypes({ taskTypes: payload.taskTypes, taskTypeState, taskIntent: payload.taskIntent }).length === 0;
   const paused = threadStops || typesExhausted;
   const reason = threadStops ? thread.reason
     : Object.values(taskTypeState).filter((state) => state?.pausedAt).at(-1)?.pauseReason ?? null;
@@ -95,7 +95,6 @@ export function foldOutcome(payload, { episodeId, taskType, status, gatedClaims,
     consecutiveFailures,
     episodesWithoutGatedClaim: without,
     taskTypeState,
-    ...(taskIntent ? { taskIntent } : {}),
     outcomes: [...(payload.outcomes ?? []), { episodeId, status, gatedClaims, at, pauseReason: paused ? reason : null, ...(taskType ? { taskType } : {}) }].slice(-100),
   };
 }

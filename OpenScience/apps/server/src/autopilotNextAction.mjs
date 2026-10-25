@@ -154,10 +154,12 @@ function cut(value, max) {
  */
 export function eligibleTaskTypes(payload) {
   const state = payload?.taskTypeState ?? {};
-  // Once an ordinary job is chosen, a failure cannot turn it into a research direction.
-  const routine = payload?.taskIntent === ROUTINE_TASK_TYPE || Boolean(state[ROUTINE_TASK_TYPE]?.lastOutcome);
+  // A task whose intent is an ordinary job (`taskIntent`, set only by an explicit choice: the form's or the tool's `routine` alone,
+  // or the model's decision) does not rotate into research when that job keeps failing: its routine type paused pauses the task.
+  // Intent never narrows what the decision is offered otherwise, and history (a routine outcome, a fallback's choice) is no intent.
+  if (payload?.taskIntent === ROUTINE_TASK_TYPE && state[ROUTINE_TASK_TYPE]?.pausedAt) return [];
   return (Array.isArray(payload?.taskTypes) ? payload.taskTypes : [])
-    .filter((type) => (!routine || type === ROUTINE_TASK_TYPE) && AUTOPILOT_TASK_TYPES.includes(/** @type {any} */ (type)) && !state[type]?.pausedAt);
+    .filter((type) => AUTOPILOT_TASK_TYPES.includes(/** @type {any} */ (type)) && !state[type]?.pausedAt);
 }
 
 /**

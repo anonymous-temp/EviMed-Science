@@ -79,9 +79,12 @@ test("retry exhaustion settles the episode once and produces one final failure n
 
 test("two distinct failed routine executions pause their original ordinary intent",async()=>{
   const f=fixture(),row=await f.create({taskTypes:["routine","literature-sentinel","data-prospecting"]});
+  // The model read the instruction as an ordinary job: that decision, not the fallback rotation, records the intent.
+  f.service.planner={decide:async()=>({action:"run",taskType:"routine",focus:"",reason:"An ordinary job.",model:"m"})};
   for(const requestId of ["one","two"]){const e=await f.service.runNow("u",row.id,{requestId});await f.service.markEpisodeDispatched("u",e.episode.id,{runId:`run-${requestId}`,sessionId:"session"});await f.service.completeRun("u",{projectId:"p",runId:`run-${requestId}`,status:"failed",claims:[],artifacts:[]});}
   const paused=await f.service.get("u",row.id);assert.equal(paused.payload.status,"paused");assert.equal(paused.payload.taskIntent,"routine");
   const resumed=await f.service.start("u",row.id,{expectedRevision:paused.revision});
+  assert.equal(resumed.payload.taskIntent,undefined,"a start decides a derived intent again");
   const next=await f.service.runNow("u",row.id,{requestId:"three"});assert.equal(next.episode.payload.taskType,"routine");assert.equal(resumed.payload.status,"active");
 });
 
@@ -147,12 +150,35 @@ test("a terminal attempt cannot become a new task failure after bounded agenda h
 
 test("ordinary title and calendar edits keep the classified intent when a form resubmits the same type set",async()=>{
   const f=fixture(),types=["routine","literature-sentinel","evidence-update","data-prospecting"],row=await f.create({taskTypes:types});
+  f.service.planner={decide:async()=>({action:"run",taskType:"routine",focus:"",reason:"An ordinary job.",model:"m"})};
   await f.service.runNow("u",row.id,{requestId:"classified"});
   const before=await f.service.get("u",row.id);assert.equal(before.payload.taskIntent,"routine");
   const edited=await f.service.update("u",row.id,{expectedRevision:before.revision,title:"Renamed",taskTypes:[...types].reverse(),schedule:{kind:"daily",timeZone:"UTC",time:"14:00"}});
   assert.equal(edited.payload.taskIntent,"routine");
-  f.service.planner={decide:async()=>({action:"run",taskType:"evidence-update",source:"model"})};
-  assert.equal((await f.service.runNow("u",row.id,{requestId:"after-edit"})).episode.payload.taskType,"routine");
+  // The intent does not narrow what the next decision is offered (review F2): it only keeps a failing job from rotating into research.
+  f.service.planner={decide:async()=>({action:"run",taskType:"evidence-update",focus:"",reason:"New literature.",model:"m"})};
+  const next=(await f.service.runNow("u",row.id,{requestId:"after-edit"})).episode.payload;
+  assert.equal(next.taskType,"evidence-update");assert.deepEqual([...next.selection.eligibleTypes].sort(),[...types].sort());
+});
+
+test("a fallback rotation that runs routine records no intent, and the next decision is still offered every type",async()=>{
+  const f=fixture(),types=["routine","literature-sentinel","evidence-update","data-prospecting"],row=await f.create({taskTypes:types});
+  let calls=0;f.service.planner={decide:async()=>{calls++;if(calls===1)throw Object.assign(Error("provider down"),{code:"circuit_open"});return{action:"run",taskType:"literature-sentinel",focus:"",reason:"Search.",model:"m"};}};
+  const fallback=(await f.service.runNow("u",row.id,{requestId:"fallback"})).episode.payload;
+  assert.equal(fallback.selection.source,"date-rotation");assert.equal(fallback.taskType,"routine");
+  assert.equal((await f.service.get("u",row.id)).payload.taskIntent,undefined,"the rotation is no researcher's choice");
+  const next=(await f.service.runNow("u",row.id,{requestId:"decided"})).episode.payload;
+  assert.equal(next.taskType,"literature-sentinel");assert.deepEqual([...next.selection.eligibleTypes].sort(),[...types].sort());
+});
+
+test("a start keeps the form's routine-only intent and clears one derived for a mixed task",async()=>{
+  const f=fixture(),only=await f.create();
+  const paused=await f.service.stop("u",only.id,{expectedRevision:only.revision});
+  assert.equal((await f.service.start("u",only.id,{expectedRevision:paused.revision})).payload.taskIntent,"routine");
+  const mixed=await f.create({taskTypes:["routine","evidence-update"],prompt:"Mixed"});const stored=await f.documents.get("u","agenda",mixed.id);
+  await f.documents.put("u","agenda",mixed.id,{...stored.payload,taskIntent:"routine",enabled:false,status:"paused"},{expectedRevision:stored.revision,projectId:stored.projectId});
+  const restarted=await f.service.start("u",mixed.id,{expectedRevision:stored.revision+1});
+  assert.equal(restarted.payload.taskIntent,undefined);
 });
 
 test("a dispatch binding persisted before a lost callback keeps its accepted run cancellable",async()=>{

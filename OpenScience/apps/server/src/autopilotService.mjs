@@ -98,6 +98,8 @@ const followUpKey = item => hash(JSON.stringify([item.digestId, item.claimId, it
  * notice (`noteDispatchRefusal`); it never pauses the task (review F6, 2026-10-25).
  */
 export const AUTOPILOT_TASK_CAUSED_DISPATCH_CODES = Object.freeze(["autopilot_capability_unavailable"]);
+/** Whether a task's types are `routine` alone: the one type set that is itself an explicit choice of an ordinary job. @param {unknown} types */
+const onlyRoutine = types => Array.isArray(types) && types.length === 1 && types[0] === ROUTINE_TASK_TYPE;
 /** How long one notice about the same refusal of the same task stands for every later refusal of it. */
 const DISPATCH_REFUSAL_NOTICE_PERIOD_MS = 7 * 86_400_000;
 /** In-memory stores share the same admission lock across service instances. */
@@ -623,7 +625,7 @@ export class AutopilotService {
       createdAt: now,
       updatedAt: now,
     };
-    if (payload.taskTypes.length === 1 && payload.taskTypes[0] === ROUTINE_TASK_TYPE) payload.taskIntent = ROUTINE_TASK_TYPE;
+    if (onlyRoutine(payload.taskTypes)) payload.taskIntent = ROUTINE_TASK_TYPE;
     const materials = await this.materialsFor(userId, projectId, input);
     if (materials.length) payload.materials = materials;
     await this.#tag(payload);
@@ -827,7 +829,7 @@ export class AutopilotService {
       if (changed) {
         payload.taskTypeState = {};
         delete payload.taskIntent;
-        if (types.length === 1 && types[0] === ROUTINE_TASK_TYPE) payload.taskIntent = ROUTINE_TASK_TYPE;
+        if (onlyRoutine(types)) payload.taskIntent = ROUTINE_TASK_TYPE;
       }
     }
     for (const field of ["dailyBudgetCny", "weeklyBudgetCny"]) if (input[field] !== undefined) payload[field] = budget(input[field], field);
@@ -1806,8 +1808,11 @@ export class AutopilotService {
     // An agenda whose episodes could only be refused is not started: it would pause again at its
     // next occurrence with the same sentence, and the researcher would have started it for nothing.
     this.assertEpisodeBudgetFundable(agenda);
+    // A start is a fresh authorization, of the intent too: one the model derived is decided again; the form's `routine` alone stays.
+    const { taskIntent: _derivedIntent, ...kept } = agenda.payload;
     return this.documents.put(userId, "agenda", agenda.id, {
-      ...agenda.payload, enabled: true, status: "active", pauseReason: null, pauseCode: null, userSignal: null, evolutionWaiting: null,
+      ...kept, ...(onlyRoutine(agenda.payload.taskTypes) ? { taskIntent: ROUTINE_TASK_TYPE } : {}),
+      enabled: true, status: "active", pauseReason: null, pauseCode: null, userSignal: null, evolutionWaiting: null,
       automaticPause: null,
       // A researcher's start is a fresh authorization: the pauses automatic rules
       // put on task types and the stop the planner chose are lifted with it.
@@ -2420,7 +2425,10 @@ export class AutopilotService {
       if (input.scheduleVersion !== undefined && input.scheduleVersion !== (current.payload.scheduleVersion ?? 1)) throw new HttpError(409, "product_revision_conflict", "The schedule changed before enqueue.");
       const watermarkMissing = !manual && input.occurrence && (!current.payload.lastScheduledOccurrence
         || Date.parse(current.payload.lastScheduledOccurrence.scheduledAt) < Date.parse(input.occurrence.scheduledAt));
-      const intentMissing = routine && current.payload.taskIntent !== ROUTINE_TASK_TYPE;
+      // Intent is recorded only from an explicit source: the model's own decision, or a task whose types are `routine` alone. Never
+      // from the date rotation that backs a failed decision up (it always picks `routine` when it may), and never from history.
+      const intentMissing = routine && current.payload.taskIntent !== ROUTINE_TASK_TYPE
+        && (selection?.source === "model" || onlyRoutine(current.payload.taskTypes));
       if (pending || messageMissing || watermarkMissing || intentMissing || current.payload.lastScheduledDate !== scheduledDate) {
         await this.documents.put(userId, "agenda", agenda.id, { ...current.payload,
           ...(intentMissing ? { taskIntent: ROUTINE_TASK_TYPE } : {}),

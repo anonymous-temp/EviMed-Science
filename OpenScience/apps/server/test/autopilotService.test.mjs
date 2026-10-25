@@ -2502,7 +2502,7 @@ test("routine executions are not research: six in a row neither park the task no
   assert.equal(agenda.payload.episodesWithoutGatedClaim, 0);
 });
 
-test("a recurring job keeps its ordinary intent after its first classified execution, while research can still be answered", async () => {
+test("a recurring job keeps its ordinary intent after its first classified execution, is decided again but never answered, while research can still be answered", async () => {
   const types = ["routine", "literature-sentinel", "evidence-update", "data-prospecting"];
   const planner = plannerDouble((input) => choose(input.eligible.includes("routine") ? "routine" : input.eligible[0]));
   const { service } = fixture({ planner });
@@ -2514,9 +2514,12 @@ test("a recurring job keeps its ordinary intent after its first classified execu
   assert.equal(planner.calls[0].stopAllowed, false);
   agenda = await service.get("user-one", agenda.id);
   await service.recordOutcome("user-one", agenda.id, { expectedRevision: agenda.revision, episodeId: first.episode.id, status: "succeeded", gatedClaims: 0 });
+  assert.equal((await service.get("user-one", agenda.id)).payload.taskIntent, "routine", "the model's own decision records the intent");
   const next = await service.schedule("user-one", agenda.id, { date: "2026-09-07" });
   assert.equal(next.episode.payload.taskType, "routine");
-  assert.equal(planner.calls.length, 1, "an ordinary job keeps its intent without reclassifying it");
+  // The intent narrows nothing the decision is offered (review F2); a routine job is still never exhausted.
+  assert.deepEqual(planner.calls[1].eligible, types);
+  assert.equal(planner.calls[1].stopAllowed, false, "a routine execution completed, and a routine job is never exhausted");
 
   // The control: the same task after a research execution may be answered.
   const researchPlanner = plannerDouble(() => choose("literature-sentinel"));
@@ -2539,6 +2542,8 @@ test("a decision that cannot be had still runs a recurring job as a recurring jo
   for (const date of ["2026-09-06", "2026-09-07", "2026-09-08", "2026-09-09"]) {
     const { episode } = await service.schedule("user-one", agenda.id, { date });
     assert.equal(episode.payload.taskType, "routine", `${date}: the rotation reaches research directions in turn; a news digest is not one`);
-    assert.equal(episode.payload.selection.source, date === "2026-09-06" ? "date-rotation" : "only-choice");
+    // The rotation's choice records no intent (review F2): every day is decided, and falls back, again.
+    assert.equal(episode.payload.selection.source, "date-rotation");
   }
+  assert.equal((await service.get("user-one", agenda.id)).payload.taskIntent, undefined);
 });
