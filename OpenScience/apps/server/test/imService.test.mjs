@@ -322,7 +322,7 @@ test("queued frontier delivery rechecks channel preferences and the injected mut
     await service.processDeliveries();
     assert.equal(sent.length, scenario === "eligible" ? 1 : 0, scenario);
     assert.equal(settled[0][2].status, scenario === "eligible" ? "sent" : "skipped");
-    if (sent.length) assert.equal(sent[0].link, "https://science.example.com/app/frontier?item=item1");
+    if (sent.length) assert.equal(sent[0].link, "https://science.example.com/app/frontier?item=item1&from=push");
   }
 });
 

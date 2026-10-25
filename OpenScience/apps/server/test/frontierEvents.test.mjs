@@ -21,6 +21,7 @@ import {
   frontierEventCounts,
   frontierEventHeat,
   frontierEventRole,
+  frontierEventTitle,
   FRONTIER_HOT_SOLO_SCORE,
   frontierHotEligible,
   frontierPrimaryKind,
@@ -380,4 +381,25 @@ test("different publishers mentioning one organization cannot autojoin different
     events: new Map([["different-drug", { id: "different-drug", firstAt: NOW }]]) });
   assert.equal(decision.target, null, "recall proposes; only an answer joins");
   assert.equal(reading.length, 1);
+});
+
+test("an event is titled by the first member that has a Chinese title, and never by a bare link (G10, 2026-10-25)", () => {
+  // The review's event 384cf3806b8be6d1: its primary report is an X post whose Chinese title was refused for a number and whose raw
+  // title ends in its address; a later report of the same event has a Chinese title.
+  const post = { role: "primary", title_zh: null, title_raw: "Breaking: FDA approves first oral GLP-1 for obesity https://t.co/AbC123xyz", owner_entity: "FDA" };
+  const coverage = { role: "report", title_zh: "FDA批准首个口服GLP-1减重药", title_raw: "FDA clears the first oral GLP-1 for weight loss", owner_entity: "Reuters" };
+  assert.equal(frontierEventTitle([post, coverage]), "FDA批准首个口服GLP-1减重药", "a Chinese title of any member beats a primary's raw English one");
+  // First-hand reports are read first; each side keeps the order the event heard of its members.
+  const earlier = { role: "report", title_zh: "较早的报道", title_raw: "earlier" };
+  const primaryZh = { role: "primary", title_zh: "一手来源的标题", title_raw: "primary" };
+  assert.equal(frontierEventTitle([earlier, primaryZh]), "一手来源的标题");
+  assert.equal(frontierEventTitle([earlier, { ...primaryZh, title_zh: "  " }]), "较早的报道", "a blank Chinese title is none");
+  // No member has a Chinese title: the original, without its links.
+  assert.equal(frontierEventTitle([post]), "Breaking: FDA approves first oral GLP-1 for obesity");
+  // A post that is only an address says nothing: the next report's words, else the owner's name — never the link.
+  const bare = { role: "primary", title_zh: null, title_raw: "https://finance.sina.com.cn/roll/2026-10-24/doc-inabc.shtml.", owner_entity: "新浪财经" };
+  assert.equal(frontierEventTitle([bare, { role: "report", title_zh: null, title_raw: "Hepatitis B drug approved" }]), "Hepatitis B drug approved");
+  assert.equal(frontierEventTitle([bare]), "新浪财经");
+  assert.equal(frontierEventTitle([{ ...bare, owner_entity: null }]), "未命名事件");
+  assert.ok([...frontierEventTitle([{ role: "primary", title_zh: "长".repeat(300) }])].length <= 200, "a title is at most 200 characters");
 });

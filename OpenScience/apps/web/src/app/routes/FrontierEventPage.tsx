@@ -1,6 +1,7 @@
 import { rememberFrontierPosition, useFrontierOrigin } from "@/components/frontier/frontierReadingState";
 import { markFrontierEventRead } from "@/lib/frontierClient";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { serveFrontierList, useFrontierListTracking } from "@/lib/frontierTracking";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { CalendarClock, ChevronLeft, SearchX } from "lucide-react";
 import { WebApiError } from "@/lib/apiClient";
@@ -199,6 +200,12 @@ function EventBody({ event, order, onOrder }: { event: FrontierEvent; order: Fro
   const sourceTypes = useMemo(() => [...new Set(timeline.flatMap((item) => (item.sourceTypeLabel ? [item.sourceTypeLabel] : [])))], [timeline]);
   const visible = sourceType ? timeline.filter((item) => item.sourceTypeLabel === sourceType) : timeline;
   const firstHand = timeline.some((item) => item.role === "primary");
+  // The reports are a list a reader opens an article from, registered like the other lists (G12, 2026-10-25): an open from here is
+  // `event`, with its position in the order shown — the parties' own texts first — not a `direct` arrival.
+  const root = useRef<HTMLDivElement>(null);
+  const shown = useMemo(() => (firstHand ? [...visible.filter((item) => item.role === "primary"), ...visible.filter((item) => item.role !== "primary")] : visible), [firstHand, visible]);
+  useEffect(() => { serveFrontierList("event", null, shown.map((item) => ({ id: item.id }))); }, [shown]);
+  useFrontierListTracking(root, [event.id, shown]);
   const institutions = institutionsLine(event);
   const specialty = event.specialties[0] ?? null;
   const updated = ago(event.lastAt);
@@ -240,7 +247,7 @@ function EventBody({ event, order, onOrder }: { event: FrontierEvent; order: Fro
       )}
       {/* One column: 720 holds a timeline or a side column, not both. The heat and where the reports come from are a strip above
         * the summary, where a reader weighing the event looks first. */}
-      <div className="mt-6 flex flex-col gap-8">
+      <div ref={root} className="mt-6 flex flex-col gap-8">
         <aside aria-label="热度与来源" className="flex flex-wrap items-start gap-x-10 gap-y-4">
           {heat !== null && (
             <div>
@@ -270,12 +277,16 @@ function EventBody({ event, order, onOrder }: { event: FrontierEvent; order: Fro
             )}
           </Section>
 
-          {firstHand ? (
-            <>
-              <ReportGroup id="event-primary" title="一手材料" rows={visible.filter((item) => item.role === "primary")} toolbar={sourceFilter} />
-              <ReportGroup id="event-reports" title="其他报道" rows={visible.filter((item) => item.role !== "primary")} />
-            </>
-          ) : <ReportGroup id="event-reports" title="报道" rows={visible} toolbar={sourceFilter} />}
+          {timeline.length > 0 && (
+            <div data-frontier-list="event" className="space-y-8">
+              {firstHand ? (
+                <>
+                  <ReportGroup id="event-primary" title="一手材料" rows={visible.filter((item) => item.role === "primary")} toolbar={sourceFilter} />
+                  <ReportGroup id="event-reports" title="其他报道" rows={visible.filter((item) => item.role !== "primary")} />
+                </>
+              ) : <ReportGroup id="event-reports" title="报道" rows={visible} toolbar={sourceFilter} />}
+            </div>
+          )}
 
           {event.related.length > 0 && (
             <Section title="相关事件" className="mt-0">

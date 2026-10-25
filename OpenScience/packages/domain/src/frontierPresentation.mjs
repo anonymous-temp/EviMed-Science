@@ -20,6 +20,12 @@ export function frontierNoticeTarget(source) {
     const zone = source.type === 'system' && /^frontier-zone:([A-Za-z0-9_-]{1,80}):([A-Za-z0-9_-]{1,80})$/.exec(source.id);
     return zone ? { kind: 'zone', key: `${zone[1]}:${zone[2]}`, switch: 'frontier' } : null;
 }
+/**
+ * How a reader arrived, when the address says so (G12, 2026-10-25): every link a notification carries to the frontier page ends in this
+ * one marker, and the page's tracking reads it — a reading page reached from a notification without a list is the surface `push`,
+ * not `direct` (`FRONTIER_SURFACES`). A closed word, never a person or a message.
+ */
+export const FRONTIER_ARRIVAL = Object.freeze({ param: 'from', push: 'push' });
 /** @param {{id?:unknown,type?:unknown}|null|undefined} source */
 export function frontierNoticeHref(source) {
     const target = frontierNoticeTarget(source);
@@ -29,6 +35,7 @@ export function frontierNoticeHref(source) {
         const [zoneId, cardId] = target.key.split(':');
         return `/app/frontier/zones/${encodeURIComponent(zoneId)}/evidence/${encodeURIComponent(cardId)}`;
     }
-    return target.kind === 'safety' ? `/app/frontier?item=${encodeURIComponent(target.key)}`
-        : `/app/frontier?view=${target.kind}&${target.kind === 'weekly' ? 'week' : 'day'}=${target.key}`;
+    const marker = `${FRONTIER_ARRIVAL.param}=${FRONTIER_ARRIVAL.push}`;
+    return target.kind === 'safety' ? `/app/frontier?item=${encodeURIComponent(target.key)}&${marker}`
+        : `/app/frontier?view=${target.kind}&${target.kind === 'weekly' ? 'week' : 'day'}=${target.key}&${marker}`;
 }

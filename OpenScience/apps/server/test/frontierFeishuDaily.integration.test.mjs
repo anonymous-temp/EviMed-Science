@@ -128,7 +128,7 @@ test("the daily reaches a bound Feishu reader once, as a card that opens the iss
   const card = JSON.parse(sent[0].args.data.content);
   assert.equal(card.header.title.content, "今日前沿 · 9月22日 · 1 条精选");
   assert.match(JSON.stringify(card), /司美格鲁肽降低心血管事件/, "the lead's title is the card's body");
-  assert.equal(card.body.elements[1].behaviors[0].default_url, `https://science.example.com/app/frontier?view=daily&day=${DAY}`);
+  assert.equal(card.body.elements[1].behaviors[0].default_url, `https://science.example.com/app/frontier?view=daily&day=${DAY}&from=push`);
   assert.equal(sent[0].args.data.receive_id, "ou_owner", "the person who scanned");
   assert.deepEqual((await delivery()).map((row) => row.status), ["sent"]);
   // Once a day: a second scan pushes nothing, and the IM worker has nothing left to send.

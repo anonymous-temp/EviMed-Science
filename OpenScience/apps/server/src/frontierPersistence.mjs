@@ -355,6 +355,11 @@ DO $$ BEGIN
     ALTER TABLE evimed_frontier.item_texts ADD CONSTRAINT item_texts_body_zh_check CHECK (char_length(body_zh) <= 150000);
   END IF;
 END $$;
+-- c2-gaps 2026-10-25 (G2): the reader's fourth text — the entry's usable summary and the record's facts, as the plugin delivered
+-- them, for an item that has no full text, abstract or page excerpt (a registry record, a regulator's database row, a safety notice,
+-- a feed's own summary). Written with the other text columns (frontierSummaryText), NULL until looked at, '' when there is nothing
+-- to read; the entry's own columns and the content hash are untouched. The 导读 and 要点 of such an item are written from it.
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS reader_summary text CHECK (char_length(reader_summary) <= 12000);
 
 CREATE TABLE IF NOT EXISTS evimed_frontier.item_mentions (
   item_id      bigint NOT NULL REFERENCES evimed_frontier.items(id) ON DELETE CASCADE,

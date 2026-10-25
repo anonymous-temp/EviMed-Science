@@ -100,13 +100,13 @@ export function frontierLeadLimit(text) {
   return Math.max(FRONTIER_LEAD_LIMITS.min, Math.min(FRONTIER_LEAD_LIMITS.chars, Math.round(equivalent)));
 }
 
-const KIND_NAMES = Object.freeze({ body: "全文", abstract: "摘要", excerpt: "网页节选" });
+const KIND_NAMES = Object.freeze({ body: "全文", abstract: "摘要", excerpt: "网页节选", summary: "来源摘要" });
 
 /**
  * What one call shows the model: the source, the date, the title (and its Chinese when there is one), and the reader text, its
  * head when longer than `FRONTIER_LEAD_LIMITS.input`.
  * @param {{ sourceName: string, date?: string | null, titleRaw: string, titleZh?: string | null, text: string,
- *           kind: "body" | "abstract" | "excerpt", post?: boolean }} input
+ *           kind: "body" | "abstract" | "excerpt" | "summary", post?: boolean }} input
  */
 export function buildLeadInput({ sourceName, date = null, titleRaw, titleZh = null, text, kind, post = false }) {
   const body = String(text ?? "").trim();

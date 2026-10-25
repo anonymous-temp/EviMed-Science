@@ -1674,7 +1674,7 @@ export {
   geoTextKey,
   parseGeoActionKey,
 } from './src/geoActions.mjs'
-export { frontierNoticeTarget, frontierNoticeHref } from './src/frontierPresentation.mjs';
+export { frontierNoticeTarget, frontierNoticeHref, FRONTIER_ARRIVAL } from './src/frontierPresentation.mjs';
 export { shareNoticeHref } from './src/shareNotice.mjs';
 
 export { validAgendaDate, validateAgendaSchedule, normalizeAgendaSchedule, agendaLocalDate, DISPLAY_TIME_ZONE, agendaDueOccurrence, agendaNextOccurrence, AGENDA_WEEKDAY_WORDS, describeAgendaSchedule, agendaZoneName, agendaInstantText } from "./src/agendaSchedule.mjs";

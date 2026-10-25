@@ -513,39 +513,56 @@ describe("an item whose blocks the server could not fill", () => {
     expect(within(screen.getByRole("article", { name: "正文" })).getByRole("link", { name: "打开原文" })).toBeInTheDocument();
   });
 
-  it("explains a rejected Chinese headline and guide while preserving the source headline", async () => {
+  it("says nothing of why a Chinese headline and guide are missing: the source headline and one plain way to the source (G5, 2026-10-25)", async () => {
     client.fetchFrontierItem.mockResolvedValue({ ...frontierItemDetail({ id: "item-1",
-      title: "Original source headline", titleRaw: "Original source headline", titleZh: null, summary: null,
+      title: "Original source headline", titleRaw: "Original source headline", titleZh: null, summary: null, lead: null,
       verification: "title-only", editorDiagnostics: { schemaVersion: 1, outcome: "title-only", attempts: 2,
         inputSha256: "a".repeat(64), editorVersion: "editor-test", checkedAt: "2026-10-20T00:00:00.000Z",
         reason: null, fields: { title_zh: ["language"], summary_zh: ["number"] } } }), abstract: null, abstractZh: null });
     show();
     expect(await screen.findByRole("heading", { name: "Original source headline", level: 1 })).toBeInTheDocument();
-    expect(screen.getByText(/中文标题未能完整表达来源内容，保留原标题/)).toBeInTheDocument();
-    expect(screen.getByText(/导读中的数字未能与来源对应/)).toBeInTheDocument();
-    expect(screen.queryByText("editor-test")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "阅读来源" })).toHaveAttribute("target", "_blank");
+    // Nothing about the checking: no number that did not match, no check not finished, no cause at all.
+    expect(document.body).not.toHaveTextContent(/未能|暂不展示|尚未完成|暂缺|暂未|保留原标题|核对|editor-test/);
+    expect(document.querySelector("[data-note]")).toBeNull();
+    const source = screen.getByRole("link", { name: "阅读来源" });
+    expect(source).toHaveAttribute("target", "_blank");
+    expect(source).toHaveAttribute("href", "https://www.nejm.org/doi/full/10.1056/example");
   });
 
   it.each([
-    ["source_missing", "来源暂未提供可用于导读的摘要或正文"],
-    ["not_checked", "中文内容暂未完成"],
-  ])("offers source reading for %s without inventing Chinese content", async (code, message) => {
+    ["source_missing", "pending"],
+    ["not_checked", "pending"],
+    ["number", "title-only"],
+  ])("offers only the way to the source for %s, without inventing Chinese content or explaining it", async (code, verification) => {
     client.fetchFrontierItem.mockResolvedValue({ ...frontierItemDetail({ id: "item-1", title: "Source headline", titleRaw: "Source headline",
-      titleZh: null, summary: null, verification: "pending",
-      editorDiagnostics: { schemaVersion: 1, outcome: "pending", attempts: 0, inputSha256: null,
+      titleZh: null, summary: null, lead: null, verification,
+      editorDiagnostics: { schemaVersion: 1, outcome: verification, attempts: 0, inputSha256: null,
         editorVersion: null, checkedAt: "2026-10-20T00:00:00Z", reason: null, fields: { title_zh: ["not_checked"], summary_zh: [code] } } }), abstract: null, abstractZh: null });
     show();
     expect(await screen.findByRole("heading", { name: "Source headline", level: 1 })).toBeInTheDocument();
-    expect(screen.getByText(new RegExp(message))).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/来源暂未提供|暂未完成|数字未能|导读暂缺/);
     expect(screen.getByRole("link", { name: "阅读来源" })).toHaveAttribute("target", "_blank");
+    expect(screen.queryByRole("heading", { name: "AI 导读" })).not.toBeInTheDocument();
   });
 
-  it("keeps historical fallback causes unknown", async () => {
-    client.fetchFrontierItem.mockResolvedValue({ ...frontierItemDetail({ id: "item-1", titleZh: null, summary: null, verification: "title-only", editorDiagnostics: null }), abstract: null, abstractZh: null });
+  it("has no note and no 「阅读来源」 beside a Chinese title, whatever the checks said before — and no old record's cause either", async () => {
+    client.fetchFrontierItem.mockResolvedValue({ ...frontierItemDetail({ id: "item-1", summary: null, lead: null, verification: "title-only",
+      editorDiagnostics: { schemaVersion: 1, outcome: "title-only", attempts: 2, inputSha256: null, editorVersion: null, checkedAt: "2026-10-20T00:00:00Z",
+        reason: null, fields: { title_zh: ["passed"], summary_zh: ["number"] } } }), abstract: null, abstractZh: null });
     show();
-    expect(await screen.findByText(/目前保留来源标题，中文导读暂缺/)).toBeInTheDocument();
-    expect(screen.queryByText(/数字未能与来源对应/)).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "口服 PCSK9 抑制剂降低主要心血管事件", level: 1 })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "阅读来源" })).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/数字未能与来源对应|中文导读暂缺/);
+  });
+
+  it("shows the card's own summary as the first block while no 导读 was written (G2: a record with no text still reads)", async () => {
+    // The server sends the card's summary as `lead` until a 导读 exists, and the page sets it first, labelled 「AI 导读」.
+    client.fetchFrontierItem.mockResolvedValue({ ...frontierItemDetail({ id: "item-1", summary: "FDA 批准 JEMPERLI 的补充申请，审评类别为标准审评。",
+      lead: "FDA 批准 JEMPERLI 的补充申请，审评类别为标准审评。", brief: null, insight: null, body: null, flags: [] }), abstract: null, abstractZh: null });
+    show();
+    const lead = await screen.findByRole("region", { name: "AI 导读" });
+    expect(within(lead).getByText("FDA 批准 JEMPERLI 的补充申请，审评类别为标准审评。")).toBeInTheDocument();
+    expect(screen.queryByText("摘要")).not.toBeInTheDocument();
   });
 });
 
