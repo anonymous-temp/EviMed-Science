@@ -81,7 +81,8 @@ test("a crash after final queue failure reconciles its episode and sends a dedup
   await jobs.fail(owner,claimed.id,claimed.leaseToken,{code:"runtime_unavailable",message:"outage"},{retry:false});
   const before=notices.size;notificationFailure=true;
   await service.reconcileStopWork();assert.equal((await service.getEpisode(owner,execution.episode.id)).payload.status,"failed");
-  assert.equal((await service.get(owner,agenda.id)).payload.outcomes.filter(o=>o.episodeId===execution.episode.id).length,1);assert.equal(notices.size,before);
+  // A dispatch that never ran is no task outcome (review F6); its one notice waits for the inbox.
+  assert.equal(((await service.get(owner,agenda.id)).payload.outcomes??[]).filter(o=>o.episodeId===execution.episode.id).length,0);assert.equal(notices.size,before);
   notificationFailure=false;await service.reconcileStopWork();assert.equal(notices.size,before+1);
   await service.reconcileStopWork();assert.equal(notices.size,before+1);
   assert.equal((await service.cancelEpisode(owner,agenda.id,execution.episode.id)).payload.status,"failed");
@@ -145,10 +146,11 @@ test("real inbox persistence receives one useful final failure or automatic-paus
   const notifications=new NotificationService(database),notifying=new AutopilotService({documents,jobs,notifications,now:()=>at});
   const created=await notifying.create(owner,{...input,prompt:"Real inbox failure notices"});
   const agenda=await notifying.start(owner,created.id,{expectedRevision:created.revision});
+  // A failure that is the task's own (its type has no capability here) counts against the type; two pause the task.
   for(const requestId of ["failure-one","failure-two"]){
     const execution=await notifying.runNow(owner,agenda.id,{requestId});
-    await notifying.markEpisodeFailed(owner,execution.episode.id,{code:"runtime_unavailable"});
-    await notifying.markEpisodeFailed(owner,execution.episode.id,{code:"runtime_unavailable"});
+    await notifying.markEpisodeFailed(owner,execution.episode.id,{code:"autopilot_capability_unavailable"});
+    await notifying.markEpisodeFailed(owner,execution.episode.id,{code:"autopilot_capability_unavailable"});
   }
   const saved=await notifying.get(owner,agenda.id);assert.equal(saved.payload.status,"paused");
   const notices=(await notifications.list(owner,{projectId:agenda.projectId})).items;

@@ -89,6 +89,17 @@ function listOfText(value, field, allowed = null) {
 function isConflict(error) { return error?.code === "product_revision_conflict"; }
 function hash(value) { return createHash("sha256").update(value).digest("hex"); }
 const followUpKey = item => hash(JSON.stringify([item.digestId, item.claimId, item.note, item.at]));
+
+/**
+ * The dispatch refusals that are the task's own: every later attempt of this task type ends the same way, so they count against
+ * the type (two in a row pause it, and the task goes on with the rest). A closed list. Every other terminal dispatch refusal — the
+ * task's own budget spent, the account's credits, a runtime that refused or never confirmed the prompt, retries of a resource wait
+ * exhausted — never ran the work, is no observation about the task, and stays page state on the episode with one de-duplicated
+ * notice (`noteDispatchRefusal`); it never pauses the task (review F6, 2026-10-25).
+ */
+export const AUTOPILOT_TASK_CAUSED_DISPATCH_CODES = Object.freeze(["autopilot_capability_unavailable"]);
+/** How long one notice about the same refusal of the same task stands for every later refusal of it. */
+const DISPATCH_REFUSAL_NOTICE_PERIOD_MS = 7 * 86_400_000;
 /** In-memory stores share the same admission lock across service instances. */
 const taskAdmissionLocks = new WeakMap();
 
@@ -1221,10 +1232,15 @@ export class AutopilotService {
         // A fold that cannot be written still settles the episode below, with the reason, so recovery never selects it again.
         let skipped = null;
         let skippedCode = null;
+        const code = String(saved.payload.error?.code ?? "");
         try {
           const agenda = await this.get(userId, saved.payload.agendaId);
           if (agenda.payload.archivedAt || agenda.payload.status === "stopped") skipped = "agenda_unavailable";
-          else await this.recordOutcome(userId, agenda.id, {
+          else if (!AUTOPILOT_TASK_CAUSED_DISPATCH_CODES.includes(code)) {
+            // The work never ran: page state and, at most once a week per reason, a notice. Never an outcome, never a pause.
+            skipped = "not_run";
+            await this.noteDispatchRefusal(userId, agenda.id, code).catch(() => null);
+          } else await this.recordOutcome(userId, agenda.id, {
             expectedRevision: agenda.revision,
             episodeId: saved.id, taskType: saved.payload.taskType, status: "failed", gatedClaims: 0,
           });
@@ -2687,11 +2703,38 @@ export class AutopilotService {
     throw new HttpError(409, "autopilot_outcome_conflict", "The research agenda changed repeatedly while recording its outcome.");
   }
 
+  /**
+   * One notice that an execution could not start, for a reason that is not the task's (`AUTOPILOT_TASK_CAUSED_DISPATCH_CODES`): the
+   * task keeps its schedule, and the same reason of the same task is told once a week, not once an occurrence. Queued with the
+   * agenda like every task notice, so a lost inbox write is retried; nothing for a task that is no longer active or is the platform's.
+   * @param {string} userId @param {string} agendaId @param {string} code
+   */
+  async noteDispatchRefusal(userId, agendaId, code) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const agenda = await this.get(userId, agendaId);
+      if (!this.notifications || this.programme?.owns(userId, agenda.projectId)
+        || agenda.payload.archivedAt || !agenda.payload.enabled || agenda.payload.status !== "active") return agenda;
+      const reason = /^[a-z0-9_]{1,100}$/.test(code) ? code : "autopilot_dispatch_failed";
+      const key = `autopilot-refusal:${agenda.id}:${reason}:${Math.floor(this.now().getTime() / DISPATCH_REFUSAL_NOTICE_PERIOD_MS)}`;
+      if ((agenda.payload.taskNotices ?? []).some(item => item.input?.idempotencyKey === key)) return this.flushTaskNotices(userId, agenda);
+      const notice = this.taskIssueNotice(agenda, { key, refused: true, reason: knownErrorCodeMessage(reason) ?? "执行服务这次没能开始这项任务。" });
+      try {
+        const saved = await this.documents.put(userId, "agenda", agenda.id, { ...agenda.payload,
+          taskNotices: [...(agenda.payload.taskNotices ?? []).filter(item => item.status !== "sent"), notice],
+        }, { expectedRevision: agenda.revision, projectId: agenda.projectId });
+        return await this.flushTaskNotices(userId, saved);
+      } catch (error) { if (!isConflict(error)) throw error; }
+    }
+    return null;
+  }
+
   /** A terminal failure/pause has one stable inbox request, committed with the outcome that earned it. */
-  taskIssueNotice(agenda, { key, pauseReason = null, reason = "本次执行未能完成。" }) {
+  taskIssueNotice(agenda, { key, pauseReason = null, reason = "本次执行未能完成。", refused = false }) {
     return { status: "queued", input: { noticeType: "notify", severity: "attention",
-      title: `${agenda.payload.title} ${pauseReason ? "已暂停" : "执行失败"}`.slice(0, 150),
-      body: pauseReason ? `${pauseReason}。查看任务后可恢复或立即重试。`.slice(0, 1000) : `${reason} 自动重试已结束，可查看任务并立即重试。`.slice(0, 1000),
+      title: `${agenda.payload.title} ${pauseReason ? "已暂停" : refused ? "本次未能执行" : "执行失败"}`.slice(0, 150),
+      body: pauseReason ? `${pauseReason}。查看任务后可恢复或立即重试。`.slice(0, 1000)
+        : refused ? `${reason} 任务保留原定计划，下次到时间会照常执行；也可以查看任务后立即重试。`.slice(0, 1000)
+          : `${reason} 自动重试已结束，可查看任务并立即重试。`.slice(0, 1000),
       projectId: agenda.projectId, source: { type: "system", id: `autopilot-task:${agenda.id}` }, idempotencyKey: key,
       actions: [{ id: "open", label: "查看任务" }],
     } };

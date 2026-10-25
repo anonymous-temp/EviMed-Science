@@ -69,9 +69,11 @@ test("retry exhaustion settles the episode once and produces one final failure n
   for(let i=0;i<3;i++)await worker.tick();
   const failed=await f.service.getEpisode("u",execution.episode.id),agenda=await f.service.get("u",row.id);
   assert.equal(f.queue[0].status,"failed");assert.equal(failed.payload.status,"failed");assert.equal(failed.payload.resourceDeferrals.episode.retryAt,null);
-  assert.equal(agenda.payload.outcomes.length,1,"attempts are not separate task outcomes");assert.equal(f.notices.size,1);
+  // A dispatch that never ran is page state and one notice, never a task outcome (review F6): attempts are not outcomes either.
+  assert.equal((agenda.payload.outcomes??[]).length,0,"a refused dispatch is no task outcome");assert.equal(f.notices.size,1);
+  assert.equal(agenda.payload.status,"active");assert.match([...f.notices.values()][0].title,/本次未能执行$/);
   await f.service.markEpisodeFailed("u",failed.id,{code:"runtime_unavailable"});
-  assert.equal((await f.service.get("u",row.id)).payload.outcomes.length,1);assert.equal(f.notices.size,1);
+  assert.equal(((await f.service.get("u",row.id)).payload.outcomes??[]).length,0);assert.equal(f.notices.size,1);
   assert.equal((await f.service.cancelEpisode("u",row.id,failed.id)).payload.status,"failed","a final failure retains its outcome");
 });
 
@@ -275,4 +277,36 @@ test("a dispatch failure whose fold cannot be written is still settled, so recov
   const settled=await f.service.markEpisodeFailed("u",execution.episode.id,{code:"autopilot_capability_unavailable"});
   assert.equal(settled.payload.status,"failed");assert.ok(settled.payload.dispatchOutcomeRecordedAt);
   assert.equal(settled.payload.dispatchOutcomeSkipped,"outcome_unrecorded");assert.equal(settled.payload.dispatchOutcomeError,"autopilot_outcome_conflict");
+});
+
+test("dispatches the task's own budget, the account's credits or the runtime refused never pause the task or count against its type",async()=>{
+  const f=fixture(),row=await f.create();
+  for(const [requestId,code] of [["budget-one","autopilot_daily_budget_spent"],["budget-two","autopilot_daily_budget_spent"],["prompt","runtime_prompt_rejected"],["unknown","runtime_prompt_acceptance_unknown"]]){
+    const execution=await f.service.runNow("u",row.id,{requestId});
+    await new AutopilotWorker({jobs:f.jobs,service:f.service,dispatchEpisode:async()=>{throw Object.assign(Error("refused"),{code});}}).tick();
+    const failed=await f.service.getEpisode("u",execution.episode.id);
+    assert.equal(failed.payload.status,"failed","the page says it did not run");assert.equal(failed.payload.error.code,code);assert.equal(failed.payload.dispatchOutcomeSkipped,"not_run");
+  }
+  // Retries of a credits wait exhausted end the same way.
+  const waiting=await f.service.runNow("u",row.id,{requestId:"credits"});
+  for(let i=0;i<3;i++)await new AutopilotWorker({jobs:f.jobs,service:f.service,dispatchEpisode:async()=>{throw Object.assign(Error("credits"),{code:"credits_exhausted"});}}).tick();
+  assert.equal((await f.service.getEpisode("u",waiting.episode.id)).payload.status,"failed");
+  const agenda=await f.service.get("u",row.id);
+  assert.deepEqual([agenda.payload.status,agenda.payload.enabled],["active",true],"the task keeps its schedule");
+  assert.deepEqual(agenda.payload.taskTypeState??{},{});assert.equal((agenda.payload.outcomes??[]).length,0);assert.equal(agenda.payload.consecutiveFailures??0,0);
+  const titles=[...f.notices.values()].map(n=>n.title);
+  assert.equal(titles.length,4,"one notice per reason a week, not one per refused occurrence");assert.ok(titles.every(t=>t.endsWith("本次未能执行")));
+  assert.ok([...f.notices.values()].every(n=>!n.body.includes("已暂停")));
+});
+
+test("a failure that is the task type's own still counts against the type and pauses a single-type task after two",async()=>{
+  const f=fixture(),row=await f.create();
+  for(const requestId of ["one","two"]){
+    await f.service.runNow("u",row.id,{requestId});
+    await new AutopilotWorker({jobs:f.jobs,service:f.service,dispatchEpisode:async()=>{throw Object.assign(Error("missing"),{code:"autopilot_capability_unavailable"});}}).tick();
+    await new AutopilotWorker({jobs:f.jobs,service:f.service,dispatchEpisode:async()=>{throw Object.assign(Error("missing"),{code:"autopilot_capability_unavailable"});}}).tick();
+    await new AutopilotWorker({jobs:f.jobs,service:f.service,dispatchEpisode:async()=>{throw Object.assign(Error("missing"),{code:"autopilot_capability_unavailable"});}}).tick();
+  }
+  const agenda=await f.service.get("u",row.id);
+  assert.equal(agenda.payload.status,"paused");assert.ok(agenda.payload.taskTypeState.routine.pausedAt);assert.equal(agenda.payload.outcomes.length,2);
 });
