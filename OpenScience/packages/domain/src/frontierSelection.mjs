@@ -206,7 +206,7 @@ export function frontierPracticeAdmit(candidates, { selectedCount }) {
 /**
  * The tiers the 「AI 评分」 pill is drawn in, on the score of 2026-10-25 (owner, 2026-10-23: three tiers, after AIHOT's pill; the
  * lines moved with the score, from 85 / 70): `high` from 76, `medium` from 60, `low` below. A selected card reads medium at least (the
- * selection line is 68, a floor place 62), as it did before the move. One table for the server's `scoreBand` and the web's fallback.
+ * selection line is 64, a floor place 60), as it did before the move. One table for the server's `scoreBand` and the web's fallback.
  */
 export const FRONTIER_SCORE_TIERS = Object.freeze({ high: 76, medium: 60 })
 

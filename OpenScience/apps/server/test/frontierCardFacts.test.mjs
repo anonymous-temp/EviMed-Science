@@ -33,7 +33,7 @@ test("a card's AI 评分 tier (owner, 2026-10-23; lines moved with the score, 20
 test("the selection line is the config's, the calibrated default when it says nothing", () => {
   assert.equal(frontierSelectThreshold({ frontierSelectThreshold: 75 }), 75);
   assert.equal(frontierSelectThreshold({ frontierSelectThreshold: 0 }), 0);
-  assert.equal(FRONTIER_SELECT_THRESHOLD_DEFAULT, 68);
+  assert.equal(FRONTIER_SELECT_THRESHOLD_DEFAULT, 64);
   for (const unset of [{}, null, { frontierSelectThreshold: null }, { frontierSelectThreshold: "" }, { frontierSelectThreshold: "x" }]) {
     assert.equal(frontierSelectThreshold(unset), FRONTIER_SELECT_THRESHOLD_DEFAULT, JSON.stringify(unset));
   }

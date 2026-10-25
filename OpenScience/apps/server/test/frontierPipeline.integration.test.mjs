@@ -612,13 +612,13 @@ test("c2-fixes: a floor place under the line asks the genre's own 80th percentil
   await reset();
   const clock = new Date("2026-09-22T12:00:00Z");
   const { pipeline, plugin } = pipelineWith({ now: () => clock });
-  // Thirty newsroom releases (行业动态 by code's genre) that the clinical score keeps under the line: totals run 40 to 64 (authority 6, impact 18).
+  // Thirty newsroom releases (行业动态 by code's genre) that the clinical score keeps under the line: totals run 42 to 60 (authority 6, impact 14: a release's ceiling).
   const releases = [];
   for (const [index, topic] of DISTINCT_TOPICS.entries()) {
-    const total = 40 + Math.round((index * 24) / 29);
-    const rest = total - 6 - 18;
+    const total = 42 + Math.round((index * 18) / 29);
+    const rest = total - 6 - 14;
     const relevance = Math.min(20, Math.floor(rest / 2));
-    releases.push(await deliver({ source_id: "c-novo", title: `${topic} [parts:18-${rest - relevance}-${relevance}]`, summary: "N".repeat(200) }));
+    releases.push(await deliver({ source_id: "c-novo", title: `${topic} [parts:14-${rest - relevance}-${relevance}]`, summary: "N".repeat(200) }));
   }
   for (const delivered of releases) plugin.texts.set(delivered.pluginEntryId, { entry_id: delivered.pluginEntryId, revision: 1, status: "unavailable", enrichment: {} });
   for (let round = 0; round < 6; round += 1) await pipeline.processBatch();
@@ -630,7 +630,7 @@ test("c2-fixes: a floor place under the line asks the genre's own 80th percentil
   const sorted = [...scores].sort((a, b) => a - b);
   const position = 0.8 * (sorted.length - 1);
   const p80 = sorted[Math.floor(position)] + (sorted[Math.ceil(position)] - sorted[Math.floor(position)]) * (position - Math.floor(position));
-  assert.ok(p80 >= 58 && p80 < 62, `the genre's 80th percentile is the bar, held between 58 and the absolute floor of 62 (${p80})`);
+  assert.ok(p80 >= 56 && p80 < 60, `the genre's 80th percentile is the bar, held between 56 and the absolute floor of 60 (${p80})`);
   const selected = rows.filter((row) => row.selected);
   assert.deepEqual(selected.map((row) => row.selected_rule), ["genre-floor"], "industry's floor of one place in a day of 20 is filled");
   assert.equal(Number(selected[0].score_total), Math.max(...scores), "with the genre's best, which is under the line");
@@ -706,7 +706,7 @@ async function laneDay(config = {}) {
     b: { source_id: "p-medrxiv", title: `${DISTINCT_TOPICS[3]} [parts:18-11-15]` }, // 50
     c: { source_id: "p-biorxiv", title: `${DISTINCT_TOPICS[4]} [parts:18-8-14]` }, // 46: under the floor
     d: { source_id: "p-biorxiv", title: `${DISTINCT_TOPICS[5]} [parts:18-14-17]` }, // 55
-    e: { source_id: "c-novo", title: `${DISTINCT_TOPICS[6]} [parts:18-20-19]` }, // 63, a newsroom (authority 6; a release's impact is capped at 18)
+    e: { source_id: "c-novo", title: `${DISTINCT_TOPICS[6]} [parts:14-20-20]` }, // 60, a newsroom (authority 6; a release's impact is capped at 14)
   });
   const summary = await pipeline.processBatch();
   return { pipeline, plugin, named, summary, clock };

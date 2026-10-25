@@ -227,7 +227,7 @@ export const FRONTIER_SCORE_RUBRIC_ZH = [
  * (`frontierPracticeAdmissible` and the day's cap in the mix). Said so that nearly every item answers `false`: a team that reads
  * closely says about 6% of what it reads changes its practice, and the two labellers called 2 of 248 gold items practice-changing.
  */
-export const FRONTIER_PRACTICE_RULE_ZH = `可能改变实践。绝大多数条目填 {"changing":false,"reason_zh":""}。只有同时满足三条才填 true：一，会改变许多患者的处方、诊断、筛查或诊疗路径，或是临床必须执行的监管、安全措施；二，现在就能用或必须现在就做（国内尚未上市的药物获批、只有新闻稿的顶线结果、预印本、早期研究、对别处消息的转述都不算）；三，来源是权威期刊、指南、监管机构或主要学会。填 true 时 reason_zh 用一句话（不超过 ${FRONTIER_PRACTICE_LIMITS.reasonChars} 个字）写出变了什么、对谁，只用原文里有的事实和数字，不用「重磅」「颠覆」这类词。`;
+export const FRONTIER_PRACTICE_RULE_ZH = `可能改变实践。绝大多数条目填 {"changing":false,"reason_zh":""}，一百条里不过一两条。只有同时满足三条才填 true：一，许多患者的处方、诊断、筛查或诊疗路径会因此改变，或是临床必须马上执行的监管、安全措施。典型的是：一个国内已批准、适用于常见病或多个瘤种的新适应症；重新规定诊断标准或分型的权威共识或指南，或对它的忠实解读；撤市、停用或新增黑框警告。不属于：罕见病（如血友病、遗传性血管性水肿这类每年新发不过数百人的病）的药物、小众器械、单个专科里小范围的人群；二，现在就能用或必须现在就做：国内已批准可以处方的适应症、已发布的诊断标准或指南、已生效的监管要求。国内尚未上市的药物获批、只有新闻稿的顶线结果、预印本、早期研究、对别处消息的转述、对一项已有批准的回顾或药物简介都不算；三，来源是权威期刊、指南、监管机构或主要学会，或是对它们的忠实解读。填 true 时 reason_zh 用一句话（不超过 ${FRONTIER_PRACTICE_LIMITS.reasonChars} 个字）写出变了什么、对谁，只用原文里有的事实和数字，不用「重磅」「颠覆」这类词。`;
 
 /** The screening instructions: the stable prefix of every screening call. */
 export const FRONTIER_SCREEN_INSTRUCTIONS = [

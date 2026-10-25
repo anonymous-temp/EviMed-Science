@@ -36,7 +36,7 @@ test('the ceilings read the genre, a decided evidence type, a registry-class sou
   assert.equal(frontierScoreCeilings({ parts: full, genre: 'trial' }).parts.impact, 12)
   assert.deepEqual(frontierScoreCeilings({ parts: full, genre: 'preprint', preprint: true }).parts, { authority: 18, impact: 18, novelty: 14, relevance: 20 })
   // A press release's impact is capped only when code decided the evidence type (a company's newsroom): the model's own guess is no ground.
-  assert.equal(frontierScoreCeilings({ parts: full, evidenceType: 'press-release', evidenceFixed: true }).parts.impact, 18)
+  assert.equal(frontierScoreCeilings({ parts: full, evidenceType: 'press-release', evidenceFixed: true }).parts.impact, 14)
   assert.equal(frontierScoreCeilings({ parts: full, evidenceType: 'review-opinion', evidenceFixed: false }).parts.impact, 30, 'a model-guessed evidence type lowers nothing')
   assert.equal(frontierScoreCeilings({ parts: full, evidenceType: 'review-opinion', evidenceFixed: true }).parts.impact, 16)
   assert.equal(frontierScoreCeilings({ parts: full, sourceId: 'prepare-guideline-registry' }).parts.impact, 12)
@@ -80,7 +80,7 @@ test('every ceiling in the table is a whole number within its part\'s scale', as
   }
 })
 
-test('the tiers: high from 76, medium from 60; a selected card (line 68) reads medium at least', () => {
+test('the tiers: high from 76, medium from 60; a selected card (line 64) reads medium at least', () => {
   assert.deepEqual({ ...FRONTIER_SCORE_TIERS }, { high: 76, medium: 60 })
   assert.equal(frontierScoreTier(76), 'high')
   assert.equal(frontierScoreTier(75.9), 'medium')

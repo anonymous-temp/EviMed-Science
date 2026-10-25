@@ -258,17 +258,17 @@ test('a preprint under the line comes in only by the preprint lane, never by a f
 
 // ------------------------------------------------------------------------------------ genre floors (c2-fixes 2026-10-25)
 
-test('a floor place under the line asks its genre\'s 80th percentile, held between 58 and the absolute 62 (the score of 2026-10-25)', () => {
-  assert.deepEqual(FRONTIER_MIX_GENRE_FLOOR, { percentile: 0.8, min: 58, days: 30, minSample: 30 })
-  assert.equal(FRONTIER_MIX_FLOOR_SCORE, 62)
-  assert.equal(FRONTIER_MIX_ZH_MARGIN, 6)
+test('a floor place under the line asks its genre\'s 80th percentile, held between 56 and the absolute 60 (the score of 2026-10-25)', () => {
+  assert.deepEqual(FRONTIER_MIX_GENRE_FLOOR, { percentile: 0.8, min: 56, days: 30, minSample: 30 })
+  assert.equal(FRONTIER_MIX_FLOOR_SCORE, 60)
+  assert.equal(FRONTIER_MIX_ZH_MARGIN, 4)
   assert.equal(FRONTIER_MIX_PREPRINT_MIN_SCORE, 50)
-  assert.equal(frontierMixGenreFloorScore(60), 60, 'a genre whose top fifth starts at 60 asks 60')
-  assert.equal(frontierMixGenreFloorScore(41), 58, 'industry\'s top fifth is 41: it asks 58, never less, so an unfilled floor beats a junk pick')
-  assert.equal(frontierMixGenreFloorScore(74), 62, 'a genre the editor scores high keeps the absolute floor: its top fifth would be above the line')
-  assert.equal(frontierMixGenreFloorScore(undefined), 62, 'no percentile, no change')
-  assert.equal(frontierMixGenreFloorScore(null), 62)
-  assert.equal(frontierMixGenreFloorScore(Number.NaN), 62)
+  assert.equal(frontierMixGenreFloorScore(58), 58, 'a genre whose top fifth starts at 58 asks 58')
+  assert.equal(frontierMixGenreFloorScore(41), 56, 'industry\'s top fifth is 41: it asks 56, never less, so an unfilled floor beats a junk pick')
+  assert.equal(frontierMixGenreFloorScore(74), 60, 'a genre the editor scores high keeps the absolute floor: its top fifth would be above the line')
+  assert.equal(frontierMixGenreFloorScore(undefined), 60, 'no percentile, no change')
+  assert.equal(frontierMixGenreFloorScore(null), 60)
+  assert.equal(frontierMixGenreFloorScore(Number.NaN), 60)
   assert.equal(frontierMixGenreFloorScore(52, 55, 45), 52, 'the minimum may be given')
   assert.equal(frontierMixGenreFloorScore(70, 55), 55, 'the absolute floor given is the ceiling of the genre\'s')
 })

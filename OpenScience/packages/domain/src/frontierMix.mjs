@@ -83,25 +83,26 @@ export const FRONTIER_MIX_ZH_TARGET = 0.30
  * lets a Chinese item of 74 in. On the week to 2026-10-24, 12-41 Chinese items a day stood between 74 and 81 (most of
  * them 公众号 解读 and Chinese regulators' notices), against 2-21 above the line.
  */
-export const FRONTIER_MIX_ZH_MARGIN = 6
+export const FRONTIER_MIX_ZH_MARGIN = 4
 
 /**
- * The lowest score a place under the line is given from (c3-select 2026-10-25, on the recalibrated score): six under the line of 68,
- * the lower edge of the "medium" band (`FRONTIER_SCORE_TIERS`). On the gold set's dev split the labellers called 38% of the items in
- * 60-67 picks and 7% of those in 50-54: under 62 a floor place is a coin that mostly lands wrong, and an unfilled floor beats a junk pick.
+ * The lowest score a place under the line is given from (c3-select 2026-10-25, on the recalibrated score): four under the line of 64,
+ * the lower edge of the "medium" band (`FRONTIER_SCORE_TIERS`). On the gold set's dev split the labellers called half of the 8 items
+ * in 60-63 picks and a quarter of the 8 in 58-59 (7 % of those in 50-54 on the first scoring): under 60 a floor place is a coin that
+ * mostly lands wrong, and an unfilled floor beats a junk pick.
  */
-export const FRONTIER_MIX_FLOOR_SCORE = 62
+export const FRONTIER_MIX_FLOOR_SCORE = 60
 
 /**
  * What a `genre-floor` place under the line asks of its item's genre (c2-fixes 2026-10-25, owner: industry is too little in
  * 精选): a score within the top `1 - percentile` of the genre's published scores of the last `days` days (`percentile` 0.8,
- * the SQL `percentile_cont`), at least `min` (58) and at most `FRONTIER_MIX_FLOOR_SCORE` — a genre the editor scores high
+ * the SQL `percentile_cont`), at least `min` (56) and at most `FRONTIER_MIX_FLOOR_SCORE` — a genre the editor scores high
  * (guidelines' 80th percentile is 84, above the line itself) keeps the 60 it had: its top fifth is never a lower bar
  * than that, and asking it would empty the floor. A genre with fewer than `minSample` scored items in the window has no
  * floor of its own (a percentile of a handful is noise) and keeps the 60. Preprints, the Chinese margin and the event's
  * paper keep `FRONTIER_MIX_FLOOR_SCORE`.
  */
-export const FRONTIER_MIX_GENRE_FLOOR = Object.freeze({ percentile: 0.8, min: 58, days: 30, minSample: 30 })
+export const FRONTIER_MIX_GENRE_FLOOR = Object.freeze({ percentile: 0.8, min: 56, days: 30, minSample: 30 })
 
 /**
  * The day's size: the non-safety items above the line the source caps allow (or what its research needs at its ceiling),
@@ -243,7 +244,7 @@ const share = (value) => Math.round(value * 1000) / 1000
 
 /**
  * The score a `genre-floor` place under the line asks of a genre whose 80th percentile is `percentile`: that, held between
- * `FRONTIER_MIX_GENRE_FLOOR.min` and `floorScore` (the absolute floor, 62); `floorScore` when the genre has no percentile.
+ * `FRONTIER_MIX_GENRE_FLOOR.min` and `floorScore` (the absolute floor, 60); `floorScore` when the genre has no percentile.
  * @param {unknown} percentile @param {number} [floorScore] @param {number} [min] the genre bar's lower end (`FRONTIER_MIX_GENRE_FLOOR.min`)
  */
 export function frontierMixGenreFloorScore(percentile, floorScore = FRONTIER_MIX_FLOOR_SCORE, min = FRONTIER_MIX_GENRE_FLOOR.min) {
