@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { REFERENCE_PRICE_LIST, priceUsage } from "@evimed/domain";
 import {
+  RETIRED_ACCOUNT_TABLES,
   UNEXPORTED_ACCOUNT_TABLES,
   accountExportTables,
   exportPluginDocumentRow,
@@ -481,6 +482,19 @@ test("every account-scoped table is either exported or declared unexported with 
       `${table} is left out without a stated reason`,
     );
   }
+  // The tables that only a database from an earlier release can still hold
+  // (the legacy memory engine's records, kept by `legacyMemoryRetirement.mjs`
+  // when they hold rows) are declared on their own list, and the declaration
+  // is held the other way round: no migration may create one again without it
+  // being classified like every other table, and none is also declared as
+  // simply unexported.
+  for (const [table, reason] of Object.entries(RETIRED_ACCOUNT_TABLES)) {
+    assert.equal(tables.has(table), false, `${table} is declared retired but a migration creates it`);
+    assert.ok(!exported.includes(table), `${table} is declared retired and is exported by a query`);
+    assert.ok(!Object.hasOwn(UNEXPORTED_ACCOUNT_TABLES, table), `${table} is declared both retired and unexported`);
+    assert.ok(reason.length > 30, `${table} is retired without a stated reason`);
+  }
+  assert.ok(Object.hasOwn(RETIRED_ACCOUNT_TABLES, "evimed_memory.records"), "the records table is the one the archive still hands over");
   // `evimed_control.users` is the account itself and carries no user_id column,
   // so the scan does not ask about it; the snapshot's own locking SELECT is
   // what exports it, as `state.account`.
