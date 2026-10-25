@@ -28,7 +28,7 @@ reconstruct.
 transcript, in code, so you never read the tail of a run that ended in the platform's own
 submission and repair steps. `requests` are the researcher's own first messages of the run's
 turns, word for word. `interventions` are everything they did to the run once it was going — a
-message typed into it (`steer`), a reply judged on the next turn (`follow-up`, with the one-sentence
+message typed into it (`steer`, read by the same judge when the run finished), a reply judged on the next turn (`follow-up`, with the one-sentence
 `rule` a judge drew from it and its `verdict`) and a result they corrected in the page
 (`result-corrected`) — each with its place (`seq`, or none when it happened outside this
 transcript) and their own words. `artifacts` are what the run left, with each file's format and,
@@ -49,8 +49,7 @@ outranks anything the run did on its own and anything the platform's reviewer
 said. Read them before the transcript, and when they and `repairIssues`
 disagree, the researcher is right.
 
-`signal` names what the lesson rests on: `researcher` (there are corrections or
-edits), `reviewer` (the run repaired against the platform's own findings and
+`signal` names what the lesson rests on: `researcher` (there are corrections, edits or an adoption), `reviewer` (the run repaired against the platform's own findings and
 nothing else) or `run` (a delivery or a repeated routine nobody corrected). A
 `reviewer` lesson teaches how to pass EviMed's checks; the control plane keeps
 what you propose from it for the capability's handbook and never files it as
@@ -112,7 +111,7 @@ writing a basis nobody gave it).
 
 ## 1. Induce from the trigger, in the trigger's own shape
 
-`trigger` says which of six inductions applies. Do exactly the one named.
+`trigger` says which of seven inductions applies. Do exactly the one named.
 Every trigger is set by the platform on its own — no researcher approved the
 lesson or will approve the method; the researcher's later runs are what keep it
 or stop it.
@@ -190,6 +189,27 @@ they exclude the situation of this error, and name that situation in
 could have prevented is a `create` only when it states a repeatable rule, and its
 scope is the class of situation the error belongs to, never the one document it
 happened in.
+
+**`adopted` — the researcher asked, on the next turn, that the way this run did its work be kept.** The run
+finished and delivered something, and the next thing the person said pointed at it and reached beyond it — 「以后周报都按这个来」,
+「把刚才的做法存下来」, "from now on, do it like this". That is the strongest evidence a method can have, stronger than a routine,
+because they chose it; and it is no correction, so the run itself is what you write down. `trajectory.interventions` holds their
+words as a `follow-up` with `verdict: "adopt"`, and `rule` names the kind of work they want done this way again. Read it first.
+Then read what the run was: `requests` (what was asked, which says the kind of work), each artifact's `shape` (how it was laid out),
+`tools` (the order of the work) and the closing excerpt (the reply they answered). Write the way the work was done, for the kind of
+work they named:
+
+- Keep what carried the work — the layout and order of what was left, the register, the checks, the tools in the order they were used
+  — and leave out what this one task required: its subject, names, figures and dates. A person who says 「这个格式很好」 means the
+  shape, not the content.
+- A layout's places are filled only from what the person gives (the rule above). The adopted run may have written a basis, a reason
+  or a date nobody gave it; the method must not make one a required part of the next report.
+- `applies_when` is the kind of work they named, in their words (the weekly report, the abstract, the e-mail to a collaborator), or
+  the genre of what they first asked when they named none. A way of working they adopted for weekly reports is not one for every
+  document.
+- Quote their adoption words in `evidence`, however short: 「以后周报都按这个来」 is a quotation of a person who asked.
+- A method on file that already says what this run did is `no_change`, naming it; one that says part of it, or a different way of
+  doing the same kind of work, is an `amend` — they have now said which way they want.
 
 **`delivered` — a delivery finished and nobody reacted to it.** The platform no longer queues this
 by itself (what it taught is read in the routine below); a job queued earlier may still carry it. A
@@ -353,7 +373,9 @@ anything specific to this one package. If the contract returns it as too long,
 shorten it in place; do not move text into a file to get around the limit.
 
 Every `quote` is verbatim — from a request or an intervention in the trajectory, or from a message of an
-excerpt, of the run named by `runId` — at least eight and at most six hundred characters; a paraphrase is
+excerpt, of the run named by `runId` — at most six hundred characters, and at least eight, except that the researcher's own
+reaction (an `intervention`'s words) may be as short as two: 「太长了」 is a quotation of a person who said it, and the rule
+sentence carries what it means. A paraphrase is
 not evidence. The control plane checks each quotation against what you were given before it stores any: a
 quotation that is not there is dropped, and a method rests only on the ones that are. `applicability` and `counterexamples`
 restate `applies_when` and `not_when` in the candidate's own words so the two can

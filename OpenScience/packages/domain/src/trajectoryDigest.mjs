@@ -27,8 +27,10 @@
  *  - `outcome` — `{ status, repaired }`.
  *
  * Pure: the transcript and the ledger's record of the run in, plain data out. A request or an intervention whose text carries a
- * credential or an identifier (`hasSensitiveText`, `identifierShapesIn`) is dropped, and `dropped.sensitive` counts it, because an input that silently
- * lost the decisive message produces a confident method about something that did not happen.
+ * credential or an identifier BY SHAPE (`identifierShapesIn`: an ID number, a phone, a card, an e-mail, a provider key, a secret assigned
+ * to a name) is dropped, and `dropped.sensitive` counts it, because an input that silently lost the decisive message produces a confident
+ * method about something that did not happen. Not by word: a keyword pattern over language (`password`, 密码, 我患有) dropped 「把密码列去掉」
+ * and every request that merely mentioned a token, and deciding what a sentence is about is the model's (2026-10-25, E6).
  *
  * Deletable when the kernel hands the learning loop a typed account of a turn's intent and corrections.
  *
@@ -38,7 +40,6 @@
 import { cleanArtifactShapes } from './artifactShape.mjs'
 import { fileFormatOf } from './fileDeliverable.mjs'
 import { PLATFORM_CONTEXT_TAGS, carriesPlatformContext, identifierShapesIn, stripPlatformTags, unwrapUserWrappers } from './memoryVocabulary.mjs'
-import { hasSensitiveText } from './sensitiveText.mjs'
 import { isMcpToolName, isPlatformChoreographyTool, mcpToolBaseName } from './toolNames.mjs'
 
 /** Bounds on what a digest holds: the size of a model's input, not a policy. */
@@ -190,7 +191,7 @@ export function trajectoryDigest(transcript, run, options = {}) {
   const turns = ownTurnStarts(root, run)
   let sensitive = 0
   /** @param {string} text */
-  const unsafe = (text) => { if (hasSensitiveText(text) || identifierShapesIn(text).length) { sensitive += 1; return true } return false }
+  const unsafe = (text) => { if (identifierShapesIn(text).length) { sensitive += 1; return true } return false }
 
   // The first typed message of each own turn.
   /** @type {Map<number, any>} */

@@ -34,6 +34,7 @@ import {
   resetLearningForDigest,
   retirementProposal,
   storedEvidenceQuotes,
+  METHOD_EVIDENCE_QUOTE_LENGTH,
   successfulFamilies,
   unresolvedConflicts,
   validateMethodGraph,
@@ -594,7 +595,10 @@ test("a rewrite keeps every check and every quotation the method's own body carr
   const body = ["## Purpose", "Keep the span: “the 12 mm cut-off was chosen by the researcher”.", "", "## Verification", "- The quote still matches.", "", "## Constraints", "- Never widen.", ""].join("\n");
   const provenance = { evidence: [{ runId: "r1", seqRange: [1, 2], quote: "the 12 mm cut-off was chosen by the researcher" }, "a quote the body does not carry at all"] };
   assert.deepEqual(storedEvidenceQuotes(provenance), ["the 12 mm cut-off was chosen by the researcher", "a quote the body does not carry at all"]);
-  assert.deepEqual(storedEvidenceQuotes({ evidence: ["short", { quote: "x".repeat(700) }, 5, null] }), [], "too short, too long and not text are not quotations");
+  assert.deepEqual(storedEvidenceQuotes({ evidence: ["短", " ", { quote: "x".repeat(700) }, 5, null] }), [], "one character, none, too long and not text are not quotations");
+  // Two characters are enough since 2026-10-25: 「太长了」 is a follow-up, and the quotation only proves the person said it.
+  assert.deepEqual(storedEvidenceQuotes({ evidence: ["太长了", { quote: "短点" }, "太长了"] }), ["太长了", "短点"], "a short quotation is kept, once");
+  assert.deepEqual(METHOD_EVIDENCE_QUOTE_LENGTH, { min: 2, max: 600 });
 
   assert.deepEqual(bodyPreservation({ body, provenance }, body), { ok: true, dropped: [], quotesDropped: [] });
   const rephrased = body.replace("the 12 mm cut-off was chosen by the researcher", "a 12 mm threshold the researcher picked");
@@ -604,6 +608,14 @@ test("a rewrite keeps every check and every quotation the method's own body carr
   const shrunk = bodyPreservation({ body, provenance }, body.replace("- Never widen.\n", ""));
   assert.deepEqual([shrunk.ok, shrunk.dropped], [false, ["Never widen."]]);
   assert.deepEqual(bodyPreservation({ body }, body.replace("Keep the span", "Keep the exact span")), { ok: true, dropped: [], quotesDropped: [] }, "a method that stores no quotation is held to its checks alone");
+
+  // A short quotation is evidence the record holds and not a phrase the body must keep: 「太长」 sits inside half the sentences of the
+  // language, and a body that happens to carry it would refuse every rewording of itself.
+  const shortBody = ["## Purpose", "每条不要写得太长，先写结论。", "", "## Verification", "- 结论在前。", "", "## Constraints", "- 不加没给的依据。", ""].join("\n");
+  const shortProvenance = { evidence: [{ runId: "r1", seqRange: [1, 2], quote: "太长了" }, { runId: "r1", seqRange: [3, 4], quote: "太长" }] };
+  assert.deepEqual(storedEvidenceQuotes(shortProvenance), ["太长了", "太长"]);
+  assert.deepEqual(bodyPreservation({ body: shortBody, provenance: shortProvenance }, shortBody.replace("每条不要写得太长", "每条尽量短")), { ok: true, dropped: [], quotesDropped: [] },
+    "rephrasing a sentence that holds a short stored quotation is not a loss");
 });
 
 /* ------------------------------------------------- carried and never opened */

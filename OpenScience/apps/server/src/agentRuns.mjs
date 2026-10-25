@@ -4,7 +4,7 @@ import { reviewDeliveredRegister } from "./reportRegisterJudge.mjs";
 import { createHash } from "node:crypto";
 import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
-import { FILE_DELIVERABLE_KIND, availableRunActions, availableRunStepActions, compareArtifacts, fileFormatIssues, hasSensitiveText, identifierShapesIn, runIsStalled } from "@evimed/domain";
+import { FILE_DELIVERABLE_KIND, availableRunActions, availableRunStepActions, compareArtifacts, fileFormatIssues, identifierShapesIn, runIsStalled } from "@evimed/domain";
 import {
   HttpError,
   assertNoSymlinkPath,
@@ -1315,13 +1315,13 @@ function validateNativeTurn(value) {
 const STEER_TEXT_CHARS = 1500;
 
 /**
- * The words of a steer as the ledger may hold them: trimmed and cut, and none at all when they carry a credential or an identifier
- * (`hasSensitiveText`, `identifierShapesIn`, the checks the memory path keeps by) — the count and the request id still say it happened.
+ * The words of a steer as the ledger may hold them: trimmed and cut, and none at all when they carry a credential or an identifier by
+ * shape (`identifierShapesIn`, the check the memory path keeps by; not a word list) — the count and the request id still say it happened.
  * @param {unknown} text @returns {string}
  */
 function steerTextOf(text) {
   const value = typeof text === "string" ? text.trim().slice(0, STEER_TEXT_CHARS) : "";
-  return value && !hasSensitiveText(value) && !identifierShapesIn(value).length ? value : "";
+  return value && !identifierShapesIn(value).length ? value : "";
 }
 
 /**

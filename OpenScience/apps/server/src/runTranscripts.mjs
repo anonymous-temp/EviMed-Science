@@ -36,7 +36,7 @@ import { runOwnsRuntimeScope } from "./runUsage.mjs";
 import { readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
-import { SOCKET_TOOL_NAMES, hasSensitiveText } from "@evimed/domain";
+import { SOCKET_TOOL_NAMES, identifierShapesIn } from "@evimed/domain";
 import { delegatedChildrenOf, socketToolResult } from "./dshRuntimeAdapter.mjs";
 import { HttpError, openScopedFileNoFollow, readStableFileHandle, readTextFileNoFollow, safeId, withProjectStorageMutation, writeFileAtomicNoFollow } from "./security.mjs";
 
@@ -676,11 +676,21 @@ export async function pruneRunTranscripts(project, options = {}) {
   return { removed };
 }
 
+/** Every string a value holds, in order, however deep. @param {unknown} value @param {string[]} [into] @returns {string[]} */
+function stringLeaves(value, into = []) {
+  if (typeof value === "string") into.push(value);
+  else if (Array.isArray(value)) for (const entry of value) stringLeaves(entry, into);
+  else if (value && typeof value === "object") for (const entry of Object.values(value)) stringLeaves(entry, into);
+  return into;
+}
+
 /**
  * The excerpt a distillation run is allowed to see.
  *
  * Two filters, both of which are the reason this lives here rather than in the
- * distiller: a message carrying a credential or a patient identifier is dropped
+ * distiller: a message carrying a credential or an identifier by SHAPE (`identifierShapesIn`: an ID number, a phone, a card, an e-mail,
+ * a provider key, a secret assigned to a name, a long bare token — not a word list, which dropped any message that mentioned a
+ * `token`, a `secret` or 密码, tool output included) is dropped
  * whole rather than redacted, and the excerpt is bounded by message count so a
  * pathological run cannot fill the model's context with its own loop. What is
  * dropped is counted, because an excerpt that silently lost the decisive
@@ -699,8 +709,8 @@ export function transcriptExcerpt(messages, range = {}) {
     return message.seq >= from && message.seq <= to;
   });
   const clean = inRange.filter((message) => {
-    const text = JSON.stringify(message.parts ?? "");
-    if (hasSensitiveText(text)) { sensitive += 1; return false; }
+    // The strings a message holds, as text: the shapes are those of plain text, and JSON's escaping would break a labelled secret in two.
+    if (identifierShapesIn(stringLeaves(message.parts).join("\n")).length) { sensitive += 1; return false; }
     return true;
   });
   const bounded = Math.max(0, clean.length - limit);

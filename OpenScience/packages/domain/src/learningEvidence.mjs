@@ -6,18 +6,29 @@
  * the next turn. A native-memory account had no correction source at all, and nothing could tell a delivery the researcher accepted
  * from one they quietly redid. So every reaction is one row in the feedback ledger — `trigger_kind = 'learning-evidence'`,
  * `subject_type = 'run'`, `subject_id` the run reacted to — whose `detail` is this shape. The method counters read it
- * (`appliedCorrected`, `appliedClean`), the routine trigger reads it (`clean` is "no correction on the run"), and the operator's
- * report counts it. It is evidence, never a gate: nothing in the platform waits for one.
+ * (`appliedCorrected`, `appliedClean`), the routine trigger reads it (`clean` is "kept, and no correction on the run": since 2026-10-25
+ * silence is unknown, not approval, `learningRunOutcome`), and the operator's report counts it. It is evidence, never a gate: nothing in
+ * the platform waits for one.
  *
- * Four kinds of evidence, five verdicts:
+ * Five kinds of evidence, six verdicts:
  *
- *  - `steer` — a message typed into the running turn. Always a correction (verdict `correction`): what was added mid-run is what the
- *    run did not have right, and no judge reads it.
+ *  - `steer` — a message typed into the running turn, read by the same judge as a follow-up when the run finishes (`correction`,
+ *    `preference`, `rejection`, `accept` or `none`: a run that has not finished cannot be `adopt`ed). A steer nobody could read
+ *    (the judge was down) is `correction`: what was added mid-run is, by where it was typed, what the run did not have.
  *  - `follow-up` — the first message of the next turn within thirty minutes, judged once by a small model for what it says about
- *    the previous run: `correction`, `preference`, `rejection`, `accept` or `none` (a new question).
+ *    the previous run: `correction`, `preference`, `rejection`, `accept`, `none` (a new question) or `adopt` (the person asks that the
+ *    way the work was just done be kept for the same kind of work: the strongest signal there is, because it is both an acceptance and
+ *    a lesson).
  *  - `result-corrected` — a result corrected in the page (`resultCorrection.mjs`); always `correction`.
+ *  - `used` — the owner opened or downloaded one of the run's delivered files after the run finished, through the control plane.
+ *    No words, verdict `none`; once per run. Silence is unknown and not approval, so a file taken is the only reaction short of
+ *    words that says the work was kept.
  *  - `silent` — a succeeded run that left a file and was reacted to by nobody by the time the next turn came or thirty minutes
  *    passed; verdict `none`. It carries the shape of what it left (`artifactShape.mjs`), because that is what a routine compares.
+ *    It counts for nothing: neither clean nor corrected.
+ *
+ * What a run's events add up to is `learningRunOutcome`: `corrected` (any correction, whenever it came), `clean` (accepted, adopted or
+ * used, and never corrected) or `unknown` (silence, a new question, a message that is about something else).
  *
  * `scope` is where the run's work happened (the capability, or `conversation`), `endedAt` when the run ended (a routine does not count a run that ended before
  * the account's last memory reset), and `shape` what a clean run left.
@@ -35,11 +46,20 @@ import { cleanArtifactShapes } from './artifactShape.mjs'
 export const LEARNING_EVIDENCE_TRIGGER = 'learning-evidence'
 export const LEARNING_EVIDENCE_SUBJECT_TYPE = 'run'
 
-export const LEARNING_EVIDENCE_KINDS = Object.freeze(['steer', 'follow-up', 'result-corrected', 'silent'])
-export const LEARNING_EVIDENCE_VERDICTS = Object.freeze(['correction', 'preference', 'rejection', 'accept', 'none'])
+export const LEARNING_EVIDENCE_KINDS = Object.freeze(['steer', 'follow-up', 'result-corrected', 'silent', 'used'])
+export const LEARNING_EVIDENCE_VERDICTS = Object.freeze(['correction', 'preference', 'rejection', 'accept', 'none', 'adopt'])
 
 /** The verdicts that say the run was not right: a lesson, and a method it opened that did not help. */
 export const LEARNING_CORRECTION_VERDICTS = Object.freeze(['correction', 'preference', 'rejection'])
+
+/** The verdicts that say the run was kept: it is clean, and `adopt` is also a lesson at once. */
+export const LEARNING_ACCEPT_VERDICTS = Object.freeze(['accept', 'adopt'])
+
+/** The verdicts that carry a rule and a quotation of the person's words: what a judge must ground in the message. */
+export const LEARNING_RULE_VERDICTS = Object.freeze([...LEARNING_CORRECTION_VERDICTS, 'adopt'])
+
+/** What a steer can say: a run still going cannot be adopted. */
+export const LEARNING_STEER_VERDICTS = Object.freeze(['correction', 'preference', 'rejection', 'accept', 'none'])
 
 /**
  * How long after a run finished its next turn is read as a reaction to it, and how long a run waits for one before it counts as
@@ -56,7 +76,8 @@ const text = (value, max) => (typeof value === 'string' ? value.trim().slice(0, 
 
 /**
  * The detail of one evidence event, cleaned and bounded, or null when it is not one: the evidence and the verdict must be of the
- * closed vocabularies, and a correction-only kind (`steer`, `result-corrected`) cannot carry another verdict. Fitted to the ledger's
+ * closed vocabularies, a result corrected in the page is always a correction, silence and a use say nothing in words (`none`), and a
+ * steer carries the verdict its judge gave it, or `correction` when nobody read it. Fitted to the ledger's
  * allowance by giving up the shape first, then the rule, then the end of the quotation.
  * @param {unknown} value
  * @returns {{ evidence: string, verdict: string, rule: string | null, quote: string | null, concerns: { id: string, digest: string }[],
@@ -68,8 +89,9 @@ export function cleanLearningEvidence(value) {
   const evidence = String(record.evidence ?? '')
   if (!LEARNING_EVIDENCE_KINDS.includes(evidence)) return null
   let verdict = String(record.verdict ?? '')
-  if (evidence === 'steer' || evidence === 'result-corrected') verdict = 'correction'
-  else if (evidence === 'silent') verdict = 'none'
+  if (evidence === 'steer') verdict = LEARNING_STEER_VERDICTS.includes(verdict) ? verdict : 'correction'
+  else if (evidence === 'result-corrected') verdict = 'correction'
+  else if (evidence === 'silent' || evidence === 'used') verdict = 'none'
   if (!LEARNING_EVIDENCE_VERDICTS.includes(verdict)) return null
   const limits = LEARNING_EVIDENCE_LIMITS
   const at = Number.isFinite(Date.parse(String(record.at ?? ''))) ? new Date(String(record.at)).toISOString() : null
@@ -105,13 +127,39 @@ export function cleanLearningEvidence(value) {
 }
 
 /**
- * Whether an evidence event says the run was corrected: a steer, a result corrected in the page, or a follow-up whose verdict is a
- * correction, a preference or a rejection. A `silent` event, an accepted follow-up and a new question are the run left alone.
+ * Whether an evidence event says the run was corrected: a result corrected in the page, or a steer or follow-up whose verdict is a
+ * correction, a preference or a rejection (a steer nobody judged is a correction). Silence, a use, an acceptance, an adoption and a new
+ * question are the run left alone.
  * @param {{ evidence?: unknown, verdict?: unknown } | null | undefined} detail
  * @returns {boolean}
  */
 export function isLearningCorrection(detail) {
   const evidence = String(detail?.evidence ?? '')
-  if (evidence === 'steer' || evidence === 'result-corrected') return true
+  if (evidence === 'result-corrected') return true
+  if (evidence === 'steer') return !detail?.verdict || LEARNING_CORRECTION_VERDICTS.includes(String(detail.verdict))
   return evidence === 'follow-up' && LEARNING_CORRECTION_VERDICTS.includes(String(detail?.verdict ?? ''))
+}
+
+/**
+ * Whether an evidence event says the work was kept: the person's own acceptance or adoption on the next turn, or the file taken.
+ * @param {{ evidence?: unknown, verdict?: unknown } | null | undefined} detail
+ * @returns {boolean}
+ */
+export function isLearningKept(detail) {
+  const evidence = String(detail?.evidence ?? '')
+  if (evidence === 'used') return true
+  return evidence === 'follow-up' && LEARNING_ACCEPT_VERDICTS.includes(String(detail?.verdict ?? ''))
+}
+
+/**
+ * What a run's evidence adds up to. `corrected`: any correction, whenever it came. `clean`: kept (accepted, adopted, or its file
+ * taken) and never corrected. `unknown`: everything else — silence is not approval, and a message about something else says nothing
+ * about the work. A routine counts only clean runs, and so do the counters of the methods the run opened.
+ * @param {readonly ({ evidence?: unknown, verdict?: unknown } | null | undefined)[]} details every event of one run
+ * @returns {'corrected' | 'clean' | 'unknown'}
+ */
+export function learningRunOutcome(details) {
+  const events = Array.isArray(details) ? details : []
+  if (events.some((detail) => isLearningCorrection(detail))) return 'corrected'
+  return events.some((detail) => isLearningKept(detail)) ? 'clean' : 'unknown'
 }

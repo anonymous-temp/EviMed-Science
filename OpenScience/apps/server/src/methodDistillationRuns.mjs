@@ -39,7 +39,7 @@
 import { createHash } from "node:crypto";
 
 import {
-  HANDBOOK_TEXT_LIMITS, METHOD_OPERATIONS, TRAJECTORY_ANCHOR_RADIUS, isMcpToolName, isPlatformChoreographyTool, mcpToolBaseName, methodScientific,
+  HANDBOOK_TEXT_LIMITS, METHOD_EVIDENCE_QUOTE_LENGTH, METHOD_OPERATIONS, TRAJECTORY_ANCHOR_RADIUS, isMcpToolName, isPlatformChoreographyTool, mcpToolBaseName, methodScientific,
   parseSkillFrontmatter, projectMethodResultLinks, rootSessionOf, SKILL_AUTHORING_LIMITS, steeredMessages, trajectoryDigest, transcriptMessageText, unwrapUserWrappers,
 } from "@evimed/domain";
 import { readArtifactShapes } from "./artifactShapes.mjs";
@@ -65,8 +65,10 @@ export const DISTILLATION_INPUT_FILE = "distillation-input.json";
  * what it taught is now `silent` evidence feeding `routine`), and stays here so
  * a job already queued under it is still read. `script` (2026-10-25) is a program the researcher's runs keep carrying:
  * the same normalised code in three runs of two conversations (`scriptLessons.mjs`), whose method may attach it as a code skill.
+ * `adopted` (2026-10-25) is the person asking, on the next turn, that the way a finished run did its work be kept
+ * (`learningTriggers.adoptedLessonFor`): a lesson at once, with their words as its evidence and the run's own trajectory as what to write down.
  */
-export const DISTILLATION_TRIGGERS = Object.freeze(["edit_diff", "repair_accepted", "correction", "delivered", "routine", "script"]);
+export const DISTILLATION_TRIGGERS = Object.freeze(["edit_diff", "repair_accepted", "correction", "delivered", "routine", "script", "adopted"]);
 
 /** Bumped when the input shape or the cleaning rules change, so a re-run under
  *  new rules is a different job rather than a duplicate of the old one. */
@@ -122,7 +124,9 @@ const RELATED_POOL = 100;
 
 /** How many quotations a method stores as the evidence it rests on, and how long one may be (`storedEvidenceQuotes` reads the same bounds). */
 const MAX_EVIDENCE = 20;
-const EVIDENCE_LENGTH = Object.freeze({ min: 8, max: 600 });
+const EVIDENCE_LENGTH = METHOD_EVIDENCE_QUOTE_LENGTH;
+/** A quotation shorter than this is kept only as the researcher's own reaction (`verifiedEvidence`): short strings of anything else are in every text. */
+const SHORT_QUOTE_BELOW = 8;
 
 /**
  * What a lesson's evidence is, from what the input holds — a closed reading,
@@ -286,7 +290,8 @@ function anchoredExcerpts({ runId, trigger, messages, interventions, rootSession
     }
     return { excerpts, dropped };
   }
-  if (trigger !== "correction") return { excerpts, dropped };
+  // An adoption is read as a correction is: the closing messages of the run are what the person kept (the reply they answered).
+  if (trigger !== "correction" && trigger !== "adopted") return { excerpts, dropped };
   const placed = interventions.filter((entry) => Number.isSafeInteger(entry.seq));
   const windows = foldWindows(placed.map((entry) => ({ from: Number(entry.seq) - TRAJECTORY_ANCHOR_RADIUS, to: Number(entry.seq) + TRAJECTORY_ANCHOR_RADIUS })));
   for (const window of windows.slice(0, MAX_WINDOWS)) {
@@ -461,14 +466,38 @@ export function evidenceCorpus(input) {
 }
 
 /**
+ * What the researcher themselves said of each run the distillation was shown, squashed, as the texts a SHORT quotation may be checked
+ * against: the words of each intervention (a steer, a follow-up, a corrected result) and of each correction typed into the run, and the
+ * instruction of a result corrected in the page. Not the judge's rule and not the run's own prose: a two-character quotation is in
+ * every text, so it proves something only where the text is the person's reaction (「太长了」 said after a delivery).
+ * @param {any} input a built distillation input @returns {Map<string, string[]>} run id to the person's reaction texts
+ */
+export function reactionCorpus(input) {
+  /** @type {Map<string, string[]>} */
+  const texts = new Map();
+  const add = (/** @type {string} */ runId, /** @type {unknown} */ text) => {
+    if (!runId || typeof text !== "string" || !text.trim()) return;
+    texts.set(runId, [...(texts.get(runId) ?? []), squashed(text)]);
+  };
+  const runId = String(input?.runId ?? "");
+  for (const intervention of input?.trajectory?.interventions ?? []) add(runId, intervention.text);
+  for (const correction of input?.corrections ?? []) add(runId, correction.text);
+  for (const event of input?.feedback ?? []) { add(runId, event?.detail?.instruction); add(runId, event?.detail?.quote); }
+  for (const peer of input?.peerRuns ?? []) for (const intervention of peer?.trajectory?.interventions ?? []) add(String(peer.runId), intervention.text);
+  return texts;
+}
+
+/**
  * The quotations a candidate says it rests on, kept only where they are in what the distillation was shown: each as
- * `{ runId, seqRange, quote }`, the quote a substring of that run's text (white space folded), eight to six hundred characters, at
- * most twenty. A quotation that is not there is dropped and counted, never repaired — the model's word that it was quoting is not
- * evidence, and a merge later checks its bodies against these (`bodyPreservation`).
+ * `{ runId, seqRange, quote }`, the quote a substring of that run's text (white space folded), two to six hundred characters, at
+ * most twenty — and one shorter than eight characters only when it is a substring of something the researcher themselves said of that
+ * run (`reactions`, `reactionCorpus`; without it, none). A quotation that is not there is dropped and counted, never repaired — the model's
+ * word that it was quoting is not evidence, and a merge later checks its bodies against these (`bodyPreservation`).
  * @param {unknown} entries the candidate's `evidence` @param {Map<string, string>} corpus
+ * @param {Map<string, string[]>} [reactions]
  * @returns {{ kept: { runId: string, seqRange: [number, number], quote: string }[], dropped: number }}
  */
-export function verifiedEvidence(entries, corpus) {
+export function verifiedEvidence(entries, corpus, reactions = new Map()) {
   /** @type {{ runId: string, seqRange: [number, number], quote: string }[]} */
   const kept = [];
   let dropped = 0;
@@ -476,7 +505,8 @@ export function verifiedEvidence(entries, corpus) {
     const quote = squashed(entry?.quote);
     const runId = typeof entry?.runId === "string" ? entry.runId : "";
     const range = Array.isArray(entry?.seqRange) ? entry.seqRange : [];
-    const present = quote.length >= EVIDENCE_LENGTH.min && quote.length <= EVIDENCE_LENGTH.max && (corpus.get(runId) ?? "").includes(quote);
+    const inReactions = quote.length >= SHORT_QUOTE_BELOW || (reactions.get(runId) ?? []).some((text) => text.includes(quote));
+    const present = quote.length >= EVIDENCE_LENGTH.min && quote.length <= EVIDENCE_LENGTH.max && inReactions && (corpus.get(runId) ?? "").includes(quote);
     if (!present || range.length !== 2 || !range.every((/** @type {unknown} */ bound) => Number.isSafeInteger(bound))) { dropped += 1; continue; }
     if (kept.some((held) => held.quote === quote)) continue;
     if (kept.length >= MAX_EVIDENCE) { dropped += 1; continue; }
@@ -735,7 +765,7 @@ export class MethodDistillationRuns {
     if (result.status !== "succeeded") {
       throw new HttpError(409, "method_distillation_run_failed", "The distillation run did not succeed.");
     }
-    const applied = await this.applyCandidate(job, run, result.output ?? {}, { signal: input.signal, evidence: evidenceCorpus(input) });
+    const applied = await this.applyCandidate(job, run, result.output ?? {}, { signal: input.signal, evidence: evidenceCorpus(input), reactions: reactionCorpus(input) });
     return { state: "complete", ...identityRecord, ...applied };
   }
 
@@ -757,7 +787,7 @@ export class MethodDistillationRuns {
    * bodies to these. The lesson's `scope` — the capability it came from, or `conversation` — is stored with them, so a later run
    * of the same scope is offered the method (`learnedMethodMount.mjs`).
    * @param {any} job @param {any} run @param {Record<string, any>} output
-   * @param {{signal?: string, evidence?: Map<string, string>, abortSignal?: AbortSignal}} [context] what the lesson's evidence was, read from the job when absent; and the text the distillation was shown, by run
+   * @param {{signal?: string, evidence?: Map<string, string>, reactions?: Map<string, string[]>, abortSignal?: AbortSignal}} [context] what the lesson's evidence was, read from the job when absent; and the text the distillation was shown, by run
    */
   async applyCandidate(job, run, output, context = {}) {
     const candidate = output.candidate ?? output["method-candidate.json"] ?? output;
@@ -818,7 +848,7 @@ export class MethodDistillationRuns {
         { role: "successor", versionId: event.detail?.successor?.versionId, digest: event.detail?.successor?.digest },
       ]));
     const lessonScope = learningScopeOf(run);
-    const verified = context.evidence ? verifiedEvidence(candidate?.evidence, context.evidence) : { kept: [], dropped: 0 };
+    const verified = context.evidence ? verifiedEvidence(candidate?.evidence, context.evidence, context.reactions) : { kept: [], dropped: 0 };
     if (context.evidence) this.onEvidence?.({ kept: verified.kept.length, dropped: verified.dropped });
     const provenance = {
       origin: "inferred",
