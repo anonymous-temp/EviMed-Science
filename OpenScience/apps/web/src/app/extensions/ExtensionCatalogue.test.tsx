@@ -5,7 +5,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { useProjectStore } from "@/lib/projects";
 import { ExtensionsPage } from "./ExtensionsPage";
 
-const skills = vi.hoisted(() => ({ listPlatformSkills: vi.fn(), projectPlatformSkills: vi.fn(), saveProjectPlatformSkills: vi.fn(), listPersonalSkills: vi.fn(), projectSkills: vi.fn(), pendingPersonalSkillTransfers: vi.fn() }));
+const skills = vi.hoisted(() => ({ listPlatformSkills: vi.fn(), projectPlatformSkills: vi.fn(), saveProjectPlatformSkills: vi.fn(), listPersonalSkills: vi.fn(), projectSkills: vi.fn(), pendingPersonalSkillTransfers: vi.fn(), readPlatformSkill: vi.fn() }));
 const plugins = vi.hoisted(() => ({ inventory: vi.fn(), extensionCatalogue: vi.fn(), extensionInstallations: vi.fn(), projectExtensions: vi.fn(), projectBuiltinPlugins: vi.fn(), saveProjectBuiltinPlugins: vi.fn(), saveProjectExtensions: vi.fn(), extensionInstallation: vi.fn(), extensionHistory: vi.fn(), extensionConnections: vi.fn() }));
 const api = vi.hoisted(() => ({ listWebPlugins: vi.fn(), saveWebPlugin: vi.fn(), listWebResearchAgents: vi.fn() }));
 vi.mock("@/lib/skillLibraryClient", async original => ({ ...(await original<object>()), ...skills }));
@@ -35,13 +35,12 @@ beforeEach(() => {
   api.listWebPlugins.mockResolvedValue([]);
   api.listWebResearchAgents.mockResolvedValue([{ id: "peer-review", title: "审稿工具" }]);
 });
-it("opens discovery with publisher-visible cards, without a creation-first empty library or duplicated workflows", async () => {
+it("opens discovery with publisher-visible cards, without a creation-first empty library", async () => {
   open();
   expect(await screen.findByRole("tab", { name: /发现/ })).toHaveAttribute("aria-selected", "true");
   expect(await screen.findByText("K-Dense")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "科学绘图" })).toBeInTheDocument();
   expect(screen.queryByText(/还没有自己的技能/)).not.toBeInTheDocument();
-  expect(api.listWebResearchAgents).not.toHaveBeenCalled();
 });
 
 it("separates authored methods from upstream packages and exposes only the upstream GitHub link", async () => {
@@ -102,15 +101,18 @@ it("distinguishes a deployment catalogue that is unavailable from a successful e
   open("/app/extensions/discover?type=plugins");
   expect(await screen.findByText("暂未提供可添加的插件，已有功能仍可使用。")).toBeInTheDocument();
 });
-it("hides required and module-private skills from discovery", async () => {
+it("lists required and module skills under their groups with no control and no word about it", async () => {
   skills.listPlatformSkills.mockResolvedValue({ groups: [skill.group, "循证 GEO"], geoGroup: "循证 GEO", items: [skill,
     { ...skill, id: "core:guard", title: "必需校验", requirement: { required: true, reason: "system" } },
-    { ...skill, id: "geo-private:internal", title: "内部方法", group: "循证 GEO" },
+    { ...skill, id: "geo-private:internal", title: "内部方法", group: "循证 GEO", requirement: { required: true, reason: "private-workflow" } },
   ] });
-  open();
-  await screen.findByRole("button", { name: "科学绘图" });
-  expect(screen.queryByRole("button", { name: "必需校验" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "内部方法" })).not.toBeInTheDocument();
+  open("/app/extensions/installed");
+  const guard = (await screen.findByRole("button", { name: "必需校验" })).closest("li")!;
+  expect(within(guard).queryByRole("switch")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "内部方法" })).toBeInTheDocument();
+  expect(screen.queryByRole("switch", { name: /内部方法/ })).not.toBeInTheDocument();
+  expect(screen.getByRole("switch", { name: /科学绘图/ })).toBeInTheDocument();
+  expect(screen.queryByText(/始终开启|系统提供/)).not.toBeInTheDocument();
 });
 it("uses the selected project's effective plugin state", async () => {
   const coordinate = { kind: "npm", name: "sample-plugin", version: "1.0.0" };
@@ -209,4 +211,68 @@ it("closing a changed plugin drawer leaves the list current and its next switch 
   await userEvent.click(toggle);
   await waitFor(() => expect(plugins.saveProjectExtensions).toHaveBeenCalledTimes(2));
   expect(plugins.saveProjectExtensions.mock.calls[1][1]).toBe(6);
+});
+
+it("a project with no runtime running says when its saved choice takes effect and is not polled", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    const idle = { ...project, payload: { disabled: [skill.id] }, items: [{ ...skill, enabled: false, effective: null }], activation: { phase: "pending", savedRevision: 4, effectiveRevision: null, error: null, live: false } };
+    skills.projectPlatformSkills.mockResolvedValue(idle);
+    open("/app/extensions/installed");
+    expect(await screen.findByText("下次对话生效")).toBeInTheDocument();
+    expect(screen.queryByText("等待当前任务结束后生效")).not.toBeInTheDocument();
+    await act(async () => { vi.advanceTimersByTime(10 * 60 * 1000); });
+    expect(skills.projectPlatformSkills).toHaveBeenCalledTimes(1);
+  } finally { vi.useRealTimers(); }
+});
+
+it("an apply under way on a running runtime is re-read with growing waits, then no more", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    skills.projectPlatformSkills.mockResolvedValue({ ...project, activation: { ...activation, phase: "waiting", savedRevision: 4, effectiveRevision: 3, live: true } });
+    open("/app/extensions/installed");
+    expect(await screen.findByText("等待当前任务结束后生效")).toBeInTheDocument();
+    for (let round = 0; round < 12; round++) await act(async () => { vi.advanceTimersByTime(61000); });
+    const calls = skills.projectPlatformSkills.mock.calls.length;
+    expect(calls).toBeGreaterThan(1);
+    expect(calls).toBeLessThanOrEqual(8);
+    await act(async () => { vi.advanceTimersByTime(30 * 60 * 1000); });
+    expect(skills.projectPlatformSkills).toHaveBeenCalledTimes(calls);
+  } finally { vi.useRealTimers(); }
+});
+
+it("a 循证 GEO project on its shared settings draws no project switch and says the choices do not apply there", async () => {
+  const notApplicable = { phase: "not-applicable", savedRevision: 3, effectiveRevision: null, error: null, live: true };
+  skills.projectPlatformSkills.mockResolvedValue({ ...project, activation: notApplicable });
+  skills.projectSkills.mockResolvedValue({ revision: 3, payload: { skills: [] }, activation: notApplicable });
+  plugins.inventory.mockResolvedValue({ projectId: "one", groups: [{ id: "tools", title: "对话", items: [
+    { id: "diagrams", title: "Mermaid 图表", use: "呈现流程图", control: { kind: "switch", setting: "mermaid" }, opens: { kind: "drawer" } },
+    { id: "citations", title: "文献引用核对", use: "核对引用", control: { kind: "switch", setting: "dsh-cite" }, opens: { kind: "drawer" } },
+  ] }], researchTools: { count: 0, groups: [] } });
+  plugins.projectBuiltinPlugins.mockResolvedValue({ revision: 3, payload: { disabled: [] }, items: [{ id: "annotation", enabled: true, effective: null, available: true }, { id: "mermaid", enabled: true, effective: null, available: true }], activation: notApplicable });
+  api.listWebPlugins.mockResolvedValue([{ id: "dsh-cite", desired: { revision: 2, enabled: true, settings: {} }, effective: { enabled: true }, phase: "applied", settingsSchema: {} }]);
+  open("/app/extensions/installed");
+  const plot = (await screen.findByRole("button", { name: "科学绘图" })).closest("li")!;
+  expect(within(plot).getByText("循证 GEO 项目中不适用")).toBeInTheDocument();
+  expect(screen.queryByRole("switch", { name: /科学绘图/ })).not.toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: "Mermaid 图表" })).toBeInTheDocument();
+  expect(screen.queryByRole("switch", { name: /Mermaid 图表/ })).not.toBeInTheDocument();
+  // The citation settings travel with the project's own plugin configuration, which a shared start keeps.
+  expect(await screen.findByRole("switch", { name: /文献引用核对/ })).toBeInTheDocument();
+});
+
+it("an upstream skill the platform adapted says so on its row and in its drawer, which names no version or licence string", async () => {
+  const adapted = { ...skill, provenance: { kind: "upstream-adapted", publisher: "K-Dense-AI", repository: "https://github.com/K-Dense-AI/scientific-agent-skills", version: "v2.72.0", license: "MIT" } };
+  skills.listPlatformSkills.mockResolvedValue({ groups: [skill.group], items: [adapted] });
+  skills.projectPlatformSkills.mockResolvedValue({ ...project, items: [{ ...adapted, enabled: true, effective: true }] });
+  skills.readPlatformSkill.mockResolvedValue({ ...adapted, when: null, instructions: null });
+  open("/app/extensions/installed");
+  const row = (await screen.findByRole("button", { name: "科学绘图" })).closest("li")!;
+  expect(within(row).getByText("K-Dense-AI · 已改编")).toBeInTheDocument();
+  await userEvent.click(within(row).getByRole("button", { name: "科学绘图" }));
+  const drawer = await screen.findByRole("dialog", { name: "科学绘图" });
+  expect(within(drawer).getByText("已改编")).toBeInTheDocument();
+  expect(within(drawer).getByText("K-Dense-AI 发布，平台为在线运行做过改编")).toBeInTheDocument();
+  expect(within(drawer).queryByText("v2.72.0")).not.toBeInTheDocument();
+  expect(within(drawer).queryByText("MIT")).not.toBeInTheDocument();
 });

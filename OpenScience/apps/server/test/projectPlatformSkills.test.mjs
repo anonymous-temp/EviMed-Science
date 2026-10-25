@@ -25,14 +25,16 @@ function fixture() {
 test('optional platform choices persist in the existing project selection, retain personal pins and isolate projects/accounts', async () => {
   const { service, documents } = fixture()
   await documents.put(user.id, 'extension-defaults', 'skills:project:one', { skills: [{ skillId: 'existing' }] }, { expectedRevision: 0 })
-  const saved = await service.saveProjectPlatform(user, project, { expectedRevision: 1, disabled: ['office:docx'] })
+  const saved = await service.saveProjectPlatform(user, project, { expectedRevision: 1, disabled: ['curated:matplotlib'] })
   assert.equal(saved.revision, 2)
-  assert.equal(saved.items.find(item => item.id === 'office:docx').enabled, false)
-  assert.equal(saved.items.find(item => item.id === 'office:docx').effective, null)
-  assert.equal(saved.activation.phase, 'waiting')
+  assert.equal(saved.items.find(item => item.id === 'curated:matplotlib').enabled, false)
+  assert.equal(saved.items.find(item => item.id === 'curated:matplotlib').effective, null)
+  // No runtime runs and nothing was proven: the choice takes effect when the next conversation starts one.
+  assert.equal(saved.activation.phase, 'pending')
+  assert.equal(saved.activation.live, false)
   assert.deepEqual((await service.projectSelections(user, project)).payload.skills, [{ skillId: 'existing' }])
   const fresh = new SkillLibraryService(null, { documents, projectAccess: service.projectAccess, platformCatalogue: service.platformCatalogue })
-  assert.deepEqual((await fresh.projectPlatform(user, project)).payload.disabled, ['office:docx'])
+  assert.deepEqual((await fresh.projectPlatform(user, project)).payload.disabled, ['curated:matplotlib'])
   assert.deepEqual((await fresh.projectPlatform(user, { id: 'two', userId: user.id })).payload.disabled, [])
   await assert.rejects(service.projectPlatform({ id: 'outsider' }, project), { status: 404 })
   await assert.rejects(service.saveProjectPlatform(user, project, { expectedRevision: 1, disabled: [] }), { code: 'product_revision_conflict' })
@@ -42,20 +44,20 @@ test('optional platform choices persist in the existing project selection, retai
 
 test('saved, waiting, effective and apply failure read back without claiming the saved policy is running', async () => {
   const { service, documents } = fixture()
-  await service.saveProjectPlatform(user, project, { expectedRevision: 0, disabled: ['office:docx'] })
+  await service.saveProjectPlatform(user, project, { expectedRevision: 0, disabled: ['curated:matplotlib'] })
   let state = { payload: { phase: 'waiting', runtimeGeneration: 'fixture', desired: { selectionRevision: 1 }, effective: { reference: { generationHash: 'a' }, selectionRevision: 0, platformSkills: { disabled: [] } }, error: null } }
   service.projectActivation = async () => ({ state, runtimeGeneration: 'fixture', captured: state.payload.effective })
   let view = await service.projectPlatform(user, project)
   assert.equal(view.activation.effectiveRevision, 0)
-  assert.equal(view.items.find(item => item.id === 'office:docx').effective, true)
+  assert.equal(view.items.find(item => item.id === 'curated:matplotlib').effective, true)
   state.payload.phase = 'failed'; state.payload.error = 'personal_skill_apply_failed'
   view = await service.projectPlatform(user, project)
   assert.equal(view.activation.phase, 'failed')
   assert.equal(view.activation.error, 'personal_skill_apply_failed')
-  assert.equal(view.items.find(item => item.id === 'office:docx').effective, true)
-  state = { payload: { phase: 'effective', runtimeGeneration: 'fixture', desired: { selectionRevision: 1 }, effective: { reference: { generationHash: 'b' }, selectionRevision: 1, platformSkills: { disabled: ['office:docx'] } }, error: null } }
+  assert.equal(view.items.find(item => item.id === 'curated:matplotlib').effective, true)
+  state = { payload: { phase: 'effective', runtimeGeneration: 'fixture', desired: { selectionRevision: 1 }, effective: { reference: { generationHash: 'b' }, selectionRevision: 1, platformSkills: { disabled: ['curated:matplotlib'] } }, error: null } }
   view = await service.projectPlatform(user, project)
-  assert.equal(view.items.find(item => item.id === 'office:docx').effective, false)
+  assert.equal(view.items.find(item => item.id === 'curated:matplotlib').effective, false)
   assert.equal((await service.projectSelections(user, project)).activation.phase, 'effective')
   await documents.put(user.id, 'extension-defaults', 'skills:project:one', { skills: [], disabledPlatformSkills: [] }, { expectedRevision: 1 })
   assert.equal((await service.projectPlatform(user, project)).activation.phase, 'waiting')
@@ -73,24 +75,45 @@ test('platform provenance identifies a verbatim publisher, derived upstream and 
   assert.equal(byId('curated:survival-analysis').provenance.upstreamPublisher, 'K-Dense-AI')
   assert.equal(byId('office:docx').provenance.kind, 'first-party')
   assert.equal(byId('core:deep-research').requirement.required, false)
-  assert.equal(byId('curated:statistical-analysis').requirement.required, false)
-  assert.equal(byId('office:docx').requirement.required, false)
+  // A professional workflow loads these by name, so a project cannot switch them off (WORKFLOW_LOADED_PLATFORM_SKILLS).
+  assert.deepEqual(byId('curated:statistical-analysis').requirement, { required: true, reason: 'workflow' })
+  assert.deepEqual(byId('office:docx').requirement, { required: true, reason: 'workflow' })
   assert.equal(byId('curated:matplotlib').provenance.kind, 'upstream-adapted')
 })
 
-test('persisted effect is historical when the current runtime is missing or has a different captured generation', async () => {
+test('with no runtime running the last proven generation is in effect; a live runtime that differs is waiting', async () => {
   const { service } = fixture()
-  await service.saveProjectPlatform(user, project, { expectedRevision: 0, disabled: ['office:docx'] })
-  const effective = { reference: { generationHash: 'a'.repeat(64) }, selectionRevision: 1, platformSkills: { disabled: ['office:docx'] } }
+  await service.saveProjectPlatform(user, project, { expectedRevision: 0, disabled: ['curated:matplotlib'] })
+  const effective = { reference: { generationHash: 'a'.repeat(64) }, selectionRevision: 1, platformSkills: { disabled: ['curated:matplotlib'] } }
   const state = { payload: { phase: 'effective', runtimeGeneration: 'old-runtime', desired: effective, effective } }
+  // The runtime was reaped: the generation the worker proved is what the next start mounts again, so it reads as in effect.
   service.projectActivation = async () => ({ state, runtimeGeneration: null, captured: null })
-  assert.equal((await service.projectPlatform(user, project)).items.find(item => item.id === 'office:docx').effective, null)
+  const idle = await service.projectPlatform(user, project)
+  assert.equal(idle.activation.phase, 'ready')
+  assert.equal(idle.activation.live, false)
+  assert.equal(idle.activation.effectiveRevision, 1)
+  assert.equal(idle.items.find(item => item.id === 'curated:matplotlib').effective, false)
   service.projectActivation = async () => ({ state, runtimeGeneration: 'new-runtime', captured: { reference: null, platformSkills: { disabled: [] } } })
   const fallback = await service.projectPlatform(user, project)
   assert.equal(fallback.activation.phase, 'waiting')
+  assert.equal(fallback.activation.live, true)
   assert.equal(fallback.activation.effectiveRevision, null)
+  assert.equal(fallback.items.find(item => item.id === 'curated:matplotlib').effective, null)
   service.projectActivation = async () => ({ state, runtimeGeneration: 'old-runtime', captured: effective })
-  assert.equal((await service.projectPlatform(user, project)).items.find(item => item.id === 'office:docx').effective, false)
+  const live = await service.projectPlatform(user, project)
+  assert.equal(live.activation.phase, 'effective')
+  assert.equal(live.items.find(item => item.id === 'curated:matplotlib').effective, false)
+  // A saved choice the last proven generation does not carry, with nothing running: applied at the next start.
+  await service.saveProjectPlatform(user, project, { expectedRevision: 1, disabled: [] })
+  service.projectActivation = async () => ({ state: { payload: { ...state.payload, phase: 'waiting', desired: { selectionRevision: 2 } } }, runtimeGeneration: null, captured: null })
+  assert.equal((await service.projectPlatform(user, project)).activation.phase, 'pending')
+  // A choice that could not be prepared: deferred, not waiting for a task that is not running.
+  service.projectActivation = async () => ({ state: { payload: { ...state.payload, phase: 'waiting', error: 'runtime_composition_unavailable', desired: { reference: null, selectionRevision: 2 } } }, runtimeGeneration: 'baseline-runtime', captured: { reference: null } })
+  assert.equal((await service.projectPlatform(user, project)).activation.phase, 'deferred')
+  // A project that never chose anything and never started is the platform's own composition.
+  const { service: fresh } = fixture()
+  fresh.projectActivation = async () => ({ state: null, runtimeGeneration: null, captured: null })
+  assert.equal((await fresh.projectPlatform(user, { id: 'never', userId: user.id })).activation.phase, 'ready')
 })
 
 test('optional builtin controls share project revision, preserve skills, and cannot enable a deployment-disabled integration', async () => {
@@ -100,7 +123,7 @@ test('optional builtin controls share project revision, preserve skills, and can
   assert.deepEqual(result.payload.disabled, ['annotation'])
   assert.equal(result.items.find(item => item.id === 'annotation').enabled, false)
   assert.equal(result.items.find(item => item.id === 'annotation').effective, null)
-  await service.saveProjectPlatform(user, project, { expectedRevision: 1, disabled: ['office:docx'] })
+  await service.saveProjectPlatform(user, project, { expectedRevision: 1, disabled: ['curated:matplotlib'] })
   assert.equal((await service.projectBuiltins(user, project)).items.find(item => item.id === 'annotation').enabled, false)
   await assert.rejects(service.saveProjectBuiltins(user, project, { expectedRevision: 2, disabled: ['memory'] }), { status: 400 })
   service.builtinAvailability.annotation = false
@@ -108,4 +131,48 @@ test('optional builtin controls share project revision, preserve skills, and can
   assert.equal(unavailable.items.find(item => item.id === 'annotation').enabled, false)
   assert.equal(unavailable.items.find(item => item.id === 'annotation').reason, 'deployment_disabled')
   assert.deepEqual(unavailable.payload.disabled, [])
+})
+
+test('a saved disabled id that left the catalogue never blocks a later save and is not sent back to the page', async () => {
+  const { service, documents } = fixture()
+  // A release removed the skill this project had switched off (and one became required by a workflow).
+  await documents.put(user.id, 'extension-defaults', 'skills:project:one', { skills: [], disabledPlatformSkills: ['community:retired-skill', 'core:domain-check', 'curated:matplotlib'] }, { expectedRevision: 0 })
+  const view = await service.projectPlatform(user, project)
+  assert.deepEqual(view.payload.disabled, ['curated:matplotlib'], 'the page is given only ids it can show and switch')
+  assert.deepEqual(view.staleDisabled, ['community:retired-skill', 'core:domain-check'])
+  // The page re-sends what it holds, or (an older page) the stale ids too: neither is refused.
+  const saved = await service.saveProjectPlatform(user, project, { expectedRevision: 1, disabled: ['community:retired-skill', 'curated:matplotlib', 'curated:survival-analysis'] })
+  assert.deepEqual(saved.payload.disabled, ['curated:matplotlib', 'curated:survival-analysis'])
+  assert.deepEqual((await service.projectSelections(user, project)).payload.disabledPlatformSkills, ['curated:matplotlib', 'curated:survival-analysis'], 'the stale id is dropped from storage')
+  // A newly named unknown id is still refused.
+  await assert.rejects(service.saveProjectPlatform(user, project, { expectedRevision: 2, disabled: ['community:never-shipped'] }), { status: 404 })
+})
+
+test('a 循证 GEO project on its shared context reads every project choice as not applicable, and keeps them', async () => {
+  const { service } = fixture()
+  await service.saveProjectPlatform(user, project, { expectedRevision: 0, disabled: ['curated:matplotlib'] })
+  const effective = { reference: { generationHash: 'a'.repeat(64) }, selectionRevision: 1, platformSkills: { disabled: ['curated:matplotlib'] } }
+  service.projectActivation = async () => ({ state: { payload: { phase: 'effective', runtimeGeneration: 'geo-runtime', desired: effective, effective } }, runtimeGeneration: 'geo-runtime', captured: null, sharedContext: true })
+  const view = await service.projectPlatform(user, project)
+  assert.equal(view.activation.phase, 'not-applicable')
+  assert.deepEqual(view.payload.disabled, ['curated:matplotlib'], 'the saved choice is kept for when the project is its owner\'s again')
+  assert.equal((await service.projectBuiltins(user, project)).activation.phase, 'not-applicable')
+  // An unknown policy (it could not be read) is not taken for a shared one.
+  service.projectActivation = async () => ({ state: null, runtimeGeneration: null, captured: null, sharedContext: null })
+  assert.equal((await service.projectPlatform(user, project)).activation.phase, 'pending')
+})
+
+test('only a reader is given the activation: a save, a publication and the apply worker read the selection alone', async () => {
+  const { service } = fixture()
+  let observed = 0
+  service.projectActivation = async () => { observed++; return { state: null, runtimeGeneration: null, captured: null } }
+  await service.saveProjectPlatform(user, project, { expectedRevision: 0, disabled: ['curated:matplotlib'] })
+  assert.equal(observed, 1, 'the save reads its own selection without one, and answers the view with one')
+  observed = 0
+  assert.equal((await service.projectSelections(user, project, { activation: false })).activation, undefined)
+  const { selectPersonalSkillMounts } = await import('../src/personalSkillMount.mjs')
+  await selectPersonalSkillMounts({ service, user, project })
+  assert.equal(observed, 0)
+  assert.ok((await service.projectSelections(user, project)).activation)
+  assert.equal(observed, 1)
 })

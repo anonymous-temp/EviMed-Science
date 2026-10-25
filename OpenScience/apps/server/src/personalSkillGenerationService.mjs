@@ -237,7 +237,7 @@ export class PersonalSkillGenerationService {
    * @param {any} user @param {any} project @param {number} selectionRevision */
   async recordFailure(user, project, selectionRevision) {
     await this.skills.requireProject(user, project)
-    const selection = await this.skills.projectSelections(user, project)
+    const selection = await this.skills.projectSelections(user, project, { activation: false })
     if (selection.revision !== selectionRevision) return
     const current = await this.current(project)
     return this.documents.put(user.id, 'extension-generation', stateId(project), {
@@ -391,32 +391,52 @@ export class PersonalSkillGenerationService {
       return candidate
     }))
   }
+  /** A saved choice a start could not prepare or prove. The runtime starts on the ordinary baseline, and the state says the
+   * choice is not in effect yet, so the page never claims it is; the next start prepares it again (`prepareForRuntime`
+   * reconciles a desired generation that has no reference). Best effort: a failure to record never fails the start.
+   * @param {any} user @param {any} project @param {number} selectionRevision @param {string} code */
+  async recordUnavailable(user, project, selectionRevision, code) {
+    const selection = await this.skills.projectSelections(user, project, { activation: false })
+    if (selection.revision !== selectionRevision) return null
+    const current = await this.current(project)
+    if (current?.payload.desired?.selectionRevision === selectionRevision && !current.payload.desired.reference && current.payload.error === code) return current
+    return this.documents.put(user.id, 'extension-generation', stateId(project), {
+      desired: { reference: null, selectionRevision, pins: [], findings: [{ code }],
+        platformSkills: { disabled: selection.payload.disabledPlatformSkills ?? [], disabledPlugins: selection.payload.disabledBuiltinPlugins ?? [] } },
+      effective: current?.payload.effective ?? null, lastGood: current?.payload.lastGood ?? null, runtimeGeneration: current?.payload.runtimeGeneration ?? null,
+      phase: 'waiting', error: code,
+    }, { expectedRevision: current?.revision ?? 0, projectId: project.id })
+  }
   /** Existing effective bytes survive cold recovery; only first-ever idle startup may use desired.
+   * A project's optional choices (a platform skill or an annotation/diagram integration switched off, a personal skill
+   * switched on) never keep it from starting: what cannot be prepared or proven starts on the ordinary baseline and is
+   * recorded as not in effect (owner rulings 2026-10-10: no new hard block, a failure degrades and keeps the rest).
    * @param {any} project */
   async prepareForRuntime(project) {
     const user = await this.resolveUser(project)
     let state = await this.current(project)
-    const selection = await this.skills.projectSelections(user, project)
+    const selection = await this.skills.projectSelections(user, project, { activation: false })
     const identity = await this.identities(project).catch(() => null)
-    const baseline = () => {
-      if ((selection.payload.disabledPlatformSkills ?? []).length || (selection.payload.disabledBuiltinPlugins ?? []).length) {
-        throw Object.assign(new HttpError(503, 'product_state_unavailable', 'The saved project choices cannot be applied until its runtime composition is available.'), { preserveSkillPolicy: true })
-      }
+    /** @param {string|null} code what kept the saved choice out of this start, recorded for the page; null when the state already says it */
+    const baseline = async code => {
+      if (code) await this.recordUnavailable(user, project, selection.revision, code).catch(() => null)
       return { reference: null, pins: [], selectionRevision: selection.revision, findings: [] }
     }
     const compatible = candidate => personalGenerationCompatible(identity, candidate)
     if (!identity || !state || state.payload.desired?.selectionRevision !== selection.revision
       || !compatible(state.payload.desired)) {
       try { await this.reconcile(user, project); state = await this.current(project) }
-      catch { return baseline() }
+      catch { return baseline('runtime_composition_unavailable') }
     }
     // Cold recovery must not depend on a retired image. Existing active runtime
     // entries keep their captured pins; this only selects bytes for a new start.
-    if (!identity) return baseline()
+    // An unavailable identity was recorded by `reconcile` itself (`runtime_image_unavailable`).
+    if (!identity) return baseline(null)
+    // No candidate: a changed selection is not mounted under work in flight, and its apply job is already queued.
     const candidate = await personalGenerationForStart({ state, identity, busy: () => this.ledgerBusy(project) })
-    if (!candidate) return baseline()
+    if (!candidate) return baseline(null)
     try { await verifyPersonalSkillGeneration(this.config, project, candidate.reference, identity.baseRuntimeImageDigest) }
-    catch { return baseline() }
+    catch { return baseline('runtime_composition_unavailable') }
     // Startup is not proof: markEffective remains the leased worker's decision.
     return candidate
   }
@@ -432,7 +452,7 @@ export class PersonalSkillGenerationService {
   async requireInvocation(project, skillId, revision) {
     const user = await this.resolveUser(project)
     const source = await this.skills.atRevision(user, skillId, revision)
-    const desired = await this.skills.projectSelections(user, project)
+    const desired = await this.skills.projectSelections(user, project, { activation: false })
     if (!desired.payload.skills.some(pin => pin.skillId === skillId && pin.revision === revision && pin.digest === source.payload.digest)) throw fail()
     if (source.payload.invocation.userInvocable !== true) throw new HttpError(403, 'extension_access_denied', 'This skill cannot be invoked by a user.')
     return source.payload

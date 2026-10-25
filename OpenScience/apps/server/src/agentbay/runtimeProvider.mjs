@@ -475,7 +475,7 @@ export class AgentBayRuntimeProvider {
   /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?: any, personalSkillGeneration?:any, memoryGatewayUrl?: string, geoSkills?: boolean }} input */
   async prepare(project, { pluginConfig, capsuleMethodsMounted, platformSkillGeneration = null, personalSkillGeneration = null, memoryGatewayUrl = "", geoSkills = false }) {
     this.assertConfigured();
-    const identity = await this.manager.inspectRuntimeImage();
+    const identity = await this.manager.generationImageIdentity();
     const personal = personalSkillGeneration?.reference ? await verifyPersonalSkillGeneration(this.config, project, personalSkillGeneration.reference, identity.imageId) : null;
     // A session that just ended may still be coming home; its Context copy
     // and manifests are what this start reads.
@@ -681,11 +681,19 @@ export class AgentBayRuntimeProvider {
    * Base64 staging uses the existing root-only upload transport; no skill body is ever evaluated as a command.
    * @param {any} project @param {any} plan */
   async syncPersonalGeneration(project, plan) {
-    const image = await this.manager.inspectRuntimeImage();
+    const image = await this.manager.generationImageIdentity();
     const selected = await verifyPersonalSkillGeneration(this.config, project, plan.personalSkillGeneration.reference, image.imageId);
     const quote = value => `'${String(value).replace(/'/g, "'\\''")}'`;
     const remoteRoot = `/opt/evimed/personal-skill-generations/${selected.reference.ownerHash}/${selected.reference.projectHash}/${selected.reference.generationHash}/skills`;
     if (plan.personalSkillsRuntimeDir !== remoteRoot) throw new HttpError(400, 'extension_contract_invalid', 'Invalid personal skill projection.');
+    // A reattached session that already holds this immutable generation is read back with one command and not written again:
+    // the digest of every file's digest and path, in byte order, against the same digest of the verified manifest, and no
+    // entry that is neither a file nor a directory. Anything else, including a command that fails, writes every file.
+    const listing = selected.files.map(file => ({ key: Buffer.from(`./${file.path.slice('skills/'.length)}`), line: `${file.digest.slice(7)}  ./${file.path.slice('skills/'.length)}\n` }))
+      .sort((left, right) => Buffer.compare(left.key, right.key)).map(entry => entry.line).join('');
+    const expected = createHash('sha256').update(listing).digest('hex');
+    const held = await this.command(plan.agentbay.session, `cd ${quote(remoteRoot)} 2>/dev/null && test -z "$(find . -mindepth 1 ! -type d ! -type f -print -quit)" && find . -type f -print | LC_ALL=C sort | xargs -r -d '\\n' sha256sum | sha256sum`).catch(() => null);
+    if (held?.ok && String(held.stdout).trim().split(/\s+/)[0] === expected) return { reused: true };
     for (const file of selected.files) {
       const relative = file.path.slice('skills/'.length), target = `${remoteRoot}/${relative}`, staged = `/run/evimed/uploads/${randomBytes(12).toString('hex')}.b64`;
       const opened = await openScopedFileNoFollow(this.config.dataDir, path.join(selected.root, file.path));
@@ -699,6 +707,7 @@ export class AgentBayRuntimeProvider {
       const written = await this.command(plan.agentbay.session, `base64 -d ${quote(staged)} > ${quote(target + '.part')} && chmod 0444 ${quote(target + '.part')} && chown 0:0 ${quote(target + '.part')} && mv -f ${quote(target + '.part')} ${quote(target)} && sha256sum ${quote(target)}; rc=$?; rm -f ${quote(staged)}; exit $rc`);
       if (!written.ok || written.stdout.trim().split(/\s+/)[0] !== file.digest.slice(7)) throw new HttpError(502, 'agentbay_file_write_failed', 'The immutable personal skill bytes could not be verified.');
     }
+    return { reused: false };
   }
 
   /** The project's materialized capsule methods as one text bundle the

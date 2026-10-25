@@ -116,7 +116,7 @@ export function InventoryDrawer({ item, groupTitle, tools, onClose, controls }: 
   return (
     <Drawer title={item.title} description={item.publisher ? `${item.publisher} · ${groupTitle}` : groupTitle} onClose={onClose}>
       <div className="flex flex-col gap-6">
-        <div className="flex items-center gap-3"><Tag>{item.system ? "系统提供" : "插件"}</Tag><RepositoryLink href={skillRepositoryUrl(item.repository)} title={item.title} /></div>
+        <div className="flex items-center gap-3"><Tag>插件</Tag><RepositoryLink href={skillRepositoryUrl(item.repository)} title={item.title} /></div>
         {controls && <div className="rounded-card bg-surface-1 p-4">{controls}</div>}
         <DrawerSection title="它会做什么"><p className="text-ui text-text">{item.does}</p></DrawerSection>
         <DrawerSection title="怎么用"><p className="text-ui text-text">{item.how}</p></DrawerSection>

@@ -9,15 +9,31 @@ import SEAMS from '../seam-manifest.json' with { type: 'json' }
 const CITE_VERSION = SEAMS.plugins['dsh-cite']
 export const CITATION_TOOLS = Object.freeze(['cite_lookup', 'cite_format', 'cite_bibtex', 'cite_check', 'cite_health'])
 /** Actual Loader state of the two admitted optional client integrations; no profile administration is exposed.
+ * The loader is read where this context has one (`ctx.get`), never injected: the probe also proves citations and
+ * extensions, and a runtime without the loader service loses only this one proof (`extension_probe_unavailable`).
  * @param {any} ctx */
 export async function builtinPluginState(ctx) {
+  const loader = typeof ctx.get === 'function' ? ctx.get('loader') : undefined
+  if (!loader || typeof loader.entries !== 'function') throw probeFailure('extension_probe_unavailable')
   const { readPluginInventory } = await loadHarnessModule('@deepseek-ai/dsh-host-plugin-inventory')
-  const inventory = await readPluginInventory(ctx)
+  const inventory = await readPluginInventory({ get: (/** @type {string} */ name) => ctx.get(name), loader })
   return { items: Object.entries({ annotation: 'dsh-annotation', mermaid: 'ui-mermaid' }).map(([id, rowId]) => {
     const rows = inventory.entries.filter((/** @type {any} */ entry) => entry.entryId === rowId)
     if (rows.length !== 1 || rows[0].enabled && rows[0].fiberPhase !== 'active') throw probeFailure('extension_probe_config_invalid')
     return { id, enabled: rows[0].enabled }
   }) }
+}
+/**
+ * What `evimedPlugins/builtin` answers: the loader's actual state, and whether it is what this kernel's own launch
+ * environment expected (`matchesLaunch`). The control plane decides the proof by comparing the state with the profile it
+ * wrote itself (`probePersonalSkillGeneration`, the runtime's `builtinPlugins`). The environment is the controller's, from
+ * another container whose deployment flags can disagree with the web's, so a disagreement is reported here and never
+ * refuses the proof: it used to fail every personal-generation proof on such a deployment.
+ * @param {{items:{id:string,enabled:boolean}[]}} state @param {unknown} disabledClientBundles
+ */
+export function builtinProof(state, disabledClientBundles) {
+  const expected = Array.isArray(disabledClientBundles) ? disabledClientBundles : null
+  return { ...state, matchesLaunch: expected ? state.items.every(item => item.enabled !== expected.includes(item.id)) : null }
 }
 /** Read the installed package selected by the bundle's own module resolver.
  * @param {string} manifestUrl */
@@ -274,12 +290,7 @@ export async function registerPluginProbe(ctx, options = {}) {
       for (const initialize of initializers) initialize.call(this)
     }
     async status() { return { busy: await pluginRuntimeBusy(ctx) } }
-    async builtin() {
-      const state = await builtinPluginState(ctx)
-      const disabled = options.disabledClientBundles
-      if (disabled && state.items.some(item => item.enabled === disabled.includes(item.id))) throw probeFailure('extension_probe_config_invalid')
-      return state
-    }
+    async builtin() { return builtinProof(await builtinPluginState(ctx), options.disabledClientBundles) }
     async verify() { return this.probe(false) }
     async verifyExtensions() { return this.probe(true) }
     /** @param {{sessionId:string}} request */

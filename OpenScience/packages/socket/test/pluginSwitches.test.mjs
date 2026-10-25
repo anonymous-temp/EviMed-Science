@@ -170,7 +170,7 @@ test('the required provider retains its stable alias and native registry while a
   const { SkillRegistry } = await loadHarnessModule('@deepseek-ai/dsh-skill');
   const ctx = new Context(); new SkillRegistry(ctx);
   t.after(async () => { await ctx.fiber.dispose(); await rm(root, { recursive: true, force: true }); });
-  for (const [origin, name] of [['core', 'stats-integrity'], ['office', 'docx']]) {
+  for (const [origin, name] of [['core', 'stats-integrity'], ['office', 'memo']]) {
     await mkdir(path.join(root, origin, name), { recursive: true });
     await writeFile(path.join(root, origin, name, 'SKILL.md'), `---\nname: ${name}\ndescription: Fixture method\n---\nPreserve source material.`);
   }
@@ -180,7 +180,7 @@ test('the required provider retains its stable alias and native registry while a
   assert.equal(PLUGIN_SPECIFIERS['skill-filesystem'], './plugins/project-skills.mjs');
   assert.equal(row.disabled, undefined);
   assert.equal(row.config.enabled, undefined, 'the discovery provider cannot be ablated as an optional policy plugin');
-  const env = { ...PRODUCTION, ...ALL_OFF, EVIMED_PRESET_SKILLS_DIR: root, EVIMED_DISABLED_PLATFORM_SKILLS: '["office:docx","core:stats-integrity"]' };
+  const env = { ...PRODUCTION, ...ALL_OFF, EVIMED_PRESET_SKILLS_DIR: root, EVIMED_DISABLED_PLATFORM_SKILLS: '["office:memo","core:stats-integrity"]' };
   /** @param {any} value @returns {any} */
   const resolve = value => Array.isArray(value) ? value.map(resolve) : value && typeof value === 'object'
     ? Object.hasOwn(value, 'expression') ? evaluate(value.expression, env) : Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, resolve(entry)])) : value;
@@ -190,7 +190,7 @@ test('the required provider retains its stable alias and native registry while a
   await ctx.plugin(plugin, config);
   await new Promise(resolveReady => setTimeout(resolveReady, 20));
   const skills = await ctx.skills.list({ cwd: root });
-  const required = skills.find((/** @type {any} */ skill) => skill.name === 'stats-integrity'), optional = skills.find((/** @type {any} */ skill) => skill.name === 'docx');
+  const required = skills.find((/** @type {any} */ skill) => skill.name === 'stats-integrity'), optional = skills.find((/** @type {any} */ skill) => skill.name === 'memo');
   assert.ok(required && optional, 'the row actually registered the native filesystem provider');
   assert.equal(required.provider, 'filesystem');
   assert.equal(required.invocation.modelInvocable, true);

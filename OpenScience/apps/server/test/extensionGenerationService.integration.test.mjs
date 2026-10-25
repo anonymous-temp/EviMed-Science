@@ -66,7 +66,7 @@ test('installed isolated-tool composition survives optional skill off/on and per
   const selection=await extensions.project(a,project.id),state=await service.reconcile(a,project.id,{expectedRevision:selection.revision});
   let installed=state.payload.desired;await service.markEffective(project,installed,runtimeProof(installed));
   const original=installed.projection.plugins.find(plugin=>plugin.extensionId===entry.id);
-  for(const disabled of [['office:docx'],[]]){
+  for(const disabled of [['curated:matplotlib'],[]]){
     const currentSelection=await skills.projectSelections(a,project);
     await skills.saveProjectPlatform(a,project,{expectedRevision:currentSelection.revision,disabled});
     selected=await plugins.withAdmission(project,()=>personal.reconcile(a,project));
@@ -283,7 +283,7 @@ test('revoking the real lead who configured a rolled-back generation leaves owne
   const manager=rollbackManager(project,good);await manager.assertExtensionPromptGeneration(project);await assert.rejects(service.operationIdentity(a,'p1',entry.id,'fixture-runtime','doc_read'),{code:'project_not_found',status:404});manager.runtimes.clear();
   const skills=new SkillLibraryService(db,{artifacts:{root:path.join(root,'skill-artifacts'),maxGlobalBytes:8*1024*1024,minFreeBytes:0},projectAccess:async(user,currentProject)=>{assert.equal(user.id,currentProject.userId);},platformCatalogue:createPlatformSkillCatalogue({rootDir:new URL('../../..',import.meta.url).pathname})});
   await skills.initializeProject(a,project);let personalSelection=await skills.projectSelections(a,project);
-  await skills.saveProjectPlatform(a,project,{expectedRevision:personalSelection.revision,disabled:['office:docx']});personalSelection=await skills.projectSelections(a,project);
+  await skills.saveProjectPlatform(a,project,{expectedRevision:personalSelection.revision,disabled:['curated:matplotlib']});personalSelection=await skills.projectSelections(a,project);
   await skills.saveProjectBuiltins(a,project,{expectedRevision:personalSelection.revision,disabled:['annotation']});
   const personal=new PersonalSkillGenerationService(db,{config:{dataDir:root},skillService:skills,pluginService:plugins,resolveUser:async()=>a,
     identities:async()=>({baseRuntimeImageDigest:identities.baseRuntimeImageDigest,adapterRevision:identities.adapterRevision,permissionProfileRevision:identities.permissionProfileRevision}),ledgerBusy:async()=>false});
@@ -294,7 +294,7 @@ test('revoking the real lead who configured a rolled-back generation leaves owne
   cold.provider={preflight:async()=>{},prepare:async(_project,input)=>{coldPlan=input;throw new Error('cold provider boundary');}};
   await assert.rejects(cold.startKernel(project),/cold provider boundary/);
   assert.equal(coldPlan.extensionGeneration.projection.plugins.some(plugin=>plugin.extensionId===entry.id),false,'a revoked installer cannot keep its optional tools');
-  assert.deepEqual(coldPlan.personalSkillGeneration.platformSkills,{disabled:['office:docx'],disabledPlugins:['annotation']},'ordinary owner research retains every saved disable');
+  assert.deepEqual(coldPlan.personalSkillGeneration.platformSkills,{disabled:['curated:matplotlib'],disabledPlugins:['annotation']},'ordinary owner research retains every saved disable');
   await db.query("DELETE FROM evimed_product.revisions WHERE user_id=$1 AND id=ANY($2::text[])",[a.id,['skills:project:p1','personal-skills:project:p1']]);
   await db.query("DELETE FROM evimed_product.documents WHERE user_id=$1 AND id=ANY($2::text[])",[a.id,['skills:project:p1','personal-skills:project:p1']]);
   await db.query("UPDATE evimed_product.jobs SET status='succeeded' WHERE user_id=$1 AND project_id='p1' AND kind='personal-skill-apply'",[a.id]);

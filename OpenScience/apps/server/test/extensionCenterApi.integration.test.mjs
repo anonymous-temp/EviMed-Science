@@ -87,9 +87,11 @@ test("actual hosted API binds library, native parsing, PostgreSQL CAS and CSRF w
     const platform = await request('/api/projects/default/skills/platform');
     assert.equal(platform.revision, selection.revision);
     assert.equal(platform.items.find(item => item.id === 'office:docx').provenance.kind, 'first-party');
-    const disabled = await request('/api/projects/default/skills/platform', 'PUT', { expectedRevision: platform.revision, disabled: ['office:docx'] });
-    assert.equal(disabled.activation.phase, 'waiting');
-    assert.equal(disabled.items.find(item => item.id === 'office:docx').enabled, false);
+    const disabled = await request('/api/projects/default/skills/platform', 'PUT', { expectedRevision: platform.revision, disabled: ['curated:matplotlib'] });
+    // No runtime runs in this deployment: the saved choice takes effect when the next conversation starts one.
+    assert.equal(disabled.activation.phase, 'pending');
+    assert.equal(disabled.activation.live, false);
+    assert.equal(disabled.items.find(item => item.id === 'curated:matplotlib').enabled, false);
     assert.equal((await request('/api/projects/default/skills')).payload.skills[0].digest, skill.payload.digest);
     await request('/api/projects/default/skills/platform', 'PUT', { expectedRevision: disabled.revision, disabled: ['core:stats-integrity'] }, 409);
     await request('/api/projects/default/skills/platform', 'PUT', { expectedRevision: selection.revision, disabled: [] }, 409);
@@ -97,9 +99,9 @@ test("actual hosted API binds library, native parsing, PostgreSQL CAS and CSRF w
     assert.equal(builtins.revision, disabled.revision);
     const builtinOff = await request('/api/projects/default/plugins/builtin', 'PUT', { expectedRevision: builtins.revision, disabled: ['annotation'] });
     assert.equal(builtinOff.items.find(item => item.id === 'annotation').enabled, false);
-    assert.equal(builtinOff.activation.phase, 'waiting');
+    assert.equal(builtinOff.activation.phase, 'pending');
     assert.equal((await request('/api/projects/default/skills/platform')).revision, builtinOff.revision);
-    assert.deepEqual((await request('/api/projects/default/skills/platform')).payload.disabled, ['office:docx']);
+    assert.deepEqual((await request('/api/projects/default/skills/platform')).payload.disabled, ['curated:matplotlib']);
     // No actual native session dispatcher is supplied here; do not turn the saved project intent into a fake invocation.
     await request(`/api/projects/default/skills/${encodeURIComponent(skill.id)}/invoke`, "POST", { revision: 1, sessionId: "fixture-session", idempotencyKey: "fixture-invoke" }, 503);
     const uploaded = await fetch(`${base}/api/skills/uploads?kind=skill`, { method: "POST", headers: { ...auth, "content-type": "application/octet-stream" }, body: "---\nname: imported-native\ndescription: Upload\n---\n\nRead this source.\n" });

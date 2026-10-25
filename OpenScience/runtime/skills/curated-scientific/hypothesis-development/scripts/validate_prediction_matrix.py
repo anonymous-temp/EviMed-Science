@@ -235,7 +235,7 @@ def validate_matrix(
     return {
         "schema_version": "2.0",
         "valid": not errors,
-        "status": "INVALID_MATRIX" if errors else "VALID_FOR_HUMAN_REVIEW",
+        "status": "INVALID_MATRIX" if errors else "VALID_FOR_REVIEW",
         "errors": errors,
         "warnings": warnings,
         "prediction_count": len(rows),

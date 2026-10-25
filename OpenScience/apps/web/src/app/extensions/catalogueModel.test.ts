@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allInstalledExtensions, extensionAvailability, skillActivationText, skillPublisher, skillRepositoryUrl, visiblePlatformSkills } from "./catalogueModel";
+import { allInstalledExtensions, extensionAvailability, nextDisabled, skillActivationText, platformSkillReadOnly, skillAdapted, skillPublisher, skillRepositoryUrl } from "./catalogueModel";
 import type { ExtensionInstallation, ExtensionSelection } from "@/lib/extensionsClient";
 import type { PlatformSkill } from "@/lib/skillLibraryClient";
 
@@ -21,13 +21,15 @@ describe("extension activation belongs to the selected project", () => {
   });
 });
 
-it("keeps required and module-private methods out of the selectable catalogue", () => {
+it("a required, long-task or module-pack skill is listed without a control; the rest can be switched", () => {
   const rows = [
-    { id: "office:docx", group: "办公文档" },
+    { id: "curated:plot", group: "数据与图表" },
     { id: "core:guard", requirement: { required: true, reason: "system" } },
+    { id: "office:docx", requirement: { required: true, reason: "workflow" } },
     { id: "geo-private:method", group: "循证 GEO" },
+    { id: "loopx:loopx", group: "长任务" },
   ] as PlatformSkill[];
-  expect(visiblePlatformSkills(rows, "循证 GEO").map(row => row.id)).toEqual(["office:docx"]);
+  expect(rows.filter(row => !platformSkillReadOnly(row)).map(row => row.id)).toEqual(["curated:plot"]);
 });
 
 it("keeps publisher and adaptation identity instead of relabeling every package as built-in", () => {
@@ -60,4 +62,23 @@ it("loads installed pages completely and rejects a looping cursor without preten
   expect(result.items.map(item => item.id)).toEqual(["one", "two"]);
   expect(calls).toEqual([undefined, "next"]);
   await expect(allInstalledExtensions(async () => ({ items: [], nextCursor: "loop" }))).rejects.toThrow();
+});
+
+it("a switch never re-sends a disabled id the page has no row for", () => {
+  const policy = { payload: { disabled: ["community:gone", "office:docx"] }, items: [{ id: "office:docx" }, { id: "office:xlsx" }] };
+  expect(nextDisabled(policy, "office:xlsx", false)).toEqual(["office:docx", "office:xlsx"]);
+  expect(nextDisabled(policy, "office:docx", true)).toEqual([]);
+});
+
+it("an idle project's activation says when the saved choice takes effect, in plain words", () => {
+  expect(skillActivationText(false, { phase: "ready", savedRevision: 2, effectiveRevision: 2, error: null, live: false })).toBe("已关闭");
+  expect(skillActivationText(true, { phase: "ready", savedRevision: 0, effectiveRevision: null, error: null, live: false })).toBe("已启用");
+  expect(skillActivationText(true, { phase: "pending", savedRevision: 3, effectiveRevision: null, error: null, live: false })).toBe("下次对话生效");
+  expect(skillActivationText(false, { phase: "deferred", savedRevision: 3, effectiveRevision: null, error: "runtime_composition_unavailable", live: true })).toBe("暂未生效，稍后会自动再试");
+});
+
+it("an upstream skill the platform edited is told apart from one it ships unedited", () => {
+  expect(skillAdapted({ provenance: { kind: "upstream-adapted" } } as PlatformSkill)).toBe(true);
+  expect(skillAdapted({ provenance: { kind: "upstream" } } as PlatformSkill)).toBe(false);
+  expect(skillAdapted({} as PlatformSkill)).toBe(false);
 });

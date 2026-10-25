@@ -18,17 +18,45 @@ export function extensionAvailability(installation: ExtensionInstallation, selec
   return "未在当前项目启用";
 }
 
+/** What a 循证 GEO project's rows say in place of a switch: its shared settings carry none of the project's own choices. */
+export const SHARED_PROJECT_TEXT = "循证 GEO 项目中不适用";
+
+/** Whether the project's switches do not apply (a 循证 GEO project on its shared settings), from any of its activations. */
+export const projectChoicesNotApplicable = (...activations: Array<SkillActivation | null | undefined>) =>
+  activations.some(activation => activation?.phase === "not-applicable");
+
 export function skillActivationText(enabled: boolean, activation?: SkillActivation): string {
   if (!activation) return "生效状态待确认";
+  if (activation.phase === "not-applicable") return SHARED_PROJECT_TEXT;
   if (activation.phase === "saved") return "生效状态待确认";
+  if (activation.phase === "pending") return "下次对话生效";
   if (activation.phase === "waiting") return "等待当前任务结束后生效";
+  if (activation.phase === "deferred") return "暂未生效，稍后会自动再试";
   if (activation.phase === "failed" || activation.phase === "rolled-back") return "更改未生效，请重试";
   return enabled ? "已启用" : "已关闭";
 }
 
-/** Private workflow methods and essential policies remain available in their owning surfaces. */
-export const visiblePlatformSkills = (items: readonly PlatformSkill[], geoGroup?: string) =>
-  items.filter(item => !item.requirement?.required && !item.id.startsWith("geo-private:") && (!geoGroup || item.group !== geoGroup));
+/**
+ * How long the page waits before each re-read of a pending activation, then it stops: an apply the running runtime has
+ * not reached in about four minutes is read again on the reader's next action, not every three seconds for good.
+ */
+export const ACTIVATION_POLL_DELAYS_MS: readonly number[] = [3000, 6000, 12000, 24000, 48000, 60000, 60000];
+
+/**
+ * The disabled list a switch sends: what the project holds, without the one being switched and without any id the page was
+ * not given a row for (a skill a release removed is not re-sent for the server to refuse).
+ */
+export function nextDisabled(policy: { payload: { disabled: string[] }; items: ReadonlyArray<{ id: string }> }, id: string, enabled: boolean): string[] {
+  const kept = policy.payload.disabled.filter(item => item !== id && policy.items.some(row => row.id === item));
+  return enabled ? kept : [...kept, id];
+}
+
+/**
+ * A skill a project cannot switch: one the platform requires (a standing method, one a professional workflow loads by name,
+ * the long task's, the 循证 GEO method pack's). It is listed like the rest, with no control.
+ */
+export const platformSkillReadOnly = (skill: PlatformSkill) =>
+  skill.requirement?.required === true || skill.id.startsWith("geo-private:") || skill.id.startsWith("loopx:");
 
 export type CatalogueOrigin = "first-party" | "third-party" | "personal";
 export const catalogueOrigins: ReadonlyArray<{ value: CatalogueOrigin; label: string }> = [
@@ -41,6 +69,9 @@ export function skillOrigin(skill: PlatformSkill): CatalogueOrigin {
   if (!skill.provenance) return skill.source === "community" ? "third-party" : "first-party";
   return ["first-party", "first-party-derived", "proprietary"].includes(skill.provenance.kind) ? "first-party" : "third-party";
 }
+
+/** An upstream skill the platform edited for hosting (its review recorded the edits): said, so the upstream link is not read as the text that runs. */
+export const skillAdapted = (skill: PlatformSkill) => skill.provenance?.kind === "upstream-adapted";
 
 export function skillPublisher(skill: PlatformSkill): string {
   const source = skill.provenance;

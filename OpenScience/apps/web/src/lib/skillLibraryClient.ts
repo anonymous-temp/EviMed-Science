@@ -32,9 +32,16 @@ export interface SkillUpdatePlan {
 export interface SkillUpdateResult extends SkillUpdatePlan { skill: PersonalSkill; applied: boolean; taken: string[]; kept: string[]; pinnedRevision?: number }
 export type PersonalSkill = ProductRecord<PersonalSkillPayload>;
 export interface SkillSelection { skillId: string; revision: number; digest?: string; nativeName?: string }
+/**
+ * A project's saved choices and whether they are in effect. `effective`: proven on the live runtime; `ready`: no runtime runs
+ * and the last proven generation carries them; `pending`: no runtime runs, applied when the next conversation starts one;
+ * `waiting`: applied once the running runtime's current work ends; `deferred`: could not be prepared, a later start tries
+ * again; `failed` / `rolled-back`: the apply's proof failed; `not-applicable`: a 循证 GEO project whose shared settings carry
+ * none of the project's own choices. `live` says whether a runtime runs now.
+ */
 export interface SkillActivation {
-  phase: "saved" | "waiting" | "effective" | "failed" | "rolled-back";
-  savedRevision: number; effectiveRevision: number | null; error: string | null;
+  phase: "saved" | "ready" | "pending" | "waiting" | "deferred" | "effective" | "failed" | "rolled-back" | "not-applicable";
+  savedRevision: number; effectiveRevision: number | null; error: string | null; live?: boolean;
 }
 export interface SkillSelectionRecord { revision: number; payload: { skills: SkillSelection[] }; activation?: SkillActivation }
 export interface SkillVersion { revision: number; payload: PersonalSkillPayload; deletedAt: string | null; recordedAt: string }
@@ -92,6 +99,8 @@ export interface PlatformSkill {
 }
 export interface ProjectPlatformSkills {
   id: string; revision: number; payload: { disabled: string[] };
+  /** Saved ids that no longer name a skill that can be switched off (a release removed one); never re-sent. */
+  staleDisabled?: string[];
   items: Array<PlatformSkill & { enabled: boolean; effective: boolean | null }>;
   activation: SkillActivation;
 }

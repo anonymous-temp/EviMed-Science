@@ -117,3 +117,16 @@ test('a verified citation configuration does not expose deployment secrets or th
   const result = await request(f);
   assert.equal(JSON.stringify(result.data).includes('must-not-forward'), false);
 });
+
+test('a project setting that cannot be read leaves the inventory on the deployment\'s own flags, never down', async () => {
+  const f = fixture();
+  const handler = createInventoryRoutes({ store: f.store, pluginService: f.pluginService, config: DEPLOYED,
+    builtinSettings: async () => { throw Object.assign(new Error('database unavailable'), { status: 503, code: 'product_state_unavailable' }); } });
+  const result = await request({ ...f, handler });
+  assert.equal(result.status, 200);
+  assert.deepEqual(items(result).filter(item => ['annotation', 'diagrams'].includes(item.id)).map(item => item.state), ['on', 'on']);
+  // A refusal of the reader's own access still refuses.
+  const denied = createInventoryRoutes({ store: f.store, pluginService: f.pluginService, config: DEPLOYED,
+    builtinSettings: async () => { throw new HttpError(404, 'project_not_found', 'missing'); } });
+  await assert.rejects(request({ ...f, handler: denied }), { status: 404 });
+});

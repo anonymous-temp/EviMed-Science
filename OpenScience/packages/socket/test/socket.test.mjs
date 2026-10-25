@@ -1547,3 +1547,10 @@ test("a capability built on a module's tools is not offered where the module is 
   assert.deepEqual(offeredCapabilities(manifests, disabledTools("web_read, geo_read,geo_write,social_posts_search")).map((item) => item.id), ["clinical-evidence-synthesis", "vcr-protocol"]);
   assert.deepEqual(offeredCapabilities(manifests, disabledTools("vcr_read,vcr_write,vcr_simulate,trial_registry_record,curve_digitize,evidence_pool")).map((item) => item.id), ["clinical-evidence-synthesis", "geo-insight"]);
 });
+
+test("the plugin probe injects no loader: a runtime without one keeps its citation and extension proofs", async () => {
+  const { inject } = await import("../plugins/plugin-probe.mjs");
+  assert.equal(inject.includes("loader"), false);
+  // Every service it does inject is one the seam manifest names as required of the kernel.
+  for (const name of inject) assert.ok(SEAMS.services.required.includes(name), `${name} is a required kernel service`);
+});

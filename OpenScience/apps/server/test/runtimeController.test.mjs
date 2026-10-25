@@ -722,6 +722,15 @@ test("the capsule startup protocol refuses a controller from before endpoint han
   await assert.doesNotReject(client.health());
 });
 
+test("a controller from before the manifest-derived skill policy (protocol 16) is refused, not trusted to launch it", async () => {
+  // Protocol 17: the controller derives EVIMED_DISABLED_PLATFORM_SKILLS / EVIMED_DISABLED_CLIENT_BUNDLES from the verified
+  // personal generation. A protocol 16 controller would launch the project's switched-off skills enabled.
+  assert.ok(RUNTIME_CONTROLLER_PROTOCOL_VERSION >= 17);
+  const client = new RuntimeControllerClient({});
+  client.request = async () => ({ protocolVersion: 16 });
+  await assert.rejects(client.health(), (error) => error?.code === "runtime_controller_protocol_mismatch");
+});
+
 test("runtime controller shutdown ends even while a client holds a connection open", async () => {
   // `server.close` resolves only once every open connection has ended, and a
   // connection that has never sent a request does not end on its own: with no

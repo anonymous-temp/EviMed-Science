@@ -3565,6 +3565,9 @@ export class RuntimeManager {
     this.platformSkillOverrides = new Map();
     this.personalSkillGenerations = null;
     /** @type {any} */ this.rebasePersonalComposite = null;
+    /** What an optional part of a start could not do, counted by code (principle 15), and the last one per project. */
+    /** @type {Map<string, number>} */ this.startFindingCounts = new Map();
+    /** @type {Map<string, { code: string, cause: string|null, at: number }>} */ this.lastStartFindings = new Map();
     /** @type {any} */ this.markPersonalCompositeEffective = null;
     this.personalSkillOverrides = new Map();
     /** @type {any} Cold selection reauthorizes current account/project/config state in the composition root. */
@@ -4503,13 +4506,31 @@ export class RuntimeManager {
     return { version, major };
   }
 
-  async inspectRuntimeImage() {
+  /** An optional part of a start that degraded instead of failing it: counted, kept per project, and said on stderr by code.
+   * @param {Record<string, any>} project @param {string} code @param {any} [error] */
+  noteStartFinding(project, code, error = null) {
+    const cause = typeof error?.code === "string" ? error.code : null;
+    this.startFindingCounts.set(code, (this.startFindingCounts.get(code) ?? 0) + 1);
+    this.lastStartFindings.set(this.key(project), { code, cause, at: Date.now() });
+    process.stderr.write(`runtime start degraded: ${code}${cause ? ` (${cause})` : ""}\n`);
+  }
+
+  /**
+   * The runtime image identity a personal-skill or extension generation is bound to. AgentBay exposes an immutable image
+   * identifier, not OCI bytes, so there it is the digest of the provider-qualified identifier; every other provider answers
+   * what the image inspection answers. Only the generation callers use it: every other reader of the image (循证进化's
+   * kernel proof, a result's lineage, the document renderer) keeps `inspectRuntimeImage`'s own answer.
+   */
+  async generationImageIdentity() {
     if (this.config.runtimeProvider === 'agentbay') {
       const providerImageId = String(this.config.agentbayImageId ?? '');
       if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,255}$/.test(providerImageId)) throw new HttpError(503, 'runtime_image_unavailable', 'The AgentBay image identity is unavailable.');
-      // AgentBay exposes an immutable image identifier, not OCI bytes. This is the digest of the provider-qualified identity.
       return { imageId: `sha256:${createHash('sha256').update(JSON.stringify({ provider: 'agentbay', imageId: providerImageId })).digest('hex')}`, providerImageId };
     }
+    return this.inspectRuntimeImage();
+  }
+
+  async inspectRuntimeImage() {
     if (this.runtimeController) return this.runtimeController.inspectRuntimeImage();
     if (this.config.runtimeSandboxMode !== 'docker') return null;
     const result = spawnSync(this.config.runtimeContainerBin, ['image', 'inspect', '--format', '{{.Id}}', this.config.runtimeContainerImage], { encoding: 'utf8', timeout: 5000, maxBuffer: 65536 });
@@ -4987,10 +5008,11 @@ export class RuntimeManager {
     // after that freeze and invalidate the worker's post-replacement guard.
     if (!contextGeneration && !this.personalSkillOverrides.has(key) && !this.extensionGenerationOverrides.has(key) && this.personalSkillGenerations) {
       try { personalSkillGeneration = await this.personalSkillGenerations.prepareForRuntime(project); }
-      catch (error) {
-        if (error?.preserveSkillPolicy === true) throw error;
+      catch {
         // Preparation failed before current identity compatibility could be
-        // established. Ordinary research starts without optional personal bytes.
+        // established. Ordinary research starts without optional personal bytes
+        // (and without the project's optional choices, which the generation
+        // state records as not in effect).
         personalSkillGeneration = null;
       }
     }
@@ -4999,9 +5021,18 @@ export class RuntimeManager {
       try { extensionGeneration = await this.extensionGenerationResolver(project); if (extensionGeneration) await this.prepareGeneration(project, extensionGeneration); }
       catch { extensionGeneration = null; }
     }
-    if (!extensionGeneration && !this.extensionGenerationOverrides.has(key) && personalSkillGeneration && this.rebasePersonalComposite) {
-      extensionGeneration = await this.rebasePersonalComposite(project, personalSkillGeneration);
-    }
+    // The installed plugin composite re-stamped with the personal generation this start mounts. Optional, like the rest of
+    // this preparation: it runs only where the project's selected plugins are functionally the installed ones
+    // (`whenUnchanged`; any other difference is the plugin apply worker's), never for a shared 循证 GEO context (which
+    // mounts neither half), and any failure starts the project with the personal generation alone and is recorded.
+    // A null personal generation is the ordinary baseline (`rebasePersonal`): an installed composite stamped with personal
+    // skills the project no longer selects is re-stamped without them rather than unmounted.
+    const rebaseComposite = async () => {
+      if (contextGeneration || this.extensionGenerationOverrides.has(key) || !this.rebasePersonalComposite) return null;
+      try { return (await this.rebasePersonalComposite(project, personalSkillGeneration, { whenUnchanged: true })) ?? null; }
+      catch (error) { this.noteStartFinding(project, "extension_composite_rebase_failed", error); return null; }
+    };
+    if (!extensionGeneration && personalSkillGeneration) extensionGeneration = await rebaseComposite();
     if (contextGeneration) { personalSkillGeneration = null; extensionGeneration = null; }
     if (extensionGeneration && !this.extensionGenerationOverrides.has(key)
       && !samePersonalPackages(extensionGeneration.projection.personal, personalSkillGeneration)) {
@@ -5011,10 +5042,9 @@ export class RuntimeManager {
       // reference of every project's personal skills differs from the one the
       // composite was stamped with while the skills are what they were — and
       // comparing references unmounted the installed extension of every project
-      // that also has personal skills (2026-10-04).
-      if (!this.rebasePersonalComposite) throw new HttpError(409, 'product_revision_conflict', 'The installed plugins must be recomposed with the selected skills.');
-      extensionGeneration = await this.rebasePersonalComposite(project, personalSkillGeneration);
-      if (!extensionGeneration) throw new HttpError(409, 'product_revision_conflict', 'The installed plugin composition is unavailable.');
+      // that also has personal skills (2026-10-04). Rebased where it can be;
+      // otherwise the extension waits and the personal generation starts alone.
+      extensionGeneration = await rebaseComposite();
     }
     if (extensionGeneration) {
       const legacy = extensionGeneration.projection.plugins.find(plugin => plugin.compatibility === 'legacy-citation-v1');
@@ -7240,16 +7270,21 @@ export class RuntimeManager {
     if (personal.length !== wanted.length || wanted.some(pin => !personal.some(item => item.name === pin.nativeName
       && item.modelInvocable === pin.invocation.modelInvocable && item.path === `${runtime.personalSkillsRuntimeDir ?? PERSONAL_SKILLS_RUNTIME_DIR}/${pin.nativeName}/SKILL.md`))
       || this.runtimeGeneration(project) !== generation) throw new HttpError(502, 'extension_contract_invalid', 'Native skill discovery did not prove this generation.');
+    // A disabled id the runtime does not list at all names a skill this image no longer carries (a release removed or
+    // renamed it): there is nothing to restrict, so it is reported, never a reason the generation cannot be proven. Every
+    // skill the runtime does list must carry both invocation flags off.
+    /** @type {string[]} */ const absentDisabled = [];
     if (disabled.length) {
       const catalogue = await this.callKernel(runtime, project, 'evimedSkills/list', { sessionId: addressed.sessionId }, AbortSignal.timeout(10000));
       if (catalogue?.complete !== true || !Array.isArray(catalogue.items) || disabled.some(id => {
         const item = catalogue.items.find(candidate => candidate.name === id.split(':')[1]);
-        return !item || item.invocation?.userInvocable !== false || item.invocation?.modelInvocable !== false;
+        if (!item) { absentDisabled.push(id); return false; }
+        return item.invocation?.userInvocable !== false || item.invocation?.modelInvocable !== false;
       }) || this.runtimeGeneration(project) !== generation) throw new HttpError(502, 'extension_contract_invalid', 'Native skill policy did not prove this generation.');
     }
     const composite = proveComposite && runtime.extensionGeneration && this.markPersonalCompositeEffective
       ? { candidate: runtime.extensionGeneration, proof: await this.probeGeneration(project, runtime.extensionGeneration, false) } : null;
-    return { generation, pendingSession: false, ...(composite ? { composite } : {}) };
+    return { generation, pendingSession: false, ...(absentDisabled.length ? { absentDisabled } : {}), ...(composite ? { composite } : {}) };
   }
   /** The native skill consumer owns slash parsing and logged skill-invocation context.
    * @param {{project:any,skillId:string,revision:number,sessionId:string,idempotencyKey:string,recordPromptActor?:(request:any)=>Promise<void>}} request */

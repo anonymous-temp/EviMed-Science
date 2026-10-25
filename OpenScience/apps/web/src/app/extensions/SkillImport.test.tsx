@@ -20,7 +20,7 @@ const detail = { skill: { instructions: "Preserve actual source quotations.", de
 const personal = { id: "skill:fresh", revision: 1, payload: { title: "我的核对方法", description: "核对", instructions: "Preserve sources.", nativeName: "personal-fresh", digest: "sha256:fresh", resources: [], prepared: true }, createdAt: "", updatedAt: "", deletedAt: null };
 function open() { return render(<MemoryRouter initialEntries={["/app/extensions/skills"]}><Routes><Route path="/app/extensions/:tab/:itemId?" element={<ExtensionsPage />} /></Routes></MemoryRouter>); }
 /** The page's one primary action: 「新建技能」, then 「导入」 in its menu. */
-async function openImport(user: ReturnType<typeof userEvent.setup>) { await user.click(await screen.findByRole("button", { name: "导入与创建" })); await user.click(screen.getByRole("menuitem", { name: "导入技能" })); }
+async function openImport(user: ReturnType<typeof userEvent.setup>) { await user.click(await screen.findByRole("button", { name: "添加技能" })); await user.click(screen.getByRole("menuitem", { name: "导入技能" })); }
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
 beforeEach(() => {
   vi.resetAllMocks();
