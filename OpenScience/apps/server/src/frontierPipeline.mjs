@@ -2377,7 +2377,7 @@ export class FrontierPipeline {
           WHERE i.state = 'published' AND i.timeline_at >= $1 AND i.timeline_at < $2`, [start, end])).rows;
         if (!rows.length) return;
         const eventIds = [...new Set(rows.map((/** @type {any} */ row) => row.event_id).filter((id) => id != null).map(String))];
-        /** @type {Record<string, Array<{ id: string, genre: string, evidenceType: string | null, selected: boolean }>>} */
+        /** @type {Record<string, Array<{ id: string, genre: string, evidenceType: string | null, selected: boolean, rule: string | null, safety: boolean }>>} */
         const events = {};
         if (eventIds.length) {
           const members = (await client.query(`SELECT ei.event_id, i.id, i.genre, i.platform, i.channel, i.source_type, i.evidence_type,
