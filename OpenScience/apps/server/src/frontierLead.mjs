@@ -158,3 +158,26 @@ export async function frontierWriteLead(editor, input) {
     { verify: (/** @type {any} */ answer) => verifyLead(answer, modelInput, { briefed: input.briefed === true }), timeoutMs: LEAD_TIMEOUT_MS });
   return { lead: result.output?.lead_zh ?? null, verification: result.verification, error: result.error ?? null, modelInput };
 }
+
+/**
+ * The repair hook of the faithfulness check (c3-faith F2, `frontierFaith.mjs`): a 导读 already written, sent back to the writer
+ * once with what a comparison with the study's facts found named line by line, through the writer's own instructions and the
+ * checks of `verifyLead`. The new 导读 when it passes them, null when it does not (the caller then removes the sentences that
+ * mismatch). Throws with the call's code when the call itself fails.
+ * @param {{ callJson: Function }} editor @param {Parameters<typeof buildLeadInput>[0] & { genre?: string | null, briefed?: boolean }} input
+ * @param {string} draft the 导读 as written @param {string[]} lines what is wrong with it, one line each
+ * @returns {Promise<string | null>}
+ */
+export async function frontierRepairLead(editor, input, draft, lines) {
+  const modelInput = buildLeadInput(input);
+  const briefed = input.briefed === true;
+  const answer = await editor.callJson([
+    { role: "system", content: frontierLeadInstructions(input.genre ?? null, { briefed }) },
+    { role: "user", content: modelInput },
+    { role: "assistant", content: JSON.stringify({ lead_zh: draft }) },
+    { role: "user", content: ["你上面的导读与原文对照后发现下面这些问题：", ...lines,
+      "请只修正这些问题，其余照旧；修正时仍遵守上面的全部写法要求；改不了的句子删去。重新输出完整的 JSON 对象，键名不变。"].join("\n") },
+  ], { maxTokens: LEAD_MAX_TOKENS, timeoutMs: LEAD_TIMEOUT_MS });
+  const checked = verifyLead(answer, modelInput, { briefed });
+  return checked.issues.length || !checked.output.lead_zh ? null : checked.output.lead_zh;
+}

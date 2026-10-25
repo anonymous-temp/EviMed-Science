@@ -201,3 +201,25 @@ test("ct-mix: lead triggers are on with the module, 120 searches a day, one defa
   const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
   for (const name of ["OPEN_SCIENCE_FRONTIER_LEADS_ENABLED", "OPEN_SCIENCE_FRONTIER_LEADS_DAILY_QUERIES"]) assert.match(compose, new RegExp(`\\n\\s+${name}:\\n`), name);
 });
+
+test("c3-faith: the study facts and the check are on with the module, each with its own lever in config, compose and the example .env", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const config = configUnder({});
+  assert.deepEqual([config.frontierStudyFactsEnabled, config.frontierFaithEnabled], [true, true]);
+  assert.equal(configUnder({ OPEN_SCIENCE_FRONTIER_STUDY_FACTS_ENABLED: "false" }).frontierStudyFactsEnabled, false);
+  assert.equal(configUnder({ OPEN_SCIENCE_FRONTIER_FAITH_ENABLED: "false" }).frontierFaithEnabled, false);
+  const example = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
+  for (const name of ["OPEN_SCIENCE_FRONTIER_STUDY_FACTS_ENABLED", "OPEN_SCIENCE_FRONTIER_FAITH_ENABLED"]) assert.match(example, new RegExp(`^${name}=true$`, "m"), name);
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
+  for (const name of ["OPEN_SCIENCE_FRONTIER_STUDY_FACTS_ENABLED", "OPEN_SCIENCE_FRONTIER_FAITH_ENABLED"]) assert.match(compose, new RegExp(`\\n\\s+${name}:\\n`), name);
+  // A pipeline made without a config asks for no extra call.
+  const { FrontierPipeline } = await import("../src/frontierPipeline.mjs");
+  const bare = new FrontierPipeline({ database: {}, editor: { screen() {}, edit() {} }, plugin: { text() {} }, config: {} });
+  assert.deepEqual([bare.studyFactsEnabled, bare.faithEnabled], [false, false]);
+  const on = new FrontierPipeline({ database: {}, editor: { screen() {}, edit() {} }, plugin: { text() {} }, config });
+  assert.deepEqual([on.studyFactsEnabled, on.faithEnabled], [true, true]);
+  const factsOnly = new FrontierPipeline({ database: {}, editor: { screen() {}, edit() {} }, plugin: { text() {} }, config: { ...config, frontierFaithEnabled: false } });
+  assert.deepEqual([factsOnly.studyFactsEnabled, factsOnly.faithEnabled], [true, false]);
+  const off = new FrontierPipeline({ database: {}, editor: { screen() {}, edit() {} }, plugin: { text() {} }, config: { ...config, frontierStudyFactsEnabled: false } });
+  assert.deepEqual([off.studyFactsEnabled, off.faithEnabled], [false, false], "the check needs the facts");
+});
