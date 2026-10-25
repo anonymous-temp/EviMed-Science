@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/Button';
 import { Drawer } from '@/components/ui/Drawer';
 import { Note } from '@/components/ui/Note';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { List, ListRow } from '@/components/ui/ListRow';
+import { EmptyState } from '@/components/cards/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { useSharedGeoLoad } from '../geoProjectData';
 import { useGeoFrame } from '../geoFrame';
@@ -20,6 +22,8 @@ import { TabError, TabSkeleton } from './geoTabKit';
 
 const when = (value: string | null) => value ? new Date(value).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) : '未记录';
 const ledgerNames: Record<string, string> = { budget_set: '设置预算', reserve: '预留', release: '释放预留', settle: '支付', refund: '退款到账' };
+const versionWords: Record<string, string> = { update_needed: '稿件已有新版本', unknown: '发布版本未记录' };
+const versionWord = (state: string | null | undefined) => (state && versionWords[state]) || '与当前稿件一致';
 const phaseNames: Record<string, string> = { send_started: '正在提交', late_send_result: '补回提交结果', price_changed: '价格变化', url_changed: '发布地址更新', refund_seen: '退款到账', refund_escalated: '退款待核对', auto_cancel: '自动撤单', check: '检查页面', cited: '发现引用' };
 
 /** Execution history is independent of the current strategy's action list. */
@@ -63,14 +67,10 @@ function OrderPage({ geoId, onOpen }: { geoId: string; onOpen(id: string): void 
   if (state.kind === 'error') return <TabError message={state.message} onRetry={reload} />;
   return <div className="flex flex-col gap-3">
     {state.refreshError && <Note tone="warn" action={<Button size="sm" onClick={reload}>重试</Button>}>{state.refreshError}</Note>}
-    {state.data.items.length === 0 ? <p className="text-ui text-text-3">还没有投放订单。已有的自主发布页面仍显示在对应行动中。</p> : <ul aria-label="投放订单" className="divide-y divide-border">
-      {state.data.items.map(order => <li key={order.id} className="flex flex-wrap items-center gap-3 py-3 text-ui">
-        <button type="button" className="min-w-0 flex-1 text-left text-link hover:underline" onClick={() => onOpen(order.id)}>{order.articleTitle || '未关联稿件'} · {order.media || order.domain || '媒体未记录'}</button>
-        <span>{orderStateWord(order.state)}</span><span className="tabular-nums">{yuan(order.priceCny)}</span>
-        <span className="text-caption text-text-3">{order.versionState === 'update_needed' ? '稿件已有新版本' : order.versionState === 'unknown' ? '发布版本未记录' : '与当前稿件一致'}</span>
-        <span className="text-caption text-text-3">{order.publishedAt ? `发布于 ${when(order.publishedAt)}` : '尚无发布记录'}</span>
-      </li>)}
-    </ul>}
+    {state.data.items.length === 0 ? <EmptyState title="还没有投放订单" reason="自主发布的页面见“自主发布”。" /> : <List label="投放订单" divided>
+      {state.data.items.map(order => <ListRow key={order.id} title={`${order.articleTitle || '未关联稿件'} · ${order.media || order.domain || '媒体未记录'}`} onOpen={() => onOpen(order.id)}
+        meta={[orderStateWord(order.state), yuan(order.priceCny), versionWord(order.versionState), order.publishedAt ? `发布于 ${when(order.publishedAt)}` : '尚无发布记录'].join(' · ')} />)}
+    </List>}
     <PageControls pager={pager} nextCursor={state.data.nextCursor} total={state.data.total} refresh={reload} firstKey={`distribution-orders:${geoId}:`} />
   </div>;
 }
@@ -85,13 +85,11 @@ function LedgerPage({ geoId, onOpen }: { geoId: string; onOpen(id: string): void
     <dl className="flex flex-wrap gap-x-6 gap-y-2 text-ui">
       {([['累计支付', money.settledCny], ['退款到账', money.refundedCny], ['净支出', money.spentCny], ['已预留', money.reservedCny], ['可用预算', money.availableCny]] as const).map(([label, value]) => <div key={label}><dt className="text-caption text-text-3">{label}</dt><dd className="tabular-nums">{yuan(value)}</dd></div>)}
     </dl>
-    {state.data.items.length === 0 ? <p className="text-ui text-text-3">还没有费用流水。</p> : <ul aria-label="费用流水" className="divide-y divide-border">
-      {state.data.items.map(row => <li key={row.id} className="flex flex-wrap items-baseline gap-3 py-3 text-ui">
-        <span>{when(row.createdAt)}</span><span>{ledgerNames[row.kind] || '其他变动'}</span><span className="tabular-nums">{yuan(row.amountCny)}</span>
-        <span className="text-caption text-text-3">{`变动后可用 ${yuan(row.balance.availableCny)}`}</span>
-        {row.orderId && <Button variant="text" size="sm" onClick={() => onOpen(row.orderId!)}>查看订单</Button>}
-      </li>)}
-    </ul>}
+    {state.data.items.length === 0 ? <p className="text-ui text-text-3">还没有费用流水。</p> : <List label="费用流水" divided>
+      {state.data.items.map(row => <ListRow key={row.id} title={ledgerNames[row.kind] || '其他变动'}
+        meta={`${when(row.createdAt)} · ${yuan(row.amountCny)} · 变动后可用 ${yuan(row.balance.availableCny)}`}
+        actions={row.orderId ? <Button variant="text" size="sm" onClick={() => onOpen(row.orderId!)}>查看订单</Button> : undefined} />)}
+    </List>}
     <PageControls pager={pager} nextCursor={state.data.nextCursor} total={state.data.total} refresh={reload} firstKey={`distribution-ledger:${geoId}:`} />
   </div>;
 }
@@ -114,23 +112,26 @@ function OrderDetail({ geoId, project, orderId, onClose }: { geoId: string; proj
   const order = state.kind === 'ready' ? state.data.order : null;
   const href = safeWebHref(order?.publishedUrl);
   const canManage = !project.access || project.access.abilities.includes('manage_money');
+  // The button that opens the version the page was published from: beside the sentence that says there is a newer one, else in the row of actions.
+  const versionButton = order && order.articleResultVersionId && order.articleDigest ? <Button variant="text" size="sm" onClick={() => void openVersion(order)}>查看当时稿件</Button> : null;
+  const newerVersion = order?.versionState === 'update_needed' && versionButton !== null;
   return <Drawer title={order?.articleTitle || '投放订单'} onClose={onClose}>
     {state.kind === 'loading' && <TabSkeleton />}
     {state.kind === 'error' && <TabError message={state.message} onRetry={reload} />}
     {order && state.kind === 'ready' && <div className="flex flex-col gap-4">
       {state.refreshError && <Note tone="warn" action={<Button size="sm" onClick={reload}>重试</Button>}>{state.refreshError}</Note>}
-      <p className="text-ui">{orderStateWord(order.state)} · {order.media || order.domain || '媒体未记录'} · {yuan(order.priceCny)}</p>
+      <p className="text-ui">{orderStateWord(order.state)} · {order.media || order.domain || '媒体未记录'} · {yuan(order.priceCny)}{order.versionState === 'unknown' ? ' · 稿件版本未记录' : ''}</p>
       <p className="text-caption text-text-3">{`实际发布时间：${when(order.publishedAt)}`}</p>
-      {order.versionState === 'update_needed' && <p className="text-ui text-text-3">当前稿件已有新版本，线上页面仍关联当时发布的版本。</p>}
-      {order.versionState === 'unknown' && <p className="text-ui text-text-3">这个历史订单没有保留稿件版本，不能据此判断线上内容是否已更新。</p>}
+      {newerVersion && <Note action={versionButton}>当前稿件已有新版本，线上页面仍关联当时发布的版本。</Note>}
       <div className="flex flex-wrap gap-2">
         {href && <a href={href} target="_blank" rel="noreferrer" className="text-link hover:underline">打开线上页面</a>}
-        {order.articleResultVersionId && order.articleDigest && <Button variant="text" size="sm" onClick={() => void openVersion(order)}>查看当时稿件</Button>}
+        {!newerVersion && versionButton}
         {order.cancellable && canManage && <Button variant="secondary" size="sm" loading={busy} onClick={() => setConfirm(true)}>撤单</Button>}
       </div>
-      <ol aria-label="订单时间线" className="divide-y divide-border">
-        {state.data.events.items.map(event => <li key={event.id} className="flex flex-wrap gap-3 py-2 text-ui"><time>{when(event.at)}</time><span>{event.phase ? phaseNames[event.phase] || '状态更新' : event.toState ? orderStateWord(event.toState) : '状态更新'}</span>{event.amountCny != null && <span>{yuan(event.amountCny)}</span>}</li>)}
-      </ol>
+      <List label="订单时间线" divided>
+        {state.data.events.items.map(event => <ListRow key={event.id} title={event.phase ? phaseNames[event.phase] || '状态更新' : event.toState ? orderStateWord(event.toState) : '状态更新'}
+          meta={<><time>{when(event.at)}</time>{event.amountCny != null && ` · ${yuan(event.amountCny)}`}</>} />)}
+      </List>
       <PageControls pager={pager} nextCursor={state.data.events.nextCursor} total={state.data.events.total} refresh={reload} firstKey={`distribution-order:${geoId}:${orderId}:`} />
     </div>}
     {confirm && <ConfirmDialog title="提交撤单请求？" body="媒体处理结果会更新到订单；预留释放和退款以实际费用流水为准。" confirmLabel="撤单" onConfirm={() => void cancel()} onCancel={() => setConfirm(false)} />}
@@ -144,14 +145,10 @@ function OwnedPage({ geoId, onOpen }: { geoId: string; onOpen(id: string): void 
   if (state.kind === 'error') return <TabError message={state.message} onRetry={reload} />;
   return <div className="flex flex-col gap-3">
     {state.refreshError && <Note tone="warn" action={<Button size="sm" onClick={reload}>重试</Button>}>{state.refreshError}</Note>}
-    {state.data.items.length === 0 ? <p className="text-ui text-text-3">还没有登记自主发布的页面，可在对应行动中添加发布地址。</p> : <ul aria-label="自主发布页面" className="divide-y divide-border">
-      {state.data.items.map(link => <li key={link.id} className="flex flex-wrap items-baseline gap-3 py-3 text-ui">
-        <button type="button" className="min-w-0 flex-1 text-left text-link hover:underline" onClick={() => onOpen(link.id)}>{link.title || link.url}</button>
-        <span>{link.status === 'retired' ? '已下线' : '已登记发布'}</span>
-        <span className="text-caption text-text-3">{link.versionState === 'update_needed' ? '稿件已有新版本' : link.versionState === 'unknown' ? '发布版本未记录' : '与当前稿件一致'}</span>
-        <span className="text-caption text-text-3">{when(link.publishedAt)}</span>
-      </li>)}
-    </ul>}
+    {state.data.items.length === 0 ? <EmptyState title="还没有登记自主发布的页面" reason="发布地址可在对应行动中添加。" /> : <List label="自主发布页面" divided>
+      {state.data.items.map(link => <ListRow key={link.id} title={link.title || link.url} onOpen={() => onOpen(link.id)}
+        meta={[link.status === 'retired' ? '已下线' : '已登记发布', versionWord(link.versionState), when(link.publishedAt)].join(' · ')} />)}
+    </List>}
     <PageControls pager={pager} nextCursor={state.data.nextCursor} total={state.data.total} refresh={reload} firstKey={`owned-publications:${geoId}:`} />
   </div>;
 }
@@ -193,15 +190,13 @@ function OwnedDetail({ geoId, project, linkId, onClose }: { geoId: string; proje
       {canEdit && link.currentResultVersionId && link.currentDigest && <div className="flex flex-col gap-2">
         <Input type="datetime-local" label="实际更新时间（北京时间）" value={publishedAt} onChange={event => setPublishedAt(event.target.value)} disabled={busy} />
         <Button size="sm" onClick={prepare} disabled={busy}>登记线上已更新为当前稿件</Button>
-        <p className="text-caption text-text-3">请在自行更新线上页面后登记。登记会保留旧稿件及历史记录。</p>
       </div>}
       {error && <Note tone="warn" action={<Button size="sm" variant="text" onClick={reload}>刷新记录</Button>}>{error}</Note>}
-      <ol aria-label="发布版本记录" className="divide-y divide-border">
-        {data.history.items.map(receipt => <li key={receipt.revision} className="flex flex-wrap items-baseline gap-2 py-2">
-          <span>{receipt.basis === 'legacy_record' ? '此前登记' : '登记线上更新'} · {when(receipt.publishedAt)}</span>
-          {receipt.resultVersionId && receipt.digest ? <Button size="sm" variant="text" onClick={() => void openPublication(receipt.resultVersionId!, receipt.digest!)}>查看这版稿件</Button> : <span className="text-text-3">稿件版本未记录</span>}
-        </li>)}
-      </ol>
+      <List label="发布版本记录" divided>
+        {data.history.items.map(receipt => <ListRow key={receipt.revision} title={`${receipt.basis === 'legacy_record' ? '此前登记' : '登记线上更新'} · ${when(receipt.publishedAt)}`}
+          meta={receipt.resultVersionId && receipt.digest ? undefined : '稿件版本未记录'}
+          actions={receipt.resultVersionId && receipt.digest ? <Button size="sm" variant="text" onClick={() => void openPublication(receipt.resultVersionId!, receipt.digest!)}>查看这版稿件</Button> : undefined} />)}
+      </List>
       {data.history.items.length === 0 && <p className="text-caption text-text-3">还没有版本更新记录。</p>}
       <div className="flex gap-2">{data.history.nextBeforeRevision && <Button size="sm" variant="text" onClick={() => setBefore(data.history.nextBeforeRevision!)}>更早记录</Button>}{before && <Button size="sm" variant="text" onClick={() => setBefore(undefined)}>最新记录</Button>}</div>
     </div>}

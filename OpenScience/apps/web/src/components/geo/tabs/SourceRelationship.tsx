@@ -27,7 +27,6 @@ export function SourceRelationship({ geoId, target, canEdit, onChanged }: { geoI
       {canEdit && <Button size="sm" variant="text" onClick={() => setEditing(value => !value)}>{editing ? '收起修改' : '修改关系'}</Button>}
       {data.current && <Button size="sm" variant="text" onClick={() => setHistory(value => !value)} aria-expanded={history}>变更记录</Button>}
     </div>
-    <p className="text-caption text-text-3">手动标记只适用于这个{target.kind === 'domain' ? '域名' : '页面'}，用于分析归属。</p>
     {editing && canEdit && <RelationshipForm key={`${target.kind}:${target.value}:${data.current?.revision ?? 0}`} geoId={geoId} target={target} current={data.current} onSaved={() => { setEditing(false); reload(); }} onReload={reload} />}
     {history && <div>
       <ul aria-label="关系变更记录" className="text-caption text-text-2">
