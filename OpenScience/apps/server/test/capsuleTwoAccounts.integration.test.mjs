@@ -74,10 +74,8 @@ async function learnedMethod(body) {
 
 /** A native account's opening block, for a conversation in the project. */
 const opening = () => new ResidentProfiles({ config: {}, store: /** @type {any} */ ({
-  async memoryEngine() { return "native"; },
   async settings() { return { learningPaused: false, recallPaused: false, pausedProjects: [] }; },
   async sessionState() { return { trialCapsuleId: null }; },
-  async residentRecords() { throw new Error("a native account's records are the engine's"); },
   async lookupCounts() { throw new Error("a native account's records are the engine's"); },
   async residentState() { return { digest: null, compactedSince: false }; },
   async noteResidentDelivered() {},

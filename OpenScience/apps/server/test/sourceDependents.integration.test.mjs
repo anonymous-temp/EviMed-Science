@@ -1,6 +1,6 @@
 // What rests on a knowledge-base document, read against the real stores (knowledge base P0, 「相关记忆与做法」).
 //
-// What the unit tests cannot say: the memories are found by their `record_sources` row, the results by jsonb containment on
+// What the unit tests cannot say: the memories are found by the sources the overlay recorded for their files, the results by jsonb containment on
 // the result ledger, the methods by the version their record names — all under the account that holds the document and in
 // its project, and a sentence from another account or another project never appears.
 import assert from "node:assert/strict";

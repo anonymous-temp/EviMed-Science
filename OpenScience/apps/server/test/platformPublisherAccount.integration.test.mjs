@@ -140,7 +140,7 @@ test("nothing speaks for it through an integration key", options, async () => {
   const routes = createAgentMemoryRoutes({
     config: { agentMemoryApiEnabled: true, maxJsonBytes: 1_048_576 },
     apiKeys: /** @type {any} */ ({ async resolve() { return { userId: PLATFORM_PUBLISHER_USER_ID, keyId: "agk_1", projectId: null, scopes: ["memory.read"], subjects: false }; } }),
-    store, memorySettings: /** @type {any} */ ({}), capsules: /** @type {any} */ ({}), memoryIntelligence: /** @type {any} */ ({}),
+    store, memorySettings: /** @type {any} */ ({}), capsules: /** @type {any} */ ({}),
   });
   await assert.rejects(routes(/** @type {any} */ ({ url: "/api/agent-memory/v1/recall", method: "GET", headers: { authorization: "Bearer evk_x" } }), /** @type {any} */ (response())),
     refusal("agent_key_invalid", 401));

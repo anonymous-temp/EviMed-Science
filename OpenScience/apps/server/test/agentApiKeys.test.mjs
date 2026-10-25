@@ -70,6 +70,6 @@ test("an institution's doctors are deleted engine first, then the index, with th
     ["deleteUser", "subj_a"],
     ["finishCapsules", "subj_a"],
   ]);
-  assert.equal(await deleteSubjectAccounts({ apiKeys: null, store: null, memorySubstrate: null }, "x"), 0,
+  assert.equal(await deleteSubjectAccounts({ apiKeys: null, store: null }, "x"), 0,
     "a deployment without durable keys has no subjects");
 });

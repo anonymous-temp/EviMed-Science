@@ -97,8 +97,8 @@ async function seedContexts({context,benchmark,dataDir,sharedBudget,reviewSeeds,
     const scope={id,userId:owner.userId,credentialsFile,workspace:path.join(dataDir,'users',owner.userId,'projects',id,'workspace'),sourceMap:{},originalFiles:{},originalTexts:{},evaluation,seededMemoryChunks:0,seededArchiveIds:[]};
     primary.contexts[key]=scope;owner.projects['project-alpha']=scope;
     if(evaluation.substrate!=='knowledge'){
-      const settings=await checked(owner.api,'GET','/api/memory/settings');
-      if(settings.engine!=='native')throw new Error(`Context ${key} requires an actual native-memory account; refusing legacy substitution`);
+      // The one engine answers the page's profile or says by name that it cannot (503 memory_engine_unavailable): no other store stands in.
+      await checked(owner.api,'GET','/api/memory/profile');
     }
     const target=SIZES[evaluation.size];if(originals.length>target)throw new Error('Source set exceeds frozen project-size target');
     const material=[...originals,...Array.from({length:target-originals.length},(_,i)=>({id:`distractor-${key}-${i}`,distractor:true,text:`Authored benchmark distractor ${i}. Warehouse inventory slot ${i} holds item ${i+1000}. No policy or clinical question is answered here.`}))];

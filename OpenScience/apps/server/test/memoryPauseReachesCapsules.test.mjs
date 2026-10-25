@@ -164,7 +164,7 @@ test("the composition root gives the runtime manager the researcher's switches f
     async sessionState(_userId, _projectId, sessionId) { return { trialCapsuleId: sessionId === "ses_trial" ? "pack-1" : null }; },
     async relevant() { return []; },
   };
-  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false, memoryExtractionEnabled: false, memorySettings: store });
+  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false, memorySettings: store });
   try {
     await app.listen(0, "127.0.0.1");
     assert.equal(typeof app.runtimeManager.memoryPause, "function");

@@ -87,7 +87,7 @@ arms a timer for the conversation; after the quiet (`OPEN_SCIENCE_NATIVE_MEMORY_
 engine session until two reads agree and something is pending (the plugin's writes are asynchronous), then commits through
 `commitSession` of the memory gateway — the function the HTTP commit route uses — so the admission rule, the hourly bound
 and the ledger row are the plugin's own commit's. Two turns inside the quiet are one commit; a turn the platform started (an
-automated run, a scheduled task, a LoopX continuation) starts none; a legacy account is not touched; an engine that does not
+automated run, a scheduled task, a LoopX continuation) starts none; an engine that does not
 answer is a counted failure and the messages stay pending for the next commit, the plugin's disposal commit or the idle
 commit. The plugin's threshold stays at 20000 and is not lowered: a token count would still leave a one-line statement
 waiting, and a second trigger would make two paths race for the same messages. The plugin's disposal commit that follows a

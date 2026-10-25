@@ -20,7 +20,7 @@ async function fixture(t, extraConfig = {}) {
   const dataDir = await mkdtemp("/tmp/source-runtime-app-");
   const app = createWebApiApp({ dataDir, stateStore: "postgres", databaseUrl, runtimeMode: "mock",
     devAuth: false, authMode: "local", bootstrapUser: "", bootstrapPassword: "",
-    memoryExtractionEnabled: false, autopilotEnabled: false,
+    autopilotEnabled: false,
     sourceIngestionEnabled: true, sourceIngestionPollMs: 60_000, sourceIngestionLeaseMs: 30_000,
     documentParserUrl: "", modelGatewaySigningSecret: "fixture-source-signing-secret-at-least-32-characters",
     ...extraConfig });

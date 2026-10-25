@@ -8,11 +8,11 @@ import { migrateProductStore } from "./productPersistence.mjs";
 const LEARNING_JOB_KINDS = Object.freeze(["distill", "consolidate", "learning-evidence"]);
 
 /**
- * 「重置记忆」, the half that is not a memory record.
+ * 「重置记忆」, the half that is not a memory file.
  *
  * Hidden knowledge: the memory page shows four kinds of thing, kept in two
- * stores — the structured memories (`evimed_memory.records`, which
- * `MemorySettingsStore.purgeUserMemory` deletes) and, in the product ledger,
+ * stores — the memory files (the engine's, which `NativeMemoryStore.reset`
+ * deletes) and, in the product ledger,
  * the learned methods, the capability handbooks and the notes of the
  * researcher's own capsules. The reset used to clear only the first and say it
  * had cleared everything; the page then still showed every method and handbook

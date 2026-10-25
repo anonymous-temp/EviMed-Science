@@ -2813,11 +2813,12 @@ export function loadConfig(overrides = {}) {
     memorySearchMinScore: Number(
       overrides.memorySearchMinScore ?? process.env.OPEN_SCIENCE_MEMORY_SEARCH_MIN_SCORE ?? 0.75,
     ),
-    // Which component decides *which* memories a question sees. `builtin` is
-    // the term matcher inside the research-memory store and needs nothing
+    // Which component decides *which* of the capsule's facts a question sees.
+    // `builtin` is the term matcher inside the capsule store and needs nothing
     // deployed; `openviking` delegates the ranking to a context database. The
-    // record itself stays authoritative in the control-plane database either
-    // way, so this switch changes recall quality and nothing else. Unset, the
+    // fact itself stays authoritative in the control-plane database either
+    // way, so this switch changes recall quality and nothing else (an account's
+    // own memory files are the engine's and are not ranked by this). Unset, the
     // index is selected exactly when it is configured (an OpenViking URL and
     // its key) — `memoryIndexProvider.memoryIndexSelection` decides, and readiness
     // says which way and why.
@@ -2825,8 +2826,8 @@ export function loadConfig(overrides = {}) {
       overrides.memoryIndexProvider ?? process.env.OPEN_SCIENCE_MEMORY_INDEX_PROVIDER ?? "",
     ).trim(),
     // Report-only by default (development principle 4: a new check ships as a
-    // notice before it may block). Set this and a recall whose index is down
-    // fails instead of falling back to the term matcher.
+    // notice before it may block). Set this and a capsule recall whose index is
+    // down fails instead of falling back to the term matcher.
     memoryIndexStrict: overrides.memoryIndexStrict ?? boolEnv("OPEN_SCIENCE_MEMORY_INDEX_STRICT", false),
     openVikingUrl: String(overrides.openVikingUrl ?? process.env.OPEN_SCIENCE_OPENVIKING_URL ?? "").replace(/\/+$/, ""),
     openVikingApiKey: openVikingSecret.value,

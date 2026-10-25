@@ -699,7 +699,7 @@ export interface WebPendingMemory {
 }
 
 /** The memory page's search: keyword over everything stored, unioned with the
- *  recall index's semantic hits, each resolved back to the stored record. */
+ *  engine's semantic hits, each read back from its file. */
 export interface WebMemorySearch {
   items: WebStructuredMemory[];
   query: string;

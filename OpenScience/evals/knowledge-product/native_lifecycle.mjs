@@ -28,10 +28,11 @@ async function available(api,method,url,body,statuses=[200,201]){
 export async function nativePrerequisites(ctx){
  const a=ctx.accounts['account-alpha'];a.api.project=a.projects['project-alpha'].id;const facts={runtimeMode:ctx.runtimeMode,requiredApis:requiredNativeApis};
  if(ctx.runtimeMode!=='kernel')return {...facts,ready:false,reason:'Mock HTTP runtime cannot establish native lifecycle acceptance'};
- const settings=await available(a.api,'GET','/api/memory/settings');
+ await available(a.api,'GET','/api/memory/settings');
+ const profile=await available(a.api,'GET','/api/memory/profile');
  const knowledge=await available(a.api,'GET',`/api/knowledge-pages?projectId=${a.api.project}`);
  await available(a.api,'GET','/api/agent-keys');await available(a.api,'GET','/api/capsules');
- return {...facts,ready:settings.engine==='native'&&knowledge.enabled&&knowledge.engine?.ok===true,memoryEngine:settings.engine,knowledgeState:knowledge.state,engine:knowledge.engine,ownedExpiryFixture:!!ctx.databaseBindingsFile};
+ return {...facts,ready:Array.isArray(profile.records)&&knowledge.enabled&&knowledge.engine?.ok===true,memoryEngine:'native',knowledgeState:knowledge.state,engine:knowledge.engine,ownedExpiryFixture:!!ctx.databaseBindingsFile};
 }
 async function createNote(api,projectId,title,body){api.project=projectId;return (await checked(api,'POST','/api/sources/notes',{projectId,title,body})).source;}
 async function controlReady(api,projectId,minimum){
@@ -114,7 +115,7 @@ export async function runNativeLifecycle(c,ctx){
    const seeded=await seedMemory(a.api,scopeA,marker);receipts.push({operation:'native-memory-seed-frozen',hash:seeded.freeze.hash,recordIds:seeded.records.map(r=>r.id),pending:0});
    const before=await runNativeToolProbe(a.api,scopeA,'mcp__openviking__search',{query:marker});proofs.push(before);if(!toolSucceeded(before)||!toolFacts(before).includes(marker))throw new NativeUnavailable('Actual native search did not retrieve its materialized canary before the test');
    if(c.scenario==='other-memory'){
-    const settings=await checked(b.api,'GET','/api/memory/settings');if(settings.engine!=='native')throw new NativeUnavailable('Second account is not on the native engine');
+    await available(b.api,'GET','/api/memory/profile');
     const after=await runNativeToolProbe(b.api,b.projects['project-alpha'],'mcp__openviking__search',{query:marker});proofs.push(after);insist(toolSucceeded(after)&&!toolFacts(after).includes(marker),'Cross-account native recall exposed the owner memory');
    }else{
     for(const record of seeded.records)await checked(a.api,'DELETE',`/api/memory/records/${encodeURIComponent(record.id)}`);

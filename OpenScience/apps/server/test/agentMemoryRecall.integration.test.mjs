@@ -80,7 +80,7 @@ after(async () => {
 const options = { skip: !url && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
 
 test("a doctor's recall hands over their own habits first, then the named school's methods and facts", options, async () => {
-  const result = await recallForAgent({ capsules, memorySubstrate: null, learning },
+  const result = await recallForAgent({ capsules, learning },
     { user: doctor, institution: { id: hospital } }, { query: "桂枝汤", capsuleIds: [school] });
   assert.deepEqual(result.methods.map((method) => method.source), ["learned", "capsule"], "the person's own come first");
   const [own, borrowed] = result.methods;
@@ -96,14 +96,14 @@ test("a doctor's recall hands over their own habits first, then the named school
 });
 
 test("without capsuleIds a doctor reads the capsules in force, and the institution's shelf only when named", options, async () => {
-  const result = await recallForAgent({ capsules, memorySubstrate: null, learning }, { user: doctor, institution: { id: hospital } }, { query: "桂枝汤" });
+  const result = await recallForAgent({ capsules, learning }, { user: doctor, institution: { id: hospital } }, { query: "桂枝汤" });
   assert.deepEqual(result.methods.map((method) => method.source), ["learned"]);
   assert.equal(result.items.length, 0, "nothing is in force for this doctor");
   assert.equal(result.capsules, undefined);
 });
 
 test("methods can be asked for by half, or not at all", options, async () => {
-  const ask = (methods) => recallForAgent({ capsules, memorySubstrate: null, learning },
+  const ask = (methods) => recallForAgent({ capsules, learning },
     { user: doctor, institution: { id: hospital } }, { query: "x", capsuleIds: [school], methods });
   assert.deepEqual((await ask("own")).methods.map((method) => method.source), ["learned"]);
   assert.deepEqual((await ask("capsules")).methods.map((method) => method.source), ["capsule"]);
@@ -112,11 +112,11 @@ test("methods can be asked for by half, or not at all", options, async () => {
 
 test("a capsule nobody on this key may read is refused, and says nothing about whether it exists", options, async () => {
   await assert.rejects(
-    () => recallForAgent({ capsules, memorySubstrate: null, learning }, { user: doctor, institution: { id: hospital } }, { query: "x", capsuleIds: [foreign] }),
+    () => recallForAgent({ capsules, learning }, { user: doctor, institution: { id: hospital } }, { query: "x", capsuleIds: [foreign] }),
     (error) => error.status === 404 && error.code === "capsule_not_found",
   );
   await assert.rejects(
-    () => recallForAgent({ capsules, memorySubstrate: null, learning }, { user: doctor, institution: { id: hospital } }, { query: "x", capsuleIds: [randomUUID()] }),
+    () => recallForAgent({ capsules, learning }, { user: doctor, institution: { id: hospital } }, { query: "x", capsuleIds: [randomUUID()] }),
     (error) => error.status === 404 && error.code === "capsule_not_found",
   );
 });
@@ -125,16 +125,16 @@ test("the budget is spent in the mount's order: the doctor's own capsule methods
   const own = (await capsules.create(doctor.id, { title: "我的记忆胶囊" })).id;
   await capsules.addEntry(doctor.id, own, { factKind: "method_preference", layer: "methods", origin: "explicit", content: "复诊先问睡眠。" });
   await capsules.activate(doctor.id, own, { mode: "own" });
-  const result = await recallForAgent({ capsules, memorySubstrate: null, learning }, { user: doctor, institution: { id: hospital } }, { query: "x" });
+  const result = await recallForAgent({ capsules, learning }, { user: doctor, institution: { id: hospital } }, { query: "x" });
   assert.deepEqual(result.methods.map((method) => [method.source, method.capsuleId ?? null]), [["capsule", own], ["learned", null]]);
-  const withSchool = await recallForAgent({ capsules, memorySubstrate: null, learning }, { user: doctor, institution: { id: hospital } },
+  const withSchool = await recallForAgent({ capsules, learning }, { user: doctor, institution: { id: hospital } },
     { query: "x", capsuleIds: [own, school] });
   assert.deepEqual(withSchool.methods.map((method) => [method.source, method.capsuleId ?? null]), [["capsule", own], ["learned", null], ["capsule", school]],
     "the institution's school is the doctor's to borrow, and borrowed methods come last");
 });
 
 test("a doctor with no memory yet still reads the named school, and nothing of anyone else's", options, async () => {
-  const result = await recallForAgent({ capsules, memorySubstrate: null, learning },
+  const result = await recallForAgent({ capsules, learning },
     { user: null, institution: { id: hospital } }, { query: "桂枝汤", capsuleIds: [school] });
   assert.deepEqual(result.methods.map((method) => method.source), ["capsule"]);
   assert.equal(result.sources.memory, 0);

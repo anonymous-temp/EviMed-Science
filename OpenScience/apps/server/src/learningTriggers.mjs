@@ -59,7 +59,7 @@
  * platform's own bookkeeping — 21 of the 28 lessons read by 2026-10-12 were of that kind, 14 of 17 handbooks they became failed on length, and the methods
  * the merging pass then built from them were rewordings of two lessons about anchors and recorded scope. Its share is
  * `OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE` (0), chosen by a hash of the run id (`runSampling.mjs`) and counted. What a researcher corrects in
- * the result (`result-corrected`, `afterCorrection`), says in the running turn, or has the extractor record as a `correction` memory stays unsampled.
+ * the result (`result-corrected`, `afterCorrection`), or says in the running turn stays unsampled.
  *
  * What this module still refuses is work that is not the researcher's: an
  * automated run (an evaluation cell, a probe, an audit or acceptance harness —
