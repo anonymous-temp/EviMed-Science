@@ -238,6 +238,8 @@ const INSIGHT_BATCH = 4;
 const BRIEF_BATCH = 6;
 /** Study facts made a round (c3-faith: one call each, at once), and the genres whose items have them. */
 const STUDY_FACTS_BATCH = 12;
+/** How far back the facts step looks (a week: the facts of older items are made when their 导读 is written, not in bulk). */
+const STUDY_FACTS_WINDOW_MS = 7 * DAY;
 const STUDY_FACTS_GENRES = ["paper", "preprint", "trial", "conference"];
 /** Open-access PDFs read a round (each a download and a parse), and how long one may take. */
 const FULLTEXT_BATCH = 2;
@@ -2724,7 +2726,7 @@ export class FrontierPipeline {
 
   /**
    * The study facts of study items (c3-faith F1, `frontierStudyFacts.mjs`): every published item of a study genre (paper, preprint,
-   * trial, conference) of the last `FRONTIER_LEAD_WINDOW_MS` whose settled reader text has no record made from it
+   * trial, conference) of the last week (`STUDY_FACTS_WINDOW_MS`) whose settled reader text has no record made from it
    * (`study_facts->>'basis'` = the text's hash), 精选, safety alerts and items near the selection line first, the rest while the
    * budget is not throttled. One call each; a record each field of which is anchored to a quotation code found, or an empty
    * marker for that text (a text asked about once). A call the provider or the budget prevented records nothing. Nothing a reader
@@ -2746,7 +2748,7 @@ export class FrontierPipeline {
         FOR UPDATE OF i SKIP LOCKED)
       UPDATE evimed_frontier.items i SET lease_owner = $5, lease_until = $6 FROM picked WHERE i.id = picked.id
       RETURNING i.id, i.title_raw, i.platform, i.primary_source_id, i.published_at, i.lease_until, i.genre`,
-    [now, new Date(now.getTime() - FRONTIER_LEAD_WINDOW_MS), budget.state === "throttled", STUDY_FACTS_BATCH, this.workerId,
+    [now, new Date(now.getTime() - STUDY_FACTS_WINDOW_MS), budget.state === "throttled", STUDY_FACTS_BATCH, this.workerId,
       new Date(now.getTime() + this.leaseMs), STUDY_FACTS_GENRES, this.threshold - FRONTIER_READER_MARGIN])).rows;
     if (!claimed.length) return;
     const sources = await this.#sources(claimed.map((item) => item.primary_source_id));

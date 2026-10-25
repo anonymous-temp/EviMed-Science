@@ -8,6 +8,9 @@
  *   node evals/frontier-writing/run_eval.mjs --key-file <path> [--only <case-id>] [--genre <genre>] [--sample-kind <kind>] [--limit N]
  *       [--concurrency 4] [--max-cny 3] [--skip-edit] [--out <file>]
  *   node evals/frontier-writing/run_eval.mjs --rescore <run.json> [--out <file>]   (measure a run again, no model call)
+ *   --faith  (c3-faith) read each study item's written 导读 and 要点 against the study's facts, as the pipeline does (one repair, then the
+ *            mismatching sentence removed): the texts measured are the ones the check leaves, and the summary gains `faith`, the
+ *            faithfulness mismatch rate before and after repair (a notice metric). `faith_eval.mjs` measures the check itself.
  *
  * What is measured (`metricsOf`), per case and per genre, before and after:
  * - numbers: every number of a written text found in the source (`checkNumbers` over the title and the text — not the source's
@@ -32,6 +35,7 @@ import { parseArgs } from "node:util";
 import { FRONTIER_GENRES, FRONTIER_LANES, FRONTIER_SOURCE_TYPE_LABELS_ZH, frontierGenreDecision, frontierGenreFallback } from "../../packages/domain/index.mjs";
 import { FRONTIER_BRIEF_FIELDS, FRONTIER_BRIEF_VERSION, frontierBriefWanted, frontierWriteBrief, quotationForm } from "../../apps/server/src/frontierBrief.mjs";
 import { FRONTIER_EDITOR_VERSION, FRONTIER_REASON_VERSION, FrontierEditor, isChineseTitle, readerNumberSource } from "../../apps/server/src/frontierEditor.mjs";
+import { faithSource, frontierEnsureStudyFacts, frontierFaithCheckBrief, frontierFaithCheckLead, frontierStudyFactsWanted } from "../../apps/server/src/frontierFaithStep.mjs";
 import { FRONTIER_LEAD_VERSION, buildLeadInput, frontierLeadLimit, frontierWriteLead } from "../../apps/server/src/frontierLead.mjs";
 import { checkNumbers } from "../../apps/server/src/frontierNumbers.mjs";
 import { callModelForControlPlane } from "../../apps/server/src/modelGateway.mjs";
@@ -104,6 +108,7 @@ async function main() {
       concurrency: { type: "string", default: "4" },
       "max-cny": { type: "string", default: "3" },
       "skip-edit": { type: "boolean", default: false },
+      faith: { type: "boolean", default: false },
       out: { type: "string" },
       rescore: { type: "string" },
     },
@@ -149,7 +154,7 @@ async function main() {
   const editor = new FrontierEditor({ deepseekProviderEnabled: true, deepseekApiKey: apiKey, deepseekBaseUrl: "https://api.deepseek.com",
     frontierModel: "deepseek-flash" }, { owner: { userId: "eval", projectId: "eval" }, callModel });
   const { cases } = JSON.parse(await readFile(join(here, "cases.json"), "utf8"));
-  const wanted = cases.filter((/** @type {any} */ entry) => (!values.only || entry.id === values.only) && (!values.genre || entry.expectGenre === values.genre)
+  const wanted = cases.filter((/** @type {any} */ entry) => (!values.only || entry.id === values.only) && (!values.genre || values.genre.split(",").includes(entry.expectGenre))
     && (!values["sample-kind"] || entry.sampleKind === values["sample-kind"]))
     .slice(0, values.limit ? Number(values.limit) : undefined);
   /** @type {any[]} */
@@ -157,7 +162,7 @@ async function main() {
   const queue = [...wanted];
   const worker = async () => {
     for (let entry = queue.shift(); entry; entry = queue.shift()) {
-      try { results.push(await runCase(editor, entry, values["skip-edit"])); }
+      try { results.push(await runCase(editor, entry, values["skip-edit"], values.faith)); }
       catch (error) { results.push({ id: entry.id, error: /** @type {any} */ (error)?.code ?? String(error) }); }
       process.stderr.write(`frontier-writing: ${results.length}/${wanted.length} ¥${usage.cny.toFixed(3)}\n`);
     }
@@ -176,9 +181,9 @@ async function main() {
 /**
  * One case: the edit (genre, summary, reason), then the 导读 and the 要点 with code's genre decision, and their measures before
  * and after.
- * @param {FrontierEditor} editor @param {any} entry @param {boolean} skipEdit
+ * @param {FrontierEditor} editor @param {any} entry @param {boolean} skipEdit @param {boolean} [faith]
  */
-async function runCase(editor, entry, skipEdit) {
+async function runCase(editor, entry, skipEdit, faith = false) {
   const item = entry.item;
   const row = { platform: item.platform, channel: item.channel, source_type: item.sourceType, evidence_type: item.evidenceType,
     flags: item.flags ?? [], lane: item.lane, safety_alert: item.lane === "safety" && item.sourceType === "regulator" };
@@ -203,13 +208,36 @@ async function runCase(editor, entry, skipEdit) {
   const input = { sourceName: item.sourceName, titleRaw: item.titleRaw, titleZh: edited?.output?.titleZh ?? item.titleZh ?? null, text: entry.text,
     kind, post: item.platform === "x" };
   const [lead, brief] = await Promise.all([frontierWriteLead(editor, { ...input, genre, briefed: frontierBriefWanted(genre) }), frontierWriteBrief(editor, { ...input, genre })]);
+  // c3-faith: the drafts read against the study's facts; what the check leaves is what is measured below.
+  /** @type {any} */
+  let faithRow = null;
+  if (faith && frontierStudyFactsWanted(genre)) {
+    const factsInput = { sourceName: item.sourceName, titleRaw: item.titleRaw, text: entry.text, kind };
+    const ensured = await frontierEnsureStudyFacts(editor, { stored: null, sha: "eval", input: factsInput });
+    faithRow = { facts: Boolean(ensured.view) };
+    if (ensured.view) {
+      const source = faithSource(factsInput);
+      const writerInput = { ...input, genre, briefed: frontierBriefWanted(genre) };
+      if (lead.lead) {
+        const run = await frontierFaithCheckLead(editor, { facts: ensured.view, lead: lead.lead, previous: null, input: writerInput, source });
+        faithRow.lead = { outcome: run.result.outcome, before: run.result.first.length, remaining: run.result.remaining.length, rules: run.result.first.map((m) => m.rule) };
+        lead.lead = run.lead;
+      }
+      if (brief.brief) {
+        const run = await frontierFaithCheckBrief(editor, { facts: ensured.view, brief: brief.brief, previous: null, input: { ...input, genre }, source });
+        faithRow.brief = { outcome: run.result.outcome, before: run.result.first.length, remaining: run.result.remaining.length, rules: run.result.first.map((m) => m.rule) };
+        brief.brief = run.brief;
+      }
+    }
+  }
   const source = readerNumberSource(buildLeadInput(input));
   const limit = frontierLeadLimit(entry.text);
   const chinese = isChineseTitle(item.titleRaw);
   const after = { genre, genreBasis: decided.basis, modelGenre: edited?.output?.genre ?? null, title: edited?.output?.titleZh ?? null,
     scores: edited?.output?.scores ?? null, scoresRaw: edited?.output?.scoresRaw ?? null,
     summary: edited?.output?.summaryZh ?? null, reason: edited?.output?.reasonZh ?? null, lead: lead.lead, brief: brief.brief,
-    editVerification: edited?.verification ?? null, leadVerification: lead.verification, briefDropped: brief.dropped, briefError: brief.error };
+    editVerification: edited?.verification ?? null, leadVerification: lead.verification, briefDropped: brief.dropped, briefError: brief.error,
+    ...(faithRow ? { faith: faithRow } : {}) };
   return {
     id: entry.id, expectGenre: entry.expectGenre, genreAccepted: entry.acceptGenres.includes(genre), textChars: entry.textChars, textSource: kind,
     before: entry.before, after,
@@ -250,11 +278,19 @@ export function summarize(results) {
   }
   const dropped = /** @type {Record<string, number>} */ ({});
   for (const row of results) for (const part of row.after?.briefDropped ?? []) dropped[part.reason] = (dropped[part.reason] ?? 0) + 1;
+  // c3-faith: the faithfulness mismatch rate (a notice metric) — drafts a mismatch was confirmed in before the repair, and drafts it
+  // was still confirmed in after it (those had a sentence removed); the drafts the check leaves have none.
+  const drafts = results.flatMap((row) => ["lead", "brief"].map((kind) => row.after?.faith?.[kind]).filter(Boolean));
+  const faithSummary = drafts.length ? { drafts: drafts.length, mismatchBefore: drafts.filter((d) => d.before > 0).length, mismatchAfterRepair: drafts.filter((d) => d.remaining > 0).length,
+    rateBefore: Math.round((drafts.filter((d) => d.before > 0).length / drafts.length) * 1000) / 1000,
+    rateAfterRepair: Math.round((drafts.filter((d) => d.remaining > 0).length / drafts.length) * 1000) / 1000,
+    outcomes: drafts.reduce((/** @type {Record<string, number>} */ sum, d) => ({ ...sum, [d.outcome]: (sum[d.outcome] ?? 0) + 1 }), {}) } : null;
   const thin = results.filter((row) => row.textSource === "summary");
   return { thinRecords: thin.length ? { after: tally(thin, "after") } : null, all: { before: tally(results, "before"), after: tally(results, "after"),
     scores: scoreDistribution(results.filter((row) => row.after).map((row) => ({ genre: row.after.genre, scores: row.after.scores }))),
     scoresRaw: scoreDistribution(results.filter((row) => row.after).map((row) => ({ genre: row.after.genre, scores: row.after.scoresRaw }))),
-    genreAccepted: `${results.filter((row) => row.genreAccepted).length}/${results.length}`, errors: results.filter((row) => row.error).length, briefDropped: dropped },
+    genreAccepted: `${results.filter((row) => row.genreAccepted).length}/${results.length}`, errors: results.filter((row) => row.error).length, briefDropped: dropped,
+    ...(faithSummary ? { faith: faithSummary } : {}) },
   byGenre };
 }
 
