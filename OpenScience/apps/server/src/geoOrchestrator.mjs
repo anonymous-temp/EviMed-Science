@@ -104,6 +104,8 @@ export const GEO_SCHEDULE = Object.freeze({
   baselineRestDays: 3,
   noiseQuestions: 10,
   noiseRepeat: 5,
+  /** Noise rounds a project is given, the first included: one that heard no answer is asked again, never without bound. */
+  noiseTries: 3,
   metricsGraceMinutes: 30,
   /** The rounds that measure the whole question set; only their rows choose sentinel engines. */
   fullRoundKinds: Object.freeze(["baseline", "weekly", "single_step"]),
@@ -1076,14 +1078,31 @@ export class GeoOrchestrator {
     return this.#step(project, "diagnosis", { status: "running", roundId });
   }
 
-  /** The noise round, once per full-program project after its baseline. @param {any} project @param {ReturnType<typeof wantedSteps>} plan @param {{ enqueued: string[] }} result */
+  /**
+   * The noise round, once per full-program project after its baseline — once that measured: a noise round that heard no answer
+   * (its engines paused, the probe host down) measured no band, and the project would have read the default threshold for good
+   * (2026-10-25). It is asked again under the next key once one of the project's engines has answered since it finished, at most
+   * `GEO_SCHEDULE.noiseTries` times in all.
+   * @param {any} project @param {ReturnType<typeof wantedSteps>} plan @param {{ enqueued: string[] }} result
+   */
   async #noise(project, plan, result) {
     if (!plan.full || project.steps.questions.status !== "done" || project.steps.diagnosis.status !== "done" || !this.enqueueRound) return;
-    if (await this.#mark(project.id, "round:noise")) return;
+    const prior = (await this.#marksWith(project.id, "round:noise")).filter((mark) => mark.key === "round:noise" || String(mark.key).startsWith("round:noise:r"));
+    let key = "round:noise";
+    if (prior.length) {
+      if (prior.length >= GEO_SCHEDULE.noiseTries) return;
+      const last = prior.at(-1);
+      if (last.state !== "done" || !last.round_id) return;
+      const empty = (await this.store.query(`SELECT 1 FROM evimed_geo.rounds r WHERE r.id = $1 AND r.status IN ('done', 'partial') AND NOT ${holdsAnswer("r")}
+          AND EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.engine = ANY($2::text[]) AND s.asked_at > r.finished_at AND s.status IN ('valid', 'refusal')
+            AND coalesce(s.surface ->> 'mode', 'web') <> 'inclusion')`, [String(last.round_id), project.engines])).rows.length > 0;
+      if (!empty) return;
+      key = `round:noise:r${prior.length + 1}`;
+    }
     // The questions and the repeats are the measurement's own (the owner's
     // PROBE_NOISE_* constants): the highest-weight measured questions, five times each.
-    const roundId = await this.#enqueueOnce(project, "round:noise", { kind: "noise", engines: project.engines, ref: { reason: "noise" } });
-    if (roundId) result.enqueued.push("round:noise");
+    const roundId = await this.#enqueueOnce(project, key, { kind: "noise", engines: project.engines, ref: { reason: "noise" } });
+    if (roundId) result.enqueued.push(key);
   }
 
   /** Step 7 is the market's: running while orders are out, done once one is published. @param {any} project @param {ReturnType<typeof wantedSteps>} plan */
@@ -1788,8 +1807,10 @@ export class GeoOrchestrator {
     if (!this.enqueueRound) return counts;
     const now = this.now();
     const plan = wantedSteps(project.steps);
-    const baseline = (await this.store.query(`SELECT id, finished_at FROM evimed_geo.rounds WHERE geo_project_id = $1
-      AND kind IN ('baseline', 'single_step') AND status IN ('done', 'partial') ORDER BY finished_at LIMIT 1`, [project.id])).rows[0];
+    // The baseline the weekly rest is counted from is the first that heard an answer: one that measured nothing (a diagnosis asked
+    // again after it) dated the rest from a round that was no baseline, and a weekly round could follow the real one within days.
+    const baseline = (await this.store.query(`SELECT r.id, r.finished_at FROM evimed_geo.rounds r WHERE r.geo_project_id = $1
+      AND r.kind IN ('baseline', 'single_step') AND r.status IN ('done', 'partial') AND ${holdsAnswer("r")} ORDER BY r.finished_at LIMIT 1`, [project.id])).rows[0];
     if (plan.want.has("monitoring") && baseline && FINISHED.has(project.steps.diagnosis.status)) {
       const slot = weeklySlot(now, this.timeZone);
       const weeklyKey = `weekly:${slot.monday}`;

@@ -917,13 +917,33 @@ test("an engine paused part-way through a round is out of its coverage key, as i
   }
 });
 
+test("the net effect's baseline is the first baseline that heard an answer, not an earlier one whose every ask failed (2026-10-25)", options, async () => {
+  await reset();
+  await seed("geo_y");
+  const round = (/** @type {string} */ id, /** @type {string} */ date) => database.query(
+    `INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind, set_version, status, sample_date) VALUES ($1, 'user_geo_y', 'geo_y', 'baseline', 1, 'partial', $2)`,
+    [id, date]);
+  await round("gr_y_empty", "2026-09-01");
+  await database.query(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, engine, asked_at, status)
+    VALUES ('gs_y_failed', 'user_geo_y', 'gr_y_empty', 'geo_y', 'deepseek', '2026-09-01T02:00:00Z', 'failed')`);
+  await round("gr_y_heard", "2026-09-15");
+  await database.query(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, engine, asked_at, status)
+    VALUES ('gs_y_valid', 'user_geo_y', 'gr_y_heard', 'geo_y', 'deepseek', '2026-09-15T02:00:00Z', 'valid')`);
+  assert.equal(await store.baselineDate("geo_y", 1), "2026-09-15");
+});
+
 test("the net effect reads the arms' earlier cells: an insufficient cell with counts pools, one without is no observation, a computed row keeps its band (Q-2)", options, async () => {
   await reset();
   await seed("geo_n");
   const ENGINES = ["deepseek", "doubao"];
-  const round = (/** @type {string} */ id, /** @type {string} */ kind, /** @type {string} */ date) => database.query(
-    `INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind, set_version, status, sample_date, ref) VALUES ($1, 'user_geo_n', 'geo_n', $2, 1, 'done', $3, $4::jsonb)`,
-    [id, kind, date, JSON.stringify({ balance: { engines: ENGINES } })]);
+  // A measured round heard answers: the baseline is the first one that did (`baselineDate`).
+  const round = async (/** @type {string} */ id, /** @type {string} */ kind, /** @type {string} */ date) => {
+    await database.query(
+      `INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind, set_version, status, sample_date, ref) VALUES ($1, 'user_geo_n', 'geo_n', $2, 1, 'done', $3, $4::jsonb)`,
+      [id, kind, date, JSON.stringify({ balance: { engines: ENGINES } })]);
+    await database.query(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, engine, asked_at, status)
+      VALUES ($1, 'user_geo_n', $2, 'geo_n', 'deepseek', $3::date, 'valid')`, [`gs_${id}`, id, date]);
+  };
   const arm = (/** @type {string} */ roundId, /** @type {string} */ armName, /** @type {string} */ metricId, /** @type {string | null} */ pool, /** @type {Record<string, any>} */ cell) => ({
     scope: "arm", arm: armName, pool, metricId, dataType: "measured", ...cell,
   });

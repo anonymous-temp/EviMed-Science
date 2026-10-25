@@ -658,6 +658,48 @@ test("an urgent error the measurement could not tell is told by the program unde
   assert.equal(world.notices.filter((notice) => notice.title === "DeepSeek 把玛仕度肽说成每天注射一次").length, 1);
 });
 
+test("a noise round that heard no answer is asked again once an engine answers, three times at most (2026-10-25)", options, async () => {
+  const { world, project } = await lockedProgram();
+  await finishRound(world.enqueued[0].id, { finishedAt: "2026-09-20T00:00:00Z" });
+  await world.orchestrator.advance(project.id);
+  assert.equal((await statuses(project.id)).diagnosis, "done");
+  const noises = () => world.enqueued.filter((round) => round.geoProjectId === project.id && round.kind === "noise");
+  assert.deepEqual(noises().map((round) => round.ref.scheduleKey), ["round:noise"]);
+  // "An engine has answered since" is read across projects, and other tests leave answers on the wall clock: these rounds end later.
+  for (const [index, key] of [[0, "round:noise:r2"], [1, "round:noise:r3"]]) {
+    await finishRound(noises()[index].id, { answers: 0, finishedAt: `2030-01-0${index + 1}T00:00:00Z` });
+    await world.orchestrator.advance(project.id);
+    assert.equal(noises().length, index + 1, "the engines are still silent: nothing is asked again");
+    await q(`INSERT INTO evimed_geo.snapshots (id, user_id, geo_project_id, engine, asked_at, status) VALUES ($1, $2, $3, 'deepseek',
+      (SELECT finished_at + interval '1 minute' FROM evimed_geo.rounds WHERE id = $4), 'valid')`, [`back-n${index}-${project.id}`, project.userId, project.id, noises()[index].id]);
+    await world.orchestrator.advance(project.id);
+    assert.deepEqual(noises().map((round) => round.ref.scheduleKey).at(-1), key);
+  }
+  await finishRound(noises()[2].id, { answers: 0, finishedAt: "2030-01-03T00:00:00Z" });
+  await q(`INSERT INTO evimed_geo.snapshots (id, user_id, geo_project_id, engine, asked_at, status) VALUES ($1, $2, $3, 'deepseek',
+    (SELECT finished_at + interval '1 minute' FROM evimed_geo.rounds WHERE id = $4), 'valid')`, [`back-n2-${project.id}`, project.userId, project.id, noises()[2].id]);
+  await world.orchestrator.advance(project.id);
+  assert.equal(noises().length, 3, "three tries, no fourth");
+  await q(`DELETE FROM evimed_geo.snapshots WHERE geo_project_id = $1 AND starts_with(id, 'back-n')`, [project.id]);
+});
+
+test("the weekly rest is counted from the first baseline that heard an answer, not an empty one before it (2026-10-25)", options, async () => {
+  const { world, project, user } = await lockedProgram();
+  await finishRound(world.enqueued[0].id, { answers: 0, finishedAt: "2026-09-20T00:00:00Z" });
+  await world.orchestrator.advance(project.id);
+  assert.equal((await statuses(project.id)).diagnosis, "failed");
+  await world.orchestrator.runStep(user, project, "diagnosis");
+  const second = world.enqueued.filter((round) => round.geoProjectId === project.id && round.kind === "baseline")[1];
+  await finishRound(second.id, { finishedAt: "2026-10-04T00:00:00Z" }); // Sunday, the day before the weekly round is due
+  await world.orchestrator.advance(project.id);
+  assert.equal((await statuses(project.id)).diagnosis, "done");
+  world.setClock("2026-10-04T19:10:00Z"); // Monday 2026-10-05 03:10 in Shanghai
+  await world.orchestrator.tickSchedules();
+  const [mark] = await q(`SELECT state, detail FROM evimed_geo.schedule_marks WHERE geo_project_id = $1 AND key = 'weekly:2026-10-05'`, [project.id]);
+  assert.deepEqual([mark?.state, mark?.detail?.reason], ["skipped", "baseline_recent"], "a day after the baseline that measured is noise, not a week");
+  assert.equal(world.enqueued.some((round) => round.geoProjectId === project.id && round.kind === "weekly"), false);
+});
+
 test("a diagnosis is done only when its metrics exist; past the grace operators are alerted and the program waits", options, async () => {
   const { world, project } = await lockedProgram();
   const round = world.enqueued[0].id;

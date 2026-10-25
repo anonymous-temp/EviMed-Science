@@ -1238,10 +1238,17 @@ export class GeoMeasureStore {
     return row ? { value: num(row.value), measured: row.status === "ok" } : null;
   }
 
-  /** The first baseline round's sample date. @param {string} geoProjectId @param {number | null} setVersion */
+  /**
+   * The first baseline round's sample date — of a baseline that heard an answer. A baseline whose every ask failed has a sample date
+   * and nothing in it; read as the baseline, it put the net effect's baseline window before any measured week, and the net effect
+   * of every later round was not computable (2026-10-25).
+   * @param {string} geoProjectId @param {number | null} setVersion
+   */
   async baselineDate(geoProjectId, setVersion) {
-    const result = await this.query(`SELECT sample_date::text AS sample_date FROM evimed_geo.rounds WHERE geo_project_id = $1 AND kind = 'baseline'
-      AND status IN ('done', 'partial') AND set_version IS NOT DISTINCT FROM $2 AND sample_date IS NOT NULL ORDER BY sample_date LIMIT 1`, [geoProjectId, setVersion]);
+    const result = await this.query(`SELECT r.sample_date::text AS sample_date FROM evimed_geo.rounds r WHERE r.geo_project_id = $1 AND r.kind = 'baseline'
+      AND r.status IN ('done', 'partial') AND r.set_version IS NOT DISTINCT FROM $2 AND r.sample_date IS NOT NULL
+      AND EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.round_id = r.id AND s.status IN ('valid', 'refusal'))
+      ORDER BY r.sample_date LIMIT 1`, [geoProjectId, setVersion]);
     const value = result.rows[0]?.sample_date;
     return value ?? null;
   }
