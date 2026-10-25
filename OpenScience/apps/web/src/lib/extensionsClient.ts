@@ -1,4 +1,5 @@
 import { productRequest, type ProductPage } from "./productClient";
+import type { SkillActivation } from "./skillLibraryClient";
 
 export type ExtensionCoordinate = { kind: "npm"; name: string; version: string } | { kind: "github"; repository: string; commit: string; subdirectory?: string };
 export interface ExtensionSetting { type: "integer" | "number" | "boolean" | "string"; min?: number; max?: number; maxLength?: number; enum?: string[]; default?: string | number | boolean }
@@ -10,7 +11,20 @@ export interface ExtensionInstallation { id: string; revision: number; coordinat
 export interface ExtensionJob { id: string; status: string; attempts: number; createdAt: string; finishedAt: string | null }
 export interface ExtensionSelection { installationId: string; enabled: boolean; settings: Record<string, string | number | boolean>; connectionRefs: string[]; catalogueId?: string; coordinate?: ExtensionCoordinate; integrity?: string; effective?: boolean; phase?: string }
 export interface ProjectExtensions { revision: number; selections: ExtensionSelection[]; effectiveGeneration: string | null }
-export const extensionCatalogue = () => productRequest<{ items: CatalogueExtension[]; generatedAt: string; policyState?: string }>("/extensions/catalogue");
+export interface BuiltinPluginPolicy {
+  revision: number;
+  payload: { disabled: string[] };
+  items: Array<{ id: "annotation" | "mermaid"; enabled: boolean; effective: boolean | null; available: boolean }>;
+  activation: SkillActivation;
+}
+export const projectBuiltinPlugins = (projectId: string) => productRequest<BuiltinPluginPolicy>(`/projects/${encodeURIComponent(projectId)}/plugins/builtin`);
+export const saveProjectBuiltinPlugins = (projectId: string, expectedRevision: number, disabled: string[]) =>
+  productRequest<BuiltinPluginPolicy>(`/projects/${encodeURIComponent(projectId)}/plugins/builtin`, "PUT", { expectedRevision, disabled });
+export interface ExtensionCatalogue {
+  items: CatalogueExtension[]; generatedAt: string; policyState?: string;
+  availability?: { state: "available" | "unavailable"; reason: string | null };
+}
+export const extensionCatalogue = () => productRequest<ExtensionCatalogue>("/extensions/catalogue");
 export const extensionInstallations = (cursor?: string | null) => productRequest<ProductPage<ExtensionInstallation>>(`/extensions/installations${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`);
 export const extensionInstallation = (id: string) => productRequest<ExtensionInstallation>(`/extensions/installations/${encodeURIComponent(id)}`);
 export const installExtension = (coordinate: ExtensionCoordinate, idempotencyKey: string) => productRequest<{ installation: ExtensionInstallation; job: ExtensionJob | null }>("/extensions/installations", "POST", { coordinate, scope: "library", idempotencyKey });
@@ -54,6 +68,9 @@ export function extensionStatus(item: Pick<ExtensionInstallation, "effective" | 
 export interface InventoryItem {
   id: string;
   title: string;
+  publisher?: string | null;
+  kind?: "upstream" | "platform";
+  system?: boolean;
   /** The one line a row carries. */
   use: string;
   /** A name of the icon set (`inventoryIcons.ts`). */

@@ -21,6 +21,8 @@ export const SCOPED_SKILL_ROOTS = Object.freeze([
   // owner's pack, not a template: listed and readable, never copied into an account.
   Object.freeze({ root: `${BASE}/geo-private/skills`, source: 'builtin', duplicate: false }),
   Object.freeze({ root: '/opt/evimed/personal-skills', source: 'personal', duplicate: false }),
+  ...(/^\/opt\/evimed\/personal-skill-generations\/[a-f0-9]{64}\/[a-f0-9]{64}\/[a-f0-9]{64}\/skills$/.test(process.env.EVIMED_PERSONAL_SKILLS_DIR ?? '')
+    ? [Object.freeze({ root: String(process.env.EVIMED_PERSONAL_SKILLS_DIR), source: 'personal', duplicate: false })] : []),
 ])
 /** @param {any} value @param {string[]} fields */
 function closed(value, fields) {

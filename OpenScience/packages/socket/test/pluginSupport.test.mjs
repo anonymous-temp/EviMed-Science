@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { AGENT_PLUGIN_IDS, BUNDLE_NAME, HOST_PLUGIN_IDS } from "../index.mjs";
+import { AGENT_PLUGIN_IDS, REQUIRED_AGENT_PLUGIN_IDS, BUNDLE_NAME, HOST_PLUGIN_IDS, PLUGIN_SPECIFIERS } from "../index.mjs";
 
 /**
  * Row ids whose `name` is this bundle or one of its subpaths. Each chunk runs
@@ -51,4 +51,13 @@ test("plugin-support.json lists every socket plugin the composition mounts, and 
   const recorded = support.nativePlugins;
   assert.equal(new Set(recorded).size, recorded.length, "a plugin is recorded twice");
   assert.deepEqual([...recorded].sort(), [...host, ...agent].sort());
+  assert.deepEqual(Object.keys(support.requiredNativeProviders).sort(), [...REQUIRED_AGENT_PLUGIN_IDS].sort());
+  for (const id of REQUIRED_AGENT_PLUGIN_IDS) {
+    const record = support.requiredNativeProviders[id];
+    assert.equal(record.required, true);
+    assert.equal(record.scope, 'preset');
+    assert.equal(record.module, BUNDLE_NAME + PLUGIN_SPECIFIERS[/** @type {keyof typeof PLUGIN_SPECIFIERS} */ (id)].slice(1).replace(/\.mjs$/, ''));
+    assert.equal(Object.hasOwn(record, 'switch'), false, 'a required provider is not advertised as an optional engine');
+    assert.ok(record.reason.length > 40);
+  }
 });

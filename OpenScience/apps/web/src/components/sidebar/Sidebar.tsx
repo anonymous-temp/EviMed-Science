@@ -64,7 +64,7 @@ const NAV: NavItem[] = [
   { to: "/app/files", label: "知识库", icon: <FolderTree size={16} aria-hidden="true" /> },
   { to: "/app/memory", label: "记忆胶囊", icon: <Brain size={16} aria-hidden="true" /> },
   { to: "/app/autopilot", label: "定时任务", icon: <Orbit size={16} aria-hidden="true" /> },
-  { to: "/app/extensions/skills", label: "插件与技能", icon: <Plug size={16} aria-hidden="true" /> },
+  { to: "/app/extensions/discover", label: "插件与技能", icon: <Plug size={16} aria-hidden="true" /> },
 ];
 
 /**
@@ -104,7 +104,7 @@ function navRows({ frontier, vcr, geo }: { frontier: boolean; vcr: boolean; geo:
  * is not on screen).
  */
 export function isCurrent(to: string, pathname: string, projectModule: "geo" | "vcr" | null): boolean {
-  if (to === "/app/extensions/skills") return pathname.startsWith("/app/extensions");
+  if (to === "/app/extensions/discover") return pathname.startsWith("/app/extensions");
   const chatting = pathname === "/app/home" || pathname.startsWith("/app/chat");
   if (to === "/app/home") return chatting && projectModule === null;
   if (to === VCR_NAV.to) return pathname.startsWith(to) || (chatting && projectModule === "vcr");

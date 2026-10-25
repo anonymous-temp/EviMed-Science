@@ -17,14 +17,10 @@ import { Link } from "react-router";
 import { MissingRecord, orMissing, RecordMissing } from "./MissingRecord";
 import { DrawerSection } from "./PlatformSkillDrawer";
 import { settingLabel } from "./extensionCopy";
+import { extensionAvailability } from "./catalogueModel";
 
 /** The three words a package's state comes down to for a reader: it works, it is getting ready, or it needs something from them. */
-export function extensionState(item: Pick<ExtensionInstallation, "effective" | "phase">): "可用" | "准备中" | "需处理" | "已移除" {
-  if (item.effective) return "可用";
-  if (item.phase === "removed") return "已移除";
-  if (["failed", "unsupported", "connection-needed"].includes(item.phase)) return "需处理";
-  return "准备中";
-}
+export const extensionState = extensionAvailability;
 
 /**
  * A package of the extension centre — one offered under 「可以添加」 or one the reader added — opened from its row: add it,
@@ -75,7 +71,7 @@ export function ExtensionDrawer({ extensionId, projectId, onClose, onChanged }: 
   }, [installation]);
   const act = async (work: () => Promise<unknown>) => {
     if (working.current) return; working.current = true; setBusy(true); setError(null);
-    try { await work(); if (alive.current) await load(); }
+    try { await work(); if (alive.current) { await load(); if (alive.current) onChanged(); } }
     catch (caught) { if (alive.current) setError(productErrorMessage(caught)); }
     finally { working.current = false; if (alive.current) setBusy(false); }
   };
@@ -106,7 +102,7 @@ export function ExtensionDrawer({ extensionId, projectId, onClose, onChanged }: 
     const added = await installExtension(entry.coordinate, key); requestKeys.current.delete(identity);
     if (alive.current) onChanged(added.installation.id);
   });
-  const state = installation ? extensionState(installation) : null;
+  const state = installation ? extensionState(installation, selected) : null;
   if (missing) return <Drawer title="插件" onClose={onClose}><MissingRecord noun="插件" list="回到插件列表" onBack={onClose} /></Drawer>;
   return (
     <Drawer title={entry?.title ?? "插件"} description={state ? `我的插件 · ${state}` : "可以添加"} onClose={onClose}>
@@ -140,7 +136,7 @@ export function ExtensionDrawer({ extensionId, projectId, onClose, onChanged }: 
           <div><Button variant="text" destructive disabled={busy} onClick={() => setRemoving(true)}>移除插件</Button></div>
         </>}
       </div>}
-      {removing && installation && <ConfirmDialog title="移除插件" body="从我的插件移除。正在执行的任务会继续使用它原有的版本。" confirmLabel="移除" busy={busy} onCancel={() => setRemoving(false)} onConfirm={() => void act(async () => { await removeExtension(installation.id, installation.revision); if (alive.current) { onChanged(); onClose(); } })} />}
+      {removing && installation && <ConfirmDialog title="移除插件" body="从我的插件库移除。已经选用它的项目仍保留原版本；如需停用，请先关闭对应项目的开关。" confirmLabel="移除" busy={busy} onCancel={() => setRemoving(false)} onConfirm={() => void act(async () => { await removeExtension(installation.id, installation.revision); if (alive.current) { onChanged(); onClose(); } })} />}
     </Drawer>
   );
 }

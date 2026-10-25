@@ -2185,7 +2185,8 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
     capsuleMethodsDir: capsuleMethodsRuntimePath(plan),
     extensionProjectionFile: plan.extensionGeneration?.reference ? "/opt/evimed/extensions/projection.json" : "",
     extensionGatewayUrl: plan.extensionGeneration?.reference ? extensionGatewayEndpointUrl(config) : "",
-    personalSkillsDir: PERSONAL_SKILLS_RUNTIME_DIR,
+    personalSkillsDir: plan.personalSkillsRuntimeDir ?? PERSONAL_SKILLS_RUNTIME_DIR,
+    disabledPlatformSkills: plan.personalSkillGeneration?.platformSkills?.disabled ?? [],
     platformSkillsDir: plan.platformSkillGeneration ? (plan.platformSkillsRuntimeDir ?? PLATFORM_SKILLS_RUNTIME_DIR) : "",
     evolutionGatewayUrl: plan.platformSkillGeneration ? (gateways?.evolution ?? evolutionGatewayEndpointUrl(config)) : "",
     capsuleGatewayUrl,
@@ -2238,6 +2239,7 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
     disabledClientBundles: [
       ...(config.runtimeAnnotationEnabled === false ? ["annotation"] : []),
       ...(config.runtimeMermaidEnabled === false ? ["mermaid"] : []),
+      ...(plan.personalSkillGeneration?.platformSkills?.disabledPlugins ?? []),
     ],
   };
 }
@@ -2584,6 +2586,8 @@ export function buildRuntimeLaunchPlan(config, project, port, {
   platformSkillGeneration = null,
   personalSkillGeneration = null,
   personalSkillImageId = null,
+  disabledPlatformSkills = [],
+  disabledClientBundles = [],
   extensionGeneration = null,
   extensionImageId = null,
 } = {}) {
@@ -2827,6 +2831,8 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           extensionProjectionFile: extensionReference ? "/opt/evimed/extensions/projection.json" : "",
           extensionGatewayUrl: extensionReference ? extensionGatewayEndpointUrl(config) : "",
           personalSkillsDir: PERSONAL_SKILLS_RUNTIME_DIR,
+          disabledPlatformSkills,
+          disabledClientBundles: [...new Set([...disabledClientBundles, ...(config.runtimeAnnotationEnabled === false ? ['annotation'] : []), ...(config.runtimeMermaidEnabled === false ? ['mermaid'] : [])])],
           platformSkillsDir: platformReference ? PLATFORM_SKILLS_RUNTIME_DIR : "",
           evolutionGatewayUrl: platformReference ? evolutionGatewayEndpointUrl(config) : "",
           capsuleGatewayUrl,
@@ -3313,10 +3319,10 @@ export class DockerRuntimeProvider {
       catch { manager.platformSkillSupply?.noteFailure?.("platform_skill_generation_unverified"); platformSkillGeneration = null; }
     }
     const plan = buildRuntimeLaunchPlan(this.config, project, port, { pluginConfig, platformSkillGeneration: platformSkillGeneration?.reference ?? null, personalSkillGeneration: personal?.reference ?? null,
-      personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extensionGeneration?.reference ?? null,
+      personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, disabledPlatformSkills: personal?.platformSkills?.disabled ?? [], disabledClientBundles: personal?.platformSkills?.disabledPlugins ?? [], extensionGeneration: extensionGeneration?.reference ?? null,
       extensionImageId: extensionGeneration?.identity.baseRuntimeImageDigest ?? null, memoryGatewayUrl, geoSkills, modelGatewayProfile });
     plan.platformSkillGeneration = platformSkillGeneration;
-    plan.personalSkillGeneration = personalSkillGeneration;
+    plan.personalSkillGeneration = personal ? { ...personalSkillGeneration, platformSkills: personal.platformSkills } : personalSkillGeneration;
     plan.extensionGeneration = extensionGeneration;
     plan.pluginConfig = pluginConfig;
     if (plan.releaseProvenance) await manager.recordUnverifiedRelease(project, plan.releaseProvenance);
@@ -3526,6 +3532,8 @@ export class RuntimeManager {
     this.platformSkillRefreshes = new Map();
     this.platformSkillOverrides = new Map();
     this.personalSkillGenerations = null;
+    /** @type {any} */ this.rebasePersonalComposite = null;
+    /** @type {any} */ this.markPersonalCompositeEffective = null;
     this.personalSkillOverrides = new Map();
     /** @type {any} Cold selection reauthorizes current account/project/config state in the composition root. */
     this.extensionGenerationResolver = null;
@@ -4271,6 +4279,12 @@ export class RuntimeManager {
   }
 
   async inspectRuntimeImage() {
+    if (this.config.runtimeProvider === 'agentbay') {
+      const providerImageId = String(this.config.agentbayImageId ?? '');
+      if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,255}$/.test(providerImageId)) throw new HttpError(503, 'runtime_image_unavailable', 'The AgentBay image identity is unavailable.');
+      // AgentBay exposes an immutable image identifier, not OCI bytes. This is the digest of the provider-qualified identity.
+      return { imageId: `sha256:${createHash('sha256').update(JSON.stringify({ provider: 'agentbay', imageId: providerImageId })).digest('hex')}`, providerImageId };
+    }
     if (this.runtimeController) return this.runtimeController.inspectRuntimeImage();
     if (this.config.runtimeSandboxMode !== 'docker') return null;
     const result = spawnSync(this.config.runtimeContainerBin, ['image', 'inspect', '--format', '{{.Id}}', this.config.runtimeContainerImage], { encoding: 'utf8', timeout: 5000, maxBuffer: 65536 });
@@ -4635,7 +4649,8 @@ export class RuntimeManager {
     // after that freeze and invalidate the worker's post-replacement guard.
     if (!this.personalSkillOverrides.has(key) && !this.extensionGenerationOverrides.has(key) && this.personalSkillGenerations) {
       try { personalSkillGeneration = await this.personalSkillGenerations.prepareForRuntime(project); }
-      catch {
+      catch (error) {
+        if (error?.preserveSkillPolicy === true) throw error;
         // Preparation failed before current identity compatibility could be
         // established. Ordinary research starts without optional personal bytes.
         personalSkillGeneration = null;
@@ -4646,6 +4661,9 @@ export class RuntimeManager {
       try { extensionGeneration = await this.extensionGenerationResolver(project); if (extensionGeneration) await this.prepareGeneration(project, extensionGeneration); }
       catch { extensionGeneration = null; }
     }
+    if (!extensionGeneration && !this.extensionGenerationOverrides.has(key) && personalSkillGeneration && this.rebasePersonalComposite) {
+      extensionGeneration = await this.rebasePersonalComposite(project, personalSkillGeneration);
+    }
     if (extensionGeneration && !this.extensionGenerationOverrides.has(key)
       && !samePersonalPackages(extensionGeneration.projection.personal, personalSkillGeneration)) {
       // A fresh personal apply/removal must never be overwritten by an older
@@ -4655,7 +4673,9 @@ export class RuntimeManager {
       // composite was stamped with while the skills are what they were — and
       // comparing references unmounted the installed extension of every project
       // that also has personal skills (2026-10-04).
-      extensionGeneration = null;
+      if (!this.rebasePersonalComposite) throw new HttpError(409, 'product_revision_conflict', 'The installed plugins must be recomposed with the selected skills.');
+      extensionGeneration = await this.rebasePersonalComposite(project, personalSkillGeneration);
+      if (!extensionGeneration) throw new HttpError(409, 'product_revision_conflict', 'The installed plugin composition is unavailable.');
     }
     if (extensionGeneration) {
       const legacy = extensionGeneration.projection.plugins.find(plugin => plugin.compatibility === 'legacy-citation-v1');
@@ -4822,6 +4842,9 @@ export class RuntimeManager {
       pluginConfig: plan.pluginConfig,
       platformSkillGeneration,
       personalSkillGeneration,
+      personalSkillsRuntimeDir: plan.personalSkillsRuntimeDir ?? PERSONAL_SKILLS_RUNTIME_DIR,
+      builtinPlugins: { annotation: this.config.runtimeAnnotationEnabled !== false && !(personalSkillGeneration?.platformSkills?.disabledPlugins ?? []).includes('annotation'),
+        mermaid: this.config.runtimeMermaidEnabled !== false && !(personalSkillGeneration?.platformSkills?.disabledPlugins ?? []).includes('mermaid') },
       extensionGeneration,
       // The memory engine this runtime was launched for, as the address it was given (`releaseMemoryEngineRuntimes`).
       memoryGatewayUrl: String(plan.memoryGatewayUrl ?? ""),
@@ -6642,7 +6665,7 @@ export class RuntimeManager {
   restoreGeneration(project, candidate) { return this.replaceGeneration(project, candidate); }
   /** Actual preset registry/config proof plus native personal inventory, bound to the same runtime epoch.
    * @param {any} project @param {any} expected */
-  async probeGeneration(project, expected) {
+  async probeGeneration(project, expected, provePersonal = true) {
     const runtime = this.runtimes.get(this.key(project)), generation = this.runtimeGeneration(project);
     if (!runtime || !generation || canonicalJson(runtime.extensionGeneration?.reference ?? null) !== canonicalJson(expected.reference ?? null)) throw new HttpError(409, 'extension_contract_invalid', 'The runtime generation changed.');
     const native = await this.callKernel(runtime, project, 'evimedPlugins/verifyExtensions', {}, AbortSignal.timeout(45000));
@@ -6651,7 +6674,7 @@ export class RuntimeManager {
     let inventory = native.inventory;
     if (!expected.reference && legacy && Array.isArray(inventory) && inventory.length === 0) inventory = [{ extensionId: legacy.extensionId, artifactDigest: legacy.artifactDigest, configRevision: native.citation.revision, configDigest: legacy.configDigest, enabled: native.citation.enabled }];
     const personal = expected.projection.personal;
-    const checked = await this.probePersonalSkillGeneration(project, { reference: personal.reference, pins: personal.pins });
+    const checked = provePersonal ? await this.probePersonalSkillGeneration(project, personal, null, false) : { pendingSession: false };
     if (checked.pendingSession || this.runtimeGeneration(project) !== generation) throw new HttpError(502, 'plugin_apply_failed', 'Native personal inventory is unavailable.');
     return { reference: expected.reference, runtimeGeneration: generation, baseRuntimeImageDigest: runtime.extensionGeneration.identity.baseRuntimeImageDigest,
       adapterRevision: runtime.extensionGeneration.identity.adapterRevision, permissionProfileRevision: runtime.extensionGeneration.identity.permissionProfileRevision,
@@ -6728,30 +6751,57 @@ export class RuntimeManager {
   }
   async replacePersonalSkillRuntime(project, candidate) {
     const key = this.key(project);
-    this.personalSkillOverrides.set(key, candidate);
-    try { return await this.startAdmitted(project, { replaceRuntime: async () => { if (this.runtimes.has(key)) await this.stop(project); } }); }
-    finally { this.personalSkillOverrides.delete(key); }
+    let composite = null;
+    try {
+      this.personalSkillOverrides.set(key, candidate);
+      composite = this.rebasePersonalComposite ? await this.rebasePersonalComposite(project, candidate) : null;
+      if (composite) this.extensionGenerationOverrides.set(key, composite);
+      return await this.startAdmitted(project, { replaceRuntime: async () => { if (this.runtimes.has(key)) await this.stop(project); } });
+    }
+    finally { this.personalSkillOverrides.delete(key); if (composite) this.extensionGenerationOverrides.delete(key); }
   }
   /** Native cold-readable catalogue; no diagnostic user conversation or model call.
    * @param {any} project @param {any} expected @param {string|null} [sessionId] */
-  async probePersonalSkillGeneration(project, expected, sessionId = null) {
+  async probePersonalSkillGeneration(project, expected, sessionId = null, proveComposite = true) {
     const runtime = this.runtimes.get(this.key(project));
     const generation = this.runtimeGeneration(project);
     if (!runtime || !generation || (runtime.personalSkillGeneration?.reference?.generationHash ?? null) !== (expected?.reference?.generationHash ?? null)) {
       throw new HttpError(409, 'extension_contract_invalid', 'The personal skill runtime changed.');
     }
     const wanted = (expected?.pins ?? []).filter(pin => pin.invocation.userInvocable);
+    if (expected?.platformSkills?.disabledPlugins !== undefined) {
+      const builtin = await this.callKernel(runtime, project, 'evimedPlugins/builtin', {}, AbortSignal.timeout(10000));
+      if (!Array.isArray(builtin?.items) || ['annotation', 'mermaid'].some(id => {
+        const actual = builtin.items.filter(item => item.id === id);
+        return actual.length !== 1 || actual[0].enabled !== runtime.builtinPlugins?.[id];
+      })) throw new HttpError(502, 'extension_contract_invalid', 'Native integration configuration did not prove this generation.');
+    }
     const listed = await this.callKernel(runtime, project, 'session/list', { _request: {} }, AbortSignal.timeout(10000));
     const sessions = sessionListItems(listed);
     const addressed = sessionId ? sessions.find(item => item.sessionId === sessionId) : sessions.find(item => item.origin?.kind !== 'subagent');
-    if (!addressed) return { generation, pendingSession: wanted.length > 0 };
+    const disabled = expected?.platformSkills?.disabled ?? [];
+    if (!addressed) {
+      if (wanted.length > 0 || disabled.length > 0) return { generation, pendingSession: true };
+      const proof = proveComposite && runtime.extensionGeneration && this.markPersonalCompositeEffective
+        ? { candidate: runtime.extensionGeneration, proof: await this.probeGeneration(project, runtime.extensionGeneration, false) } : null;
+      return { generation, pendingSession: false, ...(proof ? { composite: proof } : {}) };
+    }
     const observed = await this.callKernel(runtime, project, 'skills/list', { request: { sessionId: addressed.sessionId } }, AbortSignal.timeout(10000));
     if (!Array.isArray(observed?.skills)) throw new HttpError(502, 'extension_contract_invalid', 'Native skill discovery did not return an inventory.');
     const personal = observed.skills.filter(item => String(item.name).startsWith('personal-'));
     if (personal.length !== wanted.length || wanted.some(pin => !personal.some(item => item.name === pin.nativeName
-      && item.modelInvocable === pin.invocation.modelInvocable && item.path === `${PERSONAL_SKILLS_RUNTIME_DIR}/${pin.nativeName}/SKILL.md`))
+      && item.modelInvocable === pin.invocation.modelInvocable && item.path === `${runtime.personalSkillsRuntimeDir ?? PERSONAL_SKILLS_RUNTIME_DIR}/${pin.nativeName}/SKILL.md`))
       || this.runtimeGeneration(project) !== generation) throw new HttpError(502, 'extension_contract_invalid', 'Native skill discovery did not prove this generation.');
-    return { generation, pendingSession: false };
+    if (disabled.length) {
+      const catalogue = await this.callKernel(runtime, project, 'evimedSkills/list', { sessionId: addressed.sessionId }, AbortSignal.timeout(10000));
+      if (catalogue?.complete !== true || !Array.isArray(catalogue.items) || disabled.some(id => {
+        const item = catalogue.items.find(candidate => candidate.name === id.split(':')[1]);
+        return !item || item.invocation?.userInvocable !== false || item.invocation?.modelInvocable !== false;
+      }) || this.runtimeGeneration(project) !== generation) throw new HttpError(502, 'extension_contract_invalid', 'Native skill policy did not prove this generation.');
+    }
+    const composite = proveComposite && runtime.extensionGeneration && this.markPersonalCompositeEffective
+      ? { candidate: runtime.extensionGeneration, proof: await this.probeGeneration(project, runtime.extensionGeneration, false) } : null;
+    return { generation, pendingSession: false, ...(composite ? { composite } : {}) };
   }
   /** The native skill consumer owns slash parsing and logged skill-invocation context.
    * @param {{project:any,skillId:string,revision:number,sessionId:string,idempotencyKey:string,recordPromptActor?:(request:any)=>Promise<void>}} request */

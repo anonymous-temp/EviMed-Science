@@ -1,5 +1,5 @@
 /**
- * Every agent-scope plugin of ours can be switched off from the environment.
+ * Optional agent policy plugins can be switched off; the native skill provider remains required.
  *
  * Hidden knowledge: native DSH + DeepSeek is the control a plugin is measured
  * against (principle 11), so "off" has to mean the kernel's own composition —
@@ -16,15 +16,17 @@
  */
 
 import assert from "node:assert/strict";
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, mkdir, mkdtemp, realpath, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from 'node:os';
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { parse } from 'yaml';
 
 import { SOCKET_TOOL_NAME_LIST } from "@evimed/domain";
 import { loadHarnessModule } from "@evimed/harness-port";
 
-import { AGENT_PLUGIN_IDS, PLUGIN_SPECIFIERS } from "../index.mjs";
+import { AGENT_PLUGIN_IDS, REQUIRED_AGENT_PLUGIN_IDS, PLUGIN_SPECIFIERS } from "../index.mjs";
 
 const PRESET = await readFile(new URL("../presets/evimed-universal/agent.cordis.yml", import.meta.url), "utf8");
 const PLUGIN_PREFIX = "@evimed/dsh-socket/plugins/";
@@ -86,7 +88,9 @@ function scalar(value, env) {
   return value.text.replace(/^'|'$/g, "");
 }
 
-const ROWS = [...presetRows(PRESET).values()].filter((row) => row.name.startsWith(PLUGIN_PREFIX));
+const OWNED_ROWS = [...presetRows(PRESET).values()].filter((row) => row.name.startsWith(PLUGIN_PREFIX));
+const ROWS = OWNED_ROWS.filter(row => !REQUIRED_AGENT_PLUGIN_IDS.includes(row.id));
+const OPTIONAL_IDS = AGENT_PLUGIN_IDS.filter(id => !REQUIRED_AGENT_PLUGIN_IDS.includes(id));
 
 /** A plugin module by row id; the specifiers are relative to the package root. @param {string} id */
 function pluginModule(id) {
@@ -136,8 +140,10 @@ const PRODUCTION = {
   EVIMED_COMPACTION_MAX_REQUEST_BYTES: "1572864",
 };
 
-test("every agent-scope plugin of ours carries one off switch, read from its own environment variable", () => {
-  assert.deepEqual(ROWS.map((row) => row.id).sort(), [...AGENT_PLUGIN_IDS].sort(), "the preset's rows are the plugins the bundle declares");
+test("every optional agent policy plugin carries one off switch, and required providers are accounted separately", () => {
+  assert.deepEqual(OWNED_ROWS.map((row) => row.id).sort(), [...AGENT_PLUGIN_IDS].sort(), "the preset's rows are the plugins the bundle declares");
+  assert.deepEqual([...REQUIRED_AGENT_PLUGIN_IDS], ['skill-filesystem']);
+  assert.deepEqual(ROWS.map(row => row.id).sort(), [...OPTIONAL_IDS].sort());
   const variables = ROWS.map((row) => switchOf(row).variable);
   assert.equal(new Set(variables).size, variables.length, `two rows share a switch: ${variables.join(", ")}`);
 
@@ -156,6 +162,40 @@ test("every agent-scope plugin of ours carries one off switch, read from its own
   // Negative control: one switch moves one row, so the evaluation really reads it.
   const screeningOff = { EVIMED_SCREENING_ENABLED: "0" };
   assert.deepEqual(ROWS.filter((row) => !isOn(row, screeningOff)).map((row) => row.id).sort(), ["evimed-duplicate-lines", "evimed-review", "evimed-screening"]);
+});
+
+test('the required provider retains its stable alias and native registry while all optional policy switches are off', async t => {
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), 'required-skill-provider-')));
+  const { Context } = await loadHarnessModule('@deepseek-ai/cordis');
+  const { SkillRegistry } = await loadHarnessModule('@deepseek-ai/dsh-skill');
+  const ctx = new Context(); new SkillRegistry(ctx);
+  t.after(async () => { await ctx.fiber.dispose(); await rm(root, { recursive: true, force: true }); });
+  for (const [origin, name] of [['core', 'stats-integrity'], ['office', 'docx']]) {
+    await mkdir(path.join(root, origin, name), { recursive: true });
+    await writeFile(path.join(root, origin, name, 'SKILL.md'), `---\nname: ${name}\ndescription: Fixture method\n---\nPreserve source material.`);
+  }
+  const source = parse(PRESET, { customTags: [{ tag: 'tag:yaml.org,2002:js', resolve: (/** @type {string} */ value) => ({ expression: value }) }] });
+  const row = source.find((/** @type {any} */ candidate) => candidate.id === 'skill-filesystem');
+  assert.equal(row.name, '@evimed/dsh-socket/plugins/project-skills');
+  assert.equal(PLUGIN_SPECIFIERS['skill-filesystem'], './plugins/project-skills.mjs');
+  assert.equal(row.disabled, undefined);
+  assert.equal(row.config.enabled, undefined, 'the discovery provider cannot be ablated as an optional policy plugin');
+  const env = { ...PRODUCTION, ...ALL_OFF, EVIMED_PRESET_SKILLS_DIR: root, EVIMED_DISABLED_PLATFORM_SKILLS: '["office:docx","core:stats-integrity"]' };
+  /** @param {any} value @returns {any} */
+  const resolve = value => Array.isArray(value) ? value.map(resolve) : value && typeof value === 'object'
+    ? Object.hasOwn(value, 'expression') ? evaluate(value.expression, env) : Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, resolve(entry)])) : value;
+  const plugin = await pluginModule(row.id), config = resolve(row.config);
+  assert.equal(config.includeDefaultRoots, false);
+  assert.equal(config.watch, false);
+  await ctx.plugin(plugin, config);
+  await new Promise(resolveReady => setTimeout(resolveReady, 20));
+  const skills = await ctx.skills.list({ cwd: root });
+  const required = skills.find((/** @type {any} */ skill) => skill.name === 'stats-integrity'), optional = skills.find((/** @type {any} */ skill) => skill.name === 'docx');
+  assert.ok(required && optional, 'the row actually registered the native filesystem provider');
+  assert.equal(required.provider, 'filesystem');
+  assert.equal(required.invocation.modelInvocable, true);
+  assert.equal(required.invocation.userInvocable, true);
+  assert.deepEqual(optional.invocation, { modelInvocable: false, userInvocable: false });
 });
 
 /**
@@ -225,7 +265,7 @@ test("a switched-off plugin returns before it touches its context; switched on, 
  * the environment disables is not mounted, as the kernel does not mount it.
  * @param {Record<string, string>} env @param {readonly string[]} [only]
  */
-async function mountComposition(env, only = AGENT_PLUGIN_IDS) {
+async function mountComposition(env, only = OPTIONAL_IDS) {
   const { Context } = await loadHarnessModule("@deepseek-ai/cordis");
   const { ToolRuntime } = await loadHarnessModule("@deepseek-ai/dsh-tools");
   const ctx = new Context();

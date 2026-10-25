@@ -7,6 +7,7 @@ import { canonicalJson, canonicalPersonalSkillResourcePath } from "@evimed/domai
 import { RUNTIME_INVENTORY, inventorySkillWords } from "@evimed/domain/runtime-inventory";
 import { SKILL_DISPLAY, SKILL_DISPLAY_GEO_GROUP, SKILL_DISPLAY_GROUPS, SKILL_DISPLAY_LOOPX_GROUP } from "@evimed/domain/skill-display";
 import { SKILL_PACKAGES } from "@evimed/domain/skill-packages";
+import { platformSkillRequirement } from "@evimed/domain/platform-skill-policy";
 import { HttpError } from "./security.mjs";
 
 /**
@@ -219,7 +220,25 @@ export function createPlatformSkillCatalogue({ rootDir, dataDir = null, packages
     const order = new Map(Object.keys(display).map((name, index) => [name, index]));
     listed.sort((left, right) => SKILL_DISPLAY_GROUPS.indexOf(left.group) - SKILL_DISPLAY_GROUPS.indexOf(right.group)
       || (order.get(left.name) ?? 0) - (order.get(right.name) ?? 0));
-    const all = [...listed, ...loopxRows(), ...await geoRows()];
+    let scientific = null, scientificSkills = [];
+    try { const inventory = JSON.parse(await fs.readFile(path.join(rootDir, ROOTS.curated, 'inventory.json'), 'utf8')); scientific = inventory.source; scientificSkills = inventory.skills ?? []; } catch { /* source unavailable is reported as unknown */ }
+    let loopx = null;
+    try { loopx = JSON.parse(await fs.readFile(path.join(rootDir, 'deps-version.json'), 'utf8')).loopx; } catch { /* the pin is unknown in this image */ }
+    const all = [...listed, ...loopxRows(), ...await geoRows()].map(row => {
+      const record = packages.get(`${row.id.replace(':', '/')}`);
+      const source = record?.source, repo = source?.repository ?? (source?.kind === 'derived' ? scientific?.repository : row.id.startsWith('loopx:') ? loopx?.githubRepo : null);
+      const kind = row.id.startsWith('geo-private:') ? 'proprietary' : row.id.startsWith('loopx:') ? 'upstream'
+        : source?.kind === 'repository' ? (record?.origin === 'curated' && scientificSkills.find(item => item.name === row.name)?.upstreamReview?.edits?.length ? 'upstream-adapted' : 'upstream') : source?.kind === 'derived' ? 'first-party-derived' : 'first-party';
+      return { ...row, scope: 'project', requirement: platformSkillRequirement(row.id), provenance: {
+        kind, publisher: kind === 'first-party-derived' ? 'EviMed' : repo?.split('/')[0] ?? (kind === 'first-party' || kind === 'proprietary' ? 'EviMed Science' : null),
+        upstreamPublisher: kind === 'first-party-derived' ? repo?.split('/')[0] ?? null : null,
+        repository: repo ? `https://github.com/${repo}` : kind === 'first-party' ? 'https://github.com/anonymous-temp/EviMed-Science' : null,
+        version: record?.version ?? (row.id.startsWith('loopx:') ? loopx?.version : null) ?? null, commit: source?.commit ?? (source?.kind === 'derived' ? scientific?.pin?.commit : null),
+        upstreamVersion: source?.kind === 'derived' ? scientific?.pin?.tag ?? null : null,
+        license: record?.licence?.id ?? (kind === 'proprietary' ? 'Proprietary' : kind === 'first-party' ? 'MIT' : row.id.startsWith('loopx:') ? 'Apache-2.0' : null),
+        digest: record?.digest ?? null,
+      } };
+    });
     cached = { at: now(), rows: all };
     return all;
   }

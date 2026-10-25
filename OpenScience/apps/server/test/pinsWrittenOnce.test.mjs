@@ -54,7 +54,7 @@ const NOT_COPIES = [/(^|\/)pnpm-lock\.yaml$/, /(^|\/)fixtures\//, /^packages\/co
 /** @returns {string[]} tracked and untracked-but-not-ignored files under the scanned directories */
 function candidateFiles() {
   const out = execFileSync("git", ["-c", "core.quotePath=false", "ls-files", "--cached", "--others", "--exclude-standard", "--", ...SCANNED], { cwd: repo, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
-  return out.split("\n").filter((file) => file && !NOT_COPIES.some((pattern) => pattern.test(file)) && !/\.(png|jpg|jpeg|gif|ico|woff2?|ttf|pdf|xlsx|docx|pptx|zip|gz|tgz|wasm|sqlite|parquet|feather)$/i.test(file));
+  return out.split("\n").filter((file) => file && existsSync(path.join(repo, file)) && !NOT_COPIES.some((pattern) => pattern.test(file)) && !/\.(png|jpg|jpeg|gif|ico|woff2?|ttf|pdf|xlsx|docx|pptx|zip|gz|tgz|wasm|sqlite|parquet|feather)$/i.test(file));
 }
 
 const escape = (/** @type {string} */ text) => text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");

@@ -157,7 +157,7 @@ export const routes: RouteObject[] = [
         // sentence, not a 404. 模拟会员 and 模拟退款 had nothing behind them and
         // were removed (2026-10-07): their addresses are not found.
         { path: "account/simulated/:page", element: <SimulatedWalletPage /> },
-        { path: "extensions", element: <Navigate to="/app/extensions/skills" replace /> },
+        { path: "extensions", element: <Navigate to="/app/extensions/discover" replace /> },
         // 插件与技能: one element for both tabs and the open item (`skills/:skillId`, `plugins/:extensionId`), so switching tabs keeps what was read.
         { path: "extensions/:tab/:itemId?", element: <ExtensionsPage /> },
         // Seven destinations, six of them above (2026-09-15 walk, C8). The rows

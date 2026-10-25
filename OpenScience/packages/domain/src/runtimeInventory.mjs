@@ -52,6 +52,9 @@ import { researchToolGroups } from './researchToolDisplay.mjs'
  * @property {string} use the line a row carries, at most {@link USE_MAX} characters
  * @property {string} does
  * @property {string} how
+ * @property {string|null} [publisher]
+ * @property {'upstream'|'platform'} [kind]
+ * @property {boolean} [system]
  * @property {ItemControl} control
  * @property {ItemOpens} opens
  * @property {ItemGate} gate
@@ -171,6 +174,9 @@ export function unaccountedInventory(inventory = RUNTIME_INVENTORY, words = RUNT
  * @property {ItemOpens} opens
  * @property {string} does
  * @property {string} how
+ * @property {string|null} publisher
+ * @property {'upstream'|'platform'} kind
+ * @property {boolean} system
  * @property {{ title: string, does: string }[]} [parts]
  * @property {Record<string, string>} [toolSentences]
  * @property {true} [showsTools] its drawer lists the account's research tools (`researchTools` of the same answer)
@@ -200,7 +206,8 @@ export function listInventory(facts = {}, words = RUNTIME_INVENTORY_WORDS) {
         if (gate?.tool && declined.has(gate.tool)) return []
         const state = gate?.project ? (settings[gate.project] === true ? 'on' : 'off') : 'on'
         /** @type {ListedItem} */
-        const listed = { id, title: item.title, use: item.use, icon: item.icon, state, control: item.control, opens: item.opens, does: item.does, how: item.how }
+        const listed = { id, title: item.title, use: item.use, icon: item.icon, state, control: item.control, opens: item.opens, does: item.does, how: item.how,
+          publisher: item.publisher ?? null, kind: item.kind ?? (item.bundles.length ? 'upstream' : 'platform'), system: item.system ?? item.bundles.length === 0 }
         if (item.parts) listed.parts = item.parts.map((part) => ({ ...part }))
         if (item.toolSentences) listed.toolSentences = { ...item.toolSentences }
         if (item.toolSets.includes('research')) listed.showsTools = true

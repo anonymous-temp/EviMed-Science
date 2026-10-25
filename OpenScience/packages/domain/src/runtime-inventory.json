@@ -1602,7 +1602,7 @@
   },
   "preset": {
     "source": "packages/socket/presets/evimed-universal/agent.cordis.yml",
-    "sha256": "3e9a2a458195fd4eec0e1c9360aa9b23a03d032fa715c5b0b7aff108ce37398e",
+    "sha256": "bb3ab442c56c770cb8a4179685a37b7f2f3a59d8085f481a80cff94c6d9c1b35",
     "rows": [
       {
         "id": "persona",
@@ -1681,7 +1681,7 @@
       },
       {
         "id": "skill-filesystem",
-        "name": "@deepseek-ai/dsh-skill-filesystem",
+        "name": "@evimed/dsh-socket/plugins/project-skills",
         "state": "enabled"
       },
       {

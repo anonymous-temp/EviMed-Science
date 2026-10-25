@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Drawer } from "@/components/ui/Drawer";
@@ -101,16 +101,18 @@ export function CitationDrawer({ item, citation, projectName, groupTitle, onClos
  * several abilities, and — for the research tool set — the tools by group, one sentence each, in the reader's words and never
  * a tool's name. Nothing says that it is always on, how many tools there are or what version it is.
  */
-export function InventoryDrawer({ item, groupTitle, tools, onClose }: {
+export function InventoryDrawer({ item, groupTitle, tools, onClose, controls }: {
   item: InventoryItem;
   groupTitle: string;
   /** The account's research tool set, shown under the item that is the tool set. */
   tools: Inventory["researchTools"] | null;
   onClose: () => void;
+  controls?: ReactNode;
 }) {
   return (
-    <Drawer title={item.title} description={groupTitle} onClose={onClose}>
+    <Drawer title={item.title} description={item.publisher ? `${item.publisher} · ${groupTitle}` : groupTitle} onClose={onClose}>
       <div className="flex flex-col gap-6">
+        {controls}
         <DrawerSection title="它会做什么"><p className="text-ui text-text">{item.does}</p></DrawerSection>
         <DrawerSection title="怎么用"><p className="text-ui text-text">{item.how}</p></DrawerSection>
         {item.parts && item.parts.length > 0 && (

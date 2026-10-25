@@ -1,4 +1,5 @@
 import { PLATFORM_SKILL_GENERATION_MAX_PINS } from './platformSkillLimits.mjs';
+import { normalizeDisabledPlatformSkills, normalizeDisabledBuiltinPlugins } from '@evimed/domain/platform-skill-policy';
 import { createPlatformSkillTelemetry } from './platformSkillTelemetry.mjs';
 import { reviewDeliveredRegister } from "./reportRegisterJudge.mjs";
 import { createHash } from "node:crypto";
@@ -1036,7 +1037,13 @@ function normalizePersonalSkillGeneration(value) {
     seen.add(pin.skillId);
     pins.push({ skillId: pin.skillId, revision: pin.revision, digest: pin.digest, nativeName: pin.nativeName, source: "personal" });
   }
-  return { generationId: value.generationId, pins };
+  let platformSkills;
+  if (value.platformSkills) {
+    try { platformSkills = { disabled: normalizeDisabledPlatformSkills(value.platformSkills.disabled),
+      ...(value.platformSkills.disabledPlugins !== undefined ? { disabledPlugins: normalizeDisabledBuiltinPlugins(value.platformSkills.disabledPlugins) } : {}) }; }
+    catch { /* Optional observational metadata cannot break an existing run. */ }
+  }
+  return { generationId: value.generationId, pins, ...(platformSkills ? { platformSkills } : {}) };
 }
 
 /**

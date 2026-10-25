@@ -1184,7 +1184,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const independentProductWork = work => productDatabase ? productDatabase.withoutTransactionClient(work) : work();
   const pluginService = productDatabase ? new PluginService(productDatabase, { jobs: productJobs, maxTimeoutMs: config.publicSourceGatewayTimeoutMs }) : null;
   const pluginRoutes = createPluginRoutes({ store, service: pluginService, maxJsonBytes: config.maxJsonBytes });
-  const inventoryRoutes = createInventoryRoutes({ store, pluginService, config });
+  const inventoryRoutes = createInventoryRoutes({ store, pluginService, config, builtinSettings: (user, project) => skillLibraryService?.projectBuiltins(user, project) ?? null });
   const extensionAccess = new ExtensionAccess({ store, studyAccess: async (user, projectId, { client }) => {
     if (!vcr) return null;
     const study = await vcr.store.studyByControlProject(user.id, projectId, client);
@@ -1207,6 +1207,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     access: extensionAccess, catalogue: overrides.extensionCatalogue ?? extensionDeployment.catalogue,
     proofAuthority: overrides.extensionProofAuthority ?? null,
     catalogueGeneratedAt: overrides.extensionCatalogueGeneratedAt ?? extensionDeployment.generatedAt,
+    catalogueAvailability: overrides.extensionCatalogue ? { state: 'available', reason: null }
+      : { state: extensionDeployment.status === 'configured' ? 'available' : 'unavailable',
+        reason: extensionDeployment.status === 'configured' ? null : extensionDeployment.status === 'unconfigured' ? 'catalogue_unconfigured' : 'catalogue_unavailable' },
     // Evidence labels, never gates (owner ruling 2026-10-04): the deployment file's own staleness travels to the
     // catalogue, and a qualification record that cannot be read as a record is logged for the operator while the
     // researcher sees the extension without a label.
@@ -1247,6 +1250,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // What each shipped or imported skill needs against what the runtime image installs: a label beside the package.
   const skillSupply = new SkillSupply({ config });
   const skillLibraryService = productDatabase ? new SkillLibraryService(productDatabase, {
+    builtinAvailability: { annotation: config.runtimeAnnotationEnabled !== false, mermaid: config.runtimeMermaidEnabled !== false },
     artifacts: skillArtifacts, supply: skillSupply,
     // The skills the platform ships, listed and read from the control plane's own packages — no runtime needed.
     platformCatalogue: createPlatformSkillCatalogue({ rootDir: config.rootDir, dataDir: config.dataDir, packAllowed: user => moduleState(config, user, "geo") === "on", loopxEnabled: config.loopxEnabled !== false }),
@@ -1273,12 +1277,29 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     },
   }) : null;
   const skillLibraryRoutes = createSkillLibraryRoutes({ store, service: skillLibraryService, maxJsonBytes: config.maxJsonBytes,
-    saveProject: (user, project, input) => pluginService.withAdmission(project, () => productDatabase.transaction(async () => {
+    saveProject: (user, project, input) => pluginService.withAdmission(project, async () => {
       const selection = await skillLibraryService.saveProjectSelections(user, project, input);
       if (config.runtimeMode !== "kernel") return selection;
-      const candidate = await personalSkillGenerations.reconcile(user, project);
-      return { ...selection, activation: { phase: "waiting", ...(candidate.waiting ? { code: "runtime_image_unavailable" } : {}) } };
-    })),
+      try { await personalSkillGenerations.reconcile(user, project); }
+      catch { await personalSkillGenerations.recordFailure(user, project, selection.revision); }
+      return skillLibraryService.projectSelections(user, project);
+    }),
+    savePlatform: (user, project, input) => pluginService.withAdmission(project, async () => {
+      const selection = await skillLibraryService.saveProjectPlatform(user, project, input);
+      if (config.runtimeMode === 'kernel') {
+        try { await personalSkillGenerations.reconcile(user, project); }
+        catch { await personalSkillGenerations.recordFailure(user, project, selection.revision); }
+      }
+      return skillLibraryService.projectPlatform(user, project);
+    }),
+    saveBuiltins: (user, project, input) => pluginService.withAdmission(project, async () => {
+      const selection = await skillLibraryService.saveProjectBuiltins(user, project, input);
+      if (config.runtimeMode === 'kernel') {
+        try { await personalSkillGenerations.reconcile(user, project); }
+        catch { await personalSkillGenerations.recordFailure(user, project, selection.revision); }
+      }
+      return skillLibraryService.projectBuiltins(user, project);
+    }),
   });
   const personalSkillTransfer = skillLibraryService ? new PersonalSkillTransfer({ skills: skillLibraryService, artifacts: skillArtifacts }) : null;
   const personalSkillTransferRoutes = createPersonalSkillTransferRoutes({ store, service: personalSkillTransfer, skills: skillLibraryService,
@@ -3548,6 +3569,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (!runtimeManager.pluginOverrides.has(runtimeManager.key(project))) {
           void pluginService?.runtimeStarted(project).catch(() => { process.stderr.write("plugin first-launch verification enqueue failed\n"); });
         }
+        if (!runtimeManager.personalSkillOverrides.has(runtimeManager.key(project))) {
+          void personalSkillGenerations?.requestRuntimeProof(project, runtimeManager.runtimePersonalSkillGeneration(project), runtimeManager.runtimeGeneration(project))
+            .catch(() => { process.stderr.write('project skill runtime verification enqueue failed\n'); });
+        }
       });
     },
   });
@@ -3838,7 +3863,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (!Number.isFinite(observedAt) || !Number.isFinite(launchedAt) || observedAt < launchedAt) return null;
       }
       const generation = runtimeManager.runtimePersonalSkillGeneration(project);
-      return generation?.reference ? { generationId: generation.reference.generationHash, pins: runtimeManager.runtimePersonalSkillPins(project) } : null;
+      return generation?.reference ? { generationId: generation.reference.generationHash, pins: runtimeManager.runtimePersonalSkillPins(project),
+        platformSkills: generation.platformSkills ?? { disabled: [] } } : null;
     },
     // Which workspace a run belongs to, re-derived rather than remembered. It
     // is asked on recovery, so a verification in flight when the control plane
@@ -4467,6 +4493,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     ledgerBusy: async project => (await agentRuns.list(project)).some(run => run.status === "running"),
   }) : null;
   runtimeManager.personalSkillGenerations = personalSkillGenerations;
+  if (skillLibraryService && personalSkillGenerations) skillLibraryService.projectActivation = async (_user, project) => ({
+    state: await personalSkillGenerations.current(project), runtimeGeneration: runtimeManager.runtimeGeneration(project),
+    captured: runtimeManager.runtimePersonalSkillGeneration(project), builtins: runtimeManager.runtimes.get(runtimeManager.key(project))?.builtinPlugins,
+  });
   if (productDatabase && config.runtimeMode === "kernel" && extensionDeployment.status === "configured"
     && typeof config.modelGatewaySigningSecret === "string" && config.modelGatewaySigningSecret.length >= 32) {
     hostedExtensions = extensionIntegrationFactory({ config, database: productDatabase, store, agentRuns, runtimeManager,
@@ -6609,11 +6639,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         releaseMutation = await maintenanceService.admitMutation();
       }
       if (await evimedAuthRoutes(req, res)) return;
-      if (await pluginRoutes(req, res)) return;
       if (await personalSkillTransferRoutes(req, res)) return;
+      if (await skillLibraryRoutes(req, res)) return;
+      if (await pluginRoutes(req, res)) return;
       if (await inventoryRoutes(req, res)) return;
       if (await extensionRoutes(req, res)) return;
-      if (await skillLibraryRoutes(req, res)) return;
       if (await capsuleRoutes(req, res)) return;
       if (await notificationRoutes(req, res)) return;
       if (await learningRoutes(req, res)) return;
