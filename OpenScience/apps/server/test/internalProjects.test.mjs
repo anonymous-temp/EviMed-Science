@@ -290,22 +290,24 @@ async function finishedStepResultSurvivesTheNextClear(receiptAt) {
 
 // A name a client chose is never a waiver (follow-up to the review of 「循证进化」, 2026-10-05, B1). `acceptance-*`, `audit-*`
 // and `eval-method-*` are typed by the account that makes the project — or derived from the title it gives it — so they
-// are the platform's own only for an operator or the deployment's acceptance account.
-const accounts = { operatorUsers: ["operator"], acceptanceUsername: "cdss-access" };
+// are the platform's own only for an operator. (A throwaway account an acceptance driver registers is an ordinary account: its
+// `acceptance-x` project is charged, counted and takes a runtime slot like any researcher's.)
+const accounts = { operatorUsers: ["operator"] };
 
 test("a self-measurement name is internal only for the accounts that may hold one", () => {
   for (const id of ["acceptance-meta-analysis", "audit-worker-probe", "eval-method-release"]) {
     assert.equal(isInternalProjectOf(accounts, "operator", id), true, `${id} for an operator`);
-    assert.equal(isInternalProjectOf(accounts, "cdss-access", id), true, `${id} for the acceptance account`);
     assert.equal(isInternalProjectOf(accounts, "researcher", id), false, `${id} for anyone else is an ordinary project`);
-    assert.equal(isInternalProjectOf({ operatorUsers: [], acceptanceUsername: "" }, "researcher", id), false);
-    assert.equal(isInternalProjectOf({ operatorUsers: [], acceptanceUsername: "" }, "", id), false, "no owner, no waiver");
+    assert.equal(isInternalProjectOf({ operatorUsers: [] }, "researcher", id), false);
+    assert.equal(isInternalProjectOf({ operatorUsers: [] }, "", id), false, "no owner, no waiver");
+    // A throwaway driver account is nobody's waiver, whatever it is called.
+    assert.equal(isInternalProjectOf(accounts, "acc-202610250907-ababab", id), false, `${id} for a driver's throwaway account`);
   }
-  // An unset acceptance account matches nobody, even an empty id.
-  assert.equal(isMeasurementAccount({ operatorUsers: [], acceptanceUsername: "" }, ""), false);
+  // With no operator named, nobody matches, not even an empty id.
+  assert.equal(isMeasurementAccount({ operatorUsers: [] }, ""), false);
+  assert.equal(isMeasurementAccount({}, "operator"), false);
   assert.equal(isMeasurementAccount(accounts, "operator"), true);
-  assert.equal(isMeasurementAccount(accounts, "cdss-access"), true);
-  assert.equal(isMeasurementAccount(accounts, "cdss-access2"), false);
+  assert.equal(isMeasurementAccount(accounts, "operator2"), false);
   // What the server makes itself stays internal by name for any owner — and cannot be typed.
   for (const id of [LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, FRONTIER_PROJECT_ID, EVIDENCE_PROJECT_ID, `methodeval-${"0a".repeat(12)}`]) {
     assert.equal(isInternalProjectOf(accounts, "researcher", id), true, id);
@@ -315,7 +317,7 @@ test("a self-measurement name is internal only for the accounts that may hold on
   assert.equal(isInternalProjectOf(accounts, "researcher", "default"), false);
 });
 
-test("an ordinary account's acceptance-x project takes its runtime slot like any other; an operator's and the acceptance account's do not", () => {
+test("an ordinary account's acceptance-x project takes its runtime slot like any other; an operator's does not", () => {
   const config = { maxRunningRuntimesPerUser: 2, maxRunningRuntimes: 8, ...accounts };
   const manager = new RuntimeManager(config);
   manager.runtimes.set("researcher:acceptance-x", {});
@@ -323,7 +325,7 @@ test("an ordinary account's acceptance-x project takes its runtime slot like any
   assert.equal(manager.runtimeCountForUser("researcher"), 2, "both count against the researcher's ceiling");
   assert.throws(() => manager.enforceRuntimeCapacity({ userId: "researcher", id: "third" }), { code: "runtime_limit_exceeded" });
   assert.equal(manager.backgroundRuntimeCount(), 0, "and neither is background work");
-  for (const userId of ["operator", "cdss-access"]) {
+  for (const userId of ["operator"]) {
     const own = new RuntimeManager(config);
     own.runtimes.set(`${userId}:acceptance-x`, {});
     own.runtimes.set(`${userId}:default`, {});

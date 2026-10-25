@@ -100,7 +100,9 @@ const EVALUATION_CELL_PROJECT = /^methodeval-[a-f0-9]{24}$/;
  * every accepted run was read as the researcher's own work — the learning loop
  * distilled methods from them (two of which then taught every later run to
  * write package bookkeeping into its report) and 「与你相关」 read their topics
- * as the researcher's interests.
+ * as the researcher's interests. Since 2026-10-25 the drivers run in a throwaway
+ * account of their own, deleted when they end, so none of that can reach a
+ * person's account; the name is internal only in an operator's.
  */
 const SELF_MEASUREMENT_PROJECT = /^(?:acceptance|audit)-[a-z0-9-]+$/;
 
@@ -143,14 +145,14 @@ export function isInternalProject(projectId) {
 const CLIENT_NAMEABLE_INTERNAL = /^(?:(?:acceptance|audit)-[a-z0-9-]+|eval-method-[a-z0-9-]+)$/;
 
 /**
- * Whether an account may hold the platform's self-measurement projects: an operator, or the
- * deployment's configured acceptance account (`OPEN_SCIENCE_ACCEPTANCE_USERNAME`).
- * @param {{ operatorUsers?: string[], acceptanceUsername?: string } | null | undefined} config @param {unknown} userId
+ * Whether an account may hold the platform's self-measurement projects: an operator. A driver's throwaway account
+ * holds ordinary projects, charged and counted like any researcher's.
+ * @param {{ operatorUsers?: string[] } | null | undefined} config @param {unknown} userId
  */
 export function isMeasurementAccount(config, userId) {
   const id = String(userId ?? "");
   if (!id) return false;
-  return (config?.operatorUsers ?? []).includes(id) || (Boolean(config?.acceptanceUsername) && config?.acceptanceUsername === id);
+  return (config?.operatorUsers ?? []).includes(id);
 }
 
 /**
@@ -161,10 +163,10 @@ export function isMeasurementAccount(config, userId) {
  * A name alone is a waiver anyone can type: `POST /api/projects` takes an id from its caller, and
  * `projectIdFromName` derives one from a researcher's own title (an English "Audit trial" becomes
  * `audit-trial`). So `acceptance-*`, `audit-*` and `eval-method-*` are internal only when the account
- * that owns them is an operator or the acceptance account, and are ordinary projects for everyone
- * else. The names the server makes itself (the loop's, the knowledge base's, the frontier's, an
- * evaluation cell's, the evolution module's) are reserved at creation and stay internal by name.
- * @param {{ operatorUsers?: string[], acceptanceUsername?: string } | null | undefined} config
+ * that owns them is an operator, and are ordinary projects for everyone else. The names the server makes itself
+ * (the loop's, the knowledge base's, the frontier's, an evaluation cell's, the evolution module's) are reserved at
+ * creation and stay internal by name.
+ * @param {{ operatorUsers?: string[] } | null | undefined} config
  * @param {unknown} userId @param {unknown} projectId @returns {boolean}
  */
 export function isInternalProjectOf(config, userId, projectId) {
