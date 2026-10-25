@@ -5231,7 +5231,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // runtime idle that long would yield its slot. Not the idle timeout: that
     // is how long a runtime stays warm (twelve hours), not how long work lasts.
     busyDelayMs: Math.min(86_400_000, Math.max(5 * 60_000, Number(config.runtimeIdleYieldAfterMs) + 60_000)),
-    cancelDispatched: async ({ userId, projectId, sessionId, episodeId, runId, verificationId, dispatchId, runtimeGeneration }) => {
+    cancelDispatched: async ({ userId, projectId, sessionId, episodeId, runId, verificationId, dispatchId, runtimeGeneration, finalAttempt }) => {
       const user = await store.userById(userId);
       if (!user) return;
       const project = await store.requireProject(user, projectId);
@@ -5241,7 +5241,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         });
       }
       return cancelScheduledRun({ runtimeManager, agentRuns, stopRun: stopRunForUser }, project,
-        { runId, sessionId, episodeId, runtimeGeneration });
+        { runId, sessionId, episodeId, runtimeGeneration, finalAttempt: finalAttempt === true });
     },
     // The second process: an independent re-check of one claim, in a fresh
     // session that was never told what the first run concluded or how, and in a

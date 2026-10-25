@@ -146,7 +146,9 @@ export class AutopilotWorker {
       if (job.payload?.action === "cancel") {
         await this.cancelDispatched({ userId: job.userId, projectId: job.projectId, episodeId: job.payload.episodeId,
           sessionId: job.payload.sessionId, runId: job.payload.runId,
-          verificationId: job.payload.verificationId, dispatchId: job.payload.dispatchId, runtimeGeneration: job.payload.runtimeGeneration });
+          verificationId: job.payload.verificationId, dispatchId: job.payload.dispatchId, runtimeGeneration: job.payload.runtimeGeneration,
+          // Whether this is the job's last try: what a cancellation that cannot confirm its run does then (`cancelScheduledRun`).
+          finalAttempt: job.attempts >= Number(job.maxAttempts ?? 3) });
         await this.service.markCancellationCompleted(job.userId, job.payload.episodeId, job.payload.runId, job.payload.verificationId);
         const finished = await this.jobs.finish(job.userId, job.id, job.leaseToken, {
           episodeId: job.payload.episodeId, canceled: true,
