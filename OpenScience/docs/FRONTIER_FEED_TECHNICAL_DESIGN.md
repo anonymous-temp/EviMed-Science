@@ -834,11 +834,13 @@ flowchart TB
 **选入规则**（`items.selected_rule` ∈ `threshold` / `lane-floor` / `safety-bypass` / `operator-pin`）：
 
 1. **安全警示一律选入**（`safety-bypass`）；被 PubMed 文献类型降级（信件、评论、社论等）的或已撤稿的从不选入；
-2. 其余要求：`verification ∈ {passed, repaired}`、总分 ≥ 阈值（`OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD`，默认 **82**）、且未超过该来源的**每日上限：3 条，来源权威为 5 的期刊 5 条**；安全绕行与运营置顶不占上限；
+2. 其余要求：`verification ∈ {passed, repaired}`、总分 ≥ 阈值（`OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD`，默认 **64**，2026-10-25 起；原为 82）、且未超过该来源的**每日上限：3 条，来源权威为 5 的期刊 5 条**；安全绕行与运营置顶不占上限；
 3. **选入是黏性的**：之后重新打分不会取消选入；
 4. **栏目保底**：每个栏目每天如果一条也没选上，从该栏目前 5 名里（已校验、未撤稿、未降级）挑最好的，要求总分 ≥ **60**。
 
 **阈值怎么校准。** 目标是工作日选入 15–30 条。最初是 70，首日分布出来后调到 75（2026-09-22），之后在 09-23 到 09-26 四个工作日选入 29/56/50/37 条；对 2,259 条回放，阈值 75 得 22/46/43/32，80 得 15/26/30/22，82 得 12/22/24/20，生产实际比回放多约 19%（选入是黏性的：重新编辑压低分数也不取消；且栏目保底在每个有发布或重新打分的轮次末尾都会跑），于是代码默认值定为 82（2026-09-28；已在运行的部署要手工把环境变量同步过去），估计工作日约 14–29 条；周末与平静日会低于 15，**日报从不凑数**。这是一个小样本经验校准，不是统计推断——换了信源组合或模型就应该重新校准（第 11 章）。
+
+**2026-10-25 重新校准（c3-select）。** 生产里存的分数来自旧版提示词并被夹到量程，按两位独立标注员标出、对过分歧的 248 条金标集（开发集取奇数号、测试集取偶数号，从不在测试集上调参）量，旧分数在测试集上精确率 0.111、召回 0.333、AUC 0.566。打分改为：分项评分细则并进编辑调用（分数在答案最前），代码按题材与设计加上限（`frontierScoreCeilings`，`frontier-selection.json`：试验与预印本、代码判定的新闻稿或评论、PREPARE 登记、研究事实给出的设计与样本量、转载方的权威上限），模型原始分项留在 `editor_diagnostics.scoresRaw`，被压低的原因在 `.capped`。阈值在开发集上选为 64（保持旧分数开发集召回 0.50 的最高线），测试集一次读出：精确率 0.750、召回 0.714、AUC 0.944；栏目保底 60、题材底线 56–60、中文余量 4、预印本通道 50（`OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_MIN_SCORE`）。按金标集加权估计，每天约 62 条在线上方（90% 区间 38–87），经来源上限、每事件一条与日量 20–60 后精选约 45–60 条；**上线后用第一周的真实分布（`scripts/ops/frontier-mix-replay.mjs`）再定线，不用这次的估计**。旧条目用 `node scripts/ops/frontier-rewrite.mjs --steps score --days 30 --apply` 重新打分（约 ¥0.0012 一条，不改动已选入）。部署的 `.env` 或已上线的 循证进化 策略（`selectionThreshold`）若还钉着 82，要一并改掉。
 
 **分数在页面上怎么显示。** 卡片只显示总分（安全警示不显示分数）；分数带 `high`（≥阈值）、`medium`（≥60）、`low`；四个维度只以 `high/medium/low`（≥2/3 满分、≥1/3 满分、其余）出现，从不显示数字。
 
@@ -1696,7 +1698,12 @@ node evals/frontier-editing/run_eval.mjs --runs 3 --key-file <你的模型密钥
 | `OPEN_SCIENCE_FRONTIER_DAILY_BUDGET_CNY` | 300 | 0–10000；0=不设限；≥80% 节流，≥100% 停止（2026-10-22 起 300，原为 10） |
 | `OPEN_SCIENCE_FRONTIER_PROCESS_CONCURRENCY` | 2 | 1–8 |
 | `OPEN_SCIENCE_FRONTIER_OFFPEAK` | `false` | Edit throughout the day within the existing daily budget; optional offpeak deferral must be explicitly enabled (owner freshness correction, 2026-10-19). |
-| `OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD` | 82 | 0–100 |
+| `OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD` | 64 | 0–100（2026-10-25 起；原为 82，见 4.10 节） |
+| `OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_MIN_SCORE` | 50 | 预印本与企业新闻通道的最低总分（2026-10-25 起；原为 60） |
+| `OPEN_SCIENCE_FRONTIER_STUDY_FACTS_ENABLED` | `true` | 研究类（论文、预印本、试验、会议）条目读出研究事实：设计、样本量、人群、对照、主要终点、结果方向、作者把握程度，每项锚定代码在原文中找到的引文（`items.study_facts`）；每条一次 flash 调用 |
+| `OPEN_SCIENCE_FRONTIER_FAITH_ENABLED` | `true` | 需要上一项。导读、要点写成后据研究事实复核：设计、方向、对照、人群不符或把握程度强于原文的，退回写作模型改一次，仍不符的句子删去；卡片摘要只删不改；不向读者显示，结果在 `open_science_frontier_pipeline_total{outcome=faith*}` 与 `editor_diagnostics.faith`；存量用 `frontier-rewrite.mjs --steps facts,faith` |
+| `OPEN_SCIENCE_FRONTIER_RECLUSTER_MAX_PAIRS` | 40 | 0–400；重新聚类每轮（每 10 分钟，仅在当日预算正常时）交给模型判断的事件对数；0 关闭 |
+| `OPEN_SCIENCE_FRONTIER_PRIMARY_REPORTS_ENABLED` | `true` | 权威 4–5 期刊、有 DOI 但没有正文的条目，每 6 小时看一次附近已发布的非期刊报道（同事件、向量近邻、否则共享词），一次 flash 调用判断它是否为研究、哪些是它的报道；采纳的报道导读成为它的阅读正文，导读注明出自谁的报道；因无正文被丢下的条目 21 天内再向插件要；`false` 两者都关 |
 | `OPEN_SCIENCE_FRONTIER_NOTIFY_BATCH` | 50 | 1–200；周刊收件人分页、安全推送扇出与投递循环的批量（日报推送固定每次 50 人） |
 | `OPEN_SCIENCE_FRONTIER_SAFETY_SCAN_BATCH` | 100 | 1–500 |
 | `OPEN_SCIENCE_KNOWLEDGE_PLUGIN_URL` | 空 | http(s)，不含凭据 |
