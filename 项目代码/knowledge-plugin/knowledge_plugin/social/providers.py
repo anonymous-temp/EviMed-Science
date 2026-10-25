@@ -121,12 +121,12 @@ class SocialDataClient:
         await self._ledger.record(SOCIALDATA, purpose=purpose, outcome="ok", objects=objects, amount=objects * OBJECT_USD)
         return body
 
-    async def search(self, query: str, cursor: str | None = None) -> tuple[list[dict], str | None]:
-        """One page of a newest-first search: ``(tweets, next cursor)``."""
+    async def search(self, query: str, cursor: str | None = None, *, purpose: str = "search") -> tuple[list[dict], str | None]:
+        """One page of a newest-first search: ``(tweets, next cursor)``. ``purpose`` is the ledger's label for the call."""
         params = {"query": query, "type": "Latest"}
         if cursor:
             params["cursor"] = cursor
-        body = await self._get("/twitter/search?" + urlencode(params), purpose="search",
+        body = await self._get("/twitter/search?" + urlencode(params), purpose=purpose,
                                most_objects=SEARCH_PAGE_OBJECTS, count=lambda b: len(b.get("tweets") or []))
         if body is None:
             return [], None
@@ -134,9 +134,9 @@ class SocialDataClient:
         following = body.get("next_cursor")
         return tweets, following if isinstance(following, str) and following else None
 
-    async def user(self, handle: str) -> dict | None:
+    async def user(self, handle: str, *, purpose: str = "user") -> dict | None:
         """The account behind a handle, or ``None`` when there is none."""
-        return await self._get("/twitter/user/" + handle, purpose="user", most_objects=1, count=lambda b: 1)
+        return await self._get("/twitter/user/" + handle, purpose=purpose, most_objects=1, count=lambda b: 1)
 
     async def article(self, tweet_id: str) -> dict | None:
         """The X Article a post published (looked up by the post's id), or ``None``."""

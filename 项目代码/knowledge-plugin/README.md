@@ -120,7 +120,13 @@ Shanghai day:
    lead's article link, `candidate_from_link`) is validated by one Dajiala call — `post_history` by its nickname (¥0.16)
    or by the link (¥0.14), at most 20 a Shanghai day across lines: Dajiala names exactly that account, its posts carry one
    `__biz` we do not read yet, and it posted within 30 days; it then goes on trial as an ordinary WeChat row (priority 4,
-   one read a day). X candidates wait without using the day's validations.
+   one read a day). An X candidate (`x:<handle>`, the author of a quoted post) is validated through SocialData
+   (`social/x_discovery.py`): one user lookup and one page of its recent posts, at most 20 accounts a Shanghai day inside the
+   day's SocialData spend cap (about US$0.004 each): the handle is a closed format, the account exists, is public, is not one
+   we already read (by handle or by user id), and posted something of its own — not a retweet — within 30 days; it then goes on
+   trial as an ordinary X row (`mode: signal`, an hourly read in a shared shard). Whether it is medical is the platform's screen.
+   A candidate that waited only for the day's validations or a paused provider is due again the next day; one that waited for a
+   key is due at once when the key is there.
 4. **Validate** within each line's daily cap: reachable (direct, then the relay), robots allows it, an existing adapter
    reads it, an item dated within 30 days, MEDLINE for a journal (and at least eight Crossref articles in 30 days). A
    valid candidate becomes an ordinary registry row on trial (`mixed` lane, every 6–24 hours; journals every 12–24).
@@ -131,6 +137,22 @@ delivered, reported back by the platform after each mirror (`POST /v1/sources/sc
 in `discovery_daily` and `/v1/health` `discovery` (`today`, `history` of 14 days, `by_line`, `in_trial`).
 `python -m knowledge_plugin lifecycle` prints what the rules would retire now (writes nothing; `--apply` retires);
 `python -m knowledge_plugin discover [--lines a,b] [--caps line=n,…]` runs one cycle in the foreground.
+
+## Pages that cannot be read, and the six platforms
+
+- **Redirect shells.** A press release whose link is a page with no text of its own and one `<meta http-equiv="refresh">`
+  (the 香港卫生防护中心's, 477 bytes) is followed once, through the same protected fetch, to a host the source's
+  `allowed_hosts` names (`enrich/page.py`); the registry row names `info.gov.hk`. A second shell, or a target outside the hosts, is
+  a note (`page_refresh_host_not_allowed`), not a request.
+- **A page that answers 4xx** is asked three times — after an hour, after six hours — and is then final (`page_4xx_given_up`);
+  a timeout, a 5xx and the host's pacing are still asked again hourly until the entry's 14-day horizon.
+- **A source whose pages never read is `degraded`.** When at least 90 % of the last 20 page reads of a source's entries failed
+  (and at least 10 were made) its health is `degraded` although its feed polls cleanly (`policy.text_failing`, from each poll and
+  the hourly re-check); it clears itself when newer pages read. A page that failed but whose feed text stood in is neither.
+- **One failing platform never holds the other five of the six-platform monitor** (`social/crawl.py`): a crawl that fails
+  records the attempt for that term and platform and parks the platform for three hours (doubled for every failure in a row, at
+  most twelve), so the round robin goes on to the platforms it has not asked; a busy answer from GEO parks nobody, and a
+  recovered platform comes back by itself. A platform that keeps failing reads `degraded`, then `unreadable`, as a source.
 
 ## Leads (contract 1.6.0)
 

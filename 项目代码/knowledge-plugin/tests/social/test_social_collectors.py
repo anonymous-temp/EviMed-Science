@@ -310,6 +310,121 @@ async def test_crawl_monitors_the_watch_list_one_request_at_a_time_and_keeps_no_
     assert len(requests) == 3 and requests[2]["platform"] == "zhihu"
 
 
+CRAWL_PLATFORMS = (("xhs", "xiaohongshu"), ("douyin", "douyin"), ("zhihu", "zhihu"), ("weibo", "weibo"),
+                   ("bilibili", "bilibili"), ("wechat_channels", "channels"))
+
+
+async def six_platform_monitor(social_settings, pool, tmp_path, handler, *, terms=("司美格鲁肽", "流感")):
+    registry = tmp_path / "social-sources.json"
+    registry.write_text(json.dumps({"sources": [], "watch_list": [{"term": term, "why": "test"} for term in terms]}))
+    settings = replace(social_settings, social_registry_path=str(registry))
+    await sync(pool, [crawl_row(platform, name) for platform, name in CRAWL_PLATFORMS])
+    return SocialCollector(settings, pool, FakeFetcher(), clock=lambda: NOW, crawl_transport=httpx.MockTransport(handler))
+
+
+def collected(request: httpx.Request, *, post_id="p"):
+    body = json.loads(request.content)
+    return httpx.Response(200, json={"platform": body["platform"], "meta": {"collection_status": "collected"}, "posts": [
+        {"post_id": f"{post_id}-{body['platform']}", "title": "一条帖子", "content": "内容" * 20,
+         "url": f"https://example.test/{body['platform']}/{post_id}", "publish_time": int((NOW - timedelta(hours=2)).timestamp())}]})
+
+
+async def test_one_failing_platform_never_holds_the_other_five(social_settings, pool, tmp_path):
+    """Review G1 (2026-10-25): xhs answered 500 for three days and every attempt went to xhs again, the other five never asked."""
+    asked = []
+    down = {"xhs"}
+
+    def handler(request: httpx.Request):
+        platform = json.loads(request.content)["platform"]
+        asked.append(platform)
+        return httpx.Response(500, json={"detail": "boom"}) if platform in down else collected(request)
+
+    collector = await six_platform_monitor(social_settings, pool, tmp_path, handler)
+    clock = [NOW]
+    collector._clock = lambda: clock[0]
+    first = (await collector.tick())["crawl"]
+    assert first["failed"] == "http_500" and first["parked_until"] == (NOW + timedelta(hours=3)).isoformat()
+    assert asked == ["xhs"]
+    xhs = await source(pool, "social-xiaohongshu")
+    assert xhs["consecutive_failures"] == 1 and xhs["last_error_code"] == "crawl_http_500"
+    assert xhs["next_poll_at"] == NOW + timedelta(hours=3) and xhs["health"] == "degraded", "a failing platform reads non-healthy"
+
+    for step in range(1, 6):                      # twelve minutes apart, the five others in turn, none of them xhs
+        clock[0] = NOW + timedelta(minutes=12 * step)
+        done = (await collector.tick())["crawl"]
+        assert done["term"] == "司美格鲁肽" and done["posts"] == 1 and done["new"] == 1
+    assert asked == ["xhs", "douyin", "zhihu", "weibo", "bilibili", "wechat_channels"]
+    for _, name in CRAWL_PLATFORMS[1:]:
+        read = await source(pool, f"social-{name}")
+        assert read["health"] == "healthy" and read["last_ok_at"] is not None and read["consecutive_failures"] == 0
+
+    clock[0] = NOW + timedelta(minutes=72)        # the second term goes round the five that are not parked
+    for platform in ("douyin", "zhihu", "weibo", "bilibili", "wechat_channels"):
+        done = (await collector.tick())["crawl"]
+        assert done["term"] == "流感" and done["platform"] == platform
+        clock[0] += timedelta(minutes=12)
+    assert "xhs" not in asked[6:], "xhs is parked for three hours"
+
+
+async def test_a_parked_platform_comes_back_when_its_time_is_up_and_a_success_clears_it(social_settings, pool, tmp_path):
+    asked, down = [], {"xhs"}
+
+    def handler(request: httpx.Request):
+        platform = json.loads(request.content)["platform"]
+        asked.append(platform)
+        return httpx.Response(500) if platform in down else collected(request)
+
+    collector = await six_platform_monitor(social_settings, pool, tmp_path, handler, terms=("流感",))
+    clock = [NOW]
+    collector._clock = lambda: clock[0]
+    await collector.tick()                                         # xhs fails and is parked until 09:00
+    for _ in range(5):
+        clock[0] += timedelta(minutes=12)
+        await collector.tick()
+    assert asked == ["xhs", "douyin", "zhihu", "weibo", "bilibili", "wechat_channels"]
+    clock[0] = NOW + timedelta(hours=3, minutes=1)
+    assert (await collector.tick())["crawl"]["platform"] == "xhs", "its time is up: it is asked again"
+    assert asked[-1] == "xhs"
+    again = await source(pool, "social-xiaohongshu")
+    assert again["consecutive_failures"] == 2 and again["next_poll_at"] == clock[0] + timedelta(hours=6), "doubled"
+
+    down.clear()                                                   # it recovers; the round robin reaches it in its turn
+    clock[0] = NOW + timedelta(hours=9, minutes=2)
+    for _ in range(6):
+        done = (await collector.tick())["crawl"]
+        clock[0] += timedelta(minutes=12)
+        if done["platform"] == "xhs":
+            break
+    assert done["platform"] == "xhs" and done["posts"] == 1
+    back = await source(pool, "social-xiaohongshu")
+    assert back["health"] == "healthy" and back["consecutive_failures"] == 0 and back["last_ok_at"] == clock[0] - timedelta(minutes=12)
+    async with pool.connection() as conn:
+        state = (await (await conn.execute("SELECT value FROM evimed_knowledge.meta WHERE key = 'social_crawl_state'")).fetchone())["value"]
+    assert "parked" not in state, "the first success clears the park"
+
+
+async def test_a_busy_answer_parks_nobody_and_all_platforms_down_waits_without_asking(social_settings, pool, tmp_path):
+    asked, status = [], [429]
+
+    def handler(request: httpx.Request):
+        asked.append(json.loads(request.content)["platform"])
+        return httpx.Response(status[0], json={"detail": "x"})
+
+    collector = await six_platform_monitor(social_settings, pool, tmp_path, handler, terms=("流感",))
+    clock = [NOW]
+    collector._clock = lambda: clock[0]
+    assert (await collector.tick())["crawl"] == {"busy": "http_429"}
+    clock[0] = NOW + timedelta(minutes=11)
+    status[0] = 500
+    for _ in range(6):                                              # the crawler itself is down: each platform fails once
+        clock[0] += timedelta(minutes=12)
+        assert "parked_until" in (await collector.tick())["crawl"]
+    assert asked == ["xhs", "xhs", "douyin", "zhihu", "weibo", "bilibili", "wechat_channels"], "xhs was not parked by the busy answer"
+    clock[0] += timedelta(minutes=12)
+    assert (await collector.tick())["crawl"] == {"skipped": "all_parked"}
+    assert len(asked) == 7
+
+
 async def test_the_scheduler_never_claims_a_social_source(social_settings, pool):
     from knowledge_plugin.scheduler import Crawler
 

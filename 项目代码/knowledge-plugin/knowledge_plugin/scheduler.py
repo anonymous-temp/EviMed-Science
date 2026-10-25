@@ -58,7 +58,7 @@ from .registry import RegistryError, load_registry, source_from_row
 from .settings import Settings
 from .social.wechat import is_article as is_wechat_article
 from .store import (StoreResult, claim_texts, insert_fetch, redeliver, reliability_24h, reliability_24h_all,
-                    save_text_result, store_entries, text_failure)
+                    save_text_result, store_entries, text_failure, text_outcomes, text_outcomes_all)
 
 log = logging.getLogger("knowledge_plugin.scheduler")
 
@@ -532,7 +532,8 @@ class Crawler:
                     enabled=row["enabled"], last_ok_at=row["last_ok_at"], failing_since=failing_since, now=started,
                     successes_24h=successes, failure_episodes_24h=episodes,
                     drifted=policy.is_drifted(row["access"], row["last_nonempty_at"], row["zero_streak"],
-                                              row["ever_dated"], row["undated_streak"]))
+                                              row["ever_dated"], row["undated_streak"]),
+                    text_failing=policy.text_failing(await text_outcomes(conn, row["id"])))
                 await conn.execute(
                     """UPDATE evimed_knowledge.sources SET lease_owner = NULL, lease_until = NULL, next_poll_at = %s,
                               last_attempt_at = %s, consecutive_failures = %s, failing_since = %s,
@@ -574,7 +575,8 @@ class Crawler:
                 successes, episodes = await reliability_24h(conn, row["id"], started)
                 health = policy.health_state(enabled=row["enabled"], last_ok_at=started, failing_since=None,
                                              now=started, successes_24h=successes, failure_episodes_24h=episodes,
-                                             drifted=drifted)
+                                             drifted=drifted,
+                                             text_failing=policy.text_failing(await text_outcomes(conn, row["id"])))
                 await conn.execute(
                     """UPDATE evimed_knowledge.sources SET lease_owner = NULL, lease_until = NULL,
                               next_poll_at = %(next)s, poll_interval_s = %(interval)s, empty_polls = %(empty)s,
@@ -773,6 +775,7 @@ class Crawler:
         changed = 0
         async with self._pool.connection() as conn:
             counts = await reliability_24h_all(conn, now)
+            text_reads = await text_outcomes_all(conn)
             rows = await (await conn.execute(
                 """SELECT id, health, last_ok_at, failing_since, access, last_nonempty_at, zero_streak, ever_dated,
                           undated_streak, updated_at
@@ -786,7 +789,8 @@ class Crawler:
                     enabled=True, last_ok_at=row["last_ok_at"], failing_since=row["failing_since"], now=now,
                     successes_24h=successes, failure_episodes_24h=episodes,
                     drifted=policy.is_drifted(row["access"], row["last_nonempty_at"], row["zero_streak"],
-                                              row["ever_dated"], row["undated_streak"]))
+                                              row["ever_dated"], row["undated_streak"]),
+                    text_failing=policy.text_failing(text_reads.get(row["id"], ())))
                 if health == row["health"]:
                     continue
                 result = await conn.execute(
