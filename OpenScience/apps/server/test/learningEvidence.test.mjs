@@ -46,8 +46,8 @@ function memoryLedger() {
   };
 }
 
-/** @param {{ runs?: any[], answer?: string | null | (() => Promise<string | null>), refusal?: string | null, ledger?: ReturnType<typeof memoryLedger>, opened?: any[], shapes?: any, failures?: string[] }} [options] */
-function setup({ runs = [finished()], answer = null, refusal = null, ledger = memoryLedger(), opened = methods, shapes = { "report/weekly.md": { format: "md", labels: ["summary", "findings"] } }, failures = [] } = {}) {
+/** @param {{ runs?: any[], answer?: string | null | (() => Promise<string | null>), refusal?: string | null, ledger?: ReturnType<typeof memoryLedger>, opened?: any[], shapes?: any, failures?: string[], scripts?: any }} [options] */
+function setup({ runs = [finished()], answer = null, refusal = null, ledger = memoryLedger(), opened = methods, shapes = { "report/weekly.md": { format: "md", labels: ["summary", "findings"] } }, failures = [], scripts = null } = {}) {
   /** @type {any[]} */ const enqueued = [];
   /** @type {string[]} */ const brought = [];
   /** @type {any[]} */ const lessons = [];
@@ -61,7 +61,7 @@ function setup({ runs = [finished()], answer = null, refusal = null, ledger = me
   };
   const judge = { available: true, read: async (request, owner) => { asked.push({ request, owner }); return typeof answer === "function" ? answer() : answer; } };
   const evidence = new LearningEvidence({
-    feedback: ledger, jobs, agentRuns: { list: async () => runs }, triggers: () => triggers, judge: /** @type {any} */ (judge),
+    feedback: ledger, jobs, agentRuns: { list: async () => runs }, triggers: () => triggers, judge: /** @type {any} */ (judge), scripts,
     methodsOpened: async () => opened, resolveProject: async () => project, readShapes: async () => shapes, report: (reason) => failures.push(reason),
     now: () => new Date(NOW),
   });
@@ -250,6 +250,23 @@ test("a run nobody reacted to is settled as silent, with the shape of what it le
   assert.deepEqual(event.detail.shape, [{ format: "md", labels: ["summary", "findings"] }]);
   assert.deepEqual(await run.evidence.settle({ job: settleJob() }), { settled: "silent", routine: false });
   assert.equal(run.ledger.rows.length, 1);
+});
+
+test("a run nobody corrected is handed to the script detector when it settles; a corrected one is not, and a detector that fails never fails the settling", async () => {
+  /** @type {any[]} */ const seen = [];
+  const run = setup({ scripts: { afterSettle: async (_project, finishedRun) => { seen.push(finishedRun.id); return { recorded: 0, queued: [] }; } } });
+  assert.deepEqual(await run.evidence.settle({ job: settleJob() }), { settled: "silent", routine: false });
+  assert.deepEqual(seen, ["run_prev"]);
+  const corrected = setup({ scripts: { afterSettle: async () => { seen.push("corrected"); } } });
+  await corrected.ledger.recordLearningEvidence("u1", { runId: "run_prev", projectId: "p1", key: "k", detail: { evidence: "steer", quote: "再短一点", at: new Date(NOW).toISOString(), scope: "conversation" } });
+  assert.equal((await corrected.evidence.settle({ job: settleJob() })).settled, "corrected");
+  assert.deepEqual(seen, ["run_prev"], "a corrected run is not read for a program");
+  const failing = setup({ scripts: { afterSettle: async () => { throw new Error("executor down"); } } });
+  assert.deepEqual(await failing.evidence.settle({ job: settleJob() }), { settled: "silent", routine: false });
+  // A run with no file has no routine shape and is still read for programs: a script run prints its results and leaves nothing.
+  const none = setup({ shapes: {}, runs: [finished({ outputFiles: [] })], scripts: { afterSettle: async (_project, finishedRun) => { seen.push(`none:${finishedRun.id}`); } } });
+  await none.evidence.settle({ job: settleJob() });
+  assert.deepEqual(seen, ["run_prev", "none:run_prev"]);
 });
 
 test("a store that will not take the silence of a settled run fails the job, so the worker retries it, rather than finishing it with nothing written", async () => {

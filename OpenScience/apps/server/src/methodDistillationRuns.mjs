@@ -45,7 +45,8 @@ import {
 import { readArtifactShapes } from "./artifactShapes.mjs";
 import { LEARNING_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
 import { readRunTranscript, transcriptExcerpt } from "./runTranscripts.mjs";
-import { learnedMethodId, methodScopeOf } from "./learningService.mjs";
+import { readToolTraces } from "./toolExecutionEdges.mjs";
+import { learnedMethodId, methodScopeOf, methodSourceProjects } from "./learningService.mjs";
 import { learningScopeOf, lessonPeers } from "./learningTriggers.mjs";
 import { recordSkippedBeforeReset } from "./memoryMetrics.mjs";
 import { endedBeforeReset } from "./researchMemory.mjs";
@@ -62,9 +63,10 @@ export const DISTILLATION_INPUT_FILE = "distillation-input.json";
  * the Nth successful run of one capability, whose shared routine is induced
  * from all N transcripts at once. `delivered` is no longer produced (2026-10-23:
  * what it taught is now `silent` evidence feeding `routine`), and stays here so
- * a job already queued under it is still read.
+ * a job already queued under it is still read. `script` (2026-10-25) is a program the researcher's runs keep carrying:
+ * the same normalised code in three runs of two conversations (`scriptLessons.mjs`), whose method may attach it as a code skill.
  */
-export const DISTILLATION_TRIGGERS = Object.freeze(["edit_diff", "repair_accepted", "correction", "delivered", "routine"]);
+export const DISTILLATION_TRIGGERS = Object.freeze(["edit_diff", "repair_accepted", "correction", "delivered", "routine", "script"]);
 
 /** Bumped when the input shape or the cleaning rules change, so a re-run under
  *  new rules is a different job rather than a duplicate of the old one. */
@@ -102,6 +104,9 @@ const TAIL_WINDOW = Object.freeze({ edit_diff: 60, repair_accepted: 80 });
 /** How many anchored windows one lesson reads, and how many messages the closing window holds when nothing anchors one. */
 const MAX_WINDOWS = 4;
 const CLOSING_WINDOW = TRAJECTORY_ANCHOR_RADIUS * 2;
+
+/** What the executor's verdict says when it could not run the scripts at all, which is not the same as them failing. */
+const CODE_VERIFICATION_UNAVAILABLE = new Set(["candidate_static_check_unavailable", "candidate_dependencies_unavailable", "code_skill_verification_unavailable"]);
 
 /** How many other runs a routine induction reads beside the one that
  *  triggered it — the job's own list, bounded again here because the payload
@@ -311,23 +316,26 @@ function anchoredExcerpts({ runId, trigger, messages, interventions, rootSession
  * Then the trajectory (`trajectoryDigest`): what was asked, what was done to it, what it left. The excerpts follow, each anchored on
  * an intervention; a lesson with none (a routine, a clean delivery) has the digests and nothing raw.
  * @param {{run: any, trigger: string, transcript: {header: any, messages: any[]} | null, feedback?: any[], repairIssues?: any[], relatedMethods?: any[], mountedTools?: string[],
- *   shapes?: Record<string, any> | null,
- *   peerRuns?: {runId: string, run?: any, shapes?: Record<string, any> | null, transcript: {header: any, messages: any[]} | null}[],
+ *   shapes?: Record<string, any> | null, toolTraces?: readonly any[] | null,
+ *   scripts?: {hash: string, runs: number, conversations: number, exemplars: {runId: string, at?: string, source: string}[]} | null,
+ *   peerRuns?: {runId: string, run?: any, shapes?: Record<string, any> | null, toolTraces?: readonly any[] | null, transcript: {header: any, messages: any[]} | null}[],
  *   correctionRecords?: {recordId: string, key?: string | null, text: string}[],
  *   methodsUsed?: {invoked?: any[], handbooks?: any[], passedOver?: any[], unresolved?: any[]} | null}} input
  *   `methodsUsed`: what the run read, resolved to revisions with what became of the results produced under each
  *   (`MethodFeedbackService.usedForLesson`); absent when this deployment cannot say, which is not "none".
  *   `shapes`: the run's files' structure by path (`readArtifactShapes`); absent, the digest has path and format only.
+ *   `toolTraces`: the run's executed tool trace (`readToolTraces`); absent or empty, the digest's tool order is read from the transcript's own calls.
+ *   `scripts`: for a `script` lesson, the program that recurred — how often, and the source of up to three of its occurrences, so the variants are seen.
  */
 export function buildDistillationInput(input) {
   if (!DISTILLATION_TRIGGERS.includes(input.trigger)) {
     throw new HttpError(400, "distillation_trigger_invalid", "Unknown distillation trigger.");
   }
-  const digestOf = (/** @type {any} */ run, /** @type {any} */ transcript, /** @type {any} */ shapes, /** @type {any} */ reactions = []) => trajectoryDigest(
-    transcript, run ?? {}, { shapes, reactions },
+  const digestOf = (/** @type {any} */ run, /** @type {any} */ transcript, /** @type {any} */ shapes, /** @type {any} */ reactions = [], /** @type {any} */ toolTraces = null) => trajectoryDigest(
+    transcript, run ?? {}, { shapes, reactions, toolTraces },
   );
   const reactions = reactionsOf(input.feedback);
-  const trajectory = digestOf(input.run, input.transcript, input.shapes, reactions);
+  const trajectory = digestOf(input.run, input.transcript, input.shapes, reactions, input.toolTraces);
   const steered = steeredCorrections(input.transcript, input.run);
   const { sessionId: rootSessionId } = rootSessionOf(input.transcript, input.run);
   const anchored = input.transcript
@@ -399,6 +407,12 @@ export function buildDistillationInput(input) {
       unresolved: (input.methodsUsed?.unresolved ?? []).slice(0, 8),
       known: Boolean(input.methodsUsed),
     },
+    // The program a `script` lesson is about, as the researcher's runs carried it: what stays and what varies between the occurrences is the method's
+    // parameters. Absent for every other trigger, so their inputs are what they were.
+    ...(input.trigger === "script" && input.scripts ? { scripts: {
+      hash: input.scripts.hash, runs: input.scripts.runs, conversations: input.scripts.conversations,
+      exemplars: input.scripts.exemplars.slice(0, 3).map((exemplar) => ({ runId: exemplar.runId, ...(exemplar.at ? { at: exemplar.at } : {}), source: String(exemplar.source).slice(0, 16_000) })),
+    } } : {}),
     authoringLimits: {
       maxBodyLines: SKILL_AUTHORING_LIMITS.maxBodyLines,
       maxDescriptionChars: SKILL_AUTHORING_LIMITS.maxDescriptionChars,
@@ -413,7 +427,7 @@ export function buildDistillationInput(input) {
     peerRuns: (input.peerRuns ?? []).slice(0, MAX_PEER_RUNS).map((peer) => ({
       runId: peer.runId,
       transcriptCompleteness: peer.transcript?.header?.completeness ?? "unavailable",
-      trajectory: peer.transcript ? digestOf(peer.run ?? { id: peer.runId }, peer.transcript, peer.shapes) : null,
+      trajectory: peer.transcript ? digestOf(peer.run ?? { id: peer.runId }, peer.transcript, peer.shapes, [], peer.toolTraces) : null,
     })),
   };
 }
@@ -554,10 +568,15 @@ export class MethodDistillationRuns {
    *   resetInstant?: ((userId: string) => Promise<string | null>) | null,
    *   similarity?: { nearest: (query: string, methods: readonly any[], options?: { limit?: number }) => Promise<{ method: any, score: number }[]> } | null,
    *   resolveRun?: ((project: any, runId: string) => Promise<any>) | null,
+   *   scriptUses?: { exemplars: (userId: string, hash: string) => Promise<{runId: string, at?: string, source: string}[]> } | null,
+   *   verifyCode?: ((candidate: { files: Record<string, string>, dependencies: [] }, options: { signal?: AbortSignal }) => Promise<{ ok: boolean, issues: { code: string, message?: string, path?: string }[] }>) | null,
+   *   onCodeSkill?: ((outcome: string) => void) | null,
    *   onEvidence?: ((counts: { kept: number, dropped: number }) => void) | null}} dependencies
+   *   `scriptUses` gives a `script` lesson the sources of the program that recurred; `verifyCode` runs a candidate's attached scripts and their tests in the disposable
+   *   executor before any method that carries them is written (`onCodeSkill` counts `verified`, `failed`, `unavailable`).
    */
   constructor({ dispatch, readResult, learning, jobs = null, notifications = null, readCorrections = null, resolveProject = null, usedMethods = null, resetInstant = null,
-    similarity = null, resolveRun = null, onEvidence = null }) {
+    similarity = null, resolveRun = null, scriptUses = null, verifyCode = null, onCodeSkill = null, onEvidence = null }) {
     if (typeof dispatch !== "function" || typeof readResult !== "function") {
       throw new TypeError("Method distillation requires the bounded run dispatcher and result reader.");
     }
@@ -573,6 +592,9 @@ export class MethodDistillationRuns {
     this.resetInstant = resetInstant;
     this.similarity = similarity;
     this.resolveRun = resolveRun;
+    this.scriptUses = scriptUses;
+    this.verifyCode = verifyCode;
+    this.onCodeSkill = onCodeSkill;
     this.onEvidence = onEvidence;
   }
 
@@ -591,6 +613,56 @@ export class MethodDistillationRuns {
     } catch {
       return pool.slice(0, MAX_RELATED);
     }
+  }
+
+  /**
+   * The program a `script` lesson is about, as the account's own runs carried it. A lesson whose occurrences are gone (the project was deleted, the account
+   * reset its memory) has nothing to read and nothing to retry.
+   * @param {any} job @returns {Promise<{hash: string, runs: number, conversations: number, exemplars: {runId: string, at?: string, source: string}[]}>}
+   */
+  async #scriptsOf(job) {
+    const hash = String(job.payload?.scriptHash ?? "");
+    const exemplars = this.scriptUses && /^[a-f0-9]{32}$/.test(hash) ? await this.scriptUses.exemplars(job.userId, hash) : [];
+    if (!exemplars.length) throw new HttpError(409, "distillation_run_unavailable", "The program this lesson was queued for is no longer on record.");
+    return { hash, runs: Number(job.payload?.runs) || exemplars.length, conversations: Number(job.payload?.conversations) || 1, exemplars };
+  }
+
+  /**
+   * Prove a candidate's attached scripts run before any method that carries them is written: the static checks and each script's own test, in the
+   * disposable executor (`verifyCode`). A candidate that fails is no method — never a verdict on the researcher's work, which was done long before. An
+   * executor that could not run them is not a failure of the candidate: the job is retried, and a method carrying code nobody ran is never written.
+   * @param {Record<string, string> | undefined} files @param {AbortSignal | undefined} [signal]
+   * @returns {Promise<{ ok: boolean, issues: string[] }>}
+   */
+  async #verifiedCode(files, signal = undefined) {
+    if (!files || !Object.keys(files).some((path) => /^scripts\/[^/]+\.py$/.test(path))) return { ok: true, issues: [] };
+    if (!this.verifyCode) {
+      this.#codeSkill("unavailable");
+      throw new HttpError(503, "code_skill_verification_unavailable", "A method that carries code is not written without running it, and this deployment cannot run it.");
+    }
+    /** @type {Awaited<ReturnType<NonNullable<typeof this.verifyCode>>>} */
+    let verdict;
+    try {
+      verdict = await this.verifyCode({ files, dependencies: [] }, { signal });
+    } catch (error) {
+      this.#codeSkill("unavailable");
+      throw error instanceof HttpError ? error : new HttpError(503, "code_skill_verification_unavailable", "The scripts could not be run.");
+    }
+    if (verdict.issues?.some((issue) => CODE_VERIFICATION_UNAVAILABLE.has(issue.code))) {
+      this.#codeSkill("unavailable");
+      throw new HttpError(503, "code_skill_verification_unavailable", "The scripts could not be run.");
+    }
+    if (!verdict.ok) {
+      this.#codeSkill("failed");
+      return { ok: false, issues: (verdict.issues ?? []).map((issue) => String(issue.code)).slice(0, 8) };
+    }
+    this.#codeSkill("verified");
+    return { ok: true, issues: [] };
+  }
+
+  /** @param {string} outcome */
+  #codeSkill(outcome) {
+    try { this.onCodeSkill?.(outcome); } catch { /* a counter never decides what is written */ }
   }
 
   /**
@@ -630,6 +702,7 @@ export class MethodDistillationRuns {
     const files = [...new Set(["artifacts", "unverifiedArtifacts", "outputFiles"].flatMap((field) => (Array.isArray(run?.[field]) ? run[field] : [])
       .map((/** @type {any} */ entry) => String(typeof entry === "string" ? entry : entry?.path ?? ""))))].filter(Boolean);
     const shapes = files.length ? await readArtifactShapes(project, files).catch(() => ({})) : {};
+    const toolTraces = await readToolTraces(project, run.id);
     // The researcher's whole library, ranked by what this lesson is about: a method learnt in another project is the one to amend,
     // not a near-duplicate to write beside it.
     const related = await this.#related(job.userId, lessonQueryText({ run, trigger, transcript, feedback, correctionRecords, shapes }));
@@ -648,11 +721,13 @@ export class MethodDistillationRuns {
         runId: peer.runId,
         ...(peerRun ? { run: peerRun } : {}),
         shapes: peerProject && peerFiles.length ? await readArtifactShapes(peerProject, peerFiles).catch(() => ({})) : null,
+        toolTraces: peerProject ? await readToolTraces(peerProject, peer.runId) : [],
         transcript: peerProject ? await readRunTranscript(peerProject, peer.runId).catch(() => null) : null,
       });
     }
     const methodsUsed = this.usedMethods ? await this.usedMethods(project, run).catch(() => null) : null;
-    const input = buildDistillationInput({ run, trigger, transcript, feedback, repairIssues, relatedMethods: related, peerRuns, correctionRecords, methodsUsed, shapes });
+    const scripts = trigger === "script" ? await this.#scriptsOf(job) : null;
+    const input = buildDistillationInput({ run, trigger, transcript, feedback, repairIssues, relatedMethods: related, peerRuns, correctionRecords, methodsUsed, shapes, toolTraces, scripts });
     const dispatchId = distillationDispatchId(run.id, trigger, typeof job.payload?.dispatchKey === "string" ? job.payload.dispatchKey.slice(0, 200) : "");
     const identity = await this.dispatch({
       userId: job.userId,
@@ -703,7 +778,7 @@ export class MethodDistillationRuns {
    * bodies to these. The lesson's `scope` — the capability it came from, or `conversation` — is stored with them, so a later run
    * of the same scope is offered the method (`learnedMethodMount.mjs`).
    * @param {any} job @param {any} run @param {Record<string, any>} output
-   * @param {{signal?: string, evidence?: Map<string, string>}} [context] what the lesson's evidence was, read from the job when absent; and the text the distillation was shown, by run
+   * @param {{signal?: string, evidence?: Map<string, string>, abortSignal?: AbortSignal}} [context] what the lesson's evidence was, read from the job when absent; and the text the distillation was shown, by run
    */
   async applyCandidate(job, run, output, context = {}) {
     const candidate = output.candidate ?? output["method-candidate.json"] ?? output;
@@ -787,6 +862,9 @@ export class MethodDistillationRuns {
     // after its run had passed the same rules (2026-09-21, the first two
     // lessons production ever finished).
     const files = candidate?.files;
+    // A method that carries code is written only once its scripts and their tests have run (`#verifiedCode`); one that fails to is no method.
+    const codeVerdict = await this.#verifiedCode(files, context.abortSignal);
+    if (!codeVerdict.ok) return { operation: "no_change", methodId: undefined, skipped: "code_skill_unverified", issues: codeVerdict.issues };
     // The steps in the researcher's language, beside the method and never in
     // it (M-5); cleaned by the store.
     const steps = typeof candidate?.display?.steps === "string" ? candidate.display.steps : undefined;
@@ -862,6 +940,8 @@ export class MethodDistillationRuns {
         scope: scopes.size === 1 && target.payload?.provenance?.scope ? lessonScope : undefined,
         evidence: evidence.length ? evidence : undefined,
         ...(folded.length ? {
+          // The merged method rests on the projects the folded ones were learnt in as well (`LearningService.amendMethod` unions them in).
+          sourceProjectIds: folded.flatMap((method) => methodSourceProjects(method.payload?.provenance)),
           consolidatedBy: `consolidate:distill:${job.id ?? run.id}`,
           mergedFrom: folded.map((method) => ({ methodId: method.id, digest: method.payload.contentDigest })),
           pendingRetirements: folded.map((method) => ({ methodId: method.id, baseDigest: method.payload.contentDigest, assignment: `distill:${run.id}` })),
@@ -873,7 +953,27 @@ export class MethodDistillationRuns {
       scope,
     });
     await this.#enqueueIntegrate(job, amended.id, amended.revision);
+    // The amendment is in force at once; whether it contradicts what the person accepted is read afterwards, never waited for.
+    await this.#enqueueReplay(job, amended, target.payload?.contentDigest);
     return { operation: existing ? "amend" : operation, methodId: amended.id };
+  }
+
+  /**
+   * Ask for the replay of a method this lesson has just changed (`methodReplay.mjs`): against the body it holds now, naming the one it replaced.
+   * Nothing when the body did not change or the store did not say. Keyed on the body, so a retried distillation queues no second.
+   * @param {any} job @param {any} method the method as amended @param {unknown} previousDigest
+   */
+  async #enqueueReplay(job, method, previousDigest) {
+    const digest = method?.payload?.contentDigest;
+    if (!this.jobs || typeof digest !== "string" || !digest || typeof previousDigest !== "string" || previousDigest === digest) return;
+    try {
+      await this.jobs.enqueue(job.userId, "consolidate", { action: "replay", methodId: method.id, digest, previousDigest }, {
+        idempotencyKey: `consolidate:replay:${method.id}:${digest}`,
+        projectId: LEARNING_PROJECT_ID,
+      });
+    } catch {
+      // isolated: an amendment that was not replayed stands on its own runs' counters, as it did before the replay existed
+    }
   }
 
   /**

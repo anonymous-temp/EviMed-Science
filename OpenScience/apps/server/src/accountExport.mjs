@@ -10,6 +10,7 @@ import { EXTENSION_CUSTOMER_KINDS, exportExtensionAccountRow, exportPersonalSkil
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
 import { migrateFrontierEventReading } from "./frontierEventReading.mjs";
 import { migrateCapsuleShare } from "./capsuleShareLinks.mjs";
+import { migrateScriptUses } from "./scriptLessons.mjs";
 import { senderDisplayName } from "./capsuleShareLabel.mjs";
 import { receivedPackForExport, sentSnapshotForExport } from "./capsuleSharerAccount.mjs";
 
@@ -114,6 +115,10 @@ const queries = [
   ["feedbackEvents", `SELECT id,project_id AS "projectId",run_id AS "runId",trigger_kind AS "trigger",
     subject_type AS "subjectType",subject_id AS "subjectId",detail,occurred_at AS "occurredAt",recorded_at AS "recordedAt"
     FROM evimed_product.feedback_events WHERE user_id=$1 ORDER BY occurred_at,id`],
+  // The programs the account's own runs carried that the learning loop counted toward a script lesson (`scriptLessons.mjs`): the program's text, the run and
+  // conversation it was in and when, for the last ninety days.
+  ["scriptUses", `SELECT script_hash AS "scriptHash",run_id AS "runId",session_id AS "sessionId",project_id AS "projectId",scope,occurred_at AS "occurredAt",source
+    FROM evimed_learning.script_uses WHERE user_id=$1 ORDER BY occurred_at,run_id,script_hash`],
 ];
 
 /** Every table the exported state is read from, as `schema.table`.
@@ -395,6 +400,7 @@ export async function withAccountExportSnapshot(database, user, config, operatio
   await migrateEvidenceZones(database);
   await migrateFrontierEventReading(database);
   await migrateCapsuleShare(database);
+  await migrateScriptUses(database);
   return database.transaction(async client => {
     await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
     await client.query("SET LOCAL statement_timeout = '15s'");
@@ -472,7 +478,7 @@ export async function withAccountExportSnapshot(database, user, config, operatio
     for (const entry of omissions) {
       report(`account export left out ${entry.kind}: ${entry.reason}, ${entry.documents} documents${entry.revisions === undefined ? "" : `, ${entry.revisions} revisions`}\n`);
     }
-    // `version` stays 1 with `priceLists`, `feedbackEvents` and `omissions`
+    // `version` stays 1 with `priceLists`, `feedbackEvents`, `scriptUses` and `omissions`
     // added, and with new kinds among `documents`: v1 is an additive contract,
     // so a new top-level key, or a kind a reader does not know, is not a break
     // for a reader that keeps parsing what it knows, and a bump would tell
@@ -490,7 +496,7 @@ export async function withAccountExportSnapshot(database, user, config, operatio
       version: 1, snapshotAt: owner.snapshotAt, account: { id: owner.id, name: owner.name, accountCreatedAt: owner.accountCreatedAt },
       projects: tables.projects, researchSessions: tables.researchSessions, documents: tables.documents, revisions: tables.revisions,
       inbox: { notifications: tables.notifications, preferences: tables.notificationPreferences[0] ?? null }, usage: tables.usage,
-      priceLists: exportedPriceLists(tables.usage), feedbackEvents: tables.feedbackEvents, omissions,
+      priceLists: exportedPriceLists(tables.usage), feedbackEvents: tables.feedbackEvents, scriptUses: tables.scriptUses, omissions,
       frontierEventReads: tables.frontierEventReads,
       evidenceCardRevisions:tables.evidenceCardRevisions,evidenceAutomation:tables.evidenceAutomation,evidenceZones:tables.evidenceZones,evidenceCards:tables.evidenceCards,evidenceZoneFollows:tables.evidenceZoneFollows,
       evidenceComments:tables.evidenceComments,evidenceReviews:tables.evidenceReviews,evidenceZoneFeedback:tables.evidenceZoneFeedback,evidenceChallenges:tables.evidenceChallenges,evidenceTopicRequestVotes:tables.evidenceTopicRequestVotes,

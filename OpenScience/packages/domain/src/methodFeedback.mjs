@@ -72,8 +72,8 @@ export const METHOD_APPLICABILITY_STATES = Object.freeze(['unknown', 'flagged', 
 /** How many entries one method record keeps. The oldest go first; a count is never a megabyte. */
 export const METHOD_FEEDBACK_LIMIT = 60
 
-/** What a method's record says about how it was left: returned to an earlier body, or stopped. */
-export const METHOD_LINK_TYPES = Object.freeze(['rolled_back_for_regression', 'retired_for_regression'])
+/** What a method's record says about how it was left: returned to an earlier body, or stopped — because the results made under the newer body were found wrong (`*_for_regression`), or because the newer text contradicted runs the person had accepted (`*_for_replay`, `MethodReplay`: `results` is the runs it was read against, `against` the contradictions). */
+export const METHOD_LINK_TYPES = Object.freeze(['rolled_back_for_regression', 'retired_for_regression', 'rolled_back_for_replay', 'retired_for_replay'])
 
 /** How many revision links one method keeps. */
 export const METHOD_LINK_LIMIT = 20

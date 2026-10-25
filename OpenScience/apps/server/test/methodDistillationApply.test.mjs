@@ -177,6 +177,112 @@ test("a create under a name the library already holds becomes that method's next
   assert.equal(enqueued[0].opts.idempotencyKey, "consolidate:integrate:method:learned:do-the-thing:4");
 });
 
+test("a merge the distillation proposes names the projects of the methods it folds in, beside the lesson's own", async () => {
+  const learning = fakeLearning(["method:learned:do-the-thing", "method:learned:folded-a"]);
+  const read = learning.getMethod;
+  learning.getMethod = async (userId, methodId) => {
+    const found = await read(userId, methodId);
+    return { ...found, payload: { ...found.payload, status: "approved", contentDigest: `sha256:${methodId}`,
+      provenance: methodId.endsWith("folded-a") ? { sourceProjectId: "p_two", sourceProjectIds: ["p_two", "p_three"] } : { sourceProjectId: "p_one" } } };
+  };
+  const { distillation } = runs(learning);
+  await distillation.applyCandidate(job, run, {
+    candidate: { operation: "merge", targetMethodId: "method:learned:do-the-thing", mergedMethodIds: ["method:learned:folded-a"] },
+    skill: SKILL,
+  });
+  assert.equal(learning.amended.length, 1);
+  assert.deepEqual(learning.amended[0].provenance.sourceProjectIds, ["p_two", "p_three"], "the service unions them with what the target already names");
+  assert.equal(learning.amended[0].provenance.sourceProjectId, "p1", "and the lesson's own project is the provenance's sourceProjectId, as for any lesson");
+});
+
+test("an amendment that changed the body is queued for replay, naming the body it replaced; one that changed nothing, or that the store did not describe, is not", async () => {
+  const learning = fakeLearning(["method:learned:do-the-thing"]);
+  const read = learning.getMethod;
+  learning.getMethod = async (userId, methodId) => ({ ...(await read(userId, methodId)), payload: { dependencies: [], contentDigest: "sha256:old" } });
+  const amend = learning.amendMethod;
+  /** @type {{ digest: string }} */
+  const next = { digest: "sha256:new" };
+  learning.amendMethod = async (userId, methodId, input) => ({ ...(await amend(userId, methodId, input)), payload: { contentDigest: next.digest } });
+  const { distillation, enqueued } = runs(learning);
+  await distillation.applyCandidate(job, run, { candidate: { operation: "amend", targetMethodId: "method:learned:do-the-thing" }, skill: SKILL });
+  const replay = enqueued.find((entry) => entry.payload.action === "replay");
+  assert.deepEqual(replay?.payload, { action: "replay", methodId: "method:learned:do-the-thing", digest: "sha256:new", previousDigest: "sha256:old" });
+  assert.equal(replay?.opts.idempotencyKey, "consolidate:replay:method:learned:do-the-thing:sha256:new");
+  assert.equal(replay?.opts.projectId, LEARNING_PROJECT_ID);
+  assert.equal(replay?.kind, "consolidate");
+  // The same body back is not a change.
+  next.digest = "sha256:old";
+  const before = enqueued.length;
+  await distillation.applyCandidate(job, run, { candidate: { operation: "amend", targetMethodId: "method:learned:do-the-thing" }, skill: SKILL });
+  assert.equal(enqueued.slice(before).filter((entry) => entry.payload.action === "replay").length, 0);
+});
+
+/** A code skill: the script, its tool schema and its test, which share one stem. */
+const CODE_FILES = {
+  "scripts/clean_column.py": "def clean_column(rows, column):\n    return [row for row in rows if row.get(column) not in (None, '')]\n\n\nif __name__ == '__main__':\n    print(clean_column([{'a': 1}], 'a'))\n",
+  "scripts/clean_column.tool.json": JSON.stringify({ name: "clean_column", description: "Drop the rows with an empty value in one column.",
+    parameters: { type: "object", properties: { rows: { type: "array", description: "The rows." }, column: { type: "string", description: "The column." } }, required: ["rows", "column"] } }),
+  "tests/test_clean_column.py": "from scripts.clean_column import clean_column\n\n\ndef test_drops_empty():\n    assert clean_column([{'a': 1}, {'a': ''}], 'a') == [{'a': 1}]\n",
+};
+
+/** @param {{ verdict?: any, throws?: any }} [options] */
+function codeRuns({ verdict = { ok: true, issues: [] }, throws = null } = {}) {
+  const learning = fakeLearning();
+  /** @type {any[]} */ const verified = [];
+  /** @type {string[]} */ const outcomes = [];
+  const distillation = new MethodDistillationRuns({
+    learning, jobs: { async enqueue() { return { id: "j" }; } },
+    dispatch: async () => { throw new Error("applyCandidate must not dispatch a run"); },
+    readResult: async () => { throw new Error("applyCandidate must not read a run result"); },
+    verifyCode: async (candidate) => { verified.push(candidate); if (throws) throw throws; return verdict; },
+    onCodeSkill: (outcome) => outcomes.push(outcome),
+  });
+  return { distillation, learning, verified, outcomes };
+}
+
+test("a candidate that carries scripts is written only after its scripts and their tests have run in the executor", async () => {
+  const { distillation, learning, verified, outcomes } = codeRuns();
+  const applied = await distillation.applyCandidate(job, run, { candidate: { operation: "create", files: CODE_FILES }, skill: SKILL });
+  assert.equal(applied.operation, "create");
+  assert.equal(verified.length, 1);
+  assert.deepEqual(Object.keys(verified[0].files).sort(), Object.keys(CODE_FILES).sort());
+  assert.deepEqual(verified[0].dependencies, [], "the method's depends_on is not a package request");
+  assert.deepEqual(learning.created[0].files, CODE_FILES, "the files the executor ran are the files the method carries");
+  assert.deepEqual(outcomes, ["verified"]);
+});
+
+test("a candidate whose scripts fail is no method, said by its issues, and the job does not fail: the researcher's work was done long before", async () => {
+  const { distillation, learning, outcomes } = codeRuns({ verdict: { ok: false, issues: [{ code: "method_script_self_test_failed" }, { code: "candidate_network_import_denied" }] } });
+  const applied = await distillation.applyCandidate(job, run, { candidate: { operation: "create", files: CODE_FILES }, skill: SKILL });
+  assert.deepEqual(applied, { operation: "no_change", methodId: undefined, skipped: "code_skill_unverified", issues: ["method_script_self_test_failed", "candidate_network_import_denied"] });
+  assert.equal(learning.created.length, 0);
+  assert.deepEqual(outcomes, ["failed"]);
+});
+
+test("an executor that could not run the scripts is not a verdict on them: the job is refused for retry, and nothing is written", async () => {
+  for (const options of [
+    { throws: Object.assign(new Error("down"), { code: "runtime_controller_unavailable" }) },
+    { verdict: { ok: false, issues: [{ code: "candidate_static_check_unavailable" }] } },
+  ]) {
+    const { distillation, learning, outcomes } = codeRuns(options);
+    await assert.rejects(() => distillation.applyCandidate(job, run, { candidate: { operation: "create", files: CODE_FILES }, skill: SKILL }), { code: "code_skill_verification_unavailable" });
+    assert.equal(learning.created.length, 0);
+    assert.deepEqual(outcomes, ["unavailable"]);
+  }
+  // A deployment with no executor composed never writes a method that carries code.
+  const bare = runs();
+  await assert.rejects(() => bare.distillation.applyCandidate(job, run, { candidate: { operation: "create", files: CODE_FILES }, skill: SKILL }), { code: "code_skill_verification_unavailable" });
+  assert.equal(bare.learning.created.length, 0);
+});
+
+test("a candidate with no script is not sent to the executor at all", async () => {
+  const { distillation, learning, verified } = codeRuns();
+  await distillation.applyCandidate(job, run, { candidate: { operation: "create" }, skill: SKILL });
+  await distillation.applyCandidate(job, run, { candidate: { operation: "create", files: { "tests/notes.md": "x" } }, skill: SKILL });
+  assert.equal(verified.length, 0);
+  assert.equal(learning.created.length, 2);
+});
+
 test("a delivered package is read as one method, not as a method whose scripts are its own files", async () => {
   // 2026-09-21: the first two lessons production ever finished were refused as
   // `method_invalid` — `applyCandidate` handed the store the whole delivered
@@ -203,8 +309,10 @@ test("a delivered package is read as one method, not as a method whose scripts a
   assert.deepEqual(verdict.issues, [], "what reaches the store passes the store's own rules");
 });
 
-test("scripts the proposal itself attaches still travel with it", async () => {
-  const { distillation, learning } = runs();
+test("scripts the proposal itself attaches still travel with it (once they have run)", async () => {
+  const learning = fakeLearning();
+  const distillation = new MethodDistillationRuns({ learning, jobs: { async enqueue() { return { id: "j" }; } },
+    dispatch: async () => { throw new Error("no run"); }, readResult: async () => { throw new Error("no run"); }, verifyCode: async () => ({ ok: true, issues: [] }) });
   const files = { "scripts/count.py": "print(1)\n" };
   await distillation.applyCandidate(job, run, decodeLearningOutput({
     "SKILL.md": SKILL,

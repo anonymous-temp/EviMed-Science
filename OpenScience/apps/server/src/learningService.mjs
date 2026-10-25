@@ -144,6 +144,10 @@ export function effectiveStatusReason(payload) {
   if (returned?.type === "rolled_back_for_regression" && returned.toDigest === payload?.contentDigest) {
     return `用上较新一版后，${returned.results} 个结果里有 ${returned.against} 个没能被重算复现，或被你改正过，已回到这一版；这只说明两者相伴出现，不证明是这条做法造成的。`;
   }
+  // Returned to an earlier body because the newer text contradicted runs the person had accepted (`MethodReplay`): the same, said in what was found.
+  if (returned?.type === "rolled_back_for_replay" && returned.toDigest === payload?.contentDigest) {
+    return `较新的一版和你之前认可过的工作对不上（核对了 ${returned.results} 次，其中 ${returned.against} 次冲突），已回到这一版；要用较新的一版，可以在版本历史里恢复。`;
+  }
   return payload?.provenance?.origin === "explicit"
     ? "你亲口定下的做法，已直接生效；回到上一版即可撤销。"
     : "从你自己的研究里学到，已直接生效；用上它的研究若明显更常被退回，会自动停用，你也可以随时停用。";
@@ -361,9 +365,14 @@ export class LearningService {
     const digest = this.#validated({ ...input, resolveDigest: await this.#digestResolver(userId) });
     const name = String(input.frontmatter?.name ?? "");
     const id = learnedMethodId(name);
-    const sourceProjectId = sourceProjectOf(input.provenance, input.projectId);
+    // A method learnt from one lesson names the project the lesson was in. One derived from other methods (a merge, a factored-out shared part)
+    // names every project its sources were learnt in, which the caller states in the provenance and which is kept as it is stated: it was forced
+    // to the project the consolidation ran in, so deleting a source's project never reached a merge built from it.
+    const named = methodSourceProjects(input.provenance);
+    const sourceProjectId = named[0] ?? sourceProjectOf(null, input.projectId);
+    const sourceProjectIds = named.length ? named : sourceProjectId ? [sourceProjectId] : [];
     const provenance = withResultLinks({ origin: "inferred", ...input.provenance,
-      ...(sourceProjectId ? { sourceProjectId, sourceProjectIds: [sourceProjectId] } : {}) });
+      ...(sourceProjectId ? { sourceProjectId, sourceProjectIds } : {}) });
     const createdAt = this.now().toISOString();
     const steps = cleanMethodSteps(input.steps);
     const scope = cleanMethodScope(input.scope);
@@ -502,8 +511,9 @@ export class LearningService {
     const sourceProjectId = sourceProjectOf(current.payload.provenance, null) ?? sourceProjectOf(input.provenance, null);
     // But every project a lesson came from is kept beside it: deleting a project retires only the methods that were
     // learnt in no other (`retireProjectMethods`).
+    // (A merge folds methods learnt elsewhere into this one, and its provenance names their projects as well as the lesson's.)
     const sourceProjectIds = methodSourceProjects({ ...current.payload.provenance,
-      sourceProjectIds: [...methodSourceProjects(current.payload.provenance), sourceProjectOf(input.provenance, null)].filter(Boolean) });
+      sourceProjectIds: [...methodSourceProjects(current.payload.provenance), ...methodSourceProjects(input.provenance)] });
     const payload = {
       ...current.payload,
       status: bodyChanged ? "candidate" : current.payload.status,
@@ -674,8 +684,11 @@ export class LearningService {
    *
    * A method is the researcher's, not the project's (`createCandidate`), and it used to outlive every project it came from.
    * Deleting a project is asking for what it held to go, and a way of working drawn only from its conversations is part of
-   * that. A method that a lesson from another project also shaped keeps standing: it is not only this project's. Retired,
-   * not deleted: the reason is written on it, and it can be returned to like any stopped method.
+   * that. A method that a lesson from another project also shaped keeps standing: it is not only this project's, and the deleted
+   * project leaves its list of sources — so that deleting the last of the others later finds it again (it was found by the first
+   * project it was learnt in alone, and a method learnt in two projects outlived both). A merge, or a method factored out of
+   * others, names every project its sources were learnt in (`createCandidate`) and goes the same way. Retired, not deleted: the
+   * reason is written on it, and it can be returned to like any stopped method.
    * Run inside the project's deletion (`transactionClient`), so the project goes only if its methods are stopped.
    *
    * @param {string} userId @param {string} projectId @param {{ transactionClient?: any }} [options]
@@ -685,33 +698,47 @@ export class LearningService {
     /** @type {string[]} */
     const retired = [];
     let kept = 0;
-    /** @type {string | null} */
-    let cursor = null;
-    do {
-      const page = await this.documents.list(userId, "method", {
-        limit: 100, cursor,
-        filter: { recordType: LEARNED_METHOD_RECORD_TYPE, provenance: { sourceProjectId: projectId } },
-      });
-      for (const listed of page.items ?? []) {
-        if (listed.payload?.status === "retired") continue;
-        if (methodSourceProjects(listed.payload?.provenance).some((id) => id !== projectId)) { kept += 1; continue; }
-        // The revision read is the revision written against: one that moved in between is read again, a few times.
-        let document = listed;
-        for (let attempt = 0; attempt < 4; attempt += 1) {
-          if (document.payload?.status === "retired" || methodSourceProjects(document.payload?.provenance).some((id) => id !== projectId)) break;
-          const payload = { ...document.payload, status: "retired", statusReason: PROJECT_DELETED_REASON, statusChangedAt: this.now().toISOString() };
-          try {
-            await this.documents.put(userId, "method", document.id, payload, { expectedRevision: document.revision, transactionClient });
-            retired.push(document.id);
-            break;
-          } catch (error) {
-            if (/** @type {any} */ (error)?.code !== "product_revision_conflict" || attempt === 3) throw error;
-            document = await this.documents.get(userId, "method", document.id) ?? document;
+    /** @type {Set<string>} */
+    const handled = new Set();
+    // By the project it was first learnt in, and by every project it names: a record from before the list names the first only.
+    for (const provenance of [{ sourceProjectId: projectId }, { sourceProjectIds: [projectId] }]) {
+      /** @type {string | null} */
+      let cursor = null;
+      do {
+        const page = await this.documents.list(userId, "method", {
+          limit: 100, cursor,
+          filter: { recordType: LEARNED_METHOD_RECORD_TYPE, provenance },
+        });
+        for (const listed of page.items ?? []) {
+          if (handled.has(listed.id)) continue;
+          handled.add(listed.id);
+          // A stopped method keeps the reason it was stopped for, and its sources as they were.
+          if (listed.payload?.status === "retired") continue;
+          // The revision read is the revision written against: one that moved in between is read again, a few times.
+          let document = listed;
+          for (let attempt = 0; attempt < 4; attempt += 1) {
+            if (document.payload?.status === "retired") break;
+            const remaining = methodSourceProjects(document.payload?.provenance).filter((id) => id !== projectId);
+            const others = remaining.length > 0;
+            const payload = others
+              ? { ...document.payload, provenance: { ...document.payload.provenance,
+                ...(document.payload.provenance?.sourceProjectId === projectId ? { sourceProjectId: remaining[0] } : {}), sourceProjectIds: remaining } }
+              : { ...document.payload, status: "retired", statusReason: PROJECT_DELETED_REASON, statusChangedAt: this.now().toISOString() };
+            try {
+              // Dropping a deleted project from a method's sources is bookkeeping, not a change of the method: no history row.
+              await this.documents.put(userId, "method", document.id, payload, { expectedRevision: document.revision, transactionClient, ...(others ? { telemetry: true } : {}) });
+              if (others) kept += 1;
+              else retired.push(document.id);
+              break;
+            } catch (error) {
+              if (/** @type {any} */ (error)?.code !== "product_revision_conflict" || attempt === 3) throw error;
+              document = await this.documents.get(userId, "method", document.id) ?? document;
+            }
           }
         }
-      }
-      cursor = page.nextCursor ?? null;
-    } while (cursor);
+        cursor = page.nextCursor ?? null;
+      } while (cursor);
+    }
     return { retired, kept };
   }
 
@@ -1182,6 +1209,29 @@ export class LearningService {
     };
     if (proposal.action === "rollback" && proposal.rollbackToDigest) {
       return { action: "rollback", document: await this.rollback(userId, document.id, { expectedRevision: document.revision, targetDigest: proposal.rollbackToDigest, link }) };
+    }
+    return { action: "retire", document: await this.retire(userId, document.id, { expectedRevision: document.revision, reason: sentences.retire, link }) };
+  }
+
+  /**
+   * Act on a replay that found the newer text contradicting runs the person had accepted (`MethodReplay`): return the method to the exact
+   * earlier body it names, or stop it when there is none (a merge the pass just built, whose originals are still in force), and keep the link
+   * that says why. Both are what the person undoes by restoring a revision. `results` is the runs the text was read against and `rejected` the
+   * contradictions found in them; the sentence for a stop is the reader's, passed in because it lives with the other retirement sentences.
+   * @param {string} userId @param {any} document the method as read just now
+   * @param {{ rollbackToDigest?: string | null, runs?: number, rejected?: number }} proposal
+   * @param {{ retire: string }} sentences
+   * @returns {Promise<{ action: "rollback" | "retire", document: any }>}
+   */
+  async applyReplayRegression(userId, document, proposal, sentences) {
+    const rollback = Boolean(proposal.rollbackToDigest) && proposal.rollbackToDigest !== document.payload.contentDigest;
+    const link = {
+      type: rollback ? "rolled_back_for_replay" : "retired_for_replay",
+      at: this.now().toISOString(), fromDigest: document.payload.contentDigest, toDigest: rollback ? proposal.rollbackToDigest : null,
+      results: proposal.runs ?? 0, against: proposal.rejected ?? 0, evidence: [],
+    };
+    if (rollback) {
+      return { action: "rollback", document: await this.rollback(userId, document.id, { expectedRevision: document.revision, targetDigest: proposal.rollbackToDigest ?? undefined, link }) };
     }
     return { action: "retire", document: await this.retire(userId, document.id, { expectedRevision: document.revision, reason: sentences.retire, link }) };
   }

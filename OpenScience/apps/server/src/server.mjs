@@ -119,6 +119,9 @@ import { createClinicalReuse } from "./clinicalContextReuse.mjs";
 import { createLearningRuntime } from "./learningRuntime.mjs";
 import { MethodDistillationRuns } from "./methodDistillationRuns.mjs";
 import { MethodConsolidation, createMethodScreenBaseline } from "./methodConsolidation.mjs";
+import { MethodReplay, MethodReplayJudge, createTrajectoryReader } from "./methodReplay.mjs";
+import { ScriptLessons, ScriptUses } from "./scriptLessons.mjs";
+import { createEvolutionVerification } from "./evolutionVerification.mjs";
 import { createMethodSimilarity } from "./methodSimilarity.mjs";
 import { HandbookConsolidation } from "./handbookConsolidation.mjs";
 import { NativeHandbookContext } from "./nativeHandbookContext.mjs";
@@ -129,7 +132,7 @@ import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learning
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
 import { learnedMethodFamilyForRuntime, methodFamily, runScopeOf } from "./learnedMethodMount.mjs";
 import { createMethodAppliedOutcomes } from "./methodAppliedOutcomes.mjs";
-import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
+import { persistExecutedToolEdges, persistToolTraces } from "./toolExecutionEdges.mjs";
 import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, conversationTurnRouteReason, deliverableDir, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, geoVisibleQuestionOfReason, isChargeableResearchRun, isConversationTurnRun, isResearcherOwnedWork, isVerificationRun, meetsPasswordMinimum, mountedMethodDigest, runRoleOf, usagePurposeOfRun, VCR_STEP_CAPABILITIES, VCR_CAPABILITIES } from "@evimed/domain";
 import { requestedSourceScope, ResearchSessionStore } from "./researchSessions.mjs";
 import { boundConversationNote, prepareResearchContext } from "./researchContext.mjs";
@@ -4232,21 +4235,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // below used to take every such run out of the loop's counters, and a method the work of the study used daily looked unused).
           await recordMethodUse({ project, run, sessions });
           if (!reusableClinicalContext) return;
-          // What actually fed what, for the evaluation corpus.
-          //
-          // Every edge in all fifteen tool graphs is `via: "schema"` — a type
-          // that *could* flow — and only an executed edge may carry a task, so
-          // the brief generator honestly produced nothing. This is the receipt
-          // that was missing; it costs one pass over the transcript already in
-          // hand.
+          // What actually fed what, and the order the work's tools ran in. Every edge in the capability tool graphs was `via: "schema"` — a
+          // type that *could* flow — until the receipts below existed; they cost one pass over the transcript already in hand.
           try {
             const written = await persistExecutedToolEdges({ project, run, sessions });
-            // The call sequence itself, not only the pairs it implies. The plan
-            // builds the corpus "execute first, write the task second", and the
-            // run that established the edges is the execution — so the golden
-            // trace it asks for is read off the transcript rather than waiting
-            // for a fixture harness that would only ever be a claim about it.
-            const traced = await persistGoldenTraces({ project, run, sessions });
+            // The call sequence itself, not only the pairs it implies: what the learning loop's trajectory digest reads as the order of
+            // the work's tools (`readToolTraces`, in `MethodDistillationRuns`).
+            const traced = await persistToolTraces({ project, run, sessions });
             if (written.edges || traced.traces) {
               await securityAudit(config, "run.tool.edges", "ok", {
                 userId: project.userId, projectId: project.id, runId: run.id,
@@ -4598,7 +4593,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     });
     // The mount ranks the library by the same reading of "close" (`RuntimeManager.syncCapsuleMethods`).
     runtimeManager.methodSimilarity = methodSimilarity;
+    // Python runs for the control plane in one place, the runtime controller's disposable container (`exec-verify`): the script detector asks it to normalise
+    // the programs a run carried, and a method that carries code is written only once its scripts have run there (`MethodDistillationRuns.#verifiedCode`).
+    const codeController = overrides.codeSkillController ?? new RuntimeControllerClient(config);
+    const codeVerification = createEvolutionVerification({ execute: (body, options) => codeController.execVerify(body, options),
+      prepareDependencies: (requests, options) => codeController.prepareEvolutionDependencies({ requests }, options) });
+    const scriptUses = productDatabase ? new ScriptUses({ database: productDatabase, windowDays: config.transcriptRetentionDays }) : null;
     const distillation = new MethodDistillationRuns({
+      scriptUses, verifyCode: (candidate, options) => codeVerification.verify(candidate, options), onCodeSkill: (outcome) => learningMetrics.observeCodeSkill(outcome),
       dispatch: dispatchLearningRun,
       readResult: (identity) => readLearningResult({ ...identity, capabilityId: "method-distillation" }),
       learning: learningService, jobs: productJobs, notifications: notificationService,
@@ -4633,7 +4635,24 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // A lesson that became an account's handbook may be general enough for the platform's (learningPlatformHandbooks.mjs, flywheel F16); told, never asked.
       onApplied: (applied) => platformHandbooks?.consider(applied),
     }));
+    // A method that was just rewritten is read against up to five runs the person accepted, afterwards and never waited for (`methodReplay.mjs`).
+    const methodReplay = feedbackEvents ? new MethodReplay({
+      learning: learningService, feedback: feedbackEvents,
+      readTrajectory: createTrajectoryReader({
+        resolveProject: async (userId, projectId) => {
+          const user = await store.userById(userId);
+          return user ? store.requireProject(user, projectId) : null;
+        },
+        listRuns: (project) => agentRuns.list(project),
+      }),
+      judge: new MethodReplayJudge(config, { usageLedger, fetchImpl: overrides.methodReplayFetch ?? globalThis.fetch }),
+      enabled: async (userId) => config.learningEnabled && !(await memoryPausedFor(researchMemory, userId, null)).learning,
+      onOutcome: (outcome) => learningMetrics.observeReplayOutcome(outcome),
+      onVerdict: (verdict) => learningMetrics.observeReplayVerdict(verdict),
+      onStopped: (code) => learningMetrics.observeRetirement(code),
+    }) : null;
     const consolidation = new MethodConsolidation({
+      replay: methodReplay,
       // A card carried this many answered runs and never opened is stopped, with the count as the reason (`OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS`);
       // each stop is counted by the branch that decided.
       unusedAfterLoads: config.learningUnusedRetireLoads, onRetirement: (code) => learningMetrics.observeRetirement(code),
@@ -4665,6 +4684,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       learningEvidence = new LearningEvidence({
         feedback: feedbackEvents, jobs: productJobs, agentRuns, triggers: () => learningTriggers,
         judge: new FollowUpJudge(config, { usageLedger, fetchImpl: overrides.followUpFetch ?? globalThis.fetch }),
+        // A program a clean run carried is counted toward a script lesson (`scriptLessons.mjs`); the queue is the triggers', given late like the triggers themselves.
+        scripts: scriptUses ? new ScriptLessons({ uses: scriptUses, execute: (body, options) => codeController.execVerify(body, options),
+          queue: () => (project, run, lesson) => learningTriggers.queue(project, run, lesson), onOutcome: (outcome, times) => learningMetrics.observeScript(outcome, times) }) : null,
         // The learned methods the previous run opened, by title and when they apply: what a follow-up can be about.
         methodsOpened: methodFeedback ? async (project, run) => (await methodFeedback.usedBy(project, run)).methods.map((method) => ({
           id: method.id, digest: method.digest,

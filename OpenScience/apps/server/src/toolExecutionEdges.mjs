@@ -1,23 +1,21 @@
 /**
- * Which tool actually fed which, read off a finished run.
+ * Which tool actually fed which, and in what order, read off a finished run.
  *
- * Hidden knowledge: `evals/tool-graph/` holds fifteen capability graphs and
- * every edge in all of them is `via: "schema"` — a type an upstream tool
- * *could* produce filling a parameter a downstream tool requires. Not one edge
- * is `via: "executed"`, and `executed` is the only source a task may be built
- * on, so `generate-briefs.mjs` (deleted 2026-10-23) correctly and honestly produced zero briefs and
- * the whole paired-evaluation corpus was empty. The missing piece was never the
- * sampler or the generator. It was that nothing wrote a receipt.
+ * Hidden knowledge: `evals/tool-graph/` holds a capability graph per capability and every edge in them was `via: "schema"` — a
+ * type an upstream tool *could* produce filling a parameter a downstream tool requires — until this producer existed; `executed`
+ * is the only source a task may be built on, and nothing wrote one. The receipts below are written for every finished run, and
+ * merged into the corpus by hand (`scripts/dev/collect-executed-edges.mjs`); the corpus the evaluation harness was to build tasks
+ * from (`generate-briefs.mjs`, deleted 2026-10-23, never produced a brief) is gone, and the graphs' own consumer is the 循证进化
+ * opportunity de-duplication. The second half of the file, the tool traces, is read by the learning loop.
  *
- * This is that producer, and it reads the artefact we already keep: the run
- * transcript. The claim it makes is deliberately the narrow, decidable one —
+ * This reads the artefact we already keep: the run transcript. The claim the edge receipts make is deliberately the narrow,
+ * decidable one —
  *
  *   tool A's result carried an identifier, and a later tool B's input used it.
  *
- * — because that is a fact code can settle. Whether B *semantically* depends on
- * A is a judgement, and a judgement recorded as a receipt is how an evaluation
- * corpus starts testing a claim instead of a system. This file never emits a
- * `semantic` edge for that reason.
+ * — because that is a fact code can settle. Whether B *semantically* depends on A is a judgement, and a judgement recorded as a
+ * receipt is how an evaluation corpus starts testing a claim instead of a system. This file never emits a `semantic` edge for that
+ * reason.
  *
  * Three refusals, each of which would otherwise mint an edge that is not there:
  *
@@ -39,12 +37,11 @@
  * @module
  */
 
-import { createHash } from "node:crypto";
 import path from "node:path";
 
 import { referenceIdentifiers } from "@evimed/domain/clinical-evidence";
 
-import { withProjectStorageMutation, writeFileAtomicNoFollow } from "./security.mjs";
+import { readTextFileNoFollow, withProjectStorageMutation, writeFileAtomicNoFollow } from "./security.mjs";
 
 /** How many characters of one tool result are scanned for identifiers. */
 const MAX_SCANNED_CHARS = 200_000;
@@ -254,89 +251,51 @@ export async function persistExecutedToolEdges({ project, run, sessions }) {
   return { path: path.relative(project.rootDir, absolute), edges: receipts.length };
 }
 
-/* ------------------------------------------------------------- golden traces */
+/* ------------------------------------------------------------- tool traces */
 
 /**
- * @typedef {object} GoldenTraceStep
+ * @typedef {object} ToolTraceStep
  * @property {number} turn
  * @property {string} tool
- * @property {Record<string, unknown>} args
- * @property {string} returnDigest   sha256 of the result text, so a replay is checkable
- * @property {string[]} outputKeys   the top-level keys of a structured result
  */
 
 /**
- * The call sequence a finished run actually performed, per capability.
+ * The call sequence a finished run actually performed: per session, the calls that completed, in the order they completed.
  *
- * Hidden knowledge: the plan has the corpus built "execute first, write the
- * task second", and `generate-briefs.mjs` (deleted 2026-10-23) said in its own header that it cannot
- * execute — it needs a fixture environment and a live kernel. That was read as
- * "the golden trace has to wait for an execution harness". It does not. The
- * runs that established the executed edges *already performed the chain*, and
- * the transcript records every call, its arguments and its result. A trace read
- * off a real run is stronger evidence than one synthesised in a fixture
- * environment, because a fixture environment is a claim about the world and a
- * run is the world.
+ * Hidden knowledge: this was the "golden trace" of the paired-evaluation corpus — each step with its arguments, a digest of its
+ * result and the keys of a structured one, "so a replay is checkable" — and the brief generator that was to build tasks on it
+ * (`generate-briefs.mjs`) was deleted on 2026-10-23 without ever having produced one. Nothing read the arguments or the digests
+ * in the months they were written. What reads a trace now is the trajectory digest the learning loop's distillation is shown
+ * (`trajectoryDigest`, `options.toolTraces`): the order of the tools the work called, which is what a routine is induced from.
+ * A call that failed is not a step of the work, and this is the one place that already knows which calls completed, so the
+ * digest takes its sequence from here and falls back to the transcript's own calls (every call that was made) when a run has no
+ * trace. Only the tool and its turn are kept: the arguments of a call are the person's data and a trace is written for every run.
  *
- * `returnDigest` rather than the result itself: the trace is committed to a
- * corpus, and tool results carry retrieved source text. A digest is enough to
- * check a replay landed in the same place and carries nothing a reader of the
- * corpus is not entitled to.
+ * A session with no capability is in it (the ordinary conversation's own session has none): the edge receipts above need a
+ * capability to file an edge under, a sequence of tools does not.
  *
- * Turns come from the normalized transcript's own `message.turn`, because the
- * plan grades a turn as a unit — any dependency-compatible order inside one
- * turn is equally correct — and a trace that flattened them would grade a
- * legitimate reordering as a deviation.
+ * Turns come from the normalized transcript's own `message.turn`.
  *
  * @param {{runId: string, sessions: readonly any[]}} input
- * @returns {{capability: string, sessionId: string, runId: string, steps: GoldenTraceStep[]}[]}
+ * @returns {{capability: string | null, sessionId: string, runId: string, steps: ToolTraceStep[]}[]}
  */
-export function goldenTraces(input) {
+export function toolTraces(input) {
   const runId = String(input.runId ?? "");
   if (!runId) return [];
-  /** @type {{capability: string, sessionId: string, runId: string, steps: GoldenTraceStep[]}[]} */
+  /** @type {{capability: string | null, sessionId: string, runId: string, steps: ToolTraceStep[]}[]} */
   const traces = [];
   for (const session of input.sessions ?? []) {
-    const capability = String(session?.capability ?? "");
-    if (!capability) continue;
-    /** @type {GoldenTraceStep[]} */
-    const steps = [];
-    for (const call of completedToolCalls(session)) {
-      const text = typeof call.output === "string" ? call.output : asText(call.output);
-      steps.push({
-        turn: call.turn,
-        tool: call.tool,
-        args: call.input && typeof call.input === "object" ? /** @type {Record<string, unknown>} */ (call.input) : {},
-        returnDigest: `sha256:${createHash("sha256").update(text, "utf8").digest("hex")}`,
-        outputKeys: outputKeysOf(text),
-      });
-    }
-    if (steps.length) traces.push({ capability, sessionId: String(session.sessionId ?? ""), runId, steps });
+    const steps = completedToolCalls(session).map((call) => ({ turn: call.turn, tool: call.tool }));
+    if (steps.length) traces.push({ capability: String(session?.capability ?? "") || null, sessionId: String(session?.sessionId ?? ""), runId, steps });
   }
   return traces;
 }
 
-/**
- * The top-level keys of a structured result, or none.
- *
- * A grader uses these to check a replay produced the same *shape* without
- * comparing the values, which is what makes a check survive a source that
- * legitimately returns different records for the same query.
- * @param {string} text @returns {string[]}
- */
-function outputKeysOf(text) {
-  const trimmed = String(text ?? "").trim();
-  if (!trimmed.startsWith("{")) return [];
-  try {
-    const parsed = JSON.parse(trimmed);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? Object.keys(parsed).sort().slice(0, 24) : [];
-  } catch {
-    return [];
-  }
-}
-
-/** Where one project's golden traces live, beside its receipts. */
+/** Where one project's tool traces live, beside its receipts. */
 export const TRACE_DIR_NAME = "tool-traces";
+
+/** The schema a trace file carries; a file of another one (the arguments-and-digests shape that was written until 2026-10-25) is not read. */
+export const TOOL_TRACE_SCHEMA = "tool-trace/2";
 
 /** @param {{ metaDir: string }} project @param {string} runId @returns {string} */
 export function tracePath(project, runId) {
@@ -344,15 +303,15 @@ export function tracePath(project, runId) {
 }
 
 /**
- * Write one run's golden traces beside its edge receipts.
+ * Write one run's tool traces beside its edge receipts.
  * @param {{project: any, run: {id: string}, sessions: readonly any[]}} input
  * @returns {Promise<{path: string | null, traces: number, steps: number}>}
  */
-export async function persistGoldenTraces({ project, run, sessions }) {
-  const traces = goldenTraces({ runId: run.id, sessions });
+export async function persistToolTraces({ project, run, sessions }) {
+  const traces = toolTraces({ runId: run.id, sessions });
   if (!traces.length) return { path: null, traces: 0, steps: 0 };
   const absolute = tracePath(project, run.id);
-  const text = `${JSON.stringify({ schemaVersion: "tool-trace/1", runId: run.id, traces }, null, 2)}\n`;
+  const text = `${JSON.stringify({ schemaVersion: TOOL_TRACE_SCHEMA, runId: run.id, traces })}\n`;
   await withProjectStorageMutation(project, async () => {
     await writeFileAtomicNoFollow(project.rootDir, absolute, text, { encoding: "utf8", mode: 0o600 });
   });
@@ -361,4 +320,30 @@ export async function persistGoldenTraces({ project, run, sessions }) {
     traces: traces.length,
     steps: traces.reduce((total, trace) => total + trace.steps.length, 0),
   };
+}
+
+/**
+ * One run's tool traces as they were stored, or an empty list when it has none: a run older than the retention window, a clinical
+ * conversation (no trace is kept of one), a store that would not take the write, or a file of another schema are ordinary states,
+ * and the digest reads the transcript's own calls instead. A corrupt file is the same state, never an error: the distillation
+ * must not be refused for the sequence of its tools.
+ * @param {{ rootDir: string, metaDir: string }} project @param {string} runId
+ * @returns {Promise<{capability: string | null, sessionId: string, runId: string, steps: ToolTraceStep[]}[]>}
+ */
+export async function readToolTraces(project, runId) {
+  try {
+    const text = await readTextFileNoFollow(project.rootDir, tracePath(project, runId), "");
+    if (!text) return [];
+    const parsed = JSON.parse(text);
+    if (parsed?.schemaVersion !== TOOL_TRACE_SCHEMA || parsed.runId !== runId || !Array.isArray(parsed.traces)) return [];
+    return parsed.traces.filter((/** @type {any} */ trace) => Array.isArray(trace?.steps)).map((/** @type {any} */ trace) => ({
+      capability: typeof trace.capability === "string" && trace.capability ? trace.capability : null,
+      sessionId: String(trace.sessionId ?? ""),
+      runId,
+      steps: trace.steps.filter((/** @type {any} */ step) => typeof step?.tool === "string" && step.tool)
+        .map((/** @type {any} */ step) => ({ turn: Number(step.turn) || 0, tool: step.tool })),
+    }));
+  } catch {
+    return [];
+  }
 }

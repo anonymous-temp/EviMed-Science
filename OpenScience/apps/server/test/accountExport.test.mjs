@@ -328,6 +328,7 @@ test("the archive carries the account's own feedback ledger", async () => {
     async (snapshot) => JSON.parse(snapshot.data.toString()),
   );
   assert.deepEqual(empty.feedbackEvents, []);
+  assert.deepEqual(empty.scriptUses, [], "the programs a script lesson was counted from: an empty list, not a missing key");
 });
 
 /** The migration modules, read as the text they are. */
@@ -341,6 +342,8 @@ const migrationSources = [
   "researchMemoryPersistence.mjs",
   // The share schema (`evimed_share`) is two accounts' relation, so its tables name the account by `owner_id` or `recipient_id`, not `user_id`.
   "capsuleShareLinks.mjs",
+  // The programs a script lesson is counted from (`evimed_learning.script_uses`): the account's own code, so the archive carries it.
+  "scriptLessons.mjs",
 ];
 
 /** The columns that make a table one account's: the owner's, a recipient's, or the plain `user_id`. */
@@ -403,13 +406,14 @@ test("the exported table list is derived from the queries, joins included", () =
     "evimed_share.links",
     "evimed_share.link_uses",
     "evimed_share.deliveries",
+    "evimed_learning.script_uses",
   ]) {
     assert.ok(
       exported.includes(table),
       `${table} is not read by any export query`,
     );
   }
-  assert.equal(exported.length, 24, `the export reads ${exported.join(", ")}`);
+  assert.equal(exported.length, 25, `the export reads ${exported.join(", ")}`);
 });
 
 test("every account-scoped table is either exported or declared unexported with a reason", () => {
