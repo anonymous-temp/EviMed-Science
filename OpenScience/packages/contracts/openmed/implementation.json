@@ -1586,7 +1586,7 @@
         "apps/server/src/vcrStore.mjs",
         "apps/server/src/vcrCloudEgress.mjs",
         "apps/server/src/capsuleGateway.mjs",
-        "apps/server/src/memoryIntelligence.mjs",
+        "apps/server/src/memoryAdmission.mjs",
         "apps/server/src/learningTriggers.mjs",
         "docs/WEB_OPERATIONS_RUNBOOK.md"
       ],

@@ -1376,8 +1376,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    * the account (`NativeMemoryOverlay.touched`), so the deletion of an account that never used memory asks nothing of the engine.
    * @param {string} userId
    */
-  const nativeMemoryHeldBy = async (userId) => nativeMemory.configured && config.memoryEngineEnabled === true
-    && await nativeMemoryOverlay.touched(userId).catch(() => true);
+  const nativeMemoryHeldBy = async (userId) => {
+    if (!nativeMemory.configured || config.memoryEngineEnabled !== true) return false;
+    return nativeMemoryOverlay.touched(userId).catch(() => true);
+  };
   // One reranker for the capsule index. It orders candidates that have already
   // been hydrated from the authoritative store, because the index's own
   // reranked endpoint navigates by directory abstracts that nothing generates
@@ -1437,30 +1439,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   function requireFeedbackEvents() {
     if (!feedbackEvents) throw new HttpError(503, "feedback_unavailable", "Recording feedback requires the shared product store.");
     return feedbackEvents;
-  }
-
-  /**
-   * Feedback is recorded beside the researcher's action, never instead of it.
-   *
-   * The memory update has already been written and audited by the time this
-   * runs, so an unreachable ledger must not turn a successful PATCH into an
-   * error the user sees. It is not swallowed either: the failure lands in the
-   * security ledger with its code, which is where "the loop stopped closing"
-   * has to be visible.
-   *
-   * @param {any} ctx @param {() => any} operation
-   */
-  async function recordFeedback(ctx, operation) {
-    try {
-      return await operation();
-    } catch (error) {
-      await securityAudit(config, "feedback.record", "failed", {
-        userId: ctx.user.id,
-        code: typeof error?.code === "string" ? error.code : "feedback_unavailable",
-        detail: String(error?.message ?? "").slice(0, 200),
-      });
-      return null;
-    }
   }
 
   const learningService = productDocuments
@@ -2244,7 +2222,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       notifications: notificationService, weekly, config, workerId: randomId("frontier-notify-") });
     // What each reader was served and did (frontierInteractions.mjs): list ids for every list answer, and the page's events.
     const interactions = new FrontierInteractions({ database: productDatabase, config });
-    const profiles = new FrontierProfiles({ database: productDatabase, memorySettings, editor, embedder, config, budget, entityVocabulary, tags: tagStore,
+    const profiles = new FrontierProfiles({ database: productDatabase, memorySettings, nativeMemory: config.memoryEngineEnabled ? nativeMemory : null, editor, embedder, config, budget, entityVocabulary, tags: tagStore,
       // 与我相关 reads a reader's own recent questions: their runs across
       // their projects, the platform's internal ones left out. Asked in the
       // background, a few readers a round, never on a request.
@@ -4369,7 +4347,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           const runtimeReplica = await mirrorSourceRuntimeReplica({ documents: productDocuments, sources: sourceService, store, runtimeManager, config }, job);
           await libraryService?.refreshSourceCurrent(job.userId, event.sourceId, { strict: true });
           const current = await productDocuments.get(job.userId, "source", event.sourceId);
-          const readable = Boolean(current && sourceReadable(current.payload));
           await nativeMemoryWorker?.labelSource(job.userId, { type: "knowledge_source", id: event.sourceId },
             current && sourceReadable(current.payload) ? "current" : "removed");
           if (current && sourceReadable(current.payload)) {
@@ -8609,10 +8586,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     evidenceProgramme,
     usageLedger,
     notificationService,
-    // Returned so the composition root can be asserted at the composition root.
-    // It was reachable only through `recordRun`'s call site, so cutting its
-    // inbox dependency here left every test green and the notices dark.
-    memoryIntelligence,
     feedbackEvents,
     // The only claimer of `distill` and `consolidate`. Returned for the same
     // reason as the line above it, and the absence was not theoretical: the

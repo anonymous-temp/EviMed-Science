@@ -148,6 +148,8 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_revisions (
 );
 CREATE INDEX IF NOT EXISTS native_revisions_file_idx ON evimed_memory.native_revisions (user_id, uri, id DESC);
 CREATE INDEX IF NOT EXISTS native_revisions_recent_idx ON evimed_memory.native_revisions (user_id, changed_at DESC);
+-- The newest revision of an account, which 「与你相关」 reads as the mark of the account's memory (`frontierProfiles.mjs`, `memoryMarkOf`).
+CREATE INDEX IF NOT EXISTS native_revisions_user_id_idx ON evimed_memory.native_revisions (user_id, id DESC);
 -- One diff is ingested once: the same archive never writes the same change of the same file twice.
 CREATE UNIQUE INDEX IF NOT EXISTS native_revisions_once_idx ON evimed_memory.native_revisions (user_id, archive_uri, uri, change)
   WHERE archive_uri IS NOT NULL;

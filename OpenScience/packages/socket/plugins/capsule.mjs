@@ -34,11 +34,12 @@
  * conversation nobody prepared, and for a control plane that predates the selection file.
  *
  * Two switches, because the row carries two things. The memory half — the
- * recall and note tools — is the model's way into the person's memory, and an
- * account whose memory OpenViking's native engine keeps already has one: the
- * official plugin's five `mcp__openviking__*` tools. Both sets side by side made
- * the model call both every time, the old one answering nothing (LAB-MEM,
- * 2026-10-13), so that half stands aside for such an account (`memoryEnabled`).
+ * recall and note tools — is the model's way into the person's memory, and a
+ * deployment that keeps it in OpenViking's engine (every deployment with one: the legacy engine that
+ * did not was deleted on 2026-10-25) already has one: the official plugin's five `mcp__openviking__*`
+ * tools. Both sets side by side made the model call both every time, the old one answering nothing
+ * (LAB-MEM, 2026-10-13), so that half stands aside there (`memoryEnabled`); it is the capsule's own
+ * recall and notes only where there is no engine.
  * The other half — the user's methods, the conversation's scope and the
  * handbook context — is not memory and stays (`enabled`).
  *

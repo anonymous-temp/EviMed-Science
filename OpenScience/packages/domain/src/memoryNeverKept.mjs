@@ -1,14 +1,10 @@
 /**
  * What a memory never holds, and how to decide what it does hold: two texts, written once.
  *
- * Hidden knowledge: two extractors write this platform's memory and they must agree on what is not worth keeping. The native
- * engine reads it from its type templates (`deploy/web/openviking/memory-templates`, rendered by
- * `memory-templates-src/build.mjs` into each of the eight types, so every type's rules read complete on their own); the
- * legacy extraction (`apps/server/src/memoryIntelligence.mjs`) puts the same text into its instruction. Before 2026-10-14 the
- * legacy side had its own, older wording, and the two disagreed on the one rule that mattered most: the native templates
- * refuse anything the assistant said, and the legacy extraction admitted it as the person's project memory (31 records on
- * the owner's account). One text, two readers; `memoryNeverKept.test.mjs` holds the rendered templates and the legacy
- * instruction to it.
+ * Hidden knowledge: this is the one statement of what is not worth keeping. The native engine reads it from its type templates
+ * (`deploy/web/openviking/memory-templates`, rendered by `memory-templates-src/build.mjs` into each of the eight types, so every
+ * type's rules read complete on their own). A second reader, the platform's own extraction into PostgreSQL records, put the same
+ * text into its instruction until that engine was deleted (2026-10-25); `memoryNeverKept.test.mjs` holds the rendered templates to it.
  *
  * Two blocks since 2026-10-23, because they answer two questions and the single block that used to answer both ended every
  * template with a sentence that set the default to nothing:
@@ -32,7 +28,7 @@
  * @module @evimed/domain/memoryNeverKept
  */
 
-/** The never-kept rules as the engine's templates and the legacy extraction both state them, with no trailing newline. */
+/** The never-kept rules as the engine's templates state them, with no trailing newline. */
 export const MEMORY_NEVER_KEPT_TEXT = `# What is never kept (the same rules apply to every memory type)
 Never write any of the following into a memory, even when the user quotes it or asks you to remember it:
 - Secrets and identity numbers: passwords, API keys, tokens, verification codes; ID-card, passport, bank-card and account numbers, or any fragment of one; government-ID, criminal-record and immigration-status details.
@@ -45,7 +41,7 @@ Never write any of the following into a memory, even when the user quotes it or 
 Keep only when the user explicitly asks to remember it ("记住…"): their own health, medication or allergy, religion, politics, ethnicity, sexual orientation, finances, a child's details, a precise home address or whereabouts, biometrics. That one fact is kept, in the PROFILE, in their own words, with no reason added; asking about a disease, a drug or a personal matter, or mentioning one's own condition inside a question ("我对青霉素过敏，术后抗生素怎么选？"), is a topic of the conversation, not a memory. The exception covers only the fact that message asks to keep: another detail of that kind said later in passing or inside a question (a second allergy, a reading) is still not kept, even when one of its kind is already remembered, and is not added to the kept one.
 Keep the fact and drop the sensitive reason: "我吃素，因为信佛" keeps that they are vegetarian and nothing about religion.`
 
-/** How a line is chosen, as the engine's templates and the legacy extraction both state it, with no trailing newline. */
+/** How a line is chosen, as the engine's templates state it, with no trailing newline. */
 export const MEMORY_DECIDE_TEXT = `# How to decide what to write (the same rules apply to every memory type)
 Write a line when it would change a later answer: next month, in another conversation, the assistant would do something differently with it, and the person would be annoyed to have to say it again. Write it in the first conversation it appears in, even as one line; do not wait to see it twice.
 What the person's own words are worth:
