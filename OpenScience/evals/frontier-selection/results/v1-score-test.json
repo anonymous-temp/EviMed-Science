@@ -1,0 +1,2260 @@
+{
+ "at": "2026-10-25T12:27:22.695Z",
+ "label": "v1-score-test",
+ "mode": "score",
+ "model": "deepseek-flash",
+ "editorVersion": "frontier-editor-1.33af912d72f6",
+ "usage": {
+  "calls": 124,
+  "cacheHit": 158080,
+  "cacheMiss": 54967,
+  "output": 4217,
+  "cny": 0.15
+ },
+ "results": [
+  {
+   "n": 2,
+   "id": "3c03de6f9b71eec0",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 13,
+    "relevance": 11
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 13,
+    "relevance": 11
+   },
+   "practice": null,
+   "modelInputSha256": "629c0e494ff3ba91d62a85664ba6d11d52fc8048f518b871eaf9b04ce563b825",
+   "error": null
+  },
+  {
+   "n": 4,
+   "id": "c06e219e4975c4c8",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 8,
+    "novelty": 6,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 8,
+    "novelty": 6,
+    "relevance": 8
+   },
+   "practice": null,
+   "modelInputSha256": "3cf30466eab7704b0839c8480b24d7c3e0b25c06aa19801c9fe0b4a98779836a",
+   "error": null
+  },
+  {
+   "n": 6,
+   "id": "77bda968f169fdf4",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 16,
+    "novelty": 12,
+    "relevance": 14
+   },
+   "scores": {
+    "impact": 16,
+    "novelty": 12,
+    "relevance": 14
+   },
+   "practice": null,
+   "modelInputSha256": "371376b5488a38dfa8bd7114df22590a125ddc61f3114f6d0e32acc2ef63a5bb",
+   "error": null
+  },
+  {
+   "n": 8,
+   "id": "3c67a80de32a0d7e",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 22,
+    "novelty": 15,
+    "relevance": 16
+   },
+   "scores": {
+    "impact": 22,
+    "novelty": 15,
+    "relevance": 16
+   },
+   "practice": {
+    "changing": true,
+    "reasonZh": "ECTRIMS发布MS及NMOSD/MOGAD妊娠哺乳指南，110条建议覆盖用药、分娩与哺乳，指导育龄期女性管理。"
+   },
+   "modelInputSha256": "5d7fb897f1d5d550c7d9249b2fb6cc30ae01b3bfac7457cc88f7cd98e3628929",
+   "error": null
+  },
+  {
+   "n": 10,
+   "id": "642cc1bb84432e89",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 8,
+    "novelty": 6,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 8,
+    "novelty": 6,
+    "relevance": 8
+   },
+   "practice": null,
+   "modelInputSha256": "806ad261f22678c01e51271c2daea23ec6716af07e1af21f6ce4e45215b5e0eb",
+   "error": null
+  },
+  {
+   "n": 12,
+   "id": "7d05ede67c99078d",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 18,
+    "novelty": 12,
+    "relevance": 14
+   },
+   "scores": {
+    "impact": 18,
+    "novelty": 12,
+    "relevance": 14
+   },
+   "practice": null,
+   "modelInputSha256": "8825f330947dc589e88e748e6e7d8ef88ecd1cdf4da15e11d6676d8310d02894",
+   "error": null
+  },
+  {
+   "n": 14,
+   "id": "edca8729ad01933a",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 13,
+    "novelty": 11,
+    "relevance": 15
+   },
+   "scores": {
+    "impact": 13,
+    "novelty": 11,
+    "relevance": 15
+   },
+   "practice": null,
+   "modelInputSha256": "29fe42297eb685e7e8e774ebfc471b4b9a337ff286ed794988e3b0a10d2e3e52",
+   "error": null
+  },
+  {
+   "n": 16,
+   "id": "90a9b0a07c6256c0",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 14
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 14
+   },
+   "practice": null,
+   "modelInputSha256": "206042ed37da415271b5020fdcc68f9422a65b467ccaa0efc201513b562f2272",
+   "error": null
+  },
+  {
+   "n": 18,
+   "id": "7ca22cf16abfaea8",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 6
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 6
+   },
+   "practice": null,
+   "modelInputSha256": "fb95305f52bfdc95b1f6a1400275c5059b46b099cdefaf882a2afbf62eb9094b",
+   "error": null
+  },
+  {
+   "n": 20,
+   "id": "0354e8802cad7de5",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 14,
+    "novelty": 13,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 14,
+    "novelty": 13,
+    "relevance": 12
+   },
+   "practice": null,
+   "modelInputSha256": "cf9cb4c2cf60628ecc2f22f06ab502e808bac06656575b0dec0148a9eb719e18",
+   "error": null
+  },
+  {
+   "n": 22,
+   "id": "5d6530a4f1a622f1",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 15,
+    "novelty": 13,
+    "relevance": 15
+   },
+   "scores": {
+    "impact": 15,
+    "novelty": 13,
+    "relevance": 15
+   },
+   "practice": null,
+   "modelInputSha256": "e4c4e0ce7cf462b09b18ef52365e46f583e0d35b0573c8077845c58d38409cc6",
+   "error": null
+  },
+  {
+   "n": 24,
+   "id": "3c1946df0093ba2f",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "practice": null,
+   "modelInputSha256": "82915090701e9bb65895c02b961bda3b5323f567c644c429d1492b312c42315b",
+   "error": null
+  },
+  {
+   "n": 26,
+   "id": "d70847c6f0feeaae",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 18,
+    "novelty": 14,
+    "relevance": 15
+   },
+   "scores": {
+    "impact": 18,
+    "novelty": 14,
+    "relevance": 15
+   },
+   "practice": null,
+   "modelInputSha256": "a8810fde2b88b8699bb254f4121a527982252a2ae8fa0fe76172c25e527078a5",
+   "error": null
+  },
+  {
+   "n": 28,
+   "id": "ff176e2fc27ce17b",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 18,
+    "novelty": 12,
+    "relevance": 14
+   },
+   "scores": {
+    "impact": 18,
+    "novelty": 12,
+    "relevance": 14
+   },
+   "practice": null,
+   "modelInputSha256": "d947942d3aef158d43856d5fd49c93c39a904e761e3d283f65a95bfd5350b9f6",
+   "error": null
+  },
+  {
+   "n": 30,
+   "id": "617dcb1bd4c44e64",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 22,
+    "novelty": 14,
+    "relevance": 15
+   },
+   "scores": {
+    "impact": 22,
+    "novelty": 14,
+    "relevance": 15
+   },
+   "practice": null,
+   "modelInputSha256": "03920416f318b277df78275257c886491dc23ba119ffc37adf7608d9084088bd",
+   "error": null
+  },
+  {
+   "n": 32,
+   "id": "8a993f4153817de2",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 13
+   },
+   "scores": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 13
+   },
+   "practice": null,
+   "modelInputSha256": "00a3c98a64b3f855305f227aa01ae25e2b8e3217ac03c11cf0cada3c5145272c",
+   "error": null
+  },
+  {
+   "n": 34,
+   "id": "40412369f64b9589",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "practice": null,
+   "modelInputSha256": "8bc1ba95ac1a9ca3463200052d6482ccf7755d69552f0744b9dbe1ce36237423",
+   "error": null
+  },
+  {
+   "n": 36,
+   "id": "eeffabccd0c8a51c",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 18,
+    "novelty": 14,
+    "relevance": 13
+   },
+   "scores": {
+    "impact": 18,
+    "novelty": 14,
+    "relevance": 13
+   },
+   "practice": null,
+   "modelInputSha256": "558660804d1e593d488ef880d390baa1cc56e6bd4a351eafaa4ef767c95fc52c",
+   "error": null
+  },
+  {
+   "n": 38,
+   "id": "2965945e908a37d1",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 8,
+    "novelty": 7,
+    "relevance": 9
+   },
+   "scores": {
+    "impact": 8,
+    "novelty": 7,
+    "relevance": 9
+   },
+   "practice": null,
+   "modelInputSha256": "8965b428391f88c87b1d0ef5bf0093acedc8d81ada40291981298eb5b126a4e5",
+   "error": null
+  },
+  {
+   "n": 40,
+   "id": "79aff591e7eb484a",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 15,
+    "novelty": 10,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 15,
+    "novelty": 10,
+    "relevance": 12
+   },
+   "practice": null,
+   "modelInputSha256": "3e10c3e1d59f7cfeb75b4d932f7a3dbfdf23b7911af6b5757aaaf0dec5ced5f9",
+   "error": null
+  },
+  {
+   "n": 42,
+   "id": "90986471bfd23403",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "practice": null,
+   "modelInputSha256": "d03d5a3c0d03fe10813dfd04ca008570e705801dfdb1dceed064317645244e93",
+   "error": null
+  },
+  {
+   "n": 44,
+   "id": "44bbe984ad4c152d",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 8,
+    "novelty": 8,
+    "relevance": 9
+   },
+   "scores": {
+    "impact": 8,
+    "novelty": 8,
+    "relevance": 9
+   },
+   "practice": null,
+   "modelInputSha256": "cbef5237e7604b443c523eb9ac5cc767bc42286284a7bce726cb4c5261595023",
+   "error": null
+  },
+  {
+   "n": 46,
+   "id": "a2e7d9058f3412d0",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 8,
+    "novelty": 7,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 8,
+    "novelty": 7,
+    "relevance": 12
+   },
+   "practice": null,
+   "modelInputSha256": "d8f3e34b9311109a55ebaf4907ff669caff830d5cf03026a17f13d9192ffcd6a",
+   "error": null
+  },
+  {
+   "n": 48,
+   "id": "e2cf82fcf93b62f9",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 18,
+    "novelty": 12,
+    "relevance": 17
+   },
+   "scores": {
+    "impact": 18,
+    "novelty": 12,
+    "relevance": 17
+   },
+   "practice": null,
+   "modelInputSha256": "d36771438e2665d4dc42cfbc18a252985b8f9c5f36944a10694444c30c603ce0",
+   "error": null
+  },
+  {
+   "n": 50,
+   "id": "06c3bbdec4985ceb",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 18,
+    "novelty": 12,
+    "relevance": 15
+   },
+   "scores": {
+    "impact": 18,
+    "novelty": 12,
+    "relevance": 15
+   },
+   "practice": null,
+   "modelInputSha256": "a9b03038b48ab5ea7cc21f8c460fd899245ffe2eb242bf5863e052a8aead65b5",
+   "error": null
+  },
+  {
+   "n": 52,
+   "id": "c7304a5d22090d19",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 9,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 9,
+    "relevance": 8
+   },
+   "practice": null,
+   "modelInputSha256": "b36d3d50d6a31475f92f21d1d850839d81765dd77d3a644daa0362276bb8fd31",
+   "error": null
+  },
+  {
+   "n": 54,
+   "id": "e46e70c34135d67f",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 9,
+    "relevance": 6
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 9,
+    "relevance": 6
+   },
+   "practice": null,
+   "modelInputSha256": "30b5f2da89091ac5488768e57d617dd08bb9e0e7e376491dd1d15b8521916bc0",
+   "error": null
+  },
+  {
+   "n": 56,
+   "id": "22c4871b9b298d7b",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 8,
+    "novelty": 5,
+    "relevance": 6
+   },
+   "scores": {
+    "impact": 8,
+    "novelty": 5,
+    "relevance": 6
+   },
+   "practice": null,
+   "modelInputSha256": "60a7a4d84a2f1f4dc003cebef082aed468554d0af50bc841015f9f61c2aa6c56",
+   "error": null
+  },
+  {
+   "n": 58,
+   "id": "8fd207edb5549ebd",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 6,
+    "novelty": 5,
+    "relevance": 6
+   },
+   "scores": {
+    "impact": 6,
+    "novelty": 5,
+    "relevance": 6
+   },
+   "practice": null,
+   "modelInputSha256": "e1628462a3551dc492129c921377b2c1f8fdaf6cf012c4ff918aeb94da7ae5ed",
+   "error": null
+  },
+  {
+   "n": 60,
+   "id": "f474161d9c263433",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 8,
+    "novelty": 5,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 8,
+    "novelty": 5,
+    "relevance": 12
+   },
+   "practice": null,
+   "modelInputSha256": "8b02cc3ed7d1be53686305cf89dfd5448e4ddea1adb21eb5e47d40cefe73c57d",
+   "error": null
+  },
+  {
+   "n": 62,
+   "id": "db3d89f363ced9b9",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 9,
+    "relevance": 16
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 9,
+    "relevance": 16
+   },
+   "practice": null,
+   "modelInputSha256": "7e7de6df26e5960eb0c9256ed6b25933680ff3aac6b7031197f38c7d6bc4c627",
+   "error": null
+  },
+  {
+   "n": 64,
+   "id": "3b693d3b83936a56",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 9,
+    "novelty": 8,
+    "relevance": 10
+   },
+   "scores": {
+    "impact": 9,
+    "novelty": 8,
+    "relevance": 10
+   },
+   "practice": null,
+   "modelInputSha256": "151fa88235092a21ea8786320f5217f26bc675505e33b1ba28e300f07aef7ee1",
+   "error": null
+  },
+  {
+   "n": 66,
+   "id": "08278e23662fc29c",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 9,
+    "novelty": 8,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 9,
+    "novelty": 8,
+    "relevance": 12
+   },
+   "practice": null,
+   "modelInputSha256": "e6ff4f3307bb5e5dc21410d53921e930e60cd71211cd3bb14cfe7424aa5b9623",
+   "error": null
+  },
+  {
+   "n": 68,
+   "id": "849b9b37d93d64b1",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "practice": null,
+   "modelInputSha256": "d9e545be87c7aeab8137bc1779ee84f3b5a498faccae610633ca70d7f9d45580",
+   "error": null
+  },
+  {
+   "n": 70,
+   "id": "41a253a1d61a1d7a",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 16
+   },
+   "scores": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 16
+   },
+   "practice": null,
+   "modelInputSha256": "6cb6f19ee708ec5087868895f33cc64df646d3ba2aebe931a6c810f8e207bee0",
+   "error": null
+  },
+  {
+   "n": 72,
+   "id": "b481bb334038ed86",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 14,
+    "novelty": 12,
+    "relevance": 11
+   },
+   "scores": {
+    "impact": 14,
+    "novelty": 12,
+    "relevance": 11
+   },
+   "practice": null,
+   "modelInputSha256": "99a6eb8911d049e6ea630fa3e95531af7bbe829945e612f13e44ce3aaa1eb386",
+   "error": null
+  },
+  {
+   "n": 74,
+   "id": "9dfa0848c5376be7",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 9,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 9,
+    "relevance": 12
+   },
+   "practice": null,
+   "modelInputSha256": "c3da623ed651b54e129039a9b83b02d4000b791af43c986d94525bfc7520f40f",
+   "error": null
+  },
+  {
+   "n": 76,
+   "id": "d76445b7741af34e",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 8,
+    "novelty": 5,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 8,
+    "novelty": 5,
+    "relevance": 8
+   },
+   "practice": null,
+   "modelInputSha256": "bc472c883815ff483bc98b267ff48206aced5cbe2cdc240c5d70e4287863a1f4",
+   "error": null
+  },
+  {
+   "n": 78,
+   "id": "02684bc2ec6049b4",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 12
+   },
+   "practice": null,
+   "modelInputSha256": "2756026229d51f9b048b4ab709dbdd361d84b086654fba26f62779d84935398a",
+   "error": null
+  },
+  {
+   "n": 80,
+   "id": "7c839416a3897791",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 8,
+    "novelty": 6,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 8,
+    "novelty": 6,
+    "relevance": 12
+   },
+   "practice": null,
+   "modelInputSha256": "785f5bffb1ab5670ec78f0e48444fa1671d18aeafd877b243fed173b4cdd6e7b",
+   "error": null
+  },
+  {
+   "n": 82,
+   "id": "a5210cba4f596ca1",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 13
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 13
+   },
+   "practice": null,
+   "modelInputSha256": "13405bc2675b15cd48e19ab6650ba2c46f4fe51cdc4965fe530037ef95e09973",
+   "error": null
+  },
+  {
+   "n": 84,
+   "id": "6f51395fea3c0788",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 18,
+    "novelty": 11,
+    "relevance": 16
+   },
+   "scores": {
+    "impact": 18,
+    "novelty": 11,
+    "relevance": 16
+   },
+   "practice": null,
+   "modelInputSha256": "e00f9102e55cb7bcf535b42866a5ae2d0fdb9072c5eda124824ac2b34b4950da",
+   "error": null
+  },
+  {
+   "n": 86,
+   "id": "25ed94e8e2c7b73f",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 8,
+    "novelty": 5,
+    "relevance": 6
+   },
+   "scores": {
+    "impact": 8,
+    "novelty": 5,
+    "relevance": 6
+   },
+   "practice": null,
+   "modelInputSha256": "7b7ae632b7feee0f4a0bf7162073f50e5fa83eeee94b58fc275efc4d6489873e",
+   "error": null
+  },
+  {
+   "n": 88,
+   "id": "0ec4b407ba6e9ec6",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 8,
+    "relevance": 13
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 8,
+    "relevance": 13
+   },
+   "practice": null,
+   "modelInputSha256": "51f364ac74a069dc617725cc3d5d6087b8855f4e4884f37f1c82806f1c47a070",
+   "error": null
+  },
+  {
+   "n": 90,
+   "id": "8f141dd323af57d4",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 9
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 9
+   },
+   "practice": null,
+   "modelInputSha256": "f0852d6427f47e4664a72fb53dd19bc5faa12710acdc5741231c44b98a6252cc",
+   "error": null
+  },
+  {
+   "n": 92,
+   "id": "631cb3bc398f367d",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 13,
+    "novelty": 11,
+    "relevance": 14
+   },
+   "scores": {
+    "impact": 13,
+    "novelty": 11,
+    "relevance": 14
+   },
+   "practice": null,
+   "modelInputSha256": "0d2e3e3860d2245075ac0104081a3395fda98fa0dc21389327a879deaf0ff2f9",
+   "error": null
+  },
+  {
+   "n": 94,
+   "id": "d6730f5587dde14c",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 9,
+    "novelty": 8,
+    "relevance": 6
+   },
+   "scores": {
+    "impact": 9,
+    "novelty": 8,
+    "relevance": 6
+   },
+   "practice": null,
+   "modelInputSha256": "fba1244ac460da6ce4d266e79ca474582e74773d4c5dbdf353c373afb4bf1bea",
+   "error": null
+  },
+  {
+   "n": 96,
+   "id": "8d0d72bb27a27241",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 12
+   },
+   "practice": null,
+   "modelInputSha256": "47582274216b0f8e5789d7316eb26822d8e437611672b0823cf71ce55a8399ff",
+   "error": null
+  },
+  {
+   "n": 98,
+   "id": "ff5c1722492aed9e",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 10,
+    "relevance": 11
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 10,
+    "relevance": 11
+   },
+   "practice": null,
+   "modelInputSha256": "abb5b761177c968ab4f7d5e24c9bab8904f22b2032be591e1355171cb3cd29c0",
+   "error": null
+  },
+  {
+   "n": 100,
+   "id": "d3ebbec47b7d692c",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 10,
+    "relevance": 11
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 10,
+    "relevance": 11
+   },
+   "practice": null,
+   "modelInputSha256": "40ccd9f655988c35284e9503b4822fbe3fafd6d0cb8a453347371e655b734a9e",
+   "error": null
+  },
+  {
+   "n": 102,
+   "id": "2db8c83c6f359b15",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 5,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 5,
+    "relevance": 8
+   },
+   "practice": null,
+   "modelInputSha256": "f60848d8584c4157b63d7c32cfa07fa7ef1e73951213d55519087536cdd725fa",
+   "error": null
+  },
+  {
+   "n": 104,
+   "id": "1aa5aa4b6b570b36",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 9,
+    "novelty": 8,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 9,
+    "novelty": 8,
+    "relevance": 12
+   },
+   "practice": null,
+   "modelInputSha256": "127e323bb35d55ff8ac7889ac4cb4cc604e9cdf09df03ac95458550adf812c80",
+   "error": null
+  },
+  {
+   "n": 106,
+   "id": "faeba4d61718a582",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 10,
+    "relevance": 11
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 10,
+    "relevance": 11
+   },
+   "practice": null,
+   "modelInputSha256": "9ab68cc0cbf0263eb8e3f73b43e7b0d083b3d7572441edcf159201e48d61445e",
+   "error": null
+  },
+  {
+   "n": 108,
+   "id": "162656efd2edcd5a",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 22,
+    "novelty": 15,
+    "relevance": 16
+   },
+   "scores": {
+    "impact": 22,
+    "novelty": 15,
+    "relevance": 16
+   },
+   "practice": null,
+   "modelInputSha256": "d8c084aa01c6d152a0c741295e320127cfbecfc63d2305758fd44528a69db5fd",
+   "error": null
+  },
+  {
+   "n": 110,
+   "id": "299b5be3ec28bbf7",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 15
+   },
+   "scores": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 15
+   },
+   "practice": null,
+   "modelInputSha256": "9b594c63fafe6063c6da30a358a78dd7b5e01c5d340029047e416e7fdbed6158",
+   "error": null
+  },
+  {
+   "n": 112,
+   "id": "f97767778852c122",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 9,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 9,
+    "relevance": 8
+   },
+   "practice": null,
+   "modelInputSha256": "125b79cfd7b64649b4ad0fef72031bada361e3788d0f31225ad4393525d508cf",
+   "error": null
+  },
+  {
+   "n": 114,
+   "id": "632cc7b7b007fd60",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 15,
+    "novelty": 13,
+    "relevance": 15
+   },
+   "scores": {
+    "impact": 15,
+    "novelty": 13,
+    "relevance": 15
+   },
+   "practice": null,
+   "modelInputSha256": "a9202bc074d74f5187b4f92388cd922424e3679ba8998dc2e4a6c8c7919f371a",
+   "error": null
+  },
+  {
+   "n": 116,
+   "id": "d6626ef1feb10243",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 9,
+    "novelty": 8,
+    "relevance": 9
+   },
+   "scores": {
+    "impact": 9,
+    "novelty": 8,
+    "relevance": 9
+   },
+   "practice": null,
+   "modelInputSha256": "1d46dea236e0068e5846ffc58fa648ced7e538ea58ee1a342343ed8961fb9897",
+   "error": null
+  },
+  {
+   "n": 118,
+   "id": "995b031230bbc8af",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 22,
+    "novelty": 16,
+    "relevance": 18
+   },
+   "scores": {
+    "impact": 22,
+    "novelty": 16,
+    "relevance": 18
+   },
+   "practice": null,
+   "modelInputSha256": "b5addadffa35d2e80dadfb2fd8e481f53a25b50b2d6e2762a94ef3e09f7bfc2d",
+   "error": null
+  },
+  {
+   "n": 120,
+   "id": "3a7b3128c34e1081",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 9,
+    "novelty": 8,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 9,
+    "novelty": 8,
+    "relevance": 12
+   },
+   "practice": null,
+   "modelInputSha256": "9d32d094e1382fa2e5c7e54e1b05b93b3ad87792d5a7eafe3aa29f71f1420d1c",
+   "error": null
+  },
+  {
+   "n": 122,
+   "id": "bcc40e5b1fbda493",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 11,
+    "novelty": 11,
+    "relevance": 13
+   },
+   "scores": {
+    "impact": 11,
+    "novelty": 11,
+    "relevance": 13
+   },
+   "practice": null,
+   "modelInputSha256": "e8d8ba546395b06107003cc01e45d41494c014b1cb63384e58f3e4bad321f06f",
+   "error": null
+  },
+  {
+   "n": 124,
+   "id": "fa5ca7bdbcf6b6e5",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 15
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 15
+   },
+   "practice": null,
+   "modelInputSha256": "ea84c6ec3177e2687139e4f836b658b0069fe57af8060495ce9ce657e79bfe44",
+   "error": null
+  },
+  {
+   "n": 126,
+   "id": "6e470ed7d7fc7abf",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 22,
+    "novelty": 15,
+    "relevance": 16
+   },
+   "scores": {
+    "impact": 22,
+    "novelty": 15,
+    "relevance": 16
+   },
+   "practice": {
+    "changing": true,
+    "reasonZh": "TMB-H 阈值由≥10 上调至≥13 mut/Mb，10–13 患者不再符合帕博利珠单抗适应证，需按新标准判读。"
+   },
+   "modelInputSha256": "8846372fe796fe39051d21935c68396c37b91afac0afa075094350a5ffd5e35a",
+   "error": null
+  },
+  {
+   "n": 128,
+   "id": "f5ac9c905281cc85",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 8
+   },
+   "practice": null,
+   "modelInputSha256": "44607a26c949a12522f4c3de0dcfb1eb6a73ee97dc4afce3cf48cd2d1d026c6d",
+   "error": null
+  },
+  {
+   "n": 130,
+   "id": "b9e48785838f3d09",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 7,
+    "relevance": 6
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 7,
+    "relevance": 6
+   },
+   "practice": null,
+   "modelInputSha256": "a2f6e30fc45b179dbf599be3f01d38984e792c69add951b628f81a1cf50ac773",
+   "error": null
+  },
+  {
+   "n": 132,
+   "id": "185dda1e8667182c",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 13
+   },
+   "scores": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 13
+   },
+   "practice": null,
+   "modelInputSha256": "ca552cc080f07c89d609db9ff46161c18d9d6c0a2bd28129a29ae9a47810f9f8",
+   "error": null
+  },
+  {
+   "n": 134,
+   "id": "78e5a3738d29c6eb",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 9,
+    "relevance": 15
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 9,
+    "relevance": 15
+   },
+   "practice": null,
+   "modelInputSha256": "692d2365301f081c124143616008335b05b3706d1cf4059a15c4f1f90dcd2f9a",
+   "error": null
+  },
+  {
+   "n": 136,
+   "id": "865abe2e4e4fbbee",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 10,
+    "relevance": 11
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 10,
+    "relevance": 11
+   },
+   "practice": null,
+   "modelInputSha256": "e548c164e99c3d190ffd08c480e4bb67c4e34cf3fcff8a205a1a7032ab7f1444",
+   "error": null
+  },
+  {
+   "n": 138,
+   "id": "2a714d67a66b67e6",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 16
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 16
+   },
+   "practice": null,
+   "modelInputSha256": "b2dbe2bf98e076711e18237c14e7d26c0c5e2f8fbf09256bcdca9c85dab7d05a",
+   "error": null
+  },
+  {
+   "n": 140,
+   "id": "59c62dccb473c344",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 22,
+    "novelty": 17,
+    "relevance": 18
+   },
+   "scores": {
+    "impact": 22,
+    "novelty": 17,
+    "relevance": 18
+   },
+   "practice": {
+    "changing": true,
+    "reasonZh": "国产听觉脑干植入体获批，蜗神经缺如的先天耳聋患儿可绕过耳蜗直接刺激脑干重建听觉。"
+   },
+   "modelInputSha256": "f74e142904876197b4dfcc066178f30024bdb78bec39fa7300106b61f435df93",
+   "error": null
+  },
+  {
+   "n": 142,
+   "id": "e56ead8dc95e99a9",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 9,
+    "novelty": 8,
+    "relevance": 6
+   },
+   "scores": {
+    "impact": 9,
+    "novelty": 8,
+    "relevance": 6
+   },
+   "practice": null,
+   "modelInputSha256": "fdbf4653bc88b2a9e0b39532d897a874f158dfead8538cbf5c9f9b37931b110e",
+   "error": null
+  },
+  {
+   "n": 144,
+   "id": "c7f191129ecf177e",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 9,
+    "relevance": 13
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 9,
+    "relevance": 13
+   },
+   "practice": null,
+   "modelInputSha256": "b00c4474e7a1b06c0bbb58a537cec71f2d8f1256e592ed1ce1a71577d2f578c2",
+   "error": null
+  },
+  {
+   "n": 146,
+   "id": "6c6362d8841c2d08",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 8,
+    "novelty": 9,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 8,
+    "novelty": 9,
+    "relevance": 8
+   },
+   "practice": null,
+   "modelInputSha256": "47199b208057d1c8a98cdd897b6bf770dbd73e42b32493ccb1a85b5bdadfec9b",
+   "error": null
+  },
+  {
+   "n": 148,
+   "id": "0db8377ed6dd6a95",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 9
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 9
+   },
+   "practice": null,
+   "modelInputSha256": "5e89c91e2035dd17b9663fe83fd5e0a4c4b8bebe8c49c07cd3fbacec9bf6bae0",
+   "error": null
+  },
+  {
+   "n": 150,
+   "id": "c27237a20208775b",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 7
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 7
+   },
+   "practice": null,
+   "modelInputSha256": "e0056954cd7ea37b94b79cb15457be29a05326513c3325266abb838ca6c77c87",
+   "error": null
+  },
+  {
+   "n": 152,
+   "id": "cf24668270d5ba44",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 6,
+    "novelty": 5,
+    "relevance": 6
+   },
+   "scores": {
+    "impact": 6,
+    "novelty": 5,
+    "relevance": 6
+   },
+   "practice": null,
+   "modelInputSha256": "be32cf89b9ee63d7b33b596134b210301d2310ee7ee88ff5d4193cef4e8d132f",
+   "error": null
+  },
+  {
+   "n": 154,
+   "id": "8efef7b476bd9aa2",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 8,
+    "novelty": 9,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 8,
+    "novelty": 9,
+    "relevance": 8
+   },
+   "practice": null,
+   "modelInputSha256": "6591847192b45f6dea54ae7e91207d93d6f1c9b69c4fc5f2af0ca5cf737e1390",
+   "error": null
+  },
+  {
+   "n": 156,
+   "id": "72d2d75c5105f21f",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 9,
+    "novelty": 8,
+    "relevance": 10
+   },
+   "scores": {
+    "impact": 9,
+    "novelty": 8,
+    "relevance": 10
+   },
+   "practice": null,
+   "modelInputSha256": "bfe7589d72c8bfd9084759a70a66b8ff28c1719c73c3300cc0169f3f4840844d",
+   "error": null
+  },
+  {
+   "n": 158,
+   "id": "67cb625d6070db15",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 9,
+    "relevance": 16
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 9,
+    "relevance": 16
+   },
+   "practice": null,
+   "modelInputSha256": "3377940c5ea7d89a75394eca08232d016c2088ffe445e962e9b77c10fb43b6a2",
+   "error": null
+  },
+  {
+   "n": 160,
+   "id": "a3a8cf72a8d6bf9f",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 9,
+    "relevance": 13
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 9,
+    "relevance": 13
+   },
+   "practice": null,
+   "modelInputSha256": "cb1ef9bb9b5cfcf23cdfdee547793ee4e7ea7f259910e571f858812f5062ed13",
+   "error": null
+  },
+  {
+   "n": 162,
+   "id": "9f951eb89ad4ef1f",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "practice": null,
+   "modelInputSha256": "68c330bd1ab771fe809e61bb21a33ff9d167ff06dc54374ff5a11c755d63c128",
+   "error": null
+  },
+  {
+   "n": 164,
+   "id": "c951b859646439b5",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 7,
+    "relevance": 13
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 7,
+    "relevance": 13
+   },
+   "practice": null,
+   "modelInputSha256": "c6a503bcce653343b7fa73fa6e22f7b2be68810c0b6a651ddc2b60a417391514",
+   "error": null
+  },
+  {
+   "n": 166,
+   "id": "b90201664557220d",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 9
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 9
+   },
+   "practice": null,
+   "modelInputSha256": "01284f79df09380c90db1ebdbf348158785777d2bdbfef4b3717b9348d73a0c3",
+   "error": null
+  },
+  {
+   "n": 168,
+   "id": "6b611414ec592728",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 9,
+    "novelty": 8,
+    "relevance": 9
+   },
+   "scores": {
+    "impact": 9,
+    "novelty": 8,
+    "relevance": 9
+   },
+   "practice": null,
+   "modelInputSha256": "a5bb1db60dcd57108bb05494f81c52f6ff736c2ea419a69d4f622d3b776d2f91",
+   "error": null
+  },
+  {
+   "n": 170,
+   "id": "d55a4b25addbaf94",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 18,
+    "novelty": 14,
+    "relevance": 15
+   },
+   "scores": {
+    "impact": 18,
+    "novelty": 14,
+    "relevance": 15
+   },
+   "practice": null,
+   "modelInputSha256": "1d193a1112190737d824082a91b1154170cdaabc8722d299e6fae8211d0499fa",
+   "error": null
+  },
+  {
+   "n": 172,
+   "id": "ce7b5e6a8da76ea6",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 12
+   },
+   "practice": null,
+   "modelInputSha256": "c1f8dda2b3baf925dde18660ae90a531a8609ccecc717972f62e138aee9b4825",
+   "error": null
+  },
+  {
+   "n": 174,
+   "id": "30f8ef1c142e5085",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 22,
+    "novelty": 15,
+    "relevance": 14
+   },
+   "scores": {
+    "impact": 22,
+    "novelty": 15,
+    "relevance": 14
+   },
+   "practice": null,
+   "modelInputSha256": "01b3f9dab0258ff5cab6e2bd2eb51d3d737fdf3f35d1c348822c438281a5bbde",
+   "error": null
+  },
+  {
+   "n": 176,
+   "id": "affdba10f1528ebe",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 18,
+    "novelty": 11,
+    "relevance": 13
+   },
+   "scores": {
+    "impact": 18,
+    "novelty": 11,
+    "relevance": 13
+   },
+   "practice": null,
+   "modelInputSha256": "09037a0bf7df552796b48e038de4a3e9449d925b87f6dbadeb26c9caabec5c56",
+   "error": null
+  },
+  {
+   "n": 178,
+   "id": "964ea9c382afccf0",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 14
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 14
+   },
+   "practice": null,
+   "modelInputSha256": "2fe06122be022e7eac15b5b55e3e451f8891f854cd18be64c797b2f837ff5dd1",
+   "error": null
+  },
+  {
+   "n": 180,
+   "id": "7d4f456a78c6e17a",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 15,
+    "novelty": 10,
+    "relevance": 14
+   },
+   "scores": {
+    "impact": 15,
+    "novelty": 10,
+    "relevance": 14
+   },
+   "practice": null,
+   "modelInputSha256": "7434282a94a2cd9e8e28b3201957cd7030a984a4bc85cfb4ccfd7ff7cf80faee",
+   "error": null
+  },
+  {
+   "n": 182,
+   "id": "e14691f6702e7100",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 11
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 11
+   },
+   "practice": null,
+   "modelInputSha256": "2508a672961f4cd9e19628f917c70600d6c4a268ca24c4f1603992bc0ae98079",
+   "error": null
+  },
+  {
+   "n": 184,
+   "id": "82881e4b0493c50f",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 21,
+    "novelty": 16,
+    "relevance": 14
+   },
+   "scores": {
+    "impact": 21,
+    "novelty": 16,
+    "relevance": 14
+   },
+   "practice": null,
+   "modelInputSha256": "993a39fee669a9169f0fb4dc14443b0a91812a49c4331d456bd9a997cced13f9",
+   "error": null
+  },
+  {
+   "n": 186,
+   "id": "623026191347f92b",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 11,
+    "novelty": 12,
+    "relevance": 13
+   },
+   "scores": {
+    "impact": 11,
+    "novelty": 12,
+    "relevance": 13
+   },
+   "practice": null,
+   "modelInputSha256": "6d051e75141a28d83e260aef033a42f51a6a3f65a7914087d837a9ec75970d15",
+   "error": null
+  },
+  {
+   "n": 188,
+   "id": "f2fcd234ddc7df42",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 10,
+    "relevance": 9
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 10,
+    "relevance": 9
+   },
+   "practice": null,
+   "modelInputSha256": "c7f19912b9bf71fc69caba8d068f25b869908aa1292b2ba75dfe8253877b0142",
+   "error": null
+  },
+  {
+   "n": 190,
+   "id": "b629d15f338543f9",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 6
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 6
+   },
+   "practice": null,
+   "modelInputSha256": "5d68aa55775216abfa6669a29b9fba12d3084e28069c49165dfb9bb0eae29320",
+   "error": null
+  },
+  {
+   "n": 192,
+   "id": "6e8e35b4e44dfb44",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 15,
+    "novelty": 18,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 15,
+    "novelty": 18,
+    "relevance": 12
+   },
+   "practice": null,
+   "modelInputSha256": "c0174f58b8b85185e44428c7c30db1965a67776f94cbbff8959c895ac75727fc",
+   "error": null
+  },
+  {
+   "n": 194,
+   "id": "ec2017d783e114f3",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 8,
+    "novelty": 5,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 8,
+    "novelty": 5,
+    "relevance": 12
+   },
+   "practice": null,
+   "modelInputSha256": "8269ae5531f2ef25fccf4779de2b62ce02b657263bac6d910702225f1288c127",
+   "error": null
+  },
+  {
+   "n": 196,
+   "id": "a49a05447a7eb8b0",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "practice": null,
+   "modelInputSha256": "9e3772577e9e8c1543ef67237b5ee85881d0661a8b5be4d20d1e9566470521d1",
+   "error": null
+  },
+  {
+   "n": 198,
+   "id": "b73ea154535c0c64",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 5,
+    "novelty": 3,
+    "relevance": 5
+   },
+   "scores": {
+    "impact": 5,
+    "novelty": 3,
+    "relevance": 5
+   },
+   "practice": null,
+   "modelInputSha256": "594bfd02c64db5875835c799dce4bdaa88fd2b065aa15c084931a419c0d7ccff",
+   "error": null
+  },
+  {
+   "n": 200,
+   "id": "b430320cde49b939",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 18,
+    "novelty": 11,
+    "relevance": 14
+   },
+   "scores": {
+    "impact": 18,
+    "novelty": 11,
+    "relevance": 14
+   },
+   "practice": null,
+   "modelInputSha256": "8c44793843cc23c9608da7a1e15af59a43f3fb2e49023913745f8b0aac52d672",
+   "error": null
+  },
+  {
+   "n": 202,
+   "id": "12838edabbc3db99",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 9,
+    "novelty": 8,
+    "relevance": 11
+   },
+   "scores": {
+    "impact": 9,
+    "novelty": 8,
+    "relevance": 11
+   },
+   "practice": null,
+   "modelInputSha256": "22872834b7968072b11217ea504140d6abe84a946c232a4a157d6a50f1f38217",
+   "error": null
+  },
+  {
+   "n": 204,
+   "id": "6a960ab9a5506d72",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 12
+   },
+   "practice": null,
+   "modelInputSha256": "efe73d656e4cb35e2707a7d184ace1003fde9cfa34093e2e40edbbb0c8d482c3",
+   "error": null
+  },
+  {
+   "n": 206,
+   "id": "00c340f17648e1fa",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 14,
+    "novelty": 9,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 14,
+    "novelty": 9,
+    "relevance": 8
+   },
+   "practice": null,
+   "modelInputSha256": "1323dbe7d55d3a330b4a3e6f4dc6c949a457efbf6507273593af5dac46265875",
+   "error": null
+  },
+  {
+   "n": 208,
+   "id": "12e3081e2db3a5fb",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 6,
+    "novelty": 4,
+    "relevance": 5
+   },
+   "scores": {
+    "impact": 6,
+    "novelty": 4,
+    "relevance": 5
+   },
+   "practice": null,
+   "modelInputSha256": "4d0e7fc7d73fb3ba8567278033768e8a661de6ac97f7654b4b3e24f9203376ff",
+   "error": null
+  },
+  {
+   "n": 210,
+   "id": "8045a53c12a5f41e",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "practice": null,
+   "modelInputSha256": "aa886382fd304c8f28a27b5e00bd7c2a97b44ae1f767d5e1557958461758adb2",
+   "error": null
+  },
+  {
+   "n": 212,
+   "id": "077e2ed942dbc299",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 13
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 11,
+    "relevance": 13
+   },
+   "practice": null,
+   "modelInputSha256": "0dd577848fb0d181d8403278c5eba1c8db93db72dd61ada747a75853cc1e7a82",
+   "error": null
+  },
+  {
+   "n": 214,
+   "id": "c07aaa1ea4499bc3",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 11,
+    "novelty": 9,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 11,
+    "novelty": 9,
+    "relevance": 8
+   },
+   "practice": null,
+   "modelInputSha256": "c1e3bbbbb968005def0cd1b4daa256e90a7a784935c479d6922ceec9e78a73d6",
+   "error": null
+  },
+  {
+   "n": 216,
+   "id": "def605f20561786f",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 11,
+    "novelty": 9,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 11,
+    "novelty": 9,
+    "relevance": 12
+   },
+   "practice": null,
+   "modelInputSha256": "6c4130cb60f0c85473d4a307c91906893ddf97256b43f561fc48f254b13b722d",
+   "error": null
+  },
+  {
+   "n": 218,
+   "id": "57855317011c5bda",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 9,
+    "relevance": 9
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 9,
+    "relevance": 9
+   },
+   "practice": null,
+   "modelInputSha256": "b3b7ac7939e99a8bc2a4d87088e80c9fd23233284700c68bfb1b5e8134a9d20f",
+   "error": null
+  },
+  {
+   "n": 220,
+   "id": "9260dea3a87a22a6",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 14,
+    "novelty": 12,
+    "relevance": 15
+   },
+   "scores": {
+    "impact": 14,
+    "novelty": 12,
+    "relevance": 15
+   },
+   "practice": null,
+   "modelInputSha256": "2662ada287276ae0bdf81fe7478790123d49ad7d6744c38b52374d6f8ea6500e",
+   "error": null
+  },
+  {
+   "n": 222,
+   "id": "83f605133c40c657",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 14,
+    "novelty": 10,
+    "relevance": 15
+   },
+   "scores": {
+    "impact": 14,
+    "novelty": 10,
+    "relevance": 15
+   },
+   "practice": null,
+   "modelInputSha256": "dbdabdf6a2684f4c822463e8b8788df756def0882001a031667c12f2151890ba",
+   "error": null
+  },
+  {
+   "n": 224,
+   "id": "c2388fa929c64eb6",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 8,
+    "novelty": 7,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 8,
+    "novelty": 7,
+    "relevance": 12
+   },
+   "practice": null,
+   "modelInputSha256": "ff4fc7e5525c864610ef4509e6669d89d2085c5032e56938088f364477d0dfb4",
+   "error": null
+  },
+  {
+   "n": 226,
+   "id": "10663a45a51629e5",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 12
+   },
+   "practice": null,
+   "modelInputSha256": "84d681413e644b3a00ee5ac31d356f18365bac6788e3ea62eaf733e8886d3439",
+   "error": null
+  },
+  {
+   "n": 228,
+   "id": "24e748848dd869aa",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 15
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 15
+   },
+   "practice": null,
+   "modelInputSha256": "2c338ea019a519dd74e958fd047fbc287f11006e7808692edd17fd7116b41f6f",
+   "error": null
+  },
+  {
+   "n": 230,
+   "id": "abdefd0ba80b4624",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 9,
+    "relevance": 16
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 9,
+    "relevance": 16
+   },
+   "practice": null,
+   "modelInputSha256": "2641ac558fd73d33f1d46676b132f025bc04eba8f937cdee393db4632b722f83",
+   "error": null
+  },
+  {
+   "n": 232,
+   "id": "9588da6b06f818c1",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 9,
+    "novelty": 10,
+    "relevance": 10
+   },
+   "scores": {
+    "impact": 9,
+    "novelty": 10,
+    "relevance": 10
+   },
+   "practice": null,
+   "modelInputSha256": "6020bdc6b07c6aad3cf60f2ef5386328399372b1041a9ecae5a2021c076663ce",
+   "error": null
+  },
+  {
+   "n": 234,
+   "id": "0f94e3e0a9c1a180",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 8,
+    "novelty": 5,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 8,
+    "novelty": 5,
+    "relevance": 8
+   },
+   "practice": null,
+   "modelInputSha256": "5d642ac688a03d505ecbc9764d5765cbabbb341a26144fbc5976e28f0a42dcf1",
+   "error": null
+  },
+  {
+   "n": 236,
+   "id": "14ef1ab348a6bf7a",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 8,
+    "relevance": 9
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 8,
+    "relevance": 9
+   },
+   "practice": null,
+   "modelInputSha256": "7d4ca2fa8fc28e867cab54adea3fd4103dda3777ecbe2a44408536fa6625df33",
+   "error": null
+  },
+  {
+   "n": 238,
+   "id": "71d2a40f353f091c",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 13,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "scores": {
+    "impact": 13,
+    "novelty": 11,
+    "relevance": 12
+   },
+   "practice": null,
+   "modelInputSha256": "c9c8eca6a716d274dcbfa069690cecb11ee2b8f33f57c80a502b7f343a66e87b",
+   "error": null
+  },
+  {
+   "n": 240,
+   "id": "258a402ce6ea749a",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 12,
+    "novelty": 6,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 12,
+    "novelty": 6,
+    "relevance": 8
+   },
+   "practice": null,
+   "modelInputSha256": "422819e801e1a56c9ac23fb6aa4a40da4d3d87952f5f62be7a2e89b7f9be1e8f",
+   "error": null
+  },
+  {
+   "n": 242,
+   "id": "f9bf7effd53f3105",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 8,
+    "novelty": 5,
+    "relevance": 13
+   },
+   "scores": {
+    "impact": 8,
+    "novelty": 5,
+    "relevance": 13
+   },
+   "practice": null,
+   "modelInputSha256": "de089952ae9f96f51796a3bfac161787a2693301273cedd8baf8d115c8cc5a51",
+   "error": null
+  },
+  {
+   "n": 244,
+   "id": "fafdcda56403bdea",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 9
+   },
+   "scores": {
+    "impact": 14,
+    "novelty": 11,
+    "relevance": 9
+   },
+   "practice": null,
+   "modelInputSha256": "0350492542e9ace390f7ad483b82d3160a2213433d896af976f671d91fec9f77",
+   "error": null
+  },
+  {
+   "n": 246,
+   "id": "bcb75de111818ed9",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 8
+   },
+   "scores": {
+    "impact": 10,
+    "novelty": 8,
+    "relevance": 8
+   },
+   "practice": null,
+   "modelInputSha256": "2189610b4db47c7069074d95f8da84a227e20b4ec88975ab16303b331483fc70",
+   "error": null
+  },
+  {
+   "n": 248,
+   "id": "0901e867ab5b23e3",
+   "mode": "score",
+   "scoresRaw": {
+    "impact": 22,
+    "novelty": 15,
+    "relevance": 18
+   },
+   "scores": {
+    "impact": 22,
+    "novelty": 15,
+    "relevance": 18
+   },
+   "practice": {
+    "changing": true,
+    "reasonZh": "第五版心肌梗死通用定义重构MI分型、按性别设定肌钙蛋白参考上限，国内医生诊断心梗需据此调整。"
+   },
+   "modelInputSha256": "e9176be7dd10f3134cba94ac2408422901a24e7205a51d0b1f532b8b5dd222f3",
+   "error": null
+  }
+ ]
+}
