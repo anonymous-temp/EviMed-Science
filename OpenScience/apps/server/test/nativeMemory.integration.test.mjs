@@ -59,21 +59,11 @@ async function fixture(t, { extract = () => ({}) } = {}) {
   return { userId, stub, sessions, overlay, memorySettings, store, worker, root, engineUser, seed, advance: (ms) => { clock = new Date(clock.getTime() + ms); }, now: () => clock };
 }
 
-test("the engine of an account is native by default where the deployment has it, and one account is never on both", options, async (t) => {
+test("an account of a deployment with the engine is registered with it, and settings keep no word of which engine it is on", options, async (t) => {
   const { userId, memorySettings, overlay } = await fixture(t);
-  assert.equal(await memorySettings.memoryEngine(userId), "native");
-  assert.ok((await memorySettings.accountsOnEngine("native")).some((entry) => entry.userId === userId));
-  assert.ok(!(await memorySettings.accountsOnEngine("legacy")).some((entry) => entry.userId === userId));
-  const walk = await memorySettings.engineWalk();
-  assert.ok(walk.examined.native >= 1, "the walk looked at accounts");
-  assert.equal(walk.both.filter((entry) => entry.userId === userId).length, 0);
-  // A legacy record written after the move is what the walk is there to find (the move is dated a minute back: a write in the
-  // very second of the switch counts as before it).
-  await database.query("UPDATE evimed_memory.settings SET engine_changed_at = engine_changed_at - interval '1 minute' WHERE user_id=$1", [userId]);
-  await memorySettings.upsertRecord(userId, { scope: "user", scopeId: null, kind: "preference", key: "preference.x", value: "x", summary: "x", origin: "inferred", status: "active", confidence: 0.7, importance: 0.5, sensitive: false }, null);
-  const after = await memorySettings.engineWalk();
-  assert.ok(after.both.some((entry) => entry.userId === userId && entry.engine === "native" && entry.writes >= 1), "a legacy write on a native account is reported");
   assert.equal((await overlay.account(userId)).registeredAt !== null, true);
+  assert.ok((await overlay.accounts()).some((entry) => (entry.userId ?? entry) === userId), "the worker's pass reaches it");
+  assert.equal("engine" in await memorySettings.settings(userId), false, "there is one engine, and nothing to say about it per account");
 });
 
 test("a memory file is a record, the profile is a document of lines, and counts are counted here", options, async (t) => {
@@ -83,7 +73,6 @@ test("a memory file is a record, the profile is a document of lines, and counts 
   seed("projects/oncology-review.md", "# Oncology review\n领域：肿瘤药学\n## 目标\n- 评价某药的疗效\n## 阶段\n- 检索中", { type: "project_context", tags: ["project=p_onc"] });
   seed("evimed/derived.md", "derived index, not a memory");
   const profilePage = await store.profile(userId, { holder: { id: userId, name: "T" } });
-  assert.equal(profilePage.engine, "native");
   assert.equal(profilePage.activeCount, 4, "one file, two profile lines, one project card");
   const lines = profilePage.records.filter((record) => record.document);
   assert.equal(lines.length, 2);
