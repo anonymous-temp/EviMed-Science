@@ -60,6 +60,7 @@ export function frontierRoutePattern(pathname) {
     return "/api/frontier/items/:id/:action";
   }
   if (parts[0] === "follows") return parts.length === 1 ? "/api/frontier/follows" : "/api/frontier/follows/:id";
+  if (parts[0] === "track") return parts.length === 3 && parts[1] === "congresses" ? "/api/frontier/track/congresses/:id" : `/api/frontier/track/${parts[1] ?? ""}`;
   if (parts[0] === "ops") return parts[1] === "sources" ? "/api/frontier/ops/sources/:id/enabled" : "/api/frontier/ops/items/:id/:action";
   if (["status", "sources", "for-you", "hot", "events", "dailies", "weeklies", "monthlies", "media", "prefs", "topics"].includes(parts[0])) return `/api/frontier/${parts[0]}${parts.length > 1 ? "/:id" : ""}`;
   return "/api/frontier/:route";
@@ -229,6 +230,13 @@ export function createFrontierRoutes({ store, service, config, maxJsonBytes, aud
     if (parts.length === 1 && parts[0] === "sources" && method === "GET") {
       return reply(await service.sources(user));
     }
+    // 追踪 (c3-track 2026-10-25): the approvals, the guideline updates and the congresses, and one congress's hub.
+    if (parts.length === 2 && parts[0] === "track" && method === "GET") {
+      if (parts[1] === "approvals") return reply(await service.trackApprovals(user, url.searchParams));
+      if (parts[1] === "guidelines") return reply(await service.trackGuidelines(user, url.searchParams));
+      if (parts[1] === "congresses") return reply(await service.trackCongresses());
+    }
+    if (parts.length === 3 && parts[0] === "track" && parts[1] === "congresses" && method === "GET") return reply(await service.trackCongress(user, parts[2]));
     // The tag tree (2026-10-23): a specialty's 热门标签 or the search box's suggestions, one tag, and the operators' view of the tree.
     if (parts.length === 1 && parts[0] === "tags" && method === "GET") return reply(await service.tagList(url.searchParams));
     if (parts.length === 2 && parts[0] === "tags" && method === "GET") return reply(await service.tagDetail(parts[1]));

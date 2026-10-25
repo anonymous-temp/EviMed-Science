@@ -10,7 +10,7 @@ import { hotWindowFilter } from "./FrontierHot";
  * What the page is showing. `weekly` is the 简报 tab's second period, `daily` its first. 与我相关 is the first entry of 关注
  * (`?view=following&follow=foryou`, owner 2026-10-25: 「那就是订阅关注吧」); an older `?view=foryou` opens it.
  */
-export type PageView = "selected" | "hot" | "daily" | "all" | "following" | "weekly" | "zones";
+export type PageView = "selected" | "hot" | "daily" | "all" | "following" | "weekly" | "zones" | "track";
 
 /**
  * The peer views (owner, 2026-10-25): the three lists of items, which share 「筛选」, first — everyone's selection, everything, the
@@ -21,6 +21,7 @@ export const FRONTIER_VIEWS: readonly TabItem<PageView>[] = [
   { value: "all", label: "全部" },
   { value: "following", label: "关注" },
   { value: "hot", label: "热榜" },
+  { value: "track", label: "追踪" },
   { value: "daily", label: "简报" },
   { value: "zones", label: "证据专区" },
 ];
@@ -36,6 +37,7 @@ export type FollowChoice = { kind: "foryou" } | { kind: "all" } | { kind: "follo
  *    the feed's filters (`feedFilters`); while searching, 「按时间」;
  *  - 热榜: 当前 · 本周 · 本月 and when the ranking was taken;
  *  - 简报: 日报 · 周报, and the issue's own 分类, 往期 and 复制 (`issue`);
+ *  - 追踪 (c3-track): 审批 · 指南 · 会议 and, where it fits, one filter (the agency, the specialty) — `trackControls`;
  *  - 证据专区: the scope menu (全部专区 · 我创建的 · 我关注的), the count of a search's matches and, for a reader who may make one,
  *    「新建专区」 (`zones`).
  *
@@ -46,7 +48,7 @@ export type FollowChoice = { kind: "foryou" } | { kind: "all" } | { kind: "follo
  * of six thousand pixels scrolls under it.
  */
 export function frontierToolbar({
-  view, onView, filters, onFilters, showWindow, searching, search, tag, hotTags, specialtyFollow, hot, following, issue, zones, onClear, onReset,
+  view, onView, filters, onFilters, showWindow, searching, search, tag, hotTags, specialtyFollow, hot, following, issue, zones, track, onClear, onReset,
 }: {
   view: PageView;
   onView: (view: PageView) => void;
@@ -80,6 +82,8 @@ export function frontierToolbar({
   issue: { filters: ToolbarFilter[]; actions: ReactNode };
   /** The directory's own controls (`zoneDirectoryControls`) and 「新建专区」, for the 证据专区 tab. */
   zones: { filters: ToolbarFilter[]; summary: string | undefined; onCreate: (() => void) | null };
+  /** The 追踪 tab's controls (`trackControls`): its segment and the one filter of that segment. */
+  track: { filters: ToolbarFilter[] };
   /** Lets go of the feed's filters and the search. */
   onClear: () => void;
   /** Lets go of the feed's filters, not the search (「筛选」's 「清除」 and the sheet's 「重置」). */
@@ -119,6 +123,9 @@ export function frontierToolbar({
         ...issue.filters,
       ];
       actions = issue.actions;
+      break;
+    case "track":
+      controls = track.filters;
       break;
     case "zones":
       controls = zones.filters;

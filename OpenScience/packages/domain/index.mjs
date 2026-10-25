@@ -1439,6 +1439,37 @@ export {
   frontierLeadPlaces,
   frontierLeadQueryKey,
 } from './src/frontierLeadWatch.mjs'
+// frontierTrack — c3-track 2026-10-25: 追踪, the approvals, guideline updates and congresses of 前沿动态 as views of their own: the
+// approval kinds and the regulators code knows by their source's owner, the limits of the tracker extraction and its version, and
+// the congress calendar's clock (on, coming or just over, in the feed's zone) with the window its items are found in.
+export {
+  FRONTIER_AGENCIES,
+  FRONTIER_AGENCY_ALIASES,
+  FRONTIER_AGENCY_REGIONS,
+  FRONTIER_APPROVAL_AGENCY_KEYS,
+  FRONTIER_APPROVAL_KIND_LABELS_ZH,
+  FRONTIER_APPROVAL_KINDS,
+  FRONTIER_CONGRESS_ITEM_DAYS,
+  FRONTIER_CONGRESS_RECENT_DAYS,
+  FRONTIER_CONGRESS_UPCOMING_DAYS,
+  FRONTIER_TRACK_APPROVAL_DAYS,
+  FRONTIER_TRACK_LIMITS,
+  FRONTIER_TRACK_PAGE,
+  FRONTIER_TRACK_VERSION,
+  frontierAgencyByKey,
+  frontierAgencyOfOwner,
+  frontierCongressById,
+  frontierCongressCode,
+  frontierCongressItemWindow,
+  frontierCongressRecapDays,
+  frontierCongressStatus,
+  frontierCongressSummary,
+  frontierDayIn,
+  frontierDaysBetween,
+  frontierQuoteNamesAgency,
+  frontierShiftDay,
+} from './src/frontierTrack.mjs'
+/** @typedef {import('./src/frontierTrack.mjs').FrontierApprovalKind} FrontierApprovalKind */
 // frontierTopics — 20 exports: hot-event topics of 前沿动态 (owner 2026-10-25): the fields a hot event comes from and their
 // labels, the hot lists it is first seen on, a topic's states, its items' roles and origins, the evidence programme's states
 // for it, the limits it lives within, and the outside-event trigger's pure decisions (a candidate, a surge, the title key,

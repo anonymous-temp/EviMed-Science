@@ -1,5 +1,5 @@
 import { rememberFrontierPosition, useFrontierOrigin } from "./frontierReadingState";
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { Star } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -56,6 +56,8 @@ export interface FrontierCardProps {
   onOpened?: (item: FrontierItem) => void;
   /** A #tag was pressed: the feed narrows to it. Absent: the tag is a link to 全部 with it. */
   onTag?: (tag: FrontierTagRef) => void;
+  /** A line under the summary that belongs to where the card is shown (a congress hub's design caveat, c3-track). */
+  note?: ReactNode;
 }
 
 /**
@@ -134,7 +136,7 @@ const ABOVE = "relative z-sticky";
  *
  * 不感兴趣 hides the card at once and, while the page says so (`hideStrip`), one line stands in its place (`FrontierHideStrip`).
  */
-export function FrontierCard({ item, grouped = false, markSelected = false, onStar, onHide, hideStrip = null, onSave, saving = false, onOpened, onTag }: FrontierCardProps) {
+export function FrontierCard({ item, grouped = false, markSelected = false, onStar, onHide, hideStrip = null, onSave, saving = false, onOpened, onTag, note }: FrontierCardProps) {
   const titleId = useId();
   const origin = useFrontierOrigin();
   const location = useLocation();
@@ -225,6 +227,7 @@ export function FrontierCard({ item, grouped = false, markSelected = false, onSt
               </Link>
             </h3>
             {item.summary && <p data-prose="" className="mt-1 line-clamp-2 max-w-measure whitespace-pre-line text-ui text-text-2 sm:line-clamp-3">{item.summary}</p>}
+            {note}
           </div>
           {/* The item's first picture, beside the title and not a second link to the same article: the release walk counts a
             * hidden duplicate link as a control without a name, and each picture height as one more kind of control. A

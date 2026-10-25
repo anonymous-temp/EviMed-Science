@@ -8,7 +8,7 @@ import { frontierWeeklyMarkdown } from "./frontierWeekly.mjs";
 import { frontierMonthlyMarkdown } from "./frontierMonthly.mjs";
 import { createHash } from "node:crypto";
 import {
-  FRONTIER_ACCESSES, FRONTIER_EGRESSES, FRONTIER_EVIDENCE_TYPE_LABELS_ZH, FRONTIER_HEALTH_LABELS_ZH, FRONTIER_HOT_WINDOW_HOURS,
+  FRONTIER_ACCESSES, FRONTIER_AGENCY_REGIONS, FRONTIER_APPROVAL_KIND_LABELS_ZH, FRONTIER_EGRESSES, FRONTIER_EVIDENCE_TYPE_LABELS_ZH, FRONTIER_HEALTH_LABELS_ZH, FRONTIER_HOT_WINDOW_HOURS,
   FRONTIER_ITEM_FLAG_LABELS_ZH, FRONTIER_LANES, FRONTIER_LANE_LABELS_ZH, FRONTIER_LAUNCH_TIERS, FRONTIER_SOURCE_TYPE_LABELS_ZH,
   FRONTIER_SPECIALTIES, FRONTIER_SPECIALTY_LABELS_ZH, FRONTIER_SPECIALTY_RETIRED, frontierScoreLevel, frontierSourceDisplayName, frontierSpecialtyKey,
 } from "@evimed/domain";
@@ -25,6 +25,7 @@ import { HttpError } from "./security.mjs";
 import { FrontierSubscriptions, frontierFollowPredicate, frontierTagPredicate } from "./frontierSubscriptions.mjs";
 import { FRONTIER_ITEM_TAG_LIMIT, FrontierTagStore } from "./frontierTags.mjs";
 import { frontierTopicSummary } from "./frontierTopics.mjs";
+import { FrontierTrack } from "./frontierTrack.mjs";
 
 /**
  * What a reader of 「前沿动态」 is served (plan §7.3, §10.5).
@@ -549,6 +550,8 @@ export class FrontierService {
     this.interactions = interactions;
     /** The hot-event topics (`FrontierTopics`, c2-leads 2026-10-25): 热榜's 「热点话题」, the topic page and `frontier_search`; null serves none. */
     this.topics = topics;
+    /** 追踪 (c3-track 2026-10-25, `frontierTrack.mjs`): the approval and guideline records and the congress hubs, read. */
+    this.trackReader = new FrontierTrack({ database, now, timeZone: String(config.frontierTimeZone || "Asia/Shanghai") });
     /** The selection line a card's score band is read against (the pipeline's own). */
     this.selectThreshold = frontierSelectThreshold(config);
     /** @type {Map<string, { version: number, at: number, value: any }>} */
@@ -1281,6 +1284,8 @@ export class FrontierService {
         evidenceUpkeep: this.config.evidenceUpkeepEnabled === true,
         // Hot-event topics (c2-leads 2026-10-25): 热榜's 「热点话题」 and the topic pages.
         topics: Boolean(this.topics),
+        // 追踪 (c3-track 2026-10-25): approvals, guideline updates and congresses.
+        track: true,
       },
       versions: {
         content: String(metaNumber(read.meta[FRONTIER_META_KEYS.contentVersion])),
@@ -1805,6 +1810,114 @@ export class FrontierService {
       if (found) card = { id: found.id, title: found.title, href: `/app/frontier/zones/${encodeURIComponent(found.zone_id)}/evidence/${encodeURIComponent(found.id)}` };
     }
     return frontierTopicSummary(row, { refs, card });
+  }
+
+  // ───────────────────────── c3-track 2026-10-25: 追踪 (contract §T) ─────────────────────────
+
+  /**
+   * The cards of a page of tracked rows, each the feed's own (the reader's marks overlaid), and the rows a reader hid or whose
+   * item left (withdrawn, hidden source) left out.
+   * @param {{ id: string }} user @param {Array<{ rowId: string }>} rows
+   */
+  async #trackCards(user, rows) {
+    const items = await this.hydrate(user, { rowIds: rows.map((row) => row.rowId) });
+    return items;
+  }
+
+  /**
+   * 审批 (`GET /api/frontier/track/approvals?from&agency&kind&cursor`): the approvals of the last 90 days (or from `from`), each
+   * with the card and the fields of its record, the agencies they come from with their counts (a filter's options) and the year's
+   * count by agency. `listId` names what was served (surface `track`).
+   * @param {{ id: string }} user @param {URLSearchParams} params
+   */
+  async trackApprovals(user, params) {
+    const from = params.get("from");
+    if (from && !/^\d{4}-\d{2}-\d{2}$/.test(from)) throw failure(400, "frontier_query_invalid", "The from parameter is invalid.");
+    const agency = params.get("agency");
+    if (agency && !/^[a-z-]{2,20}$/.test(agency)) throw failure(400, "frontier_query_invalid", "The agency parameter is invalid.");
+    const kind = params.get("kind");
+    if (kind && !Object.hasOwn(FRONTIER_APPROVAL_KIND_LABELS_ZH, kind)) throw failure(400, "frontier_query_invalid", "The kind parameter is invalid.");
+    const cursor = params.get("cursor");
+    if (cursor && cursor.length > 200) throw failure(400, "frontier_cursor_invalid", "The cursor is invalid.");
+    const read = await this.trackReader.approvals({ from, agency, kind, cursor });
+    const cards = await this.#trackCards(user, read.rows);
+    const rows = read.rows.flatMap((row) => {
+      const item = cards.get(row.rowId);
+      if (!item || item.state?.hidden) return [];
+      return [{ item, at: row.at, approval: row.facts.approval, approvalLabel: FRONTIER_APPROVAL_KIND_LABELS_ZH[/** @type {keyof typeof FRONTIER_APPROVAL_KIND_LABELS_ZH} */ (row.facts.approval)],
+        agency: row.facts.agency, drug: row.facts.drug.text, indication: row.facts.indication?.text ?? null, date: row.facts.date ?? null }];
+    });
+    const listId = await this.#serve(user, "track", `track:approvals:${agency || "all"}`, rows.map((row) => ({ item: row.item.id, slot: null, score: row.item.score })));
+    return { items: rows, nextCursor: read.next, from: read.from,
+      agencies: read.agencies.map((entry) => ({ ...entry, regionLabel: FRONTIER_AGENCY_REGIONS.find((region) => region.key === entry.region)?.label ?? "其他" })),
+      ytd: read.ytd, listId };
+  }
+
+  /**
+   * 指南 (`GET /api/frontier/track/guidelines?specialty&cursor`): the guideline records newest first, each with the card and up to
+   * five key recommendations with their grade, and the specialties they carry.
+   * @param {{ id: string }} user @param {URLSearchParams} params
+   */
+  async trackGuidelines(user, params) {
+    const specialty = params.get("specialty");
+    if (specialty && !Object.hasOwn(this.vocabulary.specialties, specialty)) throw failure(400, "frontier_query_invalid", "The specialty parameter is invalid.");
+    const cursor = params.get("cursor");
+    if (cursor && cursor.length > 200) throw failure(400, "frontier_cursor_invalid", "The cursor is invalid.");
+    const read = await this.trackReader.guidelines({ specialty, cursor });
+    const cards = await this.#trackCards(user, read.rows);
+    const rows = read.rows.flatMap((row) => {
+      const item = cards.get(row.rowId);
+      if (!item || item.state?.hidden) return [];
+      return [{ item, at: row.at, body: row.facts.body?.text ?? null, scope: row.facts.scope?.text ?? null,
+        recommendations: row.facts.recommendations.map((/** @type {any} */ entry) => ({ text: entry.text, grade: entry.grade })) }];
+    });
+    const listId = await this.#serve(user, "track", `track:guidelines:${specialty || "all"}`, rows.map((row) => ({ item: row.item.id, slot: null, score: row.item.score })));
+    return { items: rows, nextCursor: read.next, listId,
+      specialties: read.specialties.filter((entry) => Object.hasOwn(this.vocabulary.specialties, entry.key)).map((entry) => ({ key: entry.key, label: this.vocabulary.specialties[entry.key], count: entry.count })) };
+  }
+
+  /**
+   * 会议 (`GET /api/frontier/track/congresses`): the congresses on now, coming in the next 60 days and ended within the last 30,
+   * each with its dates, city, specialty, status and the count of its items.
+   */
+  async trackCongresses() {
+    const congresses = await this.trackReader.congresses();
+    return { congresses: congresses.map((congress) => ({ ...congress,
+      specialtyLabel: congress.specialty && Object.hasOwn(this.vocabulary.specialties, congress.specialty) ? this.vocabulary.specialties[congress.specialty] : null })) };
+  }
+
+  /**
+   * One congress's hub (`GET /api/frontier/track/congresses/:id`): its days, newest first, each with its recap (its references
+   * resolved to items) and its items as the feed's cards, the selected ones first, a conference result with its design caveat.
+   * `listId` names what was served (surface `congress`). 404 `frontier_congress_not_found` for an id the calendar does not have.
+   * @param {{ id: string }} user @param {string} id
+   */
+  async trackCongress(user, id) {
+    if (!/^[a-z0-9-]{3,80}$/.test(String(id ?? ""))) throw failure(404, "frontier_congress_not_found", "No such congress.");
+    const read = await this.trackReader.congress(id);
+    if (!read) throw failure(404, "frontier_congress_not_found", "No such congress.");
+    const cards = await this.#trackCards(user, read.days.flatMap((day) => day.items));
+    const refIds = [...new Set(read.days.flatMap((day) => (day.recap?.refs ?? []).map((/** @type {any} */ ref) => String(ref.itemId))).filter((refId) => PUBLIC_ID.test(refId)))];
+    const titles = new Map(refIds.length ? (await this.database.query(`SELECT i.public_id, coalesce(nullif(i.title_zh, ''), i.title_raw) AS title, s.name AS source_name
+      FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
+      WHERE i.public_id = ANY($1::text[]) AND i.state = 'published'`, [refIds])).rows.map((/** @type {any} */ row) => [row.public_id, row]) : []);
+    const days = read.days.map((day) => ({
+      day: day.day,
+      recap: day.recap ? { text: day.recap.text, at: day.recap.at,
+        refs: day.recap.refs.flatMap((/** @type {any} */ ref) => {
+          const found = titles.get(String(ref.itemId));
+          return found ? [{ n: Number(ref.n), itemId: String(ref.itemId), title: String(found.title ?? ""), sourceName: String(found.source_name ?? "") }] : [];
+        }) } : null,
+      items: day.items.flatMap((entry) => {
+        const item = cards.get(entry.rowId);
+        return item && !item.state?.hidden ? [{ item, caveat: entry.caveat }] : [];
+      }),
+    }));
+    const served = days.flatMap((day) => day.items.map((entry) => ({ item: entry.item.id, slot: null, score: entry.item.score })));
+    const listId = await this.#serve(user, "congress", `congress:${read.congress.id}`, served);
+    return { congress: { ...read.congress,
+      specialtyLabel: read.congress.specialty && Object.hasOwn(this.vocabulary.specialties, read.congress.specialty) ? this.vocabulary.specialties[read.congress.specialty] : null },
+    itemCount: days.reduce((sum, day) => sum + day.items.length, 0), days, listId };
   }
 
   /** Persist only the exact visible versions acknowledged by the reader; newer reports remain unseen.

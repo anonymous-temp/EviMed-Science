@@ -1952,3 +1952,217 @@ export async function fetchFrontierTopic(topicId: string): Promise<FrontierTopic
   });
   return { topic, items };
 }
+
+/* ------------------------------------------------------------------------------------------------ 追踪 (c3-track) */
+
+/**
+ * 追踪 (c3-track 2026-10-25): the approvals, the guideline updates and the congresses, and one congress's hub. Each list row is the
+ * feed's own item with the fields of its record (`items.track_facts`), which the server checked against the item's text; a congress
+ * is a row of the calendar with its status on the day and the number of its items. Like the other wave-two readers, a list returns
+ * null where the route does not exist yet or the module is off.
+ */
+export const FRONTIER_TRACK_SEGMENTS = ["approvals", "guidelines", "congresses"] as const;
+export type FrontierTrackSegment = typeof FRONTIER_TRACK_SEGMENTS[number];
+
+export interface FrontierTrackAgency { key: string; label: string; region: string; regionLabel: string; count: number }
+export interface FrontierApprovalRow {
+  item: FrontierItem;
+  /** The day the row is dated by: the decision's own day where the text gave one, the item's day otherwise. */
+  at: string;
+  approval: string;
+  approvalLabel: string;
+  agency: { key: string; label: string } | null;
+  drug: string;
+  indication: string | null;
+}
+export interface FrontierApprovals {
+  items: FrontierApprovalRow[];
+  nextCursor: string | null;
+  from: string;
+  agencies: FrontierTrackAgency[];
+  /** The year's count by agency, and the first day the count reaches back to. */
+  ytd: { year: number; since: string | null; total: number; byAgency: Array<{ key: string; label: string; count: number }> };
+  listId: string | null;
+}
+export interface FrontierGuidelineRow {
+  item: FrontierItem;
+  at: string;
+  body: string | null;
+  scope: string | null;
+  recommendations: Array<{ text: string; grade: string | null }>;
+}
+export interface FrontierGuidelines {
+  items: FrontierGuidelineRow[];
+  nextCursor: string | null;
+  specialties: Array<{ key: string; label: string; count: number }>;
+  listId: string | null;
+}
+export type FrontierCongressStatus = "ongoing" | "upcoming" | "recent";
+export interface FrontierCongress {
+  id: string;
+  /** 「ESMO 2026」. */
+  code: string;
+  name: string;
+  nameEn: string;
+  start: string;
+  end: string;
+  city: string | null;
+  specialty: string | null;
+  specialtyLabel: string | null;
+  status: FrontierCongressStatus;
+  itemCount: number;
+}
+export interface FrontierCongressRecap {
+  text: string;
+  at: string | null;
+  refs: Array<{ n: number; itemId: string; title: string; sourceName: string }>;
+}
+export interface FrontierCongressHub {
+  congress: Omit<FrontierCongress, "itemCount" | "status"> & { status: FrontierCongressStatus | "later" | "past"; sourceUrl: string | null; abstractsAt: string | null };
+  itemCount: number;
+  days: Array<{ day: string; recap: FrontierCongressRecap | null; items: Array<{ item: FrontierItem; caveat: string | null }> }>;
+  listId: string | null;
+}
+
+const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const day = (value: unknown): string | null => (typeof value === "string" && DAY_PATTERN.test(value) ? value : null);
+const FRONTIER_CONGRESS_STATUSES = ["ongoing", "upcoming", "recent"] as const;
+
+function parseTrackAgency(value: unknown): { key: string; label: string } | null {
+  const row = record(value);
+  const key = text(row?.key), label = text(row?.label);
+  return key && label ? { key: key.slice(0, 24), label: label.slice(0, 40) } : null;
+}
+
+export function parseFrontierApprovals(value: unknown): FrontierApprovals {
+  const raw = record(value) ?? {};
+  const items = (Array.isArray(raw.items) ? raw.items : []).flatMap((entry): FrontierApprovalRow[] => {
+    const row = record(entry);
+    const item = parseFrontierItem(row?.item);
+    const at = day(row?.at), drug = text(row?.drug);
+    return item && at && drug ? [{ item, at, approval: text(row?.approval) ?? "other", approvalLabel: text(row?.approvalLabel) ?? "审批动态",
+      agency: parseTrackAgency(row?.agency), drug: drug.slice(0, 200), indication: text(row?.indication)?.slice(0, 200) ?? null }] : [];
+  });
+  const ytd = record(raw.ytd) ?? {};
+  return {
+    items,
+    nextCursor: text(raw.nextCursor),
+    from: day(raw.from) ?? "",
+    agencies: (Array.isArray(raw.agencies) ? raw.agencies : []).flatMap((entry): FrontierTrackAgency[] => {
+      const row = record(entry);
+      const key = text(row?.key), label = text(row?.label);
+      return key && label ? [{ key, label, region: text(row?.region) ?? "other", regionLabel: text(row?.regionLabel) ?? "其他", count: count(row?.count) }] : [];
+    }).slice(0, 30),
+    ytd: {
+      year: count(ytd.year), since: day(ytd.since), total: count(ytd.total),
+      byAgency: (Array.isArray(ytd.byAgency) ? ytd.byAgency : []).flatMap((entry) => {
+        const agency = parseTrackAgency(entry);
+        return agency ? [{ ...agency, count: count(record(entry)?.count) }] : [];
+      }).slice(0, 30),
+    },
+    listId: text(raw.listId),
+  };
+}
+
+export function parseFrontierGuidelines(value: unknown): FrontierGuidelines {
+  const raw = record(value) ?? {};
+  return {
+    items: (Array.isArray(raw.items) ? raw.items : []).flatMap((entry): FrontierGuidelineRow[] => {
+      const row = record(entry);
+      const item = parseFrontierItem(row?.item);
+      const at = day(row?.at);
+      if (!item || !at) return [];
+      const recommendations = (Array.isArray(row?.recommendations) ? row.recommendations : []).flatMap((rec) => {
+        const point = record(rec);
+        const body = text(point?.text);
+        return body ? [{ text: body.slice(0, 240), grade: text(point?.grade)?.slice(0, 60) ?? null }] : [];
+      }).slice(0, 5);
+      return [{ item, at, body: text(row?.body)?.slice(0, 200) ?? null, scope: text(row?.scope)?.slice(0, 200) ?? null, recommendations }];
+    }),
+    nextCursor: text(raw.nextCursor),
+    specialties: (Array.isArray(raw.specialties) ? raw.specialties : []).flatMap((entry) => {
+      const row = record(entry);
+      const key = text(row?.key), label = text(row?.label);
+      return key && label ? [{ key, label, count: count(row?.count) }] : [];
+    }).slice(0, 40),
+    listId: text(raw.listId),
+  };
+}
+
+function parseCongress(value: unknown): FrontierCongress | null {
+  const row = record(value);
+  const idValue = text(row?.id), start = day(row?.start), end = day(row?.end), name = text(row?.name);
+  if (!idValue || !start || !end || !name) return null;
+  return {
+    id: idValue, code: text(row?.code) ?? name, name: name.slice(0, 120), nameEn: text(row?.nameEn)?.slice(0, 160) ?? "", start, end,
+    city: text(row?.city)?.slice(0, 60) ?? null, specialty: text(row?.specialty), specialtyLabel: text(row?.specialtyLabel)?.slice(0, 40) ?? null,
+    status: oneOf(row?.status, FRONTIER_CONGRESS_STATUSES, "recent"), itemCount: count(row?.itemCount),
+  };
+}
+
+export function parseFrontierCongressHub(value: unknown): FrontierCongressHub | null {
+  const raw = record(value);
+  const congress = parseCongress(raw?.congress);
+  if (!raw || !congress) return null;
+  const header = record(raw.congress);
+  return {
+    congress: { ...congress, status: oneOf(header?.status, [...FRONTIER_CONGRESS_STATUSES, "later", "past"] as const, "recent"), sourceUrl: safeLink(header?.sourceUrl), abstractsAt: day(header?.abstractsAt) },
+    itemCount: count(raw.itemCount),
+    days: (Array.isArray(raw.days) ? raw.days : []).flatMap((entry): FrontierCongressHub["days"] => {
+      const row = record(entry);
+      const when = day(row?.day);
+      if (!when) return [];
+      const recap = record(row?.recap);
+      const body = text(recap?.text);
+      return [{
+        day: when,
+        recap: body ? { text: body.slice(0, 1200), at: moment(recap?.at), refs: (Array.isArray(recap?.refs) ? recap.refs : []).flatMap((ref) => {
+          const mark = record(ref);
+          const n = count(mark?.n), itemId = text(mark?.itemId);
+          return n > 0 && itemId ? [{ n, itemId, title: text(mark?.title) ?? "", sourceName: text(mark?.sourceName) ?? "" }] : [];
+        }) } : null,
+        items: (Array.isArray(row?.items) ? row.items : []).flatMap((it) => {
+          const parsed = record(it);
+          const item = parseFrontierItem(parsed?.item);
+          return item ? [{ item, caveat: text(parsed?.caveat)?.slice(0, 260) ?? null }] : [];
+        }),
+      }];
+    }),
+    listId: text(raw.listId),
+  };
+}
+
+/** 审批: the approvals of the last 90 days, a page at a time; optionally one agency's. Null where the route does not exist. */
+export function listFrontierApprovals({ agency = null, cursor = null }: { agency?: string | null; cursor?: string | null } = {}): Promise<FrontierApprovals | null> {
+  return optional(async () => {
+    const query = new URLSearchParams();
+    if (agency) query.set("agency", agency);
+    if (cursor) query.set("cursor", cursor);
+    return parseFrontierApprovals(await productRequest<unknown>(`/frontier/track/approvals${query.toString() ? `?${query}` : ""}`));
+  });
+}
+
+/** 指南: the guideline updates, newest first, a page at a time; optionally one specialty's. */
+export function listFrontierGuidelines({ specialty = null, cursor = null }: { specialty?: string | null; cursor?: string | null } = {}): Promise<FrontierGuidelines | null> {
+  return optional(async () => {
+    const query = new URLSearchParams();
+    if (specialty) query.set("specialty", specialty);
+    if (cursor) query.set("cursor", cursor);
+    return parseFrontierGuidelines(await productRequest<unknown>(`/frontier/track/guidelines${query.toString() ? `?${query}` : ""}`));
+  });
+}
+
+/** 会议: the congresses on now, coming in the next 60 days and ended within the last 30. */
+export function listFrontierCongresses(): Promise<FrontierCongress[] | null> {
+  return optional(async () => {
+    const raw = record(await productRequest<unknown>("/frontier/track/congresses"));
+    return (Array.isArray(raw?.congresses) ? raw.congresses : []).map(parseCongress).filter((congress): congress is FrontierCongress => congress !== null);
+  });
+}
+
+/** One congress's hub. Throws every refusal: its page says something different for each (the module off, not built yet, no such congress). */
+export async function fetchFrontierCongress(congressId: string): Promise<FrontierCongressHub> {
+  const hub = parseFrontierCongressHub(await productRequest<unknown>(`/frontier/track/congresses/${id(congressId)}`));
+  if (!hub) throw new WebApiError("The frontier congress was malformed.", { status: 502 });
+  return hub;
+}
