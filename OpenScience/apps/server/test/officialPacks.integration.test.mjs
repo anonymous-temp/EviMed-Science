@@ -11,6 +11,7 @@ import { CapsuleTransferService } from "../src/capsuleTransferService.mjs";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
 import { OfficialPacks } from "../src/officialPacks.mjs";
+import { migrateProductStore } from "../src/productPersistence.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
@@ -47,6 +48,8 @@ before(async () => {
   await writePack("review", { "pack.json": CARD("系统综述"), "pooling.md": methodFile("合并之前先看异质性", "可比性不够就不合并。", "conversation, meta-analysis") });
   database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 4, databaseConnectionTimeoutMs: 5_000 });
   await migrateMemorySettings(database);
+  // A database of its own (the product-state run gives each file one) has no product ledger yet: the publisher's records live there.
+  await migrateProductStore(database);
   await clearPublisher();
   await database.query(`INSERT INTO evimed_control.users(id,name,auth_type) VALUES ($1,'Person','development'),($2,'Other','development'),($3,'Subject',NULL)`.replace("NULL", "'subject'"),
     [person, other, subject]);

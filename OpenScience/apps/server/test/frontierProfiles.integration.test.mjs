@@ -13,6 +13,7 @@ import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { FRONTIER_RANKING, FrontierProfiles, encodeVector } from "../src/frontierProfiles.mjs";
 import { MemorySettingsStore } from "../src/memorySettings.mjs";
+import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
 import { NativeMemoryOverlay } from "../src/nativeMemoryOverlay.mjs";
 import { migrateNativeMemory } from "../src/nativeMemoryPersistence.mjs";
 import { insertSource } from "./helpers/frontierFixtures.mjs";
@@ -77,6 +78,8 @@ before(async () => {
   database = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 6, databaseConnectionTimeoutMs: 2_000 });
   await migrateFrontier(database, { dimension: 1024 });
   for (const id of Object.values(users)) await database.query("INSERT INTO evimed_control.users(id, name, auth_type) VALUES ($1, $1, 'development')", [id]);
+  // The memory schema is the settings store's (the server migrates it first); a database of its own has none yet.
+  await migrateMemorySettings(database);
   await migrateNativeMemory(database);
   memory = new MemorySettingsStore({}, { database });
   overlay = new NativeMemoryOverlay({ database });
