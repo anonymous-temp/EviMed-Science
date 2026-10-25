@@ -135,6 +135,47 @@ test("one issue a day through the frontier-daily job: its window, its sections w
   assert.equal(await writer.read("not-a-day"), null);
 });
 
+test("G3: an issue does not lead with the event the last three issues led with, even when that event had one report then; the item stays in its section", options, async () => {
+  const summary = { summaryZh: "导读。", verification: "passed", selected: true };
+  const event = async (publicId, firstAt, reports) => (await database.query(`INSERT INTO evimed_frontier.events (public_id, title_zh, lane, first_at, last_at, report_count)
+    VALUES ($1, $1, 'evidence', $2, $3, $4) RETURNING id`, [publicId, firstAt, "2026-09-21T10:00:00Z", reports])).rows[0].id;
+  const into = (item, id) => database.query("UPDATE evimed_frontier.items SET event_id = $2 WHERE id = $1", [item.id, id]);
+  const big = await event("03b4fabf39b7b03d", "2026-09-17T08:00:00Z", 42);
+  const fresh = await event("e000000000000002", "2026-09-21T02:00:00Z", 2);
+  const old = await event("e000000000000003", "2026-09-10T02:00:00Z", 3);
+  // Three issues led with the big event, each with another report of it; the lead of the first one had one report and so stored no event.
+  const reports = [];
+  for (const hour of [1, 3, 5]) {
+    const report = await insertComposedItem(database, { ...summary, sourceId: "nejm", title: `Report ${hour}`, scoreTotal: 90, visibleAt: `2026-09-1${6 + Math.floor(hour / 2)}T0${hour}:00:00Z` });
+    await into(report, big);
+    reports.push(report);
+  }
+  const led = (itemId, eventId) => JSON.stringify({ itemId, title: "t", text: null, eventId, eventTitle: null });
+  for (const [day, report, eventId] of [["2026-09-21", reports[2], "03b4fabf39b7b03d"], ["2026-09-20", reports[1], "03b4fabf39b7b03d"], ["2026-09-19", reports[0], null]]) {
+    await database.query(`INSERT INTO evimed_frontier.dailies (day, window_start, window_end, lead, sections, markdown, item_ids, model)
+      VALUES ($1::date, $2, $2, $3::jsonb, '[]'::jsonb, '', '{}', 'm')`, [day, "2026-09-20T23:00:00Z", led(report.publicId, eventId)]);
+  }
+  // An issue four days back led with another event: it is no longer remembered.
+  await database.query(`INSERT INTO evimed_frontier.dailies (day, window_start, window_end, lead, sections, markdown, item_ids, model)
+    VALUES ('2026-09-18', $1, $1, $2::jsonb, '[]'::jsonb, '', '{}', 'm')`, ["2026-09-17T23:00:00Z", led("p-of-another-lead", "e000000000000003")]);
+  // The window's candidates: today's report of the big event (hottest, highest score), a new event's, and an old event's.
+  const today = await insertComposedItem(database, { ...summary, sourceId: "nejm", title: "Report today", titleZh: "今天的报道", scoreTotal: 97, visibleAt: "2026-09-21T09:00:00Z" });
+  await into(today, big);
+  const newest = await insertComposedItem(database, { ...summary, sourceId: "nejm", title: "A new event", titleZh: "新事件", scoreTotal: 71, visibleAt: "2026-09-21T04:00:00Z" });
+  await into(newest, fresh);
+  const older = await insertComposedItem(database, { ...summary, sourceId: "nejm", title: "An old event", titleZh: "旧事件", scoreTotal: 85, visibleAt: "2026-09-21T06:00:00Z" });
+  await into(older, old);
+  const events = { hotEventIds: async () => [String(big), String(old), String(fresh)] };
+  const writer = new FrontierDaily({ database, jobs, notifications, editor: aiEditor(), events, config: { frontierDailyTime: "07:30", frontierTimeZone: "Asia/Shanghai" },
+    owner: () => ({ userId: users.operator, projectId: FRONTIER_PROJECT_ID }), budget: async () => ({ state: "ok" }), now: () => FINALIZED, workerId: "test-daily" });
+  const issue = await writer.compose(DAY);
+  assert.equal(issue.lead.itemId, newest.publicId, "the event that began in the window leads; the big event (hottest) and the old one are not it");
+  const sectioned = issue.sections.flatMap((section) => section.itemIds);
+  assert.ok(sectioned.includes(today.publicId), "today's report of the big event stays in its section");
+  assert.ok(sectioned.includes(older.publicId));
+  assert.match(issue.markdown, /## 头条\n\n\*\*新事件\*\*/);
+});
+
 test("an issue names every source by its institution — the safety block, the Markdown, the AI minute's input — never by its feed", options, async () => {
   await insertSource(database, "openfda-drug-enforcement-api", { name: "openFDA 药品召回（enforcement）API", lane: "safety", source_type: "regulator",
     authority: 5, owner_entity: "U.S. Food and Drug Administration" });

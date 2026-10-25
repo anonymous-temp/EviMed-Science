@@ -203,7 +203,15 @@ export async function followedZoneCards(database, { userId, from, to, limit = FR
  * @typedef {{ id: string | number, public_id: string, title_raw: string, title_zh?: string | null, summary_zh?: string | null,
  *             lane: string, selected: boolean, selected_rule?: string | null, safety_alert: boolean, score_total?: number | null, visible_at: string | Date,
  *             canonical_url: string, source_name: string, event_id?: string | number | null, event_public_id?: string | null,
- *             event_title?: string | null, event_reports?: number | null, event_digest?: string | null }} FrontierDailyRow
+ *             event_title?: string | null, event_reports?: number | null, event_digest?: string | null, event_first_at?: string | Date | null }} FrontierDailyRow
+ */
+
+/** How many earlier issues' lead events a new issue does not lead with again (G3, 2026-10-25). */
+export const FRONTIER_DAILY_LEAD_MEMORY = 3;
+
+/**
+ * The events and items the last issues led with, as public ids: a candidate of one is not a lead (it may stay in a section).
+ * @typedef {{ itemIds?: Iterable<string>, eventIds?: Iterable<string> }} FrontierRecentLeads
  */
 
 /**
@@ -226,20 +234,31 @@ function byWeight(left, right) {
 /**
  * What one day's issue holds, from the window's verified items: the lead —
  * the selected item whose event ranks highest on the hot list, else the
- * highest scored — the safety alerts, one section per lane with selected
+ * highest scored; never an item of an event the last issues led with
+ * (`recentLeads`: it may stay in its section — a 42-report event led four of five
+ * days in a row, 2026-10-25), and an event that began inside the window (`window`)
+ * before one that began earlier — the safety alerts, one section per lane with selected
  * items (the best eight each, none empty, and after them the items the
  * preprint lane selected: its places are a ruling of the owner's, and their
  * totals sort below every item that reached the line, so a cap by score would
  * cut them on the days the section is full), and the AI-lane items the AI
  * minute is written from. Null when there is nothing to publish.
- * @param {{ rows: FrontierDailyRow[], hotEventIds?: string[] }} input
+ * @param {{ rows: FrontierDailyRow[], hotEventIds?: string[], recentLeads?: FrontierRecentLeads | null,
+ *           window?: { start: Date | string, end: Date | string } | null }} input
  */
-export function frontierDailyIssue({ rows, hotEventIds = [] }) {
+export function frontierDailyIssue({ rows, hotEventIds = [], recentLeads = null, window = null }) {
   const rank = new Map(hotEventIds.map((id, index) => [String(id), index]));
   const safety = rows.filter((row) => row.safety_alert).sort((left, right) => new Date(right.visible_at).getTime() - new Date(left.visible_at).getTime())
     .slice(0, FRONTIER_DAILY_SAFETY_MAX);
   const selected = rows.filter((row) => row.selected && !row.safety_alert);
-  const lead = [...selected].sort((left, right) => (rank.get(String(left.event_id)) ?? Infinity) - (rank.get(String(right.event_id)) ?? Infinity)
+  const ledItems = new Set([...(recentLeads?.itemIds ?? [])].map(String));
+  const ledEvents = new Set([...(recentLeads?.eventIds ?? [])].map(String));
+  const barred = (/** @type {FrontierDailyRow} */ row) => ledItems.has(String(row.public_id)) || (row.event_public_id != null && ledEvents.has(String(row.event_public_id)));
+  const opened = window ? new Date(window.start).getTime() : Number.NaN;
+  // An event that began before the window is yesterday's story told again; one with no first report on record counts as new.
+  const older = (/** @type {FrontierDailyRow} */ row) => Number.isFinite(opened) && row.event_first_at != null && new Date(row.event_first_at).getTime() < opened;
+  const lead = selected.filter((row) => !barred(row)).sort((left, right) => Number(older(left)) - Number(older(right))
+    || (rank.get(String(left.event_id)) ?? Infinity) - (rank.get(String(right.event_id)) ?? Infinity)
     || byWeight(left, right))[0] ?? null;
   /** @type {Array<{ lane: string, rows: FrontierDailyRow[] }>} */
   const sections = [];
@@ -492,7 +511,8 @@ export class FrontierDaily {
     /** @type {FrontierDailyRow[]} */
     const rows = ((await this.database.query(`SELECT i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.lane, i.selected, i.selected_rule, i.safety_alert,
         i.score_total, i.visible_at, i.canonical_url, i.event_id, s.id AS source_id, s.name AS source_name, s.owner_entity AS source_owner,
-        e.public_id AS event_public_id, e.title_zh AS event_title, e.report_count AS event_reports, e.digest_zh AS event_digest
+        e.public_id AS event_public_id, e.title_zh AS event_title, e.report_count AS event_reports, e.digest_zh AS event_digest,
+        e.first_at AS event_first_at
       FROM evimed_frontier.items i
       JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
       LEFT JOIN evimed_frontier.events e ON e.id = i.event_id AND e.merged_into IS NULL
@@ -509,7 +529,7 @@ export class FrontierDaily {
       // and the reason it was chosen without the hot list is on the status.
       this.state.lastError = codeOf(error);
     }
-    const issue = frontierDailyIssue({ rows, hotEventIds });
+    const issue = frontierDailyIssue({ rows, hotEventIds, recentLeads: await this.#recentLeads(day), window });
     if (!issue) return null;
     const { lead, safety, sections, ai } = issue;
     // An event page is worth linking once it holds more than one report; its
@@ -534,6 +554,37 @@ export class FrontierDaily {
       sections: sections.map((section) => ({ lane: section.lane, itemIds: section.rows.map((row) => row.public_id) })),
       safety: safety.map((row) => row.public_id),
     };
+  }
+
+  /**
+   * What the last `FRONTIER_DAILY_LEAD_MEMORY` issues before `day` led with, as public ids: each lead's item, and the event that
+   * item belongs to now (a survivor, when its event was merged) beside the event the issue stored — an event that had one report
+   * when it led stored none, and has since collected more. A read that fails is no memory: the issue is still written.
+   * @param {string} day @returns {Promise<{ itemIds: string[], eventIds: string[] }>}
+   */
+  async #recentLeads(day) {
+    try {
+      const earlier = (await this.database.query(`SELECT lead FROM evimed_frontier.dailies WHERE day < $1::date ORDER BY day DESC LIMIT $2`,
+        [day, FRONTIER_DAILY_LEAD_MEMORY])).rows ?? [];
+      const leads = earlier.map((/** @type {any} */ row) => row.lead).filter((/** @type {any} */ lead) => lead && typeof lead === "object" && typeof lead.itemId === "string");
+      if (!leads.length) return { itemIds: [], eventIds: [] };
+      const itemIds = [...new Set(leads.map((/** @type {any} */ lead) => String(lead.itemId)))];
+      const eventIds = new Set(leads.map((/** @type {any} */ lead) => lead.eventId).filter((/** @type {unknown} */ id) => typeof id === "string"));
+      const found = (await this.database.query(`SELECT DISTINCT survivor.public_id AS event_public_id
+        FROM evimed_frontier.items i
+        JOIN evimed_frontier.events own ON own.id = i.event_id
+        JOIN evimed_frontier.events survivor ON survivor.id = coalesce(own.merged_into, own.id)
+        WHERE i.public_id = ANY($1::text[])
+        UNION
+        SELECT survivor.public_id FROM evimed_frontier.events named
+        JOIN evimed_frontier.events survivor ON survivor.id = coalesce(named.merged_into, named.id)
+        WHERE named.public_id = ANY($2::text[])`, [itemIds, [...eventIds]])).rows ?? [];
+      for (const row of found) eventIds.add(String(row.event_public_id));
+      return { itemIds, eventIds: [...eventIds] };
+    } catch (error) {
+      this.state.lastError = codeOf(error);
+      return { itemIds: [], eventIds: [] };
+    }
   }
 
   /** The AI minute is a model call like any other: only while the day's budget is not spent. */
