@@ -2423,7 +2423,11 @@ export function frontierMetricFamilies(enabled, snapshot) {
         "deferred", "hotRuns", "hotChanges", "digestsWritten", "digestsDropped",
         // fr-events 2026-10-22: the grouping calls, their second looks, the relations they found, the links and the gate.
         "groupCalls", "secondLooks", "secondLooksAgreed", "sameOccurrence", "sameStory", "followsLinks", "sameEventUnselected", "lexicalRecalls",
-        "regrouped"].map((kind) => ({ labels: { kind }, value: Number(events[kind] ?? 0) })));
+        "regrouped",
+        // c3-cluster 2026-10-25: the re-clustering sweep.
+        "reclusterRuns", "reclusterAnchors", "reclusterPairs", "reclusterSame", "reclusterRelated", "reclusterDifferent", "reclusterUnjudged",
+        "reclusterSecondLooks", "reclusterSecondAgreed", "reclusterMerged", "reclusterLinks", "reclusterPicksUnselected", "reclusterVetoed",
+        "reclusterStale", "reclusterStopped", "reclusterFailures"].map((kind) => ({ labels: { kind }, value: Number(events[kind] ?? 0) })));
     const profiles = composer.profiles ?? null;
     add("personalization_state", "「与你相关」 as /status reports it (1 = current).", "gauge",
       ["available", "unavailable", "off"].map((state) => ({ labels: { state }, value: (profiles?.state ?? "off") === state ? 1 : 0 })));
