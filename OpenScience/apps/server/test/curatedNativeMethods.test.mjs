@@ -32,6 +32,14 @@ test("native hypothesis CLI validates the real template, rejects malformed recor
   } finally { await fs.rm(temporary, { recursive: true, force: true }); }
 });
 
+test("the hypothesis record and the prediction matrix name their passing status alike", () => {
+  const record = run("validate_hypothesis_schema.py", [path.join(hypothesis, "assets/hypothesis_record_template.json")]);
+  const matrix = run("validate_prediction_matrix.py", [path.join(hypothesis, "assets/prediction_rival_matrix_template.csv")]);
+  assert.equal(matrix.status, 0, matrix.stderr);
+  assert.equal(JSON.parse(matrix.stdout).status, "VALID_FOR_REVIEW");
+  assert.match(JSON.parse(record.stdout).status, /^VALID_(FOR_REVIEW|WITH_REVIEW_NOTES)$/);
+});
+
 test("native preregistration scaffold resolves bundled assets deterministically", async () => {
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "preregistration-native-"));
   try {
