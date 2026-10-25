@@ -99,6 +99,21 @@ test("the safety push ceiling has one default: the config's, the notifier's fall
   assert.match(compose, /^\s+OPEN_SCIENCE_FRONTIER_SAFETY_PUSH_DAILY_CAP:\s*$/m);
 });
 
+test("the typed follows' embedding line has one default: the config's, the matcher's fallback and the example .env agree (c3-watch)", async () => {
+  const { FRONTIER_FOLLOW_MIN_COSINE_DEFAULT, FrontierFollowWatch } = await import("../src/frontierFollowMatches.mjs");
+  const { readFile } = await import("node:fs/promises");
+  assert.equal(configUnder({}).frontierFollowMinCosinePercent, Math.round(FRONTIER_FOLLOW_MIN_COSINE_DEFAULT * 100));
+  const line = (/** @type {Record<string, any>} */ config) => new FrontierFollowWatch({ database: {}, config, dimension: 1024 }).minCosine;
+  assert.equal(line({}), FRONTIER_FOLLOW_MIN_COSINE_DEFAULT);
+  assert.equal(line({ frontierFollowMinCosinePercent: 70 }), 0.7);
+  assert.equal(line({ frontierFollowMinCosinePercent: "x" }), FRONTIER_FOLLOW_MIN_COSINE_DEFAULT);
+  assert.equal(line({ frontierFollowMinCosinePercent: 5 }), FRONTIER_FOLLOW_MIN_COSINE_DEFAULT, "out of range falls back, it does not clamp");
+  const example = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
+  assert.equal([...example.matchAll(/^OPEN_SCIENCE_FRONTIER_FOLLOW_MIN_COSINE_PERCENT=(\d+)$/gm)].map((match) => Number(match[1])).join(), "55");
+  assert.match(compose, /^\s+OPEN_SCIENCE_FRONTIER_FOLLOW_MIN_COSINE_PERCENT:\s*$/m);
+});
+
 test("the events route's per-reader minute has one default: the config's, the module's and the example .env agree; out of range stops the start", async () => {
   const { FRONTIER_EVENTS_PER_MINUTE_DEFAULT, FrontierInteractions } = await import("../src/frontierInteractions.mjs");
   const { readFile } = await import("node:fs/promises");
@@ -160,6 +175,9 @@ test("a value outside its range stops the start by the variable's name", () => {
     ["OPEN_SCIENCE_FRONTIER_SAFETY_PUSH_DAILY_CAP", "0"],
     ["OPEN_SCIENCE_FRONTIER_SAFETY_PUSH_DAILY_CAP", "51"],
     ["OPEN_SCIENCE_FRONTIER_SAFETY_PUSH_DAILY_CAP", "2.5"],
+    ["OPEN_SCIENCE_FRONTIER_FOLLOW_MIN_COSINE_PERCENT", "29"],
+    ["OPEN_SCIENCE_FRONTIER_FOLLOW_MIN_COSINE_PERCENT", "96"],
+    ["OPEN_SCIENCE_FRONTIER_FOLLOW_MIN_COSINE_PERCENT", "0.55"],
     ["OPEN_SCIENCE_KNOWLEDGE_PLUGIN_URL", "ftp://plugin"],
     ["OPEN_SCIENCE_KNOWLEDGE_PLUGIN_URL", "http://someone:test-only@plugin:8080"],
     ["OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_FILE", "relative/token"],

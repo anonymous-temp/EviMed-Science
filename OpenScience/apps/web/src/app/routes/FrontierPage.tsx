@@ -15,11 +15,13 @@ import {
   FRONTIER_FOLLOWS_CHANGED,
   FRONTIER_WINDOWS,
   listFrontierItems,
+  markFrontierFollowSeen,
   markFrontierItemRead,
   saveFrontierItemToLibrary,
   starFrontierItem,
   unstarFrontierItem,
   useFrontierFeature,
+  type FrontierFollow,
   type FrontierForYou,
   type FrontierHotWindow,
   type FrontierItem,
@@ -162,6 +164,9 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   useEffect(() => { setManageFollows(false); }, [view]);
   // The 关注 feed is asked for only once the reader follows something to put in it (one narrowed follow is its own proof).
   const following = useFollowing(ready && view === "following");
+  // Opening one follow's feed is looking at what is new in it: the server forgets the count (c3-watch, 2026-10-25).
+  const openedFollow = ready && choice?.kind === "follow" ? choice.id : null;
+  useEffect(() => { if (openedFollow) void markFrontierFollowSeen(openedFollow); }, [openedFollow]);
   const listingView = view === "selected" || view === "all"
     || (view === "following" && (choice?.kind === "follow" || (choice?.kind === "all" && following.topics.length > 0)));
   const q = (params.get("q") ?? "").trim();
@@ -184,7 +189,9 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const trackAgency = /^[a-z-]{2,24}$/.test(params.get("agency") ?? "") ? params.get("agency")! : "";
   const trackSpecialty = readKey(params.get("specialty"), FRONTIER_SPECIALTIES);
   // 「没有结果」 means a filter or a narrowed follow excluded everything; the whole of the follows is not a filter.
-  const filtered = Boolean(channel || lane || specialties.length || tag || evidence || starred || unread || windowFilter || choice?.kind === "follow");
+  // A typed follow that has matched nothing (yet) is not a filter that excluded everything: it says what it is waiting for (c3-watch).
+  const typedFollow = choice?.kind === "follow" ? following.topics.find((entry) => entry.id === choice.id && entry.kind === "query") : undefined;
+  const filtered = Boolean(channel || lane || specialties.length || tag || evidence || starred || unread || windowFilter || (choice?.kind === "follow" && !typedFollow));
   /** Where the list on screen is, as its events name it (frontierTracking): the feed, a search or the follows. */
   const listSurface: FrontierTrackSurface = q ? "search" : view === "following" ? "follows" : "feed";
   /** Where a card's star or hide is taken: 与我相关 or the list. */
@@ -777,8 +784,17 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const showAllFollows = () => setParams((current) => {
     const updated = new URLSearchParams(current); updated.set("follow", "all"); return updated;
   });
+  /** A follow the reader just typed opens: its feed, with the words they typed. */
+  const openFollow = (follow: FrontierFollow) => setParams((current) => {
+    const updated = new URLSearchParams(current);
+    updated.set("view", "following");
+    updated.set("follow", follow.id);
+    for (const name of ["q", "sort", "day", "week", "window", "item", "scope", "request"]) updated.delete(name);
+    return updated;
+  });
   const followList = (onPick?: () => void, onManage?: () => void) => choice && (
     <FollowList state={following} choice={choice} hrefFor={followHref} onManage={onManage ?? (() => setManageFollows(true))} titled={Boolean(onPick)}
+      onAdded={(follow) => { trackFrontierFilter("follow", "follows"); onPick?.(); openFollow(follow); }}
       onPick={() => { trackFrontierFilter("follow", "follows"); onPick?.(); }} />
   );
   // The onboarding card's answer becomes the first follows; then the view and 与我相关 are read again.
@@ -798,7 +814,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       listing={listing && listing.key === key ? listing : null}
       error={listError}
       fresh={fresh?.count ?? 0}
-      empty={view === "following" ? "关注的内容暂时没有新动态" : undefined}
+      empty={view === "following" ? (typedFollow ? `暂时没有匹配“${typedFollow.label}”的动态，有新的会出现在这里` : "关注的内容暂时没有新动态") : undefined}
       firstRun={status ? status.lastPublishedAt === null : true}
       loadingMore={loadingMore}
       renderItem={card}

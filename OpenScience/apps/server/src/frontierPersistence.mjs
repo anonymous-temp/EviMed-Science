@@ -774,6 +774,11 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.follow_matches (
 );
 CREATE INDEX IF NOT EXISTS frontier_follow_matches_follow_idx ON evimed_frontier.follow_matches (follow_id, matched_at DESC);
 CREATE INDEX IF NOT EXISTS frontier_follow_matches_item_idx ON evimed_frontier.follow_matches (item_id);
+-- c3-watch 2026-10-25
+-- How far a typed follow's items have been looked at (a scan starts a little before it), and when a daily notice named a match.
+ALTER TABLE evimed_frontier.user_follows ADD COLUMN IF NOT EXISTS matched_through timestamptz(3);
+ALTER TABLE evimed_frontier.follow_matches ADD COLUMN IF NOT EXISTS notified_at timestamptz(3);
+CREATE INDEX IF NOT EXISTS frontier_user_follows_query_idx ON evimed_frontier.user_follows (matched_through NULLS FIRST) WHERE kind = 'query';
 -- One congress day's recap (@evimed/domain frontier-congresses.json ids), written from that day's items with numbers checked (c3-track).
 CREATE TABLE IF NOT EXISTS evimed_frontier.congress_recaps (
   congress_id  text NOT NULL CHECK (congress_id ~ '^[a-z0-9-]{3,80}$'),

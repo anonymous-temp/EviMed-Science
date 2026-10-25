@@ -9,6 +9,7 @@ import {
   type FrontierDaily,
   type FrontierDailySchedule,
   type FrontierDailySummary,
+  type FrontierFollowedQuery,
   type FrontierFollowedZone,
   type FrontierItem,
 } from "@/lib/frontierClient";
@@ -220,6 +221,7 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit, expansion 
       {issue.safety.length > 0 && <DailySection key={`${issue.day}-safety-alerts`} expansion={expansion} expansionId={`digest:${weekly ? "week" : "day"}:${issue.day}:safety-alerts`} id="safety-alerts" title="安全警示" items={issue.safety} safety limit={laneLimit} />}
       {issue.sections.map((section) => <DailySection key={`${issue.day}-${section.lane}`} expansion={expansion} expansionId={`digest:${weekly ? "week" : "day"}:${issue.day}:${section.lane}`} id={section.lane} title={section.laneLabel || "其他"} items={section.items} limit={laneLimit} />)}
 
+      {issue.followedQueries && issue.followedQueries.length > 0 && <FollowedQueries follows={issue.followedQueries} />}
       {issue.followedZones && issue.followedZones.length > 0 && <FollowedZones zones={issue.followedZones} />}
 
       {issue.aiMinute && (
@@ -236,6 +238,28 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit, expansion 
         </nav>
       )}
     </article>
+  );
+}
+
+/**
+ * 「你关注的」: the things this reader typed to follow that have news, each one a link to its feed with the number of new items
+ * (c3-watch). Theirs alone, like the zones below it.
+ */
+function FollowedQueries({ follows }: { follows: FrontierFollowedQuery[] }) {
+  return (
+    <section aria-labelledby="daily-followed-queries" className="mt-8">
+      <h3 id="daily-followed-queries" className="text-body font-semibold text-text">你关注的</h3>
+      <ul aria-label="有新动态的关注" className="mt-1">
+        {follows.map((follow) => (
+          <li key={follow.id} className="flex items-baseline gap-2 border-b border-border py-3">
+            <Link to={`/app/frontier?view=following&follow=${encodeURIComponent(follow.id)}`} className="min-w-0 flex-1 text-body leading-6 text-text hover:text-accent hover:underline">
+              {follow.label}
+            </Link>
+            <span className="shrink-0 text-caption tabular-nums text-text-3">{follow.newItems >= 99 ? "99+" : follow.newItems} 条新动态</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

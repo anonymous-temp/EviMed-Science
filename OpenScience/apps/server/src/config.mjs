@@ -454,6 +454,9 @@ function frontierSettings(overrides) {
     // The most safety pushes one reader receives in a day (owner ruling 2026-10-10: a Class I recall and a boxed-warning alert now go to
     // every reader with the push on). FRONTIER_SAFETY_PUSH_DAILY_CAP_DEFAULT (frontierNotifications.mjs, with the reasoning).
     frontierSafetyPushDailyCap: integer("frontierSafetyPushDailyCap", "OPEN_SCIENCE_FRONTIER_SAFETY_PUSH_DAILY_CAP", 3, 1, 50),
+    // The cosine, in hundredths, an item's embedding must reach against a typed follow's words for the embedding leg to match it
+    // (c3-watch 2026-10-25; only a follow with no key takes the leg). FRONTIER_FOLLOW_MIN_COSINE_DEFAULT (frontierFollowMatches.mjs).
+    frontierFollowMinCosinePercent: integer("frontierFollowMinCosinePercent", "OPEN_SCIENCE_FRONTIER_FOLLOW_MIN_COSINE_PERCENT", 55, 30, 95),
     // Lead triggers (ct-mix 2026-10-24, frontierLeads.mjs): the feed searches the open web through the platform's gateway for
     // what it is missing and hands the pages to the knowledge plugin. On with the module (it needs a web-search engine and
     // the plugin); a day's searches are capped here (FRONTIER_LEADS_DAILY_QUERIES_DEFAULT), each booked under purpose
