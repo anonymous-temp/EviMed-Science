@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { carriesPlatformContext, identifierShapesIn, platformIdentifiersIn } from "@evimed/domain";
+import { carriesPlatformContext, identifierShapesIn, linkStatesLeftFor, platformIdentifiersIn } from "@evimed/domain";
 import { filterCapturedMessage } from "./memoryGateway.mjs";
 import { contentHash, lineFingerprint, memoryLines } from "./nativeMemoryOverlay.mjs";
 import {
@@ -696,9 +696,11 @@ export class NativeMemoryWorker {
     let touched = 0;
     for (const link of await this.overlay.filesNaming(source, { userId })) {
       if (link.state === state) continue;
-      // A check moves a link only where it adds knowledge: a correction never lowers a retraction, and a check that could not answer
-      // never undoes a finding (`unknown` is only ever what a link nobody had found a change on becomes).
-      if ((state === "changed" && link.state === "retracted") || (state === "unknown" && link.state !== "current")) continue;
+      // A check moves a link only where it adds knowledge (`linkStatesLeftFor`, the rule the retired records engine kept): a correction
+      // never lowers a retraction, a check that could not answer never undoes a finding, and a clean answer is only what a link nobody
+      // had answered for becomes (or a document that is back in the library, `removed`): it never lifts a retraction, a correction
+      // or an expiry.
+      if (!linkStatesLeftFor(state).includes(link.state)) continue;
       await this.overlay.markSource(userId, link.uri, source, state);
       const held = await this.overlay.file(userId, link.uri);
       if (await this.#writeLabel(userId, link.uri, held?.memoryType ?? "project_facts", source, state)) touched += 1;

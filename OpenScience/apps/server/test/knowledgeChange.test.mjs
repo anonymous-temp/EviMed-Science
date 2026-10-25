@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { SOURCE_CHANGE_LINK_STATES } from "@evimed/domain";
+import { SOURCE_CHANGE_LINK_STATES, linkStatesLeftFor } from "@evimed/domain";
 import { loadConfig } from "../src/config.mjs";
 import { NATIVE_SOURCE_STATES } from "../src/nativeMemoryPersistence.mjs";
 import { KnowledgeChangeService, memoryLinkOf, producingAgenda } from "../src/knowledgeChange.mjs";
@@ -60,11 +60,10 @@ function memoryDouble({ rows = [], fail = false } = {}) {
     async labelSource(_user, link, state) {
       calls.push(["label", link, state]);
       if (fail) throw Object.assign(new Error("engine down"), { code: "memory_unavailable" });
-      // A check moves a link only where it adds knowledge (the worker's rule): a correction never lowers a retraction, and a check
-      // that could not answer is only what a link nobody had found a change on becomes.
+      // A check moves a link only where it adds knowledge (the worker's rule, `linkStatesLeftFor`).
       let moved = 0;
       for (const row of rows) {
-        if (row.state === state || (state === "changed" && row.state === "retracted") || (state === "unknown" && row.state !== "current")) continue;
+        if (row.state === state || !linkStatesLeftFor(state).includes(row.state)) continue;
         row.state = state;
         moved += 1;
       }
@@ -199,16 +198,16 @@ test("a check that could not answer leaves a correction found earlier and marks 
   assert.ok((await impactsOf(f)).every(item => item.payload.effect === "source_gap"));
 });
 
-test("a clean answer asks the engine to set the links right through one label call and creates no impact", async () => {
-  const memory = memoryDouble({ rows: [memoryRow("a", { state: "unknown" }), memoryRow("b", { state: "retracted" })] });
+test("a clean answer asks the engine to set the links right through one label call, sets right only what no check had answered, and creates no impact", async () => {
+  const memory = memoryDouble({ rows: [memoryRow("a", { state: "unknown" }), memoryRow("b", { state: "retracted" }), memoryRow("c", { state: "changed" }), memoryRow("d", { state: "expired" })] });
   const f = fixture({ memory });
   const reply = await f.service.reconcileSourceUpdate("alice", { projectId: "p", source: { id: DOI }, status: { state: "no_update", checkedAt: "2026-10-04T00:00:00Z", updates: [] } });
   assert.deepEqual(reply.items, []);
   const states = Object.fromEntries((await memory.dependentsOfSource()).map(row => [row.recordId, row.state]));
-  // The engine's own rule decides which links a clean answer moves (`NativeMemoryWorker.labelSource`: it lifts a label whatever
-  // it was; only a correction never lowers a retraction and only an outage never undoes a finding), so this unit pins the call, not the rule.
   assert.deepEqual(memory.calls.filter(call => call[0] === "label").map(call => call[2]), ["current"]);
-  assert.deepEqual(states, { a: "current", b: "current" });
+  // The rule is the domain's `linkStatesLeftFor`, held in `nativeMemory.integration.test.mjs` against the real worker: "nothing new was
+  // found this time" never undoes a retraction, a correction or an expiry an earlier check found.
+  assert.deepEqual(states, { a: "current", b: "retracted", c: "changed", d: "expired" });
 });
 
 test("learned methods linked to the affected versions are labelled once, by how they meet the result", async () => {

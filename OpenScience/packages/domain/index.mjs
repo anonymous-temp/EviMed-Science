@@ -1101,6 +1101,7 @@ export {
   foldSourceChange,
   linkReasonOf,
   linkStateOf,
+  linkStatesLeftFor,
   methodSourceChanges,
   projectAffected,
 } from './src/knowledgeChange.mjs'

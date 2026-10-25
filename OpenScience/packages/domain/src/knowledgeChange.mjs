@@ -84,6 +84,26 @@ export function linkStateOf(status) {
 }
 
 /**
+ * Which states a link may leave for the state a check (or the library) found. A check moves a link only where it adds knowledge:
+ * a retraction outranks a correction, a correction is never turned back into `unknown` by a check that could not be made, and a
+ * clean answer is only the one that sets right what no check had answered (`unknown`): it never lifts a retraction, a correction or
+ * an expiry that an earlier check found, because "nothing new was found this time" does not say the earlier finding was wrong.
+ * Two states are the library's own fact about a document and not a finding about a publication, and so move freely: `removed`
+ * (the document left the library) is recorded over any state, and is lifted by `current` (the same bytes are back, which is what the
+ * library's sync says when a deleted document is added again).
+ * @param {string} next
+ * @returns {string[]}
+ */
+export function linkStatesLeftFor(next) {
+  if (next === "retracted") return ["current", "unknown", "changed", "expired", "removed"];
+  if (next === "changed") return ["current", "unknown", "expired", "removed"];
+  if (next === "unknown") return ["current"];
+  if (next === "current") return ["unknown", "removed"];
+  if (next === "removed" || next === "expired") return ["current", "unknown", "changed", "retracted", "expired", "removed"].filter((state) => state !== next);
+  return [];
+}
+
+/**
  * The short machine reason a link is labelled with: what kind of notice, or why the check could not answer.
  * @param {{ state?: unknown, reason?: unknown, updates?: unknown } | null | undefined} status
  * @returns {string}

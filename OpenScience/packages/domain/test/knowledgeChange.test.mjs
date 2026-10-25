@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   AFFECTED_LIST_LIMIT, METHOD_SOURCE_CHANGE_LIMIT, SOURCE_CHANGE_LINK_STATES, SOURCE_REPLACED_KIND, affectedClass, affectedCounts,
-  foldSourceChange, linkReasonOf, linkStateOf, methodSourceChanges, projectAffected,
+  foldSourceChange, linkReasonOf, linkStateOf, linkStatesLeftFor, methodSourceChanges, projectAffected,
 } from "../index.mjs";
 
 const VERSION = `rv_${"a".repeat(64)}`;
@@ -20,6 +20,18 @@ test("a check moves a link to the state it found, and a check that could not ans
     assert.equal(linkStateOf(status), "unknown");
   }
   for (const state of ["current", "changed", "retracted", "unknown"]) assert.ok(SOURCE_CHANGE_LINK_STATES.includes(state));
+});
+
+test("a check lowers nothing: a retraction outranks a correction, and neither an unanswered check nor a clean one undoes a finding", () => {
+  assert.deepEqual(linkStatesLeftFor("unknown"), ["current"], "only a link nobody had found a change on");
+  assert.ok(!linkStatesLeftFor("changed").includes("retracted"));
+  assert.ok(linkStatesLeftFor("retracted").includes("changed"));
+  assert.ok(!linkStatesLeftFor("retracted").includes("retracted"));
+  for (const finding of ["retracted", "changed", "expired"]) assert.ok(!linkStatesLeftFor("current").includes(finding), `a clean answer does not lift ${finding}`);
+  assert.ok(linkStatesLeftFor("current").includes("unknown"), "a clean answer sets right an unanswered check");
+  assert.ok(linkStatesLeftFor("current").includes("removed"), "a document that is back in the library is current again");
+  assert.ok(linkStatesLeftFor("removed").includes("retracted"), "a document that left the library is recorded whatever it was");
+  assert.deepEqual(linkStatesLeftFor("falsified"), []);
 });
 
 test("the label's reason is the kind of notice or the reason the check could not answer", () => {

@@ -134,7 +134,7 @@ test("Postgres: a correction labels the memory and the method, finds the report 
   assert.equal((await learning.getMethod(f.owner, f.method.id)).payload.sourceChanges.length, 1);
 });
 
-test("Postgres: a retraction outranks a correction, an unanswered check undoes neither, and a clean answer clears the label", options, async () => {
+test("Postgres: a retraction outranks a correction, neither an unanswered check nor a clean answer undoes a finding", options, async () => {
   const f = await setup();
   const resting = await f.fact("project.pooled", [{ type: "doi", id: DOI }]);
   const status = (state, extra = {}) => ({ state, checkedAt: "2026-10-04T00:00:00Z", updates: [], ...extra });
@@ -147,12 +147,14 @@ test("Postgres: a retraction outranks a correction, an unanswered check undoes n
   assert.equal((await linkStates(f, resting.id))[0][1], "changed");
   await check(status("unavailable", { reason: "timeout" }));
   assert.equal((await linkStates(f, resting.id))[0][1], "changed", "an outage does not undo a correction");
+  await check(status("no_update"));
+  assert.equal((await linkStates(f, resting.id))[0][1], "changed", "nor does a clean answer");
   await check(correction("retraction"));
   assert.deepEqual(await linkStates(f, resting.id), [["doi", "retracted"]]);
   await check(correction());
   assert.equal((await linkStates(f, resting.id))[0][1], "retracted", "a later correction notice does not lower a retraction");
   await check(status("no_update"));
-  assert.equal((await linkStates(f, resting.id))[0][1], "current", "a clean answer clears what was found: the engine's label is taken off (NativeMemoryWorker.labelSource)");
+  assert.equal((await linkStates(f, resting.id))[0][1], "retracted", "a clean answer never lifts a retraction (`linkStatesLeftFor`, held against the real worker in nativeMemory.integration.test.mjs)");
   const methodLabels = (await learning.getMethod(f.owner, f.method.id)).payload.sourceChanges;
   assert.deepEqual(methodLabels.map(label => label.state).sort(), ["changed", "retracted"], "one label per state the source was found in");
 });
