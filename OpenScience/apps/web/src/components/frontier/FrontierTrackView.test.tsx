@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { WebApiError } from "@/lib/apiClient";
 import { frontierItem } from "./__fixtures__/frontierItems";
 import type { FrontierApprovalRow, FrontierApprovals, FrontierCongress, FrontierGuidelineRow, FrontierGuidelines } from "@/lib/frontierClient";
 import {
@@ -32,7 +33,8 @@ function paging<Page, Row>(state: TrackListState<Page>, rows: Row[], extra: Reco
 const ready = <Page,>(page: Page, rows: number): TrackListState<Page> => ({ kind: "ready", page, rows });
 const wrap = (node: React.ReactNode) => render(<MemoryRouter initialEntries={["/app/frontier?view=track"]}>{node}</MemoryRouter>);
 
-beforeEach(() => client.listFrontierCongresses.mockReset().mockResolvedValue([]));
+// Braces: a function a hook returns is its teardown, and the spy must not be one.
+beforeEach(() => { client.listFrontierCongresses.mockReset().mockResolvedValue([]); });
 
 describe("the words and the address of 追踪", () => {
   it("reads a segment from the address, 审批 by default", () => {
@@ -213,15 +215,16 @@ describe("热榜's line while a congress is on", () => {
     expect(link).toHaveAttribute("href", "/app/frontier/congress/esmo-2026");
     expect(screen.getAllByRole("link")).toHaveLength(1);
   });
-  it("is nothing while no congress is on, or the one on has no items, or the read failed", async () => {
+  it("is nothing while no congress is on, or the one on has no items", async () => {
     client.listFrontierCongresses.mockResolvedValue([{ id: "esmo-2026", code: "ESMO 2026", name: "x", nameEn: "", start: "2026-10-23", end: "2026-10-27", city: null, specialty: null, specialtyLabel: null, status: "ongoing", itemCount: 0 }]);
-    const { container, unmount } = wrap(<CongressNowLine />);
+    const { container } = wrap(<CongressNowLine />);
     await waitFor(() => expect(client.listFrontierCongresses).toHaveBeenCalled());
     expect(container).toBeEmptyDOMElement();
-    unmount();
-    client.listFrontierCongresses.mockRejectedValue(new Error("down"));
-    const failed = wrap(<CongressNowLine />);
-    await waitFor(() => expect(client.listFrontierCongresses).toHaveBeenCalledTimes(2));
-    expect(failed.container).toBeEmptyDOMElement();
+  });
+  it("is nothing when the read failed", async () => {
+    client.listFrontierCongresses.mockRejectedValue(new WebApiError("down", { status: 500, code: "server_error" }));
+    const { container } = wrap(<CongressNowLine />);
+    await waitFor(() => expect(client.listFrontierCongresses).toHaveBeenCalled());
+    expect(container).toBeEmptyDOMElement();
   });
 });
