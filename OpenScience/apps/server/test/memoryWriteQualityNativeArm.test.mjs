@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { filterCapturedMessage } from "../src/memoryGateway.mjs";
 import { identifierShapesIn } from "@evimed/domain";
 import { CARD_PATTERNS, NATIVE_CASE_DIRECTORIES, changedFiles, kindsOf, nativeCaseIssues, offlineVerdicts, parseArguments, scoreNative } from "../../../evals/memory-write-quality/run_native_eval.mjs";
-import { runsOnArm } from "../../../evals/memory-write-quality/caseShape.mjs";
+import { generalCaseIssues } from "../../../evals/memory-write-quality/caseShape.mjs";
 
 const evalDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../evals/memory-write-quality");
 const load = async (name) => Promise.all((await readdir(path.join(evalDirectory, name))).filter((file) => file.endsWith(".json")).sort()
@@ -20,7 +20,7 @@ test("both directories are replayed, and every case in them is shaped for this a
   const cases = (await Promise.all(NATIVE_CASE_DIRECTORIES.map(load))).flat();
   assert.deepEqual(cases.flatMap(nativeCaseIssues), []);
   const general = await load("cases-general");
-  assert.equal(general.length, 38, "the eleven general cases of 2026-10-12, the 25 work-order cases of 2026-10-23 (C01-C24, the last in two variants), the upgrade and the cross-key conflict");
+  assert.equal(general.length, 37, "the eleven general cases of 2026-10-12, the 25 work-order cases of 2026-10-23 (C01-C24, the last in two variants) and the upgrade");
   assert.ok(general.every((item) => item.replay.synthetic === true), "every name and number in them is invented");
   assert.ok(cases.length >= 35);
 });
@@ -30,7 +30,7 @@ test("the work-order corpus holds every case of research G section 6, each with 
   const workOrder = general.filter((item) => !/^g\d\d-/.test(item.file));
   const ids = workOrder.map((item) => item.id.split("-")[0]);
   for (let number = 1; number <= 23; number += 1) assert.ok(ids.includes(`c${String(number).padStart(2, "0")}`), `case C${number} is in the corpus`);
-  assert.ok(ids.includes("c24a") && ids.includes("c24b") && ids.includes("u01") && ids.includes("x01"), "the platform-tag pair, the upgrade and the conflict");
+  assert.ok(ids.includes("c24a") && ids.includes("c24b") && ids.includes("u01"), "the platform-tag pair and the upgrade");
   assert.ok(workOrder.every((item) => item.decidable === true && item.expect), "each is decided by code; a reading is a judge question beside it");
   // The keep side and the refuse side are both there: the corpus that was blind to the owner's account asked only for refusals and statements.
   const keeps = workOrder.filter((item) => item.expect.requireAnyKind || item.expect.requireTextContains?.length);
@@ -38,15 +38,25 @@ test("the work-order corpus holds every case of research G section 6, each with 
   assert.ok(keeps.length >= 10 && refuses.length >= 12, `${keeps.length} keep cases, ${refuses.length} refuse cases`);
   // A case that starts from a memory has the engine write it: C17 (the recall echo), C22 (a choice shown twice) and the upgrade.
   assert.deepEqual(workOrder.filter((item) => item.replay.seed).map((item) => item.id.split("-")[0]).sort(), ["c17", "c22", "u01"]);
-  // The conflict is the legacy extractor's own and is not replayed on the engine.
-  const conflict = workOrder.find((item) => item.id.startsWith("x01"));
-  assert.deepEqual(conflict.arms, ["legacy"]);
-  assert.equal(runsOnArm(conflict, "native"), false);
-  assert.equal(runsOnArm(workOrder.find((item) => item.id.startsWith("c01")), "native"), true);
+  // The cross-key conflict was the deleted extractor's own (its `conflictsWith` never fired on production) and went with it.
+  assert.equal(ids.includes("x01"), false);
+});
+
+test("a misspelt or unfounded check in a case is a shape error, not a silent pass", async () => {
+  const general = await load("cases-general");
+  const base = general.find((item) => item.id.startsWith("c17"));
+  const shapeOf = (patch) => generalCaseIssues({ ...base, ...patch }).join("\n");
+  assert.equal(shapeOf({}), "");
+  assert.match(shapeOf({ expect: { noTextContain: ["a"] } }), /noTextContain is not a check/);
+  assert.match(shapeOf({ replay: { ...base.replay, seed: undefined } }), /needs replay\.seed/);
+  assert.match(shapeOf({ expect: { requireAnyKind: [] } }), /requireAnyKind is not a list of record kinds/);
+  assert.match(shapeOf({ expect: { requireConflictWith: ["profile.nothing"] } }), /requireConflictWith is not a check/);
+  assert.match(shapeOf({ expect: { droppedAtTheDoor: ["u9"] } }), /droppedAtTheDoor is not a list of ids of the case's own messages/);
+  assert.match(shapeOf({ replay: { ...base.replay, messages: [{ id: "u1", role: "tool", text: "x" }] } }), /neither a user's nor an assistant's/);
 });
 
 test("offline, the corpus holds the code to what it relies on: the shapes it refuses and the messages the door drops", async () => {
-  const cases = (await Promise.all(NATIVE_CASE_DIRECTORIES.map(load))).flat().filter((item) => runsOnArm(item, "native"));
+  const cases = (await Promise.all(NATIVE_CASE_DIRECTORIES.map(load))).flat();
   assert.deepEqual(offlineVerdicts(cases, { filterCapturedMessage, identifierShapesIn }), []);
   // The kernel's reminder envelope and the platform's brief tag are both dropped at the door; the same words untagged are not.
   const tagged = cases.filter((item) => item.expect?.droppedAtTheDoor);

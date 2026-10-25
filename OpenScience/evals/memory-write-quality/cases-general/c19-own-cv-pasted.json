@@ -4,10 +4,6 @@
   "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C19); every name, number and identifier is invented",
   "expected": "Nothing is written: what a pasted CV says is the document's; polishing it states nothing about the person.",
   "decidable": true,
-  "arms": [
-    "native",
-    "legacy"
-  ],
   "judge": "Is any line about the person's role, employer or publication count written from the pasted CV? None may be (owner decision: the CV is not the person's statement).",
   "replay": {
     "synthetic": true,

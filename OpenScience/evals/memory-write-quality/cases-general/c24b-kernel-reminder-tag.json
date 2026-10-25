@@ -4,10 +4,6 @@
   "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C24); every name, number and identifier is invented",
   "expected": "Nothing is written: a message wearing the kernel's reminder tag (the skill catalogue and the like) is machine text; the door drops it.",
   "decidable": true,
-  "arms": [
-    "native",
-    "legacy"
-  ],
   "replay": {
     "synthetic": true,
     "projectId": "default",

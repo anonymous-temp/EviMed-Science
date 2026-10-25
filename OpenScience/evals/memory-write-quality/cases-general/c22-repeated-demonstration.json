@@ -4,10 +4,6 @@
   "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C22); every name, number and identifier is invented",
   "expected": "Nothing is kept after either conversation: a choice shown in two tasks and never called a rule is not yet a preference (owner decision 3, principle 18); the case changes only if that decision does.",
   "decidable": true,
-  "arms": [
-    "native",
-    "legacy"
-  ],
   "replay": {
     "synthetic": true,
     "projectId": "default",

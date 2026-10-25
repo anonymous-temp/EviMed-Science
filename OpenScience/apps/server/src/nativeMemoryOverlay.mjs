@@ -161,13 +161,14 @@ export class NativeMemoryOverlay {
     return result.rows.map(admissionRow);
   }
 
-  /** Recheck the current owner, engine, project and immutable candidate revision before extraction or a retry.
+  /** Recheck the current owner, project and immutable candidate revision before extraction or a retry.
    * @param {string} userId @param {any} admission */
   async admissionAuthority(userId, admission) {
-    const policy = await this.#query(`SELECT s.engine,s.learning_paused,s.paused_projects FROM evimed_memory.settings s
-      JOIN evimed_control.users u ON u.id=s.user_id WHERE s.user_id=$1`, [owner(userId)]);
+    // The settings row is optional (an account that never changed a switch has none), the account is not.
+    const policy = await this.#query(`SELECT s.learning_paused,s.paused_projects FROM evimed_control.users u
+      LEFT JOIN evimed_memory.settings s ON s.user_id=u.id WHERE u.id=$1`, [owner(userId)]);
     const settings = policy.rows[0];
-    if (!settings || settings.engine !== "native") return { allowed: false, state: "cancelled", reason: "memory_engine_changed" };
+    if (!settings) return { allowed: false, state: "cancelled", reason: "account_unavailable" };
     if (settings.learning_paused || (admission.projectId && (settings.paused_projects ?? []).includes(admission.projectId))) {
       return { allowed: false, state: "suspended", reason: "learning_paused" };
     }
@@ -175,20 +176,12 @@ export class NativeMemoryOverlay {
       const project = await this.#query("SELECT 1 FROM evimed_control.projects WHERE user_id=$1 AND id=$2", [userId, admission.projectId]);
       if (!project.rows.length) return { allowed: false, state: "cancelled", reason: "project_unavailable" };
     }
-    if (String(admission.candidateId).startsWith("record:")) {
-      const found = await this.#query("SELECT version,status,scope,scope_id FROM evimed_memory.records WHERE user_id=$1 AND id=$2", [userId, admission.candidateId.slice(7)]);
-      const candidate = found.rows[0];
-      if (!candidate || candidate.version !== admission.revision || candidate.status !== "pending"
-        || (candidate.scope === "project" ? candidate.scope_id : null) !== admission.projectId) {
-        return { allowed: false, state: "cancelled", reason: "candidate_changed" };
-      }
-    } else {
-      const found = await this.#query("SELECT revision,project_id,payload FROM evimed_product.documents WHERE user_id=$1 AND kind='fact' AND id=$2 AND deleted_at IS NULL", [userId, admission.candidateId]);
-      const candidate = found.rows[0];
-      if (!candidate || candidate.revision !== admission.revision || candidate.payload?.status !== "candidate"
-        || candidate.payload?.transfer || candidate.project_id !== admission.projectId) {
-        return { allowed: false, state: "cancelled", reason: "candidate_changed" };
-      }
+    // A candidate is a note of the capsule that an outside agent proposed; it is admitted only as the revision that was read.
+    const found = await this.#query("SELECT revision,project_id,payload FROM evimed_product.documents WHERE user_id=$1 AND kind='fact' AND id=$2 AND deleted_at IS NULL", [userId, admission.candidateId]);
+    const candidate = found.rows[0];
+    if (!candidate || candidate.revision !== admission.revision || candidate.payload?.status !== "candidate"
+      || candidate.payload?.transfer || candidate.project_id !== admission.projectId) {
+      return { allowed: false, state: "cancelled", reason: "candidate_changed" };
     }
     return { allowed: true, state: null, reason: null };
   }

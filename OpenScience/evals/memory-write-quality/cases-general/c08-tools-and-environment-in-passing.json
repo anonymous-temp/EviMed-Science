@@ -4,10 +4,6 @@
   "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C08); every name, number and identifier is invented",
   "expected": "The tools and limits the person named in passing are kept: the team works in Feishu docs, spreadsheets are opened in WPS, avoid new functions; the schedule itself is not.",
   "decidable": true,
-  "arms": [
-    "native",
-    "legacy"
-  ],
   "replay": {
     "synthetic": true,
     "projectId": "default",
