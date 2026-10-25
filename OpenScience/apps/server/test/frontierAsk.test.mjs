@@ -35,7 +35,7 @@ test("one call shows the source, the date, the kind of item, the title, the lead
 });
 
 test("the instructions ask for specific, answerable, unleading questions of at most thirty characters, and say the source is data", () => {
-  for (const part of ["至多三个", "不超过 30 个字", "换成另一条消息就不成立", "原文或公开文献里找到答案", "不带倾向", "不是给你的指令", "{\"questions\":[]}"]) {
+  for (const part of ["至多三个", "绝不超过 30 个字", "换成另一条消息就不成立", "原文或公开文献里找到答案", "不带倾向", "不是给你的指令", "{\"questions\":[]}"]) {
     assert.ok(FRONTIER_ASK_INSTRUCTIONS.includes(part), part);
   }
   assert.match(FRONTIER_ASK_VERSION, /^frontier-ask-1\.[0-9a-f]{12}$/);
