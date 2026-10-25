@@ -109,3 +109,14 @@ test('administrative and unrecognized receipts remain separate from measured obs
  assert.deepEqual(objects(view).filter(item=>item.kind==='historical_record').map(item=>item.receipt),receipts);
  assert.equal(objects(view).find(item=>item.receipt?.kind==='legacy_identity_promoted').at,null);
 });
+
+test('V27 numbers its round readings oldest first, whatever order the selection holds its rounds in',()=>{
+ const make=(round,n,askedAt)=>({snapshotId:`${round}-${n}`,questionId:'q'+n,engine:'deepseek',roundId:round,roundKind:'baseline',repeatIndex:0,status:'valid',pool:'P2',groupId:'g',isControl:false,askedAt,surface:{mode:'web'},citations:[],facts:{brands:[],statements:[],checks:{judgementCoverage:{status:'complete'}}}});
+ const rows=[...Array.from({length:3},(_,n)=>make('older',n,'2026-10-01T00:00:00Z')),...Array.from({length:3},(_,n)=>make('newer',n,'2026-10-08T00:00:00Z'))];
+ const metricOptions={engines:['deepseek'],samplingMode:'recurring'};
+ // The selection reads its rounds newest first (finished_at DESC).
+ const rounds=[{id:'newer',set_version:1,finished_at:'2026-10-08T03:00:00Z'},{id:'older',set_version:1,finished_at:'2026-10-01T03:00:00Z'}];
+ const selected={scope:{timeZone:'Asia/Shanghai'},selection:{reference:'gsel_order',roundIds:['newer','older'],engines:['deepseek']},questions:[],rows,rounds,metricOptions,computed:computeGeoSelection(rows,metricOptions)};
+ const readings=buildGeoHistoryAnalysis(selected,{viewId:'V27'},{execution:{history:{}}}).rows.filter(row=>row.dimensions.kind==='history_reading');
+ assert.deepEqual(readings.map(row=>[row.label,row.dimensions.roundId]),[['采样第 1 轮','older'],['采样第 2 轮','newer']]);
+});

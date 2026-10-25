@@ -193,7 +193,9 @@ export function buildGeoHistoryAnalysis(selected,view,context={}) {
  const timeline=rows.flatMap(row=>row.dimensions.objects.filter(item=>item.unit==='business_events').map(item=>({id:item.id,rowKey:row.key,columnKey:view.viewId==='V15'?item.kind==='task_attempt'?'tasks':item.kind==='judgment_changed'?'judgments':item.kind==='business_closed'?'closedObservations':item.kind==='historical_record'?'records':'observations':'events',at:item.at,label:item.eventLabel})));
  const dated=timeline.filter(item=>item.at).sort((a,b)=>a.at.localeCompare(b.at)||a.id.localeCompare(b.id));
  const trend=[];
- if(view.viewId==='V27'&&selected.metricOptions)for(const [index,round] of list(selected.rounds).entries()){
+ // Rounds are numbered oldest first, as the rival buckets are: the selection holds them newest first (finished_at DESC).
+ const chronological=[...list(selected.rounds)].sort((a,b)=>Number(a.finished_at==null)-Number(b.finished_at==null)||new Date(a.finished_at??0).getTime()-new Date(b.finished_at??0).getTime()||String(a.id).localeCompare(String(b.id)));
+ if(view.viewId==='V27'&&selected.metricOptions)for(const [index,round] of chronological.entries()){
   const computed=geoRoundReadings(selected,round.id),cell=computed.cells.find(item=>item.scope==='project'&&item.metricId===(view.metricId??'M-01'));
   if(!cell)continue;
   const key=hash(['round-reading',round.id,cell.metricId]);
