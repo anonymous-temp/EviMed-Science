@@ -25,17 +25,13 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { FrontierEditor } from "../../apps/server/src/frontierEditor.mjs";
 import {
-  FRONTIER_RECLUSTER, FRONTIER_RECLUSTER_INSTRUCTIONS, FRONTIER_RECLUSTER_PAIR_INSTRUCTIONS, buildReclusterInput, buildReclusterPairInput,
-  frontierReclusterPairs, frontierReclusterPlan, validateReclusterAnswer, validateReclusterPair,
+  FRONTIER_RECLUSTER, frontierReclusterPairs, frontierReclusterPlan, judgeReclusterPairs, reclusterPlanEntry,
 } from "../../apps/server/src/frontierRecluster.mjs";
 import { callModelForControlPlane } from "../../apps/server/src/modelGateway.mjs";
 
 /** The reference price of deepseek-flash, CNY per million tokens (`@evimed/domain` metering). */
 const PRICE = Object.freeze({ cacheHit: 0.04, cacheMiss: 2, output: 8 });
 const here = dirname(fileURLToPath(import.meta.url));
-const BATCH_TOKENS = 1_500;
-const PAIR_TOKENS = 500;
-
 /** A deterministic shuffle (mulberry32), so batches are not all of one label. @template T @param {T[]} list @param {number} seed */
 function shuffled(list, seed) {
   let state = seed >>> 0;
@@ -54,44 +50,10 @@ function shuffled(list, seed) {
   return out;
 }
 
-/** One judged batch: the verdict per pair and, for a `SAME`, the second look. @param {any} editor @param {Array<{ a: any, b: any }>} pairs */
+/** The pairs judged by the code that ships; a pair never reached (a spent budget) has no verdict. @param {any} editor @param {Array<{ a: any, b: any }>} pairs @param {any} stats */
 async function judge(editor, pairs, stats) {
-  /** @type {Array<any>} */
-  const verdicts = new Array(pairs.length).fill(null);
-  for (let start = 0; start < pairs.length; start += FRONTIER_RECLUSTER.batchPairs) {
-    const slice = pairs.slice(start, start + FRONTIER_RECLUSTER.batchPairs);
-    let slots = new Array(slice.length).fill(null);
-    for (let round = 0; round < 2 && slots.some((slot) => !slot); round += 1) {
-      const missing = slots.map((slot, index) => (slot ? -1 : index)).filter((index) => index >= 0);
-      const asked = missing.map((index) => slice[index]);
-      try {
-        const answer = await editor.callJson([{ role: "system", content: FRONTIER_RECLUSTER_INSTRUCTIONS }, { role: "user", content: buildReclusterInput(asked) }],
-          { maxTokens: BATCH_TOKENS, timeoutMs: 90_000 });
-        const read = validateReclusterAnswer(asked.length, answer);
-        if (read) missing.forEach((index, at) => { if (read[at]) slots[index] = read[at]; });
-      } catch (error) {
-        if (/** @type {any} */ (error)?.code === "usage_budget_exceeded") throw error;
-        stats.failures += 1;
-      }
-    }
-    for (let at = 0; at < slice.length; at += 1) {
-      const verdict = slots[at];
-      if (!verdict) { verdicts[start + at] = { relation: null }; continue; }
-      let second = null;
-      if (verdict.relation === "SAME") {
-        try {
-          second = validateReclusterPair(await editor.callJson([{ role: "system", content: FRONTIER_RECLUSTER_PAIR_INSTRUCTIONS },
-            { role: "user", content: buildReclusterPairInput(slice[at]) }], { maxTokens: PAIR_TOKENS, timeoutMs: 60_000 }));
-        } catch (error) {
-          if (/** @type {any} */ (error)?.code === "usage_budget_exceeded") throw error;
-          stats.failures += 1;
-        }
-      }
-      verdicts[start + at] = { ...verdict, second, confirmed: verdict.relation === "SAME" && second ? second.relation === "SAME" : false,
-        secondMade: Boolean(second) };
-    }
-  }
-  return verdicts;
+  const { verdicts } = await judgeReclusterPairs({ callJson: (messages, limits) => editor.callJson(messages, limits), pairs, stats });
+  return verdicts.map((verdict) => verdict ?? { relation: null, confidence: 0, reason: "", second: null, secondMade: false, confirmed: false });
 }
 
 /** @param {any} raw @param {number} index */
@@ -122,10 +84,7 @@ async function labelled(/** @type {any} */ editor, /** @type {{ seed: number }} 
     matrix[key] = (matrix[key] ?? 0) + 1;
   }
   // The plan over every judged pair (the transitive merges and the veto), and whether each merged group lies inside one true cluster.
-  const judged = order.map((pair, index) => ({ a: pair.a, b: pair.b, relation: verdicts[index].relation ?? "DIFFERENT",
-    confirmed: verdicts[index].relation === "SAME" && !verdicts[index].secondMade ? undefined : verdicts[index].confirmed === true,
-    confidence: verdicts[index].confidence ?? 0 }));
-  const plan = frontierReclusterPlan(judged);
+  const plan = frontierReclusterPlan(order.map((pair, index) => reclusterPlanEntry(pair, verdicts[index])));
   const parent = new Map(events_.map((event) => [event.id, event.id]));
   const find = (/** @type {string} */ id) => { let root = id; while (parent.get(root) !== root) root = /** @type {string} */ (parent.get(root)); return root; };
   for (const pair of oriented) if (pair.label.label === "same") parent.set(find(pair.a.id), find(pair.b.id));
@@ -176,9 +135,7 @@ async function sample(/** @type {any} */ editor, /** @type {string} */ path, /**
   const rows = pairs.map((pair, index) => ({ a: pair.a.publicId, b: pair.b.publicId, titleA: pair.a.title, titleB: pair.b.title, score: pair.score,
     signals: pair.signals, relation: verdicts[index].relation, reason: verdicts[index].reason ?? null, second: verdicts[index].second?.relation ?? null,
     secondReason: verdicts[index].second?.reason ?? null, confirmed: verdicts[index].confirmed === true }));
-  const plan = frontierReclusterPlan(pairs.map((pair, index) => ({ a: pair.a, b: pair.b, relation: verdicts[index].relation ?? "DIFFERENT",
-    confirmed: verdicts[index].relation === "SAME" && !verdicts[index].secondMade ? undefined : verdicts[index].confirmed === true,
-    confidence: verdicts[index].confidence ?? 0 })));
+  const plan = frontierReclusterPlan(pairs.map((pair, index) => reclusterPlanEntry(pair, verdicts[index])));
   const count = (/** @type {string} */ relation) => rows.filter((row) => row.relation === relation).length;
   return { events: events.length, anchors: anchors.length, candidates, judged: rows.length, same: count("SAME"), related: count("RELATED"), different: count("DIFFERENT"),
     unjudged: rows.filter((row) => !row.relation).length, confirmedSame: rows.filter((row) => row.confirmed).length,
@@ -199,7 +156,7 @@ async function main() {
   if (!apiKey) throw new Error("The DeepSeek key file is empty.");
   const maxCny = Number(values["max-cny"]) || 2;
   const usage = { calls: 0, cacheHit: 0, cacheMiss: 0, output: 0, cny: 0 };
-  const stats = { failures: 0 };
+  const stats = { calls: 0, failures: 0, secondLooks: 0, secondAgreed: 0 };
   /** @type {typeof callModelForControlPlane} */
   const callModel = async (context, call) => {
     if (usage.cny >= maxCny) throw Object.assign(new Error("The eval's spending limit is reached."), { code: "usage_budget_exceeded" });

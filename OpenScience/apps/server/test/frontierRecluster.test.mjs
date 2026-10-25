@@ -13,6 +13,8 @@ import {
   frontierReclusterPairKey,
   frontierReclusterPairs,
   frontierReclusterPlan,
+  judgeReclusterPairs,
+  reclusterPlanEntry,
   validateReclusterAnswer,
   validateReclusterPair,
 } from "../src/frontierRecluster.mjs";
@@ -183,6 +185,52 @@ test("the plan: a chain of confirmed SAMEs is one group, the oldest survives; a 
     { a, b: c, relation: "SAME", confirmed: false, confidence: 0.95 },
   ]);
   assert.deepEqual(secondLookSaidNo.merges, [{ survivor: "1", absorbed: ["2"] }], "a SAME the second look refused counts against the join as much as a RELATED");
+});
+
+test("an unjudged pair neither merges nor vetoes, and a judged batch is read as the shipping code reads it", async () => {
+  const events = ["1", "2", "3"].map((id, index) => event(id, `Readout ${id}`, { first: index }));
+  const [a, b, c] = events;
+  const plan = frontierReclusterPlan([
+    { a, b, relation: "SAME", confirmed: true, confidence: 0.9 },
+    { a: b, b: c, relation: "SAME", confirmed: true, confidence: 0.8 },
+    { a, b: c, relation: "UNJUDGED" },
+  ]);
+  assert.deepEqual(plan.merges, [{ survivor: "1", absorbed: ["2", "3"] }]);
+
+  const asked = [];
+  const answers = [
+    { pairs: [{ id: "P1", relation: "SAME", confidence: 0.9, reason: "同一次发生" }, { id: "P2", relation: "RELATED", confidence: 0.6, reason: "后续" }] },
+    { pairs: [{ id: "P1", relation: "DIFFERENT", confidence: 0.8, reason: "不同" }] },
+    { relation: "SAME", confidence: 0.9, difference: "" },
+  ];
+  const callJson = async (messages) => {
+    asked.push(messages[0].content === FRONTIER_RECLUSTER_PAIR_INSTRUCTIONS ? "pair" : "batch");
+    return answers.shift();
+  };
+  const stats = { calls: 0, failures: 0, secondLooks: 0, secondAgreed: 0 };
+  const { verdicts, stopped } = await judgeReclusterPairs({ callJson, stats, pairs: [{ a, b }, { a: b, b: c }, { a, b: c }] });
+  assert.equal(stopped, null);
+  assert.deepEqual(asked, ["batch", "batch", "pair"], "the pair the first answer left out is asked once more, and the SAME gets its second look");
+  assert.deepEqual(verdicts.map((verdict) => verdict.relation), ["SAME", "RELATED", "DIFFERENT"]);
+  assert.equal(verdicts[0].confirmed, true);
+  assert.deepEqual([stats.calls, stats.secondLooks, stats.secondAgreed], [3, 1, 1]);
+  assert.deepEqual(reclusterPlanEntry({ a, b }, verdicts[0]), { a, b, relation: "SAME", confidence: 0.9, confirmed: true });
+  assert.equal(reclusterPlanEntry({ a, b }, null).relation, "UNJUDGED");
+
+  // A spent budget ends the run where it stands: a pair not reached is null, not different; a failed second look is neither confirmed nor refused.
+  let n = 0;
+  const spent = await judgeReclusterPairs({ pairs: [{ a, b }, { a: b, b: c }], callJson: async () => {
+    n += 1;
+    if (n === 1) return { pairs: [{ id: "P1", relation: "SAME", confidence: 1 }, { id: "P2", relation: "SAME", confidence: 1 }] };
+    if (n === 2) throw Object.assign(new Error("x"), { code: "frontier_model_incomplete" });
+    throw Object.assign(new Error("x"), { code: "usage_budget_exceeded" });
+  } });
+  assert.equal(spent.stopped, "budget");
+  assert.equal(spent.verdicts[0].secondMade, false);
+  assert.deepEqual(reclusterPlanEntry({ a, b }, spent.verdicts[0]), { a, b, relation: "SAME", confidence: 1 }, "no confirmed field: nothing confirmed, nothing refused");
+  assert.deepEqual([spent.verdicts[1].relation, spent.verdicts[1].secondMade], ["SAME", false], "the budget ended the run before its second look");
+  const refused = await judgeReclusterPairs({ pairs: [{ a, b }], callJson: async () => assert.fail("not asked"), allow: () => false });
+  assert.deepEqual([refused.stopped, refused.verdicts[0]], ["refused", null]);
 });
 
 test("the plan: a RELATED verdict also vetoes a join through a chain, and stays a link; the valve caps the merges of a run", () => {

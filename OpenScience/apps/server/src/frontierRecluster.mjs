@@ -347,6 +347,88 @@ export function validateReclusterPair(answer) {
   return relation ? { relation, confidence: confidenceOf(answer?.confidence), reason: clip(answer?.difference ?? answer?.reason, 200) } : null;
 }
 
+/** @typedef {{ relation: (typeof FRONTIER_RECLUSTER_RELATIONS)[number] | null, confidence: number, reason: string,
+ *   second: { relation: string, confidence: number, reason: string } | null, secondMade: boolean, confirmed: boolean }} FrontierReclusterVerdict
+ *   One pair judged. `relation` null: the batch answer never addressed it. `confirmed` the second look agreed to a `SAME`; `secondMade`
+ *   whether a second look was made at all (a `SAME` whose second look failed is neither confirmed nor refused). */
+
+const BATCH_TOKENS = 1_500;
+const PAIR_TOKENS = 500;
+const BATCH_TIMEOUT_MS = 90_000;
+const PAIR_TIMEOUT_MS = 60_000;
+
+/**
+ * Judge pairs of events: the batch call, `FRONTIER_RECLUSTER.batchPairs` at a time (a batch whose answer leaves a pair out is asked
+ * once more for the pairs it left out), then the second look for each `SAME`. The server's sweep and the eval both call this, so
+ * what is measured is what runs. `allow` is asked before each call and ends the run when it says no (the day's budget, the
+ * round's time); a spent budget (`usage_budget_exceeded`) from the call itself ends it the same way. A call that fails otherwise
+ * leaves its pairs unjudged, never different.
+ * @param {{ callJson: (messages: Array<{ role: string, content: string }>, limits: { maxTokens: number, timeoutMs: number }) => Promise<any>,
+ *   pairs: Array<{ a: FrontierReclusterEvent, b: FrontierReclusterEvent }>, timeZone?: string, allow?: () => Promise<boolean> | boolean,
+ *   stats?: { calls: number, failures: number, secondLooks: number, secondAgreed: number } }} input
+ * @returns {Promise<{ verdicts: Array<FrontierReclusterVerdict | null>, stopped: "budget" | "refused" | null }>}
+ */
+export async function judgeReclusterPairs({ callJson, pairs, timeZone = DISPLAY_TIME_ZONE, allow = () => true, stats = { calls: 0, failures: 0, secondLooks: 0, secondAgreed: 0 } }) {
+  /** @type {Array<FrontierReclusterVerdict | null>} */
+  const verdicts = new Array(pairs.length).fill(null);
+  /** @type {"budget" | "refused" | null} */
+  let stopped = null;
+  /** @param {Array<{ role: string, content: string }>} messages @param {{ maxTokens: number, timeoutMs: number }} limits */
+  const call = async (messages, limits) => {
+    if (!(await allow())) { stopped = "refused"; return undefined; }
+    stats.calls += 1;
+    try {
+      return await callJson(messages, limits);
+    } catch (error) {
+      if (/** @type {any} */ (error)?.code === "usage_budget_exceeded") { stopped = "budget"; return undefined; }
+      stats.failures += 1;
+      return null;
+    }
+  };
+  for (let start = 0; start < pairs.length && !stopped; start += FRONTIER_RECLUSTER.batchPairs) {
+    const slice = pairs.slice(start, start + FRONTIER_RECLUSTER.batchPairs);
+    /** @type {Array<{ relation: any, confidence: number, reason: string } | null>} */
+    const slots = new Array(slice.length).fill(null);
+    for (let round = 0; round < 2 && !stopped && slots.some((slot) => !slot); round += 1) {
+      const missing = slots.map((slot, index) => (slot ? -1 : index)).filter((index) => index >= 0);
+      const answer = await call([{ role: "system", content: FRONTIER_RECLUSTER_INSTRUCTIONS },
+        { role: "user", content: buildReclusterInput(missing.map((index) => slice[index]), { timeZone }) }], { maxTokens: BATCH_TOKENS, timeoutMs: BATCH_TIMEOUT_MS });
+      const read = answer ? validateReclusterAnswer(missing.length, answer) : null;
+      if (read) missing.forEach((index, at) => { if (read[at]) slots[index] = read[at]; });
+    }
+    for (let at = 0; at < slice.length && !stopped; at += 1) {
+      const slot = slots[at];
+      if (!slot) { if (!stopped) verdicts[start + at] = { relation: null, confidence: 0, reason: "", second: null, secondMade: false, confirmed: false }; continue; }
+      /** @type {FrontierReclusterVerdict} */
+      const verdict = { ...slot, second: null, secondMade: false, confirmed: false };
+      verdicts[start + at] = verdict;
+      if (slot.relation !== "SAME") continue;
+      const answer = await call([{ role: "system", content: FRONTIER_RECLUSTER_PAIR_INSTRUCTIONS },
+        { role: "user", content: buildReclusterPairInput(slice[at], { timeZone }) }], { maxTokens: PAIR_TOKENS, timeoutMs: PAIR_TIMEOUT_MS });
+      stats.secondLooks += 1;
+      const second = answer ? validateReclusterPair(answer) : null;
+      if (second) {
+        verdict.second = second;
+        verdict.secondMade = true;
+        verdict.confirmed = second.relation === "SAME";
+        if (verdict.confirmed) stats.secondAgreed += 1;
+      }
+    }
+  }
+  return { verdicts, stopped };
+}
+
+/**
+ * The plan's input for a judged pair: `confirmed` is true when the second look agreed, false when it refused, absent when it could
+ * not be made (a `SAME` nobody confirmed merges nothing, and vetoes nothing).
+ * @param {{ a: FrontierReclusterEvent, b: FrontierReclusterEvent }} pair @param {FrontierReclusterVerdict | null} verdict
+ */
+export function reclusterPlanEntry(pair, verdict) {
+  const relation = verdict?.relation ?? "UNJUDGED";
+  return { a: pair.a, b: pair.b, relation, confidence: verdict?.confidence ?? 0,
+    ...(relation === "SAME" && verdict?.secondMade ? { confirmed: verdict.confirmed } : {}) };
+}
+
 // ───────────────────────── what code does with the verdicts ─────────────────────────
 
 /**
@@ -354,6 +436,7 @@ export function validateReclusterPair(answer) {
  * did not, absent that it could not be made); the older event of each merged group survives. Two events a call judged not `SAME` are never put in one group, even through a chain of `SAME`s
  * (the veto: a merge of A and B and of B and C would otherwise join A and C against a verdict). A `RELATED` pair whose events
  * stay apart is a link, from the older event to the newer.
+ * An `UNJUDGED` pair (the batch answer never addressed it) says nothing: it neither merges nor vetoes.
  * @param {Array<{ a: { id: string, firstAt: string | Date }, b: { id: string, firstAt: string | Date }, relation: string, confirmed?: boolean,
  *   confidence?: number }>} judged
  * @param {{ maxMerges?: number }} [options]
@@ -376,7 +459,7 @@ export function frontierReclusterPlan(judged, { maxMerges = FRONTIER_RECLUSTER.m
   };
   // A pair the batch call called `SAME` and the second look did not (`confirmed: false`) is a judgement against the merge as much as a
   // `RELATED` is; one whose second look could not be made (`confirmed` absent) is no judgement at all.
-  const apart = judged.filter((pair) => pair.relation !== "SAME" || pair.confirmed === false).map((pair) => [String(pair.a.id), String(pair.b.id)]);
+  const apart = judged.filter((pair) => pair.relation === "DIFFERENT" || pair.relation === "RELATED" || (pair.relation === "SAME" && pair.confirmed === false)).map((pair) => [String(pair.a.id), String(pair.b.id)]);
   const same = judged.filter((pair) => pair.relation === "SAME" && pair.confirmed === true)
     .sort((left, right) => (right.confidence ?? 0) - (left.confidence ?? 0) || Number(left.a.id) - Number(right.a.id));
   let vetoed = 0;
