@@ -32,7 +32,7 @@ import { fileURLToPath } from "node:url";
 export const OFFICIAL_PACKS_DIR = fileURLToPath(new URL("../../../capsules/official/", import.meta.url));
 
 /** The bounds of one method's text, in characters: a method is read on the run's own initiative, and read short. */
-export const OFFICIAL_METHOD_LIMITS = Object.freeze({ title: 80, whenToUse: 200, body: 1_600, scopes: 4 });
+export const OFFICIAL_METHOD_LIMITS = Object.freeze({ title: 80, whenToUse: 300, body: 1_600, scopes: 4 });
 /** The bounds of a pack's card. */
 export const OFFICIAL_PACK_LIMITS = Object.freeze({ title: 40, summary: 200, methods: 6 });
 
@@ -90,11 +90,20 @@ export function parseOfficialMethod(text, packId, methodId) {
   if (!body || [...body].length > OFFICIAL_METHOD_LIMITS.body) return { issue: "body_invalid" };
   if (!scope.length || scope.length > OFFICIAL_METHOD_LIMITS.scopes || new Set(scope).size !== scope.length
     || scope.some((entry) => entry !== "conversation" && !SCOPE_ID.test(entry))) return { issue: "scope_invalid" };
+  return { method: buildOfficialMethod(packId, methodId, { scope, title, whenToUse, body }) };
+}
+
+/**
+ * A method as the publication, the copies and the mount all read it. The text's own limits are the caller's: the folder's methods are held to the
+ * short ones (`parseOfficialMethod`), a person's general method that was promoted to the pack of everyone's (`officialPromotion.mjs`) to its own.
+ * @param {string} packId @param {string} methodId @param {{ scope: string[], title: string, whenToUse: string, body: string }} fields
+ */
+export function buildOfficialMethod(packId, methodId, { scope, title, whenToUse, body }) {
   const sha = sha256({ scope, title, whenToUse, body });
-  return { method: {
+  return {
     id: methodId, packId, key: officialMethodId(packId, methodId), name: officialMethodName(packId, methodId), scope, title, description: title, whenToUse, body,
     content: officialMethodContent({ title, whenToUse, body }), sha, version: sha.slice(0, 12),
-  } };
+  };
 }
 
 /**
