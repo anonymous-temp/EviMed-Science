@@ -19,7 +19,7 @@
  *   the editor's score is a clinical one, and the genres that are not clinical evidence — industry above all — score
  *   lower whatever their worth (on 2026-10-25 industry's median was 41 against a paper's 50; of 105 industry items
  *   today none reached 65 and one was selected, against a floor of 8%), so a floor place under the line needs the top
- *   fifth of its own genre's last 30 days of published scores, never less than 45 and never more than the 60 it was.
+ *   fifth of its own genre's last 30 days of published scores, never less than 56 and never more than the 60 floor (c3-select 2026-10-25: it was 45 and 60 on the first scoring, with the line at 82; the line is 64 now).
  * - **A soft quota.** A group short of candidates is not padded with another group's items or with anything under the
  *   band: its places stay empty. News has no range of its own: it fills what the others leave of the day's size.
  * - **The day's size** (`FRONTIER_MIX_DAY`) is the number of non-safety items above the line the source caps allow,
@@ -79,8 +79,8 @@ export const FRONTIER_MIX_NEVER = /** @type {readonly FrontierGenre[]} */ (Objec
 export const FRONTIER_MIX_ZH_TARGET = 0.30
 
 /**
- * How far under the line a Chinese candidate may take a place while the day is under its Chinese share: the line of 82
- * lets a Chinese item of 74 in. On the week to 2026-10-24, 12-41 Chinese items a day stood between 74 and 81 (most of
+ * How far under the line a Chinese candidate may take a place while the day is under its Chinese share: with the line at 64 a Chinese
+ * item of 60 comes in (c3-select 2026-10-25; it was 8 under a line of 82). On the week to 2026-10-24, 12-41 Chinese items a day stood between 74 and 81 on the first scoring (most of
  * them 公众号 解读 and Chinese regulators' notices), against 2-21 above the line.
  */
 export const FRONTIER_MIX_ZH_MARGIN = 4
@@ -97,9 +97,9 @@ export const FRONTIER_MIX_FLOOR_SCORE = 60
  * What a `genre-floor` place under the line asks of its item's genre (c2-fixes 2026-10-25, owner: industry is too little in
  * 精选): a score within the top `1 - percentile` of the genre's published scores of the last `days` days (`percentile` 0.8,
  * the SQL `percentile_cont`), at least `min` (56) and at most `FRONTIER_MIX_FLOOR_SCORE` — a genre the editor scores high
- * (guidelines' 80th percentile is 84, above the line itself) keeps the 60 it had: its top fifth is never a lower bar
+ * (on the first scoring guidelines' 80th percentile was 84, above the line itself) keeps the floor it had: its top fifth is never a lower bar
  * than that, and asking it would empty the floor. A genre with fewer than `minSample` scored items in the window has no
- * floor of its own (a percentile of a handful is noise) and keeps the 60. Preprints, the Chinese margin and the event's
+ * floor of its own (a percentile of a handful is noise) and keeps the floor. Preprints, the Chinese margin and the event's
  * paper keep `FRONTIER_MIX_FLOOR_SCORE`.
  */
 export const FRONTIER_MIX_GENRE_FLOOR = Object.freeze({ percentile: 0.8, min: 56, days: 30, minSample: 30 })

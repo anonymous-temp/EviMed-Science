@@ -13,6 +13,12 @@
  *
  * The model's raw parts are stored, never the clamped ones, and the code ceilings (`frontierScoreCeilings`) and the practice label's admission
  * are applied to them afterwards by `finish.mjs`, so a ceiling can be fitted on dev without another model call.
+ * To reproduce a row of the table in the hand-off (the final prompt, line 64):
+ *   node evals/frontier-selection/run_eval.mjs --key-file <path> --split all --mode edit --out /tmp/run.json   (about ¥0.95, 284 calls)
+ *   node evals/frontier-selection/finish.mjs /tmp/run.json                                                        (the ceilings, no model)
+ *   node evals/frontier-selection/metrics.mjs --run /tmp/run.rows.json --split dev --threshold 64 --by-genre      (and --split test)
+ * `results/base-edit.json` is the round-2 prompt's run (the control), `results/final-edit-all.json` the final one; without --run, metrics.mjs
+ * reads the scores production had stored.
  * The key is read from the file inside this process and never printed; nothing is metered (no usage ledger); the run stops at --max-cny.
  * The input is what the pipeline shows the model, with the gold set's text (at most 1,200 characters) in place of the stored abstract or body.
  */

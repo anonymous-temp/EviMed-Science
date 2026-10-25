@@ -7,10 +7,10 @@
  *   node scripts/ops/frontier-mix-replay.mjs --file scored-7d.jsonl                 # a table, days with 100+ items
  *   node scripts/ops/frontier-mix-replay.mjs --file scored-7d.jsonl --json          # one JSON object
  *   node scripts/ops/frontier-mix-replay.mjs --file scored-7d.jsonl --threshold 82 --min-items 1
- *   node scripts/ops/frontier-mix-replay.mjs --file scored-7d.jsonl --no-genre-floors  # the absolute 60 for every floor place
+ *   node scripts/ops/frontier-mix-replay.mjs --file scored-7d.jsonl --no-genre-floors  # the absolute floor (60) for every floor place
  *
  * A floor place under the line asks its genre's 80th percentile of the export's own scores (production reads the last 30 days:
- * `FRONTIER_MIX_GENRE_FLOOR`), held between 45 and 60; a week's export is a thinner basis than a month's. At most one item of an
+ * `FRONTIER_MIX_GENRE_FLOOR`), held between 56 and 60; a week's export is a thinner basis than a month's. At most one item of an
  * event is selected a day, as in production.
  *
  * The export is one row per published item of the window, read on the serving host (read-only):
