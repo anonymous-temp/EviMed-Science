@@ -427,8 +427,7 @@ function frontierSettings(overrides) {
     // model calls to, and — to show anything — the plugin.
     frontierEnabled: overrides.frontierEnabled ?? boolEnv("OPEN_SCIENCE_FRONTIER_ENABLED", false),
     frontierAudience: audience,
-    // Accounts that see the module under `operators` without being operators:
-    // the acceptance account verifies the dry run without operator rights.
+    // Accounts that see the module under `operators` without being operators: a person who verifies the dry run without operator rights.
     frontierPreviewUsers: overrides.frontierPreviewUsers ?? listEnv("OPEN_SCIENCE_FRONTIER_PREVIEW_USERS"),
     frontierPollMs: integer("frontierPollMs", "OPEN_SCIENCE_FRONTIER_POLL_MS", 5_000, 1_000, 3_600_000),
     frontierLeaseMs: integer("frontierLeaseMs", "OPEN_SCIENCE_FRONTIER_LEASE_MS", 600_000, 60_000, 86_400_000),
@@ -3166,13 +3165,6 @@ export function loadConfig(overrides = {}) {
     operatorUsers: String(overrides.operatorUsers
       ?? process.env.OPEN_SCIENCE_OPERATOR_USERS ?? "")
       .split(",").map((value) => value.trim()).filter(Boolean),
-    // The one account besides the operators that may hold the platform's self-measurement projects
-    // (`acceptance-*`, `audit-*`, `eval-method-*`): the deployment's acceptance account, the one the smoke
-    // and the capability battery sign in as. Empty — the default — means there is none. A project is
-    // internal (not charged, outside the project ceiling and the runtime slots) only when its name says
-    // so AND its owner is one of these accounts: a name a client chose is never a waiver
-    // (`isInternalProjectOf`). The account is an id, as `operatorUsers` are.
-    acceptanceUsername: String(overrides.acceptanceUsername ?? process.env.OPEN_SCIENCE_ACCEPTANCE_USERNAME ?? "").trim(),
     mountedMethodPromptBytes: mountedMethodPromptBytes(overrides),
     transcriptRetentionDays: Number(overrides.transcriptRetentionDays
       ?? process.env.OPEN_SCIENCE_TRANSCRIPT_RETENTION_DAYS ?? 90),

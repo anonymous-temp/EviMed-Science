@@ -2406,8 +2406,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // The ids the platform makes itself — the loop's, the knowledge base's, the frontier's and an
     // evaluation cell's — are internal by name for any owner, so they cannot be typed here. Not the
     // self-measurement shapes (`acceptance-*`, `audit-*`, `eval-method-*`): the paired evaluation makes
-    // its own through this very route, and they are internal only for an operator or the acceptance
-    // account (`isInternalProjectOf`); for everyone else they are ordinary projects.
+    // its own through this very route, and they are internal only for an operator (`isInternalProjectOf`);
+    // for everyone else, the throwaway accounts of the acceptance drivers included, they are ordinary projects.
     if (isReservedProjectId(id)) {
       throw new HttpError(409, "project_id_reserved", "This project id is reserved for the platform's own work.");
     }
