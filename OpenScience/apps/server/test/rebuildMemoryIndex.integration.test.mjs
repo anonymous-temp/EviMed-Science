@@ -1,12 +1,12 @@
-// `pnpm rebuild:memory-index` is the whole recovery story for the recall index:
+// `pnpm rebuild:memory-index` is the whole recovery story for the capsule recall index:
 // the index holds nothing of its own, so a lost volume or a changed embedding
 // model is repaired by running this and nothing else. That makes two properties
 // worth a real process rather than a unit test of a function it does not
 // export: that the command builds its store and its index client from the
-// server's own configuration, and that it rebuilds BOTH halves — the research
-// records it writes itself, and the capsule facts that go through the durable
-// job the server's worker also claims. Rebuilding one half and reporting
-// success is the failure this test exists to refuse.
+// server's own configuration, and that it rebuilds the capsule facts through the durable
+// job the server's worker also claims. (Until 2026-10-25 it rebuilt a second half, the research
+// records of the legacy memory engine, which the index held as a derived copy; the engine's memory
+// files are the engine's own and are not rebuilt from here.)
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
@@ -37,7 +37,7 @@ if (databaseUrl) {
 }
 const options = { timeout: 30_000, skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
 
-test("the rebuild command restores both halves of the index from the control-plane database", options, async (t) => {
+test("the rebuild command restores the capsule half of the index from the control-plane database", options, async (t) => {
   const index = await startOpenVikingServer();
   const dataDir = await mkdtemp("/tmp/evimed-rebuild-index-");
   const userId = `rebuild${randomUUID().replaceAll("-", "").slice(0, 12)}`;
@@ -69,26 +69,17 @@ test("the rebuild command restores both halves of the index from the control-pla
   await documents.put(userId, "fact", "fact-one",
     { capsuleId: "capsule-one", factKind: "preference", layer: "stable", content: "prefers tables over prose", status: "approved" },
     { expectedRevision: 0 });
-  const { MemorySettingsStore } = await import("../src/memorySettings.mjs");
-  const memory = new MemorySettingsStore({}, { database });
-  await memory.upsertRecord(userId, {
-    scope: "user", scopeId: "", kind: "preference", key: "reporting.format",
-    value: "prefers tables over prose", summary: "", origin: "explicit", status: "active",
-    confidence: 1, importance: 0.8, sensitive: false,
-  });
 
   const { stdout } = await run(process.execPath, [script, "--user", userId, "--json"], { env: environment });
   const summary = JSON.parse(stdout);
   assert.equal(summary.ok, true, stdout);
-  assert.equal(summary.written, 1, "the research record was not written to the index");
   assert.equal(summary.capsules, 1, "the capsule half of the index was not rebuilt");
   assert.equal(summary.capsulesFailed, 0, stdout);
 
   // Read back through the same parsers recall uses: a file the index holds
   // under a path recall cannot parse is a file recall will never return.
   const written = [...index.files.keys()];
-  assert.equal(written.filter((uri) => parseMemoryUri(uri)?.recordId).length, 1,
-    `the research record copy is missing from ${written.join(", ")}`);
+  assert.equal(written.filter((uri) => parseMemoryUri(uri)?.recordId).length, 0, "no copy of a research record is written any more");
   assert.equal(written.filter((uri) => parseCapsuleFactUri(uri)?.factId === "fact-one").length, 1,
     `the capsule fact is missing from ${written.join(", ")}`);
 
@@ -107,7 +98,7 @@ test("the rebuild command restores both halves of the index from the control-pla
   index.files.clear();
   const second = JSON.parse((await run(process.execPath, [script, "--user", userId, "--json"], { env: environment })).stdout);
   assert.equal(second.ok, true);
-  assert.equal(index.files.size, 2, "a second run rebuilt nothing, so a lost index would stay lost");
+  assert.equal(index.files.size, 1, "a second run rebuilt nothing, so a lost index would stay lost");
 });
 
 test("the rebuild command refuses to run against a deployment with no index selected", options, async (t) => {

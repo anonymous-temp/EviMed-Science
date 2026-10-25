@@ -18,6 +18,9 @@ import { LearningService } from "../src/learningService.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
 import { MemorySettingsStore } from "../src/memorySettings.mjs";
 
+/** The engine's store as the dashboard reads it: none of the doctor's memory files are the point of these cases (habits are). */
+const engineDouble = () => ({ configured: true, async listRecords() { return []; }, async changes() { return []; }, overlay: { async admission() { return null; } } });
+
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) {
   const parsed = new URL(url);
@@ -45,7 +48,7 @@ before(async () => {
       return { choices: [{ message: { content: JSON.stringify({ title: "脾胃气虚证多用太子参", summary: "脾胃气虚证的候选方里，你多以太子参代替党参。" }) } }] };
     },
   });
-  services = { memorySettings, learning, observations: new AgentObservations({ database, learning, memorySettings, writer }) };
+  services = { memorySettings, nativeMemory: engineDouble(), learning, observations: new AgentObservations({ database, learning, memorySettings, writer }) };
   const keys = new AgentApiKeyStore(database);
   doctor = { id: (await keys.subjectAccount(hospital, "doc-7")).userId };
   paused = { id: (await keys.subjectAccount(hospital, "doc-8")).userId };
@@ -79,7 +82,7 @@ test("three edits make a habit that takes effect, the dashboard counts it and re
     [["脾胃气虚证多用太子参", "approved", true, "observed", 3, 3]]);
   assert.deepEqual(board.neverLearned, [{ herb: "附子", count: 1 }], "「不学习」: seen, never learned from, and named as the herb it is");
 
-  const recalled = await recallForAgent({ capsules: null, memorySubstrate: null, learning: services.learning }, { user: doctor }, { query: "脾胃气虚", methods: "own" });
+  const recalled = await recallForAgent({ capsules: null, memory: null, learning: services.learning }, { user: doctor }, { query: "脾胃气虚", methods: "own" });
   assert.deepEqual(recalled.methods.map((method) => method.title), ["脾胃气虚证多用太子参"]);
   assert.match(recalled.methods[0].content, /以太子参替代党参/);
 });
@@ -94,7 +97,7 @@ test("a habit the doctor stops doing is retired, with the reason said, and leave
   const board = await memoryBoard(services, doctor);
   const habit = board.habits.find((item) => item.id === retired[0].id);
   assert.deepEqual([habit.status, habit.statusReason], ["retired", "最近的改方里不再这样做"]);
-  const recalled = await recallForAgent({ capsules: null, memorySubstrate: null, learning: services.learning }, { user: doctor }, { query: "x", methods: "own" });
+  const recalled = await recallForAgent({ capsules: null, memory: null, learning: services.learning }, { user: doctor }, { query: "x", methods: "own" });
   assert.ok(!recalled.methods.some((method) => method.id === retired[0].id));
 });
 
