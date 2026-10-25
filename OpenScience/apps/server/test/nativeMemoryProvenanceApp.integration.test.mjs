@@ -12,6 +12,18 @@ import { nativeConversationTitleKey } from "../src/nativeMemoryStore.mjs";
 
 const { options, fixture } = nativeAppIntegration();
 
+/**
+ * A colleague on the GEO project, which makes it a shared project with a namespace of its own. A shared project's runtime reads
+ * nothing before its shared-context launch is proven (`assertContextPolicyGeneration`), which only a real launch writes and the mock
+ * kernel never does; these tests dispatch only to put a titled run in the ledger, so the kernel's history of the new session, which
+ * is empty, is answered here.
+ */
+async function sharedWith(app, geo, geoProject, owner) {
+  const colleague = await app.store.userById('provenance-colleague') ?? await app.store.createUser('provenance-colleague', 'test-only-colleague-password', 'Colleague');
+  await geo.addMember({ geoId: geoProject.id, userId: colleague.id, role: 'editor', invitedBy: owner.id });
+  app.agentRuns.readSessionHistory = async () => [];
+}
+
 test("the profile names the conversations behind a native memory by the run ledger of the project they were held in", options, async (t) => {
   const { app, base, headers, user, stub, engineUser } = await fixture(t, ({ user: engine, session }) => ({
     adds: [{ uri: `viking://user/${engine}/memories/preferences/${session.replace("dsh-session_", "")}.md`, memory_type: "preferences", after: `Preference from ${session.replace("dsh-session_", "")}.` }],
@@ -56,10 +68,15 @@ test('historical native provenance never resolves an equal session id against a 
   await app.store.createProject(owner, projectId, 'Original');
   const project = await app.store.requireProject(owner, projectId), database = app.store.database;
   const geo = new GeoStore({ database }); await geo.ready();
-  await geo.createProject({ userId: user.id, projectId, engines: ['deepseek'], coverageDays: 30 });
+  const geoProject = await geo.createProject({ userId: user.id, projectId, engines: ['deepseek'], coverageDays: 30 });
   const documents = new ProductDocuments(database), policies = new GeoSharedContext({ database, documents });
   const contexts = new GeoNativeMemoryContext({ database, documents, policies, sessions });
+  // A one-person GEO project is its owner's own memory (owner ruling 2026-10-25); the project namespace whose incarnation this test
+  // holds apart is a shared project's, one with a member.
+  assert.equal((await contexts.forProject(project)).kind, 'owned');
+  await sharedWith(app, geo, geoProject, user);
   const original = await contexts.forProject(project);
+  assert.equal(original.kind, 'geo-project');
   app.nativeMemory.memoryContexts = contexts;
   const seed = async (context, text) => {
     const uri = stub.seedMemory(context.namespaceId, 'project_facts/source.md', text);
@@ -99,8 +116,12 @@ test('the real title resolver qualifies equal sessions from two registered proje
   for (const projectId of ['title-a', 'title-b']) {
     await app.store.createProject(owner, projectId, projectId);
     const project = await app.store.requireProject(owner, projectId);
-    await geo.createProject({ userId: user.id, projectId, engines: ['deepseek'], coverageDays: 30 });
+    const geoProject = await geo.createProject({ userId: user.id, projectId, engines: ['deepseek'], coverageDays: 30 });
+    // Each a shared project (a member besides the owner), so each has a project namespace of its own and the same session id is
+    // held in two: a one-person project would put both sources in the owner's memory, under one file.
+    await sharedWith(app, geo, geoProject, user);
     const context = await contexts.forProject(project);
+    assert.equal(context.kind, 'geo-project');
     await app.researchSessions.put(project, 'shared', { mode: 'open-domain' });
     const run = await app.agentRuns.dispatch(project, { sessionId: 'shared', dispatchId: `dispatch-${projectId}`, automated: true,
       question: projectId, effectiveAgentId: null }, async () => ({ accepted: true }));
