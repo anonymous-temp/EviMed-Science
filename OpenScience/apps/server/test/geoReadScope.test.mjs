@@ -71,3 +71,15 @@ test("URL tags are repeated literal values regardless of JSON-looking prefixes",
   assert.deepEqual(geoScopeFromQuery(query).clientTags, [...labels].sort());
   assert.deepEqual(normalizeGeoReadScope({ clientTags: labels }).clientTags, [...labels].sort());
 });
+
+test("a selection is descriptive only when every round is one-shot or the explicit contracts mix; a legacy round keeps it recurring", async () => {
+  const { geoSelectionSamplingMode } = await import("../src/geoReadScope.mjs");
+  const oneShot = { samplingMode: "one_shot" }, recurring = { samplingMode: "recurring" };
+  assert.equal(geoSelectionSamplingMode([oneShot, oneShot]), "one_shot");
+  assert.equal(geoSelectionSamplingMode([oneShot, recurring]), "mixed");
+  assert.equal(geoSelectionSamplingMode([recurring]), "recurring");
+  assert.equal(geoSelectionSamplingMode([null, null]), "legacy_recurring");
+  // A legacy recurring round in the mix is never read as descriptive (2026-10-25: it dropped every interval of the old rounds too).
+  assert.equal(geoSelectionSamplingMode([oneShot, null]), "legacy_recurring");
+  assert.equal(geoSelectionSamplingMode([recurring, null, oneShot]), "legacy_recurring");
+});

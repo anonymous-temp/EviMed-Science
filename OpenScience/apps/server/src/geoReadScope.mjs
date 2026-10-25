@@ -57,6 +57,18 @@ function values(raw, field, vocabulary = null, tags = false) {
   return [...new Set(list.map((value) => tags ? value : value.trim()))].sort();
 }
 
+/**
+ * The sampling mode the selected rounds are read under: one-shot when every round is, `mixed` when explicit one-shot and recurring
+ * contracts mix (both descriptive: the interval is dropped, never the answer floor), and recurring whenever a legacy round (saved
+ * before contracts) is in the selection, so a mix never makes the old recurring rounds descriptive.
+ * @param {Array<{ samplingMode?: string } | null>} contracts one per selected round
+ */
+export function geoSelectionSamplingMode(contracts) {
+  const modes = [...new Set(contracts.map((contract) => contract?.samplingMode ?? "legacy_recurring"))];
+  if (modes.length === 1) return modes[0];
+  return !modes.length || modes.includes("legacy_recurring") ? "legacy_recurring" : "mixed";
+}
+
 /** Closed normalization shared by URL and native JSON reads. Same dimension OR, different dimensions AND.
  * @param {unknown} [input] */
 export function normalizeGeoReadScope(input = {}) {
@@ -450,7 +462,7 @@ async function selectGeoRows(store, measure, project, input, { history = false, 
   const groups = [...new Map(rows.filter((row) => row.groupId).map((row) => [row.groupId, row.isControl])).entries()];
   const samplingContracts = rounds.map((round) => round.surface?.measurementContract ?? null);
   const samplingModes = [...new Set(samplingContracts.map((contract) => contract?.samplingMode ?? "legacy_recurring"))];
-  const metricOptions = { samplingMode: samplingModes.length === 1 ? samplingModes[0] : "mixed", engines, competitors: project.competitors.map((/** @type {any} */ competitor) => String(competitor.brandName || competitor.genericName || "")).filter(Boolean),
+  const metricOptions = { samplingMode: geoSelectionSamplingMode(samplingContracts), engines, competitors: project.competitors.map((/** @type {any} */ competitor) => String(competitor.brandName || competitor.genericName || "")).filter(Boolean),
     owned: context?.owned ?? {}, arms: { pilot: groups.filter(([, control]) => !control).map(([id]) => String(id)),
       control: groups.filter(([id, control]) => control && !contaminated.includes(String(id))).map(([id]) => String(id)) } };
   const computed = computeGeoSelection(rows, metricOptions);

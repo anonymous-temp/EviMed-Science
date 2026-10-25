@@ -24,16 +24,19 @@ test('import contract and row validation reject unknowns without dropping origin
   ]) assert.throws(() => previewGeoQuestionImport(input))
 })
 
-test('one-shot observations retain real thin rates without inferential intervals and differ from recurring coverage', () => {
+test('one-shot observations keep the 30-answer floor, drop only the inferential interval, and differ from recurring coverage', () => {
   const row = { snapshotId: 's1', questionId: 'q1', groupId: 'g1', pool: 'P2', engine: 'deepseek', status: /** @type {const} */ ('valid'), facts: { brands: [{ name: 'Product', ours: true, count: 1 }] } }
   const measured = computeGeoMetrics([row], { engines: ['deepseek'], samplingMode: 'one_shot' })
   const cell = measured.cells.find((c) => c.scope === 'engine' && c.metricId === 'M-01')
   assert.ok(cell)
-  assert.equal(cell.value, 100)
-  assert.equal(cell.status, 'ok')
+  // One answer is k of n, never a rate a page may rank or compare (2026-10-25: every sub-floor cell read `ok`).
+  assert.deepEqual([cell.numerator, cell.denominator, cell.status], [1, 1, 'insufficient'])
   assert.equal(cell.reason, 'one_shot_descriptive')
   assert.equal(cell.ciLow, null)
   assert.equal(cell.ciHigh, null)
+  const thirty = Array.from({ length: 30 }, (_, i) => ({ ...row, snapshotId: `s${i}`, questionId: `q${i}` }))
+  const floor = computeGeoMetrics(thirty, { engines: ['deepseek'], samplingMode: 'one_shot' }).cells.find((c) => c.scope === 'engine' && c.metricId === 'M-01')
+  assert.deepEqual([floor?.status, floor?.value, floor?.ciLow, floor?.reason], ['ok', 100, null, 'one_shot_descriptive'], 'at the floor a one-shot rate is descriptive, with no interval')
   const recurring = computeGeoMetrics([row], { engines: ['deepseek'] }).cells.find((c) => c.scope === 'engine' && c.metricId === 'M-01')
   assert.ok(recurring)
   assert.equal(recurring.status, 'insufficient')
@@ -67,6 +70,7 @@ test('mixed contracts keep one-shot unclassified answers as descriptive members 
   assert.ok(rate)
   assert.equal(rate.denominator, 2)
   assert.equal(rate.value, 50)
+  assert.equal(rate.status, 'insufficient', 'a mix of contracts lifts no floor')
   assert.equal(rate.reason, 'mixed_contract_descriptive')
   assert.equal(rate.ciLow, null)
   assert.equal(rate.ciHigh, null)

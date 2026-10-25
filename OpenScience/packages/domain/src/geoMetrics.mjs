@@ -1193,12 +1193,15 @@ export function computeGeoMetrics(rows, options = {}) {
     }
   }
 
+  // A one-shot reading (or a mix of explicit one-shot and recurring contracts) is descriptive: one call per question and engine is
+  // no sample an inferential interval describes, so the interval is dropped and the reason says why. The answer floor is not an
+  // interval: a cell under it stays `insufficient` — k of n, never a rate a page ranks or compares (2026-10-25: every sub-floor cell
+  // read `ok` and was ranked).
   if (['one_shot', 'mixed'].includes(options.samplingMode ?? '')) {
     for (const cell of cells) {
       cell.ciLow = null
       cell.ciHigh = null
       if (cell.value != null && ['ok', 'insufficient'].includes(cell.status) && cell.numerator != null && cell.denominator != null && cell.denominator > 0) {
-        cell.status = 'ok'
         cell.reason = options.samplingMode === 'mixed' ? 'mixed_contract_descriptive' : 'one_shot_descriptive'
       }
     }
