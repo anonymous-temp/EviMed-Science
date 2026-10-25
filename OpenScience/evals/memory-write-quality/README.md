@@ -180,3 +180,13 @@ Cases to replay in the lab after the template change (three samples each): `--on
 corpus once (`--repeat 3`) for the never side: the new types and the longer shared text must not have moved any refusal (`c15`–`c21`, `c23`, `c24`,
 `g06`–`g10`, `m01`–`m03`, `s01`–`s03` first). Remove `pendingTemplate` from every case that passes all three samples.
 
+### Lab results of the round (2026-10-25, OpenViking v0.5.1.1, the ten templates, `--repeat 3`)
+
+| Run | Result |
+|---|---|
+| `--only c22,e3b,e3c,i01,i02,i03,p01` (`results/2026-10-25-native-memory-package.json`) | 16/21: E3B, E3C, I02, I03, P01 in every sample; C22 1/3 (the promotion said only as a choice to keep landed in the profile twice); I01 0/3 because the case asked for the person's wording (「先看结论」) and the engine kept the gist (「回答先给结论，再展开细节」) |
+| C22 again after the promotion names a preference (`results/2026-10-25-native-c22-preference-wording.json`) | 3/3, a preference after the second conversation |
+| the whole corpus (`results/2026-10-25-native-next-round-full.json`) | 234/237 decidable samples, 9 need reading, no failure; the three not passing are I01 under the old wording of its check, which passes as rewritten (the files are in the result). Every refusal held (c15–c21, c23, c24, g06–g10, m01–m03, s01–s03); P01 put the project's rule under 约束 |
+
+The `pendingTemplate` markers of C22, I01 and I02 are gone.
+
