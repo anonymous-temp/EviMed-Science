@@ -86,6 +86,74 @@ const ITEMS = [
 ];
 
 /**
+ * 追踪 (c3-track): the regulator's approvals and the evidence body's guidelines carry the records the track step extracts (written as
+ * it writes them), and the congress on now — or, between meetings, the one that ended last — has three reports naming it inside its
+ * window and a recap of its first day, so the walk reads the three segments and a hub with something in it. The congress is read
+ * from the calendar on the day the fixture is made, so the fixture keeps one whatever the date.
+ * @param {any} database @param {Function} insertComposedItem @param {{ hoursAgo: (hours: number) => string, log: (line: string) => void }} context
+ */
+async function furnishTrack(database, insertComposedItem, { hoursAgo, log }) {
+  const { FRONTIER_CONGRESSES, frontierCongressCode, frontierCongressItemWindow, frontierCongressStatus, frontierDayIn } = await import("@evimed/domain");
+  const { FRONTIER_TRACK_FACTS_VERSION } = await load("src", "frontierTrackFacts.mjs");
+  const facts = (/** @type {Record<string, unknown>} */ record) => JSON.stringify({ version: FRONTIER_TRACK_FACTS_VERSION, basis: "walk-fixture", ...record });
+  const approvals = (await database.query(`SELECT id, title_zh FROM evimed_frontier.items WHERE primary_source_id = 'example-drug-regulator'
+    AND evidence_type = 'regulatory-decision' ORDER BY visible_at DESC`)).rows;
+  const records = [
+    { kind: "approval", approval: "new-drug", agency: { key: "nmpa", label: "国家药监局", from: "source" }, drug: { text: "周制剂降糖药", quote: "周制剂降糖药" },
+      indication: { text: "成人 2 型糖尿病", quote: "成人 2 型糖尿病" }, date: null },
+    { kind: "approval", approval: "new-indication", agency: { key: "nmpa", label: "国家药监局", from: "source" }, drug: { text: "某靶向药", quote: "某靶向药" },
+      indication: { text: "一线治疗", quote: "一线适应证" }, date: null },
+  ];
+  for (const [index, row] of approvals.entries()) {
+    await database.query("UPDATE evimed_frontier.items SET genre = 'approval', genre_basis = 'code', track_facts = $2::jsonb, track_facts_version = $3 WHERE id = $1",
+      [row.id, facts(records[index % records.length]), FRONTIER_TRACK_FACTS_VERSION]);
+  }
+  const guidelines = (await database.query(`SELECT id FROM evimed_frontier.items WHERE primary_source_id = 'example-evidence-body' AND evidence_type = 'guideline'
+    ORDER BY visible_at DESC`)).rows;
+  for (const row of guidelines) {
+    await database.query("UPDATE evimed_frontier.items SET genre = 'guideline', genre_basis = 'code', track_facts = $2::jsonb, track_facts_version = $3 WHERE id = $1",
+      [row.id, facts({ kind: "guideline", body: { text: "示例循证医学协会", quote: "示例循证医学协会" }, scope: { text: "2 型糖尿病诊疗", quote: "诊疗指南" },
+        recommendations: [{ text: "把体重管理写入起始治疗目标", grade: "strong", quote: "体重管理" }, { text: "起始治疗即考虑心肾保护", grade: null, quote: "心肾保护" }] }),
+      FRONTIER_TRACK_FACTS_VERSION]);
+  }
+  const today = frontierDayIn(new Date());
+  const congress = FRONTIER_CONGRESSES.find((entry) => frontierCongressStatus(entry, today) === "ongoing")
+    ?? FRONTIER_CONGRESSES.filter((entry) => frontierCongressStatus(entry, today) === "recent").sort((a, b) => b.end.localeCompare(a.end))[0] ?? null;
+  if (!congress) { log(`frontier: ${approvals.length} approvals and ${guidelines.length} guidelines tracked; no congress on or just ended on ${today}`); return; }
+  const code = frontierCongressCode(congress);
+  const window = frontierCongressItemWindow(congress);
+  // The reports sit on the meeting's first day (or the window's first day still to come is today), never after now.
+  const firstDay = congress.start <= today ? congress.start : window.from;
+  const hours = Math.max(1, Math.round((Date.now() - new Date(`${firstDay}T10:00:00+08:00`).getTime()) / 3_600_000));
+  const reports = [
+    ["example-journal-oncology", "evidence", "rct", ["oncology"], true, `${code}：一项三期随机试验在大会上报告主要终点达到`, "三期随机试验在大会口头报告，主要终点的风险比 0.71。"],
+    ["example-health-news", "evidence", "rct", ["oncology"], false, `${code} 现场：口头报告的新数据怎么看`, "报道援引大会口头报告，试验组的主要终点优于对照。"],
+    ["example-journal-cardiology", "evidence", "observational", ["cardiology"], false, `${code} 壁报：一项真实世界队列研究`, "队列研究提示不良事件多在治疗前三个月出现。"],
+  ];
+  const ids = [];
+  for (const [index, [sourceId, lane, evidenceType, specialties, selected, titleZh, summaryZh]] of reports.entries()) {
+    const at = hoursAgo(hours - index);
+    const row = await insertComposedItem(database, {
+      sourceId, title: `${code} report ${index + 1}`, titleZh, summaryZh, reasonZh: selected ? "大会口头报告的三期结果，直接影响治疗选择。" : null, lane,
+      sourceType: SOURCES.find((entry) => entry[0] === sourceId)?.[3] ?? "media", evidenceType, evidenceBasis: "pubmed-types", specialties, selected,
+      selectedRule: selected ? "score" : null, safetyAlert: false, verification: "passed", publishedAt: at, timelineAt: at, visibleAt: at,
+      scores: { authority: 24, impact: selected ? 20 : 10, novelty: 10, relevance: null }, scoreTotal: selected ? 78 : 58,
+      entityKeys: specialties.map((specialty) => `specialty:${specialty}`), registryIds: [], identityKey: `walk:${sha(`congress:${index}:${titleZh}`).slice(0, 24)}`,
+      abstract: summaryZh, mentions: [],
+    });
+    ids.push(row);
+  }
+  const publicIds = (await database.query("SELECT id, public_id FROM evimed_frontier.items WHERE id = ANY($1::bigint[]) ORDER BY id", [ids.map((row) => row.id)])).rows;
+  if (congress.start <= today) {
+    await database.query(`INSERT INTO evimed_frontier.congress_recaps (congress_id, day, recap_zh, refs, item_ids, model, generated_at)
+      VALUES ($1, $2::date, $3, $4::jsonb, $5::bigint[], 'walk-fixture', now()) ON CONFLICT (congress_id, day) DO NOTHING`,
+    [congress.id, congress.start, `首日的口头报告里，一项三期随机试验达到主要终点，风险比 0.71 [1]；现场报道强调试验组优于对照 [2]。一项真实世界队列提示不良事件多在治疗前三个月出现，属于观察性研究，不能说明因果 [3]。`,
+      JSON.stringify(publicIds.map((row, index) => ({ n: index + 1, itemId: String(row.public_id) }))), publicIds.map((row) => row.id)]);
+  }
+  log(`frontier: ${approvals.length} approvals and ${guidelines.length} guidelines tracked; congress ${congress.id} (${frontierCongressStatus(congress, today)}) with ${ids.length} reports`);
+}
+
+/**
  * @param {any} app @param {any} user the fixture account
  * @param {{ log: (line: string) => void }} context
  */
@@ -122,6 +190,7 @@ export async function furnishFrontier(app, user, { log }) {
   await database.query("UPDATE evimed_frontier.items SET ask_zh = $1::jsonb WHERE selected",
     [JSON.stringify(["这个结果适用于中国患者吗", "和现有标准治疗相比差在哪", "安全性数据有哪些"])]);
   log(`frontier: ${SOURCES.length} sources, ${ITEMS.length} items`);
+  await furnishTrack(database, insertComposedItem, { hoursAgo, log });
 
   // The composer's own loops, once: items into events, the hot list, today's issue.
   const composer = app.frontier?.composer;
