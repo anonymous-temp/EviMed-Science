@@ -879,7 +879,7 @@ export function ReaderNotes({ item, outline }: { item: FrontierItemDetail; outli
           </div>
           {parts.length > 0 && <ScoreBars parts={parts} className="mt-3" />}
           {item.reason && <p className="mt-3 text-ui text-text-2">{item.reason}</p>}
-          {item.practice && <p className="mt-3 text-ui text-text-2"><span className="font-medium text-text">{PRACTICE_LABEL}</span>：{item.practice.reason}</p>}
+          {item.practice && <p className="mt-3 text-ui text-text-2"><span className="font-semibold text-text">{PRACTICE_LABEL}</span>：{item.practice.reason}</p>}
         </RailBlock>
       )}
       {item.specialties.length > 0 && (
