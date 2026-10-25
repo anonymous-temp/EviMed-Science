@@ -45,7 +45,9 @@ VALIDATIONS_PER_DAY = 20
 USER_PURPOSE = "discovery-user"
 SEARCH_PURPOSE = "discovery-search"
 FRESH_DAYS = 30
-BUSINESS_KINDS = frozenset({"business", "government"})     # what X itself states about an account (``verified_type``)
+# What X itself states about an account (``verified_type`` of SocialData's user object). No answer recorded so far carries
+# it, so a discovered account is a person's unless X says business or government: the role is a label, never a gate.
+BUSINESS_KINDS = frozenset({"business", "government"})
 
 
 def handle_of(candidate: dict) -> str | None:
