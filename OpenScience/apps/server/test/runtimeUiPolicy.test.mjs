@@ -395,21 +395,24 @@ test('carrier closure aborts and cleans a pending authorization before it settle
 });
 
 test('a scoped carrier retires at its lifetime identity budget without evicting old bindings', { timeout: 30000 }, async t => {
+  // The rule is the same at any budget. At the production one (4096) every identity is a full frame revalidation against the
+  // file-backed store double, about 50 s on a loaded host, so the carrier is given a small one.
+  const budget = 64;
   let wake;
-  const f = await fixture(t, {}, { projectItem: async (_endpoint, _payload, value) => ({ forward: true, value }), onStreamClosed: () => wake?.() });
+  const f = await fixture(t, {}, { lifetimeStreams: budget, projectItem: async (_endpoint, _payload, value) => ({ forward: true, value }), onStreamClosed: () => wake?.() });
   const c = f.connect(); assert.equal(await c.opened, 101);
   const peer = [...f.peers][0]; peer.removeAllListeners('message');
   const sent = [];
   peer.on('message', raw => sent.push(JSON.parse(raw.toString())));
   let closeCode = null; c.ws.on('close', code => { closeCode = code; wake?.(); });
-  for (let index = 0; index < 4100 && closeCode === null; index++) {
+  for (let index = 0; index < budget + 4 && closeCode === null; index++) {
     const done = new Promise(resolve => { wake = resolve; });
     c.send(open(`lifetime-${index}`, 'session/page'));
     c.send({ type: 'cancel', streamId: `lifetime-${index}` });
     await done; wake = null;
   }
   assert.equal(closeCode, 1001, 'a fresh carrier starts before any retired identity can be reused');
-  assert.equal(sent.filter(item => item.type === 'open').length, 4096);
+  assert.equal(sent.filter(item => item.type === 'open').length, budget);
   const next = f.connect(); assert.equal(await next.opened, 101, 'rotation does not disable new native reading');
 });
 
