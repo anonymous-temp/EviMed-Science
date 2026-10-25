@@ -68,7 +68,7 @@ TERMINAL_STATUSES = frozenset({"succeeded", "failed", "canceled"})
 # Codes that would name a context failure directly. None of them is emitted
 # today; they are listed so the counter starts working the day one is, instead
 # of a later reader having to discover that the column was never wired.
-ATTRIBUTABLE_OVERFLOW_CODES = ("context_overflow", "compaction_handle_lost", "model_max_tokens")
+ATTRIBUTABLE_OVERFLOW_CODES = ("context_overflow", "model_max_tokens")
 # The code an overflow actually lands on, together with every other kernel-side
 # failure. Counted apart, and never added to the attributable total.
 INDISTINGUISHABLE_OVERFLOW_CODES = ("runtime_session_error",)
@@ -447,7 +447,7 @@ def build_report(
         "schemaVersion": SCHEMA_VERSION,
         "generatedAt": now(),
         "plan": "docs/superpowers/plans/2026-09-07-self-evolving-agent-loop.md §6.5 step one",
-        "policyFreeze": "No compaction policy — threshold, retainRatio, template or handle set — may change while "
+        "policyFreeze": "No compaction policy — threshold or retainRatio — may change while "
                         "distribution.sufficient is false. §6.5: 没有分布不改策略.",
         "inputs": {"ledgers": receipts, "usageExportRuns": len(usage), "undatedRuns": undated},
         "weeks": weeks,

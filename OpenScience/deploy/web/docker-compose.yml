@@ -442,10 +442,8 @@ services:
       # 0.8 of the context window, and one forced compaction when a request
       # reaches three quarters of the model gateway's body limit
       # (harness-port compaction.mjs).
-      OPEN_SCIENCE_RUNTIME_COMPACTION_POLICY:
       OPEN_SCIENCE_RUNTIME_COMPACTION_THRESHOLD_RATIO:
       OPEN_SCIENCE_RUNTIME_COMPACTION_RETAIN_RATIO:
-      OPEN_SCIENCE_RUNTIME_COMPACTION_RETAIN_TOKENS:
       OPEN_SCIENCE_RUNTIME_COMPACTION_MAX_TOKENS:
       OPEN_SCIENCE_RUNTIME_COMPACTION_MAX_REQUEST_BYTES:
       # The socket plugins every runtime runs without (preset row ids, comma
@@ -2239,10 +2237,8 @@ services:
       OPEN_SCIENCE_VCR_STATUS_WAIT_SECONDS:
       # And its compaction settings, including the request-size guard, which is
       # a share of the web API's model gateway body limit.
-      OPEN_SCIENCE_RUNTIME_COMPACTION_POLICY:
       OPEN_SCIENCE_RUNTIME_COMPACTION_THRESHOLD_RATIO:
       OPEN_SCIENCE_RUNTIME_COMPACTION_RETAIN_RATIO:
-      OPEN_SCIENCE_RUNTIME_COMPACTION_RETAIN_TOKENS:
       OPEN_SCIENCE_RUNTIME_COMPACTION_MAX_TOKENS:
       OPEN_SCIENCE_RUNTIME_COMPACTION_MAX_REQUEST_BYTES:
       OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES: ${OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES:-12582912}

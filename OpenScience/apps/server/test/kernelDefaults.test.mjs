@@ -102,10 +102,10 @@ test("every setting the runtime depends on still holds in the composition the im
   assert.equal(baseline.byId.get("evimed-plugin-probe").name, "@evimed/dsh-socket/plugins/plugin-probe");
   assert.equal(baseline.rows.filter(row => row.id === "evimed-skill-catalogue").length, 1);
   assert.equal(baseline.byId.get("evimed-skill-catalogue").name, "@evimed/dsh-socket/plugins/skill-catalogue");
-  // 25 since 2026-09-07: the compaction group gained `evimed-compaction`, the
-  // provider swap that preserves a run's durable handles across a compaction.
-  // It sits beside the kernel's own engine rather than replacing the row,
-  // because it registers nothing at all on the default policy.
+  // 25 since 2026-09-07: the compaction group gained `evimed-compaction`. It
+  // began as a provider swap that preserved a run's durable handles across a
+  // compaction (deleted 2026-10-25 after its A/B) and is now the request-size
+  // guard; it sits beside the kernel's own engine, which does the compaction.
   // 20 since 2026-09-18: the `delegation` group and its four rows (the
   // kernel's subagent, subagent-control, workflow and workflow-worker tools)
   // left the preset; delegation is evimed_delegate over the host's subagent

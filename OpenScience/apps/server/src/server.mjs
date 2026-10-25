@@ -3453,10 +3453,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     },
     // Recorded, not merely published: the browser shows a compaction card and
     // forgets it, while "does compaction ever fire, and what does it cost"
-    // needs the ledger. Today the answer is expected to be "never" — the
-    // control plane declares a 1,000,000-token window against a 400,000-token
-    // run budget — and an empty column is exactly the measurement §6.5 asks for
-    // before any threshold is touched.
+    // needs the ledger (`evals/context-fidelity/report.py` reads it).
     onCompaction: (project, runId, record) => {
       void agentRuns?.recordLearning(project, runId, {
         appendCompaction: {
@@ -3464,7 +3461,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           seq: record.seq,
           replaced: record.replaced,
           tokens: record.tokens,
-          policy: config.runtimeCompactionPolicy ?? "basic",
         },
       }).catch(() => {});
       // A compaction takes the resident profile out of the history it was written into, so the conversation's next dispatch hands
@@ -11366,11 +11362,11 @@ async function readinessRuntime(config, runtimeManager) {
   // branch. There is one kernel now, but "what am I actually running" is still
   // a question an operator must be able to answer without reading env files.
   //
-  // `compactionPolicy` and `capabilitySkillsDir` ride along because they are
-  // the two settings a paired evaluation declares about the deployment it ran
-  // on and cannot set over HTTP. Without them in readiness the harness could
-  // only write the word "declaredOnly" in its report, which reads like a
-  // result and is an admission that nobody checked.
+  // `capabilitySkillsDir` rides along because it is a setting a paired
+  // evaluation declares about the deployment it ran on and cannot set over
+  // HTTP. Without it in readiness the harness could only write the word
+  // "declaredOnly" in its report, which reads like a result and is an
+  // admission that nobody checked.
   // The threshold and the request-size guard are what a launched runtime is
   // given (runtimeCompactionSettings), read back here so a lever set in .env
   // can be seen to have reached the launch plan.
@@ -11378,7 +11374,6 @@ async function readinessRuntime(config, runtimeManager) {
   const kernel = {
     kernel: RUNTIME_KERNEL_NAME,
     kernelVersion: config.dshVersion,
-    compactionPolicy: config.runtimeCompactionPolicy,
     compactionThresholdRatio: compaction.config.thresholdRatio,
     compactionMaxRequestBytes: compaction.maxRequestBytes,
     capabilitySkillsDir: RUNTIME_CAPABILITY_SKILLS_DIR,

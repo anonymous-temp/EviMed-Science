@@ -321,13 +321,12 @@
     compaction: true
     toolResultPruner: true
   config:
-    # The kernel's engine stays mounted and stays the default. `evimed-compaction`
-    # is a provider swap that only takes effect when the policy says
-    # `structured`; on `basic` it registers nothing and this group is exactly
-    # what it was. Two engines are never both active — the row below returns
-    # early rather than registering a second one — and a consistency test says so.
-    # The policy is not the off switch: on `basic` the row still guards the
-    # gateway's request-size limit. `enabled` is, and off it leaves exactly the
+    # The kernel's engine does the compaction and nothing of ours replaces it:
+    # a summariser that carried the run's handles across one (`structured`) was
+    # measured against it on 2026-10-25, kept nothing more, and was deleted.
+    # `evimed-compaction` below is only the request-size guard: it asks this
+    # engine for one compaction when the next request would pass the gateway's
+    # body limit. `enabled` is its off switch, and off it leaves exactly the
     # kernel's own group.
     - id: compaction-basic
       name: '@deepseek-ai/dsh-compaction-basic'
@@ -343,12 +342,8 @@
       name: '@evimed/dsh-socket/plugins/compaction'
       config:
         enabled: !!js process.env.EVIMED_COMPACTION_ENABLED !== '0'
-        policy: !!js process.env.EVIMED_COMPACTION_POLICY ?? 'basic'
-        thresholdRatio: !!js Number(process.env.EVIMED_COMPACTION_THRESHOLD_RATIO ?? 0.8)
-        retainRatio: !!js Number(process.env.EVIMED_COMPACTION_RETAIN_RATIO ?? 0.16)
-        maxTokens: !!js Number(process.env.EVIMED_COMPACTION_MAX_TOKENS ?? 8192)
-        # The request size at which one compaction is forced on either policy,
-        # before the control plane's model gateway would refuse the body (a 413
+        # The request size at which one compaction is forced, before the
+        # control plane's model gateway would refuse the body (a 413
         # the run does not survive). The control plane sends three quarters of
         # the gateway's limit; unset, as on a laptop with no gateway, it is off.
         maxRequestBytes: !!js Number(process.env.EVIMED_COMPACTION_MAX_REQUEST_BYTES ?? 0)

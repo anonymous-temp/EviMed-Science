@@ -1529,32 +1529,17 @@ async function probeSandbox(ctx, required) {
 
 export { registerPluginProbe, registerCitationConfiguration, installedCitationVersion, registerExtensionConfiguration, verifyExtensionAgent, extensionInvocationFacts } from './src/pluginProbe.mjs'
 
-// The structured compaction provider. The engine itself is resolved lazily —
-// the pinned base class lives in the runtime image, not in this workspace — so
-// only the pure parts are re-exported here, and the control plane derives the
-// container's compaction environment from the same definitions the preset row
-// reads inside it.
+// The compaction settings both sides of the container boundary derive, and the
+// request-size guard's measurement and trigger. The compaction itself is the
+// kernel's own engine: nothing here replaces it.
 export {
   COMPACTION_DEFAULTS,
-  COMPACTION_DEGRADATIONS,
   COMPACTION_ENV_KEYS,
-  COMPACTION_HANDLE_LOST,
-  COMPACTION_OBSERVATIONS,
-  COMPACTION_PLUGIN,
-  COMPACTION_POLICIES,
-  EVIMED_SUMMARY_INSTRUCTION,
   REQUEST_BYTES_GUARD,
-  STATE_HANDLE_KINDS,
-  buildStateHandlePacket,
   compactionConfigFromEnv,
-  compactionProviderIssues,
   compactionRuntimeEnv,
-  createEvimedCompactionEngine,
   forceCompaction,
-  loadEvimedCompactionEngine,
-  missingHandles,
   nextRequestBytes,
-  strictHandleInstruction,
 } from './src/compaction.mjs'
 
 export { decorateEngineToolContext, ENGINE_EXECUTION_CONTEXT } from './src/engineContext.mjs'

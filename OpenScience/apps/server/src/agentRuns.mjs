@@ -1134,10 +1134,10 @@ function normalizeRepairRounds(value) {
   return { content, structural };
 }
 
-/** @param {any} value @returns {{at: string, seq: number, replaced: number, tokens: number, policy: string}[] | undefined} */
+/** @param {any} value @returns {{at: string, seq: number, replaced: number, tokens: number}[] | undefined} */
 function normalizeCompactionRecords(value) {
   if (!Array.isArray(value)) return undefined;
-  /** @type {{at: string, seq: number, replaced: number, tokens: number, policy: string}[]} */
+  /** @type {{at: string, seq: number, replaced: number, tokens: number}[]} */
   const entries = [];
   for (const item of value.slice(-maxCompactionRecords)) {
     if (!item || typeof item !== "object") continue;
@@ -1147,7 +1147,6 @@ function normalizeCompactionRecords(value) {
       seq: item.seq,
       replaced: Number.isSafeInteger(item.replaced) && item.replaced >= 0 ? item.replaced : 0,
       tokens: Number.isSafeInteger(item.tokens) && item.tokens >= 0 ? item.tokens : 0,
-      policy: typeof item.policy === "string" ? item.policy.slice(0, 32) : "",
     });
   }
   return entries;

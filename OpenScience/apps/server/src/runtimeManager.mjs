@@ -2122,16 +2122,15 @@ export function revisionGatewayProviderUrl(config) {
  * process's environment by the same function the container-side rows use.
  *
  * One derivation for the launch plan and for readiness, so the value an
- * operator reads back is the value a runtime is started with. The policy comes
- * from config (which may be overridden in tests); the gateway's body limit
- * does too, because the byte guard is a share of it and a limit the gateway
- * enforces but the guard never heard of is the 413 the guard exists to avoid.
+ * operator reads back is the value a runtime is started with. The gateway's
+ * body limit comes from config (which may be overridden in tests), because the
+ * byte guard is a share of it and a limit the gateway enforces but the guard
+ * never heard of is the 413 the guard exists to avoid.
  * @param {Record<string, any>} config @param {Record<string, string | undefined>} [env]
  */
 export function runtimeCompactionSettings(config, env = process.env) {
   return compactionConfigFromEnv({
     ...env,
-    OPEN_SCIENCE_RUNTIME_COMPACTION_POLICY: String(config.runtimeCompactionPolicy ?? "basic"),
     ...(Number(config.modelGatewayMaxBodyBytes) > 0
       ? { OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES: String(Math.floor(Number(config.modelGatewayMaxBodyBytes))) }
       : {}),
