@@ -1,6 +1,8 @@
 /** Hosted T08 acceptance, invoked by capability-acceptance --result-revisions.
  * Requires a deployed candidate manifest. No responses, outputs or producer facts are mocked.
- * Secrets use the existing acceptance password-file convention and never enter evidence.
+ * It signs in as nobody: it registers a throwaway account after the candidate is verified (so a wrong release creates none), runs the
+ * three journeys in it, and deletes it through the product at the end, on a result, an error or an interrupt (`throwaway-account.mjs`).
+ * The password is made and held there; none enters the evidence. An account that could not be deleted is a FAIL line and exit code 4.
  */
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -10,6 +12,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
 import { sendThroughApply } from "./transient-refusal.mjs";
+import { contextTransport, openThrowawayAccount } from "./throwaway-account.mjs";
 /* global sessionStorage, localStorage, HTMLTextAreaElement, document, window */
 
 const execute = promisify(execFile);
@@ -106,8 +109,6 @@ function required(name) { const value = process.env[name]?.trim(); assert.ok(val
 const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 
 export async function runResultRevisionAcceptance(args) {
-  const username = String(process.env.OPEN_SCIENCE_ACCEPTANCE_USERNAME ?? "").trim();
-  if (!username) throw new Error("Name the account the driver signs in as: OPEN_SCIENCE_ACCEPTANCE_USERNAME.");
   const base = String(args.base ?? required("OPEN_SCIENCE_ACCEPTANCE_BASE_URL")).replace(/\/+$/, "");
   const manifest = JSON.parse(await readFile(String(args["candidate-manifest"] ?? required("OPEN_SCIENCE_ACCEPTANCE_CANDIDATE_MANIFEST")), "utf8"));
   const expectedRevision = String(args["expected-revision"] ?? required("OPEN_SCIENCE_ACCEPTANCE_EXPECTED_REVISION"));
@@ -122,19 +123,20 @@ export async function runResultRevisionAcceptance(args) {
     startedAt: new Date().toISOString(), scope: "actual-hosted-native-revision", scientificApplicability: "not_assessed", journeys: [], accepted: false };
   const require = createRequire(import.meta.url);
   const { chromium } = require(required("OPEN_SCIENCE_PLAYWRIGHT_CORE"));
-  const browser = await chromium.launch({ headless: true, args: ["--no-sandbox"], ...(process.env.OPEN_SCIENCE_WALK_CHROMIUM ? { executablePath: process.env.OPEN_SCIENCE_WALK_CHROMIUM } : {}) });
+  // An interrupt is the driver's to answer (it deletes its account through the context's session, then closes the browser).
+  const browser = await chromium.launch({ headless: true, args: ["--no-sandbox"], handleSIGINT: false, handleSIGTERM: false, handleSIGHUP: false,
+    ...(process.env.OPEN_SCIENCE_WALK_CHROMIUM ? { executablePath: process.env.OPEN_SCIENCE_WALK_CHROMIUM } : {}) });
   let context;
+  /** @type {Awaited<ReturnType<typeof openThrowawayAccount>> | null} */ let account = null;
   try {
     context = await browser.newContext({ ignoreHTTPSErrors: Boolean(args.insecure), locale: "zh-CN", viewport: { width: 1512, height: 945 } });
     const health = await context.request.get(`${base}/api/health`); const ready = await context.request.get(`${base}/api/ready`);
     assert.equal(health.status(), 200); assert.equal(ready.status(), 200);
     assertCandidate(manifest, (await health.json()).data, (await ready.json()).data, expectedRevision);
     report.candidateVerified = true;
-    const login = await context.request.post(`${base}/api/auth/login`, { data: { username,
-      password: (await readFile(required("OPEN_SCIENCE_ACCEPTANCE_PASSWORD_FILE"), "utf8")).trim() } });
-    assert.equal(login.status(), 200, "acceptance login failed");
-    const csrf = (await login.json()).data.csrfToken;
-    assert.ok(typeof csrf === "string" && csrf, "login returned no CSRF token");
+    // The registration signs the new account in: its cookie is the context's, and every page below carries it.
+    account = await openThrowawayAccount({ base, send: contextTransport(context, base), prefix: "acc", onSignal: () => browser.close() });
+    const csrf = account.csrfToken;
     const projectId = String(args.project ?? `acceptance-result-revision-${Date.now().toString(36)}`);
     const headers = { "x-open-science-csrf": csrf, "x-open-science-project": projectId };
     const api = async (route, data) => {
@@ -143,12 +145,9 @@ export async function runResultRevisionAcceptance(args) {
       if (!response.ok()) throw Object.assign(new Error(`${route.split("?")[0]} returned ${response.status()}`), { status: response.status() });
       return (await response.json()).data;
     }
-    const existing = await api("/api/projects");
-    if (!existing.some(project => project.id === projectId)) {
-      const created = await context.request.post(`${base}/api/projects`, { headers, data: { id: projectId, name: "Result revision acceptance" }, timeout: 30_000 });
-      const body = await created.json();
-      assert.ok(created.ok() || created.status() === 409 && body.code === "project_exists", `acceptance project creation returned ${created.status()}`);
-    }
+    // The account is new, so the project is too (an ordinary project of an ordinary account).
+    const created = await context.request.post(`${base}/api/projects`, { headers, data: { id: projectId, name: "Result revision acceptance" }, timeout: 30_000 });
+    assert.ok(created.ok(), `acceptance project creation returned ${created.status()}`);
     report.projectId = projectId;
     await context.addInitScript(id => { sessionStorage.setItem("openScience.projectId", id); localStorage.setItem("openScience.projectId", id); }, projectId);
     const page = await context.newPage(); const sent = []; const refused = new Map();
@@ -352,7 +351,11 @@ export async function runResultRevisionAcceptance(args) {
     assert.ok(report.accepted, "three actual native revision journeys did not all pass; inspect result-revisions.json");
     return report;
   } finally {
+    // Deleted before the browser closes (the deletion needs the context's session), whatever the journeys did.
+    const outcome = await account?.close();
+    if (outcome && !outcome.deleted) process.exitCode = 4;
     report.finishedAt = new Date().toISOString();
+    report.account = account ? { deleted: outcome?.deleted ?? false } : null;
     await writeFile(path.join(out, "result-revisions.json"), JSON.stringify(report, null, 2), { mode: 0o600 });
     await context?.close(); await browser.close();
   }
