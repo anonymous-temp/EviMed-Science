@@ -15,8 +15,8 @@ import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { LEGACY_INDEX_WITHDRAWN, retireLegacyMemory } from "../src/legacyMemoryRetirement.mjs";
 import { MemoryIndexWithdrawals } from "../src/memoryIndexWithdrawals.mjs";
 import { memoryMetricFamilies, resetMemoryMetrics } from "../src/memoryMetrics.mjs";
+import { MemorySettingsStore } from "../src/memorySettings.mjs";
 import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
-import { researchMemoryRoots } from "../src/openVikingClient.mjs";
 import { ProductJobs } from "../src/productJobs.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
 import { createStore } from "../src/store.mjs";
@@ -56,7 +56,11 @@ async function oldDeployment(t, { accounts = 2, seed = async () => {} } = {}) {
   await migrateProductStore(database);
   await database.query(`ALTER TABLE evimed_memory.settings ADD COLUMN IF NOT EXISTS engine text NOT NULL DEFAULT 'native',
     ADD COLUMN IF NOT EXISTS engine_changed_at timestamptz`);
-  await database.query("CREATE TABLE evimed_memory.records (id text PRIMARY KEY, user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE, value text)");
+  // The columns the account export reads are the old release's own.
+  await database.query(`CREATE TABLE evimed_memory.records (id text PRIMARY KEY, user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE, value text,
+    scope text NOT NULL DEFAULT 'user', scope_id text NOT NULL DEFAULT '', kind text NOT NULL DEFAULT 'preference', key text NOT NULL DEFAULT '',
+    summary text NOT NULL DEFAULT '', origin text NOT NULL DEFAULT 'stated', status text NOT NULL DEFAULT 'active', sensitive boolean NOT NULL DEFAULT false,
+    created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now())`);
   for (const table of LEGACY_CHILDREN) await database.query(`CREATE TABLE evimed_memory.${table} (user_id text, record_id text)`);
   await seed(database, users);
   const withdrawals = new MemoryIndexWithdrawals({ database, openViking: null });
@@ -96,7 +100,6 @@ test("empty tables and no legacy account: the tables and the engine columns are 
   assert.equal(lines.length, 1);
   assert.equal(lines[0], `legacy memory: tables dropped; 2 retired index job(s) deleted; index copies of the records queued for ${accounts.length} account(s)`);
   assert.deepEqual([counted("dropped"), counted("index_withdrawals_queued"), counted("jobs_deleted"), counted("failed")], [1, 1, 1, 0]);
-  void researchMemoryRoots;
 
   // Idempotent: a second start finds nothing, owes nothing again and says nothing.
   const quiet = [];
@@ -128,6 +131,21 @@ test("a table that still holds a record is kept with its columns, one line names
   const again = await retireLegacyMemory({ database, withdrawals, report: () => {} });
   assert.deepEqual([again.tables, again.jobs, again.withdrawn], ["kept_records", 0, "done_before"]);
   assert.equal((await owedTo(database)).length, everyAccount * 3);
+});
+
+test("a database that kept its records hands them over in the person's own export, and one that dropped them hands over only the switches", options, async (t) => {
+  const { database, users } = await oldDeployment(t, { accounts: 2, seed: async (db, [owner]) => {
+    await db.query("INSERT INTO evimed_memory.records (id, user_id, value) VALUES ('rec_held', $1, '一条还在的记忆')", [owner]);
+  } });
+  const memorySettings = new MemorySettingsStore({}, { database });
+  const held = await memorySettings.exportUserMemory(users[0]);
+  assert.equal(held.version, 2);
+  assert.deepEqual(held.legacyRecords.map((/** @type {any} */ row) => [row.id, row.value]), [["rec_held", "一条还在的记忆"]]);
+  assert.equal("legacyRecords" in await memorySettings.exportUserMemory(users[1]), false, "only the person's own rows");
+  // Dropped (nothing was held), the archive carries the switches alone, and says nothing about a table that is not there.
+  await database.query("DROP TABLE evimed_memory.record_reviews, evimed_memory.record_conflicts, evimed_memory.record_sources, evimed_memory.record_usage, evimed_memory.records");
+  const gone = await memorySettings.exportUserMemory(users[0]);
+  assert.deepEqual(Object.keys(gone).sort(), ["settings", "version"]);
 });
 
 test("an account that still says it is on the legacy engine keeps the tables, even empty", options, async (t) => {
