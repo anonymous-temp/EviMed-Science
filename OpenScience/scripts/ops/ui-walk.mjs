@@ -167,7 +167,7 @@ import { contextTransport, openThrowawayAccount } from "./throwaway-account.mjs"
 const WALK_TABLES = {
   "pageTemplates": {
     "version": 1,
-    "about": ["The one table of the pages the UI walk visits (R19, plan §3 S9, audit D §3.2 and §4 S5): which router pattern a view belongs to, which of the six page templates it is built on, the style budget it is held to, the kinds of section it may stack, and whether its first row is clicked.","scripts/ops/ui-walk.mjs reads it (embedded: the release switch mounts that one file only, `node scripts/ops/embed-walk-tables.mjs` writes the copy and a test holds it equal), apps/server/test/uiWalk.test.mjs and apps/web/src/app/pageTemplates.test.ts read it for the router coverage, and apps/web/src/test/pageComposition.test.tsx reads the templates' slots.","A view is a name the walk's report uses (`vcr-trial@2` is the second study's trial tab and is the view `vcr-trial`). `route` is the address the walk opens; a view without one is found from the deployment's own lists (`discovered`) or is a tab of a module page (`module`, `tab`).","`budget` names a row of `budgets` (the reading page's 8 / 5 / 3 when absent) and `budgetOverride` changes single numbers of it, each with the measure and the reason in `budgetNote`. There is no list of pages excused from their budget: a page that has to spend more says so here, with the measurement behind it, and a debt that is not a budget is an entry of ui-walk-baseline.json with an owner and a day.","`family` is the set of pages that share one tab strip (or one route): their titles start on one left edge; a page of its own kind (a record: a zone, a card, an author, an event, a document) is a family of one. A module's views (`module`) keep the same visible workflow rail and one contextual view selector; both 虚拟临床研究 and 循证 GEO retain their step states during conversation, including on a phone (owner, 2026-10-20).","`templates` says what each template may hold: `tablist`, `toolbar` and `stepRail` are `allowed`, `none` or (for the rail) `every-tab`; a reading page may carry the switch of its own document (a GEO answer's date, a document's 内容 / 原文 on a phone), which DESIGN.md does not forbid it. `orphans: content` marks a page made of text (a reading page): a sentence standing alone on it is its content, so the orphan-sentence budget does not apply there. `longViewports` is how many windows tall a page of the template may be before it needs contents: a reading page needs them from six, anything else contents or a list read a page at a time from twelve."],
+    "about": ["The one table of the pages the UI walk visits (R19, plan §3 S9, audit D §3.2 and §4 S5): which router pattern a view belongs to, which of the six page templates it is built on, the style budget it is held to, the kinds of section it may stack, and whether its first row is clicked.","scripts/ops/ui-walk.mjs reads it (embedded: the release switch mounts that one file only, `node scripts/ops/embed-walk-tables.mjs` writes the copy and a test holds it equal), apps/server/test/uiWalk.test.mjs and apps/web/src/app/pageTemplates.test.ts read it for the router coverage, and apps/web/src/test/pageComposition.test.tsx reads the templates' slots.","A view is a name the walk's report uses (`vcr-trial@2` is the second study's trial tab and is the view `vcr-trial`). `route` is the address the walk opens; a view without one is found from the deployment's own lists (`discovered`) or is a tab of a module page (`module`, `tab`).","`budget` names a row of `budgets` (the reading page's 8 / 5 / 3 when absent) and `budgetOverride` changes single numbers of it, each with the measure and the reason in `budgetNote`. There is no list of pages excused from their budget: a page that has to spend more says so here, with the measurement behind it, and a debt that is not a budget is an entry of ui-walk-baseline.json with an owner and a day.","`family` is the set of pages that share one tab strip (or one route): their titles start on one left edge; a page of its own kind (a record: a zone, a card, an author, an event, a document) is a family of one. A module's views (`module`) keep the same visible workflow rail and one contextual view selector; both 虚拟临床研究 and 循证 GEO retain their step states during conversation, including on a phone (owner, 2026-10-20). `workflow` says how a module navigates: `compact`, the steps folded beside one pinned 「查看：」 result selector; `rail`, 循证 GEO since its V3 plan (2026-10-23, §一.1 and §3.1, written at the owner's request), the eight steps are the one business navigation, a step's own views are a contextual 「分析视图」 select, and no project-level 「查看：」 selector is drawn; a module row without one keeps the rail and one pinned selector (虚拟临床研究).","`templates` says what each template may hold: `tablist`, `toolbar` and `stepRail` are `allowed`, `none` or (for the rail) `every-tab`; a reading page may carry the switch of its own document (a GEO answer's date, a document's 内容 / 原文 on a phone), which DESIGN.md does not forbid it. `orphans: content` marks a page made of text (a reading page): a sentence standing alone on it is its content, so the orphan-sentence budget does not apply there. `longViewports` is how many windows tall a page of the template may be before it needs contents: a reading page needs them from six, anything else contents or a list read a page at a time from twelve."],
     "templates": {
       "T1": {"name":"list page","tablist":"allowed","toolbar":"allowed","stepRail":"none","outline":"none","longViewports":12},
       "T2": {"name":"master-detail page","tablist":"none","toolbar":"none","stepRail":"none","outline":"none","longViewports":12},
@@ -234,15 +234,15 @@ const WALK_TABLES = {
       {"view":"extensions-plugin-missing","route":"/app/extensions/plugins/impeccable-audit-missing","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","rows":false},
       {"view":"extensions-skill-missing","route":"/app/extensions/skills/impeccable-audit-missing","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","rows":false},
       {"view":"not-found","route":"/app/does-not-exist","pattern":"/app/*","family":"screen","template":"screen","rows":false},
-      {"view":"geo-overview","module":"geo","tab":"","pattern":"/app/geo/:geoId","family":"geo","template":"T3","workflow":"compact","budget":"geo","rows":false},
-      {"view":"geo-visibility","module":"geo","tab":"/visibility","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"compact","budget":"geo","rows":false},
-      {"view":"geo-accuracy","module":"geo","tab":"/accuracy","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"compact","budget":"geo","rows":true},
-      {"view":"geo-questions","module":"geo","tab":"/questions","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"compact","budget":"geo","rows":true},
-      {"view":"geo-sources","module":"geo","tab":"/sources","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"compact","budget":"geo","rows":true},
-      {"view":"geo-actions","module":"geo","tab":"/actions","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"compact","budget":"geo","rows":false},
-      {"view":"geo-plan","module":"geo","tab":"/plan","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"compact","budget":"geo","rows":false},
-      {"view":"geo-evidence","module":"geo","tab":"/evidence","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"compact","budget":"geo","rows":false},
-      {"view":"geo-answer","discovered":true,"pattern":"/app/geo/:geoId/answers/:snapshotId","family":"geo-record","band":"geo","template":"T3","workflow":"compact","templateNote":"one answer is read inside the module band, under 问题与回答 (router.tsx; pageComposition.test.tsx holds it there with the compact workflow): a module page (`band`: held to the module tabs' band by module-chrome), not a reader of its own — r19-guards2, from the fixture walk","budget":"geo","rows":false},
+      {"view":"geo-overview","module":"geo","tab":"","pattern":"/app/geo/:geoId","family":"geo","template":"T3","workflow":"rail","budget":"geo","rows":false},
+      {"view":"geo-visibility","module":"geo","tab":"/visibility","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"rail","budget":"geo","rows":false},
+      {"view":"geo-accuracy","module":"geo","tab":"/accuracy","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"rail","budget":"geo","rows":true},
+      {"view":"geo-questions","module":"geo","tab":"/questions","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"rail","budget":"geo","rows":true},
+      {"view":"geo-sources","module":"geo","tab":"/sources","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"rail","budget":"geo","rows":true},
+      {"view":"geo-actions","module":"geo","tab":"/actions","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"rail","budget":"geo","rows":false},
+      {"view":"geo-plan","module":"geo","tab":"/plan","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"rail","budget":"geo","rows":false},
+      {"view":"geo-evidence","module":"geo","tab":"/evidence","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"rail","budget":"geo","rows":false},
+      {"view":"geo-answer","discovered":true,"pattern":"/app/geo/:geoId/answers/:snapshotId","family":"geo-record","band":"geo","template":"T3","workflow":"rail","templateNote":"one answer is read inside the module band, under 问题与回答 (router.tsx; pageComposition.test.tsx holds it there with the eight-step rail): a module page (`band`: held to the module tabs' band by module-chrome), not a reader of its own — r19-guards2, from the fixture walk","budget":"geo","rows":false},
       {"view":"vcr-overview","module":"vcr","tab":"","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
       {"view":"vcr-population","module":"vcr","tab":"/population","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
       {"view":"vcr-patients","module":"vcr","tab":"/patients","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
@@ -1701,8 +1701,11 @@ export function moduleViewAddressHolds(module, label, initial, before, after, { 
   return to.searchParams.get("view") === (key === previous ? from.searchParams.get("view") : null);
 }
 
-/** Exercise the visible rail and pinned result selector; navigation only, never a workflow Start action. */
-export async function verifyModuleNavigation(page, module, { programme = true, canonical = false } = {}) {
+/**
+ * Exercise the visible rail and pinned result selector; navigation only, never a workflow Start action. `views: false` is a module whose
+ * steps are its navigation (循证 GEO's `rail`, page table): every step is clicked and read, and there is no selector to go through.
+ */
+export async function verifyModuleNavigation(page, module, { programme = true, canonical = false, views: selector = true } = {}) {
   await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
   await readModuleResult(page, `${module} initial view`);
   const initial = page.url();
@@ -1736,7 +1739,7 @@ export async function verifyModuleNavigation(page, module, { programme = true, c
     recordCoverage(`step ${id}`, result);
     destinations.push({ id, state, address: actual.pathname + actual.search + actual.hash, result });
   }
-  const labels = moduleViewLabels(module, programme, canonical);
+  const labels = selector ? moduleViewLabels(module, programme, canonical) : [];
   const views = [];
   for (const label of labels) {
     const selector = page.locator("[data-page-chrome]").getByRole("button", { name: /^查看：/ });
@@ -1828,7 +1831,12 @@ export function compositionFindings(name, viewportName, c) {
       const expected = (view.module ?? view.band) === "vcr" ? 7 : 8;
       if (!c.stepRail || c.stepRail.folded || c.stepRail.count !== expected) add("step-rail", `the module must show all ${expected} workflow steps`);
       if (c.stepRail?.steps?.some((step) => !step.state || !step.href || !step.stateVisible)) add("step-rail", "a workflow step has no visible state or destination");
-      if (c.viewSelector.count !== 1) add("chrome", "the module must expose exactly one pinned result-view selector");
+      // 循证 GEO's steps are its one business navigation since its V3 plan (2026-10-23, §一.1 and §3.1, written at the owner's request):
+      // a step's own views are a contextual 「分析视图」 select, and a second, project-level 「查看：」 selector of the eight result views is
+      // what the plan removed. 虚拟临床研究 keeps its pinned selector.
+      if (view.workflow === "rail") {
+        if (c.viewSelector.count !== 0) add("chrome", "the module's steps are its navigation: a second, project-level result selector (「查看：…」) stands beside them");
+      } else if (c.viewSelector.count !== 1) add("chrome", "the module must expose exactly one pinned result-view selector");
     }
     // 虚拟临床研究's tab row is its step bar (a dot of state on every tab but the overview, which is not a step).
     const dotted = tablists.some((list) => list.dots >= 2 && list.dots >= list.tabs - 1);
@@ -4014,7 +4022,7 @@ async function main() {
             composition.compactWorkflow.views = await verifyCompactWorkflowViews(page);
           }
           if (composition.viewSelector && /^(?:geo|vcr)-overview(?:@\d+)?$/.test(name)) {
-            const navigation = await verifyModuleNavigation(page, name.startsWith("geo-") ? "geo" : "vcr");
+            const navigation = await verifyModuleNavigation(page, name.startsWith("geo-") ? "geo" : "vcr", { views: templateOf(name).view?.workflow !== "rail" });
             report.pages[current].navigation = navigation;
             notices.push(...navigation.notices.map((notice) => `${current}: ${notice}`));
           }
