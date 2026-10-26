@@ -325,3 +325,32 @@ def test_empty_report_bindings_do_not_claim_a_completed_check():
     assert result["counts"] == {"requested": 0, "matched": 0, "mismatched": 0, "notChecked": 0}
     assert result["comparisons"] == []
     assert result["proseChecked"] is False
+
+
+@pytest.mark.parametrize("column,code", [
+    ("patient", "identifier_in_predictors"), ("visit", "identifier_in_predictors"),
+    ("split", "split_in_predictors"), ("p", "probability_in_predictors"),
+])
+@pytest.mark.parametrize("scope", ["final", "stage"])
+def test_declared_nonfeature_roles_cannot_validate_as_predictors(column, code, scope):
+    if scope == "final":
+        result = audit(predictor_columns=["age", column])
+        stage = "final_predictors"
+    else:
+        result = audit(fit_stages=[{"name": "selection", "fitIds": ["private-training-1"], "predictors": ["age", column]}])
+        stage = "selection"
+    assert code in codes(result)
+    finding = next(item for item in result["findings"] if item["code"] == code)
+    assert finding["stage"] == stage
+    assert finding["columns"] == [column]
+    assert result["validation"]["status"] == "compromised"
+    assert result["metrics"]["scope"] == "valid_test_rows_descriptive"
+
+
+def test_predictor_role_checks_use_explicit_roles_not_clinical_name_blacklists():
+    predictors = ["age", "site_id", "split_dose", "probability_of_smoking"]
+    result = audit(predictor_columns=predictors, fit_stages=[{
+        "name": "model", "fitIds": ["private-training-1"], "predictors": predictors,
+    }])
+    assert not ({"identifier_in_predictors", "split_in_predictors", "probability_in_predictors"} & codes(result))
+    assert result["validation"]["status"] == "supported_by_declared_checks"
