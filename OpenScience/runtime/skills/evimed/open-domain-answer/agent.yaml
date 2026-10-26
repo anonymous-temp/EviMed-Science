@@ -30,6 +30,12 @@ optionalTools:
   - drug_label_search
   - pharmacy_reference_search
   - frontier_search
+  - vcr_read
+  - vcr_write
+  - vcr_simulate
+  - trial_registry_record
+  - curve_digitize
+  - evidence_pool
 dataSources:
   - uploaded-files
   - literature

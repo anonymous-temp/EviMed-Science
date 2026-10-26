@@ -182,7 +182,7 @@ describe("EvidenceMatrixTable: the check is ✓, ⚠ or blank", () => {
   it("leaves the cells blank, and says nothing, for a report that was never checked", () => {
     expect(rowsRead("unavailable")).toEqual(["", ""]);
     expect(screen.queryByText(/未核对|暂无核对结果/)).toBeNull();
-    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("note")).toBeNull();
     expect(screen.queryByRole("group", { name: "核对" })).toBeNull();
     expect(screen.getByText("显示 2 / 2 条")).toBeInTheDocument();
   });
@@ -201,7 +201,7 @@ describe("EvidenceMatrixTable: the check is ✓, ⚠ or blank", () => {
   it("shows a failed read as one error row with 重试, blank cells, and asks again from the button", async () => {
     const retry = vi.fn();
     expect(rowsRead("failed", undefined, { onRetry: retry })).toEqual(["", ""]);
-    const alert = screen.getByRole("alert");
+    const alert = screen.getByRole("note");
     expect(alert).toHaveTextContent("核对结果暂时读取不到");
     expect(screen.queryByText(/未核对|暂无核对结果|核对中/)).toBeNull();
     expect(screen.queryByRole("group", { name: "核对" })).toBeNull();
@@ -211,16 +211,16 @@ describe("EvidenceMatrixTable: the check is ✓, ⚠ or blank", () => {
 
   it("shows no error row for the checks of a report that has none, nor while they load", () => {
     rowsRead("unavailable", undefined, { onRetry: vi.fn() });
-    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("note")).toBeNull();
     cleanup();
     rowsRead("loading", undefined, { onRetry: vi.fn() });
-    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("note")).toBeNull();
   });
 
   it("takes a failed read in the cards of a phone the same way", async () => {
     phone();
     renderMatrix({ verificationState: "failed", verified: new Map(), onRetry: vi.fn() });
-    expect(screen.getByRole("alert")).toHaveTextContent("核对结果暂时读取不到");
+    expect(screen.getByRole("note")).toHaveTextContent("核对结果暂时读取不到");
     expect(screen.queryByText(/未核对|暂无核对结果/)).toBeNull();
   });
 

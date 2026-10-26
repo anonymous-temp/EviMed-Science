@@ -14,7 +14,7 @@ import { LoadError } from "@/components/cards/LoadError";
 import { Button } from "@/components/ui/Button";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Menu } from "@/components/ui/Menu";
-import { Switch } from "@/components/ui/Switch";
+import { AsyncSwitch } from "@/components/ui/AsyncSwitch";
 import { useCapsuleData } from "./useCapsuleData";
 
 /** A capsule someone else shared: imported, never mixed into the researcher's own. */
@@ -144,6 +144,7 @@ function ReceivedPacks() {
       reload();
     } catch (error) {
       toast.error(`没有完成：${productErrorMessage(error)}`);
+      throw error;
     } finally {
       setBusy(null);
     }
@@ -192,15 +193,16 @@ function ReceivedPacks() {
         </>
       )}
       trailing={(
-        <Switch
+        <AsyncSwitch
+          readChecked={async () => { const packs = await fetchReceivedCapsules(); return packs.find(item => item.id === pack.id)?.enabled ?? false; }}
           label={`启用“${pack.title}”`}
           checked={pack.enabled}
-          disabled={busy !== null || Boolean(pack.takenDown)}
-          onChange={(next) => void (next ? enable(pack) : disable(pack))}
+          pending={busy !== null} disabled={Boolean(pack.takenDown)}
+          onChange={(next) => (next ? enable(pack) : disable(pack))}
         />
       )}
       menu={pack.takenDown ? undefined : <Menu label="更多" items={[
-        { label: "试用一次", disabled: busy !== null, onSelect: () => void trial(pack) },
+        { label: "试用一次", disabled: busy !== null, onSelect: () => { void trial(pack).catch(() => undefined); } },
       ]} />}
     />
   );

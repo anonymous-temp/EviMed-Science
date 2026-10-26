@@ -1,3 +1,4 @@
+import { PendingFeedback } from "@/components/ui/PendingFeedback";
 import { cn } from "@/lib/cn";
 
 function Bar({ className }: { className?: string }) {
@@ -11,7 +12,7 @@ function Bar({ className }: { className?: string }) {
  */
 export function FrontierSkeleton() {
   return (
-    <div className="animate-pulse" aria-hidden="true">
+    <PendingFeedback stage="正在读取前沿内容"><div className="animate-pulse" aria-hidden="true">
       {["w-4/5", "w-3/5", "w-2/3"].map((width, index) => (
         <div key={index} className="flex">
           <div className="mt-5 w-14 shrink-0"><Bar className="h-3 w-9" /></div>
@@ -23,6 +24,6 @@ export function FrontierSkeleton() {
           </div>
         </div>
       ))}
-    </div>
+    </div></PendingFeedback>
   );
 }

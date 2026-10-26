@@ -7,8 +7,8 @@ import { VCR_RAIL_STEPS, VCR_STEP_TABS, vcrTabPath } from "./vcrTabs";
 
 /** The marks a step wears, shaped as the tabs' dots are: a filled dot is done, a ring is under way, an amber diamond needs the reader, a small hollow one is not started. */
 const MARK: Record<"done" | "active" | "attention" | "todo", string> = {
-  done: "h-2 w-2 rounded-full bg-accent",
-  active: "h-2 w-2 rounded-full bg-surface ring-2 ring-accent",
+  done: "h-2 w-2 rounded-full bg-ok",
+  active: "h-2 w-2 rounded-full bg-surface ring-2 ring-info",
   attention: "h-2 w-2 rotate-45 bg-warn",
   todo: "h-1.5 w-1.5 rounded-full bg-surface-2 ring-1 ring-border-control",
 };

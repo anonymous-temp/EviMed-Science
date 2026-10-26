@@ -1,8 +1,9 @@
 /** Source-bound numeric parameters for existing reference simulators, never an inferred fitted model. */
 import { createHash } from "node:crypto";
-import { validateScenario } from "@evimed/domain";
+import { validateScenario, canonicalScenarioJson, vcrTimeUnitOf } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { projectSourceManifestRecord } from "./sourceService.mjs";
+import { literatureUnitIsInQuote } from "./vcrEvidenceSources.mjs";
 const object = (/** @type {any} */ value) => value && typeof value === "object" && !Array.isArray(value) ? value : {};
 const digest = (/** @type {string} */ value) => createHash("sha256").update(value).digest("hex");
 export const VCR_LITERATURE_PROFILES = Object.freeze([
@@ -22,13 +23,15 @@ export const VCR_LITERATURE_PROFILES = Object.freeze([
 export function literatureNumericCandidates(text, sha) {
   /** @type {any[]} */ const rows = [];
   const prefix = text.slice(0, 1_000_000);
-  const pattern = /(?<![\w.])[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?!\w|\.\d)/g;
+  const pattern = /(?<![\w.])[-+−]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?!\w|\.\d)/g;
   for (const match of prefix.matchAll(pattern)) {
-    const value = Number(match[0]);
+    const value = Number(match[0].replace("−", "-"));
     if (!Number.isFinite(value)) continue;
     const start = match.index;
     const end = start + match[0].length;
-    const unit = /^\s*(%|mmol\/L|mg\/dL|mg|kg|mmHg|days?|weeks?|months?|years?|天|周|月|年)(?=\s|[.,;:，。；）)]|$)/iu.exec(prefix.slice(end, end + 32))?.[1] ?? "";
+    const suffix = /^\s*\(?\s*(%|(?:\/\s*)?[\p{L}µμ][\p{L}\p{N}µμ²³^−+-]*(?:\s*\/\s*[\p{L}µμ][\p{L}\p{N}µμ²³^−+-]*)*)(?=\s|[.,;:，。；）)]|$)/iu.exec(prefix.slice(end, end + 48))?.[1] ?? "";
+    // Preserve unfamiliar physical units too; silently losing them makes a dose look dimensionless.
+    const unit = /^(and|or|with|at|in|of|for|was|were|respectively|compared|versus|vs|to)$/iu.test(suffix) ? "" : suffix;
     const quoteStart = Math.max(prefix.lastIndexOf("\n", start - 1) + 1, start - 100);
     const nextLine = prefix.indexOf("\n", end);
     const quoteEnd = Math.min(nextLine < 0 ? prefix.length : nextLine, end + 100);
@@ -37,6 +40,25 @@ export function literatureNumericCandidates(text, sha) {
     if (rows.length >= 1000) break;
   }
   return rows;
+}
+/** Dimensionless scientific parameters need a declared scale or a source-local semantic label.
+ * Never let a caller's chosen destination erase a preserved physical unit.
+ * @param {any} candidate @param {"probability"|"hazard_ratio"} kind
+ */
+function dimensionlessParameter(candidate, kind) {
+  const unit = String(candidate.unit ?? "").trim().toLowerCase();
+  const before = String(candidate.quote).slice(0, candidate.start - candidate.quoteStart);
+  const clause = before.split(/[;。\n]|\.(?!\d)/u).at(-1) ?? "";
+  if (kind === "probability" && unit === "%") return { value: candidate.value / 100, conversion: "percent_to_proportion",
+    issue: /(?:\b(?:probability|proportion|fraction|response|survival|risk|mortality|incidence|event)\b|概率|发生率|响应率|应答率|生存率)/iu.test(clause)
+      ? null : "来源百分数尚未声明为结局概率或发生比例。" };
+  const declared = kind === "probability" ? /^(proportion|probability|fraction)$/u : /^hr$/u;
+  if (declared.test(unit)) return { value: candidate.value, conversion: "identity", issue: null };
+  if (unit && !(kind === "hazard_ratio" && unit === "ratio")) return { value: candidate.value, conversion: "unvalidated", issue: "来源的物理单位或比例尺度与所选参数不兼容。" };
+  const semantic = kind === "probability"
+    ? /(?:\b(?:probability|proportion|fraction)\b|\b(?:response|event|outcome|mortality|survival|incidence)\s+rate\b|\bbaseline\s+survival\b|概率|发生率|响应率|应答率|生存率)/iu
+    : /(?:\bhazard\s+ratio\b|\bHR\b|风险比|危险比)/iu;
+  return { value: candidate.value, conversion: "identity", issue: semantic.test(clause) ? null : "来源未声明所选无量纲参数的比例尺度或含义。" };
 }
 /** @param {{sources:any}} dependencies */
 export function createVcrModelSources({ sources }) {
@@ -68,6 +90,13 @@ export function createVcrModelSources({ sources }) {
       const asked = object(card.literatureSource);
       const read = await this.preview(user, study, String(asked.sourceId ?? ""));
       if (asked.generation !== read.generation || asked.textSha256 !== read.textSha256) throw new HttpError(409, "source_changed", "The source changed; read it again before mapping parameters.");
+      if (card.executionProfile === "model.prognostic_apply") {
+        const source = await sources.get(String(user.id), read.sourceId);
+        const capture = await sources.loadCapture(String(user.id), source);
+        const preservedText = String(capture?.input?.text ?? "");
+        if (digest(preservedText) !== read.textSha256) throw new HttpError(409, "source_changed", "Read the changed source before binding a model.");
+        return preparePublishedEquation(read, card, preservedText, study.projectId);
+      }
       const profile = VCR_LITERATURE_PROFILES.find(row => row.method === card.executionProfile);
       const byId = new Map(read.parameters.map(row => [row.id, row]));
       /** @type {any[]} */ const bindings = [];
@@ -80,8 +109,11 @@ export function createVcrModelSources({ sources }) {
         const field = profile?.fields.find(row => row.key === binding.field);
         const candidate = byId.get(String(binding.candidateId));
         if (!field || !candidate || bindings.some(row => row.field === field.key)) throw new HttpError(400, "vcr_model_invalid", "A parameter mapping must name one current source occurrence and supported field.");
-        const converted = field.unit === "proportion" && candidate.unit === "%" ? candidate.value / 100 : candidate.value;
-        const conversion = field.unit === "proportion" && candidate.unit === "%" ? "percent_to_proportion" : "identity";
+        const dimensionless = field.unit === "proportion" ? dimensionlessParameter(candidate, "probability")
+          : field.key === "truth.hazardRatio" ? dimensionlessParameter(candidate, "hazard_ratio") : null;
+        const converted = dimensionless?.value ?? candidate.value;
+        const conversion = dimensionless?.conversion ?? "identity";
+        if (dimensionless?.issue) missing.push(`${field.label}：${dimensionless.issue}`);
         truth[field.key.split(".")[1]] = converted;
         if (field.key === "truth.controlMedian") {
           timeUnit = ({ day: "days", days: "days", 天: "days", week: "weeks", weeks: "weeks", 周: "weeks", month: "months", months: "months", 月: "months", year: "years", years: "years", 年: "years" })[candidate.unit.toLowerCase()] ?? null;
@@ -109,5 +141,98 @@ export function createVcrModelSources({ sources }) {
         inputs: ["研究设计人数", ...bindings.map(row => `${row.field}（${row.unit || "来源未声明单位"}）`)], outputs: "标明假设和来源的参考情景结局分布；不是个体临床预测。",
       };
     },
+  };
+}
+
+
+/** Resolve a closed equation against preserved numeric occurrences and exact semantic quotations.
+ * Evidence anchors verify what was read; clinical interpretation/transportability still needs assessment.
+ * @param {any} read @param {any} card @param {string} text @param {string} projectId
+ */
+export function preparePublishedEquation(read, card, text, projectId) {
+  const equation = object(card.equation);
+  const model = structuredClone(object(equation.model));
+  const endpoint = structuredClone(object(equation.endpoint));
+  const terms = Array.isArray(model.terms) ? model.terms : [];
+  const sourceCondition = equation.sourceCondition;
+  const missing = [];
+  const paths = new Map();
+  if (["linear", "logistic"].includes(model.family)) paths.set("model.intercept", { target: model, key: "intercept", probability: false });
+  if (model.residualSd != null) paths.set("model.residualSd", { target: model, key: "residualSd", probability: false });
+  for (const [index, term] of terms.entries()) {
+    for (const key of ["coefficient", ...(term.center != null && term.center !== 0 ? ["center"] : []), ...(term.scale != null && term.scale !== 1 ? ["scale"] : [])]) {
+      paths.set(`model.terms.${index}.${key}`, { target: term, key, probability: false });
+    }
+  }
+  paths.set("endpoint.horizon", { target: endpoint, key: "horizon", probability: false });
+  if (model.baseline) {
+    paths.set("model.baseline.survival", { target: model.baseline, key: "survival", probability: true });
+    paths.set("model.baseline.horizon", { target: model.baseline, key: "horizon", probability: false });
+  }
+  const candidates = new Map(read.parameters.map((/** @type {any} */ row) => [row.id, row]));
+  const bound = new Set();
+  const bindings = [];
+  for (const asked of Array.isArray(card.parameterBindings) ? card.parameterBindings : []) {
+    const field = paths.get(asked.field);
+    const candidate = /** @type {any} */ (candidates.get(asked.candidateId));
+    if (!field || !candidate || bound.has(asked.field)) throw new HttpError(400, "vcr_model_invalid", "An equation parameter must name one preserved numeric occurrence and one supported field.");
+    if (["endpoint.horizon", "model.baseline.horizon"].includes(asked.field)) {
+      const declaredUnit = asked.field === "endpoint.horizon" ? endpoint.timeUnit : model.baseline?.timeUnit;
+      if (!vcrTimeUnitOf(candidate.unit) || vcrTimeUnitOf(candidate.unit) !== vcrTimeUnitOf(declaredUnit)) missing.push(`Missing or mismatched preserved horizon unit: ${asked.field}.`);
+    }
+    const dimensionless = field.probability ? dimensionlessParameter(candidate, "probability") : null;
+    if (dimensionless?.issue) missing.push(`${asked.field}: ${dimensionless.issue}`);
+    const conversion = dimensionless?.conversion ?? "identity";
+    const value = dimensionless?.value ?? candidate.value;
+    field.target[field.key] = value;
+    bound.add(asked.field);
+    bindings.push({ ...candidate, field: asked.field, candidateId: candidate.id, mappedValue: value, conversion,
+      sourceId: read.sourceId, generation: read.generation, textSha256: read.textSha256 });
+  }
+  for (const path of paths.keys()) if (!bound.has(path)) missing.push(`Missing preserved parameter binding: ${path}.`);
+  const semanticFields = ["endpoint", "population", "sourceCondition", ...(model.baseline ? ["model.baseline.reference"] : []), ...terms.map((/** @type {any} */ _term, /** @type {number} */ index) => `model.terms.${index}`)];
+  const semanticBindings = [];
+  for (const asked of Array.isArray(card.semanticBindings) ? card.semanticBindings : []) {
+    if (!semanticFields.includes(asked.field) || !Number.isSafeInteger(asked.start) || !Number.isSafeInteger(asked.end)
+      || asked.start < 0 || asked.end <= asked.start || asked.end > text.length || typeof asked.quote !== "string"
+      || !asked.quote.trim() || text.slice(asked.start, asked.end) !== asked.quote) {
+      throw new HttpError(400, "vcr_model_invalid", "An equation interpretation must quote the preserved source at exact offsets.");
+    }
+    semanticBindings.push({ field: asked.field, quote: asked.quote, start: asked.start, end: asked.end,
+      sourceId: read.sourceId, generation: read.generation, textSha256: read.textSha256 });
+  }
+  for (const field of semanticFields) if (!semanticBindings.some(binding => binding.field === field)) missing.push(`Missing source interpretation: ${field}.`);
+  for (const [index, term] of terms.entries()) {
+    const quotes = semanticBindings.filter(binding => binding.field === `model.terms.${index}`).map(binding => binding.quote);
+    if (term.transform === "indicator") {
+      // A category is an encoding, not a physical measurement. Its complete level mapping must be preserved.
+      if (term.unit !== "category" || !Array.isArray(term.levels) || !quotes.some(quote => term.levels.every(level => quote.includes(String(level))))) {
+        missing.push(`Missing preserved category encoding: model.terms.${index}.`);
+      }
+    } else if (typeof term.unit !== "string" || !quotes.some(quote => {
+      // A follow-up unit elsewhere in a broad quotation is not a predictor's unit.
+      const predictor = String(term.column).toLowerCase();
+      return quote.split(/[.;\n。；]/u).some(clause => clause.toLowerCase().split(/[^\p{L}\p{N}_]+/u).includes(predictor) && literatureUnitIsInQuote(clause, term.unit));
+    })) {
+      missing.push(`Missing preserved predictor unit: model.terms.${index}.unit.`);
+    }
+  }
+  const inputUnits = Object.fromEntries(terms.map((/** @type {any} */ term) => [term.column, term.unit]));
+  const scenario = { inputId: "binding_preview", idColumn: "USUBJID", inputUnits, sourceCondition, endpoint, model };
+  missing.push(...validateScenario("model.prognostic_apply", scenario).map(issue => `${issue.code}: ${issue.field}`));
+  if (model.baseline && (model.baseline.horizon !== endpoint.horizon || model.baseline.timeUnit !== endpoint.timeUnit)) missing.push("The baseline horizon and unit differ from the endpoint.");
+  for (const term of terms) if (term.transform === "indicator" && (!Array.isArray(term.levels) || !term.levels.includes(term.category))) missing.push("An indicator category must belong to its declared levels.");
+  if (model.baseline?.reference === "zero" && terms.some(term => term.center !== 0)) missing.push("A zero-reference Cox baseline requires explicitly zero covariate centers.");
+  const frozen = { model, endpoint, sourceCondition };
+  return {
+    literatureSource: { sourceId: read.sourceId, generation: read.generation, textSha256: read.textSha256, projectId, title: read.title },
+    parameterBindings: bindings, semanticBindings, equation: frozen, executionProfile: "model.prognostic_apply", interfaceShape: "baseline_to_outcome",
+    executionSpec: missing.length ? null : { method: "model.prognostic_apply", scenario: frozen,
+      scenarioHash: digest(canonicalScenarioJson(frozen)), sourceParameters: bindings.map(binding => ({ field: binding.field, value: binding.mappedValue })) },
+    specificationMissing: missing, registrationState: missing.length ? "incomplete_specification" : "source_bound_equation",
+    type: "published_prognostic_equation", inputs: terms.map((/** @type {any} */ term) => `${term.column} (${term.unit})`),
+    outputs: "Prognostic values under the declared source condition; no identified treatment effect.",
+    knownLimits: ["Source quotations and numbers are verified; clinical interpretation and target-population transportability are not automatically validated.",
+      "Coefficient uncertainty is not estimated. Cox without baseline survival yields relative scores only."],
   };
 }

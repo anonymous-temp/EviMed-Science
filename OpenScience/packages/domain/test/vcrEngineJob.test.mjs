@@ -408,14 +408,15 @@ const COMPARATOR_EFFECT_METHODS = /** @type {const} */ ([
 ]);
 
 test("the comparator-effect methods are appended, read patients, and every rule they can fire has a label", () => {
-  // The first release's 24 kinds keep their order: a mirror in the runtime's tool holds the list equal, in order.
-  assert.deepEqual([...VCR_JOB_KINDS].slice(0, 24), ["profile_snapshot", "build_cohort", "generate_population", "literature_population", "synthesize_population",
+  // Two source-model jobs precede the first release's 24 kinds, which retain their relative order.
+  assert.deepEqual([...VCR_JOB_KINDS].slice(0, 2), ["fit_survival_model", "apply_prognostic_model"]);
+  assert.deepEqual([...VCR_JOB_KINDS].slice(2, 26), ["profile_snapshot", "build_cohort", "generate_population", "literature_population", "synthesize_population",
     "population_quality", "generate_patients", "generate_patients_continuous", "generate_patients_binary", "reconstruct_km", "pool_evidence", "weight_comparator",
     "propensity_weight_comparator", "maic_comparator", "evalue", "rmst", "design_analytic", "design_simulation", "design_grid", "assurance", "procova",
     "accrual_forecast", "map_prior", "match_criteria"]);
-  // The kinds appended after the first 24 are this stream's four in the order they were added, then whatever other streams appended
+  // After the source models and original 24, this stream's four remain in the order they were added, then whatever other streams appended
   // (the robustness methods): derived from the domain, so a stream that appends a kind does not edit this line.
-  assert.deepEqual([...VCR_JOB_KINDS].slice(24, 24 + COMPARATOR_EFFECT_METHODS.length), COMPARATOR_EFFECT_METHODS.map(([, kind]) => kind), "appended in the order they were added");
+  assert.deepEqual([...VCR_JOB_KINDS].slice(26, 26 + COMPARATOR_EFFECT_METHODS.length), COMPARATOR_EFFECT_METHODS.map(([, kind]) => kind), "appended in the order they were added");
   assert.equal(VCR_JOB_KINDS.length, Object.keys(VCR_ENGINE_METHODS).length + Object.keys(VCR_LONGITUDINAL_JOBS).length, "every kind has an engine or control-plane method");
   for (const [method, kind] of COMPARATOR_EFFECT_METHODS) {
     assert.equal(/** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind], method, kind);

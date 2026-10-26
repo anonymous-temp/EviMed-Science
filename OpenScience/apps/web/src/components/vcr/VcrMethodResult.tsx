@@ -15,7 +15,7 @@ import { engineIntervalForDisplay, intervalText } from "./vcrText";
 import { PartialResultNote, VcrTabSkeleton } from "./VcrStates";
 import { useVcrLoad, VcrTabError } from "./vcrTabKit";
 
-const measureNames: Record<string, string> = { hazard_ratio_robust: "风险比（稳健方差）", hazard_ratio_unadjusted: "未调整的风险比", hazard_ratio_ac_adjusted: "调整后的 A 对 C 风险比", hazard_ratio_ac_unadjusted: "未调整的 A 对 C 风险比", hazard_ratio_bc: "B 对 C 风险比", log_hazard_ratio_se_robust: "对数风险比的标准误（稳健）", log_hazard_ratio_se_bootstrap: "对数风险比的标准误（自助法）", ph_test_chisq: "等比例风险检验统计量", ph_test_p: "等比例风险检验 P 值", power: "把握度", type_one_error: "I 类错误", bias: "偏倚", coverage: "区间覆盖率", expected_sample_size: "期望样本量", sample_size: "样本量", generated_records: "生成记录", required_events: "所需事件数", hazard_ratio: "风险比", risk_ratio: "风险比值", odds_ratio: "优势比", e_value: "E-value", e_value_confidence_limit: "置信限 E-value", evalue: "E-value", evalue_estimate: "E-value", evalue_limit: "置信限 E-value", duration_months: "周期（月）", effective_sample_size: "有效样本量", cost: "成本" };
+const measureNames: Record<string, string> = { fitted_median: "拟合生存中位时间", aic: "AIC", predicted_population_mean: "人群预测均值", predicted_outcome_sd: "预测结局标准差", mean_relative_score: "平均相对预后评分", hazard_ratio_robust: "风险比（稳健方差）", hazard_ratio_unadjusted: "未调整的风险比", hazard_ratio_ac_adjusted: "调整后的 A 对 C 风险比", hazard_ratio_ac_unadjusted: "未调整的 A 对 C 风险比", hazard_ratio_bc: "B 对 C 风险比", log_hazard_ratio_se_robust: "对数风险比的标准误（稳健）", log_hazard_ratio_se_bootstrap: "对数风险比的标准误（自助法）", ph_test_chisq: "等比例风险检验统计量", ph_test_p: "等比例风险检验 P 值", power: "把握度", type_one_error: "I 类错误", bias: "偏倚", coverage: "区间覆盖率", expected_sample_size: "期望样本量", sample_size: "样本量", generated_records: "生成记录", required_events: "所需事件数", hazard_ratio: "风险比", risk_ratio: "风险比值", odds_ratio: "优势比", e_value: "E-value", e_value_confidence_limit: "置信限 E-value", evalue: "E-value", evalue_estimate: "E-value", evalue_limit: "置信限 E-value", duration_months: "平均研究时长（月）", effective_sample_size: "有效样本量", cost: "成本" };
 function measureLabel(row: { name: string; label?: string }) {
   return row.label && row.label !== row.name ? row.label : measureNames[row.name] ?? row.name;
 }
@@ -29,7 +29,7 @@ export function VcrMethodResult({ studyId, job }: { studyId: string; job: VcrJob
   const measures = result.measures ?? [];
   return <div className="flex min-w-0 flex-col gap-4" data-vcr-method-result={job.id}>
     <div className="flex flex-wrap items-center gap-2"><ConclusionChip state={result.conclusion} /><span className="text-caption text-text-3">本次运行的保留结果</span></div>
-    {(job.error?.partial || ["failed", "canceled"].includes(job.state)) && <PartialResultNote sentence="这次运行没有完整结束，下面保留已经得到的结果。修改配置后可重新运行。" />}
+    {(job.error?.partial || ["failed", "canceled"].includes(job.state)) && <PartialResultNote sentence="这次运行没有完整结束，下面保留已经得到的结果。可在研究对话中接着完成。" />}
     {measures.length > 0 && <DataTable label="本次计算指标" columns={[
       { key: "name", header: "指标", rowHeader: true, cell: row => measureLabel(row) },
       { key: "value", header: "结果", cell: row => <VcrNumber label={measureLabel(row)} value={{ value: row.value, unit: row.unit, mcse: row.mcse, interval: engineIntervalForDisplay(row.interval), source: row.source ?? source }} /> },

@@ -192,14 +192,14 @@ describe("no title over an empty box", () => {
     const raw = fixture("ev201/matching.json");
     // The study keeps its protocol version (the fixture's own): a protocol with nothing evaluated yet is the case this guards, and
     // clearing `protocols` in the fixture, as 2026-10-10 did to keep the test green, removed the case instead of the toolbar.
-    Object.assign(raw, { candidates: [], comparisons: [], forecast: null, pendingReview: null, ledger: [], sites: [], followup: [], headline: null, partner: null });
+    Object.assign(raw, { selected: null, timeline: [], candidateRoster: ["P-0201"], candidates: [], comparisons: [], forecast: null, pendingReview: null, ledger: [], sites: [], followup: [], headline: null, partner: null });
     expect(raw.protocols).toHaveLength(1);
     installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}/matching`]: raw });
     const view = await drawTab(<MatchingTab studyId={STUDY_ID} study={study((rawStudy) => { rawStudy.steps.matching = { status: "none", requested: false }; })} />);
-    expect(view.container.querySelector("[data-vcr-step-empty='matching']")).not.toBeNull();
-    expect(view.container.querySelector("[data-page-chrome]")).toBeNull();
-    expect(view.queryByRole("button", { name: "查看方案" })).toBeNull();
-    expect(view.getAllByRole("button")).toHaveLength(1);
+    expect(view.getByText("尚未生成匹配评估")).toBeInTheDocument();
+    expect(view.getAllByRole("button", { name: "开始评估" })).toHaveLength(1);
+    expect(view.getByRole("group", { name: "匹配方向" })).toBeInTheDocument();
+    expect(view.queryByRole("button", { name: "确认后联系" })).toBeNull();
     expect(emptyTitles(view.container)).toEqual([]);
   });
 

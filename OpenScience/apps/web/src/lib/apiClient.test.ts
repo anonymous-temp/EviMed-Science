@@ -1436,3 +1436,28 @@ it("creates the ordinary native session in the explicitly requested project with
   expect(client.getWebProjectId()).toBe("other-open-project");
   expect((fetchMock.mock.calls[index][1] as RequestInit).method).toBe("POST");
 });
+
+it.each(["success", "unauthorized", "network"])("fences a former session's delayed %s response", async outcome => {
+  const client = await loadClient("https://science.example/api");
+  const lifecycle = await import("./sessionLifecycle");
+  let finish!: () => void;
+  const fetchMock = vi.fn(() => new Promise<Response>((resolve, reject) => { finish = () => outcome === "network" ? reject(new TypeError("old private transport")) : resolve(new Response("private A", {status:outcome === "unauthorized" ? 401 : 200})); }));
+  vi.stubGlobal("fetch", fetchMock);
+  const ended = vi.fn(); window.addEventListener(client.WEB_SESSION_ENDED_EVENT, ended);
+  try {
+    const task = client.fetchWithWebAuth("https://science.example/api/private");
+    window.dispatchEvent(new Event(client.WEB_SESSION_ENDED_EVENT)); window.dispatchEvent(new Event(client.WEB_SESSION_STARTED_EVENT));
+    finish(); await expect(task).rejects.toBeInstanceOf(lifecycle.StaleSessionError);
+    expect(ended).toHaveBeenCalledTimes(1); // A's old 401 cannot sign B out.
+  } finally { window.removeEventListener(client.WEB_SESSION_ENDED_EVENT, ended); }
+});
+
+it("checks component lifetime again after CSRF readback before sending upload bytes", async () => {
+ const client = await loadClient("https://science.example/api");
+ const { StaleSessionError } = await import("./sessionLifecycle");
+ let mounted = true, finish!: (response: Response) => void;
+ const fetchMock = vi.fn(() => new Promise<Response>(resolve => { finish = resolve; })); vi.stubGlobal("fetch", fetchMock);
+ const task = client.invokeCommand("upload_file", {data:"synthetic"}, {projectId:"default", isCurrent:()=>mounted});
+ expect(fetchMock).toHaveBeenCalledTimes(1); mounted = false; finish(csrfMeResponse());
+ await expect(task).rejects.toBeInstanceOf(StaleSessionError); expect(fetchMock).toHaveBeenCalledTimes(1);
+});

@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+/* eslint-disable jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex -- Named scientific drawing regions support local keyboard navigation without application mode. */
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Dna, Minus, Plus, RotateCcw } from "lucide-react";
 import { extOf } from "@/lib/artifacts";
 import {
@@ -10,6 +11,7 @@ import {
 } from "@/lib/genome";
 import { cn } from "@/lib/cn";
 import { iconButtonClasses } from "@/components/ui/IconButton";
+import { viewerKey } from "./viewerKeyboard";
 import { Tooltip } from "@/components/ui/Tooltip";
 
 const ROW_H = 15;
@@ -18,11 +20,15 @@ const RULER_H = 26;
 const MIN_SPAN = 20; // don't zoom past ~20 bp
 
 /**
- * Native genome-track viewer (P1-3) for annotation files
- * (BED / bedGraph / GFF3 / GTF / VCF). Renders features as horizontal tracks on
- * a base-pair axis — drag to pan, wheel to zoom — entirely locally from the file
- * alone (no reference genome, no service). Colors follow the app's series
- * palette and are theme-aware via CSS tokens.
+ * Anatomy: named viewer/content region, local controls and decoded readout.
+ * Variants: file-format branches retain the source's scientific meaning.
+ * States: setup, readable content, empty/invalid input and selected value.
+ * Hit area: native controls; the drawing surface accepts pointer input.
+ * Keyboard: native controls; focused drawing shortcuts never intercept editors.
+ * Long content: bounded content scrolls; scientific units remain visible.
+ * Theme: app chrome follows tokens; fixed scientific stages retain their palette.
+ * Responsive behavior: drawing coordinates track the available container.
+ * Verification: adjacent tests and ScientificViewerGallery; physical AT/touch unverified.
  */
 export function GenomeView({ filename, text }: { filename: string; text: string }) {
   const format = useMemo(() => genomeFormat(extOf(filename)), [filename]);
@@ -48,16 +54,27 @@ export function GenomeView({ filename, text }: { filename: string; text: string 
   const [width, setWidth] = useState(760);
   const [hover, setHover] = useState<{ f: GenomeFeature; x: number; y: number } | null>(null);
   const boxRef = useRef<HTMLDivElement | null>(null);
-  const dragRef = useRef<{ x: number; startBp: number; span: number } | null>(null);
+  const dragRef = useRef<{ pointerId: number; x: number; startBp: number; span: number } | null>(null);
+
+  const [dragging, setDragging] = useState(false);
+  const endDrag = useCallback(() => {
+    const drag = dragRef.current;
+    dragRef.current = null;
+    setDragging(false);
+    const box = boxRef.current;
+    if (drag && box?.hasPointerCapture(drag.pointerId)) box.releasePointerCapture(drag.pointerId);
+  }, []);
 
   // Reset the viewport to the whole contig when the contig changes.
   useEffect(() => {
+    endDrag();
     if (!contig) return setView(null);
     const pad = Math.max(1, Math.round((contig.max - contig.min) * 0.02));
     setView({ start: Math.max(0, contig.min - pad), end: contig.max + pad });
     setHover(null);
-  }, [contig]);
+  }, [contig, endDrag]);
 
+  const viewMounted = view !== null;
   useLayoutEffect(() => {
     const el = boxRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
@@ -65,11 +82,13 @@ export function GenomeView({ filename, text }: { filename: string; text: string 
     ro.observe(el);
     setWidth(el.clientWidth || 760);
     return () => ro.disconnect();
-  }, []);
+  }, [viewMounted]);
 
   if (!format) return <div className="p-4 text-ui text-muted">这不是可识别的基因组注释文件。</div>;
-  if (!data || data.features.length === 0 || !contig || !view)
+  if (!data || data.features.length === 0 || !contig)
     return <div className="p-4 text-ui text-muted">此 {format.toUpperCase()} 文件中未找到特征。</div>;
+
+  if (!view) return <div role="status" className="p-4 text-muted">正在准备基因组视图</div>;
 
   const extent = { start: Math.max(0, contig.min - 1), end: contig.max + 1 };
   const span = Math.max(MIN_SPAN, view.end - view.start);
@@ -114,7 +133,7 @@ export function GenomeView({ filename, text }: { filename: string; text: string 
         </span>
         {data.contigs.length > 1 ? (
           <select
-            className="rounded-input border border-strong bg-surface px-2 py-1 text-caption text-text outline-none focus:border-focus"
+            className="rounded-input border border-strong bg-surface px-2 py-1 text-caption text-text outline-none focus:border-focus-input"
             value={contigIdx}
             onChange={(e) => setContigIdx(Number(e.target.value))}
             aria-label="序列片段"
@@ -164,23 +183,38 @@ export function GenomeView({ filename, text }: { filename: string; text: string 
 
       <div
         ref={boxRef}
-        className={cn("relative flex-1 overflow-hidden", dragRef.current ? "cursor-grabbing" : "cursor-grab")}
+        {...{ tabIndex: 0, role: "region", "aria-label": `${filename} 基因组视图` }}
+        onKeyDown={(e) => {
+          if (!viewerKey(e)) return;
+          if (e.key === "Escape") { endDrag(); return; }
+          if (e.key === "Enter" && contigFeatures[0]) { setHover({ f: contigFeatures[0], x: 0, y: 0 }); e.preventDefault(); }
+          if (e.shiftKey) return;
+          if (e.key === "+" || e.key === "=") { zoomAt(0.6, width / 2); e.preventDefault(); }
+          if (e.key === "-") { zoomAt(1.66, width / 2); e.preventDefault(); }
+          if (e.key === "0") { setView(extent); e.preventDefault(); }
+          if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+            const delta = span * (e.key === "ArrowLeft" ? -0.1 : 0.1);
+            setView(clampView(view.start + delta, view.end + delta)); e.preventDefault();
+          }
+        }}
+        onPointerCancel={endDrag}
+        onLostPointerCapture={endDrag}
+        className={cn("relative flex-1 overflow-hidden", dragging ? "cursor-grabbing" : "cursor-grab")}
         onPointerDown={(e) => {
           e.currentTarget.setPointerCapture(e.pointerId);
-          dragRef.current = { x: e.clientX, startBp: view.start, span };
+          dragRef.current = { pointerId: e.pointerId, x: e.clientX, startBp: view.start, span };
+          setDragging(true);
           setHover(null);
         }}
         onPointerMove={(e) => {
           const d = dragRef.current;
-          if (!d) return;
+          if (!d || d.pointerId !== e.pointerId) return;
           const dxBp = ((e.clientX - d.x) / width) * d.span;
           setView(clampView(d.startBp - dxBp, d.startBp - dxBp + d.span));
         }}
-        onPointerUp={(e) => {
-          dragRef.current = null;
-          if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-        }}
+        onPointerUp={(e) => { if (dragRef.current?.pointerId === e.pointerId) endDrag(); }}
         onWheel={(e) => {
+          if (e.ctrlKey || e.metaKey) return;
           const rect = e.currentTarget.getBoundingClientRect();
           zoomAt(e.deltaY > 0 ? 1.2 : 0.83, e.clientX - rect.left);
         }}
@@ -243,6 +277,9 @@ export function GenomeView({ filename, text }: { filename: string; text: string 
         )}
       </div>
 
+      <div role="status" className="px-3 text-caption text-text">{hover ? `${hover.f.name ?? "特征"} · ${hover.f.chrom}:${hover.f.start}–${hover.f.end} · ${hover.f.strand ?? ""} · ${hover.f.score ?? ""}` : "选择特征以读取数值"}</div>
+      <details className="px-3 text-caption"><summary>特征数据</summary><ul className="max-h-40 overflow-auto">{contigFeatures.map((f, i) => <li key={i}><button type="button" onClick={() => setHover({ f, x: 0, y: 0 })}>{f.name ?? "特征"} · {f.chrom}:{f.start}–{f.end} {f.strand} {f.score}</button></li>)}</ul></details>
+      <p className="px-3 text-caption text-muted">聚焦视图：左右方向键平移，+ / - 缩放，0 重置，Enter 读取，Escape 结束拖动。</p>
       <div className="border-t border-border px-3 py-1 text-caption text-muted">
         拖动平移 · 滚轮缩放
         {rows.length > 0 && Math.max(...rows) + 1 > MAX_ROWS && ` · 共 ${Math.max(...rows) + 1} 行，显示前 ${MAX_ROWS} 行`}

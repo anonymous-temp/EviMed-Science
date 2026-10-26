@@ -220,7 +220,7 @@ test("what the store refuses underneath is one item's issue; the others stand", 
 // --- virtual patients read the schedule -------------------------------------------------------------------------------------------------
 
 const config = { vcrEnabled: true, vcrAudience: "all", modelGatewayInternalUrl: "http://127.0.0.1:8788/internal/models/v1" };
-const runtimeManager = { assertActiveModelGatewayToken: (/** @type {string} */ token) => {
+const runtimeManager = { boundedRuntimeScope: () => ({ runId: 'schedule-dispatch' }), assertActiveModelGatewayToken: (/** @type {string} */ token) => {
   if (token !== "token") throw new Error("bad token");
   return { userId: "u1", projectId: "prj_1" };
 } };
@@ -234,6 +234,10 @@ function gateway(storeOverrides = {}) {
   const boundary = new VcrService({ store: /** @type {any} */ ({}), config: {} });
   const store = {
     async studyByControlProject() { return study; },
+    async studyByRuntimeDispatch(userId, projectId, dispatchId) {
+      assert.equal(userId, study.userId); assert.equal(projectId, study.projectId); assert.equal(dispatchId, 'schedule-dispatch');
+      return study;
+    },
     async latestSchedule() { return SCHEDULE; },
     async savePatientSet(input) { saved.push(input); return { id: "pts_1", version: 1 }; },
     async patientSets() { return [{ id: "pts_1", version: 1, name: "虚拟患者" }]; },

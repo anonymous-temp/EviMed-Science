@@ -7,7 +7,7 @@ import { EVIMED_MARK_PATH, EviMedMark } from "./EviMedMark";
 
 /**
  * One mark across the product (spec §3.2, audit F-G8): the EviMed molecule,
- * in the accent colour, in the sidebar, on the login page, in the browser tab
+ * in the independent identity colour, in the sidebar, on the login page, in the browser tab
  * and on the home screen. The research workbench's teal four-node mark is
  * retired, and this is where it would be noticed coming back.
  */
@@ -31,13 +31,13 @@ function files(path: string): string[] {
 }
 
 describe("the EviMed mark", () => {
-  it("is the molecule the favicon and the app icons draw, in the accent colour", () => {
+  it("is the molecule the favicon and the app icons draw, in the independent identity colour", () => {
     const favicon = readFileSync(join(SRC, "assets/evimed-mark.svg"), "utf8");
     expect(favicon).toContain(`d="${EVIMED_MARK_PATH}"`);
     const { container } = render(<EviMedMark className="h-5 w-5" />);
     const svg = container.querySelector("svg")!;
     expect(svg).toHaveAttribute("aria-label", "EviMed Science");
-    expect(svg).toHaveClass("text-accent");
+    expect(svg).toHaveClass("text-brand-ink");
     const paths = svg.querySelectorAll("path");
     expect(paths).toHaveLength(1);
     expect(paths[0]).toHaveAttribute("d", EVIMED_MARK_PATH);

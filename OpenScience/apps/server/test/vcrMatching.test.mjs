@@ -775,11 +775,10 @@ test("the skill says the two things a run must not get wrong, and names its requ
   const authored = await readFile(path.join(repoRoot, "capabilities", "vcr-matching", "SKILL.md"), "utf8");
   const shipped = await readFile(path.join(repoRoot, "capability-skills", "vcr-matching", "SKILL.md"), "utf8");
   assert.equal(authored, shipped, "the authored skill and the shipped copy are one document");
-  assert.match(authored, /你只抽证据，判定由代码做/);
-  assert.match(authored, /联系患者之前必须有人确认/);
-  assert.match(authored, /逐人确认，不是批量确认/);
-  assert.match(authored, /「未知」永远不是「不满足」/u);
-  assert.match(authored, /只要有一条适用的排除标准是「未知」，这个人就不能是「符合」/u);
+  assert.match(authored, /The evaluator computes the final verdict/);
+  assert.match(authored, /No contact, referral, site CRM/);
+  assert.match(authored, /Unknown eligibility is never exclusion, a negative finding or zero/);
+  assert.match(authored, /unknown coverage, not an eligible verdict/);
   for (const name of ["matching-assessment.md", "matching.json"]) assert.ok(authored.includes(name), name);
 });
 
@@ -834,9 +833,9 @@ test("the eval pack carries real briefs, and every one of them names the input t
     assert.ok(brief.inputs.studyId, brief.id);
     assert.ok(brief.mustDo.length >= 3 && brief.mustNotDo.length >= 3, brief.id);
   }
-  // The two measurement briefs are the ones AC-36 and AC-37 are answered by.
+  // Historical matching replay remains; CRM accrual is outside this capability.
   assert.ok(ids.some((id) => id.includes("historical-replay")), "AC-36 needs a replay brief");
-  assert.ok(ids.some((id) => id.includes("accrual-forecast-backtest")), "AC-37 needs a backtest brief");
+  assert.ok(!ids.some((id) => id.includes("accrual-forecast-backtest")), "retired CRM accrual must not return as matching work");
 });
 
 test('C2-25 declared code vocabulary versions cannot silently select the current mapping', () => {

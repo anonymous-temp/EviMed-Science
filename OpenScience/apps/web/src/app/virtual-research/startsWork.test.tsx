@@ -87,7 +87,7 @@ const BUTTON: Record<string, [string, string]> = {
   trial: ["模拟试验方案", "trial"],
 };
 
-describe("a step that has not begun is started from its empty tab, in place", () => {
+describe("a task that has not begun opens the existing native conversation", () => {
   it.each(EMPTY_TABS)("%s: the recipe's button asks for the step and the tab stays", async (tab) => {
     const [label, step] = BUTTON[tab];
     const server = serve((raw) => {
@@ -96,12 +96,10 @@ describe("a step that has not begun is started from its empty tab, in place", ()
     }, { [`GET /vcr/studies/${STUDY_ID}/${tab}`]: fixture(`empty/${tab}.json`) });
     drawStudy(`/app/virtual-research/${STUDY_ID}/${tab}`);
     await userEvent.click(await screen.findByRole("button", { name: label }));
-    await waitFor(() => expect(posts(server, "/run")).toHaveLength(1));
-    expect(posts(server, "/run")[0].body).toEqual({ step });
-    await waitFor(() => expect(document.querySelector("[data-activity='strip']")).not.toBeNull());
-    expect(screen.getByTestId("where")).toHaveTextContent(`/app/virtual-research/${STUDY_ID}/${tab}`);
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent(`/app/virtual-research/${STUDY_ID}/chat`));
+    expect(posts(server, "/run")).toHaveLength(0);
     expect(shell.select).not.toHaveBeenCalled();
-    expect(frame.registered).toHaveLength(0);
+    expect(screen.getByRole("region", { name: "研究对话" })).toBeInTheDocument();
   });
 
   it("the evidence step: 找证据、整理假设卡 on 定义与证据", async () => {
@@ -111,21 +109,20 @@ describe("a step that has not begun is started from its empty tab, in place", ()
     }, { [`GET /vcr/studies/${STUDY_ID}/data`]: fixture("empty/data.json") });
     drawStudy(`/app/virtual-research/${STUDY_ID}/data`);
     await userEvent.click(await screen.findByRole("button", { name: "找证据、整理假设卡" }));
-    await waitFor(() => expect(posts(server, "/run")).toHaveLength(1));
-    expect(posts(server, "/run")[0].body).toEqual({ step: "evidence" });
-    expect(screen.getByTestId("where")).toHaveTextContent(`/app/virtual-research/${STUDY_ID}/data`);
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent(`/app/virtual-research/${STUDY_ID}/chat`));
+    expect(posts(server, "/run")).toHaveLength(0);
     expect(shell.select).not.toHaveBeenCalled();
   });
 });
 
-describe("the header's next step is pressed on any tab, and the page does not move", () => {
-  it.each(["", "/trial", "/matching"])("on %s", async (suffix) => {
+describe("task navigation does not enforce a programme", () => {
+  it.each(["", "/trial", "/matching"])("has no mandatory next-step action on %s", async suffix => {
     const server = serve(() => undefined);
     drawStudy(`/app/virtual-research/${STUDY_ID}${suffix}`);
-    await userEvent.click(await screen.findByRole("button", { name: "接着做：生成虚拟患者" }));
-    await expectStarted(server, `/app/virtual-research/${STUDY_ID}${suffix}`, { step: "patients" });
-    // And the header offers no next step any more, because the strip says what is being done.
-    expect(within(document.querySelector("[data-page-header]") as HTMLElement).queryByRole("button", { name: /^(下一步|接着做|重新做)/ })).toBeNull();
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.queryByRole("button", { name: /^(下一步|接着做：|重新做：)/ })).toBeNull();
+    expect(document.querySelector("[data-step-rail]")).toBeNull();
+    expect(posts(server, "/run")).toHaveLength(0);
   });
 });
 
@@ -151,7 +148,8 @@ describe("a step that did not finish is gone on from where it stopped, in place"
       return found as HTMLElement;
     });
     await userEvent.click(within(attention).getByRole("button", { name: "接着做" }));
-    await expectStarted(server, `/app/virtual-research/${STUDY_ID}`, { step: "patients" });
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent(`/app/virtual-research/${STUDY_ID}/chat`));
+    expect(posts(server, "/run")).toHaveLength(0);
   });
 });
 

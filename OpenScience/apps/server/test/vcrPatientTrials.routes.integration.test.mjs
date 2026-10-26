@@ -205,7 +205,7 @@ test("a run writes two registry trials for a patient, the platform judges her ag
   // Neither direction's counts moved: the study has no protocol of its own, so its funnel and ledger know nothing of the trials.
   assert.deepEqual(page.funnel, []);
   assert.deepEqual(page.protocols, []);
-  assert.deepEqual(page.ledger, []);
+  assert.equal("ledger" in page, false);
 });
 
 test("a reader may read the trials but not ask for a search; somebody outside the study finds none of it", options, async () => {

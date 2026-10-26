@@ -1,4 +1,6 @@
-import { useId } from "react";
+import { isSubmitKey } from "@/lib/compositionKeys";
+import { NumberField } from "@/components/ui/NumberField";
+import { useId, useState } from "react";
 import { VCR_ROW_RULE_COMPARATORS, VCR_ROW_RULE_OPS, VCR_ROW_RULE_LIMITS, validateRowRule, VCR_SCENARIO_EXAMPLES, VCR_SCENARIO_SCHEMAS, whenHolds } from "@evimed/domain";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Button } from "@/components/ui/Button";
@@ -61,7 +63,7 @@ export function ScenarioField({ schema, value, change, title, root, method = "",
   }
   if (schema.t === "map") {
     const object = (value ?? {}) as Record<string, unknown>;
-    return <fieldset className="flex flex-col gap-2"><legend>{fieldTitle}</legend>{Object.entries(object).map(([key, entry]) => <ScenarioField hiddenFields={hiddenFields} columnOptions={columnOptions} key={key} title={key} method={method} path={`${path}.${key}`} customLabel schema={schema.values as Schema} value={entry} root={root} change={(next) => change({ ...object, [key]: next })} />)}<Input label="添加列名" onKeyDown={(event) => { if (event.key === "Enter" && event.currentTarget.value.trim()) { event.preventDefault(); change({ ...object, [event.currentTarget.value.trim()]: schemaDefault(schema.values as Schema) }); event.currentTarget.value = ""; } }} hint="输入列名后按回车" /></fieldset>;
+    return <fieldset className="flex flex-col gap-2"><legend>{fieldTitle}</legend>{Object.entries(object).map(([key, entry]) => <ScenarioField hiddenFields={hiddenFields} columnOptions={columnOptions} key={key} title={key} method={method} path={`${path}.${key}`} customLabel schema={schema.values as Schema} value={entry} root={root} change={(next) => change({ ...object, [key]: next })} />)}<Input label="添加列名" onKeyDown={(event) => { if (isSubmitKey(event) && event.currentTarget.value.trim()) { event.preventDefault(); change({ ...object, [event.currentTarget.value.trim()]: schemaDefault(schema.values as Schema) }); event.currentTarget.value = ""; } }} hint="输入列名后按回车" /></fieldset>;
   }
   if (Array.isArray(schema.values) || schema.valuesBy || schema.t === "boolean") {
     const controller = schema.valuesBy?.path.split(".").reduce<unknown>((at, key) => at && typeof at === "object" ? (at as Record<string, unknown>)[key] : undefined, root);
@@ -74,6 +76,8 @@ export function ScenarioField({ schema, value, change, title, root, method = "",
   const columnField = /(?:Column|column|tstrOutcome)$/.test(path) || /(?:covariates|columns)\[\d+\]$/.test(path);
   if (columnOptions.length && columnField && schema.t === "string") return <Select label={fieldTitle} value={typeof value === "string" ? value : ""} onChange={event => change(event.target.value)}><option value="">选择数据列</option>{columnOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</Select>;
   const numeric = schema.t === "number" || schema.t === "integer";
+  if (numeric) return <NumberField label={text.unit ? `${fieldTitle}（${text.unit}）` : fieldTitle} hint={text.hint} value={value} onValueChange={change}
+    policy={{ scale: text.unit === "比例" ? "fraction" : "scalar", unit: text.unit ?? schema.unit ?? "", integer: schema.t === "integer", exponent: true, min: schema.min, max: schema.max, gt: schema.gt, lt: schema.lt }} example={schema.t === "integer" ? "100" : "0.05"} />;
   return <Input label={text.unit ? `${fieldTitle}（${text.unit}）` : fieldTitle} hint={text.hint} value={typeof value === "string" || typeof value === "number" ? value : ""} type={numeric ? "number" : "text"} min={schema.min} max={schema.max} step={schema.t === "integer" ? 1 : "any"} maxLength={schema.maxLength} pattern={schema.pattern} onChange={(event) => change(numeric && event.target.value !== "" ? Number(event.target.value) : event.target.value)} />;
 }
 
@@ -90,7 +94,7 @@ function RowRule({ value, change, depth, columnOptions = [] }: { columnOptions?:
   const reset = () => change({ op: "compare", column: "", comparator: "gte" });
   if (unsupported) return <fieldset className="flex flex-col gap-2 rounded border border-border p-3"><legend>条件</legend><p role="alert" className="text-ui text-error">已保留原条件，当前无法编辑。请重新配置此条件后再运行。</p><Button size="sm" variant="secondary" onClick={reset}>重新配置条件</Button></fieldset>;
   const operands = Array.isArray(rule.operands) ? rule.operands : [];
-  const numeric = (key: string, title: string) => <Input label={title} type="number" value={typeof rule[key] === "number" ? rule[key] : ""} onChange={(event) => change({ ...rule, [key]: event.target.value === "" ? "" : Number(event.target.value) })} />;
+  const numeric = (key: string, title: string) => <NumberField label={title} value={rule[key]} policy={{ scale: "scalar", unit: "", exponent: true }} example="0.5" onValueChange={next => change({ ...rule, [key]: next })} />;
   const column = typeof rule.column === "string" ? rule.column : "";
   return <fieldset className="flex min-w-0 flex-col gap-2 rounded border border-border p-3"><legend>条件</legend>
     <Select label="运算" value={op} onChange={(event) => change({ op: event.target.value })}>{VCR_ROW_RULE_OPS.map((item) => <option key={item} value={item}>{ruleChoiceLabel(item)}</option>)}</Select>
@@ -106,6 +110,6 @@ function RowRule({ value, change, depth, columnOptions = [] }: { columnOptions?:
 }
 
 function RuleValue({ title, value, change }: { title: string; value: unknown; change: (value: unknown) => void }) {
-  const type = value === undefined || typeof value === "number" ? "number" : typeof value === "boolean" ? "boolean" : "string";
-  return <><Select label={`${title}类型`} value={type} onChange={event => change(event.target.value === "number" ? 0 : event.target.value === "boolean" ? false : "")}><option value="number">数字</option><option value="string">文本</option><option value="boolean">布尔值</option></Select><ScenarioField title={title} schema={{ t: type }} value={value} change={next => change(type === "number" && next === "" ? undefined : next)} root={{}} /></>;
+  const [type, setType] = useState(() => value === undefined || typeof value === "number" ? "number" : typeof value === "boolean" ? "boolean" : "string");
+  return <><Select label={`${title}类型`} value={type} onChange={event => { setType(event.target.value); change(event.target.value === "number" ? "" : event.target.value === "boolean" ? false : ""); }}><option value="number">数字</option><option value="string">文本</option><option value="boolean">布尔值</option></Select><ScenarioField title={title} schema={{ t: type }} value={value} change={change} root={{}} /></>;
 }

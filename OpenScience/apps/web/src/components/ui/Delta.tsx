@@ -58,6 +58,18 @@ export function deltaMagnitude(value: number): string {
   return String(size >= 1 ? Math.round(size) : Math.round(size * 10) / 10);
 }
 
+/**
+ * Component: Delta; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Visible arrow/magnitude with screen-reader direction and unit.
+ * Variants: point/index/count; up/down polarity; optional safety tone.
+ * States: Non-finite/missing renders nothing; noise band renders flat label.
+ * Hit area: No built-in action target; supplied child controls own their geometry.
+ * Keyboard: No focus stop or key handler added; child controls keep native semantics.
+ * Long content: Intrinsic inline text; no truncation.
+ * Theme: Improvement uses accent; ordinary worsening text; safety worsening danger.
+ * Responsive: Inline content follows surrounding text.
+ * Verification: DataPrimitives.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function Delta({
   value,
   unit = "point",

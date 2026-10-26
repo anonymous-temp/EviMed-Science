@@ -16,6 +16,18 @@ import { cn } from "@/lib/cn";
  * The built-in title is a block heading of a data page and is set as the others are (`ChartCard`, `Section`: 18 / 600). A card that
  * stood among them with a 14 / 600 title made a page carry a heading size more than the four it may hold (R19.2).
  */
+/**
+ * Component: Card; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Section with optional h2/header, padded body and footer.
+ * Variants: p-3 or p-4 body; raw header replaces title.
+ * States: Static grouping; children own read/mutation states.
+ * Hit area: No built-in action target; supplied child controls own their geometry.
+ * Keyboard: No focus stop or key handler added; child controls keep native semantics.
+ * Long content: Content is not truncated; callers own oversized children.
+ * Theme: Surface and hairline border; no shadow.
+ * Responsive: Fluid section with caller-owned width.
+ * Verification: Card.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function Card({
   title,
   header,
@@ -30,7 +42,7 @@ export function Card({
   hint?: ReactNode;
   /** Raw header content — replaces the title/hint block when given. */
   header?: ReactNode;
-  /** Footer slot, separated by a top border. */
+  /** Footer slot below the padded body; no built-in separator. */
   footer?: ReactNode;
   /** Body padding: 16 (the card padding) or 12 for a dense list card. */
   padding?: "p-3" | "p-4";

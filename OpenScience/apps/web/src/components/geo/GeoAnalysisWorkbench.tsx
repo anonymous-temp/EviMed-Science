@@ -48,6 +48,7 @@ export function GeoAnalysisWorkbench({
   embedded = false,
   initialDescriptor,
   titleLevel,
+  title = "所选数据分析",
 }: {
   geoId: string;
   project: GeoProject;
@@ -56,13 +57,14 @@ export function GeoAnalysisWorkbench({
   initialDescriptor?: GeoAnalysisDescriptor;
   /** The heading's rung when embedded: a page that already sets its blocks at the section rung sets this one there too, rather than adding a pair. */
   titleLevel?: "section" | "sub";
+  title?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   if (embedded)
     return (
       <div data-geo-analysis="">
         <Section
-          title="所选数据分析"
+          title={title}
           level={titleLevel ?? (initialView === "V12" ? "section" : "sub")}
         >
           <AnalysisBody
@@ -516,8 +518,9 @@ function AnalysisPage({
             },
           })),
         ]}
-        footnote={["V15","V27"].includes(view.viewId)?"事件、任务与样本关联分别计数；样本可被多个事件引用，不是新增采样。采样读数保留实际观察区间，未知不补为零。":view.viewId==="V25"?"金额为人民币；历史余额使用完整项目账目前缀与当时预算，预留和退款不重复计为支出。":view.viewId==="V26"?"冻结实测、登记基线、当前实测与规划目标分别显示；费用为规划估计，未知不计为零。":["V17","V18","V19","V20","V22"].includes(view.viewId)?"所有来源先按所选范围与筛选聚合，再分页。数值可打开完整成员；类型覆盖可重叠，错误共同出现不代表因果。":"实测、对照与当前目标分别显示；空白不计为零。趋势图和导出均包含全部所选数据。"}
+
       />
+      <Note action={null}>{["V15","V27"].includes(view.viewId)?"事件、任务与样本关联分别计数；样本可被多个事件引用，不是新增采样。采样读数保留实际观察区间，未知不补为零。":view.viewId==="V25"?"金额为人民币；历史余额使用完整项目账目前缀与当时预算，预留和退款不重复计为支出。":view.viewId==="V26"?"冻结实测、登记基线、当前实测与规划目标分别显示；费用为规划估计，未知不计为零。":["V17","V18","V19","V20","V22"].includes(view.viewId)?"所有来源先按所选范围与筛选聚合，再分页。数值可打开完整成员；类型覆盖可重叠，错误共同出现不代表因果。":"实测、对照与当前目标分别显示；空白不计为零。趋势图和导出均包含全部所选数据。"}</Note>
       {data && (
         <>
           <Note

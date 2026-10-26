@@ -32,21 +32,21 @@ describe("formatDate (spec §14.3)", () => {
   });
 });
 
-describe("formatRelativeTime (spec §14.4)", () => {
-  const now = new Date(2026, 8, 26, 16, 0);
-  const at = (...parts: [number, number, number, number, number]) => new Date(...parts);
-  it("walks the table: 刚刚, N 分钟前, a clock, 昨天, this year, before", () => {
-    expect(formatRelativeTime(at(2026, 8, 26, 15, 59), now)).toBe("1 分钟前");
-    expect(formatRelativeTime(new Date(now.getTime() - 20_000), now)).toBe("刚刚");
-    expect(formatRelativeTime(at(2026, 8, 26, 15, 18), now)).toBe("42 分钟前");
-    expect(formatRelativeTime(at(2026, 8, 26, 14, 5), now)).toBe("14:05");
-    expect(formatRelativeTime(at(2026, 8, 25, 9, 7), now)).toBe("昨天 09:07");
-    expect(formatRelativeTime(at(2026, 8, 14, 9, 7), now)).toBe("9月14日");
-    expect(formatRelativeTime(at(2025, 8, 14, 9, 7), now)).toBe("2025-09-14");
-  });
-  it("never writes a negative age for a clock slightly ahead", () => {
-    expect(formatRelativeTime(new Date(now.getTime() + 90_000), now)).toBe("16:01");
+describe("formatRelativeTime elapsed and absolute display", () => {
+  const now = new Date("2026-09-26T08:00:00Z");
+  it("uses elapsed time across midnight, then the Shanghai absolute timestamp", () => {
+    expect(formatRelativeTime("2026-09-25T23:00:00Z", now)).toBe("9 小时前");
+    expect(formatRelativeTime(now.getTime() - 60_000, now)).toBe("1 分钟前");
+    expect(formatRelativeTime(now.getTime() - 20_000, now)).toBe("刚刚");
+    expect(formatRelativeTime(now.getTime() - 86_400_000, now)).toBe("2026-09-25 16:00");
+    expect(formatRelativeTime("2026-09-27T08:00:00Z", now)).toBe("2026-09-27 16:00");
     expect(formatRelativeTime("", now)).toBe("");
+  });
+  it("allows a schedule's chosen zone and leaves date-only values unchanged", () => {
+    expect(formatDateTime("2026-09-26T08:00:00Z", { timeZone: "UTC", hour: "2-digit", minute: "2-digit", hour12: false })).toBe("08:00");
+    expect(formatDate("2026-09-26")).toBe("2026-09-26");
+    expect(formatDateTime("2026-09-26", { timeZone: "America/Los_Angeles" })).toBe("2026-09-26");
+    expect(formatRelativeTime("2026-09-27T08:00:00Z", now, "UTC")).toBe("2026-09-27 08:00");
   });
 });
 

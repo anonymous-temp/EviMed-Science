@@ -57,51 +57,51 @@
    the dark theme points the same role at a different step rather than
    inverting a colour. See packages/design-tokens/src/index.mjs. */
 :root {
-  --brand-50: #eef4fc;
-  --brand-100: #dde9f9;
-  --brand-200: #bcd3f3;
-  --brand-300: #8fb5ea;
-  --brand-400: #5f97e0;
-  --brand-500: #2a72d0;
-  --brand-600: #0a5dc1;
-  --brand-700: #0a4da0;
-  --brand-800: #0c3e7f;
-  --brand-900: #0e305f;
-  --brand-950: #0a1f3e;
-  --n-0: #ffffff;
-  --n-25: #fafbfc;
-  --n-50: #f5f7f9;
-  --n-100: #edf0f3;
-  --n-150: #e4e8ec;
-  --n-200: #d6dce2;
-  --n-300: #bac2ca;
-  --n-400: #939ca6;
-  --n-500: #5f686f;
-  --n-600: #535b64;
-  --n-700: #3e454d;
-  --n-800: #2a3037;
-  --n-900: #1a1f25;
-  --n-950: #12161b;
-  --n-control: #858e97;
-  --dark-bg: #0f1318;
-  --dark-surface: #161b21;
-  --dark-surface-2: #1e242b;
-  --dark-border-faint: #1e242b;
-  --dark-border: #262d35;
-  --dark-border-strong: #646e78;
-  --danger-50: #fdf1ef;
-  --danger-100: #fbe2de;
-  --danger-300: #e0877f;
-  --danger-400: #d1594e;
-  --danger-600: #bc342a;
-  --danger-700: #a72d24;
-  --danger-800: #9a2a22;
-  --danger-950: #3d100c;
+  --brand-50: #fbefe8;
+  --brand-100: #f6dfd1;
+  --brand-200: #edbfa7;
+  --brand-300: #e3a385;
+  --brand-400: #d98c6b;
+  --brand-500: #bc6442;
+  --brand-600: #a34427;
+  --brand-700: #8d3922;
+  --brand-800: #71301f;
+  --brand-900: #55281d;
+  --brand-950: #321c16;
+  --n-0: #fffdf8;
+  --n-25: #f7f5ef;
+  --n-50: #f2efe7;
+  --n-100: #ebe7de;
+  --n-150: #e3ded3;
+  --n-200: #d6d0c4;
+  --n-300: #bcb5a9;
+  --n-400: #9b9387;
+  --n-500: #686157;
+  --n-600: #645c52;
+  --n-700: #494239;
+  --n-800: #36302a;
+  --n-900: #24211e;
+  --n-950: #191714;
+  --n-control: #8c8173;
+  --dark-bg: #171512;
+  --dark-surface: #211e1a;
+  --dark-surface-2: #2a2621;
+  --dark-border-faint: #2a2621;
+  --dark-border: #342f29;
+  --dark-border-strong: #81766a;
+  --danger-50: #fdf0f2;
+  --danger-100: #f9dfe4;
+  --danger-300: #e58b9c;
+  --danger-400: #d75d78;
+  --danger-600: #ad2f45;
+  --danger-700: #97263a;
+  --danger-800: #822235;
+  --danger-950: #3b121c;
   --warn-50: #fff5e5;
   --warn-100: #ffeacc;
   --warn-300: #e0b169;
   --warn-400: #c98a1f;
-  --warn-600: #985600;
+  --warn-600: #925100;
   --warn-700: #8c5000;
   --warn-800: #7f4800;
   --warn-950: #331d00;
@@ -109,18 +109,18 @@
   --ok-100: #d5ebdf;
   --ok-300: #7cc0a0;
   --ok-400: #3f9c73;
-  --ok-600: #1c7347;
+  --ok-600: #1a6f44;
   --ok-700: #1a6a42;
   --ok-800: #155636;
   --ok-950: #082418;
-  --info-50: #eef4fc;
-  --info-100: #dde9f9;
-  --info-300: #8fb5ea;
-  --info-400: #5f97e0;
-  --info-600: #2a72d0;
-  --info-700: #0a5dc1;
-  --info-800: #0c3e7f;
-  --info-950: #0a1f3e;
+  --info-50: #eaf0f5;
+  --info-100: #dfe5e9;
+  --info-300: #9bbbd5;
+  --info-400: #8ba3b3;
+  --info-600: #526c7d;
+  --info-700: #18324d;
+  --info-800: #354957;
+  --info-950: #142330;
 }
 
 /* The semantic layer. Contrast notes are measured by
@@ -133,43 +133,45 @@
   --surface-1: var(--n-50);
   --surface-2: var(--n-100);
   --surface-3: var(--n-150);
-  --scrim: rgba(15, 19, 24, 0.32);
+  --scrim: rgba(36, 33, 30, 0.32);
   --border-hairline: var(--n-150);
   --border-faint: var(--n-100);
   --border-light: var(--n-200);
-  --border-control: var(--n-control); /* 3.21 on the page, 3.10 on the sidebar */
-  --text: var(--n-900); /* 16.00 on the page */
-  --text-2: var(--n-700); /* 9.37 on the page */
-  --text-3: var(--n-500); /* 5.48 on the page, 5.29 on the sidebar — nothing lighter carries text */
-  --title-ink: var(--brand-900); /* 12.62 on the page, 11.43 on a hovered row */
-  --text-graphic: var(--n-400); /* decorative graphics only, 2.69 on the page — never text, never a status */
-  --accent: var(--brand-600); /* 6.05 on the page; white on it 6.27 */
+  --border-control: var(--n-control); /* 3.50 on the page, 3.32 on the sidebar */
+  --text: var(--n-900); /* 14.69 on the page */
+  --text-2: var(--n-700); /* 9.08 on the page */
+  --text-3: var(--n-500); /* 5.61 on the page, 5.32 on the sidebar — nothing lighter carries text */
+  --title-ink: var(--n-900); /* 14.69 on the page */
+  --text-graphic: var(--n-400); /* decorative graphics only, 2.78 on the page — never text, never a status */
+  --brand-ink: var(--n-900);
+  --accent: var(--brand-600); /* 5.64 on the page; white on it 6.15 */
   --accent-fg: #ffffff;
   --accent-soft: var(--brand-50);
   --accent-pressed: var(--brand-700);
-  --accent-strong: var(--brand-800); /* on accent-soft: 9.44 */
+  --accent-strong: var(--brand-800); /* on accent-soft: 8.68 */
   --ok: var(--ok-600);
   --ok-soft: var(--ok-50);
   --warn: var(--warn-600);
   --warn-soft: var(--warn-50);
   --warn-strong: var(--warn-800); /* on warn-soft: 6.87 */
-  --error: var(--danger-600); /* 5.53 on the page */
+  --error: var(--danger-600); /* 5.89 on the page */
   --error-fg: #ffffff;
   --danger: var(--danger-600);
   --danger-soft: var(--danger-50);
-  --danger-strong: var(--danger-800); /* on danger-soft: 6.97 */
+  --danger-strong: var(--danger-800); /* on danger-soft: 8.49 */
   --info: var(--info-700);
   --info-soft: var(--info-50);
-  --link: var(--brand-600); /* 6.05 on the page */
-  --verify-ok: var(--brand-600);
+  --link: var(--brand-600); /* 5.64 on the page */
+  --verify-ok: var(--ok-600);
   --verify-pending: var(--warn-600);
   --highlight: #fdeba8;
-  --focus: var(--brand-600); /* 2 px ring, 6.05 on the page */
-  --badge: var(--danger-600); /* unread count; white on it 5.73 — the dark scheme keeps the same step because white on danger-400 is 4.00 */
+  --focus: var(--brand-600); /* 2 px ring, 5.64 on the page */
+  --focus-input: var(--n-900);
+  --badge: var(--danger-600); /* unread count; white on it 6.42 */
   --badge-fg: #ffffff;
   --member-from: #f6d58e;
   --member-to: #fbe7be;
-  --dot-running: var(--brand-500);
+  --dot-running: var(--info-700);
   --dot-done: var(--ok-600);
   --dot-review: var(--warn-600);
   --dot-failed: var(--danger-600);
@@ -181,7 +183,7 @@
   --border: var(--border-hairline); /* retired name of --border-hairline */
   --border-strong: var(--border-control); /* retired name of --border-control */
   --muted: var(--text-3); /* retired name of --text-3 */
-  --chart-own: #0a5dc1;
+  --chart-own: #a34427;
   --series-1: #0a5dc1;
   --series-2: #e07b39;
   --series-3: #1d9a87;
@@ -204,11 +206,12 @@
   --border-faint: var(--dark-border-faint);
   --border-light: var(--dark-border);
   --border-control: var(--dark-border-strong);
-  --text: #eef1f4;
-  --text-2: #c3cad2;
-  --text-3: #8d96a0;
-  --title-ink: var(--brand-100);
+  --text: #f2eee6;
+  --text-2: #d1c8ba;
+  --text-3: #a99e8f;
+  --title-ink: #f2eee6;
   --text-graphic: var(--n-600);
+  --brand-ink: var(--n-25);
   --accent: var(--brand-400);
   --accent-fg: var(--dark-bg);
   --accent-soft: var(--brand-950);
@@ -227,19 +230,20 @@
   --info: var(--info-300);
   --info-soft: var(--info-950);
   --link: var(--brand-400);
-  --verify-ok: var(--brand-300);
+  --verify-ok: var(--ok-300);
   --verify-pending: var(--warn-300);
   --highlight: var(--warn-800);
   --focus: var(--brand-400);
+  --focus-input: var(--n-25);
   --badge: var(--danger-600);
   --badge-fg: #ffffff;
   --member-from: #7a6329;
   --member-to: #5c4a1d;
-  --dot-running: var(--brand-400);
+  --dot-running: var(--info-300);
   --dot-done: var(--ok-300);
   --dot-review: var(--warn-400);
   --dot-failed: var(--danger-400);
-  --dot-canceled: var(--n-500);
+  --dot-canceled: var(--n-control);
   --chart-grid: var(--dark-border);
   --chart-axis: var(--dark-border-strong);
   --chart-band: var(--brand-950);
@@ -247,7 +251,7 @@
   --border: var(--border-hairline);
   --border-strong: var(--border-control);
   --muted: var(--text-3);
-  --chart-own: #5f97e0;
+  --chart-own: #d98c6b;
   --series-1: #5690dd;
   --series-2: #e8975f;
   --series-3: #3fb5a2;
@@ -358,11 +362,11 @@
   --z-skip: 90;
   --opacity-disabled: 0.4;
   --opacity-drag: 0.8;
-  --shadow-e1: 0 1px 2px rgba(20, 32, 48, 0.04), 0 0 0 1px rgba(20, 32, 48, 0.06);
-  --shadow-e2: 0 6px 24px rgba(20, 32, 48, 0.06), 0 1px 3px rgba(20, 32, 48, 0.06), 0 0 0 1px rgba(20, 32, 48, 0.05);
-  --shadow-e3: 0 24px 56px rgba(20, 32, 48, 0.14), 0 0 0 1px rgba(20, 32, 48, 0.06);
-  --shadow-pop: 0 6px 24px rgba(20, 32, 48, 0.06), 0 1px 3px rgba(20, 32, 48, 0.06), 0 0 0 1px rgba(20, 32, 48, 0.05); /* retired name of --shadow-e2 */
-  --shadow-modal: 0 24px 56px rgba(20, 32, 48, 0.14), 0 0 0 1px rgba(20, 32, 48, 0.06); /* retired name of --shadow-e3 */
+  --shadow-e1: 0 1px 2px rgba(36, 33, 30, 0.04), 0 0 0 1px rgba(36, 33, 30, 0.06);
+  --shadow-e2: 0 6px 24px rgba(36, 33, 30, 0.06), 0 1px 3px rgba(36, 33, 30, 0.06), 0 0 0 1px rgba(36, 33, 30, 0.05);
+  --shadow-e3: 0 24px 56px rgba(36, 33, 30, 0.14), 0 0 0 1px rgba(36, 33, 30, 0.06);
+  --shadow-pop: 0 6px 24px rgba(36, 33, 30, 0.06), 0 1px 3px rgba(36, 33, 30, 0.06), 0 0 0 1px rgba(36, 33, 30, 0.05); /* retired name of --shadow-e2 */
+  --shadow-modal: 0 24px 56px rgba(36, 33, 30, 0.14), 0 0 0 1px rgba(36, 33, 30, 0.06); /* retired name of --shadow-e3 */
   --dur-fast: 120ms;
   --dur-base: 200ms;
   --dur-slow: 320ms;
@@ -375,9 +379,9 @@
   --tooltip-hide-delay: 100ms;
   --toast-success: 5000ms;
   --toast-action: 10000ms;
-  --chart-rival-1: #5a626b;
+  --chart-rival-1: #626a73;
   --chart-rival-2: #737c85;
-  --chart-rival-3: #8a939c;
+  --chart-rival-3: #838c95;
   --chart-line: 2px;
   --chart-line-own: 2.5px;
   --chart-line-other: 1.5px;
@@ -500,8 +504,8 @@
     --border-control: var(--n-600);
   }
   html[data-theme="dark"] {
-    --text-2: #eef1f4;
-    --text-3: #c3cad2;
+    --text-2: #f2eee6;
+    --text-3: #d1c8ba;
     --text-graphic: var(--n-400);
     --border-hairline: var(--dark-border-strong);
     --border-light: var(--dark-border-strong);
@@ -622,15 +626,23 @@ a,
 button {
   border-radius: var(--radius-control);
 }
-/* Text fields signal focus with their border (and the `Input` primitive's
-   1 px inner line), so their outline is transparent — invisible here, and
-   painted in the system highlight colour when forced colours take over. */
+/* Fields use ink focus while their error border remains visible. Forced colors
+   replaces this semantic ink with the system Highlight via the generated rule. */
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
 [contenteditable]:focus-visible {
-  outline: var(--focus-ring-width) solid transparent;
-  outline-offset: 0;
+  outline: var(--focus-ring-width) solid var(--focus-input);
+  outline-offset: var(--focus-ring-offset);
+}
+
+@media (forced-colors: active) {
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible,
+  [contenteditable]:focus-visible {
+    outline-color: Highlight;
+  }
 }
 
 /* The heading the shell focuses after a route change (`useRouteFocus`, spec §5.3) is not a control, so it takes focus for the

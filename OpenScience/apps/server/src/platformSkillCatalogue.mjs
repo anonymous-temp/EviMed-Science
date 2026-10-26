@@ -5,7 +5,7 @@ import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import { canonicalJson, canonicalPersonalSkillResourcePath } from "@evimed/domain";
 import { RUNTIME_INVENTORY, inventorySkillWords } from "@evimed/domain/runtime-inventory";
-import { SKILL_DISPLAY, SKILL_DISPLAY_GEO_GROUP, SKILL_DISPLAY_GROUPS, SKILL_DISPLAY_LOOPX_GROUP } from "@evimed/domain/skill-display";
+import { geoSkillDisplayTitle, SKILL_DISPLAY, SKILL_DISPLAY_GEO_GROUP, SKILL_DISPLAY_GROUPS, SKILL_DISPLAY_LOOPX_GROUP } from "@evimed/domain/skill-display";
 import { SKILL_PACKAGES } from "@evimed/domain/skill-packages";
 import { platformSkillRequirement } from "@evimed/domain/platform-skill-policy";
 import { HttpError } from "./security.mjs";
@@ -168,7 +168,7 @@ export function createPlatformSkillCatalogue({ rootDir, dataDir = null, packages
       const directory = path.join(root, entry.name);
       try {
         const { meta } = splitSkillText(await fs.readFile(path.join(directory, "SKILL.md"), "utf8"));
-        found.push({ id: `geo-private:${entry.name}`, name: entry.name, title: String(meta.name ?? entry.name), use: firstSentence(meta.description),
+        found.push({ id: `geo-private:${entry.name}`, name: entry.name, title: geoSkillDisplayTitle(entry.name, String(meta.title ?? meta.name ?? entry.name)), use: firstSentence(meta.description),
           group: SKILL_DISPLAY_GEO_GROUP, source: "platform", canCopy: false, directory });
       } catch { /* a folder without a readable skill file is not a skill */ }
     }
@@ -181,7 +181,7 @@ export function createPlatformSkillCatalogue({ rootDir, dataDir = null, packages
           const name = String(entry?.name ?? "");
           // A name that is not one path segment is not a skill the pack has; the index is a file, not a trusted source.
           if (!/^[a-z0-9][a-z0-9-]{0,80}$/.test(name)) continue;
-          found.push({ id: `geo-private:${name}`, name, title: String(entry.title ?? name).slice(0, 120), use: firstSentence(entry.use),
+          found.push({ id: `geo-private:${name}`, name, title: geoSkillDisplayTitle(name, String(entry.title ?? name).slice(0, 120)), use: firstSentence(entry.use),
             group: SKILL_DISPLAY_GEO_GROUP, source: "platform", canCopy: false, directory: null });
         }
       } catch { /* no index in this place: try the next, or there is no such group */ }

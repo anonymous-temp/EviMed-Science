@@ -43,8 +43,8 @@ describe("a study's progress in its row", () => {
     ]);
     expect(container.querySelector("[data-vcr-step='trial']")).toHaveTextContent("试验进行中");
     // The marks differ in shape as well as colour: done is filled, under way a ring, not started a small hollow one.
-    expect(container.querySelector("[data-vcr-step='definition'] [data-forced-colors]")?.className).toContain("bg-accent");
-    expect(container.querySelector("[data-vcr-step='trial'] [data-forced-colors]")?.className).toContain("ring-accent");
+    expect(container.querySelector("[data-vcr-step='definition'] [data-forced-colors]")?.className).toContain("bg-ok");
+    expect(container.querySelector("[data-vcr-step='trial'] [data-forced-colors]")?.className).toContain("ring-info");
     expect(container.querySelector("[data-vcr-step='matching'] [data-forced-colors]")?.className).toContain("ring-border-control");
   });
 

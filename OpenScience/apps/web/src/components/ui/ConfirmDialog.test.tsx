@@ -109,7 +109,7 @@ describe("ConfirmDialog", () => {
     const p = { ...props(), busy: true };
     render(<ConfirmDialog {...p} />);
     const confirm = screen.getByRole("button", { name: "删除" });
-    expect(confirm).toBeDisabled();
+    expect(confirm).toHaveAttribute("aria-disabled", "true");
     expect(confirm).toHaveAttribute("aria-busy", "true");
     expect(screen.getByRole("button", { name: "取消" })).toBeDisabled();
     await userEvent.click(confirm);

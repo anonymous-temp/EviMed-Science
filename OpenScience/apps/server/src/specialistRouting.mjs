@@ -129,14 +129,17 @@ export function routeSafetyMedicine(query, agents) {
  *   agents: any[],
  *   classifier?: { classify: Function } | null,
  *   consultModel?: boolean,
+ *   moduleCapabilityIds?: string[],
  *   trace?: { failure?: string, verdict?: string },
  *   owner?: { userId: string, projectId: string } | null,
  * }} input
  * @returns {Promise<{ specialist: any, decidedBy: 'named' | 'model' | 'rules' | 'default', modelConsulted: boolean }>}
  */
-export async function routeOpenDomain({ query, agents, classifier = null, consultModel = true, trace = {}, owner = null }) {
+export async function routeOpenDomain({ query, agents, classifier = null, consultModel = true, trace = {}, owner = null, moduleCapabilityIds = [] }) {
   const structured = routeSlashCommand(query, agents);
   if (structured) return { specialist: structured, decidedBy: "named", modelConsulted: false };
+  const moduleCapabilities = new Set(moduleCapabilityIds);
+  agents = agents.filter(agent => agent.listed !== false || moduleCapabilities.has(agent.id));
   const modelConsulted = consultModel && classifier != null;
   if (modelConsulted) {
     let verdict = null;

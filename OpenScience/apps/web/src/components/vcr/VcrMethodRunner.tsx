@@ -53,6 +53,7 @@ const liveJob = (job: VcrJob | null) => Boolean(job && ["queued", "running", "aw
 /** Shared main-area workbench: domain form, existing queue, immutable job result. */
 export function VcrMethodRunner(props: VcrMethodRunnerProps) { return <MethodWorkbench key={props.studyId ?? "global"} {...props} />; }
 function MethodWorkbench({ method, methods = [], onClose, sourceModel, studyId: embeddedStudy, onUse, initialJobId, initialStudyId, initialScenario, showTitle = true, draftScope, active = true }: VcrMethodRunnerProps) {
+  const configurationForm = useRef<HTMLFormElement>(null);
   const [selectedMethod, setSelectedMethod] = useState(method);
   const engineMethod = selectedMethod.method ?? selectedMethod.id;
   const schema = schemas[engineMethod];
@@ -197,6 +198,7 @@ function MethodWorkbench({ method, methods = [], onClose, sourceModel, studyId: 
     finally { if (current()) { holding.current = false; setBusy(false); } }
   }
   async function run() {
+    if (configurationForm.current && !configurationForm.current.reportValidity()) return;
     if (holding.current || live || !kind || runReason || !active) return;
     const current = operationGuard();
     holding.current = true; setBusy(true); setError(null);
@@ -267,7 +269,7 @@ function MethodWorkbench({ method, methods = [], onClose, sourceModel, studyId: 
       setJob(null); setFrozen(null); setJobStudy(""); } }} >{modes.map(row => <option key={row.id} value={row.method}>{({ "patients.binary": "二分类结局", "patients.continuous": "连续结局", "patients.time_to_event": "生存结局", "patients.longitudinal": "纵向结局" })[row.method ?? ""] ?? row.name}</option>)}</Select>}
     <Button size="sm" className="self-start" variant="text" disabled={live || busy} onClick={() => setUsingLiterature(true)}>使用文献参数</Button>
     {!kind || (!schema && !forecast) ? <Note action={null}>{description.purpose}{studyId && <Link className="ml-2 text-link hover:underline" to={`/app/virtual-research/${encodeURIComponent(studyId)}/${engineMethod === "matching.evaluate" ? "matching" : "data"}`}>{description.action}</Link>}{!studyId && <Link className="ml-2 text-link hover:underline" to="/app/virtual-research">选择或建立研究</Link>}</Note> : <>
-      <form className="flex flex-col gap-4" onSubmit={event => event.preventDefault()}>
+      <form ref={configurationForm} className="flex flex-col gap-4" onSubmit={event => { event.preventDefault(); void run(); }}>
         {examples[engineMethod]?.length > 0 && <Disclosure summary="载入可编辑示例"><Note action={<div className="flex flex-col items-start gap-2">{examples[engineMethod].map((example, index) => <Button key={index} type="button" variant="secondary" disabled={busy || live} onClick={() => editScenario(structuredClone(example.scenario))}>{methodExampleLabel(engineMethod, example.label)}</Button>)}</div>}>载入后可修改每项输入，点击运行才会计算。</Note></Disclosure>}
         {activeModel && <><Note action={null}>正在使用文献参数版本 {activeModel.version ?? "未记录"}。编辑数值后将保存为用户情景。</Note><VcrBoundSourceRecord modelId={activeModel.id} version={activeModel.version} /></>}
         {schema && engineMethod !== "population.quality" && <fieldset disabled={busy || live} className="min-w-0"><ScenarioField title="方法参数" method={engineMethod} schema={schema} hiddenFields={engineMethod === "comparator.maic_time_to_event" ? ["pseudoIpdInputId"] : fixedMethodEndpoint(engineMethod) && (scenario.endpoint as Record<string, unknown> | undefined)?.type === fixedMethodEndpoint(engineMethod) ? ["endpoint"] : []} value={scenario} root={scenario} change={next => editScenario(next as Record<string, unknown>)} /></fieldset>}

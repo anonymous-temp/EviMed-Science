@@ -1,3 +1,5 @@
+import { useUnsavedGuard } from "@/lib/useUnsavedGuard";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input, inputClasses } from "@/components/ui/Input";
@@ -18,13 +20,13 @@ const FILE_INPUT_STYLE = "h-auto p-2 file:mr-3 file:cursor-pointer file:rounded 
  * Bringing a skill in: a file, a public repository at one commit, or the history and account data of an earlier export.
  * The three live in one drawer, opened from the page's 「新建技能」 menu, so the list stays where it is.
  */
-export function SkillImportForm({ recovery, onBusy, onDone, onCancel }: {
+export function SkillImportForm({ recovery, onBusy, onDone, onCancel, onDirtyChange }: {
   /** An unfinished account migration to pick up where it stopped. */
   recovery?: PendingSkillTransfer;
   onBusy: (busy: boolean) => void;
   /** The new skill's id, or nothing when a migration finished (it saves several). */
   onDone: (skillId?: string) => void;
-  onCancel: () => void;
+  onCancel: () => void; onDirtyChange?: (dirty: boolean) => void;
 }) {
   const alive = useRef(true), importingRequest = useRef(false);
   const [busy, setBusyState] = useState(false), [error, setError] = useState<string | null>(null);
@@ -32,6 +34,9 @@ export function SkillImportForm({ recovery, onBusy, onDone, onCancel }: {
   const [mode, setMode] = useState<"file" | "repository" | "transfer">(recovery ? "transfer" : "file");
   const [repository, setRepository] = useState(""), [commit, setCommit] = useState(""), [subdirectory, setSubdirectory] = useState("");
   const [preview, setPreview] = useState<{ resourceId: string; content: SkillImportPreview; source?: { repository: string; commit: string; subdirectory?: string } } | null>(null);
+  const dirty = !!file || !!title || !!repository || !!commit || !!subdirectory;
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
+  const closeGuard = useUnsavedGuard(dirty, onCancel, busy);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const setBusy = (value: boolean) => { setBusyState(value); onBusy(value); };
   const importFile = async () => {
@@ -63,7 +68,7 @@ export function SkillImportForm({ recovery, onBusy, onDone, onCancel }: {
   };
   if (mode === "transfer") return <SkillTransferImport recovery={recovery} onBusy={onBusy} onClose={() => onDone()} />;
   return (
-    <form className="flex flex-col gap-4" onSubmit={event => { event.preventDefault(); void importFile(); }}>
+    <><form className="flex flex-col gap-4" onSubmit={event => { event.preventDefault(); void importFile(); }}>
       <div className="flex gap-2">
         <Button type="button" variant={mode === "file" ? "secondary" : "text"} disabled={busy} onClick={() => { setMode("file"); setPreview(null); }}>本地文件</Button>
         <Button type="button" variant="text" disabled={busy} onClick={() => { setMode("repository"); setPreview(null); }}>公开仓库</Button>
@@ -84,8 +89,8 @@ export function SkillImportForm({ recovery, onBusy, onDone, onCancel }: {
         {preview.content.resources.length > 0 && <List label="导入资源" divided>{preview.content.resources.map(resource => <ListRow key={resource.path} title={resource.path} meta={/^scripts\//.test(resource.path) ? "脚本" : "资源"} />)}</List>}
       </section>}
       {error && <p role="alert" className="text-ui text-error">{error}</p>}
-      <div className="flex gap-2"><Button type="submit" variant={preview ? "secondary" : "primary"} loading={busy}>预览</Button>{preview && <Button type="button" disabled={busy} onClick={() => void confirmImport()}>确认导入</Button>}<Button type="button" variant="text" disabled={busy} onClick={onCancel}>取消</Button></div>
-    </form>
+      <div className="flex gap-2"><Button type="submit" variant={preview ? "secondary" : "primary"} loading={busy}>预览</Button>{preview && <Button type="button" disabled={busy} onClick={() => void confirmImport()}>确认导入</Button>}<Button type="button" variant="text" disabled={busy} onClick={closeGuard.requestClose}>取消</Button></div>
+    </form>{closeGuard.confirming && <ConfirmDialog title="放弃未保存的修改？" confirmLabel="放弃修改" onConfirm={closeGuard.discard} onCancel={closeGuard.keepEditing} />}</>
   );
 }
 

@@ -71,7 +71,7 @@ const list = (value) => (Array.isArray(value) ? value : []);
  * orchestrator agree on the words they file and look up.
  */
 export const VCR_RESULT_KINDS = Object.freeze([
-  "population", "patient_set", "comparator", "trial_scenario", "design_grid",
+  "population", "patient_set", "comparator", "trial_scenario", "design_grid", "model_fit", "model_prediction",
   "matching", "accrual_forecast", "evidence_pool", "snapshot_profile", "longitudinal", "population_quality",
 ]);
 
@@ -131,7 +131,8 @@ export function vcrStudyFromRow(row) {
     dataTier: String(row.data_tier ?? "T0"),
     intendedUse: String(row.intended_use ?? "exploratory"),
     status: String(row.status ?? "active"),
-    purpose: row.purpose === "calculation" ? "calculation" : "programme",
+    purpose: ["calculation", "task"].includes(row.purpose) ? row.purpose : "programme",
+    scope: row.scope === "conversation" ? "conversation" : "project",
     steps: normalizedVcrSteps(row.steps),
     budget: object(row.budget),
     outcomeSeal: object(row.outcome_seal),
@@ -406,13 +407,40 @@ export class VcrStore extends VcrStoreBase {
   /** The study of a control-plane project, for the runtime gateway. @param {string} userId @param {string} projectId @param {any} [client] */
   async studyByControlProject(userId, projectId, client = null) {
     const sql = `SELECT s.* FROM ${VCR_SCHEMA}.studies s
-      WHERE s.project_id = $1 AND s.deleted_at IS NULL
+      WHERE s.project_id = $1 AND s.scope = 'project' AND s.deleted_at IS NULL
         AND (s.user_id = $2 OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.members m WHERE m.study_id = s.id AND m.user_id = $2))
       ORDER BY (s.user_id = $2) DESC, s.id${client ? " FOR SHARE OF s" : ""}`;
     const values = [String(projectId), String(userId)];
     const rows = client ? (await client.query(sql, values)).rows : await this.rows(sql, values);
     const owned = rows.find(row => row.user_id === String(userId));
     return vcrStudyFromRow(owned ?? (rows.length === 1 ? rows[0] : null));
+  }
+
+  /** The scheduler's immutable dispatch association, never an inferred project run. */
+  async studyByRuntimeDispatch(userId,projectId,dispatchId) {
+    const rows = await this.rows(`SELECT s.* FROM ${VCR_SCHEMA}.studies s JOIN ${VCR_SCHEMA}.schedule_marks m ON m.study_id=s.id
+      WHERE s.user_id=$1 AND s.project_id=$2 AND s.deleted_at IS NULL AND m.kind='run' AND m.dispatch_id=$3`,[userId,projectId,dispatchId]);
+    return rows.length===1 ? vcrStudyFromRow(rows[0]) : null;
+  }
+
+  /** The authenticated root conversation has its own idempotent task context.
+   * No project name or session binding is changed. */
+  async taskContext({ userId, projectId, rootSessionId }) {
+    if (![userId, projectId, rootSessionId].every(value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,160}$/.test(value))) {
+      throw new TypeError('Invalid conversation research scope.');
+    }
+    return this.transaction(async client => {
+      const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.studies
+        (id,user_id,project_id,name,purpose,scope,conversation_session_id)
+        VALUES ($1,$2,$3,'Conversation research','task','conversation',$4)
+        ON CONFLICT (user_id,project_id,conversation_session_id) WHERE scope='conversation'
+        DO UPDATE SET updated_at=now() WHERE studies.deleted_at IS NULL RETURNING *`,
+      [vcrId('study'),userId,projectId,rootSessionId])).rows[0];
+      if (!row) throw new Error('Conversation research was deleted.');
+      await client.query(`INSERT INTO ${VCR_SCHEMA}.members (study_id,user_id,role,invited_by)
+        VALUES ($1,$2,'lead',$2) ON CONFLICT DO NOTHING`,[row.id,userId]);
+      return vcrStudyFromRow(row);
+    });
   }
 
   /**

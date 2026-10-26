@@ -152,8 +152,10 @@ or a traceback.
 
 The methods of the domain's `VCR_ENGINE_METHODS`, at `1.0.0` (the first release's 24
 and, appended after them, the comparator-effect methods of section 11, the
-robustness methods below and the trajectory generator `patients.longitudinal`), except
-`design.analytic` (1.1.0), `design.assurance` (1.1.0: group sequential) and
+robustness methods below, the source-model methods and the trajectory generator `patients.longitudinal`), except
+`patients.continuous` / `patients.binary` / `patients.time_to_event` /
+`patients.longitudinal` (1.1.0: stable member identity and explicit pairing),
+`design.analytic` (1.2.0: integer allocations; 1.0.0/1.1.0 preserve their original rounding), `design.assurance` (1.1.0: group sequential) and
 `design.simulate` / `design.grid` (1.2.0: single-arm means and survival times; a
 job recorded at an earlier version stays valid for what that version could run:
 `legacyVersion` by design, `legacyReleases` by design and endpoint), one job kind each, keyed exactly as that registry. The
@@ -435,6 +437,22 @@ failed on the code it replaced; the comment on the case says what it pins.
    `design_effect_null` on the field that states the effect; the type I error of
    a design is `design.simulate`'s measure on the same scenario (N43, N44).
    The exact single-arm design is given its size and so computes at a null rate.
+   Version 1.2 sizes fixed two-arm continuous/binary designs by rounding each
+   formula-derived arm upward, then adding them: `required_treatment` +
+   `required_control` = `required_total`. `required_per_arm` is only an equal-
+   allocation alias. The achieved fraction can differ slightly from the requested
+   allocation; this is not a promise of an exact block ratio. Versions 1.0/1.1
+   replay their original total ceilings and aliases unchanged.
+   The sizing formulas remain normal approximations. For effect 5, SD 12,
+   two-sided alpha 0.05 and target power 0.8, the unrounded total is 180.838189;
+   91 + 91 = 182 is the integer allocation. Its pooled two-sample t power is
+   about 0.798306, not exactly 0.8; exact t sizing would be a different calculation
+   (base R gives 91.389444 per arm before rounding). `diagnostics.sampleSize`
+   preserves the formula, unrounded arms, rounding rule, requested/realized
+   allocation and separately checked power. The aggregate tool's saved status
+   exposes a whitelist of these receipt-bound facts as `computationBasis`; it
+   never relabels the normal formula as exact t. N53 checks balanced/unequal
+   continuous and binary cases and both legacy versions.
 9. **A key the engine accepts and cannot apply is named, not ignored.** The result's
    `diagnostics.notApplied` lists `{ key, field, reason }` for each such key and the job
    goes on with the rest (an unanchored MAIC's `treatmentColumn` the table cannot honour,
@@ -694,3 +712,18 @@ error, bias, coverage and the rest carry their Monte-Carlo errors; the analytic 
 non-central t (or the normal closed form for z) and, for the log-rank, a first-order normal
 approximation held to a documented tolerance (`VCR_ONE_SAMPLE_LOGRANK_APPROXIMATION_BIAS`). The
 external-control and Simon designs stay binary.
+
+
+## AI-native source models and patient identity (2026-10-26)
+
+`model.survival_fit` / `fit_survival_model` fits intercept-only exponential, Weibull, lognormal and loglogistic right-censored survival with `survival::survreg`. A selected arm and source condition are explicit. Observed input is one selected endpoint row per person; reconstructed pseudo-IPD stays reconstructed. Saved curves and fit diagnostics survive downstream incompatibility. Only exponential/Weibull currently adapt to the reference patient and trial-design methods; the other distributions are never silently converted to an exponential baseline. No-event or failed fits are not estimable. Fitted-median p10/p50/p90 parameters hold shape fixed: sensitivity, not a joint-uncertainty model or assurance.
+
+`model.prognostic_apply` / `apply_prognostic_model` applies closed typed linear, logistic or Cox equations with explicit predictor transformations, units, coding, centering and scaling. The control plane verifies exact preserved-source bindings; source text is never executable code. Missing predictors stay unknown. Cox without baseline survival and reference yields relative scores only. A linear expectation without residual variance is not an outcome distribution. Prediction benchmarks are descriptive; they create neither observed controls nor an identified treatment effect. `N52_source_models.R` checks the fitting against independent likelihood calculations and predictions against closed forms.
+
+The four `patients.*` methods at 1.1.0 bind member IDs to the frozen population and original row identity; changing outcome parameters does not silently create different people. Observed/extracted/calculated/imputed source identity uses the selected input ID, while generated input identity uses its hash. Without an input table, the pairing key (or declared seed) provides the identity basis. Legacy 1.0.0 jobs preserve their original seed/job/row identity policy. `pairing.key` declares intended correspondence; the same frozen population, row selection and seed must be retained for comparable scenarios. `pairing.replicate` advances independent L'Ecuyer-CMRG streams. Pairing reduces simulation noise; it does not identify individual causal effects.
+
+Counts distinguish unique people from longitudinal observations, generated people and effective sample size. Repeated visits do not increase real N. All used-column provenance is preserved; imputed or synthetic rows never become observed rows. Read-only generated-record access requires verified independently generated ancestry and immutable table hashes, not a synthetic flag alone.
+
+A saved model enters a trial through `trial_scenario.configuration.modelResultId` and `modelResultVersion`; `modelParameterQuantile` selects `p10`, `p50` or `p90` (default `p50`). A design grid places the same immutable references in `dimensions.base` and may use `modelParameterQuantile: "all"` to compare the three parameter scenarios. The server resolves and verifies the saved execution, binds endpoint/horizon/source condition and derives the compatible control input. Model outputs do not supply an assumed treatment effect. Quantiles are parameter sensitivity with fixed shape, not patient percentiles or assurance.
+
+Local host-R tests are development evidence. The pinned R/container run and clinical validation are separate acceptance gates; do not label an unpinned host run as production-runtime validation.

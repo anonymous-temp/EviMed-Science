@@ -87,3 +87,13 @@ describe("热榜's 「新」 and 「升温」", () => {
     }
   });
 });
+
+
+it("shows popularity in neutral tags with readable words", () => {
+  render(<MemoryRouter><HotBoard state={{ board: { window: "current", takenAt: ago(0.2), since: ago(72.2), events: [event(1, { badge: "new" }), event(2, { badge: "warming" as FrontierHotEvent["badge"] })] }, error: null }} onRetry={vi.fn()} /></MemoryRouter>);
+  for (const text of ["新", "升温"]) {
+    const tag = screen.getByText(text);
+    expect(tag.className).not.toMatch(/(?:accent|warn|danger)/);
+    expect(tag).toHaveClass("text-text-2");
+  }
+});

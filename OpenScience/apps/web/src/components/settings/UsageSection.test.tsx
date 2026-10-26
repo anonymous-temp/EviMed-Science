@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -327,7 +327,7 @@ describe("额度 on a deployment that bills research", () => {
     let answer!: (value: object) => void;
     mocks.allowance.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
     const { container } = open();
-    expect(container.querySelector(".animate-pulse")).not.toBeNull();
+    await waitFor(() => expect(container.querySelector(".animate-pulse")).not.toBeNull());
     expect(screen.queryByText("20.00 灵豆")).not.toBeInTheDocument();
     await act(async () => { answer({ ...allowance, available: 35 }); });
     expect(await screen.findByText("35.00 灵豆")).toBeInTheDocument();
@@ -340,7 +340,7 @@ describe("额度 on a deployment that bills research", () => {
     first.unmount();
     mocks.allowance.mockRejectedValueOnce(new Error("network"));
     open();
-    expect(await screen.findByRole("alert")).toHaveTextContent("操作未完成，请重试。");
+    expect(await screen.findByRole("note")).toHaveTextContent("操作未完成，请重试。");
     expect(screen.queryByText("20.00 灵豆")).not.toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "重试" }));
     expect(await screen.findByText("20.00 灵豆")).toBeInTheDocument();
@@ -352,7 +352,7 @@ describe("the section while the deployment's answer is read", () => {
     mocks.operator = true;
     mocks.allowance.mockReturnValue(new Promise(() => {}));
     const { container } = open();
-    expect(container.querySelector(".animate-pulse")).not.toBeNull();
+    await waitFor(() => expect(container.querySelector(".animate-pulse")).not.toBeNull());
     expect(screen.queryByText("0.00 灵豆")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading")).not.toBeInTheDocument();
     expectNoResearchBilling();
@@ -363,7 +363,7 @@ describe("the section while the deployment's answer is read", () => {
   it("reports a failed read with its retry, naming neither page, and shows no zero", async () => {
     mocks.operator = true;
     mocks.allowance.mockRejectedValueOnce(new Error("network")); open();
-    const alert = await screen.findByRole("alert");
+    const alert = await screen.findByRole("note");
     expect(alert).toHaveTextContent("操作未完成，请重试。");
     expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
     expect(screen.queryByText("0.00 灵豆")).not.toBeInTheDocument();

@@ -1,6 +1,9 @@
+import { Note } from "@/components/ui/Note";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { batchPageState, runBatch, toggleBatch, type BatchSelection } from "@/lib/batchSelection";
 import { EvolutionDecisionCard } from '@/components/evolution/EvolutionDecisionCard';
 import { frontierNoticeHref, shareNoticeHref, geoSignalHref } from "@evimed/domain";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { Bell, Check, CheckCheck, ShieldAlert } from "lucide-react";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -101,12 +104,22 @@ export function InboxPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
   const [busyGroup, setBusyGroup] = useState<string | null>(null);
+  const batchScope = `${filter}:${sourceParam ?? ""}`;
+  const batchToolbarId = useId();
+  const [selection, setSelection] = useState<BatchSelection>({ scope: batchScope, ids: [] });
+  const currentBatchScope = useRef(batchScope);
+  currentBatchScope.current = batchScope;
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [batchNotice, setBatchNotice] = useState("");
+  const selectedIds = selection.scope === batchScope ? selection.ids : [];
+  useEffect(() => { setSelection({ scope: batchScope, ids: [] }); setBatchNotice(""); }, [batchScope]);
   const generation = useRef(0);
   const mutationGeneration = useRef(0);
 
   const reload = useCallback(async () => {
     const current = ++generation.current;
     setItems(null);
+    setSelection({ scope: currentBatchScope.current, ids: [] });
     setLoadingMore(false);
     setBusyId(null);
     mutationGeneration.current++;
@@ -146,6 +159,7 @@ export function InboxPage() {
   }, [reload]);
 
   const applySaved = (saved: InboxItem, currentFilter: Filter) => {
+    if (saved.readAt) setSelection(existing => ({ ...existing, ids: existing.ids.filter(id => id !== saved.id) }));
     setItems((existing) => currentFilter === "unread" && saved.readAt
       ? existing?.filter((candidate) => candidate.id !== saved.id) ?? []
       : existing?.map((candidate) => candidate.id === saved.id ? saved : candidate) ?? []);
@@ -297,6 +311,25 @@ export function InboxPage() {
   const fromSource = (list: readonly InboxItem[]) => (source ? list.filter((item) => inboxSourceOf(item) === source) : list);
   const pinnedEntries = order ? groupInbox(fromSource(order.pinned)) : [];
   const restEntries = order ? groupInbox(fromSource(order.rest)) : [];
+  const eligibleBatch = fromSource(items ?? []).filter(item => !item.readAt && severityOf(item) !== "safety");
+  const eligibleIds = eligibleBatch.map(item => item.id);
+  const pageSelection = batchPageState(selectedIds, eligibleIds);
+  const readSelected = async () => {
+    if (batchBusy || busyId || markingAll || busyGroup) return;
+    const current = generation.current;
+    const scopeAtStart = batchScope;
+    const requested = eligibleBatch.filter(item => selectedIds.includes(item.id));
+    setBatchBusy(true); setBatchNotice("");
+    const outcomes = await runBatch(requested.map(item => item.id), id => {
+      const item = requested.find(candidate => candidate.id === id)!;
+      return markInboxRead(id, item.revision);
+    });
+    setBatchBusy(false);
+    if (current !== generation.current || currentBatchScope.current !== scopeAtStart) return;
+    for (const result of outcomes.succeeded) { applySaved(result.value, filter); noteRead(result.value); }
+    setSelection({ scope: scopeAtStart, ids: outcomes.failed.map(result => result.id) });
+    setBatchNotice(`已读 ${outcomes.succeeded.length} 条。${outcomes.failed.length ? `失败 ${outcomes.failed.length} 条：${outcomes.failed.map(result => `${requested.find(item => item.id === result.id)?.title ?? result.id}（${inboxErrorMessage(result.error)}）`).join("、")}。再次操作只重试失败项。` : ""}`);
+  };
   const openGroupEntry = [...pinnedEntries, ...restEntries].find((entry): entry is Extract<InboxEntry, { kind: "group" }> => entry.kind === "group" && entry.group.key === groupKey);
 
   const setOpen = (id: string | null) => setParams((existing) => withParam(existing, "open", id), { replace: true });
@@ -320,8 +353,9 @@ export function InboxPage() {
     <InboxRow
       key={item.id}
       item={item}
+      selection={!item.readAt && severityOf(item) !== "safety" ? <Checkbox data-selection-for={batchToolbarId} data-selection-scope={batchScope} label={<span className="sr-only">选择：{item.title}</span>} checked={selectedIds.includes(item.id)} disabled={batchBusy} onChange={() => setSelection(current => toggleBatch(current, batchScope, item.id))} /> : undefined}
       operator={operator}
-      busy={busyId === item.id}
+      busy={batchBusy || busyId === item.id}
       open={openId === item.id}
       onToggle={() => { setOpen(openId === item.id ? null : item.id); readOnOpen(item); }}
       onRead={() => void update(item, () => markInboxRead(item.id, item.revision))}
@@ -354,7 +388,7 @@ export function InboxPage() {
         // 「全部已读」 is an action on the list below, so it is the toolbar's — a 36 px text button in the header was a kind of control of its
         // own (the owner's inbox drew nine against a budget of eight), and the header is the title, the scope and at most one primary.
         actions: (
-          <Button variant="text" size="sm" loading={markingAll} disabled={!hasUnread} onClick={() => void readAll()}>
+          <Button variant="text" size="sm" loading={markingAll} disabled={!hasUnread || batchBusy} onClick={() => void readAll()}>
             {!markingAll && <CheckCheck size={16} aria-hidden="true" />}全部已读
           </Button>
         ),
@@ -365,6 +399,14 @@ export function InboxPage() {
       }}
     >
       <span ref={scrollAnchor} hidden />
+      {eligibleBatch.length > 0 && <div id={batchToolbarId} data-action-group="selection" data-selection-scope={batchScope} role="toolbar" aria-label="批量标为已读" className="mb-3 flex flex-wrap items-center gap-3">
+        <Checkbox data-selection-for={batchToolbarId} data-selection-scope={batchScope} label={`选择当前已加载的 ${eligibleIds.length} 条可批量处理消息`} checked={pageSelection.checked} mixed={pageSelection.mixed} disabled={batchBusy} onChange={() => setSelection({ scope: batchScope, ids: pageSelection.checked ? [] : eligibleIds })} />
+
+        <Button variant="text" size="sm" disabled={!selectedIds.length || batchBusy || !!busyId || markingAll || !!busyGroup} onClick={() => setSelection({ scope: batchScope, ids: [] })}>清除选择</Button>
+        <Button size="sm" disabled={!selectedIds.length || batchBusy || !!busyId || markingAll || !!busyGroup} loading={batchBusy} onClick={() => void readSelected()}>所选标为已读</Button>
+        <Note className="w-full" result={["已选 ", { n: selectedIds.length }, " 条。仅包括当前已加载的消息；需要优先查看的消息请逐条打开。折叠组内的消息也计入当前已加载范围。"]} />
+      </div>}
+      {batchNotice && <p role="status" className="mb-3 break-words text-ui">{batchNotice}</p>}
       {error && <LoadError className="mb-4" message={error} onRetry={() => void reload()} />}
       <div>
         {items === null || order === null ? <RunsSkeleton filter={false} />
@@ -407,7 +449,7 @@ function InboxGroupRow({ group, name, busy, onOpen, onRead }: { group: InboxGrou
   const unread = group.unread > 0;
   return (
     <ListRow
-      leading={<span aria-hidden="true" className={cn("mt-2 h-1.5 w-1.5 self-start rounded-full", unread && (group.safety ? "bg-danger" : "bg-accent"))} />}
+      leading={<span className="flex min-h-11 w-11 items-center"><span aria-hidden="true" className={cn("h-1.5 w-1.5 rounded-full", unread && (group.safety ? "bg-danger" : "bg-accent"))} /></span>}
       title={<span className="block line-clamp-2">{inboxGroupTitle(group, name)}{unread && <span className="sr-only">（有未读）</span>}</span>}
       onOpen={onOpen}
       unread={unread}
@@ -459,8 +501,9 @@ function actionHref(item: InboxItem, action: InboxAction): string | null {
   return null;
 }
 
-function InboxRow({ item, operator, busy, open, onToggle, onRead, onResolve, onOpened }: {
+function InboxRow({ item, selection, operator, busy, open, onToggle, onRead, onResolve, onOpened }: {
   item: InboxItem;
+  selection?: import("react").ReactNode;
   operator: boolean;
   busy: boolean;
   open: boolean;
@@ -483,12 +526,12 @@ function InboxRow({ item, operator, busy, open, onToggle, onRead, onResolve, onO
   const hasBody = body.lines.length > 0 || (operator && body.technical.length > 0);
   return (
     <ListRow
-      leading={(
+      leading={<span className="flex min-h-11 w-11 items-center">{selection ?? (
         <span
           aria-hidden="true"
-          className={cn("mt-2 h-1.5 w-1.5 self-start rounded-full", unread && (safety ? "bg-danger" : "bg-accent"))}
+          className={cn("h-1.5 w-1.5 rounded-full", unread && (safety ? "bg-danger" : "bg-accent"))}
         />
-      )}
+      )}</span>}
       // Two lines of title on a phone, then an ellipsis; an open row shows the whole of it.
       title={<span className={cn("block", !(open && !href) && "line-clamp-2")}>{item.title}{unread && <span className="sr-only">（未读）</span>}</span>}
       to={href ?? undefined}

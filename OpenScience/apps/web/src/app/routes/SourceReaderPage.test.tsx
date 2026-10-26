@@ -546,7 +546,7 @@ describe("a document's page", () => {
       resize(TWO_COLUMN_MIN_WIDTH);
       await within(columnOf("points")!).findByText("讲了什么");
       expect(text()).not.toContain("相关记忆与做法");
-      expect(within(columnOf("points")!).queryByRole("alert")).not.toBeInTheDocument();
+      expect(within(columnOf("points")!).queryByRole("note")).not.toBeInTheDocument();
     });
 
     it("say nothing about use where the record has none, or cannot be read", async () => {
@@ -562,7 +562,7 @@ describe("a document's page", () => {
       resize(TWO_COLUMN_MIN_WIDTH);
       await within(columnOf("points")!).findByText("讲了什么");
       expect(text()).not.toContain("用过它的对话");
-      expect(within(columnOf("points")!).queryByRole("alert")).not.toBeInTheDocument();
+      expect(within(columnOf("points")!).queryByRole("note")).not.toBeInTheDocument();
     });
 
     it("show the conversations even for a document the reading failed on or is still reading, which a run may have read the text of", async () => {
@@ -667,7 +667,7 @@ describe("a document's page", () => {
       resize(TWO_COLUMN_MIN_WIDTH);
       await within(columnOf("points")!).findByText("讲了什么");
       expect(text()).not.toContain("表格与图");
-      expect(within(columnOf("points")!).queryByRole("alert")).not.toBeInTheDocument();
+      expect(within(columnOf("points")!).queryByRole("note")).not.toBeInTheDocument();
     });
 
     it("say the way to the newest version when this is an old one", async () => {
@@ -923,7 +923,7 @@ describe("a document's page", () => {
       renderReader();
       await screen.findByRole("heading", { level: 1, name: guideline.display.title });
       resize(TWO_COLUMN_MIN_WIDTH);
-      const alert = await within(columnOf("points")!).findByRole("alert");
+      const alert = await within(columnOf("points")!).findByRole("note");
       expect(alert).toHaveTextContent("无法加载内容");
       expect(within(columnOf("original")!).getByTestId("preview")).toBeInTheDocument();
       await userEvent.click(within(alert).getByRole("button", { name: "重试" }));
@@ -957,7 +957,7 @@ describe("a document's page", () => {
     it("says it could not open the document when that is what happened, with a way to try again", async () => {
       mocks.getSource.mockRejectedValueOnce(new WebApiError("down", { status: 503, code: "product_state_unavailable" }));
       renderReader();
-      const alert = await screen.findByRole("alert");
+      const alert = await screen.findByRole("note");
       expect(alert).toHaveTextContent("无法打开这份资料");
       expect(screen.queryByText("这份资料不存在或已删除。")).not.toBeInTheDocument();
       await userEvent.click(within(alert).getByRole("button", { name: "重试" }));

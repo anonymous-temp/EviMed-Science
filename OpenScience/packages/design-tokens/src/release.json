@@ -1,17 +1,17 @@
 {
-  "version": "2.2.0",
+  "version": "3.0.0",
   "artifacts": {
-    "dsh-theme.json": "sha256:2beb7f3f91abe7ee27dbffb2447f5bc9def6c5cc64ec8c2ea376455ab24fff37",
-    "dtcg/base.tokens.json": "sha256:f90f287b3716726279f37090ae023d4948a712a0f8fa1b54d6f2c2eedfd72794",
-    "dtcg/dark.tokens.json": "sha256:71500e92ba7ecc0ca65bfd190ed428bec09e2c6cc9bebeef8e1cacea9586bf92",
-    "dtcg/evimed.resolver.json": "sha256:a462bd99112d4006744ab2b2ef7dc46a074c1ce58471a72d9691c69baf078b23",
-    "dtcg/light.tokens.json": "sha256:c5c5248b14d8408535300584f0f8881eebac9e3d6b04c88b7e35b81b8530651a",
-    "dtcg/motion-full.tokens.json": "sha256:073678d54fc9511d3b352fda7d9b8cf0b2eb513dca09f8f89d66aaaddc6c8198",
-    "dtcg/motion-reduced.tokens.json": "sha256:92b9ec69a719cd614507b95506c36e8e3193cb43be722b73aa5dd2df716804b0",
-    "echarts-theme.json": "sha256:dcfb53553c7ec5cd49f32f6010fbd44574ac64154e090f6edc17bab437c2bd03",
-    "element-plus.css": "sha256:1392b30c6128e4692e1ce94e648f540ef677d909ea73cef02f1b947725c2ed66",
-    "figma-tokens.json": "sha256:eb8e33c56781bd1c3ba81942b74c1853b2578b66d319d481356d8c5937345678",
-    "tailwind-preset.js": "sha256:e3cd232f1660d9a47d4d4093167e111a0afddfa4f8938921987aeaf720ebcec5",
-    "tokens.css": "sha256:d3546f34b6f01438418c8769940fbf6215a4171e3ff62df86f886fe54c92e9aa"
+    "dsh-theme.json": "sha256:0cd1086d9874bbfc0e19c081279435be3a0fdc75459ea63b72bea36f919ba3dc",
+    "dtcg/base.tokens.json": "sha256:6cff9febbea2da903131fc363a0cedb2383e46561f06b690bc507251c2fe3a9e",
+    "dtcg/dark.tokens.json": "sha256:9894a78d95396ac7cc5ea44822a38ff03a773b55814bf810cd832db8e26eee42",
+    "dtcg/evimed.resolver.json": "sha256:e45ebd4bf60abfff7bc19f2209bfdf9bed312342134b7941db26109938483b6f",
+    "dtcg/light.tokens.json": "sha256:1bd2ff6c02501c03cc2446432e9f79f406c18d4692bf3de9ff8e4cd3b33ae17d",
+    "dtcg/motion-full.tokens.json": "sha256:643fe21c0475241a2c9205e8c16a337f4b7af36fcf11a7c3a4d4bd7726595164",
+    "dtcg/motion-reduced.tokens.json": "sha256:3fcd2d82a12ed0c69530f315c4b4f2be4453e4499953d59d36860af16abc32e2",
+    "echarts-theme.json": "sha256:0fa398e198859ea6b681756e1a0dbe302d6b6618b1c600292a8260adb32d2d37",
+    "element-plus.css": "sha256:1de14b7f4debe80be58eb6d6e979d766fe87cbd20e39fc76a2f50261460df73e",
+    "figma-tokens.json": "sha256:d3c4f83d5b3f759e2f4d627cefda0ceaea241fec4e0371b2964d6545da924bb9",
+    "tailwind-preset.js": "sha256:81cfd76316e5a83996228751b52abb40c57373efe2d9d8664d97a1e90fbbdccf",
+    "tokens.css": "sha256:a526d9d68f97f090cdba0c7020cd11da5c21957151c42527cfedffa39ed3897d"
   }
 }

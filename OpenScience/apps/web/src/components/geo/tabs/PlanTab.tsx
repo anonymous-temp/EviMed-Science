@@ -1,10 +1,12 @@
 import { GeoAnalysisWorkbench } from "../GeoAnalysisWorkbench";
 import { ensureGeoConversationSession } from "../geoConversationSession";
 import { GEO_ARTICLE_CHANNEL_LABELS_ZH } from "@evimed/domain";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router";
 import { getGeoProject, stageGeoPlanContext, type GeoImplementationAction, type GeoStrategyView, type GeoProject } from "@/lib/geoClient";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClasses } from "@/components/ui/Button";
+import { Outline, useOutline } from "@/components/ui/Outline";
+import { Disclosure } from "@/components/ui/Disclosure";
 import { Note } from "@/components/ui/Note";
 import { FactList } from "@/components/ui/FactList";
 import { Section } from "@/components/ui/Section";
@@ -20,7 +22,8 @@ import { yuan } from "./geoTabText";
 import { Assumptions, Battlefield, ClientToDos, EnginePromises, Targets } from "./PlanStrategy";
 
 /** Shared contextual plan composition, including the legacy plan destination. */
-export function PlanTab({ geoId, project, sourceId, sourceUrl, selectionRef }: { geoId: string; project: GeoProject; sourceId?: string; sourceUrl?:string; selectionRef?:string }) {
+export function PlanTab({ geoId, project, sourceId, sourceUrl, selectionRef, embedded = false }: { geoId: string; project: GeoProject; sourceId?: string; sourceUrl?:string; selectionRef?:string; embedded?:boolean }) {
+  const planBody = useRef<HTMLDivElement>(null);
   const [params] = useSearchParams();
   const location = useLocation();
   const requestedVersion = Number(params.get("strategyVersion"));
@@ -32,6 +35,7 @@ export function PlanTab({ geoId, project, sourceId, sourceUrl, selectionRef }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState<{signature:string;key:string} | null>(null);
+  const outline = useOutline(planBody, { idPrefix: `geo-plan-${geoId}`, refresh: [state] });
   if (state.kind === "loading") return <TabSkeleton rows={4} />;
   if (state.kind === "error") return <TabError message={state.message} onRetry={reload} />;
   const plan = state.data;
@@ -52,26 +56,29 @@ export function PlanTab({ geoId, project, sourceId, sourceUrl, selectionRef }: {
     finally { setBusy(false); }
   };
   return (
-    <div id="implementation-plan" data-geo-tab="plan" className="flex flex-col gap-10">
-      <Section title="实施方案" toolbar={mayConverse ? <Button disabled={busy} onClick={() => void handoff()}>{plan.version == null ? "生成方案" : "调整方案"}</Button> : undefined}>
-        {error && <Note tone="warn" action={<Button size="sm" onClick={reload}>刷新方案</Button>}>{error}</Note>}
-        {plan.freshness?.status === "needs_update" && <Note tone="warn" action={<Button size="sm" onClick={reload}>刷新方案</Button>}>所选资料或目标已变化，当前方案保留原有依据，可在对话中更新。</Note>}
-        {plan.freshness?.status === "unknown" && <Note action={<Button size="sm" onClick={reload}>刷新方案</Button>}>部分依据暂时无法核实；金额与工作量未估时保留为空。</Note>}
+    <div ref={planBody} id="implementation-plan" data-geo-tab="plan" className="flex flex-col gap-10">
+      <Outline entries={outline.entries} active={outline.active} onSelect={outline.select} layout="folded" label="方案目录" />
+      <Section title="实施方案" toolbar={mayConverse ? <Button variant={!embedded && plan.version == null ? "primary" : "secondary"} disabled={busy} onClick={() => void handoff()}>{plan.version == null ? "生成方案" : "调整方案"}</Button> : undefined}>
+        {error && <Note tone="warn" action={<Button variant="text" size="sm" onClick={reload}>刷新方案</Button>}>{error}</Note>}
+        {plan.freshness?.status === "needs_update" && <Note tone="warn" action={<Button variant="text" size="sm" onClick={reload}>刷新方案</Button>}>所选资料或目标已变化，当前方案保留原有依据，可在对话中更新。</Note>}
+        {plan.freshness?.status === "unknown" && <Note action={<Button variant="text" size="sm" onClick={reload}>刷新方案</Button>}>部分依据暂时无法核实；金额与工作量未估时保留为空。</Note>}
         {plan.version != null && <p className="text-caption text-text-3">方案版本 {plan.version} · 目标为规划值</p>}
-        {plan.version == null && <Note action={<Button size="sm" onClick={reload}>刷新方案</Button>}>根据当前诊断范围制定内容、渠道和工作顺序；尚无引用信源也可以制定方案。</Note>}
-        <Link to={destination(geoId, {tab:"actions",section:"budget"})} className="text-caption text-accent hover:underline">查看实际投放预算</Link>
+        {plan.version == null && <Note action={<Button variant="text" size="sm" onClick={reload}>刷新方案</Button>}>根据当前诊断范围制定内容、渠道和工作顺序；尚无引用信源也可以制定方案。</Note>}
+        <Link to={destination(geoId, {tab:"actions",section:"budget"})} className={buttonClasses({variant:"text",size:"sm",className:"self-start"})}>查看实际投放预算</Link>
         {plan.basis?.capturedAt && <FactList rows={[{label:plan.readingsKind === "submitted_input" ? "本次方案依据" : "方案依据日期",value:plan.basis.capturedAt.slice(0,10)}]} />}
-        {plan.summary && <p className="max-w-measure text-ui">{plan.summary}</p>}
+        {plan.summary && <FactList rows={[{label:"方案摘要",value:plan.summary}]} />}
         {(plan.implementation?.actions ?? []).map(action => <div key={action.key} className="flex flex-col gap-2">
-          <p className="text-ui">{action.sequence != null ? `${action.sequence}. ` : ""}{action.what.title || action.need.judgment || "内容行动"}</p>
-          <PlanActionFacts action={action} basis={plan.basis} />
-          {action.need.judgment && <p className="max-w-measure text-ui">{action.need.judgment}</p>}
-          {action.sources.map(source => <p key={source.domain ?? source.channel} className="max-w-measure text-caption">{source.url || source.domain || source.name} · {source.url && plan.basis?.focus.url === source.url ? "所选引用页面" : "可选渠道"}{source.why ? ` · ${source.why}` : ""}</p>)}
+          <h3 className="text-ui font-semibold">{action.sequence != null ? `${action.sequence}. ` : ""}{action.what.title || action.need.judgment || "内容行动"}</h3>
+          <Disclosure summary="时间、工作量与费用依据"><PlanActionFacts action={action} basis={plan.basis} /></Disclosure>
+          <FactList rows={[
+            ...(action.need.judgment ? [{label:"行动判断",value:action.need.judgment}] : []),
+            ...action.sources.map(source => ({label: source.url && plan.basis?.focus.url === source.url ? "所选引用页面" : "可选渠道", value: <>{source.url || source.domain || source.name}{source.why ? ` · ${source.why}` : ""}</>})),
+          ]} />
 
-          {mayConverse && <Button disabled={busy || plan.version == null} onClick={() => void handoff(action)}>用于内容</Button>}
+          {mayConverse && <Button variant="text" size="sm" className="self-start" disabled={busy || plan.version == null} onClick={() => void handoff(action)}>用于内容</Button>}
         </div>)}
       </Section>
-      <GeoAnalysisWorkbench key={`frozen-plan:${plan.version??"none"}`} geoId={geoId} project={project} initialView="V26" initialDescriptor={{viewId:"V26",...(plan.version!=null?{strategyVersion:plan.version}:{})}} embedded/>
+      <GeoAnalysisWorkbench key={`frozen-plan:${plan.version??"none"}`} geoId={geoId} project={project} initialView="V26" title="方案目标与实测分析" initialDescriptor={{viewId:"V26",...(plan.version!=null?{strategyVersion:plan.version}:{})}} embedded/>
       <Targets geoId={geoId} plan={plan} onChosen={() => { reload(); frame?.data.invalidate(); }} />
       <Battlefield geoId={geoId} plan={plan} />
       <EnginePromises plan={plan} />

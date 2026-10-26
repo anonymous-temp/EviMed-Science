@@ -196,7 +196,7 @@ describe("模拟充值", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("模拟充值 50.00 灵豆已入账。");
     await waitFor(() => expect(mocks.allowance).toHaveBeenCalledTimes(2));
     await settle();
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
     expect(within(row("可用额度")).getByText("250.00 灵豆")).toBeInTheDocument();
   });
 
@@ -207,7 +207,7 @@ describe("模拟充值", () => {
     mocks.topUp.mockRejectedValueOnce(refused).mockResolvedValueOnce(applied(100, 300)).mockResolvedValueOnce(applied(100, 400));
     await openRecharge();
     await userEvent.click(screen.getByRole("button", { name: "100 灵豆" }));
-    const alert = await screen.findByRole("alert");
+    const alert = await screen.findByRole("note");
     expect(alert).toHaveTextContent(webErrorMessage(refused));
     // Nothing was added and nothing reads as zero: the balance is the one read.
     expect(within(row("可用额度")).getByText("200.00 灵豆")).toBeInTheDocument();
@@ -218,7 +218,7 @@ describe("模拟充值", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("模拟充值 100.00 灵豆已入账。");
     expect(mocks.topUp).toHaveBeenCalledTimes(2);
     expect(asked(1)).toEqual(asked(0));
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
     expect(within(row("可用额度")).getByText("300.00 灵豆")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "100 灵豆" }));
@@ -233,17 +233,17 @@ describe("模拟充值", () => {
     await openRecharge();
     await userEvent.click(screen.getByRole("button", { name: "100 灵豆" }));
     // A failure that never reached the control plane is worded by the page.
-    expect(await screen.findByRole("alert")).toHaveTextContent("模拟充值没有完成，请重试。");
+    expect(await screen.findByRole("note")).toHaveTextContent("模拟充值没有完成，请重试。");
     await userEvent.click(screen.getByRole("button", { name: "100 灵豆" }));
     await waitFor(() => expect(mocks.topUp).toHaveBeenCalledTimes(2));
     expect(asked(1)).toEqual(asked(0));
-    await screen.findByRole("alert");
+    await screen.findByRole("note");
 
     await userEvent.click(screen.getByRole("button", { name: "50 灵豆" }));
     await waitFor(() => expect(mocks.topUp).toHaveBeenCalledTimes(3));
     expect(asked(2)[0]).toBe("topup-50");
     expect(asked(2)[1]).not.toBe(asked(0)[1]);
-    await screen.findByRole("alert");
+    await screen.findByRole("note");
     // The retry is of the package that failed last.
     mocks.topUp.mockResolvedValueOnce(applied(50, 250));
     await userEvent.click(screen.getByRole("button", { name: "重试" }));
@@ -259,7 +259,10 @@ describe("模拟充值", () => {
     // Both clicks land before the page has drawn the first.
     act(() => { button.click(); button.click(); });
     expect(mocks.topUp).toHaveBeenCalledTimes(1);
-    for (const each of packages()) expect(each).toBeDisabled();
+    for (const each of packages()) {
+      if (each === button) { expect(each).toHaveAttribute("aria-disabled", "true"); expect(each).not.toBeDisabled(); }
+      else expect(each).toBeDisabled();
+    }
     expect(button).toHaveAttribute("aria-busy", "true");
     await userEvent.click(screen.getByRole("button", { name: "50 灵豆" }));
     expect(mocks.topUp).toHaveBeenCalledTimes(1);
@@ -296,7 +299,7 @@ describe("模拟充值", () => {
     let answer!: (value: object) => void;
     mocks.allowance.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
     const { container } = open(SIMULATED_WALLET_PAGES.recharge);
-    expect(container.querySelector(".animate-pulse")).not.toBeNull();
+    await waitFor(() => expect(container.querySelector(".animate-pulse")).not.toBeNull());
     expect(screen.queryByText("200.00 灵豆")).not.toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     await act(async () => { answer({ ...simulated, available: 35 }); });
@@ -357,7 +360,7 @@ describe("模拟订单", () => {
     mocks.orders.mockReturnValue(new Promise(() => {}));
     const { container } = open(SIMULATED_WALLET_PAGES.orders);
     await screen.findByText("模拟数据，不涉及真实资金");
-    expect(container.querySelector(".animate-pulse")).not.toBeNull();
+    await waitFor(() => expect(container.querySelector(".animate-pulse")).not.toBeNull());
     expect(screen.queryByText("还没有模拟充值订单")).not.toBeInTheDocument();
   });
 
@@ -365,12 +368,12 @@ describe("模拟订单", () => {
     const refused = unreachable();
     mocks.orders.mockRejectedValueOnce(refused).mockResolvedValueOnce({ simulated: true, currency: "CNY", items: [first], nextCursor: null });
     open(SIMULATED_WALLET_PAGES.orders);
-    const alert = await screen.findByRole("alert");
+    const alert = await screen.findByRole("note");
     expect(alert).toHaveTextContent(webErrorMessage(refused));
     expect(screen.queryByText("还没有模拟充值订单")).not.toBeInTheDocument();
     await userEvent.click(within(alert).getByRole("button", { name: "重试" }));
     expect(await orderRows()).toHaveLength(1);
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
   });
 
   it("retries a failed later page without losing the orders it has", async () => {
@@ -422,7 +425,7 @@ describe("the pages while the deployment's answer is read", () => {
   it("are a skeleton until it comes: no line, no top-up, and nothing said about the deployment", async () => {
     mocks.allowance.mockReturnValue(new Promise(() => {}));
     const { container } = open(SIMULATED_WALLET_PAGES.recharge);
-    expect(container.querySelector(".animate-pulse")).not.toBeNull();
+    await waitFor(() => expect(container.querySelector(".animate-pulse")).not.toBeNull());
     expect(screen.getByRole("heading", { level: 1, name: "模拟充值" })).toBeInTheDocument();
     expect(screen.queryByText("模拟数据，不涉及真实资金")).not.toBeInTheDocument();
     expect(screen.queryByText("这个部署没有开启模拟额度")).not.toBeInTheDocument();
@@ -433,7 +436,7 @@ describe("the pages while the deployment's answer is read", () => {
   it("report a failed read with its retry, and open once it can be read", async () => {
     mocks.allowance.mockRejectedValueOnce(new Error("network")).mockResolvedValue(simulated);
     open(SIMULATED_WALLET_PAGES.recharge);
-    const alert = await screen.findByRole("alert");
+    const alert = await screen.findByRole("note");
     expect(alert).toHaveTextContent("操作未完成，请重试。");
     expect(screen.queryByText("这个部署没有开启模拟额度")).not.toBeInTheDocument();
     expect(screen.queryByText(/灵豆/)).not.toBeInTheDocument();

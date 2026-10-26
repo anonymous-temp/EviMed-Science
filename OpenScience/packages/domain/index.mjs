@@ -1778,7 +1778,6 @@ export {
   VCR_COMPARATOR_ROUTE_LABELS_ZH,
   VCR_CONCLUSIONS,
   VCR_CONCLUSION_LABELS_ZH,
-  VCR_CONTACT_STATES,
   VCR_COUNT_KEYS,
   VCR_COUNT_LABELS_ZH,
   VCR_COX_FEW_EVENTS,
@@ -1855,8 +1854,6 @@ export {
   VCR_QUALITY_CATEGORY_LABELS_ZH,
   VCR_REAL_PATIENT_SOURCES,
   VCR_RECONSTRUCTION_TOLERANCE,
-  VCR_REFERRAL_STATES,
-  VCR_REFERRAL_STATE_LABELS_ZH,
   VCR_REGISTRY_ALLOCATION_LABELS_ZH,
   VCR_REGISTRY_MASKING_LABELS_ZH,
   VCR_REGISTRY_PHASE_LABELS_ZH,
@@ -2274,7 +2271,7 @@ export {
 } from './src/resultPackage.mjs'
 
 export { RESULT_PRODUCER_KINDS, RESULT_INPUT_KINDS, RESULT_AVAILABILITY, isResultDigest, normalizeResultPath, projectResultInput, projectResultVersion, projectResultMethod, resultMethodDifference, validateResultAnchor, resultVersionDifference } from "./src/resultProvenance.mjs";
-export { RESULT_REPLAY_METHODS, compareResultNumbers } from "./src/resultReplay.mjs";
+export { RESULT_R_REPLAY_METHOD_KINDS, RESULT_REPLAY_METHODS, compareResultNumbers } from "./src/resultReplay.mjs";
 export { RESEARCH_BILLING_VERSION, RESEARCH_BILLING_VERSION_WHOLE_CREDIT, RESEARCH_BILLING_VERSIONS, WALLET_CONTRACT_WHOLE_CREDIT, WALLET_CONTRACT_EXACT, RESEARCH_MONEY_SCALE, RESEARCH_BILLABLE_PURPOSES, STEP_WAITING_ALLOWANCE, allowanceRefusalSentence, allowanceWaitingNote, allowanceWaitingSentence, stepWaitingFor, researchMoneyUnits, researchMoneyDecimal, researchTaskCharge, creditUnitsOrNull, formatCredits, estimateRunCostUnits, SIMULATED_WALLET_LABEL, SIMULATED_START_CREDITS, SIMULATED_LOW_CREDITS, SIMULATED_WALLET_PAGES, SIMULATED_TOPUP_PACKAGES } from './src/researchBilling.mjs';
 
 // creditLots — 灵豆 held as lots: the two kinds, where a gift comes from, and the Asia/Shanghai calendar of expiry and monthly dates.

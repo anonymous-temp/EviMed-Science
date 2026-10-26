@@ -43,6 +43,10 @@ const requireValue = (ok, code) => { if (!ok) throw new Error(code); };
  * @type {Record<string, MethodReference>}
  */
 export const NUMERIC_REFERENCES = {
+  N53a: { methods: ['design.analytic'], anchors: ['Reference: noncentral t, not the normal quantiles', 'abs(basis$powerAtAllocatedN - exact_t) < 1e-12'] },
+  N53c: { methods: ['design.analytic'], anchors: ['Independent pooled-null / alternative-variance normal formula.', 'vcr_measure_value(r,"required_total")==nt+nc'] },
+  N52a: { methods: ['model.survival_fit'], anchors: ['Censored exponential MLE: events / total time at risk.', 'delta < 1e-8'] },
+  N52d: { methods: ['model.prognostic_apply'], anchors: ['mean(1 - 0.8^exp(c(-0.5,0.5)))', 'delta < 1e-12'] },
   // --- the first fifteen: reviewed against a numerical comparison in the case body ---
   N01b: { methods: ['design.analytic'], anchors: ['rpact::getDesignGroupSequential(', 'd_rp < 1e-4 && d_g4 < 1e-4'] },
   N06b: { methods: ['design.analytic'], anchors: ['Required patients (Lachin-Foulkes) against rpact', 'rpact::getSampleSizeSurvival(', 'abs(r$events - r$want_events) < 1e-3'] },

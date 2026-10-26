@@ -18,11 +18,13 @@ export function AddLinkDialog({ projectId, onClose, onAdded }: {
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const submit = async () => {
+  const submit = async (markSaved: () => void) => {
     setBusy(true);
     setError(null);
     try {
       const added = await addSourceLink(projectId, url.trim());
+      markSaved();
+      setBusy(false); setUrl("");
       onAdded(added.source);
     } catch (failure) {
       setError(productErrorMessage(failure));
@@ -30,15 +32,15 @@ export function AddLinkDialog({ projectId, onClose, onAdded }: {
     }
   };
   return (
-    <FormDialog title="添加网页链接" onClose={onClose} busy={busy}>
-      <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (url.trim() && !busy) void submit(); }}>
+    <FormDialog title="添加网页链接" onClose={onClose} busy={busy} dirty={url.trim().length > 0}>
+      {(requestClose, markSaved) => <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (url.trim() && !busy) void submit(markSaved); }}>
         <Input label="网址" type="url" inputMode="url" placeholder="https://" value={url} onChange={(event) => setUrl(event.target.value)}
           error={error} disabled={busy} autoComplete="off" />
         <div className="flex justify-end gap-2">
-          <Button variant="secondary" disabled={busy} onClick={onClose}>取消</Button>
+          <Button variant="secondary" disabled={busy} onClick={requestClose}>取消</Button>
           <Button type="submit" loading={busy} disabled={!url.trim()}>添加</Button>
         </div>
-      </form>
+      </form>}
     </FormDialog>
   );
 }
@@ -53,11 +55,13 @@ export function NewNoteDialog({ projectId, onClose, onAdded }: {
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const submit = async () => {
+  const submit = async (markSaved: () => void) => {
     setBusy(true);
     setError(null);
     try {
       const added = await addSourceNote(projectId, { title: title.trim(), body });
+      markSaved();
+      setBusy(false); setTitle(""); setBody("");
       onAdded(added.source);
     } catch (failure) {
       setError(productErrorMessage(failure));
@@ -65,15 +69,15 @@ export function NewNoteDialog({ projectId, onClose, onAdded }: {
     }
   };
   return (
-    <FormDialog title="新建笔记" onClose={onClose} busy={busy}>
-      <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (title.trim() && !busy) void submit(); }}>
+    <FormDialog title="新建笔记" onClose={onClose} busy={busy} dirty={title.length > 0 || body.length > 0}>
+      {(requestClose, markSaved) => <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (title.trim() && !busy) void submit(markSaved); }}>
         <Input label="标题" value={title} maxLength={120} onChange={(event) => setTitle(event.target.value)} disabled={busy} autoComplete="off" />
         <Textarea label="正文" value={body} rows={8} onChange={(event) => setBody(event.target.value)} disabled={busy} error={error} />
         <div className="flex justify-end gap-2">
-          <Button variant="secondary" disabled={busy} onClick={onClose}>取消</Button>
+          <Button variant="secondary" disabled={busy} onClick={requestClose}>取消</Button>
           <Button type="submit" loading={busy} disabled={!title.trim()}>保存</Button>
         </div>
-      </form>
+      </form>}
     </FormDialog>
   );
 }

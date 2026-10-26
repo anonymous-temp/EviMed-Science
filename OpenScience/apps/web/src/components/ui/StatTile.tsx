@@ -1,46 +1,28 @@
 import { useId, type ReactNode } from "react";
 import { Link } from "react-router";
 import { cn } from "@/lib/cn";
+import type { Measured, MetricReading } from "@/lib/measurement";
 import { Tooltip } from "@/components/ui/Tooltip";
 
 /**
- * One number on a data page, and the three things that make it readable: its
- * rank among comparable things, its target, and a change that knows the
- * metric's noise (fusion plan §4.8, appendix E §3.3).
- *
- * The old board printed 「品牌提及率 7%」 alone in four identical grey cards,
- * and a reader could not tell whether 7 was good. A tile therefore carries
- * `rank`, `delta` and `note`, and the leading tile of a band is `lead`: first in
- * the band and set at the same 32 px metric rung as the rest. It was 40 px until
- * the owner's ruling of 2026-10-19 — a data page uses at most five size × weight
- * pairs, and a 40 px figure beside the 32 px ones was a sixth on 循证 GEO's tabs.
- *
- * The denominator is **not** repeated in every tile: a band declares it once
- * in its `footnote`, and a tile that wants it at hand passes `hint`, which
- * becomes the tooltip. 「88 次里 3 次」 twenty times over is noise, and it is
- * what the old diagnosis page did.
- *
- * States: `loading` draws the tile's own skeleton; a number that does not
- * exist is its word (「—」「未测」「样本不足」) in `value`, never a zero.
- *
- * **A number opens what it counts** (`DESIGN.md` rules 6 and 11): `to` makes the
- * figure a link to the things counted, `onOpen` a button that narrows the page to
- * them. A word standing in for a number (`placeholder`) opens nothing — there is
- * nothing it counts.
- *
- * A tile is data, not a section of the document: it is a named group, and its
- * label a paragraph. As an `<h3>` in a `<section>` every tile was a landmark and
- * the page's outline went from its title straight to level three (axe
- * `heading-order`, 2026-10-07 audit B-04).
+ * Component: StatTile; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: label, typed reading, context and optional drill-down.
+ * Variants: default, safety, dense and leading.
+ * States: initial loading, measured, unmeasured and failed with prior value.
+ * Hit area: numeric link/button retains its visible figure.
+ * Keyboard: native link/button activation.
+ * Long content: labels truncate; context wraps.
+ * Theme: semantic ink and safety roles.
+ * Responsive: dense numbers shrink on narrow screens.
+ * Verification: DataPrimitives, Marks and measurement adapter tests.
  */
-
 export interface StatTileProps {
   /** The metric's name. */
   label: string;
   /** The number, or the word that stands in its place. */
-  value: ReactNode;
+  reading: MetricReading;
+  renderMeasured?: (reading: Measured) => ReactNode;
   /** 「%」「/ 100」「条严重讲错」 — the unit, set small beside the number. */
-  unit?: ReactNode;
   /** 「第 3 / 6」 — where this stands among comparable products. */
   rank?: ReactNode;
   /** A `<Delta>`. */
@@ -60,7 +42,6 @@ export interface StatTileProps {
   /** `safety`: the number itself is a clinical count, and is red. */
   tone?: "default" | "safety";
   /** The value is a word standing in for a number (「样本不足」「未测」「—」). */
-  placeholder?: boolean;
   /**
    * A tile among several small counts (a stage, a status): on a phone it is
    * padded 12 and its number set at 20 instead of 32, so a band of four takes two
@@ -68,14 +49,13 @@ export interface StatTileProps {
    * it is the ordinary tile. Not for the band's leading metric.
    */
   dense?: boolean;
-  loading?: boolean;
   className?: string;
 }
 
 export function StatTile({
   label,
-  value,
-  unit,
+  reading,
+  renderMeasured,
   rank,
   delta,
   note,
@@ -85,12 +65,10 @@ export function StatTile({
   onOpen,
   lead = false,
   tone = "default",
-  placeholder = false,
   dense = false,
-  loading = false,
   className,
 }: StatTileProps) {
-  if (loading) {
+  if (reading.kind === "loading") {
     return (
       <div aria-hidden="true" className={cn("flex animate-pulse flex-col gap-3 p-4", dense && "max-sm:gap-2 max-sm:p-3", className)}>
         <div className="h-3 w-16 rounded bg-surface-2" />
@@ -99,10 +77,15 @@ export function StatTile({
       </div>
     );
   }
+  const measured = reading.kind === "measured" ? reading : reading.kind === "failed" ? reading.previous : undefined;
+  const placeholder = measured === undefined;
+  const value = measured ? renderMeasured?.(measured) ?? measured.value.toLocaleString("zh-CN") : reading.kind === "unmeasured" ? reading.reason : "读取失败";
+  const unit = measured?.unit;
   const opens = !placeholder && (to !== undefined || onOpen !== undefined);
   const tile = (
     <div role="group" aria-label={label} className={cn("flex min-w-0 flex-col p-4", dense && "max-sm:p-3", className)}>
       <p className="truncate text-caption text-text-3">{label}</p>
+      {measured && <span className="sr-only">{measured.scope} · {measured.observedAt ? `观测时间 ${measured.observedAt}` : "观测时间未知"}</span>}
       <p
         data-stat-value
         className={cn(
@@ -124,6 +107,7 @@ export function StatTile({
           {note}
         </p>
       )}
+      {reading.kind === "failed" && <p role="alert" className="mt-2 text-caption text-error">{reading.error}{measured && " · 显示上次读数"}<button type="button" onClick={reading.retry} className="ml-2 underline">重试</button></p>}
       {chart != null && <div className="mt-2.5">{chart}</div>}
     </div>
   );
@@ -141,6 +125,18 @@ function OpenNumber({ label, value, to, onOpen }: { label: string; value: ReactN
 }
 
 /** 「第 3 / 6」 beside a number: where it stands among comparable products. */
+/**
+ * Component: Rank; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Static inline rank content beside a metric.
+ * Variants: Caller content; no action variant.
+ * States: No inferred rank or verification state.
+ * Hit area: No built-in action target; supplied child controls own their geometry.
+ * Keyboard: No focus stop or key handler added; child controls keep native semantics.
+ * Long content: Intrinsic rank text; no truncation.
+ * Theme: Current implementation uses accent-soft/accent.
+ * Responsive: Nonshrinking h-tag inline badge.
+ * Verification: DataPrimitives.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function Rank({ children }: { children: ReactNode }) {
   return (
     <span className="inline-flex h-tag shrink-0 items-center rounded-tag bg-accent-soft px-1.5 text-meta font-normal tabular-nums text-accent">
@@ -171,6 +167,18 @@ const BAND_COLUMNS: Record<2 | 3 | 4 | 5 | 6, string> = {
   6: "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6",
 };
 
+/**
+ * Component: StatBand; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Named section with shared described-by footnote and bordered metric grid.
+ * Variants: Two through six target columns; dense narrow layout.
+ * States: Children own reading states; footnote renders once per band.
+ * Hit area: No built-in action target; supplied child controls own their geometry.
+ * Keyboard: No focus stop or key handler added; child controls keep native semantics.
+ * Long content: Shared footnote retained; grid children must manage long values.
+ * Theme: Neutral surface and cell borders.
+ * Responsive: One or dense two columns initially; sm/lg/xl expand by configured count.
+ * Verification: DataPrimitives.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function StatBand({
   label,
   footnote,
@@ -214,6 +222,18 @@ export function StatBand({
  * “61 算好还是不好” without a second chart (appendix E §4.1: a bullet, never
  * a gauge, because a gauge can only carry one value). Its fills are the data,
  * so it keeps them in a Windows contrast theme (spec §10.9 rule 6).
+ */
+/**
+ * Component: BulletBar; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Accessible image of measured value with optional baseline/target/rival markers.
+ * Variants: Optional scale and marker labels.
+ * States: Missing/nonfinite value hides; valid marker positions clamp to bar bounds.
+ * Hit area: No built-in action target; supplied child controls own their geometry.
+ * Keyboard: No focus stop or key handler added; child controls keep native semantics.
+ * Long content: Accessible label retains rounded marker descriptions; scale middle label truncates.
+ * Theme: Accent value, chart target, neutral rival; data colors preserved in forced colors.
+ * Responsive: Fluid track; fixed-height marks.
+ * Verification: DataPrimitives.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
  */
 export function BulletBar({
   value,

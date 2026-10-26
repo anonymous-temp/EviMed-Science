@@ -108,9 +108,10 @@ test("the digital-twin label is derived from four pieces of evidence, never gran
     "digital_twin");
 });
 
-test("roles carry abilities, and only two may contact a patient", () => {
-  assert.ok(roleAllows("lead", "contact_patients"));
-  assert.ok(roleAllows("recruiter", "contact_patients"));
+test("research roles carry scientific abilities and none grants patient contact", () => {
+  assert.equal(roleAllows("lead", "contact_patients"),false);
+  assert.equal(roleAllows("recruiter", "contact_patients"),false);
+  assert.equal(roleAllows("site","write_referrals"),false);
   assert.ok(!roleAllows("viewer", "write"));
   assert.ok(!roleAllows("statistical_reviewer", "contact_patients"));
 });

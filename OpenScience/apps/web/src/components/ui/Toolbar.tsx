@@ -1,3 +1,4 @@
+import { isComposingKey, isSubmitKey } from "@/lib/compositionKeys";
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type InputHTMLAttributes, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { cn } from "@/lib/cn";
 import { Search, SlidersHorizontal, X, type LucideIcon } from "lucide-react";
@@ -661,7 +662,7 @@ function SearchBox({ search, inputRef, focusOnMount = false, shortcut = false, o
     } else if (event.key === "ArrowUp" && open) {
       event.preventDefault();
       setActive((at) => (at <= 0 ? items.length - 1 : at - 1));
-    } else if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+    } else if (isSubmitKey(event)) {
       if (open && active >= 0 && items[active]) {
         event.preventDefault();
         pick(items[active].value);
@@ -670,12 +671,12 @@ function SearchBox({ search, inputRef, focusOnMount = false, shortcut = false, o
         setDismissed(true);
         search.onSubmit();
       }
-    } else if (event.key === "Escape" && open) {
+    } else if (event.key === "Escape" && !isComposingKey(event) && open) {
       // The list closes first; the box keeps its words until the next Escape.
       event.preventDefault();
       event.stopPropagation();
       setDismissed(true);
-    } else if (event.key === "Escape" && onEscapeEmpty && search.value === "") {
+    } else if (event.key === "Escape" && !isComposingKey(event) && onEscapeEmpty && search.value === "") {
       event.preventDefault();
       event.stopPropagation();
       onEscapeEmpty();
@@ -835,6 +836,18 @@ function BandSummary({ text, className }: { text: string; className: string }) {
 
 /* ---------------------------------------------------------------- toolbar */
 
+/**
+ * Component: Toolbar; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Declared view/filter/search/summary/action row with responsive filter panel.
+ * Variants: Band, oneRow, pinned/folded controls and custom sheetLead.
+ * States: Controlled query/filter choices; local panel/search expansion; reset calls owner.
+ * Hit area: Shared Tabs, FilterChip, Menu, Switch, SearchInput and Button targets.
+ * Keyboard: Child keyboard behavior; composition-safe search; scoped / shortcut.
+ * Long content: Overflow chips fold or scroll; applied tokens collapse with counts.
+ * Theme: Shared semantic controls; no additional palette.
+ * Responsive: Narrow filter sheet; measured band overflow folds filters; oneRow has phone search overlay.
+ * Verification: Toolbar.test.tsx and Composition.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function Toolbar({ label = "筛选与操作", views, filters: declared = [], onClear, onReset, search, summary, actions, className, inBand = false,
   oneRow = false, tokens: given = [], sheetLead, resultCount, searchShortcut = false }: ToolbarProps) {
   const narrow = useNarrow();

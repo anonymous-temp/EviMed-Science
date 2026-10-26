@@ -1,3 +1,4 @@
+import { formatRelativeTime } from "@/lib/format";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -99,7 +100,8 @@ it("draws a notice as a row: unread dot, title, one line of what happened, and t
   const link = await screen.findByRole("link", { name: /中医药治疗儿童疳证的 Meta 分析检索 已完成/ });
   const row = link.closest("li")!;
   expect(within(row).getByText("报告和 6 个文件已在对话里")).toBeInTheDocument();
-  expect(within(row).getByText("昨天")).toBeInTheDocument();
+  expect(row.querySelector("time")).toHaveAttribute("datetime", yesterdayNoon);
+  expect(row.querySelector("time")).toHaveTextContent(formatRelativeTime(yesterdayNoon));
   expect(within(row).getByText("（未读）")).toHaveClass("sr-only");
   // No card around it and no buttons under it.
   expect(row.className).not.toMatch(/(^|\s)border(\s|$)/);
@@ -199,7 +201,7 @@ it("keeps a failed 「标为已读」 retryable and says why", async () => {
   vi.mocked(api.markInboxRead).mockRejectedValue(new Error("network"));
   open();
   await userEvent.click(await screen.findByRole("button", { name: "标为已读" }));
-  expect(await screen.findByRole("alert")).toHaveTextContent("操作未完成，请重试。");
+  expect(await screen.findByRole("note")).toHaveTextContent("操作未完成，请重试。");
   expect(screen.getByRole("button", { name: "标为已读" })).toBeInTheDocument();
 });
 
@@ -356,7 +358,7 @@ it("says so, with a retry, when the list cannot be read, rather than showing an 
     return { items: [review], nextCursor: null };
   });
   open();
-  expect(await screen.findByRole("alert")).toHaveTextContent("操作未完成，请重试。");
+  expect(await screen.findByRole("note")).toHaveTextContent("操作未完成，请重试。");
   expect(screen.queryByText("收件箱为空")).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: "重试" }));
   expect(await screen.findByText("审阅一个研究结论")).toBeInTheDocument();
@@ -372,7 +374,7 @@ it("discards a late page after changing filters and prevents duplicate page requ
   open();
   const more = await screen.findByRole("button", { name: "显示更多" });
   await userEvent.click(more);
-  expect(more).toBeDisabled();
+  expect(more).toHaveAttribute("aria-disabled", "true");
   await userEvent.click(more);
   // The page, the unread safety findings it pins, and the one next page — not two.
   expect(api.listInbox).toHaveBeenCalledTimes(3);
@@ -667,4 +669,26 @@ it("opens a terminal task failure in the task's own project", async () => {
   serve({ items: [{ ...review, id: "task-failure", title: "行业日报未完成", noticeType: "notify", projectId: "project-two", source: { type: "system", id: "autopilot-task:agenda-one" }, actions: [{ id: "open", label: "查看任务", style: "primary" }], readAt: at(1) }], nextCursor: null });
   open();
   expect(await screen.findByRole("link", { name: "行业日报未完成" })).toHaveAttribute("href", "/app/autopilot/agenda-one?project=project-two");
+});
+
+
+it("selects loaded IDs, excludes safety and retries only failed batch reads", async () => {
+ const first = runNotice({ id: "batch-a", title: "Batch A" }); const second = runNotice({ id: "batch-b", title: "Batch B" });
+ serve({ items: [first, second], nextCursor: null });
+ vi.mocked(api.markInboxRead).mockImplementation(async id => { if (id === "batch-b") throw new Error("offline"); return { ...first, readAt: at(0), revision: 2 }; });
+ open();
+ const selectAll = await screen.findByRole("checkbox", { name: /选择当前已加载的 2 条/ });
+ const selectionToolbar = screen.getByRole("toolbar", { name: "批量标为已读" });
+ expect(selectionToolbar.id).not.toBe("");
+ for (const checkbox of screen.getAllByRole("checkbox")) {
+   expect(checkbox).toHaveAttribute("data-selection-for", selectionToolbar.id);
+   expect(checkbox).toHaveAttribute("data-selection-scope", selectionToolbar.getAttribute("data-selection-scope"));
+ }
+ await userEvent.click(selectAll);
+ await userEvent.click(screen.getByRole("button", { name: "所选标为已读" }));
+ expect(await screen.findByText(/失败 1 条：Batch B/)).toBeInTheDocument();
+ expect(screen.getByRole("checkbox", { name: /选择：Batch B/ })).toBeChecked();
+ vi.mocked(api.markInboxRead).mockClear();
+ await userEvent.click(screen.getByRole("button", { name: "所选标为已读" }));
+ await waitFor(() => expect(api.markInboxRead).toHaveBeenCalledTimes(1)); expect(api.markInboxRead).toHaveBeenCalledWith("batch-b", 1);
 });

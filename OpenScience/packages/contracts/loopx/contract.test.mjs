@@ -114,6 +114,8 @@ test('hosted bootstrap verifies the CLI and skill without modifying the installa
     commands: { register: command => registered.push(command) } }, { root: dir, cli, enabled: true });
   assert.equal(services[0][1].state, 'failed');
   assert.equal(registered[0].name, 'loopx-init');
+  assert.equal(registered[0].description, '诊断：检查长任务工具是否可用');
+  assert.equal(registered[0].recordInput, false);
   assert.equal((await registered[0].handler({ rawInput: '' })).kind, 'error');
 });
 

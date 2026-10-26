@@ -1,3 +1,4 @@
+import { FactList } from "@/components/ui/FactList";
 import {GeoHistoryVisual} from "./GeoHistoryVisual";
 import { useId, useState } from "react";
 import type { GeoAnalysisView, GeoAnalysisChartCell } from "@/lib/geoAnalysisClient";
@@ -161,7 +162,7 @@ export function GeoAnalysisVisual({ data, onSelect }: {
     const cells=chart.cells??[], coverage=chart.mode==="type_coverage";
     return <ChartCard title={coverage?"来源类型回答覆盖率":"来源引用集中度"} state={cells.length?"content":"empty"} emptyText="这个范围没有可核对链接；无法观测的引用能力保留未知。"
       footnote={coverage?"同一回答可计入多个类型，覆盖率之和可以超过 100%。部分判定回答的可用引用仍保留。":"错误和品牌提及仅表示共同出现，不代表错误由该来源引起。"}
-      legend={<p>{coverage?`分母：${chart.denominator??0} 个有可用引用的回答；类型覆盖可重叠。`:`分母：${chart.denominator??0} 个回答与页面配对；前 ${chart.topN??15} 项及完整余项。`}</p>}>
+      legend={<FactList rows={[{label:"分母",value:coverage?`${chart.denominator??0} 个有可用引用的回答；类型覆盖可重叠。`:`${chart.denominator??0} 个回答与页面配对；前 ${chart.topN??15} 项及完整余项。`}]} />}>
       <BarList label={coverage?"各类来源覆盖回答":"来源回答与页面配对"} rows={cells.filter(cell=>cell.value!==null).map(cell=>({key:cell.rowKey,label:cell.label,value:cell.value!,unit:coverage?"%":"配对"}))}
         onSelect={key=>{const cell=cells.find(cell=>cell.rowKey===key);if(cell)onSelect(cell);}}/>
     </ChartCard>;

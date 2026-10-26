@@ -1,33 +1,15 @@
-# Capability manifest — the only definition of this capability.
-#
-# Step 7 of a 「虚拟临床研究」 study (build plan 2026-09-28 §4, §7): match a protocol
-# to patients or a patient to protocols, and draft the recruitment material the
-# study team then reviews. Public so the module can bind a session to it, and
-# kept off 科研工具 and the kernel's own tool list by `display.listed: false` —
-# `visibility: internal` would make that binding answer 403.
-#
-# `safetyClass: clinical` because of what it writes, not what it decides: the
-# pre-screening questionnaire, the patient-facing explanation and the
-# coordinator's script are read by patients, so the pharmacist-owned safety
-# rules run over this package's prose. The eligibility verdict itself is not
-# produced by this run at all — `vcrMatching.mjs` computes it, and the run's job
-# is to locate evidence and to answer the criteria only language can decide.
+# Capability contract; conversation-native VCR reset, 2026-10-26.
+# Module workflows are explicit specialists; ordinary conversation can load their skills and call shared tools.
 id: vcr-matching
 version: 1.2.0
-title: Virtual Clinical Research — Matching and Recruitment
+title: Virtual Clinical Research — Patient Matching
 category: Clinical Research
-description: Two-way eligibility matching for a trial protocol — structure the criteria, locate each patient fact
-  in its source text with a character span and a visibility time, answer the language-only criteria with a quote,
-  and hand back the computed four-state judgment set with its evidence gaps, plus draft pre-screening and
-  referral material for the study team to review. Also, for one patient, the registry trials they could join,
-  with each one's eligibility text structured the same way and the platform's ranking.
-whenToUse: 「虚拟临床研究」要做患者匹配、预筛材料或招募协作时交给我：把方案的入排条件结构化，为每位候选人从病历里定位证据（带原文区间与可见时间），把只能靠语言理解的条件给出引用原句，再交回逐条判定与待补证据清单。判定由平台代码做，我不改判；联系患者一律等协调员逐人确认。用户只问“这个人能不能入组”时也走我；为某位患者找可参加的试验（给患者找试验）也交给我：去试验登记平台找，把每个试验的入排条件结构化，平台逐个判定并排序。
+description: |
+  Assess eligibility in either direction using original case records and source-bound trial criteria. Preserve unknown states, criterion evidence and recheck needs; no recruitment operations.
+whenToUse: |
+  Virtual Clinical Research (虚拟临床研究): Use for a requested eligibility assessment deliverable, protocol-to-patient matching or patient-to-trial matching. A single case can start from the original human message or attachment in global conversation. No study form, full protocol or PICO is required for patient-to-trial search.
 persona: |
-  你是临床研究的预筛分析员。你的产出是证据，不是结论：每抽出一个事实，都要给出来源文档、字符区间和平台可见时间；
-  区间里找不到对应的值，就不要写这个事实。资格判定由平台的确定性引擎在你给的事实上算，你不要自己下「符合/不符合」的结论，
-  也不要把「未知」写成「不满足」——缺证据就是缺证据，写清楚缺哪一项、从哪里能补。
-  只能靠语言理解的条件（例如「能够理解并签署知情同意」）由你判断，并附上支持这一判断的原句。
-  预筛问卷、患者说明和协调员话术可作为可下载的 AI 草稿，不提供材料审批或发布通道；患者的回答只算「患者自述」，不等同于病历事实。
+  Work in the current conversation and answer in Chinese unless requested otherwise. Complete only the requested scope. Use preserved evidence and exact tools for numbers. Explain task-specific data requirements and missingness. Never invent patient facts, treatment exposure, clinical validation or regulatory acceptance. Matching stops at assessment; recruitment operations are retired.
 safetyClass: clinical
 skills:
 - vcr-matching
@@ -56,9 +38,6 @@ produces:
   - path: criterion-funnel.md
     role: document
     required: false
-  - path: recruitment-drafts.md
-    role: draft
-    required: false
   - path: revision-notes.md
     role: work
     required: false
@@ -73,7 +52,6 @@ inputs:
   - subjectKeys
   - direction
   - asOf
-  - draftMaterials
 autopilot:
   # Scheduling belongs to the 「虚拟临床研究」 orchestrator, which dispatches this
   # capability inside the study. The autopilot allocator has no VCR task type.
@@ -92,16 +70,16 @@ starterPrompts:
 - 把这份方案的入排条件结构化，然后对知识库里的 20 份病历跑一遍预筛。
 
 display:
-  title: "匹配与招募"
+  title: "患者匹配"
   category: "虚拟临床研究"
-  description: "把入排条件结构化，逐条判定候选人并交回待补证据与筛选漏斗，联系患者前等人确认。"
+  description: "双向核对患者资料与试验条件，保留逐条证据、未知项和复评需要。"
   listed: false
   starterPrompts:
   - "把这份方案的入排条件结构化，然后对知识库里的 20 份病历跑一遍预筛。"
   - "这位患者能不能入组 EV-201？逐条说明，缺什么证据也写出来。"
   - "哪一条入排条件最卡人？按历史候选人群跑一遍漏斗。"
   - "给 P-0192 找一个可以参加的试验，逐条说明缺什么证据。"
-  materials: "需要一份方案的入排条件；有病历或候选人名单更好"
+  materials: "单人匹配可用原始病例消息或附件；批量匹配需要授权患者数据，试验条件可上传或检索。"
   estimatedMinutes:
     min: 15
     max: 90
@@ -109,9 +87,6 @@ display:
   - "逐条资格判定与证据位置"
   - "待补证据清单"
   - "入排条件漏斗；一位患者可参加的试验及排序"
-  - "预筛问卷与联系话术草稿"
   knownLimits:
   - "资格判定由平台代码计算，不设统一准确率门槛，也不引用外部产品的准确率。"
   - "缺证据一律记「未知」，不会替患者补全；任一排除标准未知时整体不判为「符合」。"
-  - "联系患者前必须由协调员逐人确认，本能力不会代为联系。"
-  - "提供可下载的 AI 草稿，不提供材料审批或发布通道。"

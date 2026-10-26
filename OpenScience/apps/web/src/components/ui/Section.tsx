@@ -15,11 +15,35 @@ export function useBlockHeadingLevel(): HeadingLevel {
 }
 
 /** What is inside a block whose heading is `level`: its own headings are one level below it. */
+/**
+ * Component: HeadingLevelScope; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Context provider for child block headings; no DOM wrapper.
+ * Variants: Numeric parent heading level.
+ * States: Derived child level is parent + 1, capped at six.
+ * Hit area: No DOM or interaction target.
+ * Keyboard: No focus behavior.
+ * Long content: Children pass through unchanged.
+ * Theme: No styling.
+ * Responsive: No layout.
+ * Verification: DataPrimitives.test.tsx and ChartCard.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function HeadingLevelScope({ level, children }: { level: number; children: ReactNode }) {
   return <BlockHeadingLevel.Provider value={Math.min(6, level + 1) as HeadingLevel}>{children}</BlockHeadingLevel.Provider>;
 }
 
 /** A heading at the level of where it stands (`useBlockHeadingLevel`): a part of a card, a group of a list. */
+/**
+ * Component: BlockHeading; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Semantic h2-h6 selected by surrounding HeadingLevelScope.
+ * Variants: Caller className and content.
+ * States: Context determines level; no interactive state.
+ * Hit area: No built-in action target; supplied child controls own their geometry.
+ * Keyboard: No focus stop or key handler added; child controls keep native semantics.
+ * Long content: Heading text retained without clipping.
+ * Theme: Caller chooses semantic text classes.
+ * Responsive: Native block flow.
+ * Verification: DataPrimitives.test.tsx and ChartCard.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function BlockHeading({ className, children }: { className?: string; children: ReactNode }) {
   const Heading = `h${useBlockHeadingLevel()}` as "h2" | "h3" | "h4" | "h5" | "h6";
   return <Heading className={className}>{children}</Heading>;
@@ -39,6 +63,18 @@ export function BlockHeading({ className, children }: { className?: string; chil
  *   <DataTable … />
  * </Section>
  * ```
+ */
+/**
+ * Component: Section; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Named section with heading/count, toolbar and nested heading context.
+ * Variants: section/sub; compact preserves semantic rank.
+ * States: Static grouping; caller owns child read states.
+ * Hit area: No built-in action target; supplied child controls own their geometry.
+ * Keyboard: No focus stop or key handler added; child controls keep native semantics.
+ * Long content: Heading/count retained; header wraps toolbar.
+ * Theme: Main or compact secondary text; token spacing.
+ * Responsive: Wrapping header and min-width-zero title.
+ * Verification: DataPrimitives.test.tsx and Composition.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
  */
 export function Section({ title, count, toolbar, level = "section", compact = false, className, children }: {
   title: string;

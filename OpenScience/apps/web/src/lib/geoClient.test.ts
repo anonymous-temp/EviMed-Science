@@ -29,7 +29,7 @@ describe("starting work, and reading what the programme did", () => {
     expect(network.productRequest).toHaveBeenCalledWith("/geo/projects/geo_1/runs");
     expect(runs.map((run) => [run.sessionId, run.label, run.state])).toEqual([["s_1", "写第 2 批稿件", "running"], ["s_2", "生成周报", "finished"], ["s_3", "后台分析", "stopped"]]);
     expect(runs[0].at).toBe("2 分钟前");
-    expect(runs[1].at).toMatch(/^(2026-09-14|9月14日)$/);
+    expect(runs[1].at).toBe("2026-09-14 16:00");
     expect(runs[2].at).toBeNull();
     // Nothing the page would print is an id.
     expect(runs.map(run => run.runId)).toEqual(['run_1', 'run_2', 'run_3']);

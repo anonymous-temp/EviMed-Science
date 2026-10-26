@@ -419,3 +419,15 @@ it("retains the source plan when an exact conversation is unavailable",async()=>
   await screen.findByText("方案暂时无法打开，请刷新后重试。");
   expect(client.stageGeoPlanContext).not.toHaveBeenCalled();expect(open).not.toHaveBeenCalled();
 });
+
+it("keeps source-embedded generation subordinate while preserving its source context", async () => {
+  client.getGeoStrategy.mockResolvedValue({ ...strategyFilled, version: null });
+  render(<MemoryRouter><GeoFrameHarness project={project} tab="sources"><PlanTab {...props} embedded sourceUrl="https://example.org/selected-page" /></GeoFrameHarness></MemoryRouter>);
+  const generate = await screen.findByRole("button", { name: "生成方案" });
+  expect(generate).toHaveClass("bg-surface-2");
+  expect(generate).not.toHaveClass("bg-accent");
+  expect(screen.getByRole("region", { name: "方案目标与实测分析" })).toBeInTheDocument();
+  await userEvent.click(generate);
+  await waitFor(() => expect(client.stageGeoPlanContext).toHaveBeenCalled());
+  expect(client.stageGeoPlanContext.mock.calls[0][1]).toMatchObject({ mode: "strategy", url: "https://example.org/selected-page" });
+});

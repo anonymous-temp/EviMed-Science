@@ -55,7 +55,7 @@ export function OverviewCard({ part, title, count = null, memories = null, shape
       data-more={state === "content" && more > 0 ? more : undefined} className="h-full"
     >
       <ChartCard
-        className="h-full"
+        className="h-full border-0"
         title={title}
         state={state === "loading" ? "loading" : state === "error" ? "error" : "content"}
         errorMessage={errorMessage ?? "这一部分暂时没有读到。"}

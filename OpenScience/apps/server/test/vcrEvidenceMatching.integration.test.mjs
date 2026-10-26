@@ -86,6 +86,7 @@ before(async () => {
   await vcr.store.ready();
   vcr.notifier = { async newCandidates(_study, facts) { notices.push(facts); return true; } };
   study = await vcr.store.createStudy({ userId: USER, projectId: "prj-evm", name: "EV-201 证据与匹配", question: "q", dataTier: "T0" });
+  await vcr.store.rows(`UPDATE ${VCR_SCHEMA}.studies SET conversation_session_id='native-evidence-fixture' WHERE id=$1`, [study.id]);
   otherStudy = await vcr.store.createStudy({ userId: OTHER_USER, projectId: "prj-evm-other", name: "别人的研究", question: "q", dataTier: "T0" });
 });
 
@@ -105,7 +106,8 @@ function write(what, items, target = study) {
 
 /** The request a gateway handler reads. @param {string} url @param {unknown} body */
 function request(url, body) {
-  return Object.assign(Readable.from([Buffer.from(JSON.stringify(body))]), { method: "POST", url, headers: { authorization: "Bearer token" } });
+  return Object.assign(Readable.from([Buffer.from(JSON.stringify(body))]), { method: "POST", url,
+    headers: { authorization: "Bearer token", "x-evimed-execution-context": "trusted-native-fixture" } });
 }
 function response() {
   return { status: 0, body: "", writeHead(/** @type {number} */ status) { this.status = status; return this; },
@@ -115,7 +117,8 @@ function response() {
 async function gateway(operation, body, overrides = {}) {
   const handler = createVcrGatewayHandler({ vcrEnabled: true, vcrAudience: "all", modelGatewayInternalUrl: "http://127.0.0.1:1/x" },
     { assertActiveModelGatewayToken: () => ({ userId: USER, projectId: "prj-evm" }) },
-    { vcr: { ...vcr, ...overrides } });
+    { vcr: { ...vcr, ...overrides }, resolveInvocation: async () => ({ userId: USER, projectId: "prj-evm", rootSessionId: "native-evidence-fixture",
+      sessionId: "native-evidence-fixture", runId: "evidence-fixture-run", callId: "evidence-fixture-call" }) });
   const res = response();
   await handler(request(`/internal/vcr/v1/${operation}`, body), res);
   return res;
@@ -649,18 +652,9 @@ test("the flow: the platform freezes the protocol and the instant, a job evaluat
   assert.equal(finished.persisted, 2);
   const tallies = await vcr.matchStore.assessmentTallies(study.id);
   assert.equal(Object.values(tallies).reduce((sum, n) => sum + n, 0), 2);
-  const referrals = await vcr.matchStore.listReferrals({ studyId: study.id });
-  assert.equal(referrals.length >= 1, true, "the candidates became referrals");
-  assert.equal(referrals.every((referral) => ["candidate", "needs_evidence"].includes(referral.state)), true, "in `candidate`, made by the control plane, never in a contact state");
-  assert.equal(referrals.every((referral) => referral.contactApprovedBy === null), true);
-  assert.equal(notices.length, 1, "the coordinators were told once");
-  assert.equal(notices[0].candidates, referrals.length);
-
-  // A second run of the same subjects makes no second notice and no second referral.
-  const again = await vcr.matching.onJobFinished({ action: "finished", state: "succeeded", job: { id: "job_match_2", studyId: study.id, kind: "match_criteria", state: "succeeded" }, engineResult: result });
-  assert.equal(again.candidates, 0);
-  assert.equal(notices.length, 1);
-  assert.equal((await vcr.matchStore.listReferrals({ studyId: study.id })).length, referrals.length);
+  assert.equal(typeof vcr.matchStore.createReferral,"undefined");assert.equal(notices.length,0,"scientific assessments send no recruitment notice");
+  const again=await vcr.matching.onJobFinished({state:"succeeded",job:{id:"job_match_2",studyId:study.id,kind:"match_criteria"},engineResult:result});
+  assert.equal(again.persisted,2);assert.equal(notices.length,0);
   // A job of another kind, or one that failed, persists nothing.
   assert.equal((await vcr.matching.onJobFinished({ state: "succeeded", job: { kind: "design_simulation", studyId: study.id }, engineResult: result })).persisted, 0);
   assert.equal((await vcr.matching.onJobFinished({ state: "failed", job: { kind: "match_criteria", studyId: study.id }, engineResult: result })).persisted, 0);
@@ -697,84 +691,17 @@ test("CS-35 M-14 the store's lookups are study-scoped: another study's assessmen
   await assert.rejects(() => vcr.matching.reviewAssessment({ id: "x" }, otherStudy, { assessmentId: assessment.id }), (error) => /** @type {any} */ (error).code === "vcr_assessment_not_found");
   await assert.rejects(() => vcr.matchStore.overrideJudgment({ assessmentId: assessment.id, criterionId: "c", state: "maybe", by: "x", userId: USER, studyId: study.id }),
     (error) => /** @type {any} */ (error).code === "vcr_write_value_invalid", "an unknown state is refused, not stored");
-  const [referral] = await vcr.matchStore.listReferrals({ studyId: study.id, limit: 1 });
-  assert.equal(await vcr.matchStore.getReferral(referral.id, otherStudy.id), null);
-  assert.equal((await vcr.matchStore.getReferral(referral.id, study.id)).id, referral.id);
+
 });
 
-test("PA-12 a site is written into this study only, without a verification a run cannot give, and a follow-up keeps the restricted fields restricted", options, async () => {
-  const sites = await write("site", [
-    { name: "北京协和医院", capacity: { slots: 20, activationPlannedOn: "2026-10-15" }, contacts: [{ name: "张医生" }], activatedOn: "2026-05-01",
-      accrualPrior: { alpha: 2, beta: 4, screenFailureRate: 0.3 }, verifiedAt: "2026-09-01" },
-    { name: "复旦大学附属肿瘤医院", accrualPrior: { alpha: -1, beta: 1 } },
-    { name: "x", accrualPrior: { alpha: 2, beta: 4, history: { enrolled: 99 } } },
-    { id: "ste_of_another_study", name: "y" },
-  ]);
-  assert.equal(sites.ids.length, 0, "no item of that batch is a site this study may write");
-  assert.deepEqual(sites.issues.map((issue) => [issue.index, issue.field]), [[0, "verifiedAt"], [1, "accrualPrior.alpha"], [2, "accrualPrior.history"], [3, "id"]]);
-  const written = await write("site", [{ name: "北京协和医院", capacity: { slots: 20, activationPlannedOn: "2026-10-15" }, contacts: [{ name: "张医生" }], activatedOn: "2026-05-01", accrualPrior: { alpha: 2, beta: 4, screenFailureRate: 0.3 } }]);
-  assert.equal(written.ok, true);
-  const [site] = await vcr.matchStore.listSites(study.id);
-  assert.equal(site.verifiedAt, null, "a profile with no verification makes no capacity claim");
-  assert.deepEqual(await vcr.matchStore.listSites(otherStudy.id), []);
-
-  const follow = await write("followup", [
-    { subjectKey: "P-001", kind: "study_specific", exitDate: "2026-08-01", exitReason: "患者要求退出" },
-    { subjectKey: "P-001", kind: "study_specific", exitDate: "2026-08-01", exitReason: "退出", observations: [{ variable: "progression_date", value: "2026-07-01" }] },
-    { subjectKey: "P-001", kind: "study_specific" },
-    { subjectKey: "P-001", kind: "post_exit", windowStart: "2026-08-02", observations: [{ variable: "ecog", value: 1, at: "2026-08-10" }] },
-    { subjectKey: "P-001", kind: "routine_care", exitReason: "x", derived: true },
-  ]);
-  assert.equal(follow.ids.length, 2);
-  assert.deepEqual(follow.issues.map((issue) => issue.index), [1, 2, 4]);
-  const episodes = await vcr.matchStore.listFollowupEpisodes({ studyId: study.id, subjectKey: "P-001" });
-  const trial = episodes.find((episode) => episode.kind === "study_specific");
-  assert.equal(trial.exitReason, "患者要求退出", "the exit is recorded as it was given");
-  assert.equal(trial.restricted.progression_date.reason, "restricted_in_trial", "and never converted into a progression date");
-  // Trying to turn the exit into a trial fact is refused by the exit rule's own name, and the run is told why in words.
-  const derived = follow.issues.find((issue) => issue.index === 1);
-  assert.equal(derived.code, "vcr_exit_field_not_derivable");
-  assert.match(derived.message, /不可见，也不能从出组记录推出/);
-  assert.doesNotMatch(derived.message, /方案\s*§|AC-\d/);
-
-  // The exit stands as first recorded: a different one for the same subject is appended, reported, never written over.
-  const restated = await write("followup", [
-    { subjectKey: "P-001", kind: "study_specific", exitDate: "2026-08-09", exitReason: "患者要求退出" },
-    { subjectKey: "P-001", kind: "study_specific", exitDate: "2026-08-01", exitReason: "疾病进展" },
-    { subjectKey: "P-001", kind: "study_specific", exitDate: "2026-08-01", exitReason: "患者要求退出" },
-    { subjectKey: "P-001", kind: "study_specific", exitDate: "2026-08-01", exitReason: "患者要求退出", windowEnd: "2026-09-30" },
-  ]);
-  assert.equal(restated.ids.length, 3, "a different exit is appended (three written), a window that ends after the exit is refused");
-  assert.deepEqual(restated.issues.map((issue) => [issue.index, issue.field, issue.code]), [
-    [0, "exitDate", "vcr_exit_date_rewritten"],
-    [1, "exitReason", "vcr_exit_reason_rewritten"],
-    [3, "windowEnd", "vcr_write_value_invalid"],
-  ]);
-  const after = await vcr.matchStore.listFollowupEpisodes({ studyId: study.id, subjectKey: "P-001" });
-  assert.equal(after.find((episode) => episode.kind === "study_specific" && episode.exitReason === "患者要求退出").exitReason, "患者要求退出", "the first record is untouched");
-  assert.ok(after.filter((episode) => episode.kind === "study_specific").length >= 4, "nothing was overwritten: every write is a row");
+test("removed site/followup writers refuse explicitly while research data remain usable",options,async()=>{
+ for(const what of ["site","followup"])await assert.rejects(write(what,[{subjectKey:"P-001",name:"legacy"}]),{status:410,code:"vcr_recruitment_retired"});
+ assert.ok((await vcr.matchStore.listFacts({studyId:study.id})).length>0);
 });
 
-test("PA-26 the accrual forecast is built from the referral ledger in exactly the engine's shape, and the backtest reads the registered forecasts", options, async () => {
-  const referrals = await vcr.matchStore.listReferrals({ studyId: study.id });
-  assert.ok(referrals.length >= 1);
-  const [site] = await vcr.matchStore.listSites(study.id);
-  await vcr.matchStore.upsertSite({ userId: USER, site: { ...site, studyId: study.id, id: site.id, verifiedAt: null } });
-  const built = await vcr.matching.accrualScenario(study, { target: 40, byTimes: [6, 12] });
-  assert.equal(built.ok, true, built.message);
-  assert.deepEqual(Object.keys(built.scenario).sort(), ["byTimes", "sites", "target"], "screenFailure only where the ledger has screening history");
-  assert.deepEqual(Object.keys(built.scenario.sites[0]).sort(), ["alpha", "beta", "enrolled", "exposureTime", "id", "startTime"]);
-  assert.equal(built.scenario.sites[0].alpha, 2 + built.scenario.sites[0].enrolled, "the site's posterior is its prior plus what the ledger says it enrolled");
-  const refused = await vcr.matching.accrualScenario(study, { target: 0 });
-  assert.equal(refused.ok, false);
-  assert.equal((await vcr.matching.accrualScenario(study, { target: 10, eventTarget: 5 })).ok, false, "an event target needs its hazard");
-  assert.equal((await vcr.matching.accrualScenario(study, { target: 10, byTimes: [12, 6] })).ok, false);
-  const empty = await vcr.matching.accrualScenario(otherStudy, { target: 10 });
-  assert.equal(empty.ok, false);
-  assert.match(empty.message, /中心/);
-  const backtest = await vcr.matching.accrualBacktest(study);
-  assert.equal(backtest.slices, 0);
-  assert.equal(backtest.coverage, null, "no registered forecast, no coverage: nothing is invented");
+test("matching exposes no operational accrual assembly or backtest",options,async()=>{
+ for(const key of ["accrualScenario","accrualBacktest","enrollmentTimeline"])assert.equal(typeof vcr.matching[key],"undefined");
+ const tab=await vcr.matching.tab(study);assert.ok(tab.assessments.length>0);assert.ok(Array.isArray(tab.candidates));assert.equal('referrals' in tab,false);
 });
 
 test("the runtime read of matching is aggregates and pseudonymous keys, and one subject's own assessment: no reviewer, no note", options, async () => {
@@ -790,24 +717,11 @@ test("the runtime read of matching is aggregates and pseudonymous keys, and one 
   assert.equal((await vcr.service.runtimeRead(otherStudy, "matching", {})).protocol, null, "another study's run reads nothing of this one");
 });
 
-test("the funnel and the tallies are computed over the complete data, and the referral funnel counts a withdrawal at the step it reached", options, async () => {
-  const funnel = await vcr.matchStore.criterionFunnelRows(study.id);
-  assert.ok(funnel.length >= 1);
-  assert.ok(funnel.every((row) => row.satisfied + row.not_satisfied + row.unknown + row.pending_recheck + row.notApplicable >= 1));
-  const [referral] = await vcr.matchStore.listReferrals({ studyId: study.id, limit: 1 });
-  const moves = ["contactable", "contacted", "withdrawn"];
-  const { decideReferralTransition } = await import("../src/vcrRecruit.mjs");
-  await vcr.matchStore.approveContact({ referralId: referral.id, studyId: study.id, approvedBy: USER, userId: USER });
-  for (const to of moves) {
-    const moved = await vcr.matchStore.transitionReferral({ referralId: referral.id, studyId: study.id, to, actor: USER, userId: USER,
-      guard: (current) => decideReferralTransition({ referral: current, to, role: "lead" }) });
-    assert.equal(moved.ok, true, `${to}: ${JSON.stringify(moved)}`);
-  }
-  const progress = await vcr.matchStore.referralProgress(study.id);
-  assert.equal(progress.get(referral.id), "contacted");
-  const tab = await vcr.matching.tab(study);
-  assert.ok(tab.funnel.reachedContact >= 1, "the withdrawn patient was contacted");
-  assert.deepEqual(Object.keys(tab.tallies).every((key) => ["eligible", "ineligible", "insufficient_evidence", "pending"].includes(key)), true);
+test("scientific criterion funnel and tallies retain complete matching denominators without referral data",options,async()=>{
+ const funnel=await vcr.matchStore.criterionFunnelRows(study.id);assert.ok(funnel.length>0);
+ assert.ok(funnel.every(row=>row.satisfied+row.not_satisfied+row.unknown+row.pending_recheck+row.notApplicable>=1));
+ const tab=await vcr.matching.tab(study);assert.ok(Object.values(tab.tallies).reduce((a,b)=>a+b,0)>0);
+ assert.equal('sites' in tab,false);assert.equal('funnel' in tab,false);
 });
 
 test("a deferral that has come due is re-evaluated by the recheck, once per study, and nothing due is nothing enqueued", options, async () => {
@@ -861,8 +775,8 @@ test("simulate match_criteria on the real queue: the frozen scenario is accepted
   assert.equal(new Date(latest[0].asOf).getTime(), Date.parse(asOf), "the assessment is the one of the frozen instant, persisted by the hook");
 });
 
-test("simulate accrual_forecast on the real queue: the scenario built from the ledger passes the engine's own schema, and only its table is kept", options, async () => {
-  const started = await gateway("simulate", { action: "start", kind: "accrual_forecast", scenario: { target: 40, byTimes: [6, 12] } });
+test("simulate accrual_forecast on the real queue: explicit abstract-site assumptions pass the engine schema and only its design table is kept", options, async () => {
+  const started = await gateway("simulate", { action: "start", kind: "accrual_forecast", scenario: { sites: [{id:"abstract_1",alpha:2,beta:4,startTime:0}], target: 40, byTimes: [6, 12] } });
   assert.equal(started.status, 200, started.body);
   const { jobId } = started.json().data;
   const row = await vcr.store.one(`SELECT kind, scenario, checkpoint FROM ${VCR_SCHEMA}.jobs WHERE id = $1`, [jobId]);
@@ -885,12 +799,12 @@ test("simulate match_criteria hands the queue the platform's own frozen scenario
   assert.deepEqual(asked[0].scenario.criteria.every((criterion) => criterion.state === "unknown"), true);
   assert.ok(asked[0].inputs.some((input) => input.id.startsWith("matching:asof:")), "the instant is frozen as an input");
   assert.equal(asked[0].detail.origin, "runtime");
-  const accrual = await gateway("simulate", { action: "start", kind: "accrual_forecast", scenario: { target: 40 } }, { jobs });
+  const accrual = await gateway("simulate", { action: "start", kind: "accrual_forecast", scenario: { sites: [{id:"abstract_1",alpha:2,beta:4,startTime:0}], target: 40 } }, { jobs });
   assert.equal(accrual.status, 200, accrual.body);
   assert.deepEqual(asked[1].detail.keepTables, ["probability_by_month"]);
-  assert.equal(accrual.json().data.notes.screenFailureUnavailable, true, "what the study cannot supply is said, not zeroed");
+  assert.equal(accrual.json().data.notes,undefined,"no live CRM history is claimed");
   const smuggled = await gateway("simulate", { action: "start", kind: "accrual_forecast", scenario: { target: 40, sites: [{ id: "x", alpha: 1, beta: 1, startTime: 0 }] } }, { jobs });
-  assert.equal(smuggled.status, 400, "the rates of a site come from the ledger, not from the run");
+  assert.equal(smuggled.status, 200, "an optional abstract design calculation accepts explicit assumptions");
 });
 
 // Last on purpose: the earlier tests read the account's first precedent and expect it to be the ClinicalTrials.gov one.
@@ -970,9 +884,7 @@ test("a legacy calendar-only exit is compared as recorded, without a timezone re
     (id, study_id, user_id, subject_key, kind, window_end, restricted, exit_reason)
     VALUES ('fup_legacy_calendar', $1, $2, $3, 'study_specific', $4::timestamptz, '{}'::jsonb, 'Original reason')`,
   [study.id, USER, subjectKey, "2026-08-01"]);
-  const saved = await write("followup", [{ subjectKey, kind: "study_specific", exitDate: "2026-08-01", exitReason: "Original reason" }]);
-  assert.equal(saved.ids.length, 1);
-  assert.ok(!saved.issues.some(row => row.code === "vcr_exit_date_rewritten" || row.code === "vcr_exit_reason_rewritten"));
+  await assert.rejects(write("followup",[{subjectKey,kind:"study_specific",exitDate:"2026-08-01",exitReason:"Original reason"}]),{status:410,code:"vcr_recruitment_retired"});
   const original = await vcr.matchStore.firstTrialExit({ studyId: study.id, subjectKey });
   assert.equal(original.id, "fup_legacy_calendar");
   assert.equal(original.exitDate, null, "the migration never invents missing verbatim input on old rows");

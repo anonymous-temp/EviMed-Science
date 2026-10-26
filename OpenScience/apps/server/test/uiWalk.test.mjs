@@ -112,7 +112,8 @@ test("the walk covers every tab a study has, and the domain is where the list li
   // tab added there and not here is a page nobody looks at again.
   const { VCR_TABS } = await import("@evimed/domain");
   const walked = VCR_TABS_WALK.map(([name]) => name.replace(/^vcr-/, ""));
-  assert.deepEqual(walked, [...VCR_TABS], "the walk's tab list is the domain's, in the domain's order");
+  assert.deepEqual([...walked].sort(), [...VCR_TABS].sort(), "six result destinations retain the individual patient variant inside population");
+  assert.deepEqual(VCR_TABS_WALK.find(([name]) => name === "vcr-patients"), ["vcr-patients", "/population?level=individual"]);
   const browser = await readFile(path.join(repoRoot, "apps/web/src/components/vcr/vcrTabs.ts"), "utf8");
   assert.match(browser, /VCR_TABS/, "the page derives its tabs from the domain; a hand-written list here would drift");
 });
@@ -185,11 +186,12 @@ function measureControls(controls) {
     return el;
   };
   const elements = controls.map(make).flatMap((el) => [el, ...el.children]);
-  const body = { innerText: controls.map((control) => control.text ?? "").join("\n"), contains: () => true };
+  const body = { innerText: controls.map((control) => control.text ?? "").join("\n"), contains: () => true, append: () => {} };
   const saved = Object.fromEntries(["document", "window", "getComputedStyle", "CSS"].map((name) => [name, globalThis[name]]));
   Object.assign(globalThis, {
     document: {
       body,
+      createElement: () => ({ style: {}, remove: () => {} }),
       title: "知识库 · EviMed",
       documentElement: { scrollWidth: 1512 },
       querySelector: () => null,
@@ -405,9 +407,9 @@ function queryAll(root, selector) {
 /** Run `fn` with `root` (a <body>) installed as the page. */
 function inPage(root, fn, { path = "/app/files" } = {}) {
   const saved = Object.fromEntries(["document", "window", "getComputedStyle", "CSS", "location"].map((name) => [name, globalThis[name]]));
-  const body = Object.assign(root, { innerText: descendants(root).map((el) => el.text).filter(Boolean).join("\n") });
+  const body = Object.assign(root, { innerText: descendants(root).map((el) => el.text).filter(Boolean).join("\n"), append: () => {} });
   Object.assign(globalThis, {
-    document: { body, title: "页面 · EviMed", documentElement: { scrollWidth: 1512, scrollHeight: 945 }, activeElement: null, querySelector: (selector) => queryAll(body, selector)[0] ?? null, querySelectorAll: (selector) => queryAll(body, selector) },
+    document: { body, createElement: () => ({ style: {}, remove: () => {} }), title: "页面 · EviMed", documentElement: { scrollWidth: 1512, scrollHeight: 945 }, activeElement: null, querySelector: (selector) => queryAll(body, selector)[0] ?? null, querySelectorAll: (selector) => queryAll(body, selector) },
     window: { innerWidth: 1512, innerHeight: 945 },
     getComputedStyle: (el) => el.style,
     CSS: { escape: (value) => value },
@@ -661,7 +663,8 @@ function compositionRead(pathname) {
     notes: [], headline: 0, activity: 0, stepStates: [] };
   if (geo || vcr) {
     read.chrome = { ...box(60, 124, 272, 1200), position: "sticky", sticky: true, held: mode === "band" && pathname.endsWith("/plan") ? { scrolled: 400, before: 60, after: -340, scrollerTop: 0 } : null };
-    read.tablists = [{ label: "视图", tabs: 8, dots: vcr ? 7 : 0, inChrome: true, inToolbar: false, inSection: false, ...box(100, 40) }];
+    read.tablists = geo ? [{ label: "视图", tabs: 8, dots: 0, inChrome: true, inToolbar: false, inSection: false, ...box(100, 40) }] : [];
+    if (vcr) read.viewSelector = { count: 1, top: 100 };
     if (geo) read.stepRail = { ...box(60, 40), folded: false, count: mode === "steps" && pathname.endsWith("/visibility") ? 7 : 8, inChrome: true, steps: [] };
   }
   if (mode === "orphans" && pathname === "/app/files") read.orphans = [1, 2].map((n) => ({ text: "第" + n + "句话单独站在页面上没有动作", tag: "p", ...box(300 + n * 40, 24) }));
@@ -739,8 +742,20 @@ function context() {
           return { composer: !chatFailing(), stats: [] };
         },
       }],
-      getByRole: (role, { name } = {}) => ({ ...locator(role, name), waitFor: async () => {} }),
-      locator: () => ({ allTextContents: async () => [] }),
+      getByRole: (role, { name } = {}) => role === "menuitemradio" ? {
+        allTextContents: async () => ["对话", "总览", "匹配", "人群与患者", "对照", "试验", "依据"],
+        click: async () => {
+          const base = target().pathname.match(/^\/app\/virtual-research\/[^/]+/)[0];
+          const keys = { "对话": "chat", "总览": "", "匹配": "matching", "人群与患者": "population", "对照": "comparator", "试验": "trial", "依据": "data" };
+          url = new URL(base + (keys[name] ? "/" + keys[name] : ""), url).href;
+        },
+      } : ({ ...locator(role, name), waitFor: async () => {} }),
+      locator: () => ({
+        count: async () => 0,
+        allTextContents: async () => [],
+        locator: () => ({ count: async () => 0, evaluateAll: async () => [], locator: () => ({ count: async () => 0 }) }),
+        getByRole: () => ({ count: async () => 1, click: async () => {} }),
+      }),
       reload: async () => {},
       async goto(target, options) {
         if (poisoned) throw Error("page.goto: navigation interrupted by chrome-error://chromewebdata/");
@@ -767,6 +782,8 @@ function context() {
           return { failed: Boolean(bad), message: bad ? "研究暂时无法读取。重试" : null };
         }
         if (typeof fn === "function" && fn.name === "measureComposition") return compositionRead(target().pathname);
+        if (typeof fn === "function" && fn.name === "vcrRequestedStepsProbe") return [];
+        if (typeof fn === "function" && fn.name === "moduleResultProbe") return { status: "content", coverage: true, retained: 1, errors: [], warnings: [], empty: [] };
         // FAKE_SCROLL=stretch|tall|taller: a page two windows tall (photographed whole), nine, and fifty (photographed in slices, and cut off).
         if (typeof fn === "function" && fn.name === "scrollPage") {
           if (arg[0] === "to") { log({ scrollTo: arg[1], at: target().pathname }); return { top: arg[1] }; }
@@ -1054,6 +1071,16 @@ test("a partial walk (OPEN_SCIENCE_WALK_ONLY) reads the views it names at both w
   assert.match(stdout, /PARTIAL WALK \(files, geo-visibility\): not a release walk/);
   const unknown = await walk({ OPEN_SCIENCE_WALK_ONLY: "no-such-view" }).catch((error) => error);
   assert.match(String(unknown.message ?? unknown), /the walk wrote no report \(exit 2\)[\s\S]*names no view: no-such-view/);
+});
+
+test("partial VCR discovery omits unrelated coverage gaps while the full fixture walk still requires them", async () => {
+  const env = { ...WALK_FIXTURE_ACCOUNT, FAKE_EMPTY_LISTS: "1" };
+  const partial = await walk({ ...env, OPEN_SCIENCE_WALK_ONLY: "virtual-research" }, { axe: true });
+  assert.equal(partial.code, 0, partial.stdout + partial.stderr);
+  assert.ok(!partial.report.findings.some(entry => entry.rule === "not-walked"));
+  const full = await walk(env, { axe: true });
+  assert.equal(full.code, 1);
+  assert.ok(full.report.findings.some(entry => entry.rule === "not-walked" && entry.view === "frontier-event"));
 });
 
 test("a finding the baseline does not accept fails the walk, whatever kind of notice it used to be, and the delta says what", async () => {
@@ -2159,7 +2186,7 @@ test("the walk opens the pages whose ids the deployment's lists name: both studi
   assert.ok(report.pages["vcr-trial@2@desktop"] && report.pages["vcr-trial@desktop"], "the second study is reported as vcr-trial@2");
   for (const address of [
     "/app/geo/geo_1/answers/snap_1", "/app/frontier/zones/z_user", "/app/frontier/zones/z_official/evidence/card_1", "/app/frontier/authors/au_1",
-    "/app/frontier/events/ev_1", "/app/frontier?view=following&follow=all", "/app/virtual-research?tab=models", "/app/virtual-research?tab=precedents",
+    "/app/frontier/events/ev_1", "/app/frontier?view=following&follow=all", "/app/virtual-research?tab=precedents",
     "/app/virtual-research?tab=definitions", "/app/account?tab=notifications", "/app/ops", "/app/memory/shared/impeccable-audit-missing", "/app/extensions/plugins/impeccable-audit-missing",
     "/app/extensions/skills/impeccable-audit-missing", "/app/runs/run_1/files/deliverables/pkg/clinical-evidence-matrix.json", "/app/files/src_1",
   ]) assert.ok(visited.has(address), `walked ${address}`);
@@ -3060,4 +3087,38 @@ test("calculation history discovery requires its real purpose, successful job, c
   assert.equal(await discover({ "https://walk.test/api/vcr/studies/calc/jobs": { jobs: [] } }), null);
   assert.equal(await discover({ "https://walk.test/api/vcr/studies/calc/jobs/job-real/result": {} }), null);
   assert.equal(await discoverCalculationHistory({}, "https://walk.test", [studies[0]]), null);
+});
+
+
+test("an eighth VCR color is conditional on the exact semantic palette and a real running activity", () => {
+  const palette = ['text', 'text-2', 'text-3', 'on-accent', 'accent', 'warning', 'success', 'information'];
+  const workflowPalette = { palette, colors: palette, runningInformation: true };
+  const findings = (name, facts) => pageFindings(name, 'desktop', clean({ colorKinds: 8, workflowPalette, ...facts }), []).failures;
+  assert.deepEqual(findings('vcr-comparator', {}), []);
+  for (const facts of [{ workflowPalette: { ...workflowPalette, runningInformation: false } }, { workflowPalette: { ...workflowPalette, colors: [...palette.slice(0, 7), 'arbitrary'] } }, { colorKinds: 9 }]) {
+    assert.ok(findings('vcr-comparator', facts).some(entry => entry.includes('text colours')));
+  }
+  assert.ok(findings('files', {}).some(entry => entry.includes('text colours')));
+});
+
+
+test("Inbox counts only exclusive validated selection control kinds outside its ordinary eight", () => {
+  const selectionControls = { present: true, valid: true, checkboxKinds: ['native-checkbox'], primaryKinds: ['local-primary'], exclusiveKinds: ['native-checkbox', 'local-primary'] };
+  const verdict = overrides => pageFindings('inbox', 'desktop', clean({ controlKinds: 10, selectionControls, ...overrides }), []).failures;
+  assert.deepEqual(verdict({}), []);
+  for (const overrides of [{ controlKinds: 11 }, { selectionControls: { ...selectionControls, valid: false } }, { selectionControls: { ...selectionControls, exclusiveKinds: ['native-checkbox'] } }, { selectionControls: null }]) {
+    assert.ok(verdict(overrides).length);
+  }
+  assert.ok(pageFindings('files', 'desktop', clean({ controlKinds: 11, selectionControls }), []).failures.length);
+});
+
+test("GeoAnswer retains six exact reader roles only when every 16px node is original prose", () => {
+  const sizeWeightPairs = ['12px/400', '14px/400', '14px/600', '16px/400', '18px/600', '24px/600'];
+  const answerReading = { surface: true, originalNodes: 2, misplacedBodyNodes: 0 };
+  const types = (name, overrides) => pageFindings(name, 'desktop', clean({ sizeWeightPairs, answerReading, ...overrides }), []).notices.filter(entry => entry.rule === 'type-pairs');
+  assert.deepEqual(types('geo-answer', {}), []);
+  for (const overrides of [{ sizeWeightPairs: [...sizeWeightPairs, '20px/400'] }, { sizeWeightPairs: sizeWeightPairs.map(pair => pair === '16px/400' ? '17px/400' : pair) }, { answerReading: { ...answerReading, surface: false } }, { answerReading: { ...answerReading, originalNodes: 0 } }, { answerReading: { ...answerReading, misplacedBodyNodes: 1 } }]) {
+    assert.ok(types('geo-answer', overrides).length);
+  }
+  assert.ok(types('geo-plan', {}).length);
 });

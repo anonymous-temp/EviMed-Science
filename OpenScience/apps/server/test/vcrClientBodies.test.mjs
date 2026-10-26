@@ -16,7 +16,7 @@ import test from "node:test";
 
 import { createVcrRoutes } from "../src/vcrRoutes.mjs";
 import {
-  assessmentBody, assumptionBody, budgetBody, cancelBody, contactBody, decisionBody, definitionCompareBody, definitionSaveBody, definitionUseBody, exportBody,
+  assessmentBody, assumptionBody, budgetBody, cancelBody, decisionBody, definitionCompareBody, definitionSaveBody, definitionUseBody, exportBody,
   jobBody, memberBody, packBindBody, regulatoryContactBody, reviewBody, runBody, studyCreateBody, studyPatchBody,
 } from "../../web/src/lib/vcrBodies.ts";
 
@@ -90,7 +90,6 @@ function harness() {
       async add(/** @type {any} */ input) { seen.push(["member", input.role]); return { userId: input.userId, role: input.role }; },
       async remove() { return { removed: true }; },
     },
-    matching: { async contactReferral(/** @type {any} */ _user, /** @type {any} */ _study, /** @type {string} */ id) { seen.push(["contact", id]); return { id, state: "contacted" }; } },
     knowledge: {
       async bindPack(/** @type {any} */ _study, /** @type {string} */ packId) { seen.push(["bind", packId]); return { binding: {}, pack: {} }; },
       async saveFromStudy(/** @type {any} */ _study, /** @type {any} */ input) { seen.push(["save", input.populationId]); return { definitionId: "dfn_1", version: 1 }; },
@@ -139,8 +138,6 @@ const CASES = /** @type {Array<[string, string, string, unknown]>} */ ([
   ["add a regulatory contact with only the day and the agency", "POST", "/api/vcr/studies/std_1/regulatory-contacts", regulatoryContactBody({ date: "2026-08-14", agency: "FDA", type: "", summary: "  ", attachments: [] })],
   ["export a package", "POST", "/api/vcr/studies/std_1/export", exportBody("study_package")],
   ["add a member", "POST", "/api/vcr/studies/std_1/members", memberBody({ userId: "u_stat", role: "statistical_reviewer" })],
-  ["confirm one contact", "POST", "/api/vcr/studies/std_1/referrals/ref_1/contact", contactBody({ note: "已电话确认", reason: "符合入组" })],
-  ["confirm one contact with no note", "POST", "/api/vcr/studies/std_1/referrals/ref_1/contact", contactBody()],
   ["work from a catalogue pack", "POST", "/api/vcr/studies/std_1/pack", packBindBody("nsclc")],
   ["save a population as a new library definition", "POST", "/api/vcr/studies/std_1/definitions",
     definitionSaveBody({ populationId: "pop_1", name: "  成人 ECOG 0-1  ", text: " 年龄不小于 18 岁、ECOG 0 或 1。 " })],
@@ -198,4 +195,15 @@ test("a regulatory contact body trims what was typed and leaves out what the for
 test("the settings body cannot carry the compute budget", () => {
   const body = studyPatchBody({ name: "x", status: "active", /** @type {any} */ budget: { limitSeconds: 1 } });
   assert.equal("budget" in body, false);
+});
+
+// AC-18 is superseded by the approved retirement: no contact is initiated.
+test("AC-18 retired contact routes refuse old clients without a write", async () => {
+  const { send, seen } = harness();
+  for (const body of [{}, { note: "synthetic old-client request", reason: "eligible" }]) {
+    const answer = await send("POST", "/api/vcr/studies/std_1/referrals/ref_1/contact", body);
+    assert.equal(answer.status, 410);
+    assert.equal(answer.code, "vcr_recruitment_retired");
+  }
+  assert.deepEqual(seen, []);
 });

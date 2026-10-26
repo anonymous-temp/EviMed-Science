@@ -121,6 +121,18 @@ function keyboardFocus(element: HTMLElement): boolean {
   }
 }
 
+/**
+ * Component: Tooltip; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Single trigger and portalled plain-text tooltip; optional hidden description.
+ * Variants: description/label; whenTruncated and gallery defaultOpen.
+ * States: Mouse/pen delay; keyboard opens; Escape suppresses until trigger leaves.
+ * Hit area: Trigger owns geometry; tooltip accepts hover, contains no controls.
+ * Keyboard: Keyboard-origin focus opens; Escape dismisses without moving focus.
+ * Long content: Contract is plain text up to 40 characters; truncation check gates optional reveal.
+ * Theme: Inverse surface/foreground; z-tooltip and shared motion.
+ * Responsive: Viewport-clamped above/below placement with resize/scroll updates.
+ * Verification: Tooltip.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function Tooltip({
   content,
   kind = "description",

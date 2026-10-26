@@ -107,7 +107,7 @@ it.each(VCR_ROW_RULE_OPS)("renders the %s rule operator with its typed saved val
   const change = vi.fn(); render(<ScenarioField schema={{ t: "rule" }} value={rule} root={{}} title="条件" change={change} />);
   expect(screen.getAllByLabelText("运算")[0]).toHaveValue(op);
   expect(screen.getByLabelText("数据列")).toHaveValue(op === "in" || op === "not_in" ? "group" : "age");
-  if (op === "in" || op === "not_in") { expect(screen.getByLabelText("匹配值 1")).toHaveValue(60); expect(screen.getByLabelText("匹配值 2")).toHaveValue("false"); expect(screen.getByLabelText("匹配值 3")).toHaveValue("source category"); fireEvent.change(screen.getByLabelText("匹配值 1"), { target: { value: "65" } }); expect(change).toHaveBeenCalledWith({ ...rule, values: [65, false, "source category"] }); }
+  if (op === "in" || op === "not_in") { expect(screen.getByLabelText("匹配值 1")).toHaveValue("60"); expect(screen.getByLabelText("匹配值 2")).toHaveValue("false"); expect(screen.getByLabelText("匹配值 3")).toHaveValue("source category"); fireEvent.change(screen.getByLabelText("匹配值 1"), { target: { value: "65" } }); expect(change).toHaveBeenCalledWith({ ...rule, values: [65, false, "source category"] }); }
   else expect(change).not.toHaveBeenCalled();
 });
 

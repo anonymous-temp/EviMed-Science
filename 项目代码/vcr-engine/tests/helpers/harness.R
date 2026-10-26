@@ -280,6 +280,10 @@ vcr_test_handler_jobs <- function() {
   in_cmp_ev <- vcr_test_input(cmp_ev, "snp_e05c:events", "event")
   # a time-to-event MAIC: the study's patients (covariates centred on the aggregate means) and a reconstruction's pseudo-patients
   in_pseudo <- vcr_test_input(data.frame(time = stats::rexp(50L, 0.1) + 0.5, status = stats::rbinom(50L, 1L, 0.7)), "rec_e05c:1", source = "reconstructed")
+  # Source-bound model jobs mirror N52's censored likelihood and centered prediction fixtures.
+  model_survival <- vcr_test_input(data.frame(USUBJID = paste0("S", 1:5), time = c(1, 2, 3, 4, 6),
+                                             status = c(1, 1, 0, 1, 0)), "snp_e05:model_survival")
+  model_prognostic <- vcr_test_input(data.frame(USUBJID = paste0("P", 1:3), age = c(40, 60, NA)), "snp_e05:model_prognostic")
   sites <- lapply(1:8, function(i) list(id = sprintf("s%d", i), alpha = 2, beta = 2.5, startTime = 0))
   curve_arm <- function(med) {
     t <- seq(0, 24, by = 0.5); tr <- c(0, 6, 12, 18, 24)
@@ -296,6 +300,14 @@ vcr_test_handler_jobs <- function() {
     list("patients.continuous", list(design = list(nTreat = 40, nControl = 40), endpoint = list(type = "continuous"), truth = list(effect = 0.4, sd = 1)), NULL),
     list("patients.binary", list(design = list(nTreat = 40, nControl = 40), endpoint = list(type = "binary"), truth = list(controlRate = 0.3, treatmentRate = 0.45)), NULL),
     list("patients.time_to_event", list(design = list(nTreat = 40, nControl = 40), endpoint = list(type = "time_to_event"), truth = list(controlMedian = 12, hazardRatio = 0.7), accrual = list(kind = "uniform", duration = 6, followup = 12)), NULL),
+    list("model.survival_fit", list(inputId = model_survival$id, idColumn = "USUBJID", timeColumn = "time",
+                                     statusColumn = "status", statusEncoding = "event", distribution = "exponential",
+                                     timeUnit = "months", horizons = c(1, 3, 8)), list(model_survival)),
+    list("model.prognostic_apply", list(inputId = model_prognostic$id, idColumn = "USUBJID", sourceCondition = "control",
+                                         endpoint = list(type = "binary", horizon = 12, timeUnit = "months"), inputUnits = list(age = "years"),
+                                         model = list(family = "logistic", intercept = -1,
+                                                      terms = list(list(column = "age", coefficient = 0.05, transform = "identity",
+                                                                        unit = "years", center = 50, scale = 1)))), list(model_prognostic)),
     list("evidence.pool", list(studies = list(list(studyId = "a", estimate = -0.4, se = 0.2), list(studyId = "b", estimate = -0.6, se = 0.15), list(studyId = "c", estimate = -0.3, se = 0.25)), method = "random_effects_dl", scale = "log"), NULL),
     list("evidence.reconstruct_km", list(curve = curve_arm(12)$curve, riskTable = curve_arm(12)$riskTable, provenance = list(kind = "digitizer", tool = "e05-digitizer")), list(list(kind = "evidence", id = "ev_e05@1"))),
     list("comparator.entropy_balance", list(covariates = list("age", "male"), treatmentColumn = "arm", outcomeColumn = "y", endpoint = list(type = "continuous")), list(in_subj)),

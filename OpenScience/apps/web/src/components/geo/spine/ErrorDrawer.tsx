@@ -144,16 +144,19 @@ export function ErrorCorrections({
   corrections,
   canRun,
   onAsk,
+  statementNumber,
 }: {
   geoId: string;
   project: GeoProject;
   corrections: readonly GeoAction[];
   canRun: boolean;
   onAsk: () => void;
+  statementNumber?: number;
 }) {
+  const title = statementNumber == null ? "纠错稿" : `第 ${statementNumber} 条说法的纠错稿`;
   if (corrections.length === 0) {
     return (
-      <Section title="纠错稿" level="sub">
+      <Section title={title} level="sub">
         <Note action={canRun ? <Button variant="secondary" size="sm" onClick={onAsk}>写纠错稿</Button> : undefined}>
           这条说法还没有纠错稿。
         </Note>
@@ -161,7 +164,7 @@ export function ErrorCorrections({
     );
   }
   return (
-    <Section title="纠错稿" count={`${corrections.length} 条行动`} level="sub">
+    <Section title={title} count={`${corrections.length} 条行动`} level="sub">
       <CorrectionList geoId={geoId} project={project} corrections={corrections} />
     </Section>
   );

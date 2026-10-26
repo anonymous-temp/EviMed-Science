@@ -2,13 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Drawer } from "@/components/ui/Drawer";
-import { Switch } from "@/components/ui/Switch";
+import { ApplyControl } from "./ApplyControl";
 import { Tag } from "@/components/ui/Tag";
 import { LoadError } from "@/components/cards/LoadError";
 import { FilesSkeleton } from "@/components/cards/Skeletons";
 import { copyPlatformSkill, readPlatformSkill, projectPlatformSkills, saveProjectPlatformSkills, type PersonalSkill, type PlatformSkill } from "@/lib/skillLibraryClient";
 import { productErrorMessage } from "@/lib/productClient";
-import { nextDisabled, skillActivationText, skillAdapted, skillOrigin, skillPublisher, skillRepositoryUrl } from "./catalogueModel";
+import { nextDisabled, skillActivationText, skillDisplayName, skillAdapted, skillOrigin, skillPublisher, skillRepositoryUrl } from "./catalogueModel";
 import { RepositoryLink } from "./CatalogueView";
 import { useActivationPoll } from "./useActivationPoll";
 import { useLoad } from "./useLoad";
@@ -54,12 +54,12 @@ export function PlatformSkillDrawer({ skill, projectId, projectName, onClose, on
     catch (cause) { if (alive.current) setError(productErrorMessage(cause)); }
     finally { running.current = false; if (alive.current) setCopying(false); }
   };
-  return <Drawer title={skill.title} description={`${skillPublisher(detail ?? skill)} · ${skill.group}`} onClose={onClose}>
+  return <Drawer title={skillDisplayName(skill)} description={`${skillPublisher(detail ?? skill)} · ${skill.group}`} onClose={onClose}>
     <div className="flex min-h-full flex-col gap-6">
       <div className="flex flex-col gap-4"><div className="flex flex-wrap items-center gap-2"><Tag>技能</Tag><Tag>{thirdParty ? "第三方" : "EviMed Science"}</Tag>{skillAdapted(detail ?? skill) && <Tag>已改编</Tag>}<RepositoryLink href={sourceUrl} title={skill.title} /></div>
-        <p data-prose className="text-body text-text-2">{skill.use}</p></div>
+        <p data-prose className="text-body text-text-2">{skill.use}</p><p className="text-meta text-text-3">技能标识：<code>{skill.id}</code></p></div>
       {!skill.requirement?.required && <div className="rounded-card bg-surface-1 p-4"><DrawerSection title="当前项目">
-        {current?.activation.phase !== "not-applicable" && <Switch showLabel label={`在“${projectName}”里使用`} checked={enabled} disabled={!current || saving || copying} onChange={checked => void save(checked)} />}
+        {current?.activation.phase !== "not-applicable" && <ApplyControl showLabel label={`在“${projectName}”里使用`} checked={enabled} disabled={!current || saving || copying} onChange={checked => void save(checked)} />}
         <p role="status" className="text-ui text-text-2">{skillActivationText(enabled, current?.activation)}</p>
         {current && ["failed", "rolled-back"].includes(current.activation.phase) && <Button variant="text" disabled={saving} onClick={() => void save(enabled)}>重新应用</Button>}
         {policy.state.status === "error" && <LoadError message={policy.state.message} onRetry={() => policy.reload()} />}

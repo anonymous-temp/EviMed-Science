@@ -101,15 +101,13 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
           <StatTile
             key={tile.key}
             label={tile.label}
-            value={tile.value}
-            unit={tile.unit}
+            reading={tile.key === "safety" && diagnosis.state.kind === "loading" ? { kind: "loading" } : tile.key === "safety" && diagnosis.state.kind === "error" ? { kind: "failed", error: diagnosis.state.message, retry: diagnosis.reload } : tile.reading}
+            renderMeasured={() => tile.value}
             hint={tile.hint}
             lead={tile.lead}
             rank={tile.rank ?? undefined}
             tone={tile.tone}
-            placeholder={tile.placeholder}
             to={tile.tab ? path(geoTabPath(geoId, tile.tab)) : undefined}
-            loading={diagnosis.state.kind === "loading" && tile.key === "safety"}
             delta={<Delta value={tile.delta} unit={tile.key === "gvi" ? "index" : "point"} polarity={tile.polarity} />}
             note={tile.triple ? undefined : tile.note}
             className={tile.lead ? "sm:col-span-2" : undefined}
@@ -119,7 +117,7 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
                   ? (
                     <BulletBar
                       label={tile.label}
-                      value={Number(tile.value) || null}
+                      value={tile.reading.kind === "measured" ? tile.reading.value : null}
                       target={tile.target}
                       targetLabel={tile.target === null ? undefined : `目标 ${formatGeoValue(tile.target, "index")}`}
                       // The rival's reading is a mention rate, not an index: it is

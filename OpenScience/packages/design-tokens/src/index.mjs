@@ -28,12 +28,10 @@
  * `scripts/build/generate-design-tokens.mjs --check` and
  * `apps/web/src/app/designTokens.test.ts` both regenerate and compare, so a
  * stale artifact is a red test rather than a shell and a stylesheet that
- * disagree about what blue is.
+ * disagree about their palette.
  *
- * Nothing here is a decision this module makes on its own: the values are the
- * design language 2.0 table of
- * `docs/superpowers/specs/2026-09-26-EviMed与EviMed-Science融合方案.md` §5, and
- * `OpenScience/DESIGN.md` is its prose. Contrast figures in the `note` fields
+ * Values follow the owner-approved warm-paper and terracotta direction
+ * (2026-10-26). `OpenScience/DESIGN.md` is the design language in prose. Contrast figures in the `note` fields
  * are measured with the WCAG 2.1 relative-luminance formula — `contrast.mjs`
  * recomputes them at build time and fails the build on a shortfall, so a note
  * cannot quietly become fiction.
@@ -50,7 +48,7 @@
  * steps and the version still read 2.0.0, so "both sides pin one version"
  * could not see the drift).
  */
-export const DESIGN_TOKENS_VERSION = '2.2.0'
+export const DESIGN_TOKENS_VERSION = '3.0.0'
 
 /* ------------------------------------------------------------------ ramps -- */
 
@@ -61,83 +59,60 @@ export const DESIGN_TOKENS_VERSION = '2.2.0'
  * @type {Readonly<Record<string, Readonly<Record<string, string>>>>}
  */
 export const COLOR_RAMPS = Object.freeze({
-  /**
-   * 循证蓝. `600` is EviMed's live brand colour, kept to the byte — the
-   * platform has users and a logo already. The other ten steps are filled in
-   * around it on one lightness ladder.
-   */
+  /** Terracotta actions; the logo has its own neutral brand-ink role. */
   brand: Object.freeze({
-    50: '#eef4fc',
-    100: '#dde9f9',
-    200: '#bcd3f3',
-    300: '#8fb5ea',
-    400: '#5f97e0', // the dark scheme's accent: 4.63 on its inset track, 6.20 on the dark canvas
-    500: '#2a72d0',
-    600: '#0a5dc1',
-    700: '#0a4da0',
-    800: '#0c3e7f',
-    900: '#0e305f',
-    950: '#0a1f3e',
+    50: '#fbefe8',
+    100: '#f6dfd1',
+    200: '#edbfa7',
+    300: '#e3a385',
+    400: '#d98c6b',
+    500: '#bc6442',
+    600: '#a34427',
+    700: '#8d3922',
+    800: '#71301f',
+    900: '#55281d',
+    950: '#321c16',
   }),
   /**
-   * A blue-grey at the brand's own colour temperature, so a grey surface
-   * beside a blue one does not read as two products. Body text is `900`, not
-   * black: the live EviMed shell set every text role to `#000000` and every
-   * secondary role to `#333333`, and a collapsed ramp is why its placeholders
-   * were black and its spinners invisible.
-   *
-   * `control` is the one hand-placed step: the visible boundary of a control
-   * needs 3:1 (WCAG 1.4.11) and no ladder step sat there.
+   * Warm paper and ink. The control step is measured separately because a
+   * meaningful control boundary needs 3:1 on every surface it occupies.
    */
   n: Object.freeze({
-    0: '#ffffff',
-    25: '#fafbfc',
-    50: '#f5f7f9',
-    100: '#edf0f3',
-    150: '#e4e8ec',
-    200: '#d6dce2',
-    300: '#bac2ca',
-    400: '#939ca6',
-    // 4.61 on `surface-3` (#e4e8ec), the darkest ground metadata is drawn on —
-    // in the shell's inset tracks and in the kernel's own `bg-layer-3`. The
-    // design language quotes 5.3:1, which was measured on white only; at
-    // #646d77 the same text was 4.27:1 two layers down, and the kernel's
-    // tertiary label is this step.
-    500: '#5f686f',
-    600: '#535b64',
-    700: '#3e454d',
-    800: '#2a3037',
-    900: '#1a1f25',
-    950: '#12161b',
-    // 3.10 on the sidebar, 3.33 on white. The design language quotes 3.3:1,
-    // which is true on white and was 2.90 on the sidebar at #8a939c — a
-    // control edge has to clear 3:1 on every ground it actually sits on, so
-    // the step is one shade darker than the table's headline figure.
-    control: '#858e97',
+    0: '#fffdf8',
+    25: '#f7f5ef',
+    50: '#f2efe7',
+    100: '#ebe7de',
+    150: '#e3ded3',
+    200: '#d6d0c4',
+    300: '#bcb5a9',
+    400: '#9b9387',
+    500: '#686157',
+    600: '#645c52',
+    700: '#494239',
+    800: '#36302a',
+    900: '#24211e',
+    950: '#191714',
+    control: '#8c8173',
   }),
-  /** Dark surfaces on the same hue, one step lighter per layer. */
+  /** Dark ink surfaces, one step lighter per layer. */
   dark: Object.freeze({
-    bg: '#0f1318',
-    surface: '#161b21',
-    'surface-2': '#1e242b',
-    'border-faint': '#1e242b',
-    border: '#262d35',
-    'border-strong': '#646e78',
+    bg: '#171512',
+    surface: '#211e1a',
+    'surface-2': '#2a2621',
+    'border-faint': '#2a2621',
+    border: '#342f29',
+    'border-strong': '#81766a',
   }),
-  /** Clinical safety, deletion, a severe error. Red is spent here and nowhere else. */
+  /** Clinical safety, deletion and severe errors use a distinct crimson. */
   danger: Object.freeze({
-    50: '#fdf1ef',
-    100: '#fbe2de',
-    300: '#e0877f',
-    400: '#d1594e',
-    // 4.66 on `surface-3` (#e4e8ec) and 5.73 on the page; white on it 5.73. The
-    // design language quotes #c0362c, measured on white; two layers down the
-    // same red was 4.48:1, and a safety notice is the last text that may fall
-    // below AA.
-    600: '#bc342a',
-    700: '#a72d24',
-    800: '#9a2a22',
-    950: '#3d100c',
+    50: '#fdf0f2',
+    100: '#f9dfe4',
+    300: '#e58b9c',
+    400: '#d75d78',
+    600: '#ad2f45',
+    700: '#97263a',
+    800: '#822235',
+    950: '#3b121c',
   }),
   /** Needs attention, not danger: an unverified quotation, a paused probe. */
   warn: Object.freeze({
@@ -145,7 +120,7 @@ export const COLOR_RAMPS = Object.freeze({
     100: '#ffeacc',
     300: '#e0b169',
     400: '#c98a1f',
-    600: '#985600', // 4.64 on `surface-3`, 5.72 on the page; white on it 5.72
+    600: '#925100', // Keeps attention text readable on the deepest paper surface.
     700: '#8c5000',
     800: '#7f4800',
     950: '#331d00',
@@ -156,24 +131,21 @@ export const COLOR_RAMPS = Object.freeze({
     100: '#d5ebdf',
     300: '#7cc0a0',
     400: '#3f9c73',
-    600: '#1c7347', // 4.75 on `surface-3`, 5.85 on the page; white on it 5.85
+    600: '#1a6f44', // Keeps completed-state text readable on the deepest paper surface.
     700: '#1a6a42',
     800: '#155636',
     950: '#082418',
   }),
-  /**
-   * Informational. On the brand's own hue now that the brand is blue: an
-   * "information" blue distinct from the accent would be a second accent.
-   */
+  /** Deep navy information, independent from actions and safety. */
   info: Object.freeze({
-    50: '#eef4fc',
-    100: '#dde9f9',
-    300: '#8fb5ea',
-    400: '#5f97e0', // the dark scheme's accent: 4.63 on its inset track, 6.20 on the dark canvas
-    600: '#2a72d0',
-    700: '#0a5dc1',
-    800: '#0c3e7f',
-    950: '#0a1f3e',
+    50: '#eaf0f5',
+    100: '#dfe5e9',
+    300: '#9bbbd5',
+    400: '#8ba3b3',
+    600: '#526c7d',
+    700: '#18324d',
+    800: '#354957',
+    950: '#142330',
   }),
 })
 
@@ -211,7 +183,7 @@ export function resolveColor(reference) {
 export const COLOR_ROLES = Object.freeze(
   /** @type {Record<string, ColorRole>} */ ({
     /* --- surfaces ------------------------------------------------------- */
-    // The canvas. A hair off white so a white card has an edge without a
+    // The warm-paper canvas separates a lighter reading surface without a
     // border; the kernel frame takes the same value, so the conversation and
     // the shell around it are still one surface.
     bg: { light: 'n-25', dark: 'dark-bg' },
@@ -226,7 +198,7 @@ export const COLOR_ROLES = Object.freeze(
     'surface-3': { light: 'n-150', dark: 'dark-border' },
     // Modal scrim. Not `black/30`: an opacity modifier on a Tailwind default
     // is a colour no theme switch can reach.
-    scrim: { light: 'rgba(15, 19, 24, 0.32)', dark: 'rgba(0, 0, 0, 0.56)' },
+    scrim: { light: 'rgba(36, 33, 30, 0.32)', dark: 'rgba(0, 0, 0, 0.56)' },
 
     /* --- borders -------------------------------------------------------- */
     // Decoration: separators, a card's edge, a table rule.
@@ -235,31 +207,32 @@ export const COLOR_ROLES = Object.freeze(
     // A pill or segment whose ground already separates it from the page.
     'border-light': { light: 'n-200', dark: 'dark-border' },
     // The visible boundary of a control (WCAG 1.4.11 wants 3:1).
-    'border-control': { light: 'n-control', dark: 'dark-border-strong', note: '3.21 on the page, 3.10 on the sidebar' },
+    'border-control': { light: 'n-control', dark: 'dark-border-strong', note: '3.50 on the page, 3.32 on the sidebar' },
 
     /* --- text ----------------------------------------------------------- */
-    text: { light: 'n-900', dark: '#eef1f4', note: '16.00 on the page' },
-    'text-2': { light: 'n-700', dark: '#c3cad2', note: '9.37 on the page' },
-    'text-3': { light: 'n-500', dark: '#8d96a0', note: '5.48 on the page, 5.29 on the sidebar — nothing lighter carries text' },
-    // The title of a list row that opens a document (前沿动态's cards, 2026-10-23): the brand's deep blue, not black and not the
-    // bright accent, which is what it turns under the pointer; a read row's title steps down to `text-2`.
-    'title-ink': { light: 'brand-900', dark: 'brand-100', note: '12.62 on the page, 11.43 on a hovered row' },
-    // Icons and rules only. Never a word, and never a status: 2.69 on the page,
-    // under the 3:1 a meaningful graphic needs, which is why `dot-*` has its own
-    // steps and `contrast.mjs` fails a dot that borrows this one.
-    'text-graphic': { light: 'n-400', dark: 'n-600', note: 'decorative graphics only, 2.69 on the page — never text, never a status' },
+    text: { light: 'n-900', dark: '#f2eee6', note: '14.69 on the page' },
+    'text-2': { light: 'n-700', dark: '#d1c8ba', note: '9.08 on the page' },
+    'text-3': { light: 'n-500', dark: '#a99e8f', note: '5.61 on the page, 5.32 on the sidebar — nothing lighter carries text' },
+    // Document titles use warm ink; a read row steps down to text-2.
+    'title-ink': { light: 'n-900', dark: '#f2eee6', note: '14.69 on the page' },
+    // Decorative icons and rules only. Meaningful graphics have their own
+    // measured 3:1 roles; contrast.mjs prevents status dots borrowing this one.
+    'text-graphic': { light: 'n-400', dark: 'n-600', note: 'decorative graphics only, 2.78 on the page — never text, never a status' },
+
+    // Identity is neutral ink; actions retain their separate terracotta role.
+    'brand-ink': { light: 'n-900', dark: 'n-25' },
 
     /* --- accent --------------------------------------------------------- */
-    // One accent: the primary action, the link, the focus ring, the selected
-    // row, the ✓ verified mark, and "our" series in a chart.
-    accent: { light: 'brand-600', dark: 'brand-400', note: '6.05 on the page; white on it 6.27' },
+    // One accent: primary actions, links, button focus, selected rows and
+    // "our" comparison series. Verification and information have separate roles.
+    accent: { light: 'brand-600', dark: 'brand-400', note: '5.64 on the page; white on it 6.15' },
     'accent-fg': { light: '#ffffff', dark: 'dark-bg' },
-    // Selected rows, the current sidebar row, the verified chip. Never text.
+    // Selected rows and the current sidebar row. Never text.
     'accent-soft': { light: 'brand-50', dark: 'brand-950' },
     // The pressed state of an accent surface.
     'accent-pressed': { light: 'brand-700', dark: 'brand-300' },
     // Text on `accent-soft`. Same step as the ramp's 800, different job.
-    'accent-strong': { light: 'brand-800', dark: 'brand-300', note: 'on accent-soft: 9.44' },
+    'accent-strong': { light: 'brand-800', dark: 'brand-300', note: 'on accent-soft: 8.68' },
 
     /* --- status: colour is never the only carrier ----------------------- */
     ok: { light: 'ok-600', dark: 'ok-300' },
@@ -268,28 +241,29 @@ export const COLOR_ROLES = Object.freeze(
     'warn-soft': { light: 'warn-50', dark: 'warn-950' },
     'warn-strong': { light: 'warn-800', dark: 'warn-300', note: 'on warn-soft: 6.87' },
     // Red is spent on clinical safety, deletion and a severe error, and on
-    // nothing else. Low certainty is not red: it is a shorter blue bar.
-    error: { light: 'danger-600', dark: 'danger-300', note: '5.53 on the page' },
+    // nothing else. Low certainty is not red: it is a shorter confidence bar.
+    error: { light: 'danger-600', dark: 'danger-300', note: '5.89 on the page' },
     'error-fg': { light: '#ffffff', dark: 'dark-bg' },
     danger: { light: 'danger-600', dark: 'danger-300' },
     'danger-soft': { light: 'danger-50', dark: 'danger-950' },
-    'danger-strong': { light: 'danger-800', dark: 'danger-300', note: 'on danger-soft: 6.97' },
+    'danger-strong': { light: 'danger-800', dark: 'danger-300', note: 'on danger-soft: 8.49' },
     info: { light: 'info-700', dark: 'info-300' },
     'info-soft': { light: 'info-50', dark: 'info-950' },
     // Links wear the accent: one accent colour on the whole product.
-    link: { light: 'brand-600', dark: 'brand-400', note: '6.05 on the page' },
+    link: { light: 'brand-600', dark: 'brand-400', note: '5.64 on the page' },
 
     /* --- product marks -------------------------------------------------- */
-    // A verified claim, in the brand colour on purpose: verification is the
-    // promise the brand makes.
-    'verify-ok': { light: 'brand-600', dark: 'brand-300' },
+    // A verified claim uses success green, independent from the action accent.
+    'verify-ok': { light: 'ok-600', dark: 'ok-300' },
     // "Needs checking" is amber and never red: it is not a clinical alarm.
     'verify-pending': { light: 'warn-600', dark: 'warn-300' },
     // A located quotation in a preserved source, and a search hit. Body text
     // on it still reads.
     highlight: { light: '#fdeba8', dark: 'warn-800' },
-    focus: { light: 'brand-600', dark: 'brand-400', note: '2 px ring, 6.05 on the page' },
-    badge: { light: 'danger-600', dark: 'danger-600', note: 'unread count; white on it 5.73 — the dark scheme keeps the same step because white on danger-400 is 4.00' },
+    focus: { light: 'brand-600', dark: 'brand-400', note: '2 px ring, 5.64 on the page' },
+    // Field focus uses identity ink; buttons and links keep accent focus.
+    'focus-input': { light: 'n-900', dark: 'n-25' },
+    badge: { light: 'danger-600', dark: 'danger-600', note: 'unread count; white on it 6.42' },
     'badge-fg': { light: '#ffffff', dark: '#ffffff' },
     // The membership card's one gradient — the single brand moment a settings
     // page is allowed.
@@ -297,17 +271,13 @@ export const COLOR_ROLES = Object.freeze(
     'member-to': { light: '#fbe7be', dark: '#5c4a1d' },
 
     /* --- run-state dots: graphics, 3:1, always beside a shape and a word - */
-    // 3:1 on the canvas, on a card and on the sidebar, in both schemes —
-    // `contrast.mjs` measures all five on all three. 已停止 was `text-graphic`'s
-    // own grey (2.69 light, 2.71 dark): a mark that says something cannot wear
-    // the colour of a decoration. It is the next step towards the text now:
-    // `control` in the light scheme (3.21 / 3.33 / 3.10), 500 in the dark
-    // (3.28 / 3.05 / 3.05).
-    'dot-running': { light: 'brand-500', dark: 'brand-400' },
+    // Every dot clears 3:1 on the canvas, cards and sidebar in both themes.
+    // Dots always accompany a shape and a word.
+    'dot-running': { light: 'info-700', dark: 'info-300' },
     'dot-done': { light: 'ok-600', dark: 'ok-300' },
     'dot-review': { light: 'warn-600', dark: 'warn-400' },
     'dot-failed': { light: 'danger-600', dark: 'danger-400' },
-    'dot-canceled': { light: 'n-control', dark: 'n-500' },
+    'dot-canceled': { light: 'n-control', dark: 'n-control' },
 
     /* --- chart chrome --------------------------------------------------- */
     'chart-grid': { light: 'n-150', dark: 'dark-border' },
@@ -345,8 +315,8 @@ export const COLOR_ROLE_ALIASES = Object.freeze({
  */
 export const COLOR_ROLES_MORE_CONTRAST = Object.freeze(
   /** @type {Record<string, ColorRole>} */ ({
-    'text-2': { light: 'n-800', dark: '#eef1f4' },
-    'text-3': { light: 'n-700', dark: '#c3cad2' },
+    'text-2': { light: 'n-800', dark: '#f2eee6' },
+    'text-3': { light: 'n-700', dark: '#d1c8ba' },
     'text-graphic': { light: 'n-500', dark: 'n-400' },
     'border-hairline': { light: 'n-300', dark: 'dark-border-strong' },
     'border-light': { light: 'n-control', dark: 'dark-border-strong' },
@@ -377,14 +347,10 @@ export const COLOR_ROLES_MORE_CONTRAST = Object.freeze(
  * three together and re-run the dataviz validator.
  */
 export const CHART_COLORS = Object.freeze({
-  own: '#0a5dc1',
-  // Darkest for the highest rank, and every step a graphic a reader can see:
-  // ≥ 3:1 on the page and on a card (WCAG 1.4.11), measured by `contrast.mjs`.
-  // 2.0's third step, #b4bcc5, was 1.92:1 on white and could only colour a bar
-  // that carried its own number (spec §32.4, appendix E #22); 2.1 moves the
-  // second and third one step darker and keeps the first. All three also clear
-  // 3:1 on the dark canvas.
-  rivals: Object.freeze(['#5a626b', '#737c85', '#8a939c']),
+  own: COLOR_RAMPS.brand[600],
+  // Darkest for the highest rank; every grey clears 3:1 on warm paper and
+  // on the dark canvas. Scientific category colours below remain stable.
+  rivals: Object.freeze(['#626a73', '#737c85', '#838c95']),
   series: Object.freeze(['#0a5dc1', '#e07b39', '#1d9a87', '#7b5cd6', '#c94f7c', '#c7a12b', '#5a626b', '#b4bcc5']),
   // Step 4 was #3e7ed4: white on it was 4.09:1 and the body colour 4.06:1, so the number in a heat cell of that step failed both
   // (axe color-contrast on the 引擎读数 and 试验设计 heat tables, r19-guards2). #2e73cf carries white at 4.70:1.
@@ -396,7 +362,7 @@ export const CHART_COLORS = Object.freeze({
    * at one end, a light grey middle, orange at the other (spec §32.4). The two
    * arms are matched step for step in CIE lightness (L* 41 / 62 / 84 either
    * side of a 95 middle), so neither end reads as the louder one; the orange
-   * is the categorical slot-2 hue, the blue the brand. Seven steps, index 3 is
+   * is the categorical slot-2 hue; neither arm follows the action accent. Seven steps, index 3 is
    * the midpoint. Never red to green, for the reason the heat ramp is not.
    */
   diverging: Object.freeze(['#0a5dc1', '#5f97e0', '#bcd3f3', '#edf0f3', '#f9c7ab', '#dd7b3c', '#9f4600']),
@@ -743,12 +709,12 @@ export const ICON_STROKE = 1.5
  */
 export const ELEVATION = Object.freeze({
   flat: 'none',
-  e1: '0 1px 2px rgba(20, 32, 48, 0.04), 0 0 0 1px rgba(20, 32, 48, 0.06)',
-  e2: '0 6px 24px rgba(20, 32, 48, 0.06), 0 1px 3px rgba(20, 32, 48, 0.06), 0 0 0 1px rgba(20, 32, 48, 0.05)',
-  e3: '0 24px 56px rgba(20, 32, 48, 0.14), 0 0 0 1px rgba(20, 32, 48, 0.06)',
+  e1: '0 1px 2px rgba(36, 33, 30, 0.04), 0 0 0 1px rgba(36, 33, 30, 0.06)',
+  e2: '0 6px 24px rgba(36, 33, 30, 0.06), 0 1px 3px rgba(36, 33, 30, 0.06), 0 0 0 1px rgba(36, 33, 30, 0.05)',
+  e3: '0 24px 56px rgba(36, 33, 30, 0.14), 0 0 0 1px rgba(36, 33, 30, 0.06)',
   /** Retired names, pointed at their replacements. */
-  pop: '0 6px 24px rgba(20, 32, 48, 0.06), 0 1px 3px rgba(20, 32, 48, 0.06), 0 0 0 1px rgba(20, 32, 48, 0.05)',
-  modal: '0 24px 56px rgba(20, 32, 48, 0.14), 0 0 0 1px rgba(20, 32, 48, 0.06)',
+  pop: '0 6px 24px rgba(36, 33, 30, 0.06), 0 1px 3px rgba(36, 33, 30, 0.06), 0 0 0 1px rgba(36, 33, 30, 0.05)',
+  modal: '0 24px 56px rgba(36, 33, 30, 0.14), 0 0 0 1px rgba(36, 33, 30, 0.06)',
 })
 
 /**

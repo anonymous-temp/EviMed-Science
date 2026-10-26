@@ -32,6 +32,7 @@ import { HttpError } from "./security.mjs";
 import { CTGOV_STUDY_URL, CTIS_STUDY_URL } from "./trialRegistryClient.mjs";
 import { VCR_MATCHING_VOCABULARY_VERSION, assessSubject, frozenAsOf, languageKeysOf, matchingInputDigest, statedRequirement } from "./vcrMatching.mjs";
 import { matchingVariablesOf, subjectTableFacts } from "./vcrMatchingTable.mjs";
+import { matchingAssessmentEvidence } from "./vcrMatchingEvidence.mjs";
 
 /**
  * Sites kept on a candidate trial. A registry record can list hundreds; a patient's reader needs where
@@ -215,15 +216,19 @@ const protocolTitle = (protocol) => text(protocol.title) || `方案版本 ${prot
  * @param {any} trial @param {readonly any[]} criteria @param {{ withCriteria?: boolean }} [options]
  */
 function trialForRun(trial, criteria, { withCriteria = false } = {}) {
+  const located = criteria.filter(criterion => locateSourceText(criterion.sourceText, trial.eligibilityText)).length;
   return {
     id: trial.id, registry: trial.registry, registryId: trial.registryId, title: trial.title, phase: trial.phase, status: trial.status,
     conditions: trial.conditions, locations: { total: trial.locations?.total ?? null, countries: trial.locations?.countries ?? [] },
     url: trial.url, recordHash: trial.recordHash, retrievedAt: trial.retrievedAt, updatedAt: trial.updatedAt,
+    eligibilityCoverage: { status: !text(trial.eligibilityText) ? "unavailable" : located < criteria.length ? "partial" : "located",
+      providedCriteria: criteria.length, locatedCriteria: located, criterionExtractionCompleteness: "unknown" },
     criteria: withCriteria
       ? criteria.map((criterion) => ({
         id: criterion.id, ordinal: criterion.ordinal, kind: criterion.kind, criterionType: criterion.criterionType,
         // An exclusion reads back as written: the condition that excludes (`statedRequirement`).
         sourceText: criterion.sourceText, requirement: statedRequirement(criterion), applicability: criterion.applicability,
+        sourceLocator: criterion.sourceLocator, sourceVerified: Boolean(locateSourceText(criterion.sourceText, trial.eligibilityText)),
         languageKeys: languageKeysOf(criterion.requirement, criterion.id),
       }))
       : criteria.length,
@@ -234,12 +239,13 @@ function trialForRun(trial, criteria, { withCriteria = false } = {}) {
  * One line of a patient's list: a registry trial, or a version of the study's own protocol, with the verdict about this patient (`null`
  * until one has been made).
  * @param {{ kind: "registry" | "protocol", id: string, title: string, status?: string, phase?: string, registry?: string | null, registryId?: string | null,
- *   url?: string, conditions?: readonly string[], locations?: any }} about @param {any} assessment
+ *   url?: string, conditions?: readonly string[], locations?: any, retrievedAt?:string|null }} about @param {any} assessment
  */
 function listed(about, assessment) {
   return {
     kind: about.kind, id: about.id, title: about.title, status: about.status ?? "", phase: about.phase ?? "",
     registry: about.registry ?? null, registryId: about.registryId ?? null, url: about.url ?? "",
+    retrievedAt: about.retrievedAt ?? null,
     conditions: [...(about.conditions ?? [])], locations: about.locations ?? null,
     summary: assessment ? String(assessment.summary) : null,
     counts: assessment ? assessment.counts ?? {} : null,
@@ -354,6 +360,9 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
         for (const trial of trials) {
           try {
             const criteria = criteriaOf.get(trial.id) ?? [];
+            const unlocated = new Set(criteria.filter(criterion => !locateSourceText(criterion.sourceText, trial.eligibilityText)).map(criterion => criterion.id));
+            const checkedCriteria = criteria.map(criterion => unlocated.has(criterion.id) ? { ...criterion, applicability: null,
+              requirement: { op: "language", key: `unavailable-source:${criterion.id}`, text: "Original trial criterion text is unavailable." } } : criterion);
             const language = await candidateStore.latestLanguageJudgments({ studyId: study.id, candidateTrialId: trial.id, subjectKey, visibleBy: at });
             const documentIds = new Set([
               ...facts.map((fact) => String(fact.source?.documentId ?? "")),
@@ -364,10 +373,16 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
               facts: facts.map((fact) => [fact.id, matchingInputDigest(fact)]).sort(), languages: Object.values(language).map((entry) => entry.id).sort(),
             });
             const assessment = assessSubject({
-              studyId: study.id, protocolVersionId: null, subjectKey, asOf: at, direction: "patient_to_trial", criteria, facts,
+              studyId: study.id, protocolVersionId: null, subjectKey, asOf: at, direction: "patient_to_trial", criteria: checkedCriteria, facts,
               documents: await documentsOf(documentIds), modelJudgments: language,
               provenance: { vocabularyVersion: VCR_MATCHING_VOCABULARY_VERSION, inputSnapshotId },
             });
+            for (const judgment of assessment.judgments) if (unlocated.has(judgment.criterionId)) {
+              judgment.decidedBy = "code";
+              judgment.missing = [{ variable: judgment.criterionId, reason: "criterion_source_unavailable" }];
+            }
+            assessment.evidenceGaps = [...assessment.evidenceGaps.filter(gap => !gap.criterionIds.some(id => unlocated.has(id))),
+              ...[...unlocated].map(id => ({ variable: id, reason: "criterion_source_unavailable", criterionIds: [id] }))];
             const saved = await candidateStore.saveAssessment({
               userId: study.userId,
               assessment: {
@@ -441,6 +456,7 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
       const entries = trials.filter((trial) => verdicts.has(trial.id)).map((trial) => listed({
         kind: "registry", id: trial.id, title: trial.title, status: trial.status, phase: trial.phase, registry: trial.registry,
         registryId: trial.registryId, url: trial.url, conditions: trial.conditions, locations: trial.locations,
+        retrievedAt: trial.retrievedAt,
       }, verdicts.get(trial.id) ?? null));
       const protocols = matchStore ? await matchStore.protocols(study.id) : [];
       for (const protocol of protocols) {
@@ -468,19 +484,22 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
     /**
      * One line of a patient's list with the criteria it was judged on and the per-criterion judgments: what a page's criterion table
      * is made of. `null` when this patient has no verdict from that trial or protocol version. `ranked` is the list the caller already read.
-     * @param {any} study @param {{ subjectKey: string, id: string, ranked?: any[] | null }} input
+     * @param {any} study @param {{ subjectKey: string, id: string, ranked?: any[] | null, viewer?:{id:string} }} input
      */
-    async detail(study, { subjectKey, id, ranked = null }) {
+    async detail(study, { subjectKey, id, ranked = null, viewer = null }) {
+      if ((await matchStore?.withdrawnSubjects?.(study.id) ?? new Set()).has(subjectKey)) return null;
       const entry = (ranked ?? await self.ranked(study, { subjectKey })).find((row) => row.id === id);
       if (!entry) return null;
       if (entry.kind === "registry") {
         const criteria = await candidateStore.listCriteria(entry.id);
         const assessment = entry.assessmentId ? await candidateStore.getAssessment(entry.assessmentId, study.id) : null;
-        return { entry, criteria, judgments: assessment?.judgments ?? [], assessment };
+        const projected = viewer ? await matchingAssessmentEvidence({ documents, study, assessment, subjectKey, viewer }) : assessment;
+        return { entry, criteria, judgments: projected?.judgments ?? [], assessment: projected };
       }
       const criteria = await matchStore.listCriteria({ studyId: study.id, protocolVersionId: entry.id });
       const assessment = entry.assessmentId ? await matchStore.getAssessment(entry.assessmentId, study.id) : null;
-      return { entry, criteria, judgments: assessment?.judgments ?? [], assessment };
+      const projected = viewer ? await matchingAssessmentEvidence({ documents, study, assessment, subjectKey, viewer }) : assessment;
+      return { entry, criteria, judgments: projected?.judgments ?? [], assessment: projected };
     },
 
     /**
@@ -491,6 +510,9 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
      */
     async runtimeRead(study, filter = {}) {
       const subjectKey = filter.subjectKey ? String(filter.subjectKey) : null;
+      if (subjectKey && (await matchStore?.withdrawnSubjects?.(study.id) ?? new Set()).has(subjectKey)) {
+        return { subjectKey, withdrawn: true, trials: [], ranking: [], assessment: null, requests: [], more: false };
+      }
       const wanted = filter.id || filter.registryId;
       if (wanted) {
         const trial = await candidateStore.getCandidateTrial({
@@ -503,11 +525,7 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
         if (!subjectKey) return answer;
         const verdict = (await candidateStore.latestAssessments({ studyId: study.id, subjectKey })).get(trial.id) ?? null;
         const full = verdict ? await candidateStore.getAssessment(verdict.id, study.id) : null;
-        return { ...answer, subjectKey, assessment: full ? {
-          summary: full.summary, asOf: full.asOf, counts: full.counts, evidenceGaps: full.evidenceGaps,
-          judgments: full.judgments.map((judgment) => ({ criterionId: judgment.criterionId, state: judgment.state, applicable: judgment.applicable,
-            decidedBy: judgment.decidedBy, recheckAt: judgment.recheckAt })),
-        } : null };
+        return { ...answer, subjectKey, assessment: await matchingAssessmentEvidence({ documents, study, assessment: full, subjectKey }) };
       }
       if (subjectKey) {
         const ranking = await self.ranked(study, { subjectKey });
@@ -526,7 +544,7 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
           unjudged: await self.unjudged(study, { subjectKey }),
           ranking: ranking.map((row) => ({
             rank: row.rank, kind: row.kind, id: row.id, registry: row.registry, registryId: row.registryId, title: row.title, phase: row.phase, status: row.status,
-            eligibility: row.summary, counts: row.counts, evidenceGaps: row.evidenceGaps, asOf: row.asOf,
+            eligibility: row.summary, criteriaCounts: row.counts, evidenceGaps: row.evidenceGaps, asOf: row.asOf, retrievedAt: row.retrievedAt,
           })),
           requests,
         };

@@ -182,12 +182,13 @@ test("AC-17 a role that does not carry the ability is refused by name", async ()
 
 test("AC-17 one person holding two roles gets the union of what they allow", async () => {
   const { store, access } = scene();
-  store.addMember("std_1", "doctor", "site");
+  store.addMember("std_1", "doctor", "data_manager");
   store.addMember("std_1", "doctor", "clinical_reviewer");
   const decision = await access.judge({ actor: "doctor", studyId: "std_1", ability: "review_clinical" });
   assert.equal(decision.allowed, true);
-  assert.deepEqual(decision.roles, ["clinical_reviewer", "site"]);
-  assert.equal((await access.judge({ actor: "doctor", studyId: "std_1", ability: "write_referrals" })).allowed, true);
+  assert.deepEqual(decision.roles, ["clinical_reviewer", "data_manager"]);
+  assert.equal((await access.judge({ actor: "doctor", studyId: "std_1", ability: "manage_data" })).allowed, true);
+  await assert.rejects(()=>access.judge({actor:"doctor",studyId:"std_1",ability:"write_referrals"}),TypeError,"retired operational writes are no longer abilities");
   assert.equal((await access.judge({ actor: "doctor", studyId: "std_1", ability: "manage_members" })).allowed, false);
   await assert.rejects(() => access.judge({ actor: "doctor", studyId: "std_1", ability: "invent_an_ability" }), TypeError);
 });
@@ -228,7 +229,7 @@ test("AC-17 the source's own account needs no grant, and a withdrawn source is r
 test("AC-17 a grant names a person, a role or the study, and a revoked one is not judged on", async () => {
   const { store, access } = scene();
   store.addMember("std_1", "dm", "data_manager");
-  store.addMember("std_1", "coord", "recruiter");
+  store.addMember("std_1", "coord", "clinical_reviewer");
   assert.equal(granteeMatches("role:data_manager", "dm", "std_1", ["data_manager"]), true);
   assert.equal(granteeMatches("role:lead", "dm", "std_1", ["data_manager"]), false);
   assert.equal(granteeMatches("study:std_1", "anyone", "std_1", []), true);
@@ -474,4 +475,12 @@ test("AC-17 a failed audit write never turns an allowed read into a refusal", as
   store.audit = async () => { throw new Error("the ledger is down"); };
   const decision = await access.judge({ actor: "owner", studyId: "std_1", ability: "read" });
   assert.equal(decision.allowed, true, "the judgment stands whether or not the ledger could be written");
+});
+
+test('preserved retired role rows grant no active scientific write ability',async()=>{
+ const {store,access}=scene();
+ for(const role of ['site','recruiter']){
+  store.members.push({studyId:'std_1',userId:`legacy_${role}`,role});
+  for(const ability of ['read','write','run','manage_data','read_patient_level']) assert.equal((await access.judge({actor:`legacy_${role}`,studyId:'std_1',ability})).allowed,false);
+ }
 });

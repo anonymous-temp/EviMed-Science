@@ -149,13 +149,17 @@ describe("飞书 under 通知: the push", () => {
     expect(screen.queryByRole("switch")).not.toBeInTheDocument();
   });
 
-  it("keeps the switch as it was, and says so, when the push cannot be changed", async () => {
+  it("locks an unknown push outcome until an authoritative refresh", async () => {
     mocks.fetchImStatus.mockResolvedValue(bound);
     mocks.setFeishuNotifications.mockRejectedValue(new Error("down"));
     push();
     const toggle = await screen.findByRole("switch", { name: "推送到飞书" });
     await act(async () => { fireEvent.click(toggle); });
     expect(mocks.setFeishuNotifications).toHaveBeenCalledWith(false);
+    expect(screen.getByRole("switch", { name: "推送到飞书" })).toHaveAttribute("aria-checked", "false");
+    fireEvent.click(toggle);
+    expect(mocks.setFeishuNotifications).toHaveBeenCalledTimes(1);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "刷新核对状态" })); });
     expect(screen.getByRole("switch", { name: "推送到飞书" })).toHaveAttribute("aria-checked", "true");
   });
 });

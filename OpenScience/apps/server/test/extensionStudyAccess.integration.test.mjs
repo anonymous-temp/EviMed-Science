@@ -8,6 +8,7 @@ import { ControlPlaneDatabase } from '../src/controlPlaneDatabase.mjs';
 import { ExtensionAccess } from '../src/extensionAccess.mjs';
 import { VcrStore } from '../src/vcrStore.mjs';
 import { VcrDataStore } from '../src/vcrDataStore.mjs';
+import { vcrSchemaSql } from '../src/vcrPersistence.mjs';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL;
@@ -22,7 +23,15 @@ test('real study roles retain original actor and revocation serializes with exte
     await db.query("INSERT INTO evimed_control.users(id,name,auth_type) SELECT id,id,'development' FROM unnest($1::text[]) id", [['owner','lead','viewer','data','site','foreign']]);
     await db.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES('owner','shared','Shared',1048576),('foreign','ordinary','Ordinary',1048576)");
     const study = await studies.createStudy({ userId: 'owner', projectId: 'shared', name: 'Shared' });
-    for (const [userId, role] of [['lead','lead'],['viewer','viewer'],['data','data_manager'],['site','site']]) await members.addMember({ studyId: study.id, userId, role });
+    for (const [userId, role] of [['lead','lead'],['viewer','viewer'],['data','data_manager']]) await members.addMember({ studyId: study.id, userId, role });
+    await assert.rejects(members.addMember({ studyId: study.id, userId: 'site', role: 'site' }), /A member role/);
+    // Preserve a pre-retirement role as historical data, then restore the current
+    // migration before testing that it cannot authorize any extension operation.
+    await db.query('ALTER TABLE evimed_vcr.members DROP CONSTRAINT IF EXISTS members_role_check');
+    await db.query('ALTER TABLE evimed_vcr.members DROP CONSTRAINT IF EXISTS vcr_members_active_roles');
+    await db.query("INSERT INTO evimed_vcr.members(study_id,user_id,role) VALUES($1,'site','site')", [study.id]);
+    await db.query(vcrSchemaSql());
+    await assert.rejects(db.query("INSERT INTO evimed_vcr.members(study_id,user_id,role) VALUES($1,'new_site','site')", [study.id]), { code: '23514' });
     const store = { database: db, userById: async id => ({ id }), requireProject: async (actor,id) => {
       const row = (await db.query('SELECT id,user_id FROM evimed_control.projects WHERE user_id=$1 AND id=$2', [actor.id,id])).rows[0];
       if (!row) throw Object.assign(new Error('Absent'), { status: 404 });

@@ -97,7 +97,7 @@ export function SourcesTab({ geoId, project }: { geoId: string; project: GeoProj
   if (state.kind === "error") return <TabError message={state.message} onRetry={reload} />;
   const data = state.data;
   const sources = (Array.isArray(data?.sources) ? data.sources : []).filter((source) => source && source.domain);
-  if (sources.length === 0) return <><GeoAnalysisWorkbench geoId={geoId} project={project} initialView="V17" embedded /><StepPending geoId={geoId} project={project} step="sources" /><PlanTab geoId={geoId} project={project} selectionRef={data.selection?.reference} sourceUrl={planParams.get("planUrl")??undefined} /></>;
+  if (sources.length === 0) return <><GeoAnalysisWorkbench geoId={geoId} project={project} initialView="V17" title="信源引用分析" embedded /><StepPending geoId={geoId} project={project} step="sources" /><PlanTab embedded geoId={geoId} project={project} selectionRef={data.selection?.reference} sourceUrl={planParams.get("planUrl")??undefined} /></>;
   const linkless = (Array.isArray(data?.linklessEngines) ? data.linklessEngines : []).filter(Boolean);
   const everyAction = actions.state.kind === "ready" && Array.isArray(actions.state.data?.actions) ? actions.state.data.actions : [];
   const groups = [...new Map([
@@ -114,7 +114,7 @@ export function SourcesTab({ geoId, project }: { geoId: string; project: GeoProj
           {zh`${linkless.map(engineName).join("、")}的引用只有标题、没有链接，引用了哪些信源测不出`}
         </p>
       )}
-      <PlanTab geoId={geoId} project={project} selectionRef={data.selection?.reference} sourceUrl={planParams.get("planUrl") ?? undefined} sourceId={planParams.get("planSource") ?? sources.find(source => source.domain === planParams.get("source") || source.id === planParams.get("source"))?.id} />
+      <PlanTab embedded geoId={geoId} project={project} selectionRef={data.selection?.reference} sourceUrl={planParams.get("planUrl") ?? undefined} sourceId={planParams.get("planSource") ?? sources.find(source => source.domain === planParams.get("source") || source.id === planParams.get("source"))?.id} />
       <ClusterDrawerHost geoId={geoId} project={project} />
     </div>
   );
@@ -302,7 +302,7 @@ function SourceList({
     <section aria-label="信源" className="flex flex-col gap-6">
       {view === "cited" && (
         <>
-          <GeoAnalysisWorkbench geoId={geoId} project={project} initialView="V17" embedded />
+          <GeoAnalysisWorkbench geoId={geoId} project={project} initialView="V17" title="信源引用分析" embedded />
           {rows.length === 0 ? (
             <Note action={narrowed || needle ? <Button variant="secondary" size="sm" onClick={() => change({ [GEO_ENGINE_PARAM]: null, only: null, [KIND_PARAM]: null, [GEO_CLUSTER_FILTER_PARAM]: null, sourceSearch: null })}>清除筛选</Button> : undefined}>
               {needle ? `没有包含“${query.trim()}”的信源。` : "没有符合的信源。"}

@@ -47,12 +47,13 @@ describe("the daily's switch under 通知", () => {
     client.fetchFrontierDigestSwitch.mockRejectedValueOnce(new WebApiError("down", { status: 503, code: null }));
     render(<FrontierDigestRow feature="on" description="每天的医学前沿日报，发到收件箱" />);
     expect(screen.getByText("每天的医学前沿日报，发到收件箱")).toBeInTheDocument();
-    expect(await screen.findByRole("alert")).toHaveTextContent("服务暂时不可用，请稍后重试。");
+    expect(await screen.findByText("服务暂时不可用，请稍后重试。")).toBeInTheDocument();
     expect(screen.queryByText("每天的医学前沿日报，发到收件箱")).not.toBeInTheDocument();
   });
 
   it("turns the push off and on through the inbox preferences", async () => {
     client.setFrontierDigestSwitch.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    client.fetchFrontierDigestSwitch.mockResolvedValueOnce(true).mockResolvedValueOnce(false).mockResolvedValue(true);
     renderRow();
     const toggle = await screen.findByRole("switch", { name: "前沿日报" });
     await waitFor(() => expect(toggle).toBeEnabled());
@@ -68,7 +69,7 @@ describe("the daily's switch under 通知", () => {
   it("says so when the preference cannot be read, and reads again on retry", async () => {
     client.fetchFrontierDigestSwitch.mockRejectedValueOnce(new WebApiError("down", { status: 503, code: null })).mockResolvedValueOnce(false);
     renderRow();
-    expect(await screen.findByRole("alert")).toHaveTextContent("服务暂时不可用，请稍后重试。");
+    expect(await screen.findByText("服务暂时不可用，请稍后重试。")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "重试" }));
     await waitFor(() => expect(screen.getByRole("switch", { name: "前沿日报" })).toHaveAttribute("aria-checked", "false"));
   });
@@ -85,9 +86,27 @@ describe("the daily's switch under 通知", () => {
 });
 
 it("the weekly control saves only its named switch", async () => {
-  client.fetchFrontierNotificationSwitch.mockResolvedValue(false); client.setFrontierNotificationSwitch.mockResolvedValue(true);
+  client.fetchFrontierNotificationSwitch.mockResolvedValueOnce(false).mockResolvedValue(true); client.setFrontierNotificationSwitch.mockResolvedValue(true);
   render(<FrontierDigestRow feature="on" switchKey="frontierWeekly" label="前沿周刊" />);
   const control = screen.getByRole("switch", { name: "前沿周刊" }); await waitFor(() => expect(control).toBeEnabled());
   await userEvent.click(control); expect(client.setFrontierNotificationSwitch).toHaveBeenCalledWith("frontierWeekly", true);
   await waitFor(() => expect(control).toHaveAttribute("aria-checked", "true"));
+});
+
+it("preserves focus and locks a timed-out write until the explicit preference readback", async () => {
+  Object.values(client).forEach(mock => mock.mockReset());
+  client.fetchFrontierDigestSwitch.mockResolvedValue(true);
+  let reject!: (error: unknown) => void;
+  client.setFrontierDigestSwitch.mockImplementation(() => new Promise((_, no) => { reject = no; }));
+  renderRow();
+  const toggle = await screen.findByRole("switch", { name: "前沿日报" });
+  await waitFor(() => expect(toggle).toBeEnabled());
+  toggle.focus(); await userEvent.click(toggle); await userEvent.click(toggle);
+  expect(toggle).toHaveFocus(); expect(toggle).not.toBeDisabled();
+  expect(client.setFrontierDigestSwitch).toHaveBeenCalledOnce();
+  reject(new Error("timeout"));
+  const refresh = await screen.findByRole("button", { name: "刷新核对状态" });
+  await userEvent.click(toggle); expect(client.setFrontierDigestSwitch).toHaveBeenCalledOnce();
+  await userEvent.click(refresh);
+  await waitFor(() => expect(toggle).toHaveAttribute("aria-checked", "true"));
 });

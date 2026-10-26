@@ -44,10 +44,10 @@ export async function fixClock(store) {
     ["criteria", "created_at", early, "id"], ["precedents", "created_at", early, "id"], ["evidence_items", "created_at", early, "id"],
     ["assumptions", "created_at", early, "id"], ["models", "created_at", early, "id"], ["model_assessments", "created_at", early, "id"], ["populations", "created_at", early, "id"],
     ["patient_sets", "created_at", early, "id"], ["comparator_designs", "created_at", early, "id"], ["trial_scenarios", "created_at", early, "id"],
-    ["design_grids", "created_at", early, "id"], ["reviews", "created_at", early, "id"], ["sites", "created_at", early, "id"],
+    ["design_grids", "created_at", early, "id"], ["reviews", "created_at", early, "id"],
     ["jobs", "created_at", late, "id"], ["executions", "created_at", late, "id"], ["results", "created_at", late, "id"],
     ["decisions", "created_at", late, "id"], ["exports", "created_at", late, "id"], ["forecasts", "created_at", late, "id"],
-    ["matching_assessments", "created_at", late, "id"], ["referrals", "created_at", late, "id"], ["followup_episodes", "created_at", late, "id"],
+    ["matching_assessments", "created_at", late, "id"], ["followup_episodes", "created_at", late, "id"],
   ];
   for (const [table, column, base, key] of tables) {
     await store.query(`WITH r AS (SELECT ${key} AS k, row_number() OVER (ORDER BY ${column}, ${key}) AS n FROM evimed_vcr.${table})
@@ -60,8 +60,6 @@ export async function fixClock(store) {
     FROM jsonb_each(steps) AS t(k, v)), steps)`, [iso(late + 3_600_000)]);
   await store.query("UPDATE evimed_vcr.jobs SET updated_at = created_at + interval '2 minutes', finished_at = CASE WHEN finished_at IS NULL THEN NULL ELSE created_at + interval '2 minutes' END");
   await store.query("UPDATE evimed_vcr.exports SET updated_at = created_at + interval '3 minutes'");
-  await store.query("UPDATE evimed_vcr.referrals SET updated_at = created_at, contact_approved_at = CASE WHEN contact_approved_at IS NULL THEN NULL ELSE created_at END");
-  await store.query("UPDATE evimed_vcr.sites SET updated_at = created_at");
   await store.query(`WITH r AS (SELECT study_id AS s, node AS nn, row_number() OVER (ORDER BY marked_at, node) AS n FROM evimed_vcr.stale_marks)
     UPDATE evimed_vcr.stale_marks t SET marked_at = $1::timestamptz + r.n * interval '11 minutes' FROM r WHERE t.study_id = r.s AND t.node = r.nn`, [iso(late + 3_600_000)]);
 }
@@ -128,7 +126,7 @@ export async function seedEv201({ store, matchStore, evidenceStore, plane = "", 
     userId: owner, projectId, name,
     question: "单臂 II 期加外部对照行不行，还是必须做随机？", dataTier: "T0", intendedUse: "design_support",
   });
-  await store.query("INSERT INTO evimed_vcr.members (study_id, user_id, role) VALUES ($1, 'u_stat', 'statistical_reviewer'), ($1, 'u_recruit', 'recruiter')", [study.id]);
+  await store.query("INSERT INTO evimed_vcr.members (study_id, user_id, role) VALUES ($1, 'u_stat', 'statistical_reviewer'), ($1, 'u_research', 'data_manager')", [study.id]);
   const userId = owner;
   const studyId = study.id;
 
@@ -458,12 +456,12 @@ export async function seedEv201({ store, matchStore, evidenceStore, plane = "", 
   });
   await store.attachResult("comparator_designs", literature.id, literatureResult.id, { conclusion: "limited" });
 
-  // 试验方案：模拟运行 + 入组预测
+  // Synthetic UI fixtures: total study duration is distinct from optional accrual forecasts.
   const designMeasures = {
-    "方案 A 单臂 + 文献对照": [simulated("power", 0.66, 0.004), simulated("assurance", 0.58, 0.004), simulated("expected_sample_size", 60, 0)],
-    "方案 B 2:1 随机": [simulated("power", 0.81, 0.003), simulated("assurance", 0.71, 0.004), simulated("type_one_error", 0.0247, 0.0011), simulated("expected_sample_size", 180, 0)],
-    "方案 C 1:1 随机 + 一次期中分析": [simulated("power", 0.85, 0.003), simulated("assurance", 0.74, 0.004), simulated("type_one_error", 0.0251, 0.0011), simulated("expected_sample_size", 204, 1.1)],
-    "方案 D 1:1 随机 无期中": [simulated("power", 0.86, 0.003), simulated("assurance", 0.72, 0.004), simulated("expected_sample_size", 240, 0)],
+    "方案 A 单臂 + 文献对照": [simulated("power", 0.66, 0.004), simulated("assurance", 0.58, 0.004), simulated("expected_sample_size", 60, 0), { ...simulated("duration_months", 18.7, 0.12), unit: "months" }],
+    "方案 B 2:1 随机": [simulated("power", 0.81, 0.003), simulated("assurance", 0.71, 0.004), simulated("type_one_error", 0.0247, 0.0011), simulated("expected_sample_size", 180, 0), { ...simulated("duration_months", 22.4, 0.15), unit: "months" }],
+    "方案 C 1:1 随机 + 一次期中分析": [simulated("power", 0.85, 0.003), simulated("assurance", 0.74, 0.004), simulated("type_one_error", 0.0251, 0.0011), simulated("expected_sample_size", 204, 1.1), { ...simulated("duration_months", 25.6, 0.18), unit: "months" }],
+    "方案 D 1:1 随机 无期中": [simulated("power", 0.86, 0.003), simulated("assurance", 0.72, 0.004), simulated("expected_sample_size", 240, 0), { ...simulated("duration_months", 27, 0.18), unit: "months" }],
   };
   for (const scenario of scenarios) {
     const jobId = await job("design_simulation", "design.simulate", { replicates: 16000 });
@@ -571,22 +569,6 @@ export async function seedEv201({ store, matchStore, evidenceStore, plane = "", 
     });
     assessments[subject.key] = await matchStore.saveAssessment({ assessment, userId });
   }
-  for (const [id, name, activated, slots, used, verified] of [
-    [`ste_01${idTag}`, "中心 01", "2026-07-15", 6, 2, "2026-09-20T00:00:00.000Z"], [`ste_07${idTag}`, "中心 07", null, 4, 0, null],
-  ]) {
-    await store.query(`INSERT INTO evimed_vcr.sites (id, study_id, user_id, name, capability, capacity, competing, contacts, activated_on, verified_at)
-      VALUES ($1, $2, $3, $4, '{"place": "北京"}'::jsonb, $5::jsonb, '[{"id":"x"}]'::jsonb, '[]'::jsonb, $6, $7)`,
-    [id, studyId, userId, name, JSON.stringify({ slots, used }), activated, verified]);
-  }
-  for (const [id, subjectKey, state, siteId, approver] of [
-    [`ref_seed_1${idTag}`, "P-0192", "contactable", `ste_01${idTag}`, null], [`ref_seed_2${idTag}`, "P-0233", "needs_evidence", null, null],
-    [`ref_seed_3${idTag}`, "P-0201", "contacted", `ste_01${idTag}`, "u_recruit"], [`ref_seed_4${idTag}`, "P-0207", "enrolled", `ste_01${idTag}`, "u_recruit"],
-  ]) {
-    await store.query(`INSERT INTO evimed_vcr.referrals (id, study_id, assessment_id, site_id, user_id, subject_key, state, contact_approved_by, contact_approved_at, enrolled_on)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $8::text IS NULL THEN NULL ELSE now() END, CASE WHEN $7 = 'enrolled' THEN '2026-09-20'::date ELSE NULL END)`,
-    [id, studyId, assessments[subjectKey]?.id ?? null, siteId, userId, subjectKey, state, approver]);
-  }
-  await matchStore.saveFollowupEpisode({ episode: { studyId, subjectKey: "P-0207", kind: "study_specific", windowStart: "2026-09-21T00:00:00.000Z", observations: [] }, userId });
   await record({ kind: "matching", executionId: (await execution(await job("match_criteria", "matching.evaluate"), "matching.evaluate", null)).id,
     conclusion: "estimable", counts: { realPatients: 6 }, measures: [measure("eligible", 1), measure("insufficient_evidence", 2)], diagnostics: {} });
 
@@ -666,16 +648,16 @@ export async function seedPatientTrials({ store, matchStore, patientTrials }) {
   const brain = criterion("exclusion", "comorbidity", "Active brain metastases", { op: "absent", variable: "active_brain_metastasis" }, ["申请近 4 周头颅 MRI"]);
   const egfr = criterion("inclusion", "biomarker", "Documented EGFR exon 19 deletion or L858R mutation", { op: "present", variable: "egfr_mutation" }, ["EGFR 突变检测报告"]);
   const elderly = criterion("inclusion", "demographic", "Age >= 70 years", { op: "compare", variable: "age", comparator: "gte", value: 70, unit: "year" });
-  const trial = (/** @type {string} */ registryId, /** @type {string} */ title, /** @type {string} */ phase, /** @type {string} */ status, /** @type {number} */ sites) => ({
+  const trial = (/** @type {string} */ registryId, /** @type {string} */ title, /** @type {string} */ phase, /** @type {string} */ status, /** @type {number} */ sites, /** @type {{sourceText:string}[]} */ sourceCriteria) => ({
     registry: "clinicaltrials.gov", registryId, title, phase, status, conditions: ["Non-small Cell Lung Cancer"],
     locations: { total: sites, countries: ["China"], sites: [{ facility: "Beijing Cancer Hospital", city: "Beijing", state: "", country: "China", status: "RECRUITING" }] },
-    url: `https://clinicaltrials.gov/study/${registryId}`, recordHash: createHash("sha256").update(registryId).digest("hex"), retrievedAt: "2026-09-28T08:00:00.000Z", eligibilityText: "",
+    url: `https://clinicaltrials.gov/study/${registryId}`, recordHash: createHash("sha256").update(registryId).digest("hex"), retrievedAt: "2026-09-28T08:00:00.000Z", eligibilityText: sourceCriteria.map(entry => entry.sourceText).join("\n"),
   });
-  const first = await patientTrials.writeTrial(study, { trial: trial("NCT05000001", "EV-201 plus docetaxel versus docetaxel in previously treated NSCLC", "PHASE3", "RECRUITING", 14),
+  const first = await patientTrials.writeTrial(study, { trial: trial("NCT05000001", "EV-201 plus docetaxel versus docetaxel in previously treated NSCLC", "PHASE3", "RECRUITING", 14, [age, ecog, brain]),
     criteria: [age, ecog, brain], subjectKeys: ["P-0192"] });
-  const second = await patientTrials.writeTrial(study, { trial: trial("NCT05000002", "A phase 2 study of EV-201 in EGFR-mutant NSCLC after osimertinib", "PHASE2", "NOT_YET_RECRUITING", 3),
+  const second = await patientTrials.writeTrial(study, { trial: trial("NCT05000002", "A phase 2 study of EV-201 in EGFR-mutant NSCLC after osimertinib", "PHASE2", "NOT_YET_RECRUITING", 3, [age, egfr, brain]),
     criteria: [age, egfr, brain], subjectKeys: ["P-0192"] });
-  const third = await patientTrials.writeTrial(study, { trial: trial("NCT05000003", "EV-201 in elderly patients with advanced NSCLC", "PHASE2", "RECRUITING", 5),
+  const third = await patientTrials.writeTrial(study, { trial: trial("NCT05000003", "EV-201 in elderly patients with advanced NSCLC", "PHASE2", "RECRUITING", 5, [elderly, ecog]),
     criteria: [elderly, ecog], subjectKeys: ["P-0192"] });
   // The study's own protocol has judged her too.
   const ownCriteria = await matchStore.listCriteria({ studyId: study.id, protocolVersionId: protocol.id });

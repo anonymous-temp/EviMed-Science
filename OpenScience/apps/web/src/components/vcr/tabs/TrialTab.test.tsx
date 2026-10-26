@@ -110,11 +110,14 @@ describe("试验 · the designs", () => {
     expect((await screen.findAllByText("蒙特卡洛标准误")).length).toBeGreaterThan(0);
   });
 
-  it("names the prediction interval under the last-patient-in cell, and writes no bare 区间", async () => {
+  it("keeps mean duration and its simulation error distinct from an individual prediction interval", async () => {
     const { container } = draw();
     await trialDrawn();
     const duration = container.querySelector("tr[data-vcr-design='B'] [data-vcr-measure='duration_months']") as HTMLElement;
-    expect(duration.querySelector("[data-vcr-interval]")).toHaveTextContent("80% 预测区间 13.90–19.30");
+    expect(duration).toHaveTextContent("22.4");
+    expect(duration.querySelector("[data-vcr-mcse]")).toHaveTextContent("±0.15");
+    expect(duration).not.toHaveTextContent("预测区间");
+    expect(duration.querySelector("[data-vcr-interval]")).toBeNull();
     expect(container.querySelector("tr[data-vcr-design='B'] [data-vcr-measure='cost']")).toHaveTextContent("3,900");
     expect(screen.getByText("成本（万元）")).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(BARE_INTERVAL);
@@ -144,14 +147,14 @@ describe("试验 · the designs", () => {
     expect(key.querySelector("[data-vcr-scatter-label='D']")).toHaveTextContent("被 B 占优");
   });
 
-  it("draws each design's last patient in as a point inside its named prediction interval", async () => {
+  it("draws each design's mean study duration inside its Monte-Carlo interval", async () => {
     const { container } = draw();
     const timeline = await found(container, "[data-vcr-milestones]");
     expect([...timeline.querySelectorAll("[data-vcr-milestone]")].map((row) => row.getAttribute("data-vcr-milestone"))).toEqual(["A", "B", "C"]);
     const b = timeline.querySelector("[data-vcr-milestone='B']") as HTMLElement;
-    expect(b).toHaveTextContent("末例入组");
-    expect(b).toHaveTextContent("16.40");
-    expect(b).toHaveTextContent("80% 预测区间 13.90–19.30");
+    expect(b).toHaveTextContent("平均研究时长");
+    expect(b).toHaveTextContent("22.4");
+    expect(b).toHaveTextContent("95% 蒙特卡洛区间 22.1–22.7");
   });
 
   it("has no counts band of its own: the four numbers are on 总览", async () => {
@@ -213,24 +216,15 @@ describe("试验 · the designs", () => {
       expect(screen.queryByRole("columnheader", { name: "来源" })).toBeNull();
     });
 
-    it("opens a design's numbers for editing from its own row — written as that design's next version", async () => {
-      installVcrServer(network.productRequest, {
-        [`GET /vcr/studies/${STUDY_ID}/cards?kind=trial_scenario&object=scn_2`]: {
-          kind: "trial_scenario", objectId: "scn_2", title: "B",
-          settings: [{ path: "design.nTreat", label: "试验组人数", value: 400, unit: "人", integer: true, min: 1, max: null }],
-        },
-      });
-      draw();
+    it("puts the exact scenario and result into an unsent adjustment draft without a configuration form", async () => {
+      const { spies } = draw();
       await trialDrawn();
       await userEvent.click(screen.getByRole("button", { name: "改设定：方案 B" }));
-      const drawer = await screen.findByRole("dialog", { name: /改设定：B/ });
-      const field = await within(drawer).findByLabelText("试验组人数（人）");
-      await userEvent.clear(field);
-      await userEvent.type(field, "450");
-      await userEvent.click(within(drawer).getByRole("button", { name: "保存" }));
-      await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/cards`, "POST",
-        { kind: "trial_scenario", objectId: "scn_2", set: { "design.nTreat": 450 } }));
-      await waitFor(() => expect(gets("trial")).toHaveLength(2));
+      expect(spies.openChat).toHaveBeenCalledWith(expect.stringContaining("scn_2"));
+      expect(spies.openChat).toHaveBeenCalledWith(expect.stringContaining("res_2"));
+      expect(spies.openChat).toHaveBeenCalledWith(expect.stringContaining("建立新版本"));
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(network.productRequest.mock.calls.some(([, method]) => method === "POST")).toBe(false);
     });
   });
 });
@@ -312,9 +306,9 @@ describe("试验 · what the band offers", () => {
     const { container, spies } = draw();
     await trialDrawn();
     await userEvent.click(within(band(container)).getByRole("button", { name: "加一个方案" }));
-    expect(spies.openChat).toHaveBeenLastCalledWith(VCR_ADD_DESIGN_DRAFT);
+    expect(spies.openChat).toHaveBeenLastCalledWith(expect.stringContaining(VCR_ADD_DESIGN_DRAFT));
     await userEvent.click(within(band(container)).getByRole("button", { name: "改假设" }));
-    expect(spies.openChat).toHaveBeenLastCalledWith(VCR_CHANGE_ASSUMPTION_DRAFT);
+    expect(spies.openChat).toHaveBeenLastCalledWith(expect.stringContaining(VCR_CHANGE_ASSUMPTION_DRAFT));
     expect(network.productRequest.mock.calls.some(([path, method]) => method === "POST" && String(path).includes("/run"))).toBe(false);
   });
 
@@ -403,7 +397,7 @@ describe("试验 · the decision", () => {
     await userEvent.click(save);
     await userEvent.click(save);
     expect(network.productRequest.mock.calls.filter(([path, method]) => String(path).endsWith("/decisions") && method === "POST")).toHaveLength(1);
-    expect(save).toBeDisabled();
+    expect(save).toHaveAttribute("aria-disabled", "true");
     release({});
     await waitFor(() => expect(toasts.success).toHaveBeenCalled());
   });

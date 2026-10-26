@@ -255,12 +255,14 @@ export async function deleteVcrProjectRows(client, userId, projectId) {
   if (!exists.rowCount) return { deleted: false, studyId: null, artifacts: noArtifacts() };
   const found = await client.query(
     `SELECT id FROM ${VCR_SCHEMA}.studies WHERE user_id = $1 AND project_id = $2`, [userId, projectId]);
-  const studyId = found.rows[0]?.id ?? null;
-  if (!studyId) return { deleted: false, studyId: null, artifacts: noArtifacts() };
-  const artifacts = await collectArtifacts(client, [studyId]);
-  await removeDraftPacksOf(client, [studyId]);
-  await client.query(`DELETE FROM ${VCR_SCHEMA}.studies WHERE id = $1`, [studyId]);
-  return { deleted: true, studyId, artifacts };
+  const studyIds=found.rows.map(row=>String(row.id));
+  const studyId=studyIds[0] ?? null;
+  await client.query(`DELETE FROM ${VCR_SCHEMA}.conversation_completions WHERE user_id=$1 AND project_id=$2`,[userId,projectId]);
+  if (!studyIds.length) return {deleted:false,studyId:null,artifacts:noArtifacts()};
+  const artifacts=await collectArtifacts(client,studyIds);
+  await removeDraftPacksOf(client,studyIds);
+  await client.query(`DELETE FROM ${VCR_SCHEMA}.studies WHERE user_id=$1 AND project_id=$2`,[userId,projectId]);
+  return {deleted:true,studyId,artifacts};
 }
 
 /**
@@ -278,6 +280,7 @@ export async function deleteVcrUserRows(client, userId) {
   if (!exists.rowCount) return { deleted: false, artifacts: noArtifacts() };
   const owned = await client.query(`SELECT id FROM ${VCR_SCHEMA}.studies WHERE user_id = $1`, [userId]);
   const artifacts = await collectArtifacts(client, owned.rows.map((row) => String(row.id)), userId);
+  await client.query(`DELETE FROM ${VCR_SCHEMA}.conversation_completions WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM ${VCR_SCHEMA}.studies WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM ${VCR_SCHEMA}.members WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM ${VCR_SCHEMA}.grants WHERE grantee = $1`, [userId]);

@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Menu } from "@/components/ui/Menu";
 import { PanelRow } from "@/components/ui/Panel";
-import { Switch } from "@/components/ui/Switch";
+import { AsyncSwitch } from "@/components/ui/AsyncSwitch";
 import { formatDate } from "@/lib/format";
 import { toast } from "@/lib/toast";
 
@@ -149,6 +149,7 @@ export function FeishuRow({ im }: { im: ImState }) {
       await load();
     } catch (error) {
       toast.error(webErrorMessage(error));
+      throw error;
     } finally {
       if (mounted.current) setPushing(false);
     }
@@ -199,7 +200,7 @@ export function FeishuRow({ im }: { im: ImState }) {
         control={(
           <>
             <span className={state.healthy ? undefined : "text-warn-strong"}>{state.text}</span>
-            <Switch label="推送到飞书" checked={binding.notifications} disabled={busy !== null || pushing} onChange={(on) => void push(on)} />
+            <AsyncSwitch readChecked={async () => { const fresh = await fetchImStatus(); await load(); return fresh.feishu && "notifications" in fresh.feishu ? fresh.feishu.notifications : false; }} label="推送到飞书" checked={binding.notifications} disabled={busy !== null} pending={pushing} onChange={(on) => push(on)} />
             <Menu
               label="飞书的更多操作"
               items={[

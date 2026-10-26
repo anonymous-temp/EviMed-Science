@@ -102,7 +102,7 @@ describe("the list", () => {
   it("is a recipe in its empty state, not a paragraph", async () => {
     installVcrServer(network.productRequest, { "GET /vcr/studies": { studies: [], draftProjectIds: [] } });
     drawStudy("/app/virtual-research");
-    await screen.findByText("还没有研究");
+    await screen.findByText("研究结果会保留在这里");
     expect(blocks()).toEqual([]);
   });
 });

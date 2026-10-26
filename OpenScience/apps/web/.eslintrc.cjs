@@ -56,7 +56,7 @@ const tokenRules = [
   // slash is written `\x2F` because an esquery regex literal cannot contain
   // one.
   ...banned(
-    "/(^|[\\s:])(bg|text|border|ring|outline|divide|placeholder|decoration|fill|stroke|from|to|via|shadow|caret)-(bg|surface|surface-1|surface-2|surface-3|scrim|border|border-hairline|border-faint|border-control|faint|strong|text|text-2|text-3|title-ink|muted|accent|accent-fg|accent-soft|accent-strong|accent-pressed|link|warn|warn-soft|warn-strong|ok|ok-soft|error|error-fg|danger|danger-soft|danger-strong|info|info-soft|verify-ok|verify-pending|highlight|focus|badge|badge-fg|text-graphic|border-light|member-from|member-to|chart-own|chart-grid|chart-axis|chart-band|chart-target|dot-[a-z]+)\\x2F\\d+/",
+    "/(^|[\\s:])(bg|text|border|ring|outline|divide|placeholder|decoration|fill|stroke|from|to|via|shadow|caret)-(bg|surface|surface-1|surface-2|surface-3|scrim|border|border-hairline|border-faint|border-control|faint|strong|text|text-2|text-3|title-ink|brand-ink|muted|accent|accent-fg|accent-soft|accent-strong|accent-pressed|link|warn|warn-soft|warn-strong|ok|ok-soft|error|error-fg|danger|danger-soft|danger-strong|info|info-soft|verify-ok|verify-pending|highlight|focus|focus-input|badge|badge-fg|text-graphic|border-light|member-from|member-to|chart-own|chart-grid|chart-axis|chart-band|chart-target|dot-[a-z]+)\\x2F\\d+/",
     "An opacity modifier on a design-token colour generates no CSS (the tokens are var() colours). Use a solid token or its -soft / -strong partner from src/index.css.",
   ),
   ...banned(
@@ -321,6 +321,14 @@ module.exports = {
       rules: {
         "no-restricted-syntax": ["error", ...errorTextRules],
       },
+    },
+    // Adopted text-submit surfaces only: Enter activation on buttons and
+    // roving-focus controls remains native and is intentionally outside this rule.
+    {
+      files: ["src/app/routes/EvidenceZonesPage.tsx", "src/app/routes/EvidenceZonePage.tsx", "src/components/vcr/VcrScenarioEditor.tsx", "src/components/vcr/VcrPrecedentsPanel.tsx"],
+      rules: { "no-restricted-syntax": ["error", ...tokenRules, ...retiredTypeRules, ...componentRules, ...iconRules, ...errorTextRules,
+        { selector: "BinaryExpression[left.type='MemberExpression'][left.property.name='key'][right.value='Enter']", message: "Text submission must use isSubmitKey so IME confirmation cannot submit a draft." },
+      ] },
     },
     ...layoutOverrides,
   ],

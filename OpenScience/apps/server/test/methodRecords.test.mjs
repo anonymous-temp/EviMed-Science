@@ -38,7 +38,7 @@ test("every admitted method has a record, and the records name no method that is
     for (const field of ["title", "estimand", "assumptions", "inputs", "refusals", "diagnostics", "dependencies", "references"]) {
       assert.ok(record[field]?.length > 0, `${method}.${field} is written`);
     }
-    assert.equal(record.seeded, false, `${method}: no admitted method draws a random number`);
+    assert.equal(record.seeded, ["design.simulate","design.assurance","accrual.poisson_gamma","comparator.map_prior"].includes(method), `${method}: seeding follows the numerical method`);
     // Every assumption says what checks it, and each named check exists in the record.
     const named = new Set([...record.refusals, ...record.diagnostics].map((item) => item.code));
     for (const assumption of record.assumptions) {
@@ -68,7 +68,7 @@ test("every reference a record cites names a test file that exists, and each sta
 });
 
 test("the two R-run methods are recorded at the version the R engine publishes", () => {
-  for (const method of ["design.analytic", "comparator.evalue"]) {
+  for (const method of RESULT_REPLAY_METHODS.filter(method => VCR_ENGINE_METHODS[method])) {
     assert.equal(methodRecord(method).version, VCR_ENGINE_METHODS[method].version, method);
     assert.equal(methodRecord(method).engine, "vcr-engine");
   }
@@ -94,7 +94,7 @@ test("the adapter ships the domain's records byte for byte and cuts the same dig
 test("the refusals the control plane lets through are the records' own, each with a message and a sentence for the model", async () => {
   assert.ok(METHOD_REFUSAL_CODES.size >= 9, "the vocabulary was read");
   for (const code of METHOD_REFUSAL_CODES) {
-    assert.match(code, /^replay_[a-z_]{1,80}$/);
+    assert.match(code, /^(?:replay_[a-z_]{1,80}|scenario_value_invalid)$/);
     assert.ok(RESULT_WORKBENCH_ERROR_MESSAGES[code], `${code} has a message for the researcher`);
   }
   // The calculation tool answers a named refusal with a sentence of its own; its table is the records' vocabulary.

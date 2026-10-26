@@ -327,7 +327,7 @@ describe("a read that failed is said, on its own card, and is never a zero", () 
     await ready();
     expect(card("received")).toHaveAttribute("data-state", "content");
     const hand = card("received").querySelector<HTMLElement>("[data-overview-handover]")!;
-    expect(await within(hand).findByRole("alert")).toHaveTextContent("暂时读不到你能交出去的内容。");
+    expect(await within(hand).findByRole("note")).toHaveTextContent("暂时读不到你能交出去的内容。");
     expect(within(hand).getByRole("button", { name: /重试/u })).toBeInTheDocument();
   });
 });

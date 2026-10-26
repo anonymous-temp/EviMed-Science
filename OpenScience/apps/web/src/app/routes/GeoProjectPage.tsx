@@ -1,3 +1,4 @@
+import { PendingFeedbackBoundary } from "@/components/ui/PendingFeedback";
 import { memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from "react";
 import { Outlet, useLocation, useNavigate, useNavigationType, useParams } from "react-router";
 import { FileDown, MessageSquare, MoreHorizontal, Radar } from "lucide-react";
@@ -546,7 +547,7 @@ function GeoBand({
         <>
           {project.signalsSupported && <GeoSignalsWorkbench geoId={geoId} project={project} step={api.step} />}
           {api.scopePending && (api.scopeError ? <LoadError message={api.scopeError} onRetry={reload} /> : <TabSkeleton />)}
-          <div hidden={api.scopePending || project.signalsSupported && params.has("signal")}><GeoTab api={api} /></div>
+          <div hidden={api.scopePending || project.signalsSupported && params.has("signal")}><PendingFeedbackBoundary mode={api.scopePending || project.signalsSupported && params.has("signal") ? "inactive" : "active"}><GeoTab api={api} /></PendingFeedbackBoundary></div>
         </>
       )}
       {scopeOpen && <GeoScopeDialog geoId={geoId} project={project} initial={api.scope?.selectionRef && project.scope ? { ...project.scope, selectionRef: api.scope.selectionRef } : api.scope} onClose={() => setScopeOpen(false)} onApply={next => {

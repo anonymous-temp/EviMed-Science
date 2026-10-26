@@ -13,7 +13,7 @@
     "backgroundColor": "transparent",
     "textStyle": {
       "fontFamily": "\"EviMed CJK Punct\", Inter, \"PingFang SC\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Noto Sans CJK SC\", system-ui, sans-serif",
-      "color": "#1a1f25"
+      "color": "#24211e"
     },
     "title": {
       "show": false
@@ -29,7 +29,7 @@
       "axisLine": {
         "show": true,
         "lineStyle": {
-          "color": "#858e97",
+          "color": "#8c8173",
           "width": 1
         }
       },
@@ -37,14 +37,14 @@
         "show": false
       },
       "axisLabel": {
-        "color": "#5f686f",
+        "color": "#686157",
         "fontSize": 12,
         "fontFamily": "\"EviMed CJK Punct\", Inter, \"PingFang SC\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Noto Sans CJK SC\", system-ui, sans-serif"
       },
       "splitLine": {
         "show": true,
         "lineStyle": {
-          "color": "#e4e8ec",
+          "color": "#e3ded3",
           "width": 1,
           "type": "solid"
         }
@@ -57,7 +57,7 @@
       "axisLine": {
         "show": true,
         "lineStyle": {
-          "color": "#858e97",
+          "color": "#8c8173",
           "width": 1
         }
       },
@@ -65,7 +65,7 @@
         "show": false
       },
       "axisLabel": {
-        "color": "#5f686f",
+        "color": "#686157",
         "fontSize": 12,
         "fontFamily": "\"EviMed CJK Punct\", Inter, \"PingFang SC\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Noto Sans CJK SC\", system-ui, sans-serif"
       },
@@ -80,7 +80,7 @@
       "axisLine": {
         "show": true,
         "lineStyle": {
-          "color": "#858e97",
+          "color": "#8c8173",
           "width": 1
         }
       },
@@ -88,14 +88,14 @@
         "show": false
       },
       "axisLabel": {
-        "color": "#5f686f",
+        "color": "#686157",
         "fontSize": 12,
         "fontFamily": "\"EviMed CJK Punct\", Inter, \"PingFang SC\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Noto Sans CJK SC\", system-ui, sans-serif"
       },
       "splitLine": {
         "show": true,
         "lineStyle": {
-          "color": "#e4e8ec",
+          "color": "#e3ded3",
           "width": 1,
           "type": "solid"
         }
@@ -108,7 +108,7 @@
       "axisLine": {
         "show": true,
         "lineStyle": {
-          "color": "#858e97",
+          "color": "#8c8173",
           "width": 1
         }
       },
@@ -116,14 +116,14 @@
         "show": false
       },
       "axisLabel": {
-        "color": "#5f686f",
+        "color": "#686157",
         "fontSize": 12,
         "fontFamily": "\"EviMed CJK Punct\", Inter, \"PingFang SC\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Noto Sans CJK SC\", system-ui, sans-serif"
       },
       "splitLine": {
         "show": true,
         "lineStyle": {
-          "color": "#e4e8ec",
+          "color": "#e3ded3",
           "width": 1,
           "type": "solid"
         }
@@ -134,7 +134,7 @@
     },
     "legend": {
       "textStyle": {
-        "color": "#3e454d",
+        "color": "#494239",
         "fontSize": 12,
         "fontFamily": "\"EviMed CJK Punct\", Inter, \"PingFang SC\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Noto Sans CJK SC\", system-ui, sans-serif"
       },
@@ -144,25 +144,25 @@
       "itemGap": 16
     },
     "tooltip": {
-      "backgroundColor": "#ffffff",
-      "borderColor": "#e4e8ec",
+      "backgroundColor": "#fffdf8",
+      "borderColor": "#e3ded3",
       "borderWidth": 1,
       "padding": [
         8,
         12
       ],
-      "extraCssText": "border-radius:8px;box-shadow:0 6px 24px rgba(20, 32, 48, 0.06), 0 1px 3px rgba(20, 32, 48, 0.06), 0 0 0 1px rgba(20, 32, 48, 0.05);",
+      "extraCssText": "border-radius:8px;box-shadow:0 6px 24px rgba(36, 33, 30, 0.06), 0 1px 3px rgba(36, 33, 30, 0.06), 0 0 0 1px rgba(36, 33, 30, 0.05);",
       "textStyle": {
-        "color": "#1a1f25",
+        "color": "#24211e",
         "fontSize": 13,
         "fontFamily": "\"EviMed CJK Punct\", Inter, \"PingFang SC\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Noto Sans CJK SC\", system-ui, sans-serif"
       },
       "axisPointer": {
         "lineStyle": {
-          "color": "#858e97"
+          "color": "#8c8173"
         },
         "crossStyle": {
-          "color": "#858e97"
+          "color": "#8c8173"
         }
       }
     },
@@ -186,7 +186,7 @@
     },
     "pie": {
       "itemStyle": {
-        "borderColor": "#ffffff",
+        "borderColor": "#fffdf8",
         "borderWidth": 1
       }
     },
@@ -202,12 +202,12 @@
         ]
       },
       "textStyle": {
-        "color": "#5f686f"
+        "color": "#686157"
       }
     },
     "heatmap": {
       "itemStyle": {
-        "borderColor": "#ffffff",
+        "borderColor": "#fffdf8",
         "borderWidth": 1,
         "borderRadius": 3
       }
@@ -227,7 +227,7 @@
     "backgroundColor": "transparent",
     "textStyle": {
       "fontFamily": "\"EviMed CJK Punct\", Inter, \"PingFang SC\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Noto Sans CJK SC\", system-ui, sans-serif",
-      "color": "#eef1f4"
+      "color": "#f2eee6"
     },
     "title": {
       "show": false
@@ -243,7 +243,7 @@
       "axisLine": {
         "show": true,
         "lineStyle": {
-          "color": "#646e78",
+          "color": "#81766a",
           "width": 1
         }
       },
@@ -251,14 +251,14 @@
         "show": false
       },
       "axisLabel": {
-        "color": "#8d96a0",
+        "color": "#a99e8f",
         "fontSize": 12,
         "fontFamily": "\"EviMed CJK Punct\", Inter, \"PingFang SC\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Noto Sans CJK SC\", system-ui, sans-serif"
       },
       "splitLine": {
         "show": true,
         "lineStyle": {
-          "color": "#262d35",
+          "color": "#342f29",
           "width": 1,
           "type": "solid"
         }
@@ -271,7 +271,7 @@
       "axisLine": {
         "show": true,
         "lineStyle": {
-          "color": "#646e78",
+          "color": "#81766a",
           "width": 1
         }
       },
@@ -279,7 +279,7 @@
         "show": false
       },
       "axisLabel": {
-        "color": "#8d96a0",
+        "color": "#a99e8f",
         "fontSize": 12,
         "fontFamily": "\"EviMed CJK Punct\", Inter, \"PingFang SC\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Noto Sans CJK SC\", system-ui, sans-serif"
       },
@@ -294,7 +294,7 @@
       "axisLine": {
         "show": true,
         "lineStyle": {
-          "color": "#646e78",
+          "color": "#81766a",
           "width": 1
         }
       },
@@ -302,14 +302,14 @@
         "show": false
       },
       "axisLabel": {
-        "color": "#8d96a0",
+        "color": "#a99e8f",
         "fontSize": 12,
         "fontFamily": "\"EviMed CJK Punct\", Inter, \"PingFang SC\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Noto Sans CJK SC\", system-ui, sans-serif"
       },
       "splitLine": {
         "show": true,
         "lineStyle": {
-          "color": "#262d35",
+          "color": "#342f29",
           "width": 1,
           "type": "solid"
         }
@@ -322,7 +322,7 @@
       "axisLine": {
         "show": true,
         "lineStyle": {
-          "color": "#646e78",
+          "color": "#81766a",
           "width": 1
         }
       },
@@ -330,14 +330,14 @@
         "show": false
       },
       "axisLabel": {
-        "color": "#8d96a0",
+        "color": "#a99e8f",
         "fontSize": 12,
         "fontFamily": "\"EviMed CJK Punct\", Inter, \"PingFang SC\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Noto Sans CJK SC\", system-ui, sans-serif"
       },
       "splitLine": {
         "show": true,
         "lineStyle": {
-          "color": "#262d35",
+          "color": "#342f29",
           "width": 1,
           "type": "solid"
         }
@@ -348,7 +348,7 @@
     },
     "legend": {
       "textStyle": {
-        "color": "#c3cad2",
+        "color": "#d1c8ba",
         "fontSize": 12,
         "fontFamily": "\"EviMed CJK Punct\", Inter, \"PingFang SC\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Noto Sans CJK SC\", system-ui, sans-serif"
       },
@@ -358,25 +358,25 @@
       "itemGap": 16
     },
     "tooltip": {
-      "backgroundColor": "#161b21",
-      "borderColor": "#262d35",
+      "backgroundColor": "#211e1a",
+      "borderColor": "#342f29",
       "borderWidth": 1,
       "padding": [
         8,
         12
       ],
-      "extraCssText": "border-radius:8px;box-shadow:0 6px 24px rgba(20, 32, 48, 0.06), 0 1px 3px rgba(20, 32, 48, 0.06), 0 0 0 1px rgba(20, 32, 48, 0.05);",
+      "extraCssText": "border-radius:8px;box-shadow:0 6px 24px rgba(36, 33, 30, 0.06), 0 1px 3px rgba(36, 33, 30, 0.06), 0 0 0 1px rgba(36, 33, 30, 0.05);",
       "textStyle": {
-        "color": "#eef1f4",
+        "color": "#f2eee6",
         "fontSize": 13,
         "fontFamily": "\"EviMed CJK Punct\", Inter, \"PingFang SC\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Noto Sans CJK SC\", system-ui, sans-serif"
       },
       "axisPointer": {
         "lineStyle": {
-          "color": "#646e78"
+          "color": "#81766a"
         },
         "crossStyle": {
-          "color": "#646e78"
+          "color": "#81766a"
         }
       }
     },
@@ -400,7 +400,7 @@
     },
     "pie": {
       "itemStyle": {
-        "borderColor": "#161b21",
+        "borderColor": "#211e1a",
         "borderWidth": 1
       }
     },
@@ -416,12 +416,12 @@
         ]
       },
       "textStyle": {
-        "color": "#8d96a0"
+        "color": "#a99e8f"
       }
     },
     "heatmap": {
       "itemStyle": {
-        "borderColor": "#161b21",
+        "borderColor": "#211e1a",
         "borderWidth": 1,
         "borderRadius": 3
       }

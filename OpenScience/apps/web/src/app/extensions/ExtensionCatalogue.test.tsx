@@ -91,7 +91,7 @@ it("keeps source filtering when switching between discovery and added", async ()
   expect(await screen.findByRole("button", { name: "自研分析" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "科学绘图" })).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole("tab", { name: "已添加" }));
-  expect(await screen.findByRole("switch", { name: /自研分析/ })).toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: /应用.*自研分析/ })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "科学绘图" })).not.toBeInTheDocument();
 });
 
@@ -110,7 +110,7 @@ it("offers a real current-project switch and keeps a disabled preinstalled skill
   skills.saveProjectPlatformSkills.mockResolvedValue(updated);
   skills.projectPlatformSkills.mockResolvedValueOnce(project).mockResolvedValue(updated);
   open("/app/extensions/installed");
-  const toggle = await screen.findByRole("switch", { name: /科学绘图/ });
+  const toggle = await screen.findByRole("button", { name: /应用.*科学绘图/ });
   await userEvent.click(toggle);
   await waitFor(() => expect(skills.saveProjectPlatformSkills).toHaveBeenCalledWith("one", 3, [skill.id]));
   expect(await screen.findByText("等待当前任务结束后生效")).toBeInTheDocument();
@@ -135,9 +135,10 @@ it("lists required and module skills under their groups with no control and no w
   open("/app/extensions/installed");
   const guard = (await screen.findByRole("button", { name: "必需校验" })).closest("li")!;
   expect(within(guard).queryByRole("switch")).not.toBeInTheDocument();
+  expect(within(guard).queryByRole("button", { name: /应用/ })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "内部方法" })).toBeInTheDocument();
-  expect(screen.queryByRole("switch", { name: /内部方法/ })).not.toBeInTheDocument();
-  expect(screen.getByRole("switch", { name: /科学绘图/ })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /应用.*内部方法/ })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /应用.*科学绘图/ })).toBeInTheDocument();
   expect(screen.queryByText(/始终开启|系统提供/)).not.toBeInTheDocument();
 });
 it("uses the selected project's effective plugin state", async () => {
@@ -156,9 +157,9 @@ it("a late policy response from a previous project never replaces the current pr
   open("/app/extensions/installed");
   await screen.findByRole("button", { name: "科学绘图" });
   act(() => useProjectStore.setState({ currentId: "two" }));
-  await waitFor(() => expect(screen.getByRole("switch", { name: /科学绘图/ })).toHaveAttribute("aria-checked", "false"));
+  await waitFor(() => expect(screen.getByRole("button", { name: /应用.*科学绘图/ })).toHaveAccessibleName(/应用启用/));
   await act(async () => finish(project));
-  expect(screen.getByRole("switch", { name: /科学绘图/ })).toHaveAttribute("aria-checked", "false");
+  expect(screen.getByRole("button", { name: /应用.*科学绘图/ })).toHaveAccessibleName(/应用启用/);
 });
 
 it("changes an optional bundled plugin without routing it to citation settings", async () => {
@@ -166,7 +167,7 @@ it("changes an optional bundled plugin without routing it to citation settings",
   plugins.projectBuiltinPlugins.mockResolvedValue({ revision: 3, payload: { disabled: ["annotation"] }, items: [{ id: "annotation", enabled: false, effective: false, available: true }, { id: "mermaid", enabled: true, effective: true, available: true }], activation });
   plugins.saveProjectBuiltinPlugins.mockResolvedValue({ revision: 4, payload: { disabled: ["annotation", "mermaid"] }, items: [{ id: "annotation", enabled: false, effective: false, available: true }, { id: "mermaid", enabled: false, effective: true, available: true }], activation: { ...activation, phase: "waiting", savedRevision: 4 } });
   open("/app/extensions/installed?type=plugins");
-  await userEvent.click(await screen.findByRole("switch", { name: /Mermaid 图表/ }));
+  await userEvent.click(await screen.findByRole("button", { name: /应用.*Mermaid 图表/ }));
   expect(plugins.saveProjectBuiltinPlugins).toHaveBeenCalledWith("one", 3, ["annotation", "mermaid"]);
   expect(await screen.findByText("等待当前任务结束后生效")).toBeInTheDocument();
 });
@@ -197,7 +198,7 @@ it("does not turn a deployment-disabled plugin into a personal disable while cha
   plugins.projectBuiltinPlugins.mockResolvedValue({ revision: 3, payload: { disabled: [] }, items: [{ id: "annotation", enabled: false, effective: false, available: false }, { id: "mermaid", enabled: true, effective: true, available: true }], activation });
   plugins.saveProjectBuiltinPlugins.mockResolvedValue({ revision: 4, payload: { disabled: ["mermaid"] }, items: [], activation: { ...activation, phase: "waiting", savedRevision: 4 } });
   open("/app/extensions/installed?type=plugins");
-  await userEvent.click(await screen.findByRole("switch", { name: /Mermaid 图表/ }));
+  await userEvent.click(await screen.findByRole("button", { name: /应用.*Mermaid 图表/ }));
   expect(plugins.saveProjectBuiltinPlugins).toHaveBeenCalledWith("one", 3, ["mermaid"]);
 });
 
@@ -206,7 +207,7 @@ it("shows citation switch failures on the added page without requiring its drawe
   api.listWebPlugins.mockResolvedValue([{ id: "dsh-cite", desired: { revision: 2, enabled: true, settings: {} }, effective: { enabled: true }, phase: "applied", settingsSchema: {} }]);
   api.saveWebPlugin.mockRejectedValue(new Error("temporary test failure"));
   open("/app/extensions/installed?type=plugins");
-  await userEvent.click(await screen.findByRole("switch", { name: /文献引用核对/ }));
+  await userEvent.click(await screen.findByRole("button", { name: /应用.*文献引用核对/ }));
   expect(await screen.findByText("操作没有完成，请重试。")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "刷新引用设置" })).toBeInTheDocument();
 });
@@ -232,8 +233,8 @@ it("closing a changed plugin drawer leaves the list current and its next switch 
   await userEvent.click(await within(drawer).findByRole("button", { name: "停用" }));
   await waitFor(() => expect(plugins.saveProjectExtensions).toHaveBeenCalledTimes(1));
   await userEvent.click(within(drawer).getByRole("button", { name: "关闭" }));
-  const toggle = await screen.findByRole("switch", { name: /详情插件/ });
-  await waitFor(() => expect(toggle).not.toBeChecked());
+  const toggle = await screen.findByRole("button", { name: /应用.*详情插件/ });
+  await waitFor(() => expect(toggle).toHaveAccessibleName(/应用启用/));
   await userEvent.click(toggle);
   await waitFor(() => expect(plugins.saveProjectExtensions).toHaveBeenCalledTimes(2));
   expect(plugins.saveProjectExtensions.mock.calls[1][1]).toBe(6);
@@ -280,11 +281,11 @@ it("a 循证 GEO project on its shared settings draws no project switch and says
   open("/app/extensions/installed");
   const plot = (await screen.findByRole("button", { name: "科学绘图" })).closest("li")!;
   expect(within(plot).getByText("循证 GEO 项目中不适用")).toBeInTheDocument();
-  expect(screen.queryByRole("switch", { name: /科学绘图/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /应用.*科学绘图/ })).not.toBeInTheDocument();
   expect(await screen.findByRole("button", { name: "Mermaid 图表" })).toBeInTheDocument();
-  expect(screen.queryByRole("switch", { name: /Mermaid 图表/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /应用.*Mermaid 图表/ })).not.toBeInTheDocument();
   // The citation settings travel with the project's own plugin configuration, which a shared start keeps.
-  expect(await screen.findByRole("switch", { name: /文献引用核对/ })).toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: /应用.*文献引用核对/ })).toBeInTheDocument();
 });
 
 it("an upstream skill the platform adapted says so on its row and in its drawer, which names no version or licence string", async () => {

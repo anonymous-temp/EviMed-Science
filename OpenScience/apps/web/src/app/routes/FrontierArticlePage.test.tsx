@@ -366,7 +366,7 @@ describe("不感兴趣 on the reading page asks why first (c2-hide)", () => {
     await userEvent.click(within(menu).getByRole("menuitem", { name: "看过了" }));
     await waitFor(() => expect(client.hideFrontierItem).toHaveBeenCalledWith("x-post-0001", "already-seen"));
     expect(client.addFrontierFollow).not.toHaveBeenCalled();
-    const toast = await screen.findByText("已隐藏");
+    const toast = await screen.findByText("已隐藏", { selector: "[data-toast] button" });
     expect(toast).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "撤销" }));
     await waitFor(() => expect(client.unhideFrontierItem).toHaveBeenCalledWith("x-post-0001"));
@@ -376,7 +376,7 @@ describe("不感兴趣 on the reading page asks why first (c2-hide)", () => {
     const menu = await chooseHide();
     await userEvent.click(within(menu).getByRole("menuitem", { name: "不说原因，直接隐藏" }));
     await waitFor(() => expect(client.hideFrontierItem).toHaveBeenCalledWith("x-post-0001", undefined));
-    expect(await screen.findByText("已隐藏")).toBeInTheDocument();
+    expect(await screen.findByText("已隐藏", { selector: "[data-toast] button" })).toBeInTheDocument();
   });
 
   it("hides nothing when the reasons are dismissed, and opens them again on the next 不感兴趣", async () => {
@@ -397,7 +397,7 @@ describe("不感兴趣 on the reading page asks why first (c2-hide)", () => {
     await userEvent.click(within(menu).getByRole("menuitem", { name: "不想看“Arena.ai”" }));
     await waitFor(() => expect(client.hideFrontierItem).toHaveBeenCalledWith("x-post-0001", "source"));
     await waitFor(() => expect(client.addFrontierFollow).toHaveBeenCalledWith({ kind: "source", key: "x-arena", label: "Arena.ai", muted: true }));
-    expect(await screen.findByText("已隐藏，并屏蔽该来源")).toBeInTheDocument();
+    expect(await screen.findByText("已隐藏，并屏蔽该来源", { selector: "[data-toast] button" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "撤销" }));
     await waitFor(() => expect(client.removeFrontierFollow).toHaveBeenCalledWith("21"));
     expect(client.unhideFrontierItem).toHaveBeenCalledWith("x-post-0001");

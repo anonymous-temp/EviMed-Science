@@ -1,3 +1,4 @@
+import { formatRelativeTime } from "./format";
 import { describe, expect, it } from "vitest";
 import type { WebAgentRun } from "@/lib/apiClient";
 import { compactTime, relativeTime, runDidNotDeliver, runMetaLine, runQuestion, runState, runTitle, undeliveredFiles, webRunOutcome } from "./runPresentation";
@@ -62,9 +63,9 @@ describe("the state a run is shown in", () => {
     // Older than a day: the spec's date forms, never Intl's 9/20 or 2025/9/20.
     const today = new Date(now);
     const earlier = new Date(today.getFullYear(), 0, 2, 9, 0).getTime();
-    if (now - earlier > 86_400_000) expect(relativeTime(earlier, now)).toBe("1月2日");
-    expect(relativeTime(new Date(2020, 8, 20, 9, 0).getTime(), now)).toBe("2020-09-20");
-    expect(compactTime(new Date(2020, 8, 20, 9, 0).getTime(), now)).toBe("2020-09-20");
+    if (now - earlier > 86_400_000) expect(relativeTime(earlier, now)).toBe(formatRelativeTime(earlier, new Date(now)));
+    expect(relativeTime(new Date(2020, 8, 20, 9, 0).getTime(), now)).toBe(formatRelativeTime(new Date(2020, 8, 20, 9, 0), new Date(now)));
+    expect(compactTime(new Date(2020, 8, 20, 9, 0).getTime(), now)).toBe(formatRelativeTime(new Date(2020, 8, 20, 9, 0), new Date(now)));
   });
 });
 

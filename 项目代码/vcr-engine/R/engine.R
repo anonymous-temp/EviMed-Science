@@ -46,7 +46,7 @@
 VCR_ENGINE_SOURCE_FILES <- c(
   "protocol", "rules", "inputs", "rng", "simulators", "population", "quality", "weighting", "rmst",
   "reconstruct", "maic", "evidence_pool", "map_prior", "design_analytic",
-  "design_simulate", "assurance", "procova", "accrual", "summaries", "comparison", "weighted_cox", "maic_tte", "aipw", "covariate_sets"
+  "design_simulate", "assurance", "procova", "accrual", "summaries", "comparison", "weighted_cox", "maic_tte", "aipw", "covariate_sets", "model_survival", "model_prognostic"
 )
 
 #' Source every module in dependency order. Idempotent.
@@ -63,6 +63,8 @@ vcr_engine_load <- function(root = NULL) {
 
 #' The handlers this build actually implements, keyed by method id.
 vcr_engine_handlers <- function() list(
+  "model.survival_fit" = vcr_job_fit_survival_model,
+  "model.prognostic_apply" = vcr_job_apply_prognostic_model,
   "profile.snapshot" = vcr_job_profile_snapshot,
   "cohort.build" = vcr_job_build_cohort,
   "population.scenario" = vcr_job_generate_population,
@@ -582,6 +584,10 @@ vcr_job_build_cohort <- function(job, output_dir = NULL, ...) {
 #' and a record of what was applied (the rules' hash equals the one
 #' `cohort.build` reported for the same rules).
 vcr_apply_downstream_cohort <- function(df, items) {
+  if (is.null(df)) {
+    if (!is.null(items) && length(items)) vcr_abort("scenario_value_invalid", "scenario.cohortRules", "A cohort filter requires a stored population.")
+    return(list(data = NULL, info = NULL, keep = logical()))
+  }
   if (is.null(items) || !length(items)) return(list(data = df, info = NULL, keep = rep(TRUE, nrow(df))))
   cons <- vcr_named_rules(items, names(df), "scenario.cohortRules")
   if (length(cons$issues)) vcr_abort_issue(cons$issues[[1]])
@@ -781,7 +787,9 @@ vcr_job_generate_patients <- function(job, output_dir = NULL, ...) {
   tabs <- vcr_job_tables(job)
   pop <- if (length(tabs$files)) tabs$files[[1]] else tabs$subject
   z <- NULL; lp <- NULL
-  set.seed(job$seed, kind = VCR_RNG_KIND)
+  randomization <- vcr_patient_randomization(job)
+  cohort <- vcr_apply_downstream_cohort(pop, sc$cohortRules)
+  pop <- cohort$data
   if (!is.null(pop)) {
     n <- nrow(pop)
     if (is.null(n1) || is.null(n0) || n1 + n0 != n) vcr_abort("scenario_value_invalid", "scenario.design", "For a stored population the arm sizes add up to the number of members.")
@@ -817,8 +825,8 @@ vcr_job_generate_patients <- function(job, output_dir = NULL, ...) {
     vcr_sim_tte(n1, n0, vcr_control_distribution(tr), hr, acc, vcr_scalar(acc$followup, Inf),
                 vcr_scalar(acc$dropoutAnnual, 0), dropout_period = vcr_time_unit(sc)$perYear, max_followup = vcr_scalar(acc$maxFollowup, Inf), z = z, lp = lp)
   }
-  ids <- vapply(seq_len(nrow(d)), function(i) substr(vcr_sha256(paste(job$seed, job$jobId %||% "", i, sep = ":")), 1L, 12L), character(1))
-  out <- data.frame(patientId = paste0("vp_", ids), stringsAsFactors = FALSE)
+  ids <- vcr_patient_ids(job, pop, nrow(d))
+  out <- data.frame(patientId = ids, stringsAsFactors = FALSE)
   if (!is.null(pop)) out <- cbind(out, pop)
   out <- cbind(out, d)
   out$source <- "synthetic"
@@ -827,7 +835,7 @@ vcr_job_generate_patients <- function(job, output_dir = NULL, ...) {
        measures = list(vcr_measure("generated_records", nrow(d), source = "synthetic")),
        counts = vcr_counts(realPatients = 0, generatedRecords = nrow(d),
                            events = if ("status" %in% names(d)) sum(d$status) else NULL),
-       diagnostics = c(list(endpoint = endpoint, valueSource = "synthetic", modelTier = "scenario",
+       diagnostics = c(list(endpoint = endpoint, valueSource = "synthetic", modelTier = "scenario", randomization = randomization, cohort = cohort$info,
                           mode = if (is.null(pop)) "scenario" else "population",
                           note = "Scenario simulation from stated parameters; no baseline-conditioned or digital-twin claim is made."),
                        # what the patients page draws: the arms' survival curves and their summary numbers,
@@ -1516,6 +1524,9 @@ vcr_job_design_analytic <- function(job, ...) {
       vcr_measure("sample_size",ex$n,source="calculated"))),diagnostics=list(exactBinomial=ex)))
   }
   measures <- list(); diag <- list()
+  # 1.0/1.1 replay the historical totals and aliases unchanged. Version 1.2 sizes each integer arm first.
+  integer_allocation <- identical(job$methodVersion, "1.2.0")
+  allocated <- NULL
   add <- function(name, value, ...) measures[[length(measures) + 1L]] <<- vcr_measure(name, value, source = "calculated", ...)
   gs <- NULL; inflation <- 1
   if (identical(kind, "group_sequential")) {
@@ -1572,12 +1583,30 @@ vcr_job_design_analytic <- function(job, ...) {
   } else if (identical(e, "continuous")) {
     eff <- .vcr_need(tr$effect, "scenario.truth.effect", "A continuous design states the effect to detect.")
     n <- vcr_n_means(eff, vcr_scalar(tr$sd, 1), alpha, power, alloc, sided)
-    add("required_total", ceiling(n$total)); add("required_per_arm", ceiling(n$total * alloc))
+    if (integer_allocation) {
+      allocated <- vcr_integer_allocation(n)
+      add("required_total", allocated$total); add("required_treatment", allocated$treatment); add("required_control", allocated$control)
+      if (identical(alloc, 0.5)) add("required_per_arm", allocated$treatment)
+      diag$sampleSize <- list(basis = "normal_approximation", formula = "two_sample_means_normal_approximation",
+        rounding = "ceiling_each_arm_then_sum", unrounded = n, targetPower = power,
+        nTreatment = allocated$treatment, nControl = allocated$control, total = allocated$total,
+        allocationRequested = alloc, allocationAchieved = allocated$treatment / allocated$total,
+        powerCheckBasis = "pooled_two_sample_t", powerAtAllocatedN = vcr_power_means(eff, vcr_scalar(tr$sd, 1), allocated$treatment, allocated$control, alpha, sided))
+    } else { add("required_total", ceiling(n$total)); add("required_per_arm", ceiling(n$total * alloc)) }
   } else if (identical(e, "binary") && identical(kind, "two_arm_fixed")) {
     p0 <- vcr_scalar(tr[["controlRate"]], NULL)
     p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(tr[["treatmentRate"]], NULL), vcr_scalar(tr$riskDifference, NULL), vcr_scalar(tr$oddsRatio, NULL))
     n <- vcr_n_proportions(p0, p1, alpha, power, alloc, sided)
-    add("required_total", ceiling(n$total)); add("required_control", ceiling(n$control))
+    if (integer_allocation) {
+      allocated <- vcr_integer_allocation(n)
+      add("required_total", allocated$total); add("required_treatment", allocated$treatment); add("required_control", allocated$control)
+      if (identical(alloc, 0.5)) add("required_per_arm", allocated$treatment)
+      diag$sampleSize <- list(basis = "normal_approximation", formula = "two_proportion_normal_approximation",
+        rounding = "ceiling_each_arm_then_sum", unrounded = n, targetPower = power,
+        nTreatment = allocated$treatment, nControl = allocated$control, total = allocated$total,
+        allocationRequested = alloc, allocationAchieved = allocated$treatment / allocated$total,
+        powerCheckBasis = "two_proportion_normal_approximation", powerAtAllocatedN = vcr_power_proportions(p0, p1, allocated$treatment, allocated$control, alpha, sided))
+    } else { add("required_total", ceiling(n$total)); add("required_control", ceiling(n$control)) }
   }
   if (identical(kind, "simon_two_stage")) {
     p_null <- .vcr_need(tr$nullRate, "scenario.truth.nullRate", "Simon's design states the null response rate."); p_alt <- .vcr_need(tr$alternativeRate, "scenario.truth.alternativeRate", "Simon's design states the alternative response rate.")
@@ -1609,20 +1638,22 @@ vcr_job_design_analytic <- function(job, ...) {
     }
     diag$powerCurve <- tryCatch({
       sc2 <- sc
-      if (!is.null(n_total)) sc2$design <- list(kind = kind, nTreat = ceiling(n_total * alloc), nControl = ceiling(n_total * (1 - alloc)))
+      if (!is.null(allocated)) sc2$design <- list(kind = kind, nTreat = allocated$treatment, nControl = allocated$control)
+      else if (!is.null(n_total)) sc2$design <- list(kind = kind, nTreat = ceiling(n_total * alloc), nControl = ceiling(n_total * (1 - alloc)))
       else if (!is.null(sc$accrual)) {
         m_req <- Filter(function(m) identical(m$name, "required_patients"), measures)
         if (length(m_req)) sc2$design <- list(kind = kind, nTreat = ceiling(m_req[[1]]$value * alloc), nControl = ceiling(m_req[[1]]$value * (1 - alloc)))
       }
       if (is.null(sc2$design$nTreat)) NULL else vcr_power_curve_summary(sc2, alpha, sided)
     }, error = function(err) NULL)
-    diag$sensitivity <- tryCatch(vcr_analytic_sensitivity(e, tr, alpha, power, alloc, sided, measures), error = function(err) NULL)
+    diag$sensitivity <- tryCatch(vcr_analytic_sensitivity(e, tr, alpha, power, alloc, sided, measures, integer_allocation), error = function(err) NULL)
   }
   list(status = "succeeded", measures = vcr_analytic_finite_or_refuse(measures), counts = vcr_counts(), diagnostics = diag)
 }
 
 #' Required size at the stated effect and at 80% and 120% of it, one parameter at a time.
-vcr_analytic_sensitivity <- function(e, tr, alpha, power, alloc, sided, measures) {
+vcr_analytic_sensitivity <- function(e, tr, alpha, power, alloc, sided, measures, integer_allocation = FALSE) {
+  total_of <- function(n) if (integer_allocation) vcr_integer_allocation(n)$total else n$total
   wiggle <- c(0.8, 1.2)
   base_of <- function(name) { m <- Filter(function(x) identical(x$name, name), measures); if (length(m)) m[[1]]$value else NA_real_ }
   if (identical(e, "time_to_event")) {
@@ -1634,8 +1665,8 @@ vcr_analytic_sensitivity <- function(e, tr, alpha, power, alloc, sided, measures
   }
   if (identical(e, "continuous")) {
     eff <- vcr_scalar(tr$effect, NULL); if (is.null(eff)) return(NULL)
-    n <- vapply(wiggle, function(k) vcr_n_means(eff * k, vcr_scalar(tr$sd, 1), alpha, power, alloc, sided)$total, numeric(1))
-    sdv <- vapply(wiggle, function(k) vcr_n_means(eff, vcr_scalar(tr$sd, 1) * k, alpha, power, alloc, sided)$total, numeric(1))
+    n <- vapply(wiggle, function(k) total_of(vcr_n_means(eff * k, vcr_scalar(tr$sd, 1), alpha, power, alloc, sided)), numeric(1))
+    sdv <- vapply(wiggle, function(k) total_of(vcr_n_means(eff, vcr_scalar(tr$sd, 1) * k, alpha, power, alloc, sided)), numeric(1))
     return(list(measure = "所需总样本量", base = list(value = base_of("required_total")),
                 rows = list(list(label = "效应", range = sprintf("%.3g–%.3g", eff * 0.8, eff * 1.2), low = ceiling(min(n)), high = ceiling(max(n))),
                             list(label = "标准差", range = sprintf("%.3g–%.3g", vcr_scalar(tr$sd, 1) * 0.8, vcr_scalar(tr$sd, 1) * 1.2), low = ceiling(min(sdv)), high = ceiling(max(sdv))))))
@@ -1643,7 +1674,7 @@ vcr_analytic_sensitivity <- function(e, tr, alpha, power, alloc, sided, measures
   p0 <- vcr_scalar(tr[["controlRate"]], NULL)
   p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(tr[["treatmentRate"]], NULL), vcr_scalar(tr$riskDifference, NULL), vcr_scalar(tr$oddsRatio, NULL))
   clip <- function(p) pmin(pmax(p, 0.001), 0.999)
-  n <- vapply(wiggle, function(k) vcr_n_proportions(p0, clip(p0 + k * (p1 - p0)), alpha, power, alloc, sided)$total, numeric(1))
+  n <- vapply(wiggle, function(k) total_of(vcr_n_proportions(p0, clip(p0 + k * (p1 - p0)), alpha, power, alloc, sided)), numeric(1))
   list(measure = "所需总样本量", base = list(value = base_of("required_total")),
        rows = list(list(label = "两组事件率之差", range = sprintf("%.3g–%.3g", 0.8 * (p1 - p0), 1.2 * (p1 - p0)), low = ceiling(min(n)), high = ceiling(max(n)))))
 }
@@ -1721,7 +1752,7 @@ vcr_job_design_grid <- function(job, output_dir = NULL, cancel_file = NULL, prog
        measures = list(vcr_measure("cells", length(cells), source = "calculated")),
        counts = vcr_counts(),
        issues = issues,
-       diagnostics = list(replicatesCompleted = done, cellsPlanned = planned, cellsRun = length(cells),
+       diagnostics = list(seedPolicy = "independent_cell_seeds; independent_L_Ecuyer_replicate_streams_within_cell; no_common_random_numbers_between_cells", replicatesCompleted = done, cellsPlanned = planned, cellsRun = length(cells),
                           # the cells with their numbers: the page draws the heat grid from these (the full table stays a CSV)
                           cells = lapply(cells, function(c_) list(designIndex = c_$designIndex, truthIndex = c_$truthIndex, seed = c_$seed,
                                                                   scenarioHash = c_$scenarioHash, status = c_$status,

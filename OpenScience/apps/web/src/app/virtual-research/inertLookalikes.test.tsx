@@ -69,7 +69,7 @@ describe("nothing that looks pressed is inert", () => {
     });
     drawStudy(`/app/virtual-research/${STUDY_ID}`);
     await screen.findByText(/正在模拟试验方案/);
-    expect(document.querySelector(".bg-accent-soft")).not.toBeNull();
+    expect(document.querySelector("[data-activity]")).not.toBeNull();
     expect(inertLookalikes(document.body)).toEqual([]);
   });
 });

@@ -1,3 +1,4 @@
+import { measurement } from "@/lib/measurement";
 import { cn } from "@/lib/cn";
 import { StatTile } from "@/components/ui/StatTile";
 import { Tooltip } from "@/components/ui/Tooltip";
@@ -46,7 +47,7 @@ export function VcrCountsBand({ counts, tabOf, className }: {
       <div className="flex flex-wrap gap-px overflow-hidden rounded-panel border border-border bg-border [&>*]:min-w-40 [&>*]:flex-1 [&>*]:bg-surface">
         {keys.map((key) => {
           const value = counts[key] as number;
-          const tile = <StatTile key={key} label={countLabel(key)} value={countText(value)} to={tabOf?.(key)} dense />;
+          const tile = <StatTile key={key} label={countLabel(key)} reading={measurement(value, "", counts.scope ?? countLabel(key))} renderMeasured={reading => countText(reading.value)} to={tabOf?.(key)} dense />;
           // The rounded 「约 648 万」 is what a reader can hold; the exact figure stays one hover away rather than in the tile.
           return Math.abs(value) >= 10_000
             ? <Tooltip key={key} content={`${countLabel(key)} ${numberText(value, 0)}`}><div data-vcr-count={key}>{tile}</div></Tooltip>

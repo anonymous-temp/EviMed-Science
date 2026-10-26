@@ -144,7 +144,7 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
   }); };
   return <Section title="问句整理与诊断" level="sub">
     <div className="flex flex-wrap items-center gap-2">
-      {canEdit && <Button size="sm" disabled={busy || !!pendingImport.current} onClick={() => { setEditing(true); setSaved(null); }}>导入问句</Button>}
+      {canEdit && <Button variant="secondary" size="sm" disabled={busy || !!pendingImport.current} onClick={() => { setEditing(true); setSaved(null); }}>导入问句</Button>}
       {canEdit && data.groups.length > 0 && data.version != null && data.contract != null && <Button size="sm" variant="text" disabled={busy || !!pendingImport.current} onClick={editExisting}>编辑为新版本</Button>}
       {version != null && <AskAi project={target} label="建议分类" draft={`/geo-insight 请读取第 ${version} 版完整原题，仅建议测量池、人群、阶段与分类状态。保留原题、编号、客户分组与原标签，输出带原编号的可导入表格，建议不覆盖客户原分类；用户采用后另存新版本。`} />}{version != null && <AskAi project={target} label="检查覆盖" draft={`/geo-insight 请检查第 ${version} 版问句覆盖，读取该版本原题、已有资料和旅程人群，指出具体缺口与依据，不编造配额。保留原分类，建议另列，输出可编辑的新版本问句表，不自动采样。`} />}
       {version != null && activeContract != null && canRun && <Button size="sm" disabled={busy || !storageScope} onClick={start}>{busy ? '正在处理' : `启动第 ${version} 版诊断`}</Button>}
@@ -155,7 +155,7 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
       {book && <>
         <label className="text-ui text-text">工作表<select disabled={busy || !!pendingImport.current} aria-label="工作表" className={inputClasses()} value={sheet} onChange={event => { setSheet(Number(event.target.value)); setRows([]); setMapping({}); changed(); }}>{book.sheets.map((item, index) => <option key={index} value={index}>{item.name}</option>)}</select></label>
         <div className="grid gap-3 md:grid-cols-2">{(['text', 'originalId', 'originalGroup', 'clientTags', 'pool', 'audience', 'journeyStage', 'kind', 'sourceUrl', 'collectedAt', 'classificationStatus', 'isMeasured'] as const).map((field, index) => <label key={field} className="text-ui text-text">{['原题文本', '原编号', '客户原分类', '客户原标签', '测量池（P1–P4）', '人群（patient / physician 等）', '旅程阶段', '问句性质（client / typical / real / label_safety）', '来源链接', '采集日期', '分类状态（unclassified / suggested / confirmed）', '参与测量（true / false / 1 / 0）'][index]}<select disabled={busy || !!pendingImport.current} className={inputClasses()} value={mapping[field] ?? ''} onChange={event => { setMapping(previous => ({ ...previous, [field]: event.target.value === '' ? undefined : Number(event.target.value) })); changed(); setRows([]); }}><option value="">请选择列</option>{book.sheets[sheet].rows[0]?.map((name, column) => <option key={column} value={column}>{column + 1} · {name || '未命名'}</option>)}</select></label>)}</div>
-        <Button size="sm" disabled={busy || !!pendingImport.current} onClick={() => { void act(async () => { const mapped = mapQuestionRows(book.sheets[sheet].rows, mapping, book.sheets[sheet].typedRows); setRows(mapped.rows); setBlank(mapped.excludedBlankRows); changed(); }); }}>读取映射行</Button>
+        <Button variant="secondary" size="sm" disabled={busy || !!pendingImport.current} onClick={() => { void act(async () => { const mapped = mapQuestionRows(book.sheets[sheet].rows, mapping, book.sheets[sheet].typedRows); setRows(mapped.rows); setBlank(mapped.excludedBlankRows); changed(); }); }}>读取映射行</Button>
       </>}
       <ContractFields value={contract} disabled={busy || !!pendingImport.current} onChange={next => { setContract(next); changed(); }} />
       {rows.length > 0 && <>

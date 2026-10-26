@@ -494,7 +494,7 @@
   },
   "design.analytic": {
    "id": "design.analytic",
-   "version": "1.1.0",
+   "version": "1.2.0",
    "engine": "vcr-engine",
    "title": "Closed-form trial design calculation: sample size, events, power, group-sequential boundaries, exact single-arm and Simon designs",
    "estimand": "The sample size or event count a stated design needs, or the power it has, under the scenario's assumed truth; not a forecast of the trial.",
@@ -506,7 +506,7 @@
     },
     {
      "id": "large_sample_formulas",
-     "text": "Two-arm continuous and binary designs use normal-approximation formulas; time-to-event designs count events with Schoenfeld's formula under proportional hazards and exponential survival; group-sequential boundaries are Lan-DeMets spending functions.",
+     "text": "Two-arm continuous and binary designs use normal-approximation formulas; time-to-event designs count events with Schoenfeld's formula under proportional hazards and exponential survival; group-sequential boundaries are Lan-DeMets spending functions. Version 1.2 rounds each continuous/binary arm up separately and reports their sum; the continuous formula is not exact t-test sizing, and its separately checked pooled-t power can be below the normal-approximation target. Earlier method versions retain their original rounding.",
      "checkedBy": "none"
     },
     {
@@ -561,6 +561,13 @@
      "source": "Schoenfeld's event formula for HR 0.7, one-sided alpha 0.025, power 0.9: 330.378 events, 331 rounded up, the number the plan quotes, asserted through a genuine R run of this method",
      "tolerance": "exact after rounding up",
      "test": "OpenScience/apps/server/test/resultVcrReplayNumeric.test.mjs"
+    },
+    {
+     "id": "n53_integer_allocation",
+     "kind": "analytic",
+     "source": "Independent normal-quantile formulas, per-arm ceiling arithmetic and base-R noncentral-t power for balanced and unequal allocation; versions 1.0/1.1 replay their original outputs.",
+     "tolerance": "1e-10 for unrounded size, integer totals exact and 1e-12 for pooled-t power",
+     "test": "项目代码/vcr-engine/tests/numeric/N53_integer_allocation.R"
     }
    ]
   },
@@ -632,6 +639,242 @@
      "source": "VanderWeele & Ding (2017) Annals of Internal Medicine 167:268: risk ratio 3.9 with lower limit 1.8 gives E-values 7.26 and 3.0; and the EValue R package on a grid of scales",
      "tolerance": "5e-3 for the book values, 1e-6 for the package",
      "test": "项目代码/vcr-engine/tests/numeric/N10_N13_survival.R (case N12)"
+    }
+   ]
+  },
+  "design.simulate": {
+   "id": "design.simulate",
+   "version": "1.2.0",
+   "engine": "vcr-engine",
+   "title": "Trial operating characteristics under fixed scenario assumptions",
+   "estimand": "Monte Carlo power, bias and duration with simulation uncertainty. Scenario parameters are assumptions, not observations.",
+   "assumptions": [
+    {
+     "id": "source_assumptions",
+     "text": "Input assumptions and historical aggregate populations are appropriate for the research question; the computation does not establish transportability.",
+     "checkedBy": "none"
+    },
+    {
+     "id": "simulation_precision",
+     "text": "The seed and replicate budget are explicit; Monte Carlo uncertainty and partial completion are preserved.",
+     "checkedBy": "output:diagnostics"
+    }
+   ],
+   "inputs": [
+    {
+     "name": "input.scenario",
+     "meaning": "Closed aggregate engine scenario, validated by the numerical engine."
+    },
+    {
+     "name": "input.seed",
+     "meaning": "Random seed, default 1."
+    },
+    {
+     "name": "input.replicates",
+     "meaning": "Requested replicate limit, default 1000; actual completed count is in the engine result."
+    }
+   ],
+   "refusals": [
+    {
+     "code": "scenario_value_invalid",
+     "when": "A required engine field is missing or out of range."
+    }
+   ],
+   "diagnostics": [
+    {
+     "code": "engine_diagnostics",
+     "severity": "notice",
+     "when": "The engine states assumptions, precision and computation limits."
+    }
+   ],
+   "seeded": true,
+   "dependencies": [
+    "R"
+   ],
+   "references": [
+    {
+     "id": "owned_engine_contract",
+     "kind": "other-implementation",
+     "source": "Existing VCR engine method and scenario validation; aggregate replay preserves its exact source and environment identities.",
+     "tolerance": "The method-specific engine cross-check tolerance; no new clinical validation is claimed.",
+     "test": "OpenScience/apps/server/test/resultVcrReplayAggregate.test.mjs"
+    }
+   ]
+  },
+  "design.assurance": {
+   "id": "design.assurance",
+   "version": "1.1.0",
+   "engine": "vcr-engine",
+   "title": "Design assurance under an explicit effect prior",
+   "estimand": "Probability of a successful design averaged over a specified prior. Assurance is not fixed-effect power.",
+   "assumptions": [
+    {
+     "id": "source_assumptions",
+     "text": "Input assumptions and historical aggregate populations are appropriate for the research question; the computation does not establish transportability.",
+     "checkedBy": "none"
+    },
+    {
+     "id": "simulation_precision",
+     "text": "The seed and replicate budget are explicit; Monte Carlo uncertainty and partial completion are preserved.",
+     "checkedBy": "output:diagnostics"
+    }
+   ],
+   "inputs": [
+    {
+     "name": "input.scenario",
+     "meaning": "Closed aggregate engine scenario, validated by the numerical engine."
+    },
+    {
+     "name": "input.seed",
+     "meaning": "Random seed, default 1."
+    },
+    {
+     "name": "input.replicates",
+     "meaning": "Requested replicate limit, default 1000; actual completed count is in the engine result."
+    }
+   ],
+   "refusals": [
+    {
+     "code": "scenario_value_invalid",
+     "when": "A required engine field is missing or out of range."
+    }
+   ],
+   "diagnostics": [
+    {
+     "code": "engine_diagnostics",
+     "severity": "notice",
+     "when": "The engine states assumptions, precision and computation limits."
+    }
+   ],
+   "seeded": true,
+   "dependencies": [
+    "R"
+   ],
+   "references": [
+    {
+     "id": "owned_engine_contract",
+     "kind": "other-implementation",
+     "source": "Existing VCR engine method and scenario validation; aggregate replay preserves its exact source and environment identities.",
+     "tolerance": "The method-specific engine cross-check tolerance; no new clinical validation is claimed.",
+     "test": "OpenScience/apps/server/test/resultVcrReplayAggregate.test.mjs"
+    }
+   ]
+  },
+  "accrual.poisson_gamma": {
+   "id": "accrual.poisson_gamma",
+   "version": "1.0.0",
+   "engine": "vcr-engine",
+   "title": "Mathematical accrual under gamma-Poisson assumptions",
+   "estimand": "Simulated time to a stated target from explicitly supplied rate assumptions. No recruitment operations are inferred.",
+   "assumptions": [
+    {
+     "id": "source_assumptions",
+     "text": "Input assumptions and historical aggregate populations are appropriate for the research question; the computation does not establish transportability.",
+     "checkedBy": "none"
+    },
+    {
+     "id": "simulation_precision",
+     "text": "The seed and replicate budget are explicit; Monte Carlo uncertainty and partial completion are preserved.",
+     "checkedBy": "output:diagnostics"
+    }
+   ],
+   "inputs": [
+    {
+     "name": "input.scenario",
+     "meaning": "Closed aggregate engine scenario, validated by the numerical engine."
+    },
+    {
+     "name": "input.seed",
+     "meaning": "Random seed, default 1."
+    },
+    {
+     "name": "input.replicates",
+     "meaning": "Requested replicate limit, default 1000; actual completed count is in the engine result."
+    }
+   ],
+   "refusals": [
+    {
+     "code": "scenario_value_invalid",
+     "when": "A required engine field is missing or out of range."
+    }
+   ],
+   "diagnostics": [
+    {
+     "code": "engine_diagnostics",
+     "severity": "notice",
+     "when": "The engine states assumptions, precision and computation limits."
+    }
+   ],
+   "seeded": true,
+   "dependencies": [
+    "R"
+   ],
+   "references": [
+    {
+     "id": "owned_engine_contract",
+     "kind": "other-implementation",
+     "source": "Existing VCR engine method and scenario validation; aggregate replay preserves its exact source and environment identities.",
+     "tolerance": "The method-specific engine cross-check tolerance; no new clinical validation is claimed.",
+     "test": "OpenScience/apps/server/test/resultVcrReplayAggregate.test.mjs"
+    }
+   ]
+  },
+  "comparator.map_prior": {
+   "id": "comparator.map_prior",
+   "version": "1.0.0",
+   "engine": "vcr-engine",
+   "title": "Robust meta-analytic predictive prior from aggregate arms",
+   "estimand": "Predictive distribution from stated historical aggregate arms; exchangeability remains an assumption.",
+   "assumptions": [
+    {
+     "id": "source_assumptions",
+     "text": "Input assumptions and historical aggregate populations are appropriate for the research question; the computation does not establish transportability.",
+     "checkedBy": "none"
+    },
+    {
+     "id": "simulation_precision",
+     "text": "The seed and replicate budget are explicit; Monte Carlo uncertainty and partial completion are preserved.",
+     "checkedBy": "output:diagnostics"
+    }
+   ],
+   "inputs": [
+    {
+     "name": "input.scenario",
+     "meaning": "Closed aggregate engine scenario, validated by the numerical engine."
+    },
+    {
+     "name": "input.seed",
+     "meaning": "Random seed, default 1."
+    },
+    {
+     "name": "input.replicates",
+     "meaning": "Requested replicate limit, default 1000; actual completed count is in the engine result."
+    }
+   ],
+   "refusals": [
+    {
+     "code": "scenario_value_invalid",
+     "when": "A required engine field is missing or out of range."
+    }
+   ],
+   "diagnostics": [
+    {
+     "code": "engine_diagnostics",
+     "severity": "notice",
+     "when": "The engine states assumptions, precision and computation limits."
+    }
+   ],
+   "seeded": true,
+   "dependencies": [
+    "R"
+   ],
+   "references": [
+    {
+     "id": "owned_engine_contract",
+     "kind": "other-implementation",
+     "source": "Existing VCR engine method and scenario validation; aggregate replay preserves its exact source and environment identities.",
+     "tolerance": "The method-specific engine cross-check tolerance; no new clinical validation is claimed.",
+     "test": "OpenScience/apps/server/test/resultVcrReplayAggregate.test.mjs"
     }
    ]
   }

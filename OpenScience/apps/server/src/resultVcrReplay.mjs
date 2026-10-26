@@ -1,14 +1,16 @@
 /** Fixed aggregate replay through the existing VCR gateway; patient tables never enter this adapter. */
+import { vcrReplicatesForJob } from "./vcrJobs.mjs";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { canonicalScenarioJson, validateEngineJob, VCR_ENGINE_METHODS, VCR_ENGINE_PROTOCOL_VERSION } from "@evimed/domain";
+import { canonicalScenarioJson, validateEngineJob, VCR_ENGINE_METHODS, VCR_ENGINE_PROTOCOL_VERSION, RESULT_R_REPLAY_METHOD_KINDS } from "@evimed/domain";
 import { normalizeResultPath } from "@evimed/domain/result-provenance";
 import { replayDigest } from "./resultReplayClient.mjs";
 import { HttpError, assertProjectCapacity, openScopedFileNoFollow, readStableFileHandle, resolveScopedPath,
   withProjectStorageMutation, writeFileExclusiveNoFollow } from "./security.mjs";
 
-const METHODS = ["design.analytic", "comparator.evalue"];
+const METHODS = Object.keys(RESULT_R_REPLAY_METHOD_KINDS);
+const SEEDED = new Set(["design.simulate","design.assurance","accrual.poisson_gamma","comparator.map_prior"]);
 const HASH = /^[a-f0-9]{64}$/;
 const ID = /^[A-Za-z0-9_-]{1,160}$/;
 const TERMINAL = ["succeeded", "failed", "canceled", "not_estimable"];
@@ -32,6 +34,33 @@ function identity(health) {
     || typeof health.engineVersion !== "string" || !health.engineVersion || typeof health.rVersion !== "string" || !health.rVersion) return null;
   return { codeDigest: health.numericalSourceDigest,
     environmentDigest: replayDigest({ engineVersion: health.engineVersion, rVersion: health.rVersion, packageLockHash: health.packageLockHash }) };
+}
+
+/** The analytic sizing basis is scientific output, never arbitrary engine prose.
+ * @param {any} result */
+export function vcrAnalyticComputationBasis(result) {
+  if (result?.method !== "design.analytic" || result.methodVersion !== "1.2.0") return null;
+  const s = result.diagnostics?.sampleSize;
+  if (!s || s.basis !== "normal_approximation" || s.rounding !== "ceiling_each_arm_then_sum"
+    || !["two_sample_means_normal_approximation", "two_proportion_normal_approximation"].includes(s.formula)) return null;
+  const continuous = s.formula === "two_sample_means_normal_approximation";
+  const check = continuous ? "pooled_two_sample_t" : "two_proportion_normal_approximation";
+  const value = (/** @type {string} */ name) => result.measures?.find((/** @type {any} */ item) => item.name === name)?.value;
+  if (![s.nTreatment, s.nControl, s.total].every(n => Number.isSafeInteger(n) && n > 0)
+    || s.total !== s.nTreatment + s.nControl || value("required_total") !== s.total
+    || value("required_treatment") !== s.nTreatment || value("required_control") !== s.nControl
+    || ![s.targetPower, s.powerAtAllocatedN, s.allocationRequested, s.allocationAchieved].every(n => Number.isFinite(n) && n >= 0 && n <= 1)
+    || Math.abs(s.allocationAchieved - s.nTreatment / s.total) > 1e-12 || s.powerCheckBasis !== check
+    || ![s.unrounded?.total, s.unrounded?.treat, s.unrounded?.control].every(n => Number.isFinite(n) && n > 0)
+    || Math.ceil(s.unrounded.treat) !== s.nTreatment || Math.ceil(s.unrounded.control) !== s.nControl
+    || Math.abs(s.unrounded.total - s.unrounded.treat - s.unrounded.control) > 1e-10 * Math.max(1, s.unrounded.total)) return null;
+  return { basis: s.basis, formula: s.formula, rounding: s.rounding,
+    nTreatment: s.nTreatment, nControl: s.nControl, total: s.total,
+    allocationRequested: s.allocationRequested, allocationAchieved: s.allocationAchieved,
+    unrounded: { total: s.unrounded.total, treatment: s.unrounded.treat, control: s.unrounded.control },
+    targetPower: s.targetPower, powerCheckBasis: check, powerAtAllocatedN: s.powerAtAllocatedN,
+    note: continuous ? "Sample size uses a normal approximation, not an exact two-sample t calculation. The separate pooled-t power at these integer arm sizes may be below the target."
+      : "Sample size and checked power use a large-sample two-proportion normal approximation, not an exact binary test. Each arm is rounded up separately; their sum is the total." };
 }
 
 export class ResultVcrReplay {
@@ -128,11 +157,15 @@ export class ResultVcrReplay {
     try { input = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)); }
     catch { fail("result_recipe_invalid", "Calculation input must be aggregate JSON.", 400); }
     const parameters = recipe.parameters ?? {};
-    if (!object(input) || !object(input.scenario) || Object.keys(input).some(key => !["scenario", "seed", "cpuSecondsLimit"].includes(key))
-      || !object(parameters) || Object.keys(parameters).some(key => !["seed", "cpuSecondsLimit"].includes(key))) {
+    if (!object(input) || !object(input.scenario) || Object.keys(input).some(key => !["scenario", "seed", "replicates", "cpuSecondsLimit"].includes(key))
+      || !object(parameters) || Object.keys(parameters).some(key => !["seed", "replicates", "cpuSecondsLimit"].includes(key))) {
       fail("result_recipe_invalid", "Only aggregate scenario, seed and CPU limit are supported.", 400);
     }
     const seed = parameters.seed ?? input.seed ?? 1;
+    const requestedReplicates = SEEDED.has(scope.method) ? parameters.replicates ?? input.replicates ?? 1000 : null;
+    if (requestedReplicates != null && (!Number.isSafeInteger(requestedReplicates) || requestedReplicates<1 || requestedReplicates>100000)) fail('result_recipe_invalid','Invalid requested simulation precision.',400);
+    const replicates = vcrReplicatesForJob(RESULT_R_REPLAY_METHOD_KINDS[scope.method],input.scenario,requestedReplicates);
+    if (replicates != null && (!Number.isSafeInteger(replicates) || replicates<1 || replicates>100000)) fail("result_recipe_invalid","Invalid simulation precision limit.",400);
     const cpuSecondsLimit = parameters.cpuSecondsLimit ?? input.cpuSecondsLimit ?? 60;
     if (!Number.isInteger(seed) || seed < 0 || seed > 2147483647 || !Number.isInteger(cpuSecondsLimit)
       || cpuSecondsLimit < 1 || cpuSecondsLimit > this.maxCpuSeconds) fail("result_recipe_invalid", "Invalid fixed calculation limits.", 400);
@@ -142,14 +175,14 @@ export class ResultVcrReplay {
     }
     const engineId = this.engineId(project, scope);
     const job = { jobId: engineId, studyId: `replay-${replayDigest([project.userId, project.id])}`, protocolVersion: VCR_ENGINE_PROTOCOL_VERSION,
-      kind: scope.method === "design.analytic" ? "design_analytic" : "evalue", method: scope.method,
+      kind: RESULT_R_REPLAY_METHOD_KINDS[scope.method], method: scope.method,
       methodVersion: VCR_ENGINE_METHODS[scope.method].version, scenario: input.scenario,
-      inputs: [{ kind: "assumption", id: "asm_replay@1", hash: recipe.input.sha256 }], seed, cpuSecondsLimit, cores: 1 };
+      inputs: [{ kind: "assumption", id: "asm_replay@1", hash: recipe.input.sha256 }], seed, replicates, cpuSecondsLimit, cores: 1 };
     const issues = validateEngineJob(job);
     if (issues.length) fail("result_recipe_invalid", `Aggregate calculation input is invalid: ${issues.map(issue => issue.field).join(", ")}.`, 400);
     const record = { ownerId: project.userId, projectId: project.id, jobId: scope.jobId, recipeDigest: scope.recipeDigest, method: scope.method,
-      recipe, job, expected: { method: job.method, methodVersion: job.methodVersion,
-        scenarioHash: sha(canonicalScenarioJson(job.scenario)), seed: job.seed, replicates: null } };
+      recipe, requestedReplicates, job, expected: { method: job.method, methodVersion: job.methodVersion,
+        scenarioHash: sha(canonicalScenarioJson(job.scenario)), seed: job.seed, replicates: job.replicates } };
     // Reserve before dispatch. A lost response never causes a second automatic submit.
     let reserved = false;
     await withProjectStorageMutation(project, async () => {
@@ -191,7 +224,7 @@ export class ResultVcrReplay {
       // Queued cancellation has no numerical result, but the gateway confirms there is no running process.
       if (["canceled", "failed"].includes(progress.state) && (error?.code === "vcr_engine_not_found"
         || error?.code === "vcr_engine_rejected" && error?.status === 409 && error?.detail === "result_not_ready")) {
-        return this.answer(scope, progress.state, "confirmed", { resultError: error.code });
+        return this.answer(scope, progress.state, "confirmed", { resultError: typeof progress.error==="string" && /^[a-z][a-z0-9_]{0,79}$/.test(progress.error) ? progress.error : error.code });
       }
       throw error;
     }
@@ -217,14 +250,15 @@ export class ResultVcrReplay {
     const receiptPath = `result-replays/${scope.jobId}/output/receipt.json`;
     const receipt = Buffer.from(`${JSON.stringify({ jobId: scope.jobId, recipeDigest: scope.recipeDigest, engineJobId: record.job.jobId,
       method: record.method, methodVersion: record.job.methodVersion, codeDigest: record.recipe.codeDigest,
-      environmentDigest: record.recipe.environmentDigest, signed: checked.signed === true, outputHash: checked.outputHash ?? null,
+      environmentDigest: record.recipe.environmentDigest,
+      seed:record.job.seed,requestedReplicates:record.requestedReplicates ?? null,plannedReplicates:record.job.replicates,completedReplicates:result.replicates ?? null, signed: checked.signed === true, outputHash: checked.outputHash ?? null,
       artifacts: [artifact], machineValues })}\n`);
     await this.exclusive(project, resolveScopedPath(project.workspaceDir, receiptPath), receipt);
     // What ran, for the result's record: the R engine's own method version (the record's version for these two
     // methods; a test holds the two equal). It carries no digest of its own and no seed: neither method is seeded.
     return this.answer(scope, result.status === "not_estimable" ? "failed" : result.status, "confirmed", {
-      resultPath, machineValues, scientificStatus: result.status, partial: result.conclusion === "limited",
-      methodRecord: { id: record.method, version: record.job.methodVersion, digest: null },
+      resultPath, machineValues, ...(vcrAnalyticComputationBasis(result) ? { computationBasis: vcrAnalyticComputationBasis(result) } : {}), precision:{seed:record.job.seed,requestedReplicates:record.requestedReplicates ?? null,plannedReplicates:record.job.replicates,completedReplicates:result.replicates ?? null}, scientificStatus: result.status, partial: result.conclusion === "limited",
+      methodRecord: { id: record.method, version: record.job.methodVersion, digest: null, seeded: SEEDED.has(record.method), seed: SEEDED.has(record.method) ? record.job.seed : null },
       artifacts: [artifact, { path: receiptPath, sha256: sha(receipt), bytes: receipt.length }] });
   }
 

@@ -230,6 +230,7 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
       inputs.push({kind:'provider',id:provider.id,hash:longitudinalHash(provider)});
     }
     return jobs.enqueue({studyId:study.id,userId:study.userId,principal:actor,kind:request.kind,scenario,inputs,internal:true,
+      runId:extra.detail?.conversationOrigin?.runId ?? null,
       seed:request.seed ?? null,cpuSecondsLimit:Math.min(600,request.cpuSecondsLimit ?? 120),maxAttempts:1,
       ...(extra.idempotencyKey ? {idempotencyKey:extra.idempotencyKey} : {}),
       detail:{...(extra.detail ?? {}),longitudinal:true,principal:actor}});

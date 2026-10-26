@@ -64,6 +64,15 @@ const frozen = (list) => Object.freeze([...list])
 /** The protocol's own version. A change that is not backward compatible bumps it. */
 export const VCR_ENGINE_PROTOCOL_VERSION = 1
 
+/** Analytic 1.1.0 retains its original rounding, including exact single-arm support. */
+const ANALYTIC_RELEASES = Object.freeze([Object.freeze({
+  version: '1.1.0',
+  support: Object.freeze({
+    two_arm_fixed: frozen(['continuous', 'binary', 'time_to_event']), group_sequential: frozen(['time_to_event']),
+    single_arm: frozen(['binary']), simon_two_stage: frozen(['binary']),
+  }),
+})])
+
 /**
  * What `design.simulate` and `design.grid` implemented at 1.1.0, design by endpoint: single-arm trials of a mean and of a survival
  * time came after it (1.2.0, 2026-10-07). A job recorded at 1.1.0 stays valid when it asks for nothing the 1.1.0 build did not do,
@@ -88,15 +97,17 @@ const SIMULATE_RELEASES = Object.freeze([Object.freeze({
  * itself, and `intendedUseCeilingFor` reads it.
  */
 export const VCR_ENGINE_METHODS = Object.freeze({
+  'model.survival_fit': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['survival::survreg', 'closed-form censored exponential likelihood']), modelTier: 'literature' },
+  'model.prognostic_apply': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['closed-form published equation evaluation']), modelTier: 'literature' },
   'profile.snapshot': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['profile_dataset.py']), modelTier: null },
   'cohort.build': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen([]), modelTier: null },
   'population.scenario': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['simstudy semantics']), modelTier: 'scenario' },
   'population.literature': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen([]), modelTier: 'literature' },
   'population.synthpop': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['synthpop']), modelTier: 'data' },
   'population.quality': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen([]), modelTier: 'data' },
-  'patients.continuous': { version: '1.0.0', endpoints: frozen(['continuous']), crossChecks: frozen([]), modelTier: 'scenario' },
-  'patients.binary': { version: '1.0.0', endpoints: frozen(['binary']), crossChecks: frozen([]), modelTier: 'scenario' },
-  'patients.time_to_event': { version: '1.0.0', endpoints: frozen(['time_to_event']), crossChecks: frozen(['simsurv']), modelTier: 'scenario' },
+  'patients.continuous': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous']), crossChecks: frozen([]), modelTier: 'scenario' },
+  'patients.binary': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['binary']), crossChecks: frozen([]), modelTier: 'scenario' },
+  'patients.time_to_event': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['simsurv']), modelTier: 'scenario' },
   'evidence.pool': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['metafor', 'meta engine']), modelTier: 'literature' },
   'evidence.reconstruct_km': { version: '1.0.0', endpoints: frozen(['time_to_event']), crossChecks: frozen(['IPDfromKM']), modelTier: 'literature' },
   'comparator.entropy_balance': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['WeightIt', 'cobalt']), modelTier: 'data' },
@@ -105,7 +116,7 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'comparator.maic': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['NICE DSU TSD 18']), modelTier: 'data' },
   'comparator.evalue': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['EValue']), modelTier: 'scenario' },
   'comparator.map_prior': { version: '1.0.0', endpoints: frozen(['binary', 'continuous']), crossChecks: frozen(['RBesT']), modelTier: 'literature' },
-  'design.analytic': { version: '1.1.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential', 'simon_two_stage']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['rpact', 'gsDesign', 'stats::binom.test', 'Simon 1989']), modelTier: 'scenario' },
+  'design.analytic': { version: '1.2.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential', 'simon_two_stage']), legacyReleases: ANALYTIC_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['rpact', 'gsDesign', 'stats::binom.test', 'Simon 1989']), modelTier: 'scenario' },
   'design.simulate': { version: '1.2.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['design.analytic', 'independent beta-binomial variance', 'exact non-central t power of the one-sample test', 'independent normal approximation of the one-sample log-rank score']), modelTier: 'scenario' },
   'design.grid': { version: '1.2.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen([]), modelTier: 'scenario' },
   'design.assurance': { version: '1.1.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(["O'Hagan 2005", 'independent Monte Carlo of the sequential design under the design prior']), modelTier: 'scenario' },
@@ -124,7 +135,7 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'comparator.prognostic_adjustment': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['FDA 2023 covariate-adjustment guidance, Table 1', 'M-estimation sandwich by numerical Jacobians', 'survival::coxph and survfit(newdata)']), modelTier: 'data' },
   // --- end robustness methods ---
   // --- longitudinal virtual patients (2026-10-07, plan 5.2): a linear mixed model of a continuous trajectory ---
-  'patients.longitudinal': { version: '1.0.0', endpoints: frozen(['continuous']), crossChecks: frozen(['nlme::lme on the output table', 'closed-form model-implied mean and variance']), modelTier: 'scenario' },
+  'patients.longitudinal': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous']), crossChecks: frozen(['nlme::lme on the output table', 'closed-form model-implied mean and variance']), modelTier: 'scenario' },
   // --- end longitudinal ---
 })
 
@@ -137,6 +148,7 @@ export const VCR_ENGINE_METHOD_IDS = frozen(Object.keys(VCR_ENGINE_METHODS))
  * everywhere else and a mismatch would otherwise queue the wrong computation.
  */
 export const VCR_JOB_METHODS = Object.freeze({
+  fit_survival_model: 'model.survival_fit', apply_prognostic_model: 'model.prognostic_apply',
   profile_snapshot: 'profile.snapshot',
   build_cohort: 'cohort.build',
   generate_population: 'population.scenario',
@@ -177,6 +189,7 @@ export const VCR_JOB_METHODS = Object.freeze({
 
 /** Job kinds that read patient-level rows, and so need a snapshot grant (plan §8.1). */
 export const VCR_PATIENT_LEVEL_JOB_KINDS = frozen([
+  'fit_survival_model', 'apply_prognostic_model',
   'profile_snapshot', 'build_cohort', 'synthesize_population', 'population_quality',
   'weight_comparator', 'propensity_weight_comparator', 'rmst', 'match_criteria', 'weighted_cox_comparator',
   'maic_time_to_event_comparator', 'aipw_comparator', 'covariate_set_comparator',
@@ -196,6 +209,8 @@ export const VCR_PATIENT_LEVEL_JOB_KINDS = frozen([
  * control route — and counts them apart, never as real patients.
  */
 export const VCR_INDIVIDUAL_INPUT_SOURCES = Object.freeze({
+  'model.survival_fit': frozen([...VCR_REAL_PATIENT_SOURCES, 'reconstructed']),
+  'model.prognostic_apply': frozen([...VCR_REAL_PATIENT_SOURCES, 'synthetic']),
   'population.synthpop': VCR_REAL_PATIENT_SOURCES,
   'comparator.entropy_balance': VCR_REAL_PATIENT_SOURCES,
   'comparator.propensity_weight': VCR_REAL_PATIENT_SOURCES,
@@ -676,6 +691,7 @@ export function validateEngineJob(job) {
 function legacyDesignVersionMatches(job) {
   const spec = /** @type {any} */ (VCR_ENGINE_METHODS)[job.method]
   if (!spec) return false
+  if ((spec.compatibleVersions ?? []).includes(job.methodVersion)) return !job.scenario?.pairing && !job.scenario?.cohortRules
   const base = job.scenario?.design?.kind
   const kinds = job.method === 'design.grid' && Array.isArray(job.scenario?.designs)
     ? job.scenario.designs.map((/** @type {any} */ design) => design.kind ?? base) : [base]

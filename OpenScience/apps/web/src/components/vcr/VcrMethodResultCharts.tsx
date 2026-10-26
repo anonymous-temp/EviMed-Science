@@ -18,6 +18,19 @@ const list = (value: unknown): Record<string, unknown>[] => Array.isArray(value)
 const number = (value: unknown): number | null => typeof value === "number" && Number.isFinite(value) ? value : null;
 const text = (value: unknown): string | null => typeof value === "string" && value ? value : null;
 const sourceOf = (value: unknown, fallback: VcrValueSource): VcrValueSource => (VCR_VALUE_SOURCES as readonly unknown[]).includes(value) ? value as VcrValueSource : fallback;
+
+/** A fitted baseline is distinct from an observed Kaplan-Meier curve; extrapolation keeps its own label. */
+export function readFittedSurvivalSeries(raw: unknown): VcrSeries[] {
+  const rows = list(raw).filter(row => number(row.time) !== null && number(row.survival) !== null);
+  const firstExtrapolated = rows.findIndex(row => row.extrapolated === true);
+  const points = (entries: Record<string, unknown>[]) => entries.map(row => ({ x: number(row.time)!, y: number(row.survival)! }));
+  const supported = firstExtrapolated < 0 ? rows : rows.slice(0, firstExtrapolated);
+  const extrapolated = firstExtrapolated < 0 ? [] : rows.slice(Math.max(0, firstExtrapolated - 1));
+  return [
+    ...(supported.length > 1 ? [{ key: "fitted-baseline", label: "拟合生存基线", source: "calculated" as const, points: points(supported) }] : []),
+    ...(extrapolated.length > 1 ? [{ key: "fitted-extrapolation", label: "模型外推", source: "calculated" as const, dashed: true, points: points(extrapolated) }] : []),
+  ];
+}
 /** Raw vcr_series() band levels are probability fractions; chart legends take percentages. */
 export function readMethodResultSeries(raw: unknown, source: VcrValueSource): VcrSeries[] {
   return list(raw).flatMap((row, index) => {
@@ -49,6 +62,9 @@ export function VcrMethodResultCharts({ result, method }: { result: NonNullable<
   const power = object(diagnostics.powerCurve);
   const powerSeries = readMethodResultSeries(power.series, "calculated");
   const curves = readMethodResultSeries(object(diagnostics.survival).curves ?? diagnostics.curves, source);
+  const fitted = object(diagnostics.model);
+  const fittedSeries = method === "model.survival_fit" ? readFittedSurvivalSeries(fitted.curve) : [];
+  const parameterQuantiles = method === "model.survival_fit" ? object(fitted.medianParameterQuantiles) : {};
   const balance: VcrProfileRow[] = list(diagnostics.balance).map((row, index) => ({ key: text(row.covariate) ?? String(index), label: text(row.covariate) ?? `特征 ${index + 1}`, ours: { value: null, source: "observed" }, theirs: { value: null, source: "observed" }, smd: number(row.smdAdjusted ?? row.smd), smdBefore: number(row.smdUnadjusted) }));
   const cells = list(diagnostics.cells).filter(cell => Number.isInteger(cell.designIndex) && Number.isInteger(cell.truthIndex) && Number(cell.designIndex) > 0 && Number(cell.truthIndex) > 0);
   const gridMeasure = cells.some(cell => list(cell.measures).some(measure => measure.name === "power")) ? "power" : cells.some(cell => list(cell.measures).some(measure => measure.name === "type_one_error")) ? "type_one_error" : null;
@@ -57,7 +73,7 @@ export function VcrMethodResultCharts({ result, method }: { result: NonNullable<
   const truthIndices = [...new Set(cells.map(cell => Number(cell.truthIndex)))].sort((a, b) => a - b);
   const designs: VcrDesign[] = cells.map(cell => ({ id: `${cell.designIndex}:${cell.truthIndex}`, code: `${cell.designIndex}`, name: `设计 ${cell.designIndex} · 情景 ${cell.truthIndex}`, measures: Object.fromEntries(list(cell.measures).map(row => [String(row.name), asValue(row, "calculated")])) }));
   const durations = (result.measures ?? []).filter(row => ["last_patient_in_months", "target_events_months"].includes(row.name) || (row.name === "expected_completion_time" && ["months", "month", "月"].includes(row.unit ?? "")));
-  const milestones = durations.map(row => ({ design: row.name, name: "招募预测", items: [{ key: row.name, label: ({ last_patient_in_months: "末例入组", target_events_months: "达到目标事件数", expected_completion_time: "预计完成" })[row.name] ?? row.name, value: asValue(row as unknown as Record<string, unknown>, "predicted") }] }));
+  const milestones = durations.map(row => ({ design: row.name, name: "入组假设模拟", items: [{ key: row.name, label: ({ last_patient_in_months: "末例入组", target_events_months: "达到目标事件数", expected_completion_time: "预计完成" })[row.name] ?? row.name, value: asValue(row as unknown as Record<string, unknown>, "predicted") }] }));
   const record = object(diagnostics.longitudinal);
   const longitudinal = record.summary && record.kind ? record as unknown as LongitudinalRecord : null;
   const longitudinalSeries: VcrSeries[] = longitudinal?.summary.trajectories?.length ? [{ key: longitudinal.id, label: longitudinal.summary.endpoint?.code ?? "预测轨迹", source: "predicted", ours: true, bandKind: null, points: longitudinal.summary.trajectories.map(point => ({ x: point.day, y: point.mean, low: point.lower, high: point.upper })) }] : [];
@@ -65,6 +81,8 @@ export function VcrMethodResultCharts({ result, method }: { result: NonNullable<
     {diagnostics.quality && <QualityResult raw={diagnostics.quality} />}
     {trajectorySeries.length > 0 && <Section title="结局轨迹" level="sub"><VcrSeriesLegend series={trajectorySeries} />{method === "patients.time_to_event" ? <VcrSurvivalChart curves={trajectorySeries} yLabel="生存概率" xLabel={text(trajectories.xLabel) ?? "时间（原方法单位）"} /> : <VcrTrajectoryChart series={trajectorySeries} xLabel={text(trajectories.xLabel)} yLabel={text(trajectories.yLabel)} />}</Section>}
     {curves.length > 0 && <Section title="生存曲线" level="sub"><VcrSeriesLegend series={curves} /><VcrSurvivalChart curves={curves} yLabel="生存概率" xLabel="时间（原方法单位）" /></Section>}
+    {fittedSeries.length > 0 && <Section title="拟合生存基线" level="sub"><VcrSeriesLegend series={fittedSeries} /><VcrTrajectoryChart series={fittedSeries} yLabel="生存概率" xLabel="时间（原方法单位）" /></Section>}
+    {Object.values(parameterQuantiles).some(value => number(value) !== null) && <Section title="拟合中位时间的参数不确定性" level="sub"><FactList rows={["p10", "p50", "p90"].flatMap(key => number(parameterQuantiles[key]) === null ? [] : [{ label: `${key.slice(1)}% 参数分位`, value: <VcrNumber label="拟合生存中位时间" value={{ value: number(parameterQuantiles[key]), source: "calculated" }} /> }])} /></Section>}
     {powerSeries.length > 0 && <Section title="设计性能曲线" level="sub"><VcrSeriesLegend series={powerSeries} /><VcrTrajectoryChart series={powerSeries} xLabel={text(power.xLabel)} yLabel={text(power.yLabel) ?? "概率"} /></Section>}
     {balance.length > 0 && <Section title="加权前后平衡性" level="sub"><BalancePlot rows={balance} /></Section>}
     {cells.length > 0 && <Section title={gridMeasure ? `设计与效应情景 · ${gridLabel}` : "设计单元状态"} level="sub">{gridMeasure && <HeatGrid label="设计与效应情景计算网格" columns={truthIndices.map(index => ({ key: String(index), header: `情景 ${index}` }))} rows={designIndices.map(design => ({ key: String(design), header: `设计 ${design}`, cells: truthIndices.map(truth => { const cell = cells.find(row => row.designIndex === design && row.truthIndex === truth); const measure = list(cell?.measures).find(row => row.name === gridMeasure); const value = number(measure?.value); return { value, text: value == null ? "未计算" : `${(value * 100).toFixed(1)}%${cell && gridCellLimited(cell) ? " · 部分" : ""}`, hint: `${gridLabel}${number(measure?.mcse) !== null ? ` · 蒙特卡洛标准误 ${number(measure?.mcse)}` : ""}${cell ? ` · ${gridCellState(cell)}` : ""}` }; }) }))} />}<FactList rows={[{ label: "返回单元", value: `${cells.length}${number(diagnostics.cellsPlanned) !== null ? ` / 计划 ${number(diagnostics.cellsPlanned)}` : ""}` }]} /><DataTable label="设计网格单元状态" rows={cells} rowKey={cell => `${cell.designIndex}:${cell.truthIndex}`} columns={[

@@ -95,18 +95,6 @@ test('a reviewer\'s override keeps the note on the judgment row and out of the a
   assert.equal(audits[0].detail.noted, false);
 });
 
-test('a contact approval keeps the coordinator\'s note on the referral\'s event row and out of the audit row', async () => {
-  const { audits, database } = scripted([
-    [/FROM evimed_vcr\.referrals WHERE id = \$1 AND study_id = \$2 FOR UPDATE/, { rows: [{ id: 'ref_1', study_id: 'std_1', state: 'contactable', contact_approved_by: null }], rowCount: 1 }],
-    [/UPDATE evimed_vcr\.referrals SET contact_approved_by/, { rows: [{ id: 'ref_1', study_id: 'std_1', state: 'contactable', contact_approved_by: 'coordinator' }], rowCount: 1 }],
-  ]);
-  const store = noMigration(new VcrMatchStore({ database }));
-  const referral = await store.approveContact({ referralId: 'ref_1', studyId: 'std_1', approvedBy: 'coordinator', userId: 'owner', note: NOTE });
-  assert.equal(referral?.contactApprovedBy, 'coordinator');
-  assert.deepEqual(audits.map(entry => [entry.action, entry.detail]), [['vcr.referral.contact_approved', { noted: true }]]);
-  assertNone(audits, ['李四', '13800000000', '家属']);
-});
-
 test('what an audit line may say of an upload is a role, a format, a size and a hash from closed shapes, and nothing a caller typed', () => {
   const sha256 = '0123456789abcdef'.repeat(4);
   assert.equal(uploadAuditDetail({ upload: { role: 'document', format: 'pdf', bytes: 10, sha256 }, file: { name: NAME } }), `document pdf 10B sha256:${sha256}`);

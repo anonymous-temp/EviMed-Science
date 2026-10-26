@@ -573,3 +573,13 @@ AI生成稿件 → 用户在同一原生输入框继续说修改要求（或从�
 实施开始时，先核对基线是否变化，再把本版纳入的工作包细化到修改文件、数据库兼容和执行步骤。对共享知识库/记忆的修改遵循并行计划的责任边界；GEO只补本模块的消费、反馈、状态及证据关联。
 
 交付判据是用户能完整完成上述路径，并在失败时保留工作、知道原因、能够恢复。新入口只有在它对应的实际能力完成后才开放。
+
+## UI acceptance handoff — 2026-10-26
+
+The product-specific requirements below are transferred from design specification v3.0 to this module authority. They are acceptance requirements, not a claim that pending product implementation has shipped. Shared component, state, ownership and proof rules are maintained in [Frontend Design System v3.1](../../../OpenScience/docs/FRONTEND_DESIGN_SYSTEM.md). Later explicit owner decisions update this plan without creating another design-system copy of the product scope.
+
+Preserve one project identity, native conversation, eight reachable steps, result views and historical versions. Step/current/completed/waiting signals must be visible in conversation and results. Do not duplicate eight steps as another eight-tab rail. Where a step's name differs from its result destination, expose the relationship and a contextual view-result action.
+
+The active view and its scoped toolbar sit together. Short source/answer details can open alongside a list; long plans and versioned results get main-area reading. Keep question pool, model, round, time window, sample coverage and missingness associated with every statistic. No sample is not 0%; unmeasured safety is not clean safety. Distinguish co-occurrence, citation and attributable source evidence.
+
+On narrow screens, progress overflow has a visible affordance and all eight steps remain reachable. Place service-wide waits separately from the progress navigation. Compress absent metrics into useful rows rather than consuming the whole screen with tall empty tiles. Only actionable prerequisites enter the user's attention list. Content production, file version and online publication are separate states.

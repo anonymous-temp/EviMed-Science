@@ -48,10 +48,22 @@ export interface ActivityStripProps {
   className?: string;
 }
 
+/**
+ * Component: ActivityStrip; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Producer label, state dot, optional counts/elapsed time, progress link and cancellation.
+ * Variants: strip or linked/static chip.
+ * States: Waiting suppresses elapsed time; cancelling is caller controlled; no inferred percent.
+ * Hit area: Chip uses h-sm; cancellation uses Button; text link has intrinsic target.
+ * Keyboard: Native link/Button activation; no automatic focus movement.
+ * Long content: Question truncates; strip facts and controls wrap.
+ * Theme: Information ground and running-dot role; reduced motion follows shared CSS.
+ * Responsive: Strip wraps; chip is max-width constrained.
+ * Verification: StepBarParts.test.tsx and Composition.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function ActivityStrip({ label, phase, counts, startedAt, queued, waiting, to, onCancel, cancelling, variant = "strip", className }: ActivityStripProps) {
   const elapsed = useElapsed(waiting ? null : startedAt);
   const dot = waiting
-    ? <span aria-hidden="true" data-forced-colors="preserve" className="h-2 w-2 shrink-0 rounded-full bg-surface ring-2 ring-accent" />
+    ? <span aria-hidden="true" data-forced-colors="preserve" className="h-2 w-2 shrink-0 rounded-full bg-surface ring-2 ring-info" />
     : <span aria-hidden="true" data-forced-colors="preserve" className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-dot-running" />;
   if (variant === "chip") {
     const body = (
@@ -62,14 +74,14 @@ export function ActivityStrip({ label, phase, counts, startedAt, queued, waiting
         {to && <span className="shrink-0">查看进度</span>}
       </>
     );
-    const look = cn("inline-flex h-sm max-w-full items-center gap-2 rounded-full bg-accent-soft px-3 text-ui text-accent", className);
+    const look = cn("inline-flex h-sm max-w-full items-center gap-2 rounded-full bg-info-soft px-3 text-ui text-info", className);
     return to
       ? <Link to={to} data-activity="chip" className={cn(look, "hover:bg-surface-3")}>{body}</Link>
       : <span data-activity="chip" className={look}>{body}</span>;
   }
   const detail = counts && counts.total > 0 ? `${phase ? `${phase} ` : ""}${NUMBER.format(counts.done)} / ${NUMBER.format(counts.total)}` : phase;
   return (
-    <div data-activity="strip" data-activity-state={waiting ? "queued" : "running"} className={cn("flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1 rounded bg-accent-soft px-3 py-1.5 text-ui text-accent", className)}>
+    <div data-activity="strip" data-activity-state={waiting ? "queued" : "running"} className={cn("flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1 rounded bg-info-soft px-3 py-1.5 text-ui text-info", className)}>
       {dot}
       <span className="min-w-0 truncate">{waiting ? `${label} · 排队中` : `正在${label}`}</span>
       {waiting ? <span>{waiting}</span> : detail && <span className="tabular-nums">{detail}</span>}

@@ -1,3 +1,4 @@
+import { isSubmitKey } from "@/lib/compositionKeys";
 import { useEffect, useRef, useState } from "react";
 import { Navigate, useSearchParams } from "react-router";
 import { PageShell } from "@/components/layout/PageShell";
@@ -57,7 +58,7 @@ function ZoneChooser({ fromItem }: { fromItem: string }) {
           onChange: setQ,
           onClear: () => { setQ(""); setQuery(""); },
           inputProps: {
-            onKeyDown: (event) => { if (event.key === "Enter") { event.preventDefault(); setQuery(q.trim()); } },
+            onKeyDown: (event) => { if (isSubmitKey(event)) { event.preventDefault(); setQuery(q.trim()); } },
             onCompositionStart: () => { composing.current = true; },
             onCompositionEnd: (event) => { composing.current = false; setQ(event.currentTarget.value); setComposed((value) => value + 1); },
           },

@@ -49,7 +49,7 @@ vcr_case("N46a", c("AC-02", "AC-09", "AC-11"), function() {
   ex <- r$diagnostics$expected
   expected_ok <- max(abs(unlist(ex$control$mean) - implied(0)$mean), abs(unlist(ex$treated$mean) - implied(1)$mean),
                      abs(unlist(ex$control$sd) - implied(0)$sd), abs(unlist(ex$treated$sd) - implied(1)$sd)) < 1e-12 && identical(unlist(ex$visits), t)
-  list(pass = identical(r$status, "succeeded") && all(in_fixed) && all(in_re) && z_worst < 4 && expected_ok && r$counts$realPatients == 0 && r$counts$generatedRecords == nrow(d),
+  list(pass = identical(r$status, "succeeded") && all(in_fixed) && all(in_re) && z_worst < 4 && expected_ok && r$counts$realPatients == 0 && r$counts$generatedRecords == length(unique(d$patientId)),
        detail = sprintf("%d rows of 2,400 patients: mixed-model fit inside its 99.9%% intervals for the intercept %.2f, slope %.3f, effect on the slope %.3f, first-visit arm gap %.3f, SDs %.2f/%.3f, correlation %.2f, residual %.2f (%s); sample against the closed-form mean and SD at 10 arm-visits: worst %.2f Monte-Carlo errors; the result's expected block equals the formula",
                         nrow(d), nlme::fixef(fit)[["(Intercept)"]], nlme::fixef(fit)[["time"]], nlme::fixef(fit)[["time:arm"]], nlme::fixef(fit)[["arm"]],
                         as.numeric(nlme::VarCorr(fit)[1, 2]), as.numeric(nlme::VarCorr(fit)[2, 2]), as.numeric(nlme::VarCorr(fit)[2, 3]), as.numeric(nlme::VarCorr(fit)[3, 2]),
@@ -66,7 +66,7 @@ vcr_case("N46b", c("AC-31", "AC-11"), function() {
   # them: the first 50 treated patients of a 50+50 run are the first 50 of a 100+100 run, bit for bit.
   base <- .n46_scenario(n = 200, effect = -0.5, dropout = 0.15, visits = list(0, 1, 2, 3, 4, 5))
   dir <- tempfile("n46b"); dir.create(dir); on.exit(unlink(dir, recursive = TRUE), add = TRUE)
-  # one job id for every run: a patient's id is a function of the seed, the job id and the index, and these are the same patients
+  # one job id for every run: a patient's id is a function of the pairing key (or seed) and index, and these are the same patients
   rd <- function(sc, seed = 4602L) vcr_test_table(.n46_run(sc, seed, "b", dir), "virtual-patients", dir)
   a <- rd(base)
   nul <- base; nul$truth$effect <- 0; b <- rd(nul)
@@ -113,7 +113,7 @@ vcr_case("N46c", c("AC-09", "AC-02"), function() {
   runs <- all(tapply(d$visit, d$patientId, function(v) identical(as.integer(v), seq_along(v))))
   conv <- identical(unique(d$source), "synthetic") && identical(unique(d$modelTier), "scenario") &&
     identical(r$diagnostics$valueSource, "synthetic") && identical(r$diagnostics$modelTier, "scenario") && r$counts$realPatients == 0 &&
-    r$counts$generatedRecords == nrow(d) && identical(r$status, "succeeded") && identical(r$conclusion, "estimable") && length(unique(d$patientId)) == 2L * n
+    r$counts$generatedRecords == length(unique(d$patientId)) && identical(r$status, "succeeded") && identical(r$conclusion, "estimable") && length(unique(d$patientId)) == 2L * n
   none <- .n46_run(.n46_scenario(n = 100, dropout = 0, visits = list(0, 1, 2)), 4603L, "c0", dir)
   list(pass = first_all && runs && z < 4 && conv && identical(nrow(vcr_test_table(none, "virtual-patients", dir)), 600L),
        detail = sprintf("12%% leaving before each follow-up visit: still in at visits 2/4/6 = %.3f/%.3f/%.3f against %.3f/%.3f/%.3f (worst %.2f binomial errors, both arms), everyone present at the first visit (%s), observed visits are a run from the first (%s); synthetic at tier scenario on every row, 0 real patients, %d records; no dropout keeps all 600 rows",
@@ -186,7 +186,7 @@ vcr_case("N46e", c("AC-09", "AC-20"), function() {
   # reproduced here from the job's own seed and the person ids carry the index, so the choice can be checked against the latent slopes
   set.seed(4605L, kind = VCR_RNG_KIND)
   sim <- vcr_sim_longitudinal(400, 400, c(0, 2, 4, 6, 8), 50, -0.4, -0.6, 2.5, 6, 0.35, -0.3, 0.2)
-  ids <- paste0("vp_", vapply(seq_len(800), function(i) substr(vcr_sha256(paste(4605L, "job_n46e", i, sep = ":")), 1L, 12L), character(1)))
+  ids <- paste0("vp_", vapply(seq_len(800), function(i) substr(vcr_sha256(paste("seed:4605", i, sep = ":")), 1L, 12L), character(1)))
   eligible <- which(rowSums(sim$observed) >= 2L); true_slope <- -0.4 + sim$u1 + (-0.6) * sim$arm
   at <- eligible[order(true_slope[eligible], eligible)][ceiling(c(0.1, 0.5, 0.9) * length(eligible))]
   exs <- r$diagnostics$examples
@@ -230,7 +230,7 @@ vcr_case("N46f", c("AC-04", "AC-30"), function() {
   one_visit <- sc; one_visit$visits <- list(0)
   codes <- lapply(list(key = bad_key, visits = bad_visits, short = one_visit), function(s) .n46_run(s, 4606L, "f2", dir1))
   refusals <- vapply(codes, function(r) paste(r$status, paste(vcr_test_issue_codes(r), collapse = "+")), character(1))
-  null_ok <- identical(one$status, "succeeded") && abs(vcr_measure_value(one, "generated_records") - nrow(vcr_test_table(one, "virtual-patients", dir1))) < 1e-9
+  null_ok <- identical(one$status, "succeeded") && abs(vcr_measure_value(one, "generated_records") - length(unique(vcr_test_table(one, "virtual-patients", dir1)$patientId))) < 1e-9
   list(pass = same_table && same_hash && null_ok && all(grepl("^failed ", refusals)) && grepl("scenario_field_unknown", refusals[["key"]]) && grepl("scenario_value_invalid", refusals[["visits"]]) && grepl("scenario_value_invalid", refusals[["short"]]),
        detail = sprintf("1 and 8 cores: the table is byte-identical (%s) and so is the output hash (%s); a null effect is a legal scenario; refused by name: an unlisted key (%s), visits out of order (%s), one visit (%s)",
                         same_table, same_hash, refusals[["key"]], refusals[["visits"]], refusals[["short"]]))

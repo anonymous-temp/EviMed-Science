@@ -42,7 +42,7 @@ describe("shared method workbench", () => {
     expect(methodKind("comparator.evalue")).toBe("evalue");
     expect(methodKind("model_comparator")).toBeNull();
     expect(methodKind("matching.evaluate")).toBeNull();
-    expect(methodTask("matching.evaluate")).toBe("招募与匹配");
+    expect(methodTask("matching.evaluate")).toBe("入组预测与匹配");
     expect(methodTask("comparator.covariate_sets")).toBe("稳健性分析");
     expect(validateScenario("comparator.evalue", schemaDefault(VCR_SCENARIO_SCHEMAS["comparator.evalue"] as never)).length).toBeGreaterThan(0);
   });
@@ -123,14 +123,14 @@ describe("shared method workbench", () => {
   });
   it("retains Gamma recruitment shape units and the Beta screening prior semantics", async () => {
     draw({ id: "accrual", name: "Accrual", method: "accrual.poisson_gamma" }); await chooseStudy(); example("accrual.poisson_gamma");
-    expect(screen.getAllByLabelText("招募强度 Gamma 形状 α（无量纲）")[0]).toHaveValue(2);
-    expect(screen.getAllByLabelText("招募强度 Gamma 速率 β（月）")[0]).toHaveValue(4);
+    expect(screen.getAllByLabelText("招募强度 Gamma 形状 α（无量纲）")[0]).toHaveValue("2");
+    expect(screen.getAllByLabelText("招募强度 Gamma 速率 β（月）")[0]).toHaveValue("4");
     expect(screen.queryByLabelText(/显著性水平/)).toBeNull(); fireEvent.click(screen.getByRole("button", { name: "添加筛选失败率 Beta 先验" }));
     expect(screen.getByLabelText("筛选失败率 Beta 先验形状 α（无量纲）")).toBeInTheDocument();
   });
   it("retains test alpha and calendar units in trial-design examples", async () => {
     draw({ id: "trial", name: "Trial", method: "design.analytic" }); await chooseStudy(); example("design.analytic");
-    expect(screen.getByLabelText("检验显著性水平 α（比例）")).toHaveValue(0.025); expect(screen.getByLabelText("对照中位时间（月（方法默认））")).toHaveValue(12);
+    expect(screen.getByLabelText("检验显著性水平 α（比例）")).toHaveValue("0.025"); expect(screen.getByLabelText("对照中位时间（月（方法默认））")).toHaveValue("12");
   });
 });
 
@@ -161,7 +161,7 @@ it("keeps endpoint drafts separate and clears the previously selected result whe
   fireEvent.change(screen.getByLabelText("模拟结局类型"), { target: { value: "patients.longitudinal" } });
   expect(screen.queryByRole("button", { name: "复用本次配置" })).toBeNull(); expect(screen.queryByText(/运行完成/)).toBeNull();
   fireEvent.change(screen.getByLabelText("模拟结局类型"), { target: { value: "patients.binary" } });
-  expect(screen.getByLabelText("对照发生率")).toHaveValue(VCR_SCENARIO_EXAMPLES["patients.binary"][0].scenario.truth.controlRate);
+  expect(screen.getByLabelText("对照发生率")).toHaveValue(String(VCR_SCENARIO_EXAMPLES["patients.binary"][0].scenario.truth.controlRate));
   expect(screen.queryByRole("button", { name: "复用本次配置" })).toBeNull();
 });
 
@@ -216,7 +216,7 @@ it("applies a versioned literature mapping at the configuration point without lo
   render(<MemoryRouter><VcrMethodRunner method={binary} /></MemoryRouter>); await chooseStudy(); example("patients.binary");
   const originalN = screen.getByLabelText("干预组人数").getAttribute("value");
   fireEvent.click(screen.getByRole("button", { name: "使用文献参数" })); fireEvent.click(screen.getByRole("button", { name: "Save mapped source fixture" }));
-  await waitFor(() => expect(screen.getByLabelText("对照发生率")).toHaveValue(0.4)); expect(screen.getByLabelText("干预组人数")).toHaveAttribute("value", originalN);
+  await waitFor(() => expect(screen.getByLabelText("对照发生率")).toHaveValue("0.4")); expect(screen.getByLabelText("干预组人数")).toHaveAttribute("value", originalN);
   expect(screen.getByText(/文献参数版本 2.1.0/)).toBeInTheDocument();
   // Applied values can render before the input-admission effect is ready; a user can run only once the action is enabled.
   await waitFor(() => expect(screen.getByRole("button", { name: "保存配置并运行" })).not.toBeDisabled());
@@ -299,7 +299,7 @@ it("locks an in-flight history read so its result cannot overwrite concurrent ed
   api.getVcrMethodHistory.mockResolvedValue({ jobs: [{ id: "old_job", kind: "evalue", state: "succeeded" }] }); api.getVcrMethodConfiguration.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
   draw(); await chooseStudy(); example("comparator.evalue"); fireEvent.click(screen.getByText("历史运行与原始配置")); fireEvent.click(screen.getByRole("button", { name: "打开原始配置与结果" }));
   expect(screen.getByLabelText(/风险比值|风险比/)).toBeDisabled(); expect(screen.getByRole("button", { name: "使用文献参数" })).toBeDisabled();
-  await act(async () => finish({ kind: "evalue", method: "comparator.evalue", scenario: { riskRatio: 4 }, seed: 42, inputRefs: [], unavailableInputs: 0 })); await waitFor(() => expect(screen.getByLabelText(/风险比值|风险比/)).toHaveValue(4));
+  await act(async () => finish({ kind: "evalue", method: "comparator.evalue", scenario: { riskRatio: 4 }, seed: 42, inputRefs: [], unavailableInputs: 0 })); await waitFor(() => expect(screen.getByLabelText(/风险比值|风险比/)).toHaveValue("4"));
 });
 it("holds the originating scope while a saved literature version is being fetched", async () => {
   let finish: (value: unknown) => void = () => undefined;
@@ -309,7 +309,7 @@ it("holds the originating scope while a saved literature version is being fetche
   fireEvent.click(screen.getByRole("button", { name: "使用文献参数" })); fireEvent.click(screen.getByRole("button", { name: "Save mapped source fixture" }));
   expect(screen.getByLabelText("对照发生率")).toBeDisabled(); expect(screen.getByLabelText("模拟结局类型")).toBeDisabled(); expect(screen.getByLabelText("保存到研究或独立计算")).toBeDisabled(); await userEvent.type(screen.getByLabelText("对照发生率"), "9");
   await act(async () => finish({ methods: [binary], models: [{ id: "mapped_source", version: "3.0.0", executionSpec: { method: "patients.binary", scenario: { endpoint: { type: "binary" }, truth: { controlRate: 0.4, treatmentRate: 0.6 } } } }] }));
-  await waitFor(() => expect(screen.getByLabelText("对照发生率")).not.toBeDisabled()); expect(screen.getByLabelText("对照发生率")).toHaveValue(0.4); expect(screen.getByLabelText("保存到研究或独立计算")).toHaveValue("study_1");
+  await waitFor(() => expect(screen.getByLabelText("对照发生率")).not.toBeDisabled()); expect(screen.getByLabelText("对照发生率")).toHaveValue("0.4"); expect(screen.getByLabelText("保存到研究或独立计算")).toHaveValue("study_1");
 });
 it("keeps authoritative provider-specific inputs outside browser persistence while restoring edited forecast fields", async () => {
   const drafts = await import("@/lib/vcrMethodDraft"); drafts.clearMethodDrafts(); drafts.activateMethodDraftOwner("owner", "tenant");
@@ -334,7 +334,7 @@ it("edits the cohort age rule through shared controls and refuses incomplete con
   await screen.findByLabelText("Authorized snapshot · 120 行");
   fireEvent.click(screen.getByLabelText("Authorized snapshot · 120 行"));
   const age = screen.getAllByLabelText("比较值")[0];
-  expect(age).toHaveValue(18);
+  expect(age).toHaveValue("18");
   fireEvent.change(age, { target: { value: "60" } });
   const run = screen.getByRole("button", { name: "保存配置并运行" });
   await waitFor(() => expect(run).toBeEnabled());

@@ -134,7 +134,7 @@ describe("RunFilePage", () => {
 
     mocks.readClaimVerification.mockRejectedValue(new Error("offline"));
     renderAt(`/app/runs/run_1/files/${MATRIX}`);
-    expect(await screen.findByRole("alert")).toHaveTextContent("核对结果暂时读取不到");
+    expect(await screen.findByRole("note")).toHaveTextContent("核对结果暂时读取不到");
     expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
     expect(screen.queryByText(/暂无核对结果|未核对/)).toBeNull();
   });

@@ -1,9 +1,21 @@
+import { InlineAlert } from "./InlineAlert";
+import { Freshness } from "./Freshness";
 import type { ReactNode } from "react";
-import { RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import { ScrollRegion } from "@/components/ui/ScrollRegion";
 
+/**
+ * Component: DataTable; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: scrollable labelled table or local loading/empty/error state.
+ * Variants: numeric, ranked and sticky row-header columns.
+ * States: first loading/empty/error are distinct; refresh retains supplied rows with status or recovery.
+ * Hit area: native row actions supplied by callers.
+ * Keyboard: focusable ScrollRegion and native controls.
+ * Long content: local horizontal scrolling preserves row names.
+ * Theme: semantic surface and border roles.
+ * Responsive: overflow stays inside the table.
+ * Verification: DataPrimitives and DataRecovery behavioral tests; rendered overflow remains a browser check.
+ */
 /**
  * The data page's table: a sticky header, numbers right-aligned in tabular
  * figures, one row optionally marked as ours, and inline bars where a number
@@ -66,6 +78,7 @@ export function DataTable<T>({
   emptyText,
   errorMessage,
   onRetry,
+  lastSuccessAt,
   footnote,
   minWidth = "min-w-[36rem]",
   ground = "bg",
@@ -86,6 +99,8 @@ export function DataTable<T>({
   emptyText?: string;
   errorMessage?: string;
   onRetry?: () => void;
+  /** Time of the retained successful read; unknown is explicit after a refresh failure. */
+  lastSuccessAt?: string | null;
   /** The denominator, said once for the whole table. */
   footnote?: ReactNode;
   /** The width below which the table scrolls sideways instead of crushing. */
@@ -98,7 +113,7 @@ export function DataTable<T>({
   ground?: "bg" | "surface";
   className?: string;
 }) {
-  if (state === "loading") {
+  if (state === "loading" && rows.length === 0) {
     return (
       <div aria-hidden="true" className={cn("animate-pulse", className)}>
         {Array.from({ length: 4 }, (_, index) => (
@@ -110,17 +125,8 @@ export function DataTable<T>({
       </div>
     );
   }
-  if (state === "error") {
-    return (
-      <div role="alert" className={cn("flex flex-wrap items-center gap-3 rounded border border-danger bg-danger-soft px-3 py-2 text-ui text-danger-strong", className)}>
-        <span className="min-w-0 flex-1 break-words">{errorMessage ?? "暂时无法读取，请稍后重试。"}</span>
-        {onRetry && (
-          <Button size="sm" variant="secondary" onClick={onRetry}>
-            <RefreshCw size={16} aria-hidden="true" />重试
-          </Button>
-        )}
-      </div>
-    );
+  if (state === "error" && rows.length === 0) {
+    return <InlineAlert className={className} onRetry={onRetry}>{errorMessage ?? "暂时无法读取，请稍后重试。"}</InlineAlert>;
   }
   if (state === "empty" || rows.length === 0) {
     return <p className={cn("py-6 text-ui text-text-3", className)}>{emptyText ?? "还没有可以看的数据。"}</p>;
@@ -128,7 +134,9 @@ export function DataTable<T>({
   const drawn = drawnColumns(columns, rows);
   const groundClass = ground === "surface" ? "bg-surface" : "bg-bg";
   return (
-    <div className={className}>
+    <div className={className} aria-busy={state === "loading" || undefined}>
+      {state === "error" && <Freshness at={lastSuccessAt ?? null} error={errorMessage ?? "刷新失败，已保留上次结果。"} onRetry={onRetry} />}
+      {state === "loading" && <p role="status" className="py-2 text-caption text-text-2">正在更新，已保留上次结果</p>}
       <ScrollRegion label={label}>
         <table className={cn("w-full border-separate border-spacing-0", minWidth)}>
           <caption className="sr-only">{label}</caption>
@@ -218,6 +226,18 @@ function frozenAt<T>(column: DataColumn<T>, index: number): boolean {
  * without reading a legend. The bar keeps its colours in a Windows contrast
  * theme (spec §10.9 rule 6): the theme drops fills, and a bar with no fill is
  * no bar.
+ */
+/**
+ * Component: InlineBar; owner: H; rules: DS21, AT07/37.
+ * Anatomy: labelled image track with one proportional fill; value text belongs beside it.
+ * Variants: own, rival or quiet.
+ * States: missing/nonfinite values or nonpositive max render a dash; visible width clamps to 2-100 percent.
+ * Hit area: static graphic with no interaction target.
+ * Keyboard: no focus stop; accessible image label supplies meaning.
+ * Long content: graphic has no visible text; caller keeps precise value and units readable.
+ * Theme: accent own, neutral rival/quiet; data colors explicitly preserved in forced colors.
+ * Responsive: fluid full-width track with fixed two-unit height.
+ * Verification: DataPrimitives.test.tsx; /__gallery visual coverage; AT reading remains manual.
  */
 export function InlineBar({
   value,

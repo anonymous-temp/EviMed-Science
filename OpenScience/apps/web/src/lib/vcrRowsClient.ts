@@ -79,6 +79,10 @@ export type VcrRecordPosition =
   | { kind: "binary"; arm: string; value: number; armRate: number | null; armSize: number | null };
 
 export interface VcrPatientRecord {
+  source?: "predicted";
+  targetClass?: "synthetic";
+  observations?: Array<Record<string, VcrRowCell>>;
+  observationCount?: number;
   result: string;
   id: string;
   arm: { value: string; label: string } | null;
@@ -163,6 +167,9 @@ export function readVcrPatientRecord(raw: unknown): VcrPatientRecord {
   const value = obj(raw);
   const arm = obj(value.arm);
   return {
+    ...(value.source === "predicted" ? { source: "predicted" as const, ...(value.targetClass === "synthetic" ? { targetClass: "synthetic" as const } : {}) } : {}),
+    observations: arr(value.observations).map(row => Object.fromEntries(Object.entries(row).map(([key, value]) => [key, cell(value)]))),
+    observationCount: finite(value.observationCount) ?? undefined,
     result: text(value.result) ?? "",
     id: text(value.id) ?? "",
     arm: typeof arm.value === "string" ? { value: arm.value, label: text(arm.label) ?? arm.value } : null,

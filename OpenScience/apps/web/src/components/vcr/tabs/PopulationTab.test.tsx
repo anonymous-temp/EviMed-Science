@@ -1,13 +1,11 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { WebApiError } from "@/lib/apiClient";
 import { readVcrStudy, type VcrQualityReport, type VcrStudy } from "@/lib/vcrClient";
 import { PopulationTab } from "./PopulationTab";
 import { renderTab } from "../__fixtures__/tabFrame";
-import { fixture, installVcrServer, EMPTY_STUDY_ID, STUDY_ID } from "../__fixtures__/serverFixtures";
+import { fixture, installVcrServer, STUDY_ID } from "../__fixtures__/serverFixtures";
 import { generatedPopulation } from "../__fixtures__/generatedPopulation";
-import { VCR_NO_DEFINITION } from "../vcrText";
 
 /**
  * 人群 (R19; audit B §4.4): a generated population is a table of its variables with the limit in the row, its shapes against what
@@ -27,7 +25,6 @@ vi.mock("@/lib/apiClient", async (importOriginal) => ({
 }));
 
 const ev201 = (): VcrStudy => readVcrStudy(fixture("ev201/study.json"));
-const emptyStudy = (): VcrStudy => readVcrStudy(fixture("empty/study.json"));
 const withStep = (step: string, fields: Record<string, unknown>): VcrStudy => {
   const raw = fixture("ev201/study.json");
   raw.steps[step] = { ...raw.steps[step], ...fields };
@@ -35,7 +32,6 @@ const withStep = (step: string, fields: Record<string, unknown>): VcrStudy => {
 };
 const readOnly = (): VcrStudy => { const raw = fixture("ev201/study.json"); raw.abilities = ["read"]; return readVcrStudy(raw); };
 const tab = (name: string) => `GET /vcr/studies/${STUDY_ID}/${name}`;
-const gets = (name: string) => network.productRequest.mock.calls.filter(([path, method]) => path === `/vcr/studies/${STUDY_ID}/${name}` && (method ?? "GET") === "GET");
 const nothingIn = (name: string) => ({ [tab(name)]: fixture(`empty/${name}.json`) });
 const draw = (study: VcrStudy = ev201()) => renderTab(<PopulationTab studyId={STUDY_ID} study={study} />);
 const band = (container: HTMLElement) => container.querySelector("[data-page-chrome]") as HTMLElement;
@@ -130,23 +126,7 @@ describe("人群 · a real cohort", () => {
     expect(await screen.findByRole("img", { name: /既往免疫治疗 标准化差异 0.31，超过界值/ })).toBeInTheDocument();
   });
 
-  it("offers the criteria's numbers for editing from the band, and writes the next protocol version with only what changed", async () => {
-    installVcrServer(network.productRequest, {
-      [`GET /vcr/studies/${STUDY_ID}/cards?kind=criteria`]: {
-        kind: "criteria", objectId: "prt_1", title: "入排条件",
-        settings: [{ path: "0.requirement.value", label: "年龄 ≥ 18 岁 · 界值", value: 18, unit: null, integer: false, min: null, max: null }],
-      },
-    });
-    const { container } = draw();
-    await screen.findByText("逐条筛选");
-    await userEvent.click(within(band(container)).getByRole("button", { name: "改入排数值" }));
-    const drawer = await screen.findByRole("dialog", { name: "改入排条件的数值" });
-    const threshold = await within(drawer).findByLabelText("年龄 ≥ 18 岁 · 界值");
-    await userEvent.clear(threshold);
-    await userEvent.type(threshold, "20");
-    await userEvent.click(within(drawer).getByRole("button", { name: "保存" }));
-    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/cards`, "POST", { kind: "criteria", set: { "0.requirement.value": 20 } }));
-  });
+
 
   it("offers a reader who cannot write nothing to edit", async () => {
     const { container } = draw(readOnly());
@@ -282,16 +262,7 @@ describe("人群 · a generated population", () => {
     });
   });
 
-  it("generates it again with the settings it has — one request, the tab is read again, and no toast promises where the result will be", async () => {
-    serve();
-    const { container } = draw();
-    await screen.findByRole("table", { name: "每个变量设定的分布和生成的结果" });
-    await userEvent.click(within(band(container)).getByRole("button", { name: "重新生成" }));
-    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/cards`, "POST", { kind: "population", regenerate: true }));
-    expect(network.productRequest.mock.calls.filter(([path, method]) => String(path).endsWith("/cards") && method === "POST")).toHaveLength(1);
-    await waitFor(() => expect(gets("population")).toHaveLength(2));
-    expect(toasts.success).not.toHaveBeenCalled();
-  });
+
 
   it("describes a population by what the server could read: without a profile it is the header, the band and the records — and no sentence about regenerating", async () => {
     serve((raw) => { raw.profile = []; raw.profileKind = null; });
@@ -303,67 +274,11 @@ describe("人群 · a generated population", () => {
     expect(screen.queryByText(/还没有画像/)).toBeNull();
   });
 
-  it("offers 改设定, which opens the numbers it was generated from and writes the next version with only what changed", async () => {
-    serve(() => undefined, {
-      [`GET /vcr/studies/${STUDY_ID}/cards?kind=population`]: {
-        kind: "population", objectId: "pop_1", title: "人群设定",
-        settings: [
-          { path: "n", label: "生成记录数", value: 1000, unit: "条", integer: true, min: 1, max: null },
-          { path: "population.variables.0.mean", label: "age 均数", value: 58, unit: null, integer: false, min: null, max: null },
-        ],
-      },
-    });
-    const { container } = draw();
-    await userEvent.click(await within(await found(container, "[data-page-chrome]")).findByRole("button", { name: "改设定" }));
-    const drawer = await screen.findByRole("dialog", { name: "改人群设定" });
-    const records = await within(drawer).findByLabelText("生成记录数（条）");
-    expect(records).toHaveValue(1000);
-    expect(within(drawer).getByRole("button", { name: "保存" })).toBeDisabled();
-    await userEvent.clear(records);
-    await userEvent.type(records, "2000");
-    await userEvent.click(within(drawer).getByRole("button", { name: "保存" }));
-    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/cards`, "POST", { kind: "population", set: { n: 2000 } }));
-    expect(toasts.success).toHaveBeenCalledWith("已保存，依赖它的结果会重新计算。");
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "改人群设定" })).toBeNull());
-    await waitFor(() => expect(gets("population")).toHaveLength(2));
-  });
 
-  it("tells a typed value the engine's range would refuse in place, and sends nothing", async () => {
-    serve(() => undefined, {
-      [`GET /vcr/studies/${STUDY_ID}/cards?kind=population`]: {
-        kind: "population", objectId: "pop_1", title: "人群设定",
-        settings: [{ path: "n", label: "生成记录数", value: 1000, unit: "条", integer: true, min: 1, max: null }],
-      },
-    });
-    const { container } = draw();
-    await userEvent.click(await within(await found(container, "[data-page-chrome]")).findByRole("button", { name: "改设定" }));
-    const drawer = await screen.findByRole("dialog", { name: "改人群设定" });
-    const records = await within(drawer).findByLabelText("生成记录数（条）");
-    await userEvent.clear(records);
-    await userEvent.type(records, "0");
-    expect(await within(drawer).findByText("不能小于 1")).toBeInTheDocument();
-    expect(within(drawer).getByRole("button", { name: "保存" })).toBeDisabled();
-    expect(network.productRequest.mock.calls.some(([path, method]) => String(path).endsWith("/cards") && method === "POST")).toBe(false);
-  });
 
-  it("shows a refusal of the engine's as the one sentence naming the setting, and keeps the drawer", async () => {
-    serve(() => undefined, {
-      [`GET /vcr/studies/${STUDY_ID}/cards?kind=population`]: {
-        kind: "population", objectId: "pop_1", title: "人群设定",
-        settings: [{ path: "population.variables.0.sd", label: "age 标准差", value: 10, unit: null, integer: false, min: null, max: null }],
-      },
-      [`POST /vcr/studies/${STUDY_ID}/cards`]: () => { throw new WebApiError("“age 标准差”这样填引擎不会接受，没有保存。", { status: 422, code: "vcr_card_edit_refused" }); },
-    });
-    const { container } = draw();
-    await userEvent.click(await within(await found(container, "[data-page-chrome]")).findByRole("button", { name: "改设定" }));
-    const drawer = await screen.findByRole("dialog", { name: "改人群设定" });
-    const sd = await within(drawer).findByLabelText("age 标准差");
-    await userEvent.clear(sd);
-    await userEvent.type(sd, "12");
-    await userEvent.click(within(drawer).getByRole("button", { name: "保存" }));
-    expect(await within(drawer).findByRole("alert")).toHaveTextContent("“age 标准差”这样填引擎不会接受，没有保存。");
-    expect(screen.getByRole("dialog", { name: "改人群设定" })).toBeInTheDocument();
-  });
+
+
+
 
   it("offers a reader who cannot write the download and nothing that would be refused", async () => {
     serve();
@@ -375,20 +290,15 @@ describe("人群 · a generated population", () => {
 });
 
 describe("人群 · before there is one", () => {
-  it("says the first sentence is missing on a study nobody has described — not that something is queued", async () => {
-    installVcrServer(network.productRequest, nothingIn("population"));
-    const { container } = renderTab(<PopulationTab studyId={EMPTY_STUDY_ID} study={emptyStudy()} />, { studyId: EMPTY_STUDY_ID });
-    expect(await screen.findByText(VCR_NO_DEFINITION)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "说明研究问题" })).toBeInTheDocument();
-    expect(container.querySelector("[data-page-chrome]")).toContainElement(screen.getByRole("button", { name: "数据来源" }));
-  });
+
 
   it("is a recipe with one verb-and-object button when the step was never asked for, and the button starts it where the reader is", async () => {
     installVcrServer(network.productRequest, nothingIn("population"));
-    const { container } = draw(withStep("population", { status: "none", requested: false }));
+    const { container, spies } = draw(withStep("population", { status: "none", requested: false }));
     const recipe = await found(container, "[data-vcr-step-empty='population']");
     await userEvent.click(within(recipe).getByRole("button", { name: "构建人群" }));
-    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/run`, "POST", { step: "population" }));
+    expect(spies.openChat).toHaveBeenCalledWith(expect.stringContaining(STUDY_ID));
+    expect(network.productRequest.mock.calls.filter(([, method]) => method === "POST")).toEqual([]);
   });
 
   it("says where a step that was asked for waits, and offers no second start", async () => {
@@ -397,4 +307,15 @@ describe("人群 · before there is one", () => {
     const waiting = await found(container, "[data-vcr-step-waiting='population']");
     expect(within(waiting).queryByRole("button", { name: "构建人群" })).toBeNull();
   });
+});
+
+it("adjusts a cohort in its existing conversation with the result identity and no immediate write", async () => {
+  const payload = generatedPopulation();
+  installVcrServer(network.productRequest, { [tab("population")]: payload });
+  const view = renderTab(<PopulationTab studyId={STUDY_ID} study={ev201()} />);
+  await userEvent.click(await screen.findByRole("button", { name: "改设定" }));
+  expect(view.spies.openChat).toHaveBeenCalledWith(expect.stringContaining(STUDY_ID));
+  expect(view.spies.openChat.mock.calls[0][0]).toContain(payload.records!.result);
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(network.productRequest.mock.calls.filter(([, method]) => method === "POST")).toEqual([]);
 });

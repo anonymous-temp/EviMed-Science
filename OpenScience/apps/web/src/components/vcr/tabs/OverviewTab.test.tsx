@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -52,7 +52,7 @@ function draw(value: VcrStudy, api: StudyFrameApi | null = null, id = STUDY_ID) 
 }
 
 const address = (tab: string) => `/app/virtual-research/${STUDY_ID}${tab ? `/${tab}` : ""}`;
-const rows = () => within(screen.getByRole("list", { name: "七个步骤" })).getAllByRole("listitem");
+const rows = () => within(screen.getByRole("list", { name: "已开展的任务" })).getAllByRole("listitem");
 
 beforeEach(() => {
   toasts.success.mockReset();
@@ -72,7 +72,7 @@ describe("总览", () => {
     const order = [
       container.querySelector("[data-vcr-counts]"),
       container.querySelector("[data-vcr-attention]"),
-      screen.getByRole("list", { name: "七个步骤" }),
+      screen.getByRole("list", { name: "已开展的任务" }),
       screen.getByRole("heading", { name: "交付物" }),
     ];
     const positions = order.map((element) => all.indexOf(element as Element));
@@ -151,9 +151,8 @@ describe("总览", () => {
         delete raw.stepSummaries.matching;
       }));
       const list = rows();
-      expect(list[6].querySelector("[data-vcr-step-state='none']")).not.toBeNull();
-      expect(list[6]).not.toHaveTextContent(/前|刚刚|今天|昨天/);
-      expect(list[0]).toHaveTextContent(/前|刚刚|今天|昨天|月/);
+      expect(document.querySelector('[data-vcr-step-row="matching"]')).toBeNull();
+      expect(list[0]).toHaveTextContent(/前|刚刚|\d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
     });
 
     it("tells a step in line from one that is running, and neither from one nobody has started", () => {
@@ -171,7 +170,8 @@ describe("总览", () => {
 
   describe("what needs the reader", () => {
     it("is one line each, with what to do about it: the tab the server named, and nothing for a line it did not send a way to", () => {
-      draw(study());
+      const api = frame();
+      draw(study(), api);
       const region = screen.getByRole("region", { name: "需要关注" });
       expect(within(region).getByRole("link", { name: "查看缺口" })).toHaveAttribute("href", address("comparator"));
       // The wait on the budget is the frame's line, on every tab; a line with nothing to do is not a sentence on its own.
@@ -180,10 +180,11 @@ describe("总览", () => {
     });
 
     it("offers 接着做 for a step that did not finish, and starts that step without leaving the page", async () => {
-      draw(study());
+      const api = frame();
+      draw(study(), api);
       const region = screen.getByRole("region", { name: "需要关注" });
       await userEvent.click(within(region).getByRole("button", { name: "接着做" }));
-      await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/run`, "POST", { step: "patients" }));
+      expect(api.openChat).toHaveBeenCalledWith(expect.stringContaining(STUDY_ID));
     });
 
     it("sends the stale line to the change log, which is the frame's drawer", async () => {
@@ -240,7 +241,7 @@ describe("总览", () => {
     it("says what is missing — the first sentence, in the conversation — and has none of the lists", () => {
       const { container } = draw(readVcrStudy(fixture("empty/study.json")), null, EMPTY_STUDY_ID);
       expect(container.querySelector("[data-vcr-counts]")).toBeNull();
-      expect(screen.queryByRole("list", { name: "七个步骤" })).toBeNull();
+      expect(screen.queryByRole("list", { name: "已开展的任务" })).toBeNull();
       expect(screen.getByRole("button", { name: "说明研究问题" })).toBeInTheDocument();
     });
 
@@ -251,4 +252,13 @@ describe("总览", () => {
       expect(api.openChat).toHaveBeenCalled();
     });
   });
+});
+
+it("shows a task question and its matching result without requiring a full programme definition", () => {
+  const task = readVcrStudy({ ...fixture<Record<string, unknown>>("empty/study.json"), purpose: "task", question: "核对这位患者的试验入排条件", definition: null,
+    steps: { matching: { status: "done", requested: true }, definition: { status: "none", requested: false } } });
+  draw(task);
+  expect(screen.getByText("核对这位患者的试验入排条件")).toBeInTheDocument();
+  expect(screen.getByRole("list", { name: "已开展的任务" })).toHaveTextContent("匹配");
+  expect(screen.queryByRole("button", { name: "说明研究问题" })).toBeNull();
 });

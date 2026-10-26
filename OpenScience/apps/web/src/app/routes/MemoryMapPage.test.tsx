@@ -148,7 +148,7 @@ describe("the landing's header: the verbs of a capsule are on the map too", () =
     fetchMyCapsule.mockRejectedValue(new Error("down"));
     await user.click(screen.getByRole("button", { name: "记忆设置" }));
     await user.click(await screen.findByRole("menuitem", { name: "已忘记的内容" }));
-    expect(await within(await screen.findByRole("dialog", { name: "已忘记的内容" })).findByRole("alert")).toHaveTextContent("暂时读不到已忘记的内容");
+    expect(await within(await screen.findByRole("dialog", { name: "已忘记的内容" })).findByRole("note")).toHaveTextContent("暂时读不到已忘记的内容");
   });
 
   it("pauses nothing for a map narrowed to the 「其他」 mark of projects the account no longer has: the item is off", async () => {
@@ -362,7 +362,7 @@ describe("记忆地图", () => {
     fetchMemoryMap.mockResolvedValue(busyMap({ nodes: [], edges: [], events: [], missing: ["native-memory"],
       summary: { memories: 0, documents: 0, methods: 0, projects: 0, needsLook: 0, since: null } }));
     open();
-    expect(await screen.findByRole("alert")).toHaveTextContent("有一部分没有读到");
+    expect(await screen.findByRole("note")).toHaveTextContent("有一部分没有读到");
     expect(screen.queryByLabelText("三个数字")).toBeNull();
     expect(screen.queryByText(/还没有记住什么/u)).toBeNull();
     expect(screen.queryByText("再多聊几次，这里会长出你的地图。")).toBeNull();
@@ -372,7 +372,7 @@ describe("记忆地图", () => {
     fetchMemoryMap.mockRejectedValueOnce(new Error("down")).mockResolvedValue(busyMap());
     const user = userEvent.setup();
     open();
-    const alert = await screen.findByRole("alert");
+    const alert = await screen.findByRole("note");
     expect(alert).toHaveTextContent("暂时读不到记忆地图");
     await user.click(within(alert).getByRole("button", { name: /重试/u }));
     expect(await screen.findByText(/EviMed 记住了你的/u)).toBeInTheDocument();

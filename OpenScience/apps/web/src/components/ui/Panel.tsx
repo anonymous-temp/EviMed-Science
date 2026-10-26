@@ -12,6 +12,18 @@ import { cn } from "@/lib/cn";
  * the group's name either — a row may carry one short line under its label
  * when the label alone would be ambiguous (「任务完成的通知推送到飞书」).
  */
+/**
+ * Component: Panel; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Section with optional h2/action above one divided settings surface.
+ * Variants: Optional group title/action.
+ * States: Children own setting state.
+ * Hit area: No built-in action target; supplied child controls own their geometry.
+ * Keyboard: No focus stop or key handler added; child controls keep native semantics.
+ * Long content: Header and child text are retained; child rows own overflow.
+ * Theme: Surface, border and main-text roles.
+ * Responsive: Fluid box; no internal viewport breakpoint.
+ * Verification: Primitives.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function Panel({
   title,
   action,
@@ -38,6 +50,18 @@ export function Panel({
   );
 }
 
+/**
+ * Component: PanelRow; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Label/description beside control, optional expanded body below.
+ * Variants: Value/control and optional child content.
+ * States: Caller owns control and expansion state.
+ * Hit area: Only supplied controls are interactive.
+ * Keyboard: No focus stop or key handler added; child controls keep native semantics.
+ * Long content: Label/description retained; control cannot shrink.
+ * Theme: Main label and secondary description/value.
+ * Responsive: Flex row stays side-by-side; caller must bound long controls.
+ * Verification: Primitives.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function PanelRow({
   label,
   description,

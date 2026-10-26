@@ -151,7 +151,7 @@ describe("AI 运行 — the record of what a module's programme did in the backg
   it("says a list that cannot be read, with the way to read it again", async () => {
     const load = vi.fn().mockRejectedValueOnce(new WebApiError("no", { status: 503, code: "geo_unavailable" })).mockResolvedValue(RUNS);
     draw({ load });
-    const alert = await screen.findByRole("alert");
+    const alert = await screen.findByRole("note");
     await userEvent.click(within(alert).getByRole("button", { name: /重试/ }));
     expect(await screen.findByRole("button", { name: "生成周报" })).toBeInTheDocument();
     expect(load).toHaveBeenCalledTimes(2);
@@ -169,7 +169,7 @@ describe("AI 运行 — the record of what a module's programme did in the backg
     rerender(<MemoryRouter><ProgrammeRunsDrawer projectId="p-masi" load={load} version="c" onClose={() => undefined} /></MemoryRouter>);
     await waitFor(() => expect(load).toHaveBeenCalledTimes(3));
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
-    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("note")).toBeNull();
   });
 
   it("reads itself while a step is going on, and stops when nothing is", async () => {

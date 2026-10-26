@@ -23,18 +23,22 @@ export function humanSize(n: number | null | undefined): string {
   return `${text} ${units[unit]}`;
 }
 
+export const DEFAULT_TIME_ZONE = "Asia/Shanghai";
+
 /** Hour and minute of a timestamp, `14:05`; empty for a value that is not a time. */
 export function formatClock(value: string | null | undefined): string {
   if (!value) return "";
   const time = new Date(value);
   if (Number.isNaN(time.getTime())) return "";
-  return time.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
+  return time.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: DEFAULT_TIME_ZONE });
 }
 
 /** zh-CN locale date-time; pass Intl options to narrow the rendered fields. */
 export function formatDateTime(value: Date | number | string, options?: Intl.DateTimeFormatOptions): string {
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return formatDate(value);
   const date = value instanceof Date ? value : new Date(value);
-  return date.toLocaleString("zh-CN", options);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("zh-CN", { timeZone: DEFAULT_TIME_ZONE, ...options });
 }
 
 /** Last path segment of a workspace folder, or "工作区" when unknown. */
@@ -118,7 +122,10 @@ const pad2 = (n: number) => String(n).padStart(2, "0");
 export function formatDate(value: Date | number | string | null | undefined, style: "prose" | "iso" | "short" = "iso"): string {
   const date = toDate(value);
   if (!date) return "";
-  const [y, m, d] = [date.getFullYear(), date.getMonth() + 1, date.getDate()];
+  const calendar = typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value.split("-").map(Number) : null;
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: DEFAULT_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+  const part = (type: string) => Number(parts.find(item => item.type === type)?.value);
+  const [y, m, d] = calendar ?? [part("year"), part("month"), part("day")];
   if (style === "prose") return `${y}年${m}月${d}日`;
   if (style === "short") return `${m}月${d}日`;
   return `${y}-${pad2(m)}-${pad2(d)}`;
@@ -130,32 +137,25 @@ export function formatDate(value: Date | number | string | null | undefined, sty
  * form, in a list). Empty for a value that is not a date.
  */
 export function formatDay(value: string | null | undefined, now: Date = new Date()): string {
-  const date = toDate(value);
-  if (!date) return "";
-  return formatDate(date, date.getFullYear() === now.getFullYear() ? "short" : "iso");
+  if (!value) return "";
+  const day = formatDate(value);
+  if (!day) return "";
+  const [year, month, date] = day.split("-");
+  return year === formatDate(now).slice(0, 4) ? `${Number(month)}月${Number(date)}日` : day;
 }
 
-/**
- * When an event happened, as a list says it (spec §14.4): 「刚刚」 under a
- * minute, 「N 分钟前」 under an hour, 「14:05」 earlier today, 「昨天 14:05」,
- * 「9月14日」 this year, 「2025-09-14」 before. A time in the future (a clock a
- * little ahead of the server's) reads as its clock or its date, never as
- * 「−3 分钟前」. Pair it with a `<time dateTime>` whose title is the absolute
- * time: a relative time is never a record's only time. Empty for a value that
- * is not a time.
+/** Elapsed relative time below 24 hours; otherwise an absolute timestamp in the display zone.
+ * Pair with a time element and formatDateTime title to retain the exact instant.
  */
-export function formatRelativeTime(value: Date | number | string | null | undefined, now: Date = new Date()): string {
+export function formatRelativeTime(value: Date | number | string | null | undefined, now: Date = new Date(), timeZone = DEFAULT_TIME_ZONE): string {
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return formatDate(value);
   const date = toDate(value);
   if (!date) return "";
   const elapsed = now.getTime() - date.getTime();
   if (elapsed >= 0 && elapsed < 60_000) return "刚刚";
   if (elapsed >= 60_000 && elapsed < 3_600_000) return `${Math.floor(elapsed / 60_000)} 分钟前`;
-  const clock = `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
-  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const days = Math.round((startOfDay(now) - startOfDay(date)) / 86_400_000);
-  if (days === 0) return clock;
-  if (days === 1) return `昨天 ${clock}`;
-  return formatDay(formatDate(date, "iso"), now);
+  if (elapsed >= 3_600_000 && elapsed < 86_400_000) return `${Math.floor(elapsed / 3_600_000)} 小时前`;
+  return formatDateTime(date, { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).replaceAll("/", "-");
 }
 
 /** The minus sign a reader sees (U+2212); exports keep ASCII `-` (spec §14.2). */
@@ -278,3 +278,6 @@ export function formatConfidenceInterval(
   const head = [measure, unit ? `${point}${NBSP}${unit}` : point].filter(Boolean).join(" ");
   return `${head}（${level}% CI ${interval}）`;
 }
+
+export { formatQuantity, parseQuantity } from "./quantity";
+export type { QuantityPolicy, ParsedQuantity } from "./quantity";

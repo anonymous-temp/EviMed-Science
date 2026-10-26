@@ -152,3 +152,14 @@ it('opens the exact linked assessment through existing history pages and shows p
   expect(screen.getByRole('region',{name:'所选历史判定'})).toHaveTextContent('If adult');
   expect(client.getGeoDiagnosisReview.mock.calls[1][2]).toEqual({historyBefore:8});
 });
+
+it("names each statement correction section uniquely without changing heading rank", async () => {
+  const second = { ...statement, text: "A second answer sentence.", claimId: "claim2" };
+  const review = saved();
+  client.getGeoDiagnosisReview.mockResolvedValue({ ...review, current: { statements: [statement, second] }, original: { statements: [statement, second] } });
+  renderReview();
+  const first = await screen.findByRole("region", { name: "第 1 条说法的纠错稿" });
+  const next = screen.getByRole("region", { name: "第 2 条说法的纠错稿" });
+  expect(first.querySelector("h3")).toHaveTextContent("第 1 条说法的纠错稿");
+  expect(next.querySelector("h3")).toHaveTextContent("第 2 条说法的纠错稿");
+});

@@ -140,80 +140,20 @@ per-project workspace + JSONL provenance.
 
 ## Frontend conventions (design system)
 
-- UI baseline language is **Simplified Chinese** (code/comments stay English);
-  technical identifiers (URLs, enum values, model/provider ids) stay as-is.
-- **The design tokens are one package — `@evimed/design-tokens`
-  (`packages/design-tokens/src/index.mjs`) — and `DESIGN.md` is its prose.** It
-  generates six artifacts into `dist/` and no consumer restates a value: the
-  block in `src/index.css` (`pnpm tokens:css`), the Tailwind preset both front
-  ends extend, the Element Plus theme the Vue shell links, the ECharts theme both
-  sides register, the kernel frame's `overrideTokens` map, and a Figma token
-  file. `pnpm tokens:check` fails on a stale artifact and
-  `apps/web/src/app/designTokens.test.ts` regenerates and compares, so editing a
-  consumer instead of the table is a red test. Contrast is recomputed at build
-  time and a shortfall fails the build. The shell conforms to the kernel, not the
-  other way around.
-- Brand is **循证蓝 `#0a5dc1`** (EviMed's live colour; 循证青 retired 2026-09-26).
-  One sans stack for the chrome; the **serif is three brand moments only** — the
-  wordmark, the home headline, a document title (`text-wordmark`/`text-hero`/
-  `text-doc-title` carry the family). Nine sizes
-  (12/13/14/16/18/20/24/32/40) as `text-badge/meta/caption/compact/ui/body/
-  wordmark/section/heading/title/doc-title/display/metric/metric-lg/hero`, still
-  at most four size × weight pairs per page, and **32/40 on data pages only**;
-  weights 400/600 for Chinese (`font-medium` is an ESLint error); a line of text at most 40 CJK characters (`max-w-measure`
-  560 / `-body` 640). **Three columns through `PageShell`**: `max-w-read` 720
-  (answers, reports), `max-w-page` 1040 (lists), `max-w-wide` 1200 (dashboards);
-  its header is one line with **no subtitle**. Radii: `rounded-tag` 6, `rounded`
-  8 (controls, rows), `rounded-card` 12, `rounded-panel` 16 (dialogs, drawers),
-  `rounded-composer` 24, `rounded-full` pills. Heights: 28 small, 36 default, 44
-  primary, tags 22. Icons 16 / 20, one stroke (1.5). One accent (links too).
-  Static cards have no shadow — `shadow-e1` / `shadow-e2` (composer, menus,
-  popovers) / `shadow-e3` (dialogs, drawers). **Restraint is the default and
-  expression has a budget**: one brand moment per page, charts and metric rungs
-  on data pages. In a comparison chart we are the brand and every rival is a grey
-  (`CHART_COLORS`). The component set (`PageShell`, `Tabs`, `FilterChips`, `Tag`,
-  `Button`, `IconButton`, `List`/`ListRow`, `Panel`, `EmptyState`, `StatTile`,
-  `Delta`, `ChartCard`, `DataTable`, plus `Menu`, `Switch`, `SearchInput`) is in
-  `DESIGN.md`; ESLint rejects a hand-made bordered pill or bordered button
-  outside `components/ui/`.
-- **The interface never explains the system** (2026-09-23 plan; blanket hint/subtitle prohibitions superseded for useful task guidance by the October 20 ruling below): no subtitle, no hint
-  under a card title, no 「为什么入选」; no internal state as text (已交付, 核对 N 条,
-  用过 N 次, token, tok/s, API names, ids). Say what the user can do and the result.
-  The example pills on a blank conversation tell the user what can be asked; that is not
-  explaining the system. Nothing shows back-office provenance, an engine name or a file address.
-- **Page structure** (one-object and drawer restrictions qualified by the October 20 workbench ruling below; 2026-10-07 plan §9.4, `DESIGN.md` 「页面结构」): a page is one list of one
-  kind of object (a data page — the 记忆地图, the knowledge base's reader and graph — is the one
-  exception, `DESIGN.md` rule 1), short record detail opens in a drawer; articles and documents have addressed reading pages, and conversations remain in their project workspace. The header is the title, the scope
-  and at most one primary button, and nothing that looks clickable may be silent.
-  `scripts/ops/ui-walk.mjs` measures it on the live pages after every release.
-  Since R19 (2026-10-14) a page is **composed from slots**, not drawn: `PageShell` takes `scope`, `steps`, `activity`,
-  `tabs`, `toolbar` and `headline` and renders them in one fixed order, the appropriate workflow selector, view navigation and toolbar in one band without redundant step/tab bars (owner, 2026-10-19);
-  the pieces are `Toolbar`, `StepRail`, `StepState`, `ActivityStrip`, `Note`, `Headline`, `Section`, `FactList`,
-  `ChartGrid`, `Outline`, `MasterDetail`, `ScopeMenu` and `StateScreen` in `components/ui/`. A page does not write its own
-  filter row, step rail, tab bar or standalone grey sentence. `DESIGN.md` 「页面结构」 holds the six templates and rules 7–13;
-  `layoutRules.test.ts` (a count that may only fall) and `pageComposition.test.tsx` (document order, via
-  `expectComposed`) hold them; the layout lint rules are errors, and the files still drawing their own controls are
-  `layout-lint-baseline.json` (warnings there, each count held by `layoutLint.test.ts`).
-- **Module names** (the owner's rulings of 2026-10-07): the product calls its two modules 「循证 GEO」
-  (code `geo`; it was 「循证传播」 only from 2026-10-06) and 「虚拟临床研究」 (code `vcr`; it was
-  「虚拟临研」) everywhere a reader or a model sees them — pages, notices, e-mails, error sentences,
-  capability titles and SKILL text. Identifiers, routes, schemas, `OPEN_SCIENCE_*` keys and file
-  names keep `geo` / `vcr`. The old names are retired words: `retiredWords.test.ts` (web) and
-  `geoProductName.test.mjs` (server) fail on them, the walk fails on a page that shows them, and
-  the search boxes over tools, skills and plugins read them as the new names until 2027-01-07
-  (`@evimed/domain`'s `retiredNames.mjs`). A line that must hold an old name as data carries
-  `retired-word-ok`.
-- ESLint bans new arbitrary values (`text-[Npx]`, `rounded-[Npx]`, bare
-  `shadow-sm/md/lg`, `shadow-card`, opacity modifiers on token colours) across
-  `src/**`, and `font-serif` inside `components/{ui,layout,cards}` — use the
-  semantic scales; rare exceptions need an inline `eslint-disable` with a
-  reason. A test fails on hex literals outside the token module.
-  `eslint-plugin-jsx-a11y` is enforced.
-- New UI must use the `components/ui/` primitives instead of hand-rolled
-  buttons/inputs/empty states; keep the four-state discipline (loading skeleton /
-  empty / error-with-retry / success) on every list page.
-- Theme is three-way (`light/dark/system`); never hardcode `text-white` on accent
-  surfaces — use `text-accent-fg` / `text-error-fg`.
+- UI baseline language is Simplified Chinese; project files/code/comments are English. Technical identifiers retain their actual value. The maintained design authority is `docs/FRONTEND_DESIGN_SYSTEM.md` **v3.1**; `DESIGN.md` maps engineering and component adoption; component JSDoc plus `/__gallery`/composition fixtures own implemented contracts. Product scope stays in linked module plans. Chinese reading copies are dated snapshots or link indexes, not a second normative specification.
+- `@evimed/design-tokens` is the numerical authority. Edit `packages/design-tokens/src/index.mjs`, generate CSS, Tailwind, Element Plus, ECharts, native theme, Figma and DTCG consumers, and record release digests together. Never tune a generated consumer directly. `tokens:check`, contrast and generated-source tests remain required.
+- The local coordinated implementation uses token **3.0.0** and specification **3.1**. The earlier main 2.2.0 / warm-brand 2.3.0 reads are historical baselines; publication, push/main adoption and deployment need separate receipts. This brand/status reinterpretation is major; compatible additions are minor and within-role value tuning is patch. Specification, DESIGN.md, this file, token/package/release metadata, generated consumers, brand assets and consumer pin/readbacks must reach the reviewed change together. Publishing/merging/deploying remain separate stages.
+- Brand: warm paper, terracotta actions, independent near-black logo in light mode and paper ink in dark mode. Implemented role decisions (full specification DS02.3): green verification, exact text-role titles, navy information/running dots, ink field focus with accent button focus, neutral popularity tags. Scientific categorical palettes and closed study-type colors remain explicit data exceptions. `CHART_OWN`/`CHART_COLORS.own` identify our comparison; `CHART_SERIES` is a different categorical contract. Compute color distance rather than relying on a comment.
+- One sans stack for chrome; serif only for wordmark, home headline and document title. Use named sizes/weights, spacing, radii, heights and width roles from the token table. Existing per-template type budgets remain; metric sizes apply to data and the named hero role is the home exception. Meaningful units/help are not removed to reduce a mechanical text count.
+- Compose through PageShell's scope/steps/activity/tabs/toolbar/headline/body order and existing primitives. A page serves one coherent task; related input/configuration/progress/results may share a connected workbench. Short auxiliary records may use drawers; long documents/configuration use the main area. Keep one dominant action per local group, at most one header primary, one native composer and no redundant workflow rails. Old one-object/no-help blanket wording is superseded.
+- Explain purpose, necessary inputs, units, examples, prerequisites, limitations and recovery when useful. Keep raw implementation diagnostics out of ordinary tasks, while intentional user choices such as model names remain. A static tag is not a button; a row predicts whether it filters, configures or opens a destination. Informative empty/zero-count views may preserve context and offer reset/next action.
+- Current lint/layout budgets remain until a scoped evidence-backed change updates them; never weaken them just to pass. `layout-lint-baseline.json`, layout rules and page composition remain guardrails, not substitutes for a usable task. New UI uses existing primitives; no new hand-made pill/button or arbitrary color/type/geometry outside documented exceptions.
+- Apply full read/mutation state contracts: unknown is not zero; first-read and refresh failures are distinct; preserve useful old results and drafts with local recovery. Switches are immediate reversible preferences; later-runtime activation uses an explicit action and effective-time status. ARIA-disabled busy buttons require actual duplicate-activation guards. New component APIs in DESIGN.md are targets until their code and fixtures land.
+- Each touched public component adopts the nine-field JSDoc order: anatomy, variants, states, hit area, keyboard, long content, theme, responsive, verification. Keep real behavior in the header; link pending gaps. DS/AT IDs identify owner and proof (lint, tests, walk, gallery, manual). Do not infer implementation or accessibility from prose or a static screenshot.
+- Ownership: H is host-built, K is kernel-native, B crosses both. Native composer IME/Enter/stream-follow behavior is K-owned acceptance; host fields and viewers are H-owned. Fix upstream/seam gaps through supported boundaries; never add a second composer or cross-origin DOM patch. DS21 owns shared latency, mutation, undo, notification, keyboard, navigation, naming, formatting, IME and batch contracts.
+- Theme stays light/dark/system. Use semantic foreground roles, not literal white on accent. Check forced colors, reduced motion, narrow/intermediate widths, keyboard and actual AT/touch separately. Current package tests do not certify fixed scientific canvases or all native-frame states.
+- Module names stay 「循证 GEO」 (`geo`) and 「虚拟临床研究」 (`vcr`). Historical names remain retired except explicitly marked data, with existing alias expiry and retired-word tests preserved. Paths, schemas and configuration identifiers do not change for visual branding.
+- Full rule details and exceptions are maintained in the linked specification, not repeated as contradictory historical fragments here. No design rule introduces a clinical delivery veto or deletes usable research.
 
 ## Safety defaults (non-negotiable)
 
@@ -282,3 +222,50 @@ These presentation decisions supersede conflicting September 23, October 7/8 and
 - Share reference-trial search across global AI, Research Tools and the study evidence context, with Use in This Study. Distinguish live results from saved status and source failures. Literature parameters retain values, units, passages, missing fields and destination mapping; registration alone never claims executability. Retain configuration/source versions and immutable historical results.
 - The study population step owns criteria, source data, included/excluded/unknown counts, selected version and cohort results. Select account-level reusable template versions from that step, preserve Save as Template/Use Template and compatible links, and recalculate changed criteria as a new version without overwriting history.
 - Keep design tokens, default Chinese UI, keyboard/mobile access, ordinary-account access and user/project/tenant boundaries. Technical implementation, source-proof machinery and operator jargon stay out of UI; scientific sources needed to judge or reuse parameters remain available in context. No added approval ceremony or clinical delivery gate. Preserve existing quality budgets and acceptance checks; do not weaken them merely to pass unusable UI. A measured workbench-specific template change must express this connected workflow, not excuse unrelated stacked content.
+
+## Owner direction adopted 2026-10-25: AI-native virtual clinical research
+
+This is the owner's product direction, not a claim that removal or redesign has
+already been implemented. The detailed scope and proposed interaction are in
+../docs/superpowers/specs/2026-10-25-vcr-ai-native-product-reset.md.
+
+- Remove recruitment operations from VCR: assignment, patient contact, referrals,
+  site CRM, enrollment/funnel ledgers, operational recruitment forecasting, and
+  follow-up task management. Keep evidence-backed patient-to-trial and
+  trial-to-patient matching. Remove operational side effects as well as UI;
+  retain historical records under their existing rights and retention rules.
+- Make the native AI conversation the operating entry. AI invokes the existing
+  statistical/model tools and reads saved results. VCR calculation methods are
+  not ordinary-user standalone catalogue/form journeys. This supersedes the
+  October 20 method-discovery rule for VCR's presentation, not the existence
+  of the numerical tools or their validation.
+- Build only the context the current task needs. Matching and cohort construction
+  do not require invented trial endpoints or treatment-effect assumptions to
+  satisfy a full-study template. Do not force definition-versus-full-programme
+  choices before a direct task.
+- Show task-specific data requirements: patient information, patient-level
+  datasets, longitudinal outcomes, or a compatible model. Reuse an already
+  authorized connected source rather than requiring another upload.
+- Preserve cohorts, virtual patients, comparator research and trial simulation
+  as distinct scientific objects, with compatible views and reusable results.
+  Follow-up observations and protocol measurement schedules remain research
+  data; follow-up assignments and contact workflows are the removed OA scope.
+- Keep one native composer, existing access boundaries, numerical provenance
+  and general-purpose platform behavior. The exact task grouping in the reset
+  document is a design proposal; implementation and acceptance remain separate.
+
+## Owner direction adopted 2026-10-26: warm brand and current design authority
+
+- Warm paper surfaces and terracotta actions replace the intervening blue palette. Keep the EviMed molecule geometry and use a separate near-black logo role in light mode and light ink in dark mode; the reviewed identity remains near-black, and deep navy is reserved for the information family, not a second action accent. The native shell must retain visible logo ink if its optional theme body is disabled.
+- `docs/FRONTEND_DESIGN_SYSTEM.md` v3.1 is the full maintained specification, `DESIGN.md` its engineering map, and `packages/design-tokens` the numerical authority. Earlier full drafts and audits remain historical.
+- Audit findings and implemented changes are separate. Preserve unknown/loading/stale/failed states, scientific units, keyboard equivalents, mobile destination visibility and real source/verification scope. Do not mark unobserved pages or skipped detector work as passing.
+- The subsequent owner instruction authorizes the complete v3.1 implementation, commit and branch push, with gpt-6.1-sol delegated workers. The execution ledger records implementation and verification separately. Deployment remains unauthorized.
+
+## Owner review adopted 2026-10-26: design specification v3.1
+
+The owner supplied a detailed review and asked that decisions use its recommendations. The specification is now implemented locally with token 3.0.0, shared component contracts and scoped module repairs. Implementation is distinct from the acceptance and release receipts in the execution ledger; main/production adoption is not implied. Preserve the prior audit as dated evidence. The English canonical body is maintained; the Chinese v3.0 reading copy remains frozen and a dated link/change index points to the current specification.
+
+
+### Design v3.1 implementation evidence (2026-10-26)
+
+Read [the execution ledger](../docs/superpowers/plans/2026-10-26-design-system-v3-execution.md) for DS01–DS21 / AT01–AT50 proof boundaries. Preserve the supported native theme/focus lifecycle; do not patch private upstream APIs. Native diagnostics use the public locale group `command.section.commands` (高级命令与诊断); command IDs remain upstream identities. Semantic layout exceptions are bounded: inbox named selection controls own their selection band; VCR permits eight text colours only for the exact running information palette; GeoAnswer permits six pairs only for original 16px prose with no misplaced controls. Raw metrics and default budgets remain visible. These exceptions do not generalize to other pages. No deployment is authorized.

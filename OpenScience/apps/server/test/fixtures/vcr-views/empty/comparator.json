@@ -1,4 +1,6 @@
 {
+  "selection": null,
+  "predictionBenchmark": null,
   "headline": null,
   "routes": [
     {
@@ -18,6 +20,13 @@
     {
       "route": "literature_control",
       "state": "design_only",
+      "reason": null,
+      "note": null,
+      "selected": false
+    },
+    {
+      "route": "model_comparator",
+      "state": "scenario",
       "reason": null,
       "note": null,
       "selected": false

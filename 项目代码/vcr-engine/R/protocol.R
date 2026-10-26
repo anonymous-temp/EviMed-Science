@@ -1025,6 +1025,7 @@ vcr_validate_job <- function(job) {
 }
 
 .vcrp_legacy_design_version <- function(job,spec) {
+  if (job$methodVersion %in% unlist(spec$compatibleVersions)) return(is.null(job$scenario$pairing) && is.null(job$scenario$cohortRules))
   sc<-.vcrp_get(job,"scenario");base<-.vcrp_get(.vcrp_get(sc,"design"),"kind")
   if(!.vcrp_chr(base))base<-""
   designs<-.vcrp_get(sc,"designs")

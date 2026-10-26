@@ -1,4 +1,4 @@
-import { freezeGeoPlanBasis, geoPlanFreshness, geoPlanScopeKey, geoPlanDigest, geoPlanCanonicalScope } from "./geoPlanContext.mjs";
+import { geoPlanFreshness, geoPlanScopeKey, geoPlanDigest, geoPlanCanonicalScope } from "./geoPlanContext.mjs";
 import { geoErrorClinicalContext } from "./geoErrors.mjs";
 /**
  * What 「循证 GEO」's pages are served (build spec 2026-09-25 §3), and the
@@ -2389,7 +2389,13 @@ export class GeoService {
       try { selected = await readGeoSelection(this.store, project, { selectionRef: basis.selection.reference }); } catch { /* historical frozen basis remains readable */ }
     }
     const base = await this.spine.load(project, { answers: false });
-    const groups = basis?.groups ?? (selected ? (await freezeGeoPlanBasis(this.store, project, { selectionRef: selected.selection.reference })).basis.groups : null);
+    // Browsing a selected result needs group identity, not a frozen planning input.
+    // The latter has a deliberate size gate and belongs only to staging a task.
+    const groups = basis?.groups ?? (selected ? (await this.store.query(
+      "SELECT g.id,g.set_version,g.name,g.pool FROM evimed_geo.question_groups g JOIN unnest($2::text[],$3::integer[]) AS selected(id,set_version) ON g.id=selected.id AND g.set_version=selected.set_version WHERE g.geo_project_id=$1 AND g.user_id=$4 ORDER BY g.id",
+      [project.id, [...new Map(selected.questions.map(question => [question.group_id, Number(question.set_version)])).keys()],
+        [...new Map(selected.questions.map(question => [question.group_id, Number(question.set_version)])).values()], project.userId],
+    )).rows.map(group => ({ id: group.id, setVersion: Number(group.set_version), name: group.name, pool: group.pool })) : null);
     const spine = { ...base, strategy, ...(basis ? { targets: basis.targets } : {}),
       ...(groups ? { groups: groups.map(group => ({ ...(base.groups.find(item => item.id === group.id) ?? { ...group,
         questions: (selected?.questions ?? []).filter(question => question.group_id === group.id).map(questionFromRow), weight: null, isControl: false }), aliasIds: [] })), currentOf: new Map(groups.map(group => [group.id, group.id])) } : {}) };

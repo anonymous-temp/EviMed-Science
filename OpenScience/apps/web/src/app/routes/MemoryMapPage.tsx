@@ -1,3 +1,4 @@
+import { measurement } from "@/lib/measurement";
 import { useCallback, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { Brain } from "lucide-react";
@@ -174,9 +175,9 @@ export function MemoryMapPage() {
         return (
           <div className="space-y-4">
             <StatBand label="三个数字" columns={3}>
-              <StatTile label="记忆" value={doc.summary.memories} to={doc.summary.memories > 0 ? "/app/memory?tab=self" : undefined} />
-              <StatTile label="资料" value={doc.summary.documents} to={doc.summary.documents > 0 ? "/app/files" : undefined} />
-              <StatTile label="需要看一眼" value={doc.summary.needsLook} onOpen={doc.summary.needsLook > 0 ? () => narrow({ look: true }) : undefined} />
+              <StatTile label="记忆" reading={measurement(doc.summary.memories, "", "知识地图当前汇总")} to={doc.summary.memories > 0 ? "/app/memory?tab=self" : undefined} />
+              <StatTile label="资料" reading={measurement(doc.summary.documents, "", "知识地图当前汇总")} to={doc.summary.documents > 0 ? "/app/files" : undefined} />
+              <StatTile label="需要看一眼" reading={measurement(doc.summary.needsLook, "", "知识地图当前汇总")} onOpen={doc.summary.needsLook > 0 ? () => narrow({ look: true }) : undefined} />
             </StatBand>
             <Note action={<Button size="sm" variant="secondary" onClick={() => navigate("/app/chat")}>去对话</Button>}>再多聊几次，这里会长出你的地图。</Note>
           </div>

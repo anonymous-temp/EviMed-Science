@@ -172,7 +172,7 @@ describe("scheduled tasks", () => {
       render(); await waitFor(() => expect(screen.getByTestId("pane")).toHaveTextContent("ses-one"));
       await userEvent.click(within(bar()).getByRole("button", { name: "切换执行" }));
       await userEvent.click(screen.getByRole("menuitemradio", { name: "加载更早记录" }));
-      expect(await screen.findByRole("alert")).toHaveTextContent("更早记录暂不可用");
+      expect(await screen.findByRole("note")).toHaveTextContent("更早记录暂不可用");
       expect(screen.getByTestId("pane")).toHaveTextContent("ses-one");
     });
     it("proves a notice's project before requesting any task", async () => {
@@ -521,7 +521,7 @@ describe("scheduled tasks", () => {
     });
     it("offers retry on a list failure", async () => {
       mocks.listAgendas.mockRejectedValueOnce(new Error("offline")); render("/app/autopilot");
-      expect(await screen.findByRole("alert")).toHaveTextContent("定时任务暂不可用"); await userEvent.click(screen.getByRole("button", { name: /重试/ }));
+      expect(await screen.findByRole("note")).toHaveTextContent("定时任务暂不可用"); await userEvent.click(screen.getByRole("button", { name: /重试/ }));
       expect(await screen.findByText("心衰证据追踪")).toBeInTheDocument();
     });
     it("draws no search box over nothing, and says there are no tasks", async () => {
@@ -573,7 +573,7 @@ describe("scheduled tasks", () => {
       expect(within(pane).getByRole("link", { name: "打开第一项任务" })).toHaveAttribute("href", expect.stringMatching(/^\/app\/autopilot\/[^/]+$/));
       mocks.listAgendas.mockRejectedValue(new Error("offline"));
       await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
-      expect(await screen.findByRole("alert")).toHaveTextContent("定时任务暂不可用");
+      expect(await screen.findByRole("note")).toHaveTextContent("定时任务暂不可用");
       expect(screen.getByRole("link", { name: "心衰证据追踪" })).toBeInTheDocument();
       expect(screen.getByText("选择一项任务")).toBeInTheDocument();
     });
@@ -584,7 +584,7 @@ describe("scheduled tasks", () => {
       expect(screen.queryByRole("button", { name: "新建任务" })).not.toBeInTheDocument();
       cleanup();
       mocks.listAgendas.mockReset(); mocks.listAgendas.mockRejectedValue(new Error("offline")); render("/app/autopilot");
-      expect(await screen.findByRole("alert")).toHaveTextContent("定时任务暂不可用");
+      expect(await screen.findByRole("note")).toHaveTextContent("定时任务暂不可用");
       expect(screen.queryByRole("button", { name: "新建任务" })).not.toBeInTheDocument();
     });
   });

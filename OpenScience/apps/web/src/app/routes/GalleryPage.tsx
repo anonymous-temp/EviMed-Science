@@ -1,3 +1,8 @@
+import { PendingFeedbackBoundary } from "@/components/ui/PendingFeedback";
+import { measurement } from "@/lib/measurement";
+import { useSearchParams } from "react-router";
+import { ScientificViewerGallery } from "@/test/ScientificViewerGallery";
+import { InputPrimitivesGallery } from "@/test/InputPrimitivesGallery";
 import { useEffect, useState, type ReactNode } from "react";
 import { Copy, Download, FileText, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { STUDY_TYPE_BADGES } from "@evimed/design-tokens";
@@ -117,6 +122,18 @@ function useGalleryToasts() {
 }
 
 export function GalleryPage() {
+  const [params] = useSearchParams();
+  const suite = params.get("suite");
+  if (suite === "science" || suite === "inputs") {
+    return <PageShell title={suite === "science" ? "科学查看器验收" : "输入组件验收"} width="wide" documentTitle="本地组件验收">
+      <div data-gallery-suite={suite}>{suite === "science" ? <ScientificViewerGallery /> : <InputPrimitivesGallery />}</div>
+      <Toaster />
+    </PageShell>;
+  }
+  return <PrimitiveGallery />;
+}
+
+function PrimitiveGallery() {
   const [segment, setSegment] = useState("week");
   const [chips, setChips] = useState("all");
   const [tab, setTab] = useState("overview");
@@ -282,10 +299,10 @@ export function GalleryPage() {
 
       <Row name="StatTile / Delta" note="指标带一次声明分母；名次和目标是让 31% 可读的东西。">
         <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatTile lead label="品牌提及率" value="31" unit="%" rank="第 1 / 4" delta={<Delta value={4.2} noise={2} />} note="目标 40%" hint="按 264 次有效回答计算" />
-          <StatTile label="推荐位占比" value="18" unit="%" rank="第 2 / 4" delta={<Delta value={-0.4} noise={2} />} />
-          <StatTile label="严重讲错" value="2" unit="条" tone="safety" delta={<Delta value={-1} polarity="down" />} />
-          <StatTile label="豆包" value="未测" placeholder note="探测账号需重新登录" />
+          <StatTile lead label="品牌提及率" reading={measurement(31, "%", "示例读数")} rank="第 1 / 4" delta={<Delta value={4.2} noise={2} />} note="目标 40%" hint="按 264 次有效回答计算" />
+          <StatTile label="推荐位占比" reading={measurement(18, "%", "示例读数")} rank="第 2 / 4" delta={<Delta value={-0.4} noise={2} />} />
+          <StatTile label="严重讲错" reading={measurement(2, "条", "示例读数")} tone="safety" delta={<Delta value={-1} polarity="down" />} />
+          <StatTile label="豆包" reading={{ kind: "unmeasured", reason: "未测" }} note="探测账号需重新登录" />
         </div>
         <div className="flex items-center gap-4">
           <Delta value={4.2} noise={2} />
@@ -363,8 +380,8 @@ export function GalleryPage() {
       </Row>
 
       <Row name="Skeleton / EmptyState / LoadError" note="骨架与将要出现的内容同形；空态一句话加一个动作；读不到就说无法读取并能重试。">
-        <div className="w-72"><FilesSkeleton /></div>
-        <div className="w-72"><MemorySkeleton /></div>
+        <PendingFeedbackBoundary mode="passive"><div className="w-72"><FilesSkeleton /></div></PendingFeedbackBoundary>
+        <PendingFeedbackBoundary mode="passive"><div className="w-72"><MemorySkeleton /></div></PendingFeedbackBoundary>
         <div className="w-72 rounded-card border border-border">
           <EmptyState title="还没有资料" description="拖放文件到这里，或点右上角上传。" />
         </div>

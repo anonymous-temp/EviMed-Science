@@ -198,7 +198,8 @@ describe("CapabilitiesPage", () => {
   it("shows the list's shape while the catalogue loads", async () => {
     mocks.listWebResearchAgents.mockReturnValue(new Promise(() => {}));
     const { container } = renderPage();
-    expect(container.querySelector(".animate-pulse")).toBeInTheDocument();
+    expect(container.querySelector(".animate-pulse")).not.toBeInTheDocument();
+    await waitFor(() => expect(container.querySelector(".animate-pulse")).toBeInTheDocument());
     // The deployment's answer about billing lands meanwhile, and changes nothing here.
     await act(async () => {});
     expect(container.querySelector(".animate-pulse")).toBeInTheDocument();
@@ -472,10 +473,10 @@ describe("CapabilitiesPage", () => {
   it("offers a retry when the catalogue could not be loaded, rather than a dead error line", async () => {
     mocks.listWebResearchAgents.mockRejectedValueOnce(new WebApiError("later", { status: 503, code: "service_unavailable" }));
     renderPage();
-    expect(await screen.findByRole("alert")).toHaveTextContent("无法加载工具目录");
+    expect(await screen.findByRole("note")).toHaveTextContent("无法加载工具目录");
     mocks.listWebResearchAgents.mockResolvedValueOnce(agents);
     await userEvent.click(screen.getByRole("button", { name: /重试/ }));
-    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("note")).not.toBeInTheDocument());
     expect(screen.getByRole("button", { name: /药品安全性分析/ })).toBeInTheDocument();
   });
 
@@ -705,21 +706,4 @@ describe("CapabilitiesPage", () => {
       expect(card("药品安全性分析")).toHaveTextContent("约 4～8 灵豆");
     });
   });
-});
-
-
-it("puts seven task entries before professional capabilities, searches methods, and keeps capability failure independent", async () => {
-  mocks.getVcrModels.mockResolvedValue({ models: [], methods: [
-    { id: "population", method: "population.scenario", name: "Reference population" }, { id: "binary", method: "patients.binary", name: "Binary simulator" }, { id: "continuous", method: "patients.continuous", name: "Continuous simulator" },
-    { id: "pool", method: "evidence.pool", name: "Evidence pooling" }, { id: "entropy", method: "comparator.entropy_balance", name: "Entropy balance" }, { id: "analytic", method: "design.analytic", name: "Analytic design" }, { id: "evalue", method: "comparator.evalue", name: "E-value" }, { id: "matching", method: "matching.evaluate", name: "Matching" },
-  ] });
-  mocks.listWebResearchAgents.mockResolvedValue(agents);
-  mocks.allowance.mockResolvedValue(billingOff); forgetResearchBilling();
-  renderPage();
-  const tasks = await screen.findByRole("list", { name: "选择计算任务" });
-  expect(within(tasks).getAllByRole("button")).toHaveLength(7);
-  expect(screen.queryByRole("button", { name: "使用文献参数" })).toBeNull();
-  expect(screen.queryByRole("button", { name: "Binary simulator" })).toBeNull();
-  await userEvent.type(screen.getByLabelText("搜索工具"), "E-value");
-  expect(await screen.findByRole("button", { name: "E-value" })).toBeInTheDocument();
 });

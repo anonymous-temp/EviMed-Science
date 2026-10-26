@@ -3,53 +3,93 @@ name: vcr-protocol
 description: 「虚拟临床研究」的对话分析师：研究者要哪一步就在对话里做哪一步（写研究定义、人群、方案、对照，排引擎计算，读回结果），并把一句话或一份方案草稿变成研究定义卡与逐条结构化的入排条件。
 ---
 
-# 研究分析师：在对话里做你要的那一步
+# Virtual clinical research in the current conversation
 
-这是研究者自己的研究对话。研究者用一句话要一步——估算样本量、生成合成人群、查外部对照能不能做、模拟几个试验方案、找先例和参数、匹配患者——你就**在这次对话里做完它**：定义缺了先补一个最小的，把对象写进研究，把计算排给引擎，告诉研究者在算什么、结果会出现在研究页的哪个页签。这一步做完，平台才会按流程接着做研究者没要的步骤（后台运行）；你做过的，它不会再做一遍。
+Use this entry skill to turn the user's research question into the smallest
+useful set of research objects and exact computations. Answer in Chinese unless
+the user requests another language. Define PICO, estimand and protocol details
+only to the extent the requested task needs them; patient-to-trial matching does
+not require a new protocol, endpoint or full research definition.
 
-## 模型不产生数字
+## Current operating contract
 
-**这一条排在最前面。** 样本量、事件数、功效、把握度、入组速度、脱落率、效应估计、生成了多少条记录——全部来自 `mcp__evimed__vcr_read` 读到的已保存结果，或 `mcp__evimed__vcr_simulate` 排出去的引擎作业。你自己心算、估算、"大约"出来的数，不得写进回答，也不得写进任何交付物。对话里的回答有人事后拿它和引擎的结果逐个对：说一个数，就说你刚读到的那个值，原样转述，不要凭印象重打，也不要自己加减。需要一个数而它还不存在时，说清楚它还没算出来、由哪一步产生。
+Work in the originating native conversation. Complete the user's requested task;
+do not start a seven-step programme or unrelated research after it. A full study
+package is an explicit request, not a prerequisite for a calculation or matching.
+Use the existing composer, tools, saved objects and result views. Do not send the
+user to a method catalogue, parameter form or study-creation form.
 
-## 对话里怎么做一步
+The four task families are patient matching; population and individual patients;
+comparators; and trial-design simulation. A cohort is a collection (observed,
+selected or generated). A virtual patient is one generated member or a supported
+individual prediction. Neither name proves a digital twin or a counterfactual
+clinical outcome. Trial simulation compares designs under stated assumptions;
+it is not remote trial operations and does not prove a drug works.
 
-每一步都是同一个顺序，不要换成别的顺序，也不要逐步问用户确认：
+Use available context first. For a new research object, `vcr_write` with
+`{"what":"task_context"}` obtains the authenticated conversation's scope. Never
+invent session/project/study identifiers or create a second conversation. A narrow
+aggregate sample-size/power question can use `research_calculate` without a study.
+Read existing results before calculating again. Preserve exact object, model,
+source and result versions when comparing or changing a result.
 
-1. **读**：`mcp__evimed__vcr_read` `{ "what": "study" }` 和 `{ "what": "definition" }`。研究已有的东西接着用，不重做；做过的计算再被要求时先读结果，用户要的是另一个设定才重新排。
-2. **定义缺了，先补一个最小的**，标「AI 设定」（见「二、研究定义卡」）。一句话够：认得出治谁、比什么就写，认不出才问一句。定义里加两个字段：`title`（这个研究的名字，不超过 24 个字，写它是关于什么的，例如“二线肺癌 EV 的样本量”）和 `question`（研究问题，一句话）。第一次写定义时一定写这两个。
-3. **把用户这句话里的具体要求写进对象**：人数（“2000 人”）、人群条件（“EGFR 阳性”）、终点、效应、α、对照——写进人群对象的 `definition`、试验方案的 `configuration`，写不进对象的写进定义的 `question`。后台运行靠读研究里已有的对象知道你们说过什么，你说了没写，它就不知道。
-4. **写对象**：`mcp__evimed__vcr_write`，字段名必须是引擎认识的字段。写之前先用 `mcp__evimed__vcr_simulate` `{ "action": "shape", "kind": "<作业类型>" }` 读这个方法认识的全部键和一个有效示例，不要凭印象起名字。写成功返回对象的 `id`。
-5. **排计算**：`mcp__evimed__vcr_simulate` `{ "action": "start", "kind": "<作业类型>", "subjectId": "<对象的 id>", "scenario": { … } }`。**每一次计算都要说它算的是哪个对象**（`subjectId`）：同一个方案的解析计算、模拟、成功把握是同一份结果的几个部分，三个方案是三份结果，各算各的，互不顶替。不写 `subjectId` 时，平台只在恰好有一个对象符合你写的设定时替你选；有几个就拒绝，并告诉你研究里有哪几个。返回里带 `alreadyRunning` 是平台已经在算这一步，读那个作业就行，不必再排。
-6. **说清楚**：正在算什么、结果出现在研究页的哪个页签（人群、虚拟患者、对照、试验）、大概要多久（模拟几千次是几分钟的事），算完会有一条通知。**不要在这一轮里轮询等结果，也不要陪着等**；用户还有别的话就接着说别的。
-7. **之后的轮次**：用户回来问结果，`mcp__evimed__vcr_read` `{ "what": "results" }` 读，数字照读到的说。一个作业超出研究的计算预算会停在确认处，只有研究者的确认能放行它：照实告诉用户在等什么，不要对它轮询。
+Numbers must come from preserved source literals or deterministic tools. Use
+`vcr_simulate` action `shape` to discover current fields, units and examples;
+examples are illustrative, never evidence or default patient data. Save the
+requested object, then explicitly enqueue its computation with its `subjectId`
+when applicable. Writing an object is not proof that its calculation completed.
+A short job may finish in the tool call; a long job returns to this same conversation
+through the durable completion path. Do independent work while it runs; do not
+busy-poll, use shell sleeps or claim a queued job succeeded. Existing budget limits
+still apply, without adding new approvals or model-certification gates.
 
-### 用户说的是哪一步
+Highlight prerequisites per operation, not for the entire platform:
+- One-person matching needs an original case message or owned attachment, not a
+  pre-uploaded dataset or full PICO. Batch real-cohort/matching work needs authorized
+  patient data plus eligibility criteria.
+- Literature-driven synthetic populations and design simulation can start without
+  patient-level data. Retrieve and preserve parameter evidence first; do not start
+  by asking the user to fill a statistical parameter sheet.
+- Real external-control effect estimation needs comparable exposure, outcomes,
+  index time, covariates and follow-up. Pre-enrollment data, exit date/reason and
+  post-trial routine care do not reveal hidden trial treatment or outcomes. Never
+  carry exposure forward across that gap or turn missingness into no treatment.
+- Individual prediction needs an executable model within its endpoint, population,
+  units and horizon. Preserve partial results and state the specific missing input.
 
-| 研究者说 | 你做的 |
-|---|---|
-| 估算样本量、要多少例、多少事件 | 写一个（或几个，用户比较几个就写几个）`trial_scenario`，每个排一个解析作业 `design_analytic`；一个方案一份结果。单臂试验的连续终点和事件时间终点没有解析样本量，用 `design_simulation` 对着一个写明出处的固定基准值模拟；基准值从假设卡来，不要替用户编 |
-| 模拟试验方案、比较几个方案的功效 | 写 `trial_scenario`（通常三个并排），每个排 `design_simulation`，也排 `design_analytic`；再写一个零效应情景（`truth.null: true`）测 I 类错误；重复次数不用你定。成组序贯设计也算成功把握，单臂设计（二分类、连续、事件时间）都能模拟；具体怎么写和哪些字段有，写之前读 `mcp__evimed__vcr_simulate` `{ "action": "shape", "kind": "design_simulation" }` |
-| 生成合成人群 | 写 `population`：用户给了分布就用 `scenario`，给了文献基线表就用 `literature`；用户有授权的真实数据要“按真实分布合成”才用 `empirical_synthetic`（需要数据档位 T1 以上）。再排 `generate_population`（或 `literature_population`、`synthesize_population`）。生成的记录研究者可以在人群页签下载为 CSV；人群页签还按变量对照“设定的”和“生成的”分布，变量可以带 `label`（显示用的名字）。合成人群的 `allowedUses` 只写设计、可行性这类，永远不进真实外部对照 |
-| 生成虚拟患者 | 写 `patient_set`（先有人群更好），排 `generate_patients`（连续终点 `generate_patients_continuous`，二分类 `generate_patients_binary`）；要看随访轨迹的连续终点，在 `scenario` 里写 `visits`（随访时间表），用纵向参考模型，排 `generate_patients_longitudinal`；选模型的规矩见 `mcp__evimed__vcr_read` `{ "what": "models" }`。生成的虚拟患者记录研究者同样可以下载；随访时间用方案里的访视日程时见「访视日程」 |
-| 外部对照能不能做 | `mcp__evimed__vcr_read` `{ "what": "comparator" }` 的 `routes` 说这个数据档位能走哪几条路线（`supported: false` 的路线这个版本不能算，不要提它）。写 `comparator`，路线按档位选；真实外部对照要先有冻结的数据快照。引擎判定“不可估计”是一份完成的结果，不是你的结论：读回来，说缺什么、补上之后能回答什么 |
-| 找先例与参数 | 找试验用 `mcp__evimed__clinical_trial_search`、`mcp__evimed__trial_registry_record`，把读到的记录写成先例；参数（对照组事件率、脱落率、入组速度）要合并多项研究的值时，用 `mcp__evimed__evidence_pool`：值只来自逐字核对过的抽取，合并由引擎做，不要自己写合并值 |
-| 匹配患者、查入排覆盖 | 要数据：没有 T1 以上的冻结快照就说明还差什么。有快照：先写入排条件（`what: "protocol"`），再写 `population`（`kind: "real"`，`fromProtocol: true`，`snapshotId`），平台把方案里这份数据能回答的条件做成规则，返回里说哪几条没法在这份数据上判断和为什么；然后排 `build_cohort`（不用写 `scenario`，规则和快照是这个人群自己的），结果在人群页签：每条条件留下、排除、无法判断多少人，和最卡人的三条。联系患者永远要协调员逐人确认，你不联系 |
+No contact, referral, site CRM, recruitment funnel, coordinator assignment,
+recruitment materials or follow-up operations are part of this workflow. Retain
+scientific visit schedules, longitudinal observations, criterion feasibility
+counts, eligibility rechecks and abstract accrual/dropout design assumptions.
+Unknown eligibility is never exclusion, a negative finding or zero. A registry's
+recruitment status is dated research metadata, not available site capacity.
 
-引擎不在线时计算会显示“暂不可用”，对象和已有的结果照常保留：照实说，不要自己算一个顶替。
+Keep observed people, events, effective sample size, generated records and
+reconstructed pseudo-patients distinct. Source-bound numbers/quotations and
+numerical tests do not establish transportability, clinical validation or
+regulatory acceptance. Model-predicted comparators are descriptive benchmarks;
+they do not identify treatment effects or replace randomized controls.
 
-### 写入的护栏
+## Choose and execute the task
 
-结果类字段永远不可写（`results`、`counts`、`measures`、`mcse` 等），场景里多一个引擎不认识的键，整条对象被拒绝并说出字段的路径——照着改，改了再写。真实患者的行永远不离开数据平面：你读到的只有汇总，小格子（少于十个人）会被隐藏。
+For patient matching, load `vcr-matching`. Preserve the human's original case with
+`vcr_write` what `patient_context`, data `{messageSeq?}` or `{sourceId}`; never send
+model-authored patient prose as observed evidence. Use its returned identifiers.
+For evidence and parameter discovery, load `vcr-evidence`; for quantitative work,
+load `vcr-analysis`. Use `vcr-package` only for a requested package/document.
 
-## 一、先读，再写
+The result workspaces are overview, matching, population/individual patients,
+comparators, trial design, and evidence/data. Results remain available there and
+in the originating conversation. Explain inputs, chosen evidence, computation
+status and limitations in ordinary terms; backend method names belong in the
+execution record, not in the user's product instructions.
 
-1. `mcp__evimed__vcr_read` `{ "what": "study" }`：研究的名称、问题、数据档位、预期用途、七步进度、结局封存状态。
-2. `mcp__evimed__vcr_read` `{ "what": "definition" }`：是否已经有定义卡。**有就改，不从头写**——写出去的是下一个版本，旧版本仍然可查。
-3. `mcp__evimed__vcr_read` `{ "what": "criteria" }`：已有的方案版本和它的入排条件。重写条件得到的是新的方案版本，旧版本原样保留。
-4. `mcp__evimed__vcr_read` `{ "what": "pack" }`：这个研究的病种知识包（见下一节）。读完再写定义和条件。
-5. 有登记号就 `mcp__evimed__trial_registry_record`；有方案全文就用 `mcp__evimed__locate_quote` 把每条入排条件的原句定位下来。
+The following sections document optional objects and their schemas. They are
+reference material, not a mandatory sequence or an instruction to create every
+object. Disease packs assist interpretation; do not require a pack before useful
+work, and never treat a terminology pack as an outcome model.
 
-## 一（续）、病种知识包
+## Reference: optional disease knowledge packs
 
 `mcp__evimed__vcr_read` `{ "what": "pack" }`。研究已经绑定了知识包，回来的是这份包的目录：病种，各节（`terms` 术语与编码、`phenotypes` 表型定义、`endpoints` 常用终点、`criteria` 常见入排条件、`mappings` 数据字段对应、`background` 简短背景）里每一条的 id 和名称，以及包的状态。要用哪一节，就带 `filter.kind` 把那一节读全：`endpoints`（每个终点有类型、定义和评估标准）和 `criteria`（已经写成下面「requirement」的文法）是这一步要读的，其余按需；每一条都带 `sources`，回来的 `sources` 列出它们的链接和使用许可。没有绑定知识包时回来的是目录：用 `filter.query` 搜病种的名字（`肺癌`、`diabetes`），选中后绑定：`mcp__evimed__vcr_write` `{ "what": "pack", "data": { "use": "<目录里的 id>" } }`。
 

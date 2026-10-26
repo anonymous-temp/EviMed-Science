@@ -117,6 +117,7 @@
         "type": "mathematical_simulation",
         "title": "二分类终点参考仿真器",
         "inputs": [
+          "同队列的配对模拟标识",
           "两组人数",
           "对照组事件率",
           "处理效应（试验组事件率、风险差或比值比，三选一）",
@@ -161,6 +162,7 @@
       "shapeLabel": "基线 → 结局分布",
       "shapeMissing": [],
       "inputs": [
+        "同队列的配对模拟标识",
         "两组人数",
         "对照组事件率",
         "处理效应（试验组事件率、风险差或比值比，三选一）",
@@ -205,6 +207,7 @@
         "type": "mathematical_simulation",
         "title": "连续终点参考仿真器",
         "inputs": [
+          "同队列的配对模拟标识",
           "两组人数",
           "处理效应（均值差）",
           "结局的标准差",
@@ -250,6 +253,7 @@
       "shapeLabel": "基线 → 结局分布",
       "shapeMissing": [],
       "inputs": [
+        "同队列的配对模拟标识",
         "两组人数",
         "处理效应（均值差）",
         "结局的标准差",
@@ -302,9 +306,11 @@
           "个体间的差异（截距与斜率的标准差及相关）",
           "残差标准差",
           "每次随访前退出的概率",
-          "协变量效应（取自已存人群）"
+          "协变量效应（取自已存人群）",
+          "目标队列规则",
+          "同队列的配对模拟标识"
         ],
-        "outputs": "按给定参数生成的每次随访的连续终点观测值、两组的平均轨迹和 95% 范围，以及同一个人在两种分组下的轨迹；输出的是情景推演，不是对任何真实人群或个体的预测。",
+        "outputs": "按给定参数生成访视记录与分组汇总；配对情景使用保存的队列和随机流对应合成人群成员。未生成的反事实轨迹不展示，模拟不代表真实个体的临床预测。",
         "provider": "EviMed 虚拟临床研究",
         "interface": "vcr-engine patients.longitudinal",
         "retirement": "当引擎的 patients.longitudinal 方法版本变更时退役并重新发布。",
@@ -352,9 +358,11 @@
         "个体间的差异（截距与斜率的标准差及相关）",
         "残差标准差",
         "每次随访前退出的概率",
-        "协变量效应（取自已存人群）"
+        "协变量效应（取自已存人群）",
+        "目标队列规则",
+        "同队列的配对模拟标识"
       ],
-      "outputs": "按给定参数生成的每次随访的连续终点观测值、两组的平均轨迹和 95% 范围，以及同一个人在两种分组下的轨迹；输出的是情景推演，不是对任何真实人群或个体的预测。",
+      "outputs": "按给定参数生成访视记录与分组汇总；配对情景使用保存的队列和随机流对应合成人群成员。未生成的反事实轨迹不展示，模拟不代表真实个体的临床预测。",
       "missingData": "输入缺项不插补：缺哪一项就报哪一项，不用默认值顶替。退出的人退出后的随访记为缺失。",
       "retirement": "当引擎的 patients.longitudinal 方法版本变更时退役并重新发布。",
       "twin": "scenario_simulation",
@@ -395,6 +403,7 @@
         "type": "mathematical_simulation",
         "title": "事件时间终点参考仿真器",
         "inputs": [
+          "同队列的配对模拟标识",
           "两组人数",
           "风险比",
           "对照组生存分布（中位时间，或指数、Weibull、分段指数）",
@@ -442,6 +451,7 @@
       "shapeLabel": "基线 → 结局分布",
       "shapeMissing": [],
       "inputs": [
+        "同队列的配对模拟标识",
         "两组人数",
         "风险比",
         "对照组生存分布（中位时间，或指数、Weibull、分段指数）",
@@ -694,7 +704,7 @@
       "id": "mth_16",
       "name": "方案的解析计算",
       "method": "design.analytic",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
@@ -804,10 +814,10 @@
     },
     {
       "id": "mth_24",
-      "name": "虚拟患者（二分类终点）",
-      "method": "patients.binary",
+      "name": "应用已发表的预后模型",
+      "method": "model.prognostic_apply",
       "version": "1.0.0",
-      "endpoints": "二分类",
+      "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
         "status": "unmeasured",
@@ -818,10 +828,10 @@
     },
     {
       "id": "mth_25",
-      "name": "虚拟患者（连续终点）",
-      "method": "patients.continuous",
+      "name": "拟合人群生存模型",
+      "method": "model.survival_fit",
       "version": "1.0.0",
-      "endpoints": "连续",
+      "endpoints": null,
       "numeric": null,
       "validation": {
         "status": "unmeasured",
@@ -832,10 +842,10 @@
     },
     {
       "id": "mth_26",
-      "name": "虚拟患者（纵向轨迹）",
-      "method": "patients.longitudinal",
-      "version": "1.0.0",
-      "endpoints": "连续",
+      "name": "虚拟患者（二分类终点）",
+      "method": "patients.binary",
+      "version": "1.1.0",
+      "endpoints": "二分类",
       "numeric": null,
       "validation": {
         "status": "unmeasured",
@@ -846,10 +856,10 @@
     },
     {
       "id": "mth_27",
-      "name": "虚拟患者（事件时间终点）",
-      "method": "patients.time_to_event",
-      "version": "1.0.0",
-      "endpoints": "事件时间",
+      "name": "虚拟患者（连续终点）",
+      "method": "patients.continuous",
+      "version": "1.1.0",
+      "endpoints": "连续",
       "numeric": null,
       "validation": {
         "status": "unmeasured",
@@ -860,6 +870,34 @@
     },
     {
       "id": "mth_28",
+      "name": "虚拟患者（纵向轨迹）",
+      "method": "patients.longitudinal",
+      "version": "1.1.0",
+      "endpoints": "连续",
+      "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
+      "usedIn": null
+    },
+    {
+      "id": "mth_29",
+      "name": "虚拟患者（事件时间终点）",
+      "method": "patients.time_to_event",
+      "version": "1.1.0",
+      "endpoints": "事件时间",
+      "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
+      "usedIn": null
+    },
+    {
+      "id": "mth_30",
       "name": "文献人群",
       "method": "population.literature",
       "version": "1.0.0",
@@ -873,7 +911,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_29",
+      "id": "mth_31",
       "name": "人群质量报告",
       "method": "population.quality",
       "version": "1.0.0",
@@ -887,7 +925,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_30",
+      "id": "mth_32",
       "name": "情景人群生成",
       "method": "population.scenario",
       "version": "1.0.0",
@@ -901,7 +939,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_31",
+      "id": "mth_33",
       "name": "经验合成人群",
       "method": "population.synthpop",
       "version": "1.0.0",
@@ -915,7 +953,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_32",
+      "id": "mth_34",
       "name": "数据快照画像",
       "method": "profile.snapshot",
       "version": "1.0.0",

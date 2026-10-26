@@ -16,7 +16,7 @@ export function RenameDialog({ geoId, initial, onSaved, onCancel }: { geoId: str
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const submit = (event: FormEvent) => {
+  const submit = (event: FormEvent, markSaved: () => void) => {
     event.preventDefault();
     if (saving) return;
     const problem = projectNameProblem(name);
@@ -26,20 +26,20 @@ export function RenameDialog({ geoId, initial, onSaved, onCancel }: { geoId: str
     setSaving(true);
     setError(null);
     void patchGeoProject(geoId, { name: next })
-      .then(() => onSaved(next))
+      .then(() => { markSaved(); onSaved(next); })
       .catch((caught: unknown) => { setSaving(false); setError(webErrorMessage(caught, { fallback: "项目名没有改成功，请稍后重试。" })); });
   };
 
   return (
-    <FormDialog title="重命名" onClose={onCancel} busy={saving}>
-      <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
+    <FormDialog title="重命名" onClose={onCancel} busy={saving} dirty={name !== initial}>
+      {(requestClose, markSaved) => <form className="flex flex-col gap-4" onSubmit={event => submit(event, markSaved)} noValidate>
         <Input label="项目名" autoComplete="off" maxLength={PROJECT_NAME_MAX} value={name} disabled={saving} onChange={(event) => { setName(event.target.value); setError(null); }} />
         {error && <p role="alert" className="text-ui text-danger">{error}</p>}
         <div className="flex justify-end gap-2">
-          <Button variant="secondary" disabled={saving} onClick={onCancel}>取消</Button>
+          <Button variant="secondary" disabled={saving} onClick={requestClose}>取消</Button>
           <Button type="submit" loading={saving}>保存</Button>
         </div>
-      </form>
+      </form>}
     </FormDialog>
   );
 }

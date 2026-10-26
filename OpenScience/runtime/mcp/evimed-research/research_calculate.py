@@ -19,7 +19,7 @@ import urllib.request
 import public_sources
 from execution_context import validate_context
 
-METHODS = ("meta.dl", "faers.signals", "bibliometric.network", "design.analytic", "comparator.evalue")
+METHODS = ("meta.dl", "faers.signals", "bibliometric.network", "design.analytic", "comparator.evalue", "design.simulate", "design.assurance", "accrual.poisson_gamma", "comparator.map_prior")
 
 # What each method reads from its frozen input file, written as an input that
 # runs. Every key is one its engine requires, except a key ending in `?`, which
@@ -80,8 +80,9 @@ METHOD_INPUTS = {
                           "endpoint": {"type": "time_to_event"},
                           "truth": {"hazardRatio": 0.7, "controlMedian": 12}, "analysis": _ANALYSIS}},
         ),
-        "note": "the optional analysis fits every two_arm_fixed and group_sequential scenario and defaults to alpha "
-                "0.025 in total, power 0.9, sided 1; sd defaults to 1; informationRates rise to 1",
+        "note": "analysis defaults: alpha 0.025, power 0.9, sided 1; sd 1; informationRates end at 1. "
+                "Continuous/binary sizing uses normal approximation: ceil each arm, then sum. "
+                "Continuous is not exact t sizing; checked t power may be below target",
     },
     "comparator.evalue": {
         "input": {"scenario": {"riskRatio": 3.9, "confidenceLimit?": 1.8,
@@ -90,6 +91,30 @@ METHOD_INPUTS = {
                 "an odds or hazard ratio of a rare outcome as a risk ratio",
     },
 }
+
+METHOD_INPUTS.update({
+    "design.simulate": {
+        "input": {"scenario": {"design": {"kind": "two_arm_fixed", "nTreat": 100, "nControl?": 100},
+            "endpoint": {"type": "binary"}, "truth": {"controlRate": 0.3, "treatmentRate": 0.5},
+            "analysis?": {"method?": "logistic"}}, "seed?": 1, "replicates?": 1000},
+        "note": "aggregate assumptions only; Monte Carlo power, bias and duration have simulation uncertainty; seed and 1-100000 requested replicates are optional; method precision floors may raise the planned count, which is recorded separately",
+    },
+    "design.assurance": {
+        "input": {"scenario": {"design": {"allocation?": 0.5, "events": 300}, "endpoint": {"type": "time_to_event"},
+            "designPrior": {"mean": -0.3, "sd": 0.15}, "analysis?": {"alpha?": 0.025, "sided?": 1}}, "seed?": 1, "replicates?": 1000},
+        "note": "assurance averages power over the specified design prior; it is not power at one fixed effect",
+    },
+    "accrual.poisson_gamma": {
+        "input": {"scenario": {"sites": [{"id": "a", "alpha": 2, "beta": 4, "startTime": 0}], "target": 120, "byTimes?": [6, 12, 18]},
+            "seed?": 1, "replicates?": 1000},
+        "note": "mathematical accrual assumptions; no recruitment, referral, contact or operational records are created",
+    },
+    "comparator.map_prior": {
+        "input": {"scenario": {"historical": {"events": [12, 15, 9], "n": [60, 70, 50]},
+            "tauPrior?": {"kind": "half_normal", "scale": 0.5}, "components?": 2, "robustWeight?": 0.2}, "seed?": 1, "replicates?": 1000},
+        "note": "historical aggregate arms form an explicitly sourced prior; exchangeability is an assumption, not demonstrated by pooling",
+    },
+})
 
 # Why the executor declines a calculation, in its closed vocabulary (the `refusals` of each method's record in
 # method_records.json; a test holds this table to it). A refusal declines that one calculation: it names what
@@ -341,11 +366,13 @@ def calculate(arguments, execution_context=None):
     if state == "failed" and refusal:
         # The executor declined this calculation and said why: that, not the input's shape, is what to correct.
         next_actions.append("Correct that one input and start the calculation again; every other result is unaffected.")
+    elif state == "failed" and reported.get("code") in ("replay_input_invalid", "replay_input_too_large"):
+        next_actions.append("The executor reported an input refusal: compare the input file with its method's shape "
+                            "and correct only the named input issue before starting another calculation.")
     elif state == "failed":
-        # A wrong input shape arrives here as a bare failure; without this the
-        # run looks for the cause in its container instead of in its file.
-        next_actions.append("Before starting another, compare the input file with its method's shape in this tool's "
-                            "description: the engine fails a missing or unread key without naming it.")
+        next_actions.append("This execution failure does not identify a bad input parameter. Do not guess missing keys "
+                            "or retry automatically. Preserve this job and its input, report the execution failure, "
+                            "and retry only after the service issue is resolved or a specific input refusal is reported.")
     warned = {"failed", "canceled", "timed_out", "ownership_unknown"}
     return {"status": "warning" if state in warned else "success",
             "summary": "Deterministic calculation is " + state + ".", "data": data,

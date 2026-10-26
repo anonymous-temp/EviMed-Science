@@ -44,6 +44,18 @@ import { cn } from "@/lib/cn";
  * the press through to the row. Under 640 px the header becomes a line of sort buttons
  * and each row's cells wrap under its title, each with its label.
  */
+/**
+ * Component: List; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Named ul containing caller list items.
+ * Variants: Optional divided rows.
+ * States: Static list; children own loading/selection.
+ * Hit area: No built-in action target; supplied child controls own their geometry.
+ * Keyboard: No focus stop or key handler added; child controls keep native semantics.
+ * Long content: No clipping or pagination added.
+ * Theme: Optional border dividers; no independent color.
+ * Responsive: Vertical flex list fills parent.
+ * Verification: Primitives.test.tsx and Composition.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function List({
   label,
   divided = false,
@@ -98,6 +110,18 @@ const CONTROLS = "[&_:is(a,button,input,select,textarea,label,[role=switch],[rol
  * carries an arrow (shape, not only colour) and `aria-pressed`; pressing the active column again reverses it.
  * The page owns the order — this only reports which column was pressed.
  */
+/**
+ * Component: ListHeader; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Column labels with optional sort buttons and direction marks.
+ * Variants: Static or sortable columns.
+ * States: Controlled sort key/direction; active control is aria-pressed.
+ * Hit area: Sort buttons are h-5; touch target remains a manual acceptance concern.
+ * Keyboard: Native sort buttons; no grid traversal.
+ * Long content: Column labels retained; narrow header wraps.
+ * Theme: Secondary captions; active main text.
+ * Responsive: Fixed column widths above sm; auto widths and wrapping below.
+ * Verification: DataPrimitives.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function ListHeader({
   columns,
   sort,
@@ -143,6 +167,18 @@ export function ListHeader({
   );
 }
 
+/**
+ * Component: ListRow; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: li with semantic primary title, meta, optional cells and independent actions.
+ * Variants: Internal link, external link, button or static row; expanded/unread/muted/selected.
+ * States: Caller owns selected/expanded; no data-fetch state machine.
+ * Hit area: Interactive title stretches across row; action/cell controls sit above it.
+ * Keyboard: Native title and secondary controls; no row tab stop.
+ * Long content: meta stays selectable above the stretched title target; title identity remains accessible.
+ * Theme: Selected accent-soft ground; ordinary hover surface and semantic text.
+ * Responsive: Cells move below title below sm; row content may wrap.
+ * Verification: DataPrimitives.test.tsx and Composition.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function ListRow({
   title,
   to,
@@ -255,7 +291,7 @@ export function ListRow({
       {leading && <div className="flex shrink-0 items-center self-stretch">{leading}</div>}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         {heading}
-        {meta && <div className="min-w-0 text-caption text-text-3">{meta}</div>}
+        {meta && <div data-row-selectable="" className="pointer-events-auto relative z-page min-w-0 select-text text-caption text-text-3">{meta}</div>}
       </div>
       {(trailing || actions || menu) && (
         // Above the stretched title, so a control stays clickable; what is only text lets the press through to the row.

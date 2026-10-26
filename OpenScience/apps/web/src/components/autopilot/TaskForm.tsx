@@ -14,7 +14,8 @@ import { cancellationPending, inLingdou, lingdou, recurrence, scheduleOf, revisi
  * of 2026-09-19 and 2026-09-20), so the form does not ask for them — except when a budget is what stopped the task (`showBudgets`),
  * where the one decision that is the researcher's to make is made in place. Any amount shown is in 灵豆.
  */
-export function TaskForm({ projectId, agenda, recommendation, showBudgets = false, disabled = false, schedulingAvailable = true, onSaved, onRecorded, onBusyChange, onCancel }: {
+export function TaskForm({ projectId, agenda, recommendation, showBudgets = false, disabled = false, schedulingAvailable = true, onSaved, onRecorded, onBusyChange, onCancel, onDirtyChange }: {
+  onDirtyChange?: (dirty: boolean) => void;
   projectId: string; agenda?: AgendaRecord; recommendation?: Recommendation;
   /** A budget stopped this task (`budgetBlocks`): the caps are offered, in 灵豆, under 高级设置. */
   showBudgets?: boolean;
@@ -36,6 +37,9 @@ export function TaskForm({ projectId, agenda, recommendation, showBudgets = fals
   const episodeTooSmall = budgets.maxEpisodeCny < AGENDA_MIN_EPISODE_BUDGET_CNY;
   const projectName = useProjectLabels().get(projectId);
   const [materialIds, setMaterialIds] = useState<string[]>([]);
+  const snapshot = JSON.stringify({ title, prompt, schedule, taskTypes, budgets, materialIds });
+  const baseline = useRef(snapshot);
+  useEffect(() => { onDirtyChange?.(snapshot !== baseline.current); }, [snapshot, onDirtyChange]);
   const [pickingMaterials, setPickingMaterials] = useState(false);
   const [saving, setSaving] = useState(false);
   const [created, setCreated] = useState<AgendaRecord | null>(null);
@@ -88,12 +92,12 @@ export function TaskForm({ projectId, agenda, recommendation, showBudgets = fals
           ...(schedule.kind === "once" ? { date: schedule.date } : schedule.kind === "weekly" ? { weekdays: schedule.weekdays } : {}) } };
       if (agenda) {
         const updated = await updateAgenda(agenda.id, { ...value, expectedRevision: agenda.revision });
-        if (live.current) onSaved(updated);
+        if (live.current) { baseline.current = snapshot; onDirtyChange?.(false); onSaved(updated); }
       } else {
         if (!record) {
           record = await createAgenda({ ...value, projectId, ...(materialIds.length ? { sourceIds: materialIds } : {}) });
           if (!live.current) return;
-          setCreated(record); onRecorded(record);
+          setCreated(record); baseline.current = snapshot; onDirtyChange?.(false); onRecorded(record);
         }
         const started = await startAgenda(record.id, record.revision);
         if (live.current) onSaved(started);

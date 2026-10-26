@@ -72,12 +72,14 @@ test("the band holds: it is sticky, it is where the scroll area starts after the
   // The tab list and the rail are in the band or they scroll away.
   const loose = good({ tablists: [{ label: "项目视图", tabs: 8, dots: 0, inChrome: false, inToolbar: false, inSection: false, ...box(400) }], stepRail: { ...box(300), folded: false, count: 8, inChrome: false, steps: [] } });
   assert.deepEqual(texts("geo-plan", "desktop", loose), ["geo-plan@desktop: [chrome] the tab list “项目视图” is outside the band, so it scrolls away", "geo-plan@desktop: [chrome] the step rail is outside the band, so it scrolls away"]);
-  // A module page has a band and steps: a rail, or a tab row with a state dot on its tabs (虚拟临床研究's: the overview is not a step).
+  // GEO retains workflow navigation; VCR exposes saved research objects without a mandatory step rail.
   assert.deepEqual(rules("geo-plan", "desktop", good({ chrome: null })), ["chrome"]);
-  assert.match(texts("vcr-trial", "desktop", good({ stepRail: null }))[0], /\[step-rail\] a module page shows no steps/);
-  const dotted = good({ stepRail: null, tablists: [{ label: "研究视图", tabs: 7, dots: 6, inChrome: true, inToolbar: false, inSection: false, ...box(100) }] });
-  assert.deepEqual(rules("vcr-trial", "desktop", dotted), []);
-  assert.deepEqual(rules("vcr-trial", "desktop", good({ stepRail: null, tablists: [{ label: "研究视图", tabs: 7, dots: 1, inChrome: true, inToolbar: false, inSection: false, ...box(100) }] })), ["step-rail"]);
+  assert.match(texts("vcr-trial", "desktop", good({ stepRail: null, tablists: [] }))[0], /\[chrome\] the research workspace must expose one pinned result-view selector/);
+  assert.deepEqual(rules("vcr-trial", "desktop", good({ stepRail: null, tablists: [], viewSelector: { count: 1 } })), []);
+  assert.deepEqual(rules("vcr-trial", "desktop", good({ stepRail: { ...box(80), inChrome: true, folded: false, count: 1, steps: [{ state: "active", href: "/matching", stateVisible: true }] }, tablists: [], viewSelector: { count: 1 } })), []);
+  assert.ok(rules("vcr-trial", "desktop", good({ stepRail: { ...box(80), inChrome: true, folded: true, count: 1, steps: [] }, tablists: [], viewSelector: { count: 1 } })).includes("step-rail"));
+  assert.deepEqual(rules("vcr-trial", "desktop", good({ stepRail: null, tablists: [], viewSelector: { count: 0 } })), ["chrome"]);
+  assert.deepEqual(rules("vcr-trial", "desktop", good({ tablists: [], viewSelector: { count: 1 } })), ["step-rail"]);
 });
 
 test("a page keeps to its template's slots: a list page has no step rail, a settings page no tab list or toolbar", () => {
@@ -208,8 +210,27 @@ test("the compact GEO workflow keeps eight steps and a result selector without a
     assert.ok(rules("geo-plan", viewport, { ...compact, compactWorkflow: { count: 7, views: true, inChrome: true } }).includes("step-rail"));
     assert.ok(rules("geo-plan", viewport, { ...compact, compactWorkflow: { count: 8, views: false, inChrome: true } }).includes("chrome"));
     assert.ok(rules("geo-plan", viewport, { ...compact, compactWorkflow: { count: 8, views: true, inChrome: false } }).includes("chrome"));
-    assert.ok(rules("vcr-trial", viewport, compact).includes("step-rail"), "VCR still needs its own step navigation");
+    assert.ok(rules("vcr-trial", viewport, compact).includes("chrome"), "VCR requires its research-object selector, not GEO workflow controls");
   }
   const pages = Object.fromEntries(["geo-overview", "geo-plan"].map((name) => [`${name}@desktop`, { composition: compact }]));
   assert.ok(!familyFindings(pages).some((entry) => entry.rule === "module-steps"));
+});
+
+
+test("adopted GEO exposes only contextual analysis siblings while retaining all eight steps", () => {
+  for (const [step, selectors] of [["diagnosis", 1], ["sources", 1], ["monitoring", 1], ["evidence", 0], [null, 0]]) {
+    const facts = good({ tablists: [], viewSelector: { count: 0 }, geoContext: { adopted: true, step, selectors } });
+    assert.ok(!rules("geo-plan", "desktop", facts).includes("chrome"));
+    assert.ok(rules("geo-plan", "desktop", { ...facts, geoContext: { ...facts.geoContext, selectors: selectors ? 0 : 1 } }).includes("chrome"));
+    assert.ok(rules("geo-plan", "desktop", { ...facts, stepRail: { ...facts.stepRail, count: 7 } }).includes("step-rail"));
+  }
+});
+
+
+test("a named selection toolbar has one local primary; row markers and duplicate primaries remain findings", () => {
+  const primary = { text: "Mark selected read", ...box(128), inHeader: false, excused: false, localGroup: { kind: "selection", declared: true, primaries: 1 } };
+  assert.ok(!rules("inbox", "desktop", good({ primaries: [primary] })).includes("primary-action"));
+  for (const localGroup of [{ kind: "selection", declared: true, primaries: 2 }, { kind: "selection", declared: false, primaries: 1 }, null]) {
+    assert.ok(rules("inbox", "desktop", good({ primaries: [{ ...primary, localGroup }] })).includes("primary-action"));
+  }
 });
