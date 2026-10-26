@@ -77,3 +77,19 @@ test('external versions are derived from owning manifest and affected lock closu
     assert.notEqual((await computeRsiDependencyClosure(input)).dependencyDigest, first.dependencyDigest)
   } finally { await rm(rootDir, { recursive: true, force: true }) }
 })
+test('CommonJS loaders and undeclared file readers cannot hide dependencies', async () => {
+  const rootDir = await mkdtemp(path.join(tmpdir(), 'rsi-loader-'))
+  try {
+    await writeFile(path.join(rootDir, 'helper.cjs'), 'module.exports=1')
+    const source = "import { createRequire as loader } from 'node:module'; const require=loader(import.meta.url); require('./helper.cjs')"
+    await writeFile(path.join(rootDir, 'entry.mjs'), source)
+    const input = { rootDir, surface: 'test', registry: { test: { roots: ['entry.mjs'] } } }
+    assert.equal((await computeRsiDependencyClosure(input)).qualified, false)
+    await writeFile(path.join(rootDir, 'helper.cjs'), 'module.exports=2')
+    assert.equal((await computeRsiDependencyClosure(input)).qualified, false)
+    await writeFile(path.join(rootDir, 'entry.mjs'), "import * as modules from 'node:module'; modules['create'+'Require'](import.meta.url)(variable)")
+    assert.equal((await computeRsiDependencyClosure(input)).qualified, false)
+    await writeFile(path.join(rootDir, 'entry.mjs'), "import { readFileSync as reader } from 'node:fs'; reader('./config.json')")
+    assert.equal((await computeRsiDependencyClosure(input)).qualified, false)
+  } finally { await rm(rootDir, { recursive: true, force: true }) }
+})
