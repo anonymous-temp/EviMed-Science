@@ -217,6 +217,8 @@ function fakeEditor(provider = { balanceSpent: false }) {
       const lane = marker(item.titleRaw, "lane");
       return { ...base, verification: "passed", output: {
         genre: marker(item.titleRaw, "genre"),
+        // c5-biz: [kind:x] is the kind of 行业动态 the model names (a word outside the list reaches the pipeline as the model said it).
+        industryKind: marker(item.titleRaw, "kind"),
         titleZh: item.isChinese ? item.titleRaw : `中文：${item.titleRaw.slice(0, 20)}`,
         summaryZh: `导读：${item.abstract ? "有摘要" : "无摘要"}。`, reasonZh: "值得一看。",
         lane: lane && item.allowedLanes.includes(lane) ? lane : item.allowedLanes[0],
@@ -1511,4 +1513,31 @@ test("ct-write: the edit's genre is stored — the model's where code is not sur
   assert.equal(fixed["Morning rounds: three stories"], "roundup");
   assert.equal(fixed["国家药监局批准一款新药上市"], null);
   assert.equal(fixed["Novo Nordisk announces a licensing deal"], null);
+});
+
+test("c5-biz: the edit's kind of 行业动态 is stored with the genre — only for an item that ends as 行业动态 — and a word outside the list is none", options, async () => {
+  await reset();
+  const clock = new Date("2026-09-22T12:00:00Z");
+  const { pipeline, plugin } = pipelineWith({ now: () => clock });
+  const deal = await deliver({ source_id: "c-novo", title: "Novo Nordisk announces a licensing deal [kind:deal]", summary: "N".repeat(120) });
+  const named = await deliver({ source_id: "m-stat", title: "A biotech raises a Series B [genre:industry] [kind:financing]", summary: "S".repeat(120) });
+  const approval = await deliver({ source_id: "m-cn", title: "国家药监局批准一款新药上市 [genre:approval] [kind:deal]", summary: "国".repeat(120) });
+  const safety = await deliver({ source_id: "r-medwatch", title: "Drug Safety Communication: a recall [kind:operations]", summary: "R".repeat(120) });
+  const unknown = await deliver({ source_id: "c-novo", title: "Novo Nordisk is in a merger [kind:merger]", summary: "U".repeat(120) });
+  const unnamed = await deliver({ source_id: "c-novo", title: "Novo Nordisk opens a plant", summary: "P".repeat(120) });
+  for (const id of [deal, named, approval, safety, unknown, unnamed]) {
+    plugin.texts.set(id.pluginEntryId, { entry_id: id.pluginEntryId, revision: 1, status: "unavailable", abstract: null, body_excerpt: null, enrichment: {} });
+  }
+  await pipeline.processBatch();
+  await pipeline.processBatch();
+  const stored = async (/** @type {{ id: number }} */ delivered) => {
+    const row = await item(Number((await entry(delivered.id)).item_id));
+    return [row.genre, row.industry_kind];
+  };
+  assert.deepEqual(await stored(deal), ["industry", "deal"], "code's genre for a newsroom, the model's kind");
+  assert.deepEqual(await stored(named), ["industry", "financing"], "the model's genre and the model's kind");
+  assert.deepEqual(await stored(approval), ["approval", null], "an approval has no kind, whatever the model said");
+  assert.deepEqual(await stored(safety), ["safety", null], "a safety notice has none either");
+  assert.deepEqual(await stored(unknown), ["industry", null], "a word outside the list is dropped, not mapped to the nearest kind");
+  assert.deepEqual(await stored(unnamed), ["industry", null], "no kind named: none");
 });

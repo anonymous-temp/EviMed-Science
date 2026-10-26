@@ -7,8 +7,8 @@
  *   node scripts/ops/frontier-rewrite.mjs                   report: what each step would do, by genre, and what asking would cost
  *   node scripts/ops/frontier-rewrite.mjs --apply           do it, within the module's day budget
  *   options: --days N (1–30, default 30), --since ISO (instead of --days: where a stopped run resumes),
- *            --steps genre,title,score,lead,brief,reason,facts,faith (default genre,title,lead,brief,reason,facts,faith; `score` only by
- *            name, and first of the steps it shares a run with), --min-old-total N (score: skip items under this old total, default 50),
+ *            --steps genre,kind,title,score,lead,brief,reason,facts,faith (default genre,kind,title,lead,brief,reason,facts,faith; `score` only
+ *            by name, and first of the steps it shares a run with), --min-old-total N (score: skip items under this old total, default 50),
  *            --concurrency N (1–8, default 4), --limit N
  *
  * The steps:
@@ -16,6 +16,13 @@
  *   it (a journal's paper, a registry's trial, a safety feed's notice …); where code fell back on the channel alone
  *   (`FRONTIER_REWRITE_UNSURE`: news, commentary, industry, policy) the model names it, `FRONTIER_GENRE_BATCH` items to a call, and
  *   `frontierGenreDecision` stores the answer. No call is needed for most items.
+ * - `kind` (c5-biz, 2026-10-26): a published item whose stored genre is `industry` and that has no kind of 行业动态 yet (`industry_kind`:
+ *   deal, financing, people, operations, pipeline or other, `@evimed/domain` `FRONTIER_INDUSTRY_KINDS`) is named a kind by the model,
+ *   `FRONTIER_INDUSTRY_KIND_BATCH` items to a call (`FrontierEditor#classifyIndustryKinds`: the source, the title and the opening words).
+ *   An answer outside the closed list is dropped, never mapped to the nearest kind, and the item is asked again by the next run; an item
+ *   whose genre is not stored yet waits for the `genre` step (which runs before it in the same run, so a report made before the genre
+ *   step has written counts only the items already genred). The write is a compare-and-set on the item still being 行业动态 with no kind,
+ *   with an `item_changes` row, and one content-version bump per batch of calls. The pipeline writes the kind of a new item with its edit.
  * - `title` (c4-title, 2026-10-26): a published item whose title an older rule wrote (`editor_diagnostics.titleVersion` is not
  *   `FRONTIER_TITLE_VERSION`) and that has a Chinese title is asked for its title again (`FrontierEditor#writeTitle`: no prefix label,
  *   no site or media name, no hook, at most 40 characters, from the source's own facts and numbers). A Chinese source's own title that
@@ -60,13 +67,13 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { FRONTIER_GENRES, FRONTIER_SOURCE_TYPE_LABELS_ZH, agendaLocalDate, frontierGenreDecision, frontierGenreFallback, frontierPracticeAdmit, frontierPracticeReason, frontierSourceDisplayName,
-  isFrontierGenre }
+import { FRONTIER_GENRES, FRONTIER_SOURCE_TYPE_LABELS_ZH, agendaLocalDate, frontierGenreDecision, frontierGenreFallback, frontierIndustryKindDecision, frontierPracticeAdmit,
+  frontierPracticeReason, frontierSourceDisplayName, isFrontierGenre }
   from "@evimed/domain";
 import { FRONTIER_BRIEF_VERSION, frontierBriefWanted, frontierWriteBrief } from "../../apps/server/src/frontierBrief.mjs";
 import { FRONTIER_FAITH_VERSION, FRONTIER_STUDY_FACTS_VERSION, faithDiagnostic, faithSource, frontierEnsureStudyFacts, frontierFaithCheckBrief,
   frontierFaithCheckLead, frontierFaithCheckSummary, frontierStudyFactsWanted, frontierWriteFaith } from "../../apps/server/src/frontierFaithStep.mjs";
-import { FRONTIER_GENRE_BATCH, FRONTIER_REASON_VERSION } from "../../apps/server/src/frontierEditor.mjs";
+import { FRONTIER_GENRE_BATCH, FRONTIER_INDUSTRY_KIND_BATCH, FRONTIER_REASON_VERSION } from "../../apps/server/src/frontierEditor.mjs";
 import { FRONTIER_LEAD_VERSION, frontierWriteLead } from "../../apps/server/src/frontierLead.mjs";
 import { FRONTIER_SOURCE_STREAM_COLUMNS } from "../../apps/server/src/frontierSourceColumns.mjs";
 import { bumpFrontierVersion } from "../../apps/server/src/frontierPersistence.mjs";
@@ -79,13 +86,13 @@ const DAY_MS = 24 * 3_600_000;
 const REWRITE_LOCK = "evimed-frontier-rewrite";
 /** Items the title step writes between two content-version bumps. */
 const TITLE_BATCH = 50;
-export const FRONTIER_REWRITE_STEPS = Object.freeze(["genre", "title", "score", "lead", "brief", "reason", "facts", "faith"]);
+export const FRONTIER_REWRITE_STEPS = Object.freeze(["genre", "kind", "title", "score", "lead", "brief", "reason", "facts", "faith"]);
 /**
- * What a run does without `--steps`: the five writing steps (genre, title, lead, brief, reason) and the two c3-faith steps that check what they wrote. `score` is asked
+ * What a run does without `--steps`: the six writing steps (genre, kind, title, lead, brief, reason) and the two c3-faith steps that check what they wrote. `score` is asked
  * for by name - it is the one step that moves which items are selected and reader-worthy, so a run that rewrites prose never re-scores
  * by accident (c3-select S9).
  */
-export const FRONTIER_REWRITE_DEFAULT_STEPS = Object.freeze(["genre", "title", "lead", "brief", "reason", "facts", "faith"]);
+export const FRONTIER_REWRITE_DEFAULT_STEPS = Object.freeze(["genre", "kind", "title", "lead", "brief", "reason", "facts", "faith"]);
 /** Items under this old total are not asked about by `score`: 54% of a week sits under 50 on the old scale and none of them reaches a floor. */
 export const FRONTIER_REWRITE_SCORE_MIN_OLD_TOTAL = 50;
 /** Genres code reached from the channel alone: the model names these (the rest are code's answer, from what the fields say). */
@@ -97,6 +104,9 @@ export const FRONTIER_REWRITE_UNSURE = Object.freeze(["news", "commentary", "ind
  */
 export const REWRITE_CALL_TOKENS = Object.freeze({
   genre: { cached: 900, prompt: 1_400, output: 150 },
+  // c5-biz's kind call: a genre call's shape with a shorter vocabulary (six kinds, not thirteen genres) - ten items to a call, a short
+  // line of an answer each. Sized from the genre call's measurement, not yet measured live.
+  kind: { cached: 600, prompt: 1_400, output: 150 },
   // c4-title's live check (2026-10-26, deepseek-flash, the 127 sample rows: 153 calls, 1.2 to a title because one answer in five is sent
   // back once for its length): per title, the cached instructions, the rest of the prompt (estimated uncached: the measured run had
   // the provider's cache warm) and the output. About CNY 0.0016 a title.
@@ -229,6 +239,43 @@ export async function frontierRewrite({ database, editor = null, budget = null, 
           summary.genre.written += 1;
           if (decided.basis === "model") summary.genre.model += 1;
         }
+      });
+    }
+  }
+
+  if (steps.includes("kind")) {
+    // The items the genre says are 行业动态 and no kind has been written for; the opening words are what the genre call is shown.
+    const rows = (await database.query(`SELECT ${ITEM_FIELDS}, left(coalesce(t.abstract_raw, t.body_text, t.body_excerpt, ''), 400) AS opening
+      FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id LEFT JOIN evimed_frontier.item_texts t ON t.item_id = i.id
+      WHERE i.state = 'published' AND i.genre = 'industry' AND i.industry_kind IS NULL AND i.visible_at >= $1 AND i.visible_at < $2
+      ORDER BY i.visible_at, i.id LIMIT $3`, [since, until, limit])).rows;
+    summary.kind = { items: rows.length, toAsk: rows.length, written: 0, unreadable: 0, raced: 0, byKind: /** @type {Record<string, number>} */ ({}) };
+    calls.kind = Math.ceil(rows.length / FRONTIER_INDUSTRY_KIND_BATCH);
+    if (apply) {
+      const batches = [];
+      for (let at = 0; at < rows.length; at += FRONTIER_INDUSTRY_KIND_BATCH) batches.push(rows.slice(at, at + FRONTIER_INDUSTRY_KIND_BATCH));
+      await each(batches.map((batch) => ({ batch, visible_at: batch[0].visible_at })), async ({ batch }) => {
+        let changed = 0;
+        // A failed call throws (counted failed, nothing written, asked again next run); an unknown word is an answer of null.
+        const answers = await editor.classifyIndustryKinds(batch.map((/** @type {any} */ row) => ({ sourceName: sourceName(row), title: row.title_zh || row.title_raw, excerpt: row.opening })));
+        for (const [index, row] of batch.entries()) {
+          const kind = frontierIndustryKindDecision("industry", answers[index] ?? null);
+          if (!kind) { summary.kind.unreadable += 1; continue; }
+          const written = await database.transaction(async (/** @type {any} */ client) => {
+            // Nothing written over a kind the pipeline wrote while this one was asked, nor onto an item its re-edit made something else.
+            const updated = await client.query(`UPDATE evimed_frontier.items SET industry_kind = $2, updated_at = clock_timestamp()
+              WHERE id = $1 AND state = 'published' AND genre = 'industry' AND industry_kind IS NULL`, [row.id, kind]);
+            if (!updated.rowCount) return false;
+            await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'upsert', 'kind')", [row.id]);
+            return true;
+          });
+          if (!written) { summary.kind.raced += 1; continue; }
+          summary.kind.written += 1;
+          summary.kind.byKind[kind] = (summary.kind.byKind[kind] ?? 0) + 1;
+          changed += 1;
+        }
+        // One content-version bump per call's worth of items, so a long run shows its kinds as it goes.
+        if (changed) await database.transaction((/** @type {any} */ client) => bumpFrontierVersion(client));
       });
     }
   }

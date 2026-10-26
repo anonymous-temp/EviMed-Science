@@ -88,7 +88,7 @@ function fakeEditor() {
 }
 
 test("the arguments: a window of at most thirty days, the steps by name, a resume point", () => {
-  assert.deepEqual(parseArguments([]), { apply: false, days: 30, since: null, steps: ["genre", "title", "lead", "brief", "reason", "facts", "faith"], concurrency: 4, limit: 100_000, minOldTotal: 50 });
+  assert.deepEqual(parseArguments([]), { apply: false, days: 30, since: null, steps: ["genre", "kind", "title", "lead", "brief", "reason", "facts", "faith"], concurrency: 4, limit: 100_000, minOldTotal: 50 });
   assert.deepEqual(parseArguments(["--steps", "reason,score,genre", "--min-old-total", "40"]), { apply: false, days: 30, since: null, steps: ["genre", "score", "reason"], concurrency: 4, limit: 100_000, minOldTotal: 40 }, "score only by name, after genre");
   assert.deepEqual(parseArguments(["--apply", "--steps", "reason,genre", "--since", "2026-10-01T00:00:00Z"]).steps, ["genre", "reason"]);
   assert.deepEqual(parseArguments(["--steps", "faith,facts"]).steps, ["facts", "faith"]);

@@ -1381,18 +1381,25 @@ export {
   isFrontierInteractionType,
 } from './src/frontierInteractions.mjs'
 /** @typedef {import('./src/frontierInteractions.mjs').FrontierInteraction} FrontierInteraction */
-// frontierGenres — 9 exports: what a 前沿动态 item is as a reader names it (研究论文, 政策法规, 行业动态, 会议报道, …),
-// the genres code is sure of, and code's fallback and decision over the editor model's genre.
+// frontierGenres — 15 exports: what a 前沿动态 item is as a reader names it (研究论文, 政策法规, 行业动态, 会议报道, …),
+// the genres code is sure of, and code's fallback and decision over the editor model's genre; and the six kinds of 行业动态
+// (交易与授权, 融资与上市, 人事与组织, 公司经营, 研发管线, 其他) with the one check of the model's answer.
 export {
   FRONTIER_CODE_GENRES,
   FRONTIER_GENRE_BASES,
   FRONTIER_GENRE_LABELS_ZH,
   FRONTIER_GENRES,
+  FRONTIER_INDUSTRY_KIND_LABELS_ZH,
+  FRONTIER_INDUSTRY_KINDS,
   frontierGenreDecision,
   frontierGenreFallback,
+  frontierIndustryKindDecision,
   frontierItemGenre,
+  frontierItemIndustryKind,
   isFrontierGenre,
+  isFrontierIndustryKind,
 } from './src/frontierGenres.mjs'
+/** @typedef {import('./src/frontierGenres.mjs').FrontierIndustryKind} FrontierIndustryKind */
 // frontierMix — 24 exports: the mix of 精选 by genre group (the owner's share ranges of 2026-10-24, the Chinese target of
 // 30 %), the merge rules (a roundup never; a news rewrite or an X post of a paper never over it; a Chinese 解读 beside
 // it), the pure selection of a day's 精选 from its scored candidates (a floor place asks its genre's own bar,

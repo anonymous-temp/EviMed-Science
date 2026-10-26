@@ -91,6 +91,7 @@ import {
   frontierMixSourceCap,
   FRONTIER_CODE_GENRES,
   frontierGenreDecision,
+  frontierIndustryKindDecision,
   frontierGenreFallback,
   frontierItemGenre,
   frontierSourceDisplayName,
@@ -2289,6 +2290,9 @@ export class FrontierPipeline {
       // edit keeps the genre an earlier edit gave it.
       const genre = frontierGenreDecision({ platform: item.platform, channel: item.channel, source_type: item.source_type, evidence_type: evidenceType,
         flags, safety_alert: safetyAlert, lane: fields.lane }, output ? output.genre ?? null : item.genre_basis === "model" ? item.genre : null);
+      // The kind of 行业动态 (c5-biz 2026-10-26): the edit's own where the item ends as 行业动态, none otherwise; an item re-labelled
+      // without a new edit keeps the kind an earlier edit (or the backfill) gave it for as long as it is still 行业动态.
+      const industryKind = frontierIndustryKindDecision(genre.genre, output ? output.industryKind ?? null : item.industry_kind ?? null);
       // The score the card shows: the model's three parts and the authority term, with the ceilings the platform holds (the genre,
       // a decided evidence type, a preprint, a registry-class source, the study's design when read) and a republisher's authority
       // capped (`@evimed/domain` `frontierScoreCeilings`). The model's own numbers stay in `editor_diagnostics.scoresRaw`.
@@ -2303,7 +2307,7 @@ export class FrontierPipeline {
           evidence_type = $7, evidence_basis = $8, entities = $9::jsonb, entity_keys = $10, flags = $11,
           score_authority = $12, score_impact = $13, score_novelty = $14, score_relevance = $15, score_total = $16,
           safety_alert = $17, verification = $18, editor_version = $19, editor_model = $20, tags = $22,
-          genre = $23, genre_basis = $24, reason_version = CASE WHEN $25::boolean THEN $26::text ELSE reason_version END,
+          genre = $23, genre_basis = $24, industry_kind = $29, reason_version = CASE WHEN $25::boolean THEN $26::text ELSE reason_version END,
           practice_changing = CASE WHEN $27::boolean AND $28::text IS NULL THEN false ELSE practice_changing END,
           practice_zh = CASE WHEN $27::boolean THEN $28::text ELSE practice_zh END,
           state = CASE WHEN state = 'screened' THEN 'scored' ELSE state END,
@@ -2318,7 +2322,7 @@ export class FrontierPipeline {
         finalParts ? finalParts.authority + finalParts.impact + finalParts.novelty + finalParts.relevance : null,
         safetyAlert, fields.verification, fields.editorVersion,
         fields.editorModel, context.now, fields.tags, genre.genre, genre.basis, Boolean(output), FRONTIER_REASON_VERSION,
-        practiceReason !== undefined, practiceReason ?? null]);
+        practiceReason !== undefined, practiceReason ?? null, industryKind]);
       // The title rule's version is stamped only on a title that is clean of its marks: a translation the edit let through with a 「｜」,
       // or a Chinese source's title kept because its rewrite was refused, stays for `frontier-rewrite --steps title`, whose call sends a
       // marked answer back once (c4 review).

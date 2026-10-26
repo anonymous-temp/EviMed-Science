@@ -349,6 +349,12 @@ ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS text_arrived_at times
 -- ct-base 2026-10-24: what the item is as a reader names it (@evimed/domain FRONTIER_GENRES; null until written)
 ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS genre text;
 ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS genre_basis text CHECK (genre_basis IN ('code', 'model'));
+-- c5-biz 2026-10-26: what a piece of 行业动态 is about (@evimed/domain FRONTIER_INDUSTRY_KINDS: deal, financing, people, operations,
+-- pipeline, other). Written only for an item whose genre is industry and null for every other genre and until the model names it; the
+-- vocabulary is checked in code, as the genre is, so a new kind needs no change here. The list filter reads it through the index.
+ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS industry_kind text;
+CREATE INDEX IF NOT EXISTS frontier_items_industry_kind_idx ON evimed_frontier.items (industry_kind, timeline_at DESC, id DESC)
+  WHERE industry_kind IS NOT NULL AND state = 'published';
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS body_text_origin text CHECK (body_text_origin IN ('oa-pdf'));
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS oa_pdf_tried_at timestamptz(3);
 -- rt2 2026-10-22: a full text read from an open-access PDF is the paper to its references, up to 100,000 characters, and its
