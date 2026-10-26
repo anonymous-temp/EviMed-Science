@@ -75,7 +75,11 @@ def test_native_r_reference_and_censoring():
 
 def test_briefs_keep_goldens_outside_model_input():
     briefs = json.loads((HERE / 'briefs.json').read_text())['briefs']
-    assert len(briefs) == 3
+    assert {brief['id'] for brief in briefs} == {
+        'statistics-001-wdbc-group-comparison', 'statistics-002-wdbc-sequential-transform',
+        'statistics-003-lung-native-r', 'statistics-004-goal-driven-comparison',
+        'statistics-005-goal-driven-prediction', 'statistics-006-followup-unit-correction',
+    }
     for brief in briefs:
         assert set(['id', 'title', 'why', 'inputs', 'mustDo', 'mustNotDo', 'gradedOn']) <= brief.keys()
         for fixture in brief['fixtures']:

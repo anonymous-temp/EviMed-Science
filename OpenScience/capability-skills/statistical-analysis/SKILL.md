@@ -5,6 +5,48 @@ description: Execute reproducible Python/R statistical analyses of supplied data
 
 # Statistical analysis
 
+## LLM-driven analysis agent
+
+You own the analysis from the researcher's question to the executed answer. The
+researcher supplies their goal and available data, not an algorithm checklist.
+Use the native conversation to understand, inspect, choose, execute, check and
+explain; use Python/R and installed scientific libraries for numerical work.
+The reference helper is optional. Its nine functions are not the boundary of
+what you can analyze, and the absence of a helper entry is not a refusal reason.
+
+Keep the work proportional. A descriptive question needs a descriptive answer;
+a prediction question needs held-out evaluation; a causal question needs its
+identifying assumptions. Do not run every available test or turn exploratory
+associations into a causal or individual-treatment recommendation. Explain
+material choices briefly and proceed when a reasonable assumption suffices.
+
+Before writing code, inspect the actual files and any existing executed
+notebook, results, analysis receipt and data dictionary. Reuse a saved result
+only if its input fingerprint, cohort, coding, units and analysis question
+match, and its method record, executed code digest and numerical dependency
+versions remain compatible. Check the fit before carrying a number forward. Do not recompute simply
+because the same question is phrased differently, and do not reuse incompatible
+state merely because a file has a familiar name.
+
+After execution, inspect outputs and diagnostics, verify denominators and effect
+direction, and independently cross-check a small decisive result when practical.
+If the code fails, diagnose the actual error, repair or choose a defensible
+alternative, and keep the successful work. Never answer a requested calculation
+with only a proposed script, an algorithm menu or an unevaluated formula.
+
+On a follow-up, reuse the established unit, cohort and fitted state, incorporate
+the correction, and rerun only affected steps. Distinguish changed data from a
+changed analytical question. Deliver the answer in plain language with useful
+figures/tables and reproducible files; name remaining uncertainty. Do not
+introduce an extra form, mandatory approval step or fixed report length.
+
+Use only tools actually exposed in this session. An optional external catalogue
+such as ToolUniverse supplements the workflow when it has an appropriate
+admitted tool; it is not a prerequisite, another orchestrator or a reason to
+send patient-level data to an external service. Inspect the tool's input and
+execution/data boundary before using it. Native local Python/R remains the
+normal execution path for supplied datasets.
+
 Infer the estimand, population, independent unit and outcome/event coding from the question and data. Ask only about ambiguities that change the analysis; otherwise state the assumption and proceed. Profile locally with aggregates and masked examples, keep source data unchanged, and account for clustering, repeated measurements, exclusions and missing values. A row is not necessarily an independent subject.
 
 Start from what the project already knows about this data: read it with `mcp__evimed__dataset_semantics` (action `read`). A recorded interpretation — observation unit, patient and observation keys, units, code lists, population, time window, joins and the transformations already applied — is the starting point for a repeat analysis of the same dataset; use it instead of inferring it again, and state any departure. Write what you establish or what the researcher corrects (action `write`) with its basis: their own words as `researcher_confirmed` (a later inference never overwrites it), a supplied data dictionary as `dictionary_stated`, your own reading as `model_inferred` with what it was read from. Record each derived variable and filter with action `transform` (its inputs and the script that makes it), so a repeat analysis applies the same transformation or is told what changed.
@@ -22,6 +64,8 @@ Persist transformation code, fitted state and the data/split definition for foll
 Deliver a substantive `statistical-report.md` with the actual findings and limitations, plus the useful reproducibility artifacts. The optional names are `analysis-results.json`, `analysis-run.json`, `analysis.py` and `analysis.R`; do not create empty placeholders or require both languages. Named scripts, notebooks, figures and tables may accompany them. Prefer structured results with `schemaVersion: 1` and `analyses: [{id, status, method, estimand, n, estimate, interval, pValue, warnings}]`; omit inapplicable fields and use failed/unsupported status with a reason for unavailable calculations. Descriptive summaries do not require a p value or interval. Do not label null or non-finite estimates complete.
 
 A reference-checked helper ships beside the skill: `scripts/analysis_methods.py` (add the skill's `scripts` directory to `sys.path`). It has `compare_groups`, `covariate_balance`, `contingency_test`, `linear_regression`, `logistic_regression`, `kaplan_meier`, `log_rank`, `cox_regression` and `adjust_pvalues`. Each returns one entry shaped for `analysis-results.json` with the diagnostics the data earned (missing values, repeated measurements, censoring, zero cells, separation, covariate imbalance, unadjusted multiplicity), the method record it ran (assumptions, references) and the library versions. A computation the data cannot support comes back `unsupported` with a named reason and no number: keep every other analysis. Use it or your own code with the same care; its diagnostics are labels, never verdicts, and it is not a substitute for choosing the method from the design.
+
+For two independent event rates, the helper uses a Newcombe interval built from Wilson scores for the risk difference, including sparse boundary tables. It records the interval method and uses the observed counts even if an optional continuity correction is requested for odds or risk ratios. Confidence levels must be finite and strictly between zero and one.
 
 For lightweight provenance, use the helper shipped beside this skill:
 

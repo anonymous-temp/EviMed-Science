@@ -107,6 +107,7 @@ starterPrompts:
 # orchestrator (the fields above). The generator derives the shell's and the
 # frame's capability table from this block, and adds what evals/ measured.
 display:
+  listed: false
   title: "数据集科研可行性勘查"
   category: "研究设计与数据"
   description: "从你手上的数据出发，逐列剖析并对照文献，判断能做哪些课题。"

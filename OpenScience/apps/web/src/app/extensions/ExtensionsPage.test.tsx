@@ -28,8 +28,9 @@ const platformList = { groups: ["科研分析", "长任务", "循证 GEO"], geoG
 // The curated tools the catalogue lists, as `GET /api/agents` returns them, and the module-only one it leaves out (`display.listed: false`).
 const toolRecord = (id: string) => ({ id, version: "1.0.0", title: id, category: "", description: "", skill: id, estimatedMinutes: [20, 40] as [number, number],
   starterPrompts: [], requiredInputs: [], optionalInputs: [], requiredTools: [], optionalTools: [], dataSources: [], outputs: [], completionChecks: [], runtimeAgent: `evimed-${id}` });
-const TOOL_IDS = ["statistical-analysis", "meta-analysis", "evidence-appraisal", "peer-review"];
-const toolCatalogue = [...TOOL_IDS.map(toolRecord), toolRecord("geo-insight")];
+const TOOL_IDS = ["statistical-analysis", "meta-analysis", "research-topic-selection", "peer-review"];
+const HIDDEN_TOOL_IDS = ["dataset-research-scoping", "evidence-appraisal", "gene-expression-analysis", "manuscript-support", "geo-insight", "vcr-protocol"];
+const toolCatalogue = [...TOOL_IDS, ...HIDDEN_TOOL_IDS].map(toolRecord);
 const toolTitle = (id: string) => CAPABILITY_DISPLAY[id].title;
 const inventoryItem = (id: string, title: string, use: string, extra: object = {}) => ({ id, title, use, icon: "Wrench", state: "on", control: { kind: "none" }, opens: { kind: "drawer" }, does: `${title}做什么`, how: `${title}怎么用`, ...extra });
 beforeEach(() => {
@@ -216,7 +217,7 @@ it("lists the curated research tools as a 科研工具 group of skills, and leav
   api.listWebResearchAgents.mockResolvedValue(toolCatalogue);
   open(`/app/extensions/discover?group=${encodeURIComponent("科研工具")}`);
   for (const id of TOOL_IDS) expect(await screen.findByRole("button", { name: toolTitle(id) })).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: toolTitle("geo-insight") })).not.toBeInTheDocument();
+  for (const id of HIDDEN_TOOL_IDS) expect(screen.queryByRole("button", { name: toolTitle(id) })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "科研分析技能 a" })).not.toBeInTheDocument();
 });
 

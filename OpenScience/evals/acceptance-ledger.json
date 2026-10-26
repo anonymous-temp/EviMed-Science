@@ -471,7 +471,7 @@
       "id": "statistical-analysis",
       "visibility": "public",
       "evalHarness": "evals/statistical-analysis",
-      "briefCount": 3,
+      "briefCount": 6,
       "realDelivery": {
         "status": "accepted",
         "evidence": "evals/statistical-analysis/results/2026-09-30-statistics-001-wdbc-group-comparison-run2/run.json",
@@ -483,7 +483,7 @@
         "evals/statistical-analysis/expected.json",
         "evals/statistical-analysis/results/2026-09-30-statistics-001-wdbc-group-comparison-run2/scientific-review.txt"
       ],
-      "note": "The current DSH + DeepSeek production run delivered the WDBC comparison and executable analysis. Independent replay confirms the input hash and primary Welch statistics; preserved source fingerprints match. The review retains residual threshold-interval and report-framing findings, so delivery acceptance is not an unqualified scientific quality pass. Sequential Python and native R scenarios remain in progress."
+      "note": "The current DSH + DeepSeek production run delivered the WDBC comparison and executable analysis. Independent replay confirms the input hash and primary Welch statistics; preserved source fingerprints match. The review retains residual threshold-interval and report-framing findings, so delivery acceptance is not an unqualified scientific quality pass. Sequential Python and native R scenarios remain in progress. 2026-10-26: three additional goal-driven agent briefs cover autonomous comparison, leakage-aware prediction and a unit-correction follow-up. They are unrun; the September delivery remains the only capability-level acceptance linked here."
     },
     {
       "id": "tool-builder",
