@@ -17,6 +17,7 @@ import {
   type FrontierTrackSegment,
   FRONTIER_TRACK_SEGMENTS,
 } from "@/lib/frontierClient";
+import { cn } from "@/lib/cn";
 import { serveFrontierList } from "@/lib/frontierTracking";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
@@ -240,14 +241,30 @@ function approvalsNote(page: FrontierApprovals, onAgency: (key: string) => void)
   return parts;
 }
 
+/**
+ * A row is one link to its article, as a feed card is: the title's link stretches over the row's box (`relative` on the box, the link's
+ * `after:inset-0`), the title turns the accent under the pointer, and what else the row holds is its words. A whole row drawn as one
+ * block link was a kind of control for every number of lines it wrapped to — 52, 74, 98 … px — on the release walk of
+ * evimed-5ae53861dc26-1; the title's link is one look at any length.
+ */
+const ROW_BOX = "group relative isolate min-w-0";
+const ROW_LINK = cn(
+  "rounded outline-none transition-colors duration-fast group-hover:text-accent",
+  "after:absolute after:inset-0 after:rounded after:content-[''] focus-visible:outline-none focus-visible:after:outline focus-visible:after:outline-2 focus-visible:after:outline-focus",
+);
+/** What sits above a row's stretched link, so the pointer reaches it (a mark's reason on hover). */
+const ABOVE = "relative z-sticky";
+
 function ApprovalRow({ row }: { row: FrontierApprovalRow }) {
   const origin = useFrontierOrigin();
   return (
     <li data-frontier-item={row.item.id} className="border-b border-border py-3">
-      <Link to={articlePath(row.item.id)} state={origin} onClick={rememberFrontierPosition} className="group flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1 rounded">
+      <div className={cn(ROW_BOX, "flex flex-wrap items-baseline gap-x-3 gap-y-1")}>
         <span className="w-12 shrink-0 text-caption tabular-nums text-text-3">{numericDay(row.at)}</span>
         <span className="min-w-0 flex-1 basis-60">
-          <span data-row-title data-prose="" className="block text-body font-semibold text-text group-hover:text-accent">{row.drug}</span>
+          <span data-row-title data-prose="" className="block text-body font-semibold text-text">
+            <Link to={articlePath(row.item.id)} state={origin} onClick={rememberFrontierPosition} className={ROW_LINK}>{row.drug}</Link>
+          </span>
           {row.indication && <span data-prose="" className="mt-0.5 block text-ui text-text-2">{row.indication}</span>}
         </span>
         <span className="flex shrink-0 items-center gap-1.5 text-caption text-text-3">
@@ -255,7 +272,7 @@ function ApprovalRow({ row }: { row: FrontierApprovalRow }) {
           {row.agency && <span aria-hidden="true">·</span>}
           <span>{row.approvalLabel}</span>
         </span>
-      </Link>
+      </div>
     </li>
   );
 }
@@ -304,7 +321,7 @@ export function ApprovalsBody({ paging, agency, onAgency }: { paging: TrackPagin
 function PracticeMark({ item }: { item: FrontierItem }) {
   const practice = (item as FrontierItem & { practice?: { reason?: string } | null }).practice;
   if (!practice) return null;
-  return <Tag title={practice.reason || undefined}>可能改变实践</Tag>;
+  return <Tag title={practice.reason || undefined} className={ABOVE}>可能改变实践</Tag>;
 }
 
 function GuidelineRow({ row }: { row: FrontierGuidelineRow }) {
@@ -312,16 +329,18 @@ function GuidelineRow({ row }: { row: FrontierGuidelineRow }) {
   const shown = row.recommendations.slice(0, 3);
   return (
     <li data-frontier-item={row.item.id} className="border-b border-border py-3">
-      <Link to={articlePath(row.item.id)} state={origin} onClick={rememberFrontierPosition} className="group block min-w-0 rounded">
+      <div className={ROW_BOX}>
         <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-caption text-text-3">
           {row.body && <span data-prose="" className="max-w-full truncate">{row.body}</span>}
           {row.body && <span aria-hidden="true">·</span>}
           <span className="tabular-nums">{monthDay(row.at)}</span>
           <PracticeMark item={row.item} />
         </span>
-        <span data-row-title data-prose="" className="mt-0.5 block text-body font-semibold text-text group-hover:text-accent">{row.item.title}</span>
+        <span data-row-title data-prose="" className="mt-0.5 block text-body font-semibold text-text">
+          <Link to={articlePath(row.item.id)} state={origin} onClick={rememberFrontierPosition} className={ROW_LINK}>{row.item.title}</Link>
+        </span>
         {row.scope && shown.length === 0 && <span data-prose="" className="mt-0.5 block text-ui text-text-2">{row.scope}</span>}
-      </Link>
+      </div>
       {shown.length > 0 && (
         <ul aria-label="主要推荐" className="mt-2 space-y-1.5 border-l-2 border-border pl-3">
           {shown.map((rec, index) => (
