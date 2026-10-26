@@ -93,3 +93,12 @@ test('follow-up result filenames are open-ended, but new provenance backups are 
   assert.equal(analysisEvidence(make({ path: 'operating-point-0.3.json', sha256: 'threshold' }), before, 'update').complete, true);
   assert.equal(analysisEvidence(make({ path: '.analysis-provenance/123-previous-results.json', sha256: 'backup' }), before, 'update').complete, false);
 });
+
+test('explicitly resuming a supplied executed package needs artifacts, not a new calculation', () => {
+  const record = { run: { effectiveAgentId: 'open-domain-answer' }, artifacts: {
+    manifest: [{ path: 'analysis-results.json', sha256: 'saved' }, { path: 'statistical-report.md', sha256: 'saved' }, { path: 'analysis.py', sha256: 'saved' }],
+    tools: [{ name: 'read', status: 'completed', error: false }],
+  } };
+  assert.equal(analysisEvidence(record, [], 'resume').complete, true);
+  assert.equal(analysisEvidence({ ...record, artifacts: { manifest: [], tools: [] } }, [], 'resume').complete, false);
+});
