@@ -73,3 +73,13 @@ test('reuse evidence requires an earlier executed result and unchanged numerical
   assert.equal(analysisEvidence(record, [], 'reuse').complete, false);
   assert.equal(analysisEvidence({ ...record, artifacts: { manifest: [{ path: 'analysis-results.json', sha256: 'changed' }], tools: [] } }, manifest, 'reuse').complete, false);
 });
+
+test('a natural follow-up may stay in conversation when prior analysis and actual update evidence exist', () => {
+  const before = [{ path: 'analysis-results.json', sha256: 'old-values' }, { path: 'statistical-report.md', sha256: 'old-report' }, { path: 'analysis.py', sha256: 'code' }];
+  const record = { run: { effectiveAgentId: 'open-domain-answer' }, artifacts: {
+    manifest: before.map((file) => ({ ...file, sha256: file.sha256 + '-updated' })),
+    tools: [{ name: 'bash', status: 'completed', error: false }],
+  } };
+  assert.equal(analysisEvidence(record, before, 'update').complete, true);
+  assert.equal(analysisEvidence(record, [], 'update').complete, false);
+});
