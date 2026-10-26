@@ -90,6 +90,24 @@ class DecisionTests(unittest.TestCase):
         receipt['registration_digest'] = MODULE.registration_digest(reg)
         self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
 
+    def test_review_malformed_and_overflow_fail_closed(self):
+        for reg, rows, receipt in (([], [], {}), ({}, [[]], {})):
+            self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
+        reg, rows, receipt = fixture(mode='deterministic')
+        for row in rows: row['cost'] = 1e308
+        result = MODULE.evaluate(reg, rows, receipt)
+        self.assertEqual(result['decision'], 'inconclusive')
+        __import__('json').dumps(result, allow_nan=False)
+
+    def test_review_single_family_and_trusted_determinism(self):
+        reg, rows, receipt = fixture(mode='deterministic')
+        receipt.pop('deterministic_qualification', None)
+        self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
+        reg, rows, receipt = fixture()
+        reg['families']['other'] = dict(reg['families']['office'])
+        receipt['registration_digest'] = MODULE.registration_digest(reg)
+        self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
+
     def test_paired_t_zero_variance_requires_explicit_finite_mode(self):
         reg, rows, receipt = fixture()
         self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
