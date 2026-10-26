@@ -335,6 +335,23 @@ it("stages a versioned action as an unsent draft in the current native conversat
 });
 
 
+it("reads the plan's actions a page at a time, each a heading over its facts, its reason and channels rows of them", async () => {
+  const action = (n: number) => ({key:`fill_gap:g${n}:missing_evidence`,kind:"fill_gap",sequence:n,group:{id:`g${n}`,name:`Group ${n}`},need:{judgment:`第 ${n} 项行动的原因写在这里，长过十二个字`},
+    what:{title:`行动 ${n}`},sources:[{domain:`site-${n}.example.com`,channel:"site",why:"官网常被引用"}],work:{mode:"new",outputs:["article.md"]}});
+  client.getGeoStrategy.mockResolvedValue({...strategyFilled,version:7,implementation:{actions:Array.from({length:8},(_,i)=>action(i+1))}});
+  renderPlan();
+  // A long plan was 26 windows of sentences standing alone (the fixture walk of b559d4b7e): five actions first, the rest on demand.
+  expect(await screen.findByRole("heading",{level:3,name:"1. 行动 1"})).toBeInTheDocument();
+  expect(screen.getAllByRole("heading",{level:3}).filter(h=>/^\d+\. 行动/.test(h.textContent ?? ""))).toHaveLength(5);
+  const reason = screen.getByText("第 1 项行动的原因写在这里，长过十二个字");
+  expect(reason.closest("dd")).not.toBeNull();
+  expect(reason.closest("dd")!.previousElementSibling).toHaveTextContent("原因");
+  expect(screen.getByText(/site-1\.example\.com · 可选渠道 · 官网常被引用/).closest("dd")!.previousElementSibling).toHaveTextContent("渠道");
+  await userEvent.click(screen.getByRole("button",{name:"显示更多 · 还有 3 项行动"}));
+  expect(screen.getAllByRole("heading",{level:3}).filter(h=>/^\d+\. 行动/.test(h.textContent ?? ""))).toHaveLength(8);
+  expect(screen.getAllByRole("button",{name:"用于内容"})).toHaveLength(8);
+});
+
 it("shows supported time, workload, audience and price basis as estimates",async()=>{
   const action={key:"fill_gap:g1:missing_evidence",kind:"fill_gap",group:{id:"g1",name:"Selected group"},need:{judgment:"Explain"},what:{title:"Plan content",layer:"popular",channel:"wechat_mp"},sources:[],
     work:{mode:"new",audience:"patient",outputs:["article.md"]},timing:{durationDays:{low:2,high:4},basis:"Supplied schedule"},effort:{unit:"hours",low:3,high:5,basis:"Editorial workload"},
