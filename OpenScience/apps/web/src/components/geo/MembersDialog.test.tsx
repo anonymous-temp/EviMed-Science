@@ -29,7 +29,11 @@ describe("成员", () => {
     const list = await screen.findByRole("list", { name: "成员列表" });
     expect(within(list).getAllByRole("listitem").map((row) => row.textContent)).toEqual(["王负责人负责人", "张医生医学审核移除"]);
     await userEvent.type(screen.getByLabelText("成员的账号"), "u_new");
-    await userEvent.click(screen.getByRole("button", { name: "医学审核" }));
+    const roles = screen.getByRole("group", { name: "角色" });
+    expect(within(roles).getAllByRole("radio").map((radio) => radio.parentElement?.textContent)).toEqual(["编辑", "医学审核", "只读"]);
+    expect(within(roles).getByRole("radio", { name: "编辑" })).toBeChecked();
+    await userEvent.click(within(roles).getByRole("radio", { name: "医学审核" }));
+    expect(within(roles).getByRole("radio", { name: "医学审核" })).toBeChecked();
     await userEvent.type(screen.getByLabelText("医院"), "某某医院");
     await userEvent.type(screen.getByLabelText("科室"), "内分泌科");
     await userEvent.click(screen.getByRole("button", { name: "添加" }));
@@ -67,7 +71,8 @@ describe("出品方", () => {
 
   it("asks a doctor for the name, then saves it with the hospital and department the byline shows", async () => {
     render(<ProducerDialog geoId="geo_1" initial={null} onSaved={() => {}} onCancel={() => {}} />);
-    await userEvent.click(screen.getByRole("button", { name: "医生" }));
+    expect(screen.getByRole("radio", { name: "企业" })).toBeChecked();
+    await userEvent.click(within(screen.getByRole("group", { name: "出品方类型" })).getByRole("radio", { name: "医生" }));
     await userEvent.click(screen.getByRole("button", { name: "保存" }));
     expect(await screen.findByText("请填医生的姓名。")).toBeInTheDocument();
     expect(client.patchGeoProject).not.toHaveBeenCalled();

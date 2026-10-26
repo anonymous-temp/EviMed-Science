@@ -8,7 +8,7 @@ import { Drawer } from "@/components/ui/Drawer";
 import { Input, inputClasses } from "@/components/ui/Input";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Note } from "@/components/ui/Note";
-import { Tabs } from "@/components/ui/Tabs";
+import { Toolbar } from "@/components/ui/Toolbar";
 import { useKnowledgeConversation } from "@/components/sources/useKnowledgeConversation";
 import { getWebProjectId } from "@/lib/apiClient";
 import { CAPSULE_SIGNATURE_MAX_CHARS, capsuleEntryPreview, fromSender, recipientsOf, takenEntries } from "@/lib/capsuleText";
@@ -424,7 +424,7 @@ export function ShareDrawer({ onClose, onImported, initialTab = "export" }: { on
   return (
     <Drawer title="分享与导入" onClose={onClose}>
       <div className="space-y-6">
-        <Tabs<ShareTab> label="分享与导入" items={[{ value: "export", label: "导出" }, { value: "import", label: "导入" }]} value={tab} onChange={setTab} />
+        <Toolbar label="分享与导入" views={{ label: "分享与导入", items: [{ value: "export", label: "导出" }, { value: "import", label: "导入" }], value: tab, onChange: (next) => setTab(next as ShareTab) }} />
         {tab === "export" ? <ExportPanel capsule={capsule} /> : <ImportPanel onImported={() => { announceMemoryChanged(); onImported(); }} />}
       </div>
     </Drawer>

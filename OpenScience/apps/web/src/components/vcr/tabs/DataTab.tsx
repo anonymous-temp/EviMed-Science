@@ -25,7 +25,7 @@ import { Input, Textarea } from "@/components/ui/Input";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { MasterDetail } from "@/components/ui/MasterDetail";
 import { Section } from "@/components/ui/Section";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Radio } from "@/components/ui/Radio";
 import { Tag } from "@/components/ui/Tag";
 import type { ToolbarFilter } from "@/components/ui/Toolbar";
 import { VcrKnowledgeSection } from "../VcrKnowledge";
@@ -559,13 +559,12 @@ function SignCard({ studyId, assumption, kinds, onClose, onSigned }: {
       onSubmit={(event) => { event.preventDefault(); sign(); }}
     >
       {kinds.length > 1 && (
-        <SegmentedControl
-          aria-label="复核类型"
-          value={kind}
-          onChange={setKind}
-          options={kinds.map((value) => ({ value, label: reviewKindLabel(value) }))}
-          className="self-start"
-        />
+        // The kind of review is a field of this form, not a view of the page: one of the kinds the reader holds.
+        <fieldset role="radiogroup" aria-label="复核类型" className="flex min-w-0 flex-wrap gap-x-4">
+          {kinds.map((value) => (
+            <Radio key={value} name="vcr-review-kind" label={reviewKindLabel(value)} value={value} checked={kind === value} disabled={busy} onChange={() => setKind(value)} />
+          ))}
+        </fieldset>
       )}
       <Input label="备注" value={note} onChange={(event) => setNote(event.target.value)} />
       <div className="flex justify-end gap-2">

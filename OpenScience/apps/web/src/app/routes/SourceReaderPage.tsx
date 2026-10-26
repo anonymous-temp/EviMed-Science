@@ -17,7 +17,6 @@ import { Button, buttonClasses } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Drawer } from "@/components/ui/Drawer";
 import { Menu } from "@/components/ui/Menu";
-import { Tabs } from "@/components/ui/Tabs";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
@@ -226,6 +225,11 @@ function SourceReader({ sourceId }: { sourceId: string }) {
         title={title}
         width="full"
         back={<Back to={back} />}
+        // Where the original would be too narrow for two columns, the two views are the page's own tabs, in the band: the body below is their panel.
+        tabs={source && !isKnowledgePage(source) && !twoColumns ? {
+          label: "资料视图", panelId: "source-reader-panel", value: tab, onChange: (next: ReaderTab) => setView({ tab: next }),
+          items: [{ value: "content", label: "内容" }, { value: "original", label: "原文" }],
+        } : undefined}
         meta={source ? readerMeta(source) : undefined}
         actions={source && (
           <>
@@ -260,14 +264,9 @@ function SourceReader({ sourceId }: { sourceId: string }) {
             </div>
           )}
           {source && !isKnowledgePage(source) && !twoColumns && (
-            <div className="flex h-full min-h-0 flex-col">
-              <Tabs label="资料视图" panelId="source-reader-panel" value={tab} onChange={(next) => setView({ tab: next })}
-                items={[{ value: "content", label: "内容" }, { value: "original", label: "原文" }]} />
-              <div id="source-reader-panel" role="tabpanel" aria-labelledby={`source-reader-panel-tab-${tab}`}
-                data-reader-column={tab === "content" ? "points" : "original"}
-                className={tab === "original" ? "mt-4 min-h-0 flex-1 overflow-hidden rounded-card border border-border bg-surface" : "min-h-0 flex-1 overflow-y-auto pt-4"}>
-                {tab === "content" ? points : original}
-              </div>
+            <div data-reader-column={tab === "content" ? "points" : "original"}
+              className={tab === "original" ? "h-full min-h-0 overflow-hidden rounded-card border border-border bg-surface" : "h-full min-h-0 overflow-y-auto"}>
+              {tab === "content" ? points : original}
             </div>
           )}
         </div>

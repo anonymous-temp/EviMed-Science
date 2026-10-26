@@ -35,10 +35,15 @@ export function LoginPage() {
   // A password the registration refuses is said on the password field, not in a line under the buttons
   // (live walk 2026-10-10): the rule is shown with the field while registering, and checked before a request.
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const usernameInput = useRef<HTMLInputElement>(null);
   const passwordInput = useRef<HTMLInputElement>(null);
   const [registering, setRegistering] = useState(false);
   // The password is shown only while the person asks for it, and only until they leave the page.
   const [revealed, setRevealed] = useState(false);
+
+  // The cursor goes to the account field once the form is there (the field used to ask for it with `autoFocus`). There is no field to
+  // focus where the deployment signs in through its identity provider.
+  useEffect(() => { if (!checking) usernameInput.current?.focus(); }, [checking]);
 
   useEffect(() => {
     let active = true;
@@ -136,9 +141,9 @@ function signInMessage(error: unknown): string {
         ) : (
           <form className="space-y-4" onSubmit={submit}>
             <Input
+              ref={usernameInput}
               id="login-username"
               label="账号"
-              autoFocus
               autoComplete="username"
               value={username}
               onChange={(event) => setUsername(event.target.value)}

@@ -1,5 +1,6 @@
 import { EVIDENCE_SOURCE_TYPE_LABELS_ZH, studyBadgeKind } from "@evimed/domain";
-import { tagClasses } from "@/components/ui/Tag";
+import { cn } from "@/lib/cn";
+import { Tag } from "@/components/ui/Tag";
 
 /**
  * The study-type badge (融合方案 §5.8, 来源级): a soft ground with its own deep
@@ -22,12 +23,13 @@ export function StudyTypeBadge({ sourceType, className }: { sourceType: string |
   if (!sourceType || !label || sourceType === "other") return null;
   const kind = studyBadgeKind(sourceType);
   return (
+    // The tag's own shape and type, on this family's pair: the ground and the ink are the wrapper's, the tag draws neither.
     <span
       data-study-type={sourceType}
-      className={tagClasses({ className })}
+      className={cn("inline-flex rounded-tag", className)}
       style={{ color: `var(--study-${kind}-fg)`, backgroundColor: `var(--study-${kind}-bg)` }}
     >
-      {label}
+      <Tag className="bg-transparent text-inherit">{label}</Tag>
     </span>
   );
 }

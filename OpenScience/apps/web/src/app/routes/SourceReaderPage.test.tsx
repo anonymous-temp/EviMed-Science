@@ -342,6 +342,9 @@ describe("a document's page", () => {
       resize(TWO_COLUMN_MIN_WIDTH - 1);
       expect(document.querySelector("[data-reader-layout]")).toHaveAttribute("data-reader-layout", "tabs");
       const tabs = screen.getByRole("tablist", { name: "资料视图" });
+      // The views are the page's own, in its band; the page body below is their panel.
+      expect(tabs.closest("[data-page-chrome]")).not.toBeNull();
+      expect(screen.getByRole("tabpanel")).toHaveAttribute("data-page-body");
       expect(within(tabs).getByRole("tab", { name: "内容", selected: true })).toBeInTheDocument();
       expect(within(tabs).getByRole("tab", { name: "原文", selected: false })).toBeInTheDocument();
       expect(screen.queryByTestId("preview")).not.toBeInTheDocument();

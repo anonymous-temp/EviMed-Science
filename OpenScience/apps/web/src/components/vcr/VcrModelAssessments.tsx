@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/Card";
 import { FormDialog } from "@/components/ui/FormDialog";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input, Textarea } from "@/components/ui/Input";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Radio } from "@/components/ui/Radio";
 import { Tag } from "@/components/ui/Tag";
 
 type Rating = "" | "low" | "medium" | "high";
@@ -208,7 +208,11 @@ function RatedField({ label, rating, reason, onRating, onReason }: {
   return (
     <div className="flex flex-col gap-2">
       <span className="text-ui text-text">{label}</span>
-      <SegmentedControl<Rating> aria-label={label} size="sm" value={rating} onChange={onRating} options={RATING_OPTIONS} />
+      <fieldset role="radiogroup" aria-label={label} className="flex min-w-0 flex-wrap gap-x-4">
+        {RATING_OPTIONS.map((option) => (
+          <Radio key={option.value || "unrated"} name={`rating-${label}`} label={option.label} value={option.value} checked={rating === option.value} onChange={() => onRating(option.value)} />
+        ))}
+      </fieldset>
       <Textarea aria-label={`${label}的理由`} rows={2} value={reason} onChange={(event) => onReason(event.target.value)} />
     </div>
   );

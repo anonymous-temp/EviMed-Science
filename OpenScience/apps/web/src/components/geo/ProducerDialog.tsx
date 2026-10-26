@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { webErrorMessage } from "@/lib/apiClient";
 import { patchGeoProject, type GeoProducer } from "@/lib/geoClient";
 import { Button } from "@/components/ui/Button";
-import { FilterChips } from "@/components/ui/FilterChips";
+import { Radio } from "@/components/ui/Radio";
 import { FormDialog } from "@/components/ui/FormDialog";
 import { Input } from "@/components/ui/Input";
 
@@ -48,7 +48,12 @@ export function ProducerDialog({ geoId, initial, onSaved, onCancel }: { geoId: s
   return (
     <FormDialog title="出品方" onClose={onCancel} busy={saving} dirty={kind !== (initial?.kind ?? "enterprise") || name !== (initial?.name ?? "") || hospital !== (initial?.hospital ?? "") || department !== (initial?.department ?? "") || specialty !== (initial?.specialty ?? "")}>
       {(requestClose, markSaved) => <form className="flex flex-col gap-4" onSubmit={event => submit(event, markSaved)} noValidate><fieldset disabled={saving} className="contents">
-        <FilterChips<"enterprise" | "doctor"> label="出品方类型" options={KIND_OPTIONS} value={kind} onChange={(next) => { if (next) setKind(next); }} />
+        <fieldset className="flex min-w-0 flex-wrap gap-x-4">
+          <legend className="mb-1 text-ui text-text">出品方类型</legend>
+          {KIND_OPTIONS.map((option) => (
+            <Radio key={option.value} name="geo-producer-kind" label={option.label} value={option.value} checked={kind === option.value} onChange={() => setKind(option.value)} />
+          ))}
+        </fieldset>
         <Input label={kind === "doctor" ? "医生姓名" : "企业名称（可留空，用说明书上的持证商）"} autoComplete="off" value={name} onChange={(event) => setName(event.target.value)} />
         {kind === "doctor" && (
           <>
