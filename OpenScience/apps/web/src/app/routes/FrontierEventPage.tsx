@@ -1,7 +1,7 @@
 import { rememberFrontierPosition, useFrontierOrigin } from "@/components/frontier/frontierReadingState";
 import { markFrontierEventRead } from "@/lib/frontierClient";
 import { serveFrontierList, trackFrontierItemAction, useFrontierListTracking } from "@/lib/frontierTracking";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { CalendarClock, ChevronLeft, SearchX } from "lucide-react";
 import { WebApiError } from "@/lib/apiClient";
@@ -17,6 +17,7 @@ import {
   type FrontierItem,
 } from "@/lib/frontierClient";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { useWide } from "@/lib/useMediaQuery";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
 import { PageTitle } from "@/components/layout/PageTitle";
@@ -32,14 +33,16 @@ import { FrontierOffPage } from "@/components/frontier/FrontierStates";
 import { Sparkline } from "@/components/frontier/Sparkline";
 import {
   EXTERNAL,
+  FEED_ZONE_NOTE,
   INLINE_ACTION,
   ago,
   dateClock,
   eventResearchDraft,
-  institutionsLine,
+  itemClock,
   primaryHeld,
   updatedText,
 } from "@/components/frontier/frontierText";
+import { recordMoment, reportDays, type ReportDay } from "@/components/frontier/frontierRecord";
 
 type EventState =
   | { kind: "loading" }
@@ -64,12 +67,14 @@ const RELATION_WORDS: Readonly<Record<string, string>> = Object.freeze({
  * many institutions reported it, when it last moved, its specialty — with
  * 「深入研究」; what is known so far and the latest turn; the reports, the
  * parties' own texts first under 「一手材料」 (a paper, a notice, a label) and the
- * rest as 「其他报道」, newest first or, on 最早 (`?order=asc`, asked of the
- * server too), oldest first — or, where nobody's own text is among them,
- * one line that says so; from ten reports on a menu narrows them to one kind
- * of source; and on the right the heat, its 72-hour trend, the institutions
- * by kind, the first report and whether first-hand material is among the
- * reports. No card explains itself.
+ * rest as 「报道时间线」, cut into Beijing days, the newest day first or, on 最早
+ * (`?order=asc`, asked of the server too), the oldest — or, where nobody's own
+ * text is among them, the timeline alone; from ten reports on a menu narrows
+ * them to one kind of source; and on the right 「事件记录」: the heat and its
+ * 72-hour trend, the first report and the last update (Beijing time, said
+ * once), how many reports and sources, and whether first-hand material is
+ * among them. On a window narrower than 1024 px the record is the strip above
+ * the summary. No card explains itself.
  *
  * Hidden knowledge: an event merged into another keeps its old address — a
  * notification, a star or a Feishu card may carry it — and the server answers
@@ -95,6 +100,7 @@ function EventView({ eventId, ready }: { eventId: string; ready: boolean }) {
   const location = useLocation();
   const [params, setParams] = useSearchParams();
   const order = readOrder(params.get("order"));
+  const wide = useWide();
   const [state, setState] = useState<EventState>({ kind: "loading" });
   const [attempt, setAttempt] = useState(0);
 
@@ -142,7 +148,7 @@ function EventView({ eventId, ready }: { eventId: string; ready: boolean }) {
   }
   if (state.kind !== "ready") {
     return (
-      <EventFrame title="事件">
+      <EventFrame title="事件" wide={wide}>
         <div>
           {state.kind === "loading" && <FrontierSkeleton />}
           {state.kind === "error" && <LoadError message={state.message} onRetry={() => setAttempt((value) => value + 1)} />}
@@ -155,15 +161,16 @@ function EventView({ eventId, ready }: { eventId: string; ready: boolean }) {
     if (next === "asc") updated.set("order", "asc"); else updated.delete("order");
     return updated;
   }, { replace: true, state: location.state });
-  return <EventBody event={state.event} order={order} onOrder={setOrder} />;
+  return <EventBody event={state.event} order={order} onOrder={setOrder} wide={wide} />;
 }
 
 /**
- * The page's column (the reading column, 720: an event is read, R13 V-2), its way back and its one-line header, shared by every
- * state of it. `facts` is the one line under the title, when the event has one; it sits close to the title and the body starts
- * a section below it.
+ * The page's column — the list column, 1040, with the record beside it from 1024 px (`wide`), as the article has its notes; below that
+ * the reading column, 720: an event is read, R13 V-2 — its way back and its one-line header, shared by every state of it. `facts` is
+ * the one line under the title, when the event has one; it sits close to the title and the body starts a section below it. `aside` is
+ * the right column.
  */
-function EventFrame({ title, actions, facts, children }: { title: string; actions?: ReactNode; facts?: ReactNode; children: ReactNode }) {
+function EventFrame({ title, actions, facts, aside, wide, children }: { title: string; actions?: ReactNode; facts?: ReactNode; aside?: ReactNode; wide: boolean; children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const origin = (location.state as { frontierOrigin?: string } | null)?.frontierOrigin;
@@ -173,7 +180,9 @@ function EventFrame({ title, actions, facts, children }: { title: string; action
       title={title}
       documentTitle={`${title} · 前沿动态`}
       titleVariant="document"
-      width="read"
+      width={wide ? "page" : "read"}
+      asideLabel="事件记录"
+      aside={aside}
       back={(
         <nav aria-label="返回">
           <Link to={fromReader ? origin! : "/app/frontier"} onClick={fromReader ? (event) => { event.preventDefault(); navigate(-1); } : undefined} className={cn(INLINE_ACTION, "-ml-1.5 gap-1 px-1.5 text-text-3 hover:text-text")}>
@@ -190,7 +199,7 @@ function EventFrame({ title, actions, facts, children }: { title: string; action
   );
 }
 
-function EventBody({ event, order, onOrder }: { event: FrontierEvent; order: FrontierEventOrder; onOrder: (order: FrontierEventOrder) => void }) {
+function EventBody({ event, order, onOrder, wide }: { event: FrontierEvent; order: FrontierEventOrder; onOrder: (order: FrontierEventOrder) => void; wide: boolean }) {
   const navigate = useNavigate();
   const location = useLocation();
   // The server reads the event in the order asked; the page sorts it too, so a server that does not know the order reads the same.
@@ -216,10 +225,10 @@ function EventBody({ event, order, onOrder }: { event: FrontierEvent; order: Fro
   const shown = useMemo(() => (firstHand ? [...visible.filter((item) => item.role === "primary"), ...visible.filter((item) => item.role !== "primary")] : visible), [firstHand, visible]);
   useEffect(() => { serveFrontierList("event", null, shown.map((item) => ({ id: item.id }))); }, [shown]);
   useFrontierListTracking(root, [event.id, shown]);
-  const institutions = institutionsLine(event);
   const specialty = event.specialties[0] ?? null;
   const updated = ago(event.lastAt);
-  const heat = event.heat ?? null;
+  const studies = event.counts && event.counts.studies > 0
+    ? `${event.counts.studies} 项已识别研究${event.counts.unlinkedReports > 0 ? `（${event.counts.unlinkedReports} 篇尚未关联研究）` : ""}` : null;
   // The reports' controls are the toolbar of the first group, at its heading, over the rows they order and narrow (the source filter was a
   // menu on a row of its own between two sections, with no word for what it filters): 最新 · 最早 from two reports on, and from ten
   // reports on a kind of source.
@@ -235,11 +244,13 @@ function EventBody({ event, order, onOrder }: { event: FrontierEvent; order: Fro
     <EventFrame
       title={event.title}
       actions={<Button onClick={research}>深入研究</Button>}
+      aside={wide ? <EventRecord event={event} layout="column" /> : undefined}
+      wide={wide}
       facts={(
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-text-3">
-          {event.counts ? <span>{event.counts.reports} 篇报道 · {event.counts.institutions} 家机构 · {event.counts.studies} 项已识别研究{event.counts.unlinkedReports > 0 ? `（${event.counts.unlinkedReports} 篇尚未关联研究）` : ""}</span>
-            : event.sourceCount72h > 0 && <span>{event.sourceCount72h} 家机构报道</span>}
-          {event.sourceCount72h > 0 && updated && <span aria-hidden="true">·</span>}
+          {/* How many reports and from how many sources is the record's (事件记录); this line keeps what the record does not say. */}
+          {studies && <span>{studies}</span>}
+          {studies && updated && <span aria-hidden="true">·</span>}
           {updated && <span>{updatedText(updated)}</span>}
           {specialty && <Tag className="ml-1">{specialty.label}</Tag>}
         </div>
@@ -255,25 +266,10 @@ function EventBody({ event, order, onOrder }: { event: FrontierEvent; order: Fro
           </div>
         </Section>
       )}
-      {/* One column: 720 holds a timeline or a side column, not both. The heat and where the reports come from are a strip above
-        * the summary, where a reader weighing the event looks first. */}
+      {/* From 1024 px the record stands in the right column; below it, a strip above the summary, where a reader weighing the event
+        * looks first. */}
       <div ref={root} className="mt-6 flex flex-col gap-8">
-        <aside aria-label="热度与来源" className="flex flex-wrap items-start gap-x-10 gap-y-4">
-          {heat !== null && (
-            <div>
-              <p className="flex items-baseline gap-1">
-                <span className="text-display font-semibold tabular-nums text-text">{heat}</span>
-                <span className="text-caption text-text-3">热度</span>
-              </p>
-              <Sparkline points={event.trend} width={120} height={32} className="mt-2" />
-            </div>
-          )}
-          <dl className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-ui">
-            {institutions && <><dt className="text-text-3">机构</dt><dd className="text-text">{institutions}</dd></>}
-            {event.firstAt && <><dt className="text-text-3">首报</dt><dd className="tabular-nums text-text">{dateClock(event.firstAt)}</dd></>}
-            <dt className="text-text-3">一手材料</dt><dd className="text-text">{primaryHeld(event)}</dd>
-          </dl>
-        </aside>
+        {!wide && <EventRecord event={event} layout="strip" />}
 
         <div className="min-w-0 space-y-8">
           <Section title="概要" className="mt-0">
@@ -294,9 +290,9 @@ function EventBody({ event, order, onOrder }: { event: FrontierEvent; order: Fro
               {firstHand ? (
                 <>
                   <ReportGroup id="event-primary" title="一手材料" rows={visible.filter((item) => item.role === "primary")} toolbar={sourceFilter} />
-                  <ReportGroup id="event-reports" title="其他报道" rows={visible.filter((item) => item.role !== "primary")} />
+                  <ReportTimeline rows={visible.filter((item) => item.role !== "primary")} />
                 </>
-              ) : <ReportGroup id="event-reports" title="报道" rows={visible} toolbar={sourceFilter} />}
+              ) : <ReportTimeline rows={visible} toolbar={sourceFilter} />}
             </div>
           )}
 
@@ -319,6 +315,50 @@ function EventBody({ event, order, onOrder }: { event: FrontierEvent; order: Fro
 }
 
 /**
+ * 「事件记录」 (c5-reader, 2026-10-26): the event's heat and its 72-hour trend, then the record — when it was first reported and when it
+ * last moved (Beijing time, said once in the heading), how many reports and from how many sources, and whether first-hand material is
+ * among them. Only what is known is a row; nothing is explained. A column on the right from 1024 px (`column`: the shell's own aside), a
+ * strip above the summary below it (`strip`).
+ */
+function EventRecord({ event, layout }: { event: FrontierEvent; layout: "column" | "strip" }) {
+  const heat = event.heat ?? null;
+  const first = recordMoment(event.firstAt);
+  const last = recordMoment(event.lastAt);
+  const reports = event.counts?.reports ?? event.reportCount;
+  const sources = event.counts?.institutions ?? event.institutions72h?.total ?? event.sourceCount72h;
+  // The kinds are those of the last 72 hours: they are said beside the number only where they add up to it.
+  const kinds = event.institutions72h && event.institutions72h.total === sources ? event.institutions72h.byType.map((kind) => `${kind.label} ${kind.count}`).join(" · ") : "";
+  const rows: Array<[string, string]> = [
+    ...(first ? [["最早报道", first] as [string, string]] : []),
+    ...(last ? [["最近更新", last] as [string, string]] : []),
+    ...(reports > 0 ? [["报道", `${reports} 篇`] as [string, string]] : []),
+    ...(sources > 0 ? [["来源", kinds ? `${sources} 家（${kinds}）` : `${sources} 家`] as [string, string]] : []),
+    ["一手材料", primaryHeld(event)],
+  ];
+  const record = (
+    <div className="min-w-0 flex-1">
+      {/* The section heading's own type (18 / 600, as 概要 and the groups), with the zone in the metadata size: the page holds four size × weight pairs. */}
+      <h2 className="flex items-baseline gap-1 font-semibold text-section text-text">事件记录{(first || last) && <span className="text-caption font-normal text-text-3">{FEED_ZONE_NOTE}</span>}</h2>
+      <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-ui">
+        {rows.map(([term, value]) => <Fragment key={term}><dt className="text-text-3">{term}</dt><dd className="text-text">{value}</dd></Fragment>)}
+      </dl>
+    </div>
+  );
+  const trend = heat !== null && (
+    <div>
+      <p className="flex items-baseline gap-1">
+        <span className="text-display font-semibold tabular-nums text-text">{heat}</span>
+        <span className="text-caption text-text-3">热度</span>
+      </p>
+      <Sparkline points={event.trend} width={120} height={32} className="mt-2" />
+    </div>
+  );
+  return layout === "strip"
+    ? <aside aria-label="事件记录" className="flex flex-wrap items-start gap-x-10 gap-y-4">{trend}{record}</aside>
+    : <div className="flex flex-col gap-5">{trend}{record}</div>;
+}
+
+/**
  * A group of reports: its heading and count, then the rows — nothing at all with no rows, except the group that carries the page's
  * source filter: the filter narrows every group, so the one it sits in stays (with a count of nothing) when a kind has no reports
  * there, and the way back to all of them is where it was.
@@ -335,14 +375,54 @@ function ReportGroup({ id, title, rows, toolbar }: { id: string; title: string; 
 }
 
 /**
+ * 「报道时间线」: the reports cut into Beijing days, in the order the page reads them (newest day first, or oldest on 最早), each day a
+ * heading with its number of reports over its rows, which say the clock they stand at. Where there is a first-hand group it holds the
+ * parties' own texts and this holds the rest; the filter, when the page has one, is the first group's. Like a group, nothing at all with
+ * no rows unless it carries the filter.
+ */
+function ReportTimeline({ rows, toolbar }: { rows: Array<FrontierItem & { role: FrontierEventRole }>; toolbar?: ReactNode }) {
+  if (rows.length === 0 && !toolbar) return null;
+  return (
+    <Section title="报道时间线" count={rows.length} toolbar={toolbar} className="mt-0">
+      <div data-event-timeline="">
+        {reportDays(rows).map((day) => <TimelineDay key={day.key} day={day} />)}
+      </div>
+    </Section>
+  );
+}
+
+/**
+ * One Beijing day of the timeline: its label (in the page's own 14 / 400, the heading level under the timeline's) and how many reports it
+ * holds, over its rows.
+ */
+function TimelineDay({ day }: { day: ReportDay<FrontierItem & { role: FrontierEventRole }> }) {
+  const headingId = useId();
+  return (
+    <section aria-labelledby={headingId} className="mt-6 first:mt-0">
+      <h3 id={headingId} className="mb-1 flex items-baseline gap-2 text-ui text-text">
+        {day.label}
+        <span className="text-caption tabular-nums text-text-3">{day.items.length} 篇</span>
+      </h3>
+      <ol aria-label={`${day.label}的报道`} className="ml-1 border-l border-border">
+        {day.items.map((item) => <TimelineRow key={item.id} item={item} clock />)}
+      </ol>
+    </section>
+  );
+}
+
+/**
  * One report on the timeline: a dot on the line — filled for the parties' own
  * texts (a paper, a notice, a label), hollow for a report — its title, and
- * who said it, what kind of source that is, when, and the link to it.
+ * who said it, what kind of source that is, when, and the link to it. On a
+ * day's list `when` is the clock it stands at in Beijing time (the day is the
+ * heading above it, and a source that stated no hour has none to show);
+ * elsewhere, how long ago.
  */
-function TimelineRow({ item }: { item: FrontierItem & { role: FrontierEventRole } }) {
+function TimelineRow({ item, clock = false }: { item: FrontierItem & { role: FrontierEventRole }; clock?: boolean }) {
   const primary = item.role === "primary";
   const origin = useFrontierOrigin();
   const location = useLocation();
+  const when = clock ? itemClock(item) : ago(item.timelineAt);
   return (
     <li className="relative py-2 pl-5">
       <span aria-hidden="true" className={cn("absolute -left-[5px] top-3.5 h-2.5 w-2.5 rounded-full", primary ? "bg-accent" : "bg-bg ring-1 ring-inset ring-border-control")} />
@@ -350,8 +430,7 @@ function TimelineRow({ item }: { item: FrontierItem & { role: FrontierEventRole 
       <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-caption text-text-3">
         <span>{item.source.name}</span>
         {item.sourceTypeLabel && <><span aria-hidden="true">·</span><span>{item.sourceTypeLabel}</span></>}
-        <span aria-hidden="true">·</span>
-        <span>{ago(item.timelineAt)}</span>
+        {when && <><span aria-hidden="true">·</span><span className={clock ? "tabular-nums" : undefined}>{when}</span></>}
         <span aria-hidden="true">·</span>
         <a href={item.url} {...EXTERNAL} className={cn(INLINE_ACTION, "-ml-1 px-1 text-accent")}>
           <span className="text-caption">原文<span aria-hidden="true"> ↗</span></span>
