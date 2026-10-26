@@ -99,6 +99,8 @@ COPY --from=build /app/scripts/runtime/extensions/cowork ./scripts/runtime/exten
 COPY --from=build /app/packages/domain/index.mjs ./packages/domain/index.mjs
 COPY --from=build /app/packages/domain/src ./packages/domain/src
 COPY --from=build /app/packages/contracts/healthflux/candidates.json ./packages/contracts/healthflux/candidates.json
+# The OpenViking compile scope proof the control plane and the runtime controller read when they load (openVikingCompileExecution.mjs).
+COPY --from=build /app/packages/contracts/openviking/compile-scope-proof.json ./packages/contracts/openviking/compile-scope-proof.json
 COPY --from=build /app/packages/harness-port/index.mjs /app/packages/harness-port/seam-manifest.json ./packages/harness-port/
 COPY --from=build /app/packages/harness-port/src ./packages/harness-port/src
 COPY --from=build /app/packages/socket/index.mjs /app/packages/socket/cordis.patch.yml ./packages/socket/

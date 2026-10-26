@@ -57,6 +57,32 @@ it("separates authored methods from upstream packages and exposes only the upstr
   expect(screen.queryByRole("button", { name: "清除筛选" })).not.toBeInTheDocument();
 });
 
+it("draws the GitHub link as the quiet text action beside it, not as a smaller link of its own", async () => {
+  open("/app/extensions/installed");
+  const link = await screen.findByRole("link", { name: "科学绘图 的 GitHub" });
+  // One look for one job: a 20 px, 12 px link was a kind of control of its own on every view of the page (release walk of evimed-b559d4b7ebd0-1).
+  expect(link).toHaveClass("h-sm", "text-ui", "rounded");
+  expect(link).not.toHaveClass("text-caption");
+  expect(link).toHaveAttribute("target", "_blank");
+});
+
+it("reads 发现 a page at a time: a section shows its first twelve cards and 显示更多, and a search starts it again", async () => {
+  const many = Array.from({ length: 30 }, (_, index) => ({ ...skill, id: `curated:own-${index}`, title: `自研方法 ${index + 1}`, provenance: { ...source, kind: "first-party" } }));
+  skills.listPlatformSkills.mockResolvedValue({ groups: [skill.group], items: many });
+  open();
+  const own = await screen.findByRole("region", { name: "EviMed Science" });
+  const cards = () => within(own).getAllByRole("listitem");
+  await waitFor(() => expect(cards()).toHaveLength(12));
+  // The section's count is the whole section's, not the window's.
+  expect(within(own).getByText("31 项")).toBeInTheDocument();
+  await userEvent.click(within(own).getByRole("button", { name: "显示更多 · 还有 19 个" }));
+  expect(cards()).toHaveLength(31);
+  expect(within(own).queryByRole("button", { name: /显示更多/ })).not.toBeInTheDocument();
+  await userEvent.type(screen.getByRole("searchbox", { name: "搜索插件与技能" }), "自研");
+  await waitFor(() => expect(cards()).toHaveLength(12));
+  expect(within(own).getByRole("button", { name: "显示更多 · 还有 18 个" })).toBeInTheDocument();
+});
+
 it("keeps source filtering when switching between discovery and added", async () => {
   skills.listPlatformSkills.mockResolvedValue({ groups: [skill.group], items: [skill,
     { ...skill, id: "curated:authored", title: "自研分析", provenance: { ...source, kind: "first-party" } },

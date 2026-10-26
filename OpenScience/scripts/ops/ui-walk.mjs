@@ -212,7 +212,7 @@ const WALK_TABLES = {
       {"view":"virtual-research-definitions","route":"/app/virtual-research?tab=definitions","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","rows":false},
       {"view":"files","route":"/app/files","pattern":"/app/files","family":"knowledge","template":"T1","budget":"data","shapes":2,"rows":true},
       {"view":"knowledge-pages","route":"/app/files?kind=wiki","pattern":"/app/files","family":"knowledge","template":"T1","shapes":2,"rows":true},
-      {"view":"knowledge-graph","route":"/app/files?kind=wiki&view=graph","pattern":"/app/files","family":"knowledge","template":"T4","shapes":3,"rows":true},
+      {"view":"knowledge-graph","route":"/app/files?kind=wiki&view=graph","pattern":"/app/files","family":"knowledge","template":"T4","budget":"data","shapes":3,"rows":true},
       {"view":"files-reader","discovered":true,"pattern":"/app/files/:sourceId","family":"knowledge-record","template":"T5","budget":"data","rows":false},
       {"view":"memory","route":"/app/memory?tab=self","pattern":"/app/memory","family":"memory","template":"T1","shapes":2,"rows":true},
       {"view":"memory-project","route":"/app/memory?tab=project","pattern":"/app/memory","family":"memory","template":"T1","shapes":2,"rows":true},
@@ -3712,7 +3712,7 @@ export async function walkMemoryMap(page, base, route) {
 }
 
 /**
- * The new-skill drawer: opened from the toolbar's 「添加技能」 menu by 创建技能, it says what its fields
+ * The new-skill drawer: opened from the header's 「添加技能」 menu by 创建技能, it says what its fields
  * are for and offers to use the skill in this project, and 保存 with every field empty names what is missing in place. The save
  * button writes, so every request that is not a read is refused in the browser before it leaves, and the step fails if one was
  * tried. A control the step cannot find fails it: a walk that did not reach the drawer has not walked it.

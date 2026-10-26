@@ -272,24 +272,25 @@ function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; 
     { load: projectPlugins, label: "重试项目插件设置" }, { load: builtinPlugins, label: "重试内置插件设置" }, { load: inventory, label: "重试平台能力" },
     { load: tools, label: "重试科研工具" },
   ];
+  // The page's one primary action is the header's (DESIGN.md 「页面结构」 rule 3): 添加技能 opens 导入 / 创建, on every view and at every width.
   return <PageShell title="插件与技能" width="wide" meta={<Tooltip content={`当前项目：${projectName}`} kind="label"><span className="inline-flex max-w-48 items-center gap-1.5 text-ui"><Folder size={16} aria-hidden /><span className="truncate">{projectName}</span></span></Tooltip>}
+    actions={<Menu label="导入与创建" items={[
+      { label: "导入技能", icon: Upload, onSelect: () => setOpen({ kind: "import" }) },
+      { label: "创建技能", icon: Plus, onSelect: () => setOpen({ kind: "create" }) },
+    ]}><Button>添加技能<ChevronDown size={16} aria-hidden /></Button></Menu>}
     toolbar={{ label: "筛选与搜索", className: "pt-3",
       views: { label: "插件与技能", value: view, items: [{ value: "discover", label: "发现" }, { value: "installed", label: "已添加" }], onChange: next => { setOpen(null); navigate(`/app/extensions/${next}?${params}`); } },
       filters: [{ kind: "select", label: "类型", allLabel: "全部类型", value: type === "all" ? null : type, options: [{ value: "skills", label: "技能" }, { value: "plugins", label: "插件" }], onChange: next => { const changed = new URLSearchParams(params); changed.set("type", next ?? "all"); changed.delete("group"); setParams(changed, { replace: true }); } },
         { kind: "select", label: "来源", allLabel: "全部来源", value: origin === "all" ? null : origin, options: catalogueOrigins, onChange: next => setFilter("origin", next ?? "all") },
         ...(groups.length > 1 ? [{ kind: "select" as const, label: "分类", allLabel: "全部分类", value: group === "all" ? null : group, options: groups.map(name => ({ value: name, label: name })), onChange: (next: string | null) => setFilter("group", next ?? "all") }] : [])],
       search: { label: "搜索插件与技能", value: query, placeholder: "搜索名称、用途或作者", onChange: next => setFilter("q", next), onClear: () => setFilter("q", "") },
-      actions: <Menu label="导入与创建" items={[
-        { label: "导入技能", icon: Upload, onSelect: () => setOpen({ kind: "import" }) },
-        { label: "创建技能", icon: Plus, onSelect: () => setOpen({ kind: "create" }) },
-      ]}><Button size="sm">添加技能<ChevronDown size={16} aria-hidden /></Button></Menu>,
       onClear: narrow ? undefined : clearFilters, onReset: clearFilters }}>
     {actionError && open?.kind !== "create" && <LoadError message={actionError} onRetry={() => { setActionError(null); reloadSelections(); projectPlugins.reload(); }} />}
     {citation.error && controlled.some(item => item.control.kind === "switch" && item.control.setting === "dsh-cite") && <Note tone="warn" action={<Button size="sm" variant="text" disabled={citation.busy} onClick={() => void citation.reload()}>刷新引用设置</Button>}>{citation.error}</Note>}
     {failures.map(({ load, label }) => load.state.status === "error" && <Note key={label} tone="warn" action={<Button size="sm" variant="text" onClick={() => load.reload()}>{label}</Button>}>{load.state.message}</Note>)}
     {unavailable && type !== "skills" && <Note action={<Button size="sm" variant="text" onClick={() => catalogue.reload()}>刷新插件目录</Button>}>暂未提供可添加的插件，已有功能仍可使用。</Note>}
     {type !== "plugins" && <PendingSkillTransfers onResume={entry => setOpen({ kind: "import", recovery: entry })} />}
-    {loading ? <FilesSkeleton /> : filtered.length ? <CatalogueView entries={filtered} view={view} />
+    {loading ? <FilesSkeleton /> : filtered.length ? <CatalogueView entries={filtered} view={view} resetKey={`${view}|${type}|${group}|${origin}|${query}`} />
       : <EmptyState title={query || group !== "all" || origin !== "all" ? "没有找到匹配项" : view === "installed" ? "还没有添加这类扩展" : "暂无可添加的扩展"}
         action={<Button variant="secondary" onClick={() => { setParams({}, { replace: true }); navigate("/app/extensions/discover"); }}>浏览全部</Button>} />}
     {cursor && type !== "plugins" && <div className="mt-4"><Button variant="text" loading={loadingMore} onClick={() => void loadMore()}>更多我的技能</Button></div>}
