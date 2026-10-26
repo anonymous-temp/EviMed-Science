@@ -12,11 +12,10 @@
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f7f5ef" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#171512" />
     <!-- Add to a phone's home screen (public/manifest.json; no service worker).
-         Unhashed, so cached for a year like theme-init.js: bump ?v= on a change.
-         v=3: warm-paper icons with the EviMed molecule in neutral brand ink,
-         and the full EviMed Science product name. -->
-    <link rel="manifest" href="/manifest.json?v=3" />
-    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png?v=3" />
+         Unhashed by the build, so cached for a year like theme-init.js: each ?v= below is a hash of the file it names, written by
+         `pnpm tokens:css`, so a changed manifest or icon is a new URL and an installed client picks it up. -->
+    <link rel="manifest" href="/manifest.json?v=16c9bc0c" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png?v=b37a45c1" />
     <meta name="apple-mobile-web-app-title" content="EviMed Science" />
     <title>EviMed Science</title>
     <!-- Before first paint (public/theme-init.js). Not hashed by the build, and

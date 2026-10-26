@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,7 +18,7 @@ import { COLOR_ROLES, colorRole } from "@evimed/design-tokens";
  * and the 180 px Apple touch icon; and `evimed-app-icon-maskable.svg` — neutral ink
  * to the edges, the mark in warm paper inside the centre 60 % — at 512, which
  * is also the Feishu bot's avatar. The server caches unhashed files for a
- * year, so a changed icon needs a new `?v=`.
+ * year, so each is linked with a `?v=` that is a hash of its own bytes.
  */
 const WEB = fileURLToPath(new URL("../..", import.meta.url));
 const read = (path: string) => readFileSync(join(WEB, path), "utf8");
@@ -96,7 +97,7 @@ describe("the web app manifest", () => {
 
   it("is linked from the page, with the home-screen icon iOS reads instead", () => {
     const manifestHref = /<link rel="manifest" href="([^"]+)"/.exec(html)?.[1];
-    expect(manifestHref).toMatch(/^\/manifest\.json\?v=\d+$/);
+    expect(manifestHref).toMatch(/^\/manifest\.json\?v=[0-9a-f]{8}$/);
     const touchHref = /<link rel="apple-touch-icon" href="([^"]+)"/.exec(html)?.[1];
     expect(touchHref).toBeDefined();
     expect(pngSize(publicFile(touchHref!))).toBe("180x180");
@@ -203,10 +204,13 @@ describe("the icons use neutral identity ink independently from action colour", 
     }
   });
 
-  it("links every icon with the cache buster that changed with it", () => {
-    for (const icon of manifest.icons) expect(icon.src, icon.src).toMatch(/\?v=3$/);
-    expect(html).toContain('<link rel="manifest" href="/manifest.json?v=3" />');
-    expect(html).toContain('<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png?v=3" />');
+  // The files are served as immutable for a year, so the URL is the only way an installed client learns of a change: a colour in the
+  // manifest or a new icon must come with a new `?v=`, which `pnpm tokens:css` derives from the bytes and nothing else.
+  it("links every icon and the manifest with a cache key that is a hash of their own bytes", () => {
+    const hash = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex").slice(0, 8);
+    for (const icon of manifest.icons) expect(icon.src, icon.src).toBe(`${icon.src.split("?")[0]}?v=${hash(publicFile(icon.src))}`);
+    expect(html).toContain(`<link rel="manifest" href="/manifest.json?v=${hash(join(WEB, "public/manifest.json"))}" />`);
+    expect(html).toContain(`<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png?v=${hash(publicFile("/icons/apple-touch-icon.png"))}" />`);
     expect(html).toContain('<link rel="icon" type="image/svg+xml" href="/src/assets/evimed-mark.svg" />');
   });
 

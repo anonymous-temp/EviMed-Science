@@ -3,12 +3,15 @@
  * geometry from EviMedMark. The frame helper is serialized into a browser
  * closure, so it must be generated as a self-contained function.
  */
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { colorRole } from '../../packages/design-tokens/src/index.mjs'
 
 const root = new URL('../../', import.meta.url)
 const read = (/** @type {string} */ path) => readFileSync(new URL(path, root), 'utf8')
+/** Short content hash: the cache key of a file the server sends as immutable for a year, so a changed file is always a new URL. */
+const version = (/** @type {string | Uint8Array} */ bytes) => createHash('sha256').update(bytes).digest('hex').slice(0, 8)
 const begin = '/* >>> generated brand identity — run `pnpm tokens:css` <<< */'
 const end = '/* <<< generated brand identity >>> */'
 
@@ -31,18 +34,25 @@ export function brandArtifacts() {
   const manifest = JSON.parse(read('apps/web/public/manifest.json'))
   manifest.theme_color = canvas
   manifest.background_color = canvas
-  // These files are cached for a year. The revision moves when the artwork does.
-  const revision = 3
-  for (const item of manifest.icons) item.src = item.src.replace(/\?v=\d+$/, `?v=${revision}`)
+  // These files are cached for a year, so every one is addressed by what it holds: an icon by its own bytes, the manifest by
+  // the bytes written below (which name the icons). A colour or an artwork change can never ship under a URL already cached.
+  const iconVersion = (/** @type {string} */ src) => version(readFileSync(new URL(`apps/web/public${src.replace(/\?.*$/, '')}`, root)))
+  for (const item of manifest.icons) item.src = `${item.src.replace(/\?.*$/, '')}?v=${iconVersion(item.src)}`
+  const manifestBytes = `${JSON.stringify(manifest, null, 2)}\n`
+  const links = {
+    manifest: `/manifest.json?v=${version(manifestBytes)}`,
+    appleTouchIcon: `/icons/apple-touch-icon.png?v=${iconVersion('/icons/apple-touch-icon.png')}`,
+  }
   const html = read('apps/web/index.html')
     .replace(/(<meta name="theme-color" media="\(prefers-color-scheme: light\)" content=")[^"]+/, `$1${canvas}`)
     .replace(/(<meta name="theme-color" media="\(prefers-color-scheme: dark\)" content=")[^"]+/, `$1${colorRole('bg', 'dark')}`)
-    .replace(/(href="\/(?:manifest\.json|icons\/apple-touch-icon\.png)\?v=)\d+/g, `$1${revision}`)
+    .replace(/(<link rel="manifest" href=")[^"]+/, `$1${links.manifest}`)
+    .replace(/(<link rel="apple-touch-icon" href=")[^"]+/, `$1${links.appleTouchIcon}`)
   return Object.fromEntries(Object.entries({
     'apps/web/src/assets/evimed-mark.svg': mark,
     'apps/web/src/assets/evimed-app-icon.svg': icon(false),
     'apps/web/src/assets/evimed-app-icon-maskable.svg': icon(true),
-    'apps/web/public/manifest.json': `${JSON.stringify(manifest, null, 2)}\n`,
+    'apps/web/public/manifest.json': manifestBytes,
     'apps/web/index.html': html,
     'packages/harness-port/src/runtimeUiShell.mjs': shell.slice(0, start) + helper + shell.slice(stop + end.length),
   }).map(([name, bytes]) => [fileURLToPath(new URL(name, root)), bytes]))
