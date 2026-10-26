@@ -150,6 +150,37 @@ class DecisionTests(unittest.TestCase):
         for value in (9007199254740992, float('nan'), float('inf')):
             with self.assertRaises(ValueError): MODULE.registration_digest({'bad': value})
 
+    def test_deterministic_consumer_r1_retains_group_sampling_uncertainty(self):
+        reg, rows, receipt = fixture('targeted-repair', n=80)
+        reg['deterministicConsumer'] = True
+        reg['families']['office']['repeats'] = 1
+        rows = [row for row in rows if row['repeat'] == 0]
+        receipt['deterministic_qualification']['type'] = 'trusted-deterministic-consumer'
+        receipt['registration_digest'] = MODULE.registration_digest(reg)
+        for row in rows:
+            if row['arm'] == 'candidate':
+                row['quality'] += .1 + int(row['group']) * .001
+                row['cost'] = 1.01 + int(row['group']) * .0001
+        result = MODULE.evaluate(reg, rows, receipt)
+        self.assertEqual(result['decision'], 'qualified')
+        self.assertEqual(result['evidenceScope'], 'population-task-family')
+        interval = result['quantities']['targeted-repair']['failure_slice_quality']
+        self.assertLess(interval['lower'], interval['mean'])
+        for row in rows:
+            if row['arm'] == 'candidate': row['quality'] = .1 + int(row['group']) * .0001
+        self.assertNotEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'qualified')
+        reg.pop('deterministicConsumer')
+        receipt['registration_digest'] = MODULE.registration_digest(reg)
+        self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
+
+    def test_finite_corpus_is_diagnostic_and_z_timestamp_supported(self):
+        reg, rows, receipt = fixture(mode='deterministic')
+        receipt['now'] = '2026-10-26T00:00:00Z'
+        result = MODULE.evaluate(reg, rows, receipt)
+        self.assertEqual(result['decision'], 'qualified')
+        self.assertEqual(result['evidenceScope'], 'finite-corpus-diagnostic')
+        self.assertFalse(result['globalPolicyEligible'])
+
     def test_review_malformed_and_overflow_fail_closed(self):
         for reg, rows, receipt in (([], [], {}), ({}, [[]], {})):
             self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
