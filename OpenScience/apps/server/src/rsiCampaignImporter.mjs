@@ -76,7 +76,7 @@ export class RsiCampaignImporter {
       const stored=await this.read(client,id);if(!stored)conflict('campaign_journal_missing')
       const row=stored.payload;if(row.state!=='staged')return row
       const adapter=this.adapters[row.kind];if(!adapter?.inspect || !adapter?.publish)return {...row,reason:'campaign_adapter_unavailable'}
-      const installed=await adapter.inspect({operationId:row.operationId,surface:row.surface,phase:row.phase})
+      const installed=await adapter.inspect({operationId:row.operationId,surface:row.surface,phase:row.phase,transactionClient:client})
       const current=await this.currentTarget(row.surface,client)
       const expected={...row.target,baselineRevision:row.phase==='activate' && rsiActivationReceipt(installed,row)?installed.revision:row.target.baselineRevision}
       // Inspect first: expiry disallows new effects, but cannot hide an already activated effect.
@@ -87,19 +87,19 @@ export class RsiCampaignImporter {
       if(!rsiActivationReceipt(proof,row)) {
         if(installed?.installed)conflict('campaign_installed_identity_conflict')
         const staging={...row,phase:'stage'}
-        let staged=await adapter.inspect({operationId:row.operationId,surface:row.surface,phase:'stage'})
+        let staged=await adapter.inspect({operationId:row.operationId,surface:row.surface,phase:'stage',transactionClient:client})
         if(!rsiActivationReceipt(staged,staging)) {
           if(staged?.installed)conflict('campaign_installed_identity_conflict')
           if(!files)return {...row,reason:'campaign_verified_bytes_required'}
           if(rsiDigest(files)!==row.candidateDigest)conflict('campaign_candidate_digest_changed')
-          await adapter.publish({operationId:row.operationId,surface:row.surface,files,phase:'stage',mode:row.mode,expectedTarget:row.target})
-          staged=await adapter.inspect({operationId:row.operationId,surface:row.surface,phase:'stage'})
+          await adapter.publish({operationId:row.operationId,surface:row.surface,files,phase:'stage',mode:row.mode,expectedTarget:row.target,transactionClient:client})
+          staged=await adapter.inspect({operationId:row.operationId,surface:row.surface,phase:'stage',transactionClient:client})
           if(!rsiActivationReceipt(staged,staging))conflict('campaign_stage_unwitnessed')
         }
         if(row.phase==='activate') {
           if(rsiCompatibilityIssues(row.target,await this.currentTarget(row.surface,client)).length)conflict('campaign_target_changed')
-          await adapter.publish({operationId:row.operationId,surface:row.surface,phase:'activate',revision:staged.revision,mode:row.mode,expectedTarget:row.target})
-          proof=await adapter.inspect({operationId:row.operationId,surface:row.surface,phase:'activate'})
+          await adapter.publish({operationId:row.operationId,surface:row.surface,phase:'activate',revision:staged.revision,mode:row.mode,expectedTarget:row.target,transactionClient:client})
+          proof=await adapter.inspect({operationId:row.operationId,surface:row.surface,phase:'activate',transactionClient:client})
         }else proof=staged
       }
       if(!rsiActivationReceipt(proof,row))conflict('campaign_publication_unwitnessed')
@@ -146,7 +146,7 @@ export class RsiCampaignImporter {
       if(current.dependencyDigest!==row.target.dependencyDigest || ![row.revision,row.previousRevision].includes(current.baselineRevision))return {...row,reason:'campaign_rollback_incompatible'}
       const adapter=this.adapters[row.kind]
       if(!adapter?.rollback)return {...row,reason:'campaign_rollback_unavailable'}
-      const receipt=await adapter.rollback({operationId:row.rollbackOperationId,surface:row.surface,revision:row.previousRevision,expectedRevision:row.revision,dependencyDigest:row.target.dependencyDigest})
+      const receipt=await adapter.rollback({operationId:row.rollbackOperationId,surface:row.surface,revision:row.previousRevision,expectedRevision:row.revision,dependencyDigest:row.target.dependencyDigest,transactionClient:client})
       if(receipt?.operationId!==row.rollbackOperationId || receipt.revision!==row.previousRevision || receipt.dependencyDigest!==row.target.dependencyDigest || receipt.installed!==true)conflict('campaign_rollback_unwitnessed')
       return this.write(client,{...row,state:'rolled-back',rolledBackAt:this.now()},stored.revision)
     })
