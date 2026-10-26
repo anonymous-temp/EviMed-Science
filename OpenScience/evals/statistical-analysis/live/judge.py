@@ -11,6 +11,7 @@ import argparse
 import csv
 import hashlib
 import importlib.metadata
+import io
 import json
 import math
 from pathlib import Path
@@ -20,10 +21,10 @@ from scipy import stats
 from sklearn.metrics import average_precision_score, roc_auc_score
 
 
-def comparison_reference(fixtures, *, supplement=False, corrected=False, scale=1):
+def comparison_reference(fixtures, *, supplement=False, corrected=False, scale=1, read_bytes=None):
     def read(name):
-        with (Path(fixtures) / name).open() as file:
-            return list(csv.DictReader(file))
+        payload = read_bytes(name) if read_bytes else (Path(fixtures) / name).read_bytes()
+        return list(csv.DictReader(io.StringIO(payload.decode('utf-8'))))
     rows = read('coding-correction.csv' if corrected else 'cohort.csv')
     if corrected:
         original = read('cohort.csv')
@@ -85,7 +86,7 @@ def check_bindings(actual, expected, bindings):
 
 
 def prediction_reference(source, returned, *, id_column, probability_column, source_id_column=None, threshold=.5, split_column=None, test_label='test'):
-    if not math.isfinite(threshold) or not 0 <= threshold <= 1:
+    if isinstance(threshold, bool) or not isinstance(threshold, (int, float)) or not math.isfinite(threshold) or not 0 <= threshold <= 1:
         raise ValueError('Invalid threshold.')
     source_id_column = id_column if source_id_column is None else source_id_column
     known = {str(row[source_id_column]): row for row in source}
@@ -128,7 +129,6 @@ def main():
     parser.add_argument('--out', required=True)
     args = parser.parse_args()
     root = Path(args.artifacts).resolve()
-    spec = json.loads(Path(args.bindings).read_text())
     inputs = []
 
     def receipt(file, role):
@@ -136,7 +136,7 @@ def main():
         inputs.append({'role': role, 'path': str(file), 'sha256': hashlib.sha256(payload).hexdigest(), 'bytes': len(payload)})
         return payload
 
-    receipt(Path(args.bindings).resolve(), 'bindings')
+    spec = json.loads(receipt(Path(args.bindings).resolve(), 'bindings'))
     receipt(Path(__file__).resolve(), 'judge')
     fixtures = Path(__file__).parent / 'fixtures'
     fixture_manifest = json.loads(receipt(Path(__file__).with_name('fixture-sources.json'), 'fixture-manifest'))
@@ -146,7 +146,7 @@ def main():
         payload = receipt(file, 'fixture')
         if hashlib.sha256(payload).hexdigest() != fixture_manifest['sha256'][name]:
             raise ValueError('Fixture differs from its recorded source digest.')
-        return file
+        return payload
 
     checks = []
     for turn in spec['turns']:
@@ -160,17 +160,12 @@ def main():
             predictions = (workspace / turn['predictions']).resolve()
             if not predictions.is_relative_to(workspace):
                 raise ValueError('Predictions must be inside the captured workspace.')
-            receipt(predictions, 'predictions')
-            with fixture('breast-cancer.csv').open() as source, predictions.open() as returned:
-                reference = prediction_reference(list(csv.DictReader(source)), list(csv.DictReader(returned)), **turn['predictionOptions'])
+            returned = list(csv.DictReader(io.StringIO(receipt(predictions, 'predictions').decode('utf-8'))))
+            source = list(csv.DictReader(io.StringIO(fixture('breast-cancer.csv').decode('utf-8'))))
+            reference = prediction_reference(source, returned, **turn['predictionOptions'])
         elif kind == 'comparison':
             options = turn.get('referenceOptions', {})
-            fixture('coding-correction.csv' if options.get('corrected') else 'cohort.csv')
-            if options.get('corrected'):
-                fixture('cohort.csv')
-            if options.get('supplement'):
-                fixture('supplement.csv')
-            reference = comparison_reference(fixtures, **options)
+            reference = comparison_reference(fixtures, read_bytes=fixture, **options)
         else:
             raise ValueError('Unknown independent reference kind.')
         expected = {name: reference[name] for name in turn['required']}
