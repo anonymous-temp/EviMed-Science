@@ -19,7 +19,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { brotliCompressSync } from "node:zlib";
 import {
-  AFTER_CLICK_KIND, afterClickFindings, afterClickProbe, BACK_OFFICE, BUDGET_BY_PAGE, budgetKey, cleanupFindings, cleanupNotices, clickNamed, clickRowTitled,
+  AFTER_CLICK_KIND, AFTER_CLICK_LIST, afterClickFindings, afterClickIndex, afterClickProbe, BACK_OFFICE, BUDGET_BY_PAGE, budgetKey, cleanupFindings, cleanupNotices, clickNamed, clickRowTitled,
   EXPECTED_REFUSALS, focusProbe, frontierTargets, frontierItemRoute, GEO_TABS, geoAnswerSnapshot, HEADING_ORDER_PAGES, keylessTitles, knowledgeProbe, knowledgeReturnFindings,
   matrixFindings, matrixProbe, matrixRoute, measure, measureStructure, MISSING_RECORDS, ORIGINAL_MIN_WIDTH,
   pageFindings, pageProbe, PAGE_PROBES, pdfFrameReady, pdfPreviewFindings, pdfProbe, pdfSourceTitle, pickVcrStudies, probeFindings,
@@ -796,7 +796,9 @@ function context() {
           // Every fake row is a button, so the rows that open in place are all of them.
           if (action === "targets" || action === "inPlace") {
             // FAKE_ROWS=none: a page with no row to click, as an account with no data draws.
-            return process.env.FAKE_ROWS === "none" ? [] : process.env.FAKE_ROWS === "two" ? ["第一张清单", "第二张清单"] : ["资料清单"];
+            // 循证 GEO's 信源 view as a round with findings draws it: the 「发现与处理」 findings above the 信源 list (V3).
+            return process.env.FAKE_ROWS === "none" ? [] : process.env.FAKE_ROWS === "two" ? ["第一张清单", "第二张清单"]
+              : /\/sources$/.test(new URL(url).pathname) ? ["发现与处理记录", "信源"] : ["资料清单"];
           }
           if (action === "state") return { dialog: dialogOpen, path: new URL(url).pathname, expanded: 0 };
           // FAKE_ROWS=external: the row's title is a link to an outside address; the browser reports no popup, and the row is not silent.
@@ -1410,11 +1412,13 @@ test("the walk clicks the first row of each list on the pages R10 rebuilt, at th
 test("a row that shows nothing when clicked fails the page it is on, on every page that is clicked", async () => {
   const { code, report } = await walk({ FAKE_ROWS: "dead" });
   assert.equal(code, 1);
-  const sentence = (name) => `${name}@desktop: clicking the first row of the list “资料清单” showed nothing — no drawer, no page, no opened row`;
+  const sentence = (name, list) => `${name}@desktop: clicking the first row of the list “${list}” showed nothing — no drawer, no page, no opened row`;
+  // The fake's 信源 view holds two lists (the findings above the sources), and each first row is clicked.
+  const lists = (name) => (name === "geo-sources" ? ["发现与处理记录", "信源"] : ["资料清单"]);
   // R13 made six of these pages notices "until a walk has reported how they behave"; R19 S4 made them what the others always were.
-  for (const name of ROW_CLICK_PAGES) assert.ok(report.failures.includes(sentence(name)), name);
+  for (const name of ROW_CLICK_PAGES) for (const list of lists(name)) assert.ok(report.failures.includes(sentence(name, list)), `${name}: ${list}`);
   assert.ok(report.failures.includes("memory-map@desktop: pressing the first mark opened no drawer"));
-  assert.equal(report.failures.length, ROW_CLICK_PAGES.size + 2, report.failures.filter((line) => !line.includes("showed nothing")).join("\n"));
+  assert.equal(report.failures.length, ROW_CLICK_PAGES.size + 1 + 2, report.failures.filter((line) => !line.includes("showed nothing")).join("\n"));
   for (const name of ["frontier-zones", "geo", "geo-accuracy", "geo-questions", "inbox", "geo-sources", "autopilot", "files"]) assert.ok(ROW_CLICK_PAGES.has(name), name);
   // 设置 › 账户 is rows with their own buttons and no list that opens anything (the fixture walk could only report it unobservable).
   assert.equal(ROW_CLICK_PAGES.has("account"), false);
@@ -1444,7 +1448,11 @@ test("R13 first-row clicks: 循证 GEO's groups and findings are clicked like an
   for (const page of ["geo-questions", "geo-accuracy"]) assert.ok(log.some((entry) => entry.rowClick === `/app/geo/geo_1/${page.replace("geo-", "")}`), page);
   // Every R13 page was clicked, and what the first click opened was read where the page has a reading (the source's drawer, the task's page).
   for (const name of ["geo-questions", "geo-accuracy", "inbox", "geo", "frontier-zones"]) assert.deepEqual(report.pages[`${name}@desktop`].rowClicks, [{ label: "资料清单", shown: true }], name);
-  assert.deepEqual(report.pages["geo-sources@desktop"].rowClicks[0].after, { dialog: true, drawers: 1 });
+  // The drawer read is the 信源 row's, not the findings' above it (a finding's row opens its finding).
+  const sourceRows = report.pages["geo-sources@desktop"].rowClicks;
+  assert.deepEqual(sourceRows.map((row) => row.label), ["发现与处理记录", "信源"]);
+  assert.equal(sourceRows[0].after, undefined);
+  assert.deepEqual(sourceRows[1].after, { dialog: true, drawers: 1 });
   assert.equal(report.pages["autopilot@desktop"].rowClicks[0].after.pane, "conversation");
   // The walk starts no runtime, so the task's frame container is compared and an INFO line says there was no iframe to compare: no walk
   // could fill it, so it is not a coverage gap (a fixture walk accepts none).
@@ -1898,6 +1906,16 @@ test("what a first row opened to is read while it is open: a source's drawer, a 
     ["geo-sources@desktop: clicking the first source opened no drawer (a dialog holding data-geo-source-drawer)"]);
   assert.deepEqual(afterClickFindings("geo-sources", "sourceDrawer", null), { failures: [], notices: [] });
   assert.deepEqual(afterClickFindings("geo-sources", "unknown", { drawers: 0 }), { failures: [], notices: [] });
+});
+
+test("the after-click probe reads the list it is about: 信源's first row, after the 「发现与处理」 findings above it", () => {
+  // A finding's row opens its finding; the site's drawer is a 信源 row's (the fixture walk of b559d4b7e read the findings' first row).
+  assert.deepEqual(AFTER_CLICK_LIST, { "geo-sources": "信源" });
+  assert.equal(afterClickIndex("geo-sources", ["发现与处理记录", "信源"]), 1);
+  assert.equal(afterClickIndex("geo-sources", ["信源"]), 0);
+  assert.equal(afterClickIndex("geo-sources", ["发现与处理记录"]), -1, "a page without its 信源 list is read by nothing, and says so");
+  assert.equal(afterClickIndex("autopilot", ["即将执行", "已暂停"]), 0, "a page with no named list reads its first");
+  assert.equal(afterClickIndex("inbox", ["消息"]), -1);
 });
 
 /** The task page as the shell draws it: the list beside the task, the task bar, and a pane the kernel's frame is placed over. */

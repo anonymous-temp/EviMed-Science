@@ -3346,6 +3346,23 @@ export function rowProbe([action, index = 0]) {
 
 /** What the first row of a page's first list opened to, and the probe that reads it (`afterClickProbe`). */
 export const AFTER_CLICK_KIND = { "geo-sources": "sourceDrawer", autopilot: "taskPage" };
+/**
+ * The list whose first row the probe is about, where it is not the page's first: 循证 GEO's 信源 view draws its 「发现与处理」 findings
+ * above the 信源 list once a round has findings (V3), and a finding's row opens its finding, not a site's drawer — the fixture walk of
+ * b559d4b7e read that as "the first source opened no drawer" while a 信源 row opened its drawer.
+ */
+export const AFTER_CLICK_LIST = { "geo-sources": "信源" };
+
+/**
+ * Which of the lists the walk clicks (`labels`, in order) the after-click probe reads: the named list, else the first; -1 for a page with
+ * no probe, or whose named list is not among them.
+ * @param {string} name @param {readonly string[]} labels @returns {number}
+ */
+export function afterClickIndex(name, labels) {
+  if (!(name in AFTER_CLICK_KIND)) return -1;
+  const wanted = /** @type {Record<string, string>} */ (AFTER_CLICK_LIST)[name];
+  return wanted ? labels.indexOf(wanted) : 0;
+}
 
 /** How long the walk waits for a cleanup that never finishes to give up (`CLEANUP_WAIT_MS` of the shell, plus the margin of a slow start). */
 const CLEANUP_WALK_WAIT_MS = 135_000;
@@ -3616,6 +3633,10 @@ async function walkRowClicks(page, base, route, name, popups) {
   /** @type {Array<{ label: string, shown: boolean, after?: any }>} */ const rows = [];
   try {
     const labels = ((await page.evaluate(rowProbe, ["targets", 0])) ?? []).slice(0, ROW_CLICK_LISTS_PER_PAGE);
+    const probeAt = afterClickIndex(name, labels);
+    if (name in AFTER_CLICK_KIND && probeAt < 0 && labels.length > 0) {
+      notices.push(`${name}@desktop: not observable: the list whose first row is read after the click (“${/** @type {Record<string, string>} */ (AFTER_CLICK_LIST)[name]}”) is not among the lists on the page`);
+    }
     for (let index = 0; index < labels.length; index += 1) {
       if (index > 0) {
         // The last click may have opened a drawer or left the page: start the next from the page as it loads.
@@ -3639,12 +3660,12 @@ async function walkRowClicks(page, base, route, name, popups) {
       const after = await page.evaluate(rowProbe, ["state"]);
       rows.push({ label: labels[index], shown: rowClickShown(before, after, popups.count, external === true) });
       const kind = AFTER_CLICK_KIND[/** @type {keyof typeof AFTER_CLICK_KIND} */ (name)];
-      if (index === 0 && kind) {
-        // The first list's first row is open: read what it opened to, before the next load closes it. A task's page draws its pane once
+      if (index === probeAt && kind) {
+        // The probed list's first row is open: read what it opened to, before the next load closes it. A task's page draws its pane once
         // the task and its executions are read.
         if (kind === "taskPage") await page.waitForFunction(taskPaneReady, undefined, { timeout: 6_000 }).catch(() => null);
         const opened = await page.evaluate(afterClickProbe, [kind]);
-        rows[0].after = opened;
+        rows[index].after = opened;
         const judged = afterClickFindings(name, kind, opened);
         failures.push(...judged.failures);
         notices.push(...judged.notices);
