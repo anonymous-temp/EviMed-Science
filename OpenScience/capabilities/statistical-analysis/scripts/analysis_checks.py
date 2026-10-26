@@ -397,17 +397,25 @@ def audit_predictions(rows, *, outcome_column, positive_label, negative_label, p
         findings.append(_finding("probability_label_mismatch", interpretation="Metrics require probabilities for the explicitly declared positive label; no inversion applied."))
     if predictor_columns is None:
         notes.append(_note("predictors", "predictors_undeclared"))
-    if outcome_column in (predictor_columns or []):
-        findings.append(_finding("target_in_predictors", stage="final_predictors"))
-    for stage in fit_stages or []:
-        if outcome_column in (stage.get("predictors") or []):
-            findings.append(_finding("target_in_predictors", stage=stage["name"]))
+    role_columns = {
+        "target_in_predictors": {outcome_column},
+        "identifier_in_predictors": {patient_id_column, observation_id_column} - {None},
+        "split_in_predictors": {split_column},
+        "probability_in_predictors": {probability_column},
+    }
+    predictor_sets = [("final_predictors", predictor_columns or [])] + [
+        (stage["name"], stage.get("predictors") or []) for stage in fit_stages or []]
+    for stage_name, predictors in predictor_sets:
+        for code, columns_for_role in role_columns.items():
+            included = columns_for_role & set(predictors)
+            if included:
+                findings.append(_finding(code, stage=stage_name, columns=sorted(included)))
     duplicates = _duplicate_summary(rows, patient_id_column, observation_id_column, findings, notes)
     overlap = len(train_patients & test_patients)
     if overlap:
         findings.append(_finding("patient_split_overlap", overlap))
     fit_scope = _fit_scope(rows, fit_stages, patient_id_column, observation_id_column, split_column, train, test, findings, notes)
-    compromise_codes = {"patient_split_overlap", "fit_test_contamination", "target_in_predictors", "duplicate_exact", "duplicate_conflicting", "repeated_measurements", "repeated_patient_unresolved"}
+    compromise_codes = {"patient_split_overlap", "fit_test_contamination", "target_in_predictors", "identifier_in_predictors", "split_in_predictors", "probability_in_predictors", "duplicate_exact", "duplicate_conflicting", "repeated_measurements", "repeated_patient_unresolved"}
     compromised = bool(compromise_codes & {item["code"] for item in findings})
     validation = "compromised" if compromised else "not_established" if notes or findings or not y else "supported_by_declared_checks"
     metrics = _unsupported("probability_label_mismatch") if mismatch else _metrics(y, probabilities, int(calibration_bins), threshold, positive_label, negative_label, validation != "supported_by_declared_checks")
