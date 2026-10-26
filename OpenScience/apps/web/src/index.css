@@ -626,14 +626,15 @@ a,
 button {
   border-radius: var(--radius-control);
 }
-/* Fields use ink focus while their error border remains visible. Forced colors
+/* Fields use ink focus. The ring is drawn inside the field's own box (a negative offset): a field in an overflow container, a table
+   cell or a one-line row has no room outside it for the 2 px ring and its offset, and an outside ring was cut off there. Forced colors
    replaces this semantic ink with the system Highlight via the generated rule. */
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
 [contenteditable]:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-input);
-  outline-offset: var(--focus-ring-offset);
+  outline-offset: calc(var(--focus-ring-width) * -1);
 }
 
 @media (forced-colors: active) {

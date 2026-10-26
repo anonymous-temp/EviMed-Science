@@ -64,7 +64,9 @@ describe("Input", () => {
     expect(input).toHaveClass("border-border-control");
     // Focus is an outline forced colours can paint, never a ring shadow
     // (appendix E #1).
-    expect(input).toHaveClass("focus:outline-focus-input", "focus:outline-2", "focus:outline-offset-2");
+    expect(input).toHaveClass("focus:outline-focus-input", "focus:outline-2", "focus:-outline-offset-2");
+    // Inside the box: an outside ring is cut off where the field has no room around it.
+    expect(input.className).not.toMatch(/(^|\s)focus:outline-offset-/);
     expect(input.className).not.toMatch(/ring-/);
   });
 

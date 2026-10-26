@@ -17,7 +17,9 @@ import { cn } from "@/lib/cn";
 const controlBase = cn(
   "w-full rounded border bg-surface px-3 text-ui text-text outline-none transition-colors duration-fast max-md:text-body",
   "placeholder:text-text-3 disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-text-3",
-  "focus:outline-2 focus:outline-offset-2",
+  // The ring is drawn inside the field's own box (a negative offset): a field in an `overflow` container, a table cell or the
+  // sidebar's rename row has no 4 px of room outside it, and an outside ring was cut off there.
+  "focus:outline-2 focus:-outline-offset-2",
 );
 
 function borderClasses(error: boolean): string {

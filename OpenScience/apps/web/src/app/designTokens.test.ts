@@ -216,7 +216,8 @@ describe("the hand-written rules read the tokens (appendix E #1, #6, #12, #31)",
 
   it("draws accent control focus and independent ink field focus as outlines", () => {
     expect(handWritten).toMatch(/:focus-visible \{\n {2}outline: var\(--focus-ring-width\) solid var\(--focus\);\n {2}outline-offset: var\(--focus-ring-offset\);/);
-    expect(handWritten).toMatch(/\[contenteditable\]:focus-visible \{\n {2}outline: var\(--focus-ring-width\) solid var\(--focus-input\);/);
+    // A field's ring is inside its box: an outside one is cut off in an overflow container.
+    expect(handWritten).toMatch(/\[contenteditable\]:focus-visible \{\n {2}outline: var\(--focus-ring-width\) solid var\(--focus-input\);\n {2}outline-offset: calc\(var\(--focus-ring-width\) \* -1\);/);
     expect(handWritten).not.toMatch(/outline: none/);
   });
 
