@@ -86,7 +86,8 @@ export function HotCard({ events, onOpenAll }: { events: readonly FrontierHotEve
       padding="p-3"
       header={(
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-section font-semibold leading-6 text-text">当前热点</h2>
+          {/* The feed's own group heading size (the day's heading and the titles are 16/600 too): at 18 it was a fifth type pair on 精选, which holds four. */}
+          <h2 className="text-body font-semibold leading-6 text-text">当前热点</h2>
           <button type="button" onClick={onOpenAll} className={cn(INLINE_ACTION, "-mr-1.5 px-1.5 text-accent")}>完整热榜 ›</button>
         </div>
       )}
