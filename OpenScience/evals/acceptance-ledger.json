@@ -671,7 +671,7 @@
       "evalHarness": "evals/rsi-campaigns",
       "caseCount": 0,
       "command": "pnpm test:rsi",
-      "note": "Offline platform experiment lifecycle, preregistered paired source-group statistics, real frontierMixSelect consumer, signed finalization and incident withdrawal. Local synthetic tests and mathematical calibration are component evidence only; no Alibaba resource, production candidate, fresh confirmation or cloud acceptance run is recorded. Historical 248-row gold is exposed and cannot certify an unseen confirmation.",
+      "note": "Offline platform experiments: the monthly frontier-selection campaign (production export of whole days with the mix taken back, day-unit superiority statistics v5, a calibrated two-pass Qwen label jury, an evaluator that recomputes and signs, signed monthly report, file-signed finalization of a qualified campaign) on the Alibaba lab host, timer 1st 02:00 Asia/Shanghai, production push 00:30. A lab rehearsal on 2026-10-26 (October windows, rehearsal-only weight) ran every step and ended inconclusive below 25 groups; that is plumbing evidence, not a delivery. The first real campaign runs 2026-11-01; no bundle is imported into production in this phase. The 248-row human anchor calibrates the jury (even half) and is never a confirmation corpus.",
       "realDelivery": {
         "status": "not-run",
         "evidence": null,
