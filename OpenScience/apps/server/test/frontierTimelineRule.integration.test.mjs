@@ -23,8 +23,9 @@ if (databaseUrl) {
 }
 const options = { skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
 
-const database = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 4, databaseConnectionTimeoutMs: 2_000 });
-after(async () => { await database.close(); });
+// Made only with a database to talk to: without one every test here is skipped, and a pool would refuse to exist (CI's server step).
+const database = /** @type {ControlPlaneDatabase} */ (databaseUrl ? new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 4, databaseConnectionTimeoutMs: 2_000 }) : null);
+after(async () => { await database?.close(); });
 
 class Rollback extends Error {}
 /** Run `work` in a transaction and always roll it back. @param {(client: any) => Promise<void>} work */

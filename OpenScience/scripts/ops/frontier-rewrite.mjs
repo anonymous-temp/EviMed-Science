@@ -244,6 +244,8 @@ export async function frontierRewrite({ database, editor = null, budget = null, 
     summary.title = { items: rows.length, byLanguage: { zh: chinese, other: rows.length - chinese }, titleVersion: FRONTIER_TITLE_VERSION, written: 0, kept: 0, refused: 0, raced: 0 };
     calls.title = rows.length;
     if (apply) {
+      // The vector table exists only with pgvector (the migration skips it otherwise).
+      const vectors = (await database.query("SELECT to_regclass('evimed_frontier.item_vectors') IS NOT NULL AS present")).rows[0]?.present === true;
       // One content-version bump per batch of items, so a long run shows its titles as it goes and does not bump once an item.
       for (let at = 0; at < rows.length; at += TITLE_BATCH) {
         let changed = 0;
@@ -256,14 +258,18 @@ export async function frontierRewrite({ database, editor = null, budget = null, 
           const next = answer?.titleZh ?? null;
           const result = await database.transaction(async (/** @type {any} */ client) => {
             // Nothing written over a title the pipeline wrote while this one was asked: the answer is to the title it read.
-            const current = (await client.query("SELECT title_zh, state FROM evimed_frontier.items WHERE id = $1 FOR UPDATE", [row.id])).rows[0];
+            const current = (await client.query(`SELECT title_zh, title_raw, summary_zh, entities, tags, state FROM evimed_frontier.items
+              WHERE id = $1 FOR UPDATE`, [row.id])).rows[0];
             if (!current || current.state !== "published" || current.title_zh !== row.title_zh) return null;
             const moved = next !== null && next !== current.title_zh;
             await client.query(`UPDATE evimed_frontier.items SET editor_diagnostics = coalesce(editor_diagnostics, '{}'::jsonb) || jsonb_build_object('titleVersion', $2::text) WHERE id = $1`,
               [row.id, FRONTIER_TITLE_VERSION]);
             if (moved) {
-              await client.query("UPDATE evimed_frontier.items SET title_zh = $2, lexemes = $3::tsvector WHERE id = $1",
-                [row.id, next, tsvectorLiteral(frontierLexemeText({ ...row, title_zh: next }))]);
+              // The search words from the row as it stands now (a retag since the read is kept), and the vector goes: it was built from
+              // the old title, and the pipeline's embedding pass writes it again, as after a re-edit.
+              await client.query("UPDATE evimed_frontier.items SET title_zh = $2, lexemes = $3::tsvector, updated_at = clock_timestamp() WHERE id = $1",
+                [row.id, next, tsvectorLiteral(frontierLexemeText({ ...current, title_zh: next }))]);
+              if (vectors) await client.query("DELETE FROM evimed_frontier.item_vectors WHERE item_id = $1", [row.id]);
               await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'upsert', 'title')", [row.id]);
             }
             return { moved };

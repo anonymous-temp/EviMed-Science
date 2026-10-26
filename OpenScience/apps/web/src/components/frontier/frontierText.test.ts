@@ -1,43 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { frontierItem } from "./__fixtures__/frontierItems";
-import {
-  FEED_TIME_ZONE,
-  ago,
-  cardEyebrow,
-  clock,
-  dailyMeta,
-  dateClock,
-  dayHeading,
-  evidenceTag,
-  feedDay,
-  feedDayKey,
-  groupByDay,
-  hotBoardStamp,
-  hotRowMeta,
-  institutionsLine,
-  itemMarkdown,
-  primaryHeld,
-  rankChangeLabel,
-  rankLabel,
-  rankTone,
-  askDraft,
-  itemClock,
-  itemLine,
-  researchDraft,
-  topicAskDraft,
-  metaTime,
-  originalLinkLabel,
-  sameAddress,
-  scoreBand,
-  scoreBreakdown,
-  shortDate,
-  shortUrl,
-  sparkline,
-  splitUrls,
-  stamp,
-  statedDayKey,
-  trimUrl,
-} from "./frontierText";
+import { FEED_TIME_ZONE, ago, cardEyebrow, clock, dailyMeta, dateClock, dayHeading, evidenceTag, feedDay, feedDayKey, groupByDay, hotBoardStamp, hotRowMeta, institutionsLine, itemMarkdown, primaryHeld, rankChangeLabel, rankLabel, rankTone, askDraft, itemClock, itemLine, researchDraft, topicAskDraft, metaTime, originalLinkLabel, sameAddress, scoreBand, scoreBreakdown, shortDate, shortUrl, sparkline, splitUrls, stamp, statedDayKey, trimUrl, isStatedDayEnd, sinceText } from "./frontierText";
 import type { FrontierItem } from "@/lib/frontierClient";
 
 // The feed reads Beijing time whatever the machine's zone is (UTC+8, no daylight saving): `at` is the instant of a Beijing wall clock,
@@ -409,5 +372,30 @@ describe("an address in a text", () => {
   it("is the item's own address whatever its scheme, its www., its trailing slash or its fragment", () => {
     expect(sameAddress("http://www.fda.gov/a/", "https://fda.gov/a#top")).toBe(true);
     expect(sameAddress("https://fda.gov/a", "https://fda.gov/b")).toBe(false);
+  });
+});
+
+describe("a moment that stands for a day and no hour (c4 review: the made-up 23:59)", () => {
+  // frontierTimelineAt places a day-precision item that reached us after its day at 23:59:59.999 Beijing time: 15:59:59.999Z.
+  const dayEnd = "2026-10-25T15:59:59.999Z";
+  const now = Date.parse("2026-10-26T03:00:00.000Z"); // 11:00 on the 26th in Beijing
+  it("is recognised by its exact last millisecond in Beijing time, and nothing else is", () => {
+    expect(isStatedDayEnd(dayEnd)).toBe(true);
+    expect(isStatedDayEnd("2026-10-25T15:59:59.000Z")).toBe(false);
+    expect(isStatedDayEnd("2026-10-25T15:58:59.999Z")).toBe(false);
+    expect(isStatedDayEnd("2026-10-25T23:59:59.999Z")).toBe(false);
+    expect(isStatedDayEnd(null)).toBe(false);
+    expect(isStatedDayEnd("not a time")).toBe(false);
+  });
+  it("has no clock, and its date and how long ago are said in days", () => {
+    expect(clock(dayEnd)).toBe("");
+    expect(dateClock(dayEnd)).toBe("10月25日");
+    expect(ago(dayEnd, now)).toBe("昨天");
+    expect(sinceText(dayEnd, now)).toBe("昨天");
+    expect(ago("2026-10-22T15:59:59.999Z", now)).toBe("4 天前");
+    expect(sinceText("2026-08-01T15:59:59.999Z", now)).toBe("");
+    // An ordinary moment keeps its clock and its hours.
+    expect(clock("2026-10-25T11:00:00.000Z")).toBe("19:00");
+    expect(sinceText("2026-10-25T23:00:00.000Z", now)).toBe("4 小时前");
   });
 });

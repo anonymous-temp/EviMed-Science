@@ -63,7 +63,7 @@ describe("a journal article", () => {
     expect(original).toHaveAttribute("href", "https://www.nejm.org/doi/full/10.1056/example");
     expect(original).toHaveAttribute("target", "_blank");
     expect(within(screen.getByRole("article", { name: "正文" })).queryByRole("link", { name: "打开原文" })).not.toBeInTheDocument();
-    expect(within(rail).getByRole("button", { name: "查看摘要" })).toHaveAttribute("aria-pressed", "false");
+    expect(within(rail).getByRole("button", { name: "查看摘要" })).not.toHaveAttribute("aria-pressed");
     // The header is the title alone (owner: 「查看原文又跑到右上角去了」): the actions are the right column's, or the bar's.
     expectComposed(document.body, { tablists: 0, stepRail: false, toolbar: false });
     const header = document.querySelector("[data-page-header]") as HTMLElement;
@@ -793,7 +793,7 @@ describe("the AI view and the text view", () => {
     expect(screen.queryByRole("heading", { name: "正文" })).not.toBeInTheDocument();
     expect(screen.queryByText("为支持医疗技术创新，……")).not.toBeInTheDocument();
     const toggle = within(railOf()).getByRole("button", { name: "查看正文" });
-    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(toggle).not.toHaveAttribute("aria-pressed");
     expect(screen.getByTestId("where")).not.toHaveTextContent("view=");
 
     await userEvent.click(toggle);
@@ -805,14 +805,14 @@ describe("the AI view and the text view", () => {
     for (const name of ["AI 导读", "AI 要点", "AI 解读", "事件后续 · 2"]) expect(screen.queryByRole("region", { name }), name).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "查看正文" })).not.toBeInTheDocument();
     const back = within(railOf()).getByRole("button", { name: "AI 解读" });
-    expect(back).toHaveAttribute("aria-pressed", "true");
+    expect(back).not.toHaveAttribute("aria-pressed");
     expect(screen.getByTestId("where")).toHaveTextContent("/app/frontier/items/whole-1?view=text");
 
     await userEvent.click(back);
     expect(await screen.findByRole("region", { name: "AI 导读" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "事件后续 · 2" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "正文" })).not.toBeInTheDocument();
-    expect(within(railOf()).getByRole("button", { name: "查看正文" })).toHaveAttribute("aria-pressed", "false");
+    expect(within(railOf()).getByRole("button", { name: "查看正文" })).not.toHaveAttribute("aria-pressed");
     expect(screen.getByTestId("where")).toHaveTextContent(/^\/app\/frontier\/items\/whole-1$/);
   });
 
@@ -821,7 +821,7 @@ describe("the AI view and the text view", () => {
     expect(await screen.findByRole("heading", { name: "正文" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "AI 导读" })).not.toBeInTheDocument();
     const rail = railOf();
-    expect(within(rail).getByRole("button", { name: "AI 解读" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(rail).getByRole("button", { name: "AI 解读" })).not.toHaveAttribute("aria-pressed");
     expect(within(rail).getByRole("region", { name: "出处" })).toBeInTheDocument();
     expect(within(rail).getByRole("region", { name: "就此提问" })).toBeInTheDocument();
   });
@@ -913,7 +913,7 @@ describe("the AI view and the text view", () => {
     await userEvent.click(toggle);
     // The text it opens carries the same name as its block's.
     expect(await screen.findByRole("heading", { name: new RegExp(`^${kind}`) })).toBeInTheDocument();
-    expect(within(railOf()).getByRole("button", { name: "AI 解读" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(railOf()).getByRole("button", { name: "AI 解读" })).not.toHaveAttribute("aria-pressed");
     expect(within(railOf()).queryByRole("button", { name: `查看${kind}` })).not.toBeInTheDocument();
   });
 
@@ -991,14 +991,14 @@ describe("the narrow bar's fifth tool", () => {
     expect(toolsOf(bar)).toEqual(["收藏", "正文", "深入研究", "打开原文", "更多"]);
     expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
     const tool = within(bar).getByRole("button", { name: "正文" });
-    expect(tool).toHaveAttribute("aria-pressed", "false");
+    expect(tool).not.toHaveAttribute("aria-pressed");
     expect(screen.getByRole("region", { name: "AI 导读" })).toBeInTheDocument();
 
     await userEvent.click(tool);
     expect(await screen.findByRole("heading", { name: "正文" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "AI 导读" })).not.toBeInTheDocument();
     expect(toolsOf(bar)).toEqual(["收藏", "AI 解读", "深入研究", "打开原文", "更多"]);
-    expect(within(bar).getByRole("button", { name: "AI 解读" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(bar).getByRole("button", { name: "AI 解读" })).not.toHaveAttribute("aria-pressed");
     expect(screen.getByTestId("where")).toHaveTextContent("/app/frontier/items/whole-1?view=text");
 
     await userEvent.click(within(bar).getByRole("button", { name: "AI 解读" }));

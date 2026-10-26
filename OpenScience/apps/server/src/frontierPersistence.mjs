@@ -957,6 +957,17 @@ export async function backfillTimelineRule(client) {
         ELSE visible_at END AS at
       FROM evimed_frontier.items WHERE state = 'published' AND visible_at IS NOT NULL) r
     WHERE i.id = r.id AND r.at IS NOT NULL AND i.timeline_at IS DISTINCT FROM r.at`, [FRONTIER_FEED_TIME_ZONE]);
+  // An event's span is its visible members' first and last `timeline_at` (`FrontierEvents#refresh`), which only a joining report
+  // recomputes: the moved axis is given to every event here, or a settled one would keep a first report its own reports contradict.
+  if ((moved.rowCount ?? 0) > 0) {
+    await client.query(`UPDATE evimed_frontier.events e SET first_at = m.first_at, last_at = m.last_at, updated_at = clock_timestamp()
+      FROM (SELECT ei.event_id, min(i.timeline_at) AS first_at, max(i.timeline_at) AS last_at
+          FROM evimed_frontier.event_items ei
+          JOIN evimed_frontier.items i ON i.id = ei.item_id AND i.state = 'published'
+          JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
+          GROUP BY ei.event_id) m
+      WHERE e.id = m.event_id AND (e.first_at IS DISTINCT FROM m.first_at OR e.last_at IS DISTINCT FROM m.last_at)`);
+  }
   await client.query(`INSERT INTO evimed_frontier.meta (key, value, updated_at) VALUES ($1, to_jsonb($2::integer), clock_timestamp())
     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = clock_timestamp()`, [FRONTIER_META_KEYS.timelineRule, FRONTIER_TIMELINE_RULE]);
   if ((moved.rowCount ?? 0) > 0) await bumpFrontierVersion(client);

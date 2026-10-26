@@ -98,7 +98,7 @@ import {
   isFrontierMastheadTitle,
   isPeak,
 } from "@evimed/domain";
-import { FRONTIER_REASON_VERSION, FRONTIER_RETAG_BATCH, FRONTIER_SCORE_VERSION, FRONTIER_TITLE_VERSION } from "./frontierEditor.mjs";
+import { FRONTIER_REASON_VERSION, FRONTIER_RETAG_BATCH, FRONTIER_SCORE_VERSION, FRONTIER_TITLE_VERSION, frontierTitleMarks } from "./frontierEditor.mjs";
 import { FRONTIER_EDITOR_VERSION, frontierEditorDiagnostics, sha256, FRONTIER_SCREEN_BATCH, FRONTIER_SCREEN_EXCERPT_CHARS, buildModelInput, frontierParagraphs,
   isChineseProse, isChineseTitle } from "./frontierEditor.mjs";
 import { isDiscoveryOnlySource } from "./evolutionDiscoverySources.mjs";
@@ -1721,12 +1721,12 @@ export class FrontierPipeline {
     const since = new Date(now.getTime() - TITLE_DUPLICATE_WINDOW_MS);
     if (capabilities?.trigram) {
       const found = await client.query(`SELECT id FROM evimed_frontier.items
-        WHERE state = 'published' AND lane = $1 AND timeline_at > $2 AND similarity(title_raw, $3) >= $4
+        WHERE state = 'published' AND lane = $1 AND visible_at > $2 AND similarity(title_raw, $3) >= $4
         ORDER BY similarity(title_raw, $3) DESC, id LIMIT 1`, [lane, since, title, TITLE_DUPLICATE_SIMILARITY]);
       return found.rows[0] ? Number(found.rows[0].id) : null;
     }
     const found = await client.query(`SELECT id, title_raw FROM evimed_frontier.items
-      WHERE state = 'published' AND lane = $1 AND timeline_at > $2 ORDER BY timeline_at DESC LIMIT 2000`, [lane, since]);
+      WHERE state = 'published' AND lane = $1 AND visible_at > $2 ORDER BY visible_at DESC LIMIT 2000`, [lane, since]);
     const match = found.rows.find((row) => titleKey(row.title_raw) === key);
     return match ? Number(match.id) : null;
   }
@@ -2319,14 +2319,18 @@ export class FrontierPipeline {
         safetyAlert, fields.verification, fields.editorVersion,
         fields.editorModel, context.now, fields.tags, genre.genre, genre.basis, Boolean(output), FRONTIER_REASON_VERSION,
         practiceReason !== undefined, practiceReason ?? null]);
-      if (output && (ceiled || fields.titleZh)) {
+      // The title rule's version is stamped only on a title that is clean of its marks: a translation the edit let through with a 「｜」,
+      // or a Chinese source's title kept because its rewrite was refused, stays for `frontier-rewrite --steps title`, whose call sends a
+      // marked answer back once (c4 review).
+      const titleStamped = Boolean(fields.titleZh) && frontierTitleMarks(fields.titleZh).length === 0;
+      if (output && (ceiled || titleStamped)) {
         // Which scoring wrote the parts, and what lowered one, are kept with the model's raw numbers, for the operator and for fitting a
         // ceiling; neither is served. The title rule that wrote the title is kept the same way (c4-title: `titleVersion`, what
-        // `frontier-rewrite --steps title` reads), whenever the edit wrote a title.
+        // `frontier-rewrite --steps title` reads), when the title shown is clean of the rule's marks (above).
         await client.query(`UPDATE evimed_frontier.items SET editor_diagnostics = CASE WHEN editor_diagnostics->>'schemaVersion' = '1'
             THEN editor_diagnostics || $2::jsonb ELSE editor_diagnostics END WHERE id = $1`,
         [item.id, JSON.stringify({ ...(ceiled ? { scoreVersion: FRONTIER_SCORE_VERSION, ...(ceiled.reasons.length ? { capped: ceiled.reasons } : {}) } : {}),
-          ...(fields.titleZh ? { titleVersion: FRONTIER_TITLE_VERSION } : {}) })]);
+          ...(titleStamped ? { titleVersion: FRONTIER_TITLE_VERSION } : {}) })]);
       }
       if (output) {
         await client.query("UPDATE evimed_frontier.item_texts SET model_input = $2, model_input_sha256 = $3 WHERE item_id = $1",
@@ -2377,7 +2381,9 @@ export class FrontierPipeline {
       });
       const bypass = decision.rule === "safety-bypass";
       if (bypass) this.counters.selected += 1;
-      this.#mixDay(context, timelineAt);
+      // The mix counts an item on the day we published it, not its source's day (c4 review: a paper stated yesterday and seen this
+      // morning would otherwise meet yesterday's research places already filled — selection is sticky); `timeline_at` is the list's axis.
+      this.#mixDay(context, now);
       await client.query(`UPDATE evimed_frontier.items SET state = 'published', visible_at = $2::timestamptz, timeline_at = $3::timestamptz,
           flags = $4, selected = $5::boolean, selected_rule = $6,
           selected_at = CASE WHEN $5::boolean THEN $2::timestamptz ELSE NULL END, lexemes = $7::tsvector,
@@ -2400,7 +2406,7 @@ export class FrontierPipeline {
       const item = (await client.query(`SELECT i.*, ${frontierBesideSelectedSql("i")} AS beside_selected FROM evimed_frontier.items i
         WHERE i.id = $1 FOR UPDATE OF i`, [itemId])).rows[0];
       if (!item || item.state !== "published" || item.selected) return;
-      this.#mixDay(context, new Date(item.timeline_at));
+      this.#mixDay(context, new Date(item.visible_at ?? item.timeline_at));
       if (item.beside_selected) return;
       const source = (await client.query("SELECT * FROM evimed_frontier.sources WHERE id = $1", [item.primary_source_id])).rows[0];
       const texts = (await client.query("SELECT publication_types FROM evimed_frontier.item_texts WHERE item_id = $1", [itemId])).rows[0];
@@ -2419,8 +2425,9 @@ export class FrontierPipeline {
   }
 
   /**
-   * Hand an item's day to the round's mix (`#mix`): the days published or re-scored items fall on, each with an instant in it.
-   * @param {any} context @param {Date} timelineAt
+   * Hand an item's day to the round's mix (`#mix`): the days published or re-scored items fall on — the day we published each, in the
+   * feed's zone (`visible_at`), the day the mix reads its candidates by — each with an instant in it.
+   * @param {any} context @param {Date} timelineAt the instant whose day is handed over (an item's `visible_at`)
    */
   #mixDay(context, timelineAt) {
     if (!context || !(timelineAt instanceof Date) || !Number.isFinite(timelineAt.getTime())) return;
@@ -2435,6 +2442,8 @@ export class FrontierPipeline {
    * the day's published items and the other reports of their events are read, `frontierMixSelect` picks what the day still
    * selects, and the picks are written with their rule — `threshold`, `genre-floor`, `zh-target`, `preprint-lane` or
    * `event-primary`. It replaced the lane floor and the preprint lane (whose places are now inside the research group).
+   * A day here is the day we published its items (`visible_at`, c4 review 2026-10-26), not the source's day the list shows them under:
+   * an item that arrives after its stated day takes a place in today's mix, which is still open, as it did under the 72-hour rule.
    * Sticky like every selection: what a day already selected counts against its groups and sources and is never taken back.
    * A floor place under the line asks its genre's own bar (`@evimed/domain` `FRONTIER_MIX_GENRE_FLOOR`, c2-fixes 2026-10-25),
    * the 80th percentile of the genre's published scores of the last 30 days, read once per round (`#genreFloors`).
@@ -2462,7 +2471,7 @@ export class FrontierPipeline {
           FROM evimed_frontier.items i
           JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
           LEFT JOIN evimed_frontier.item_texts t ON t.item_id = i.id
-          WHERE i.state = 'published' AND i.timeline_at >= $1 AND i.timeline_at < $2`, [start, end])).rows;
+          WHERE i.state = 'published' AND i.visible_at >= $1 AND i.visible_at < $2`, [start, end])).rows;
         if (!rows.length) return;
         const eventIds = [...new Set(rows.map((/** @type {any} */ row) => row.event_id).filter((id) => id != null).map(String))];
         /** @type {Record<string, Array<{ id: string, genre: string, evidenceType: string | null, selected: boolean, rule: string | null, safety: boolean }>>} */
@@ -3701,8 +3710,8 @@ export class FrontierPipeline {
     const modelKey = String(this.embedder.modelKey);
     const rows = (await this.database.query(`SELECT i.id, i.title_raw, i.title_zh, i.summary_zh FROM evimed_frontier.items i
       LEFT JOIN evimed_frontier.item_vectors v ON v.item_id = i.id AND v.model_key = $1
-      WHERE i.state = 'published' AND v.item_id IS NULL AND i.timeline_at > $2
-      ORDER BY i.timeline_at DESC, i.id DESC LIMIT $3`,
+      WHERE i.state = 'published' AND v.item_id IS NULL AND i.visible_at > $2
+      ORDER BY i.visible_at DESC, i.id DESC LIMIT $3`,
     [modelKey, new Date(context.now.getTime() - FRONTIER_EMBED_WINDOW_MS), EMBED_BATCH])).rows;
     if (!rows.length) return 0;
     let vectors;

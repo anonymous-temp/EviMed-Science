@@ -188,16 +188,30 @@ export function shortDate(key: string): string {
   return `${month}月${day}日 ${WEEKDAYS[date.getUTCDay()]}`;
 }
 
-/** 「14:05」, the clock in Beijing time; empty for a time that cannot be read. */
+/**
+ * Whether a moment stands for a day and no hour: the server places an item whose source stated only its day, and which reached us
+ * after that day, at the day's last millisecond in Beijing time (`frontierTimelineAt`: 23:59:59.999), and an event's first or last
+ * report inherits it. No source states a time to the millisecond, so the marker is exact. Such a moment has no clock to show.
+ */
+export function isStatedDayEnd(value: string | number | Date | null | undefined): boolean {
+  if (value === null || value === undefined || value === "") return false;
+  const at = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(at.getTime()) || at.getUTCMilliseconds() !== 999 || at.getUTCSeconds() !== 59) return false;
+  const moment = feedMoment(at);
+  return moment?.hour === 23 && moment.minute === 59;
+}
+
+/** 「14:05」, the clock in Beijing time; empty for a time that cannot be read or that stands for a day and no hour. */
 export function clock(value: string | number | null): string {
   const at = feedMoment(value);
-  return at ? `${pad(at.hour)}:${pad(at.minute)}` : "";
+  return at && !isStatedDayEnd(value) ? `${pad(at.hour)}:${pad(at.minute)}` : "";
 }
 
 /** 「9月22日 18:01」: a moment named in full, when it is the fact itself (an event's first report). Beijing time. */
 export function dateClock(value: string | null): string {
   const at = feedMoment(value);
-  return at ? `${at.month}月${at.day}日 ${pad(at.hour)}:${pad(at.minute)}` : "";
+  if (!at) return "";
+  return isStatedDayEnd(value) ? `${at.month}月${at.day}日` : `${at.month}月${at.day}日 ${pad(at.hour)}:${pad(at.minute)}`;
 }
 
 /** 「14:05」 today, 「9月22日 14:05」 before: when something was last read. */
@@ -216,11 +230,27 @@ export function feedDay(value: string | number | Date | null | undefined, now = 
   return at.year === feedMoment(now)?.year ? `${at.month}月${at.day}日` : `${at.year}-${pad(at.month)}-${pad(at.day)}`;
 }
 
+/**
+ * 「今天」「昨天」「3 天前」, by Beijing calendar days, for a moment that stands for a day; past thirty days the date, or nothing where the
+ * line names the date already (`beyond: "none"`, as `sinceText`).
+ */
+function daysAgo(value: string | number | Date, now: number, beyond: "date" | "none" = "date"): string {
+  const day = feedDayKey(value);
+  const today = feedDayKey(now);
+  if (!day || !today) return "";
+  const days = Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${day}T00:00:00Z`)) / 86_400_000);
+  if (days <= 0) return "今天";
+  if (days === 1) return "昨天";
+  if (days <= 30) return `${days} 天前`;
+  return beyond === "date" ? feedDay(value, now) : "";
+}
+
 /** 「2 小时前」 / 「9月20日」: how long ago something happened, and past a day the Beijing date; empty for no time. */
 export function ago(value: string | null, now = Date.now()): string {
   if (!value) return "";
   const ms = Date.parse(value);
   if (Number.isNaN(ms)) return "";
+  if (isStatedDayEnd(value)) return daysAgo(value, now);
   return now - ms >= 86_400_000 ? feedDay(ms, now) : relativeTime(ms, now);
 }
 
@@ -232,6 +262,8 @@ export function sinceText(value: string | null, now = Date.now()): string {
   if (!value) return "";
   const at = Date.parse(value);
   if (Number.isNaN(at) || at > now + 60_000) return "";
+  // A day and no hour: how many Beijing days ago, not hours from a made-up clock.
+  if (isStatedDayEnd(value)) return daysAgo(value, now, "none");
   const minutes = Math.floor(Math.max(0, now - at) / 60_000);
   if (minutes < 1) return "刚刚";
   if (minutes < 60) return `${minutes} 分钟前`;

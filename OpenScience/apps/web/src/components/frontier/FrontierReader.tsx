@@ -859,7 +859,10 @@ export function ReaderNotes({ item, reports, outline }: { item: FrontierItemDeta
 
 /** The switch between the AI blocks and the text: what the button says, whether the text is open, and how to change it. */
 export interface ReaderViewSwitch {
-  /** 「查看正文」「查看摘要」「查看全文」: by what the text is (`readerTextKind`). */
+  /**
+   * 「查看正文」「查看摘要」「查看全文」: by what the text is (`readerTextKind`). The button names what it opens — 「AI 解读」 while the
+   * text is open — and carries no pressed state, which would say the opposite of its label (c4 review).
+   */
   label: string;
   text: boolean;
   onToggle: () => void;
@@ -885,7 +888,7 @@ export function ReaderActions({ item, more, onStar, onResearch, view }: {
     <section aria-label="文章操作" className="space-y-2">
       <div className="flex items-center gap-2">
         {view && (
-          <Button variant="secondary" className="min-w-0 flex-1" aria-pressed={view.text} onClick={view.onToggle}>
+          <Button variant="secondary" className="min-w-0 flex-1" onClick={view.onToggle}>
             {view.text ? <Sparkles size={16} aria-hidden="true" /> : <FileText size={16} aria-hidden="true" />}
             <span className="truncate">{view.text ? "AI 解读" : view.label}</span>
           </Button>
@@ -990,7 +993,7 @@ export function ReaderBar({ item, more, onStar, onResearch, view }: {
           <Star size={20} aria-hidden="true" />{starred ? "已收藏" : "收藏"}
         </button>
         {view && (
-          <button type="button" aria-pressed={view.text} onClick={view.onToggle} className={BAR_TOOL}>
+          <button type="button" onClick={view.onToggle} className={BAR_TOOL}>
             {view.text ? <Sparkles size={20} aria-hidden="true" /> : <FileText size={20} aria-hidden="true" />}{view.text ? "AI 解读" : view.label.replace(/^查看/, "")}
           </button>
         )}
