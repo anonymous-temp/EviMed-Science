@@ -1,4 +1,3 @@
-import { Note } from "@/components/ui/Note";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { batchPageState, runBatch, toggleBatch, type BatchSelection } from "@/lib/batchSelection";
 import { EvolutionDecisionCard } from '@/components/evolution/EvolutionDecisionCard';
@@ -353,7 +352,7 @@ export function InboxPage() {
     <InboxRow
       key={item.id}
       item={item}
-      selection={!item.readAt && severityOf(item) !== "safety" ? <Checkbox data-selection-for={batchToolbarId} data-selection-scope={batchScope} label={<span className="sr-only">选择：{item.title}</span>} checked={selectedIds.includes(item.id)} disabled={batchBusy} onChange={() => setSelection(current => toggleBatch(current, batchScope, item.id))} /> : undefined}
+      selection={!item.readAt && severityOf(item) !== "safety" ? <Checkbox label={<span className="sr-only">选择：{item.title}</span>} checked={selectedIds.includes(item.id)} disabled={batchBusy} onChange={() => setSelection(current => toggleBatch(current, batchScope, item.id))} /> : undefined}
       operator={operator}
       busy={batchBusy || busyId === item.id}
       open={openId === item.id}
@@ -392,6 +391,16 @@ export function InboxPage() {
             {!markingAll && <CheckCheck size={16} aria-hidden="true" />}全部已读
           </Button>
         ),
+        // What is ticked in the list has its group in the toolbar, while something is ticked: how many, every loaded notice, let go, and
+        // the one action — a secondary button, since the page's one primary is not a batch.
+        selection: selectedIds.length > 0 ? (
+          <div id={batchToolbarId} data-action-group="selection" data-selection-scope={batchScope} role="toolbar" aria-label="批量标为已读" className="flex flex-wrap items-center gap-2">
+            <span role="status" className="text-ui tabular-nums text-text-2">已选 {selectedIds.length} 条</span>
+            <Button variant="text" size="sm" disabled={pageSelection.checked || batchBusy || !!busyId || markingAll || !!busyGroup} onClick={() => setSelection({ scope: batchScope, ids: eligibleIds })}>全选已加载的 {eligibleIds.length} 条</Button>
+            <Button variant="text" size="sm" disabled={batchBusy || !!busyId || markingAll || !!busyGroup} onClick={() => setSelection({ scope: batchScope, ids: [] })}>清除选择</Button>
+            <Button variant="secondary" size="sm" loading={batchBusy} disabled={!!busyId || markingAll || !!busyGroup} onClick={() => void readSelected()}>所选标为已读</Button>
+          </div>
+        ) : undefined,
         filters: sources.length > 1 ? [{
           kind: "chips" as const, label: "消息来源", value: source, neutral: "", onChange: chooseSource,
           options: [{ value: "", label: "全部来源" }, ...sources.map((entry) => ({ value: entry.type, label: INBOX_SOURCE_WORDS[entry.type], count: entry.count }))],
@@ -399,13 +408,6 @@ export function InboxPage() {
       }}
     >
       <span ref={scrollAnchor} hidden />
-      {eligibleBatch.length > 0 && <div id={batchToolbarId} data-action-group="selection" data-selection-scope={batchScope} role="toolbar" aria-label="批量标为已读" className="mb-3 flex flex-wrap items-center gap-3">
-        <Checkbox data-selection-for={batchToolbarId} data-selection-scope={batchScope} label={`选择当前已加载的 ${eligibleIds.length} 条可批量处理消息`} checked={pageSelection.checked} mixed={pageSelection.mixed} disabled={batchBusy} onChange={() => setSelection({ scope: batchScope, ids: pageSelection.checked ? [] : eligibleIds })} />
-
-        <Button variant="text" size="sm" disabled={!selectedIds.length || batchBusy || !!busyId || markingAll || !!busyGroup} onClick={() => setSelection({ scope: batchScope, ids: [] })}>清除选择</Button>
-        <Button size="sm" disabled={!selectedIds.length || batchBusy || !!busyId || markingAll || !!busyGroup} loading={batchBusy} onClick={() => void readSelected()}>所选标为已读</Button>
-        <Note className="w-full" result={["已选 ", { n: selectedIds.length }, " 条。仅包括当前已加载的消息；需要优先查看的消息请逐条打开。折叠组内的消息也计入当前已加载范围。"]} />
-      </div>}
       {batchNotice && <p role="status" className="mb-3 break-words text-ui">{batchNotice}</p>}
       {error && <LoadError className="mb-4" message={error} onRetry={() => void reload()} />}
       <div>

@@ -677,18 +677,45 @@ it("selects loaded IDs, excludes safety and retries only failed batch reads", as
  serve({ items: [first, second], nextCursor: null });
  vi.mocked(api.markInboxRead).mockImplementation(async id => { if (id === "batch-b") throw new Error("offline"); return { ...first, readAt: at(0), revision: 2 }; });
  open();
- const selectAll = await screen.findByRole("checkbox", { name: /选择当前已加载的 2 条/ });
- const selectionToolbar = screen.getByRole("toolbar", { name: "批量标为已读" });
- expect(selectionToolbar.id).not.toBe("");
- for (const checkbox of screen.getAllByRole("checkbox")) {
-   expect(checkbox).toHaveAttribute("data-selection-for", selectionToolbar.id);
-   expect(checkbox).toHaveAttribute("data-selection-scope", selectionToolbar.getAttribute("data-selection-scope"));
- }
- await userEvent.click(selectAll);
- await userEvent.click(screen.getByRole("button", { name: "所选标为已读" }));
+ // Nothing is ticked: the toolbar has no selection group and the page draws no explanatory note for one.
+ const toolbar = await screen.findByRole("group", { name: "收件箱筛选" });
+ expect(screen.queryByRole("toolbar", { name: "批量标为已读" })).not.toBeInTheDocument();
+ expect(screen.queryByRole("button", { name: /所选标为已读|清除选择|全选已加载/ })).not.toBeInTheDocument();
+ expect(document.body).not.toHaveTextContent(/仅包括当前已加载|需要优先查看的消息请逐条打开/);
+ await userEvent.click(screen.getByRole("checkbox", { name: /选择：Batch A/ }));
+ // Ticking a row selects it; it neither opens the notice nor marks it read.
+ expect(api.markInboxRead).not.toHaveBeenCalled();
+ const selectionToolbar = within(toolbar).getByRole("toolbar", { name: "批量标为已读" });
+ expect(selectionToolbar).toHaveTextContent("已选 1 条");
+ // The one action is secondary: no second primary in the page.
+ const act = within(selectionToolbar).getByRole("button", { name: "所选标为已读" });
+ expect(act.className).not.toMatch(/bg-accent/);
+ await userEvent.click(within(selectionToolbar).getByRole("button", { name: "全选已加载的 2 条" }));
+ expect(selectionToolbar).toHaveTextContent("已选 2 条");
+ await userEvent.click(act);
  expect(await screen.findByText(/失败 1 条：Batch B/)).toBeInTheDocument();
  expect(screen.getByRole("checkbox", { name: /选择：Batch B/ })).toBeChecked();
  vi.mocked(api.markInboxRead).mockClear();
  await userEvent.click(screen.getByRole("button", { name: "所选标为已读" }));
  await waitFor(() => expect(api.markInboxRead).toHaveBeenCalledTimes(1)); expect(api.markInboxRead).toHaveBeenCalledWith("batch-b", 1);
+});
+
+it("lets go of a selection from the toolbar, and the group leaves with it", async () => {
+ serve({ items: [runNotice({ id: "batch-a", title: "Batch A" }), runNotice({ id: "batch-b", title: "Batch B" })], nextCursor: null });
+ open();
+ await userEvent.click(await screen.findByRole("checkbox", { name: /选择：Batch A/ }));
+ await userEvent.click(screen.getByRole("button", { name: "清除选择" }));
+ expect(screen.queryByRole("toolbar", { name: "批量标为已读" })).not.toBeInTheDocument();
+ expect(screen.getByRole("checkbox", { name: /选择：Batch A/ })).not.toBeChecked();
+});
+
+// Review R2 P1-1: the row's title is stretched over the whole row, and the selection box sat under it, so a click on the box opened
+// the notice. The leading slot is raised above the stretched title and lets through whatever is only a mark.
+it("keeps a row's selection box above the row's own target", async () => {
+ serve({ items: [runNotice({ id: "batch-a", title: "Batch A" })], nextCursor: null });
+ open();
+ const box = await screen.findByRole("checkbox", { name: /选择：Batch A/ });
+ const leading = box.closest("[data-row-leading]") as HTMLElement;
+ expect(leading).toHaveClass("relative", "z-sticky", "pointer-events-none");
+ expect(leading.className).toMatch(/label,\[role=switch\]/);
 });

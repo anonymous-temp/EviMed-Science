@@ -32,6 +32,11 @@ import { cn } from "@/lib/cn";
  * - **`trailing` does not swallow the press.** Text, a time or a Tag there lets the
  *   click through to the row; a real control placed there (a switch, a button) stays
  *   clickable. `actions` and `menu` are the places a control belongs.
+ * - **The second line (`meta`) and `leading` are the same.** Text there opens the row like
+ *   any other part of it; a real control inside (a retry button, a link to a passage, a
+ *   selection checkbox) stays above the stretched title and keeps its own press. A row
+ *   whose second line carries an identifier to copy sets `metaSelectable`: that line
+ *   then takes the pointer for itself (text can be selected, nothing opens).
  * - **What a row opens answers what the row says** (page-structure rule 6): a row
  *   with a count opens the things counted; a row that has nothing to open is not given
  *   `onOpen`.
@@ -174,7 +179,7 @@ export function ListHeader({
  * States: Caller owns selected/expanded; no data-fetch state machine.
  * Hit area: Interactive title stretches across row; action/cell controls sit above it.
  * Keyboard: Native title and secondary controls; no row tab stop.
- * Long content: meta stays selectable above the stretched title target; title identity remains accessible.
+ * Long content: meta and leading let the press through to the row, real controls inside them stay pressable; `metaSelectable` makes an identifier line selectable without opening the row; title identity remains accessible.
  * Theme: Selected accent-soft ground; ordinary hover surface and semantic text.
  * Responsive: Cells move below title below sm; row content may wrap.
  * Verification: DataPrimitives.test.tsx and Composition.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
@@ -191,6 +196,7 @@ export function ListRow({
   columns,
   leading,
   meta,
+  metaSelectable = false,
   trailing,
   actions,
   menu,
@@ -223,10 +229,15 @@ export function ListRow({
   chevron?: boolean;
   /** Numeric columns, right-aligned and in line down the list; the page draws a `ListHeader` over them. */
   columns?: ReadonlyArray<ListCell>;
-  /** Fixed-width content before the title. */
+  /** Fixed-width content before the title. A selection control here keeps its own press; anything else lets it through to the row. */
   leading?: ReactNode;
-  /** The line under the title. */
+  /** The line under the title. A press on its text opens the row; a control inside it keeps its own press. */
   meta?: ReactNode;
+  /**
+   * The line under the title carries an identifier a person copies (a hash, an accession): it takes the pointer, so its text can be
+   * selected, and a press on it does not open the row. Off by default: the whole row is one target.
+   */
+  metaSelectable?: boolean;
   /** Right-aligned, always visible: a time, a score, a switch. */
   trailing?: ReactNode;
   /**
@@ -288,10 +299,23 @@ export function ListRow({
         className,
       )}
     >
-      {leading && <div className="flex shrink-0 items-center self-stretch">{leading}</div>}
+      {leading && (
+        // On a row that can be pressed the stretched title would cover a control here (a selection checkbox): raised above it,
+        // letting through what is only a mark, as `trailing` does.
+        <div data-row-leading="" className={cn("flex shrink-0 items-center self-stretch", interactive && cn("pointer-events-none relative z-sticky", CONTROLS))}>{leading}</div>
+      )}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         {heading}
-        {meta && <div data-row-selectable="" className="pointer-events-auto relative z-page min-w-0 select-text text-caption text-text-3">{meta}</div>}
+        {meta && (
+          <div
+            data-row-selectable={metaSelectable ? "" : undefined}
+            className={cn(
+              "min-w-0 text-caption text-text-3",
+              // Raised over the stretched title only where the row has one; there, text lets the press through and a control keeps it.
+              interactive && cn("relative z-page", metaSelectable ? "pointer-events-auto select-text" : cn("pointer-events-none", CONTROLS)),
+            )}
+          >{meta}</div>
+        )}
       </div>
       {(trailing || actions || menu) && (
         // Above the stretched title, so a control stays clickable; what is only text lets the press through to the row.

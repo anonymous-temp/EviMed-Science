@@ -645,3 +645,27 @@ describe("a search box's suggestions", () => {
     expect(box).toHaveValue("肝");
   });
 });
+
+describe("the selection group", () => {
+  const views = { label: "视图", items: [{ value: "all", label: "全部" }, { value: "unread", label: "未读" }], value: "all", onChange: () => {}, panelId: "list" };
+  const group = <div role="toolbar" aria-label="批量"><span>已选 2 条</span><button type="button">清除选择</button></div>;
+
+  it("stands in the toolbar's row beside the actions, and is not there while the caller draws nothing", () => {
+    const { rerender } = render(<Toolbar views={views} actions={<button type="button">全部已读</button>} selection={group} />);
+    const bar = screen.getByRole("group", { name: "筛选与操作" });
+    expect(within(bar).getByRole("toolbar", { name: "批量" })).toBeInTheDocument();
+    // Before the page's own actions, in the same row.
+    expect(within(bar).getByRole("toolbar", { name: "批量" }).compareDocumentPosition(within(bar).getByRole("button", { name: "全部已读" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    rerender(<Toolbar views={views} actions={<button type="button">全部已读</button>} selection={undefined} />);
+    expect(screen.queryByRole("toolbar", { name: "批量" })).not.toBeInTheDocument();
+  });
+
+  it("is a row of its own under the views on a phone, never inside the filter sheet", () => {
+    narrow();
+    render(<Toolbar views={views} actions={<button type="button">全部已读</button>} selection={group} />);
+    const bar = screen.getByRole("group", { name: "筛选与操作" });
+    const own = within(bar).getByRole("toolbar", { name: "批量" }).parentElement as HTMLElement;
+    expect(own).toHaveAttribute("data-toolbar-row");
+    expect(within(own).getByRole("button", { name: "清除选择" })).toBeVisible();
+  });
+});

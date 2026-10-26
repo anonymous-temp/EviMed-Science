@@ -223,6 +223,13 @@ export interface ToolbarProps {
   summary?: ReactNode;
   /** Buttons for this list. */
   actions?: ReactNode;
+  /**
+   * The controls for the rows ticked in the list below — how many are ticked, select all, clear, the action on them. The toolbar's own
+   * group, and the caller draws it only while something is ticked (nothing standing in the row, no note). Beside `actions` where the
+   * row has room; on a phone a row of its own under the views, not inside the filter sheet, so a ticked row never leaves its action out
+   * of sight.
+   */
+  selection?: ReactNode;
   className?: string;
   /** The toolbar stands in the sticky band, so its row never wraps: what does not fit folds (`PageShell` sets it). */
   inBand?: boolean;
@@ -848,7 +855,7 @@ function BandSummary({ text, className }: { text: string; className: string }) {
  * Responsive: Narrow filter sheet; measured band overflow folds filters; oneRow has phone search overlay.
  * Verification: Toolbar.test.tsx and Composition.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
  */
-export function Toolbar({ label = "筛选与操作", views, filters: declared = [], onClear, onReset, search, summary, actions, className, inBand = false,
+export function Toolbar({ label = "筛选与操作", views, filters: declared = [], onClear, onReset, search, summary, actions, selection, className, inBand = false,
   oneRow = false, tokens: given = [], sheetLead, resultCount, searchShortcut = false }: ToolbarProps) {
   const narrow = useNarrow();
   const row = useRef<HTMLDivElement>(null);
@@ -931,6 +938,7 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
               {!tokensCrowded && tokenNodes}
               {trigger}
               {summary != null && (typeof summary === "string" ? <BandSummary text={summary} className={summaryClass} /> : <span className={summaryClass}>{summary}</span>)}
+              {selection}
               {actions}
               {search && <SearchBox search={search} inputRef={searchInput} shortcut={searchShortcut} />}
             </>
@@ -966,6 +974,7 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
             {tokenNodes}
           </div>
         )}
+        {selection && <div data-toolbar-row="" className="flex flex-wrap items-center gap-2 py-2">{selection}</div>}
       </div>
     );
   }
@@ -987,11 +996,12 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
   const searchBox = search && <SearchBox search={search} inputRef={searchInput} shortcut={searchShortcut} />;
   // On a phone the search takes what the row has left, in the same row: it used to take a row of its own, and a module's band was
   // 36 px taller on the tabs with a search than on the others (the walk's module-chrome, 循证 GEO at 390 px, r19-guards2).
-  const end = (search || summary != null || actions) && (
+  const end = (search || summary != null || actions || (selection && !narrow)) && (
     <div className={cn("ml-auto flex min-w-0 items-center gap-2", (search || shrinkSummary) && "max-sm:flex-1")}>
       {searchBox}
       {/* In the band or beside a search, the count gives way before the mobile controls do; its full text remains accessible. */}
       {summary != null && (shrinkSummary && typeof summary === "string" ? <BandSummary text={summary} className={summaryClass} /> : <span className={summaryClass}>{summary}</span>)}
+      {!narrow && selection}
       {actions}
     </div>
   );
@@ -1011,6 +1021,7 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
           {end}
         </div>
       )}
+      {narrow && selection && <div data-toolbar-row="" className="flex flex-wrap items-center gap-2 py-2">{selection}</div>}
     </div>
   );
 }
