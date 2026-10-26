@@ -55,8 +55,6 @@ const OUTLINE_FROM_DAYS = 2;
 const dayHeadingId = (day: string) => `congress-day-${day}`;
 /** The items a day shows: a card the reader said 不感兴趣 to leaves the day, as on the topic page. */
 const dayRows = (day: FrontierCongressHub["days"][number]) => day.items.filter(({ item }) => !item.state.hidden);
-/** The hub folds no text the contents would have to open first (the reader's 「展开全文」): a heading is always on the page. */
-const NOTHING_FOLDED = () => undefined;
 
 const STATUS_WORDS: Record<string, string> = { ongoing: "进行中", upcoming: "即将召开", recent: "已结束", later: "尚未开始", past: "已结束" };
 
@@ -185,7 +183,7 @@ function HubBody({ hub, onItem }: { hub: FrontierCongressHub; onItem: (item: Fro
         </div>
       )}
     >
-      {outline.length > 0 && <div className="mt-6"><ReaderOutline entries={outline} layout="folded" onReveal={NOTHING_FOLDED} /></div>}
+      {outline.length > 0 && <div className="mt-6"><ReaderOutline entries={outline} layout="folded" /></div>}
       <div data-frontier-list="congress" className="mt-6 space-y-8">
         {shown.length === 0 ? <CongressEmpty hub={hub} /> : shown.map((entry) => (
           <DaySection key={entry.day} day={entry} onStar={(item) => void update(item, "star")} onHide={(item) => void update(item, "hide")} />
