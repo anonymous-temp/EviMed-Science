@@ -1,0 +1,68 @@
+{
+ "case": "html-list/cn-ha-mpa-ggtg",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-10-26T13:07:08+00:00",
+ "note": null,
+ "source": {
+  "id": "cn-ha-mpa-ggtg",
+  "name": "河南省药品监督管理局 公告通告",
+  "homepage": "https://yjj.henan.gov.cn/",
+  "lane": "regulatory",
+  "source_type": "regulator",
+  "access": "html-list",
+  "egress": "direct",
+  "authority": 5,
+  "safety_feed": false,
+  "owner_entity": "河南省药品监督管理局",
+  "launch_tier": "P2",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 3600,
+  "poll_ceiling_s": 21600,
+  "config": {
+   "url": "https://yjj.henan.gov.cn/zwgk/ggtg/",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "yjj.henan.gov.cn"
+   ],
+   "selectors": {
+    "item": "li:has(> span.listtime)",
+    "title": "a@title",
+    "link": "a@href",
+    "date": "span.listtime"
+   },
+   "max_items": 30
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-10-26T13:07:07+00:00",
+ "request_budget": 1,
+ "parse_notes": [
+  "html_list_dropped_title=1"
+ ],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://yjj.henan.gov.cn/zwgk/ggtg/",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://yjj.henan.gov.cn/zwgk/ggtg/",
+   "headers": {
+    "content-type": "text/html"
+   },
+   "fetched_at": "2026-10-26T13:07:08+00:00",
+   "file": "01.html",
+   "gzip": false,
+   "bytes": 24735,
+   "sha256": "e1c49354f5f7fcd8c64776e56b6fd1b9d0845094e47867beac67d9b13e0fd777"
+  }
+ ]
+}

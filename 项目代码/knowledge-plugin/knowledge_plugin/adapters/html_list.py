@@ -30,6 +30,13 @@ acceptance number can be listed twice (药审中心 listed CXSL2300094 on 2026-0
 (``纳入突破性治疗品种名单：{title}（{id}）``, ``注册申请人：{summary}``); a template naming an empty
 cell falls back to the cell itself.
 
+Two readings of a title that a list page garbles (2026-10-26, c5-sources). A list marker the page puts inside the link text —
+江苏省药品监督管理局's Hanweb lists write ``· 省药品监督检验研究院…`` — is not part of the title: a leading bullet from the closed
+set ``LIST_MARKERS`` is removed. A title the page cut for its layout (a visible text that ends with ``…`` or ``...``) is read in
+full from the ``title`` attribute of the node it was read from, of the link around it or of the item, when that attribute
+begins with the visible text; an attribute that does not (a tooltip about something else) is ignored, and a title selector
+that already names an attribute (``a@title``) is read as it says.
+
 A page whose selectors match nothing returns no entries and the note ``html_list_no_items``; the
 core turns zero items on a previously productive list into the ``drifted`` health state
 (plan 10.2.8) — it is not an exception. Item links outside ``config.link_hosts`` (default: the
@@ -73,6 +80,10 @@ DEFAULT_MAX_ITEMS = 60
 DEFAULT_MIN_TITLE = 4
 MAX_SELECTOR_FALLBACKS = 3
 MAX_DATE_FORMATS = 4
+# A list marker inside the link text: the bullets and dots the markets' CMS templates put before a headline.
+LIST_MARKERS = "\u00b7\u2022\u2023\u2027\u25aa\u25cf\u25e6\u30fb"
+_LEADING_MARKER = re.compile(rf"^(?:[{LIST_MARKERS}]\s*)+")
+_CUT_TITLE = re.compile(r"(?:\u2026|\.\.\.)\s*$")
 _CDATA = re.compile(r"<!\[CDATA\[(.*?)\]\]>", re.S)
 _XML_SCRIPT = re.compile(r"<script[^>]*type=[\"']text/xml[\"'][^>]*>(.*?)</script>", re.S | re.I)
 
@@ -91,6 +102,48 @@ def _select(node: Node, spec: str | None) -> str | None:
         return value.strip() if value else None
     text = target.text(separator=" ", strip=True)
     return text or None
+
+
+def _target(node: Node, spec: str | None) -> Node | None:
+    """The node ``spec`` points at inside ``node`` (``.`` and an empty selector are the item itself)."""
+    if not spec:
+        return None
+    selector = spec.partition("@")[0].strip()
+    return node if selector in ("", ".") else node.css_first(selector)
+
+
+def _strip_ellipsis(text: str) -> str:
+    return _CUT_TITLE.sub("", text).rstrip()
+
+
+def _squeezed(text: str) -> str:
+    return re.sub(r"\s+", "", clean_markup(text))
+
+
+def _full_title(visible: str, node: Node, selectors: dict) -> str:
+    """The title attribute of the title node, the link around it or the link node, or the item, when the page cut the visible
+    title (``…`` / ``...``) and that attribute begins with what is visible; else the visible text."""
+    if not visible or not _CUT_TITLE.search(visible):
+        return visible
+    prefix = _squeezed(_strip_ellipsis(visible))
+    target = _target(node, selectors.get("title"))
+    holders: list[Node] = []
+    ancestor = target
+    while ancestor is not None:
+        holders.append(ancestor)
+        if ancestor == node:
+            break
+        ancestor = ancestor.parent
+    link = _target(node, selectors.get("link"))
+    if link is not None:
+        holders.append(link)
+    if node not in holders:
+        holders.append(node)
+    for holder in holders:
+        full = holder.attributes.get("title")
+        if full and len(_squeezed(full)) > len(prefix) and _squeezed(full).startswith(prefix):
+            return full.strip()
+    return visible
 
 
 def _date_text(raw: str | None, config: dict) -> str | None:
@@ -114,6 +167,8 @@ def _html_items(text: str, config: dict) -> list[dict[str, Any]]:
     items = []
     for node in tree.css(selectors["item"]):
         title, date = _select(node, selectors.get("title")), _select(node, selectors.get("date"))
+        if title and "@" not in selectors.get("title", ""):
+            title = _full_title(title, node, selectors)
         if title and date and title.endswith(date) and len(title) > len(date):
             title = title[: -len(date)].rstrip()  # the date cell sits inside the title link (中国疾控中心)
         items.append({
@@ -180,7 +235,7 @@ def list_entries(text: str, *, source: SourceConfig, base: str) -> tuple[list[No
     dropped = {"title": 0, "link": 0, "host": 0, "id": 0}
     page_links = 0
     for item in raw_items:
-        title = clean_markup(item.get("title"))
+        title = _LEADING_MARKER.sub("", clean_markup(item.get("title")))
         if len(title) < min_title:
             dropped["title"] += 1
             continue
