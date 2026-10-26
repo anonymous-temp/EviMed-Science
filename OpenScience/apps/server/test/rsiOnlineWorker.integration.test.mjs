@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { randomUUID, generateKeyPairSync, sign } from 'node:crypto';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ControlPlaneDatabase } from '../src/controlPlaneDatabase.mjs';
@@ -11,6 +11,9 @@ import { migrateProductStore } from '../src/productPersistence.mjs';
 import { createRsiIncidentExports } from '../src/rsiIncidentExports.mjs';
 import { PostgresStore } from '../src/store.mjs';
 import { loadConfig } from '../src/config.mjs';
+import { createRsiTrustRegistry } from '../src/rsiDeploymentAuthority.mjs';
+import { RsiCampaignImporter } from '../src/rsiCampaignImporter.mjs';
+import { canonicalRsiJson, rsiDigest, signRsiCampaignBundle } from '../src/rsiCampaignBundle.mjs';
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? '';
 if (url) { const parsed = new URL(url); assert.ok(['localhost','127.0.0.1','::1'].includes(parsed.hostname)); assert.match(parsed.pathname, /^\/evimed_test[a-z0-9_]*$/); }
 const options = { skip: !url && 'Disposable localhost PostgreSQL required' };
@@ -53,4 +56,39 @@ test('before-project-delete journal survives source deletion while cloud is unco
     assert.equal((await database.query("SELECT id FROM evimed_control.projects WHERE user_id=$1 AND id='source-project'", [foreign])).rowCount, 0);
     assert.equal((await database.query("SELECT id FROM evimed_product.jobs WHERE user_id=$1 AND payload->>'id'=$2", [owner,incident.id])).rowCount, 2);
   } finally { await accounts.database.close(); await rm(dir, { recursive: true, force: true }); }
+}));
+
+test('configured signed trust registry imports new qualified campaign using deployment exposure profile', options, () => fixture(async ({ database, owner }) => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'rsi-configured-import-'));
+  try {
+    const issuer = generateKeyPairSync('ed25519'), evaluator = generateKeyPairSync('ed25519');
+    const publicPem = key => key.export({ type: 'spki', format: 'pem' });
+    const h = rsiDigest('qualified evaluator scope'), issuerRef = path.join(dir, 'issuer.json'), evaluatorRef = path.join(dir, 'evaluator.json');
+    const profile = { mode: 'shadow', afterShadow: 'global', allowGlobal: true, allowExpansion: true, minExecutions: 200, minDays: 2, maxErrors: 0 };
+    await writeFile(issuerRef, JSON.stringify({ keyId: 'issuer', publicKey: publicPem(issuer.publicKey), surfaces: ['frontier-selection'], kinds: ['policy'] }), { mode: 0o600 });
+    await writeFile(evaluatorRef, JSON.stringify({ schemaVersion: 1, version: 1, activationPolicies: { 'frontier-selection': profile }, evaluators: [{ keyId: 'evaluator', publicKey: publicPem(evaluator.publicKey), surfaces: ['frontier-selection'], procedureDigests: [h], consumerDigests: [h] }] }), { mode: 0o600 });
+    const target = { surface: 'frontier-selection', dependencyDigest: h, baselineRevision: 'baseline' };
+    const trust = await createRsiTrustRegistry({ trustedKeyRefs: [issuerRef], evaluatorRegistryRef: evaluatorRef }, { currentTarget: async () => target });
+    const files = [{ path: 'policy.json', content: '{"selectionThreshold":4}' }];
+    const evidence = Object.fromEntries(['registrationDigest','datasetDigest','measurementDigest','consumerDigest','evaluatorDigest','procedureDigest','qualificationDigest','corpusDigest'].map(name => [name,h]));
+    const manifest = { id: 'configured-bundle', campaignId: 'configured-campaign', surface: target.surface, kind: 'policy', target,
+      createdAt: new Date(Date.now() - 10000).toISOString(), expiresAt: new Date(Date.now() + 86400000).toISOString(),
+      verdict: { status: 'qualified', scope: target.surface, ...evidence, candidateDigest: rsiDigest(files) } };
+    const envelope = await signRsiCampaignBundle({ manifest, files, keyId: 'issuer', signer: bytes => sign(null, bytes, issuer.privateKey) });
+    const payload = canonicalRsiJson({ schemaVersion: 1, bundleId: manifest.id, campaignId: manifest.campaignId, ...manifest.verdict });
+    envelope.evaluatorReceipt = { keyId: 'evaluator', payload, signature: sign(null, Buffer.from(`evimed-rsi-evaluator-v1\nevaluator\n${payload}`), evaluator.privateKey).toString('base64') };
+    let installed = null;
+    const importer = new RsiCampaignImporter({ database, owner, isBound: trust.isBound, verificationOptions: trust.verificationOptions,
+      currentTarget: async () => target, activationPolicy: trust.activationPolicy,
+      adapters: { policy: { inspect: async () => installed, publish: async input => { installed = { operationId: input.operationId, candidateDigest: rsiDigest(input.files), phase: input.phase, revision: 'candidate', installed: true }; } } } });
+    const imported = await importer.importBundle(envelope);
+    assert.equal(imported.state, 'exposed');
+    assert.equal(imported.mode, 'shadow');
+    assert.equal(imported.policy.allowExpansion, true);
+    assert.equal(imported.policy.minExecutions, 200);
+    assert.equal(imported.policy.minDays, 2);
+    assert.equal(imported.policy.maxErrors, 0);
+    await writeFile(evaluatorRef, JSON.stringify({ schemaVersion: 1, version: 2, evaluators: [] }));
+    assert.equal((await trust.activationPolicy(manifest)).minExecutions, 200, 'approved registry version is loaded once');
+  } finally { await rm(dir, { recursive: true, force: true }); }
 }));

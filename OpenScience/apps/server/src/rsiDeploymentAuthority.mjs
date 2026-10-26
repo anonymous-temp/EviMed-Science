@@ -1,5 +1,6 @@
 import { open, constants } from 'node:fs/promises';
 import { createPublicKey, verify } from 'node:crypto';
+import { RSI_CAMPAIGN_SURFACES } from '../../../packages/domain/src/rsiCampaign.mjs';
 import { canonicalRsiJson, rsiDigest } from './rsiCampaignBundle.mjs';
 
 /** Deployment records are local, non-symlink, private files; errors contain no file bytes. @param {string} file */
@@ -32,6 +33,30 @@ export async function createRsiDeploymentAuthority(online) {
       return latest.authorizationId === agreementId && user?.id === project?.userId && typeof run?.id === 'string';
     } };
 }
+/** Deployment policy thresholds are operational exposure limits, never statistical benefit proof.
+ * This profile applies to every independently qualified candidate on the registered surface.
+ * @param {any} policies */
+export function validateRsiActivationPolicies(policies) {
+  if (policies === undefined) return {};
+  if (!policies || typeof policies !== 'object' || Array.isArray(policies)) throw new Error('rsi_activation_policy_invalid');
+  const result = {};
+  for (const [surface, policy] of Object.entries(policies)) {
+    if (!Object.hasOwn(RSI_CAMPAIGN_SURFACES, surface) || !only(policy, ['mode','allowGlobal','allowExpansion','afterShadow','cohortPercent','cohortSteps','minExecutions','minDays','maxErrors'])
+      || !['shadow','cohort','global'].includes(policy.mode) || typeof policy.allowExpansion !== 'boolean' || typeof policy.allowGlobal !== 'boolean'
+      || !Number.isSafeInteger(policy.minExecutions) || policy.minExecutions < 1 || policy.minExecutions > 1000000
+      || !Number.isSafeInteger(policy.minDays) || policy.minDays < 1 || policy.minDays > 90
+      || !Number.isSafeInteger(policy.maxErrors) || policy.maxErrors < 0 || policy.maxErrors > 1000
+      || policy.mode === 'global' && !policy.allowGlobal
+      || policy.afterShadow !== undefined && (policy.mode !== 'shadow' || surface !== 'frontier-selection' || policy.afterShadow !== 'global' || !policy.allowGlobal || !policy.allowExpansion)) throw new Error('rsi_activation_policy_invalid');
+    if (policy.mode === 'cohort') {
+      if (!Array.isArray(policy.cohortSteps) || policy.cohortSteps.length < 1 || policy.cohortSteps.length > 10
+        || policy.cohortSteps.some((step, index) => !Number.isSafeInteger(step) || step < 1 || step > 100 || index > 0 && step <= policy.cohortSteps[index - 1])
+        || policy.cohortPercent !== policy.cohortSteps[0] || policy.cohortSteps.at(-1) !== 100) throw new Error('rsi_activation_policy_invalid');
+    } else if (policy.cohortSteps !== undefined || policy.cohortPercent !== undefined) throw new Error('rsi_activation_policy_invalid');
+    result[surface] = JSON.parse(canonicalRsiJson(policy));
+  }
+  return result;
+}
 /** Public verification only. The online process has no lab signer or KMS private-key operation.
  * @param {any} online @param {any} servingAdapters */
 export async function createRsiTrustRegistry(online, servingAdapters) {
@@ -46,7 +71,8 @@ export async function createRsiTrustRegistry(online, servingAdapters) {
     issuers[row.keyId] = { publicKey, surfaces: row.surfaces, kinds: row.kinds };
   }
   const registry = await readRsiDeploymentRecord(online.evaluatorRegistryRef);
-  if (!only(registry, ['schemaVersion','evaluators']) || registry.schemaVersion !== 1 || !Array.isArray(registry.evaluators) || !registry.evaluators.length) throw new Error('rsi_evaluator_registry_invalid');
+  if (!only(registry, ['schemaVersion','version','evaluators','activationPolicies']) || registry.schemaVersion !== 1 || !Number.isSafeInteger(registry.version) || registry.version < 1 || !Array.isArray(registry.evaluators) || !registry.evaluators.length) throw new Error('rsi_evaluator_registry_invalid');
+  const activationPolicies = validateRsiActivationPolicies(registry.activationPolicies);
   const evaluators = new Map();
   for (const row of registry.evaluators) {
     if (!only(row, ['keyId','publicKey','surfaces','procedureDigests','consumerDigests']) || typeof row.keyId !== 'string' || evaluators.has(row.keyId)
@@ -57,7 +83,10 @@ export async function createRsiTrustRegistry(online, servingAdapters) {
     if (Object.values(issuers).some(issuer => issuer.publicKey.export({ type: 'spki', format: 'der' }).equals(key.export({ type: 'spki', format: 'der' })))) throw new Error('rsi_evaluator_not_independent');
     evaluators.set(row.keyId, { ...row, key });
   }
-  return { isBound: () => true, activationPolicy: async () => ({ mode: 'shadow', allowGlobal: false, allowExpansion: false }),
+  return { isBound: () => true, registryVersion: registry.version,
+    activationPolicy: async manifest => activationPolicies[manifest.surface]
+      ? JSON.parse(canonicalRsiJson(activationPolicies[manifest.surface]))
+      : { mode: 'shadow', allowGlobal: false, allowExpansion: false, reason: 'campaign_activation_policy_unconfigured' },
     async verificationOptions(envelope) {
       const receipt = envelope?.evaluatorReceipt;
       if (!receipt || typeof receipt.payload !== 'string' || Buffer.byteLength(receipt.payload) > 16384 || !/^[A-Za-z0-9+/]{86}==$/.test(receipt.signature ?? '')) throw new Error('rsi_evaluator_receipt_invalid');
