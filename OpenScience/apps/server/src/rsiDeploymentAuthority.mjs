@@ -8,7 +8,10 @@ export async function readRsiDeploymentRecord(file) {
   try {
     const stat = await handle.stat();
     if (!stat.isFile() || (stat.mode & 0o777) !== 0o600 || stat.size > 65536) throw new Error('rsi_deployment_record_invalid');
-    return JSON.parse(await handle.readFile('utf8'));
+    const bytes = Buffer.alloc(65537);
+    const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
+    if (bytesRead > 65536 || bytesRead !== stat.size) throw new Error('rsi_deployment_record_invalid');
+    return JSON.parse(bytes.subarray(0, bytesRead).toString('utf8'));
   } finally { await handle.close(); }
 }
 const only = (record, keys) => record && typeof record === 'object' && !Array.isArray(record) && Object.keys(record).every(key => keys.includes(key));
@@ -37,6 +40,7 @@ export async function createRsiTrustRegistry(online, servingAdapters) {
     const row = await readRsiDeploymentRecord(ref);
     if (!only(row, ['keyId','publicKey','surfaces','kinds']) || typeof row.keyId !== 'string' || issuers[row.keyId]
       || !Array.isArray(row.surfaces) || !row.surfaces.length || !Array.isArray(row.kinds) || !row.kinds.length) throw new Error('rsi_trust_issuer_invalid');
+    if (typeof row.publicKey !== 'string' || !row.publicKey.startsWith('-----BEGIN PUBLIC KEY-----')) throw new Error('rsi_trust_public_key_required');
     const publicKey = createPublicKey(row.publicKey);
     if (publicKey.asymmetricKeyType !== 'ed25519') throw new Error('rsi_trust_algorithm_invalid');
     issuers[row.keyId] = { publicKey, surfaces: row.surfaces, kinds: row.kinds };
@@ -47,6 +51,7 @@ export async function createRsiTrustRegistry(online, servingAdapters) {
   for (const row of registry.evaluators) {
     if (!only(row, ['keyId','publicKey','surfaces','procedureDigests','consumerDigests']) || typeof row.keyId !== 'string' || evaluators.has(row.keyId)
       || !['surfaces','procedureDigests','consumerDigests'].every(name => Array.isArray(row[name]) && row[name].length)) throw new Error('rsi_evaluator_registry_invalid');
+    if (typeof row.publicKey !== 'string' || !row.publicKey.startsWith('-----BEGIN PUBLIC KEY-----')) throw new Error('rsi_trust_public_key_required');
     const key = createPublicKey(row.publicKey);
     if (key.asymmetricKeyType !== 'ed25519') throw new Error('rsi_trust_algorithm_invalid');
     if (Object.values(issuers).some(issuer => issuer.publicKey.export({ type: 'spki', format: 'der' }).equals(key.export({ type: 'spki', format: 'der' })))) throw new Error('rsi_evaluator_not_independent');

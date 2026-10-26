@@ -89,7 +89,7 @@ export async function createRsiOnlineRuntime({ config, store, documents, jobs, d
       if (stored) results.push(await importer.importBundle(JSON.parse(stored.bytes.toString('utf8'))));
     }
     await jobs.enqueue(binding.userId, 'rsi-bundle-poll', { cursor: page.cursor ?? undefined }, { projectId: binding.projectId, idempotencyKey: `rsi-poll:${Date.now()}`, runAfter: new Date(Date.now() + 60000) });
-    return { results };
+    return { processed: results.length };
   }
   const worker = createRsiOnlineWorker({ jobs, owner: binding.userId, configured, incidents, pollBundles, report });
   if (configured()) await jobs.enqueue(binding.userId, 'rsi-bundle-poll', {}, { projectId: binding.projectId, idempotencyKey: 'rsi-bundle-poll:bootstrap' });
