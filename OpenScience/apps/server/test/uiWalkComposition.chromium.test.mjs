@@ -641,21 +641,6 @@ test("measured VCR semantic palette admits running information only at its real 
 });
 
 
-test("the VCR process probe reads the authorized data envelope and rejects unavailable contracts", { skip }, async () => {
-  let status = 200;
-  let data = { steps: { matching: { requested: true, status: 'none' }, evidence: { requested: false, status: 'done' }, trial: { requested: false, status: 'none' } } };
-  await page.route('http://vcr-process.walk/**', route => route.request().url().includes('/api/')
-    ? route.fulfill({ status, contentType: 'application/json', body: JSON.stringify({ data }) })
-    : route.fulfill({ contentType: 'text/html', body: '<main>Study</main>' }));
-  await page.goto('http://vcr-process.walk/app/virtual-research/study');
-  assert.deepEqual(await page.evaluate(vcrRequestedStepsProbe), ['matching', 'evidence']);
-  status = 403;
-  await assert.rejects(page.evaluate(vcrRequestedStepsProbe), /could not be read/);
-  status = 200; data = {};
-  await assert.rejects(page.evaluate(vcrRequestedStepsProbe), /no process contract/);
-  await page.unroute('http://vcr-process.walk/**');
-});
-
 
 test("Inbox selection ownership excludes only its two unique kinds and rejects malformed or extra styles", { skip }, async () => {
   for (const defect of ['', 'no-toolbar', 'unnamed-toolbar', 'missing-name-reference', 'duplicate-toolbar', 'duplicate-primary', 'wrong-scope', 'wrong-owner', 'different-checkbox-style', 'arbitrary-owned-button', 'extra-ordinary-kind', 'new-quiet-kind', 'outside-main']) {

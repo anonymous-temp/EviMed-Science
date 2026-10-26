@@ -51,13 +51,13 @@ describe("T3 — a study, at each of its tabs", () => {
       await screen.findByRole("heading", { level: 1, name: /EV-201/ });
       await waitFor(() => expect(container.querySelector("[data-vcr-loading]")).toBeNull());
       // Every tab's body is held to the whole page's rules: 匹配与招募 was the last one with tags in its controls (R19 VCRT put them out).
-      const facts = expectComposed(container, { stepRail: true, tablists: 0 });
+      const facts = expectComposed(container, { stepRail: false, tablists: 0 });
       expect(facts.header, `${suffix || "总览"}: the header`).not.toBeNull();
       expect(facts.headerPrimaryActions.length).toBeLessThanOrEqual(1);
       expect(facts.controlsBelowContent, `${suffix || "总览"}: no control under the content it controls`).toEqual([]);
       expect(facts.chrome, `${suffix || "总览"}: the band`).toHaveClass("sticky", "top-0");
       // The tab row is the one row of views; whatever the tab holds inside itself is the tab's own business (its body's, not the band's).
-      expect(facts.chrome!.querySelector("[data-step-rail]")).toBeInTheDocument();
+      expect(facts.chrome!.querySelector("[data-step-rail]")).toBeNull();
       viewsSeen.push(within(facts.chrome as HTMLElement).getByRole("button", { name: /^查看：/ }).textContent ?? "");
       rows.push((facts.chrome as HTMLElement).children.length);
       expect(container.querySelector("#vcr-tab-panel")).toBeInTheDocument();
@@ -82,8 +82,8 @@ describe("T3 — a study, at each of its tabs", () => {
   it("is the conversation view with the band over it, and no tab selected", async () => {
     const { container } = drawStudy(`/app/virtual-research/${STUDY_ID}/chat`);
     await screen.findByRole("region", { name: "研究对话" });
-    const facts = expectComposed(container, { stepRail: true, tablists: 0 });
-    expect(facts.chrome!.querySelectorAll("[data-rail-step]").length).toBeGreaterThan(0);
+    const facts = expectComposed(container, { stepRail: false, tablists: 0 });
+    expect(facts.chrome!.querySelectorAll("[data-rail-step]")).toHaveLength(0);
     expect(screen.getByRole("button", { name: "查看：对话" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "对话" })).toBeNull();
     expect(screen.queryByRole("tab", { selected: true })).toBeNull();

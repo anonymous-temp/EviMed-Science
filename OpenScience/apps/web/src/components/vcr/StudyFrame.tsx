@@ -16,7 +16,7 @@ import type { ToolbarProps } from "@/components/ui/Toolbar";
 import { StudyFrameContext, type StudyFrameApi, type StudyPanelKey, type StudyPrimary } from "./studyFrameContext";
 import { budgetWaitOf } from "./VcrBudgetDialog";
 import { leadJob, jobLabel, runDetailLine, stepAction, studyVersion, waitingSentence } from "./vcrActivity";
-import { VCR_HOME_PATH, VCR_TAB_ITEMS, vcrWorkflowSteps, stepsOfTab } from "./vcrTabs";
+import { VCR_HOME_PATH, VCR_TAB_ITEMS } from "./vcrTabs";
 import { intendedUseLabel, tierLabel } from "./vcrText";
 
 /** The one view of a study that is not a tab: its conversation. */
@@ -80,17 +80,6 @@ export function activityStripOf(study: VcrStudy, handlers: { onCancel?: () => vo
   return null;
 }
 
-/**
- * Anatomy: shared study header, task process, activity, result selector and body.
- * Variants: native conversation, saved research objects and historical calculations.
- * States: requested/completed/waiting tasks and cancellable active work retain their identity.
- * Hit area: shared Button, Menu and StepRail contracts.
- * Keyboard: native links and shared controls expose each result destination.
- * Long content: study titles and the task row wrap or scroll within the page.
- * Theme: semantic surface, text and status tokens.
- * Responsive: requested task states remain visible on narrow screens.
- * Verification: StudyFrame and studyComposition tests; native composer acceptance is kernel-owned.
- */
 export function StudyFrame({ studyId, study, view, reload, menu, onChat, onPanel, onView, children }: StudyFrameProps) {
   const [params, setParams] = useSearchParams();
   const individual = params.get("level") === "individual" || params.has("patient");
@@ -128,10 +117,6 @@ export function StudyFrame({ studyId, study, view, reload, menu, onChat, onPanel
   // outranks it; either way the next step is the quiet one beside it, and the header never holds two solid buttons.
   const tabButton = tabPrimary ? <Button variant={waitingBudget ? "secondary" : "primary"} onClick={tabPrimary.onSelect}>{tabPrimary.label}</Button> : null;
   const strip = activityStripOf(study, { onCancel: mayRun ? cancel : undefined, cancelling });
-  const scopedSteps = vcrWorkflowSteps(study).filter(step => {
-    const record = study.steps[step.id as keyof typeof study.steps];
-    return record?.requested === true || (record?.status !== undefined && record.status !== "none");
-  });
   const controls = view === "chat" ? undefined : toolbar;
   const bandToolbar: ToolbarProps = {
     ...(controls ?? {}), views: undefined,
@@ -170,7 +155,6 @@ export function StudyFrame({ studyId, study, view, reload, menu, onChat, onPanel
           </>
         )}
         {...(strip ? { activity: strip } : {})}
-        steps={programme && scopedSteps.length > 0 ? { label: "研究进度", steps: scopedSteps, activeSteps: view === "chat" ? [] : stepsOfTab(view), visible: true, showState: true } : undefined}
         toolbar={bandToolbar}
         contentClassName={view === "chat" ? "mt-3" : undefined}
       >

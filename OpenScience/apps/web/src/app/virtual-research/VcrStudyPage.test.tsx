@@ -108,7 +108,7 @@ describe("the study page's header", () => {
     await heading();
     expect(screen.getByRole("link", { name: /虚拟临床研究/ })).toHaveAttribute("href", "/app/virtual-research");
     expect(screen.queryByRole("list", { name: "七步进度" })).toBeNull();
-    expect(document.querySelectorAll("[data-step-rail]")).toHaveLength(1);
+    expect(document.querySelectorAll("[data-step-rail]")).toHaveLength(0);
   });
 
   // UI-17: a study whose results cannot carry the use it asked for says both,
@@ -147,7 +147,7 @@ describe("the study page's header", () => {
     expect(screen.getByTestId("location")).not.toHaveTextContent("/app/chat");
     expect(store.select).not.toHaveBeenCalled();
     // The band is still there, with the same tabs; none of them is the open view.
-    expect(document.querySelectorAll("[data-rail-step]").length).toBeGreaterThan(0);
+    expect(document.querySelectorAll("[data-rail-step]")).toHaveLength(0);
     expect(screen.queryByRole("tab", { selected: true })).toBeNull();
     // The shell is asked to place the kernel's frame over the pane, for the study's own conversation, in the study's project.
     await waitFor(() => expect(pane.requests).toEqual([{ projectId: "prj_ev201", sessionId: "ses_own" }]));
@@ -219,7 +219,7 @@ describe("the seven tabs", () => {
     });
     expect(panel).toHaveTextContent("这一页的内容暂时读不出来");
     expect(screen.getByRole("heading", { level: 1, name: STUDY_NAME })).toBeInTheDocument();
-    expect(document.querySelectorAll("[data-rail-step]").length).toBeGreaterThan(0);
+    expect(document.querySelectorAll("[data-rail-step]")).toHaveLength(0);
     await userEvent.click(screen.getByRole("button", { name: /^查看/ }));
     await userEvent.click(screen.getByRole("menuitemradio", { name: "人群与患者" }));
     await waitFor(() => expect(document.querySelector("#vcr-tab-panel [data-vcr-tab-error]")).toBeNull());
@@ -272,7 +272,7 @@ describe("the study page's addresses", () => {
   it("opens a package in the reader on the study's own address, under the same band: the step bar is on every view", async () => {
     draw(`/app/virtual-research/${STUDY_ID}?package=exp_2`);
     expect(await screen.findByRole("heading", { name: "研究包 v1" })).toBeInTheDocument();
-    expect(document.querySelectorAll("[data-rail-step]").length).toBeGreaterThan(0);
+    expect(document.querySelectorAll("[data-rail-step]")).toHaveLength(0);
     expect(screen.queryByRole("textbox")).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: /返回研究/ }));
     await waitFor(() => expect(screen.queryByRole("heading", { name: "研究包 v1" })).toBeNull());
@@ -894,7 +894,7 @@ it("restores a submitted intake awaiting information as its canonical conversati
   page.unmount(); forgetStudies(); draw(`/app/virtual-research/${STUDY_ID}/chat`);
   await screen.findByRole("region", { name: "研究对话" });
   expect(screen.queryByRole("button", { name: "开始研究" })).toBeNull();
-  expect(document.querySelectorAll("[data-rail-step]").length).toBeGreaterThan(0);
+  expect(document.querySelectorAll("[data-rail-step]")).toHaveLength(0);
 });
 
 it("opens the existing protected data intake on its addressed study view", async () => {
