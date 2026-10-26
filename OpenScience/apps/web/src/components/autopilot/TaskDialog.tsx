@@ -50,12 +50,13 @@ export function TaskDialog({ projectId, available = true, agenda, recommendation
     {!agenda && <fieldset disabled={locked} className="min-w-0"><section aria-label="从推荐开始" className="mt-6 space-y-3 border-t border-border pt-4">
       <h3 className="text-ui font-semibold text-text">从推荐开始</h3>
       <List divided>{RECOMMENDATIONS.map(item => <ListRow key={item.title} title={item.title} meta={<span className="line-clamp-1">{item.prompt}</span>} onOpen={() => { if (locked) return; if (dirty) setReplacing(item); else start(item); }} />)}</List>
-      <EvolutionOpportunities projectId={projectId} onAdopted={onAdopted} onBusyChange={value => { setAdopting(value); onBusyChange(value); }} />
+      {/* Adopting an opportunity leaves the dialog for an agenda of its own, so an edited form keeps it disabled: nothing asks to discard there. */}
+      <fieldset disabled={dirty} className="min-w-0"><EvolutionOpportunities projectId={projectId} onAdopted={onAdopted} onBusyChange={value => { setAdopting(value); onBusyChange(value); }} /></fieldset>
     </section></fieldset>}
     </>}
   </FormDialog>
   {/* Beside the dialog, as its own 「放弃未保存的修改？」 is: a layer of its own, not a dialog inside the form's scroll. */}
-  {replacing && <ConfirmDialog title="放弃未保存的修改？" subject={`改用推荐「${replacing.title}」`} consequences="未保存的修改将丢失。" recovery="返回编辑可继续保留修改。" confirmLabel="放弃修改"
+  {replacing && <ConfirmDialog title="放弃未保存的修改？" subject={`改用推荐“${replacing.title}”`} consequences="未保存的修改将丢失。" recovery="返回编辑可继续保留修改。" confirmLabel="放弃修改"
     onConfirm={() => { start(replacing); setReplacing(null); }} onCancel={() => setReplacing(null)} />}
   </>;
 }
