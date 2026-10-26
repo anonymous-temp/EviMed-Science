@@ -84,7 +84,7 @@ def check_bindings(actual, expected, bindings):
     return {'passed': bool(bindings) and not missing and all(row['passed'] for row in findings), 'missingReferences': missing, 'findings': findings}
 
 
-def prediction_reference(source, returned, *, id_column, probability_column, source_id_column=None, threshold=.5):
+def prediction_reference(source, returned, *, id_column, probability_column, source_id_column=None, threshold=.5, split_column=None, test_label='test'):
     if not math.isfinite(threshold) or not 0 <= threshold <= 1:
         raise ValueError('Invalid threshold.')
     source_id_column = id_column if source_id_column is None else source_id_column
@@ -97,6 +97,11 @@ def prediction_reference(source, returned, *, id_column, probability_column, sou
         if key not in known or key in used:
             raise ValueError('Unknown or repeated prediction identity.')
         used.add(key)
+        if split_column is not None:
+            if split_column not in row or not str(row[split_column]).strip():
+                raise ValueError('Prediction split is missing.')
+            if row[split_column] != test_label:
+                continue
         label = str(known[key]['breast_cancer_yn'])
         probability = float(row[probability_column])
         if label not in ('0', '1') or not math.isfinite(probability) or not 0 <= probability <= 1:
