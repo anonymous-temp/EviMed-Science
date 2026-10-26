@@ -16,15 +16,18 @@ def calibrate(seed=20261026, simulations=20000, groups=80, batch=256):
     Boundary cases estimate false qualification. Positive cases estimate power.
     One-sided exact binomial bounds quantify Monte Carlo uncertainty.
     """
-    if simulations < 20000 or groups < 30 or not 1 <= batch <= 1024:
-        raise ValueError('require >=20000 simulations, >=30 groups, batch in 1..1024')
+    if simulations < 20000 or groups < 25 or not 1 <= batch <= 1024:
+        raise ValueError('require >=20000 simulations, >=25 groups, batch in 1..1024')
     rng = np.random.default_rng(seed)
     scenarios = [
         ('identical-quality-same-cost', 'efficiency', 0., .1, False),
         ('equal-quality-cheap', 'efficiency', 0., -.15, True),
         ('NI-boundary-efficiency', 'efficiency', -.03, -.15, False),
         ('cost-boundary-efficiency', 'efficiency', .04, 0., False),
+        # Repair slice clearly better, the whole family exactly at the NI boundary: only the global NI test can refuse it.
         ('NI-boundary-repair', 'targeted-repair', -.03, -.1, False),
+        # Cost at the efficiency boundary with a right-skewed (centred lognormal) noise, as paid model costs are.
+        ('skewed-cost-null', 'efficiency', .04, 0., False),
         ('cost-boundary-repair', 'targeted-repair', .08, 0., False),
         ('cheap-catastrophic-regression', 'efficiency', -.4, -.3, False),
         ('meaningful-targeted-repair', 'targeted-repair', .1, -.08, True),
@@ -33,49 +36,89 @@ def calibrate(seed=20261026, simulations=20000, groups=80, batch=256):
     ]
     results = []
     for name, claim, quality_mean, cost_mean, positive in scenarios:
-        passed = 0
-        for start in range(0, simulations, batch):
-            count = min(batch, simulations - start)
-            quality = rng.normal(quality_mean, .05, (count, groups))
-            if name == 'bounded-correlated-forms-null':
-                # Independent groups; shared latent group + correlated form/repeat noise.
-                latent = rng.uniform(-.06, .06, (count, groups, 1, 1))
-                form = rng.uniform(-.02, .02, (count, groups, 2, 1))
-                repeat = rng.uniform(-.01, .01, (count, groups, 2, 3))
-                quality = quality_mean + (latent + form + repeat).mean(axis=(2, 3))
-            if name == 'rare-failure-null':
-                # Centered rare shocks: null mean retained, influence rule still applied.
-                quality = quality_mean + rng.normal(0, .01, (count, groups)) + .2 * (rng.binomial(1, .02, (count, groups)) - .02)
-            cost = rng.normal(cost_mean, .08, (count, groups))
-            for index in range(count):
-                q = np.clip(quality[index], -.49, .49)
-                factor = .9 if claim == 'efficiency' else 1.1
-                costs = [(.4, float(.4 * (factor + c))) for c in cost[index]]
-                try:
-                    verdict, _ = _statistics.numeric_decision(q, [.03] * groups,
-                        [i < groups // 2 for i in range(groups)], costs, {claim: .05})
-                except ValueError:
-                    verdict = 'inconclusive'
-                if start == 0 and index == 0:
-                    _validate_wrapper(q, costs, claim, verdict)
-                passed += verdict == 'qualified'
-        results.append({'scenario': name, 'claim': claim, 'expected_positive': positive,
-                        'qualified': passed, 'simulations': simulations, 'rate': passed / simulations,
-                        'binomial_95_upper': 1. if passed == simulations else float(beta.ppf(.95, passed + 1, simulations - passed))})
-    qualification_passed = all(s['binomial_95_upper'] <= .05 for s in results if not s['expected_positive'])
+        results.append(_scenario(rng, name, claim, quality_mean, cost_mean, positive, simulations, groups, batch))
+    # Superiority (a deterministic, zero-model-call consumer, e.g. frontier selection by day): nulls and a modest effect at the
+    # registered day-level sizes and at the frontier campaign's alpha (0.05/3 per monthly campaign) as well as 0.05.
+    for day_groups in (25, 31):
+        for alpha in (.05, .05 / 3):
+            for name, quality_mean, positive, shape in (('superiority-null', 0., False, 'normal'), ('superiority-skewed-null', 0., False, 'skewed'),
+                                                        ('superiority-modest-effect', .03, True, 'normal')):
+                results.append(_superiority(rng, f'{name}-G{day_groups}-a{alpha:.4f}', quality_mean, positive, shape, simulations, day_groups, alpha, batch))
+    # A null's false-qualification rate is bounded by the claim's allocated alpha (the 95% binomial upper bound must not exceed it).
+    qualification_passed = all(s['binomial_95_upper'] <= s['allocated_alpha'] for s in results if not s['expected_positive'])
     _validate_unknown_controls()
-    return {'qualification_passed': qualification_passed, 'procedure': dict(_statistics.PROCEDURE), 'allocated_alpha': .05, 'test_alpha': .025, 'scenario_role': 'registered mathematical qualification controls; no held-back confirmation evidence', 'seed': seed, 'groups': groups, 'batch': batch, 'scenarios': results,
-            'scope': 'Shared-core mathematical clipped Gaussian contrasts with exact wrapper equivalence controls only; not end-to-end or universal coverage qualification',
+    return {'qualification_passed': qualification_passed, 'procedure': dict(_statistics.PROCEDURE), 'allocated_alpha': .05, 'test_alpha': .025,
+            'scenarios': results, 'scenario_role': 'registered mathematical qualification controls; no held-back confirmation evidence',
+            'scope': 'Shared-core mathematical clipped Gaussian and skewed contrasts with exact wrapper equivalence controls only; not end-to-end or universal coverage qualification',
             'dependencies': {'numpy': np.__version__, 'scipy': __import__('scipy').__version__}}
 
 
-def _validate_wrapper(quality, costs, claim, expected):
+def _superiority(rng, name, quality_mean, positive, shape, simulations, groups, alpha, batch):
+    passed = 0
+    for start in range(0, simulations, batch):
+        count = min(batch, simulations - start)
+        if shape == 'skewed':
+            quality = quality_mean + .04 * (rng.exponential(1., (count, groups)) - 1.)
+        else:
+            quality = rng.normal(quality_mean, .04, (count, groups))
+        for index in range(count):
+            q = np.clip(quality[index], -.49, .49)
+            try:
+                verdict, _ = _statistics.numeric_decision(q, [0.] * groups, [False] * groups, [(0., 0.)] * groups, {'superiority': alpha})
+            except ValueError:
+                verdict = 'inconclusive'
+            if start == 0 and index == 0:
+                _validate_wrapper(q, [(0., 0.)] * groups, 'superiority', verdict, alpha=alpha)
+            passed += verdict == 'qualified'
+    return {'scenario': name, 'claim': 'superiority', 'expected_positive': positive, 'groups': groups, 'alpha': alpha * _statistics.PROCEDURE['test_alpha_fraction'],
+            'allocated_alpha': alpha, 'qualified': passed, 'simulations': simulations, 'rate': passed / simulations,
+            'binomial_95_upper': 1. if passed == simulations else float(beta.ppf(.95, passed + 1, simulations - passed))}
+
+
+def _scenario(rng, name, claim, quality_mean, cost_mean, positive, simulations, groups, batch):
+    passed = 0
+    for start in range(0, simulations, batch):
+        count = min(batch, simulations - start)
+        quality = rng.normal(quality_mean, .05, (count, groups))
+        if name == 'bounded-correlated-forms-null':
+            # Independent groups; shared latent group + correlated form/repeat noise.
+            latent = rng.uniform(-.06, .06, (count, groups, 1, 1))
+            form = rng.uniform(-.02, .02, (count, groups, 2, 1))
+            repeat = rng.uniform(-.01, .01, (count, groups, 2, 3))
+            quality = quality_mean + (latent + form + repeat).mean(axis=(2, 3))
+        if name == 'rare-failure-null':
+            # Centered rare shocks: null mean retained, influence rule still applied.
+            quality = quality_mean + rng.normal(0, .01, (count, groups)) + .2 * (rng.binomial(1, .02, (count, groups)) - .02)
+        if name == 'NI-boundary-repair':
+            # Half the groups (the registered slice) gain .07, the rest lose .13: global mean -.03, the margin's boundary.
+            quality = np.where(np.arange(groups) < groups // 2, .07, -.13) + rng.normal(0, .05, (count, groups))
+        cost = rng.normal(cost_mean, .08, (count, groups))
+        if name == 'skewed-cost-null':
+            cost = cost_mean + .08 * (rng.lognormal(0, .8, (count, groups)) - np.exp(.32)) / np.sqrt((np.exp(.64) - 1) * np.exp(.64))
+        for index in range(count):
+            q = np.clip(quality[index], -.49, .49)
+            factor = .9 if claim == 'efficiency' else 1.1
+            costs = [(.4, float(.4 * (factor + c))) for c in cost[index]]
+            try:
+                verdict, _ = _statistics.numeric_decision(q, [.03] * groups,
+                    [i < groups // 2 for i in range(groups)], costs, {claim: .05})
+            except ValueError:
+                verdict = 'inconclusive'
+            if start == 0 and index == 0:
+                _validate_wrapper(q, costs, claim, verdict)
+            passed += verdict == 'qualified'
+    return {'scenario': name, 'claim': claim, 'expected_positive': positive, 'groups': groups, 'allocated_alpha': .05,
+            'qualified': passed, 'simulations': simulations, 'rate': passed / simulations,
+            'binomial_95_upper': 1. if passed == simulations else float(beta.ppf(.95, passed + 1, simulations - passed))}
+
+
+def _validate_wrapper(quality, costs, claim, expected, alpha=.05):
     """Check aggregation, minimum slice size and core parity on each scenario."""
     n = len(quality)
     registration = {'procedure': dict(_statistics.PROCEDURE), 'version': 1, 'mode': 'paired-t', 'paid_cost_budget': 1000,
-        'groups': [{'id': str(i), 'family': 'calibration', 'failure_slice': i < n // 2} for i in range(n)],
-        'G_target': n, 'claims': {claim: .05}, 'expires_at': '2030-01-01T00:00:00+00:00',
-        'cost_identity': 'all mathematical arm/form/repeat costs',
+        'groups': [{'id': str(i), 'family': 'calibration', 'failure_slice': i < n // 2 and claim != 'superiority'} for i in range(n)],
+        'G_target': n, 'claims': {claim: alpha}, 'expires_at': '2030-01-01T00:00:00+00:00',
+        'cost_identity': 'deterministic-no-model-call' if claim == 'superiority' else 'all mathematical arm/form/repeat costs',
         'families': {'calibration': {'margin': .03, 'repeats': 3, 'score_type': 'bounded-continuous',
             'pilot_rationale': 'Preregistered mathematical calibration scenario, not empirical task-family evidence',
             'forms': {'original': .5, 'equivalent': .5}}}}
@@ -124,7 +167,7 @@ if __name__ == '__main__':
         development = calibrate(args.seed, args.simulations)
         held_back = calibrate(args.seed + 104729, args.simulations)
         json.dump({'qualification_passed': development['qualification_passed'] and held_back['qualification_passed'],
+                   'generatedAt': __import__('datetime').datetime.now(__import__('datetime').timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
                    'development': development, 'held_back': held_back,
-                   'previous_diagnostic': '/tmp/rsi-statistics-review-calibration.json',
                    'scope': 'Prequalification method development on public mathematical fixtures; no real candidate confirmation'}, output, indent=2, allow_nan=False)
         output.write('\n')

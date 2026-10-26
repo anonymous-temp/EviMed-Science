@@ -1,7 +1,8 @@
 """Preregistered fixed-horizon paired-source-group decisions (offline only).
 
 Each registration declares groups, family margins/repeats/form weights and pilot
-rationale before confirmation. Rows are complete arm/form/repeat measurements;
+rationale before confirmation. A group is the registered independent sampling unit
+(a source group, or a day for a consumer that shares capacity across a day). Rows are complete arm/form/repeat measurements;
 unknown outcomes are never scored zero. Costs include every paid attempt. The
 paired-t scope is approximate, independent source groups with continuous bounded
 scores, >=30 groups per tested population and no influential group. Deterministic
@@ -17,7 +18,9 @@ import rfc8785
 import numpy as np
 from scipy.stats import t
 
-PROCEDURE = {'id': 'rsi-paired-source-v4', 'digest_codec': 'rfc8785-sha256-v1', 'test_alpha_fraction': .5, 'minimum_slice_groups': 30}
+PROCEDURE = {'id': 'rsi-paired-group-v5', 'digest_codec': 'rfc8785-sha256-v1', 'test_alpha_fraction': .5, 'minimum_slice_groups': 25}
+CLAIMS = ('efficiency', 'targeted-repair', 'superiority')
+MARGIN_CLAIMS = ('efficiency', 'targeted-repair')
 
 
 def registration_digest(registration):
@@ -41,7 +44,7 @@ def _interval(values, alpha, deterministic):
     if deterministic:
         return {'mean': mean, 'lower': mean, 'upper': mean, 'n_groups': len(values)}
     if len(values) < PROCEDURE['minimum_slice_groups']:
-        raise ValueError('sparse population: paired-t requires at least 30 independent groups')
+        raise ValueError(f"sparse population: paired-t requires at least {PROCEDURE['minimum_slice_groups']} independent groups")
     sd = float(np.std(values, ddof=1))
     if sd <= 1e-12:
         raise ValueError('zero variance is outside approximate paired-t qualification')
@@ -64,7 +67,9 @@ def evaluate(registration, observations, receipt):
     complete_costs=True, cost_identity, ISO now, expired_budget=False.
     Each group has id, family, failure_slice; family has margin, repeats,
     score_type='bounded-continuous', pilot_rationale, forms={name: weight}.
-    Claims map efficiency/targeted-repair to separately allocated alpha, sum<=.05.
+    Claims map efficiency/targeted-repair/superiority to separately allocated alpha, sum<=.05.
+    superiority: quality lower bound > 0 with no margin and no cost claim; it is for a
+    deterministic consumer whose arms make no model call (registered zero cost identity).
     """
     result = {'decision': 'inconclusive', 'reasons': [], 'quantities': {},
               'evidenceScope': 'undetermined', 'globalPolicyEligible': False,
@@ -120,7 +125,7 @@ def evaluate(registration, observations, receipt):
         claims = registration['claims']
         if not isinstance(claims, dict) or (len(claims) > 1 and registration.get('claim_policy') != 'preallocated-all-claims-IUT'):
             raise ValueError('single claim or explicit preallocated all-claims IUT required')
-        if not claims or set(claims) - {'efficiency', 'targeted-repair'} or any(not _number(a) or a < 1e-6 for a in claims.values()) or sum(claims.values()) > .05:
+        if not claims or set(claims) - set(CLAIMS) or any(not _number(a) or a < 1e-6 for a in claims.values()) or sum(claims.values()) > .05:
             raise ValueError('invalid preregistered alpha allocation')
         groups = registration['groups']
         group_map = {g['id']: g for g in groups}
@@ -133,8 +138,10 @@ def evaluate(registration, observations, receipt):
                 raise ValueError('family must be an object')
             if not isinstance(group['failure_slice'], bool):
                 raise ValueError('failure slice must be preregistered')
-            if not _number(family['margin']) or not 0 < family['margin'] < 1 or not family['pilot_rationale']:
-                raise ValueError('family margin requires pilot rationale')
+            if not family.get('pilot_rationale'):
+                raise ValueError('family requires pilot rationale')
+            if set(claims) & set(MARGIN_CLAIMS) and (not _number(family.get('margin')) or not 0 < family['margin'] < 1):
+                raise ValueError('noninferiority claim requires a family margin in (0, 1)')
             repeats = family['repeats']
             if type(repeats) is not int or repeats < (1 if deterministic or deterministic_consumer else 3) or repeats > 100:
                 raise ValueError('invalid family repetition contract')
@@ -156,7 +163,9 @@ def evaluate(registration, observations, receipt):
             indexed[key] = row
         if set(indexed) != expected:
             raise ValueError('missing measurements at fixed horizon')
-        if result['cost_totals']['baseline'] <= 0:
+        if 'superiority' in claims and (registration['cost_identity'] != 'deterministic-no-model-call' or any(row['cost'] != 0 for row in observations)):
+            raise ValueError('superiority requires the registered zero-model-call cost identity and zero measured costs')
+        if result['cost_totals']['baseline'] <= 0 and set(claims) != {'superiority'}:
             known_free_repair = deterministic and set(claims) == {'targeted-repair'} and result['cost_totals']['candidate'] == 0
             if not known_free_repair:
                 if deterministic and 'efficiency' in claims:
@@ -175,7 +184,7 @@ def evaluate(registration, observations, receipt):
             for arm in ('baseline', 'candidate'):
                 arms[arm] = sum(weight * sum(indexed[(group['id'], arm, form, repeat)]['quality'] for repeat in range(family['repeats'])) / family['repeats'] for form, weight in family['forms'].items())
             quality.append(arms['candidate'] - arms['baseline'])
-            margins.append(family['margin'])
+            margins.append(family.get('margin', 0) if set(claims) & set(MARGIN_CLAIMS) else 0)
             slices.append(group['failure_slice'])
             costs.append(tuple(sum(weight * sum(indexed[(group['id'], arm, form, repeat)]['cost'] for repeat in range(family['repeats'])) / family['repeats'] for form, weight in family['forms'].items()) for arm in ('baseline', 'candidate')))
         verdict, quantities = numeric_decision(quality, margins, slices, costs, claims, deterministic)
@@ -192,11 +201,17 @@ def numeric_decision(quality, margins, slices, costs, claims, deterministic=Fals
     outcomes, quantities = [], {}
     for claim, allocated_alpha in claims.items():
         alpha = allocated_alpha * PROCEDURE['test_alpha_fraction']
+        if claim == 'superiority':
+            superiority = _interval(quality, alpha, deterministic)
+            quantities[claim] = {'allocated_alpha': allocated_alpha, 'test_alpha': alpha, 'quality_superiority': superiority}
+            outcomes.append(superiority['lower'] > 0)
+            continue
         ni = _interval(np.array(quality) + margins, alpha, deterministic)
         bound = .9 if claim == 'efficiency' else 1.1
         cost = _interval([candidate - bound * baseline for baseline, candidate in costs], alpha, deterministic)
         item = {'allocated_alpha': allocated_alpha, 'test_alpha': alpha, 'quality_noninferiority': ni, 'cost_contrast': cost, 'cost_factor': bound}
-        passed = ni['lower'] > 0 and cost['upper'] <= 0
+        # Efficiency asks for real savings (cand - 0.9*base strictly below zero); a repair may cost up to 1.1x the baseline.
+        passed = ni['lower'] > 0 and (cost['upper'] < 0 if claim == 'efficiency' else cost['upper'] <= 0)
         if claim == 'targeted-repair':
             repair = _interval([q for q, selected in zip(quality, slices) if selected], alpha, deterministic)
             item['failure_slice_quality'] = repair

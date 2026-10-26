@@ -32,7 +32,52 @@ def fixture(claim='efficiency', mode='paired-t', n=40):
     return registration, rows, receipt
 
 
+def qualifying(claim='efficiency', n=40):
+    """A paired-t registration that qualifies unmutated: real between-group variance, NI within the margin, savings."""
+    reg, rows, receipt = fixture(claim, n=n)
+    for row in rows:
+        if row['arm'] == 'candidate':
+            row['quality'] += .01 * ((int(row['group']) * 7) % 5 - 2) + (.12 if claim == 'targeted-repair' else 0)
+    return reg, rows, receipt
+
+
+def superiority(n=40, gain=.04):
+    reg, rows, receipt = fixture('superiority', n=n)
+    reg['cost_identity'] = 'deterministic-no-model-call'
+    reg['deterministicConsumer'] = True
+    reg['families']['office'].update(repeats=1, forms={'original': 1})
+    reg['families']['office'].pop('margin')
+    rows = [row for row in rows if row['repeat'] == 0 and row['form'] == 'original']
+    for row in rows:
+        row['cost'] = 0
+        if row['arm'] == 'candidate': row['quality'] += gain + .01 * ((int(row['group']) * 7) % 5 - 2)
+    receipt['cost_identity'] = reg['cost_identity']
+    receipt['deterministic_qualification']['type'] = 'trusted-deterministic-consumer'
+    receipt['registration_digest'] = MODULE.registration_digest(reg)
+    return reg, rows, receipt
+
+
 class DecisionTests(unittest.TestCase):
+    def test_qualifying_fixtures_qualify_unmutated(self):
+        for claim, n in (('efficiency', 40), ('targeted-repair', 80)):
+            with self.subTest(claim=claim):
+                self.assertEqual(MODULE.evaluate(*qualifying(claim, n))['decision'], 'qualified')
+
+    def test_superiority_needs_gain_zero_cost_identity_and_groups(self):
+        self.assertEqual(MODULE.evaluate(*superiority())['decision'], 'qualified')
+        self.assertEqual(MODULE.evaluate(*superiority(gain=0))['decision'], 'not-qualified')
+        self.assertEqual(MODULE.evaluate(*superiority(n=20))['decision'], 'inconclusive')
+        reg, rows, receipt = superiority()
+        rows[0]['cost'] = .01
+        self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
+        reg, rows, receipt = superiority()
+        reg['cost_identity'] = receipt['cost_identity'] = 'all paid attempts'
+        receipt['registration_digest'] = MODULE.registration_digest(reg)
+        self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
+        reg, rows, receipt = superiority()
+        rows[-1]['critical_violations'] = 1
+        self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'not-qualified')
+
     def test_efficiency_requires_quality_and_savings(self):
         reg, rows, receipt = fixture(mode='deterministic')
         self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'qualified')
@@ -67,27 +112,28 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(result['cost_totals']['baseline'], sum(r['cost'] for r in rows if r['arm'] == 'baseline'))
 
     def test_contract_integrity_and_fixed_horizon(self):
-        for mutation in ('duplicate', 'missing', 'digest', 'repeat', 'exposure', 'budget'):
-            reg, rows, receipt = fixture()
+        for mutation in ('duplicate', 'missing', 'digest', 'repeat', 'exposure', 'budget', 'look'):
+            reg, rows, receipt = qualifying()
             if mutation == 'duplicate': rows.append(dict(rows[0]))
             if mutation == 'missing': rows.pop()
             if mutation == 'digest': receipt['registration_digest'] = 'wrong'
             if mutation == 'repeat': rows[0]['repeat'] = 100
             if mutation == 'exposure': receipt['confirmation_exposed'] = True
             if mutation == 'budget': receipt['expired_budget'] = True
+            if mutation == 'look': receipt['look'] = 2
             with self.subTest(mutation=mutation):
                 self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
 
     def test_nonfinite_and_missing_cost_are_unknown(self):
         for value in (None, float('nan'), float('inf'), -1):
-            reg, rows, receipt = fixture()
+            reg, rows, receipt = qualifying()
             rows[0]['cost'] = value
             result = MODULE.evaluate(reg, rows, receipt)
             self.assertEqual(result['decision'], 'inconclusive')
             __import__('json').dumps(result, allow_nan=False)
 
     def test_family_repeat_changes_require_reregistration(self):
-        reg, rows, receipt = fixture()
+        reg, rows, receipt = qualifying()
         reg['families']['office']['repeats'] = 10
         self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
         receipt['registration_digest'] = MODULE.registration_digest(reg)
@@ -106,9 +152,11 @@ class DecisionTests(unittest.TestCase):
 
     def test_empty_slice_tiny_alpha_and_sparse_slice_fail_closed(self):
         for mutation in ('empty', 'tiny-alpha', 'sparse'):
-            reg, rows, receipt = fixture('targeted-repair', n=40)
+            reg, rows, receipt = fixture('targeted-repair', n=80)
             if mutation == 'empty':
                 for group in reg['groups']: group['failure_slice'] = False
+            if mutation == 'sparse':
+                for group in reg['groups']: group['failure_slice'] = int(group['id']) < 10
             if mutation == 'tiny-alpha': reg['claims'] = {'targeted-repair': 1e-300}
             receipt['registration_digest'] = MODULE.registration_digest(reg)
             for row in rows:
@@ -195,7 +243,8 @@ class DecisionTests(unittest.TestCase):
         reg, rows, receipt = fixture(mode='deterministic')
         receipt.pop('deterministic_qualification', None)
         self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
-        reg, rows, receipt = fixture()
+        reg, rows, receipt = qualifying()
+        self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'qualified')
         reg['families']['other'] = dict(reg['families']['office'])
         receipt['registration_digest'] = MODULE.registration_digest(reg)
         self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
