@@ -245,3 +245,45 @@ test("a failed first turn prevents dependent follow-ups", async () => fixture(as
   assert.equal(f.requests.filter(r => r.url === "/api/agent-runs/dispatch").length, 1);
   assert.equal(f.requests.at(-1).url, "/api/account");
 }));
+
+
+test("invalid follow-ups are rejected before creating an account", async () => fixture(async f => {
+  await fs.writeFile(path.join(f.root, "evals/fixture/briefs.json"), JSON.stringify({ capability: "meta-analysis", briefs: [{
+    id: "fixture-case", inputs: { topic: "First analysis" }, followUps: [""],
+  }] }));
+  const result = await f.run();
+  assert.equal(result.code, 2);
+  assert.match(result.stderr, /followUps must/);
+  assert.equal(f.requests.length, 0);
+}));
+
+test("a custom prompt does not inherit the original brief's follow-ups", async () => fixture(async f => {
+  await fs.writeFile(path.join(f.root, "evals/fixture/briefs.json"), JSON.stringify({ capability: "meta-analysis", briefs: [{
+    id: "fixture-case", inputs: { topic: "First analysis" }, followUps: ["Do not inherit me."],
+  }] }));
+  const prompt = path.join(f.root, "custom.txt");
+  await fs.writeFile(prompt, "Custom analysis.");
+  f.setRun({ ...originalRun, status: "succeeded" });
+  assert.equal((await f.run({ extra: ["--prompt-file", prompt] })).code, 0);
+  const sent = f.requests.filter(r => r.url === "/api/agent-runs/dispatch");
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].body.text, "Custom analysis.");
+}));
+
+test("an incomplete artifact snapshot stops follow-ups and is recorded before account cleanup", async () => fixture(async f => {
+  await fs.writeFile(path.join(f.root, "evals/fixture/briefs.json"), JSON.stringify({ capability: "meta-analysis", briefs: [{
+    id: "fixture-case", inputs: { topic: "First analysis" }, followUps: ["Would overwrite results."],
+  }] }));
+  f.setRun({ ...originalRun, status: "succeeded", artifacts: ["results.json", "results.json"] });
+  f.hangArtifacts();
+  const result = await f.run({ artifactTimeout: 40 });
+  assert.equal(result.code, 2);
+  assert.equal(f.requests.filter(r => r.url === "/api/agent-runs/dispatch").length, 1);
+  const [{ record }] = await f.records();
+  assert.equal(record.outcome.status, "succeeded", "capture failure does not rewrite the product verdict");
+  assert.equal(record.artifactCapture.complete, false);
+  assert.deepEqual(record.artifactCapture.saved, []);
+  assert.equal(record.artifactCapture.failed.length, 1, "duplicate paths are captured only once");
+  assert.equal(record.artifactCapture.failed[0].path, "results.json");
+  assert.equal(f.requests.at(-1).url, "/api/account");
+}));
