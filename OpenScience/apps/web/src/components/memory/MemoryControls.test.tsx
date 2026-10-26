@@ -20,3 +20,18 @@ it("keeps the memory switch focused while pending and reconciles an unknown writ
   await waitFor(() => expect(control).toHaveAttribute("aria-checked", "true"));
   expect(api.fetchMemorySettings).toHaveBeenCalledTimes(2);
 });
+
+it("takes the state from the write's own answer: no second read, and a refusal is said once, in the switch's line", async () => {
+  api.fetchMemorySettings.mockReset(); api.updateMemorySettings.mockReset();
+  api.fetchMemorySettings.mockResolvedValue({ learningPaused: false, recallPaused: false, pausedProjects: [], updatedAt: null });
+  api.updateMemorySettings.mockResolvedValueOnce({ learningPaused: true, recallPaused: true, pausedProjects: [], updatedAt: null });
+  render(<MemoryControls onReset={vi.fn()} onShare={vi.fn()} onForgotten={vi.fn()} />);
+  const control = await screen.findByRole("switch", { name: "记忆" });
+  fireEvent.click(control);
+  await waitFor(() => expect(control).toHaveAttribute("aria-checked", "false"));
+  expect(api.fetchMemorySettings).toHaveBeenCalledTimes(1);
+  api.updateMemorySettings.mockRejectedValueOnce(new (await import("@/lib/apiClient")).WebApiError("conflict", { status: 409 }));
+  fireEvent.click(control);
+  expect(await screen.findByText(/没有改成：/)).toBeInTheDocument();
+  expect(screen.getAllByText(/没有改成：/)).toHaveLength(1);
+});

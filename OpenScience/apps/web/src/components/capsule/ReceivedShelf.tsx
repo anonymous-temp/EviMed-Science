@@ -136,14 +136,15 @@ function ReceivedPacks() {
   const { data, failed, reload } = useCapsuleData(fetchReceivedCapsules);
   const [busy, setBusy] = useState<string | null>(null);
 
-  const act = async (key: string, operation: () => Promise<void>) => {
+  // `throughSwitch`: the switch the action came from says what went wrong in its own line, so it is not also toasted.
+  const act = async (key: string, operation: () => Promise<void>, { throughSwitch = false } = {}) => {
     setBusy(key);
     try {
       await operation();
       announceMemoryChanged();
       reload();
     } catch (error) {
-      toast.error(`没有完成：${productErrorMessage(error)}`);
+      if (!throughSwitch) toast.error(`没有完成：${productErrorMessage(error)}`);
       throw error;
     } finally {
       setBusy(null);
@@ -154,11 +155,11 @@ function ReceivedPacks() {
     toast.success(`已启用“${pack.title}”`, {
       action: { label: "撤销", onClick: () => void disableCapsule(pack.id).then(() => { announceMemoryChanged(); reload(); }) },
     });
-  });
+  }, { throughSwitch: true });
   const disable = (pack: ReceivedCapsule) => act(`disable:${pack.id}`, async () => {
     await disableCapsule(pack.id);
     toast.success(`已停用“${pack.title}”`);
-  });
+  }, { throughSwitch: true });
   const trial = (pack: ReceivedCapsule) => act(`trial:${pack.id}`, async () => {
     // The conversation's id is chosen here so it can be marked as the trial
     // before the frame opens it; the frame then creates it under that id.
@@ -195,7 +196,7 @@ function ReceivedPacks() {
       trailing={(
         <AsyncSwitch
           readChecked={async () => { const packs = await fetchReceivedCapsules(); return packs.find(item => item.id === pack.id)?.enabled ?? false; }}
-          label={`启用“${pack.title}”`}
+          label={`启用“${pack.title}”`} errorMessage={productErrorMessage}
           checked={pack.enabled}
           pending={busy !== null} disabled={Boolean(pack.takenDown)}
           onChange={(next) => (next ? enable(pack) : disable(pack))}

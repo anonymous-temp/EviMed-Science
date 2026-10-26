@@ -1,7 +1,13 @@
 import { webErrorMessage } from "@/lib/apiClient";
 import { useEffect, useId, useRef, useState } from "react";
-import { isAmbiguousMutationError } from "@/lib/useMutationState";
+import { AmbiguousMutationError, isAmbiguousMutationError } from "@/lib/mutationOutcome";
 import { cn } from "@/lib/cn";
+
+/** What to say of a write whose outcome is unknown, without the closing stop (the line goes on with what to do). */
+function unsavedWords(reason: unknown): string {
+  const own = reason instanceof AmbiguousMutationError ? reason.message.trim().replace(/[。.]$/, "") : "";
+  return own || "没有收到保存结果";
+}
 
 /**
  * Component: Switch; owner: H; rules: DS21, DESIGN.md component adoption.
@@ -25,6 +31,7 @@ export function Switch({
   pending = false,
   error,
   reconciliationKey,
+  errorMessage,
 }: {
   checked: boolean;
   onChange: (checked: boolean) => void | Promise<unknown>;
@@ -32,6 +39,8 @@ export function Switch({
   /** Change after reading the authoritative state, including an unchanged false value. */
   reconciliationKey?: string | number;
   error?: string;
+  /** How a write that was positively refused reads in the switch's own line; the shared sentence of the error registry by default. */
+  errorMessage?: (reason: unknown) => string;
   label: string;
   disabled?: boolean;
   /** Print the label before the switch (a page-header switch such as 「记忆」). */
@@ -51,9 +60,15 @@ export function Switch({
     const next = !checked; setOptimistic(next);
     try { await onChange(next); setOptimistic(null); }
     catch (reason) {
-      if (isAmbiguousMutationError(reason)) setUnresolved(true);
-      else setOptimistic(null);
-      setLocalError(webErrorMessage(reason, { fallback: "设置未能保存，请重试。" }));
+      if (isAmbiguousMutationError(reason)) {
+        // The write may have been saved: never say it was not, and never ask for a retry that could write twice. The sentence the
+        // caller gave if it gave one; else only what is known.
+        setUnresolved(true);
+        setLocalError(unsavedWords(reason));
+      } else {
+        setOptimistic(null);
+        setLocalError(errorMessage?.(reason) ?? webErrorMessage(reason, { fallback: "设置未能保存，请重试。" }));
+      }
     } finally { locked.current = false; }
   };
   return (<>

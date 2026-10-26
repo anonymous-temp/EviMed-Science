@@ -58,19 +58,22 @@ export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotte
     return () => { cancelled = true; };
   }, []);
 
-  const change = async (patch: Parameters<typeof updateMemorySettings>[0], done: string) => {
+  const refusal = (error: unknown) => `没有改成：${webErrorMessage(error, { fallback: "请稍后重试。" })}`;
+  /** The write; the answer is the settings, and what reads them (the switch, the menu) takes it from here. A failure is the caller's to say. */
+  const save = async (patch: Parameters<typeof updateMemorySettings>[0], done: string) => {
     setBusy(true);
     try {
-      setSettings(await updateMemorySettings(patch));
+      const saved = await updateMemorySettings(patch);
+      setSettings(saved);
       toast.success(done);
       onSettingsChanged?.();
-    } catch (error) {
-      toast.error(`没有改成：${webErrorMessage(error, { fallback: "请稍后重试。" })}`);
-      throw error;
+      return saved;
     } finally {
       setBusy(false);
     }
   };
+  /** From the menu: nothing else shows a failure there, so it is a toast. */
+  const change = (patch: Parameters<typeof updateMemorySettings>[0], done: string) => save(patch, done).catch((error: unknown) => { toast.error(refusal(error)); });
   const reset = async () => {
     setConfirmingReset(false);
     setBusy(true);
@@ -102,7 +105,11 @@ export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotte
             label="记忆"
             checked={memoryOn}
             pending={busy}
-            onChange={() => change({ learningPaused: memoryOn, recallPaused: memoryOn }, memoryOn ? "已暂停" : "已开启")}
+            errorMessage={refusal}
+            onChange={async () => {
+              const saved = await save({ learningPaused: memoryOn, recallPaused: memoryOn }, memoryOn ? "已暂停" : "已开启");
+              return !saved.learningPaused && !saved.recallPaused;
+            }}
           />
         )}
       <Menu
@@ -123,7 +130,7 @@ export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotte
                 pausedProjects: projectPaused
                   ? settings.pausedProjects.filter((id) => id !== projectId)
                   : [...settings.pausedProjects, projectId],
-              }, projectPaused ? "本项目已恢复使用记忆" : "本项目已停用记忆").catch(() => undefined);
+              }, projectPaused ? "本项目已恢复使用记忆" : "本项目已停用记忆");
             },
           },
           { label: "重置记忆", destructive: true, disabled: busy, onSelect: () => setConfirmingReset(true) },

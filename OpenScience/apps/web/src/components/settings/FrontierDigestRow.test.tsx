@@ -80,8 +80,21 @@ describe("the daily's switch under 通知", () => {
     const toggle = await screen.findByRole("switch", { name: "前沿日报" });
     await waitFor(() => expect(toggle).toBeEnabled());
     await userEvent.click(toggle);
-    await waitFor(() => expect(useToastStore.getState().toasts.length).toBeGreaterThan(0));
+    // The refusal is said once, in the switch's own line — not also as a toast.
+    await waitFor(() => expect(screen.getByRole("switch", { name: "前沿日报" })).toHaveAccessibleDescription(/\S/));
+    expect(useToastStore.getState().toasts).toHaveLength(0);
     expect(screen.getByRole("switch", { name: "前沿日报" })).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("settles on the write's answer without reading the switch again", async () => {
+    client.setFrontierDigestSwitch.mockResolvedValue(false);
+    renderRow();
+    const toggle = await screen.findByRole("switch", { name: "前沿日报" });
+    await waitFor(() => expect(toggle).toBeEnabled());
+    const reads = client.fetchFrontierDigestSwitch.mock.calls.length;
+    await userEvent.click(toggle);
+    await waitFor(() => expect(screen.getByRole("switch", { name: "前沿日报" })).toHaveAttribute("aria-checked", "false"));
+    expect(client.fetchFrontierDigestSwitch).toHaveBeenCalledTimes(reads);
   });
 });
 

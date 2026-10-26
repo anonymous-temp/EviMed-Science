@@ -47,15 +47,13 @@ export function ReceivedCardView({ state, card, workStyle, onRetry, onRetryWorkS
   const [busy, setBusy] = useState<string | null>(null);
   const content = card && card.count > 0 ? card : null;
 
+  // Both actions here come from a pack's switch, which says what went wrong in its own line: it is not also toasted.
   const act = async (key: string, operation: () => Promise<void>) => {
     setBusy(key);
     try {
       await operation();
       announceMemoryChanged();
       onChanged();
-    } catch (error) {
-      toast.error(`没有完成：${productErrorMessage(error)}`);
-      throw error;
     } finally {
       setBusy(null);
     }
@@ -89,7 +87,7 @@ export function ReceivedCardView({ state, card, workStyle, onRetry, onRetryWorkS
                     trailing={(
                       <AsyncSwitch
                         readChecked={async () => { const packs = await fetchReceivedCapsules(); return packs.find(item => item.id === pack.id)?.enabled ?? false; }}
-                        label={`启用“${pack.title}”`} checked={pack.enabled} pending={busy !== null} disabled={Boolean(pack.takenDown)}
+                        label={`启用“${pack.title}”`} errorMessage={productErrorMessage} checked={pack.enabled} pending={busy !== null} disabled={Boolean(pack.takenDown)}
                         onChange={(next) => (next ? enable(pack) : disable(pack))}
                       />
                     )}

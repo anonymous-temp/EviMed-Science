@@ -114,10 +114,11 @@ export function SyncedFolders({ projectId, refreshToken }: { projectId: string; 
     }
   }, [projectId]);
   useEffect(() => { void load(); return () => { request.current += 1; }; }, [load, refreshToken]);
-  const mutate = async (operation: () => Promise<unknown>) => {
+  // `throughSwitch`: the folder's switch says what went wrong in its own line, so it is not also toasted.
+  const mutate = async (operation: () => Promise<unknown>, { throughSwitch = false } = {}) => {
     setBusy(true);
     try { await operation(); await load(); }
-    catch (error) { toast.error(productErrorMessage(error)); throw error; }
+    catch (error) { if (!throughSwitch) toast.error(productErrorMessage(error)); throw error; }
     finally { setBusy(false); }
   };
   return <section aria-labelledby={headingId}>
@@ -138,8 +139,8 @@ export function SyncedFolders({ projectId, refreshToken }: { projectId: string; 
               meta={<FolderSyncLine folder={folder} operator={operator} />}
               actions={<IconButton icon={RefreshCw} label="立即同步" size="sm" disabled={busy || !active}
                 onClick={() => { void mutate(() => syncSourceFolder(folder.id, folder.revision)).catch(() => undefined); }} />}
-              trailing={<AsyncSwitch readChecked={async () => { const page = await listSourceFolders(projectId); setFolders(page.items); return page.items.find(item => item.id === folder.id)?.payload.status === "active"; }} checked={active} label={`同步“${name}”`} pending={busy}
-                onChange={(on) => mutate(() => setSourceFolderStatus(folder.id, folder.revision, on ? "active" : "paused"))} />}
+              trailing={<AsyncSwitch readChecked={async () => { const page = await listSourceFolders(projectId); setFolders(page.items); return page.items.find(item => item.id === folder.id)?.payload.status === "active"; }} checked={active} label={`同步“${name}”`} pending={busy} errorMessage={productErrorMessage}
+                onChange={(on) => mutate(() => setSourceFolderStatus(folder.id, folder.revision, on ? "active" : "paused"), { throughSwitch: true })} />}
             />;
           })}</List>}
   </section>;

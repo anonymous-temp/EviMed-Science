@@ -1,7 +1,8 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { WebApiError } from "@/lib/apiClient";
 import { FeishuQrCode, FeishuRow, useImStatus } from "./FeishuRows";
 
 const mocks = vi.hoisted(() => ({
@@ -131,6 +132,23 @@ describe("飞书 under 通知: the push", () => {
     expect(toggle).toHaveAttribute("aria-checked", "true");
     await act(async () => { fireEvent.click(toggle); });
     expect(mocks.setFeishuNotifications).toHaveBeenCalledWith(false);
+  });
+
+  // Review R2 P2-1: the push reloaded the status and the switch read it twice more — three reads for one write.
+  it("reads the status once after a push, and a refusal is the switch's own line, not also a toast", async () => {
+    const { toast } = await import("@/lib/toast");
+    mocks.fetchImStatus.mockResolvedValue(bound);
+    mocks.setFeishuNotifications.mockResolvedValueOnce({});
+    push();
+    const toggle = await screen.findByRole("switch", { name: "推送到飞书" });
+    expect(mocks.fetchImStatus).toHaveBeenCalledTimes(1);
+    await act(async () => { fireEvent.click(toggle); });
+    await waitFor(() => expect(toggle).not.toHaveAttribute("aria-busy"));
+    expect(mocks.fetchImStatus).toHaveBeenCalledTimes(2);
+    mocks.setFeishuNotifications.mockRejectedValueOnce(new WebApiError("conflict", { status: 409 }));
+    await act(async () => { fireEvent.click(toggle); });
+    await waitFor(() => expect(toggle).toHaveAccessibleDescription(/\S/));
+    expect(toast.error).not.toHaveBeenCalled();
   });
 
   it("is bound in the same row that switches it: the state, the switch, and no link to another tab", async () => {

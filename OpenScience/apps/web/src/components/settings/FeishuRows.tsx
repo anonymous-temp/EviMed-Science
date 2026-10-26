@@ -147,10 +147,8 @@ export function FeishuRow({ im }: { im: ImState }) {
       await setFeishuNotifications(on);
       toast.success(on ? "通知会推送到飞书" : "已停止推送到飞书");
       await load();
-    } catch (error) {
-      toast.error(webErrorMessage(error));
-      throw error;
     } finally {
+      // A refusal is the switch's own line, not also a toast.
       if (mounted.current) setPushing(false);
     }
   };
