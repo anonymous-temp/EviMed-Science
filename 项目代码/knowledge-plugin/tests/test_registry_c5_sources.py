@@ -1,4 +1,4 @@
-"""The c5-sources batch (2026-10-26): 73 verified rows switched on, one dead channel retired, two walled newsrooms kept off with
+"""The c5-sources batch (2026-10-26): 71 verified rows switched on, one dead channel retired, two walled newsrooms kept off with
 their reason. The rows are in ``registry/extra-sources.json``, each switched on by an ``overrides.json`` ``enabled`` that says why,
 and each recorded in ``registry/research/source-expansion-2026-10-26.json`` (what was read, once under a browser identity and
 once under the honest one, from a development box outside mainland China)."""
@@ -40,11 +40,11 @@ def batch(record):
 
 def test_the_record_names_the_batch_by_group(record, batch):
     scope = record["scope"]
-    assert len(batch) == len(set(batch)) == scope["rows"] == 73
+    assert len(batch) == len(set(batch)) == scope["rows"] == 71
     assert Counter(row["group"] for row in record["rows"]) == {
         "cn-provincial-regulator": scope["provincialRegulators"], "eu-regulator": scope["euRegulators"],
         "university": scope["universities"], "deals-media": scope["dealsMedia"]}
-    assert (scope["provincialRegulators"], scope["euRegulators"], scope["universities"], scope["dealsMedia"]) == (21, 18, 23, 11)
+    assert (scope["provincialRegulators"], scope["euRegulators"], scope["universities"], scope["dealsMedia"]) == (21, 17, 23, 10)
 
 
 def test_every_row_of_the_batch_is_on_with_its_reason_and_was_read_by_the_rule_it_was_admitted_under(rows, record, batch):
@@ -64,14 +64,19 @@ def test_every_row_of_the_batch_is_on_with_its_reason_and_was_read_by_the_rule_i
 
 def test_a_row_the_research_held_back_is_not_in_the_registry(rows, record):
     held = {row["id"] for row in record["heldBack"]}
-    assert len(held) == 32 and not held & set(rows)
+    assert len(held) == 34 and not held & set(rows)
+    # read and verified, then left out because production's discovery already polls the same feed
+    assert {row["id"] for row in record["heldBack"] if row["status"] == "duplicate"} == {"dk-dkma-news", "pharmaphorum-news"}
 
 
-def test_only_a_safety_list_of_an_official_agency_is_a_safety_feed_and_the_trim_is_the_one_cadence(rows, batch):
+def test_only_a_pure_safety_list_of_an_official_agency_is_a_safety_feed_and_the_trim_is_the_one_cadence(rows, batch):
     safety = sorted(sid for sid in batch if rows[sid]["safety_feed"])
-    assert safety == ["cz-sukl-stahovani-pozastaveni", "de-pei-sicherheitsinformationen", "fr-ansm-informations-securite",
-                      "pl-urpl-komunikaty-produkty-lecznicze"]
+    assert safety == ["cz-sukl-stahovani-pozastaveni", "pl-urpl-komunikaty-produkty-lecznicze"]
     assert all(rows[sid]["lane"] == "safety" and rows[sid]["source_type"] == "regulator" for sid in safety)
+    # ANSM's list is made of device notices and PEI's carries general Meldungen: lane safety, typed by the edit, never every item an alert
+    overrides = read("overrides.json")
+    for sid in ("fr-ansm-informations-securite", "de-pei-sicherheitsinformationen"):
+        assert rows[sid]["lane"] == "safety" and rows[sid]["safety_feed"] is False and overrides[sid]["_why_not_safety_feed_20261026"], sid
     # a slow section with an ~880 KB feed is read four times a day, not twelve; no other row of the batch was given a cadence of its own
     slow = rows["uni-harvard-gazette-health"]
     assert (slow["poll_floor_s"], slow["poll_ceiling_s"]) == (21600, 86400)
@@ -92,3 +97,12 @@ def test_the_dead_channel_is_retired_and_the_walled_newsrooms_stay_off_with_the_
 def test_清华大学医学院_is_in_the_batch_because_its_date_can_now_be_read(rows):
     row = rows["uni-tsinghua-med-research"]
     assert row["enabled"] and row["config"]["selectors"]["date"] == "div.con span" and "date_format" not in row["config"]
+
+
+def test_a_trim_the_research_suggested_and_the_batch_did_not_take_says_why_and_the_universities_share_one_ceiling(rows):
+    overrides = read("overrides.json")
+    for sid in ("at-basg-whatsnew", "uni-vumc-news", "uni-columbia-mailman-news"):
+        assert "has no content filter" in overrides[sid]["_why_untrimmed_20261026"], sid
+    assert {rows[sid]["poll_ceiling_s"] for sid in rows if sid.startswith("uni-") and sid != "uni-harvard-gazette-health"} == {43200}
+    # AEMPS: list summaries of 29 to 36 characters wait for the page text, and the pages answered 200 on 2026-10-26: the row stays on
+    assert rows["es-aemps-notas-medicamentos"]["enabled"] and "usableSummary" in overrides["es-aemps-notas-medicamentos"][WHY]

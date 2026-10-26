@@ -34,8 +34,8 @@ def test_the_committed_registry_is_a_fresh_deterministic_build():
 def test_every_row_validates(document):
     rows = load_registry(REGISTRY, {})
     # 722 before 2026-10-10; the single arXiv discovery query is replaced by the 28 ai-discovery rows (tests/adapters/test_ai_discovery.py)
-    # ct-src 2026-10-24: six NMPA lists (755); c5-sources 2026-10-26: 73 rows in, 36kr-medical out (827)
-    assert len(rows) == len(document["sources"]) == 827
+    # ct-src 2026-10-24: six NMPA lists (755); c5-sources 2026-10-26: 71 rows in, 36kr-medical out (825)
+    assert len(rows) == len(document["sources"]) == 825
     assert sum(r.enabled for r in rows) >= 256
 
 
@@ -115,12 +115,14 @@ def test_the_plan_decisions_hold(document):
     assert recalls["safety_feed"] is False and recalls["lane"] == "mixed"
     # ct-src 2026-10-24: NMPA's device recall list is one more (every row of it is a recall notice)
     assert by_id["nmpa-device-recalls"]["safety_feed"] is True and by_id["nmpa-device-recalls"]["lane"] == "safety"
-    # c5-sources 2026-10-26: four more official safety lists — SÚKL's recalls and suspensions, PEI's safety information, ANSM's safety
-    # information and URPL's DHPC communications
-    for sid in ("cz-sukl-stahovani-pozastaveni", "de-pei-sicherheitsinformationen", "fr-ansm-informations-securite",
-                "pl-urpl-komunikaty-produkty-lecznicze"):
+    # c5-sources 2026-10-26: two more official safety lists — SÚKL's recalls and suspensions and URPL's DHPC communications. ANSM's list
+    # (all 20 rows on the day it was read were devices) and PEI's (general Meldungen beside the Rote-Hand-Briefe) are lane safety but
+    # not safety feeds: every item of a safety feed is an alert, pinned in 精选 and pushed, and the edit types these notices itself
+    for sid in ("cz-sukl-stahovani-pozastaveni", "pl-urpl-komunikaty-produkty-lecznicze"):
         assert by_id[sid]["safety_feed"] is True and by_id[sid]["lane"] == "safety", sid
-    assert sum(1 for s in sources if s["safety_feed"]) == 25
+    for sid in ("de-pei-sicherheitsinformationen", "fr-ansm-informations-securite"):
+        assert by_id[sid]["safety_feed"] is False and by_id[sid]["lane"] == "safety", sid
+    assert sum(1 for s in sources if s["safety_feed"]) == 23
     assert by_id["evimed-chictr"]["config"]["url"].endswith("/ai-api/review/api/clinical-trial")   # v1: sponsor present
     for sid in ("natcm-notices", "most-tztg", "nmpa-gd-mirror", "csco-news", "gd-pharm-society-notifications", "cntcm-news",
                 "nhsa-policy-regulations", "cdr-adr-notices", "zhongguokexuebao", "chinacdc-notifiable-disease", "china-cdc-news"):

@@ -294,8 +294,9 @@ Conference pages and inline changelogs may be monitored as one canonical documen
 body text; meeting dates remain context, never fabricated publication timestamps. CSS, scripts,
 templates and other nonvisible markup are excluded from extracted text.
 
-c5-sources (2026-10-26) added 73 verified rows (21 provincial drug regulators, 18 European national medicine regulators, 23
-university and medical-school newsrooms, 11 deals-and-financing media), recorded in
+c5-sources (2026-10-26) added 71 verified rows (21 provincial drug regulators, 17 European national medicine regulators, 23
+university and medical-school newsrooms, 10 deals-and-financing media; the Danish Medicines Agency and pharmaphorum feeds were read
+and left out because production's discovery already polls them), recorded in
 `registry/research/source-expansion-2026-10-26.json` and each switched on by an `overrides.json` `enabled` that says why; the same
 change retired `36kr-medical` (its channel answers 404: the probe row is `egress: none`, so the build no longer loads it and the
 plugin retires the stored row) and left `hopkins-medicine-newsroom` and `mayo-clinic-news` off as `probe_cloudflare`. Three

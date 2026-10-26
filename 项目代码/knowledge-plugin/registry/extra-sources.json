@@ -1991,7 +1991,7 @@
    "access": "html-list",
    "egress": "direct",
    "authority": 5,
-   "safety_feed": true,
+   "safety_feed": false,
    "owner_entity": "Paul-Ehrlich-Institut (PEI)",
    "launch_tier": "P2",
    "language": "de",
@@ -2013,31 +2013,6 @@
     },
     "date_format": "%d.%m.%Y",
     "max_items": 30
-   }
-  },
-  {
-   "id": "dk-dkma-news",
-   "name": "丹麦药品管理局 DKMA 新闻（英文）",
-   "homepage": "https://laegemiddelstyrelsen.dk/en/news/",
-   "lane": "regulatory",
-   "source_type": "regulator",
-   "access": "rss",
-   "egress": "direct",
-   "authority": 5,
-   "safety_feed": false,
-   "owner_entity": "Danish Medicines Agency (Laegemiddelstyrelsen)",
-   "launch_tier": "P2",
-   "language": "en",
-   "region": "DK",
-   "poll_floor_s": 3600,
-   "poll_ceiling_s": 21600,
-   "category": "regulator",
-   "config": {
-    "url": "https://laegemiddelstyrelsen.dk/en/Feeds/rss-feed/",
-    "max_pages": 1,
-    "allowed_hosts": [
-     "laegemiddelstyrelsen.dk"
-    ]
    }
   },
   {
@@ -2117,7 +2092,7 @@
    "access": "html-list",
    "egress": "direct",
    "authority": 5,
-   "safety_feed": true,
+   "safety_feed": false,
    "owner_entity": "French National Agency for the Safety of Medicines and Health Products (ANSM)",
    "launch_tier": "P2",
    "language": "fr",
@@ -3036,31 +3011,6 @@
     "max_pages": 1,
     "allowed_hosts": [
      "medcitynews.com"
-    ]
-   }
-  },
-  {
-   "id": "pharmaphorum-news",
-   "name": "pharmaphorum 制药行业新闻（交易、融资、人事 Changing faces）",
-   "homepage": "https://pharmaphorum.com/",
-   "lane": "pipeline",
-   "source_type": "media",
-   "access": "rss",
-   "egress": "direct",
-   "authority": 3,
-   "safety_feed": false,
-   "owner_entity": "pharmaphorum media",
-   "launch_tier": "P2",
-   "language": "en",
-   "region": "UK",
-   "poll_floor_s": 3600,
-   "poll_ceiling_s": 21600,
-   "category": "industry-media",
-   "config": {
-    "url": "https://pharmaphorum.com/rss.xml",
-    "max_pages": 1,
-    "allowed_hosts": [
-     "pharmaphorum.com"
     ]
    }
   },

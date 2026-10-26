@@ -3971,7 +3971,8 @@
  },
  "at-basg-whatsnew": {
   "enabled": true,
-  "_why_enabled_20261026": "c5-sources: read 49 items (49 dated, 45 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Official 'BASG Newsfeed' (TYPO3 whatsnew). Mixed: ~55% amtliche Nachrichten (Rueckrufe/recalls, DHPC, WNV blood-safety updates), plus Pharmakovigilanz outcome pages and some FAQ-page updates (5 FAQ rows on 2026-10-23 = noise). 51 items. Plain HTTP works."
+  "_why_enabled_20261026": "c5-sources: read 49 items (49 dated, 45 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Official 'BASG Newsfeed' (TYPO3 whatsnew). Mixed: ~55% amtliche Nachrichten (Rueckrufe/recalls, DHPC, WNV blood-safety updates), plus Pharmakovigilanz outcome pages and some FAQ-page updates (5 FAQ rows on 2026-10-23 = noise). 51 items. Plain HTTP works.",
+  "_why_untrimmed_20261026": "The plugin has no content filter and the research's suggested trim (drop the ~5 FAQ-page updates a day, noise against about 45 notices in 30 days) was not applied on purpose: the platform's screen drops what is not news, and a selector that cut the FAQ rows would also cut the Pharmakovigilanz outcome pages that share their markup."
  },
  "ch-swissmedic-mitteilungen": {
   "enabled": true,
@@ -3991,15 +3992,12 @@
  },
  "de-pei-sicherheitsinformationen": {
   "enabled": true,
-  "_why_enabled_20261026": "c5-sources: read 17 items (17 dated, 3 in the last 30 days), newest 2026-10-15, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). PEI's own RSS (SiteGlobals/Functions/RSSFeed/RSSGenerator_Sicherheitsinformationen.xml) is DISALLOWED by pei.de robots.txt (Disallow: /SiteGlobals/), so the HTML list is used. robots has Crawl-delay: 30 (poll hourly is fine). Contains Rote-Hand-Briefe, Informationsbriefe and some Meldungen that also appear in de-pei-meldungen (same article, different ?nn= query, so no URL dedup)."
- },
- "dk-dkma-news": {
-  "enabled": true,
-  "_why_enabled_20261026": "c5-sources: read 20 items (20 dated, 4 in the last 30 days), newest 2026-10-13, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Official RSS 'Latest website news' in English (advertised via <link rel=alternate>). The Danish-language feed (https://laegemiddelstyrelsen.dk/da/Feeds/rss-feed/) is a firehose of per-product supply-shortage notices (20 'forsyningsvanskelighed' rows in one day): not proposed. robots.txt is 404 (= none)."
+  "_why_enabled_20261026": "c5-sources: read 17 items (17 dated, 3 in the last 30 days), newest 2026-10-15, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). PEI's own RSS (SiteGlobals/Functions/RSSFeed/RSSGenerator_Sicherheitsinformationen.xml) is DISALLOWED by pei.de robots.txt (Disallow: /SiteGlobals/), so the HTML list is used. robots has Crawl-delay: 30 (poll hourly is fine). Contains Rote-Hand-Briefe, Informationsbriefe and some Meldungen that also appear in de-pei-meldungen (same article, different ?nn= query, so no URL dedup).",
+  "_why_not_safety_feed_20261026": "c5 review 2026-10-26: not a safety feed. Every item of a safety feed becomes a 安全警示, is selected into 精选 whatever its score and is pushed to the specialty's followers; PEI's list also carries general Meldungen (a vaccine's packaging-language notice) beside the Rote-Hand-Briefe. The edit types each notice (regulator + safety-notice in lane safety still raises a real alert), as FDA's recall feed and MHRA's list do."
  },
  "es-aemps-notas-medicamentos": {
   "enabled": true,
-  "_why_enabled_20261026": "c5-sources: read 40 items (40 dated, 9 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Notas informativas MUH: IPT (CHMP-opinion reports), ICM (quality defects/recalls), FV (pharmacovigilance), CHMP/EMA news. Table, 'Nota Informativa MUH (FV), 11/2026' in the summary cell. The site feed https://www.aemps.gob.es/feed/ is DISALLOWED by robots.txt (Disallow: /feed*/), and /informa/ detail pages answer 403 to plain requests (list pages are fine). Safety-only list (notas-de-seguridad/...) has 3 rows only (…"
+  "_why_enabled_20261026": "c5-sources: read 40 items (40 dated, 9 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Notas informativas MUH: IPT (CHMP-opinion reports), ICM (quality defects/recalls), FV (pharmacovigilance), CHMP/EMA news. Table, 'Nota Informativa MUH (FV), 11/2026' in the summary cell. The site feed https://www.aemps.gob.es/feed/ is DISALLOWED by robots.txt (Disallow: /feed*/), and /informa/ detail pages answer 403 to plain requests (list pages are fine). Safety-only list (notas-de-seguridad/...) has 3 rows only (… Re-read 2026-10-26 (c5 fixes): the list's summaries are 29 to 36 characters, below the 80 the platform takes for a usable summary (usableSummary), so each item waits for its page text; the article pages answered 200 under a browser identity and under the honest one from the development box (about 3,900 characters of text), so the row stays on. The 403 the research met on plain requests was not met again; if the Beijing probe meets it, switch the row off (disabled_reason probe_forbidden) since every item would be dropped."
  },
  "fr-ansm-actualites": {
   "enabled": true,
@@ -4007,7 +4005,8 @@
  },
  "fr-ansm-informations-securite": {
   "enabled": true,
-  "_why_enabled_20261026": "c5-sources: read 20 items (20 dated, 19 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Safety information / recalls (rappels, DHPC-like 'Information aux utilisateurs'). On 2026-10-26 all 20 rows were medical devices / IVD (13 DM, 7 DMDIV); drug items (lettres aux professionnels, pharmacovigilance) appear less often. The ?produitsSante=medicaments query is ignored by the HTML list; the RSS version is same-day-only. Owner may prefer to drop if a drug-only stream is wanted."
+  "_why_enabled_20261026": "c5-sources: read 20 items (20 dated, 19 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Safety information / recalls (rappels, DHPC-like 'Information aux utilisateurs'). On 2026-10-26 all 20 rows were medical devices / IVD (13 DM, 7 DMDIV); drug items (lettres aux professionnels, pharmacovigilance) appear less often. The ?produitsSante=medicaments query is ignored by the HTML list; the RSS version is same-day-only. Owner may prefer to drop if a drug-only stream is wanted.",
+  "_why_not_safety_feed_20261026": "c5 review 2026-10-26: not a safety feed. Every item of a safety feed becomes a 安全警示, is selected into 精选 whatever its score and is pushed to the specialty's followers; on 2026-10-26 all 20 of ANSM's rows were medical devices or in-vitro diagnostics (13 DM, 7 DMDIV), whose field-safety notices are not drug alerts. The edit types each notice (regulator + safety-notice in lane safety still raises a real alert), as FDA's recall feed and MHRA's list do."
  },
  "gr-eof-farmaka": {
   "enabled": true,
@@ -4060,7 +4059,8 @@
  },
  "uni-vumc-news": {
   "enabled": true,
-  "_why_enabled_20261026": "c5-sources: read 20 items (20 dated, 20 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). VUMC Reporter / Vanderbilt Health News (WordPress). 20 items, daily. Mixes research and clinical news with some staff-life items ('Pets of the Day'). Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+  "_why_enabled_20261026": "c5-sources: read 20 items (20 dated, 20 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). VUMC Reporter / Vanderbilt Health News (WordPress). 20 items, daily. Mixes research and clinical news with some staff-life items ('Pets of the Day'). Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200.",
+  "_why_untrimmed_20261026": "The plugin has no content filter and the research's suggested trim ('Pets of the Day' and other staff-life items among 20 daily items) was not applied on purpose: the platform's screen drops what is not news, and the research and clinical items of the same feed are the reason the row is on."
  },
  "uni-weill-cornell-news": {
   "enabled": true,
@@ -4084,7 +4084,8 @@
  },
  "uni-columbia-mailman-news": {
   "enabled": true,
-  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 10 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). 10 items, public-health research and school news; a few administrative items (funding opportunity) are mixed in. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 10 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). 10 items, public-health research and school news; a few administrative items (funding opportunity) are mixed in. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200.",
+  "_why_untrimmed_20261026": "The plugin has no content filter and the research's suggested trim (a few administrative items, such as a funding opportunity, among 10) was not applied on purpose: the platform's screen drops what is not news, and the public-health research items of the same list are the reason the row is on."
  },
  "uni-nyu-langone-research": {
   "enabled": true,
@@ -4134,10 +4135,6 @@
   "enabled": true,
   "_why_enabled_20261026": "c5-sources: read 30 items (30 dated, 30 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Full-content WordPress RSS, 30 items/poll, deals/funding/digital-health business. Honest-UA fetch OK."
  },
- "pharmaphorum-news": {
-  "enabled": true,
-  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 10 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). rss.xml (NOT /feed, which is an HTML page). 10 items/poll; carries the monthly 'Changing faces' people-moves roundup, deals and financing. Listed in registry/discovery.json directories (discovery may already admit a feed)."
- },
  "medtech-dive": {
   "enabled": true,
   "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 10 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Industry Dive feed, same format as the present BioPharma Dive/Healthcare Dive rows; 10 items/poll; some items are /spons/ sponsored posts. In registry/discovery.json directories."
@@ -4176,7 +4173,8 @@
  },
  "uni-tsinghua-med-research": {
   "enabled": true,
-  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 10 in the last 30 days), newest 2026-10-15, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Research-news column of the School of Medicine (papers of the school's groups). The date is a Chinese month name ('十月 15, 2026'), read by common.parse_date since 2026-10-26; cards carry a teaser (h4) cut by the page. 10 cards a page, released in batches (all ten dated 2026-10-15 when read), so the cadence is a batch every few weeks."
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 10 in the last 30 days), newest 2026-10-15, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Research-news column of the School of Medicine (papers of the school's groups). The date is a Chinese month name ('十月 15, 2026'), read by common.parse_date since 2026-10-26; cards carry a teaser (h4) cut by the page. 10 cards a page, released in batches (all ten dated 2026-10-15 when read), so the cadence is a batch every few weeks.",
+  "poll_ceiling_s": 43200
  },
  "hopkins-medicine-newsroom": {
   "enabled": false,

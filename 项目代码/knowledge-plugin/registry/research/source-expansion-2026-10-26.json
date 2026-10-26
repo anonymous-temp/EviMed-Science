@@ -2,11 +2,11 @@
  "at": "2026-10-26",
  "transport": "Read-only: the plugin's own adapters (html-list, rss) and robots parser, run from a development box outside mainland China (its egress geolocates to Taiwan), once under a browser User-Agent and once under the honest EviMedBot identity. No database or configuration change. Every row is egress direct: for the foreign sites that is an assumption until `python -m knowledge_plugin.probe --egress direct --source <id>` is run from the Beijing host.",
  "scope": {
-  "rows": 73,
+  "rows": 71,
   "provincialRegulators": 21,
-  "euRegulators": 18,
+  "euRegulators": 17,
   "universities": 23,
-  "dealsMedia": 11,
+  "dealsMedia": 10,
   "rule": "HTTP 200, robots.txt allows the path, at least 5 items, at least 90% dated, newest item within 30 days, the same result under the honest identity"
  },
  "rows": [
@@ -411,21 +411,6 @@
    "dated": 17,
    "inLast30Days": 3,
    "newest": "2026-10-15",
-   "robotsAllowed": true,
-   "honestIdentityRead": true,
-   "browserIdentityRead": true
-  },
-  {
-   "id": "dk-dkma-news",
-   "decision": "enabled",
-   "access": "rss",
-   "group": "eu-regulator",
-   "egress": "direct",
-   "url": "https://laegemiddelstyrelsen.dk/en/Feeds/rss-feed/",
-   "entries": 20,
-   "dated": 20,
-   "inLast30Days": 4,
-   "newest": "2026-10-13",
    "robotsAllowed": true,
    "honestIdentityRead": true,
    "browserIdentityRead": true
@@ -941,21 +926,6 @@
    "browserIdentityRead": true
   },
   {
-   "id": "pharmaphorum-news",
-   "decision": "enabled",
-   "access": "rss",
-   "group": "deals-media",
-   "egress": "direct",
-   "url": "https://pharmaphorum.com/rss.xml",
-   "entries": 10,
-   "dated": 10,
-   "inLast30Days": 10,
-   "newest": "2026-10-26",
-   "robotsAllowed": true,
-   "honestIdentityRead": true,
-   "browserIdentityRead": true
-  },
-  {
    "id": "medtech-dive",
    "decision": "enabled",
    "access": "rss",
@@ -1266,6 +1236,16 @@
    "id": "cn-hn-mpa-dt",
    "status": "yes",
    "reason": "second list for a province already covered by the main set"
+  },
+  {
+   "id": "dk-dkma-news",
+   "status": "duplicate",
+   "reason": "read and verified (20 items, newest 2026-10-13), then left out before the release: https://laegemiddelstyrelsen.dk/en/Feeds/rss-feed/ is production's discovered-fd6a605521137ba878b2, an enabled row of the production plugin database under another owner_entity string; adding it would poll the same feed twice"
+  },
+  {
+   "id": "pharmaphorum-news",
+   "status": "duplicate",
+   "reason": "read and verified (10 items, newest 2026-10-26), then left out before the release: https://pharmaphorum.com/rss.xml is production's discovered-fc9b6524b25ae4fc0f60, an enabled row of the production plugin database under another owner_entity string; adding it would poll the same feed twice"
   }
  ],
  "retired": [

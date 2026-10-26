@@ -141,7 +141,6 @@
     "State Institute for Drug Control (SUKL)": "捷克 SÚKL",
     "Federal Institute for Drugs and Medical Devices (BfArM)": "德国 BfArM",
     "Paul-Ehrlich-Institut (PEI)": "德国 PEI",
-    "Danish Medicines Agency (Laegemiddelstyrelsen)": "丹麦药品管理局",
     "Spanish Agency of Medicines and Medical Devices (AEMPS)": "西班牙 AEMPS",
     "French National Agency for the Safety of Medicines and Health Products (ANSM)": "法国 ANSM",
     "National Organization for Medicines (EOF, Greece)": "希腊 EOF",
@@ -152,7 +151,7 @@
     "Swedish Medical Products Agency (Läkemedelsverket)": "瑞典药品管理局",
     "State Institute for Drug Control (ŠÚKL, Slovakia)": "斯洛伐克 ŠÚKL",
     "Karolinska Institutet": "卡罗林斯卡学院",
-    "Washington University School of Medicine in St. Louis": "华盛顿大学医学院",
+    "Washington University School of Medicine in St. Louis": "圣路易斯华盛顿大学医学院",
     "University of Cambridge": "剑桥大学",
     "Harvard University (Harvard Gazette)": "哈佛公报",
     "Vanderbilt University Medical Center": "范德堡大学医学中心",
@@ -175,11 +174,10 @@
     "广州医科大学": "广州医科大学",
     "清华大学医学院": "清华大学医学院",
     "MedCity News": "MedCity News",
-    "pharmaphorum media": "pharmaphorum",
     "HIT Consultant Media": "HIT Consultant",
     "Korea Biomedical Review": "Korea Biomedical Review",
     "投资界（清科集团）": "投资界",
-    "摩熵医药（药融云）": "药融云"
+    "摩熵医药（药融云）": "摩熵医药"
   },
   "sources": {
     "moderna-news": "莫德纳资讯",
