@@ -8,20 +8,23 @@ scores, >=30 groups per tested population and no influential group. Deterministi
 mode makes exact claims only about the registered finite corpus, never a population.
 """
 import hashlib
-import json
 import math
 from datetime import datetime
 
+import rfc8785
 import numpy as np
 from scipy.stats import t
 
-PROCEDURE = {'id': 'rsi-paired-source-v2', 'test_alpha_fraction': .5, 'minimum_slice_groups': 30}
+PROCEDURE = {'id': 'rsi-paired-source-v3', 'digest_codec': 'rfc8785-sha256-v1', 'test_alpha_fraction': .5, 'minimum_slice_groups': 30}
 
 
 def registration_digest(registration):
-    """Digest the exact registration using sorted, compact, finite JSON."""
-    return hashlib.sha256(json.dumps(registration, sort_keys=True, separators=(',', ':'),
-                                      ensure_ascii=False, allow_nan=False).encode()).hexdigest()
+    """RFC 8785 bytes; interoperable with Node canonicalRsiJson/rsiDigest.
+
+    Unsafe integers, nonfinite numbers and invalid Unicode are rejected by the
+    pinned codec instead of silently hashing different cross-language values.
+    """
+    return hashlib.sha256(rfc8785.dumps(registration)).hexdigest()
 
 
 def _number(value):
