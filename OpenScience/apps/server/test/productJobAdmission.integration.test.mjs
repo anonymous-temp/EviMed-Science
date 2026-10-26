@@ -24,3 +24,19 @@ test("candidate admission refuses a new runtime without spending a lease attempt
     assert.equal(accepted.id, queued.id); assert.equal(accepted.attempts, 1); assert.equal(accepted.status, "running");
   } finally { await database.query("DELETE FROM evimed_control.users WHERE id=$1", [owner]); await database.close(); }
 });
+
+test('paused evolution SQL eligibility skips experimental queue heads without consuming attempts', { skip: !url && 'A disposable localhost test database is required' }, async () => {
+  const database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 2, databaseConnectionTimeoutMs: 2000 });
+  const owner = `pause_${randomUUID()}`;
+  try {
+    await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES ($1,'Pause admission','development')", [owner]);
+    const jobs = new ProductJobs(database);
+    const blocked = await jobs.enqueue(owner, 'evolution-evaluate', { action: 'scorer-audit' }, { idempotencyKey: `${owner}:audit`, runAfter: new Date(Date.now() - 60000) });
+    const allowed = await jobs.enqueue(owner, 'evolution-evaluate', { action: 'release-replay' }, { idempotencyKey: `${owner}:release` });
+    const claimed = await jobs.claim(['evolution-evaluate'], owner, { eligibility: 'evolution-serving', candidateAdmission: async (_client, job) => job.id === allowed.id });
+    assert.equal(claimed.id, allowed.id);
+    assert.equal((await jobs.get(owner, blocked.id)).attempts, 0);
+    assert.equal((await jobs.get(owner, blocked.id)).status, 'queued');
+    await assert.rejects(jobs.claim(['evolution-build'], owner, { eligibility: 'anything' }), { code: 'product_job_eligibility_invalid' });
+  } finally { await database.query('DELETE FROM evimed_control.users WHERE id=$1', [owner]); await database.close(); }
+});
