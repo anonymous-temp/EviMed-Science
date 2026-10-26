@@ -1,0 +1,119 @@
+{
+ "at": "2026-10-26T14:50:44.229Z",
+ "editor": "frontierEditor.base.mjs",
+ "editorVersion": "frontier-editor-1.6e5718b3d693",
+ "model": "deepseek-flash",
+ "runs": 3,
+ "passed": 26,
+ "total": 27,
+ "results": [
+  {
+   "kind": "evidence-type",
+   "id": "synthetic-mcda-genomic-testing",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "other",
+    "other",
+    "other"
+   ],
+   "why": "a multi-criteria decision analysis is a decision-analytic study, not a cohort or case-control study. On production (2026-10-10) the model typed the item 「多准则决策分析评估NSCLC全面基因组检测价值」 as observational (basis model; its PubMed type was only Journal Article), which also raised its authority term and let it be selected. The text here is authored (D-04)"
+  },
+  {
+   "kind": "evidence-type",
+   "id": "synthetic-cost-effectiveness-model",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "other",
+    "other",
+    "other"
+   ],
+   "why": "a cost-effectiveness model is a health-economic evaluation: the trials it takes its inputs from are not its design, and neither is an observational one (D-04). The text here is authored"
+  },
+  {
+   "kind": "evidence-type",
+   "id": "synthetic-budget-impact-analysis",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "other",
+    "other",
+    "other"
+   ],
+   "why": "a budget impact analysis projects what a payer would spend with and without a listing; the claims records it counts the eligible population from are its inputs, not its design - it follows no patients and compares no exposed with unexposed groups, so it is neither a cohort study nor real-world evidence (F12a, the owner's ruling of 2026-10-10 that an economic evaluation or a decision analysis is `other`, never the nearest design). The text here is authored"
+  },
+  {
+   "kind": "evidence-type",
+   "id": "synthetic-discrete-event-simulation",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "other",
+    "other",
+    "other"
+   ],
+   "why": "a discrete-event simulation is a model of how patients and resources flow through a system; the appointment records it is calibrated on are its inputs, not its design, so it is not an observational study of patients' outcomes (F12a, the owner's ruling of 2026-10-10 that an economic evaluation or a decision analysis is `other`, never the nearest design). The text here is authored"
+  },
+  {
+   "kind": "evidence-type",
+   "id": "synthetic-partitioned-survival-cost-utility",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "other",
+    "other",
+    "other"
+   ],
+   "why": "a cost-utility analysis built on a randomised trial's published curves is a health-economic evaluation: the trial supplies its inputs, but the study randomised no one and reports no trial result, so `rct` is the nearest design and the wrong one (F12a, the owner's ruling of 2026-10-10 that an economic evaluation or a decision analysis is `other`, never the nearest design). The text here is authored"
+  },
+  {
+   "kind": "evidence-type",
+   "id": "synthetic-screening-microsimulation",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "other",
+    "other",
+    "other"
+   ],
+   "why": "a microsimulation of screening strategies is a decision-analytic model: the cancer registry data it is calibrated to are its inputs, so it is not an observational cohort and its outcomes are projections, not observed events (F12a, the owner's ruling of 2026-10-10 that an economic evaluation or a decision analysis is `other`, never the nearest design). The text here is authored"
+  },
+  {
+   "kind": "evidence-type",
+   "id": "synthetic-pharmacist-survey",
+   "passed": 2,
+   "runs": 3,
+   "answers": [
+    "other",
+    "other",
+    "observational"
+   ],
+   "why": "a questionnaire survey of practitioners' attitudes follows no patients over time and compares no exposed with unexposed groups: it is neither a cohort nor a case-control study (D-04). The text here is authored"
+  },
+  {
+   "kind": "evidence-type",
+   "id": "synthetic-control-prospective-cohort",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "observational",
+    "observational",
+    "observational"
+   ],
+   "why": "a control, not an economic evaluation: a prospective cohort follows exposed and unexposed people over time and is what `observational` means, so the line that sends a design the vocabulary lacks to `other` must leave it where it was (F12a). The text here is authored"
+  },
+  {
+   "kind": "evidence-type",
+   "id": "synthetic-control-randomised-trial",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "rct",
+    "rct",
+    "rct"
+   ],
+   "why": "a control, not an economic evaluation: a randomised, double-blind, placebo-controlled trial is `rct`, and the line that sends a design the vocabulary lacks to `other` must not pull it away (F12a). The text here is authored"
+  }
+ ]
+}

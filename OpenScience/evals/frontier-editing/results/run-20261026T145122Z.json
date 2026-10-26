@@ -1,0 +1,97 @@
+{
+ "at": "2026-10-26T14:51:22.007Z",
+ "editor": "frontierEditor.base.mjs",
+ "editorVersion": "frontier-editor-1.6e5718b3d693",
+ "model": "deepseek-flash",
+ "runs": 3,
+ "passed": 17,
+ "total": 18,
+ "results": [
+  {
+   "kind": "flags",
+   "id": "synthetic-fda-adds-boxed-warning",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    [
+     "boxed-warning"
+    ],
+    [
+     "boxed-warning"
+    ],
+    [
+     "boxed-warning"
+    ]
+   ],
+   "why": "a safety communication that adds a Boxed Warning to a label is the case the flag exists for (F12c, the owner's ruling of 2026-10-10 that a Class I recall or a boxed-warning alert is pushed to every reader with the push on: the editor proposes the flag, so the judgement is held both ways). The text here is authored"
+  },
+  {
+   "kind": "flags",
+   "id": "synthetic-nmpa-adds-boxed-warning-zh",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    [
+     "boxed-warning"
+    ],
+    [
+     "boxed-warning"
+    ],
+    [
+     "boxed-warning"
+    ]
+   ],
+   "why": "the same judgement on a Chinese regulator's own wording, 增加黑框警告, in a source whose titles are not translated (F12c, the owner's ruling of 2026-10-10 that a Class I recall or a boxed-warning alert is pushed to every reader with the push on: the editor proposes the flag, so the judgement is held both ways). The text here is authored"
+  },
+  {
+   "kind": "flags",
+   "id": "synthetic-boxed-warning-removed",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    [],
+    [],
+    []
+   ],
+   "why": "a Boxed Warning taken away is not an alert that one was added: the line says 取消的黑框警告不算 (F12c, the owner's ruling of 2026-10-10 that a Class I recall or a boxed-warning alert is pushed to every reader with the push on: the editor proposes the flag, so the judgement is held both ways). The text here is authored"
+  },
+  {
+   "kind": "flags",
+   "id": "synthetic-label-revision-without-boxed-warning",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    [],
+    [],
+    []
+   ],
+   "why": "a safety labeling change in Warnings and Precautions is a safety notice and not a boxed warning, and the text never says the words (F12c, the owner's ruling of 2026-10-10 that a Class I recall or a boxed-warning alert is pushed to every reader with the push on: the editor proposes the flag, so the judgement is held both ways). The text here is authored"
+  },
+  {
+   "kind": "flags",
+   "id": "synthetic-existing-boxed-warning-mentioned",
+   "passed": 2,
+   "runs": 3,
+   "answers": [
+    [],
+    [
+     "boxed-warning"
+    ],
+    []
+   ],
+   "why": "a notice that only mentions the Boxed Warning a drug already carries adds none: the line says 已有的黑框警告不算 (F12c, the owner's ruling of 2026-10-10 that a Class I recall or a boxed-warning alert is pushed to every reader with the push on: the editor proposes the flag, so the judgement is held both ways). The text here is authored"
+  },
+  {
+   "kind": "flags",
+   "id": "synthetic-class-ii-recall",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    [],
+    [],
+    []
+   ],
+   "why": "a recall is graded by its class, which code reads from the record; the editor is not asked about it, and a Class II recall carries no boxed-warning flag (F12c, the owner's ruling of 2026-10-10 that a Class I recall or a boxed-warning alert is pushed to every reader with the push on: the editor proposes the flag, so the judgement is held both ways). The text here is authored"
+  }
+ ]
+}

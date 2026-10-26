@@ -1,0 +1,116 @@
+{
+ "at": "2026-10-26T14:47:02.066Z",
+ "editor": "frontierEditor.mjs",
+ "editorVersion": "frontier-editor-1.d0fc0ac43e64",
+ "model": "deepseek-flash",
+ "runs": 3,
+ "passed": 15,
+ "total": 15,
+ "results": [
+  {
+   "kind": "lane",
+   "id": "food-recall-flour",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    {
+     "screen": "public-health",
+     "edit": "public-health"
+    },
+    {
+     "screen": "public-health",
+     "edit": "public-health"
+    },
+    {
+     "screen": "public-health",
+     "edit": "public-health"
+    }
+   ],
+   "why": "a food allergen recall is public health, not drug safety (F3)"
+  },
+  {
+   "kind": "lane",
+   "id": "food-recall-chips",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    {
+     "screen": "public-health",
+     "edit": "public-health"
+    },
+    {
+     "screen": "public-health",
+     "edit": "public-health"
+    },
+    {
+     "screen": "public-health",
+     "edit": "public-health"
+    }
+   ],
+   "why": "F3"
+  },
+  {
+   "kind": "lane",
+   "id": "food-recall-dessert",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    {
+     "screen": "public-health",
+     "edit": "public-health"
+    },
+    {
+     "screen": "public-health",
+     "edit": "public-health"
+    },
+    {
+     "screen": "public-health",
+     "edit": "public-health"
+    }
+   ],
+   "why": "F3"
+  },
+  {
+   "kind": "lane",
+   "id": "food-recall-pasta",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    {
+     "screen": "public-health",
+     "edit": "public-health"
+    },
+    {
+     "screen": "public-health",
+     "edit": "public-health"
+    },
+    {
+     "screen": "public-health",
+     "edit": "public-health"
+    }
+   ],
+   "why": "F3"
+  },
+  {
+   "kind": "lane",
+   "id": "toxic-supplement-recall",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    {
+     "screen": "safety",
+     "edit": "safety"
+    },
+    {
+     "screen": "safety",
+     "edit": "safety"
+    },
+    {
+     "screen": "safety",
+     "edit": "safety"
+    }
+   ],
+   "why": "a supplement with a poisonous ingredient is a drug-safety notice"
+  }
+ ]
+}
