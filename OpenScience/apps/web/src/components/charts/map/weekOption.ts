@@ -7,7 +7,7 @@ import type { MapPalette } from "./palette";
  * The weekly bars of the time view: 记下 / 合并 / 忘记 stacked in each week, over the whole span the account has been remembering,
  * with the window the page is narrowed to held by a slider at the top of the card — the one entry for the time window on this view.
  *
- * Three hues at most, as everywhere on the map: what was written is the brand blue, what was replaced the grey of a replaced mark,
+ * Three hues at most, as everywhere on the map: what was written is the brand accent, what was replaced the grey of a replaced mark,
  * and what was forgotten the lighter grey of the line between marks; a week's counts are in its tooltip and in the list under the
  * chart, never told by colour alone. Where nothing happened in a week nothing is drawn.
  */

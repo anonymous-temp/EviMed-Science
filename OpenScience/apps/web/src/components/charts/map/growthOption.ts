@@ -12,7 +12,7 @@ import { dayEndMs, dayIn, dayStartMs } from "./zone";
  * Up to thirty gains it is **one dot for each**, in a lane for each kind that has any: 记下 ●, 学会 ▲, 资料 ■, 收下 ◆. A day with several
  * stacks its dots up the lane instead of hiding them behind one another. Past thirty a dot each is a pile, and the strip counts the weeks:
  * one cell for each week and lane, its count printed in it, in six steps of one hue. Either way it counts gains only — what was replaced or
- * forgotten is the time view's — and colours are the map's two: the brand blue for the mark and the one hue of the heat, a shape (never
+ * forgotten is the time view's — and colours are the map's two: the brand accent for the mark and the one hue of the heat, a shape (never
  * the colour) telling the kind. Where nothing happened nothing is drawn: no line joins sparse points and no empty day is marked as missed.
  */
 

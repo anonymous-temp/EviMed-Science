@@ -28,7 +28,7 @@ import { documentExportDigest } from "@evimed/domain";
  * - **The presenter never ranks.** It reports which designs another design
  *   dominates on the team's own written goal, and which design a person
  *   recorded as chosen; a `chosen` flag exists only when a decision row says
- *   so, so the brand blue is never on a design nobody chose (§14).
+ *   so, so the brand accent is never on a design nobody chose (§14).
  * - **The tab presenters live in `vcrViewsTabs.mjs`**; this file holds the
  *   study-level pages (list, overview, model library, precedents, package).
  *

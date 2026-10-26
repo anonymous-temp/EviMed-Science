@@ -302,7 +302,7 @@ test("a design keeps its own result even when another design's later run superse
   assert.equal(onlyCurrent.find((design) => design.code === "A").measures.assurance, undefined, "without the all-results list the earlier design would read as never simulated");
 });
 
-test("the brand blue exists only where a decision was recorded: `chosen` comes from a decision row and from nothing else", () => {
+test("the brand accent exists only where a decision was recorded: `chosen` comes from a decision row and from nothing else", () => {
   assert.ok(presentDesigns(designsBundle()).designs.every((design) => design.chosen === false), "nothing chosen by default, however good B looks");
   const decided = presentDesigns(designsBundle({ decisions: [{ id: "dec_1", question: "q", chosen: { id: "b", code: "B" }, createdAt: "2026-09-28T00:00:00.000Z" }] }));
   assert.deepEqual(decided.designs.filter((design) => design.chosen).map((design) => design.code), ["B"]);

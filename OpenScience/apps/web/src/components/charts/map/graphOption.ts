@@ -8,7 +8,7 @@ import type { MapPalette } from "./palette";
 /**
  * The relation graph, as the library is asked to draw it.
  *
- * What a mark is told by (spec §2, the colour budget): its **state** by colour — the brand blue in force, amber for a second
+ * What a mark is told by (spec §2, the colour budget): its **state** by colour — the brand accent in force, amber for a second
  * look, grey replaced — its **kind** by shape and by its words in the tooltip and the list, never by another hue. The account and
  * the projects are hollow hexagons (blue outline, the page's own surface inside), a memory a circle, a decision or a correction a
  * diamond, a document or a knowledge page a square, a learned method a triangle, an outside source a rounded square, a concept of

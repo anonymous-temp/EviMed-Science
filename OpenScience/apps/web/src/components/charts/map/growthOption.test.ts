@@ -24,7 +24,7 @@ describe("the growth strip", () => {
     expect(growthOption(input([]))).toBeNull();
   });
 
-  it("is one dot for each gain in a lane for each kind that has any, a shape for each lane and the brand blue for all", () => {
+  it("is one dot for each gain in a lane for each kind that has any, a shape for each lane and the brand accent for all", () => {
     const events = [event("noted", "2026-09-22"), event("noted", "2026-09-30"), event("learned", "2026-10-02", "先给结论"), event("documents", "2026-10-02"), event("received", "2026-10-09")];
     const option = growthOption(input(events)) as { series: Array<{ type: string; name: string; symbol: string; data: Array<{ value: number[]; event: number }>; itemStyle: { color: string } }>; yAxis: { data: string[]; inverse: boolean }; xAxis: { type: string } };
     expect(option.yAxis.data).toEqual(["● 记下", "▲ 学会", "■ 资料", "◆ 收下"]);

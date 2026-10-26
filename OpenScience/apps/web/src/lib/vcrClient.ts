@@ -371,7 +371,7 @@ export interface VcrDesign {
   dominated?: boolean;
   /** The letter of the design that beats it. */
   dominatedBy?: string | null;
-  /** Chosen by a recorded decision — never by the platform. The brand blue. */
+  /** Chosen by a recorded decision — never by the platform. The brand accent. */
   chosen?: boolean;
   /** The reason a design is dominated, from the server's rule. */
   note?: string | null;
@@ -779,7 +779,7 @@ export interface VcrSeries {
   label: string;
   /** `observed` draws a solid line, `reconstructed` a dashed one, `predicted` a band. */
   source: VcrValueSource;
-  /** Our arm / chosen scenario is the brand blue; the rest are greys. */
+  /** Our arm / chosen scenario is the brand accent; the rest are greys. */
   ours?: boolean;
   points: Array<{ x: number; y: number | null; low?: number | null; high?: number | null }>;
   /** The band's own name, when it has one: 「预测区间」. */

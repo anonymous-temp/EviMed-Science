@@ -403,7 +403,7 @@ export interface ChartPalette {
 /**
  * Light-mode palette (chart surface #ffffff).
  *
- * Slot 1 is the brand: in a comparison chart "ours" is always the brand blue
+ * Slot 1 is the brand: in a comparison chart "ours" is always the brand accent
  * and every competitor is a grey (slots 7, 8 and `--chart-rival-*`). A chart of
  * eight rainbow brands tells a reader nothing about which one is theirs.
  *

@@ -1,7 +1,7 @@
 import { resolvedColor } from "../echartsBase";
 
 /**
- * The map's colours: three hues at most — the brand blue for what is in force, the amber for what needs a second look, a grey for
+ * The map's colours: three hues at most — the brand accent for what is in force, the amber for what needs a second look, a grey for
  * what was replaced — and the type of a mark is told by its shape and its words, never its hue (spec §2). Every colour is a token
  * resolved to a literal for the canvas, which cannot read `var()`.
  */

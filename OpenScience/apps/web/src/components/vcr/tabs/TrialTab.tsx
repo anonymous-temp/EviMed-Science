@@ -82,7 +82,7 @@ type TrialView = "designs" | "schedule" | "regulatory";
  *    printed under its number with its name.
  *  - **A design another dominates carries no numbers.** It is greyed with the server's one sentence on why — never one the page
  *    wrote for it.
- *  - **The platform never picks a design.** The brand blue is a recorded decision (`chosen`) and nothing else. The reader writes
+ *  - **The platform never picks a design.** The brand accent is a recorded decision (`chosen`) and nothing else. The reader writes
  *    the comparison goal first, then chooses and says why; 「写入决策记录」 stays inert until both the goal and a choice are there.
  *  - **Forecasts are registered before their outcome** (plan §5.4): each one carries the time it was frozen at and — once the
  *    actual data arrive — the prediction beside what happened.
@@ -541,7 +541,7 @@ function DesignRecordDrawer({ design, onClose, onEdit }: { design: VcrDesign; on
  * 选定方案: the reader's comparison goal, the design they chose, and why — in a drawer opened from the band.
  *
  * The goal comes first and is required — a decision with no goal is a pick, not a decision (plan §5.4) — and the other reasonable
- * designs are recorded beside the choice. The platform records the decision; it does not make it, and the brand blue on the page
+ * designs are recorded beside the choice. The platform records the decision; it does not make it, and the brand accent on the page
  * follows the record, never this form's own state. One request at a time: a decision written twice is two records.
  */
 function DecisionForm({ studyId, decision, designs, onRecorded }: {
