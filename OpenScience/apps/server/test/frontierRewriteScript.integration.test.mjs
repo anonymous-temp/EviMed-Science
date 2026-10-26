@@ -246,11 +246,20 @@ test("a refused answer keeps what was there; a budget no longer ok stops the run
   assert.deepEqual(kept, { lead_zh: "旧导读。", lead_version: FRONTIER_LEAD_VERSION, reason_zh: "可了解口服 PCSK9 抑制剂的心血管获益与安全性。", reason_version: FRONTIER_REASON_VERSION });
   await database.query("UPDATE evimed_frontier.items SET brief_version = NULL, brief_basis = NULL WHERE id = $1", [selected.id]);
   const editor = fakeEditor();
+  const said = /** @type {string[]} */ ([]);
   const stopped = await frontierRewrite({ database, editor, budget: async () => ({ state: "throttled" }), threshold: 80, since: SINCE, until: UNTIL, apply: true,
-    steps: ["brief"] });
+    steps: ["brief"], onProgress: (line) => said.push(line) });
   assert.equal(stopped.stopped, "budget");
   assert.equal(stopped.resumeFrom, "2026-10-12T00:00:00.000Z");
   assert.equal(editor.asked.brief, 0);
+  // The way on is the same days again - each step selects only what it still owes - and not the day it stopped at.
+  assert.match(String(stopped.resume), /same --days/);
+  assert.match(String(stopped.resume), /Not --since resumeFrom/);
+  assert.ok(said.some((line) => line.includes("same --days")));
+  // ...and it is true: the second run, with the budget back, asks for what is owed over the whole window.
+  const resumed = await frontierRewrite({ database, editor, threshold: 80, since: SINCE, until: UNTIL, apply: true, steps: ["brief"] });
+  assert.equal(resumed.stopped, null);
+  assert.ok(editor.asked.brief > 0, "the run that was stopped owed the item its brief");
 });
 
 test("a run that stops says so", options, async () => {

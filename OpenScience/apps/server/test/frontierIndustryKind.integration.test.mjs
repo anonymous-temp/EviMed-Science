@@ -45,6 +45,7 @@ after(async () => {
 
 beforeEach(async () => {
   if (!database) return;
+  await database.query("DELETE FROM evimed_frontier.item_changes");
   await database.query("DELETE FROM evimed_frontier.items");
   await database.query("DELETE FROM evimed_frontier.entries");
   await database.query("DELETE FROM evimed_frontier.sources");
@@ -91,8 +92,19 @@ test("the column has no value but the pipeline's and the partial index is the on
   const index = (await database.query("SELECT indexdef FROM pg_indexes WHERE schemaname = 'evimed_frontier' AND indexname = 'frontier_items_industry_kind_idx'")).rows[0];
   assert.match(index.indexdef, /\(industry_kind, timeline_at DESC, id DESC\)/);
   assert.match(index.indexdef, /WHERE \(\(industry_kind IS NOT NULL\) AND \(state = 'published'::text\)\)/);
-  // Migrating again changes nothing (idempotent), and the filter's own predicate can use the index.
-  await seed();
+  // Migrating again changes nothing (idempotent: the column, the index and the kinds already written), and the filter's own predicate
+  // can use the index.
+  const { financing } = await seed();
+  const shape = async () => ({
+    columns: (await database.query(`SELECT column_name, data_type, is_nullable FROM information_schema.columns
+      WHERE table_schema = 'evimed_frontier' AND table_name = 'items' ORDER BY ordinal_position`)).rows,
+    indexes: (await database.query("SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'evimed_frontier' AND tablename = 'items' ORDER BY indexname")).rows,
+    kinds: (await database.query("SELECT public_id, genre, industry_kind FROM evimed_frontier.items ORDER BY id")).rows,
+  });
+  const before = await shape();
+  await migrateFrontier(database, { dimension: 1024 });
+  assert.deepEqual(await shape(), before);
+  assert.equal(before.kinds.find((row) => row.public_id === financing.publicId).industry_kind, "financing");
   await database.transaction(async (/** @type {any} */ client) => {
     await client.query("SET LOCAL enable_seqscan = off");
     const plan = (await client.query(`EXPLAIN SELECT i.id FROM evimed_frontier.items i WHERE i.state = 'published' AND i.genre = 'industry'

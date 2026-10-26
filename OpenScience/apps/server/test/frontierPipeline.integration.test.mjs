@@ -1541,3 +1541,32 @@ test("c5-biz: the edit's kind of 行业动态 is stored with the genre — only 
   assert.deepEqual(await stored(unknown), ["industry", null], "a word outside the list is dropped, not mapped to the nearest kind");
   assert.deepEqual(await stored(unnamed), ["industry", null], "no kind named: none");
 });
+
+test("c5-biz: an item re-labelled without a new edit keeps the kind an earlier edit or the backfill gave it for as long as it is 行业动态", options, async () => {
+  await reset();
+  const clock = new Date("2026-09-22T12:00:00Z");
+  const { pipeline, plugin } = pipelineWith({ now: () => clock });
+  // Both are published with their edit: a company's newsroom, and a news report the model calls news.
+  const company = await deliver({ source_id: "c-novo", title: "Novo Nordisk announces a licensing deal [kind:deal]", summary: "N".repeat(120) });
+  const news = await deliver({ source_id: "m-stat", title: "A report on a hospital merger [genre:news] [kind:deal]", summary: "C".repeat(120) });
+  for (const delivered of [company, news]) {
+    plugin.texts.set(delivered.pluginEntryId, { entry_id: delivered.pluginEntryId, revision: 1, status: "unavailable", abstract: null, body_excerpt: null, enrichment: {} });
+  }
+  await pipeline.processBatch();
+  const ids = [Number((await entry(company.id)).item_id), Number((await entry(news.id)).item_id)];
+  assert.deepEqual([(await item(ids[0])).industry_kind, (await item(ids[1])).industry_kind], ["deal", null], "the edit named the company's and not the news report's");
+  // The backfill has since named each one's kind (the second is a stale one), and the items are back at the start of their queue (a
+  // failed item seen again is adopted that way) with the editor unavailable this time: they are labelled again, with no new edit.
+  await database.query("UPDATE evimed_frontier.items SET industry_kind = 'financing' WHERE id = ANY($1::bigint[])", [ids]);
+  await database.query(`UPDATE evimed_frontier.items SET state = 'screened', attempts = 0, editor_version = NULL, verification = 'pending', lease_owner = NULL,
+    lease_until = NULL WHERE id = ANY($1::bigint[])`, [ids]);
+  const offline = pipelineWith({ now: () => clock, plugin, editor: Object.assign(fakeEditor(), { available: false }) });
+  await offline.pipeline.processBatch();
+  const after = await Promise.all(ids.map(item));
+  assert.deepEqual(after.map((row) => row.state), ["published", "published"]);
+  assert.deepEqual(after.map((row) => row.editor_diagnostics.reason), ["unavailable", "unavailable"], "no edit was asked: the labels were decided without one");
+  assert.equal(after[0].genre, "industry");
+  assert.equal(after[0].industry_kind, "financing", "the backfill's kind stands while the item is still 行业动态");
+  assert.equal(after[1].genre, "news");
+  assert.equal(after[1].industry_kind, null, "a kind on an item that is not 行业动态 is not kept");
+});

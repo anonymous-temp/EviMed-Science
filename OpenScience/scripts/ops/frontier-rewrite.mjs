@@ -6,7 +6,7 @@
  *
  *   node scripts/ops/frontier-rewrite.mjs                   report: what each step would do, by genre, and what asking would cost
  *   node scripts/ops/frontier-rewrite.mjs --apply           do it, within the module's day budget
- *   options: --days N (1–30, default 30), --since ISO (instead of --days: where a stopped run resumes),
+ *   options: --days N (1–30, default 30), --since ISO (instead of --days: the start of the days to read),
  *            --steps genre,kind,title,score,lead,brief,reason,facts,faith (default genre,kind,title,lead,brief,reason,facts,faith; `score` only
  *            by name, and first of the steps it shares a run with), --min-old-total N (score: skip items under this old total, default 50),
  *            --concurrency N (1–8, default 4), --limit N
@@ -56,8 +56,11 @@
  * - The report asks nothing and writes nothing. Its cost is an estimate from the calls' measured size (`REWRITE_CALL_TOKENS`, the
  *   frontier-writing eval of 2026-10-24) at the reference price list's `deepseek-flash` row.
  * - Metered like every frontier call: purpose `frontier`, the operator's internal project, the module's day budget beside the feed's
- *   own work. When the budget is no longer `ok` the run stops with `stopped: "budget"` and `resumeFrom`; `--since <resumeFrom>` asks
- *   nothing twice. Items are taken oldest first.
+ *   own work. When the budget is no longer `ok` the whole run stops — the steps after the one it stopped in have not run at all —
+ *   with `stopped: "budget"`, `resume` (what to do) and `resumeFrom` (where the stopped step was, for the log). A stopped run is
+ *   resumed by running it again with the same `--days` (or the `since` its report printed): every step selects only the items it still
+ *   owes (no stored genre, no kind, an older version of what it writes), so a second run asks nothing twice. `--since <resumeFrom>`
+ *   would be wrong: the steps that did not run would never cover the days before it. Items are taken oldest first.
  * - Idempotent: every write records the version that wrote it, and a second run over the same days finds nothing to do. The pipeline
  *   writes the same fields for new items; this command only gets the month already published there sooner.
  * - One run at a time (a session advisory lock). It needs the configuration the server runs with — the database, the DeepSeek key,
@@ -84,6 +87,11 @@ import { tsvectorLiteral } from "../../apps/server/src/kbChunker.mjs";
 
 const DAY_MS = 24 * 3_600_000;
 const REWRITE_LOCK = "evimed-frontier-rewrite";
+/**
+ * What a run that the budget stopped says to do. The steps after the one it stopped in did not run, so the way on is the same days again,
+ * not the day it stopped at: each step asks only for what it still owes.
+ */
+const RESUME_HINT = "stopped by the budget, steps after this one did not run: run it again with the same --days (or --since as printed in \"since\"); each step asks only what it still owes. Not --since resumeFrom, which would leave the steps that did not run without the days before it.";
 /** Items the title step writes between two content-version bumps. */
 const TITLE_BATCH = 50;
 export const FRONTIER_REWRITE_STEPS = Object.freeze(["genre", "kind", "title", "score", "lead", "brief", "reason", "facts", "faith"]);
@@ -184,7 +192,7 @@ export async function frontierRewrite({ database, editor = null, budget = null, 
   /** @type {Record<string, any>} */
   const summary = { applied: apply, since: since.toISOString(), until: until.toISOString(), steps, versions: { lead: FRONTIER_LEAD_VERSION,
     brief: FRONTIER_BRIEF_VERSION, reason: FRONTIER_REASON_VERSION, title: FRONTIER_TITLE_VERSION, facts: FRONTIER_STUDY_FACTS_VERSION, faith: FRONTIER_FAITH_VERSION },
-    stopped: null, resumeFrom: null, failed: 0 };
+    stopped: null, resumeFrom: null, resume: null, failed: 0 };
   /** @type {Record<string, number>} */
   const calls = {};
   let stopped = false;
@@ -196,6 +204,8 @@ export async function frontierRewrite({ database, editor = null, budget = null, 
     stopped = true;
     summary.stopped = "budget";
     summary.resumeFrom = row?.visible_at ? new Date(row.visible_at).toISOString() : null;
+    summary.resume = RESUME_HINT;
+    onProgress(`frontier-rewrite: ${RESUME_HINT}`);
     return false;
   };
   /** Runs `work` over rows, `concurrency` at a time, in order of the rows. @param {any[]} rows @param {(row: any) => Promise<void>} work */

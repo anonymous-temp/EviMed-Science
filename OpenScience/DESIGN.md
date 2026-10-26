@@ -663,9 +663,9 @@ identifier is a copy button and never page text, and a list that holds nothing i
 
 **前沿动态's list and reader (2026-10-23, the owner's screenshots; the band 2026-10-25: 「不要横着罗列着，顶上弄好几行」).** The band is
 one row on every view (`Toolbar` `oneRow`): six views — 精选 · 全部 · 关注 · 热榜 · 简报 · 证据专区 — at the left; at the right the
-open view's few controls (热榜 当前 | 本周 | 本月 and when it was taken, in Beijing time, said once; 简报 日报 | 周报, 分类, 往期, 复制 — 往期 is the toolbar's only for the weekly, and for a daily on a phone, cut into 月份 and the month's issues; on a screen with the room it is a column of months beside the issue, the open one marked, and an issue opens with 「先看三件事」 (its lead and the two items its lanes score highest); 证据专区 「全部专区 ▾」, the
+open view's few controls (热榜 当前 | 本周 | 本月 and when it was taken, in Beijing time, said once; 简报 日报 | 周报, 分类, 往期, 复制 — 往期 is the toolbar's only for the weekly, and for a daily on a phone, cut into 月份 and the month's issues; on a screen with the room it is a column of months beside the issue, the open one marked, and an issue opens with 「先看三件事」 (its lead and the two items its lanes score highest, each a title and its 导读 and nothing more; the lanes under it skip those three, and the 月份 menu names its oldest month without a count while older issues remain unread); 证据专区 「全部专区 ▾」, the
 count of a search, 新建专区), on 精选, 全部 and 关注 the applied tokens (the chosen tag keeps its 「关注」) and 「筛选」 — 栏目 (one
-choice), 专科 (the thirty in their five groups, several at once, each chosen one with 「关注」, then their 热门标签), 来源, 证据类型,
+choice) with 行业动态 beside it (the kinds of business news — 交易与授权, 融资与上市, 人事与组织, 公司经营, 研发管线; one choice, said on the row as 「行业动态 · 融资与上市」; 「其他」 is a kind an item has and not one to ask for), 专科 (the thirty in their five groups, several at once, each chosen one with 「关注」, then their 热门标签), 来源, 证据类型,
 时间 (全部 only), 只看收藏 — and the search last. 只看未读 is a toggle at the right end of the list's first day heading. 与我相关 is
 关注's first entry (`?view=following&follow=foryou`; `?view=foryou` lands there): from 640 px 关注 is a column of the reader's places —
 与我相关, 全部关注, each followed specialty, tag, drug, topic, source, event and evidence zone, each an address, then 「添加关注 · 管理」 —
