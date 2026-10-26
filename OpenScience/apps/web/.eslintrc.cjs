@@ -163,6 +163,10 @@ const PAGE_FILES = [
   "src/components/{geo,vcr,memory,sources,frontier,inbox,autopilot,capsule,settings,skills}/**/*.{ts,tsx}",
 ];
 const VCR_FILES = ["src/components/vcr/**/*.{ts,tsx}", "src/app/virtual-research/**/*.{ts,tsx}"];
+// A text-submit handler: Enter that confirms an IME composition must not submit a draft. It is part of the 虚拟临床研究 group's own
+// syntax list (a file's last matching group replaces the earlier ones' rules, so a rule written only in an earlier override is
+// silently dead there) and of the adopted-surfaces override at the end.
+const ENTER_SUBMIT = { selector: "BinaryExpression[left.type='MemberExpression'][left.property.name='key'][right.value='Enter']", message: "Text submission must use isSubmitKey so IME confirmation cannot submit a draft." };
 
 // `patterns` and not `paths`: a page may reach a primitive by its alias or by a relative path, and both are the same import.
 const atomPattern = (module, importNames) => ({
@@ -226,7 +230,7 @@ const LAYOUT_GROUPS = [
   {
     files: VCR_FILES,
     imports: [TAG_PATTERN, ...ATOM_PATTERNS, ...VCR_PATTERNS],
-    syntax: [...tokenRules, ...retiredTypeRules, ...componentRules, ...iconRules, ...errorTextRules, ...CHAT_NAVIGATION],
+    syntax: [...tokenRules, ...retiredTypeRules, ...componentRules, ...iconRules, ...errorTextRules, ...CHAT_NAVIGATION, ENTER_SUBMIT],
   },
 ];
 const layoutGroupOf = (file) => [...LAYOUT_GROUPS].reverse().find((group) => group.files.some((pattern) => minimatch(file, pattern))
@@ -325,10 +329,8 @@ module.exports = {
     // Adopted text-submit surfaces only: Enter activation on buttons and
     // roving-focus controls remains native and is intentionally outside this rule.
     {
-      files: ["src/app/routes/EvidenceZonesPage.tsx", "src/app/routes/EvidenceZonePage.tsx", "src/components/vcr/VcrScenarioEditor.tsx", "src/components/vcr/VcrPrecedentsPanel.tsx"],
-      rules: { "no-restricted-syntax": ["error", ...tokenRules, ...retiredTypeRules, ...componentRules, ...iconRules, ...errorTextRules,
-        { selector: "BinaryExpression[left.type='MemberExpression'][left.property.name='key'][right.value='Enter']", message: "Text submission must use isSubmitKey so IME confirmation cannot submit a draft." },
-      ] },
+      files: ["src/app/routes/EvidenceZonesPage.tsx", "src/app/routes/EvidenceZonePage.tsx"],
+      rules: { "no-restricted-syntax": ["error", ...tokenRules, ...retiredTypeRules, ...componentRules, ...iconRules, ...errorTextRules, ENTER_SUBMIT] },
     },
     ...layoutOverrides,
   ],
