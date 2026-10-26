@@ -103,8 +103,9 @@ export class RsiCampaignImporter {
       if(witness.outcome==='critical' && !['corrupt-bytes','unauthorized-behavior','incompatible-generation','deterministic-regression'].includes(witness.criticalCode))conflict('campaign_consumer_witness_invalid')
       const o=structuredClone(row.observations)
       if(o.witnessIds.includes(witness.id))return row
-      if(o.witnessIds.length>=10000)conflict('campaign_observation_capacity')
-      o.witnessIds.push(witness.id)
+      if(o.witnessIds.length>=10000 && witness.outcome!=='critical')conflict('campaign_observation_capacity')
+      // Evidence bounds never disable the deterministic emergency fuse.
+      if(o.witnessIds.length<10000)o.witnessIds.push(witness.id)
       const candidate=witness.arm!=='control'
       if(candidate){o.candidateExecutions++;o.errors+=witness.outcome==='ok'?0:1;if(!o.days.includes(witness.day))o.days.push(witness.day)}else o.controlExecutions++
       if(candidate && witness.outcome==='critical')o.criticalCode=witness.criticalCode
