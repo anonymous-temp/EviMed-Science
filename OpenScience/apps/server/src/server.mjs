@@ -6550,8 +6550,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const supplied = new Set(Object.keys(selected?.suppliedInputs ?? {}));
     // Inputs already supplied by the verified GEO project are not missing from a short native request.
     // Keep the human words and both classifier implementations unchanged; only this request's catalogue is qualified.
+    // The module's own capabilities are module-only (`display.listed: false`, left out of every ordinary classification);
+    // a verified selection is inside the module, so for this request they are candidates again.
     const routableAgents = registry.list().filter((agent) => agent.id !== OPEN_DOMAIN_ANSWER_AGENT_ID).map(agent => selected && agent.id.startsWith("geo-")
-      ? { ...agent, requiredInputs: (agent.requiredInputs ?? []).filter(key => !supplied.has(key)) } : agent);
+      ? { ...agent, listed: true, requiredInputs: (agent.requiredInputs ?? []).filter(key => !supplied.has(key)) } : agent);
     const classifierTrace = {};
     const { specialist } = await routeOpenDomain({
       query, agents: routableAgents, classifier: specialistClassifier, trace: classifierTrace,

@@ -38,6 +38,7 @@ const NOT_CODES = new Map([
   ["registry_planned", "source standing for a planned registry value"],
   ["vcr_execution_context", "private MCP execution-context transport key"],
   ["vcr_members_active_roles", "PostgreSQL constraint identity, never an application error code"],
+  ["vcr_grants_active_roles", "PostgreSQL constraint identity, never an application error code"],
   // `trialRegistryClient.mjs` labels a table row `kind: "registry_field"`.
   ["registry_field", "a row kind in the registry record's table, never emitted as an error"],
 ]);

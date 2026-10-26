@@ -115,6 +115,25 @@ function inList(words) {
   return `(${words.map((word) => `'${word}'`).join(", ")})`;
 }
 
+/**
+ * A role list held by a NOT VALID check beside the column's own (the retired recruitment roles may still sit in old rows):
+ * replaced only when its words differ from the declared ones, and always NOT VALID, so a second migration touches nothing and
+ * the generic vocabulary refresh finds it current. Words are compared in C collation, the order JavaScript's sort gives them.
+ * @param {string} table @param {string} name @param {string} check the CHECK body @param {readonly string[]} words
+ */
+function activeWordsCheck(table, name, check, words) {
+  inList(words);
+  const sorted = [...new Set(words)].sort().map((word) => `'${word}'`).join(", ");
+  return `DO $$ DECLARE held text; BEGIN
+  SELECT pg_get_constraintdef(oid) INTO held FROM pg_constraint WHERE conname = '${name}' AND conrelid = 'evimed_vcr.${table}'::regclass;
+  IF held IS NULL OR (SELECT array_agg(DISTINCT (m[1] COLLATE "C") ORDER BY (m[1] COLLATE "C")) FROM regexp_matches(held, '''([^'']*)''', 'g') AS m)
+      IS DISTINCT FROM ARRAY[${sorted}]::text[] THEN
+    ALTER TABLE evimed_vcr.${table} DROP CONSTRAINT IF EXISTS ${name};
+    ALTER TABLE evimed_vcr.${table} ADD CONSTRAINT ${name} CHECK (${check}) NOT VALID;
+  END IF;
+END $$;`;
+}
+
 /** The whole schema. */
 function sql() {
   return `
@@ -155,8 +174,6 @@ ALTER TABLE evimed_vcr.studies ADD COLUMN IF NOT EXISTS purpose text NOT NULL DE
 ALTER TABLE evimed_vcr.studies ADD COLUMN IF NOT EXISTS conversation_session_id text;
 ALTER TABLE evimed_vcr.studies ADD COLUMN IF NOT EXISTS scope text NOT NULL DEFAULT 'project' CHECK (scope IN ('project', 'conversation'));
 ALTER TABLE evimed_vcr.studies DROP CONSTRAINT IF EXISTS studies_user_id_project_id_key;
-ALTER TABLE evimed_vcr.studies DROP CONSTRAINT IF EXISTS studies_purpose_check;
-ALTER TABLE evimed_vcr.studies ADD CONSTRAINT studies_purpose_check CHECK (purpose IN ('programme', 'calculation', 'task'));
 CREATE UNIQUE INDEX IF NOT EXISTS vcr_studies_project_scope_idx ON evimed_vcr.studies (user_id, project_id) WHERE scope = 'project';
 CREATE UNIQUE INDEX IF NOT EXISTS vcr_studies_conversation_scope_idx ON evimed_vcr.studies (user_id, project_id, conversation_session_id) WHERE scope = 'conversation';
 
@@ -183,11 +200,7 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.members (
   PRIMARY KEY (study_id, user_id, role)
 );
 CREATE INDEX IF NOT EXISTS vcr_members_user_idx ON evimed_vcr.members (user_id);
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='vcr_members_active_roles' AND conrelid='evimed_vcr.members'::regclass) THEN
-    ALTER TABLE evimed_vcr.members ADD CONSTRAINT vcr_members_active_roles CHECK (role IN ${inList(VCR_MEMBER_ROLES)}) NOT VALID;
-  END IF;
-END $$;
+${activeWordsCheck("members", "vcr_members_active_roles", `role IN ${inList(VCR_MEMBER_ROLES)}`, VCR_MEMBER_ROLES)}
 
 -- The research question as an object: PICO, the estimand's five attributes,
 -- the primary endpoint and its type, the intended use. Versioned; everything
@@ -530,10 +543,7 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.grants (
   revoked_at    timestamptz,
   created_at    timestamptz NOT NULL DEFAULT now()
 );
-DO $$ BEGIN
-  ALTER TABLE evimed_vcr.grants DROP CONSTRAINT IF EXISTS vcr_grants_active_roles;
-  ALTER TABLE evimed_vcr.grants ADD CONSTRAINT vcr_grants_active_roles CHECK (revoked_at IS NOT NULL OR role IS NULL OR role IN ${inList(VCR_MEMBER_ROLES)}) NOT VALID;
-END $$;
+${activeWordsCheck("grants", "vcr_grants_active_roles", `revoked_at IS NOT NULL OR role IS NULL OR role IN ${inList(VCR_MEMBER_ROLES)}`, VCR_MEMBER_ROLES)}
 CREATE INDEX IF NOT EXISTS vcr_grants_source_idx ON evimed_vcr.grants (source_id) WHERE revoked_at IS NULL;
 
 -- A frozen, hashed view of a source. Immutable: a correction makes a new one.

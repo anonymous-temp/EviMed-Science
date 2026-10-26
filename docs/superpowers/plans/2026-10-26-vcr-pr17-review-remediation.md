@@ -194,7 +194,13 @@ code this branch changed, so no repeated sampling is added.
 `release-full-build.test.mjs` (13) and `evolutionDevelopmentPackaging.test.mjs` (1) on main and on this branch alike, and on
 this branch's CI it stopped the web job before durable product state, billing, extension boundaries and the frontend ran. The
 change it missed only copies `packages/contracts/openviking/compile-scope-proof.json` into the final stage and is already live,
-so the pin is re-recorded here for the current Dockerfile.
+so the pin is re-recorded here for the current Dockerfile. With the job running to the end, the PostgreSQL product-state step
+found three failures, all of this branch against main's newer tests and all fixed: a verified native 循证 GEO selection could
+no longer route to its own module-only capabilities (the reset leaves `display.listed: false` capabilities out of ordinary
+classification; the selected request now admits the GEO ones), the VCR migration rebuilt `studies_purpose_check` and
+`vcr_grants_active_roles` on every start (the first is left to the vocabulary refresh, both role checks are replaced only when
+their words change and stay NOT VALID), and main's extension test still added a retired `site` member (it now writes the
+legacy row an upgraded database holds). `frontierPipeline` and `nativeMemoryResident` failed once in CI and pass locally.
 
 **Gap 5, production and customer validation** stays outside this change: nothing was deployed and no production data was
 touched.
