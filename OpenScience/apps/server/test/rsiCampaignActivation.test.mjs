@@ -18,3 +18,7 @@ test('low traffic is inconclusive; a deterministic critical regression stops imm
  assert.equal(rsiCampaignFuse({candidateExecutions:100,days:['a','b','c'],errors:0},policy).state,'sufficient')
  assert.equal(rsiCampaignFuse({candidateExecutions:1,days:[],errors:0,criticalCode:'corrupt-bytes'},policy).state,'stop')
 })
+test('shadow pins cannot turn a shadow execution into serving publication',()=>{
+ assert.equal(rsiCampaignSelection(row,{runPin:'next'}).revision,'base')
+ assert.equal(rsiCampaignSelection(row,{runPin:'next'}).arm,'control')
+})

@@ -70,3 +70,21 @@ test('competing campaign imports serialize surface admission with no partial sec
  assert.equal(results.filter(r=>r.status==='fulfilled').length,1)
  const rows=await database.query("SELECT payload FROM evimed_product.documents WHERE user_id=$1",[owner]);assert.equal(rows.rowCount,1);assert.equal(f.publications(),1)
 }))
+test('selection rechecks live generation, expiry, binding and returns current incumbent after stop',skip,()=>withDatabase(async(database,owner)=>{
+ const f=await fixture(database,owner)
+ await f.importer.importBundle(f.envelope)
+ f.target.baselineRevision='new-incumbent';f.target.dependencyDigest='b'.repeat(64)
+ const selected=await f.importer.select(f.target.surface,{runPin:'candidate',userId:'u',projectId:'p'})
+ assert.equal(selected.revision,'new-incumbent');assert.equal(selected.shadowRevision,undefined)
+ const rows=await database.query("SELECT payload FROM evimed_product.documents WHERE user_id=$1",[owner]);assert.equal(rows.rows[0].payload.state,'stopped');assert.equal(f.rollbacks(),0)
+}))
+test('expired external activation is reconciled and rolled back under same operation identity',skip,()=>withDatabase(async(database,owner)=>{
+ const f=await fixture(database,owner);let active=null,staged=null,crashed=false,rollbackId=null
+ const original=f.options.activationPolicy
+ f.options.activationPolicy=async manifest=>({...await original(manifest),mode:'global',allowGlobal:true})
+ f.options.adapters.policy={inspect:async({phase})=>{if(phase==='activate'&&active&&!crashed){crashed=true;throw Error('activation crash')}return phase==='activate'?active:staged},publish:async input=>{const receipt={installed:true,phase:input.phase,operationId:input.operationId,candidateDigest:rsiDigest(f.files),revision:'candidate'};if(input.phase==='activate'){active=receipt;f.target.baselineRevision='candidate'}else staged=receipt},rollback:async input=>{rollbackId=input.operationId;f.target.baselineRevision=input.revision;return {...input,installed:true}}}
+ await assert.rejects(new RsiCampaignImporter(f.options).importBundle(f.envelope),/activation crash/)
+ f.options.now=()=> '2026-10-28T12:00:00Z'
+ const recovered=await new RsiCampaignImporter(f.options).resume('bundle')
+ assert.equal(recovered.state,'rolled-back');assert.equal(f.target.baselineRevision,'base');assert.equal(rollbackId,`${active.operationId}-rollback`)
+}))
