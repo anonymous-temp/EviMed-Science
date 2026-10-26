@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useLocation, useParams, useSearchParams } from "react-router";
 import { withParam } from "@/lib/addressState";
 import { fetchFrontierItem, frontierAbsence, frontierErrorMessage, frontierItemGone, hideFrontierItem, markFrontierItemRead, starFrontierItem, unhideFrontierItem, unstarFrontierItem, useFrontierFeature, type FrontierHideReason, type FrontierItemDetail } from "@/lib/frontierClient";
@@ -108,7 +108,9 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
   // What the page can show: the blocks written about the item, and its text (the stored body, or a paper's abstract fetched on demand).
   const post = isPost(item);
   const written = Boolean(item.lead || item.brief || item.insight);
-  const textKind = item.body ? readerTextKind(item, item.body) : item.abstract || item.abstractZh || abstractOffered(item) ? "摘要" : null;
+  // A paper's abstract is offered on the strength of its DOI or its journal; when the server turns out to have none, the switch goes.
+  const [noAbstract, setNoAbstract] = useState(false);
+  const textKind = item.body ? readerTextKind(item, item.body) : !noAbstract && (item.abstract || item.abstractZh || abstractOffered(item)) ? "摘要" : null;
   const switchable = written && !post && textKind !== null;
   const textView = switchable && params.get("view") === "text";
   const showWritten = written && !textView;
@@ -124,6 +126,11 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
       if (scroller && typeof scroller.scrollTo === "function") scroller.scrollTo({ top: 0 });
     },
   } : null;
+  // The abstract asked for is not there: back to what was written about the item, and the switch is gone (an empty view is no view).
+  const abstractMissing = useCallback(() => {
+    setNoAbstract(true);
+    if (params.get("view") === "text") setParams((current) => withParam(current, "view", null), { replace: true, state: location.state });
+  }, [params, setParams, location.state]);
   const toggleStar = async () => {
     try {
       onItem({ ...item, state: await (item.state.starred ? unstarFrontierItem(item.id) : starFrontierItem(item.id)) });
@@ -198,7 +205,7 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
         {showText && (item.body && textKind
           ? <ReaderText kind={textKind} text={item.body} lang={item.lang} language={language} onLanguage={setLanguage}
             ownUrl={item.url} idPrefix={prefix} className={written ? "mt-8" : "mt-6"} />
-          : <ReaderAbstract item={item} language={language} onLanguage={setLanguage} className={written ? "mt-8" : "mt-6"} />)}
+          : <ReaderAbstract item={item} language={language} onLanguage={setLanguage} onEmpty={abstractMissing} className={written ? "mt-8" : "mt-6"} />)}
         {showText && <ReaderMedia media={item.media} className="mt-6" />}
         {showText && item.quoted && <ReaderQuote quoted={item.quoted} platform={item.platform} language={language} className="mt-6" />}
         {!textView && <ReaderFollowups item={item} className="mt-10" />}
