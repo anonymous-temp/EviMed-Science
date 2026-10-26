@@ -34,6 +34,10 @@
 //     --capability clinical-evidence-synthesis --brief review-001-empa-kidney-report-family \
 //     [--base https://host] [--insecure] [--project <id of the project to make>] [--timeout-ms 7200000]
 //
+// A brief's followUps are dispatched sequentially in the same session after each
+// accepted turn is captured; --timeout-ms applies per turn. Failed/pending turns
+// stop the sequence. --prompt-file and GEO module triggers remain single-turn.
+//
 // Exit: 0 delivered and accepted, 1 a terminal run that is not an acceptance, 2 a driver
 // error, 3 the observation budget ended with the run still going, 4 the account was not deleted.
 //
@@ -234,12 +238,20 @@ async function main() {
     throw new Error("--geo-export / --geo-step ask the GEO module for its own run: no --prompt-file with them");
   }
 
+  // Follow-ups are researcher prompts, never grading instructions. A custom
+  // prompt or module-triggered run does not inherit a different brief's turns.
+  const followUps = promptFile || geoTrigger ? [] : brief.followUps ?? [];
+  if (!Array.isArray(followUps) || followUps.length > 10
+    || followUps.some(value => typeof value !== "string" || !value.trim() || value.length > 32000)) {
+    throw new Error("followUps must be at most ten nonempty prompts of at most 32000 characters each");
+  }
+
   // The account is made after everything that can be refused without one, and deleted whatever happens after.
   const account = await openThrowawayAccount({ base, send: fetchTransport(base), prefix: "acc", stop: cancelWhatWasDispatched });
   /** @type {number} */ let code = 2;
   /** @type {unknown} */ let failure = null;
   try {
-    code = await observe(account, { harness, text });
+    code = await observe(account, { harness, text, followUps });
   } catch (error) {
     failure = error;
   }
@@ -269,9 +281,9 @@ async function cancelWhatWasDispatched() {
 /**
  * Run the brief in the signed-in throwaway account and write what came back. Returns the exit code the driver ends with (the account's
  * deletion is the caller's).
- * @param {{ headers: Record<string, string> }} account @param {{ harness: string, text: string }} brief
+ * @param {{ headers: Record<string, string> }} account @param {{ harness: string, text: string, followUps: string[] }} brief
  */
-async function observe(account, { harness, text }) {
+async function observe(account, { harness, text, followUps }) {
   say(`base=${base} capability=${capabilityId} brief=${briefId}`);
   auth = { ...account.headers };
   say("signed in as the throwaway account");
@@ -350,154 +362,184 @@ async function observe(account, { harness, text }) {
     say(`session=${sessionId} bound to ${capabilityId}@${agent.version}`);
   }
 
-  let runId;
-  let run;
-  let dispatchedAt = null;
-  let promptSource = promptFile ? `file ${path.basename(promptFile)}` : "rendered brief";
-  if (geoTrigger && geo) {
-    // The GEO module's own run: 导出 or 让 AI 做, dispatched by its orchestrator
-    // with its own brief. It answers with the run when it could dispatch at
-    // once; when the run slot was busy the orchestrator's next tick sends it,
-    // so the run is found by its `geo-` dispatch id among the project's runs.
-    // Five minutes of slack: the run's start is the server's clock, this is ours.
-    const asked = new Date(Date.now() - 300_000).toISOString();
-    const route = geoExport ? `/api/geo/projects/${encodeURIComponent(geo.id)}/export` : `/api/geo/projects/${encodeURIComponent(geo.id)}/run`;
-    const answer = await api(route, { method: "POST", body: JSON.stringify(geoExport ? { kind: geoExport } : { step: geoStep }) });
-    if (answer.status !== 200) throw new Error(`GEO ${geoExport ? "export" : "step"} request failed: ${answer.status} ${JSON.stringify(answer.body).slice(0, 300)}`);
-    runId = answer.body.data?.runId ? String(answer.body.data.runId) : "";
-    say(runId ? `the GEO module dispatched run=${runId}` : "the GEO module queued the run; waiting for its dispatch");
-    const waitUntil = Date.now() + Number(args["geo-wait-ms"] ?? 1_800_000);
-    while (!runId && Date.now() < waitUntil) {
-      await new Promise((resolve) => setTimeout(resolve, pollMs));
-      const list = await pollApi("/api/agent-runs");
-      const found = list.status === 200 ? (list.body.data ?? []).find((/** @type {any} */ entry) => String(entry.dispatchId ?? "").startsWith("geo-")
-        && String(entry.startedAt ?? entry.createdAt ?? "") >= asked && entry.effectiveAgentId === capabilityId) : null;
-      if (found) runId = String(found.id);
+  // Capture each completed turn before a follow-up can change its files.
+  // The timeout is per turn; all turns use the same account, project and session.
+  let previousRunId = null;
+  for (const [turnIndex, turnText] of [text, ...followUps].entries()) {
+    let runId;
+    let run;
+    let dispatchedAt = null;
+    let promptSource = turnIndex > 0 ? `brief follow-up ${turnIndex}` : promptFile ? `file ${path.basename(promptFile)}` : "rendered brief";
+    if (geoTrigger && geo) {
+      // The GEO module's own run: 导出 or 让 AI 做, dispatched by its orchestrator
+      // with its own brief. It answers with the run when it could dispatch at
+      // once; when the run slot was busy the orchestrator's next tick sends it,
+      // so the run is found by its `geo-` dispatch id among the project's runs.
+      // Five minutes of slack: the run's start is the server's clock, this is ours.
+      const asked = new Date(Date.now() - 300_000).toISOString();
+      const route = geoExport ? `/api/geo/projects/${encodeURIComponent(geo.id)}/export` : `/api/geo/projects/${encodeURIComponent(geo.id)}/run`;
+      const answer = await api(route, { method: "POST", body: JSON.stringify(geoExport ? { kind: geoExport } : { step: geoStep }) });
+      if (answer.status !== 200) throw new Error(`GEO ${geoExport ? "export" : "step"} request failed: ${answer.status} ${JSON.stringify(answer.body).slice(0, 300)}`);
+      runId = answer.body.data?.runId ? String(answer.body.data.runId) : "";
+      say(runId ? `the GEO module dispatched run=${runId}` : "the GEO module queued the run; waiting for its dispatch");
+      const waitUntil = Date.now() + Number(args["geo-wait-ms"] ?? 1_800_000);
+      while (!runId && Date.now() < waitUntil) {
+        await new Promise((resolve) => setTimeout(resolve, pollMs));
+        const list = await pollApi("/api/agent-runs");
+        const found = list.status === 200 ? (list.body.data ?? []).find((/** @type {any} */ entry) => String(entry.dispatchId ?? "").startsWith("geo-")
+          && String(entry.startedAt ?? entry.createdAt ?? "") >= asked && entry.effectiveAgentId === capabilityId) : null;
+        if (found) runId = String(found.id);
+      }
+      if (!runId) throw new Error("the GEO module did not dispatch the run in time; see the project's page for why (paused, a run already out, or a step not yet due)");
+      const list = await api("/api/agent-runs");
+      run = (list.body?.data ?? []).find((/** @type {any} */ entry) => entry.id === runId) ?? { id: runId, status: "running" };
+      sessionId = String(run.sessionId ?? sessionId);
+      // The ledger's question is the sentence the run was asked in; the orchestrator's brief travels in the run's own context.
+      promptSource = "the GEO run's question, as the run ledger records it (the orchestrator's brief is in the run's context)";
+    } else {
+      const dispatchBase = String(args["dispatch-id"] ?? `acc-${Date.now().toString(36)}`).replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 56);
+      const dispatchId = turnIndex ? `${dispatchBase}-turn${turnIndex + 1}` : dispatchBase;
+      dispatchedAt = stamp();
+      const answer = await api("/api/agent-runs/dispatch", {
+        method: "POST",
+        body: JSON.stringify({ sessionId, dispatchId, text: turnText, automated: true }),
+      });
+      if (answer.status !== 202) {
+        throw new Error(`dispatch failed: ${answer.status} ${JSON.stringify(answer.body).slice(0, 400)}`);
+      }
+      runId = String(answer.body.data.id);
+      run = answer.body.data;
+      say(`dispatched run=${runId} prompt=${turnText.length} chars`);
     }
-    if (!runId) throw new Error("the GEO module did not dispatch the run in time; see the project's page for why (paused, a run already out, or a step not yet due)");
-    const list = await api("/api/agent-runs");
-    run = (list.body?.data ?? []).find((/** @type {any} */ entry) => entry.id === runId) ?? { id: runId, status: "running" };
+
+    // From here the run is the account's deletion's to cancel if the observation ends before it does.
+    dispatched = { runId, status: String(run.status) };
     sessionId = String(run.sessionId ?? sessionId);
-    // The ledger's question is the sentence the run was asked in; the orchestrator's brief travels in the run's own context.
-    promptSource = "the GEO run's question, as the run ledger records it (the orchestrator's brief is in the run's context)";
-  } else {
-    const dispatchId = String(args["dispatch-id"] ?? `acc-${Date.now().toString(36)}`).replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 64);
-    dispatchedAt = stamp();
-    const answer = await api("/api/agent-runs/dispatch", {
-      method: "POST",
-      body: JSON.stringify({ sessionId, dispatchId, text, automated: true }),
-    });
-    if (answer.status !== 202) {
-      throw new Error(`dispatch failed: ${answer.status} ${JSON.stringify(answer.body).slice(0, 400)}`);
+    const deadline = Date.now() + timeoutMs;
+    const terminal = terminalStatuses;
+    let lastPhase = "";
+    let lastPollProblem = null;
+    while (!terminal.has(run.status) && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, Math.min(pollMs, deadline - Date.now())));
+      if (Date.now() >= deadline) break;
+      const list = await pollApi("/api/agent-runs", { signal: AbortSignal.timeout(Math.max(1, Math.min(30_000, deadline - Date.now()))) });
+      if (list.status !== 200) {
+        lastPollProblem = "poll_unavailable";
+        say(list.error ? `poll could not reach the deployment (${list.error}); retrying` : `poll returned ${list.status}; retrying`);
+        continue;
+      }
+      const found = list.body.data.find((/** @type {any} */ entry) => entry.id === runId);
+      if (!found) { lastPollProblem = "run_unavailable"; say("run not in the list yet"); continue; }
+      lastPollProblem = null;
+      run = found;
+      dispatched.status = String(run.status);
+      sessionId = String(run.sessionId ?? sessionId);
+      const phase = `${run.status}/${run.phase ?? "-"} msgs=${run.observedMessages ?? 0} tools=${run.observedToolCalls ?? 0} repairs=${run.attempts ?? 0}`;
+      if (phase !== lastPhase) { say(phase); lastPhase = phase; }
     }
-    runId = String(answer.body.data.id);
-    run = answer.body.data;
-    say(`dispatched run=${runId} prompt=${text.length} chars`);
-  }
-
-  // From here the run is the account's deletion's to cancel if the observation ends before it does.
-  dispatched = { runId, status: String(run.status) };
-  sessionId = String(run.sessionId ?? sessionId);
-  const deadline = Date.now() + timeoutMs;
-  const terminal = terminalStatuses;
-  let lastPhase = "";
-  let lastPollProblem = null;
-  while (!terminal.has(run.status) && Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, Math.min(pollMs, deadline - Date.now())));
-    if (Date.now() >= deadline) break;
-    const list = await pollApi("/api/agent-runs", { signal: AbortSignal.timeout(Math.max(1, Math.min(30_000, deadline - Date.now()))) });
-    if (list.status !== 200) {
-      lastPollProblem = "poll_unavailable";
-      say(list.error ? `poll could not reach the deployment (${list.error}); retrying` : `poll returned ${list.status}; retrying`);
-      continue;
+    const observedAt = stamp();
+    const observation = { status: terminal.has(run.status) ? "terminal" : "pending",
+      reason: terminal.has(run.status) ? "terminal" : lastPollProblem ?? "deadline",
+      ...(terminal.has(run.status) ? {} : { note: "the run was cancelled when the driver's throwaway account was deleted" }) };
+    if (observation.status === "pending") {
+      say(`PENDING after ${Math.round(timeoutMs / 60000)} min; last observed run status=${run.status}. The run is cancelled with the throwaway account: there is no resuming it, so give the brief a longer --timeout-ms.`);
     }
-    const found = list.body.data.find((/** @type {any} */ entry) => entry.id === runId);
-    if (!found) { lastPollProblem = "run_unavailable"; say("run not in the list yet"); continue; }
-    lastPollProblem = null;
-    run = found;
-    dispatched.status = String(run.status);
-    sessionId = String(run.sessionId ?? sessionId);
-    const phase = `${run.status}/${run.phase ?? "-"} msgs=${run.observedMessages ?? 0} tools=${run.observedToolCalls ?? 0} repairs=${run.attempts ?? 0}`;
-    if (phase !== lastPhase) { say(phase); lastPhase = phase; }
+
+    // A second run of one brief on one day gets its own directory: writing into
+    // the first one replaced its run.json, and the record of a delivered or
+    // failed run is what the acceptance ledger cites (2026-09-28, three reruns
+    // of ma-001 and mr-001 each overwrote the committed record).
+    const baseDir = path.join(repoRoot, harness, "results", `${new Date().toISOString().slice(0, 10)}-${briefId}${turnIndex ? `-followup-${turnIndex}` : ""}`);
+    let outDir = baseDir;
+    for (let attempt = 2; existsSync(path.join(outDir, "run.json")); attempt += 1) outDir = `${baseDir}-run${attempt}`;
+    await mkdir(outDir, { recursive: true });
+    const result = {
+      capability: capabilityId,
+      brief: briefId,
+      turn: turnIndex + 1,
+      previousRunId,
+      base,
+      project: projectId,
+      session: sessionId,
+      runId,
+      agentVersion: agent.version,
+      dispatchedAt: run.startedAt ?? run.createdAt ?? dispatchedAt,
+      observedAt,
+      observation,
+      // What the run was asked: this driver's text when it dispatched, the run's
+      // own record when the GEO module did.
+      prompt: geoTrigger ? String(run.question ?? "") : turnText,
+      promptSource,
+      ...(geo ? { geoProject: geo.id } : {}),
+      outcome: {
+        status: run.status,
+        startedAt: run.startedAt ?? null,
+        finishedAt: run.finishedAt ?? null,
+        errorCode: run.errorCode ?? null,
+        verification: run.verification ?? null,
+        artifacts: run.artifacts ?? [],
+        unverifiedArtifacts: run.unverifiedArtifacts ?? [],
+        qualityNotices: run.qualityNotices ?? [],
+        effectiveAgentId: run.effectiveAgentId ?? null,
+        effectiveRouteReason: run.effectiveRouteReason ?? null,
+        durationMs: run.durationMs ?? null,
+        repairRounds: run.repairRounds ?? null,
+        model: run.model ?? null,
+      },
+    };
+    await writeFile(path.join(outDir, "run.json"), `${JSON.stringify(result, null, 2)}\n`, "utf8");
+
+    // The package itself, so the ledger's evidence is the delivery and not a
+    // sentence about it. A gate-accepted artifact and an unverified one are both
+    // worth keeping; which is which is already recorded above.
+    const wanted = [...new Set([...(run.artifacts ?? []), ...(run.unverifiedArtifacts ?? [])])];
+    const capture = { complete: true, saved: [], failed: [] };
+    const captureDeadline = Date.now() + artifactTimeoutMs;
+    for (const [index, relative] of wanted.entries()) {
+      const remaining = captureDeadline - Date.now();
+      if (index >= 40 || remaining <= 0) {
+        capture.failed.push({ path: relative, reason: index >= 40 ? "file_limit" : "capture_deadline" });
+        continue;
+      }
+      if (typeof relative !== "string" || !relative || path.isAbsolute(relative)
+        || relative.includes("\\") || relative.split("/").includes("..")) {
+        capture.failed.push({ path: relative, reason: "unsafe_artifact_path" });
+        continue;
+      }
+      const read = await pollApi("/api/commands/read_artifact", { method: "POST", body: JSON.stringify({ path: relative }),
+        signal: AbortSignal.timeout(Math.max(1, Math.min(10_000, remaining))) });
+      if (read.status !== 200 || read.body?.data?.encoding !== "utf8") {
+        capture.failed.push({ path: relative, reason: read.status !== 200 ? "read_failed" : "unsupported_encoding", status: read.status });
+        say(`could not read ${relative} (${read.status})`);
+        continue;
+      }
+      const target = path.join(outDir, "deliverable", relative);
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, String(read.body.data.data), "utf8");
+      capture.saved.push(relative);
+    }
+    capture.complete = capture.failed.length === 0;
+    result.artifactCapture = capture;
+    await writeFile(path.join(outDir, "run.json"), `${JSON.stringify(result, null, 2)}\n`, "utf8");
+
+    say(`status=${run.status} errorCode=${run.errorCode ?? "none"} verification=${run.verification ?? "none"}`);
+    say(`artifacts=${(run.artifacts ?? []).length} unverified=${(run.unverifiedArtifacts ?? []).length} saved=${capture.saved.length}`);
+    // Structured since 2026-09-18 (C2): the title is the reader's, `text` the sentence.
+    for (const notice of (run.qualityNotices ?? []).slice(0, 10)) say(`notice: ${typeof notice === "string" ? notice.slice(0, 300) : `[${notice?.severity ?? "advice"}] ${notice?.title ?? ""} — ${String(notice?.text ?? "").slice(0, 300)}`}`);
+    say(`results: ${path.relative(repoRoot, outDir)}`);
+
+    // The run belongs to the throwaway account, which is deleted when this returns: a run still going is cancelled first
+    // (`cancelWhatWasDispatched`), because nothing could watch it afterwards.
+    // 3 is an unfinished observation, 1 a terminal non-acceptance, 2 a driver error, 4 an account that was not deleted (the caller's).
+    const code = observation.status === "pending" ? 3 : run.status === "succeeded" && !run.verification ? 0 : 1;
+    if (code !== 0) return code;
+    if (turnIndex < followUps.length && !capture.complete) {
+      say("FOLLOWUP_STOPPED: the current turn's artifact snapshot is incomplete; later turns must not overwrite uncaptured evidence");
+      return 2;
+    }
+    previousRunId = runId;
   }
-  const observedAt = stamp();
-  const observation = { status: terminal.has(run.status) ? "terminal" : "pending",
-    reason: terminal.has(run.status) ? "terminal" : lastPollProblem ?? "deadline",
-    ...(terminal.has(run.status) ? {} : { note: "the run was cancelled when the driver's throwaway account was deleted" }) };
-  if (observation.status === "pending") {
-    say(`PENDING after ${Math.round(timeoutMs / 60000)} min; last observed run status=${run.status}. The run is cancelled with the throwaway account: there is no resuming it, so give the brief a longer --timeout-ms.`);
-  }
-
-  // A second run of one brief on one day gets its own directory: writing into
-  // the first one replaced its run.json, and the record of a delivered or
-  // failed run is what the acceptance ledger cites (2026-09-28, three reruns
-  // of ma-001 and mr-001 each overwrote the committed record).
-  const baseDir = path.join(repoRoot, harness, "results", `${new Date().toISOString().slice(0, 10)}-${briefId}`);
-  let outDir = baseDir;
-  for (let attempt = 2; existsSync(path.join(outDir, "run.json")); attempt += 1) outDir = `${baseDir}-run${attempt}`;
-  await mkdir(outDir, { recursive: true });
-  const result = {
-    capability: capabilityId,
-    brief: briefId,
-    base,
-    project: projectId,
-    session: sessionId,
-    runId,
-    agentVersion: agent.version,
-    dispatchedAt: run.startedAt ?? run.createdAt ?? dispatchedAt,
-    observedAt,
-    observation,
-    // What the run was asked: this driver's text when it dispatched, the run's
-    // own record when the GEO module did.
-    prompt: geoTrigger ? String(run.question ?? "") : text,
-    promptSource,
-    ...(geo ? { geoProject: geo.id } : {}),
-    outcome: {
-      status: run.status,
-      startedAt: run.startedAt ?? null,
-      finishedAt: run.finishedAt ?? null,
-      errorCode: run.errorCode ?? null,
-      verification: run.verification ?? null,
-      artifacts: run.artifacts ?? [],
-      unverifiedArtifacts: run.unverifiedArtifacts ?? [],
-      qualityNotices: run.qualityNotices ?? [],
-      effectiveAgentId: run.effectiveAgentId ?? null,
-      effectiveRouteReason: run.effectiveRouteReason ?? null,
-      durationMs: run.durationMs ?? null,
-      repairRounds: run.repairRounds ?? null,
-      model: run.model ?? null,
-    },
-  };
-  await writeFile(path.join(outDir, "run.json"), `${JSON.stringify(result, null, 2)}\n`, "utf8");
-
-  // The package itself, so the ledger's evidence is the delivery and not a
-  // sentence about it. A gate-accepted artifact and an unverified one are both
-  // worth keeping; which is which is already recorded above.
-  const wanted = [...(run.artifacts ?? []), ...(run.unverifiedArtifacts ?? [])];
-  let saved = 0;
-  const captureDeadline = Date.now() + artifactTimeoutMs;
-  for (const relative of wanted.slice(0, 40)) {
-    const remaining = captureDeadline - Date.now();
-    if (remaining <= 0) { say("artifact capture budget exhausted; the observation and files already saved are preserved"); break; }
-    const read = await pollApi("/api/commands/read_artifact", { method: "POST", body: JSON.stringify({ path: relative }),
-      signal: AbortSignal.timeout(Math.max(1, Math.min(10_000, remaining))) });
-    if (read.status !== 200 || read.body?.data?.encoding !== "utf8") { say(`could not read ${relative} (${read.status})`); continue; }
-    const target = path.join(outDir, "deliverable", relative.replace(/^(\.\.\/)+/, ""));
-    await mkdir(path.dirname(target), { recursive: true });
-    await writeFile(target, String(read.body.data.data), "utf8");
-    saved += 1;
-  }
-
-  say(`status=${run.status} errorCode=${run.errorCode ?? "none"} verification=${run.verification ?? "none"}`);
-  say(`artifacts=${(run.artifacts ?? []).length} unverified=${(run.unverifiedArtifacts ?? []).length} saved=${saved}`);
-  // Structured since 2026-09-18 (C2): the title is the reader's, `text` the sentence.
-  for (const notice of (run.qualityNotices ?? []).slice(0, 10)) say(`notice: ${typeof notice === "string" ? notice.slice(0, 300) : `[${notice?.severity ?? "advice"}] ${notice?.title ?? ""} — ${String(notice?.text ?? "").slice(0, 300)}`}`);
-  say(`results: ${path.relative(repoRoot, outDir)}`);
-
-  // The run belongs to the throwaway account, which is deleted when this returns: a run still going is cancelled first
-  // (`cancelWhatWasDispatched`), because nothing could watch it afterwards.
-  // 3 is an unfinished observation, 1 a terminal non-acceptance, 2 a driver error, 4 an account that was not deleted (the caller's).
-  return observation.status === "pending" ? 3 : run.status === "succeeded" && !run.verification ? 0 : 1;
+  return 0;
 }
 
 /** The three actual native revision journeys: they register and delete their own account (`result-revision-acceptance.mjs`). */

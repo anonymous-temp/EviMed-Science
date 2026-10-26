@@ -1,0 +1,190 @@
+{
+  "turns": [
+    {
+      "index": 0,
+      "referenceKind": "prediction",
+      "results": "deliverables/statistical-analysis-package/analysis-results.json",
+      "predictions": "deliverables/statistical-analysis-package/predictions.csv",
+      "predictionOptions": {
+        "id_column": "record_id",
+        "source_id_column": "",
+        "probability_column": "p_malignant",
+        "split_column": "split"
+      },
+      "required": [
+        "n",
+        "events",
+        "auc",
+        "averagePrecision",
+        "brier"
+      ],
+      "bindings": [
+        {
+          "reference": "n",
+          "source": [
+            "analyses",
+            0,
+            "n",
+            "test"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "events",
+          "source": [
+            "analyses",
+            0,
+            "n",
+            "eventsTest"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "auc",
+          "source": [
+            "analyses",
+            0,
+            "discrimination",
+            "auroc"
+          ],
+          "absoluteTolerance": 5e-05,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "averagePrecision",
+          "source": [
+            "analyses",
+            0,
+            "discrimination",
+            "averagePrecision"
+          ],
+          "absoluteTolerance": 5e-05,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "brier",
+          "source": [
+            "analyses",
+            0,
+            "overall",
+            "brier"
+          ],
+          "absoluteTolerance": 5e-05,
+          "relativeTolerance": 0
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "referenceKind": "prediction",
+      "results": "deliverables/statistical-analysis-package/operating-point-0.3.json",
+      "predictions": "deliverables/statistical-analysis-package/predictions.csv",
+      "predictionOptions": {
+        "id_column": "record_id",
+        "source_id_column": "",
+        "probability_column": "p_malignant",
+        "split_column": "split",
+        "threshold": 0.3
+      },
+      "required": [
+        "n",
+        "events",
+        "tp",
+        "fn",
+        "fp",
+        "tn",
+        "sensitivity",
+        "specificity",
+        "ppv"
+      ],
+      "bindings": [
+        {
+          "reference": "n",
+          "source": [
+            "cohort",
+            "n"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "events",
+          "source": [
+            "cohort",
+            "malignant"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "tp",
+          "source": [
+            "confusion",
+            "truePositive"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "fn",
+          "source": [
+            "confusion",
+            "falseNegative"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "fp",
+          "source": [
+            "confusion",
+            "falsePositive"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "tn",
+          "source": [
+            "confusion",
+            "trueNegative"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "sensitivity",
+          "source": [
+            "metrics",
+            "sensitivity",
+            "value"
+          ],
+          "absoluteTolerance": 5e-05,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "specificity",
+          "source": [
+            "metrics",
+            "specificity",
+            "value"
+          ],
+          "absoluteTolerance": 5e-05,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "ppv",
+          "source": [
+            "metrics",
+            "positivePredictiveValue",
+            "value"
+          ],
+          "absoluteTolerance": 5e-05,
+          "relativeTolerance": 0
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "image": "evimed-analysis-replay:20261026",
+  "imageId": "sha256:d7e263aa7f2f47a7d0689fcf96610d146201a2e0f17dbee8af919b77a414b9a2",
+  "runtime": "local Colima Docker",
+  "network": "none",
+  "rootFilesystem": "read-only",
+  "capabilities": "all dropped",
+  "noNewPrivileges": true,
+  "pidsLimit": 64,
+  "memoryLimit": "1g",
+  "cpus": 2,
+  "mounts": "captured public-data workspace and reviewed replay script, both read-only",
+  "providerCredentials": "not mounted or passed",
+  "purpose": "independent saved-pipeline replay; not a platform deployment"
+}

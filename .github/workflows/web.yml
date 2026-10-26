@@ -74,10 +74,10 @@ jobs:
           attempt apt-get "${apt_fetch[@]}" update
           # Jammy keeps the math faces in fonts-texgyre; the runtime's newer
           # Debian/Ubuntu bases split them into fonts-texgyre-math.
-          attempt apt-get "${apt_fetch[@]}" install -y python3 python3-pip python3-venv postgresql-client python3-yaml python3-cryptography r-base-core libgmp10 zlib1g fonts-noto-cjk fonts-texgyre ripgrep
+          attempt apt-get "${apt_fetch[@]}" install -y python3 python3-pip python3-venv postgresql-client python3-yaml python3-cryptography r-base-core r-cran-survival libgmp10 zlib1g fonts-noto-cjk fonts-texgyre ripgrep
           # Match the scientific imports exercised by deployment-smoke with
           # the reviewed versions shipped in deploy/runtime-dsh/Dockerfile.
-          python3 -m pip install numpy==2.2.6 pandas==2.2.3 scipy==1.15.3 statsmodels==0.14.6
+          python3 -m pip install numpy==2.2.6 pandas==2.2.3 scipy==1.15.3 statsmodels==0.14.6 scikit-learn==1.6.1 pytest==8.4.2
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -130,6 +130,7 @@ jobs:
           pnpm test:hosted-skill-evidence
           pnpm test:judge-sites
           pnpm test:general-tasks
+          pnpm test:statistical-analysis
           pnpm test:memory-policy
           pnpm test:memory-evals
           pnpm test:knowledge-product

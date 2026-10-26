@@ -88,23 +88,24 @@ test("each capability card carries its summary and typical duration for the /能
   }
 });
 
-test("the GEO capabilities reach the frame for their chip, and are marked out of its tool list", async (t) => {
+test("hidden capabilities retain their frame chips while only the twelve selected workflows are listed", async (t) => {
   // Build spec 2026-09-25 §6: hidden from the kernel's own tool list by
   // `display.listed: false`, never by `visibility: internal` — a session the
   // 「循证 GEO」 module binds to one must still name its tool.
   const f = await bootstrapFor(t);
   const frame = await frameObject(f);
   const byId = new Map(frame.capabilities.map((card) => [card.id, card]));
-  for (const id of ["geo-insight", "geo-strategy", "geo-content", "geo-proposal"]) {
+  for (const id of ["geo-insight", "geo-strategy", "geo-content", "geo-proposal", "dataset-research-scoping", "evidence-appraisal", "gene-expression-analysis", "manuscript-support"]) {
     assert.ok(byId.has(id), `${id} did not reach the frame, so a conversation bound to it would have no chip`);
     assert.equal(byId.get(id).listed, false, `${id} would be offered in the frame's tool list`);
   }
   assert.equal(byId.get("geo-insight").title, "循证 GEO");
   const listed = frame.capabilities.filter((card) => card.listed !== false);
-  // Fourteen: the fifteen public capabilities of 2026-09-24 less geo-content,
-  // which moved into the GEO module.
-  assert.ok(listed.length >= 14, `only ${listed.length} listed tools reached the frame`);
-  assert.ok(listed.every((card) => !card.id.startsWith("geo-")));
+  assert.deepEqual(Array.from(listed, (card) => card.id).sort(), [
+    "adr-analysis", "bibliometric-analysis", "clinical-evidence-synthesis", "comprehensive-drug-evaluation",
+    "drug-selection", "mendelian-randomization", "meta-analysis", "off-label-analysis", "peer-review",
+    "research-grant-development", "research-topic-selection", "statistical-analysis",
+  ].sort());
 });
 
 test("every body an operator can switch off is named where the switch is documented", async () => {

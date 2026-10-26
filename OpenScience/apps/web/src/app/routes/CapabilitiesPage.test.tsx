@@ -707,3 +707,28 @@ describe("CapabilitiesPage", () => {
     });
   });
 });
+
+
+it("keeps virtual clinical research methods and links out of the research catalogue", async () => {
+  mocks.getVcrModels.mockReset();
+  mocks.getVcrModels.mockResolvedValue({ models: [], methods: [{ id: "analytic", method: "design.analytic", name: "Analytic design" }] });
+  mocks.listWebResearchAgents.mockResolvedValue(agents);
+  mocks.allowance.mockResolvedValue(billingOff); forgetResearchBilling();
+  renderPage();
+  await screen.findByRole("button", { name: "药品安全性分析" });
+  expect(mocks.getVcrModels).not.toHaveBeenCalled();
+  expect(screen.queryByRole("list", { name: "选择计算任务" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "参考试验检索" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "自动化 Meta 分析" })).toBeInTheDocument();
+});
+
+it("lists only the twelve owner-selected research workflows and preserves hidden display metadata", () => {
+  const keep = ["adr-analysis", "bibliometric-analysis", "clinical-evidence-synthesis", "comprehensive-drug-evaluation",
+    "drug-selection", "mendelian-randomization", "meta-analysis", "off-label-analysis", "peer-review",
+    "research-grant-development", "research-topic-selection", "statistical-analysis"].sort();
+  expect(Object.entries(CAPABILITY_DISPLAY).filter(([, display]) => display.listed !== false).map(([id]) => id).sort()).toEqual(keep);
+  for (const id of ["dataset-research-scoping", "evidence-appraisal", "gene-expression-analysis", "manuscript-support"]) {
+    expect(CAPABILITY_DISPLAY[id].title).toBeTruthy();
+    expect(CAPABILITY_DISPLAY[id].listed).toBe(false);
+  }
+});

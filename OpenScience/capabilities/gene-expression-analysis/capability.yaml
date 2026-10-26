@@ -61,6 +61,7 @@ dataSources:
 starterPrompts:
 - Compare the HDAC1 knock-out and wild-type arrays in GEO series GSE5583 and list the most differentially expressed genes.
 display:
+  listed: false
   title: "基因表达差异分析"
   category: "研究设计与数据"
   description: "给出 NCBI GEO 数据集编号，比较两组样本的基因表达差异，结果附校验与回执。"

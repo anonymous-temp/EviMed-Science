@@ -655,3 +655,35 @@ def test_every_refusal_a_record_promises_is_one_the_module_can_give_and_no_unlis
     # The module's own guard: a refusal that is not in the method's record cannot be made.
     with pytest.raises(ValueError):
         am._declined("adjust_pvalues", None, "separation")
+
+
+@pytest.mark.parametrize("table", [[[0, 5], [5, 0]], [[0, 20], [3, 17]], [[3, 1], [1, 3]], [[189, 10845], [104, 10933]]])
+def test_risk_difference_uses_newcombe_wilson_interval(table):
+    # Independent analytic Wilson-score construction (Newcombe 1998, method 10).
+    from scipy.stats import norm
+    z = norm.ppf(0.975)
+    def wilson(count, total):
+        p = count / total
+        centre = (p + z*z / (2*total)) / (1 + z*z/total)
+        half = z * math.sqrt(p*(1-p)/total + z*z/(4*total*total)) / (1 + z*z/total)
+        return centre - half, centre + half
+    a, b = table
+    p1, p2 = a[0] / sum(a), b[0] / sum(b)
+    l1, u1 = wilson(a[0], sum(a)); l2, u2 = wilson(b[0], sum(b))
+    expected = (p1-p2-math.hypot(p1-l1, u2-p2), p1-p2+math.hypot(u1-p1, p2-l2))
+    result = am.contingency_test(table)
+    assert result["values"]["riskDifferenceInterval"] == pytest.approx(expected, abs=1e-12)
+    assert result["values"]["riskDifferenceIntervalMethod"] == "newcombe-wilson"
+    assert -1 <= expected[0] < expected[1] <= 1
+    reversed_result = am.contingency_test(table[::-1])
+    assert reversed_result["values"]["riskDifferenceInterval"] == pytest.approx([-expected[1], -expected[0]], abs=1e-12)
+    corrected = am.contingency_test(table, correct_zero_cells=True)
+    assert corrected["values"]["riskDifferenceInterval"] == pytest.approx(expected, abs=1e-12)
+
+
+def test_contingency_confidence_level_is_validated_before_computation():
+    for level in [0, 1, -0.1, float("nan"), float("inf")]:
+        result = am.contingency_test([[3, 1], [1, 3]], level=level)
+        assert result["status"] == "unsupported"
+        assert result["reason"] == "invalid_confidence_level"
+        assert result["estimate"] is None
