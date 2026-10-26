@@ -56,7 +56,7 @@ export interface ActivityStripProps {
  * Hit area: Chip uses h-sm; cancellation uses Button; text link has intrinsic target.
  * Keyboard: Native link/Button activation; no automatic focus movement.
  * Long content: Question truncates; strip facts and controls wrap.
- * Theme: Information ground and running-dot role; reduced motion follows shared CSS.
+ * Theme: Information ground and running-dot role, the text in the ordinary ink (the ground says it, not coloured text: a page is held to seven text colours); reduced motion follows shared CSS.
  * Responsive: Strip wraps; chip is max-width constrained.
  * Verification: StepBarParts.test.tsx and Composition.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
  */
@@ -74,14 +74,14 @@ export function ActivityStrip({ label, phase, counts, startedAt, queued, waiting
         {to && <span className="shrink-0">查看进度</span>}
       </>
     );
-    const look = cn("inline-flex h-sm max-w-full items-center gap-2 rounded-full bg-info-soft px-3 text-ui text-info", className);
+    const look = cn("inline-flex h-sm max-w-full items-center gap-2 rounded-full bg-info-soft px-3 text-ui text-text", className);
     return to
       ? <Link to={to} data-activity="chip" className={cn(look, "hover:bg-surface-3")}>{body}</Link>
       : <span data-activity="chip" className={look}>{body}</span>;
   }
   const detail = counts && counts.total > 0 ? `${phase ? `${phase} ` : ""}${NUMBER.format(counts.done)} / ${NUMBER.format(counts.total)}` : phase;
   return (
-    <div data-activity="strip" data-activity-state={waiting ? "queued" : "running"} className={cn("flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1 rounded bg-info-soft px-3 py-1.5 text-ui text-info", className)}>
+    <div data-activity="strip" data-activity-state={waiting ? "queued" : "running"} className={cn("flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1 rounded bg-info-soft px-3 py-1.5 text-ui text-text", className)}>
       {dot}
       <span className="min-w-0 truncate">{waiting ? `${label} · 排队中` : `正在${label}`}</span>
       {waiting ? <span>{waiting}</span> : detail && <span className="tabular-nums">{detail}</span>}
