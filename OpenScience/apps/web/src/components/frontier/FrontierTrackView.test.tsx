@@ -98,7 +98,14 @@ describe("审批", () => {
     expect(first).toHaveTextContent("慢性乙型肝炎");
     expect(first).toHaveTextContent("FDA");
     expect(first).toHaveTextContent("首次获批");
-    expect(within(first).getByRole("link")).toHaveAttribute("href", "/app/frontier/items/a1");
+    // The row is one link to its article, its title's: stretched over the row as a feed card's is, so the row's link is one look at any
+    // number of lines (a whole-row block link was a kind of control per height, release walk of evimed-5ae53861dc26-1).
+    const link = within(first).getByRole("link");
+    expect(link).toHaveAttribute("href", "/app/frontier/items/a1");
+    expect(link).toHaveAccessibleName("药物 a1");
+    expect(link.closest("[data-row-title]")).not.toBeNull();
+    expect(link).toHaveClass("after:absolute", "after:inset-0");
+    expect(link.parentElement!.closest(".relative")).toContainElement(within(first).getByText("慢性乙型肝炎"));
     expect(within(october).getAllByRole("listitem")[1]).toHaveTextContent("EMA·新增适应症");
     // No back office on the page.
     for (const gone of ["track_facts", "引文", "已核对", "模型"]) expect(document.body).not.toHaveTextContent(gone);
@@ -155,7 +162,9 @@ describe("指南", () => {
     const recommendations = within(first).getByRole("list", { name: "主要推荐" });
     expect(within(recommendations).getAllByRole("listitem").map((entry) => entry.textContent)).toEqual([
       "有子宫的女性使用雌激素联合孕激素强推荐", "不建议使用复方激素制剂", "每年复查一次"]);
-    expect(within(first).getAllByRole("link")[0]).toHaveAttribute("href", "/app/frontier/items/g1");
+    expect(within(first).getAllByRole("link")).toHaveLength(1);
+    expect(within(first).getByRole("link", { name: "指南 g1" })).toHaveAttribute("href", "/app/frontier/items/g1");
+    expect(within(first).getByRole("link").closest("[data-row-title]")).not.toBeNull();
     // A row without recommendations says its scope instead.
     const topRows = Array.from(list.querySelectorAll<HTMLElement>(":scope > li[data-frontier-item]"));
     expect(topRows).toHaveLength(2);
@@ -166,6 +175,10 @@ describe("指南", () => {
     const rows = [guidelineRow("g1", { item: { ...frontierItem({ id: "g1" }), practice: { reason: "首个获批的靶向药" } } as FrontierGuidelineRow["item"] }), guidelineRow("g2")];
     wrap(<GuidelinesBody paging={paging(ready({ items: rows, nextCursor: null, specialties: [], listId: null } as FrontierGuidelines, 2), rows)} specialty="" onSpecialty={vi.fn()} />);
     expect(screen.getAllByText("可能改变实践")).toHaveLength(1);
+    // A label, never inside the row's link; above the stretched link, so its reason shows on hover.
+    const mark = screen.getByText("可能改变实践");
+    expect(mark.closest("a")).toBeNull();
+    expect(mark).toHaveClass("relative", "z-sticky");
   });
   it("is an empty state with a way on", async () => {
     const onSpecialty = vi.fn();

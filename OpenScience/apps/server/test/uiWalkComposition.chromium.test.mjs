@@ -65,7 +65,8 @@ const rulesOf = (read) => [...new Set(read.findings.map((entry) => entry.rule))]
 const textOf = (read, rule) => read.findings.filter((entry) => entry.rule === rule).map((entry) => entry.text);
 
 test("a framework page that is right is read as one and has nothing to say", { skip }, async () => {
-  const read = await compose(framed({ body: section(rows(4)) + LONG }));
+  // A 循证 GEO page as its V3 plan draws it: the eight steps, the views and the toolbar, and no project-level 「查看：」 selector.
+  const read = await compose(framed({ band: rail() + tabs(TABS) + toolbar("筛选与操作", ""), body: section(rows(4)) + LONG }));
   assert.deepEqual(read.findings, []);
   const { facts } = read;
   assert.deepEqual([facts.chrome.sticky, facts.chrome.position, facts.stepRail.count, facts.stepRail.inChrome], [true, "sticky", 8, true]);
@@ -79,7 +80,7 @@ test("a framework page that is right is read as one and has nothing to say", { s
 });
 
 test("control after content: a toolbar below the table it filters and a chip group below the chart it switches are named", { skip }, async () => {
-  const below = await compose(framed({ band: rail() + tabs(TABS) + toolbar(), body: section(`${rows(5)}${toolbar("试验先例的检索")}`) }));
+  const below = await compose(framed({ band: rail() + tabs(TABS) + toolbar("筛选与操作", ""), body: section(`${rows(5)}${toolbar("试验先例的检索")}`) }));
   assert.deepEqual(rulesOf(below), ["control-after-content", "toggle-layers"].filter((rule) => rule !== "toggle-layers"));
   assert.match(textOf(below, "control-after-content")[0], /^geo-plan@desktop: \[control-after-content\] “试验先例的检索” \(at \d+ px\) stands after the table it controls \(at \d+ px\)$/);
   const chips = await compose(framed({ body: section(`<canvas></canvas><div role="group" aria-label="地图的视图"><button aria-pressed="true">关系</button><button aria-pressed="false">主题</button></div>`) }));
@@ -295,13 +296,16 @@ test("the compact workflow collector reads the progress menu and result selector
     const read = await compose(framed({ actions: '<button aria-label="进度，已完成 3/8 步">进度</button>', band: toolbar("查看", '<button aria-label="查看：总览">总览</button>'), body: section(rows(3)) + LONG }), { viewport });
     assert.deepEqual(read.facts.compactWorkflow, { count: 8, views: true, folded: false, inChrome: true });
     assert.ok(rulesOf(read).includes("step-rail"), "compact progress cannot replace the visible rail");
+    // 循证 GEO's steps are its navigation (V3 plan, 2026-10-23): a project-level 「查看：」 selector beside them is what the plan removed.
+    assert.ok(rulesOf(read).includes("chrome"), "a second, project-level result selector");
     if (viewport === "phone") {
       const folded = await compose(framed({ actions: '<button aria-label="进度，已完成 3/8 步">进度</button>', band: toolbar("查看", '<button aria-label="筛选，已选 1 项">筛选</button>'), body: section(rows(3)) + LONG }), { viewport });
       assert.deepEqual(folded.facts.compactWorkflow, { count: 8, views: false, folded: true, inChrome: true });
-      assert.ok(rulesOf(folded).includes("chrome"), "a folded trigger alone does not certify its destinations");
+      assert.ok(rulesOf(folded).includes("step-rail"), "a folded progress chip does not replace the visible rail");
     }
     const absent = await compose(framed({ actions: '<button aria-label="进度，已完成 3/8 步">进度</button>', band: toolbar("查看", ""), body: section(rows(3)) + LONG }), { viewport });
-    assert.ok(rulesOf(absent).includes("chrome"));
+    assert.ok(rulesOf(absent).includes("step-rail"));
+    assert.ok(!rulesOf(absent).includes("chrome"), "no selector is what a module whose steps are its navigation draws");
   }
 });
 
@@ -377,6 +381,13 @@ test("module navigation clicks every visible rail and programme result on deskto
     const read = await verifyModuleNavigation(page, module);
     assert.equal(read.destinations.length, module === "geo" ? 8 : 0);
     assert.deepEqual(read.views.map((entry) => entry.label), moduleViewLabels(module));
+    if (module === "geo") {
+      // 循证 GEO's steps are its navigation (`rail`, V3): every step is clicked and read, and no selector is gone through.
+      await page.goto(`http://module.walk/app/geo/study`);
+      const rail = await verifyModuleNavigation(page, module, { views: false });
+      assert.equal(rail.destinations.length, 8);
+      assert.deepEqual(rail.views, []);
+    }
     await page.unroute("http://module.walk/**");
   }
 });

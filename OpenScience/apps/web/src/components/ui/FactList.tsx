@@ -15,12 +15,15 @@ export interface Fact {
   value: ReactNode;
 }
 
-function Rows({ rows }: { rows: readonly Fact[] }) {
+function Rows({ rows, ruled }: { rows: readonly Fact[]; ruled: boolean }) {
   return (
     <>
       {rows.map((row, index) => (
         // A bottom hairline on every row but the last — the kind of line a table's rows have, so a record that holds both draws one.
-        <div key={`${index}-${row.label}`} className="grid grid-cols-[6rem_1fr] gap-3 border-b border-faint py-2 last:border-b-0">
+        // In a framed card (`ruled={false}`) the card's frame is the one line and the rows are told apart by space (DESIGN.md: at most
+        // one bordered container deep; separate by space first): a faint rule inside 总览's 项目 card was a fourth kind of border on a
+        // data page held to three (the fixture walk of b559d4b7e).
+        <div key={`${index}-${row.label}`} className={ruled ? "grid grid-cols-[6rem_1fr] gap-3 border-b border-faint py-2 last:border-b-0" : "grid grid-cols-[6rem_1fr] gap-3 py-1.5"}>
           <dt className="text-caption text-text-3">{row.label}</dt>
           <dd className="min-w-0 text-ui text-text">{row.value}</dd>
         </div>
@@ -29,18 +32,24 @@ function Rows({ rows }: { rows: readonly Fact[] }) {
   );
 }
 
-export function FactList({ rows, max = 8, className }: { rows: readonly Fact[]; max?: number; className?: string }) {
+export function FactList({ rows, max = 8, ruled = true, className }: {
+  rows: readonly Fact[];
+  max?: number;
+  /** `false` inside a framed card: no rule between rows, the card's frame is the line. */
+  ruled?: boolean;
+  className?: string;
+}) {
   const shown = rows.slice(0, max);
   const rest = rows.slice(max);
   return (
     <div data-fact-list="" className={className}>
       <dl>
-        <Rows rows={shown} />
+        <Rows rows={shown} ruled={ruled} />
       </dl>
       {rest.length > 0 && (
         <Disclosure summary={`全部 ${rows.length} 项`} className="mt-1">
           <dl>
-            <Rows rows={rest} />
+            <Rows rows={rest} ruled={ruled} />
           </dl>
         </Disclosure>
       )}

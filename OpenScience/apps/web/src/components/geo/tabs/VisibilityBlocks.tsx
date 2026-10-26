@@ -137,7 +137,9 @@ export function ClusterMatrixCard({
   const rows = useMemo(() => visible.map((row) => ({
     key: row.id,
     name: clusterName(row),
-    header: <ClusterLink groupId={row.id}>{clusterName(row)}</ClusterLink>,
+    // The group's name opens the drawer its cells open, at the cells' 28 px: one look for one job in one row (a 12 px inline link was a
+    // kind of control of its own beside them, the eleventh on 可见度 in the fixture walk of b559d4b7e). It still truncates in its column.
+    header: <ClusterLink groupId={row.id} className="block h-sm truncate leading-7">{clusterName(row)}</ClusterLink>,
     note: row.isControl ? <span className="shrink-0 text-meta text-text-3">对照</span> : undefined,
     tallies: row.byEngine,
   })), [visible]);

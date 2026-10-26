@@ -152,6 +152,9 @@ describe("可见度: the groups against the engines", () => {
     const name = within(groupRow(G_BRAND)!).getByRole("link", { name: "品牌身份、规格与厂家" });
     expect(name).toHaveAttribute("data-geo-cluster-link", G_BRAND);
     expect(name.getAttribute("href")).toContain(`group=${G_BRAND}`);
+    // At its cells' 28 px, as they open the same drawer: one look for one job (a 12 px inline link was a kind of control of its own).
+    expect(name).toHaveClass("block", "h-sm", "truncate");
+    expect(within(groupRow(G_BRAND)!).getAllByRole("button")[0]).toHaveClass("h-sm");
   });
 
   it("opens the group's drawer resting on the engine of the cell, and leaves the page's own engine choice alone", async () => {

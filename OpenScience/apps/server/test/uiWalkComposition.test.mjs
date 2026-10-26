@@ -201,15 +201,22 @@ test("a finding of a rule is accepted by the baseline entry that names the rule,
   assert.deepEqual(finding("orphan-sentence", "geo-plan@desktop", "x", 3).rule, "orphan-sentence");
 });
 
-test("the compact GEO workflow keeps eight steps and a result selector without a second rail", () => {
-  const compact = good({ stepRail: null, tablists: [], compactWorkflow: { count: 8, views: true, inChrome: true } });
+test("循证 GEO's eight steps are its navigation (V3 plan, 2026-10-23): no second, project-level result selector beside them", () => {
+  // The rail of eight steps with their states, a step's own views in a contextual 「分析视图」 select (not counted: it is no 「查看：」), and
+  // no selector of the eight result views — what the plan removed (§一.1, §3.1).
+  const rail = good({ tablists: [], viewSelector: { count: 0, top: null } });
   for (const viewport of ["desktop", "phone"]) {
-    assert.deepEqual(compositionFindings("geo-plan", viewport, compact).notices, []);
-    assert.ok(rules("geo-plan", viewport, { ...compact, compactWorkflow: { count: 7, views: true, inChrome: true } }).includes("step-rail"));
-    assert.ok(rules("geo-plan", viewport, { ...compact, compactWorkflow: { count: 8, views: false, inChrome: true } }).includes("chrome"));
-    assert.ok(rules("geo-plan", viewport, { ...compact, compactWorkflow: { count: 8, views: true, inChrome: false } }).includes("chrome"));
-    assert.ok(rules("vcr-trial", viewport, compact).includes("chrome"), "VCR requires its research-object selector, not GEO workflow controls");
+    assert.deepEqual(compositionFindings("geo-plan", viewport, rail).notices, []);
+    assert.deepEqual(compositionFindings("geo-answer", viewport, rail).notices, [], "one answer is read in the same band");
+    const selector = texts("geo-plan", viewport, { ...rail, viewSelector: { count: 1, top: 148 } });
+    assert.equal(selector.length, 1);
+    assert.match(selector[0], /\[chrome\] the module's steps are its navigation: a second, project-level result selector/);
+    assert.ok(rules("geo-plan", viewport, { ...rail, stepRail: { ...rail.stepRail, count: 7 } }).includes("step-rail"));
+    assert.ok(rules("geo-plan", viewport, { ...rail, stepRail: null }).includes("step-rail"), "the steps are the navigation: without them there is none");
+    // 虚拟临床研究 has no step rail since the 2026-10-25 reset: its six result destinations are one pinned selector.
+    assert.ok(rules("vcr-trial", viewport, rail).includes("chrome"), "VCR requires its research-object selector, not GEO workflow controls");
+    assert.deepEqual(rules("vcr-trial", viewport, { ...rail, stepRail: null, viewSelector: { count: 1, top: 148 } }), []);
   }
-  const pages = Object.fromEntries(["geo-overview", "geo-plan"].map((name) => [`${name}@desktop`, { composition: compact }]));
+  const pages = Object.fromEntries(["geo-overview", "geo-plan"].map((name) => [`${name}@desktop`, { composition: rail }]));
   assert.ok(!familyFindings(pages).some((entry) => entry.rule === "module-steps"));
 });

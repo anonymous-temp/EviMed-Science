@@ -144,10 +144,11 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
   }); };
   return <Section title="问句整理与诊断" level="sub">
     <div className="flex flex-wrap items-center gap-2">
-      {canEdit && <Button size="sm" disabled={busy || !!pendingImport.current} onClick={() => { setEditing(true); setSaved(null); }}>导入问句</Button>}
+      {/* The step's actions are the block's own, not the page's primary (the header's, DESIGN.md T3): secondary. */}
+      {canEdit && <Button variant="secondary" size="sm" disabled={busy || !!pendingImport.current} onClick={() => { setEditing(true); setSaved(null); }}>导入问句</Button>}
       {canEdit && data.groups.length > 0 && data.version != null && data.contract != null && <Button size="sm" variant="text" disabled={busy || !!pendingImport.current} onClick={editExisting}>编辑为新版本</Button>}
       {version != null && <AskAi project={target} label="建议分类" draft={`/geo-insight 请读取第 ${version} 版完整原题，仅建议测量池、人群、阶段与分类状态。保留原题、编号、客户分组与原标签，输出带原编号的可导入表格，建议不覆盖客户原分类；用户采用后另存新版本。`} />}{version != null && <AskAi project={target} label="检查覆盖" draft={`/geo-insight 请检查第 ${version} 版问句覆盖，读取该版本原题、已有资料和旅程人群，指出具体缺口与依据，不编造配额。保留原分类，建议另列，输出可编辑的新版本问句表，不自动采样。`} />}
-      {version != null && activeContract != null && canRun && <Button size="sm" disabled={busy || !storageScope} onClick={start}>{busy ? '正在处理' : `启动第 ${version} 版诊断`}</Button>}
+      {version != null && activeContract != null && canRun && <Button variant="secondary" size="sm" disabled={busy || !storageScope} onClick={start}>{busy ? '正在处理' : `启动第 ${version} 版诊断`}</Button>}
     </div>
     {version != null && <Note className="my-3" result={['第 ', { n: version }, ` 版 · ${activeContract?.samplingMode === 'recurring' ? '重复采样' : '单次采样'} · ${(activeContract?.engines ?? contract.engines).map(engineName).join('、')}。单次结果描述本次回答，不代表稳定概率。`]} action={canEdit && data.contract ? <Button size="sm" variant="text" disabled={busy || !!pendingImport.current} onClick={editExisting}>调整口径</Button> : undefined} />}
     {editing && canEdit && <div className="my-4 flex flex-col gap-4">

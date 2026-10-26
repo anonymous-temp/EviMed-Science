@@ -186,7 +186,9 @@ function TopicBody({ page, onItem }: { page: FrontierTopicPageData; onItem: (ite
           );
         })}
         {items.length === 0 && (
-          <p className="text-ui text-text-3">暂无报道与研究。<Link to="/app/frontier?view=all" className="text-accent hover:underline">看全部动态</Link></p>
+          // A link inside a sentence is underlined as the reader's are (`TextLink`): told from the words around it by more than its colour
+          // (WCAG 1.4.1; axe's link-in-text-block on the release walk of evimed-5ae53861dc26-1).
+          <p className="text-ui text-text-3">暂无报道与研究。<Link to="/app/frontier?view=all" className="rounded text-accent underline decoration-1 underline-offset-2">看全部动态</Link></p>
         )}
       </div>
     </TopicFrame>

@@ -54,6 +54,14 @@ describe("FactList", () => {
     expect(screen.queryByText(/全部 \d+ 项/)).toBeNull();
   });
 
+  it("rules its rows apart, except inside a framed card, where the card's frame is the one line and the rows are told apart by space", () => {
+    const { container, unmount } = render(<FactList rows={rows.slice(0, 3)} />);
+    expect(container.querySelector("dl > div")).toHaveClass("border-b", "border-faint");
+    unmount();
+    const framed = render(<FactList rows={rows} ruled={false} />);
+    for (const row of framed.container.querySelectorAll("dl > div")) expect(row.className).not.toMatch(/\bborder/);
+  });
+
   it("shows at most eight rows and keeps the rest behind 「全部 N 项」", () => {
     const { container } = render(<FactList rows={rows} />);
     expect(container.querySelectorAll("dl")[0].querySelectorAll("dt")).toHaveLength(8);
