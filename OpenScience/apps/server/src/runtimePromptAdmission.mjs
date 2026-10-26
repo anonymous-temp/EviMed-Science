@@ -8,9 +8,25 @@ const admissions=new WeakMap(),held=new AsyncLocalStorage();
 const busy=()=>new HttpError(409,'runtime_prompt_admission_busy','This conversation is admitting another input. Retry shortly.');
 function stateFor(manager) {
  let state=admissions.get(manager);
- if(!state){state={pending:new Map(),counters:{attempted:0,queued:0,admitted:0,failed:0,timedOut:0,active:0}};admissions.set(manager,state);}
+ if(!state){state={pending:new Map(),clients:{held:0,waiters:[]},counters:{attempted:0,queued:0,admitted:0,failed:0,timedOut:0,active:0,waitingForClient:0}};admissions.set(manager,state);}
  return state;
 }
+/** An admission holds a pooled client until the kernel acknowledges. At most half the control plane's pool
+ * may be held so: a stalled kernel delays prompts, never every other request on the same pool. */
+const clientLimit=manager=>Math.max(1,Math.floor(Number(manager.config?.databasePoolMax??10)/2));
+function acquireClient(state,limit,signal){
+ if(signal.aborted)return Promise.reject(signal.reason);
+ if(state.clients.held<limit){state.clients.held++;return Promise.resolve();}
+ state.counters.waitingForClient++;
+ return new Promise((resolve,reject)=>{
+  const waiter={grant:()=>{signal.removeEventListener('abort',abort);state.counters.waitingForClient--;resolve(undefined);}};
+  const abort=()=>{const at=state.clients.waiters.indexOf(waiter);if(at>=0)state.clients.waiters.splice(at,1);state.counters.waitingForClient--;reject(signal.reason);};
+  signal.addEventListener('abort',abort,{once:true});
+  state.clients.waiters.push(waiter);
+ });
+}
+/** A released permit passes straight to the oldest waiter, so `held` counts only real holders. */
+function releaseClient(state){const next=state.clients.waiters.shift();if(next)next.grant();else state.clients.held--;}
 export function runtimePromptAdmissionStatus(manager){return{...stateFor(manager).counters};}
 /** @template T @param {any} manager @param {any} project @param {string} sessionId
  * @param {(signal:AbortSignal)=>Promise<T>} operation @returns {Promise<T>} */
@@ -57,7 +73,7 @@ export function withSessionPromptAdmission(manager,project,sessionId,operation) 
  // A pool waiter owns no local fence: a prompt borrowing the sole plugin
  // client must be able to reach its wire and release that client first.
  const database=manager.promptAdmissionDatabase;
- const owned=database?database.transaction(async client=>{
+ const owned=database?acquireClient(state,clientLimit(manager),controller.signal).then(()=>database.transaction(async client=>{
   try{return{value:await queued(client)};}
   catch(error){
    // Stop intent/actor receipts describe an authenticated request, not a
@@ -66,7 +82,7 @@ export function withSessionPromptAdmission(manager,project,sessionId,operation) 
    if(error instanceof pg.DatabaseError)throw error;
    return{error};
   }
- }).then(outcome=>{if(outcome.error)throw outcome.error;return outcome.value;}):queued(null);
+ }).finally(()=>releaseClient(state))).then(outcome=>{if(outcome.error)throw outcome.error;return outcome.value;}):queued(null);
  // Public timeout never releases or reuses an active client. The owned task
  // drains/rolls back independently and checks abort before any late submission.
  void owned.catch(()=>{});

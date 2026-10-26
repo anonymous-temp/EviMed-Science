@@ -18,3 +18,28 @@ test('an expired queued admission never runs later when its predecessor releases
  const second=withSessionPromptAdmission(manager,project,'same',async()=>{entered++;});
  const result=await Promise.allSettled([first,second]);assert.ok(result.every(item=>item.status==='rejected'));assert.equal(entered,0);assert.equal(runtimePromptAdmissionStatus(manager).timedOut,2);
 });
+test('admissions hold at most half the database pool while kernels acknowledge; the rest wait without a client',async()=>{
+ const release=deferred(),entered=deferred();let open=0,most=0;const order=[];
+ const database={transactionScope:()=>null,withTransactionClient:(_client,operation)=>operation(),
+  transaction:async work=>{open++;most=Math.max(most,open);try{return await work({query:async()=>({rows:[]})});}finally{open--;}}};
+ const manager={config:{runtimePromptAdmissionTimeoutMs:2000,databasePoolMax:3},promptAdmissionDatabase:database},project={userId:'owner',id:'project'};
+ const first=withSessionPromptAdmission(manager,project,'a',async()=>{order.push('a');entered.resolve();await release.promise;});
+ await entered.promise;
+ const second=withSessionPromptAdmission(manager,project,'b',async()=>{order.push('b');});
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.deepEqual(order,['a']);assert.equal(runtimePromptAdmissionStatus(manager).waitingForClient,1);
+ release.resolve();await first;await second;
+ assert.deepEqual(order,['a','b']);assert.equal(most,1);assert.equal(runtimePromptAdmissionStatus(manager).waitingForClient,0);
+});
+test('an admission that times out waiting for a client never takes one later',async()=>{
+ const release=deferred(),entered=deferred();let transactions=0;
+ const database={transactionScope:()=>null,withTransactionClient:(_client,operation)=>operation(),
+  transaction:async work=>{transactions++;return work({query:async()=>({rows:[]})});}};
+ const manager={config:{runtimePromptAdmissionTimeoutMs:2000,databasePoolMax:2},promptAdmissionDatabase:database},project={userId:'owner',id:'project'};
+ const first=withSessionPromptAdmission(manager,project,'a',async()=>{entered.resolve();await release.promise;});
+ await entered.promise;manager.config.runtimePromptAdmissionTimeoutMs=20;
+ const late=withSessionPromptAdmission(manager,project,'b',async()=>{throw new Error('must not run');});
+ await assert.rejects(late,/admitting another input/);
+ release.resolve();await first;await new Promise(resolve=>setTimeout(resolve,10));
+ assert.equal(transactions,1);assert.equal(runtimePromptAdmissionStatus(manager).waitingForClient,0);
+});
