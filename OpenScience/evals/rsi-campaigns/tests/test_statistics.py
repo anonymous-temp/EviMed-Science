@@ -139,6 +139,17 @@ class DecisionTests(unittest.TestCase):
         rows[0]['cost'] = None
         self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
 
+    def test_node_generated_rfc8785_digest_vectors(self):
+        # Generated with Node JSON.stringify primitives and UTF-16 sorted keys.
+        vectors = [
+            ({'a': 1.0, 'b': 1e-7, 'c': 1e-6, 'd': -0.0}, '6484479848355ac0b74fb23d7e116824f3bbd7194d338e0cc9278535b3fc2c03'),
+            ({'😀': '值', '€': 1, 'a': 'é'}, '3a7479f491cb513bbcda3b234d08e54a55d2944e8c71efbc006e6b9afac429ba'),
+            ({'integer': 9007199254740991}, 'b7463267564326a6ee38050fbe8f807461810f64dd0b084e75046a4f3baefc27')]
+        for value, expected in vectors:
+            self.assertEqual(MODULE.registration_digest(value), expected)
+        for value in (9007199254740992, float('nan'), float('inf')):
+            with self.assertRaises(ValueError): MODULE.registration_digest({'bad': value})
+
     def test_review_malformed_and_overflow_fail_closed(self):
         for reg, rows, receipt in (([], [], {}), ({}, [[]], {})):
             self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
