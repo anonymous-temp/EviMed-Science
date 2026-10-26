@@ -67,7 +67,7 @@ export async function createRsiOnlineRuntime({ config, store, documents, jobs, d
     } });
   const publicationOwner = servingAdapters?.publicationOwnerId ?? PLATFORM_PUBLISHER_USER_ID;
   const importer = servingAdapters && new RsiCampaignImporter({ database, owner: publicationOwner,
-    isBound: configured, currentTarget: servingAdapters.currentTarget, adapters: servingAdapters.adapters,
+    isBound: configured, validateAdmission: row => trust?.validateAdmission(row) ?? false, currentTarget: servingAdapters.currentTarget, adapters: servingAdapters.adapters,
     verificationOptions: envelope => trust.verificationOptions(envelope, online), activationPolicy: manifest => trust.activationPolicy(manifest, online),
     verifyObservation: servingAdapters.verifyObservation });
   if (importer) {

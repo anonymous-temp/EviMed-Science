@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID, generateKeyPairSync, sign } from 'node:crypto';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ControlPlaneDatabase } from '../src/controlPlaneDatabase.mjs';
@@ -78,7 +78,7 @@ test('configured signed trust registry imports new qualified campaign using depl
     const payload = canonicalRsiJson({ schemaVersion: 1, bundleId: manifest.id, campaignId: manifest.campaignId, ...manifest.verdict });
     envelope.evaluatorReceipt = { keyId: 'evaluator', payload, signature: sign(null, Buffer.from(`evimed-rsi-evaluator-v1\nevaluator\n${payload}`), evaluator.privateKey).toString('base64') };
     let installed = null;
-    const importer = new RsiCampaignImporter({ database, owner, isBound: trust.isBound, verificationOptions: trust.verificationOptions,
+    const importer = new RsiCampaignImporter({ database, owner, isBound: trust.isBound, validateAdmission: trust.validateAdmission, verificationOptions: trust.verificationOptions,
       currentTarget: async () => target, activationPolicy: trust.activationPolicy,
       adapters: { policy: { inspect: async () => installed, publish: async input => { installed = { operationId: input.operationId, candidateDigest: rsiDigest(input.files), phase: input.phase, revision: 'candidate', installed: true }; } } } });
     const imported = await importer.importBundle(envelope);
@@ -88,7 +88,46 @@ test('configured signed trust registry imports new qualified campaign using depl
     assert.equal(imported.policy.minExecutions, 200);
     assert.equal(imported.policy.minDays, 2);
     assert.equal(imported.policy.maxErrors, 0);
+    const originalRegistry = await readFile(evaluatorRef);
     await writeFile(evaluatorRef, JSON.stringify({ schemaVersion: 1, version: 2, evaluators: [] }));
-    assert.equal((await trust.activationPolicy(manifest)).minExecutions, 200, 'approved registry version is loaded once');
+    assert.equal(await trust.validateAdmission(imported), false, 'registry replacement revokes future consumer admission');
+    const selected = await importer.select(target.surface, { userId: 'synthetic', projectId: 'synthetic' });
+    assert.equal(selected.arm, 'control');
+    assert.equal(selected.shadowRevision, undefined);
+    assert.equal(selected.reason, 'campaign_trust_revoked');
+    const journal = await database.query("SELECT payload FROM evimed_product.documents WHERE user_id=$1 AND payload->>'recordType'='rsi-campaign-import'", [owner]);
+    assert.equal(journal.rows[0].payload.state, 'stopped');
+    assert.equal(journal.rows[0].payload.stopReason, 'campaign_trust_revoked');
+    await writeFile(evaluatorRef, originalRegistry);
+    const secondManifest = { ...manifest, id: 'verified-then-revoked', campaignId: 'verified-then-revoked' };
+    const secondEnvelope = await signRsiCampaignBundle({ manifest: secondManifest, files, keyId: 'issuer', signer: bytes => sign(null, bytes, issuer.privateKey) });
+    const secondPayload = canonicalRsiJson({ schemaVersion: 1, bundleId: secondManifest.id, campaignId: secondManifest.campaignId, ...secondManifest.verdict });
+    secondEnvelope.evaluatorReceipt = { keyId: 'evaluator', payload: secondPayload, signature: sign(null, Buffer.from(`evimed-rsi-evaluator-v1\nevaluator\n${secondPayload}`), evaluator.privateKey).toString('base64') };
+    const secondImporter = new RsiCampaignImporter({ database, owner, isBound: trust.isBound, validateAdmission: trust.validateAdmission,
+      verificationOptions: trust.verificationOptions, currentTarget: async () => target,
+      activationPolicy: async value => { const policy = await trust.activationPolicy(value); await rm(issuerRef); return policy; },
+      adapters: { policy: { inspect: () => assert.fail('revoked import must not inspect'), publish: () => assert.fail('revoked import must not publish') } } });
+    assert.deepEqual(await secondImporter.importBundle(secondEnvelope), { state: 'rejected', issues: ['campaign_trust_revoked'] });
+    await writeFile(issuerRef, JSON.stringify({ keyId: 'issuer', publicKey: publicPem(issuer.publicKey), surfaces: ['frontier-selection'], kinds: ['policy'] }), { mode: 0o600 });
+    const globalRegistry = JSON.parse(originalRegistry.toString());
+    globalRegistry.version++;
+    globalRegistry.activationPolicies['frontier-selection'] = { mode: 'global', allowGlobal: true, allowExpansion: false, minExecutions: 200, minDays: 2, maxErrors: 0 };
+    await writeFile(evaluatorRef, JSON.stringify(globalRegistry));
+    const thirdManifest = { ...manifest, id: 'stage-then-revoked', campaignId: 'stage-then-revoked' };
+    const thirdEnvelope = await signRsiCampaignBundle({ manifest: thirdManifest, files, keyId: 'issuer', signer: bytes => sign(null, bytes, issuer.privateKey) });
+    const thirdPayload = canonicalRsiJson({ schemaVersion: 1, bundleId: thirdManifest.id, campaignId: thirdManifest.campaignId, ...thirdManifest.verdict });
+    thirdEnvelope.evaluatorReceipt = { keyId: 'evaluator', payload: thirdPayload, signature: sign(null, Buffer.from(`evimed-rsi-evaluator-v1\nevaluator\n${thirdPayload}`), evaluator.privateKey).toString('base64') };
+    let stageReceipt = null, activated = false;
+    const thirdImporter = new RsiCampaignImporter({ database, owner, isBound: trust.isBound, validateAdmission: trust.validateAdmission,
+      verificationOptions: trust.verificationOptions, currentTarget: async () => target, activationPolicy: trust.activationPolicy,
+      adapters: { policy: { inspect: async input => input.phase === 'stage' ? stageReceipt : null,
+        publish: async input => { if (input.phase === 'activate') activated = true; stageReceipt = { operationId: input.operationId, phase: 'stage', revision: 'third-candidate', candidateDigest: rsiDigest(files), installed: true }; await rm(issuerRef); },
+        rollback: async input => ({ ...input, installed: true }) } } });
+    const deniedAfterStage = await thirdImporter.importBundle(thirdEnvelope);
+    assert.equal(deniedAfterStage.stopReason, 'campaign_trust_revoked');
+    assert.equal(deniedAfterStage.state, 'rolled-back');
+    assert.equal(activated, false, 'revocation between stage and activate never publishes an active generation');
+
+
   } finally { await rm(dir, { recursive: true, force: true }); }
 }));

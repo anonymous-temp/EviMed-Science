@@ -20,9 +20,9 @@ const key = id => `rsi-import:${createHash('sha256').update(id).digest('hex')}`
  * verificationOptions must authenticate issuer/evaluator and supply expectedIdentity, qualification and trustStore.
  */
 export class RsiCampaignImporter {
-  /** @param {{database:any,owner:string,verificationOptions:(envelope:any)=>Promise<any>,currentTarget:(surface:string,client:any)=>Promise<any>,adapters:any,activationPolicy:(manifest:any)=>Promise<any>,isBound?:()=>boolean,verifyObservation?:(proof:any,row:any,options?:{transactionClient:any})=>Promise<any>,now?:()=>string}} options */
-  constructor({database,owner,verificationOptions,currentTarget,adapters,activationPolicy,isBound=()=>false,verifyObservation=async()=>null,now=()=>new Date().toISOString()}) {
-    this.database=database;this.documents=new ProductDocuments(database);this.owner=owner;this.verificationOptions=verificationOptions;this.currentTarget=currentTarget;this.adapters=adapters;this.activationPolicy=activationPolicy;this.isBound=isBound;this.verifyObservation=verifyObservation;this.now=now
+  /** @param {{database:any,owner:string,verificationOptions:(envelope:any)=>Promise<any>,currentTarget:(surface:string,client:any)=>Promise<any>,adapters:any,activationPolicy:(manifest:any)=>Promise<any>,isBound?:()=>boolean,validateAdmission?:(row:any)=>Promise<boolean>,verifyObservation?:(proof:any,row:any,options?:{transactionClient:any})=>Promise<any>,now?:()=>string}} options */
+  constructor({database,owner,verificationOptions,currentTarget,adapters,activationPolicy,isBound=()=>false,validateAdmission=async()=>false,verifyObservation=async()=>null,now=()=>new Date().toISOString()}) {
+    this.database=database;this.documents=new ProductDocuments(database);this.owner=owner;this.verificationOptions=verificationOptions;this.currentTarget=currentTarget;this.adapters=adapters;this.activationPolicy=activationPolicy;this.isBound=isBound;this.validateAdmission=validateAdmission;this.verifyObservation=verifyObservation;this.now=now
   }
   /** Every publisher sharing this surface must take this fence; journals survive process loss. @param {(client:any)=>Promise<any>} operation */
   async transaction(operation) {
@@ -37,14 +37,20 @@ export class RsiCampaignImporter {
   }
   /** @param {any} client @param {any} payload @param {number} revision */
   async write(client,payload,revision) {await this.documents.put(this.owner,'knowledge',key(payload.id),payload,{expectedRevision:revision,transactionClient:client});return payload}
+  /** Live deployment trust is required at each new-effect boundary, including after awaits.
+   * @param {any} row */
+  async admitted(row) { try { return await this.validateAdmission(row) === true; } catch { return false; } }
   /** Verify before migration, journal writes, or adapter calls. Same ID/same bytes is a read; different bytes conflicts.
    * @param {any} envelope */
   async importBundle(envelope) {
     if(!this.isBound()) return {state:'waiting',reason:'campaign_binding_unavailable'}
-    const options=await this.verificationOptions(envelope)
+    let options
+    try { options=await this.verificationOptions(envelope) } catch { return {state:'rejected',issues:['campaign_trust_unavailable']} }
     const verified=await verifyRsiCampaignBundle(envelope,{...options,now:this.now()})
     if(!verified.ok) return {state:'rejected',issues:verified.issues}
-    const m=verified.manifest, envelopeDigest=rsiDigest(envelope),policy=await this.activationPolicy(m)
+    const m=verified.manifest, envelopeDigest=rsiDigest(envelope)
+    let policy
+    try { policy=await this.activationPolicy(m) } catch { return {state:'rejected',issues:['campaign_trust_unavailable']} }
     const defaultMode=RSI_CAMPAIGN_SURFACES[/** @type {keyof typeof RSI_CAMPAIGN_SURFACES} */(m.surface)].activation
     if(!policy || !['shadow','cohort','global'].includes(policy.mode) || defaultMode==='shadow' && policy.mode==='cohort' || policy.mode==='global' && policy.allowGlobal!==true || policy.mode==='cohort' && !(policy.cohortPercent>0 && policy.cohortPercent<=100)) return {state:'rejected',issues:['campaign_activation_policy_unqualified']}
     const steps=policy.cohortSteps
@@ -52,13 +58,16 @@ export class RsiCampaignImporter {
     if(policy.afterShadow!==undefined && (policy.mode!=='shadow' || policy.afterShadow!=='global'))return {state:'rejected',issues:['campaign_activation_policy_unqualified']}
     const staged=await this.transaction(async client=>{
       const existing=await this.read(client,m.id)
-      if(existing){if(existing.payload.envelopeDigest!==envelopeDigest)conflict('campaign_bundle_identity_conflict');return existing.payload}
+      if(existing){if(existing.payload.envelopeDigest!==envelopeDigest)conflict('campaign_bundle_identity_conflict');return !await this.admitted(existing.payload) && !['stopped','rolled-back'].includes(existing.payload.state)?this.stop(client,existing,'campaign_trust_revoked'):existing.payload}
       const current=await this.currentTarget(m.surface,client)
       if(rsiCompatibilityIssues(m.target,current).length) conflict('campaign_target_changed')
       const siblings=await client.query("SELECT payload FROM evimed_product.documents WHERE user_id=$1 AND kind='knowledge' AND payload->>'recordType'='rsi-campaign-import' AND deleted_at IS NULL",[this.owner])
       if(siblings.rows.some(({payload})=>payload.campaignId===m.campaignId || payload.surface===m.surface && !['stopped','rolled-back','rejected'].includes(payload.state))) conflict('campaign_replay_or_surface_busy')
-      return this.write(client,{recordType:'rsi-campaign-import',id:m.id,campaignId:m.campaignId,envelopeDigest,bundleDigest:verified.bundleDigest,candidateDigest:m.verdict.candidateDigest,qualificationDigest:m.verdict.qualificationDigest,evidenceReferences:Object.fromEntries(['registrationDigest','datasetDigest','measurementDigest','consumerDigest','evaluatorDigest','procedureDigest','corpusDigest'].map(name=>[name,m.verdict[name]])),surface:m.surface,kind:m.kind,target:m.target,expiresAt:m.expiresAt,previousRevision:m.target.baselineRevision,operationId:`rsi-${rsiDigest([this.owner,m.id,verified.bundleDigest])}`,phase:policy.mode==='shadow'?'stage':'activate',mode:policy.mode,cohortPercent:policy.cohortPercent??0,policy:{minExecutions:policy.minExecutions??null,minDays:policy.minDays??null,maxErrors:policy.maxErrors??null,allowExpansion:policy.allowExpansion===true,afterShadow:policy.afterShadow??null,cohortSteps:steps??null},stageIndex:0,stageHistory:[],state:'staged',observations:{candidateExecutions:0,controlExecutions:0,errors:0,days:[],witnessIds:[]},stagedAt:this.now()},0)
+      const admissionRow={surface:m.surface,evidenceReferences:{procedureDigest:m.verdict.procedureDigest,consumerDigest:m.verdict.consumerDigest},authenticatedAdmissionIdentity:options.authenticatedAdmissionIdentity??null}
+      if(!await this.admitted(admissionRow))return {state:'rejected',issues:['campaign_trust_revoked']}
+      return this.write(client,{authenticatedAdmissionIdentity:options.authenticatedAdmissionIdentity??null,recordType:'rsi-campaign-import',id:m.id,campaignId:m.campaignId,envelopeDigest,bundleDigest:verified.bundleDigest,candidateDigest:m.verdict.candidateDigest,qualificationDigest:m.verdict.qualificationDigest,evidenceReferences:Object.fromEntries(['registrationDigest','datasetDigest','measurementDigest','consumerDigest','evaluatorDigest','procedureDigest','corpusDigest'].map(name=>[name,m.verdict[name]])),surface:m.surface,kind:m.kind,target:m.target,expiresAt:m.expiresAt,previousRevision:m.target.baselineRevision,operationId:`rsi-${rsiDigest([this.owner,m.id,verified.bundleDigest])}`,phase:policy.mode==='shadow'?'stage':'activate',mode:policy.mode,cohortPercent:policy.cohortPercent??0,policy:{minExecutions:policy.minExecutions??null,minDays:policy.minDays??null,maxErrors:policy.maxErrors??null,allowExpansion:policy.allowExpansion===true,afterShadow:policy.afterShadow??null,cohortSteps:steps??null},stageIndex:0,stageHistory:[],state:'staged',observations:{candidateExecutions:0,controlExecutions:0,errors:0,days:[],witnessIds:[]},stagedAt:this.now()},0)
     })
+    if(staged.state==='stopped')return this.rollback(staged.id)
     if(staged.state!=='staged')return staged
     return this.resume(m.id,verified.files)
   }
@@ -77,14 +86,16 @@ export class RsiCampaignImporter {
   async resume(id,files) {
     return this.transaction(async client=>{
       const stored=await this.read(client,id);if(!stored)conflict('campaign_journal_missing')
-      const row=stored.payload;if(row.state!=='staged')return row
+      const row=stored.payload
+      if(row.state!=='staged')return !['stopped','rolled-back'].includes(row.state) && !await this.admitted(row)?this.stop(client,stored,'campaign_trust_revoked'):row
       const adapter=this.adapters[row.kind];if(!adapter?.inspect || !adapter?.publish)return {...row,reason:'campaign_adapter_unavailable'}
       const installed=await adapter.inspect({operationId:row.operationId,surface:row.surface,phase:row.phase,transactionClient:client})
       const current=await this.currentTarget(row.surface,client)
       const expected={...row.target,baselineRevision:row.phase==='activate' && rsiActivationReceipt(installed,row)?installed.revision:row.target.baselineRevision}
       // Inspect first: expiry disallows new effects, but cannot hide an already activated effect.
-      if(!this.isBound() || this.expired(row) || rsiCompatibilityIssues(expected,current).length) {
-        return this.stop(client,stored,!this.isBound()?'campaign_binding_unavailable':this.expired(row)?'campaign_bundle_expired':'campaign_target_changed',rsiActivationReceipt(installed,row)?installed.revision:undefined)
+      const trusted=await this.admitted(row)
+      if(!trusted || !this.isBound() || this.expired(row) || rsiCompatibilityIssues(expected,current).length) {
+        return this.stop(client,stored,!trusted?'campaign_trust_revoked':!this.isBound()?'campaign_binding_unavailable':this.expired(row)?'campaign_bundle_expired':'campaign_target_changed',rsiActivationReceipt(installed,row)?installed.revision:undefined)
       }
       let proof=installed
       if(!rsiActivationReceipt(proof,row)) {
@@ -95,28 +106,32 @@ export class RsiCampaignImporter {
           if(staged?.installed)conflict('campaign_installed_identity_conflict')
           if(!files)return {...row,reason:'campaign_verified_bytes_required'}
           if(rsiDigest(files)!==row.candidateDigest)conflict('campaign_candidate_digest_changed')
+          if(!await this.admitted(row))return this.stop(client,stored,'campaign_trust_revoked')
           await adapter.publish({operationId:row.operationId,surface:row.surface,files,phase:'stage',mode:row.mode,expectedTarget:row.target,transactionClient:client})
           staged=await adapter.inspect({operationId:row.operationId,surface:row.surface,phase:'stage',transactionClient:client})
           if(!rsiActivationReceipt(staged,staging))conflict('campaign_stage_unwitnessed')
         }
         if(row.phase==='activate') {
+          if(!await this.admitted(row))return this.stop(client,stored,'campaign_trust_revoked',staged.revision)
           if(rsiCompatibilityIssues(row.target,await this.currentTarget(row.surface,client)).length)conflict('campaign_target_changed')
           await adapter.publish({operationId:row.operationId,surface:row.surface,phase:'activate',revision:staged.revision,mode:row.mode,expectedTarget:row.target,transactionClient:client})
           proof=await adapter.inspect({operationId:row.operationId,surface:row.surface,phase:'activate',transactionClient:client})
         }else proof=staged
       }
       if(!rsiActivationReceipt(proof,row))conflict('campaign_publication_unwitnessed')
+      if(!await this.admitted(row))return this.stop(client,stored,'campaign_trust_revoked',proof.revision)
       return this.write(client,{...row,state:'exposed',revision:proof.revision,publishedAt:this.now()},stored.revision)
     }).then(async row=>row.state==='stopped'?this.rollback(id):row)
   }
   /** Proof verifier returns bounded execution identities from the actual consumer, never raw user data.
    * @param {string} id @param {any} proof */
   async observe(id,proof) {
-    if(!this.isBound())return {state:'waiting',reason:'campaign_binding_unavailable'}
     return this.transaction(async client=>{
       const stored=await this.read(client,id);if(!stored)conflict('campaign_journal_missing')
       const row=stored.payload;if(!['exposed','consumer-observed','broadly-active'].includes(row.state))return row
       const current=await this.currentTarget(row.surface,client)
+      if(!await this.admitted(row))return this.stop(client,stored,'campaign_trust_revoked')
+      if(!this.isBound())return this.stop(client,stored,'campaign_binding_unavailable')
       if(this.expired(row) || !this.compatible(row,current))return this.stop(client,stored,'campaign_target_changed')
       const witness=await this.verifyObservation(proof,row,{transactionClient:client})
       if(!witness || witness.operationId!==row.operationId || witness.candidateDigest!==row.candidateDigest || !['candidate','control','shadow'].includes(witness.arm) || witness.revision!==(witness.arm==='control'?row.previousRevision:row.revision) || typeof witness.id!=='string' || !/^[a-zA-Z0-9_.:-]{1,160}$/.test(witness.id) || !/^\d{4}-\d{2}-\d{2}$/.test(witness.day) || !['ok','error','critical'].includes(witness.outcome))conflict('campaign_consumer_witness_invalid')
@@ -140,6 +155,7 @@ export class RsiCampaignImporter {
       }else if(candidate && fuse.state==='sufficient' && row.policy.allowExpansion) {
         // These are registered exposure thresholds, not evidence of a statistical benefit.
         const target=await this.currentTarget(row.surface,client)
+        if(!await this.admitted(row))return this.stop(client,stored,'campaign_trust_revoked')
         if(!this.isBound() || this.expired(row) || !this.compatible(row,target))return this.stop(client,stored,'campaign_target_changed')
         const history=[...(row.stageHistory??[]),{stageIndex:row.stageIndex??0,mode:row.mode,cohortPercent:row.cohortPercent,candidateExecutions:o.candidateExecutions,controlExecutions:o.controlExecutions,errors:o.errors,days:o.days,completedAt:this.now()}]
         const fresh={candidateExecutions:0,controlExecutions:0,errors:0,days:[],witnessIds:o.witnessIds}
@@ -178,8 +194,9 @@ export class RsiCampaignImporter {
       const records=await client.query("SELECT payload,revision FROM evimed_product.documents WHERE user_id=$1 AND kind='knowledge' AND payload->>'recordType'='rsi-campaign-import' AND payload->>'surface'=$2 AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 1 FOR UPDATE",[this.owner,surface])
       const stored=records.rows[0],row=stored?.payload
       if(!row)return {selection:{revision:current.baselineRevision,arm:'control'}}
-      if(!this.isBound() || this.expired(row) || !this.compatible(row,current)) {
-        const stopped=['stopped','rolled-back'].includes(row.state)?row:await this.stop(client,stored,!this.isBound()?'campaign_binding_unavailable':this.expired(row)?'campaign_bundle_expired':'campaign_target_changed')
+      const trusted=await this.admitted(row)
+      if(!trusted || !this.isBound() || this.expired(row) || !this.compatible(row,current)) {
+        const stopped=['stopped','rolled-back'].includes(row.state)?row:await this.stop(client,stored,!trusted?'campaign_trust_revoked':!this.isBound()?'campaign_binding_unavailable':this.expired(row)?'campaign_bundle_expired':'campaign_target_changed')
         return {stopped,selection:{revision:current.baselineRevision===row.revision?null:current.baselineRevision,arm:'control',reason:stopped.stopReason??'campaign_generation_stopped'}}
       }
       if(['stopped','rolled-back'].includes(row.state))return {selection:{revision:current.baselineRevision===row.revision?null:current.baselineRevision,arm:'control'}}

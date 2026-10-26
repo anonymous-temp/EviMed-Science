@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, chmod, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, chmod, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { generateKeyPairSync, sign } from 'node:crypto';
@@ -49,6 +49,30 @@ test('independent signed evaluator receipt admits new campaign evidence only in 
     assert.equal((await trust.verificationOptions({ ...envelope, evaluatorReceipt: signed({ ...proof, campaignId: 'new-campaign', datasetDigest: rsiDigest('new dataset') }) })).expectedIdentity.campaignId, 'new-campaign');
     await assert.rejects(trust.verificationOptions({ ...envelope, evaluatorReceipt: signed({ ...proof, procedureDigest: rsiDigest('unapproved procedure') }) }), /scope_forbidden/);
     await assert.rejects(trust.verificationOptions({ ...envelope, evaluatorReceipt: { ...envelope.evaluatorReceipt, payload: envelope.evaluatorReceipt.payload + ' ' } }), /receipt_untrusted/);
+    const admission = { surface: proof.scope, evidenceReferences: proof, authenticatedAdmissionIdentity: result.authenticatedAdmissionIdentity };
+    assert.equal(await trust.validateAdmission(admission), true);
+    const originalIssuer = await readFile(issuerRef), originalRegistry = await readFile(evaluatorRef);
+    await rm(issuerRef);
+    assert.equal(await trust.validateAdmission(admission), false);
+    await assert.rejects(trust.verificationOptions(envelope));
+    await writeFile(issuerRef, originalIssuer, { mode: 0o600 });
+    const rotatedIssuer = JSON.parse(originalIssuer.toString());
+    rotatedIssuer.publicKey = publicPem(generateKeyPairSync('ed25519').publicKey);
+    await writeFile(issuerRef, JSON.stringify(rotatedIssuer));
+    assert.equal(await trust.validateAdmission(admission), false, 'same issuer id cannot retain old key authority after rotation');
+    await writeFile(issuerRef, originalIssuer);
+    const rotatedRegistry = JSON.parse(originalRegistry.toString());
+    rotatedRegistry.version++;
+    rotatedRegistry.evaluators[0].publicKey = publicPem(generateKeyPairSync('ed25519').publicKey);
+    await writeFile(evaluatorRef, JSON.stringify(rotatedRegistry));
+    assert.equal(await trust.validateAdmission(admission), false);
+    await assert.rejects(trust.verificationOptions(envelope), /receipt_untrusted/);
+    await writeFile(evaluatorRef, originalRegistry);
+    const changedPolicy = JSON.parse(originalRegistry.toString());
+    changedPolicy.activationPolicies['frontier-selection'].minExecutions++;
+    await writeFile(evaluatorRef, JSON.stringify(changedPolicy));
+    assert.equal(await trust.validateAdmission(admission), false, 'policy scope fingerprint is live even without a version bump');
+
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 

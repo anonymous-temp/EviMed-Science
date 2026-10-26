@@ -59,7 +59,7 @@ export function validateRsiActivationPolicies(policies) {
 }
 /** Public verification only. The online process has no lab signer or KMS private-key operation.
  * @param {any} online @param {any} servingAdapters */
-export async function createRsiTrustRegistry(online, servingAdapters) {
+async function loadRsiTrustSnapshot(online, servingAdapters) {
   const issuers = Object.create(null);
   for (const ref of online.trustedKeyRefs) {
     const row = await readRsiDeploymentRecord(ref);
@@ -83,10 +83,23 @@ export async function createRsiTrustRegistry(online, servingAdapters) {
     if (Object.values(issuers).some(issuer => issuer.publicKey.export({ type: 'spki', format: 'der' }).equals(key.export({ type: 'spki', format: 'der' })))) throw new Error('rsi_evaluator_not_independent');
     evaluators.set(row.keyId, { ...row, key });
   }
+  const policyFor = surface => activationPolicies[surface]
+    ? JSON.parse(canonicalRsiJson(activationPolicies[surface]))
+    : { mode: 'shadow', allowGlobal: false, allowExpansion: false, reason: 'campaign_activation_policy_unconfigured' };
+  const identityFor = ({ issuerKeyId, evaluatorKeyId, scope, procedureDigest, consumerDigest }) => {
+    const issuer = issuers[issuerKeyId], evaluator = evaluators.get(evaluatorKeyId);
+    if (!issuer || !evaluator || !issuer.surfaces.includes(scope) || !evaluator.surfaces.includes(scope)
+      || !evaluator.procedureDigests.includes(procedureDigest) || !evaluator.consumerDigests.includes(consumerDigest)) throw new Error('rsi_admission_scope_revoked');
+    return { schemaVersion: 1, issuerKeyId, evaluatorKeyId, scope, procedureDigest, consumerDigest,
+      issuerKeyDigest: rsiDigest(issuer.publicKey.export({ type: 'spki', format: 'pem' })),
+      evaluatorKeyDigest: rsiDigest(evaluator.key.export({ type: 'spki', format: 'pem' })),
+      issuerScopeDigest: rsiDigest({ surfaces: issuer.surfaces, kinds: issuer.kinds }),
+      evaluatorScopeDigest: rsiDigest({ surfaces: evaluator.surfaces, procedureDigests: evaluator.procedureDigests, consumerDigests: evaluator.consumerDigests }),
+      registryDigest: rsiDigest(registry), registryVersion: registry.version, policyDigest: rsiDigest(policyFor(scope)) };
+  };
   return { isBound: () => true, registryVersion: registry.version,
-    activationPolicy: async manifest => activationPolicies[manifest.surface]
-      ? JSON.parse(canonicalRsiJson(activationPolicies[manifest.surface]))
-      : { mode: 'shadow', allowGlobal: false, allowExpansion: false, reason: 'campaign_activation_policy_unconfigured' },
+    activationPolicy: async manifest => policyFor(manifest.surface),
+    validateIdentity: identity => canonicalRsiJson(identityFor(identity)) === canonicalRsiJson(identity),
     async verificationOptions(envelope) {
       const receipt = envelope?.evaluatorReceipt;
       if (!receipt || typeof receipt.payload !== 'string' || Buffer.byteLength(receipt.payload) > 16384 || !/^[A-Za-z0-9+/]{86}==$/.test(receipt.signature ?? '')) throw new Error('rsi_evaluator_receipt_invalid');
@@ -98,8 +111,26 @@ export async function createRsiTrustRegistry(online, servingAdapters) {
         || !names.every(name => /^[a-f0-9]{64}$/.test(proof[name] ?? '')) || !evaluator.surfaces.includes(proof.scope)
         || !evaluator.procedureDigests.includes(proof.procedureDigest) || !evaluator.consumerDigests.includes(proof.consumerDigest)) throw new Error('rsi_evaluator_scope_forbidden');
       const currentTarget = await servingAdapters.currentTarget(proof.scope);
-      return { trustStore: issuers, currentTarget, expectedIdentity: { id: proof.bundleId, campaignId: proof.campaignId },
+      const authenticatedAdmissionIdentity = identityFor({ issuerKeyId: envelope.keyId, evaluatorKeyId: receipt.keyId, scope: proof.scope, procedureDigest: proof.procedureDigest, consumerDigest: proof.consumerDigest });
+      return { authenticatedAdmissionIdentity, trustStore: issuers, currentTarget, expectedIdentity: { id: proof.bundleId, campaignId: proof.campaignId },
         qualification: { ...Object.fromEntries([...names,'scope'].map(name => [name,proof[name]])), verifyReceipt: async ({ verdict, manifest, candidateDigest }) =>
           candidateDigest === proof.candidateDigest && manifest.id === proof.bundleId && manifest.campaignId === proof.campaignId && [...names,'scope','status'].every(name => verdict[name] === proof[name]) } };
+    } };
+}
+
+/** Sync binding reports configured visibility only. Every authorization rereads the private deployment
+ * records; removal, rotation, policy/scope/version change denies new exposure immediately.
+ * @param {any} online @param {any} servingAdapters */
+export async function createRsiTrustRegistry(online, servingAdapters) {
+  const initial = await loadRsiTrustSnapshot(online, servingAdapters);
+  return { isBound: () => true, registryVersion: initial.registryVersion,
+    async activationPolicy(manifest) { return (await loadRsiTrustSnapshot(online, servingAdapters)).activationPolicy(manifest); },
+    async verificationOptions(envelope) { return (await loadRsiTrustSnapshot(online, servingAdapters)).verificationOptions(envelope); },
+    async validateAdmission(row) {
+      try {
+        const identity = row.authenticatedAdmissionIdentity;
+        if (!identity || identity.scope !== row.surface || identity.procedureDigest !== row.evidenceReferences?.procedureDigest || identity.consumerDigest !== row.evidenceReferences?.consumerDigest) return false;
+        return (await loadRsiTrustSnapshot(online, servingAdapters)).validateIdentity(identity);
+      } catch { return false; }
     } };
 }
