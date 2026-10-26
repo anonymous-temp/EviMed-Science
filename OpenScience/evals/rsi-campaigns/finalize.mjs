@@ -64,6 +64,7 @@ export async function finalizeCampaign({completed,manifest,inputs,files,evidence
  if(purpose!=='production'||q.testOnly===true||q.evidenceScope!=='population-task-family')fail('campaign_evidence_scope_not_release_eligible');
  if(rsiDigest(statistics.registration)!==rsiDigest(inputs.registration.statistics)||statistics.receipt.confirmation_exposed!==false||statistics.receipt.look!==1||!Object.hasOwn(statistics.registration.claims,manifest.claim)||manifest.registration.procedure!==statistics.registration.procedure.id)fail('campaign_statistics_binding_changed');
  const evaluated=await evaluateStatistics({...statistics,receipt:{...statistics.receipt,now,registration_digest:'bound-by-runner'}},{pythonExecutable:statisticsPython,modulePath:statisticsModulePath});
+ if(evaluated.registration_digest!==rsiDigest(statistics.registration))fail('campaign_statistics_digest_mismatch');
  if(evaluated.decision!=='qualified'||evaluated.evidenceScope!=='population-task-family')fail('campaign_statistics_not_qualified');
  if(loadSigners)({publisher,evaluator}=await loadSigners());
  if(!publisher||!evaluator||publisher.keyId===evaluator.keyId||(publisher.publicKey instanceof KeyObject?publisher.publicKey:createPublicKey(publisher.publicKey)).export({type:'spki',format:'der'}).equals((evaluator.publicKey instanceof KeyObject?evaluator.publicKey:createPublicKey(evaluator.publicKey)).export({type:'spki',format:'der'})))fail('campaign_evaluator_not_independent');
