@@ -1,4 +1,8 @@
 import math
+import csv
+import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -46,3 +50,31 @@ def test_prediction_reference_uses_source_malignant_label_and_actual_returned_pr
     assert result['tp'] == 2 and result['fp'] == 1 and result['tn'] == 1
     with pytest.raises(ValueError):
         prediction_reference(source, returned + [returned[0]], id_column='id', probability_column='p')
+
+
+def test_cli_prediction_uses_frozen_source_and_records_exact_bytes(tmp_path):
+    with (FIXTURES / 'breast-cancer.csv').open() as file:
+        source = list(csv.DictReader(file))
+    event = next(row for row in source if row['breast_cancer_yn'] == '0')
+    nonevent = next(row for row in source if row['breast_cancer_yn'] == '1')
+    workspace = tmp_path / 'turn-0/workspace'
+    workspace.mkdir(parents=True)
+    (workspace / 'predictions.csv').write_text(f"row,p\n{event['']},0.9\n{nonevent['']},0.2\n")
+    result = workspace / 'results.json'
+    result.write_text('{"auc":1,"n":2}')
+    binding = {'turns': [{'index': 0, 'referenceKind': 'prediction', 'results': 'results.json',
+        'predictions': 'predictions.csv', 'predictionOptions': {'id_column': 'row', 'source_id_column': '', 'probability_column': 'p'},
+        'required': ['auc', 'n'], 'bindings': [{'reference': 'auc', 'source': ['auc']}, {'reference': 'n', 'source': ['n']}]}]}
+    bindings = tmp_path / 'bindings.json'
+    bindings.write_text(json.dumps(binding))
+    out = tmp_path / 'verdict.json'
+    command = [sys.executable, str(Path(__file__).with_name('judge.py')), '--artifacts', str(tmp_path), '--bindings', str(bindings), '--out', str(out)]
+    subprocess.run(command, check=True)
+    before = json.loads(out.read_text())
+    assert before['passed']
+    assert {'numpy', 'scipy', 'scikit-learn'} <= set(before['versions'])
+    assert {'bindings', 'judge', 'fixture', 'results', 'predictions'} <= {item['role'] for item in before['inputs']}
+    result.write_text('{"auc":1, "n":2}\n')
+    subprocess.run(command, check=True)
+    after = json.loads(out.read_text())
+    assert after['passed'] and before['inputs'] != after['inputs']
