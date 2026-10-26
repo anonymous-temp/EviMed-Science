@@ -21,6 +21,21 @@ async function fixture(database,owner){
 /** @param {(database:any,owner:string)=>Promise<void>} operation */
 async function withDatabase(operation){const database=new ControlPlaneDatabase({databaseUrl:url,databasePoolMax:4,databaseConnectionTimeoutMs:2000}),owner=`rsi_import_${randomUUID().replaceAll('-','')}`;try{await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES ($1,'RSI importer test','development')",[owner]);await operation(database,owner)}finally{await database.query('DELETE FROM evimed_control.users WHERE id=$1',[owner]);await database.close()}}
 const skip={skip:!url&&'Disposable localhost PostgreSQL required'}
+test('publication adapters reuse the importer transaction instead of opening a nested surface lock',skip,()=>withDatabase(async(database,owner)=>{
+ const f=await fixture(database,owner),seen=new Set()
+ for(const method of ['inspect','publish','rollback']){
+  const original=f.options.adapters.policy[method]
+  f.options.adapters.policy[method]=async input=>{
+   assert.equal(typeof input.transactionClient?.query,'function',`${method} must receive its owning transaction`)
+   await input.transactionClient.query('SELECT 1')
+   seen.add(method)
+   return original(input)
+  }
+ }
+ const importer=new RsiCampaignImporter(f.options),row=await importer.importBundle(f.envelope)
+ await importer.observe('bundle',{trusted:true,id:'fenced-critical',operationId:row.operationId,candidateDigest:rsiDigest(f.files),arm:'shadow',revision:'candidate',day:'2026-10-26',outcome:'critical',criticalCode:'corrupt-bytes'})
+ assert.deepEqual([...seen].sort(),['inspect','publish','rollback'])
+}))
 test('invalid signature and unbound import cause no journal or adapter effects',skip,()=>withDatabase(async(database,owner)=>{
  const f=await fixture(database,owner)
  assert.equal((await f.importer.importBundle({...f.envelope,payload:f.envelope.payload+' '})).state,'rejected')
