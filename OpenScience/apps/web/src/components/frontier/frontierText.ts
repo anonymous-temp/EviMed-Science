@@ -481,10 +481,13 @@ export function hotRowMeta(event: Pick<FrontierHotEvent, "sourceCount72h" | "pri
 
 const WINDOW_SPANS: Readonly<Record<FrontierHotWindow, string>> = Object.freeze({ current: "近 72 小时", week: "近 7 天", month: "近 30 天" });
 
-/** 「近 72 小时 · 22:40 更新」: the span a ranking covers and when it was taken. */
+/** 「（北京时间）」: whose clock a stamp that states a time is read on, said once on the stamp (c5-reader, 2026-10-26). */
+export const FEED_ZONE_NOTE = `（${zoneName(FEED_TIME_ZONE)}）`;
+
+/** 「近 72 小时 · 22:40 更新（北京时间）」: the span a ranking covers and when it was taken. */
 export function hotBoardStamp(window: FrontierHotWindow, takenAt: string | null): string {
   const taken = clock(takenAt);
-  return taken ? `${WINDOW_SPANS[window]} · ${taken} 更新` : WINDOW_SPANS[window];
+  return taken ? `${WINDOW_SPANS[window]} · ${taken} 更新${FEED_ZONE_NOTE}` : WINDOW_SPANS[window];
 }
 
 /**

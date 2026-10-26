@@ -232,7 +232,8 @@ describe("the hot list's words", () => {
   });
 
   it("stamps a ranking with its span and the time it was taken", () => {
-    expect(hotBoardStamp("current", at(22, 22, 40))).toBe("近 72 小时 · 22:40 更新");
+    // The stamp states a clock, so it says whose: Beijing time, once.
+    expect(hotBoardStamp("current", at(22, 22, 40))).toBe("近 72 小时 · 22:40 更新（北京时间）");
     expect(hotBoardStamp("week", null)).toBe("近 7 天");
   });
 });

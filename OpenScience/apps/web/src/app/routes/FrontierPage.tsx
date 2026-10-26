@@ -888,7 +888,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       token: narrow && narrowedLabel ? { label: `只看：${narrowedLabel}`, onRemove: showAllFollows } : null,
       followList: narrow ? (close) => followList(close, () => { close(); setManageFollows(true); }) : undefined,
     },
-    issue: dailyControls(view === "weekly" ? weekly : daily, { weekly: view === "weekly", onDay: view === "weekly" ? openWeek : openDay }),
+    issue: dailyControls(view === "weekly" ? weekly : daily, { weekly: view === "weekly", onDay: view === "weekly" ? openWeek : openDay, beside: !narrow }),
     track: {
       filters: trackControls({ segment: trackSegment, onSegment: setTrackSegment, agency: trackAgency, onAgency: (next) => setTrackFilter("agency", next), approvals: approvals.state,
         specialty: trackSpecialty, onSpecialty: (next) => setTrackFilter("guidelineSpecialty", next), guidelines: guidelines.state }),

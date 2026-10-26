@@ -1844,9 +1844,13 @@ export async function fetchFrontierEvent(eventId: string, order?: FrontierEventO
   return event;
 }
 
-export function listFrontierDailies(limit = 30, day?: string | null): Promise<FrontierDailyArchive | null> {
+/**
+ * The archive, newest first. `day` asks for the publication outcome of that day; `before` asks for the issues before that day — the
+ * page after a full one (the archive is read sixty at a time).
+ */
+export function listFrontierDailies(limit = 30, day?: string | null, before?: string | null): Promise<FrontierDailyArchive | null> {
   return optional(async () => {
-    const raw = record(await productRequest<unknown>(`/frontier/dailies?limit=${Math.min(60, Math.max(1, Math.floor(limit)))}${day ? `&day=${encodeURIComponent(day)}` : ""}`)) ?? {};
+    const raw = record(await productRequest<unknown>(`/frontier/dailies?limit=${Math.min(60, Math.max(1, Math.floor(limit)))}${day ? `&day=${encodeURIComponent(day)}` : ""}${before ? `&before=${encodeURIComponent(before)}` : ""}`)) ?? {};
     const dailies = (Array.isArray(raw.dailies) ? raw.dailies : Array.isArray(raw.items) ? raw.items : []).flatMap((entry) => {
       const row = record(entry);
       const day = text(row?.day);

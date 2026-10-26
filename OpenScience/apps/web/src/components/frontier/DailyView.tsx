@@ -1,5 +1,5 @@
 import { rememberFrontierPosition, useFrontierOrigin } from "./frontierReadingState";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router";
 import { CalendarDays, ChevronDown, Copy } from "lucide-react";
 import {
@@ -19,12 +19,17 @@ import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { Menu } from "@/components/ui/Menu";
+import { navItemClasses } from "@/components/ui/NavItem";
 import type { ToolbarFilter } from "@/components/ui/Toolbar";
+import { useNarrow } from "@/lib/useMediaQuery";
 import { FrontierSkeleton } from "./FrontierSkeleton";
 import { INLINE_ACTION, dailyMeta, rankLabel, scheduleLabel, shortDate } from "./frontierText";
+import { archiveEntryName, archiveMonths, dayInMonth, issuedStamp, monthKey, topThings, type TopThing } from "./frontierRecord";
 
-/** 往期 lists this many issues: two weeks, a menu that fits a laptop screen. */
+/** 往期 in a menu (the weekly's, an empty day's, a phone's without months) lists this many issues: two weeks, a menu that fits a laptop screen. */
 const ARCHIVE_SHOWN = 14;
+/** The archive is read this many issues at a time (the server's most): two months, and 「更早的日报」 reads the next page. */
+const ARCHIVE_PAGE = 60;
 
 /** The daily's archive and the issue on screen, read together. */
 export interface DailyState {
@@ -39,12 +44,26 @@ export interface DailyState {
   day?: string | null;
   /** When the server publishes, from its own configuration; absent from a server that names none. */
   schedule?: FrontierDailySchedule | null;
+  /** The month a phone's 往期 lists (`null`: the open issue's), for the 「月份」 choice that narrows it. Absent: no months are offered. */
+  browse?: { month: string | null; setMonth: (month: string | null) => void };
+  /** Older issues than the archive holds so far, when there may be some: the column's 「更早的日报」. */
+  more?: { loading: boolean; load: () => void } | null;
+}
+
+/** The archive's issues of two reads, newest first, each day once. */
+function mergeArchive(held: FrontierDailySummary[] | null, read: readonly FrontierDailySummary[]): FrontierDailySummary[] {
+  const byDay = new Map((held ?? []).map((entry) => [entry.day, entry]));
+  for (const entry of read) byDay.set(entry.day, entry);
+  return [...byDay.values()].sort((a, b) => b.day.localeCompare(a.day));
 }
 
 /**
  * The archive, then the issue asked for (`?day=`) or the newest one. The
  * archive answering 404 is the whole daily not existing yet, and the view says
  * so instead of failing.
+ *
+ * The archive is read sixty issues at a time and kept while the reader moves from issue to issue (a read of the first page again
+ * adds to what is held and takes nothing away), so the months a reader opened with 「更早的日报」 stay open on the issue they chose.
  */
 export function useFrontierDaily(day: string | null, enabled: boolean): DailyState {
   const [index, setIndex] = useState<FrontierDailySummary[] | null>(null);
@@ -54,23 +73,52 @@ export function useFrontierDaily(day: string | null, enabled: boolean): DailySta
   const [publication, setPublication] = useState<DailyState["publication"]>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const [older, setOlder] = useState<"maybe" | "none" | "loading">("none");
+  const [browseMonth, setBrowseMonth] = useState<string | null>(null);
+  const paged = useRef(false);
   useEffect(() => {
     if (!enabled) return;
     let active = true;
     setLoading(true);
     setError(null);
+    setBrowseMonth(null);
     (async () => {
-      const archive = await listFrontierDailies(30, day);
+      const archive = await listFrontierDailies(ARCHIVE_PAGE, day);
       const wanted = day ?? archive?.publication?.day ?? archive?.dailies[0]?.day ?? null;
       const found = wanted && archive !== null ? await fetchFrontierDaily(wanted) : null;
       return { archive, found };
     })().then(
-      ({ archive, found }) => { if (active) { setIndex(archive?.dailies ?? null); setSchedule(archive?.schedule ?? null); setIssue(found); setPublication(archive?.publication); } },
+      ({ archive, found }) => {
+        if (!active) return;
+        setIndex((held) => (archive ? mergeArchive(held, archive.dailies) : null));
+        // Whether there may be older issues is known from the first page only; a page read again must not forget a page after it.
+        if (!paged.current) setOlder(archive && archive.dailies.length >= ARCHIVE_PAGE ? "maybe" : "none");
+        setSchedule(archive?.schedule ?? null);
+        setIssue(found);
+        setPublication(archive?.publication);
+      },
       (caught: unknown) => { if (active) setError(frontierErrorMessage(caught)); },
     ).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [day, enabled, attempt]);
-  return { index, issue, loading, error, retry: () => setAttempt((value) => value + 1), day, schedule, publication };
+  const loadOlder = () => {
+    const last = index?.at(-1)?.day;
+    if (!last || older !== "maybe") return;
+    setOlder("loading");
+    paged.current = true;
+    listFrontierDailies(ARCHIVE_PAGE, null, last).then(
+      (page) => {
+        setIndex((held) => mergeArchive(held, page?.dailies ?? []));
+        setOlder(page && page.dailies.length >= ARCHIVE_PAGE ? "maybe" : "none");
+      },
+      (caught: unknown) => { setOlder("maybe"); toast.error(frontierErrorMessage(caught)); },
+    );
+  };
+  return {
+    index, issue, loading, error, retry: () => setAttempt((value) => value + 1), day, schedule, publication,
+    browse: { month: browseMonth, setMonth: setBrowseMonth },
+    more: older === "none" ? null : { loading: older === "loading", load: loadOlder },
+  };
 }
 
 /**
@@ -117,20 +165,48 @@ function weekRange(day: string): string {
 }
 
 /**
+ * Whether the daily's archive stands beside the issue, as a column of months: a daily (the weekly keeps its menu), on a screen with
+ * the room, with more than the one issue to go to. Then the toolbar has no 往期 of its own — it would be the same list twice.
+ */
+export function archiveBeside(index: readonly FrontierDailySummary[] | null, { weekly, narrow }: { weekly: boolean; narrow: boolean }): boolean {
+  return !weekly && !narrow && index !== null && index.length > 1;
+}
+
+/** The value of the 「月份」 choice that reads the next page of the archive. */
+const OLDER_MONTHS = "older";
+
+/**
  * The controls of the issue on screen, for the page's toolbar (R19, audit D C1c): 「分类」 (the lanes with their counts, each one tap
  * from its heading), 「往期」 (the issues before) and 「复制」. They were a second group of controls in the issue's own header, beside
  * the page's 日报 / 周报 chips; there is one row of controls now, and it stays at the top while the issue scrolls — which is what the
  * sticky header was for. A day with no issue has none of them (its past issues are the empty state's own button).
+ *
+ * 往期 is the toolbar's only where the archive is not beside the issue (`beside`, the column of `DailyIssue`): the weekly's, and a
+ * daily's on a phone, where it is cut into months — 「月份」 first, and 往期 lists that month's issues — so two months of issues are not
+ * one list of sixty.
  */
-export function dailyControls(state: DailyState, { weekly = false, onDay }: { weekly?: boolean; onDay: (day: string) => void }): { filters: ToolbarFilter[]; actions: ReactNode } {
+export function dailyControls(state: DailyState, { weekly = false, onDay, beside = false }: { weekly?: boolean; onDay: (day: string) => void; beside?: boolean }): { filters: ToolbarFilter[]; actions: ReactNode } {
   const issue = state.issue;
   if (!issue || state.error || state.index === null) return { filters: [], actions: null };
   const lanes = issueLanes(issue);
-  const archive = state.index.slice(0, ARCHIVE_SHOWN);
+  const months = weekly ? [] : archiveMonths(state.index);
+  const browse = state.browse;
+  const column = beside && !weekly;
+  const split = !column && months.length > 1 && browse !== undefined;
+  // The month a phone's 往期 lists: the one chosen, else the open issue's.
+  const month = split ? months.find((entry) => entry.key === (browse.month ?? monthKey(issue.day))) ?? months[0] : null;
+  const archive = month ? month.entries : state.index.slice(0, ARCHIVE_SHOWN);
+  const past = column || archive.length === 0 ? [] : [{ kind: "select" as const, label: "往期", options: archive.map((entry) => ({ value: entry.day, label: weekly ? weekRange(entry.day) : shortDate(entry.day) })), value: null, onChange: (day: string | null) => { if (day) onDay(day); } }];
   return {
     filters: [
       ...(lanes.length >= 3 ? [{ kind: "select" as const, label: "分类", options: lanes.map((lane) => ({ value: lane.id, label: `${lane.title} ${lane.count}` })), value: null, onChange: (id: string | null) => { if (id) goToLane(id); } }] : []),
-      ...(archive.length > 0 ? [{ kind: "select" as const, label: "往期", options: archive.map((entry) => ({ value: entry.day, label: weekly ? weekRange(entry.day) : shortDate(entry.day) })), value: null, onChange: (day: string | null) => { if (day) onDay(day); } }] : []),
+      ...(split ? [{
+        kind: "select" as const, label: "月份",
+        options: [...months.map((entry) => ({ value: entry.key, label: `${entry.label} · ${entry.entries.length} 期` })), ...(state.more ? [{ value: OLDER_MONTHS, label: "更早的日报" }] : [])],
+        value: null,
+        onChange: (key: string | null) => { if (key === OLDER_MONTHS) state.more?.load(); else if (key) browse.setMonth(key); },
+      }] : []),
+      ...past,
     ],
     actions: (
       <Button variant="text" size="sm" disabled={!issue.markdown} onClick={() => void copyMarkdown(issue.markdown)}>
@@ -157,7 +233,7 @@ export function dailyControls(state: DailyState, { weekly = false, onDay }: { we
 export interface DigestExpansion { ids: string[]; onExpand: (id: string) => void }
 
 export function DailyIssue({ state, onDay, weekly = false, laneLimit, expansion }: { state: DailyState; onDay: (day: string) => void; weekly?: boolean; laneLimit?: number; expansion?: DigestExpansion }) {
-  const origin = useFrontierOrigin();
+  const narrow = useNarrow();
   if (state.loading && !state.issue) return <FrontierSkeleton />;
   if (state.error) return <LoadError message={state.error} onRetry={state.retry} />;
   // Nothing to read here is not a dead end: the page's own feed is a link away (DESIGN.md rule 8).
@@ -190,16 +266,39 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit, expansion 
     );
   }
   const issue = state.issue;
-  const { previous, next } = neighbours(issue, state.index);
-  const leadText = issue.lead ? issue.lead.text ?? issue.lead.item.summary : null;
-  return (
+  const issued = issuedStamp(issue.generatedAt, issue.day);
+  const body = (
     <article aria-labelledby="frontier-daily-title">
       <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b border-border pb-2">
         <h2 id="frontier-daily-title" className="text-body font-semibold leading-6 text-text">{weekly ? weekRange(issue.day) : shortDate(issue.day)}</h2>
-        <span className="text-caption tabular-nums text-text-3">{dailyMeta(issue)}</span>
+        <span className="text-caption tabular-nums text-text-3">{[dailyMeta(issue), issued].filter(Boolean).join(" · ")}</span>
       </header>
 
-      {issue.lead && (
+      <IssueBody issue={issue} state={state} weekly={weekly} laneLimit={laneLimit} expansion={expansion} onDay={onDay} />
+    </article>
+  );
+  return archiveBeside(state.index, { weekly, narrow })
+    ? (
+      <div className="grid grid-cols-[12rem_minmax(0,1fr)] gap-8">
+        <DailyArchive index={state.index} current={issue.day} onDay={onDay} more={state.more ?? null} />
+        {body}
+      </div>
+    ) : body;
+}
+
+/** What follows an issue's header: its three things (or its lead), the safety alerts, the lanes, the reader's own follows, the AI minute and the way to the issues beside it. */
+function IssueBody({ issue, state, weekly, laneLimit, expansion, onDay }: { issue: FrontierDaily; state: DailyState; weekly: boolean; laneLimit?: number; expansion?: DigestExpansion; onDay: (day: string) => void }) {
+  const origin = useFrontierOrigin();
+  const { previous, next } = neighbours(issue, state.index ?? []);
+  const leadText = issue.lead ? issue.lead.text ?? issue.lead.item.summary : null;
+  // 先看三件事: the issue's lead and the two items its lanes score highest — the lead stands in them, so it is not drawn twice. A week keeps its
+  // headline, and a day with fewer than three to show keeps its lead as it was.
+  const things = weekly ? null : topThings(issue);
+  return (
+    <>
+      {things && <TopThings things={things} />}
+
+      {!things && issue.lead && (
         <section aria-label="头条" className="mt-5">
           {/* Feed and digest headlines share the same addressed reader. */}
           <h3 className="max-w-measure-body text-title font-semibold text-text"><ArticleLink item={issue.lead.item}>{issue.lead.item.title}</ArticleLink></h3>
@@ -237,7 +336,63 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit, expansion 
           {next ? <Button variant="text" onClick={() => onDay(next)}>{weekly ? "后一期 ›" : "后一日 ›"}</Button> : <span />}
         </nav>
       )}
-    </article>
+    </>
+  );
+}
+
+/**
+ * 往期 beside the issue, on a screen with the room: the archive cut into months, newest first, each issue a day with its number of
+ * items, the open one marked. It stays in sight under the page's band while the issue scrolls and scrolls on its own when it is long. A
+ * full page of issues ends in 「更早的日报」, which reads the next.
+ */
+function DailyArchive({ index, current, onDay, more }: { index: FrontierDailySummary[]; current: string; onDay: (day: string) => void; more: DailyState["more"] }) {
+  const column = useRef<HTMLElement>(null);
+  // The open issue is in sight in the column when it opens (a month down the list is a screen down): the column's own scroll, never the
+  // page's — `scrollIntoView` would move the page's ground too. Only when the issue changes, so the reader's own scrolling in it is left alone.
+  useEffect(() => {
+    const box = column.current;
+    const open = box?.querySelector<HTMLElement>("[aria-current='date']");
+    if (!box || !open) return;
+    if (open.offsetTop < box.scrollTop || open.offsetTop + open.offsetHeight > box.scrollTop + box.clientHeight) {
+      box.scrollTop = Math.max(0, open.offsetTop - (box.clientHeight - open.offsetHeight) / 2);
+    }
+  }, [current]);
+  return (
+    <nav ref={column} aria-label="往期日报" data-daily-archive="" className="sticky top-[calc(var(--page-chrome-h,0px)+1rem)] max-h-[calc(100vh-var(--page-chrome-h,0px)-2rem)] space-y-4 self-start overflow-y-auto">
+      {archiveMonths(index).map((month) => (
+        <div key={month.key} role="group" aria-label={month.label}>
+          <p aria-hidden="true" className="px-2 pb-1 text-caption text-text-3">{month.label}</p>
+          <ul className="space-y-0.5">
+            {month.entries.map((entry) => (
+              <li key={entry.day}>
+                <button type="button" aria-label={archiveEntryName(entry)} aria-current={entry.day === current ? "date" : undefined} className={navItemClasses({ current: entry.day === current })} onClick={() => onDay(entry.day)}>
+                  <span className="min-w-0 flex-1 truncate">{dayInMonth(entry.day)}</span>
+                  {entry.itemCount > 0 && <span className="shrink-0 text-caption tabular-nums text-text-3">{entry.itemCount}</span>}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+      {more && <Button variant="text" size="sm" className="px-2" loading={more.loading} onClick={more.load}>更早的日报</Button>}
+    </nav>
+  );
+}
+
+/**
+ * 先看三件事: the three things an issue is read for first, each one row of the lanes' own kind — its title, its 导读 and its source —
+ * and, for the lead, the way to its event. Numbered like the lanes' rows, since the order is the issue's.
+ */
+function TopThings({ things }: { things: TopThing[] }) {
+  return (
+    <section aria-labelledby="daily-top-things" className="mt-5">
+      <h3 id="daily-top-things" className="flex items-baseline gap-2">
+        <span className="text-body font-semibold text-text">先看三件事</span>
+      </h3>
+      <ol aria-label="先看三件事" className="mt-1">
+        {things.map((thing, index) => <DailyRow key={thing.item.id} item={thing.item} number={index + 1} safety={false} summary={thing.text} clamp="line-clamp-2" event={thing.event} />)}
+      </ol>
+    </section>
   );
 }
 
@@ -318,18 +473,29 @@ function DailySection({ id, title, items, safety = false, limit, expansion, expa
   );
 }
 
-/** A digest row keeps its source and opens the shared article reader. */
-function DailyRow({ item, number, safety }: { item: FrontierItem; number: number; safety: boolean }) {
+/**
+ * A digest row keeps its source and opens the shared article reader. `summary` is the sentence under the title (the item's 导读 unless
+ * the issue wrote another), `clamp` how many lines of it show, and `event` the lead's way to its event page.
+ */
+function DailyRow({ item, number, safety, summary = item.summary, clamp = "line-clamp-3", event = null }: {
+  item: FrontierItem; number: number; safety: boolean; summary?: string | null; clamp?: string; event?: { id: string; title: string } | null;
+}) {
+  const origin = useFrontierOrigin();
   return (
     <li className="flex gap-2 border-b border-border py-3">
       <span className="w-8 shrink-0 text-caption leading-6 tabular-nums text-text-3">{rankLabel(number)}</span>
       <div className="min-w-0 flex-1">
         <p data-row-title data-prose="" className="text-body font-semibold leading-6 text-text"><ArticleLink item={item}>{item.title}</ArticleLink></p>
-        {!safety && item.summary && <p data-prose="" className="mt-1 line-clamp-3 max-w-measure text-ui text-text-2">{item.summary}</p>}
+        {!safety && summary && <p data-prose="" className={cn("mt-1 max-w-measure text-ui text-text-2", clamp)}>{summary}</p>}
         <div className="mt-1 flex items-center gap-1.5 text-caption text-text-3">
           <span className="min-w-0 truncate">{item.source.name}</span>
           {/* The feed card's own look for this action: a sized button here was the page's tenth kind of control. */}
           <ArticleLink item={item} className={cn(INLINE_ACTION, "px-1 text-accent")}>详情</ArticleLink>
+          {event && (
+            <Link state={origin} onClick={rememberFrontierPosition} to={`/app/frontier/events/${encodeURIComponent(event.id)}`} className={cn(INLINE_ACTION, "px-1 text-accent")}>
+              事件页 ›
+            </Link>
+          )}
         </div>
       </div>
     </li>
