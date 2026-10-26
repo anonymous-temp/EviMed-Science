@@ -34,8 +34,10 @@ Files: `OpenScience/evals/statistical-analysis/live/`, existing capability accep
 
 - [x] Update statistical skill, capability version, audit spec and `OpenScience/PROGRESS.md` with measured results and environment limits.
 - [x] Run statistical suite, capability contracts/copy parity, changed-file checks and independent code reviews. Resolve findings.
-- [ ] Commit and push `codex/research-tools-data-analysis-20261026`; verify the remote SHA. Do not deploy or modify production data.
+- [x] Commit and push `codex/research-tools-data-analysis-20261026`; verify the remote SHA. Do not deploy or modify production data.
 
 ## Verification notes
 
 The real suite ran five cases and eleven turns. Primary numbers, state reuse and report interpretation have independent evidence in the 2026-10-26 multi-turn report. Original failures are preserved and targeted later runs close them; the source is not described as production-accepted. Final registered suite: 179 Python and 11 Node tests. Deployment-contract checks: 75 macOS tests plus the remaining GNU-Bash-specific test in Linux. Independent reviewers approved the implementations and evaluator corrections.
+
+Push verified: the implementation/evidence commit `b644aa2f41ee9f7cf04e11b6943dcedd1f58fb7b` is on GitHub branch `codex/research-tools-data-analysis-20261026`. All five final acceptance accounts were deleted; the local harness, numerical replay service and temporary Postgres cluster were stopped. Production was not deployed.
