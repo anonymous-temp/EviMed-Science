@@ -544,6 +544,15 @@ describe("a paper whose text is its structured abstract", () => {
 });
 
 describe("a Chinese news article", () => {
+  it("shows no source title under a Chinese title the model wrote from it: the rewrite took the hook and the site name away", async () => {
+    wide();
+    client.fetchFrontierItem.mockResolvedValue(detail(rawChineseNews({ title: "刘建民团队两项卒中取栓研究同期发表于《新英格兰医学杂志》", titleZh: "刘建民团队两项卒中取栓研究同期发表于《新英格兰医学杂志》",
+      titleRaw: "刘建民教授团队两项原创卒中研究同日登顶《新英格兰医学杂志》-人民日报欧洲网-人民日报海外版欧洲刊_人民日报社_海外华文媒体门户" })));
+    show("/app/frontier/items/cn-news-0001");
+    expect(await screen.findByRole("heading", { level: 1, name: "刘建民团队两项卒中取栓研究同期发表于《新英格兰医学杂志》" })).toBeInTheDocument();
+    expect(screen.queryByText(/人民日报欧洲网/)).not.toBeInTheDocument();
+  });
+
   it("opens on its AI view, has its text in Chinese behind 查看正文 with no language switch, its author beside its institution, and a specialty topic that narrows the feed", async () => {
     wide();
     client.fetchFrontierItem.mockResolvedValue(detail(rawChineseNews()));

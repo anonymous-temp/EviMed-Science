@@ -165,8 +165,9 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
     } catch (error) { toast.error(frontierErrorMessage(error)); }
   };
   const { more, reports, research, ask } = useItemActions(item, { reader: true, onHide: () => setReasons((value) => value + 1) });
-  // An original title beside a translated one, for an article; a post's 「title」 is its own first words.
-  const originalTitle = !isSocialItem(item) && item.titleZh && item.titleRaw !== item.titleZh ? item.titleRaw : null;
+  // An original title beside a translated one, for an article in another language; a post's 「title」 is its own first words. A Chinese
+  // source's own title is not shown under the title written from it: the rewrite is what took its hook, label or site name away.
+  const originalTitle = !isSocialItem(item) && !/^zh/i.test(item.lang) && item.titleZh && item.titleRaw !== item.titleZh ? item.titleRaw : null;
   // An open text of three sections or more has its contents: in the right column, or folded above the text on a narrow screen.
   const sections = showText && item.body ? readerOutline(item.body, language, prefix) : [];
   const outline = sections.length >= 3 ? sections : [];
