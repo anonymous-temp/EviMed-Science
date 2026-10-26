@@ -7,6 +7,7 @@ import { safeWebHref } from "@/lib/readPages";
 import { webErrorMessage, WebApiError } from "@/lib/apiClient";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
+import { FactList } from "@/components/ui/FactList";
 import { Section } from "@/components/ui/Section";
 import { Note } from "@/components/ui/Note";
 import { useGeoLoad } from "./geoProjectData";
@@ -186,18 +187,25 @@ export function DiagnosisReview({ geoId, data, project, actions, onAssessmentCha
         const feedback = feedbackRows.filter(row => geoStatementAssessmentIdentity(row.original) === geoStatementAssessmentIdentity(statement));
         const statementKey = geoStatementAssessmentIdentity(statement);
         return <section key={statementKey} className="flex flex-col gap-3 border-b border-border pb-4">
-          <p className="text-body text-text">“{statement.text}”</p>
-          <p className="text-ui text-text-2">原判定：{prior ? verdictWords[prior.verdict] : "较早判定未载入"} · 当前判定：{current ? verdictWords[current.verdict] : "本次复核未覆盖此句"}</p>
-          <p className="text-ui text-text-2">适用条件：{applicable ? [applicable.population, ...Object.entries(applicable.elements ?? {}).map(([key, value]) => `${key}：${String(value)}`)].filter(Boolean).join("；") || "尚未记录" : "尚未记录"}</p>
-          {claimDetail && <p className="text-ui text-text-2">依据：{safeWebHref(claimDetail.sourceRef) ? <a className="text-link" href={safeWebHref(claimDetail.sourceRef)!} target="_blank" rel="noreferrer">{claimDetail.sourceLabel || "查看引用来源"}</a> : claimDetail.sourceLabel || "原始证据"} · 正确说法：{claimDetail.statement}</p>}
-          <p className="text-ui text-text-2">依据原文：{current?.evidence ?? prior?.evidence ?? "尚无可核对的引文"}</p>
+          {/* The answer's own words, at the answer's size; then the record of the sentence as the one key / value list (no rule inside
+            * the statement's block, whose rule is under it). Loose paragraphs here were six sentences standing alone on the fixture walk. */}
+          <p data-prose="" className="text-body text-text">“{statement.text}”</p>
+          <FactList ruled={false} rows={[
+            { label: "判定", value: `原判定：${prior ? verdictWords[prior.verdict] : "较早判定未载入"} · 当前判定：${current ? verdictWords[current.verdict] : "本次复核未覆盖此句"}` },
+            { label: "适用条件", value: applicable ? [applicable.population, ...Object.entries(applicable.elements ?? {}).map(([key, value]) => `${key}：${String(value)}`)].filter(Boolean).join("；") || "尚未记录" : "尚未记录" },
+            ...(claimDetail ? [
+              { label: "依据", value: safeWebHref(claimDetail.sourceRef) ? <a className="text-link" href={safeWebHref(claimDetail.sourceRef)!} target="_blank" rel="noreferrer">{claimDetail.sourceLabel || "查看引用来源"}</a> : claimDetail.sourceLabel || "原始证据" },
+              { label: "正确说法", value: claimDetail.statement },
+            ] : []),
+            { label: "依据原文", value: <span data-prose="">{current?.evidence ?? prior?.evidence ?? "尚无可核对的引文"}</span> },
+          ]} />
           {canEdit && canRun && ready.assessmentVersion && current && <Button variant="secondary" size="sm" onClick={() => { setEditing(statementKey); setNote(""); setRequestKey(crypto.randomUUID()); }}>反馈并复核判定</Button>}
           {editing === statementKey && <div className="flex flex-col gap-2">
             <Textarea label="反馈理由与适用条件" value={note} maxLength={4000} onChange={event => setNote(event.target.value)} />
             <div className="flex gap-2"><Button size="sm" loading={busy} disabled={!note.trim()} onClick={() => void send(statement)}>提交复核</Button><Button variant="text" size="sm" onClick={() => setEditing(null)}>取消</Button></div>
           </div>}
           {canConverse && <div className="flex flex-wrap gap-2"><Button variant="secondary" size="sm" disabled={handing} onClick={() => void act(statement, "conclusion")}>更新项目结论或文章</Button><Button variant="secondary" size="sm" disabled={handing} onClick={() => void act(statement, "treatment")}>创建出处或问题群处置任务</Button></div>}
-          <ErrorCorrections geoId={geoId} project={project} corrections={actions.filter(action => action.need.errorIds.some(id => data.errors.some(row => row.id === id && geoClaimAssessmentIdentity(row) === geoClaimAssessmentIdentity(statement))))} canRun={canConverse} onAsk={() => void act(statement, "conclusion")} />
+          <ErrorCorrections inline geoId={geoId} project={project} corrections={actions.filter(action => action.need.errorIds.some(id => data.errors.some(row => row.id === id && geoClaimAssessmentIdentity(row) === geoClaimAssessmentIdentity(statement))))} canRun={canConverse} onAsk={() => void act(statement, "conclusion")} />
           {history.length > 1 && <div className="text-caption text-text-3">{history.slice().reverse().map((entry) => { const item = (entry.assessment?.statements ?? []).find(row => geoStatementAssessmentIdentity(row) === geoStatementAssessmentIdentity(statement)); return <p key={entry.version}>{entry.assessment.judgedAt ? `${new Date(entry.assessment.judgedAt).toLocaleString("zh-CN")} ` : "历史"}判定：{item ? verdictWords[item.verdict] : "未覆盖此句"}</p>; })}</div>}
           {feedback.map(row => <div key={row.id} className="text-ui text-text-2"><p>反馈：{row.note}</p><p>{statusWords[row.status] ?? "复核状态未知"} · 提交时原判定：{verdictWords[row.original.verdict]}</p>{row.result && <p>复核结果：{verdictWords[row.result.statements.find(item => geoStatementAssessmentIdentity(item) === geoStatementAssessmentIdentity(row.original))?.verdict ?? "unverifiable"]}</p>}</div>)}
         </section>;

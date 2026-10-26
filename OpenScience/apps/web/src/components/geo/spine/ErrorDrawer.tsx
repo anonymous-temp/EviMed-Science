@@ -144,22 +144,33 @@ export function ErrorCorrections({
   corrections,
   canRun,
   onAsk,
+  inline = false,
 }: {
   geoId: string;
   project: GeoProject;
   corrections: readonly GeoAction[];
   canRun: boolean;
   onAsk: () => void;
+  /**
+   * Part of a sentence's record (an answer's 「逐句诊断与反馈」, one per sentence): no section and no heading of its own — a 「纠错稿」
+   * section per sentence was the same landmark twice on a page (axe landmark-unique) and a heading pair of its own (the fixture walk).
+   */
+  inline?: boolean;
 }) {
-  if (corrections.length === 0) {
-    return (
-      <Section title="纠错稿" level="sub">
-        <Note action={canRun ? <Button variant="secondary" size="sm" onClick={onAsk}>写纠错稿</Button> : undefined}>
-          这条说法还没有纠错稿。
-        </Note>
-      </Section>
+  const none = (
+    <Note action={canRun ? <Button variant="secondary" size="sm" onClick={onAsk}>写纠错稿</Button> : undefined}>
+      这条说法还没有纠错稿。
+    </Note>
+  );
+  if (inline) {
+    return corrections.length === 0 ? none : (
+      <div>
+        <p className="mb-1 text-caption text-text-3">纠错稿 · {corrections.length} 条行动</p>
+        <CorrectionList geoId={geoId} project={project} corrections={corrections} />
+      </div>
     );
   }
+  if (corrections.length === 0) return <Section title="纠错稿" level="sub">{none}</Section>;
   return (
     <Section title="纠错稿" count={`${corrections.length} 条行动`} level="sub">
       <CorrectionList geoId={geoId} project={project} corrections={corrections} />

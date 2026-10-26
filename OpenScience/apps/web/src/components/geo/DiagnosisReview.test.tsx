@@ -21,6 +21,21 @@ beforeEach(() => {
   conversation.open.mockClear(); conversation.ensure.mockClear();
 });
 const renderReview = (viewer = false) => render(<MemoryRouter><DiagnosisReview geoId="geo_1" data={answerFilled} project={{ ...geoProject(), ...(viewer ? { access: { roles: ["viewer"], abilities: ["read"], owner: false } } : {}) }} actions={[]} /></MemoryRouter>);
+it("is a record per sentence: the answer's words, then its facts as the one key / value list, its corrections inside it with no section of their own", async () => {
+  renderReview();
+  const verdict = await screen.findByText(/原判定：讲错 · 当前判定：讲错/);
+  // The facts are rows of a list, not sentences standing alone (the fixture walk of b559d4b7e counted six on an answer).
+  expect(verdict.tagName).toBe("DD");
+  expect(verdict.previousElementSibling).toHaveTextContent("判定");
+  expect(screen.getByText("适用条件").tagName).toBe("DT");
+  expect(screen.getByText("依据原文").tagName).toBe("DT");
+  expect(screen.getByText("“An exact answer sentence.”")).toHaveAttribute("data-prose");
+  // A 「纠错稿」 region per sentence was the same landmark twice on a page (axe landmark-unique), and a heading pair of its own.
+  expect(screen.queryByRole("region", { name: /纠错稿/ })).toBeNull();
+  expect(screen.queryByRole("heading", { name: /纠错稿/ })).toBeNull();
+  expect(screen.getByText("这条说法还没有纠错稿。")).toBeVisible();
+});
+
 it("submits an exact assessment-bound feedback and retains its original judgment after reloading", async () => {
   renderReview();
   await userEvent.click(await screen.findByRole("button", { name: "反馈并复核判定" }));
