@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { addSourceLink, addSourceNote, getSourceNote, listSources, refetchSource, saveSourceNote, saveToKnowledgeBase, getSourceUnderstanding, listSourceUnderstandingHistory } from "./sourceClient";
+import { addSourceLink, addSourceNote, getSourceNote, listSources, refetchSource, saveSourceNote, saveToKnowledgeBase, getSourceUnderstanding, listSourceUnderstandingHistory, getKnowledgePageAt, saveKnowledgePage } from "./sourceClient";
 
 const request = vi.hoisted(() => vi.fn());
 const command = vi.hoisted(() => vi.fn());
@@ -74,4 +74,15 @@ describe("adding a page or a note, and editing one", () => {
     expect(await saveToKnowledgeBase("report/评价报告.md")).toEqual({ path: "knowledge-base/chat/a-1a2b3c4d.md", duplicate: false, sourceId: "src_a" });
     expect(command).toHaveBeenCalledWith("save_to_knowledge_base", { path: "report/评价报告.md" });
   });
+});
+
+
+it("sends the addressed output revision on both reader reload and save", async () => {
+  request.mockReset(); request.mockResolvedValue({});
+  const address = { projectId: "p1", tree: "wiki" as const, path: "concept/zz-duplicate.md", generationId: `kg_${"a".repeat(32)}`, pageId: "alias-page", pageRevision: 4 };
+  await getKnowledgePageAt(address.projectId,address.tree,address.path,address);
+  expect(request).toHaveBeenCalledWith(`/knowledge-pages/page?projectId=p1&tree=wiki&path=concept%2Fzz-duplicate.md&generationId=${address.generationId}&pageId=alias-page&pageRevision=4`);
+  const input = {sourceId:"same-source",markdown:"changed alias",baseSha256:"b".repeat(64),address};
+  await saveKnowledgePage(input);
+  expect(request).toHaveBeenLastCalledWith("/knowledge-pages/page","PUT",input);
 });

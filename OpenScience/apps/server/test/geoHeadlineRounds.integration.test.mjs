@@ -46,6 +46,9 @@ test("sentinel, post-publication, confirmation and noise rounds never replace th
     const at = new Date(Date.parse(`${day}T02:00:00Z`) + minute * 60_000).toISOString();
     await database.query(`INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind, status, planned, done, sample_date, finished_at)
       VALUES ($1, $2, $3, $4, 'done', 10, 10, $5::date, $6)`, [id, userId, project.id, kind, day, at]);
+    // A measured round heard an answer: a round with none is never "the latest" (2026-10-25).
+    await database.query(`INSERT INTO evimed_geo.snapshots (id, user_id, geo_project_id, round_id, engine, asked_at, status) VALUES ($1, $2, $3, $4, 'deepseek', $5, 'valid')`,
+      [`s-${id}`, userId, project.id, id, at]);
     for (const [metricId, value, scope, engine] of /** @type {const} */ ([["M-19", gvi, "project", null], ["M-01S", mention, "project", null],
       ["M-01", mention, "engine", "deepseek"]])) {
       await database.query(`INSERT INTO evimed_geo.metrics (id, user_id, geo_project_id, round_id, scope, engine, metric_id, status, value, numerator,

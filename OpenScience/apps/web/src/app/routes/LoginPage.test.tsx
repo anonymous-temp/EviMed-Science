@@ -164,7 +164,7 @@ describe("LoginPage", () => {
   it("shows the brand once, the fields by their labels alone, and nothing else", async () => {
     const { container } = renderLogin();
     const account = await screen.findByLabelText("账号");
-    expect(screen.getAllByText("EviMed")).toHaveLength(1);
+    expect(screen.getAllByText("EviMed Science")).toHaveLength(1);
     expect(screen.getByRole("heading", { level: 1, name: "登录" })).toBeInTheDocument();
     const password = screen.getByLabelText("密码");
     for (const field of [account, password]) expect(field).not.toHaveAttribute("placeholder");

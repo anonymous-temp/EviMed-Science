@@ -37,7 +37,7 @@ import { identifierShapesIn, trajectoryDigest } from "@evimed/domain";
 
 import { readArtifactShapes } from "./artifactShapes.mjs";
 import { CONVERSATION_SCOPE, methodScopeId } from "./learnedMethodMount.mjs";
-import { methodScopeOf } from "./learningService.mjs";
+import { methodScopeOf, methodSourceProjects } from "./learningService.mjs";
 import { retirementSentence } from "./methodConsolidation.mjs";
 import { callModelForControlPlane } from "./modelGateway.mjs";
 import { readRunTranscript } from "./runTranscripts.mjs";
@@ -232,14 +232,17 @@ export class MethodReplay {
    * (`createTrajectoryReader`); `judge` is the one model call. `enabled(userId)` is false for a person who paused learning.
    * `onOutcome`, `onVerdict` and `onStopped` (a method this replay took the newer version out of, by the retirement code `replay_regressed`) are
    * counters, told and never asked.
-   * @param {{ learning: any, feedback: { cleanSettledRuns: (userId: string, window: { scope: string, from: Date, to: Date, limit?: number }) => Promise<{ runId: string, projectId: string | null, at?: string, endedAt?: string | null }[]> },
+   * @param {{ learning: any, feedback: { cleanSettledRuns: (userId: string, window: { scope: string, from: Date, to: Date, limit?: number, projectId?: string | null }) => Promise<{ runId: string, projectId: string | null, at?: string, endedAt?: string | null }[]> },
    *   readTrajectory: (userId: string, accepted: { runId: string, projectId: string | null }) => Promise<ReturnType<typeof trajectoryDigest> | null>,
    *   judge: Pick<MethodReplayJudge, "read" | "available">, enabled?: ((userId: string) => Promise<boolean>) | null,
    *   onOutcome?: ((outcome: string) => void) | null, onVerdict?: ((verdict: string) => void) | null, onStopped?: ((code: string) => void) | null, now?: () => Date,
-   *   maxRuns?: number, regressionAt?: number, windowDays?: number}} dependencies
+   *   maxRuns?: number, regressionAt?: number, windowDays?: number, contextProvenance?: { policyFor: (project: { userId: string, id: string }) => Promise<any> } | null}} dependencies
+   *   `contextProvenance` keeps a replay inside the learning scope the method belongs to (`geoContextProvenance.mjs`): a method a shared GEO
+   *   project learnt is read against that project's accepted runs only, and the account's own method never against a shared project's runs —
+   *   the boundary the routine family keeps (`LearningEvidence.#settleRun`).
    */
   constructor({ learning, feedback, readTrajectory, judge, enabled = null, onOutcome = null, onVerdict = null, onStopped = null, now = () => new Date(),
-    maxRuns = REPLAY_MAX_RUNS, regressionAt = REPLAY_REGRESSION_AT, windowDays = REPLAY_WINDOW_DAYS }) {
+    maxRuns = REPLAY_MAX_RUNS, regressionAt = REPLAY_REGRESSION_AT, windowDays = REPLAY_WINDOW_DAYS, contextProvenance = null }) {
     if (!learning || !feedback || typeof readTrajectory !== "function" || !judge) throw new TypeError("Method replay needs the learning service, the feedback ledger, a trajectory reader and a judge.");
     this.learning = learning;
     this.feedback = feedback;
@@ -253,6 +256,27 @@ export class MethodReplay {
     this.maxRuns = maxRuns;
     this.regressionAt = regressionAt;
     this.windowMs = windowDays * 86_400_000;
+    this.contextProvenance = contextProvenance;
+  }
+
+  /**
+   * The accepted runs a replay of this method may read: all of them without a context provenance; else only the shared GEO project's own when
+   * the method was learnt in one, and none of a shared project's when it is the account's. A scope that cannot be read reads nothing.
+   * @param {string} userId @param {any} method @param {{ scope: string, from: Date, to: Date, limit: number }} window
+   */
+  async #accepted(userId, method, window) {
+    if (!this.contextProvenance) return this.feedback.cleanSettledRuns(userId, window);
+    const policyOf = (/** @type {string} */ projectId) => this.contextProvenance?.policyFor({ userId, id: projectId }).catch(() => null) ?? null;
+    const source = methodSourceProjects(method.payload?.provenance)[0] ?? null;
+    const policy = source ? await policyOf(source) : { kind: "owned" };
+    if (!policy) return [];
+    if (policy.kind === "geo-project") return this.feedback.cleanSettledRuns(userId, { ...window, projectId: policy.controlProjectId });
+    /** @type {any[]} */
+    const kept = [];
+    for (const run of await this.feedback.cleanSettledRuns(userId, window)) {
+      if (!run.projectId || (await policyOf(run.projectId))?.kind === "owned") kept.push(run);
+    }
+    return kept;
   }
 
   /** @param {string} outcome @returns {string} */
@@ -287,7 +311,7 @@ export class MethodReplay {
 
     const scope = methodScopeId(method.payload) ?? CONVERSATION_SCOPE;
     const to = this.now();
-    const accepted = await this.feedback.cleanSettledRuns(job.userId, { scope, from: new Date(to.getTime() - this.windowMs), to: new Date(to.getTime() + 1), limit: this.maxRuns });
+    const accepted = await this.#accepted(job.userId, method, { scope, from: new Date(to.getTime() - this.windowMs), to: new Date(to.getTime() + 1), limit: this.maxRuns });
     if (!accepted.length) return { ...base, outcome: this.#outcome("no_runs"), scope, replayed: 0, contradictions: 0 };
 
     const methodText = methodReplayText(method);

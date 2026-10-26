@@ -77,7 +77,7 @@ export interface ResultLineage {
     summary: { dependents: number; affectedValues: number; unaffectedValues: number; needSuccessor: number } }[];
 }
 export interface ResultAnchor {
-  kind: "text" | "table-cell" | "figure" | "claim" | "rendered-element";
+  kind: "file" | "text" | "table-cell" | "figure" | "claim" | "rendered-element";
   elementKind?: "text" | "table-cell" | "figure" | "claim";
   elementId: string; selectedText: string; row?: number; column?: number;
 }

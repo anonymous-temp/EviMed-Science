@@ -4,7 +4,9 @@ import { safeWorkspacePath } from "@/lib/claimCitations";
 import { ChevronLeft } from "lucide-react";
 import { sourceCitationProse } from "@evimed/domain";
 import { getWebConversationHistory, listWebAgentRuns, webErrorMessage, type PreservedConversationHistory } from "@/lib/apiClient";
-import type { ProgrammeRun } from "@/lib/programmeRuns";
+import type { ProgrammeRun, ProgrammeRunPage } from "@/lib/programmeRuns";
+import { ShowMore } from "@/components/ui/ShowMore";
+import { toast } from "@/lib/toast";
 import { withoutPlatformText } from "@/lib/platformText";
 import { LoadError } from "@/components/cards/LoadError";
 import { Button } from "@/components/ui/Button";
@@ -18,7 +20,11 @@ export const PROGRAMME_RUN_STATE_LABELS: Readonly<Record<ProgrammeRun["state"], 
 /** How often the list is read again while a step is under way. */
 const WATCH_MS = 10_000;
 
-type Load = { kind: "loading" } | { kind: "ready"; runs: ProgrammeRun[] } | { kind: "error"; message: string };
+/** `runs` is what is shown; `tail` the rows read from later pages, kept across a refresh of the first; `nextCursor` where more begins. */
+type Load = { kind: "loading" } | { kind: "ready"; runs: ProgrammeRun[]; tail: ProgrammeRun[]; nextCursor: string | null } | { kind: "error"; message: string };
+const runKey = (run: ProgrammeRun) => run.runId ?? run.sessionId;
+const pageOf = (value: ProgrammeRun[] | ProgrammeRunPage): ProgrammeRunPage => Array.isArray(value) ? { runs: value, nextCursor: null } : value;
+export type ProgrammeRecordReader = (run: ProgrammeRun) => Promise<{ history: PreservedConversationHistory; files: Array<{ runId: string; path: string; href?: string }> }>;
 
 /** A row's meta line: the state word and the time. */
 const metaOf = (run: ProgrammeRun) => [PROGRAMME_RUN_STATE_LABELS[run.state], run.at].filter(Boolean).join(" · ");
@@ -33,30 +39,57 @@ const metaOf = (run: ProgrammeRun) => [PROGRAMME_RUN_STATE_LABELS[run.state], ru
  * are in (a run's transcript is read from there), and a `version` that changes when its page has read something new — a run began or
  * ended — so the list is read again in place.
  */
-export function ProgrammeRunsDrawer({ projectId, load, version = null, onClose }: {
+export function ProgrammeRunsDrawer({ projectId, load, loadMore, version = null, initialRun = null, readRecord, onClose }: {
   projectId: string;
-  load: () => Promise<ProgrammeRun[]>;
+  /** The record, or its first page when the module reads it a page at a time (with `loadMore`). */
+  load: () => Promise<ProgrammeRun[] | ProgrammeRunPage>;
+  /** The page after `cursor`, read when the reader asks for more. */
+  loadMore?: (cursor: string) => Promise<ProgrammeRunPage>;
   version?: string | number | null;
+  initialRun?: ProgrammeRun | null;
+  readRecord?: ProgrammeRecordReader;
   onClose: () => void;
 }) {
   const [state, setState] = useState<Load>({ kind: "loading" });
   const [round, setRound] = useState(0);
-  const [record, setRecord] = useState<ProgrammeRun | null>(null);
+  const [record, setRecord] = useState<ProgrammeRun | null>(initialRun);
   const loader = useRef(load);
   loader.current = load;
+  const [more, setMore] = useState<"idle" | "reading">("idle");
 
   useEffect(() => {
     let live = true;
     Promise.resolve()
       .then(() => loader.current())
       .then(
-        (runs) => { if (live) setState({ kind: "ready", runs }); },
+        (value) => {
+          if (!live) return;
+          // A refresh reads the first page again; rows the reader already read beyond it stay, after it, with their cursor.
+          const first = pageOf(value);
+          setState((current) => {
+            const tail = current.kind === "ready" ? current.tail.filter((run) => !first.runs.some((row) => runKey(row) === runKey(run))) : [];
+            return { kind: "ready", runs: [...first.runs, ...tail], tail, nextCursor: tail.length && current.kind === "ready" ? current.nextCursor : first.nextCursor };
+          });
+        },
         // A list that was read once is kept when a later read fails: a poll is not a reason to take the record away.
         (error: unknown) => { if (live) setState((current) => (current.kind === "ready" ? current : { kind: "error", message: webErrorMessage(error, { fallback: "暂时无法读取，请稍后重试。" }) })); },
       );
     return () => { live = false; };
   }, [round, version]);
   const reload = useCallback(() => { setState({ kind: "loading" }); setRound((value) => value + 1); }, []);
+  const readMore = () => {
+    if (state.kind !== "ready" || !state.nextCursor || !loadMore || more === "reading") return;
+    setMore("reading");
+    void loadMore(state.nextCursor).then(
+      (page) => setState((current) => {
+        if (current.kind !== "ready") return current;
+        const seen = new Set(current.runs.map(runKey));
+        const added = page.runs.filter((run) => !seen.has(runKey(run)));
+        return { kind: "ready", runs: [...current.runs, ...added], tail: [...current.tail, ...added], nextCursor: page.nextCursor };
+      }),
+      (error: unknown) => toast.error(webErrorMessage(error, { fallback: "更早的记录暂时无法读取，请稍后重试。" })),
+    ).finally(() => setMore("idle"));
+  };
   // The list reads itself while a step is going on: a run that ends is on it as ended, without anyone asking.
   const going = state.kind === "ready" && state.runs.some((run) => run.state === "running");
   useEffect(() => {
@@ -68,18 +101,21 @@ export function ProgrammeRunsDrawer({ projectId, load, version = null, onClose }
   return (
     <Drawer title={record ? record.label : "AI 运行"} onClose={onClose} widthClassName="max-w-md">
       {record ? (
-        <ProgrammeRunRecord run={record} projectId={projectId} onBack={() => setRecord(null)} />
+        <ProgrammeRunRecord run={record} projectId={projectId} readRecord={readRecord} onBack={() => setRecord(null)} />
       ) : (
         <div data-programme-runs="">
           {state.kind === "loading" ? <RunsSkeleton />
             : state.kind === "error" ? <LoadError message={state.message} onRetry={reload} />
               : state.runs.length === 0 ? <p className="py-6 text-ui text-text-3">AI 还没有在后台做过什么。</p>
                 : (
-                  <List label="AI 运行" divided>
-                    {state.runs.map((run) => (
-                      <ListRow key={run.sessionId} title={run.label} onOpen={() => setRecord(run)} meta={metaOf(run)} />
-                    ))}
-                  </List>
+                  <>
+                    <List label="AI 运行" divided>
+                      {state.runs.map((run) => (
+                        <ListRow key={run.runId ?? run.sessionId} title={run.label} onOpen={() => setRecord(run)} meta={metaOf(run)} />
+                      ))}
+                    </List>
+                    {state.nextCursor && loadMore && <ShowMore remaining={null} unit="项" loading={more === "reading"} onMore={readMore} />}
+                  </>
                 )}
         </div>
       )}
@@ -107,18 +143,25 @@ const recordLink = (href: string | undefined, children: ReactNode): ReactNode =>
   : <span>{children}</span>);
 
 /** What one run said and wrote, as the platform kept it: read-only, with no way into the conversation it was made in. */
-function ProgrammeRunRecord({ run, projectId, onBack }: { run: ProgrammeRun; projectId: string; onBack: () => void }) {
+function ProgrammeRunRecord({ run, projectId, readRecord, onBack }: { run: ProgrammeRun; projectId: string; readRecord?: ProgrammeRecordReader; onBack: () => void }) {
   const [history, setHistory] = useState<PreservedConversationHistory | "error" | null>(null);
-  const [files, setFiles] = useState<Array<{ runId: string; path: string }> | "error" | null>(null);
+  const [files, setFiles] = useState<Array<{ runId: string; path: string; href?: string }> | "error" | null>(null);
   const [round, setRound] = useState(0);
   useEffect(() => {
     let live = true;
     setHistory(null);
     setFiles(null);
+    if (readRecord) {
+      void readRecord(run).then(value => {
+        if (value.history.sessionId !== run.sessionId || value.files.some(file => file.runId !== run.runId)) throw new Error('The handling record does not match the selected run.');
+        if (live) { setHistory(value.history); setFiles(value.files); }
+      }).catch(() => { if (live) { setHistory('error'); setFiles('error'); } });
+      return () => { live = false; };
+    }
     void listWebAgentRuns({ projectId }).then((runs) => {
       if (!live) return;
       const seen = new Set<string>();
-      setFiles(runs.filter((candidate) => candidate.sessionId === run.sessionId).flatMap((candidate) => {
+      setFiles(runs.filter((candidate) => candidate.sessionId === run.sessionId && (!run.runId || candidate.id === run.runId)).flatMap((candidate) => {
         const paths = [...(candidate.artifacts ?? []), ...(candidate.unverifiedArtifacts ?? []), ...(candidate.outputFiles ?? []), ...(candidate.presentedFiles ?? [])];
         return paths.flatMap((path) => {
           const safe = safeWorkspacePath(path);
@@ -129,12 +172,13 @@ function ProgrammeRunRecord({ run, projectId, onBack }: { run: ProgrammeRun; pro
         });
       }));
     }, () => { if (live) setFiles("error"); });
-    void getWebConversationHistory(run.sessionId, projectId).then(
+    const history = run.runId ? getWebConversationHistory(run.sessionId, projectId, run.runId) : getWebConversationHistory(run.sessionId, projectId);
+    void history.then(
       (value) => { if (live) setHistory(value); },
       () => { if (live) setHistory("error"); },
     );
     return () => { live = false; };
-  }, [run.sessionId, projectId, round]);
+  }, [run, run.runId, run.sessionId, projectId, round, readRecord]);
   return (
     <div data-programme-run-record="" className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
@@ -146,7 +190,7 @@ function ProgrammeRunRecord({ run, projectId, onBack }: { run: ProgrammeRun; pro
           <List label="结果文件" divided>
             {files.map((file) => (
               <li key={`${file.runId}:${file.path}`}>
-                <Link className="block py-2 text-ui text-link hover:underline" to={`/app/runs/${encodeURIComponent(file.runId)}/files/${file.path.split("/").map(encodeURIComponent).join("/")}`}>
+                <Link className="block py-2 text-ui text-link hover:underline" to={file.href ?? `/app/runs/${encodeURIComponent(file.runId)}/files/${file.path.split("/").map(encodeURIComponent).join("/")}`}>
                   {file.path.split("/").at(-1)}
                 </Link>
               </li>

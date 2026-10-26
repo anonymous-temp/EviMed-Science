@@ -8,7 +8,14 @@
  *
  * So the envelope is the route and the identity of the input it belongs to — the session, the request, the digest of the text and of the whole
  * thing — and nothing else. It lives outside the runtime workspace, in the project's own meta directory, expires after a day, is bounded in number,
- * and is addressed only by the signed-in project's own session and request ids (the same checks the handbook envelope had).
+ * and is addressed only by the signed-in project's own session and request ids (the same checks the handbook envelope had). An envelope whose
+ * stored digest does not match what it holds is no envelope.
+ *
+ * The route is the request's identity, not an enhancement: it is frozen for every native input, whatever the learning switch says, because a
+ * 循证 GEO selection is admitted only with its frozen route (`geoContextRef`, and `geoInputRead` / `geoAnalysisRead` for an ordinary selected
+ * analysis), and the run policy reads attendance from the same snapshot. The classifier bounds itself (`llmRoutingTimeoutMs`) and a failure of
+ * it is a route (the ordinary conversation), so no second deadline is laid on it here. Adoption reads the first committed input's route only:
+ * a later queued input with the same text never routes it.
  *
  * @module nativeInputRoute
  */
@@ -28,13 +35,14 @@ const textDigest = (/** @type {unknown} */ value) => digest(String(value));
 const routeDigest = (/** @type {unknown} */ value) => textDigest(String(value).replace(/\s+/g, " ").trim());
 const validRequestId = (/** @type {unknown} */ value) => typeof value === "string" && value.length > 0 && value.length <= 512 && ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127);
 const validSession = (/** @type {unknown} */ value) => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
-const routeFields = ["effectiveAgentId", "effectiveAgentVersion", "effectiveRuntimeAgent", "effectiveRouteReason", "estimatedMinutes"];
+const validRequestIdentity = (/** @type {any} */ request) => validSession(request?.sessionId) && validRequestId(request?.requestId);
+const routeFields = ["effectiveAgentId", "effectiveAgentVersion", "effectiveRuntimeAgent", "effectiveRouteReason", "estimatedMinutes", "geoContextRef", "geoAnalysisRead", "geoInputRead"];
 
 export class NativeInputRoute {
-  /** @param {{route:(project:any,sessionId:string,text:string)=>Promise<any>,allowed?:(project:any,sessionId:string)=>Promise<boolean>,now?:()=>number,ttlMs?:number,timeoutMs?:number}} options */
-  constructor({ route, allowed = async () => true, now = () => Date.now(), ttlMs = 24 * 60 * 60_000, timeoutMs = 5000 }) {
-    this.route = route; this.allowed = allowed;
-    this.now = now; this.ttlMs = ttlMs; this.timeoutMs = timeoutMs;
+  /** @param {{route:(project:any,sessionId:string,text:string,input?:{requestIds:string[],request:any})=>Promise<any>,now?:()=>number,ttlMs?:number}} options */
+  constructor({ route, now = () => Date.now(), ttlMs = 24 * 60 * 60_000 }) {
+    this.route = route;
+    this.now = now; this.ttlMs = ttlMs;
     /** @type {Map<string, { fingerprint: string, promise: Promise<any> }>} */
     this.preparing = new Map();
   }
@@ -60,6 +68,9 @@ export class NativeInputRoute {
   async envelope(project, sessionId, requestId) {
     if (!validSession(sessionId) || !validRequestId(requestId)) return null;
     const value = await this.readFile(project, this.file(project, sessionId, requestId));
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const { digest: storedDigest, ...envelope } = value;
+    if (!/^[a-f0-9]{64}$/.test(storedDigest ?? "") || digest(JSON.stringify(envelope)) !== storedDigest) return null;
     return value?.ownerId === project.userId && value?.projectId === project.id && value?.sessionId === sessionId
       && value?.requestId === requestId && value.expiresAt > this.now() ? value : null;
   }
@@ -82,6 +93,11 @@ export class NativeInputRoute {
     if (count >= MAX_ENVELOPES) throw new HttpError(503, "native_route_limit", "The request route limit is reached.");
   }
 
+  /** A selected operation must be addressable by the same identity the immutable route store accepts. @param {any} request */
+  assertRequestIdentity(request) {
+    if (!validRequestIdentity(request)) throw new HttpError(400, "native_route_request_invalid", "The native request identity cannot preserve its selected input route.");
+  }
+
   /**
    * Freeze before forwarding, never write to a shared session context file. A steer continues the current turn's route: reclassifying a short
    * correction here could send it to another capability, so a steer freezes nothing and the next queued turn gets its own.
@@ -89,8 +105,7 @@ export class NativeInputRoute {
    */
   async prepare(project, request) {
     if (request?.mode === "steer") return null;
-    if (!validSession(request?.sessionId) || !validRequestId(request?.requestId)) return null;
-    if (!await this.allowed(project, request.sessionId)) return null;
+    if (!validRequestIdentity(request)) return null;
     const fingerprint = digest(JSON.stringify(request));
     const key = this.file(project, request.sessionId, request.requestId);
     const pending = this.preparing.get(key);
@@ -111,37 +126,25 @@ export class NativeInputRoute {
       if (existing.fingerprint !== fingerprint) throw new HttpError(409, "native_route_conflict", "This request identity already names another input.");
       return existing;
     }
-    let canceled = false;
-    /** @type {any} */
-    let timer;
-    const timeout = new Promise((_, reject) => { timer = setTimeout(() => {
-      canceled = true; reject(new HttpError(503, "native_route_timeout", "Route preparation timed out."));
-    }, this.timeoutMs); });
-    const freeze = async () => {
-      const text = nativeInputText(request.content);
-      const route = await this.route(project, request.sessionId, text);
-      if (canceled) return null;
-      const envelope = { ownerId: project.userId, projectId: project.id, sessionId: request.sessionId, requestId: request.requestId,
-        fingerprint, textDigest: textDigest(text), routeTextDigest: routeDigest(text),
-        route: Object.fromEntries(routeFields.filter(key => route?.[key] !== undefined).map(key => [key, route[key]])),
-        preparedAt: this.now(), expiresAt: this.now() + this.ttlMs };
-      const value = { ...envelope, digest: digest(JSON.stringify(envelope)) };
-      const bytes = JSON.stringify(value);
-      if (Buffer.byteLength(bytes) > MAX_FILE_BYTES) throw new HttpError(413, "native_route_invalid", "The request route is too large.");
-      return withProjectStorageMutation(project, async () => {
-        if (canceled) return null;
-        const current = await this.envelope(project, request.sessionId, request.requestId);
-        if (current) {
-          if (current.fingerprint !== fingerprint) throw new HttpError(409, "native_route_conflict", "This request identity already names another input.");
-          return current;
-        }
-        await this.prune(project);
-        if (canceled) return null;
-        await writeFileAtomicNoFollow(project.rootDir, this.file(project, request.sessionId, request.requestId), bytes, { mode: 0o600 });
-        return value;
-      });
-    };
-    try { return await Promise.race([freeze(), timeout]); } finally { clearTimeout(timer); }
+    const text = nativeInputText(request.content);
+    const route = await this.route(project, request.sessionId, text, { requestIds: [request.requestId], request });
+    const envelope = { ownerId: project.userId, projectId: project.id, sessionId: request.sessionId, requestId: request.requestId,
+      fingerprint, textDigest: textDigest(text), routeTextDigest: routeDigest(text),
+      route: Object.fromEntries(routeFields.filter(key => route?.[key] !== undefined).map(key => [key, route[key]])),
+      preparedAt: this.now(), expiresAt: this.now() + this.ttlMs };
+    const value = { ...envelope, digest: digest(JSON.stringify(envelope)) };
+    const bytes = JSON.stringify(value);
+    if (Buffer.byteLength(bytes) > MAX_FILE_BYTES) throw new HttpError(413, "native_route_invalid", "The request route is too large.");
+    return withProjectStorageMutation(project, async () => {
+      const current = await this.envelope(project, request.sessionId, request.requestId);
+      if (current) {
+        if (current.fingerprint !== fingerprint) throw new HttpError(409, "native_route_conflict", "This request identity already names another input.");
+        return current;
+      }
+      await this.prune(project);
+      await writeFileAtomicNoFollow(project.rootDir, this.file(project, request.sessionId, request.requestId), bytes, { mode: 0o600 });
+      return value;
+    });
   }
 
   /**
@@ -151,7 +154,6 @@ export class NativeInputRoute {
    */
   async read(project, { sessionId, inputs }) {
     if (!validSession(sessionId) || !Array.isArray(inputs) || inputs.length > 16) throw new HttpError(400, "native_route_request_invalid", "Invalid current inputs.");
-    if (!await this.allowed(project, sessionId)) return { routes: [] };
     const routes = [];
     for (const input of inputs) {
       const envelope = await this.envelope(project, sessionId, input?.requestId);
@@ -162,14 +164,13 @@ export class NativeInputRoute {
   }
 
   /**
-   * The immutable route can be reused when the committed input becomes a run.
+   * The immutable route can be reused when the committed input becomes a run. The ledger owns the first committed human input: a later
+   * equal-text queued input cannot route it.
    * @param {any} project @param {string} sessionId @param {string[] | null | undefined} requestIds @param {string} text
    */
   async routeFor(project, sessionId, requestIds, text) {
-    for (const requestId of (requestIds ?? []).slice(0, 16)) {
-      const envelope = await this.envelope(project, sessionId, requestId);
-      if (envelope?.routeTextDigest === routeDigest(text)) return envelope.route;
-    }
-    return null;
+    const requestId = Array.isArray(requestIds) ? requestIds[0] : null;
+    const envelope = await this.envelope(project, sessionId, /** @type {string} */ (requestId));
+    return envelope?.routeTextDigest === routeDigest(text) ? envelope.route : null;
   }
 }

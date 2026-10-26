@@ -73,6 +73,14 @@ vi.mock("@/lib/apiClient", async (importOriginal) => ({
   getWebProjectId: () => "prj_geo_1",
 }));
 
+// A hand-off opens the module's own conversation through its descriptor and leaves the person's project selection alone.
+const native = vi.hoisted(() => ({ openGeoConversation: vi.fn() }));
+vi.mock("@/lib/geoNativeClient", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/geoNativeClient")>()),
+  ...native,
+}));
+const descriptor = (sessionId = "ses_geo_1") => ({ projectId: "prj_geo_1", projectName: "GEO", sessionId, scope: { kind: "geo" as const, geoProjectId: "geo_1", sessionId } });
+
 const download = vi.hoisted(() => ({ downloadArtifact: vi.fn(async () => undefined) }));
 vi.mock("@/lib/artifactFile", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/artifactFile")>()),
@@ -107,11 +115,11 @@ function expectUnsentProjectDraft(text: string) {
   expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/chat/ses_geo_1");
   const state = JSON.parse(screen.getByTestId("state").textContent ?? "null");
   expect(state.runtimeUiIntent).toMatchObject({
-    kind: "create", projectId: "prj_geo_1", sessionId: "ses_geo_1", draft: expect.stringContaining(text),
+    kind: "open", projectId: "prj_geo_1", sessionId: "ses_geo_1", draft: expect.stringContaining(text), scope: descriptor().scope,
   });
   expect(state.runtimeUiIntent).not.toHaveProperty("send");
-  expect(client.listGeoProjects).toHaveBeenCalled();
-  expect(client.getGeoProject).toHaveBeenCalledWith("geo_1");
+  expect(native.openGeoConversation).toHaveBeenCalledWith("geo_1", expect.objectContaining({ kind: expect.stringMatching(/^(session|primary)$/) }));
+  expect(store.select).not.toHaveBeenCalled();
   expect(client.runGeoStep).not.toHaveBeenCalled();
 }
 
@@ -122,6 +130,8 @@ beforeEach(() => {
   client.getGeoValue.mockResolvedValue({ version: 0, data: {}, research: [], impacts: [], observations: [], coverage: { assessed: 0, value: null } });
   store.select.mockClear();
   store.subscribe.mockClear();
+  native.openGeoConversation.mockReset();
+  native.openGeoConversation.mockImplementation(async (_geoId: string, target: { kind: string; sessionId?: string }) => descriptor(target.kind === "session" ? target.sessionId : "ses_geo_1"));
   client.listGeoProjects.mockResolvedValue([geoProject()]);
   client.getGeoProject.mockResolvedValue(geoProject());
   download.downloadArtifact.mockClear();
@@ -424,6 +434,26 @@ describe("信源", () => {
     expect(conditions.compareDocumentPosition(all) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("continues a source's answer list using its frozen selection and server cursor", async () => {
+    const dxy = sourcesFilled.sources[0];
+    const first = sourceDetailOf(dxy);
+    const last = { ...first.answers[0], snapshotId: "source_last", question: "最后一条原题" };
+    client.getGeoSources.mockResolvedValue(sourcesFilled);
+    client.getGeoSource.mockResolvedValueOnce({ ...first, round: null, scope: { from: "2026-10-01", to: "2026-10-02" },
+      selection: { reference: "gsel_source", roundIds: ["r1", "r2"] }, answerPage: { total: first.answers.length + 1, nextOffset: 200 } })
+      .mockResolvedValueOnce({ ...first, selection: { reference: "gsel_source", roundIds: ["r1", "r2"] }, answers: [last], answerPage: { total: first.answers.length + 1, nextOffset: null } });
+    renderTab(<SourcesTab {...props()} />);
+    await screen.findByText("3 个信源");
+    await userEvent.click(within(rowOf("dxy.com")).getByRole("button", { name: /丁香医生/ }));
+    const drawer = await screen.findByRole("dialog", { name: "丁香医生" });
+    await within(drawer).findByRole("region", { name: "引用它的回答" });
+    while (within(drawer).queryByRole("button", { name: /显示更多/ })) await userEvent.click(within(drawer).getByRole("button", { name: /显示更多/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /继续读取回答/ }));
+    expect(await screen.findByRole("link", { name: /最后一条原题/ })).toBeVisible();
+    expect(client.getGeoSource).toHaveBeenLastCalledWith("geo_1", dxy.id, { selectionRef: "gsel_source" }, { answerOffset: 200 });
+    expect(screen.queryByRole("button", { name: /继续读取回答/ })).not.toBeInTheDocument();
+  });
+
   it("says so when the latest round has no answer citing the site, and when nothing has been measured", async () => {
     const dxy = sourcesFilled.sources[0];
     client.getGeoSources.mockResolvedValue(sourcesFilled);
@@ -449,7 +479,6 @@ describe("信源", () => {
     const dialog = await screen.findByRole("dialog", { name: "百度百科" });
     await within(dialog).findByRole("region", { name: "讲错的回答" });
     await userEvent.click(within(dialog).getByRole("button", { name: "在对话中处理" }));
-    await waitFor(() => expect(store.select).toHaveBeenCalledWith("prj_geo_1", expect.any(Function)));
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/chat/ses_geo_1"));
     // The draft waits in the composer: the intent carries it, and nothing asks the model.
     const state = JSON.parse(screen.getByTestId("state").textContent ?? "null") as { runtimeUiIntent?: { draft?: string } } | null;
@@ -836,8 +865,7 @@ describe("总览", () => {
     expect(heading.compareDocumentPosition(trend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // The wrong statement carries its correction, with the sentence in the draft; the project's conversation is opened with it unsent.
     await userEvent.click(within(list).getByRole("button", { name: "写纠错稿" }));
-    await waitFor(() => expect(store.select).toHaveBeenCalled());
-    expect(await screen.findByTestId("state")).toHaveTextContent("每天注射一次");
+    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("每天注射一次"));
     expectUnsentProjectDraft("每天注射一次");
   });
 
@@ -1174,8 +1202,7 @@ describe("药品价值分析只在依据里", () => {
     expect(screen.getByRole("link", { name: "结论库" })).toHaveAttribute("href", "/app/geo/geo_1/evidence");
     expect(screen.getByText("得到 这个药的获益、风险、适用性、费用与可及性")).toBeInTheDocument();
     await userEvent.click(start[0]);
-    await waitFor(() => expect(store.select).toHaveBeenCalled());
-    expect(screen.getByTestId("state")).toHaveTextContent("请结合现有资料开始药品价值分析");
+    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("请结合现有资料开始药品价值分析"));
     expectUnsentProjectDraft("请结合现有资料开始药品价值分析");
     // Opened with the brief in the composer; nothing was sent.
     expect(screen.getByTestId("state")).not.toHaveTextContent("\"send\":true");
@@ -1197,13 +1224,13 @@ describe("a hand-off to the conversation that fails", () => {
   it("写纠错稿: says so in a toast and gives the button back, where it used to end in nothing", async () => {
     client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
     client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
-    store.select.mockRejectedValueOnce(new Error("project is gone"));
+    native.openGeoConversation.mockRejectedValueOnce(new Error("project is gone"));
     renderTab(<AccuracyTab {...props()} />);
     const button = (await screen.findAllByRole("button", { name: "写纠错稿" }))[0];
     await userEvent.click(button);
     await waitFor(() => expect(toasts()).toEqual(["对话暂时无法打开，请稍后重试。"]));
-    expect(client.getGeoProject).toHaveBeenCalledWith("geo_1");
-    expect(store.select).toHaveBeenCalledWith("prj_geo_1", expect.any(Function));
+    expect(native.openGeoConversation).toHaveBeenCalledWith("geo_1", expect.anything());
+    expect(store.select).not.toHaveBeenCalled();
     await waitFor(() => expect(button).toBeEnabled());
     expect(button).not.toHaveAttribute("aria-busy");
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/tab");
@@ -1212,7 +1239,7 @@ describe("a hand-off to the conversation that fails", () => {
   it("在对话中处理: says so in a toast and gives the button back", async () => {
     client.getGeoSources.mockResolvedValue(sourcesFilled);
     client.getGeoSource.mockResolvedValue(sourceDetailOf(sourcesFilled.sources[1]));
-    store.select.mockRejectedValueOnce(new Error("project is gone"));
+    native.openGeoConversation.mockRejectedValueOnce(new Error("project is gone"));
     renderTab(<SourcesTab {...props()} />);
     await screen.findByText("3 个信源");
     await userEvent.click(within(document.querySelector("[data-geo-source='baike.baidu.com']")?.closest("li") as HTMLElement).getByRole("button", { name: /百度百科/ }));
@@ -1221,11 +1248,24 @@ describe("a hand-off to the conversation that fails", () => {
     const button = within(dialog).getByRole("button", { name: "在对话中处理" });
     await userEvent.click(button);
     await waitFor(() => expect(toasts()).toEqual(["对话暂时无法打开，请稍后重试。"]));
-    expect(client.getGeoProject).toHaveBeenCalledWith("geo_1");
-    expect(store.select).toHaveBeenCalledWith("prj_geo_1", expect.any(Function));
+    expect(native.openGeoConversation).toHaveBeenCalledWith("geo_1", expect.anything());
+    expect(store.select).not.toHaveBeenCalled();
     await waitFor(() => expect(button).toBeEnabled());
     expect(button).not.toHaveAttribute("aria-busy");
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/tab");
   });
 });
 
+describe("a role that may not open the conversation", () => {
+  const viewer = () => geoProject({}, { access: { roles: ["viewer"], abilities: ["read"], owner: false } });
+  it("is offered no hand-off it would only be refused: 信源's 在对话中处理", async () => {
+    client.getGeoSources.mockResolvedValue(sourcesFilled);
+    client.getGeoSource.mockResolvedValue(sourceDetailOf(sourcesFilled.sources[1]));
+    renderTab(<SourcesTab {...props(viewer())} />);
+    await screen.findByText("3 个信源");
+    await userEvent.click(within(document.querySelector("[data-geo-source='baike.baidu.com']")?.closest("li") as HTMLElement).getByRole("button", { name: /百度百科/ }));
+    const dialog = await screen.findByRole("dialog", { name: "百度百科" });
+    await within(dialog).findByRole("region", { name: "讲错的回答" });
+    expect(within(dialog).queryByRole("button", { name: "在对话中处理" })).not.toBeInTheDocument();
+  });
+});

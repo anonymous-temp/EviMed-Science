@@ -95,7 +95,11 @@ export class KnowledgePageWorker {
         this.lastError = null;
         return outcome;
       }
-      await this.jobs.finish(job.userId, job.id, job.leaseToken, outcome.result);
+      if ("sharedSettlement" in outcome && outcome.sharedSettlement) {
+        const settlement = await this.service.prepareSharedSettlement(job, outcome.sharedSettlement);
+        await this.jobs.finishWithLease(job.userId, job.id, job.leaseToken, outcome.result,
+          client => this.service.finishSharedJob(job, settlement, client));
+      } else await this.jobs.finish(job.userId, job.id, job.leaseToken, outcome.result);
       this.lastError = null;
       this.lastCompletedAt = new Date().toISOString();
       return outcome;

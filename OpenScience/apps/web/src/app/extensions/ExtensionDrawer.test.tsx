@@ -34,11 +34,17 @@ beforeEach(() => {
   extensions.updateExtension.mockResolvedValue({ installation: { ...installed, coordinate: nextCoordinate, revision: 4 } });
 });
 
-it("says a package's state in three words, never the lifecycle's", () => {
-  expect(extensionState({ phase: "waiting", effective: true } as never)).toBe("可用");
-  for (const phase of ["preparing", "saved", "applying", "waiting"]) expect(extensionState({ phase, effective: false } as never)).toBe("准备中");
-  for (const phase of ["failed", "unsupported", "connection-needed"]) expect(extensionState({ phase, effective: false } as never)).toBe("需处理");
-  expect(extensionState({ phase: "removed", effective: false } as never)).toBe("已移除");
+it("distinguishes account installation from current-project availability", () => {
+  expect(extensionState(installed as never)).toBe("未在当前项目启用");
+  expect(extensionState(installed as never, { enabled: true, effective: true, phase: "effective" } as never)).toBe("已启用");
+  expect(extensionState(installed as never, { enabled: false, effective: false, phase: "effective" } as never)).toBe("已关闭");
+  expect(extensionState(installed as never, { enabled: true, effective: false, phase: "connection-needed" } as never)).toBe("需要连接账户");
+});
+
+it("shows effective project state even when the account installation has effective false", async () => {
+  extensions.projectExtensions.mockResolvedValue({ revision: 4, selections: [{ installationId: installed.id, enabled: true, effective: true, phase: "effective", settings: {}, connectionRefs: [] }], effectiveGeneration: "live" });
+  show();
+  expect(await screen.findByText("我的插件 · 已启用")).toBeInTheDocument();
 });
 
 it("labels the package's settings in Chinese, and a key it has no word for is 其他设置 — never the program's name", async () => {
@@ -242,4 +248,12 @@ it("a failure other than a missing package keeps the red line and 刷新", async
   expect(screen.queryByRole("button", { name: "回到插件列表" })).not.toBeInTheDocument();
   await userEvent.click(within(alert).getByRole("button", { name: "刷新" }));
   expect(await screen.findByRole("button", { name: "用于当前项目" })).toBeInTheDocument();
+});
+
+it("notifies the parent after project mutations so the added list reloads its revision", async () => {
+  extensions.projectExtensions.mockResolvedValue({ revision: 4, selections: [{ installationId: installed.id, enabled: true, effective: true, phase: "effective", settings: {}, connectionRefs: [] }], effectiveGeneration: "live" });
+  show();
+  await userEvent.click(await screen.findByRole("button", { name: "停用" }));
+  await waitFor(() => expect(extensions.saveProjectExtensions).toHaveBeenCalled());
+  await waitFor(() => expect(handlers.onChanged).toHaveBeenCalledWith());
 });

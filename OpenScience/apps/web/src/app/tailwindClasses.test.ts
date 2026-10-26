@@ -41,6 +41,7 @@ const NOT_UTILITIES: Readonly<Record<string, string>> = {
   "font-size": "a tailwind-merge class-group name (lib/cn.ts)",
   "min-h": "a tailwind-merge class-group name (lib/cn.ts)",
   "not-assessed": "an enum value (lib/resultProvenance.ts)",
+  "not-applicable": "an activation phase value (app/extensions/catalogueModel.ts)",
   "not-configured": "an enum value (lib/imClient.ts)",
   "not-offered": "an enum value (app/routes/FrontierEventPage.tsx)",
   "width:max-content": "CSS text written into a rendered Office document",

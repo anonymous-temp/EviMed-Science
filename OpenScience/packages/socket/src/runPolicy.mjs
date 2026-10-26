@@ -96,12 +96,20 @@ const GATE_SOURCE_REFUSAL = '交付门禁的实现不在你的阅读范围内。
  *   deliveryAttemptLimit: number,
  *   frozenDeliverables?: readonly string[],
  *   runningChildren?: number,
+ *   unattended?: boolean,
  * }} state `runningChildren`: the children of this run working now, by either tool that starts one
  * @returns {{ allow: true } | { allow: false, code: string, reason: string }}
  */
 export function toolPolicy(call, state) {
   const name = String(call?.name ?? '')
   const args = /** @type {Record<string, any>} */ (call?.args ?? {})
+  if (state.unattended === true) {
+    if (name === 'ask_user_question') return { allow: false, code: 'unattended_question_unavailable',
+      reason: 'Nobody is attending this execution. Continue with the supplied information and state any missing input; do not wait for an answer.' }
+    if (['schedule_task', 'update_task', `${MCP_TOOL_PREFIX}schedule_task`, `${MCP_TOOL_PREFIX}update_task`].includes(name)) {
+      return { allow: false, code: 'task_tools_not_in_conversation', reason: 'An unattended execution cannot create or change scheduled tasks.' }
+    }
+  }
   const frozen = new Set(state.frozenDeliverables ?? [])
 
   const readFields = READ_ARG_TOOLS[/** @type {keyof typeof READ_ARG_TOOLS} */ (name)]
@@ -188,6 +196,26 @@ export function toolPolicy(call, state) {
   }
 
   return { allow: true }
+}
+
+/** A request-local analysis read never becomes access to a different or current GEO view.
+ * @param {any} args @param {string} referenceId */
+export function selectedGeoAnalysisReadAllowed(args, referenceId) {
+  return selectedGeoInputReadAllowed(args, { referenceId, what: 'analysis' })
+}
+/** A closed request-local signal or analysis projection never admits another GEO view.
+ * @param {any} args @param {{referenceId:string,what:string}} scope */
+export function selectedGeoInputReadAllowed(args, scope) {
+  const referenceId = scope?.referenceId
+  if (!/^gpc_[a-f0-9]{64}$/.test(referenceId) || !args || typeof args !== 'object' || Array.isArray(args)
+    || !['analysis', 'signal'].includes(scope.what)
+    || Object.keys(args).some(key => !['what', 'filter'].includes(key)) || args.what !== scope.what) return false
+  const filter = args.filter
+  return Boolean(filter && typeof filter === 'object' && !Array.isArray(filter)
+    && Object.keys(filter).every(key => ['planContextRef', 'limit', 'offset', ...(scope.what === 'signal' ? ['targetKey'] : [])].includes(key)) && filter.planContextRef === referenceId
+    && (filter.targetKey === undefined || typeof filter.targetKey === 'string' && filter.targetKey.length > 0 && filter.targetKey.length <= 160)
+    && (filter.limit === undefined || Number.isSafeInteger(filter.limit) && filter.limit >= 1 && filter.limit <= 50)
+    && (filter.offset === undefined || Number.isSafeInteger(filter.offset) && filter.offset >= 0))
 }
 
 /**

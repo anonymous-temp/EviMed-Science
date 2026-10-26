@@ -120,3 +120,67 @@ test("the run is told which file is the revised form of the selection", async t 
   assert.equal(block.revisedPath, `${prefix}/report.md`);
   assert.match(block.preservation, /revisedPath/);
 });
+
+test("whole-file native context binds actual words, replays its request, refuses stale bytes, and ignores unreceipted copies", async t => {
+  const f = await fixture(t);
+  const original = await f.capture("article.md", "Original [citation].");
+  const makeRequest = () => ({ sessionId: f.run.sessionId, requestId: "submitted-request", content: [{ type: "text", text: "Make this easier to understand." }] });
+  const options = { versionId: original.versionId, digest: original.digest, target: null, expectedHeadVersionId: null };
+  const request = makeRequest();
+  const bound = await f.revisions.bindConversation("owner", f.project, request, options);
+  assert.equal(bound.anchor.kind, "file"); assert.equal(bound.anchor.matchMode, "whole_file");
+  assert.equal(bound.instruction, makeRequest().content[0].text);
+  assert.equal((await f.revisions.bindConversation("owner", f.project, makeRequest(), options)).id, bound.id);
+  await assert.rejects(f.revisions.bindConversation("owner", f.project, { ...makeRequest(), content: [{ type: "text", text: "A different instruction" }] }, options), { code: "result_revision_stale" });
+  await assert.rejects(f.revisions.bindConversation("owner", f.project, { ...makeRequest(), requestId: "stale" }, { ...options, digest: "a".repeat(64) }), { code: "result_revision_stale" });
+  const output = `artifacts/result-revisions/${bound.id}/output/article.md`;
+  const copy = await f.capture(output, "Original [citation].", { receipted: false });
+  assert.equal(copy.supersedesVersionId, null);
+  const successor = await f.capture(output, "Clearer wording [citation].", { receipted: false });
+  assert.equal(successor.supersedesVersionId, original.versionId);
+  assert.equal((await f.capture(`artifacts/result-revisions/${bound.id}/output/article.pdf`, "PDF rendition", { receipted: false })).supersedesVersionId, null);
+});
+
+test("mtime-only ordinary output discovery preserves bytes without claiming another session's producer", async t => {
+  const f = await fixture(t);
+  const foreign = await f.capture("concurrent-b.docx", "PK another session's Word", { producer: { kind: "tool", runId: "run-b", sessionId: "session-b", callId: "write-b" } });
+  const other = await f.capture("deliverables/b/article.md", "Another session's Markdown", { producer: { kind: "tool", runId: "run-b", sessionId: "session-b", callId: "write-b-md" } });
+  const { captureFinishedRun } = await import("../src/resultDeliveryCapture.mjs");
+  const captured = await captureFinishedRun({ results: f.results, project: f.project,
+    run: { ...f.run, outputFiles: [foreign.path, other.path] }, readReceipt: async () => null });
+  assert.equal(captured.items.length, 2);
+  for (const item of captured.items) {
+    assert.equal(item.producer.kind, "workspace");
+    assert.equal(item.producer.sessionId, null);
+  }
+  assert.equal((await f.results.query("owner", "p", { producer: { sessionId: f.run.sessionId } })).items.length, 0);
+  assert.equal((await f.results.raw("owner", "p", captured.items[0].versionId)).bytes.toString(), "PK another session's Word");
+});
+
+
+test("an actual native presentation gives a shell-written ordinary Word file its own conversation witness", async t => {
+  const f = await fixture(t);
+  await writeFile(path.join(f.project.workspaceDir, "presented.docx"), "PK shell-written Word");
+  const { captureFinishedRun } = await import("../src/resultDeliveryCapture.mjs");
+  const captured = await captureFinishedRun({ results: f.results, project: f.project,
+    run: { ...f.run, outputFiles: ["presented.docx"], presentedFiles: ["presented.docx"] }, readReceipt: async () => null });
+  assert.equal(captured.items[0].producer.kind, "deliverable");
+  assert.equal(captured.items[0].producer.sessionId, f.run.sessionId);
+});
+
+test("a changed receipt still honors the actual request's owned revision output namespace", async t => {
+  const f = await fixture(t);
+  const original = await f.capture("article.md", "The immutable original.");
+  const bound = await f.revisions.bindConversation("owner", f.project, { sessionId: f.run.sessionId, requestId: "submitted-request",
+    content: [{ type: "text", text: "Clarify this article." }] }, { versionId: original.versionId, digest: original.digest, target: null, expectedHeadVersionId: null });
+  const outputPath = `artifacts/result-revisions/${bound.id}/output/article.md`;
+  const revised = "The clarified revised article.";
+  await mkdir(path.dirname(path.join(f.project.workspaceDir, outputPath)), { recursive: true });
+  await writeFile(path.join(f.project.workspaceDir, outputPath), revised);
+  const { captureFinishedRun } = await import("../src/resultDeliveryCapture.mjs");
+  const captured = await captureFinishedRun({ results: f.results, project: f.project, run: { ...f.run, outputFiles: [outputPath] },
+    readReceipt: async () => ({ entries: [{ deliverableId: "revised", files: [{ path: outputPath, sha256: original.digest }] }] }) });
+  assert.equal(captured.items[0].producer.sessionId, f.run.sessionId);
+  assert.equal(captured.items[0].supersedesVersionId, original.versionId);
+  assert.equal((await f.results.raw("owner", "p", captured.items[0].versionId)).bytes.toString(), revised);
+});

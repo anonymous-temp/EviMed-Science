@@ -1,3 +1,5 @@
+import { useGeoPath } from "./useGeoPath";
+import { useGeoDestinationPath } from "./useGeoPath";
 import { useState } from "react";
 import { PenLine } from "lucide-react";
 import { webErrorMessage } from "@/lib/apiClient";
@@ -9,10 +11,10 @@ import { List, ListRow } from "@/components/ui/ListRow";
 import { Section } from "@/components/ui/Section";
 import { isSeverityLevel, SeverityBadge } from "@/components/ui/SeverityBadge";
 import { measurementPause, type MeasurementPause } from "./geoBand";
-import { useGeoFrame } from "./geoFrame";
+import { geoMayConverse, useGeoFrame } from "./geoFrame";
 import { useGeoMonitoring } from "./geoProjectData";
 import { engineName, GEO_STEP_NAMES, zh } from "./geoText";
-import { geoDestinationPath, GEO_STEP_HOME } from "./geoTabs";
+import { GEO_STEP_HOME } from "./geoTabs";
 import { answerPath } from "./tabs/geoTabText";
 import { useOpenGeoConversation } from "./useOpenGeoConversation";
 
@@ -30,6 +32,7 @@ import { useOpenGeoConversation } from "./useOpenGeoConversation";
  * be asked offers no 接着做 until it can be (a retry would ask nobody again).
  */
 export function NeedsYou({ geoId, project }: { geoId: string; project: GeoProject }) {
+  const geoDestinationPath = useGeoDestinationPath();
   const monitoring = useGeoMonitoring(geoId);
   const pause = measurementPause(monitoring.state.kind === "ready" ? monitoring.state.data.measurement : null);
   const items = project.needsYou;
@@ -56,6 +59,8 @@ export function NeedsYou({ geoId, project }: { geoId: string; project: GeoProjec
 const MEASURING_STEPS: ReadonlySet<GeoStepKey> = new Set(["diagnosis", "monitoring"]);
 
 function NeedsYouRow({ geoId, project, item, pause }: { geoId: string; project: GeoProject; item: GeoNeedsYou; pause: MeasurementPause | null }) {
+  const path = useGeoPath();
+  const geoDestinationPath = useGeoDestinationPath();
   const frame = useGeoFrame();
   const open = useOpenGeoConversation();
   const [busy, setBusy] = useState(false);
@@ -89,14 +94,14 @@ function NeedsYouRow({ geoId, project, item, pause }: { geoId: string; project: 
     return (
       <ListRow
         title={<span className="max-w-measure">{`“${item.statement ?? ""}”`}</span>}
-        to={answer ? answerPath(geoId, answer) : undefined}
+        to={answer ? path(answerPath(geoId, answer)) : undefined}
         meta={(
           <span className="inline-flex flex-wrap items-center gap-x-2">
             {isSeverityLevel(item.severity) && <SeverityBadge level={item.severity} />}
             <span>{`${engineName(item.engine ?? null)}讲错了`}</span>
           </span>
         )}
-        actions={(
+        actions={geoMayConverse(project) ? (
           <Button
             variant="secondary"
             size="sm"
@@ -109,7 +114,7 @@ function NeedsYouRow({ geoId, project, item, pause }: { geoId: string; project: 
             {!busy && <PenLine size={16} aria-hidden="true" />}
             写纠错稿
           </Button>
-        )}
+        ) : undefined}
       />
     );
   }

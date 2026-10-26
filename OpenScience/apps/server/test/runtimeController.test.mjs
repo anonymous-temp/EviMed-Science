@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
+import { generateKeyPairSync, randomBytes } from "node:crypto";
+import { runContextAuthorityPublicKey } from "@evimed/harness-port/run-context-authority";
 import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import http from "node:http";
 import net from "node:net";
@@ -591,6 +592,11 @@ test("runtime controller accepts only its trusted internal gateway endpoints or 
         (error) => error?.status === 400 && error?.code === "runtime_controller_source_gateway_invalid",
       );
     }
+    const otherAlgorithm = generateKeyPairSync("ec", { namedCurve: "prime256v1" }).publicKey.export({ type: "spki", format: "der" }).toString("base64url");
+    for (const attendancePublicKey of [null, true, {}, [], "not-a-public-key", "A".repeat(500), "x\nEVIMED_ATTENDANCE_USER_ID=other", otherAlgorithm]) {
+      await assert.rejects(client.request("POST", "/v1/runtime/start", { ...payload, attendancePublicKey }),
+        (error) => error?.status === 400 && error?.code === "runtime_controller_attendance_key_invalid", JSON.stringify(attendancePublicKey));
+    }
     // The GEO method pack flag is a boolean or absent. Anything else is refused before Docker, and a string is not read as a yes.
     for (const geoSkills of [1, 0, "1", "true", "", {}, []]) {
       await assert.rejects(
@@ -628,7 +634,7 @@ test("runtime controller accepts only its trusted internal gateway endpoints or 
   }
 });
 
-test("a 循证 GEO project's runtime is launched with the method pack, any other without it, through the isolated controller", async (t) => {
+test("project method packs and public attendance authority reach Docker through the isolated controller", async (t) => {
   // The whole chain on a fake Docker: the manager reads the project's kind (`geoSkillsFor`), the client sends it as protocol 14's
   // one optional field, the controller validates it and builds the launch plan itself, and the container's environment says it.
   const tmp = await shortTempDir("osrg-");
@@ -655,19 +661,40 @@ test("a 循证 GEO project's runtime is launched with the method pack, any other
       runtimeControllerMode: "socket", runtimeControllerTimeoutMs: 2_000, runtimeControllerPollMs: 100, allowDirectDockerControl: false,
       runtimeProxyConnectTimeoutMs: 3_000, runtimeSkillDirs: [], maxProjectBytes: 1024 * 1024, maxProjectUsageScanEntries: 1_000,
       runtimeIdleTimeoutMs: 0, runtimeQuotaCheckIntervalMs: 0, maxLogFileBytes: 1024 * 1024,
-      geoEnabled: true, geoAudience: "all",
+      geoEnabled: true, geoAudience: "all", modelGatewaySigningSecret: "api-only-attendance-controller-test-secret",
     }));
     const launches = async () => (await readFile(dockerLog, "utf8")).trim().split("\n").map((line) => JSON.parse(line)).filter((args) => args[0] === "run");
     let isGeo = true;
     manager.geoProjectOf = async (userId, projectId) => { assert.deepEqual([userId, projectId], [project.userId, project.id]); return isGeo; };
+    const policy = {kind:'geo-project',ownerId:project.userId,controlProjectId:project.id,geoProjectId:'geo',ownerCreatedAt:'2026-01-01',
+      projectCreatedAt:'2026-01-02',policyVersion:1,revision:1,referenceId:'policy',namespace:{id:'namespace'}};
+    manager.contextPolicies = {forProject:async()=>policy};
+    const library=path.join(dataDir,'users',project.userId,'library');
+    await mkdir(library,{recursive:true});await writeFile(path.join(library,'foreign.md'),'PRIVATE OWNER LIBRARY');
+    const receipts = new Map();
+    manager.contextDocuments = {database:{transaction:async operation=>{const previous=new Map(receipts);try{return await operation({});}catch(error){receipts.clear();for(const [key,value] of previous)receipts.set(key,value);throw error;}},withTransactionClient:async(_client,operation)=>operation()},put:async(user,kind,id,payload,options)=>receipts.set(id,{kind,id,payload,projectId:options.projectId}),get:async(user,kind,id)=>receipts.get(id)};
     const first = await manager.start(project);
     assert.equal(first.geoSkills, true, "the runtime record says what it was launched with");
+    const receipt = await manager.launchedContextReceipt(project);
+    assert.ok(receipt.mounts.some(mount=>mount.includes('dst=/runtime/capsule-methods') && mount.endsWith(',readonly')));
+    assert.ok((await launches())[0].includes(`OPENVIKING_PENDING_DIR=${receipt.pendingDirectory}`));
     await manager.stop(project);
     isGeo = false;
     const second = await manager.start(project);
     assert.equal(second.geoSkills, false);
+    assert.equal((await manager.launchedContextReceipt(project)).policy.namespaceId, "namespace", "the persistent privacy floor survives disabling the method pack");
     const runs = await launches();
     assert.equal(runs.length, 2);
+    assert.ok(runs.every(args=>!args.some(arg=>arg.includes('dst=/workspace/library'))),"the controller also excludes the owner library from every shared launch");
+    assert.equal(await readFile(path.join(library,'foreign.md'),'utf8'),'PRIVATE OWNER LIBRARY');
+    const verifier = runContextAuthorityPublicKey("api-only-attendance-controller-test-secret");
+    for (const args of runs) {
+      assert.ok(args.includes(`EVIMED_ATTENDANCE_PUBLIC_KEY=${verifier}`), "the API's public verifier crosses the controller wire");
+      assert.ok(args.includes(`EVIMED_ATTENDANCE_USER_ID=${project.userId}`));
+      assert.ok(args.includes(`EVIMED_ATTENDANCE_PROJECT_ID=${project.id}`));
+      assert.ok(!JSON.stringify(args).includes("api-only-attendance-controller-test-secret"), "the privileged controller does not receive the signing secret");
+    }
+    assert.equal(controllerConfig({ dataDir, socketPath, dockerBin }).modelGatewaySigningSecret, "");
     assert.ok(runs[0].includes("EVIMED_GEO_SKILLS=1"), "the GEO project's container is given the pack's switch on");
     assert.equal(runs[0].includes("EVIMED_GEO_SKILLS=0"), false);
     assert.ok(runs[1].includes("EVIMED_GEO_SKILLS=0"), "the same project, no longer a GEO project, is given it off");
@@ -693,6 +720,15 @@ test("the capsule startup protocol refuses a controller from before endpoint han
   );
   client.request = async () => ({ protocolVersion: RUNTIME_CONTROLLER_PROTOCOL_VERSION });
   await assert.doesNotReject(client.health());
+});
+
+test("a controller from before the manifest-derived skill policy (protocol 16) is refused, not trusted to launch it", async () => {
+  // Protocol 17: the controller derives EVIMED_DISABLED_PLATFORM_SKILLS / EVIMED_DISABLED_CLIENT_BUNDLES from the verified
+  // personal generation. A protocol 16 controller would launch the project's switched-off skills enabled.
+  assert.ok(RUNTIME_CONTROLLER_PROTOCOL_VERSION >= 17);
+  const client = new RuntimeControllerClient({});
+  client.request = async () => ({ protocolVersion: 16 });
+  await assert.rejects(client.health(), (error) => error?.code === "runtime_controller_protocol_mismatch");
 });
 
 test("runtime controller shutdown ends even while a client holds a connection open", async () => {

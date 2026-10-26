@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { Pencil } from "lucide-react";
 import { knowledgePageTypeLabel } from "@evimed/domain";
@@ -9,7 +9,7 @@ import { Tag } from "@/components/ui/Tag";
 import { Textarea } from "@/components/ui/Input";
 import { LoadError } from "@/components/cards/LoadError";
 import { WebApiError } from "@/lib/apiClient";
-import { readListState, readerPath } from "@/lib/knowledgeNav";
+import { readListState, readReaderView, readerPath } from "@/lib/knowledgeNav";
 import { productErrorMessage } from "@/lib/productClient";
 import {
   getKnowledgePage, getKnowledgePageAt, getKnowledgeStatus, requestKnowledgeCompile, saveKnowledgePage,
@@ -33,6 +33,11 @@ const OUTLINE_FROM = 4;
 export function KnowledgePageView({ source, onPage }: { source: SourceRecord; onPage?: (page: KnowledgePage) => void }) {
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  const readerView = useMemo(() => readReaderView(params), [params]);
+  const addressed = readerView.knowledge;
+  const addressKey = JSON.stringify(addressed ?? null);
+  const [refreshAddressKey, setRefreshAddressKey] = useState<string | null>(null);
+  const [canRefreshAddress, setCanRefreshAddress] = useState(false);
   const [page, setPage] = useState<KnowledgePage | null>(null);
   const [status, setStatus] = useState<KnowledgeStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -51,15 +56,27 @@ export function KnowledgePageView({ source, onPage }: { source: SourceRecord; on
   useEffect(() => {
     let active = true;
     setError(null);
-    getKnowledgePage(source.id).then(
-      (value) => { if (active) { setPage(value); report.current?.(value); } },
-      (failure) => { if (active) setError(`无法打开这页：${productErrorMessage(failure)}`); },
+    setPage(null);
+    setCanRefreshAddress(false);
+    const refreshAddress = Boolean(addressed && refreshAddressKey === addressKey);
+    const requested = addressed === null ? Promise.reject(new WebApiError("The addressed page is unavailable.", { status: 409, code: "knowledge_page_changed" }))
+      : addressed ? refreshAddress ? getKnowledgePageAt(addressed.projectId, addressed.tree, addressed.path)
+        : getKnowledgePageAt(addressed.projectId, addressed.tree, addressed.path, addressed) : getKnowledgePage(source.id);
+    requested.then(
+      (value) => { if (active) {
+        setPage(value); report.current?.(value);
+        if (refreshAddress) navigate(readerPath(value.sourceId, readListState(params), { tab: null, page: null, ...(value.address ? { knowledge: value.address } : {}) }), { replace: true });
+      } },
+      (failure) => { if (active) {
+        setError(`无法打开这页：${productErrorMessage(failure)}`);
+        setCanRefreshAddress(Boolean(addressed && failure instanceof WebApiError && failure.status === 409 && failure.code === "knowledge_page_changed"));
+      } },
     );
     getKnowledgeStatus(source.projectId).then((value) => { if (active) setStatus(value); }, () => { /* the page stands without it */ });
     return () => { active = false; };
-  }, [source.id, source.projectId, attempt]);
+  }, [source.id, source.projectId, attempt, addressed, addressKey, refreshAddressKey, navigate, params]);
 
-  const follow = useCallback((id: string) => navigate(readerPath(id, readListState(params)), { replace: true }), [navigate, params]);
+  const follow = useCallback((id: string, saved?: KnowledgePage) => navigate(readerPath(id, readListState(params), { tab: null, page: null, ...(saved?.address ? { knowledge: saved.address } : {}) }), { replace: true }), [navigate, params]);
   const compile = async () => {
     setAsking(true);
     try {
@@ -69,7 +86,10 @@ export function KnowledgePageView({ source, onPage }: { source: SourceRecord; on
     finally { setAsking(false); }
   };
 
-  if (error && !page) return <LoadError message={error} onRetry={() => setAttempt((value) => value + 1)} />;
+  if (error && !page) return <LoadError message={error} onRetry={() => {
+    if (canRefreshAddress && addressed) setRefreshAddressKey(addressKey);
+    setAttempt((value) => value + 1);
+  }} />;
   if (!page) return <p role="status" className="text-ui text-text-3">正在打开</p>;
   if (editing) {
     return (
@@ -78,8 +98,9 @@ export function KnowledgePageView({ source, onPage }: { source: SourceRecord; on
           page={page}
           projectId={source.projectId}
           onCancel={() => setEditing(false)}
-          onSaved={(saved) => { setEditing(false); toast.success("已保存"); if (saved.sourceId === source.id) { setPage(saved); report.current?.(saved); } else follow(saved.sourceId); }}
-          onReloaded={(fresh) => { setPage(fresh); report.current?.(fresh); if (fresh.sourceId !== source.id) follow(fresh.sourceId); }}
+          onSaved={(saved) => { setEditing(false); toast.success("已保存"); if (saved.sourceId === source.id) { setPage(saved); report.current?.(saved); }
+            if (saved.sourceId !== source.id || saved.address && JSON.stringify(saved.address) !== JSON.stringify(addressed)) follow(saved.sourceId, saved); }}
+          onReloaded={(fresh) => { setPage(fresh); report.current?.(fresh); if (fresh.sourceId !== source.id || fresh.address && JSON.stringify(fresh.address) !== JSON.stringify(addressed)) follow(fresh.sourceId, fresh); }}
         />
       </div>
     );
@@ -169,7 +190,7 @@ function PageEditor({ page, projectId, onCancel, onSaved, onReloaded }: {
     setSaving(true);
     setMessage(null);
     try {
-      const saved = await saveKnowledgePage({ sourceId: base.sourceId, markdown: masked.restore(text), baseSha256: base.sha256 });
+      const saved = await saveKnowledgePage({ sourceId: base.sourceId, markdown: masked.restore(text), baseSha256: base.sha256, ...(base.address ? { address: base.address } : {}) });
       if (live.current) onSaved(saved.page);
     } catch (failure) {
       if (!live.current) return;

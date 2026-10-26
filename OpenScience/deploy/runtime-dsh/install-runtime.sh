@@ -381,6 +381,8 @@ curated_smoke() {
 import importlib.util
 import json
 import pathlib
+import subprocess
+import sys
 import tempfile
 
 root = pathlib.Path("/usr/local/share/evimed/skills/curated-scientific")
@@ -420,7 +422,8 @@ with tempfile.TemporaryDirectory() as temporary:
             path = output_dir / artifact
             if not path.is_file() or path.stat().st_size == 0:
                 raise SystemExit(f"curated smoke artifact missing: {name}/{artifact}")
-print(f"smoked {len(shared)} shared curated skill implementations; {len(contracts) - len(shared)} with their own entrypoints are smoked next")
+subprocess.run([sys.executable, str(root / "_runtime/smoke_native_methods.py"), "--root", str(root)], check=True)
+print(f"smoked {len(shared)} shared curated skill implementations and adopted native methods; {len(contracts) - len(shared)} with their own entrypoints are smoked next")
 PY
 }
 

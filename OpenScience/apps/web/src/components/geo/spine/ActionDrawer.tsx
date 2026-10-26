@@ -1,3 +1,4 @@
+import { useGeoDestinationPath } from "../useGeoPath";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { pythonRound } from "@evimed/domain";
@@ -26,10 +27,8 @@ import { Section } from "@/components/ui/Section";
 import { SeverityBadge, isSeverityLevel } from "@/components/ui/SeverityBadge";
 import { Tag } from "@/components/ui/Tag";
 import { useGeoDiagnosis } from "../geoProjectData";
-import { geoDestinationPath } from "../geoTabs";
 import {
   engineName,
-  GEO_ORDER_CANCELLABLE,
   monthDay,
   orderStateWord,
   ownedPlatformName,
@@ -155,7 +154,7 @@ function ActionBody({
     setBusyOrder(order.id);
     void cancelGeoOrder(geoId, order.id)
       .then(() => {
-        toast.success("已撤单，预留的钱会退回预算。");
+        toast.success("撤单请求已处理，退款与可用预算以实际流水为准。");
         onChanged();
       })
       .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "这一单无法撤下，请稍后重试。" })))
@@ -289,7 +288,7 @@ function ActionBody({
               <List label="这条行动的订单" divided>
                 {orders.map((order) => {
                   const href = safeWebHref(order.publishedUrl);
-                  const cancellable = GEO_ORDER_CANCELLABLE.has(order.state);
+                  const cancellable = order.cancellable === true && can("manage_money");
                   return (
                     <li key={order.id} data-geo-order={order.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-ui text-text">
                       <span className="min-w-0 flex-1">{order.media || order.domain || "—"}</span>
@@ -338,7 +337,7 @@ function ActionBody({
       {cancelling && (
         <ConfirmDialog
           title={`撤下“${cancelling.title}”？`}
-          body="这一单还没有被媒体接单，撤单后不会发布，预留的钱退回预算。"
+          body="媒体处理结果会更新到订单；预留释放和退款以实际费用流水为准。"
           confirmLabel="撤单"
           onConfirm={cancelOrder}
           onCancel={() => setCancelling(null)}
@@ -351,6 +350,7 @@ function ActionBody({
 /* --------------------------------------------------------------------- gap */
 
 function Gap({ action, claims, geoId }: { action: GeoAction; claims: GeoClusterView["claims"]; geoId: string }) {
+  const geoDestinationPath = useGeoDestinationPath();
   // A wrong statement the action closes is the way to the claim's record, where the diagnosis holds the row that names its claim.
   const diagnosis = useGeoDiagnosis(geoId);
   const claimOfError = useMemo(() => new Map((diagnosis.state.kind === "ready" && Array.isArray(diagnosis.state.data?.errors) ? diagnosis.state.data.errors : []).map((row) => [row.id, claimKeyOf(row)])), [diagnosis.state]);

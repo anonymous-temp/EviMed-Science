@@ -249,6 +249,8 @@ export const GATE_CODE_TITLES_ZH = Object.freeze({
   contract_kind_ambiguous: '交付物类型不明确',
   attempt_limit_reached: '提交次数已达上限',
   budget_exhausted: '运行预算已用完',
+  unattended_question_unavailable: '无人值守任务无法等待提问',
+  autopilot_cancellation_failed: '任务尚未完全停止',
   path_guard_denied: '写入位置被拒绝',
   subagent_failed: '子任务没有完成',
   subagent_start_failed: '子任务未能启动',
@@ -312,6 +314,7 @@ export const GATE_CODE_TITLES_ZH = Object.freeze({
   run_files_changed_after_receipt: '回执之后又改动了交付文件',
   run_resubmit_not_dispatched: '补交回执的请求未能送达',
   run_partial_read: '部分子任务的记录无法读取',
+  run_input_attribution_incomplete: '部分任务输入的来源记录不完整',
   run_side_degraded: '运行中有环节未能正常生效',
   run_side_notice: '运行过程的技术提示',
   // The run side's own "degraded" lines, by the template each is written

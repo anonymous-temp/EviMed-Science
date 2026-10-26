@@ -1,3 +1,4 @@
+import { geoConversationCapability, geoConversationChecks, geoConversationRuns, geoConversationSources, geoConversationSourceScope, geoConversationStatus, startGeoConversation, stopGeoConversationRun, type GeoConversationScope } from "@/lib/geoNativeClient";
 import { geoChatPath, geoIdFromChatPath } from "@/lib/geoLocation";
 import { putConversationReference } from "@/lib/apiClient";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -217,6 +218,10 @@ function refusedStart(error: unknown): FrameFailure | null {
 
 const SESSION_ID = /^[A-Za-z0-9_-]{1,160}$/;
 
+/** What a member of a module project is told when the frame asks for the owner's file or source, or to keep a file. */
+const MEMBER_OPEN_TEXT = "这份内容在项目所有者的资料里，请在对话右侧查看。";
+const MEMBER_SAVE_TEXT = "只有项目所有者可以把这份文件存入知识库。";
+
 /**
  * A delivered file's path as the frame names it, or null. The frame is
  * third-party-composed code on another origin: the path becomes part of a
@@ -325,9 +330,15 @@ function SimulatedRechargeButton() {
  * `active` is the conversation surface being on screen in this project:
  * inactive frames keep their document and their lease and send nothing.
  */
-export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = true, mirrorAddress = true, suspended = false, onRelease }: {
+export function RuntimeUiFrame({ projectId, origin, scope, scopeOwner = false, sessionId = null, active = true, mirrorAddress = true, suspended = false, onRelease }: {
   projectId: string;
   origin: string;
+  scope?: GeoConversationScope;
+  /**
+   * In a module conversation (`scope`), whether the person owns the module project. The owner's files, sources and knowledge base are
+   * read through their own projects as anywhere else; a member reaches only what the module's routes serve, so the rest is not run.
+   */
+  scopeOwner?: boolean;
   /** The conversation this surface should be showing: the chat address's, or the one a task's page asks for. */
   sessionId?: string | null;
   active?: boolean;
@@ -345,6 +356,9 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
    *  runtime's slot is free for another project (`SessionFrameHost`). */
   onRelease?: (released: Promise<void>) => void;
 }) {
+  const startCurrentRuntime = useCallback(() => scope ? startGeoConversation(scope) : startWebRuntime({ projectId, opening: true }), [scope, projectId]);
+  const readCurrentRuns = useCallback(() => scope ? geoConversationRuns(scope) : listWebAgentRuns({ projectId }), [scope, projectId]);
+  const readCurrentChecks = useCallback(() => scope ? geoConversationChecks(scope) : Promise.resolve(null), [scope]);
   const location = useLocation();
   const navigate = useNavigate();
   const onReleaseRef = useRef(onRelease);
@@ -425,13 +439,14 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
     // and commands nothing: two cached projects must not both open a session.
     if (!active || suspended) return null;
     const explicit = runtimeUiIntentFromState(location.state, projectId);
-    if (explicit) return explicit;
+    if (explicit) return !scope || explicit.scope?.geoProjectId === scope.geoProjectId && explicit.scope.sessionId === scope.sessionId ? explicit : null;
+    if (scope && sessionId !== scope.sessionId) return null;
     // URL updates acknowledged by the native application do not command it
     // to open itself again. Browser back/forward still yields a fresh intent.
     if (sessionId && mirroredSession.current?.sessionId === sessionId && mirroredSession.current?.attempt === attempt) return null;
     return { kind: sessionId ? "open" : "create", projectId, requestId: crypto.randomUUID(),
-      sessionId: sessionId ?? crypto.randomUUID() } satisfies RuntimeUiIntent;
-  }, [active, suspended, location.state, projectId, sessionId, attempt]);
+      sessionId: sessionId ?? crypto.randomUUID(), ...(scope ? {scope} : {}) } satisfies RuntimeUiIntent;
+  }, [active, suspended, location.state, projectId, sessionId, attempt, scope]);
 
   // Another project is another opening: nothing of the last one's preparing carries over.
   useEffect(() => {
@@ -485,7 +500,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
     const ask = () => {
       roomTimer.current = undefined;
       if (!roomHold.current.active || roomHold.current.suspended) { waitToStart(kind, null); return; }
-      void startWebRuntime({ projectId, opening: true }).then(() => {
+      void startCurrentRuntime().then(() => {
         // A slot was free, or the cleanup is done: the opening begins again, and finds its runtime up.
         endWait();
         setAttempt(value => value + 1);
@@ -497,7 +512,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
       });
     };
     roomTimer.current = setTimeout(ask, delay);
-  }, [projectId, endWait]);
+  }, [endWait, startCurrentRuntime]);
   // What a refused start of the opening is to the opening: a wait, or something to show.
   const meetStartRefusal = useCallback((cause: unknown) => {
     const refused = startRefusal(cause);
@@ -528,7 +543,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
     recoveryAttempted.current = false;
     nativeReady.current = false;
     incoming.current = 0; outgoing.current = 0; lastSent.current = ""; currentRequest.current = null;
-    void createWebRuntimeUiFrame(projectId).then(value => {
+    void (scope ? createWebRuntimeUiFrame(projectId, scope) : createWebRuntimeUiFrame(projectId)).then(value => {
       if (!live) { release(value.frameId); return; }
       frameId = value.frameId;
       releaseBinding.current = () => release(value.frameId);
@@ -545,7 +560,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
       else setError(refusedFrame(cause));
     });
     return () => { live = false; if (frameId) release(frameId); };
-  }, [projectId, origin, attempt, waitToStart]);
+  }, [projectId, origin, attempt, waitToStart, scope]);
 
   useEffect(() => {
     if (!frameId) return;
@@ -659,11 +674,11 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   // idle runtime of this researcher that a tab still holds yields to it.
   useEffect(() => {
     let live = true;
-    void startWebRuntime({ projectId, opening: true }).catch((cause: unknown) => {
+    void startCurrentRuntime().catch((cause: unknown) => {
       if (live) meetStartRefusal(cause);
     });
     return () => { live = false; };
-  }, [projectId, attempt, meetStartRefusal]);
+  }, [projectId, attempt, meetStartRefusal, startCurrentRuntime]);
 
   // The moment the start is in, asked while the runtime is not up yet. A
   // status read that fails changes nothing: the deadline stays in charge.
@@ -672,23 +687,23 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
     let live = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = () => {
-      void fetchWebRuntimeStatus()
+      void (scope ? geoConversationStatus(scope) : fetchWebRuntimeStatus())
         .then((status) => { if (live) setStartStatus(status); })
         .catch(() => {})
         .finally(() => { if (live) timer = setTimeout(poll, 1_500); });
     };
     poll();
     return () => { live = false; clearTimeout(timer); };
-  }, [error, runtimeUp, attempt, projectId]);
+  }, [error, runtimeUp, attempt, projectId, scope]);
 
   // 重新连接: the reader asking for this conversation back. Its runtime may
   // have yielded to a project opened in another tab, and the frame's own
   // reconnects may not take a runtime back (`makeRoomFor`), so the button is
   // an opening as well as a renewal; a start still refused says why.
   const reconnect = useCallback(() => {
-    void startWebRuntime({ projectId, opening: true }).catch(meetStartRefusal);
+    void startCurrentRuntime().catch(meetStartRefusal);
     renewBinding.current?.();
-  }, [projectId, meetStartRefusal]);
+  }, [meetStartRefusal, startCurrentRuntime]);
 
   /** One message to the frame's bridge, in the envelope and sequence it checks. */
   const postToFrame = useCallback((type: string, fields: object) => {
@@ -725,8 +740,25 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
           typeof message.title === "string" ? message.title.slice(0, 200) : ""));
         return;
       }
+      if (scope && message?.type === "evimed.runtime-ui.session" && message.sessionId !== scope.sessionId) return;
+      if (scope && message?.type === "evimed.runtime-ui.task" && message.rootSessionId !== scope.sessionId) return;
       if (!message || message.version !== 1 || message.frameId !== binding.frameId || message.projectId !== projectId
         || !Number.isSafeInteger(message.seq) || message.seq <= incoming.current) return;
+      // A module conversation keeps its own research tool and its own study: the frame cannot rebind either.
+      if (scope && ["evimed.runtime-ui.bind-capability", "evimed.runtime-ui.vcr-options"].includes(message.type)) {
+        incoming.current = message.seq;
+        toast.error("请使用对话中的工具，或从项目页面打开这项内容。");
+        return;
+      }
+      // A member acts in the owner's runtime through the module's routes, which serve no run file, saved source or knowledge-base
+      // copy of the owner's: those run for the owner below, as in any conversation. For a member the references the frame asks
+      // about are answered as unread, which the frame draws as nothing, and a file or source asked to open is said plainly.
+      if (scope && !scopeOwner && ["evimed.runtime-ui.open-artifact", "evimed.runtime-ui.save-to-knowledge-base", "evimed.runtime-ui.source-citations", "evimed.runtime-ui.open-source"].includes(message.type)) {
+        incoming.current = message.seq;
+        if (message.type === "evimed.runtime-ui.source-citations") postToFrame("source-citations-result", { requestId: message.requestId, ok: false, items: [] });
+        else toast.error(message.type === "evimed.runtime-ui.save-to-knowledge-base" ? MEMBER_SAVE_TEXT : MEMBER_OPEN_TEXT);
+        return;
+      }
       if (message.type === "evimed.runtime-ui.booted") {
         incoming.current = message.seq;
         setBooted(value => value + 1);
@@ -769,7 +801,8 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
           // vocabulary, and the project is the tab's own, never the frame's word.
           incoming.current = message.seq;
           const tab = isGeoTab(typeof message.tab === "string" ? message.tab : null) ? message.tab as string : null;
-          void geoProjectPath(projectId, tab).then((path) => navigate(path));
+          if (scope) navigate(`/app/geo/${encodeURIComponent(scope.geoProjectId)}${tab ? `/${tab}` : ""}`);
+          else void geoProjectPath(projectId, tab).then((path) => navigate(path));
           return;
         }
         if (message.destination === "autopilot") {
@@ -819,7 +852,8 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         const path = artifactPath(message.path);
         if (!runId || !path) return;
         incoming.current = message.seq;
-        void saveToKnowledgeBase(path).then(
+        // A module conversation's files are its project's: the owner's copy goes into that project's knowledge base.
+        void (scope ? saveToKnowledgeBase(path, { projectId }) : saveToKnowledgeBase(path)).then(
           (saved) => toast.success(saved.duplicate ? "这份文件已经在知识库里" : "已存入知识库，正在读取"),
           (failure) => toast.error(`没能存入知识库：${webErrorMessage(failure)}`),
         );
@@ -838,10 +872,11 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
           : { ok: false, items: [], hasMore: false, error: typeof message.error === "string" ? message.error.slice(0, 80) : "search_failed" });
       } else if (message.type === "evimed.runtime-ui.stop-run" && typeof message.runId === "string" && SESSION_ID.test(message.runId)) {
         incoming.current = message.seq;
-        void listWebAgentRuns({ projectId }).then(async runs => {
+        void readCurrentRuns().then(async runs => {
           const run = runs.find(item => item.id === message.runId && item.sessionId === (sessionId ?? frameTask));
           if (!run?.availableActions?.some(action => action.kind === "stop" && action.targetId === run.id)) return;
-          await cancelWebAgentRun(run.id);
+          // A module conversation's run is stopped under the module's authority: it is in the owner's project, not the person's.
+          await (scope ? stopGeoConversationRun(scope, run.id) : cancelWebAgentRun(run.id));
         }).catch(failure => toast.error(webErrorMessage(failure)));
       } else if (message.type === "evimed.runtime-ui.source-citations"
         && typeof message.requestId === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(message.requestId)
@@ -876,7 +911,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         && message.sourceIds.every((id: unknown) => typeof id === "string" && /^src_[a-f0-9]{32}$/.test(id))))) {
         incoming.current = message.seq;
         const requestId = message.requestId;
-        const operation = message.sourceIds === undefined ? getWebSessionSourceScope(message.sessionId, projectId)
+        const operation = scope ? (message.sessionId === scope.sessionId ? geoConversationSourceScope(scope, message.sourceIds, message.sourceScopeMode) : Promise.reject(new Error("Conversation scope mismatch"))) : message.sourceIds === undefined ? getWebSessionSourceScope(message.sessionId, projectId)
           : putWebSessionSourceScope(message.sessionId, message.sourceIds, projectId, message.sourceScopeMode);
         void operation.then(
           value => postToFrame("source-scope-result", { requestId, ok: true, sessionId: message.sessionId, sourceIds: value.sourceScope ?? [], sourceScopeMode: Array.isArray(value.sourceScope) ? "selected" : "project", originReference: value.originReference ?? null }),
@@ -890,7 +925,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         incoming.current = message.seq;
         const requestId = message.requestId;
         const query = typeof message.query === "string" ? message.query.slice(0, 200) : "";
-        void searchKnowledgeSources(projectId, query).then(
+        void (scope ? geoConversationSources(scope).then(items => items.filter(item => item.title.toLowerCase().includes(query.toLowerCase())).slice(0, 20)) : searchKnowledgeSources(projectId, query)).then(
           (items) => postToFrame("kb-result", { requestId, ok: true, items }),
           () => postToFrame("kb-result", { requestId, ok: false, items: [] }),
         );
@@ -930,7 +965,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
           || (message.ok && (typeof message.sessionId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(message.sessionId)
             || (request.kind === "open" && message.sessionId !== request.sessionId)))) return;
         incoming.current = message.seq;
-        if (!message.ok) { setError({ ...frameFailure("这条对话暂时无法打开"), newTask: request.kind === "open" }); return; }
+        if (!message.ok) { setError({ ...frameFailure("这条对话暂时无法打开"), newTask: !scope && request.kind === "open" }); return; }
         currentRequest.current = null; setPending(false); setNavigated(true);
         mirroredSession.current = { sessionId: message.sessionId, attempt };
         setFrameTask(message.sessionId);
@@ -975,7 +1010,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [binding, origin, projectId, sessionId, frameTask, intent, location, navigate, navigated, attempt, postToFrame, waitToStart, endWait, mirrorAddress]);
+  }, [binding, origin, projectId, sessionId, frameTask, intent, location, navigate, navigated, attempt, postToFrame, waitToStart, endWait, mirrorAddress, scope, scopeOwner, readCurrentRuns]);
 
   useEffect(() => {
     if (!ready || error || !binding || !intent || !iframe.current?.contentWindow) return;
@@ -985,17 +1020,18 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
     lastSent.current = key; currentRequest.current = intent; setPending(true);
     let alive = true;
     void (async () => {
+      if (scope && (intent.scope?.geoProjectId !== scope.geoProjectId || intent.sessionId !== scope.sessionId || intent.kind !== "open" || intent.originReference)) throw new Error("Conversation scope changed");
       if (intent.originReference) await putConversationReference(intent.sessionId, projectId, intent.originReference);
       if (!alive) return;
       iframe.current?.contentWindow?.postMessage({
       type: "evimed.runtime-ui.navigate", version: 1, frameId: binding.frameId, projectId,
       requestId: intent.requestId, seq: ++outgoing.current,
-      intent: { kind: intent.kind, sessionId: intent.sessionId, ...(intent.draft === undefined ? {} : { draft: intent.draft }), ...(intent.resultRevision ? { resultRevision: intent.resultRevision } : {}), ...(intent.references ? { references: intent.references } : {}) },
+      intent: { kind: intent.kind, sessionId: intent.sessionId, ...(intent.draft === undefined ? {} : { draft: intent.draft }), ...(intent.resultRevision ? { resultRevision: intent.resultRevision } : {}), ...(intent.geoPlanContext ? { geoPlanContext: intent.geoPlanContext } : {}), ...(intent.references ? { references: intent.references } : {}) },
     }, origin);
     })().catch(() => { if (alive) setError(frameFailure("无法保存引用，请重试")); });
     return () => { alive = false; };
 
-  }, [ready, readyGeneration, error, binding, intent, projectId, origin]);
+  }, [ready, readyGeneration, error, binding, intent, projectId, origin, scope]);
 
   // The shell's light/dark/system choice, in the frame (C9 `theme`). The
   // kernel's page has no channel of its own for it — no parameter, no storage
@@ -1038,7 +1074,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
       for (const settle of [...pending.values()]) settle({ ok: false, items: [], hasMore: false, error: "search_unavailable" });
       pending.clear();
     };
-  }, [ready, error, frameId, postToFrame]);
+  }, [ready, error, frameId, postToFrame, active]);
 
   // The run bound to the task on screen, for the frame's cards and panels
   // (C9 `run-state`, plus the claims and sources of its report). Only once the
@@ -1061,7 +1097,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
     if (!booted || error || !frameId) return undefined;
     let active = true;
     if (!frameTask) { postToFrame("capability", { capabilityId: null, sessionId: null }); setFrameCapability(null); return undefined; }
-    void conversationCapability(frameTask)
+    void (scope ? geoConversationCapability(scope) : conversationCapability(frameTask))
       .then((capabilityId) => {
         if (!active) return;
         postToFrame("capability", { capabilityId, sessionId: frameTask });
@@ -1069,19 +1105,19 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
       })
       .catch(() => { /* the chip stays absent rather than wrong */ });
     return () => { active = false; };
-  }, [booted, error, frameId, frameTask, postToFrame]);
+  }, [booted, error, frameId, frameTask, postToFrame, scope]);
 
   // 循证 GEO's options beside its chip, for a conversation bound to one of the
   // module's capabilities (`useFrameGeoOptions`).
   const postGeo = useCallback((payload: object) => postToFrame("geo", payload), [postToFrame]);
   geoOptionsHandler.current = useFrameGeoOptions({
-    projectId, sessionId: frameTask, capabilityId: frameCapability, enabled: active && booted > 0 && !error && Boolean(frameId), post: postGeo,
+    projectId, geoId: scope?.geoProjectId, sessionId: frameTask, capabilityId: frameCapability, enabled: active && booted > 0 && !error && Boolean(frameId), post: postGeo,
   });
   // 虚拟临床研究's options beside its chip, for a conversation bound to one of the
   // module's capabilities (`useFrameVcrOptions`).
   const postVcr = useCallback((payload: object) => postToFrame("vcr", payload), [postToFrame]);
   vcrOptionsHandler.current = useFrameVcrOptions({
-    projectId, sessionId: frameTask, capabilityId: frameCapability, enabled: booted > 0 && !error && Boolean(frameId), post: postVcr,
+    projectId, sessionId: frameTask, capabilityId: frameCapability, enabled: !scope && booted > 0 && !error && Boolean(frameId), post: postVcr,
   });
 
   const postRunState = useCallback((state: object) => postToFrame("run-state", state), [postToFrame]);
@@ -1095,11 +1131,11 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
     setBoundRun((previous) => (previous?.id === run?.id && previous?.status === run?.status
       && JSON.stringify(previous?.connectorNeeds ?? null) === JSON.stringify(run?.connectorNeeds ?? null) ? previous : run));
   }, []);
-  useFrameRunBinding({ sessionId: frameTask, enabled: booted > 0 && !error && Boolean(frameId), postRunState, postEvidence, onRun: onBoundRun });
+  useFrameRunBinding({ scope, readRuns: readCurrentRuns, sessionId: frameTask, enabled: booted > 0 && !error && Boolean(frameId), postRunState, postEvidence, onRun: onBoundRun });
   // The independent reviewer's checks of this conversation's answers (L1): a
   // row under each checked answer, drawn by the frame from what the shell reads.
   const postReplyChecks = useCallback((payload: object) => postToFrame("reply-check", payload), [postToFrame]);
-  useFrameReplyChecks({ projectId, sessionId: frameTask, enabled: booted > 0 && !error && Boolean(frameId), post: postReplyChecks });
+  useFrameReplyChecks({ projectId, ...(scope ? { readChecks: readCurrentChecks } : {}), sessionId: frameTask, enabled: booted > 0 && !error && Boolean(frameId), post: postReplyChecks });
 
   // Focus goes where the next keystroke belongs (U8): into the conversation
   // once it is open — unless the reader already put focus somewhere else in the
@@ -1143,9 +1179,10 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   // report when the ledger has one, else the project's files. The conversation's own text lives in the kernel's
   // session store and is not faked from the ledger, which keeps no reply text.
   const openExistingResults = async () => {
+    if (scope) { navigate(`/app/geo/${encodeURIComponent(scope.geoProjectId)}/articles`); return; }
     let target = "/app/files";
     try {
-      const runs = (await listWebAgentRuns({ projectId })).filter((run) => sessionId && run.sessionId === sessionId);
+      const runs = (await readCurrentRuns()).filter((run) => sessionId && run.sessionId === sessionId);
       for (const run of runs.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))) {
         const file = reportPathOf({ runId: run.id, artifacts: run.artifacts, unverifiedArtifacts: run.unverifiedArtifacts }) ?? run.artifacts?.[0] ?? null;
         const path = artifactPath(file);
@@ -1185,7 +1222,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
                   for a simulated allowance that ran out, the page that tops it up. */}
               {error.recovery === "spend" && (error.code === SIMULATED_CREDITS_EXHAUSTED ? <SimulatedRechargeButton /> : <UsageButton />)}
             </div>
-            <PreservedConversation projectId={projectId} sessionId={sessionId ?? frameTask} />
+            <PreservedConversation scope={scope} projectId={projectId} sessionId={sessionId ?? frameTask} />
             </div>
           ) : (
             <>

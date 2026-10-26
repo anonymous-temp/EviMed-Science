@@ -8,6 +8,7 @@ import {
   GEO_TAB_STEPS,
   GEO_TABS,
   geoDestinationPath,
+  geoViewedStep,
   geoEvidenceView,
   geoQuestionsView,
   geoSectionId,
@@ -77,6 +78,7 @@ describe("the project page's tabs", () => {
     expect(geoQuestionsView("nonsense")).toBe("pools");
     expect(geoQuestionsView(null)).toBe("pools");
     expect(geoEvidenceView("value")).toBe("value");
+    expect(geoEvidenceView("coverage")).toBe("coverage");
     expect(geoEvidenceView("x")).toBe("claims");
   });
 });
@@ -142,4 +144,8 @@ describe("the step ↔ tab map", () => {
       expect(destination.tab, address).toBe(GEO_STEP_HOME[address as keyof typeof GEO_STEP_HOME].tab);
     }
   });
+});
+
+it('existing distribution workbench anchors select the distribution step',()=>{
+ expect(geoViewedStep('actions',{section:'geo-distribution'})).toBe('distribution');
 });

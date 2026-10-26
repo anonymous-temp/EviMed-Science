@@ -76,6 +76,19 @@ test("under the audience all a non-operator account makes a project, runs a step
   assert.deepEqual([(await call("outsider", "POST", `/api/geo/projects/${id}/run`, { step: "evidence" })).status], [404]);
 });
 
+test('the composed exact-run reader resolves the complete owner account for its real workspace and programme history', options, async () => {
+  const id = await made();
+  await call('owner', 'POST', `/api/geo/projects/${id}/members`, { userId: accounts.viewer, role: 'viewer' });
+  const project = await context.app.geo.service.requireProject(await context.app.store.userById(accounts.viewer), id);
+  assert.equal(project.userId, accounts.owner);
+  const control = await context.app.geo.signalResults.controlProject(project);
+  assert.equal(control.userId, accounts.owner); assert.equal(control.id, project.projectId);
+  assert.equal(typeof control.workspaceDir, 'string');
+  assert.ok(control.workspaceDir.includes(`${path.sep}${accounts.owner}${path.sep}`));
+  assert.deepEqual(await context.app.geo.signalResults.programmeRuns(project), []);
+  assert.deepEqual(await context.app.geo.signals.runs(project), []);
+});
+
 test("the owner brings in an editor, a medical reviewer and a viewer; the list names them with what each may do", options, async () => {
   const id = await made();
   assert.equal((await call("owner", "POST", `/api/geo/projects/${id}/members`, { userId: accounts.editor, role: "editor" })).status, 201);

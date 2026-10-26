@@ -142,10 +142,25 @@ test("a routine execution is no observation about whether a direction produces c
   assert.equal(payload.taskTypeState.routine.lastOutcome, "succeeded");
 });
 
-test("a routine type that keeps failing to run is paused alone, like any other type", () => {
-  let payload = agenda({ taskTypes: ["routine", "literature-sentinel"] });
+test("repeated failures pause the same ordinary job instead of rotating into research", () => {
+  // The intent is an explicit choice recorded where it is made (the form, the tool, the model's decision), never by the fold.
+  let payload = agenda({ taskTypes: ["routine", "literature-sentinel"], taskIntent: "routine" });
   payload = record(payload, "routine", "failed");
   payload = record(payload, "routine", "failed");
-  assert.deepEqual(eligibleTaskTypes(payload), ["literature-sentinel"]);
+  assert.deepEqual(eligibleTaskTypes(payload), []);
+  assert.equal(payload.taskIntent, "routine");
+  assert.equal(payload.status, "paused");
+});
+
+test("an outcome is no intent: routine history neither locks a mixed task nor narrows what the decision is offered", () => {
+  let payload = agenda({ taskTypes: ["routine", "literature-sentinel", "evidence-update"] });
+  payload = record(payload, "routine", "succeeded");
+  assert.equal(payload.taskIntent, undefined, "a routine outcome writes no intent");
+  assert.deepEqual(eligibleTaskTypes(payload), ["routine", "literature-sentinel", "evidence-update"]);
+  payload = record(payload, "routine", "failed");
+  payload = record(payload, "routine", "failed");
+  assert.deepEqual(eligibleTaskTypes(payload), ["literature-sentinel", "evidence-update"], "only the failing type is paused");
   assert.equal(payload.status, "active");
+  // A task an older build stored with routine history and no intent reads the same way.
+  assert.deepEqual(eligibleTaskTypes({ taskTypes: ["routine", "data-prospecting"], taskTypeState: { routine: { lastOutcome: "succeeded" } } }), ["routine", "data-prospecting"]);
 });

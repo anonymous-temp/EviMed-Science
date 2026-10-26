@@ -160,6 +160,38 @@ class TaskToolsTests(_GatewayCase):
         result = task_tools.call("schedule_task", {"instruction": "x", "schedule": {"kind": "daily", "time": "07:00"}})
         self.assertIn("already exists, so nothing was created", result["summary"])
 
+    def test_a_paused_duplicate_explains_that_it_will_not_run_until_reenabled(self):
+        _Gateway.answer = (200, {"data": task_facts(created=False, state="paused", nextRunAt=None, nextRunText=None)})
+        result = task_tools.call("schedule_task", {"instruction": "x", "schedule": {"kind": "daily", "time": "07:00"}})
+        self.assertEqual(result["status"], "warning")
+        self.assertIn("paused", result["summary"])
+        self.assertTrue(any("paused: false" in action for action in result["next_actions"]))
+
+    def test_partial_saved_update_reports_the_saved_state_and_only_retries_the_remaining_action(self):
+        _Gateway.answer = (200, {"data": task_facts(created=False, state="paused", nextRunAt=None, nextRunText=None,
+            outcome="partial", changed=["instruction"], pending={"paused": False},
+            recovery={"operation": "update", "taskId": "agenda-1", "paused": False},
+            failure={"code": "autopilot_unavailable", "retryable": True})})
+        result = task_tools.call("update_task", {"taskId": "agenda-1", "instruction": "new", "paused": False})
+        self.assertEqual(result["status"], "warning")
+        self.assertIn("Saved", result["summary"])
+        self.assertIn("instruction", result["summary"])
+        self.assertNotIn("nothing was changed", json.dumps(result))
+        self.assertTrue(result["warnings"])
+        self.assertTrue(any("recovery" in action for action in result["next_actions"]))
+
+    def test_material_references_are_durable_source_ids_and_never_host_paths(self):
+        source = "src_" + "a" * 32
+        _Gateway.answer = (200, {"data": task_facts(sourceIds=[source])})
+        task_tools.call("schedule_task", {"instruction": "summarize the attached sheet", "schedule": {"kind": "daily", "time": "07:00"}, "sourceIds": [source]})
+        self.assertEqual(_Gateway.seen[-1]["body"]["sourceIds"], [source])
+        task_tools.call("update_task", {"taskId": "agenda-1", "sourceIds": [source]})
+        self.assertEqual(_Gateway.seen[-1]["body"]["sourceIds"], [source])
+        for bad in [[], ["/tmp/sheet.xlsx"], ["src_short"], [source] * 11, "not-a-list"]:
+            with self.subTest(bad=bad), self.assertRaises(task_tools.TaskToolError) as caught:
+                task_tools.call("update_task", {"taskId": "agenda-1", "sourceIds": bad})
+            self.assertEqual(caught.exception.code, "task_materials_invalid")
+
     def test_a_task_the_schedule_has_no_run_left_for_is_a_warning_and_never_hidden(self):
         _Gateway.answer = (200, {"data": task_facts(state="completed", nextRunAt=None, nextRunText=None)})
         result = task_tools.call("schedule_task", {"instruction": "x", "schedule": {"kind": "daily", "time": "07:00"}})

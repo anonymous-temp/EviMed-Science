@@ -34,3 +34,38 @@ test('canonical resource study exposure excludes fresh aliases and version hashe
  const result=await pool.assemble(request('candidate'));
  assert.equal(result.id,null);assert.match(result.payload.reason,/abstention/);
 });
+
+test('a task identity cannot silently accept changed scientific truth after a retry', async () => {
+ const f=evolutionServiceFixture(),pool=createEvolutionTaskPool({service:f.service});
+ const original=task('immutable',{expectedAnswer:'preserved truth'});
+ const first=await pool.add(original);
+ assert.equal((await pool.add(original)).revision,first.revision);
+ await pool.expose([first],{candidateId:'candidate',lineageId:'lineage',reason:'confirmation-result'});
+ assert.equal((await pool.add(original)).id,first.id,'operational exposure does not change the original definition');
+ await assert.rejects(pool.add({...original,expectedAnswer:'different truth'}),/definition changed/);
+});
+
+test('confirmation binds the exact task revisions before reservation and exposure mutate accounting', async () => {
+ const f=evolutionServiceFixture(),pool=createEvolutionTaskPool({service:f.service});
+ const a=await pool.add(task('pinned-a',{abstentionExpected:true,slices:['safety']}));
+ const b=await pool.add(task('pinned-b'));
+ const batch=await pool.assemble(request('pinned-candidate'));
+ assert.equal(batch.payload.taskRefs.length,2);
+ for (const row of [a,b]) {
+  const pin=batch.payload.taskRefs.find(ref=>ref.id===row.id);
+  assert.equal(pin.revision,row.revision); assert.match(pin.payloadHash,/^[a-f0-9]{64}$/);
+  assert.ok((await f.service.get(row.id)).revision>pin.revision);
+ }
+ await pool.finish(batch,{outcome:'test'});
+ assert.deepEqual((await f.service.get(batch.id)).payload.taskRefs,batch.payload.taskRefs);
+});
+
+test('a newly measured baseline outcome is bookkeeping rather than a changed scientific task', async () => {
+ const f=evolutionServiceFixture(),pool=createEvolutionTaskPool({service:f.service});
+ const definition=task('remeasured',{pool:'development',expectedAnswer:'Preserved truth',baselineKnownCorrect:true,evaluatorVersion:'v1'});
+ const original=await pool.add(definition);
+ const updated=await pool.add({...definition,baselineKnownCorrect:false,evaluatorVersion:'v2'});
+ assert.equal(updated.id,original.id); assert.equal(updated.payload.baselineKnownCorrect,false);
+ assert.equal(updated.payload.taskHash,original.payload.taskHash);
+ await assert.rejects(pool.add({...definition,expectedAnswer:'Changed truth'}),/definition changed/);
+});

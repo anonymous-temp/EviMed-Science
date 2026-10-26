@@ -82,6 +82,51 @@ async function serve(t, handler) {
 
 const on = { geoEnabled: true, geoAudience: "all", operatorUsers: [], geoPreviewUsers: [], geoSocialTimeoutMs: 2_000 };
 
+test('signal material reads require the bound context and reject current-data selectors', async t => {
+  const { geo, calls } = geoDouble(on), { post } = await serve(t, createGeoGatewayHandler(on, runtimeManager, { geo }));
+  const filter = { planContextRef: 'gpc_' + 'a'.repeat(64), targetKey: 'target_exact', offset: 2, limit: 1 };
+  assert.equal((await post('read', { what: 'signal', filter })).status, 200);
+  assert.deepEqual(calls.at(-1), ['read', 'geo_1', 'signal', filter]);
+  for (const body of [{ what: 'signal' }, { what: 'signal', filter: { ...filter, round: 'latest' } },
+    { what: 'signal', filter: { ...filter, targetKey: '' } }, { what: 'claims', filter }, { what: 'analysis', filter }]) {
+    assert.equal((await post('read', body)).status, 400);
+  }
+});
+
+test('selected analysis descriptors pass intact and cannot leak into another read or frozen input', async t => {
+  const { geo, calls } = geoDouble(on);
+  const { post } = await serve(t, createGeoGatewayHandler(on, runtimeManager, { geo }));
+  for (const filter of [{ viewId: 'V02', timeGrain: 'round', dimension: 'engine' }, { viewId: 'V05', dimension: 'group', entityKind: 'generic', entityKey: 'Preserved generic' }]) {
+    assert.equal((await post('read', { what: 'analysis', filter })).status, 200);
+    const forwarded = calls.at(-1)[3];
+    for (const [key, value] of Object.entries(filter)) assert.equal(forwarded[key], value);
+  }
+  for (const filter of [{ timeGrain: 'round' }, { entityKind: 'generic', entityKey: 'name' }]) assert.equal((await post('read', { what: 'snapshots', filter })).status, 400);
+  assert.equal((await post('read', { what: 'analysis', filter: { planContextRef: `gpc_${'a'.repeat(64)}`, timeGrain: 'round' } })).status, 400);
+});
+
+test('frozen object continuation forwards its exact row and refuses selection replacement',async t=>{
+  const {geo,calls}=geoDouble(on),{post}=await serve(t,createGeoGatewayHandler(on,runtimeManager,{geo}));
+  const filter={planContextRef:`gpc_${'a'.repeat(64)}`,rowKey:'same-claim',columnKey:'objects',offset:51,limit:37};
+  assert.equal((await post('read',{what:'analysis',filter})).status,200);
+  assert.deepEqual(calls.at(-1),['read','geo_1','analysis',filter]);
+  for(const bad of [{...filter,columnKey:'observations'},{...filter,rowKey:null},{...filter,round:'latest'},
+    {...filter,viewId:'V16'},{...filter,expectedDigest:'a'.repeat(64)}])assert.equal((await post('read',{what:'analysis',filter:bad})).status,400);
+});
+
+test("exact member continuation can reach every observation in a bounded selection", async (t) => {
+  const { geo, calls } = geoDouble(on);
+  const { post } = await serve(t, createGeoGatewayHandler(on, runtimeManager, { geo }));
+  const filter = { selectionRef: "gsel_one", member: { metricId: "M-06", scope: "project", observationDate: "2026-10-01" }, offset: 19_950, limit: 50 };
+  assert.equal((await post("read", { what: "snapshots", filter })).status, 200);
+  assert.deepEqual(calls[0][3], filter);
+  assert.equal((await post("read", { what: "snapshots", filter: { ...filter, member: { ...filter.member, observationDate: "" } } })).status, 400);
+  assert.equal((await post("read", { what: "snapshots", filter: { ...filter, offset: 20_001 } })).status, 400);
+  const sourceFilter = { selectionRef: "gsel_one", sourceId: "source_one", answerLimit: 1, answerOffset: 200 };
+  assert.equal((await post("read", { what: "sources", filter: sourceFilter })).status, 200);
+  assert.deepEqual(calls[1][3], sourceFilter);
+});
+
 test("the gateway address is the model gateway's server, and only when the module is on", () => {
   assert.equal(geoGatewayProviderUrl({ geoEnabled: true, modelGatewayInternalUrl: "http://open-science-web:8787/internal/model/v1" }),
     "http://open-science-web:8787/internal/geo/v1");
@@ -105,6 +150,23 @@ test("the runtime's own token is the only way in, and it names the project", asy
   assert.equal((await post("nothing", {})).status, 404);
   assert.equal((await post("read", null, "token-alice", "GET")).status, 404, "POST only");
   assert.ok(failures.some((failure) => failure.code === "geo_no_project"), "failures reach the platform's ledger");
+});
+
+test('D3 native analysis descriptors retain the selected owned metric through closed gateway fields', async t => {
+  const {geo,calls}=geoDouble(on),{post}=await serve(t,createGeoGatewayHandler(on,runtimeManager,{geo}));
+  for(const filter of [{viewId:'V20',selectionRef:'gsel_d3',sourceRelationship:'all'}, {viewId:'V21',selectionRef:'gsel_d3'},
+    ...['M-08','M-08S'].map(ownedMetricId=>({viewId:'V21',ownedMetricId,selectionRef:'gsel_d3',rowKey:'exact-group',columnKey:'owned',expectedDigest:'a'.repeat(64)}))]) {
+    const result=await post('read',{what:'analysis',filter});assert.equal(result.status,200,JSON.stringify(result.body));
+    const forwarded=calls.at(-1)[3];for(const [key,value]of Object.entries(filter))assert.equal(forwarded[key],value);
+    if(filter.viewId==='V21')assert.equal(forwarded.ownedMetricId,filter.ownedMetricId??'M-08');
+  }
+  const count=calls.length;
+  for(const filter of [{viewId:'V21',ownedMetricId:'M-09'},{viewId:'V20',ownedMetricId:'M-08'}, {viewId:'V99'},
+    {ownedMetricId:'M-08'},{viewId:'V21',ownedMetricId:'M-08S',planContextRef:'gpc_'+'a'.repeat(64)}]) {
+    const result=await post('read',{what:'analysis',filter});assert.equal(result.status,400);assert.equal(result.body.code,'geo_read_filter_invalid');
+  }
+  assert.equal((await post('read',{what:'claims',filter:{viewId:'V21',ownedMetricId:'M-08S'}})).status,400);
+  assert.equal(calls.length,count,'invalid descriptors never reach runtimeRead');
 });
 
 test("off, or not open to the account, every operation says geo_disabled", async (t) => {
@@ -275,4 +337,63 @@ test("the social search needs a channel, validates its words, and answers within
   const { post: slow } = await serve(t, createGeoGatewayHandler({ ...on, geoSocialTimeoutMs: 100 }, runtimeManager, { geo: hanging.geo, budgetMs: 200 }));
   const timedOut = await slow("social", { query: "q", platforms: ["xhs"] });
   assert.deepEqual([timedOut.status, timedOut.body.code], [504, "geo_gateway_timeout"]);
+});
+
+test("native import and explicit recovery refusals retain actionable messages without becoming outages", async (t) => {
+  // Refusals the run corrects in its payload, including a round that cannot be planned as sent (they read 「gateway unavailable」).
+  for (const [status, code] of [[400, "geo_question_import_invalid"], [400, "geo_diagnosis_invalid"], [409, "geo_contract_missing"],
+    [400, "geo_recovery_invalid"], [409, "geo_round_empty"], [409, "geo_round_question_invalid"], [400, "geo_round_engine_invalid"], [400, "geo_round_too_large"]]) {
+    const message = `Correct this request: ${code}`;
+    const { geo } = geoDouble(on, { failStep: new HttpError(Number(status), String(code), message) });
+    const { post } = await serve(t, createGeoGatewayHandler(on, runtimeManager, { geo }));
+    const answer = await post("write", { what: "step", data: { step: "evidence", status: "running" } });
+    assert.deepEqual([answer.status, answer.body.code, answer.body.error], [status, "geo_write_payload_invalid", message]);
+  }
+  // Refusals with their own next step reach the run by name: a new request key, a used recovery, the person's acceptance.
+  for (const [status, code] of [[409, "geo_request_key_conflict"], [409, "geo_recovery_exhausted"], [409, "geo_recovery_acknowledgment_required"]]) {
+    const message = `Named refusal: ${code}`;
+    const { geo } = geoDouble(on, { failStep: new HttpError(Number(status), String(code), message) });
+    const { post } = await serve(t, createGeoGatewayHandler(on, runtimeManager, { geo }));
+    const answer = await post("write", { what: "step", data: { step: "evidence", status: "running" } });
+    assert.deepEqual([answer.status, answer.body.code, answer.body.error], [status, code, message]);
+  }
+});
+
+test('a project token cannot turn an active other-session plan hint into scoped authority or omit the hint to mutate legacy plans', async t => {
+  const {geo,calls} = geoDouble(on);
+  let active = false;
+  geo.service.planContexts = {activeScoped:async()=>active};
+  const {post} = await serve(t,createGeoGatewayHandler(on,runtimeManager,{geo}));
+  const hint = await post('write',{what:'strategy',data:{summary:'Forged'},planContextRef:`gpc_${'a'.repeat(64)}`,promptRequestId:'other-active-request'});
+  assert.equal(hint.status,409); assert.equal(hint.body.code,'geo_plan_file_required');
+  active = true;
+  for (const what of ['strategy','actions','targets']) {
+    const refused = await post('write',{what,data:{summary:'No hint'}});
+    assert.equal(refused.status,409); assert.equal(refused.body.code,'geo_plan_file_required');
+  }
+  assert.equal(calls.some(call=>String(call[0]).includes('Strategy')),false);
+  active = false;
+  assert.notEqual((await post('write',{what:'actions',items:[]})).status,409,'legacy unbound path remains available');
+});
+
+test('error distribution and addressed diagnosis selectors stay on their own read contract',async t=>{
+ const {geo,calls}=geoDouble(on),{post}=await serve(t,createGeoGatewayHandler(on,runtimeManager,{geo}));
+ for(const [what,filter] of [['analysis',{viewId:'V13',errorFacet:'severity',errorView:'withdrawn'}],['diagnosis',{selectionRef:'gsel_exact',errorFingerprint:'rare',errorLimit:500,errorOffset:500}]]){
+  assert.equal((await post('read',{what,filter})).status,200);for(const [key,value] of Object.entries(filter))assert.deepEqual(calls.at(-1)[3][key],value);
+ }
+ for(const [what,filter] of [['analysis',{viewId:'V16',errorFacet:'severity'}],['analysis',{viewId:'V13',errorView:'bad'}],['analysis',{viewId:'V13',errorFingerprint:'rare'}],['claims',{errorFingerprint:'rare'}],['analysis',{planContextRef:'gpc_'+'a'.repeat(64),viewId:'V13',errorView:'all'}]])assert.equal((await post('read',{what,filter})).status,400);
+});
+
+test('analytical reads reject every unsupported diagnosis-list filter instead of ignoring it',async t=>{
+ const {geo,calls}=geoDouble(on),{post}=await serve(t,createGeoGatewayHandler(on,runtimeManager,{geo}));
+ for(const filter of [{errorSeverities:['S4']},{errorStatuses:['open']},{errorTypes:['number']},{errorSearch:'x'},{errorLimit:5},{errorOffset:1},{questionId:'q'},{errorTrace:'traced'},{errorJudgmentState:'active'},{errorFingerprint:'f'}])assert.equal((await post('read',{what:'analysis',filter:{viewId:'V13',...filter}})).status,400);
+ assert.equal(calls.length,0);
+});
+
+test('publication descriptors are scoped and unrelated legacy filters cannot silently narrow analytics',async t=>{
+ const {geo,calls}=geoDouble(on),{post}=await serve(t,createGeoGatewayHandler(on,runtimeManager,{geo}));
+ for(const filter of [{viewId:'V23',publicationFacet:'group'},{viewId:'V23',publicationFacet:'audience'},{viewId:'V23',publicationFacet:'channel'},{viewId:'V24'}]){
+  assert.equal((await post('read',{what:'analysis',filter})).status,200);for(const [key,value] of Object.entries(filter))assert.equal(calls.at(-1)[3][key],value);
+ }
+ for(const filter of [{viewId:'V24',publicationFacet:'group'},{viewId:'V23',publicationFacet:'platform'},...['audience','sourceId','url','key','strategyVersion','member','answerLimit','answerOffset'].map(key=>({viewId:'V23',[key]:key==='strategyVersion'||key.endsWith('Limit')?1:'unapplied'})),{planContextRef:'gpc_'+'a'.repeat(64),publicationFacet:'group'}])assert.equal((await post('read',{what:'analysis',filter})).status,400);
 });

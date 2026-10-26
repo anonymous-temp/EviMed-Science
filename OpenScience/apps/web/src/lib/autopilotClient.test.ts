@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { addAgendaMaterials, archiveAgenda, followUpAgenda, getAgenda, getResearchState, removeAgendaMaterial, runAgendaNow, updateAgenda } from "./autopilotClient";
+import { listEpisodes, addAgendaMaterials, archiveAgenda, followUpAgenda, getAgenda, getResearchState, removeAgendaMaterial, runAgendaNow, updateAgenda } from "./autopilotClient";
 const request = vi.hoisted(() => vi.fn());
 vi.mock("./productClient", () => ({ productRequest: request }));
 beforeEach(() => request.mockReset());
@@ -20,4 +20,9 @@ it("reads a question's progress and changes its material only through its own ag
   expect(request).toHaveBeenLastCalledWith("/autopilot/agendas/task%2Fone/materials", "POST", { sha256: ["a".repeat(64)] });
   addAgendaMaterials("task", { sourceIds: ["src_a"] }); expect(request).toHaveBeenLastCalledWith("/autopilot/agendas/task/materials", "POST", { sourceIds: ["src_a"] });
   removeAgendaMaterial("task", "src/a"); expect(request).toHaveBeenLastCalledWith("/autopilot/agendas/task/materials/src%2Fa", "DELETE");
+});
+
+it("requests an older execution page in the same project and task", () => {
+  listEpisodes("project/one", "task/one", "opaque+cursor");
+  expect(request).toHaveBeenLastCalledWith("/autopilot/episodes?projectId=project%2Fone&agendaId=task%2Fone&cursor=opaque%2Bcursor");
 });

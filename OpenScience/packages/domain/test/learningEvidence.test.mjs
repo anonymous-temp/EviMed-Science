@@ -63,6 +63,18 @@ test("a correction is a corrected result, or a steer or follow-up read as a corr
   assert.equal(isLearningCorrection(null), false);
 });
 
+test('shared reference trace survives the cleaner as informational references; malformed or partial traces are omitted whole',()=>{
+  const trace={sourceProjectId:'project-1',sourceRunIds:['run-1'],inputReceiptRefs:['gni_'+'a'.repeat(64)]};
+  const clean=cleanLearningEvidence({evidence:'steer',quote:'Preserve the denominator.',at,...trace});
+  assert.ok(clean);
+  assert.equal(clean.sourceProjectId,trace.sourceProjectId);assert.deepEqual(clean.sourceRunIds,trace.sourceRunIds);assert.deepEqual(clean.inputReceiptRefs,trace.inputReceiptRefs);
+  for(const bad of [{...trace,inputReceiptRefs:['raw text']},{...trace,sourceRunIds:[]},{...trace,sourceProjectId:''},{inputReceiptRefs:trace.inputReceiptRefs}]) {
+    const rejected=cleanLearningEvidence({evidence:'steer',at,...bad});
+    assert.ok(rejected);
+    assert.equal(rejected.inputReceiptRefs,undefined);assert.equal(rejected.sourceRunIds,undefined);assert.equal(rejected.sourceProjectId,undefined);
+  }
+});
+
 test("a run is kept when it was accepted, adopted or its file taken, and nothing else is: silence and a message about something else are unknown", () => {
   assert.equal(isLearningKept({ evidence: "used" }), true);
   for (const verdict of ["accept", "adopt"]) assert.equal(isLearningKept({ evidence: "follow-up", verdict }), true, verdict);

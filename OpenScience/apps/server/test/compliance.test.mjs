@@ -173,7 +173,7 @@ test("the controller audit accepts only validated internal endpoints in a recons
   const controller = await readFile(new URL("../src/runtimeControllerServer.mjs", import.meta.url), "utf8");
   const manager = await readFile(new URL("../src/runtimeManager.mjs", import.meta.url), "utf8");
   assert.equal(controllerLaunchPlanIsScoped(controller, manager), true);
-  const call = "buildRuntimeLaunchPlan(config, project, port, { modelGatewayProfile: payload.modelGatewayProfile ?? \"\", capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, memoryGatewayUrl, geoSkills, pluginConfig, platformSkillGeneration: platform?.reference ?? null,\n      personalSkillGeneration: personal?.reference ?? null, personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extension?.reference ?? null, extensionImageId: extension?.identity.baseRuntimeImageDigest ?? null })";
+  const call = "buildRuntimeLaunchPlan(config, project, port, { modelGatewayProfile: payload.modelGatewayProfile ?? \"\", contextGeneration, capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, memoryGatewayUrl, attendancePublicKey, geoSkills, pluginConfig, platformSkillGeneration: platform?.reference ?? null, disabledPlatformSkills: personal?.platformSkills?.disabled ?? [], disabledClientBundles: personal?.platformSkills?.disabledPlugins ?? [],\n      personalSkillGeneration: personal?.reference ?? null, personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extension?.reference ?? null, extensionImageId: extension?.identity.baseRuntimeImageDigest ?? null })";
   const guard = controller.match(/    if \(\s*typeof capsuleGatewayUrl[\s\S]*?\n    \}/)?.[0];
   const revisionGuard = controller.match(/    if \(\s*typeof revisionGatewayUrl[\s\S]*?\n    \}/)?.[0];
   assert.ok(guard, "the endpoint guard must be exercised by the negative controls");
@@ -193,6 +193,8 @@ test("the controller audit accepts only validated internal endpoints in a recons
     assert.equal(controllerLaunchPlanIsScoped(controller, changed), false, from);
   }
   const cases = [
+    ["caller skill-policy selectors", controller.replace("disabledPlatformSkills: personal?.platformSkills?.disabled ?? []", "disabledPlatformSkills: payload.disabledPlatformSkills")],
+    ["caller client-policy selectors", controller.replace("disabledClientBundles: personal?.platformSkills?.disabledPlugins ?? []", "disabledClientBundles: payload.disabledClientBundles")],
     ["arbitrary fourth argument", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, payload)")],
     ["caller Docker args", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, args: payload.args })")],
     ["caller image", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, image: payload.image })")],
@@ -211,13 +213,17 @@ test("the controller audit accepts only validated internal endpoints in a recons
     ["endpoint comparison removed", controller.replace("capsuleGatewayUrl !== capsuleGatewayEndpointUrl(config)", "false")],
     ["guard only mentioned in a comment", controller.replace(guard, `/* ${guard} */`)],
     ["revision guard only mentioned in a comment", controller.replace(revisionGuard, `/* ${revisionGuard} */`)],
-    ["unknown fields allowed", controller.replace('"platformSkillGeneration", "memoryGatewayUrl", "geoSkills", "modelGatewayProfile"]', '"platformSkillGeneration", "memoryGatewayUrl", "geoSkills", "modelGatewayProfile", "args"]')],
+    ["unknown fields allowed", controller.replace('"geoSkills", "modelGatewayProfile", "contextGeneration", "attendancePublicKey"]', '"geoSkills", "modelGatewayProfile", "contextGeneration", "attendancePublicKey", "args"]')],
+    ["attendance verifier taken unvalidated", controller.replace("attendanceKeyValid = bytes.length === 44", "attendanceKeyValid = true || bytes.length === 44").replace('throw controllerFailure(400, "runtime_controller_attendance_key_invalid"', 'void controllerFailure(400, "runtime_controller_attendance_key_invalid"')],
+    ["caller attendance verifier reread", controller.replace("memoryGatewayUrl, attendancePublicKey, geoSkills, pluginConfig", "memoryGatewayUrl, attendancePublicKey: payload.attendancePublicKey, geoSkills, pluginConfig")],
     ["plugin shape guard removed", controller.replace(pluginGuard, "")],
     ["plugin validator removed", controller.replace(pluginValidation, "")],
     ["plugin validation only mentioned in a comment", controller.replace(pluginValidation, `/* ${pluginValidation} */`)],
     ["plugin extra fields allowed", controller.replace('"enabled,revision,settings"', '"args,enabled,revision,settings"')],
     ["plugin gateway timeout ceiling removed", controller.replace("config.publicSourceGatewayTimeoutMs ?? 15000);", "15000);")],
     ["unvalidated plugin reread", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, pluginConfig: payload.pluginConfig })")],
+    ["context generation verification removed", controller.replace("await verifyContextGeneration(config, project, payload.contextGeneration)", "payload.contextGeneration")],
+    ["caller context generation forwarded", controller.replace(call, call.replace(" contextGeneration, capsuleGatewayUrl,", " contextGeneration: payload.contextGeneration, capsuleGatewayUrl,"))],
     ["personal manifest verification removed", controller.replace("await verifyPersonalSkillGeneration(config, project, payload.personalSkillGeneration)", "payload.personalSkillGeneration")],
     ["extension manifest verification removed", controller.replace("await verifyGeneration(project, payload.extensionGeneration)", "payload.extensionGeneration")],
     ["assessment selected through configuration", controller.replace("hooks.extensionGenerationAssessmentAuthority ?? null", "config.extensionGenerationAssessmentAuthority ?? null")],

@@ -10,7 +10,8 @@
 // would have degraded to term matching and said nothing.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readdir, readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { readdir, readFile, writeFile, mkdtemp, realpath, mkdir, rm, stat, symlink } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -22,6 +23,7 @@ import {
 } from "../src/openVikingLayout.mjs";
 import { OPENVIKING_MODEL_GATEWAY_URL, expectedOpenVikingConfiguration } from "../../../scripts/ops/openviking-configuration.mjs";
 import { renderMemoryTemplates } from "../../../deploy/web/openviking/memory-templates-src/build.mjs";
+import { readMountedCompileConfigurationDigest } from "../src/openVikingCompileExecution.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const baseFile = path.join(root, "deploy/web/docker-compose.yml");
@@ -277,7 +279,7 @@ test("the one-shot never changes a mode it can no longer change", () => {
   const script = init.command.join("\n");
   assert.ok(!init.cap_add.includes("FOWNER"), "the assertions below are the alternative to holding FOWNER");
   const chmodTargets = [...script.matchAll(/os\.chmod\(([A-Za-z_]+),/g)].map((match) => match[1]);
-  assert.deepEqual(chmodTargets, ["temporary"], "only a freshly created path may be chmod'ed, and only before it is given away");
+  assert.deepEqual(chmodTargets, ["temporary", "digest_temporary"], "only freshly created secret/digest paths may be chmod'ed before ownership changes");
   assert.ok(
     script.indexOf("os.chmod(temporary, 0o600)") < script.indexOf("os.chown(temporary, owner, owner)"),
     "the copied secret is chmod'ed after it is given away, which needs CAP_FOWNER",
@@ -285,6 +287,38 @@ test("the one-shot never changes a mode it can no longer change", () => {
   // The directory carries its mode from `mkdir`, which is the creating call and
   // therefore needs nothing.
   assert.match(script, /data\.mkdir\(parents=True, exist_ok=True, mode=0o700\)/);
+  assert.ok(script.indexOf("os.chmod(digest_temporary, 0o600)") < script.indexOf("os.chown(digest_temporary, 0, 0)"));
+});
+
+test("ordinary init writes only a root-readable configuration digest for offline historical verification", async t => {
+  const directory = await realpath(await mkdtemp("/tmp/ovreceipt-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const input = path.join(directory, "input"), output = path.join(directory, "output");
+  await mkdir(input);
+  const bytes = Buffer.from(JSON.stringify(rendered));
+  await writeFile(path.join(input, "ov.conf"), bytes);
+  await writeFile(path.join(input, "api-key"), "test-key-stand-in");
+  await writeFile(path.join(input, "model-key"), "test-model-key-stand-in");
+  const script = base.services["evimed-openviking-init"].command.at(-1);
+  const prefix = script.slice(0, script.indexOf("# `storage.workspace`"))
+    .replaceAll("/input/", `${input}/`).replace("pathlib.Path('/output')", `pathlib.Path(${JSON.stringify(output)})`);
+  // Execute the actual copy/digest code. Ownership syscalls are recorded rather
+  // than changing this local machine's users; existing capability assertions
+  // above hold the production UID/mode relationship.
+  const program = `import os,json,pathlib\nowners=[]\nos.chown=lambda p,u,g: owners.append([pathlib.Path(p).name,u,g])\nexec(${JSON.stringify(prefix)})\nprint(json.dumps(owners))`;
+  const run = spawnSync("python3", ["-B", "-c", program], { encoding: "utf8", timeout: 5000 });
+  assert.equal(run.status, 0, run.stderr);
+  const owners = JSON.parse(run.stdout);
+  assert.ok(owners.some(([name, uid, gid]) => name === "ov.conf.sha256.tmp" && uid === 0 && gid === 0));
+  assert.ok(owners.some(([name, uid]) => name === "ov.conf.tmp" && uid === 10001));
+  const receipt = path.join(output, "ov.conf.sha256"), expected = createHash("sha256").update(bytes).digest("hex");
+  assert.equal(await readFile(receipt, "utf8"), `${expected}\n`);
+  assert.equal((await stat(receipt)).mode & 0o777, 0o600);
+  assert.equal(await readMountedCompileConfigurationDigest(receipt), expected);
+  const alias = path.join(output, "alias"); await symlink(receipt, alias);
+  assert.equal(await readMountedCompileConfigurationDigest(alias), null);
+  await writeFile(receipt, "x".repeat(1024));
+  assert.equal(await readMountedCompileConfigurationDigest(receipt), null);
 });
 
 test("every protected file is owned by the uid of the container that reads it", () => {

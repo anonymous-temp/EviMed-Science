@@ -16,12 +16,12 @@ const nameOf = (source: SourceRecord) => (source.payload.paths[0] ?? source.id).
  * uploaded or registered here: these are documents already in the knowledge
  * base, and choosing them only says which question they are for.
  */
-export function MaterialPicker({ projectId, taken, busy, onChoose, onCancel }: {
-  projectId: string; taken: string[]; busy: boolean; onChoose: (sourceIds: string[]) => void; onCancel: () => void;
+export function MaterialPicker({ projectId, taken, initialChosen = [], busy, onChoose, onCancel }: {
+  projectId: string; taken: string[]; initialChosen?: string[]; busy: boolean; onChoose: (sourceIds: string[]) => void; onCancel: () => void;
 }) {
   const [sources, setSources] = useState<SourceRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [chosen, setChosen] = useState<string[]>([]);
+  const [chosen, setChosen] = useState<string[]>(initialChosen);
   const live = useRef(true);
   const load = useCallback(() => {
     setError(null);
@@ -39,10 +39,11 @@ export function MaterialPicker({ projectId, taken, busy, onChoose, onCancel }: {
     )}
     {choices.length > 0 && <ul aria-label="知识库资料" className="max-h-72 space-y-1 overflow-y-auto">{choices.map(source => <li key={source.id}>
       <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-ui text-text hover:bg-surface-2">
-        <input type="checkbox" checked={chosen.includes(source.id)} onChange={event => setChosen(event.target.checked ? [...chosen, source.id] : chosen.filter(id => id !== source.id))} />
+        <input type="checkbox" checked={chosen.includes(source.id)} disabled={!chosen.includes(source.id) && chosen.length >= 10} onChange={event => setChosen(event.target.checked ? [...chosen, source.id] : chosen.filter(id => id !== source.id))} />
         <span className="min-w-0 truncate">{nameOf(source)}</span>
       </label>
     </li>)}</ul>}
+    {chosen.length >= 10 && <p className="text-caption text-text-3" role="status">每次最多选择 10 份资料。</p>}
     <div className="flex justify-end gap-2 border-t border-border pt-4">
       <Button variant="secondary" disabled={busy} onClick={onCancel}>取消</Button>
       <Button loading={busy} disabled={chosen.length === 0} onClick={() => onChoose(chosen)}>添加到这个任务</Button>

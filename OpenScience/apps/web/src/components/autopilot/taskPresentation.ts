@@ -76,12 +76,13 @@ export const RUN_STATES: Record<string, string> = { queued: "排队中", verifyi
 /** A run held back because the allowance cannot pay for it. A simulated wallet refuses under its own code, and its run waits, and reads, the same way. */
 const waitsForBalance = (code: string) => BALANCE_REFUSAL_CODES.includes(code);
 /** The runs still on their way: nothing of theirs is a result yet. */
-export const RUN_IN_FLIGHT = ["queued", "running", "verifying"];
+export const RUN_IN_FLIGHT = ["queued", "running", "retry_pending", "verifying"];
 /**
  * What a run says about itself, in one phrase. A run the task's own budget did not allow to start says whose budget it is, a run
  * waiting for the allowance or for a runtime says what it waits for, and the rest is the status.
  */
 export function runState(payload: EpisodePayload | undefined): string {
+  if (payload?.status === "retry_pending") return "等待自动重试";
   if (payload?.status === "merged" && payload.resultKind === "no-new-evidence") return "没有新证据";
   // An ordinary job is not research: its execution is "进行中" and, when it ends, "已完成".
   if (payload?.taskType === "routine") {
@@ -121,6 +122,8 @@ export function lastRunLine(agenda: AgendaRecord, episodes: readonly EpisodeReco
   const when = withTime ? instant(runAt(run), zone) : dayOf(runAt(run), zone);
   return when ? `上次 ${when} · ${state}` : `上次 ${state}`;
 }
+export const cancellationPending = (agenda: AgendaRecord) => agenda.payload.stopSweep?.cancellationPending === true;
+export const cancellationRetryLabel = (agenda: AgendaRecord) => agenda.payload.stopSweep?.archiveRequestedAt ? "重试删除" : "重试停止";
 export function activeAgenda(agenda: AgendaRecord): boolean { return agenda.payload.enabled && agenda.payload.status === "active" && !agenda.payload.archivedAt; }
 export function scheduleStatus(agenda: AgendaRecord): string {
   if (agenda.payload.scheduleState === "completed") return "已完成";
@@ -178,11 +181,12 @@ export const inFlight = (episode: Pick<EpisodeRecord, "payload">) => RUN_IN_FLIG
 export type TaskGroupKey = "upcoming" | "paused" | "completed";
 export const TASK_GROUPS: ReadonlyArray<readonly [TaskGroupKey, string]> = [["upcoming", "即将执行"], ["paused", "已暂停"], ["completed", "已完成"]];
 export function taskGroupOf(agenda: AgendaRecord): TaskGroupKey {
+  if (cancellationPending(agenda)) return "paused";
   if (agenda.payload.scheduleState === "completed") return "completed";
   return activeAgenda(agenda) ? "upcoming" : "paused";
 }
 
-/** A task's executions, oldest first: 「第 N 次」 counts from the first. */
+/** A task's executions, oldest first, ordered by the scheduled time and then identity. */
 export function executionsOf(agendaId: string, episodes: readonly EpisodeRecord[]): EpisodeRecord[] {
   return episodes.filter(episode => episode.payload.agendaId === agendaId)
     .sort((a, b) => runAt(a).localeCompare(runAt(b)) || a.id.localeCompare(b.id));
@@ -227,6 +231,8 @@ export function foreignZone(timeZone: string): string {
  */
 export function rowLine(agenda: AgendaRecord, running: boolean, now = new Date()): string {
   const schedule = scheduleOf(agenda);
+  if (cancellationPending(agenda)) return agenda.payload.stopSweep?.archiveRequestedAt ? "删除尚未完成，执行可能仍在进行" : "停止尚未完成，执行可能仍在进行";
+  if (agenda.payload.schedulingAvailable === false) return "定时执行暂不可用";
   const zone = foreignZone(schedule.timeZone);
   if (agenda.payload.scheduleState === "completed") {
     const day = schedule.kind === "once" ? calendarDay(schedule.date) : "";
@@ -244,16 +250,18 @@ export function rowLine(agenda: AgendaRecord, running: boolean, now = new Date()
  */
 export function scheduleLine(agenda: AgendaRecord): string {
   const schedule = scheduleOf(agenda);
+  if (cancellationPending(agenda)) return agenda.payload.stopSweep?.archiveRequestedAt ? "删除尚未完成" : "停止尚未完成";
+  if (agenda.payload.schedulingAvailable === false) return ["定时执行暂不可用", recurrence(schedule), zoneName(schedule.timeZone)].filter(Boolean).join(" · ");
   const next = activeAgenda(agenda) && agenda.payload.scheduleState !== "completed" && agenda.payload.nextRunAt ? `下次 ${instant(agenda.payload.nextRunAt, schedule.timeZone)}` : "";
-  return [recurrence(schedule), zoneName(schedule.timeZone), next].filter(Boolean).join(" · ");
+  const state = next || (!activeAgenda(agenda) ? scheduleStatus(agenda) : "");
+  return [recurrence(schedule), zoneName(schedule.timeZone), state].filter(Boolean).join(" · ");
 }
 
-/** 「第 3 次 · 今天」: one execution of a task, by its place in the task's history and its day. */
-export function executionLabel(episode: EpisodeRecord, ordinal: number, timeZone: string, now = new Date()): string {
+/** A stable full timestamp identifies an execution even when only part of its history is loaded. */
+export function executionLabel(episode: EpisodeRecord, timeZone: string): string {
   const at = runAt(episode);
-  const ahead = Number.isFinite(Date.parse(at)) ? dayNumber(new Date(at), timeZone) - dayNumber(now, timeZone) : null;
-  const day = ahead === 0 ? "今天" : ahead === -1 ? "昨天" : dayOf(at, timeZone);
-  return `第 ${ordinal} 次${day ? ` · ${day}` : ""}`;
+  if (!Number.isFinite(Date.parse(at))) return "执行时间未知";
+  return new Intl.DateTimeFormat("zh-CN", { timeZone, year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date(at));
 }
 
 /**

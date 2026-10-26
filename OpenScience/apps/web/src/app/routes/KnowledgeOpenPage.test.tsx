@@ -48,3 +48,11 @@ describe("a compiled file named by its place", () => {
     expect(mocks.pageAt).not.toHaveBeenCalled();
   });
 });
+
+it("retains the selected logical alias and page receipt when opening its shared source id", async () => {
+  const address = { projectId: "p1", tree: "wiki", path: "concept/zz-duplicate.md", generationId: `kg_${"a".repeat(32)}`, pageId: "page-alias", pageRevision: 4 };
+  mocks.pageAt.mockResolvedValue({ sourceId: `src_${"c".repeat(32)}`, address });
+  open("?project=p1&tree=wiki&path=concept%2Fzz-duplicate.md");
+  await waitFor(() => expect(screen.getByTestId("where").textContent).toContain("kpPath=concept%2Fzz-duplicate.md"));
+  expect(screen.getByTestId("where").textContent).toContain("kpId=page-alias&kpRevision=4");
+});

@@ -37,7 +37,10 @@ const CLAIMS = [
 ];
 
 async function project(withCards) {
-  const created = await store.createProject({ userId: "alice", projectId: `p-${Math.random().toString(36).slice(2, 8)}`, engines: ["deepseek"], coverageDays: 90,
+  const projectId = `p-${Math.random().toString(36).slice(2, 8)}`;
+  await db.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES('alice','GEO test','development') ON CONFLICT DO NOTHING");
+  await db.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES('alice',$1,'GEO test',1048576)", [projectId]);
+  const created = await store.createProject({ userId: "alice", projectId, engines: ["deepseek"], coverageDays: 90,
     product: { brandName: "信尔美", genericName: "玛仕度肽注射液" } });
   const written = await store.upsertClaims("alice", created.id, CLAIMS);
   if (withCards) {

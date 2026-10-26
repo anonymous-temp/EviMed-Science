@@ -6,7 +6,7 @@
  * GEO vocabulary behind them were otherwise in the bundle every page loads
  * before its first paint.
  */
-import type { GeoProjectSummary } from "@/lib/geoClient";
+import type { GeoProjectSummary, GeoProject } from "@/lib/geoClient";
 import {
   engineName,
   GEO_COVERAGE_DAYS,
@@ -29,13 +29,13 @@ export interface FrameGeoOptions {
 }
 
 /** The engines the composer offers: the default five, and those the server lists beyond them. */
-export function offeredEngines(project: GeoProjectSummary | null): string[] {
+export function offeredEngines(project: GeoProjectSummary | GeoProject | null): string[] {
   const extra = GEO_OPTIONAL_ENGINES.filter((engine) => project?.engines.includes(engine) || project?.availableEngines?.includes(engine));
   return [...GEO_DEFAULT_ENGINES, ...extra];
 }
 
 /** The chip's options for a conversation, from its GEO project — or, with none, the starters alone. */
-export function frameGeoOptions(sessionId: string, project: GeoProjectSummary | null): FrameGeoOptions {
+export function frameGeoOptions(sessionId: string, project: GeoProjectSummary | GeoProject | null): FrameGeoOptions {
   const offered = offeredEngines(project);
   const chosen = project?.engines.filter((engine) => offered.includes(engine)) ?? [];
   const product = project?.product.brandName || project?.product.genericName || null;

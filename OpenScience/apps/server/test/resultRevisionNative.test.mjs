@@ -21,7 +21,7 @@ import { HttpError } from "../src/security.mjs";
 const UI_ORIGIN = "https://science.example:8443";
 const sha = value => createHash("sha256").update(value).digest("hex");
 
-async function fixture(t) {
+async function fixture(t, automatic = null, planning = null, preparing = null, admission = null, contextPreparation = null) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "result-native-revision-"));
   const config = loadConfig({ dataDir, devAuth: true, runtimeMode: "mock", runtimeUiProxyEnabled: true,
     publicUrl: "https://science.example", runtimeUiPublicOrigin: UI_ORIGIN });
@@ -68,12 +68,16 @@ async function fixture(t) {
   });
   const socketPath = path.join(dataDir, "native.sock"); await new Promise(resolve => upstream.listen(socketPath, resolve));
   const manager = new RuntimeManager(config);
+  if (admission) manager.pluginService = admission;
   manager.start = async () => ({ url: "http://kernel.local", socketPath, cookie: "kernel_auth=fixture" });
   manager.proxy = async (req, res) => {
     received.push(JSON.parse(req.__openScienceProxyBody.toString())); res.writeHead(200, { "Content-Type": "application/json" }); res.end("{}");
   };
   const ui = createRuntimeUiServer({ config, store, runtimeManager: manager,
-    bindResultRevision: (actor, current, request) => revisions.bind(actor.id, current, request) });
+    bindGeoPlan: planning,
+    prepareGeoPlan: preparing,
+    preparePrompt: contextPreparation,
+    bindResultRevision: (actor, current, request) => automatic?.version ? revisions.bindConversation(actor.id, current, request, { versionId: automatic.version.versionId, digest: automatic.version.digest, target: null, expectedHeadVersionId: null }) : revisions.bind(actor.id, current, request) });
   const address = await ui.listen(0, "127.0.0.1"); const origin = `http://127.0.0.1:${address.port}`;
   const reuseRoutes = createResultReuseRoutes({ store, revisions, exporter: null });
   const shell = createServer(async (req, res) => {
@@ -110,6 +114,21 @@ async function fixture(t) {
 }
 
 for (const wire of ["http", "mux"]) {
+  test(`native ${wire} preserves quoted closing tags without exposing hidden revision context`, { timeout: 10000 }, async t => {
+    const f = await fixture(t);
+    const quotation = 'Original </evimed_result_selection> quoted <evimed_result_selection> finding.';
+    const selected = await f.capture('quoted.md', quotation);
+    const staged = await f.stage(selected, quotation); assert.equal(staged.response.status, 201);
+    const request = f.prompt(staged.body.data, 'Explain the quotation without changing it.');
+    if (wire === 'http') assert.equal((await f.sendHttp(request)).status, 200);
+    else { const client = await f.connect(); client.send({ type: 'open', streamId: 'quoted', endpoint: 'session/prompt', payload: { args: { request } } }); assert.equal((await client.next()).type, 'item'); }
+    const forwarded = f.received[0].payload.args.request;
+    const block = forwarded.content[1].text;
+    const context = JSON.parse(block.slice(block.indexOf('>') + 1, block.lastIndexOf('</evimed_result_selection>')));
+    assert.equal(context.anchor.selectedText, quotation);
+    assert.deepEqual(withoutPlatformBlocks([forwarded.content[1]]), []);
+    assert.equal(await readFile(path.join(f.project.workspaceDir, context.inputPath), 'utf8'), quotation);
+  });
   test(`native ${wire} forwards the frozen selected version and strips the revision envelope`, { timeout: 10000 }, async t => {
     const f = await fixture(t); const selected = await f.capture("report.md", "Original supported finding.");
     const staged = await f.stage(selected, "Original supported finding."); assert.equal(staged.response.status, 201);
@@ -168,4 +187,74 @@ test("rendered paragraph/cell hints and a figure retain their exact source versi
   const figure = await f.capture("forest.png", Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8\/x8AAwMCAO+ip1sAAAAASUVORK5CYII=", "base64"));
   const image = await f.stage(figure, "forest.png", "figure"); assert.equal(image.response.status, 201);
   assert.equal((await f.stage(figure, "some-other-figure.png", "figure")).response.status, 400);
+});
+
+for (const wire of ["http", "mux"]) {
+  test(`native ${wire} admits optional whole-file context on an unprefixed actual follow-up`, { timeout: 10000 }, async t => {
+    const automatic = { version: null }; const f = await fixture(t, automatic);
+    automatic.version = await f.capture("article.md", "Original finding.");
+    const request = { sessionId: "session", requestId: "natural-request", content: [{ type: "text", text: "Make the second paragraph clearer." }] };
+    if (wire === "http") assert.equal((await f.sendHttp(request)).status, 200);
+    else { const client = await f.connect(); client.send({ type: "open", streamId: "natural", endpoint: "session/prompt", payload: { args: { request } } }); assert.equal((await client.next()).type, "item"); }
+    const forwarded = f.received[0].payload.args.request;
+    assert.equal(forwarded.content[0].text, request.content[0].text);
+    assert.match(forwarded.content[1].text, /"kind":"file"/);
+    assert.deepEqual(withoutPlatformBlocks(forwarded.content), [request.content[0]]);
+  });
+}
+
+for (const wire of ['http','mux']) test(`native ${wire} strips a GEO context only after its authenticated actual request binding`, {timeout:10000}, async t => {
+  const referenceId = `gpc_${'a'.repeat(64)}`; const bound = [];
+  const f = await fixture(t,null,async (user,project,request)=>{
+    assert.equal(user.id,f.user.id); assert.equal(project.id,f.project.id);
+    assert.equal(request.geoPlanContext.referenceId,referenceId);
+    if (request.requestId!=='selected-plan-request') throw Object.assign(new Error('wrong request'),{status:409,code:'geo_plan_context_mismatch'});
+    bound.push(request.requestId); request.content.push({type:'text',text:'Frozen selected plan input'});
+  });
+  const request = {requestId:'selected-plan-request',sessionId:'session-1',content:[{type:'text',text:'Use this selected plan'}],geoPlanContext:{referenceId}};
+  if (wire==='http') assert.equal((await f.sendHttp(request)).status,200);
+  else {const client = await f.connect();client.send({type:'open',streamId:'selected-plan',endpoint:'session/prompt',payload:{args:{request}}});assert.equal((await client.next()).type,'item');}
+  assert.deepEqual(bound,['selected-plan-request']);
+  assert.equal(f.received[0].payload.args.request.geoPlanContext,undefined);
+  assert.equal(f.received[0].payload.args.request.content[1].text,'Frozen selected plan input');
+});
+
+for (const wire of ['http', 'mux']) test(`native ${wire} validates the same selected request before admission and binds only inside it`, { timeout: 10000 }, async t => {
+  let admitted = false;
+  const prepared = new WeakSet(); const events = [];
+  const admission = { async withAdmission(_project, operation) { assert.equal(admitted, false); admitted = true; events.push('admit'); try { return await operation(); } finally { admitted = false; } } };
+  const f = await fixture(t, null, async (_user, _project, request) => {
+    assert.equal(admitted, true); assert.ok(prepared.has(request)); events.push('bind');
+  }, async (_user, _project, request) => {
+    assert.equal(admitted, false); events.push('prepare');
+    if (request.requestId === 'stale') throw new HttpError(409, 'geo_read_filter_invalid', 'Stale selection.');
+    prepared.add(request);
+  }, admission);
+  const make = requestId => ({ requestId, sessionId: 'session', content: [{ type: 'text', text: 'Edited words with exact selected input.' }], geoPlanContext: { referenceId: `gpc_${'d'.repeat(64)}` } });
+  const send = async (request, streamId) => {
+    if (wire === 'http') return (await f.sendHttp(request)).status;
+    const client = await f.connect(); client.send({ type: 'open', streamId, endpoint: 'session/prompt', payload: { args: { request } } }); return (await client.next()).type;
+  };
+  assert.equal(await send(make('stale'), 'stale'), wire === 'http' ? 409 : 'error');
+  assert.deepEqual(events, ['prepare']); assert.equal(f.received.length, 0);
+  assert.equal(await send(make('ready'), 'ready'), wire === 'http' ? 200 : 'item');
+  assert.deepEqual(events, ['prepare', 'prepare', 'admit', 'bind']); assert.equal(f.received.length, 1);
+  assert.equal(f.received[0].payload.args.request.geoPlanContext, undefined);
+});
+
+
+for (const wire of ["http", "mux"]) test(`native ${wire} rejects a definitive route failure before forwarding while optional failures stay advisory`,{timeout:10000},async t=>{
+  const f=await fixture(t,null,null,null,null,async(_project,request)=>{
+    const error=new HttpError(503,"geo_plan_context_unavailable","The selected request route could not be preserved.");
+    if(request.requestId==='selected') error.definitivelyRejected=true;
+    throw error;
+  });
+  const send=async(requestId)=>{
+    const request={sessionId:'session',requestId,mode:'queue',content:[{type:'text',text:'Please do this work.'}]};
+    if(wire==='http') return (await f.sendHttp(request)).status;
+    const client=await f.connect();client.send({type:'open',streamId:requestId,endpoint:'session/prompt',payload:{args:{request}}});
+    return (await client.next()).type;
+  };
+  assert.equal(await send('selected'),wire==='http'?503:'error');assert.equal(f.received.length,0);
+  assert.equal(await send('ordinary'),wire==='http'?200:'item');assert.equal(f.received.length,1);
 });

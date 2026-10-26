@@ -57,21 +57,39 @@ test("a package's digest is the one the release computes over its directory, not
   assert.equal(record("extension/cowork-portable").digestAlgorithm, "source-archive-sha256");
 });
 
-test("the curated pack: the upstream it was derived from, its licence file by digest, and no commit claimed that no source records", async () => {
+test("curated packages distinguish refreshed pinned source trees from held derived baselines", async () => {
   const inventory = JSON.parse(await read("runtime/skills/curated-scientific/inventory.json"));
   const curated = [...SKILL_PACKAGES.values()].filter((entry) => entry.origin === "curated");
   assert.equal(curated.length, inventory.skills.length);
   for (const skill of inventory.skills) {
     const entry = record(`curated/${skill.name}`);
-    assert.equal(entry.source.kind, "derived");
+    const refreshed = skill.upstreamReview?.decision === "refreshed";
+    assert.equal(entry.source.kind, refreshed ? "repository" : "derived");
     assert.equal(entry.source.package, inventory.source.package);
-    assert.equal(entry.source.commit, null, "the inventory records no commit, so none is invented");
+    assert.equal(entry.source.commit, refreshed ? inventory.source.pin.commit : null);
+    if (refreshed) {
+      assert.equal(entry.source.repository, inventory.source.repository);
+      assert.equal(entry.source.path, `skills/${skill.upstreamReview.counterparts[0].name}`);
+    }
     assert.equal(entry.licence.id, inventory.source.license);
     assert.equal(entry.licence.file.sha256, inventory.source.licenseSha256);
     assert.equal(entry.digest, skill.digest, "the table's digest is the inventory's reviewed digest");
   }
   const bytes = await fs.readFile(path.join(repoRoot, "runtime/skills/curated-scientific", record("curated/cheminformatics").licence.file.path));
   assert.equal(createHash("sha256").update(bytes).digest("hex"), inventory.source.licenseSha256);
+});
+
+test("hypothesis native operations expose their own positional inputs and flags beside the bounded baseline", () => {
+  const operations = record("curated/hypothesis-development").operations;
+  const validate = operations.find((operation) => operation.entrypoint === "scripts/validate_hypothesis_schema.py");
+  assert.ok(validate, "native validator is offered, not only the generic baseline");
+  assert.equal(validate.params.find((param) => param.name === "record").required, true);
+  assert.ok(validate.params.some((param) => param.name === "--output"));
+  const scaffold = operations.find((operation) => operation.entrypoint === "scripts/generate_preregistration_scaffold.py");
+  assert.ok(scaffold.params.find((param) => param.name === "--output").required);
+  assert.equal(operations.filter((operation) => operation.entrypoint.startsWith("scripts/")).length, 7);
+  assert.ok(operations.some((operation) => operation.name.endsWith(" baseline")));
+  assert.equal(record("curated/research-grant-development").operations.length, 1, "text guidance has no invented native algorithm");
 });
 
 test("a community skill is bound to the exact repository and commit its source record names", async () => {

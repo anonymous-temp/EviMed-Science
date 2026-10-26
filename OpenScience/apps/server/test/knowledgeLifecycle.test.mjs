@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { OpenVikingSourceSync } from '../src/openVikingSourceSync.mjs';
+import { createHash } from 'node:crypto';
+import { OpenVikingSourceSync, sourceRendition } from '../src/openVikingSourceSync.mjs';
 
 test('a partial library convergence remains retryable', async () => {
   const sync = new OpenVikingSourceSync({ config: { ovKnowledgeEnabled: true }, sources: {}, jobs: {}, resources: { configured: true } });
@@ -25,12 +26,19 @@ test('an obsolete account event cannot touch a recreated account resource', asyn
 });
 
 test('a delayed delete converges the restored current generation without deleting it', async () => {
-  const calls = [];
-  const source = { id: 's', projectId: 'p', payload: { status: 'complete', generation: 3, analysis: { textSha256: 'current' } } };
-  const sync = new OpenVikingSourceSync({ config: { ovKnowledgeEnabled: true }, jobs: {},
-    sources: { get: async () => source }, resources: { configured: true, sourceUri: () => 'uri', attrs: async () => ({ sha: 'current' }),
-      removeSource: async () => calls.push('deleted') }, lifecycle: async () => {} });
-  sync.reconcileLibrary = async () => ({ failed: [] });
-  await sync.runJob({ userId: 'u', payload: { action: 'lifecycle', scope: 'source', sourceId: 's', projectId: 'p', deleted: true, generation: 1 } });
-  assert.deepEqual(calls, []);
+  // A restored source is current once its own generation has been read: the analysis names that generation (as every analysis
+  // has since 2026-09-07) and its capture is what the engine's copy is compared with. One whose text is still an earlier
+  // generation's is not readable as this one, and its copy goes until the read lands.
+  for (const [analysisGeneration, expected] of [[3, []], [1, ['deleted']]]) {
+    const calls = [];
+    const source = { id: 's', projectId: 'p', payload: { status: 'complete', generation: 3, paths: ['a.md'], analysis: { generation: analysisGeneration, textSha256: 'current' } } };
+    const capture = { input: { text: 'restored text' }, extractor: {}, pageMap: null, metadata: null };
+    const rendition = createHash('sha256').update(sourceRendition(source, capture)).digest('hex');
+    const sync = new OpenVikingSourceSync({ config: { ovKnowledgeEnabled: true }, jobs: {},
+      sources: { get: async () => source, loadCapture: async () => capture }, resources: { configured: true, sourceUri: () => 'uri', attrs: async () => ({ sha: 'current', rendition }),
+        removeSource: async () => calls.push('deleted'), pushSource: async () => calls.push('pushed') }, lifecycle: async () => {} });
+    sync.reconcileLibrary = async () => ({ failed: [] });
+    await sync.runJob({ userId: 'u', payload: { action: 'lifecycle', scope: 'source', sourceId: 's', projectId: 'p', deleted: true, generation: 1 } });
+    assert.deepEqual(calls, expected);
+  }
 });

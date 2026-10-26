@@ -434,7 +434,7 @@ async function checkDeepSeekCompatibilityPreflight() {
   }
 }
 
-/** Check protocol 8: fixed endpoints, typed settings and independently verified opaque generations. */
+/** Check the current protocol: fixed endpoints, typed settings and independently verified opaque generations. */
 export function controllerLaunchPlanIsScoped(source, managerSource = "") {
   const code = String(source).replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
   const body = code.match(/async function startRuntime\(project, payload\)\s*\{([\s\S]*?)\n {2}function runtimeStatus\(/)?.[1];
@@ -444,7 +444,7 @@ export function controllerLaunchPlanIsScoped(source, managerSource = "") {
   const allowed = compact.match(/constallowed=url\.pathname===["']\/v1\/runtime\/start["']\?(\[[^\]]*\])/);
   let fields;
   try { fields = JSON.parse((allowed?.[1] ?? "null").replace(/'/g, '"')); } catch { return false; }
-  const expected = ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig", "platformSkillGeneration", "personalSkillGeneration", "extensionGeneration", "memoryGatewayUrl", "geoSkills", "modelGatewayProfile"].sort();
+  const expected = ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig", "platformSkillGeneration", "personalSkillGeneration", "extensionGeneration", "memoryGatewayUrl", "geoSkills", "modelGatewayProfile", "contextGeneration", "attendancePublicKey"].sort();
   // Match the entire reviewed resolver: a profile cannot carry an arbitrary URL,
   // escape the gate namespace, or silently fall back when unconfigured.
   const managerCode = String(managerSource).replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "").replace(/\s+/g, "");
@@ -467,6 +467,10 @@ if(url.protocol!=="http:"||!url.port||url.username||url.password||url.search||ur
     && /constmemoryGatewayUrl=payload\.memoryGatewayUrl\?\?["']["'];if\(typeofmemoryGatewayUrl!==["']string["']\|\|\(memoryGatewayUrl!==["']["']&&memoryGatewayUrl!==memoryGatewayEndpointUrl\(config\)\)\)\{throwcontrollerFailure\(400,["']runtime_controller_memory_gateway_invalid["'],[^;]+;\}/.test(launch)
     // The GEO method pack flag is a boolean or absent and nothing else: one of the image's own read-only directories is
     // among the session's skill roots or it is not, and no caller-owned path, environment or mount can ride on it.
+    // The attendance verifier (protocol 16) is an Ed25519 public key or absent: it is parsed as one before it reaches the
+    // launch plan, and no signing secret, path or environment can ride on it.
+    && launch.includes('throwcontrollerFailure(400,"runtime_controller_attendance_key_invalid"')
+    && launch.includes('key.asymmetricKeyType==="ed25519"')
     && /constgeoSkills=payload\.geoSkills\?\?false;if\(typeofgeoSkills!==["']boolean["']\)\{throwcontrollerFailure\(400,["']runtime_controller_geo_skills_invalid["'],[^;]+;\}/.test(launch)
     // The v6 addition is one typed, closed configuration object, not generic
     // caller-owned environment, mounts, images or Docker arguments.
@@ -480,10 +484,11 @@ if(url.protocol!=="http:"||!url.port||url.username||url.password||url.search||ur
     && launch.includes("constpersonal=payload.personalSkillGeneration?awaitverifyPersonalSkillGeneration(config,project,payload.personalSkillGeneration):null;")
     && launch.includes("canonicalJson(extension.projection.personal.reference)!==canonicalJson(payload.personalSkillGeneration??null)")
     && launch.includes("inspectRuntimeImage(config).imageId!==extension.identity.baseRuntimeImageDigest")
-    && launch.includes("constplan=buildRuntimeLaunchPlan(config,project,port,{modelGatewayProfile:payload.modelGatewayProfile??\"\",capsuleGatewayUrl,revisionGatewayUrl,publicSourceGatewayUrl,memoryGatewayUrl,geoSkills,pluginConfig,platformSkillGeneration:platform?.reference??null,personalSkillGeneration:personal?.reference??null,personalSkillImageId:personal?.identity.baseRuntimeImageDigest??null,extensionGeneration:extension?.reference??null,extensionImageId:extension?.identity.baseRuntimeImageDigest??null});")
+    && launch.includes("constplan=buildRuntimeLaunchPlan(config,project,port,{modelGatewayProfile:payload.modelGatewayProfile??\"\",contextGeneration,capsuleGatewayUrl,revisionGatewayUrl,publicSourceGatewayUrl,memoryGatewayUrl,attendancePublicKey,geoSkills,pluginConfig,platformSkillGeneration:platform?.reference??null,disabledPlatformSkills:personal?.platformSkills?.disabled??[],disabledClientBundles:personal?.platformSkills?.disabledPlugins??[],personalSkillGeneration:personal?.reference??null,personalSkillImageId:personal?.identity.baseRuntimeImageDigest??null,extensionGeneration:extension?.reference??null,extensionImageId:extension?.identity.baseRuntimeImageDigest??null});")
+    && launch.includes("constcontextGeneration=payload.contextGeneration?awaitverifyContextGeneration(config,project,payload.contextGeneration):null;")
     && (launch.match(/buildRuntimeLaunchPlan\(/g) ?? []).length === 1
     && launch.includes("spawn(plan.command,plan.args,{")
-    && !/\bpayload\b/.test(body.replace(/\bpayload\s*\.\s*(?:modelGatewayProfile|port|password|capsuleGatewayUrl|revisionGatewayUrl|publicSourceGatewayUrl|memoryGatewayUrl|geoSkills|pluginConfig|platformSkillGeneration|personalSkillGeneration|extensionGeneration)\b/g, ""));
+    && !/\bpayload\b/.test(body.replace(/\bpayload\s*\.\s*(?:modelGatewayProfile|port|password|capsuleGatewayUrl|revisionGatewayUrl|publicSourceGatewayUrl|memoryGatewayUrl|attendancePublicKey|geoSkills|pluginConfig|platformSkillGeneration|personalSkillGeneration|extensionGeneration|contextGeneration)\b/g, ""));
 }
 
 async function checkRuntimeContainerTopology() {

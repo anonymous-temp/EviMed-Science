@@ -5,6 +5,7 @@ import {evolutionReplayHeldOut,evolutionPriorityFeatures} from '../src/evolution
 function memory(){const rows=new Map();return {rows,now:()=>new Date('2026-10-06'),get:async id=>rows.get(id),save:async(type,id,payload)=>{const row={id,payload,type};rows.set(id,row);return row;},list:async type=>[...rows.values()].filter(row=>row.type===type),tools:async()=>[],withLock:async(id,fn)=>fn()};}
 test('opportunity classification preserves data and contradiction instead of collapsing to repair',()=>{
  assert.equal(evolutionOpportunitySource('availability'),'data');assert.equal(evolutionOpportunitySource('semantics-contested'),'contradiction');assert.equal(evolutionOpportunitySource('workflow-success'),'success');assert.equal(evolutionOpportunitySource('unmet-demand'),'demand');assert.equal(evolutionOpportunitySource('classifier-failure'),'repair');
+ assert.equal(evolutionOpportunitySource('geo-misconception'),'demand','a consumer model mistake is a demand signal, not proof that our own policy failed');
 });
 test('first confirmed family counts once and never credits unconfirmed or audit outcomes',async()=>{
  const service=memory(),growth=createEvolutionGrowth({service,opportunity:async()=>{},database:{}});

@@ -86,7 +86,7 @@ export function validateResultAnchor(version, anchor) {
   if (!anchor || anchor.versionId !== version.versionId || anchor.digest !== version.digest) {
     throw new Error("The selected result version changed.");
   }
-  if (!["text", "table-cell", "figure", "claim", "pdf-region", "rendered-element"].includes(anchor.kind ?? "text")
+  if (!["file", "text", "table-cell", "figure", "claim", "pdf-region", "rendered-element"].includes(anchor.kind ?? "text")
     || typeof anchor.elementId !== "string" || !anchor.elementId || anchor.elementId.length > 512
     || typeof anchor.selectedText !== "string" || anchor.selectedText.length > 12000
     || (anchor.instruction != null && (typeof anchor.instruction !== "string" || !anchor.instruction.trim() || anchor.instruction.length > 12000))) {

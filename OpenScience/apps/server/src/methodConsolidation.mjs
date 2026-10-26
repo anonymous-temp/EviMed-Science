@@ -343,7 +343,7 @@ export class MethodConsolidation {
    * audit line (plan 2026-09-23 §5.8).
    *
    * @param {{dispatch: (input: any) => Promise<any>, readResult: (identity: any) => Promise<any>, learning: any,
-   *          jobs?: any, judgeService?: any, screenBaseline?: any, platformTools?: () => Promise<any[]>,
+   *          contextProvenance?: any, jobs?: any, judgeService?: any, screenBaseline?: any, platformTools?: () => Promise<any[]>,
    *          audit?: ((job: any, event: string, detail: any) => Promise<any>) | null, now?: () => Date,
    *          unusedAfterLoads?: number, onRetirement?: ((code: string) => void) | null,
    *          similarity?: {pairs: (methods: readonly any[]) => Promise<any[]>, nearest: (text: string, methods: readonly any[], options?: any) => Promise<any[]>, methodText: (method: any) => string} | null,
@@ -356,12 +356,13 @@ export class MethodConsolidation {
     dispatch, readResult, learning, jobs = null, audit = null, now = () => new Date(),
     stepWaitMs = 24 * 60 * 60_000, pollMs = 15_000, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     describe = null, platformTools = async () => [], judgeService = null, screenBaseline = null,
-    unusedAfterLoads = undefined, onRetirement = null, similarity = null, onNoop = null, onRelation = null, replay = null,
+    unusedAfterLoads = undefined, onRetirement = null, similarity = null, onNoop = null, onRelation = null, replay = null, contextProvenance = null,
   }) {
     if (typeof dispatch !== "function" || typeof readResult !== "function") {
       throw new TypeError("Method consolidation requires the bounded run dispatcher and result reader.");
     }
     if (!learning) throw new TypeError("Method consolidation requires the learning service.");
+    this.contextProvenance = contextProvenance;
     this.judgeService = judgeService;
     this.screenBaseline = screenBaseline;
     this.dispatch = dispatch;
@@ -410,14 +411,15 @@ export class MethodConsolidation {
    * The dispatch id is the step's inputs, contents included: a re-run of the
    * same pass adopts the run it already started, an unchanged library reads the
    * answer it already paid for, and a changed method is a new question.
-   * @param {any} job @param {{dispatchId: string, input: any, question: string}} step
+   * @param {any} job @param {{dispatchId: string, input: any, question: string, unprovenPriorDispatchId?:string}} step
    * @returns {Promise<any>} the settled result, or null for a run that did not succeed
    */
-  async #step(job, { dispatchId, input, question }) {
+  async #step(job, { dispatchId, input, question, unprovenPriorDispatchId }) {
     const identity = await this.dispatch({
       userId: job.userId,
       projectId: job.projectId,
       dispatchId,
+      ...(unprovenPriorDispatchId?{unprovenPriorDispatchId}:{}),
       job,
       capabilityId: "method-relations",
       contractKind: "method-relations",
@@ -434,6 +436,17 @@ export class MethodConsolidation {
       }
       await this.wait(this.pollMs);
     }
+  }
+
+  async #library(job) {
+    return this.contextProvenance
+      ? this.contextProvenance.scopedMethods(job.userId, await this.contextProvenance.policyForJob(job))
+      : (await this.learning.listMethods(job.userId, {limit: CONSOLIDATION_LIMITS.maxMethods})).items ?? [];
+  }
+  async #get(job,id) {
+    if (!this.contextProvenance) return this.learning.getMethod(job.userId,id);
+    const policy = await this.contextProvenance.policyForJob(job);
+    return this.contextProvenance.methodFor(job.userId,id,policy ?? {kind:'owned',ownerId:job.userId});
   }
 
   /** @param {{job: any, project?: any}} request */
@@ -460,8 +473,20 @@ export class MethodConsolidation {
    * @param {{job: any}} request
    */
   async sleep({ job }) {
+    if (this.contextProvenance && !job.payload?.contextPartition && !job.payload?.sourceProjectId) {
+      const rows = await this.contextProvenance.rows(job.userId,'method',{recordType:'learned-method'});
+      const projects = new Set();
+      for (const row of rows) {
+        const ids = [row.payload.provenance?.sourceProjectId,...(row.payload.provenance?.sourceProjectIds ?? [])].filter(Boolean);
+        for (const id of ids) if ((await this.contextProvenance.policyFor({userId:job.userId,id})).kind === 'geo-project') projects.add(id);
+      }
+      const partitions = [];
+      for (const sourceProjectId of [null,...projects]) partitions.push(await this.sleep({job:{...job,id:`${job.id}:scope:${sourceProjectId ?? 'owned'}`,
+        payload:{...job.payload,contextPartition:true,...(sourceProjectId ? {sourceProjectId} : {})}}}));
+      return {action:'sleep',partitions,methods:partitions.reduce((sum,part)=>sum+part.methods,0)};
+    }
     const notRetired = (/** @type {any} */ page) => (page.items ?? []).filter((/** @type {any} */ item) => item.payload?.status !== "retired");
-    const readLibrary = async () => notRetired(await this.learning.listMethods(job.userId, { limit: CONSOLIDATION_LIMITS.maxMethods }));
+    const readLibrary = async () => notRetired({items:await this.#library(job)});
     let methods = await readLibrary();
     if (methods.length === 0) {
       this.#noop("no_methods");
@@ -525,7 +550,7 @@ export class MethodConsolidation {
 
     // Levels are recomputed after the builder has had its turn, because the
     // builder is the only thing that adds a dependency.
-    const refreshed = (await this.learning.listMethods(job.userId, { limit: CONSOLIDATION_LIMITS.maxMethods })).items ?? [];
+    const refreshed = await this.#library(job);
 
     const promoted = [...early, ...await this.approveCandidates(job, refreshed, { strict: true })];
     // No paired evaluation is queued here (ruling of 2026-09-21), and none exists
@@ -542,13 +567,14 @@ export class MethodConsolidation {
     // (plan 2026-09-23 §5.8). There is no other kind of proposal: the contribution and cap proposals that were computed
     // every hour and read by nobody are gone.
     const retirements = await this.learning.retirementProposals(job.userId, {
+      ...(this.contextProvenance ? {items:refreshed} : {}),
       nowMs: this.now().getTime(),
       ...(this.unusedAfterLoads !== undefined ? { unusedAfterLoads: this.unusedAfterLoads } : {}),
     });
     /** @type {{id: string, code: string}[]} */
     const stopped = [];
     for (const entry of retirements) {
-      if (!entry.proposal.immediate) continue;
+      if (!entry.proposal.immediate || this.contextProvenance && !await this.#get(job,entry.document.id)) continue;
       // The results produced under the body it holds were found wrong more often than its predecessors': the answer is
       // the exact earlier body when there is a sound one, a stop when there is not (`scientificRegression`), and the
       // link that says why stays on the record either way.
@@ -573,7 +599,7 @@ export class MethodConsolidation {
     // longer holds, gets those (M-5). A line it already has is kept.
     const described = [];
     if (this.describe) {
-      const current = (await this.learning.listMethods(job.userId, { limit: CONSOLIDATION_LIMITS.maxMethods })).items ?? [];
+      const current = await this.#library(job);
       for (const document of current) {
         if (described.length >= CONSOLIDATION_LIMITS.maxDescriptions) break;
         if (document.payload?.status === "retired") continue;
@@ -587,7 +613,7 @@ export class MethodConsolidation {
     // The very end, after everything that moves a dependency or a status: the level of each method in the library as
     // `validateMethodGraph` derives it, written back where it differs. It was computed and returned as `graphIssues` and
     // never stored, so every method read level 0 (the page reads `learning.level`, the mount ignores it).
-    const final = (await this.learning.listMethods(job.userId, { limit: CONSOLIDATION_LIMITS.maxMethods })).items ?? [];
+    const final = await this.#library(job);
     const graph = validateMethodGraph(final.map((document) => methodRecordFrom(document)));
     const levels = await this.#writeLevels(job, final, graph.levels);
 
@@ -677,8 +703,19 @@ export class MethodConsolidation {
    *   blockedUnproven: boolean, decidedNothing: boolean, refusals: any[]}>}
    */
   async #processGroup(job, members, { buildAllowed = true, buildTypes = null } = {}) {
+    if (this.contextProvenance) for (const member of members) if (!await this.#get(job,member.id)) throw new HttpError(409,'geo_learning_target_unverified','A method left this learning scope.');
     const empty = { relations: 0, relationTypes: {}, builds: 0, blockedUnproven: false, decidedNothing: false, refusals: [] };
     const key = groupKey(members);
+    const policy=await this.contextProvenance?.policyForJob(job);
+    // Before DECIDE, only this job's original group is eligible. Cross-job
+    // adoption must present its exact decision at buildGroup.
+    const replay=await this.contextProvenance?.completedCompound(job.userId,policy,job.id,members,null,true);
+    if(replay) {
+      // A resumed worker may see the result's exact successor heads. Adopt its
+      // committed group before asking DECIDE or BUILD to read it again.
+      await this.#stamp(job,members,key);
+      return {status:'decided',...empty,builds:replay.applied?1:0,refusals:replay.refusals??[]};
+    }
     if (groupDecided(members, key)) return { status: "skipped_unchanged", ...empty };
     const decided = await this.decideGroup(job, members).catch((error) => { if (deferred(error)) throw error; return null; });
     if (!decided) return { status: "decide_failed", ...empty };
@@ -698,18 +735,21 @@ export class MethodConsolidation {
     /** @type {any[]} */
     let refusals = [];
     let limited = false;
+    let buildFailed = false;
     if (buildable.length && !blockedUnproven) {
       if (buildAllowed) {
         const built = await this.buildGroup(job, members, { ...decided, assignments: buildable.map(({ entry }) => entry) })
           .catch((error) => { if (deferred(error)) throw error; return null; });
         if (built?.applied) builds = 1;
+        buildFailed = !built || built.completed===false;
         refusals = built?.refusals ?? [];
       } else {
         limited = true;
       }
     }
     if (limited) this.#noop("build_limit");
-    if (!blockedUnproven && !limited) await this.#stamp(job, members, key);
+    if (buildFailed) this.#noop("build_failed");
+    if (!blockedUnproven && !limited && !buildFailed) await this.#stamp(job, members, key);
     return { status: "decided", relations, relationTypes, builds, blockedUnproven, decidedNothing, refusals };
   }
 
@@ -766,9 +806,9 @@ export class MethodConsolidation {
   async integrate({ job }) {
     const methodId = String(job.payload?.methodId ?? "");
     if (!methodId) throw new HttpError(400, "consolidate_payload_invalid", "An integrate job must name a method.");
-    const subject = await this.learning.getMethod(job.userId, methodId);
-    const page = await this.learning.listMethods(job.userId, { limit: CONSOLIDATION_LIMITS.maxMethods });
-    const neighbours = (page.items ?? []).filter((item) => item.id !== methodId && item.payload?.status !== "retired");
+    const subject = await this.#get(job, methodId);
+    if (!subject) throw new HttpError(409,'geo_learning_target_unverified','The method is outside this learning scope.');
+    const neighbours = (await this.#library(job)).filter((item) => item.id !== methodId && item.payload?.status !== "retired");
     const nearest = await this.#nearestTo(subject, neighbours);
     const group = [subject, ...nearest];
     if (group.length < CONSOLIDATION_LIMITS.minGroupSize) {
@@ -862,9 +902,12 @@ export class MethodConsolidation {
       }
       for (const source of [...new Set(links.map((link) => link.source))]) {
         // What the method holds now, not what the pass listed it with: a pass that reads a group again must not count a fact twice.
-        const held = (await this.learning.getMethod(job.userId, source).catch(() => null))?.payload?.learning?.relations ?? byId.get(source)?.payload?.learning?.relations ?? [];
+        const held = (await this.#get(job, source).catch(() => null))?.payload?.learning?.relations ?? byId.get(source)?.payload?.learning?.relations ?? [];
         const relations = links.filter((link) => link.source === source)
           .map((link) => ({ type, target: link.target, evidence: entry.REASON ?? "", proposedBy: `consolidate:${job.id}` }));
+        // A retry that learned no new relation must retain the original fact
+        // and its revision, including the frozen input of an unfinished build.
+        if(relations.every(relation=>held.some(before=>before.type===relation.type&&before.target===relation.target&&before.evidence===relation.evidence)))continue;
         const written = await this.learning.recordRelations(job.userId, source, relations, (/** @type {string} */ id) => byId.has(id)).catch(() => null);
         if (!written) continue;
         const added = relations.filter((relation) => !held.some((/** @type {any} */ before) => before.type === relation.type && before.target === relation.target)).length;
@@ -884,7 +927,7 @@ export class MethodConsolidation {
    * @param {any} job @param {any} member
    */
   async #fresh(job, member) {
-    const current = await this.learning.getMethod(job.userId, member.id).catch(() => null);
+    const current = await this.#get(job, member.id).catch(() => null);
     return current && current.payload?.contentDigest === member.payload?.contentDigest && current.payload?.status !== "retired" ? current : null;
   }
 
@@ -898,8 +941,15 @@ export class MethodConsolidation {
   async #retireReplaced(job, original, replacementId, proposedBy, reason) {
     await this.learning.recordRelations?.(job.userId, original.id,
       [{ type: "supersedes", target: replacementId, evidence: "A merged method now carries it.", proposedBy }], (/** @type {string} */ id) => id === replacementId).catch(() => null);
-    const current = await this.learning.getMethod(job.userId, original.id).catch(() => null);
+    const current = await this.#get(job, original.id).catch(() => null);
     if (!current || current.payload?.status === "retired") return false;
+    if (this.contextProvenance && (await this.contextProvenance.policyForJob(job))?.kind === 'geo-project') {
+      const target = await this.#get(job,replacementId);
+      if (!target) return false;
+      const retired = await this.contextProvenance.retireMerged(job.userId,current,target,{proposedBy,reason}).catch(()=>null);
+      if (retired) try { await this.learning.onMountChange?.(job.userId); } catch { /* publication notification is advisory */ }
+      return Boolean(retired);
+    }
     return Boolean(await this.learning.retire(job.userId, original.id, { expectedRevision: current.revision, reason }).catch(() => null));
   }
 
@@ -907,12 +957,12 @@ export class MethodConsolidation {
    * @param {any} job */
   async completePendingMerges(job) {
     const retired = [];
-    const methods = (await this.learning.listMethods(job.userId, { limit: CONSOLIDATION_LIMITS.maxMethods })).items ?? [];
+    const methods = await this.#library(job);
     for (const canonical of methods) {
       if (!mergeCleared(canonical) || !String(canonical.payload.provenance?.consolidatedBy ?? "").startsWith("consolidate:")) continue;
       for (const pending of canonical.payload.provenance?.pendingRetirements ?? []) {
         if (pending.methodId === canonical.id) continue;
-        const original = await this.learning.getMethod(job.userId, pending.methodId).catch(() => null);
+        const original = await this.#get(job, pending.methodId).catch(() => null);
         if (!original || original.payload.status === "retired" || original.payload.contentDigest !== pending.baseDigest
           || !preservedSectionsIntact(original.payload.body, canonical.payload.body).ok) continue;
         if (await this.#retireReplaced(job, original, canonical.id, canonical.payload.provenance.consolidatedBy,
@@ -1015,9 +1065,23 @@ export class MethodConsolidation {
    * `subset` touches only the `WIDER` method; `conflicts_with` and `supersedes` touch nothing
    * (the second is retired by the library's own rules once it is unused).
    * @param {any} job @param {readonly any[]} members @param {any} decided
-   * @returns {Promise<{applied: number, pendingRetirements?: any[], refusals: {assignment: string, methodId: string, code: string, dropped: number, quotesDropped: number}[]}>}
+   * @returns {Promise<{applied: number, completed?: boolean, pendingRetirements?: any[], refusals: {assignment: string, methodId: string, code: string, dropped: number, quotesDropped: number}[]}>}
    */
   async buildGroup(job, members, decided) {
+    const policyForReplay=await this.contextProvenance?.policyForJob(job);
+    const replay=await this.contextProvenance?.completedCompound(job.userId,policyForReplay,job.id,members,(decided?.assignments??[]).filter(entry=>METHOD_RELATION_TYPES.includes(entry?.RELATION_TYPE)));
+    if(replay)return replay;
+    if (this.contextProvenance) {
+      const currentMembers=[];
+      for (const member of members) {
+        const current=await this.#get(job,member.id);
+        if(!current||current.payload.contentDigest!==member.payload.contentDigest||current.payload.body!==member.payload.body)throw new HttpError(409,'geo_learning_target_unverified','A build source left this learning scope.');
+        // Relation bookkeeping may have advanced the revision. Freeze the
+        // verified head whose unchanged bytes are actually sent to the builder.
+        currentMembers.push(current);
+      }
+      members=currentMembers;
+    }
     const assignments = (decided?.assignments ?? []).filter((/** @type {any} */ entry) => METHOD_RELATION_TYPES.includes(entry?.RELATION_TYPE));
     /** @type {{assignment: string, methodId: string, code: string, dropped: number, quotesDropped: number}[]} */
     const refusals = [];
@@ -1025,9 +1089,10 @@ export class MethodConsolidation {
     // What each assignment names, resolved to the group's own ids (`resolveAssignments`), by the identifier the builder echoes.
     const resolved = new Map(resolveAssignments(members, assignments).map((item) => [String(item.entry.ASSIGNMENT), item]));
     const keys = members.map((member) => `${member.id}@${member.payload?.contentDigest ?? ""}`).sort();
-    const result = await this.#step(job, {
-      dispatchId: `method-relations-build-${shortDigest(`${keys.join(" ")}\n${JSON.stringify(assignments)}`)}`,
-      input: {
+    const policy=await this.contextProvenance?.policyForJob(job);
+    const priorDispatchId=`method-relations-build-${shortDigest(`${keys.join(" ")}\n${JSON.stringify(assignments)}`)}`;
+    const dispatchId=priorDispatchId+(policy?.kind==='geo-project'?'-gcp1':'');
+    const input = {
         schemaVersion: 1,
         action: "build",
         assignments,
@@ -1038,16 +1103,21 @@ export class MethodConsolidation {
           frontmatter: member.payload?.frontmatter,
           body: member.payload?.body,
         })),
-      },
+      };
+    const generationInputRef=policy?.kind==='geo-project'?await this.contextProvenance.freezeInput(job.userId,policy,dispatchId,input,members):null;
+    const generated= generationInputRef?{generationInputRef}:{};
+    const result = await this.#step(job, { dispatchId, input,
+      ...(policy?.kind==='geo-project'?{unprovenPriorDispatchId:priorDispatchId}:{}),
       question: "Rewrite the methods named in the assignments in method-relations-input.json, using the method-relations capability with action `build`. "
         + "The analyser's ASSIGNMENT and RELATION_TYPE are authoritative and may not be changed. "
         + "Preserve every procedure, constraint, edge case and verification check of each source method. "
         + "Add reuse references only near the passages they affect. Invent no tools, scripts, files or dependencies. "
         + "Each rewritten method must still read as a standalone SKILL.md.",
     });
-    if (!result) return { applied: 0, refusals };
-    let applied = 0;
+    if (!result) return { applied: 0, refusals, completed: false };
     const revisions = result.output?.revisions ?? [];
+    if(generationInputRef)return this.#applySharedBuild(job,members,assignments,resolved,revisions,{policy,generationInputRef,dispatchId,resultDigest:this.contextProvenance.digest(result.output)},refusals);
+    let applied = 0;
     const created = new Map();
     const pendingRetirements = [];
     /** @param {any} assignment @param {string} methodId @param {ReturnType<typeof bodyPreservation>} kept @param {string} event */
@@ -1070,15 +1140,23 @@ export class MethodConsolidation {
         if (lost) { await refuse(assignment, lost.member.id, lost.kept, "method.merge.refused"); continue; }
       }
       // A model may create a new candidate, never overwrite another method by name.
-      const prior = await this.learning.getMethod(job.userId, rewrite.methodId).catch((/** @type {any} */ error) => { if (error?.code === "method_not_found") return null; throw error; });
+      let prior;
+      if (this.contextProvenance) {
+        const metadata = (await this.contextProvenance.rows(job.userId,'method')).find(row => row.id === rewrite.methodId);
+        if (metadata) {
+          prior = await this.#get(job,rewrite.methodId);
+          if (!prior) continue;
+        }
+      } else prior = await this.learning.getMethod(job.userId, rewrite.methodId).catch((/** @type {any} */ error) => { if (error?.code === "method_not_found") return null; throw error; });
       if (prior) {
         if (prior.payload.provenance?.consolidatedBy === `consolidate:${job.id}` && prior.payload.body === parsed.body) created.set(rewrite.methodId, prior);
         continue;
       }
       // The project the pass ran in is where the model step ran, not where anything was learnt: what a derived method came from is its sources'
-      // projects (`sourceProjects`), and deleting one of them is what reaches it.
-      const candidate = await this.learning.createCandidate(job.userId, { projectId: null, frontmatter: parsed.frontmatter, body: parsed.body,
-        dependencies: rewrite.dependencies ?? [], provenance: { origin: "inferred", consolidatedBy: `consolidate:${job.id}`, ...sourceProjects(sources), ...(type === "merge" ? inheritedProvenance(sources) : {}),
+      // projects (`sourceProjects`), and deleting one of them is what reaches it. A shared GEO project's partition names its project.
+      const candidate = await this.learning.createCandidate(job.userId, { projectId: job.payload?.sourceProjectId ?? null, frontmatter: parsed.frontmatter, body: parsed.body,
+        dependencies: rewrite.dependencies ?? [], provenance: { origin: "inferred", ...generated, consolidatedBy: `consolidate:${job.id}`, ...sourceProjects(sources),
+          ...(type === "merge" || this.contextProvenance ? inheritedProvenance(sources) : {}),
           pendingRetirements: revisions.filter((/** @type {any} */ item) => item.operation === "retire" && item.assignment === rewrite.assignment && item.supersededBy === rewrite.methodId && sources.some(member => member.id === item.methodId && member.payload.contentDigest === item.baseDigest)).map((/** @type {any} */ item) => ({ methodId: item.methodId, baseDigest: item.baseDigest, assignment: item.assignment })) } }).catch(() => null);
       if (candidate) {
         created.set(rewrite.methodId, candidate); applied += 1;
@@ -1129,7 +1207,7 @@ export class MethodConsolidation {
         frontmatter: parsed.frontmatter,
         body: parsed.body,
         dependencies: rewrite.dependencies ?? target.payload.dependencies ?? [],
-        provenance: { ...target.payload.provenance, consolidatedBy: `consolidate:${job.id}` },
+        provenance: { ...target.payload.provenance, ...generated, consolidatedBy: `consolidate:${job.id}` },
       }).catch(() => null);
       if (amended) {
         applied += 1;
@@ -1138,6 +1216,52 @@ export class MethodConsolidation {
       }
     }
     return { applied, pendingRetirements, refusals };
+  }
+
+  async #applySharedBuild(job,members,assignments,resolved,revisions,binding,refusals) {
+    const plans=[],pendingRetirements=[];
+    for(const rewrite of revisions) {
+      const assignment=resolved.get(String(rewrite.assignment)),type=assignment?.entry.RELATION_TYPE;
+      if(!assignment?.skills)continue;
+      if(rewrite.operation==='create') {
+        const parsed=parseSkillFrontmatter(String(rewrite.skill??''));
+        if(!['shared_part','merge','abstract_pattern'].includes(type)||rewrite.baseDigest!=null||parsed.issues.length
+          ||typeof parsed.frontmatter.name!=='string'||rewrite.methodId!==learnedMethodId(parsed.frontmatter.name))continue;
+        const sources=members.filter(row=>assignment.skills.includes(row.id));
+        if(type==='merge'&&sources.some(row=>!bodyPreservation({body:row.payload.body,provenance:row.payload.provenance},parsed.body).ok)) {
+          refusals.push({assignment:String(rewrite.assignment),methodId:rewrite.methodId,code:'preservation',dropped:1,quotesDropped:0});continue;
+        }
+        plans.push({operation:'create',id:rewrite.methodId,input:{projectId:job.payload?.sourceProjectId??job.projectId,
+          frontmatter:parsed.frontmatter,body:parsed.body,dependencies:rewrite.dependencies??[],provenance:{origin:'inferred',generationInputRef:binding.generationInputRef,
+            consolidatedBy:`consolidate:${job.id}`,...inheritedProvenance(sources),pendingRetirements:revisions.filter(item=>item.operation==='retire'&&item.supersededBy===rewrite.methodId&&item.assignment===rewrite.assignment
+              &&sources.some(row=>row.id===item.methodId&&row.payload.contentDigest===item.baseDigest)).map(item=>({methodId:item.methodId,baseDigest:item.baseDigest,assignment:item.assignment}))}}});
+      } else if(rewrite.operation==='amend') {
+        const target=members.find(row=>row.id===rewrite.methodId);
+        if(!target||!assignment.skills.includes(target.id)||rewrite.baseDigest!==target.payload.contentDigest||['conflicts_with','supersedes'].includes(type)
+          ||type==='subset'&&assignment.wider!==target.id)continue;
+        const parsed=parseSkillFrontmatter(String(rewrite.skill??''));if(parsed.issues.length)continue;
+        if(parsed.body===target.payload.body&&JSON.stringify(parsed.frontmatter)===JSON.stringify(target.payload.frontmatter))continue;
+        const kept=bodyPreservation({body:target.payload.body,provenance:target.payload.provenance},parsed.body);
+        if(!kept.ok){refusals.push({assignment:String(rewrite.assignment),methodId:target.id,code:'preservation',dropped:kept.dropped.length,quotesDropped:kept.quotesDropped.length});continue;}
+        plans.push({operation:'amend',id:target.id,input:{expectedRevision:target.revision,frontmatter:parsed.frontmatter,body:parsed.body,
+          dependencies:rewrite.dependencies??target.payload.dependencies??[],provenance:{...target.payload.provenance,generationInputRef:binding.generationInputRef,consolidatedBy:`consolidate:${job.id}`}}});
+      }
+    }
+    if(plans.length>100||new Set(plans.map(plan=>plan.id)).size!==plans.length)throw new HttpError(409,'geo_learning_compound_invalid','The compound learning result is inconsistent.');
+    for(const rewrite of revisions.filter(item=>item.operation==='retire')) {
+      const assignment=resolved.get(String(rewrite.assignment)),target=members.find(row=>row.id===rewrite.methodId);
+      if(assignment?.entry.RELATION_TYPE==='merge'&&target&&assignment.skills?.includes(target.id)&&target.payload.contentDigest===rewrite.baseDigest
+        &&plans.some(plan=>plan.operation==='create'&&plan.id===rewrite.supersededBy)
+        &&revisions.some(item=>item.operation==='create'&&item.methodId===rewrite.supersededBy&&item.assignment===rewrite.assignment))pendingRetirements.push({methodId:rewrite.methodId,baseDigest:rewrite.baseDigest,supersededBy:rewrite.supersededBy,assignment:rewrite.assignment});
+    }
+    return this.contextProvenance.applyCompound(job.userId,binding.policy,{generationInputRef:binding.generationInputRef,dispatchId:binding.dispatchId,
+      resultDigest:binding.resultDigest,producerJobId:job.id,groupIdentity:this.contextProvenance.compoundGroupIdentity(members),assignments,assignmentDigest:this.contextProvenance.digest(assignments)},async()=>{
+      for(const plan of [...plans.filter(item=>item.operation==='create'),...plans.filter(item=>item.operation==='amend')]) {
+        if(plan.operation==='create')await this.learning.createCandidate(job.userId,plan.input);
+        else await this.learning.amendMethod(job.userId,plan.id,plan.input);
+      }
+      return {applied:plans.length,pendingRetirements,refusals};
+    });
   }
 
 }
@@ -1177,6 +1301,9 @@ function inheritedProvenance(sources) {
   const feedbackEventIds = union("feedbackEventIds").filter((/** @type {unknown} */ id) => typeof id === "string").slice(0, 50);
   const results = union("results").slice(0, 40);
   return {
+    // Where the sources were learnt, oldest first (`sourceProjects`): the same derivation a factored-out part takes.
+    ...sourceProjects(sources),
+    sourceRunIds: [...new Set(sources.flatMap(source=>[source.payload?.provenance?.runId,...(source.payload?.provenance?.sourceRunIds??[])]).filter(Boolean))],
     mergedFrom: sources.map((source) => ({ methodId: source.id, digest: source.payload?.contentDigest })),
     ...(evidence.length ? { evidence } : {}),
     ...(feedbackEventIds.length ? { feedbackEventIds } : {}),

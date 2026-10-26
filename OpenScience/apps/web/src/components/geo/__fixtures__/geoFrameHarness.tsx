@@ -4,6 +4,7 @@ import { Toolbar, type ToolbarProps } from "@/components/ui/Toolbar";
 import { GeoFrameContext, type GeoFrameApi } from "../geoFrame";
 import { GeoDataCache } from "../geoProjectData";
 import type { GeoTabKey } from "../geoTabs";
+import type { GeoReadScope } from "@/lib/geoReadScope";
 
 /** Module-level, so the frame's value is the same object from one render to the next: a new function each render would re-render the tab. */
 const NOOP = () => undefined;
@@ -23,6 +24,7 @@ export function GeoFrameHarness({
   reload = NOOP,
   openPanel = NOOP,
   conversation = null,
+  scope,
   children,
 }: {
   project: GeoProject;
@@ -32,13 +34,14 @@ export function GeoFrameHarness({
   openPanel?: GeoFrameApi["openPanel"];
   /** The conversation the page holds; none is the project's own. */
   conversation?: string | null;
+  scope?: GeoReadScope;
   children: ReactNode;
 }) {
   const [toolbar, setToolbar] = useState<ToolbarProps | null | undefined>(undefined);
   const [data] = useState(() => new GeoDataCache());
   const api = useMemo<GeoFrameApi>(
-    () => ({ geoId, project, tab, conversation: conversation ?? project.sessionId ?? null, reload, openPanel, data, setToolbar }),
-    [geoId, project, tab, conversation, reload, openPanel, data],
+    () => ({ geoId, project, tab, conversation: conversation ?? project.sessionId ?? null, reload, openPanel, data, setToolbar, scope }),
+    [geoId, project, tab, conversation, reload, openPanel, data, scope],
   );
   return (
     <GeoFrameContext.Provider value={api}>

@@ -4,16 +4,19 @@ import {
   getGeoDiagnosis,
   getGeoEvidence,
   getGeoMonitoring,
+  getGeoSources,
   getGeoStrategy,
   getGeoValue,
   isGeoOff,
   type GeoDiagnosis,
   type GeoEvidence,
   type GeoMonitoring,
+  type GeoSources,
   type GeoStrategyView,
   type GeoValue,
 } from "@/lib/geoClient";
-import { GeoFrameContext } from "./geoFrame";
+import { GeoFrameContext, useGeoReadScope } from "./geoFrame";
+import { geoReadScopeQuery, type GeoReadScope } from "@/lib/geoReadScope";
 
 /**
  * One project's data, read once (R19, audit C class 4.5).
@@ -36,8 +39,9 @@ import { GeoFrameContext } from "./geoFrame";
 export type GeoLoad<T> =
   | { kind: "loading" }
   /** `off`: the module is not open to this account; `missing`: nothing at that address. */
-  | { kind: "error"; message: string; off: boolean; missing: boolean }
-  | { kind: "ready"; data: T };
+  | { kind: "error"; message: string; off: boolean; missing: boolean; stale?: boolean }
+  /** `refreshStale`: the refresh was refused because the saved selection it names has changed (409) — asking again cannot help. */
+  | { kind: "ready"; data: T; refreshError?: string; refreshStale?: boolean };
 
 export interface GeoLoadResult<T> {
   state: GeoLoad<T>;
@@ -68,6 +72,7 @@ function failed(error: unknown): GeoLoad<never> {
     message: webErrorMessage(error, { fallback: "暂时无法读取，请稍后重试。" }),
     off: isGeoOff(error),
     missing: error instanceof WebApiError && error.status === 404 && !isGeoOff(error),
+    ...(error instanceof WebApiError && error.status === 409 ? { stale: true } : {}),
   };
 }
 
@@ -78,6 +83,7 @@ interface Entry {
   /** The latest read's number: an answer to an earlier one is dropped. */
   epoch: number;
   reading: boolean;
+  reloadQueued: boolean;
   loader: () => Promise<unknown>;
   watchers: number;
 }
@@ -100,6 +106,14 @@ export class GeoDataCache {
   /** The read's state: stable until it changes. */
   snapshot = (key: string): GeoLoad<unknown> => this.#entries.get(key)?.state ?? LOADING;
 
+  /** Active views keep usable data during a transient failure, with one visible retry notice in the project shell. */
+  refreshError = (): string => [...new Set([...this.#entries.values()].flatMap(entry =>
+    entry.watchers > 0 && entry.state.kind === "ready" && entry.state.refreshError ? [entry.state.refreshError] : []))].join("；");
+
+  /** Whether an active view's refresh met a saved selection that has changed since: the way out is the range without it. */
+  refreshStale = (): boolean => [...this.#entries.values()].some(entry =>
+    entry.watchers > 0 && entry.state.kind === "ready" && entry.state.refreshStale === true);
+
   /**
    * A consumer begins to read `key`. Returns what ends it. The read starts when nothing has it, when it failed, or when it is older
    * than {@link STALE_MS}; the loader is the consumer's latest.
@@ -107,20 +121,29 @@ export class GeoDataCache {
   watch(key: string, loader: () => Promise<unknown>): () => void {
     let entry = this.#entries.get(key);
     if (!entry) {
-      entry = { state: LOADING, loadedAt: 0, epoch: 0, reading: false, loader, watchers: 0 };
+      entry = { state: LOADING, loadedAt: 0, epoch: 0, reading: false, reloadQueued: false, loader, watchers: 0 };
       this.#entries.set(key, entry);
     }
     entry.loader = loader;
     entry.watchers += 1;
     if (!entry.reading && (entry.state.kind !== "ready" || this.#now() - entry.loadedAt > STALE_MS)) this.#read(entry);
     const held = entry;
-    return () => { held.watchers = Math.max(0, held.watchers - 1); };
+    return () => {
+      held.watchers = Math.max(0, held.watchers - 1);
+      if (held.state.kind === "ready" && held.state.refreshError) for (const listener of this.#listeners) listener();
+    };
   }
 
   /** Read `key` again now, keeping what is shown until the answer comes. */
   reload(key: string): void {
     const entry = this.#entries.get(key);
     if (entry) this.#read(entry);
+  }
+
+  /** What a tab is showing and was read longer than `ms` ago is read again behind itself; the rest is left as it is. */
+  refreshOlderThan(ms: number): void {
+    const now = this.#now();
+    for (const entry of this.#entries.values()) if (entry.watchers > 0 && now - entry.loadedAt > ms) this.#read(entry);
   }
 
   /** Everything is stale: what a tab is showing is read again behind itself, the rest the next time a tab asks. */
@@ -132,6 +155,7 @@ export class GeoDataCache {
   }
 
   #read(entry: Entry): void {
+    if (entry.reading) { entry.reloadQueued = true; return; }
     entry.reading = true;
     entry.epoch += 1;
     const epoch = entry.epoch;
@@ -145,7 +169,10 @@ export class GeoDataCache {
         },
         (error: unknown) => {
           if (entry.epoch !== epoch) return;
-          entry.state = failed(error);
+          const failure = failed(error);
+          const denied = error instanceof WebApiError && [401, 403, 404].includes(error.status);
+          entry.state = entry.state.kind === "ready" && !denied && failure.kind === "error"
+            ? { ...entry.state, refreshError: failure.message, refreshStale: failure.stale === true } : failure;
           entry.loadedAt = 0;
         },
       )
@@ -153,6 +180,11 @@ export class GeoDataCache {
         if (entry.epoch !== epoch) return;
         entry.reading = false;
         for (const listener of this.#listeners) listener();
+        if (entry.reloadQueued) {
+          entry.reloadQueued = false;
+          if (entry.watchers > 0 && (typeof document === "undefined" || document.visibilityState !== "hidden")) this.#read(entry);
+          else entry.loadedAt = 0;
+        }
       });
   }
 }
@@ -184,7 +216,7 @@ function useStandaloneLoad<T>(key: string, load: () => Promise<T>, enabled: bool
   }, [key, round, enabled]);
 
   const reload = useCallback(() => setRound((value) => value + 1), []);
-  return { state, reload };
+  return { state: shownKey.current === key ? state : LOADING, reload };
 }
 
 /**
@@ -203,19 +235,29 @@ export function useGeoLoad<T>(key: string, load: () => Promise<T>): GeoLoadResul
  */
 export function useSharedGeoLoad<T>(key: string, load: () => Promise<T>): GeoLoadResult<T> {
   const cache = useContext(GeoFrameContext)?.data ?? null;
-  const loader = useRef(load);
+  // A departing key may still have queued reads. Keep its loader bound to that key.
+  const keyedLoader = useRef({ key, current: load });
+  if (keyedLoader.current.key !== key) keyedLoader.current = { key, current: load };
+  const loader = keyedLoader.current;
   loader.current = load;
   const standalone = useStandaloneLoad<T>(key, load, cache === null);
   const shared = useSyncExternalStore(cache ? cache.subscribe : NO_SUBSCRIBE, () => (cache ? cache.snapshot(key) : LOADING)) as GeoLoad<T>;
-  useEffect(() => (cache ? cache.watch(key, () => loader.current()) : undefined), [cache, key]);
+  useEffect(() => (cache ? cache.watch(key, () => loader.current()) : undefined), [cache, key, loader]);
   const reload = useCallback(() => { cache?.reload(key); }, [cache, key]);
   return cache ? { state: shared, reload } : standalone;
 }
 
 /* ----------------------------------------------------- what every tab shares */
 
-export const useGeoDiagnosis = (geoId: string) => useSharedGeoLoad<GeoDiagnosis>(`diagnosis:${geoId}`, () => getGeoDiagnosis(geoId));
-export const useGeoMonitoring = (geoId: string) => useSharedGeoLoad<GeoMonitoring>(`monitoring:${geoId}`, () => getGeoMonitoring(geoId));
+/** Shared aggregate reads are keyed by the complete selected range, never only by project. */
+export function useScopedGeoLoad<T>(key: string, load: (scope?: GeoReadScope) => Promise<T>): GeoLoadResult<T> {
+  const scope = useGeoReadScope();
+  const revision = useContext(GeoFrameContext)?.project?.selection?.dataRevision ?? "";
+  return useSharedGeoLoad(`${key}${geoReadScopeQuery(scope)}${revision ? `#${revision}` : ""}`, () => load(scope));
+}
+export const useGeoDiagnosis = (geoId: string) => useScopedGeoLoad<GeoDiagnosis>(`diagnosis:${geoId}`, scope => scope ? getGeoDiagnosis(geoId, scope) : getGeoDiagnosis(geoId));
+export const useGeoMonitoring = (geoId: string) => useScopedGeoLoad<GeoMonitoring>(`monitoring:${geoId}`, scope => scope ? getGeoMonitoring(geoId, scope) : getGeoMonitoring(geoId));
+export const useGeoSources = (geoId: string) => useScopedGeoLoad<GeoSources>(`sources:${geoId}`, scope => scope ? getGeoSources(geoId, scope) : getGeoSources(geoId));
 export const useGeoValue = (geoId: string) => useSharedGeoLoad<GeoValue>(`value:${geoId}`, () => getGeoValue(geoId));
 export const useGeoEvidence = (geoId: string) => useSharedGeoLoad<GeoEvidence>(`evidence:${geoId}`, () => getGeoEvidence(geoId));
-export const useGeoStrategy = (geoId: string) => useSharedGeoLoad<GeoStrategyView>(`strategy:${geoId}`, () => getGeoStrategy(geoId));
+export const useGeoStrategy = (geoId: string, options: {strategyVersion?:number;sourceId?:string;url?:string;selectionRef?:string} = {}) => useScopedGeoLoad<GeoStrategyView>(`strategy:${geoId}:${JSON.stringify(options)}`, scope => options.selectionRef ? getGeoStrategy(geoId, options) : scope || Object.keys(options).length ? getGeoStrategy(geoId, { ...scope, ...options }) : getGeoStrategy(geoId));

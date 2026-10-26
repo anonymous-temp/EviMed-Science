@@ -112,8 +112,9 @@ export function createMemoryRoutes({
       });
       // The account's pause is the engine's own policy too: what reached it before the pause is archived and not extracted. The
       // gateway already stops forwarding; an engine that cannot be told now is told by the next change of the switch, and the
-      // switch has taken effect either way (the gateway reads it per request).
-      if (typeof body.learningPaused === "boolean" && nativeMemory?.configured) {
+      // switch has taken effect either way (the gateway reads it per request). A project's pause reaches the engine too: a shared
+      // GEO project's namespace reads it (`NativeMemoryStore.setLearning` configures every registered context).
+      if ((typeof body.learningPaused === "boolean" || Array.isArray(body.pausedProjects)) && nativeMemory?.configured) {
         await nativeMemory.setLearning(ctx.user.id, !settings.learningPaused)
           .catch((/** @type {any} */ error) => audit(ctx, "memory.settings.engine", "failed", { code: String(error?.code ?? "memory_engine_unavailable") }));
       }

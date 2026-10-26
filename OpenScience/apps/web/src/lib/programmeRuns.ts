@@ -5,6 +5,8 @@
  * Each module's client turns its own answer into this one shape, and `components/runs/ProgrammeRunsDrawer.tsx` is the one drawer.
  */
 export interface ProgrammeRun {
+  /** Exact execution identity; absent only on older module responses. */
+  runId?: string;
   /** The session the step ran in — the key of its record, never a place to go. */
   sessionId: string;
   /** What the step was, in the person's words: 「写第 2 批稿件」, 「生成虚拟患者」. */
@@ -12,6 +14,12 @@ export interface ProgrammeRun {
   state: "running" | "finished" | "stopped";
   /** When it began, as a row says it (「今天 14:32」); null when the platform did not record it. */
   at: string | null;
+}
+
+/** One page of a module's record, newest first, and where the next one begins (null: there is none). */
+export interface ProgrammeRunPage {
+  runs: ProgrammeRun[];
+  nextCursor: string | null;
 }
 
 /** The three state words a run is read by; any other word the server sent is a run that did not finish. @param {unknown} value */

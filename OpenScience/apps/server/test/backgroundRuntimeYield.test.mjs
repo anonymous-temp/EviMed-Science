@@ -186,12 +186,15 @@ test("a background runtime still coming up is waited for, then retired, instead 
     return runtimeOf(project);
   };
   const background = manager.start(f.learning);
+  // Its caller is never handed a runtime that is already gone: it hears the
+  // yield, which its owner reads as "ask again", and not an authority change.
+  const backgroundOutcome = assert.rejects(background, (error) => error.code === RUNTIME_YIELDED_CODE && error.definitivelyRejected === true);
   for (let i = 0; i < 50 && !manager.starts.has(manager.key(f.learning)); i++) await sleep(1);
   const researcher = manager.start(f.paper);
   await sleep(20);
   assert.equal(manager.runtimes.has(manager.key(f.paper)), false, "the researcher waits for the seconds the start takes");
   release();
-  await background;
+  await backgroundOutcome;
   await researcher;
   assert.deepEqual(stops.map((stop) => stop.id), [LEARNING_PROJECT_ID]);
   assert.equal(manager.runtimes.has(manager.key(f.paper)), true);

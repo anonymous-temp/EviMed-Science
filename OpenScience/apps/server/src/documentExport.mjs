@@ -105,17 +105,21 @@ export class DocumentExportService {
     return this.requestFrozen(user, source, formats);
   }
   async requestFrozen(user, source, formats = ['docx','pdf','html']) {
-    formats = documentExportFormats(formats);
-    const { project, canonicalMarkdown, title, cover = {}, revision, assets = [], reference } = source;
+    try { formats = documentExportFormats(formats); } catch { throw new HttpError(400, 'document_export_format_invalid', 'Choose Word, PDF, HTML, CSV or XLSX.'); }
+    const { project, canonicalMarkdown, title, cover = {}, revision, assets = [], reference, typedTable = null } = source;
+    if (typedTable) validateTypedExportTable(typedTable);
+    if (formats.some(format => ['csv', 'xlsx'].includes(format)) && !typedTable) throw new HttpError(400, 'document_format_unsupported', 'CSV and XLSX require typed selected data.');
     if (typeof canonicalMarkdown !== 'string' || Buffer.byteLength(canonicalMarkdown) > 4 * 1024 * 1024) throw new HttpError(413, 'document_export_too_large', 'Document exceeds the conversion limit.');
     const renderer = await this.controller.inspectRuntimeImage();
-    const sourceBytes = Buffer.byteLength(canonicalMarkdown) + assets.reduce((total, asset) => total + asset.data.length, 0);
+    const sourceBytes = Buffer.byteLength(documentExportDigest({canonicalMarkdown, cover, typedTable})) + assets.reduce((total, asset) => total + asset.data.length, 0);
     const descriptors = assets.map(({ path: name, sha256, mime }) => ({ path: name, sha256, mime }));
     const document = { version: DOCUMENT_EXPORT_VERSION, rendererVersion: DOCUMENT_RENDERER_VERSION,
-      rendererImage: renderer.imageId, canonicalMarkdown, title, cover, assets: descriptors, formats: documentExportFormats(formats), revision };
+      rendererImage: renderer.imageId, canonicalMarkdown, title, cover, ...(typedTable ? { sourceType: 'typed-table', typedTable } : {}), assets: descriptors, formats: documentExportFormats(formats), revision };
+    if (Buffer.byteLength(documentExportDigest(document)) > 5 * 1024 * 1024) throw new HttpError(413, 'document_export_too_large', 'Frozen document exceeds the conversion limit.');
     const sourceDigest = exportHash(documentExportDigest(document));
     const ownerId = project.userId;
-    const id = `dex_${exportHash(documentExportDigest({ ownerId, projectId: project.id, reference, sourceDigest })).slice(0,48)}`;
+    const identityDigest = frozenDocumentIdentity(document, reference);
+    const id = `dex_${exportHash(documentExportDigest({ ownerId, projectId: project.id, reference, sourceDigest: identityDigest })).slice(0,48)}`;
     const payload = { ownerId, requestedBy: user.id, projectId: project.id, source: reference, sourceDigest, sourceRevision: revision, title,
       rendererVersion: DOCUMENT_RENDERER_VERSION, reservedBytes: sourceBytes * 2 + MAX_OUTPUT_BYTES, sourceBytes, attempts: 0, state: 'queued', formats: Object.fromEntries(formats.map(format => [format, { state: 'queued' }])), jobId: null };
     await migrateProductStore(this.database);
@@ -152,13 +156,13 @@ export class DocumentExportService {
   view(row) {
     return { id: row.id, revision: row.revision, ...row.payload, ownerId: undefined, requestedBy: undefined, inputDigest: undefined, attempt: undefined };
   }
-  async authorized(user, id) {
+  async authorized(user, id, ability = 'read') {
     await migrateProductStore(this.database);
     const row = (await this.database.query("SELECT user_id FROM evimed_product.documents WHERE kind='document-export' AND id=$1 AND deleted_at IS NULL LIMIT 1", [id])).rows[0];
     if (!row) throw unavailable();
     const record = await this.documents.get(row.user_id, 'document-export', id);
     if (!record) throw unavailable();
-    try { await this.authorize(user, record.payload); } catch { throw unavailable(); }
+    try { await this.authorize(user, record.payload, ability); } catch { throw unavailable(); }
     return record;
   }
   async status(user, id) {
@@ -194,7 +198,7 @@ export class DocumentExportService {
     return assets;
   }
   async cancel(user, id) {
-    return this.cancelRecord(await this.authorized(user, id));
+    return this.cancelRecord(await this.authorized(user, id, 'run'));
   }
   async cancelRecord(authorized, transactionClient = null) {
     const id = authorized.id;
@@ -232,7 +236,7 @@ export class DocumentExportService {
   }
   async retry(user, id, format) {
     if (!Object.hasOwn(DOCUMENT_EXPORT_MIME, format)) throw unavailable();
-    const row = await this.authorized(user, id);
+    const row = await this.authorized(user, id, 'run');
     if ((row.payload.attempts ?? 0) >= 12) throw new HttpError(409, 'document_export_attempts_exhausted', 'The conversion attempt limit was reached.');
     const currentJob = await this.jobs.get(row.payload.ownerId, row.payload.jobId);
     if (['queued','running'].includes(currentJob?.status) || (row.payload.formats[format]?.state !== 'failed' && !(currentJob?.status === 'failed' && row.payload.formats[format]?.state !== 'ready'))) throw new HttpError(409, 'document_export_retry_invalid', 'Only a failed format can be retried.');
@@ -372,4 +376,31 @@ export class DocumentExportService {
     if (row?.payload.attempt?.attemptId === attempt.attemptId) await this.documents.put(attempt.ownerId, 'document-export', attempt.exportId,
       { ...row.payload, attempt: null, attempts: refundAttempt ? Math.max(0, (row.payload.attempts ?? 0) - 1) : row.payload.attempts }, { expectedRevision: row.revision, transactionClient });
   }
+}
+
+/** A closed, formula-free table format shared with the fixed offline renderer. @param {any} table */
+export function validateTypedExportTable(table) {
+  if (!table || Object.keys(table).some(key => !['columns','rows'].includes(key)) || !Array.isArray(table.columns) || !table.columns.length || table.columns.length > 40 || !Array.isArray(table.rows) || table.rows.length > 20000) throw new HttpError(400, 'document_input_invalid', 'Invalid typed table.');
+  const keys = new Set();
+  for (const column of table.columns) {
+    if (!column || Object.keys(column).some(key => !['key','label','type'].includes(key)) || typeof column.key !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]{0,79}$/.test(column.key) || keys.has(column.key) || typeof column.label !== 'string' || column.label.length > 200 || !['number','text'].includes(column.type)) throw new HttpError(400, 'document_input_invalid', 'Invalid typed column.');
+    keys.add(column.key);
+  }
+  for (const row of table.rows) {
+    if (!row || typeof row !== 'object' || Array.isArray(row) || Object.keys(row).some(key => !keys.has(key))) throw new HttpError(400, 'document_input_invalid', 'Invalid typed row.');
+    for (const column of table.columns) {
+      const value = row[column.key];
+      if (value !== null && value !== undefined && (column.type === 'number' ? typeof value !== 'number' || !Number.isFinite(value) : typeof value !== 'string' || value.length > 32767)) throw new HttpError(400, 'document_input_invalid', 'Invalid typed value.');
+    }
+  }
+}
+
+/** Recover the first exact selected-data export on retry, retaining its original frozen read time.
+ * The byte digest still covers all provenance. Renderer, data, method and contextual revisions remain identity inputs.
+ * @param {any} document @param {any} reference
+ */
+export function frozenDocumentIdentity(document, reference) {
+  if (reference?.kind !== 'geo-selected-analysis' || !document.cover?.analysis?.asOf) return exportHash(documentExportDigest(document));
+  const analysis = document.cover.analysis;
+  return exportHash(documentExportDigest({ ...document, cover: { ...document.cover, analysis: { ...analysis, asOf: { ...analysis.asOf, readAt: null } } } }));
 }

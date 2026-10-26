@@ -56,6 +56,23 @@ function renderTab(project: GeoProject = geoProject(), path = "/app/geo/geo_1/qu
   );
 }
 
+it("reads the selected historical question scope and retains unclassified original questions", async () => {
+  const project = geoProject();
+  const initial = questionSetFixture();
+  const group = initial.groups[0];
+  const scope = { questionVersion: 1, groupIds: [group.id], engines: ["kimi"] };
+  client.getGeoQuestions.mockImplementation(async (_id, selected) => selected && typeof selected === "object"
+    ? { ...initial, version: 1, groups: [{ ...group, pool: null, questions: [{ ...group.questions[0], text: "保留的历史原题", originalId: "A001", originalRowIndex: 0 }] }] }
+    : { ...initial, groups: [{ ...group, name: "不应混入的新题库" }] });
+  render(<MemoryRouter initialEntries={["/app/geo/geo_1/questions?questionVersion=1"]}>
+    <GeoFrameHarness project={project} tab="questions" scope={scope}><QuestionsTab geoId="geo_1" project={project} /></GeoFrameHarness>
+  </MemoryRouter>);
+  await waitFor(() => expect(client.getGeoQuestions).toHaveBeenCalledWith("geo_1", scope));
+  expect(await screen.findByRole("heading", { name: /未分类原题/ })).toBeVisible();
+  expect(screen.queryByText("不应混入的新题库")).not.toBeInTheDocument();
+  await waitFor(() => expect(client.getGeoClusters).toHaveBeenCalledWith("geo_1", scope));
+});
+
 /** A group's row on the page, or null; its name is the row's one control. */
 const rowOf = (id: string): HTMLElement | null => (document.querySelector(`[data-geo-group='${id}']`)?.closest("li") as HTMLElement | null) ?? null;
 const findRow = (id: string) => waitFor(() => {
@@ -198,7 +215,7 @@ describe("问题与回答: the band's toolbar", () => {
     // the page's own body filters nothing: every search box and every chip group is the toolbar's
     for (const search of document.querySelectorAll("input[type='search']")) expect(toolbar.contains(search)).toBe(true);
     for (const group of document.querySelectorAll("[role='group'][aria-label]")) {
-      if (group.getAttribute("aria-label") === "按数字排序") continue;
+      if (group.closest("[data-geo-analysis]") || group.getAttribute("aria-label") === "按数字排序") continue;
       expect(toolbar.contains(group), group.getAttribute("aria-label") ?? "").toBe(true);
     }
   });

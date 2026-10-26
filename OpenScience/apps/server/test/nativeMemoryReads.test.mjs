@@ -13,6 +13,8 @@ function engine({ count = 20, delay = 5 } = {}) {
   const calls = { tree: 0, read: 0, replace: 0 };
   const sessions = {
     configured: true,
+    engineUser: () => 'u1',
+    userRoot: () => 'viking://user/u1',
     memoryRoot: () => ROOT,
     async tree() {
       calls.tree += 1;

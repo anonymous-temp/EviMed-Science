@@ -19,16 +19,21 @@ const NOTHING_ABOVE_THE_FLOOR = "没有达到相关度下限的记忆。可以�
  * capsules in force (the entries of the whole account and of this project) and the evidence zones the project follows, and nothing of the
  * account's own memory files (those are the engine's). The index nominates and PostgreSQL decides, as for the recall tool, so a fact the
  * person forgot or an entry still waiting for them is never returned however long the index lags. A failure of either half is that half's alone.
- * @param {{ service: { recall: Function } | null, subscriptions?: { recall: (userId: string, projectId: string, query: string) => Promise<any[]> } | null }} dependencies
- * @returns {(request: { user: any, project: any, query: string, limit: number }) => Promise<Record<string, any>[]>}
+ * A shared GEO project's search (`contextPolicy.kind === "geo-project"`) reads only the owner's project-labelled entries that the context
+ * authorization admits (`contextItems.capsule`), never the owner's personal capsule.
+ * @param {{ service: { recall: Function } | null, contextItems?:any, subscriptions?: { recall: (userId: string, projectId: string, query: string) => Promise<any[]> } | null }} dependencies
+ * @returns {(request: { user: any, project: any, query: string, limit: number, contextPolicy?:any }) => Promise<Record<string, any>[]>}
  */
-export function createNativeCapsuleSearch({ service, subscriptions = null }) {
-  return async ({ user, project, query, limit }) => {
+export function createNativeCapsuleSearch({ service, subscriptions = null, contextItems = null }) {
+  return async ({ user, project, query, limit, contextPolicy = null }) => {
+    if(contextPolicy?.kind === "geo-project" && (contextPolicy.ownerId!==project.userId || contextPolicy.controlProjectId!==project.id)) return [];
     if (!service || !String(query ?? "").trim()) return [];
     const [capsule, reference] = await Promise.all([
-      recallAcrossMemory({ capsules: service }, user, { query, projectId: project.id, limit, standing: false, scope: "capsule" })
+      (contextPolicy?.kind === "geo-project"
+        ? service.recall(project.userId,{query,projectId:project.id,limit,projectOnly:true,authorizeEntry:(activation,entry)=>contextItems?.capsule(contextPolicy,activation,entry) ?? false})
+        : recallAcrossMemory({ capsules: service }, user, { query, projectId: project.id, limit, standing: false, scope: "capsule" }))
         .then((answer) => answer.items).catch(() => []),
-      subscriptions ? subscriptions.recall(user.id, project.id, query).catch(() => []) : [],
+      subscriptions ? subscriptions.recall(contextPolicy?.kind === "geo-project" ? project.userId : user.id, project.id, query).catch(() => []) : [],
     ]);
     return [...capsule, ...reference];
   };
@@ -91,11 +96,13 @@ export function createNativeCapsuleSearch({ service, subscriptions = null }) {
  *     notes?: (userId: string, projectId: string, sessionId: string) => Promise<string[]>,
  *     recordRecall: (project: any, runId: string, items: any[]) => Promise<unknown> } | null,
  *   resident?: { forSession: (user: any, project: any, sessionId: string) => Promise<{ text: string, digest: string, memories: { id: string, kind?: string, scope?: string }[] } | null>,
- *     attached: (user: any, project: any, sessionId: string, receipt: { digest: string, memories: { id: string, kind?: string, scope?: string }[] }) => Promise<unknown> } | null }} dependencies
+ *     attached: (user: any, project: any, sessionId: string, receipt: { digest: string, memories: { id: string, kind?: string, scope?: string }[] }) => Promise<unknown> } | null,
+ *   contextPolicies?: any, contextItems?: any }} dependencies
  *   `resident.forSession` answers the block a conversation is to be handed at its first step, or null when it holds it already (or is not to have one);
- *   `resident.attached` notes that it has been handed. */
+ *   `resident.attached` notes that it has been handed. `contextPolicies` says whether the workload's project is a shared GEO project, whose
+ *   recall reads only the entries `contextItems` admits and whose notes are refused (`contextOnly`). */
 export function createCapsuleGatewayHandler({ runtimeManager, store, service, sessions = null, nativeRoutes = null, evaluationIsolation = null, subscriptions = null, clinicalContext = null,
-  resident = null, recallLimit = 5, recallMaxLimit = 8 }) {
+  resident = null, recallLimit = 5, recallMaxLimit = 8, contextPolicies = null, contextItems = null }) {
   const maxLimit = Math.max(1, Math.min(30, Math.trunc(Number(recallMaxLimit)) || 8));
   const defaultLimit = Math.max(1, Math.min(maxLimit, Math.trunc(Number(recallLimit)) || 5));
   const windows = new Map();
@@ -132,6 +139,9 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, se
       const currentUser = await store.userById(identity.userId);
       if (!currentUser) throw new HttpError(401, "evimed_workload_token_invalid", "The workload is unavailable.");
       const project = await store.requireProject(currentUser, identity.projectId);
+      const contextPolicy=contextPolicies ? await contextPolicies.forProject(project) : {kind:"owned"};
+      const shared=contextPolicy?.kind === "geo-project";
+      if(!contextPolicy) throw new HttpError(403,"memory_scope_denied","Project context is unavailable.");
       if (action === "native-route") {
         if (!nativeRoutes) { sendJson(res, 200, { routes: [] }); return; }
         const answer = await nativeRoutes.read(project, body);
@@ -143,7 +153,7 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, se
           throw new HttpError(400, "capsule_payload_invalid", "Invalid session id.");
         }
         // An unreadable selection cannot silently widen the knowledge-base scope.
-        const notes = sessions?.notes ? await sessions.notes(currentUser.id, identity.projectId, body.sessionId)
+        const notes = !shared && sessions?.notes ? await sessions.notes(currentUser.id, identity.projectId, body.sessionId)
           .catch(() => [SOURCE_SCOPE_UNAVAILABLE_CONTEXT]) : [];
         // The block a conversation of this project is handed up front, once. Best effort: a block that cannot be read is no reason for the
         // conversation not to start (the memory is an enhancement, and the next step asks again).
@@ -211,7 +221,10 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, se
         }
         // `standing: false`: this is the lookup; the researcher's standing profile was handed over up front, and an answer
         // padded with it could never be empty (`ResidentProfiles`).
-        const recalled = pause?.recall ? recallPaused() : await recallAcrossMemory({ capsules: service }, currentUser, {
+        const recalled = pause?.recall ? recallPaused() : shared ? await service.recall(project.userId,{
+          ...body,query:body.query,limit,scope:"capsule",projectId:project.id,projectOnly:true,
+          authorizeEntry:(activation,entry)=>contextItems?.capsule(contextPolicy,activation,entry) ?? false,
+        }) : await recallAcrossMemory({ capsules: service }, currentUser, {
           ...body, limit, standing: false, projectId: identity.projectId,
           sessionId: running.length === 1 ? running[0].sessionId : null,
         });
@@ -230,6 +243,9 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, se
         const answer = !pause?.recall && found.items.length === 0 && !found.notice ? { ...found, notice: NOTHING_ABOVE_THE_FLOOR } : found;
         recordRecallTool(pause?.recall ? "paused" : answer.items.length ? "hit" : "empty", answer.items.length);
         sendJson(res, 200, evaluationIsolation ? await evaluationIsolation.filter(identity, "capsule-memory", answer) : answer);
+      } else if (shared) {
+        sendJson(res,200,{entry:null,reviewRequired:false,takesEffect:false,contextOnly:true,status:"not_kept",
+          notice:"请通过本项目的记忆入口记录需要保留的内容。"});
       } else if (writesNothing) {
         // A conversation trying someone else's capsule leaves nothing behind.
         sendJson(res, 200, {

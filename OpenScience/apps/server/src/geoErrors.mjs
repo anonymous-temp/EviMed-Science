@@ -4,8 +4,8 @@
  *
  * Hidden knowledge:
  *
- * - **One error per fact per engine.** The fingerprint is the claim the
- *   statement contradicts (its `claim_key`, stable across claim versions),
+ * - **One error per fact version and applicability per engine.** The fingerprint is the claim the
+ *   statement contradicts, its version and its recorded clinical conditions,
  *   not the statement's wording: an engine phrases the same mistake
  *   differently every time it is asked, and a wording fingerprint would turn
  *   one error into ten rows and make the confirmation round below never see
@@ -31,15 +31,15 @@
  *   — the owner's method reads the page before choosing a route, and that
  *   reading is the content run's, which fills `materials` later.
  * - **Closed only by measurement.** An error that has been acted on closes
- *   when a later judged answer to the same question on the same engine no
- *   longer carries it (EC-G03); seen again after closing, it reopens (and a
+ *   when a later fully judged answer explicitly verifies the same claim, version
+ *   and applicability as correct (EC-G03); seen again after closing, it reopens (and a
  *   severe one notifies again).
  *
  * @module geoErrors
  */
 
-import { createHash } from "node:crypto";
-import { GEO_METRICS, geoConstant, isOurCitation } from "@evimed/domain";
+import { errorFingerprint } from "./geoErrorIdentity.mjs";
+import { GEO_METRICS, geoConstant, isOurCitation, geoClaimApplicability, geoClaimAssessmentIdentity, geoClaimForStatement, geoJudgementCoverage } from "@evimed/domain";
 import { compactText } from "./geoParse.mjs";
 import { enqueueRound, measurableEngines } from "./geoProbeQueue.mjs";
 import { HttpError, randomId } from "./security.mjs";
@@ -69,14 +69,43 @@ const ROUTES = Object.freeze({
   none: { action: "continuous_supply", responsible: "platform" },
 });
 
-/**
- * The error's fingerprint: the contradicted claim's key, or (only without
- * one) the statement's folded wording.
- * @param {{ claimKey?: string | null, text?: string | null }} statement
- */
-export function errorFingerprint(statement) {
-  const basis = statement.claimKey ? `claim:${statement.claimKey}` : `text:${compactText(statement.text)}`;
-  return createHash("sha256").update(basis).digest("hex").slice(0, 32);
+export { errorFingerprint } from "./geoErrorIdentity.mjs";
+
+/** Resolve the clinical identity actually recorded by this error, never an arbitrary same-id variant.
+ * @param {any[]} statements @param {any} error @param {any[]} [frozenClaims] @param {{ includeNonWrong?: boolean }} [options] */
+export function geoErrorOrigin(statements, error, frozenClaims = [], { includeNonWrong = false } = {}) {
+  const candidates = statements.filter(statement => (includeNonWrong || statement.verdict === "wrong") && statement.claimId === error.claimId).map(statement => {
+    if (statement.claimVersion != null && statement.applicability) return statement;
+    const frozen = geoClaimForStatement(frozenClaims, statement);
+    return frozen ? { ...statement, claimVersion: frozen.version ?? null, applicability: geoClaimApplicability(frozen) } : statement;
+  });
+  const exact = candidates.filter(statement => errorFingerprint(statement) === error.fingerprint);
+  const matches = exact.length ? exact : candidates.filter(statement => errorFingerprint({ claimKey: statement.claimKey, text: statement.text }) === error.fingerprint);
+  return new Set(matches.map(geoClaimAssessmentIdentity)).size === 1 ? matches[0] ?? null : null;
+}
+
+/** One clinical identity projection for analysis, diagnosis, and correction drafts. Current context is never an original substitute. */
+export function geoErrorClinicalContext(row) {
+  const original = geoErrorOrigin(row.origin_statements ?? [], { claimId: row.claim_id, fingerprint: row.fingerprint }, row.origin_claims ?? [], { includeNonWrong: true });
+  const claim = original ? geoClaimForStatement(row.origin_claims ?? [], original) : null;
+  return {
+    claimVersion: original?.claimVersion ?? null,
+    applicability: original?.applicability ?? null,
+    originalErrorAssessment: original ? { statement: original, claim: claim ?? null, temporalBasis: "first_preserved_error_assessment" } : null,
+    currentClaim: { version: row.claim_version ?? null, applicability: row.applicability ?? null, temporalBasis: "current_claim_context" },
+  };
+}
+
+/** A business resolution is supported only by this complete, explicit and quote-anchored reading.
+ * @param {any} original @param {any} answer @param {any} basis */
+export function geoErrorResolutionSatisfied(original, answer, basis) {
+  if (!original?.claimVersion || !original.applicability || answer?.status !== "valid" || !answer.judgedAt
+    || geoJudgementCoverage(answer) !== "complete" || !basis) return false;
+  const identity = geoClaimAssessmentIdentity(original);
+  if (geoClaimAssessmentIdentity(basis) !== identity) return false;
+  const readings = (answer.statements ?? []).filter(statement => geoClaimAssessmentIdentity(statement) === identity);
+  return readings.length > 0 && readings.every(statement => statement.verdict === "correct") && readings.some(statement => compactText(statement.evidence).length >= 4
+    && compactText(basis.quote).includes(compactText(statement.evidence)) && compactText(answer.answerText).includes(compactText(statement.text)));
 }
 
 const MARKERS = [/\[(\d{1,2})\]/gu, /\[\^(\d{1,2})\]/gu, /【(\d{1,2})】/gu, /\[citation:(\d{1,2})\]/gu, /\^(\d{1,2})\^/gu, /［(\d{1,2})］/gu];
@@ -177,6 +206,9 @@ const engineLabel = (engine) => /** @type {Record<string, { display_name: string
  * @param {{ firstSnapshotId?: string | null, lastSnapshotId?: string | null }} error
  */
 export function errorNoticeOccurrence(error) {
+  // An error a re-assessment brought back is told as that re-assessment (`judgment:<version>`), whichever pass tells it.
+  const correction = /** @type {any} */ (error).judgmentCorrection;
+  if (correction?.kind === "judgment_reactivated" && correction?.assessmentVersion) return `judgment:${correction.assessmentVersion}`;
   const { firstSnapshotId: first, lastSnapshotId: last } = error;
   return first && last && last !== first ? `seen:${last}` : "first";
 }
@@ -210,6 +242,8 @@ async function notifyError(deps, error, context, occurrence = "first") {
   const retry = deps.state?.notifyRetry ?? null;
   let delivered;
   try {
+    const reassessed = errorNoticeOccurrence(error);
+    const noticeOccurrence = reassessed.startsWith("judgment:") ? reassessed : occurrence;
     delivered = await deps.notify({
       kind: "wrong_ours",
       severity: "safety",
@@ -228,7 +262,7 @@ async function notifyError(deps, error, context, occurrence = "first") {
       evidenceQuote: error.evidenceQuote,
       questionText: context.questionText ?? null,
       snapshotId: error.lastSnapshotId ?? error.firstSnapshotId,
-      idempotencyKey: `geo:wrong_ours:${error.id}:${occurrence}`,
+      idempotencyKey: `geo:wrong_ours:${error.id}:${noticeOccurrence}`,
     });
   } catch {
     delivered = false;
@@ -290,20 +324,21 @@ export async function recordErrorsFromFacts(deps, { snapshot, statements, contex
   const now = (deps.now ?? (() => new Date()))();
   const out = { created: 0, seen: 0, notified: 0 };
   const wrong = statements.filter((statement) => statement.verdict === "wrong");
-  if (!wrong.length) return out;
+  await deps.store.reconcileLegacyErrors?.(snapshot, statements);
   // Recorded below, the facts row stops owing them (`errorsRecorded`); one that throws first leaves the debt for the housekeeping.
   const round = snapshot.roundId ? await deps.store.round(snapshot.roundId) : null;
   for (const statement of wrong) {
-    const claim = context.claims.find((entry) => entry.id === statement.claimId) ?? null;
+    const claim = geoClaimForStatement(context.claims, statement);
     const trace = await traceError(deps.store, snapshot, String(statement.text), context.owned, now);
     const { error, created } = await deps.store.upsertError({
       id: randomId("ge_"), userId: snapshot.userId, geoProjectId: snapshot.geoProjectId,
-      fingerprint: errorFingerprint({ claimKey: statement.claimKey ?? claim?.key ?? null, text: statement.text }),
+      fingerprint: errorFingerprint({ ...statement, claimKey: statement.claimKey ?? claim?.key ?? null }),
       engine: snapshot.engine, questionId: snapshot.questionId, snapshotId: snapshot.id, statement: String(statement.text).slice(0, 1_000),
-      errorType: statement.errorType, severity: statement.severity, claimId: statement.claimId, evidenceQuote: statement.evidence ?? null,
+      verifiedStatement: statement, errorType: statement.errorType, severity: statement.severity, claimId: statement.claimId, evidenceQuote: statement.evidence ?? null,
       confirm: null, citedSource: trace.citedSource, action: trace.action, responsible: trace.responsible,
       now, askedAt: snapshot.askedAt ? new Date(snapshot.askedAt) : now,
     });
+    if (!error) continue;
     if (!created) {
       out.seen += 1;
       if (!error.notifiedAt && GEO_NOTIFY_SEVERITIES.includes(String(error.severity)) && error.status !== "closed") {
@@ -322,13 +357,13 @@ export async function recordErrorsFromFacts(deps, { snapshot, statements, contex
     const confirm = await confirmationFor(deps, error, round ? { roundId: round.id, kind: round.kind, ref: round.ref } : null);
     if (confirm) await deps.store.updateError(error.id, { confirm });
   }
-  await deps.store.errorsRecorded(snapshot.id);
+  await deps.store.errorsRecorded(snapshot.id, statements);
   return out;
 }
 
-/** Whether a set of statements repeats an error. @param {Array<Record<string, any>>} statements @param {string} fingerprint */
-function repeatsError(statements, fingerprint) {
-  return statements.some((statement) => statement?.verdict === "wrong" && errorFingerprint({ claimKey: statement.claimKey ?? null, text: statement.text }) === fingerprint);
+/** Whether a set of statements repeats the exact error identity. @param {Array<Record<string, any>>} statements @param {Record<string, any> | null} original */
+function repeatsError(statements, original) {
+  return Boolean(original && statements.some(statement => statement.verdict === "wrong" && geoClaimAssessmentIdentity(statement) === geoClaimAssessmentIdentity(original)));
 }
 
 /**
@@ -340,19 +375,10 @@ function repeatsError(statements, fingerprint) {
  *   responsible?: string | null, status?: "acting" | "awaiting_remeasure" }} change
  */
 export async function noteErrorAction(deps, { geoProjectId, errorId, materials = [], action = null, responsible = null, status = "acting" }) {
-  const error = await deps.store.error(errorId);
-  if (!error || error.geoProjectId !== geoProjectId) throw new HttpError(404, "geo_error_not_found", "Error not found.");
   if (status !== "acting" && status !== "awaiting_remeasure") throw new HttpError(400, "geo_error_status_invalid", "An error moves to acting or awaiting re-measurement.");
   if (action !== null && !GEO_ERROR_ACTIONS.includes(action)) throw new HttpError(400, "geo_error_action_invalid", "Unknown error action.");
-  if (error.status === "closed") throw new HttpError(409, "geo_error_closed", "The error is closed.");
   const now = (deps.now ?? (() => new Date()))();
-  const next = error.status === "awaiting_remeasure" && status === "acting" ? "awaiting_remeasure" : status;
-  await deps.store.updateError(errorId, {
-    materials: [...error.materials, ...materials.map((material) => ({ ...material, at: now.toISOString() }))],
-    ...(action ? { action } : {}), ...(responsible ? { responsible } : {}),
-    status: next, updated_at: now,
-  });
-  return { id: errorId, status: next };
+  return deps.store.appendErrorAction(geoProjectId, errorId, { materials: materials.map(material => ({ ...material, at: now.toISOString() })), action, responsible, status, now });
 }
 
 /** How many confirmation rounds one error is given, the first included: a skipped one is asked again, never without bound. */
@@ -428,7 +454,10 @@ export async function tickErrors(deps) {
       const ctx = await context(error.geoProjectId);
       if (!ctx) continue;
       tried += 1;
-      const claim = ctx.claims.find((/** @type {any} */ entry) => entry.id === error.claimId) ?? null;
+      const preserved = (await store.query(`SELECT f.statements,r.ref FROM evimed_geo.facts f JOIN evimed_geo.snapshots s ON s.id=f.snapshot_id
+        LEFT JOIN evimed_geo.rounds r ON r.id=s.round_id WHERE f.snapshot_id=$1`, [error.firstSnapshotId])).rows[0];
+      const original = geoErrorOrigin(preserved?.statements ?? [], error, preserved?.ref?.evaluationBasis?.claims ?? []);
+      const claim = original ? geoClaimForStatement(preserved?.ref?.evaluationBasis?.claims ?? ctx.claims, original) : null;
       if (await notifyError(deps, error, { projectId: ctx.project.projectId, brandName: ctx.project.product?.brandName ?? null,
         claimStatement: claim?.statement ?? null }, errorNoticeOccurrence(error))) counts.notified += 1;
     }
@@ -471,8 +500,12 @@ export async function tickErrors(deps) {
       counts.confirmsRead += 1;
       continue;
     }
-    const seen = valid.filter((answer) => repeatsError(answer.statements, error.fingerprint)).length;
-    const share = valid.length ? seen / valid.length : null;
+    const origin = (await store.query(`SELECT f.statements,r.ref FROM evimed_geo.facts f JOIN evimed_geo.snapshots s ON s.id=f.snapshot_id
+      LEFT JOIN evimed_geo.rounds r ON r.id=s.round_id WHERE f.snapshot_id=$1 AND f.geo_project_id=$2 AND f.user_id=$3`,
+      [error.firstSnapshotId, error.geoProjectId, error.userId])).rows[0];
+    const original = geoErrorOrigin(origin?.statements ?? [], error, origin?.ref?.evaluationBasis?.claims ?? []);
+    const seen = original?.claimVersion && original.applicability ? valid.filter(answer => repeatsError(answer.statements, original)).length : null;
+    const share = valid.length && seen !== null ? seen / valid.length : null;
     const stability = share === null || seen === 0 ? "unconfirmed" : share >= STABLE_SHARE ? "stable" : "sporadic";
     await store.updateError(error.id, {
       confirm: { ...error.confirm, status: "done", valid: valid.length, seen, share, stability, readAt: now.toISOString() },
@@ -494,10 +527,17 @@ export async function tickErrors(deps) {
   for (const error of await store.errorsToClose(20)) {
     if (!error.questionId || !error.updatedAt) continue;
     const later = await store.laterJudgedAnswers(error.id);
-    const latest = later.find((answer) => answer.status === "valid");
-    if (!latest || repeatsError(latest.statements, error.fingerprint)) continue;
-    await store.updateError(error.id, { status: "closed", closed_snapshot_id: latest.id, updated_at: now });
-    counts.closed += 1;
+    const latest = later[0];
+    if (!latest || latest.status !== "valid" || !latest.judgedAt || geoJudgementCoverage(latest) !== "complete") continue;
+    const origin = (await store.query(`SELECT f.statements,r.ref FROM evimed_geo.facts f JOIN evimed_geo.snapshots s ON s.id=f.snapshot_id
+      LEFT JOIN evimed_geo.rounds r ON r.id=s.round_id WHERE f.snapshot_id=$1 AND f.geo_project_id=$2 AND f.user_id=$3`,
+      [error.firstSnapshotId, error.geoProjectId, error.userId])).rows[0];
+    const original = geoErrorOrigin(origin?.statements ?? [], error, origin?.ref?.evaluationBasis?.claims ?? []);
+    if (!original?.claimVersion || !original.applicability) continue;
+    const basisContext = await store.projectContext(error.geoProjectId, latest.roundId);
+    const basis = geoClaimForStatement(basisContext?.claims ?? [], original);
+    if (!geoErrorResolutionSatisfied(original, latest, basis)) continue;
+    if (await store.closeErrorIfCurrent(error, latest, now)) counts.closed += 1;
   }
 
   // An unattributable error recorded before it got a default disposition gets one now.

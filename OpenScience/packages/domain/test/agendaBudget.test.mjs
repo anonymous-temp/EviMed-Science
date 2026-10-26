@@ -71,9 +71,9 @@ test("the share held back pays for as many re-checks as it can at the minimum a 
   }
 });
 
-test("the reasons a claim is not re-checked are a closed list, and the stop's are among them", () => {
+test("the reasons a claim is not re-checked include stopped agendas and operationally disabled scheduling", () => {
   assert.deepEqual([...VERIFICATION_UNSCHEDULED_REASONS].sort(),
-    ["agenda_paused", "agenda_stopped", "verification_budget_unavailable", "verification_cap"]);
+    ["agenda_paused", "agenda_stopped", "task_tools_disabled", "verification_budget_unavailable", "verification_cap"]);
 });
 
 test("the registry says the per-episode minimum in a Chinese sentence, and the cancelled re-check has its own", () => {

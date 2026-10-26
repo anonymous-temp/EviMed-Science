@@ -60,7 +60,8 @@ test("the page reads the engine's files, and the dispatch hands nothing of memor
   assert.equal(profile.data.groups.preference.length, 1);
   assert.equal("engine" in (await (await fetch(`${base}/api/memory/settings`, { headers })).json()).data, false);
   // The run-end extraction and the dispatch's profile give nothing of the engine's own files: the engine does both.
-  assert.equal((await app.residentProfiles.forDispatch(user.id, "default", null, { })).block ?? "", "");
+  const project = await app.store.createProject(await app.store.userById(user.id), "memory-profile", "Memory profile");
+  assert.equal((await app.residentProfiles.forDispatch(user.id, { projectId: project.id, sessionId: null })).text, "");
 });
 
 test("the map draws a native account from the engine's files, with the same document", options, async (t) => {
@@ -139,23 +140,26 @@ test("the drawer's links for a native memory are the sources it names; the other
 test("the conversation's forget tool is the page's own deletion: the file leaves, its lines are rejected, and the page can bring it back", options, async (t) => {
   const { app, user, engineUser, seed, sessions } = await fixture(t);
   const uri = seed("preferences/units.md", "Metric units.", { type: "preferences" });
-  const forgotten = await app.nativeMemory.forget({ id: user.id }, { id: "p1" }, uri);
+  const project = await app.store.createProject(await app.store.userById(user.id), "p1", "Memory edits");
+  const forgotten = await app.nativeMemory.forget({ id: user.id }, project, uri);
   assert.deepEqual(forgotten, { removed: true });
   assert.equal(await sessions.read(user.id, uri), null);
   assert.ok((await app.nativeMemory.overlay.rejectedFingerprints(user.id, "preferences")).size >= 1);
   const restored = await app.nativeMemory.undo(user.id, nativeFileId(uri), {});
   assert.equal(restored.undone, "restored");
   assert.equal(await sessions.read(user.id, uri), "Metric units.");
-  assert.deepEqual(await app.nativeMemory.forget({ id: user.id }, { id: "p1" }, `viking://user/${engineUser}/memories/preferences/none.md`), { removed: false });
+  assert.deepEqual(await app.nativeMemory.forget({ id: user.id }, project, `viking://user/${engineUser}/memories/preferences/none.md`), { removed: false });
 });
 
 test("the map's events of a native account are derived from the files' revisions, with the same events as another store's", options, async (t) => {
-  const { base, headers, seed } = await fixture(t);
+  const { app, base, headers, user, seed } = await fixture(t);
   const uri = seed("preferences/format.md", "Short answers.", { type: "preferences" });
   const record = (await (await fetch(`${base}/api/memory/records`, { headers })).json()).data.find((item) => item.uri === uri);
   const edited = await fetch(`${base}/api/memory/records/${encodeURIComponent(record.id)}`, { method: "PATCH", headers,
     body: JSON.stringify({ value: "Short answers, then detail.", expectedVersion: record.version }) });
   assert.equal(edited.status, 200);
+  // Keep the fixture inside the observation window even when the local DB clock is slightly ahead of the API clock.
+  await app.store.database.query("UPDATE evimed_memory.native_revisions SET changed_at=$3 WHERE user_id=$1 AND uri=$2", [user.id, uri, new Date(Date.now() - 60_000).toISOString()]);
   const map = (await (await fetch(`${base}/api/memory/map?include=events,buckets`, { headers })).json()).data;
   const memory = map.events.filter((event) => event.type === "memory");
   assert.ok(memory.length >= 1, JSON.stringify(map.events.map((event) => event.type)));

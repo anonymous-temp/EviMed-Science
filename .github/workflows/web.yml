@@ -81,8 +81,24 @@ jobs:
         shell: bash
         run: bash scripts/dev/fetch-skills.sh
 
+      # The index built from the pinned SIDER inputs is kept between runs: the builder reuses a cached index whose record names
+      # exactly those inputs (`reusable`) and builds it only when there is none, so a day the publisher is unreachable
+      # (2026-10-25) no longer stops every run. The key names the two input digests the builder pins.
+      - name: Restore the pinned SIDER index
+        uses: actions/cache/restore@v4
+        with:
+          path: OpenScience/runtime/mcp/evimed-research/data/sider-4.1.sqlite
+          key: sider-4.1-6427a3e3-119b2f53
+
       - name: Build and smoke the pinned public dataset
         run: python3 runtime/mcp/evimed-research/build_sider_cache.py
+
+      - name: Keep the pinned SIDER index
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: OpenScience/runtime/mcp/evimed-research/data/sider-4.1.sqlite
+          key: sider-4.1-6427a3e3-119b2f53
 
       - name: Test domain, port, socket and upstream contracts
         run: CI=true pnpm test:packages

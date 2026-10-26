@@ -435,3 +435,17 @@ export function weekOf(startedAt: string | null | undefined, now: Date = new Dat
   if (!start || now < start) return null;
   return Math.floor((now.getTime() - start.getTime()) / (7 * 86_400_000)) + 1;
 }
+
+/** Clinical conditions are source data; format their known fields without changing their meaning. */
+export function claimConditionsText(value: unknown): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return typeof value === "string" && value ? value : "适用条件未保留";
+  const fields = value as Record<string, unknown>;
+  const labels: Record<string, string> = { population: "适用人群", dose: "剂量", dosage: "用量", form: "剂型", formulation: "剂型", strength: "规格", route: "途径", frequency: "频次", duration: "疗程", indication: "适应证", comparator: "比较对象", intervention: "干预", outcome: "结局", setting: "场景", region: "地区", validUntil: "适用截止日期" };
+  const text = (item: unknown): string => typeof item === "string" ? item : typeof item === "number" ? String(item) : typeof item === "boolean" ? item ? "是" : "否" : JSON.stringify(item);
+  const parts = Object.entries(fields).flatMap(([key, item]) => item == null || item === "" || key === "evidenceLevel" || key === "elements" ? []
+    : key === "inLabel" ? [`说明书范围：${text(item)}`] : [`${labels[key] ?? "补充条件"}：${text(item)}`]);
+  if (fields.elements && typeof fields.elements === "object" && !Array.isArray(fields.elements)) {
+    for (const [key, item] of Object.entries(fields.elements)) if (item != null && item !== "") parts.push(`${labels[key] ?? "补充条件"}：${text(item)}`);
+  } else if (fields.elements != null) parts.push(`限定条件：${text(fields.elements)}`);
+  return parts.join("；") || "适用条件未保留";
+}

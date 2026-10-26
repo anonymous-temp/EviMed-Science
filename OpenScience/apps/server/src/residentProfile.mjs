@@ -1,3 +1,4 @@
+import { contextPolicyIdentity, sameContextPolicy } from "./geoContextItems.mjs";
 import { createHash } from "node:crypto";
 import { PROJECT_CARD_SLOT_LABELS_ZH, SOCKET_TOOL_NAMES } from "@evimed/domain";
 import { CAPSULE_PROFILE_FACT_KINDS, CAPSULE_PROFILE_MAX_TOKENS, capsuleFactMemos } from "./capsuleProfile.mjs";
@@ -183,16 +184,18 @@ export function nativeSessionResident({ residentProfiles, activeRuns, startedByP
 export class ResidentProfiles {
   /**
    * @param {{ config: any, store: any, capsules?: { profileFacts: Function, lookupCount?: Function } | null,
-   *   projectCard?: ((userId: string, projectId: string) => Promise<readonly any[]>) | null }} dependencies
+   *   contextPolicies?: any, projectCard?: ((userId: string, projectId: string) => Promise<readonly any[]>) | null }} dependencies
    *   `store` is the memory settings store (the switches and the conversation's hand-over state); `capsules` the capsule service,
    *   whose absence leaves the profile to the card. `projectCard` reads the rows of a project's card (the rows the memory page's
-   *   项目 tab shows); without it no card is handed over.
+   *   项目 tab shows); without it no card is handed over. `contextPolicies` says whether the project is a shared GEO project, whose
+   *   conversations are handed the project's card and none of the owner's personal capsule profile.
    */
-  constructor({ config, store, capsules = null, projectCard = null }) {
+  constructor({ config, store, capsules = null, projectCard = null, contextPolicies = null }) {
     this.config = config;
     this.store = store;
     this.capsules = capsules;
     this.projectCard = projectCard;
+    this.contextPolicies = contextPolicies;
     // `OPEN_SCIENCE_MEMORY_PROFILE_MAX_RECORDS`: the cap on how many entries the profile may carry, for the reason it has a token
     // cap — what is always present is paid for on every request, and the attention it takes is taken from the question.
     this.maxRecords = Math.max(0, Math.min(100, Math.trunc(Number(config?.memoryProfileMaxRecords ?? 24)) || 0));
@@ -244,6 +247,10 @@ export class ResidentProfiles {
       recordResidentProfile(reason);
       return { text: "", memories: [], due: false, reason, omitted: 0, digest: null, delivered: async () => {} };
     };
+    const policy = this.contextPolicies ? await this.contextPolicies.forProject({userId,id:projectId}) : {kind:"owned"};
+    if (!policy || !["owned","geo-project"].includes(policy.kind)) throw new Error("Project context policy unavailable");
+    const shared = policy.kind === "geo-project";
+    if(shared && (policy.ownerId!==userId || policy.controlProjectId!==projectId)) throw new Error("Project context policy mismatch");
     // The deployment's switch, then the researcher's own: nothing of the memory is handed over, and the profile a
     // conversation was given earlier is not taken back.
     if (this.config?.memoryRecallEnabled === false) return none("paused");
@@ -251,16 +258,18 @@ export class ResidentProfiles {
     if (pause.recall) return none("paused");
 
     const card = await this.#card(userId, projectId, attended);
-    const capsuleFacts = this.capsules ? await this.capsules.profileFacts(userId, projectId, CAPSULE_PROFILE_FACT_KINDS).catch(() => []) : [];
+    if (shared && !sameContextPolicy(policy, await this.contextPolicies.forProject({ userId, id: projectId }))) throw new Error("Project context policy changed");
+    // A shared GEO project's conversation is the project's, not its owner's: none of the owner's personal capsule profile.
+    const capsuleFacts = !shared && this.capsules ? await this.capsules.profileFacts(userId, projectId, CAPSULE_PROFILE_FACT_KINDS).catch(() => []) : [];
     // The line beside the profile names the capsule's recall tool, which a conversation has only when this deployment has no memory
     // engine: with one, a lookup is the engine's own.
-    const capsuleCount = this.config?.memoryEngineEnabled !== true && typeof this.capsules?.lookupCount === "function"
+    const capsuleCount = !shared && this.config?.memoryEngineEnabled !== true && typeof this.capsules?.lookupCount === "function"
       ? await this.capsules.lookupCount(userId, projectId, CAPSULE_PROFILE_FACT_KINDS).catch(() => 0) : 0;
     const block = renderResidentProfile({ capsuleFacts, card, capsuleCount, maxRecords: this.maxRecords });
     if (!block.text) return none("empty");
     if (block.omitted > 0) recordResidentOmitted(block.omitted);
 
-    const digest = createHash("sha256").update(block.profile).digest("hex");
+    const digest = createHash("sha256").update(shared ? JSON.stringify([contextPolicyIdentity(policy),block.profile]) : block.profile).digest("hex");
     // A conversation whose state cannot be read (an id the store cannot hold) is handed the profile and not recorded as
     // having been: it is the safe direction, and the next dispatch asks again.
     /** @type {{ digest: string | null, compactedSince: boolean } | null} */

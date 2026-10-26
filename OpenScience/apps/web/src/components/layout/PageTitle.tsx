@@ -13,5 +13,5 @@
  */
 export function PageTitle({ page, section }: { page: string; section?: string }) {
   const parts = section && section !== page ? [page, section] : [page];
-  return <title>{[...parts, "EviMed"].join(" · ")}</title>;
+  return <title>{[...parts, "EviMed Science"].join(" · ")}</title>;
 }

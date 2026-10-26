@@ -20,6 +20,7 @@
     "./runtime-inventory": "./src/runtimeInventory.mjs",
     "./result-provenance": "./src/resultProvenance.mjs",
     "./skill-display": "./src/skillDisplay.mjs",
+    "./platform-skill-policy": "./src/platformSkillPolicy.mjs",
     "./skill-packages": "./src/skillPackages.mjs",
     "./package.json": "./package.json"
   },

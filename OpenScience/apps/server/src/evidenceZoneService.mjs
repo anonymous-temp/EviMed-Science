@@ -220,6 +220,24 @@ function cardLineage(row) {
   return Object.keys(lineage).length ? lineage : null;
 }
 
+/** Exact historical cards for an already authorized GEO project. No current-card fallback or source fetch.
+ * @param {any} client @param {{userId:string,productZoneId?:string|null}} project @param {Array<{cardId:string,revision:number}>} references */
+export async function readEvidenceCardRevisions(client, project, references) {
+  if (references.length > 20000) throw error(422, "query_invalid", "Narrow the linked card scope.");
+  const refs = [...new Map(references.map(ref => [`${ref.cardId}@${ref.revision}`, ref])).values()];
+  if (!refs.length) return [];
+  const ready = (await client.query("SELECT to_regclass('evimed_frontier.evidence_card_revisions') AS revisions, to_regclass('evimed_frontier.evidence_cards') AS cards")).rows[0];
+  if (!ready?.revisions || !ready?.cards) return [];
+  return (await client.query(`SELECT c.id AS "cardId",r.revision,r.snapshot AS at,
+    jsonb_build_object('revision',c.revision,'withdrawn',c.withdrawn,'retiredAt',c.retired_at,'currency',c.currency) AS current
+    FROM jsonb_to_recordset($1::jsonb) AS requested("cardId" text,revision integer)
+    JOIN evimed_frontier.evidence_cards c ON c.id=requested."cardId"
+    JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id
+    JOIN evimed_frontier.evidence_card_revisions r ON r.card_id=c.id AND r.revision=requested.revision
+    WHERE ((c.zone_id=$2 AND c.user_id=$3 AND z.user_id=$3) OR (z.kind='official' AND z.state='published' AND c.state='published'))
+    ORDER BY c.id,r.revision`, [JSON.stringify(refs), project.productZoneId ?? "", project.userId])).rows;
+}
+
 export class EvidenceZoneService {
   /**
    * `entityKeysFor` fills a card's entity keys from the frontier glossary and

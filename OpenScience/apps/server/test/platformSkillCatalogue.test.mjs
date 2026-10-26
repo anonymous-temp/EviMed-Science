@@ -46,6 +46,26 @@ test("the list is every shipped skill in Chinese, in their groups, answered from
   assert.equal(items.find((item) => item.name === "survival-analysis")?.source, "platform");
 });
 
+test("EviMed-derived skills use the full platform publisher while retaining their upstream attribution", async () => {
+  const catalogue = createPlatformSkillCatalogue({ rootDir: repoRoot });
+  const { items } = await catalogue.list(reader);
+  const scientific = JSON.parse(await fs.readFile(path.join(repoRoot, "runtime/skills/curated-scientific/inventory.json"), "utf8")).source;
+  const derived = items.filter((item) => item.provenance.kind === "first-party-derived");
+  assert.ok(derived.length > 0);
+  for (const item of derived) {
+    assert.equal(item.provenance.publisher, "EviMed Science", item.id);
+    assert.equal(item.provenance.upstreamPublisher, scientific.repository.split("/")[0], item.id);
+    assert.equal(item.provenance.repository, `https://github.com/${scientific.repository}`, item.id);
+    assert.equal(item.provenance.commit, scientific.pin.commit, item.id);
+    assert.equal(item.provenance.upstreamVersion, scientific.pin.tag, item.id);
+    assert.ok(item.provenance.license, item.id);
+  }
+  assert.deepEqual((await catalogue.read(derived[0].id, reader)).provenance, derived[0].provenance);
+  const community = items.find((item) => item.name === "dsh-ppt");
+  assert.equal(community.provenance.publisher, "STARDUSTLC666");
+  assert.equal(community.provenance.repository, "https://github.com/STARDUSTLC666/dsh-ppt");
+});
+
 test("one skill reads as its words and its full text without the file's front matter", async () => {
   const catalogue = createPlatformSkillCatalogue({ rootDir: repoRoot });
   const row = await catalogue.read("curated:survival-analysis", reader);

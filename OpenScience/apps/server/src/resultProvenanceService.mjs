@@ -88,10 +88,7 @@ export class ResultProvenanceService {
       throw new HttpError(403, "result_project_forbidden", "Capture does not own this workspace.");
     }
     const relativePath = normalizeResultPath(input.relativePath);
-    const context = await this.resolveCaptureContext(project, { ...input, relativePath });
-    if (context) input = { ...input, inputs: [...(input.inputs ?? []), ...(context.inputs ?? [])],
-      supersedesVersionId: context.supersedesVersionId ?? input.supersedesVersionId };
-    const correction = context?.correction ?? null;
+    let correction = null;
     const full = resolveScopedPath(project.workspaceDir, relativePath);
     const rawProducer = input.producer ?? {};
     const producer = { kind: RESULT_PRODUCER_KINDS.includes(rawProducer.kind) ? rawProducer.kind : "workspace" };
@@ -104,9 +101,6 @@ export class ResultProvenanceService {
     if (input.inputs && (!Array.isArray(input.inputs) || input.inputs.length > 256)) {
       throw new HttpError(413, "result_inputs_too_large", "Too many result input references.");
     }
-    const inputs = await Promise.all((input.inputs ?? []).map(reference => this.reference(input.userId, project, reference)));
-    const code = input.code ? await this.reference(input.userId, project, input.code) : null;
-    const environment = input.environment ? await this.reference(input.userId, project, input.environment) : null;
     const captured = await withProjectStorageMutation(project, async () => {
       let opened;
       let bytes;
@@ -119,6 +113,12 @@ export class ResultProvenanceService {
       if (input.expectedDigest && input.expectedDigest !== digest) {
         throw new HttpError(409, "result_capture_changed", "Result bytes no longer match the owned producer receipt.");
       }
+      const context = await this.resolveCaptureContext(project, { ...input, relativePath, actualDigest: digest });
+      const supersedesVersionId = context?.supersedesVersionId ?? input.supersedesVersionId;
+      correction = context?.correction ?? null;
+      const inputs = await Promise.all([...(input.inputs ?? []), ...(context?.inputs ?? [])].map(reference => this.reference(input.userId, project, reference)));
+      const code = input.code ? await this.reference(input.userId, project, input.code) : null;
+      const environment = input.environment ? await this.reference(input.userId, project, input.environment) : null;
       const artifactId = `ra_${digestOf(JSON.stringify([project.userId, project.id, relativePath]))}`;
       const versionId = `rv_${digestOf(JSON.stringify([project.userId, project.id, producer.sessionId, producer.runId,
         producer.callId ?? producer.eventId, relativePath, digest]))}`;
@@ -127,7 +127,7 @@ export class ResultProvenanceService {
         if (input.review && !existing.payload.review) return this.annotateReview(input.userId, project, existing, input.review);
         return this.project(input.userId, project, existing.payload);
       }
-      if (input.supersedesVersionId) await this.get(input.userId, project.id, input.supersedesVersionId);
+      if (supersedesVersionId) await this.get(input.userId, project.id, supersedesVersionId);
       const { storagePath } = await preserveSnapshot(this, project, bytes);
       const producerStatus = input.expectedDigest ? "bound" : producer.callId || producer.eventId || producer.runId ? "observed" : "unknown";
       const coverage = { snapshot: "complete", producer: producerStatus,
@@ -150,7 +150,7 @@ export class ResultProvenanceService {
       const payload = { recordType: "result-version", artifactId, versionId, projectId: project.id,
         path: relativePath, digest, size: bytes.length, mimeType: mimeFor(full), capturedAt: this.now().toISOString(),
         producer, inputs, code, environment, method: projectResultMethod(input.method), findings: input.findings ?? [], machineValues,
-        review: input.review ?? null, coverage, supersedesVersionId: input.supersedesVersionId ?? null, storagePath,
+        review: input.review ?? null, coverage, supersedesVersionId: supersedesVersionId ?? null, storagePath,
         snapshot: producerSnapshot, bindings,
         // Index fields for the two lookups the inspection needs, never shown: the calculations in a run, and the versions bound to one.
         ...(machineValues.length ? { hasMachineValues: true } : {}), bindingSources: bindingSources(bindings) };

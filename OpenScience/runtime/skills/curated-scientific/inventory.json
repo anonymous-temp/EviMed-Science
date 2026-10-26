@@ -95,7 +95,13 @@
         "E5": "Upstream's own --no-show flag is kept instead of EviMed's earlier plt.show() patch, and the image's office-smoke passes it.",
         "E6": "EviMed's own additions are kept: the deterministic-baseline section, the export_power_analysis.py line and script.",
         "E7": "scripts/build/rewrite-skill-vocabulary.mjs --check passes on the refreshed text.",
-        "E8": "Upstream's block-style metadata with last-reviewed is kept."
+        "E8": "Upstream's block-style metadata with last-reviewed is kept.",
+        "E9": "Preserve the public hosted skill id and agents/openai.yaml while adopting the complete pinned counterpart.",
+        "E10": "Grant figures use installed matplotlib and Office skills; the unavailable scientific-schematics/OpenRouter integration is omitted.",
+        "E11": "Biopython remote-service examples are upstream reference only: use managed retrieval or local inputs; external BLAST, MUSCLE, Clustal Omega and DSSP executables are absent.",
+        "E12": "Hypothesis oversight findings are advisory notes in planning drafts; unresolved reviews do not withhold scaffold generation or platform delivery. Upstream repository-only scanner reproduction commands are replaced by hosted scope.",
+        "E13": "Expectation comparison preserves Unicode words so distinct Chinese predictions are not collapsed to empty text; risk-category diagnostic ordering is sorted for deterministic reports.",
+        "E14": "Remove trailing whitespace from two grant reference documents; wording and examples are unchanged."
       }
     },
     "delivery": {
@@ -105,654 +111,654 @@
         "_runtime"
       ],
       "executable": {
-          "astronomy-data-analysis": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "astronomy-data-analysis-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill astronomy-data-analysis --smoke"
-          },
-          "bayesian-modeling": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "bayesian-modeling-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill bayesian-modeling --smoke"
-          },
-          "biomedical-database-search": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "biomedical-database-search-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill biomedical-database-search --smoke"
-          },
-          "biomedical-knowledge-graph": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "biomedical-knowledge-graph-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill biomedical-knowledge-graph --smoke"
-          },
-          "biomedical-signal-analysis": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "biomedical-signal-analysis-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill biomedical-signal-analysis --smoke"
-          },
-          "biosequence-analysis": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "biosequence-analysis-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill biosequence-analysis --smoke"
-          },
-          "bulk-rna-seq": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "bulk-rna-seq-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill bulk-rna-seq --smoke"
-          },
-          "cancer-functional-genomics": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "cancer-functional-genomics-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill cancer-functional-genomics --smoke"
-          },
-          "cheminformatics": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "cheminformatics-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill cheminformatics --smoke"
-          },
-          "citation-integrity": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "citation-integrity-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill citation-integrity --smoke"
-          },
-          "clinical-machine-learning": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "clinical-machine-learning-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill clinical-machine-learning --smoke"
-          },
-          "digital-pathology-analysis": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "digital-pathology-analysis-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill digital-pathology-analysis --smoke"
-          },
-          "drug-discovery-data": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "drug-discovery-data-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill drug-discovery-data --smoke"
-          },
-          "experimental-design": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "experimental-design-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill experimental-design --smoke"
-          },
-          "exploratory-data-analysis": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "exploratory-data-analysis-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill exploratory-data-analysis --smoke"
-          },
-          "flow-cytometry-analysis": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "flow-cytometry-analysis-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill flow-cytometry-analysis --smoke"
-          },
-          "genome-variant-analysis": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "genome-variant-analysis-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill genome-variant-analysis --smoke"
-          },
-          "geospatial-analysis": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "geospatial-analysis-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill geospatial-analysis --smoke"
-          },
-          "hypothesis-development": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "hypothesis-development-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill hypothesis-development --smoke"
-          },
-          "markdown-mermaid-writing": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "markdown-mermaid-writing-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill markdown-mermaid-writing --smoke"
-          },
-          "mass-spectrometry-analysis": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "mass-spectrometry-analysis-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill mass-spectrometry-analysis --smoke"
-          },
-          "materials-science-analysis": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "materials-science-analysis-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill materials-science-analysis --smoke"
-          },
-          "medical-imaging-data": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "medical-imaging-data-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill medical-imaging-data --smoke"
-          },
-          "metabolic-network-modeling": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "metabolic-network-modeling-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill metabolic-network-modeling --smoke"
-          },
-          "pathway-enrichment": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "pathway-enrichment-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill pathway-enrichment --smoke"
-          },
-          "phylogenetic-analysis": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "phylogenetic-analysis-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill phylogenetic-analysis --smoke"
-          },
-          "quantum-computing-analysis": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "quantum-computing-analysis-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill quantum-computing-analysis --smoke"
-          },
-          "reproducible-workflows": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "reproducible-workflows-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill reproducible-workflows --smoke"
-          },
-          "research-grant-development": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "research-grant-development-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill research-grant-development --smoke"
-          },
-          "scientific-data-engineering": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "scientific-data-engineering-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill scientific-data-engineering --smoke"
-          },
-          "scientific-deep-learning": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "scientific-deep-learning-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill scientific-deep-learning --smoke"
-          },
-          "simulation-optimization": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "simulation-optimization-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill simulation-optimization --smoke"
-          },
-          "single-cell-analysis": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "single-cell-analysis-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill single-cell-analysis --smoke"
-          },
-          "statistical-analysis": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "statistical-analysis-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill statistical-analysis --smoke"
-          },
-          "survival-analysis": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "survival-analysis-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill survival-analysis --smoke"
-          },
-          "time-series-forecasting": {
-            "entrypoints": [
-              "../_runtime/execute_skill.py"
-            ],
-            "dependencies": [
-              "python>=3.11",
-              "numpy==2.2.6",
-              "pandas==2.2.3",
-              "scipy==1.15.3",
-              "scikit-learn==1.6.1"
-            ],
-            "artifacts": [
-              "results.json",
-              "time-series-forecasting-report.md",
-              "execution-receipt.json"
-            ],
-            "smoke": "--skill time-series-forecasting --smoke"
-          },
+        "astronomy-data-analysis": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "astronomy-data-analysis-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill astronomy-data-analysis --smoke"
+        },
+        "bayesian-modeling": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "bayesian-modeling-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill bayesian-modeling --smoke"
+        },
+        "biomedical-database-search": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "biomedical-database-search-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill biomedical-database-search --smoke"
+        },
+        "biomedical-knowledge-graph": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "biomedical-knowledge-graph-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill biomedical-knowledge-graph --smoke"
+        },
+        "biomedical-signal-analysis": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "biomedical-signal-analysis-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill biomedical-signal-analysis --smoke"
+        },
+        "biosequence-analysis": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "biosequence-analysis-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill biosequence-analysis --smoke"
+        },
+        "bulk-rna-seq": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "bulk-rna-seq-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill bulk-rna-seq --smoke"
+        },
+        "cancer-functional-genomics": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "cancer-functional-genomics-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill cancer-functional-genomics --smoke"
+        },
+        "cheminformatics": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "cheminformatics-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill cheminformatics --smoke"
+        },
+        "citation-integrity": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "citation-integrity-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill citation-integrity --smoke"
+        },
+        "clinical-machine-learning": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "clinical-machine-learning-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill clinical-machine-learning --smoke"
+        },
+        "digital-pathology-analysis": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "digital-pathology-analysis-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill digital-pathology-analysis --smoke"
+        },
+        "drug-discovery-data": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "drug-discovery-data-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill drug-discovery-data --smoke"
+        },
+        "experimental-design": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "experimental-design-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill experimental-design --smoke"
+        },
+        "exploratory-data-analysis": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "exploratory-data-analysis-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill exploratory-data-analysis --smoke"
+        },
+        "flow-cytometry-analysis": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "flow-cytometry-analysis-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill flow-cytometry-analysis --smoke"
+        },
+        "genome-variant-analysis": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "genome-variant-analysis-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill genome-variant-analysis --smoke"
+        },
+        "geospatial-analysis": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "geospatial-analysis-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill geospatial-analysis --smoke"
+        },
+        "hypothesis-development": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "hypothesis-development-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill hypothesis-development --smoke"
+        },
+        "markdown-mermaid-writing": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "markdown-mermaid-writing-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill markdown-mermaid-writing --smoke"
+        },
+        "mass-spectrometry-analysis": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "mass-spectrometry-analysis-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill mass-spectrometry-analysis --smoke"
+        },
+        "materials-science-analysis": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "materials-science-analysis-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill materials-science-analysis --smoke"
+        },
+        "medical-imaging-data": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "medical-imaging-data-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill medical-imaging-data --smoke"
+        },
+        "metabolic-network-modeling": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "metabolic-network-modeling-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill metabolic-network-modeling --smoke"
+        },
+        "pathway-enrichment": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "pathway-enrichment-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill pathway-enrichment --smoke"
+        },
+        "phylogenetic-analysis": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "phylogenetic-analysis-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill phylogenetic-analysis --smoke"
+        },
+        "quantum-computing-analysis": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "quantum-computing-analysis-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill quantum-computing-analysis --smoke"
+        },
+        "reproducible-workflows": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "reproducible-workflows-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill reproducible-workflows --smoke"
+        },
+        "research-grant-development": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "research-grant-development-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill research-grant-development --smoke"
+        },
+        "scientific-data-engineering": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "scientific-data-engineering-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill scientific-data-engineering --smoke"
+        },
+        "scientific-deep-learning": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "scientific-deep-learning-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill scientific-deep-learning --smoke"
+        },
+        "simulation-optimization": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "simulation-optimization-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill simulation-optimization --smoke"
+        },
+        "single-cell-analysis": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "single-cell-analysis-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill single-cell-analysis --smoke"
+        },
+        "statistical-analysis": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "statistical-analysis-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill statistical-analysis --smoke"
+        },
+        "survival-analysis": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "survival-analysis-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill survival-analysis --smoke"
+        },
+        "time-series-forecasting": {
+          "entrypoints": [
+            "../_runtime/execute_skill.py"
+          ],
+          "dependencies": [
+            "python>=3.11",
+            "numpy==2.2.6",
+            "pandas==2.2.3",
+            "scipy==1.15.3",
+            "scikit-learn==1.6.1"
+          ],
+          "artifacts": [
+            "results.json",
+            "time-series-forecasting-report.md",
+            "execution-receipt.json"
+          ],
+          "smoke": "--skill time-series-forecasting --smoke"
+        },
         "matplotlib": {
           "entrypoints": [
             "scripts/plot_template.py",
@@ -850,11 +856,11 @@
       "security": "REHABILITATED_SAFE",
       "reviewed": true,
       "derivedFrom": "scientific-agent-skills/biopython",
-      "digest": "sha256:4529e8872fa33e7af4a0f3d7042dde7cbb52b9ba69d47b7195453584b30e3dad",
+      "digest": "sha256:db53343f6aaaf33ee8ba730a1fc33c48af025bbb8cb15813a9b5adcbccd464d1",
       "fills": "Bounded local sequence analysis and traceable record retrieval",
       "upstreamReview": {
         "class": "A",
-        "decision": "held",
+        "decision": "refreshed",
         "counterparts": [
           {
             "name": "biopython",
@@ -863,7 +869,19 @@
           }
         ],
         "changed": "SKILL.md +44/-27; Python files ~0 +0 -0; references ~7 +1 -0",
-        "reason": "Biopython 1.88 is the image pin; text-only counterpart."
+        "reason": "Refreshed from the complete 9-file biopython counterpart (SKILL.md and 8 references), adapted to preinstalled image Python 3.11/Biopython 1.88. Local transform, pairwise alignment and FASTA/GenBank round-trip are exercised offline with the actual available library version reported; this is not a claim that external APIs or absent BLAST/MUSCLE/Clustal/DSSP tools ran. Remote examples are reference only and managed retrieval/local inputs are used.",
+        "edits": [
+          "E1",
+          "E2",
+          "E3",
+          "E4",
+          "E6",
+          "E7",
+          "E8",
+          "E9",
+          "E11"
+        ],
+        "sourceFileCount": 9
       }
     },
     {
@@ -1463,18 +1481,13 @@
       "name": "hypothesis-development",
       "security": "REHABILITATED_SAFE",
       "reviewed": true,
-      "derivedFrom": "scientific-agent-skills/hypogenic+hypothesis-generation",
-      "digest": "sha256:195ab52dfbb08d5c3c7ff47bf6667704228c5691b8226fc8d800d91254ee5ead",
+      "derivedFrom": "scientific-agent-skills/hypothesis-generation",
+      "digest": "sha256:43662deb119bde500b751028286433e93d13e8f5fb66ac3402f188d1b8fe90b5",
       "fills": "Falsifiable hypotheses, alternatives, and discriminating experiments",
       "upstreamReview": {
         "class": "A",
-        "decision": "held",
+        "decision": "refreshed",
         "counterparts": [
-          {
-            "name": "hypogenic",
-            "version": "1.0 -> 1.4",
-            "scan": "SAFE"
-          },
           {
             "name": "hypothesis-generation",
             "version": "1.1 -> 2.4",
@@ -1482,7 +1495,20 @@
           }
         ],
         "changed": "SKILL.md +467/-797; Python files ~0 +15 -2; references ~3 +13 -1; other files ~0 +12 -3",
-        "reason": "Both counterparts are now stdlib-only local CLIs (14 scripts); scanner SAFE. Best \"adopt the CLIs\" case for the next release."
+        "reason": "Refreshed from the complete 27-file hypothesis-generation counterpart (8 scripts, 8 assets, 10 references, SKILL.md), standard-library only on Python 3.11. Historical derivation included hypogenic+hypothesis-generation; hypogenic is no longer a source of the shipped method and its service/model workflow is not adopted. Native record/control/evidence CLIs and local preregistration scaffold are offered alongside the explicitly bounded EviMed baseline. Hosted oversight findings remain advisory in drafts; no delivery approval is added. Review regressions additionally cover distinct and identical Chinese expectations and stable warnings across Python hash seeds.",
+        "edits": [
+          "E1",
+          "E2",
+          "E3",
+          "E4",
+          "E6",
+          "E7",
+          "E8",
+          "E9",
+          "E12",
+          "E13"
+        ],
+        "sourceFileCount": 27
       }
     },
     {
@@ -1656,11 +1682,11 @@
       "security": "REHABILITATED_SAFE",
       "reviewed": true,
       "derivedFrom": "scientific-agent-skills/research-grants",
-      "digest": "sha256:eb7dc366fd08711d94a486c3212a8554ee170d6f8517baac9229ef67a929d215",
+      "digest": "sha256:258bbf4f1884da4d885e94f40f13627e406bb0635c6b38a424914d515fb94f8d",
       "fills": "Evidence-grounded aims, approach, milestones, risks, and audit",
       "upstreamReview": {
         "class": "A",
-        "decision": "held",
+        "decision": "refreshed",
         "counterparts": [
           {
             "name": "research-grants",
@@ -1669,7 +1695,20 @@
           }
         ],
         "changed": "SKILL.md +79/-670; Python files ~0 +0 -0; references ~8 +4 -0; other files ~3 +0 -0",
-        "reason": "Text-only counterpart (16 files)."
+        "reason": "Refreshed from the complete 16-file research-grants counterpart (SKILL.md, 12 agency/method references and 3 templates). It is text guidance, not an executable proposal algorithm; only the retained EviMed baseline is executable. Current calls still require managed web verification or supplied official documents. Existing plotting/Office tools replace the unavailable external image integration.",
+        "edits": [
+          "E1",
+          "E2",
+          "E3",
+          "E4",
+          "E6",
+          "E7",
+          "E8",
+          "E9",
+          "E10",
+          "E14"
+        ],
+        "sourceFileCount": 16
       }
     },
     {

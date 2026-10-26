@@ -277,7 +277,7 @@ const DAY = 24 * HOUR;
  * @property {() => Promise<{ userId: string, projectId: string }>} [catalogueJudgeContext] the platform catalogue owner, resolved from a real internal project
  * @property {any} [market] a `MediaMarketClient`; absent or unconfigured = no network call
  * @property {{ read: (url: string, options?: { signal?: AbortSignal }) => Promise<{ receipt: any, text: string }> } | null} [webReader]
- * @property {(article: any, project: any) => Promise<{ title?: string, markdown?: string, html?: string }>} [articleBody]
+ * @property {(article: any, project: any) => Promise<{ title?: string, markdown?: string, html?: string, sourceDigest?:string }>} [articleBody]
  *   the article's reviewed body (the file behind `articles.path`)
  * @property {(article: any, project: any) => Promise<string | null>} [gradedSha256] the sha256 the delivery gate graded the article's file at
  *   (from the receipt of its run); null when that cannot be said. A send holds to it: the bytes sent are the bytes judged (M-10).
@@ -1125,7 +1125,8 @@ async function withdrawStalePlans(ctx, project, candidatesByKey, counts, choices
   const articles = new Map((await ctx.store.getArticles(planned.map((order) => order.articleId))).map((article) => [article.id, article]));
   for (const order of planned) {
     const media = candidatesByKey.get(mediaKey(order.mediaType, order.resourceId));
-    const articleIssues = articleProblems(articles.get(order.articleId));
+    const plannedArticle = ctx.store.getOrderArticle ? await ctx.store.getOrderArticle(order) : articles.get(order.articleId);
+    const articleIssues = articleProblems(plannedArticle);
     const reason = articleIssues[0] ?? (choices.skippedArticleIds.has(String(order.articleId)) ? "action_skipped" : null)
       ?? (!media ? "outlet_withdrawn" : media.priceCny !== order.priceCny ? "price_changed" : null);
     if (!reason) continue;
@@ -1191,7 +1192,7 @@ async function placeOrder(ctx, project, order, state) {
     await transition(ctx, order, "cancelled", { detail: { reason: `plan_withdrawn:${reason}` } });
     return reason;
   };
-  const [article] = await ctx.store.getArticles([order.articleId]);
+  const article = ctx.store.getOrderArticle ? await ctx.store.getOrderArticle(order) : (await ctx.store.getArticles([order.articleId]))[0];
   if (articleProblems(article).length) return withdraw("article_not_placeable");
   const media = state.candidatesByKey.get(mediaKey(order.mediaType, order.resourceId));
   if (!media || media.priceCny !== order.priceCny) return withdraw("outlet_changed");
@@ -1211,11 +1212,11 @@ async function placeOrder(ctx, project, order, state) {
   const source = typeof body?.markdown === "string" ? body.markdown : typeof body?.html === "string" ? body.html : null;
   if (source == null) return "article_body_unavailable";
   // What goes out must be what passed review (decision 7: the post-rewrite hash).
-  if (sha256Hex(source) !== article.contentSha256) return "article_changed_since_review";
+  if ((body.sourceDigest ?? sha256Hex(source)) !== article.contentSha256) return "article_changed_since_review";
   // ... and what the gate judged: the declared hash is the run's word, the receipt's is the gate's. A hash the receipt cannot give is
   // no refusal (the article's pass was bound to it when it was granted); one it gives that is not the file's is (M-10).
   const graded = ctx.gradedSha256 ? await ctx.gradedSha256(article, project).catch(() => null) : null;
-  if (graded && graded !== sha256Hex(source)) return "article_not_graded_as_sent";
+  if (graded && graded !== (body.sourceDigest ?? sha256Hex(source))) return "article_not_graded_as_sent";
   // The claim references the article carries (flywheel F21) are the platform's own marks, written after the sentences they support:
   // the hash above is of the reviewed file, markers and all, and what goes out is that text with the markers taken off.
   const split = typeof body.markdown === "string" ? splitLeadingTitle(stripGeoClaimReferences(body.markdown)) : null;

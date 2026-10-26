@@ -35,6 +35,17 @@ function draw(props: Partial<React.ComponentProps<typeof ProgrammeRunsDrawer>> =
   return { ...view, load, onClose };
 }
 
+it("reads a long record a page at a time: the first page, then 显示更多 for the next", async () => {
+  const loadMore = vi.fn().mockResolvedValue({ runs: [RUNS[2]], nextCursor: null });
+  draw({ load: vi.fn().mockResolvedValue({ runs: RUNS.slice(0, 2), nextCursor: "c_2" }), loadMore });
+  const drawer = await screen.findByRole("dialog", { name: "AI 运行" });
+  expect(await within(drawer).findAllByRole("listitem")).toHaveLength(2);
+  await userEvent.click(within(drawer).getByRole("button", { name: "显示更多" }));
+  await waitFor(() => expect(within(drawer).getAllByRole("listitem")).toHaveLength(3));
+  expect(loadMore).toHaveBeenCalledWith("c_2");
+  expect(within(drawer).queryByRole("button", { name: "显示更多" })).not.toBeInTheDocument();
+});
+
 beforeEach(() => {
   api.history.mockReset();
   api.runs.mockReset();
@@ -45,6 +56,15 @@ afterEach(() => {
 });
 
 describe("AI 运行 — the record of what a module's programme did in the background", () => {
+  it('uses the supplied exact module reader without reaching owner-only generic history or file APIs', async () => {
+    const run = { ...RUNS[0], runId: 'exact' };
+    const readRecord = vi.fn().mockResolvedValue({ history: { sessionId: run.sessionId, capturedAt: null, partial: false, messages: [{ seq: 1, role: 'assistant', text: 'Shared run answer' }] },
+      files: [{ runId: run.runId, path: 'report.txt', href: '/app/runs/exact/files/report.txt?geoProject=geo&signal=signal&version=version' }] });
+    draw({ initialRun: run, readRecord });
+    expect(await screen.findByText('Shared run answer')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'report.txt' })).toHaveAttribute('href', '/app/runs/exact/files/report.txt?geoProject=geo&signal=signal&version=version');
+    expect(api.runs).not.toHaveBeenCalled(); expect(api.history).not.toHaveBeenCalled();
+  });
   it("lists the runs by what they were, with a state word and a time, and never an id", async () => {
     draw();
     const drawer = await screen.findByRole("dialog", { name: "AI 运行" });
@@ -164,4 +184,21 @@ describe("AI 运行 — the record of what a module's programme did in the backg
     await act(async () => { await vi.advanceTimersByTimeAsync(40_000); });
     expect(load, "nothing is going on: nothing is read").toHaveBeenCalledTimes(2);
   });
+});
+
+it('two executions in one native session retain separate rows, files and request-scoped prose', async () => {
+  const runs: ProgrammeRun[] = [{ sessionId: 'shared', runId: 'run_first', label: 'First task', state: 'finished', at: null }, { sessionId: 'shared', runId: 'run_second', label: 'Second task', state: 'finished', at: null }];
+  api.runs.mockResolvedValue([{ id: 'run_first', sessionId: 'shared', outputFiles: ['first.md'] }, { id: 'run_second', sessionId: 'shared', outputFiles: ['second.md'] }]);
+  api.history.mockImplementation(async (_session: string, _project: string, runId: string) => ({ messages: [{ seq: 1, role: 'assistant', text: runId === 'run_first' ? 'First result' : 'Second result' }] }));
+  draw({ load: vi.fn().mockResolvedValue(runs) });
+  const user = userEvent.setup(); await user.click(await screen.findByRole('button', { name: 'First task' }));
+  expect(await screen.findByRole('link', { name: 'first.md' })).toHaveAttribute('href', '/app/runs/run_first/files/first.md');
+  expect(screen.queryByRole('link', { name: 'second.md' })).not.toBeInTheDocument();
+  expect(await screen.findByText('First result')).toBeInTheDocument();
+  expect(api.history).toHaveBeenLastCalledWith('shared', 'p-masi', 'run_first');
+  await user.click(screen.getByRole('button', { name: /全部运行/ })); await user.click(screen.getByRole('button', { name: 'Second task' }));
+  expect(await screen.findByRole('link', { name: 'second.md' })).toHaveAttribute('href', '/app/runs/run_second/files/second.md');
+  expect(screen.queryByRole('link', { name: 'first.md' })).not.toBeInTheDocument();
+  expect(await screen.findByText('Second result')).toBeInTheDocument();
+  expect(api.history).toHaveBeenLastCalledWith('shared', 'p-masi', 'run_second');
 });

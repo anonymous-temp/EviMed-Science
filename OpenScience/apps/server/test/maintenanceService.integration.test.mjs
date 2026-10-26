@@ -181,6 +181,8 @@ test("runtime creation releases its read fence inside an ambient PostgreSQL tran
   await app.listen(0, "127.0.0.1");
   const user = await app.store.devUser();
   const project = await app.store.requireProject(user, "default");
+  await app.store.createProject(user, "not-admitted");
+  const notAdmitted = await app.store.requireProject(user, "not-admitted");
   const manager = app.runtimeManager, db = app.store.database;
   manager.config = { ...manager.config, runtimeMode: "kernel" };
   manager.onRuntimeStart = () => {};
@@ -203,8 +205,7 @@ test("runtime creation releases its read fence inside an ambient PostgreSQL tran
     const requested = await Promise.race([app.maintenanceService.request({ requestId: "cold-start-drain", ttlSeconds: 30 }), timeout]);
     assert.equal(requested.state, "draining");
     assert.ok(requested.blockers.activeMutations >= 1, "the admitted container boot remains visible until it settles");
-    const second = { ...project, id: "not-admitted", workspaceDir: project.workspaceDir + "-other" };
-    await assert.rejects(manager.startAdmitted(second), { code: "maintenance_active" });
+    await assert.rejects(manager.startAdmitted(notAdmitted), { code: "maintenance_active" });
   } finally { finish(); await started; }
   assert.equal(app.maintenanceService.activeMutations, 0);
   manager.runtimes.clear();
@@ -228,6 +229,8 @@ test("one-connection cold readers share actual plugin admission without starving
   await app.maintenanceService.initialize();
   const user = await app.store.devUser();
   const project = await app.store.requireProject(user, "default");
+  await app.store.createProject(user, "blocked");
+  const blockedProject = await app.store.requireProject(user, "blocked");
   const manager = app.runtimeManager, db = app.store.database;
   manager.config = { ...manager.config, runtimeMode: "kernel" };
   manager.onRuntimeStart = () => {};
@@ -267,7 +270,7 @@ test("one-connection cold readers share actual plugin admission without starving
   assert.equal(app.maintenanceService.activeMutations, 0);
   assert.equal((await db.query("SELECT name FROM evimed_control.projects WHERE user_id=$1 AND id=$2", [user.id, project.id])).rows[0].name,
     "before read fence and after", "neither parent write was rolled back by admission");
-  await assert.rejects(manager.startAdmitted({ ...project, id: "blocked", workspaceDir: project.workspaceDir + "-other" }), { code: "maintenance_active" });
+  await assert.rejects(manager.startAdmitted(blockedProject), { code: "maintenance_active" });
   const warm = manager.runtimes.get(manager.key(project));
   await assert.rejects(manager.replacePersonalSkillRuntime(project, {}), { code: "maintenance_active" });
   assert.equal(manager.runtimes.get(manager.key(project)), warm, "denied replacement preserves the admitted warm runtime");
@@ -276,6 +279,13 @@ test("one-connection cold readers share actual plugin admission without starving
   manager.startKernel = async () => { throw new Error("synthetic provider failure"); };
   await assert.rejects(manager.start(project), /synthetic provider failure/);
   assert.equal(app.maintenanceService.activeMutations, 0, "a failed provider releases its admission exactly once");
+  const beforeRefusal = pluginAdmissions;
+  await db.query("UPDATE evimed_control.projects SET archived_at=clock_timestamp() WHERE user_id=$1 AND id=$2", [user.id, blockedProject.id]);
+  await assert.rejects(manager.start(blockedProject), { code: "memory_scope_denied" });
+  await db.query("DELETE FROM evimed_control.projects WHERE user_id=$1 AND id=$2", [user.id, blockedProject.id]);
+  await assert.rejects(manager.start(blockedProject), { code: "memory_scope_denied" });
+  assert.equal(pluginAdmissions, beforeRefusal, "archived and deleted projects fail before another plugin admission");
+  assert.equal(manager.starts.size, 0); assert.equal(manager.coldStartAttempts.size, 0);
 });
 
 test("an ambient read fence releases only its own locks and rolls back only its own savepoint", options, async () => {

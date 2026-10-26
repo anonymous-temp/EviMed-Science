@@ -62,3 +62,24 @@ test("a refusal, an outage or a malformed answer is named, and the key never app
   assert.equal(unconfigured.configured, false);
   await assert.rejects(unconfigured.embedQuery("q"), { code: "kb_embedding_unconfigured" });
 });
+
+test("successful HTTP responses must contain exactly one valid vector per input", async () => {
+  const row = (index) => ({ text_index: index, embedding: [1, 2, 3, 4] });
+  const cases = [
+    { name: "missing output", answer: {} },
+    { name: "empty output", answer: { output: { embeddings: [] } } },
+    { name: "missing first input", answer: { output: { embeddings: [row(1)] } } },
+    { name: "missing last input", answer: { output: { embeddings: [row(0)] } } },
+    { name: "duplicate replacing a missing input", answer: { output: { embeddings: [row(0), row(0)] } } },
+    { name: "extra duplicate after a complete response", answer: { output: { embeddings: [row(0), row(1), row(0)] } } },
+  ];
+  for (const { name, answer } of cases) {
+    const embedder = new KbEmbedder({ apiKey: KEY, model: "m", dimension: 4, apiBase: "https://x.test" },
+      { fetchImpl: async () => Response.json(answer) });
+    await assert.rejects(embedder.embedDocuments(["first", "second"]), { code: "kb_embedding_response_invalid" }, name);
+    assert.deepEqual(embedder.counters, { requests: 1, texts: 0, tokens: 0, failures: 1 }, name);
+  }
+  const missingQuery = new KbEmbedder({ apiKey: KEY, model: "m", dimension: 4, apiBase: "https://x.test" },
+    { fetchImpl: async () => Response.json({ output: { embeddings: [] } }) });
+  await assert.rejects(missingQuery.embedQuery("query"), { code: "kb_embedding_response_invalid" });
+});

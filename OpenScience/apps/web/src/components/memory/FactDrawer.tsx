@@ -44,12 +44,13 @@ function failed(error: unknown) {
  * address the conversation opens at — so 「来源对话」 is a link back to the place
  * the memory was said, and not a claim the page cannot honour.
  */
-export function memorySource(record: WebStructuredMemory): { sessionId: string; at: string | null; projectId?: string } | null {
+export function memorySource(record: WebStructuredMemory): { sessionId: string; at: string | null; projectId?: string; titleKey?: string } | null {
   for (const item of record.evidence) {
     const sessionId = /^sessions\/([^/]+)\//.exec(item.sourceRef ?? "")?.[1];
     // The project is named when the control plane knows it: a profile line of the native engine is the person's, whatever project
     // its conversation was held in, and the link must open it there.
-    if (sessionId) return { sessionId, at: item.observedAt ?? record.createdAt, ...(item.projectId ? { projectId: item.projectId } : {}) };
+    if (sessionId) return { sessionId, at: item.observedAt ?? record.createdAt, ...(item.projectId ? { projectId: item.projectId } : {}),
+      ...(item.conversationTitleKey ? { titleKey: item.conversationTitleKey } : {}) };
   }
   return null;
 }
@@ -302,7 +303,7 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
               ))}
               {source && (
                 <ConversationLink projectId={record.scope === "project" ? record.scopeId : source.projectId ?? null} sessionId={source.sessionId}>
-                  {conversations?.[source.sessionId] ? `来源对话：《${memoryExcerpt(conversations[source.sessionId], 40)}》` : "来源对话"}
+                  {conversations?.[source.titleKey ?? source.sessionId] ? `来源对话：《${memoryExcerpt(conversations[source.titleKey ?? source.sessionId], 40)}》` : "来源对话"}
                   {formatDay(source.at) ? `（${formatDay(source.at)}）` : ""}
                 </ConversationLink>
               )}

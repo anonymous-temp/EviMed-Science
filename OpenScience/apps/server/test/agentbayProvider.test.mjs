@@ -1,3 +1,4 @@
+import { runContextAuthorityPublicKey } from "@evimed/harness-port/run-context-authority";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { chmod, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
@@ -6,6 +7,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { AgentBayRuntimeProvider } from "../src/agentbay/runtimeProvider.mjs";
+import { projectNativeMemoryNamespace } from "../src/openVikingLayout.mjs";
 import { loadConfig } from "../src/config.mjs";
 import { RuntimeManager, requestRuntime } from "../src/runtimeManager.mjs";
 import { fakeAgentBay, fakeOss, linkProxy } from "./helpers/agentbayFakes.mjs";
@@ -225,6 +227,10 @@ test("a project's session: its labels, lifecycle and Contexts, credentials only 
   assert.match(kernelEnv, /^OPEN_SCIENCE_RUNTIME_AUTHORITY='dsh\.runtime'$/m);
   assert.match(kernelEnv, /^EVIMED_PUBLIC_SOURCE_GATEWAY_URL='https:\/\/evimed\.example\/runtime-gateway\/sources\/v1\/fetch'$/m);
   for (const secret of secrets) assert.ok(!kernelEnv.includes(secret), "the kernel's environment carries no secret");
+  assert.ok(kernelEnv.includes(`EVIMED_ATTENDANCE_PUBLIC_KEY='${runContextAuthorityPublicKey("m".repeat(48))}'`));
+  assert.match(kernelEnv, /^EVIMED_ATTENDANCE_USER_ID='alice'$/m);
+  assert.match(kernelEnv, /^EVIMED_ATTENDANCE_PROJECT_ID='paper1'$/m);
+  assert.ok(!kernelEnv.includes("m".repeat(48)), "the AgentBay runtime receives only the verifier, never the API signing secret");
   assert.match(kernelEnv, /^EVIMED_GEO_SKILLS='0'$/m, "an ordinary project's session is told, in so many words, that it carries no GEO method pack");
 
   assert.equal(runtime.url, "http://dsh.runtime");
@@ -254,13 +260,20 @@ test("a project's session: its labels, lifecycle and Contexts, credentials only 
   assert.deepEqual(status.sandbox, runtime.sandbox, "the waiting shell and the bring-up read the guest's report from the status");
 });
 
-test("a 循证 GEO project's session is given the method pack's switch on", async (t) => {
+test("a shared GEO policy refuses an unqualified remote mount before creating an AgentBay session", async (t) => {
   const { fake, project, managerFor } = await fixture(t, { config: { geoEnabled: true, geoAudience: "all" } });
   const manager = managerFor();
   manager.geoProjectOf = async (userId, projectId) => userId === "alice" && projectId === "paper1";
-  await manager.start(project);
-  const kernelEnv = await readFile(fake.sessionFile("s-1", "/run/evimed/kernel.env"), "utf8");
-  assert.match(kernelEnv, /^EVIMED_GEO_SKILLS='1'$/m);
+  await assert.rejects(manager.start(project), { code: "runtime_context_unverified" });
+  const namespace = projectNativeMemoryNamespace({ ownerId: project.userId, projectId: project.id,
+    ownerCreatedAt: "2026-10-01T00:00:00.000Z", projectCreatedAt: "2026-10-02T00:00:00.000Z" });
+  // This provider unit test supplies the canonical policy interface; actual policy persistence is tested against PostgreSQL.
+  manager.contextPolicies = { forProject: async () => ({ kind: "geo-project", ownerId: project.userId,
+    controlProjectId: project.id, geoProjectId: "geo-shared", namespace, policyVersion: 1, revision: 1 }) };
+  await assert.rejects(manager.start(project), { code: "runtime_context_provider_unsupported" });
+  assert.equal(fake.calls.create.length, 0);
+  assert.equal(fake.calls.writes.length, 0);
+  assert.equal(manager.runtimes.size, 0);
 });
 
 test("a stop brings the run's work home, releases the session with its Context upload, and records what the Context holds", async (t) => {

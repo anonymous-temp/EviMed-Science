@@ -8,6 +8,7 @@ import { RESEARCHER_PAUSE_KIND, buildPlannerContext, eligibleTaskTypes, plannerF
 import { foldOutcome, reducedPriority } from "./autopilotOutcome.mjs";
 import { AGENDA_WINDOW_MS, agendaAllowance, agendaBudget, budgetFreesAt, taskBudgetRefusal } from "./agendaBudget.mjs";
 import { sourceIdFor } from "./sourceService.mjs";
+import { migrateProductStore, productTime } from "./productPersistence.mjs";
 import { HttpError } from "./security.mjs";
 import { AUTOPILOT_BUDGET_ERROR_CODES, AUTOPILOT_VERIFICATION_ROUTE_REASON } from "@evimed/domain";
 
@@ -88,6 +89,21 @@ function listOfText(value, field, allowed = null) {
 function isConflict(error) { return error?.code === "product_revision_conflict"; }
 function hash(value) { return createHash("sha256").update(value).digest("hex"); }
 const followUpKey = item => hash(JSON.stringify([item.digestId, item.claimId, item.note, item.at]));
+
+/**
+ * The dispatch refusals that are the task's own: every later attempt of this task type ends the same way, so they count against
+ * the type (two in a row pause it, and the task goes on with the rest). A closed list. Every other terminal dispatch refusal — the
+ * task's own budget spent, the account's credits, a runtime that refused or never confirmed the prompt, retries of a resource wait
+ * exhausted — never ran the work, is no observation about the task, and stays page state on the episode with one de-duplicated
+ * notice (`noteDispatchRefusal`); it never pauses the task (review F6, 2026-10-25).
+ */
+export const AUTOPILOT_TASK_CAUSED_DISPATCH_CODES = Object.freeze(["autopilot_capability_unavailable"]);
+/** Whether a task's types are `routine` alone: the one type set that is itself an explicit choice of an ordinary job. @param {unknown} types */
+const onlyRoutine = types => Array.isArray(types) && types.length === 1 && types[0] === ROUTINE_TASK_TYPE;
+/** How long one notice about the same refusal of the same task stands for every later refusal of it. */
+const DISPATCH_REFUSAL_NOTICE_PERIOD_MS = 7 * 86_400_000;
+/** In-memory stores share the same admission lock across service instances. */
+const taskAdmissionLocks = new WeakMap();
 
 function daysWithoutActivity(agenda, now) {
   const createdAt = Number.isFinite(Date.parse(agenda.payload.createdAt)) ? agenda.payload.createdAt : agenda.createdAt;
@@ -499,12 +515,13 @@ function continuationBindingKey(value) {
 /** Persistent proactive-research policy and decision ledger. Episodes remain
  * ordinary ProductJobs and are dispatched through the ordinary AgentRun path. */
 export class AutopilotService {
-  /** @param {{documents:any,jobs:any,usage?:any,accountCaps?:()=>Record<string,any>,notifications?:any,capsules?:any,planner?:{decide:(input:any)=>Promise<any>}|null,evolution?:any,evolutionSignals?:any,entityVocabulary?:{tag:(input:{texts:string[]})=>Promise<string[]|null>,frontierItemsMatching?:(query:any)=>Promise<any[]>}|null,programme?:{owns:(userId:string,projectId:string)=>boolean,assertAdmitted:(userId:string,agenda:any,options?:{episodeId?:string|null})=>Promise<void>}|null,authorizeContinuation?:((userId:string,projectId:string,binding:any)=>Promise<void>)|null,now?:()=>Date,id?:(prefix:string)=>string}} dependencies */
-  constructor({ documents, jobs, usage = null, accountCaps = () => ({}), notifications = null, capsules = null, planner = null,
+  /** @param {{documents:any,jobs:any,enabled?:boolean,usage?:any,accountCaps?:()=>Record<string,any>,notifications?:any,capsules?:any,planner?:{decide:(input:any)=>Promise<any>}|null,evolution?:any,evolutionSignals?:any,entityVocabulary?:{tag:(input:{texts:string[]})=>Promise<string[]|null>,frontierItemsMatching?:(query:any)=>Promise<any[]>}|null,programme?:{owns:(userId:string,projectId:string)=>boolean,assertAdmitted:(userId:string,agenda:any,options?:{episodeId?:string|null})=>Promise<void>}|null,authorizeContinuation?:((userId:string,projectId:string,binding:any)=>Promise<void>)|null,now?:()=>Date,id?:(prefix:string)=>string}} dependencies */
+  constructor({ documents, jobs, enabled = true, usage = null, accountCaps = () => ({}), notifications = null, capsules = null, planner = null,
     evolution = null, evolutionSignals = null, entityVocabulary = null, programme = null, authorizeContinuation = null, now = () => new Date(), id = (prefix) => `${prefix}${randomUUID()}` }) {
     if (!documents || !jobs) throw new TypeError("AutopilotService requires product documents and jobs.");
     this.documents = documents;
     this.jobs = jobs;
+    this.enabled = enabled;
     this.usage = usage;
     /** The account's own spending caps (`userDailySpendLimit`, `userWeeklySpendLimit`; zero means none), read when asked so a changed deployment setting is the next question's. */
     this.accountCaps = accountCaps;
@@ -527,6 +544,11 @@ export class AutopilotService {
     this.authorizeContinuation = authorizeContinuation;
     /** @type {{userId:string,id:string}|null} */
     this.continuationCursor = null;
+  }
+
+  /** The worker's operational switch also governs internal execution admission. Settlement and retained records remain available. */
+  assertSchedulingEnabled() {
+    if (!this.enabled) throw new HttpError(503, "autopilot_scheduling_disabled", "Scheduled execution is unavailable on this deployment; saved tasks and their results remain readable.");
   }
 
   /** Only recorded continuation bindings acquire source authority; ordinary agendas are unchanged. */
@@ -569,8 +591,8 @@ export class AutopilotService {
     throw new HttpError(409, "autopilot_episode_state_conflict", "The continuation changed while stopping.");
   }
 
-  /** @param {string} userId @param {Record<string,any>} input */
-  async create(userId, input) {
+  /** Validate an entire task before any part of it is saved. */
+  async prepareAgenda(userId, input) {
     const projectId = text(input.projectId, "project id", 160);
     const dailyBudgetCny = budget(input.dailyBudgetCny, "daily budget");
     const weeklyBudgetCny = budget(input.weeklyBudgetCny, "weekly budget");
@@ -603,8 +625,82 @@ export class AutopilotService {
       createdAt: now,
       updatedAt: now,
     };
+    if (onlyRoutine(payload.taskTypes)) payload.taskIntent = ROUTINE_TASK_TYPE;
+    const materials = await this.materialsFor(userId, projectId, input);
+    if (materials.length) payload.materials = materials;
     await this.#tag(payload);
-    return this.documents.put(userId, "agenda", this.id("agenda-"), payload, { expectedRevision: 0, projectId });
+    return { projectId, payload };
+  }
+
+  /** @param {string} userId @param {Record<string,any>} input */
+  async create(userId, input) {
+    const { projectId, payload } = await this.prepareAgenda(userId, input);
+    return this.putAgenda(userId, this.id("agenda-"), payload, { expectedRevision: 0, projectId }, payload.materials ?? []);
+  }
+
+  /** Newly associated sources remain owned and readable at the same commit as their task.
+   * Existing associations may outlive their source and are deliberately not revalidated by an unrelated edit. */
+  async putAgenda(userId, agendaId, payload, options, materials = []) {
+    const save = async transactionClient => {
+      const ids = [...new Set(materials.map(item => item.sourceId))];
+      if (transactionClient && ids.length) {
+        const sources = await transactionClient.query(`SELECT id FROM evimed_product.documents
+          WHERE user_id=$1 AND kind='source' AND project_id=$2 AND id=ANY($3::text[]) AND deleted_at IS NULL FOR SHARE`,
+        [userId, options.projectId, ids]);
+        if (sources.rows.length !== ids.length) throw new HttpError(404, "autopilot_material_not_found", "That source is not in this question's project.");
+      }
+      return this.documents.put(userId, "agenda", agendaId, payload, { ...options, transactionClient });
+    };
+    if (options.transactionClient) return save(options.transactionClient);
+    if (this.documents.database && materials.length) {
+      await migrateProductStore(this.documents.database);
+      return this.documents.database.transaction(save);
+    }
+    return save(null);
+  }
+
+  /** Conversation admission: identity, retained-task quota, materials and activation are one scoped operation.
+   * A duplicate keeps its actual state, including a researcher's pause.
+   * @param {string} userId @param {Record<string,any>} input @param {{maxTasks:number}} options */
+  async createScheduledTask(userId, input, { maxTasks }) {
+    this.assertSchedulingEnabled();
+    if (!Number.isSafeInteger(maxTasks) || maxTasks < 1 || maxTasks > 1000) throw new TypeError("Invalid scheduled-task quota.");
+    const { projectId, payload } = await this.prepareAgenda(userId, input);
+    const identity = item => JSON.stringify([String(item.prompt ?? (item.topics ?? []).join("\n")),
+      normalizeAgendaSchedule(item), (item.materials ?? []).map(material => material.sourceId).sort()]);
+    const admit = async (transactionClient = null) => {
+      // Every read under the admission lock uses its held connection. Borrowing another can deadlock a full pool.
+      const existing = transactionClient ? (await transactionClient.query(`SELECT id,project_id,payload,revision,created_at,updated_at
+        FROM evimed_product.documents WHERE user_id=$1 AND kind='agenda' AND project_id=$2 AND deleted_at IS NULL
+        AND payload->>'archivedAt' IS NULL ORDER BY created_at DESC,id DESC`, [userId, projectId])).rows.map(row => ({
+        id: row.id, kind: "agenda", projectId: row.project_id, payload: row.payload, revision: row.revision,
+        createdAt: productTime(row.created_at), updatedAt: productTime(row.updated_at),
+      })) : (await this.list(userId, { projectId })).items;
+      const duplicate = existing.find(item => identity(item.payload) === identity(payload));
+      if (duplicate) return { agenda: duplicate, created: false };
+      if (existing.length >= maxTasks) throw new HttpError(409, "task_limit_reached", "Delete an existing task before creating another; paused tasks still occupy a slot.");
+      const agenda = await this.putAgenda(userId, this.id("agenda-"), {
+        ...payload, enabled: true, status: "active", pauseReason: null, lastStartedAt: payload.createdAt,
+      }, { expectedRevision: 0, projectId, transactionClient }, payload.materials ?? []);
+      return { agenda, created: true };
+    };
+    const scope = JSON.stringify([userId, projectId]);
+    if (this.documents.database) {
+      await migrateProductStore(this.documents.database);
+      return this.documents.database.transaction(async client => {
+        // A newly started replica can still be running the product DDL. Keep its exclusive migration lock outside this commit.
+        await client.query("SELECT pg_advisory_xact_lock_shared(hashtext('evimed-product-v1'))");
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-autopilot-task:${scope}`]);
+        return admit(client);
+      });
+    }
+    let locks = taskAdmissionLocks.get(this.documents);
+    if (!locks) { locks = new Map(); taskAdmissionLocks.set(this.documents, locks); }
+    const previous = locks.get(scope) ?? Promise.resolve();
+    const pending = previous.catch(() => {}).then(() => admit());
+    locks.set(scope, pending);
+    try { return await pending; }
+    finally { if (locks.get(scope) === pending) locks.delete(scope); }
   }
 
   /** Allocate one conversation for all future executions; earlier execution conversations remain readable.
@@ -691,7 +787,7 @@ export class AutopilotService {
     const schedule = normalizeAgendaSchedule(agenda.payload);
     const active = agenda.payload.enabled && agenda.payload.status === "active" && !agenda.payload.archivedAt;
     const last = this.scheduleWatermark(agenda);
-    const due = active ? agendaDueOccurrence(schedule, last, this.now(), agenda.payload.createdAt ?? agenda.createdAt) : null;
+    const due = active ? agendaDueOccurrence(schedule, last, this.now(), this.scheduleBoundary(agenda)) : null;
     const next = active ? due ?? agendaNextOccurrence(schedule, last, this.now()) : null;
     return { ...agenda, payload: { ...agenda.payload, schedule, scheduleVersion: agenda.payload.scheduleVersion ?? 1,
       prompt: agenda.payload.prompt ?? (agenda.payload.topics ?? []).join("\n"), nextRunAt: next?.scheduledAt ?? null,
@@ -710,12 +806,14 @@ export class AutopilotService {
     return null;
   }
 
+  scheduleBoundary(agenda) { return agenda.payload.scheduleChangedAt ?? agenda.payload.createdAt ?? agenda.createdAt; }
+
   assertNotArchived(agenda) {
     if (agenda.payload.archivedAt) throw new HttpError(409, "autopilot_archived", "This scheduled task has been deleted.");
   }
 
   async update(userId, agendaId, input) {
-    const allowed = ["expectedRevision", "title", "prompt", "schedule", "taskTypes", "dailyBudgetCny", "weeklyBudgetCny", "maxEpisodeCny"];
+    const allowed = ["expectedRevision", "title", "prompt", "schedule", "taskTypes", "dailyBudgetCny", "weeklyBudgetCny", "maxEpisodeCny", "sourceIds", "sha256"];
     if (Object.keys(input).some(key => !allowed.includes(key))) throw new HttpError(400, "autopilot_payload_invalid", "Unsupported task field.");
     const agenda = await this.get(userId, agendaId);
     this.assertNotArchived(agenda);
@@ -724,10 +822,15 @@ export class AutopilotService {
     if (input.title !== undefined) payload.title = text(input.title, "title", 200);
     if (input.prompt !== undefined) payload.prompt = instruction(input.prompt);
     if (input.taskTypes !== undefined) {
-      payload.taskTypes = listOfText(input.taskTypes, "task types", AUTOPILOT_TASK_TYPES);
-      // Naming the types again is the researcher's own choice of what may run, so
-      // it lifts the pauses repeated failures put on them (as `start` does).
-      payload.taskTypeState = {};
+      const types = listOfText(input.taskTypes, "task types", AUTOPILOT_TASK_TYPES);
+      const changed = JSON.stringify([...types].sort()) !== JSON.stringify([...(payload.taskTypes ?? [])].sort());
+      payload.taskTypes = types;
+      // Forms resend their unchanged type set with ordinary edits. Only an actual choice of different types changes intent.
+      if (changed) {
+        payload.taskTypeState = {};
+        delete payload.taskIntent;
+        if (onlyRoutine(types)) payload.taskIntent = ROUTINE_TASK_TYPE;
+      }
     }
     for (const field of ["dailyBudgetCny", "weeklyBudgetCny"]) if (input[field] !== undefined) payload[field] = budget(input[field], field);
     // Only a cap the researcher is setting now is held to the floor: an agenda that already
@@ -750,8 +853,10 @@ export class AutopilotService {
       payload.pauseReason = "Waiting for the researcher to start proactive research.";
     }
     payload.updatedAt = this.now().toISOString();
+    if (input.sourceIds !== undefined || input.sha256 !== undefined) payload.materials = await this.materialsFor(userId, agenda.projectId, input, payload.materials ?? []);
     if (input.title !== undefined || input.prompt !== undefined) await this.#tag(payload);
-    return this.documents.put(userId, "agenda", agenda.id, payload, { expectedRevision: agenda.revision, projectId: agenda.projectId });
+    return this.putAgenda(userId, agenda.id, payload, { expectedRevision: agenda.revision, projectId: agenda.projectId },
+      (payload.materials ?? []).filter(item => !(agenda.payload.materials ?? []).some(previous => previous.sourceId === item.sourceId)));
   }
 
   /**
@@ -769,23 +874,40 @@ export class AutopilotService {
     }
   }
 
-  async archive(userId, agendaId, input) {
+  async archive(userId, agendaId, input, { stopRun = null } = {}) {
     const agenda = await this.get(userId, agendaId);
-    this.revision(agenda, input.expectedRevision);
+    const recovering = !this.enabled && (agenda.payload.archivedAt || agenda.payload.stopSweep?.archiveRequestedAt);
+    if (!recovering) this.revision(agenda, input.expectedRevision);
     const at = this.now().toISOString();
-    await this.documents.put(userId, "agenda", agenda.id, { ...agenda.payload,
-      archivedAt: at, enabled: false, status: "stopped", pauseReason: "Deleted by the researcher.",
-      stopSweep: { status: "queued", requestedAt: at }, updatedAt: at,
+    if (!recovering) await this.documents.put(userId, "agenda", agenda.id, { ...agenda.payload,
+      ...(this.enabled ? { archivedAt: at } : {}), enabled: false, status: "stopped", pauseReason: "Deleted by the researcher.",
+      stopSweep: { status: "queued", requestedAt: at, ...(!this.enabled ? { archiveRequestedAt: at, cancellationPending: true } : {}) }, updatedAt: at,
     }, { expectedRevision: agenda.revision, projectId: agenda.projectId });
-    await this.sweepStop(userId, agenda.id).catch(() => null);
+    if (this.enabled) await this.sweepStop(userId, agenda.id).catch(() => null);
+    else {
+      await this.sweepStop(userId, agenda.id);
+      await this.cancelOutstanding(userId, agenda.id, stopRun);
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const current = await this.get(userId, agenda.id);
+        if (current.payload.archivedAt) break;
+        try {
+          await this.documents.put(userId, "agenda", current.id, { ...current.payload,
+            archivedAt: current.payload.stopSweep?.archiveRequestedAt ?? at, updatedAt: this.now().toISOString(),
+          }, { expectedRevision: current.revision, projectId: current.projectId });
+          break;
+        } catch (error) { if (!isConflict(error) || attempt === 4) throw error; }
+      }
+    }
     return this.get(userId, agenda.id);
   }
 
   async runNow(userId, agendaId, input) {
+    this.assertSchedulingEnabled();
     return this.schedule(userId, agendaId, { requestId: text(input.requestId, "request id", 160), trigger: "manual" });
   }
 
   async followUp(userId, agendaId, input) {
+    this.assertSchedulingEnabled();
     const requestId = text(input.requestId, "request id", 160);
     const note = instruction(input.note, "follow-up note", 8000);
     const agenda = await this.get(userId, agendaId);
@@ -797,11 +919,12 @@ export class AutopilotService {
   }
 
   async scheduleDue(userId, agendaId) {
+    this.assertSchedulingEnabled();
     const agenda = await this.get(userId, agendaId);
     if (!agenda.payload.enabled || agenda.payload.status !== "active" || agenda.payload.archivedAt) return null;
     const schedule = normalizeAgendaSchedule(agenda.payload);
     const occurrence = agendaDueOccurrence(schedule, this.scheduleWatermark(agenda), this.now(),
-      agenda.payload.scheduleChangedAt ?? agenda.payload.createdAt ?? agenda.createdAt);
+      this.scheduleBoundary(agenda));
     if (!occurrence) return null;
     return this.schedule(userId, agendaId, { date: occurrence.localDate, occurrence,
       scheduleVersion: agenda.payload.scheduleVersion ?? 1, expectedRevision: agenda.revision });
@@ -809,6 +932,7 @@ export class AutopilotService {
 
   /** Stable owner/id pagination cannot starve the 101st unchanged active task. */
   async scheduleActive(database, onError = async (_row, _error) => {}) {
+    this.assertSchedulingEnabled();
     let after = ["", ""];
     let scanned = 0;
     let remaining = true;
@@ -839,17 +963,17 @@ export class AutopilotService {
    * conversation the researcher opens, not a number on a dashboard. One
    * page of the store's, which is at most 100: a limit of 200 was a 400 on
    * every read, and the task page read this on opening (2026-09-24).
-   * @param {string} userId @param {{projectId:string, agendaId?:string|null}} options
+   * @param {string} userId @param {{projectId:string, agendaId?:string|null,cursor?:string|null,limit?:number}} options
    */
-  async listEpisodes(userId, { projectId, agendaId = null }) {
+  async listEpisodes(userId, { projectId, agendaId = null, cursor = null, limit = 100 }) {
     const page = await this.documents.list(userId, "episode", {
-      projectId, limit: 100, ...(agendaId ? { filter: { agendaId: text(agendaId, "agenda id", 160) } } : {}),
+      projectId, limit, cursor, ...(agendaId ? { filter: { agendaId: text(agendaId, "agenda id", 160) } } : {}),
     });
     const items = [...page.items].sort((left, right) => String(right.payload.createdAt ?? right.createdAt ?? "").localeCompare(String(left.payload.createdAt ?? left.createdAt ?? ""))
       || right.id.localeCompare(left.id));
     // The prompt is the run's brief, not the researcher's: the list carries
     // what happened, when, and where to open it.
-    return { ...page, items: items.map((item) => this.projectEpisode(item)) };
+    return { ...page, items: await Promise.all(items.map(async item => this.projectEpisode(await this.effectiveEpisode(userId, item)))) };
   }
 
   /**
@@ -923,10 +1047,15 @@ export class AutopilotService {
         daysSinceDigestOpened: await this.daysWithoutReading(userId, agenda), userRejected: userRejected(agenda) });
       if (!["pause-thread", "park"].includes(verdict.action)) return agenda;
       try {
-        return await this.documents.put(userId, "agenda", agenda.id, {
+        const at = this.now().toISOString();
+        const notice = this.taskIssueNotice(agenda, { key: `autopilot-pause:${agenda.id}:${at}`, pauseReason: verdict.reason });
+        const saved = await this.documents.put(userId, "agenda", agenda.id, {
           ...agenda.payload, enabled: false, status: "paused", pauseReason: verdict.reason,
+          automaticPause: { kind: "inactivity", reason: verdict.reason, at },
+          taskNotices: [...(agenda.payload.taskNotices ?? []).filter(item => item.status !== "sent"), notice],
           updatedAt: this.now().toISOString(),
         }, { expectedRevision: agenda.revision, projectId: agenda.projectId });
+        return await this.flushTaskNotices(userId, saved);
       } catch (error) {
         if (!isConflict(error)) throw error;
       }
@@ -938,7 +1067,33 @@ export class AutopilotService {
   async getEpisode(userId, episodeId) {
     const episode = await this.documents.get(userId, "episode", text(episodeId, "episode id", 160));
     if (!episode) throw new HttpError(404, "autopilot_episode_not_found", "Research episode is unavailable.");
-    return episode;
+    return this.effectiveEpisode(userId, episode);
+  }
+
+  /** Reader and cancellation state derives from the same durable retry job; no second UI state machine. */
+  async effectiveEpisode(userId, episode) {
+    if (!["failed", "retry_pending"].includes(episode.payload.status) || episode.payload.completion || episode.payload.digestId || episode.payload.dispatchOutcomeRecordedAt) return episode;
+    const job = await this.episodeDispatchJob(userId, episode);
+    if (!job) return episode;
+    const pending = ["queued", "running"].includes(job.status);
+    const status = pending ? "retry_pending" : job.status === "canceled" ? "canceled" : "failed";
+    return { ...episode, payload: { ...episode.payload, status,
+      resourceDeferrals: { ...episode.payload.resourceDeferrals, episode: {
+        ...episode.payload.resourceDeferrals?.episode, jobId: job.id, code: job.error?.code ?? episode.payload.error?.code,
+        attempts: job.attempts, status: pending ? "waiting" : "exhausted", retryAt: pending ? job.runAfter ?? episode.payload.resourceDeferrals?.episode?.retryAt ?? null : null,
+      } },
+    } };
+  }
+
+  /** The launch job is authoritative for retry availability, including old failed+queued records. */
+  async episodeDispatchJob(userId, episode) {
+    const jobId = episode.payload.launchJobId ?? episode.payload.resourceDeferrals?.episode?.jobId ?? episode.payload.continuationJobId;
+    if (jobId && this.jobs.get) return this.jobs.get(userId, jobId);
+    if (!this.documents.database) return null;
+    const result = await this.documents.database.query(`SELECT id FROM evimed_product.jobs
+      WHERE user_id=$1 AND kind='episode' AND payload->>'episodeId'=$2 AND payload->>'action' IS DISTINCT FROM 'cancel'
+      ORDER BY created_at DESC,id DESC LIMIT 1`, [userId, episode.id]);
+    return result.rows[0] ? this.jobs.get(userId, result.rows[0].id) : null;
   }
 
   async episodeForRun(userId, projectId, runId) {
@@ -958,7 +1113,8 @@ export class AutopilotService {
   async markEpisodeDispatched(userId, episodeId, input) {
     const episode = await this.getEpisode(userId, episodeId);
     if (episode.payload.status === "running" && episode.payload.runId === input.runId) return episode;
-    if (!["queued", "failed"].includes(episode.payload.status)) throw new HttpError(409, "autopilot_episode_state_conflict", "Research episode is no longer dispatchable.");
+    if (episode.payload.dispatchOutcomeRecordedAt) throw new HttpError(409, "autopilot_episode_state_conflict", "A terminal dispatch cannot run again.");
+    if (!["queued", "retry_pending", "failed"].includes(episode.payload.status)) throw new HttpError(409, "autopilot_episode_state_conflict", "Research episode is no longer dispatchable.");
     if (episode.payload.status === "failed" && (episode.payload.runId || episode.payload.digestId || episode.payload.completion)) {
       throw new HttpError(409, "autopilot_episode_state_conflict", "A completed episode cannot be rebound to another dispatch.");
     }
@@ -1055,21 +1211,78 @@ export class AutopilotService {
     throw new HttpError(409, "autopilot_episode_state_conflict", "The episode changed while recording its resource wait.");
   }
 
-  /** @param {string} userId @param {string} episodeId @param {{code:string}} input */
+  /** @param {string} userId @param {string} episodeId @param {{code:string,jobId?:string,attempts?:number,retrying?:boolean,retryAt?:string|null,at?:string}} input */
   async markEpisodeFailed(userId, episodeId, input) {
-    const episode = await this.getEpisode(userId, episodeId);
-    if (["merged", "canceled"].includes(episode.payload.status)) return episode;
-    return this.documents.put(userId, "episode", episode.id, {
-      ...episode.payload, status: "failed", error: { code: text(input.code, "episode error", 100) }, updatedAt: this.now().toISOString(),
-    }, { expectedRevision: episode.revision, projectId: episode.projectId });
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const episode = await this.getEpisode(userId, episodeId);
+      if (["merged", "canceled", "verifying"].includes(episode.payload.status) || episode.payload.digestId) return episode;
+      // A persisted binding may have accepted work before the dispatch callback was lost. Its completion owns the outcome.
+      if (episode.payload.status === "running" && episode.payload.runId) return episode;
+      if (episode.payload.dispatchOutcomeRecordedAt) return episode;
+      const detail = input.jobId ? { jobId: input.jobId, code: input.code, attempts: input.attempts,
+        status: input.retrying ? "waiting" : "exhausted", at: input.at ?? this.now().toISOString(), retryAt: input.retrying ? input.retryAt : null } : null;
+      let saved;
+      try {
+        saved = await this.documents.put(userId, "episode", episode.id, {
+          ...episode.payload, status: input.retrying ? "retry_pending" : "failed", error: { code: text(input.code, "episode error", 100) },
+          ...(detail ? { resourceDeferrals: { ...episode.payload.resourceDeferrals, episode: detail } } : {}), updatedAt: this.now().toISOString(),
+        }, { expectedRevision: episode.revision, projectId: episode.projectId });
+      } catch (error) { if (isConflict(error)) continue; throw error; }
+      if (!input.retrying) {
+        await this.jobs.cancelQueued?.(userId, "episode", { episodeId: saved.id });
+        // A task deleted, stopped or gone takes no outcome and sends no notice: what it would say is about work nobody keeps.
+        // A fold that cannot be written still settles the episode below, with the reason, so recovery never selects it again.
+        let skipped = null;
+        let skippedCode = null;
+        const code = String(saved.payload.error?.code ?? "");
+        try {
+          const agenda = await this.get(userId, saved.payload.agendaId);
+          if (agenda.payload.archivedAt || agenda.payload.status === "stopped") skipped = "agenda_unavailable";
+          else if (!AUTOPILOT_TASK_CAUSED_DISPATCH_CODES.includes(code)) {
+            // The work never ran: page state and, at most once a week per reason, a notice. Never an outcome, never a pause.
+            skipped = "not_run";
+            await this.noteDispatchRefusal(userId, agenda.id, code).catch(() => null);
+          } else await this.recordOutcome(userId, agenda.id, {
+            expectedRevision: agenda.revision,
+            episodeId: saved.id, taskType: saved.payload.taskType, status: "failed", gatedClaims: 0,
+          });
+        } catch (error) {
+          skipped = error?.code === "autopilot_agenda_not_found" ? "agenda_unavailable" : "outcome_unrecorded";
+          skippedCode = typeof error?.code === "string" ? error.code.slice(0, 100) : "autopilot_outcome_failed";
+        }
+        saved = await this.settleDispatchOutcome(userId, saved.id, skipped ? { skipped, code: skippedCode } : null) ?? saved;
+      }
+      return saved;
+    }
+    throw new HttpError(409, "autopilot_episode_state_conflict", "The episode changed while recording its dispatch failure.");
+  }
+
+  /**
+   * The episode's own receipt that its terminal dispatch is settled: the agenda keeps only a bounded outcome window, so this is what
+   * makes an old terminal attempt permanent, and what keeps `reconcileStopWork` from selecting it again. `skip` says why the agenda
+   * was not told (`agenda_unavailable`, `outcome_unrecorded`) and is page state, never an outcome.
+   * @param {string} userId @param {string} episodeId @param {{skipped:string,code?:string|null}|null} [skip]
+   */
+  async settleDispatchOutcome(userId, episodeId, skip = null) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const current = await this.documents.get(userId, "episode", episodeId);
+      if (!current || current.payload.dispatchOutcomeRecordedAt || current.payload.status !== "failed") return current;
+      try {
+        return await this.documents.put(userId, "episode", current.id, { ...current.payload, dispatchOutcomeRecordedAt: this.now().toISOString(),
+          ...(skip ? { dispatchOutcomeSkipped: skip.skipped, ...(skip.code ? { dispatchOutcomeError: skip.code } : {}) } : {}),
+        }, { expectedRevision: current.revision, projectId: current.projectId });
+      } catch (error) { if (!isConflict(error)) throw error; }
+    }
+    return null;
   }
 
   /** @param {string} userId @param {string} episodeId */
   async markEpisodeCanceled(userId, episodeId) {
-    const episode = await this.getEpisode(userId, episodeId);
+    const episode = await this.documents.get(userId, "episode", episodeId);
+    if (!episode) throw new HttpError(404, "autopilot_episode_not_found", "Research episode is unavailable.");
     if (["merged", "canceled"].includes(episode.payload.status)) return episode;
     return this.documents.put(userId, "episode", episode.id, {
-      ...episode.payload, status: "canceled", updatedAt: this.now().toISOString(),
+      ...episode.payload, status: "canceled", resourceDeferrals: { ...episode.payload.resourceDeferrals, episode: null }, updatedAt: this.now().toISOString(),
     }, { expectedRevision: episode.revision, projectId: episode.projectId });
   }
 
@@ -1077,13 +1290,13 @@ export class AutopilotService {
    * Cancel one execution of a task, and nothing else: the task keeps its schedule (this is not a pause).
    *
    * Three states, three meanings:
-   *  - waiting (`queued`): its job is canceled and the episode is `canceled`. A worker that already claimed the job meets the canceled episode at its dispatch guard, or, if it
+   *  - waiting (`queued` or `retry_pending`): its job is canceled and the episode is `canceled`. A worker that already claimed the job meets the canceled episode at its dispatch guard, or, if it
    *    is past the guard, at `markEpisodeDispatched`'s refusal, which cancels the run it just started (`queueDispatchedCancellation`);
    *  - `running`: the run is stopped the way the run's own cancel stops it (`stopRun`, the control plane's
    *    `stopRunForUser`), which ends the run as canceled by the researcher; the run's completion then folds into the episode
    *    (`completeRun` → `finishCompletion`) and the episode ends `canceled`, with the same bookkeeping as any ended execution.
    *    The episode is not written here: a stop that races a finishing run must leave whichever outcome the run really had;
-   *  - ended (`merged`, `canceled`, `verifying`, `failed`): returned unchanged. Asking twice is asking once.
+   *  - ended (`merged`, `canceled`, `verifying`, or `failed` without a retry job): returned unchanged. Asking twice is asking once.
    *
    * @param {string} userId @param {string} agendaId @param {string} episodeId
    * @param {{ stopRun?: ((input: { runId: string, sessionId: string | null }) => Promise<unknown>) | null }} [options]
@@ -1097,15 +1310,19 @@ export class AutopilotService {
       }
       return episode;
     };
-    // `failed` is over as far as the page is concerned: it says what went wrong and offers no stop. (The queue may still retry a dispatch
-    // that failed for a transient reason; then the episode is going again and the next cancel stops it.)
-    const ended = (/** @type {any} */ item) => ["merged", "canceled", "verifying", "failed"].includes(item.payload.status);
+    const ended = (/** @type {any} */ item) => ["merged", "canceled", "verifying"].includes(item.payload.status);
     // Waiting. Its queue job first, so nothing claims it after the episode is marked; then the episode. A worker that dispatches
     // it in between turns it into a running one, which the next pass stops.
     let queueCleared = false;
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const episode = await owned();
-      if (ended(episode)) return episode;
+      if (ended(episode)) return queueCleared && episode.payload.status === "canceled" ? this.markEpisodeCanceled(userId, episode.id) : episode;
+      // Older releases called a dispatch waiting for retry `failed`. The durable job, not that old label, decides whether it can still run.
+      if (episode.payload.status === "failed") {
+        if (episode.payload.dispatchOutcomeRecordedAt) return episode;
+        const job = await this.episodeDispatchJob(userId, episode);
+        if (!job || !["queued", "running"].includes(job.status)) return episode;
+      }
       if (episode.payload.status === "running" && episode.payload.runId) {
         if (stopRun) await stopRun({ runId: episode.payload.runId, sessionId: episode.payload.sessionId ?? null });
         return owned();
@@ -1246,7 +1463,13 @@ export class AutopilotService {
    * @param {string} userId @param {{id:string,projectId:string,revision:number,payload:any}} episode
    */
   async finishCompletion(userId, episode) {
-    const completion = episode.payload.completion;
+    const held = episode.payload.completion;
+    const completion = held && !this.enabled ? { ...held, claims: held.claims.map(claim => {
+      const verification = claim.verification;
+      const dispatched = (episode.payload.verificationDispatches ?? []).some(item => item.verificationId === verification?.id);
+      return verification?.status === "queued" && !dispatched
+        ? { ...claim, verification: { ...verification, status: "unscheduled", reason: "task_tools_disabled", at: this.now().toISOString() } } : claim;
+    }) } : held;
     // A cancelled episode is folded only for the result it was cancelled holding.
     const foldable = completion && (episode.payload.status === "verifying" || episode.payload.status === "canceled");
     if (!foldable) {
@@ -1258,7 +1481,7 @@ export class AutopilotService {
       expectedRevision: agenda.revision, episodeId: episode.id, taskType: episode.payload.taskType, status: completion.outcomeStatus,
       gatedClaims: completion.outcomeStatus === "succeeded" ? completion.claims.length : 0,
     });
-    const digest = await this.createDigest(userId, agenda.id, {
+    let digest = await this.createDigest(userId, agenda.id, {
       digestId: completion.digestId, date: completion.date, episodeIds: [episode.id],
       costCny: completion.costCny, claims: completion.claims, artifactRefs: completion.artifactRefs ?? [],
       ...(episode.payload.taskType === ROUTINE_TASK_TYPE ? { routine: completion.outcomeStatus } : {}),
@@ -1267,7 +1490,11 @@ export class AutopilotService {
     // the fold replayable, and `reconcileStopWork` runs it again. Enqueueing
     // after the episode is merged would lose the second opinion silently.
     // None for an episode the stop already cancelled: its re-checks are ended below, not run.
-    if (episode.payload.status === "verifying") await this.enqueueVerifications(userId, { agenda, episode, digest, claims: completion.claims });
+    if (this.enabled && episode.payload.status === "verifying") await this.enqueueVerifications(userId, { agenda, episode, digest, claims: completion.claims });
+    if (!this.enabled) {
+      await this.jobs.cancelQueued?.(userId, "verify", { episodeId: episode.id });
+      for (const claim of completion.claims) if (claim.verification?.reason === "task_tools_disabled") digest = await this.applyVerificationToDigest(userId, digest.id, claim);
+    }
     let latest = await this.getEpisode(userId, episode.id);
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const stopped = latest.payload.status === "canceled" && latest.payload.completion?.runId === completion.runId;
@@ -1316,6 +1543,7 @@ export class AutopilotService {
    * @param {string} userId @param {{agenda:any,episode:any,digest:any,claims:any[]}} input
    */
   async enqueueVerifications(userId, { agenda, episode, digest, claims }) {
+    this.assertSchedulingEnabled();
     const budgetCny = verificationBudgetCny(episode);
     if (!(budgetCny > 0)) return [];
     const enqueued = [];
@@ -1573,14 +1801,19 @@ export class AutopilotService {
 
   /** @param {string} userId @param {string} agendaId @param {{expectedRevision:number}} input */
   async start(userId, agendaId, input) {
+    this.assertSchedulingEnabled();
     const agenda = await this.get(userId, agendaId);
     this.assertNotArchived(agenda);
     this.revision(agenda, input.expectedRevision);
     // An agenda whose episodes could only be refused is not started: it would pause again at its
     // next occurrence with the same sentence, and the researcher would have started it for nothing.
     this.assertEpisodeBudgetFundable(agenda);
+    // A start is a fresh authorization, of the intent too: one the model derived is decided again; the form's `routine` alone stays.
+    const { taskIntent: _derivedIntent, ...kept } = agenda.payload;
     return this.documents.put(userId, "agenda", agenda.id, {
-      ...agenda.payload, enabled: true, status: "active", pauseReason: null, pauseCode: null, userSignal: null, evolutionWaiting: null,
+      ...kept, ...(onlyRoutine(agenda.payload.taskTypes) ? { taskIntent: ROUTINE_TASK_TYPE } : {}),
+      enabled: true, status: "active", pauseReason: null, pauseCode: null, userSignal: null, evolutionWaiting: null,
+      automaticPause: null,
       // A researcher's start is a fresh authorization: the pauses automatic rules
       // put on task types and the stop the planner chose are lifted with it.
       consecutiveFailures: 0, taskTypeState: {}, plannerStop: null,
@@ -1621,34 +1854,41 @@ export class AutopilotService {
    * account's sources of this question's own project can be associated; any
    * other is a 404 that says nothing about whether it exists. All or nothing.
    *
-   * @param {string} userId @param {string} agendaId @param {{sourceIds?: unknown, sha256?: unknown}} input
+   * @param {string} userId @param {string} projectId @param {{sourceIds?: unknown, sha256?: unknown}} input
+   * @param {any[]} [have]
    */
-  async addMaterials(userId, agendaId, input) {
-    const agenda = await this.get(userId, agendaId);
-    this.assertNotArchived(agenda);
+  async materialsFor(userId, projectId, input, have = []) {
     const list = (/** @type {unknown} */ value, /** @type {RegExp} */ shape) => {
       if (value === undefined) return [];
       if (!Array.isArray(value) || value.some(item => typeof item !== "string" || !shape.test(item))) throw new HttpError(400, "autopilot_payload_invalid", "Material identifiers are invalid.");
       return value;
     };
-    const ids = [...new Set([...list(input.sourceIds, /^src_[a-f0-9]{32}$/), ...list(input.sha256, /^[a-f0-9]{64}$/).map(digest => sourceIdFor(agenda.projectId, digest))])];
-    if (ids.length === 0 || ids.length > 10) throw new HttpError(400, "autopilot_payload_invalid", "Name between one and ten sources to add.");
+    const ids = [...new Set([...list(input.sourceIds, /^src_[a-f0-9]{32}$/), ...list(input.sha256, /^[a-f0-9]{64}$/).map(digest => sourceIdFor(projectId, digest))])];
+    if (ids.length > 10) throw new HttpError(400, "autopilot_payload_invalid", "Name at most ten sources to add.");
     for (const id of ids) {
       const source = await this.documents.get(userId, "source", id);
-      if (!source || source.projectId !== agenda.projectId) throw new HttpError(404, "autopilot_material_not_found", "That source is not in this question's project.");
+      if (!source || source.projectId !== projectId) throw new HttpError(404, "autopilot_material_not_found", "That source is not in this question's project.");
     }
+    const fresh = ids.filter(id => !have.some(item => item.sourceId === id));
+    if (have.length + fresh.length > AUTOPILOT_MATERIALS_MAX) throw new HttpError(409, "autopilot_materials_full", "This question already has as much material as it keeps.");
+    return [...have, ...fresh.map(sourceId => ({ sourceId, addedAt: this.now().toISOString() }))];
+  }
+
+  async addMaterials(userId, agendaId, input) {
+    const agenda = await this.get(userId, agendaId);
+    this.assertNotArchived(agenda);
+    if (!(input.sourceIds?.length || input.sha256?.length)) throw new HttpError(400, "autopilot_payload_invalid", "Name between one and ten sources to add.");
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const current = await this.get(userId, agenda.id);
       this.assertNotArchived(current);
       const have = current.payload.materials ?? [];
-      const fresh = ids.filter(id => !have.some((/** @type {any} */ item) => item.sourceId === id));
-      if (fresh.length === 0) return current;
-      if (have.length + fresh.length > AUTOPILOT_MATERIALS_MAX) throw new HttpError(409, "autopilot_materials_full", "This question already has as much material as it keeps.");
+      const materials = await this.materialsFor(userId, agenda.projectId, input, have);
+      if (materials.length === have.length) return current;
       const at = this.now().toISOString();
       try {
-        return await this.documents.put(userId, "agenda", current.id, { ...current.payload,
-          materials: [...have, ...fresh.map(sourceId => ({ sourceId, addedAt: at }))], updatedAt: at,
-        }, { expectedRevision: current.revision, projectId: current.projectId });
+        return await this.putAgenda(userId, current.id, { ...current.payload,
+          materials, updatedAt: at,
+        }, { expectedRevision: current.revision, projectId: current.projectId }, materials.filter(item => !have.some(previous => previous.sourceId === item.sourceId)));
       } catch (error) {
         if (!isConflict(error) || attempt === 4) throw error;
       }
@@ -1676,22 +1916,82 @@ export class AutopilotService {
     throw new HttpError(409, "autopilot_activity_conflict", "The question changed repeatedly; try again.");
   }
 
-  /** @param {string} userId @param {string} agendaId @param {{expectedRevision:number}} input */
-  async stop(userId, agendaId, input) {
+  /** @param {string} userId @param {string} agendaId @param {{expectedRevision:number}} input
+   * @param {{stopRun?:((target:any)=>Promise<unknown>)|null}} [options] */
+  async stop(userId, agendaId, input, { stopRun = null } = {}) {
     const agenda = await this.get(userId, agendaId);
-    this.revision(agenda, input.expectedRevision);
-    const stopped = await this.documents.put(userId, "agenda", agenda.id, {
+    const recovering = !this.enabled && agenda.payload.status === "stopped";
+    if (!recovering) this.revision(agenda, input.expectedRevision);
+    const stopped = recovering ? agenda : await this.documents.put(userId, "agenda", agenda.id, {
       ...agenda.payload, enabled: false, status: "stopped", pauseReason: "Stopped by the researcher.",
       stopSweep: { status: "queued", requestedAt: this.now().toISOString() }, updatedAt: this.now().toISOString(),
     }, { expectedRevision: agenda.revision, projectId: agenda.projectId });
-    await this.sweepStop(userId, stopped.id).catch(() => null);
+    if (this.enabled) await this.sweepStop(userId, stopped.id).catch(() => null);
+    else {
+      await this.sweepStop(userId, stopped.id);
+      await this.cancelOutstanding(userId, stopped.id, stopRun);
+    }
     return this.get(userId, stopped.id);
+  }
+
+  /** No execution worker runs when scheduling is disabled, so recovery calls stop accepted runs directly using their saved identities. */
+  async cancelOutstanding(userId, agendaId, stopRun) {
+    const agenda = await this.get(userId, agendaId);
+    let cursor = null;
+    try {
+      do {
+        const page = await this.documents.list(userId, "episode", { projectId: agenda.projectId, filter: { agendaId }, limit: 100, cursor });
+        for (const episode of page.items) {
+          const targets = [];
+          if (episode.payload.cancellation?.status === "queued") targets.push({ ...episode.payload.cancellation, verificationId: null });
+          targets.push(...(episode.payload.verificationDispatches ?? []).filter(target => target.status !== "canceled"));
+          for (const target of targets) {
+            if (!stopRun) throw new Error("The cancellation handler is unavailable.");
+            const job = target.verificationId ? await this.jobs.enqueue(userId, "episode", { action: "cancel", episodeId: episode.id, ...target }, {
+              idempotencyKey: `verify-cancel:${episode.id}:${target.runId}`, projectId: episode.projectId, maxAttempts: 10, rearmFailed: true,
+            }) : await this.enqueueCancellation(userId, episode);
+            await stopRun({ ...target, episodeId: episode.id });
+            if (job) await this.jobs.cancel?.(userId, job.id);
+            await this.markCancellationCompleted(userId, episode.id, target.runId, target.verificationId);
+          }
+        }
+        cursor = page.nextCursor;
+      } while (cursor);
+    } catch (error) {
+      await this.recordStopCancellation(userId, agendaId, true, error?.code ?? "autopilot_cancellation_failed");
+      throw new HttpError(503, "autopilot_cancellation_failed", "The task plan is stopped, but an accepted run has not stopped. Retry stopping the task.");
+    }
+    await this.recordStopCancellation(userId, agendaId, false);
+  }
+
+  async recordStopCancellation(userId, agendaId, pending, code = null) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const agenda = await this.get(userId, agendaId);
+      if (agenda.payload.stopSweep?.cancellationPending === pending && (agenda.payload.stopSweep?.cancellationError ?? null) === code) return agenda;
+      try {
+        return await this.documents.put(userId, "agenda", agenda.id, { ...agenda.payload,
+          stopSweep: { ...agenda.payload.stopSweep, cancellationPending: pending, cancellationError: code }, updatedAt: this.now().toISOString(),
+        }, { expectedRevision: agenda.revision, projectId: agenda.projectId });
+      } catch (error) { if (!isConflict(error) || attempt === 4) throw error; }
+    }
   }
 
   async sweepStop(userId, agendaId) {
     const agenda = await this.get(userId, agendaId);
     if (agenda.payload.status !== "stopped") return agenda;
-    for (const status of ["queued", "failed", "running", "verifying"]) {
+    await this.jobs.cancelQueued?.(userId, "episode", { agendaId });
+    // A final failure is history. Only old failed records that still had an actionable launch job are canceled.
+    let failedCursor = null;
+    do {
+      const page = await this.documents.list(userId, "episode", { projectId: agenda.projectId, filter: { agendaId, status: "failed" }, limit: 100, cursor: failedCursor });
+      for (const episode of page.items) {
+        if (episode.payload.digestId || episode.payload.completion) continue;
+        const job = await this.episodeDispatchJob(userId, episode);
+        if (job && ["queued", "running", "canceled"].includes(job.status)) await this.markEpisodeCanceled(userId, episode.id).catch(error => { if (!isConflict(error)) throw error; });
+      }
+      failedCursor = page.nextCursor;
+    } while (failedCursor);
+    for (const status of ["queued", "retry_pending", "running", "verifying"]) {
       let remaining = true;
       while (remaining) {
         const page = await this.documents.list(userId, "episode", {
@@ -1790,6 +2090,30 @@ export class AutopilotService {
   async reconcileStopWork() {
     const database = this.documents.database;
     if (!database) return { scanned: 0, enqueued: 0 };
+    // A queue settlement and its episode write can be separated by a crash. Recover from the durable job, including exhausted leases.
+    // Only an episode whose launch job this lifecycle recorded (`launchJobId`, written at enqueue since 2026-10-25) is recovered:
+    // an older release's failed dispatch is history — already on its page from its job — and folding it now, after the task's
+    // later successes, would pause a healthy task and send a notice about a failure weeks old.
+    const dispatches = await database.query(`SELECT d.user_id,d.id,j.id AS job_id,j.status AS job_status,j.error,j.result,j.attempts,j.run_after
+      FROM evimed_product.documents d JOIN evimed_product.jobs j ON j.user_id=d.user_id AND j.kind='episode'
+        AND j.id=d.payload->>'launchJobId' AND j.payload->>'action' IS DISTINCT FROM 'cancel'
+      WHERE d.kind='episode' AND d.deleted_at IS NULL AND d.payload->>'status' IN ('queued','retry_pending','failed')
+        AND d.payload->>'runId' IS NULL AND d.payload->>'digestId' IS NULL
+        AND ((j.status='failed' AND d.payload->>'dispatchOutcomeRecordedAt' IS NULL)
+          OR j.status='canceled' OR (j.status='succeeded' AND j.result->>'skipped'='true'))
+      ORDER BY j.updated_at,d.id LIMIT 100`);
+    for (const row of dispatches.rows) {
+      if (row.job_status === "failed") await this.markEpisodeFailed(row.user_id, row.id, {
+        code: row.error?.code ?? "autopilot_dispatch_failed", jobId: row.job_id, attempts: row.attempts, retrying: false,
+      }).catch(() => null);
+      else await this.markEpisodeCanceled(row.user_id, row.id).catch(() => null);
+    }
+    if (this.notifications) {
+      const notices = await database.query(`SELECT user_id,id FROM evimed_product.documents
+        WHERE kind='agenda' AND deleted_at IS NULL AND jsonb_path_exists(payload, '$.taskNotices[*] ? (@.status == "queued")')
+        ORDER BY updated_at,id LIMIT 100`);
+      for (const row of notices.rows) await this.flushTaskNotices(row.user_id, await this.get(row.user_id, row.id)).catch(() => null);
+    }
     // Folds left unfinished: an episode still `verifying`, and one the agenda's stop cancelled while it was (`finishCompletion`).
     // `completion` is a JSON null once a fold is written, which `IS NOT NULL` does not tell from a result.
     const completions = await database.query(`SELECT user_id,id,project_id,payload,revision FROM evimed_product.documents
@@ -1798,7 +2122,7 @@ export class AutopilotService {
     const continuations = await database.query(`SELECT user_id,id FROM evimed_product.documents
       WHERE kind='episode' AND deleted_at IS NULL AND payload->'continuationBinding' IS NOT NULL
       AND ($1::text IS NULL OR (user_id,id)>($1::text,$2::text))
-      AND (payload->>'status' IN ('queued','running','verifying') OR (payload->>'status'='canceled'
+      AND (payload->>'status' IN ('queued','retry_pending','running','verifying') OR (payload->>'status'='canceled'
         AND EXISTS (SELECT 1 FROM evimed_product.jobs j WHERE j.user_id=evimed_product.documents.user_id
           AND j.payload->>'episodeId'=evimed_product.documents.id AND j.status IN ('queued','running')
           AND j.payload->>'action' IS DISTINCT FROM 'cancel'))) ORDER BY user_id,id LIMIT 100`,
@@ -1827,7 +2151,7 @@ export class AutopilotService {
       await this.enqueueCancellation(row.user_id, { id: row.id, projectId: row.project_id, revision: row.revision, payload: row.payload });
       enqueued += 1;
     }
-    return { scanned: completions.rows.length + continuations.rows.length + stopped.rows.length + result.rows.length, enqueued };
+    return { scanned: dispatches.rows.length + completions.rows.length + continuations.rows.length + stopped.rows.length + result.rows.length, enqueued };
   }
 
   async markCancellationCompleted(userId, episodeId, runId, verificationId = null) {
@@ -1942,6 +2266,7 @@ export class AutopilotService {
    * scheduler tick is sequential; a researcher's run-now is one more).
    * @param {string} userId @param {string} agendaId @param {any} input */
   async schedule(userId, agendaId, input) {
+    this.assertSchedulingEnabled();
     const database = this.documents.database;
     if (!database) return this.#schedule(userId, agendaId, input);
     const manual = input?.trigger === "manual" || input?.trigger === "follow-up";
@@ -2088,8 +2413,9 @@ export class AutopilotService {
         taskType: episode.payload.taskType, budgetCny: episode.payload.budgetCny, prompt: episode.payload.prompt }, {
         idempotencyKey: legacy ? `episode:${agenda.id}:${identity}` : `episode:${episodeId}`, projectId: agenda.projectId, maxAttempts: 10, transactionClient,
       });
-      if (input.continuationBinding && !episode.payload.continuationJobId) episode = await this.documents.put(userId, "episode", episodeId,
-        { ...episode.payload, continuationJobId: job.id }, { expectedRevision: episode.revision, projectId: episode.projectId, transactionClient });
+      if (!episode.payload.launchJobId) episode = await this.documents.put(userId, "episode", episodeId,
+        { ...episode.payload, launchJobId: job.id, ...(input.continuationBinding ? { continuationJobId: job.id } : {}) },
+        { expectedRevision: episode.revision, projectId: episode.projectId, transactionClient });
       const consumed = new Set(episode.payload.followUpKeys ?? []);
       const pending = (current.payload.followUps ?? []).some(item => !item.consumedBy && consumed.has(followUpKey(item)));
       const messages = current.payload.messages ?? [];
@@ -2099,8 +2425,13 @@ export class AutopilotService {
       if (input.scheduleVersion !== undefined && input.scheduleVersion !== (current.payload.scheduleVersion ?? 1)) throw new HttpError(409, "product_revision_conflict", "The schedule changed before enqueue.");
       const watermarkMissing = !manual && input.occurrence && (!current.payload.lastScheduledOccurrence
         || Date.parse(current.payload.lastScheduledOccurrence.scheduledAt) < Date.parse(input.occurrence.scheduledAt));
-      if (pending || messageMissing || watermarkMissing || current.payload.lastScheduledDate !== scheduledDate) {
+      // Intent is recorded only from an explicit source: the model's own decision, or a task whose types are `routine` alone. Never
+      // from the date rotation that backs a failed decision up (it always picks `routine` when it may), and never from history.
+      const intentMissing = routine && current.payload.taskIntent !== ROUTINE_TASK_TYPE
+        && (selection?.source === "model" || onlyRoutine(current.payload.taskTypes));
+      if (pending || messageMissing || watermarkMissing || intentMissing || current.payload.lastScheduledDate !== scheduledDate) {
         await this.documents.put(userId, "agenda", agenda.id, { ...current.payload,
+          ...(intentMissing ? { taskIntent: ROUTINE_TASK_TYPE } : {}),
           lastScheduledDate: scheduledDate,
           ...(watermarkMissing ? { lastScheduledOccurrence: input.occurrence } : {}),
           ...(messageMissing ? { messages: [...messages, { requestId: input.requestId, note: input.note,
@@ -2311,6 +2642,7 @@ export class AutopilotService {
    * @returns {Promise<{ resumed: boolean, held?: string, closed?: string, deferred?: string, episode?: any, job?: any, stopped?: any }>}
    */
   async wakeForEvolution({ userId, agendaId, sourceEpisodeId, event }) {
+    this.assertSchedulingEnabled();
     const requestId = `evolution-${hash(String(event.id ?? event.toolId)).slice(0, 32)}`;
     const agenda = await this.get(userId, agendaId);
     if (agenda.payload.archivedAt || agenda.payload.status === "stopped") return { resumed: false, closed: "autopilot_agenda_gone" };
@@ -2350,10 +2682,17 @@ export class AutopilotService {
       : (await this.documents.get(userId, "episode", episodeId))?.payload?.taskType ?? null;
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const agenda = await this.get(userId, agendaId);
-      if ((agenda.payload.outcomes ?? []).some((outcome) => outcome.episodeId === episodeId)) return agenda;
+      if ((agenda.payload.outcomes ?? []).some((outcome) => outcome.episodeId === episodeId)) return this.flushTaskNotices(userId, agenda);
       if (attempt === 0) this.revision(agenda, input.expectedRevision);
       const folded = foldOutcome(agenda.payload, { episodeId, taskType, status: /** @type {any} */ (status), gatedClaims,
         daysSinceDigestOpened: await this.daysWithoutReading(userId, agenda), userRejected: userRejected(agenda), at: this.now().toISOString() });
+      if (status === "failed") {
+        const failedEpisode = await this.documents.get(userId, "episode", episodeId);
+        const code = failedEpisode?.payload.error?.code ?? failedEpisode?.payload.completion?.deltaErrorCode;
+        folded.taskNotices = [...(agenda.payload.taskNotices ?? []).filter(item => item.status !== "sent"),
+          this.taskIssueNotice(agenda, { key: `autopilot-failure:${episodeId}`, pauseReason: folded.pauseReason,
+            reason: knownErrorCodeMessage(code) ?? "执行服务未能完成本次任务。" })];
+      }
       try {
         const saved=await this.documents.put(userId, "agenda", agenda.id, {
           ...agenda.payload, ...folded, updatedAt: this.now().toISOString(),
@@ -2364,12 +2703,69 @@ export class AutopilotService {
           try {await this.evolution?.recordResumedResearchCompleted?.({userId,projectId:agenda.projectId,agendaId,
             runId:completedEpisode?.payload?.runId,status});}catch{/* evolution observation never changes research delivery */}
         }
-        return saved;
+        return await this.flushTaskNotices(userId, saved);
       } catch (error) {
         if (!isConflict(error)) throw error;
       }
     }
     throw new HttpError(409, "autopilot_outcome_conflict", "The research agenda changed repeatedly while recording its outcome.");
+  }
+
+  /**
+   * One notice that an execution could not start, for a reason that is not the task's (`AUTOPILOT_TASK_CAUSED_DISPATCH_CODES`): the
+   * task keeps its schedule, and the same reason of the same task is told once a week, not once an occurrence. Queued with the
+   * agenda like every task notice, so a lost inbox write is retried; nothing for a task that is no longer active or is the platform's.
+   * @param {string} userId @param {string} agendaId @param {string} code
+   */
+  async noteDispatchRefusal(userId, agendaId, code) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const agenda = await this.get(userId, agendaId);
+      if (!this.notifications || this.programme?.owns(userId, agenda.projectId)
+        || agenda.payload.archivedAt || !agenda.payload.enabled || agenda.payload.status !== "active") return agenda;
+      const reason = /^[a-z0-9_]{1,100}$/.test(code) ? code : "autopilot_dispatch_failed";
+      const key = `autopilot-refusal:${agenda.id}:${reason}:${Math.floor(this.now().getTime() / DISPATCH_REFUSAL_NOTICE_PERIOD_MS)}`;
+      if ((agenda.payload.taskNotices ?? []).some(item => item.input?.idempotencyKey === key)) return this.flushTaskNotices(userId, agenda);
+      const notice = this.taskIssueNotice(agenda, { key, refused: true, reason: knownErrorCodeMessage(reason) ?? "执行服务这次没能开始这项任务。" });
+      try {
+        const saved = await this.documents.put(userId, "agenda", agenda.id, { ...agenda.payload,
+          taskNotices: [...(agenda.payload.taskNotices ?? []).filter(item => item.status !== "sent"), notice],
+        }, { expectedRevision: agenda.revision, projectId: agenda.projectId });
+        return await this.flushTaskNotices(userId, saved);
+      } catch (error) { if (!isConflict(error)) throw error; }
+    }
+    return null;
+  }
+
+  /** A terminal failure/pause has one stable inbox request, committed with the outcome that earned it. */
+  taskIssueNotice(agenda, { key, pauseReason = null, reason = "本次执行未能完成。", refused = false }) {
+    return { status: "queued", input: { noticeType: "notify", severity: "attention",
+      title: `${agenda.payload.title} ${pauseReason ? "已暂停" : refused ? "本次未能执行" : "执行失败"}`.slice(0, 150),
+      body: pauseReason ? `${pauseReason}。查看任务后可恢复或立即重试。`.slice(0, 1000)
+        : refused ? `${reason} 任务保留原定计划，下次到时间会照常执行；也可以查看任务后立即重试。`.slice(0, 1000)
+          : `${reason} 自动重试已结束，可查看任务并立即重试。`.slice(0, 1000),
+      projectId: agenda.projectId, source: { type: "system", id: `autopilot-task:${agenda.id}` }, idempotencyKey: key,
+      actions: [{ id: "open", label: "查看任务" }],
+    } };
+  }
+
+  /** The inbox write is retryable after process/storage failure; its own idempotency key covers a lost reply. */
+  async flushTaskNotices(userId, agenda) {
+    if (!this.notifications || this.programme?.owns(userId, agenda.projectId)) return agenda;
+    for (const notice of agenda.payload.taskNotices ?? []) {
+      if (notice.status === "sent") continue;
+      try { await this.notifications.create(userId, notice.input); }
+      catch { continue; }
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const current = await this.get(userId, agenda.id);
+        try {
+          agenda = await this.documents.put(userId, "agenda", current.id, { ...current.payload,
+            taskNotices: (current.payload.taskNotices ?? []).map(item => item.input.idempotencyKey === notice.input.idempotencyKey ? { ...item, status: "sent" } : item),
+          }, { expectedRevision: current.revision, projectId: current.projectId });
+          break;
+        } catch (error) { if (!isConflict(error)) return agenda; }
+      }
+    }
+    return agenda;
   }
 
   /** @param {string} userId @param {string} agendaId @param {Record<string,any>} input */
@@ -2398,8 +2794,7 @@ export class AutopilotService {
       digest = await this.getDigest(userId, digestId);
       if (digest.projectId !== agenda.projectId || digest.payload.agendaId !== agenda.id) throw new HttpError(409, "autopilot_digest_conflict", "Digest identity belongs to another agenda.");
     }
-    // A routine execution that ran to its end tells the researcher once, in the words every finished task uses; one that did not
-    // run is on the task's page (the run's state) and is not an inbox item of its own.
+    // Successful routine results announce their conversation here. Terminal failures and automatic pauses use the durable task notice in recordOutcome.
     if (this.notifications && input.routine === "succeeded" && !this.programme?.owns(userId, agenda.projectId)) await this.notifications.create(userId, {
       noticeType: "notify", title: `${agenda.payload.title} 已完成`, body: "结果在这次任务的对话里", projectId: agenda.projectId,
       source: { type: "digest", id: digest.id }, idempotencyKey: `autopilot-routine:${digest.id}`,
