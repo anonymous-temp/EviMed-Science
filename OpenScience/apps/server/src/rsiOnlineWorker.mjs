@@ -6,7 +6,7 @@ export function createRsiOnlineWorker({ jobs, owner, configured, incidents, poll
   const kinds = Object.freeze(['rsi-incident-export', 'rsi-bundle-poll']);
   async function perform() {
     if (closed || !configured()) return null;
-    const job = await jobs.claim([...kinds], workerId, { leaseMs, candidateAdmission: async (_client, candidate) => candidate.userId === owner });
+    const job = await jobs.claim([...kinds], workerId, { leaseMs, ownerId: owner });
     if (!job) return null;
     let lost = false;
     const heartbeat = setInterval(() => { jobs.renew(job.userId, job.id, job.leaseToken, leaseMs).then(ok => { if (!ok) lost = true; }).catch(() => { lost = true; }); }, Math.max(1000, Math.floor(leaseMs / 4)));
