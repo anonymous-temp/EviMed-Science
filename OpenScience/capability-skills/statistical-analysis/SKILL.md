@@ -179,7 +179,7 @@ the two populations had the same proportion. Reuse the executed display strings
 in the reply as well as in the report.
 
 Prefer native rendering directly from the numerical
-results when `research_calculate` is unavailable. Never manufacture a successful
+results when `mcp__evimed__research_calculate` is unavailable. Never manufacture a successful
 receipt or run unrelated skills merely to eliminate an advisory notice. Once
 the requested result is computed, checked and delivered, stop.
 

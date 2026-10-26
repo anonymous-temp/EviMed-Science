@@ -359,14 +359,14 @@
       "origin": "capability",
       "version": "1.9.0",
       "source": {"kind":"release"},
-      "digest": "sha256:846aeed570a4ae897d0e2a3e5259d65345549108bad1dc9700872e5c99a22df3",
+      "digest": "sha256:92b8f9e2d7b200aec207961b8f5c6c99efa038957ef1899960e38f73d2613c61",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
         {"path":"scripts/evidence_floor.py","sha256":"ddc4d2e25ddd51e69aeae1c0443cb103cb8488d2e40d331234d00334ff1f07d0"},
         {"path":"scripts/preflight.py","sha256":"d8b6628c3b7652b420c1f988689fc2a1bee6b6a2d59d6658a423f793d944908a"},
         {"path":"scripts/profile_dataset.py","sha256":"0185bb0c32c0ec8562f2583ee55d8f91e01553b6190eb52bbc53c32fcbe4aa25"}
       ],
-      "references": [{"path":"capability.yaml","sha256":"f2161169e7967f39f542a0ee21ecf31cf054af6efb6a11a13b6be4d8cfaa3677"}],
+      "references": [{"path":"capability.yaml","sha256":"d33494a3eff2b657697207e1e7447eeaccfb3687de8045682810b0f378e76430"}],
       "dependencies": [
         {"kind":"platform-tool","name":"bibliometric_analysis","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -471,9 +471,9 @@
       "origin": "capability",
       "version": "1.1.0",
       "source": {"kind":"release"},
-      "digest": "sha256:37aea7a6b6b9c4c9d47ea09220519bdb611ad89972e8909ddc631142e2b96a7f",
+      "digest": "sha256:53cde5eeff7bc0d1af9ca01693074f6dd2ba142eab2f413abedd0be28e4c5052",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"846d4e906d8cd0aa2e2901d06632d2043b1f693b450d2e0a86b195d230e93dc4"}],
+      "references": [{"path":"capability.yaml","sha256":"2028d0c805ee68ee9f82d939339ce929fb43c8df58c72343ab05018889ffa8a6"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -534,10 +534,10 @@
       "origin": "capability",
       "version": "1.0.1",
       "source": {"kind":"release"},
-      "digest": "sha256:86e3912583ad4e088f908b6295fb0c33a411e95ee975bced2e598aacbb5dc16e",
+      "digest": "sha256:0fc381b88d0a8606d15b29ef88e20788e25de82674cc6ea70f5252fdc02b2f44",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [{"path":"scripts/verify_result.py","sha256":"3fb75ee936ad10beb61da36019a7fea735656ac8dc29acbbaa903e41b5c29fcb"}],
-      "references": [{"path":"capability.yaml","sha256":"6211f39cf878c7574f58254baf5f0a040d03ec6982be41666f7a51e5634c440e"}],
+      "references": [{"path":"capability.yaml","sha256":"f1950e072f6921b1fcd1821491b686663644fe3259c8989db32c7788160b011f"}],
       "dependencies": [
         {"kind":"platform-tool","name":"gene_expression_differential","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"gene_expression_series","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -716,9 +716,9 @@
       "origin": "capability",
       "version": "1.1.0",
       "source": {"kind":"release"},
-      "digest": "sha256:fab37d7bace6853cc39eff5b715504bfca5d9810065a437e09258962318fb57f",
+      "digest": "sha256:ce61ff17bc663c8337bf19cdf5ff0b80a2811056a47df6a5a3816a7780aab20b",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"c56c77213c3a36606ac7de334c8c9d28a0576afb2bfbfd32c9bb19303a040000"}],
+      "references": [{"path":"capability.yaml","sha256":"65c8ad2d5134ef4fee6c19c92a89b4d4d5c9c1444186555b286797d02782d97d"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1025,25 +1025,28 @@
       "id": "capability/statistical-analysis",
       "name": "statistical-analysis",
       "origin": "capability",
-      "version": "1.2.0",
+      "version": "1.4.0",
       "source": {"kind":"release"},
-      "digest": "sha256:5d7379451e3cb9c93ef96cdf9d1a79400758b5dec87a874be01a10f9212c7877",
+      "digest": "sha256:9bbd06996345f50dd855aad81349f84dfafbc452960ada76204260f5af09762e",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
-        {"path":"scripts/analysis_methods.py","sha256":"e71ff10c840b7fb96003b341da4dd56d3d77ac9ea0d6023cdc712783fe5fd0c2"},
+        {"path":"scripts/analysis_checks.py","sha256":"8ba258cddfd71259f5022c8e129636ff7e0a12ed95324f33868aca03c8a1cd76"},
+        {"path":"scripts/analysis_methods.py","sha256":"43405739eeeb483706088d1ad5062fd93420db740e7340b813f57d880fb51996"},
+        {"path":"scripts/analysis_session.py","sha256":"c7176dc4368023a9928ec94f1b535766b0b6288d2fc7f425ac132590b37800e0"},
         {"path":"scripts/run_analysis.py","sha256":"ec1666014d8a9bcb4cb223653977601d2449f41fb485ceca0334e9fb634ff321"}
       ],
       "references": [
-        {"path":"capability.yaml","sha256":"0446e7f80b8e2d67efd370a6cc21362e24882b0f3518ce0551a572cb0dde5205"},
-        {"path":"scripts/analysis_method_records.json","sha256":"e6322249429c5b9ca80216314ea41480f70de1985150b7ba94658ec5d47664d2"}
+        {"path":"capability.yaml","sha256":"a2d72528bec461842b2d4f74ddabb1c50161f80aa44aaa67b22edfec8b9dee34"},
+        {"path":"scripts/analysis_method_records.json","sha256":"6dac24227531b26c8f8822ea660340104ad3c17a13c6ca15d1ddb298c87e6bc8"}
       ],
       "dependencies": [
         {"kind":"platform-tool","name":"dataset_semantics","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"research_calculate","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
-        {"kind":"python-package","name":"numpy","supply":"image","basis":"observed","evidence":"scripts/analysis_methods.py"},
+        {"kind":"python-package","name":"numpy","supply":"image","basis":"observed","evidence":"scripts/analysis_checks.py"},
         {"kind":"python-package","name":"pandas","supply":"image","basis":"observed","evidence":"scripts/analysis_methods.py"},
         {"kind":"python-package","name":"scipy","supply":"image","basis":"observed","evidence":"scripts/analysis_methods.py"},
-        {"kind":"python-package","name":"statsmodels","supply":"image","optional":true,"basis":"observed","evidence":"scripts/analysis_methods.py"}
+        {"kind":"python-package","name":"sklearn","supply":"image","optional":true,"basis":"observed","evidence":"scripts/analysis_checks.py"},
+        {"kind":"python-package","name":"statsmodels","supply":"image","optional":true,"basis":"observed","evidence":"scripts/analysis_checks.py"}
       ],
       "operations": [
         {
