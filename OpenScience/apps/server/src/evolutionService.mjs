@@ -78,6 +78,18 @@ export class EvolutionService {
     return this.jobs.enqueue(await this.owner(), `evolution-${action}`, payload, { idempotencyKey: `evolution:${key}`, projectId: EVOLUTION_PROJECT_ID,
       maxAttempts: Math.max(1, Math.min(10, this.config.evolutionMaxJobAttempts ?? 3)), runAfter });
   }
+  /** The journal acknowledges only completed side effects. Old complete/deferral records remain retryable.
+   * @param {any} action @param {()=>Promise<any>} operation */
+  async executeDecisionAction(action, operation) {
+    const id = `evolution-action-${evolutionKey(action.actionId)}`;
+    return this.withLock(`action:${action.actionId}`, async () => {
+      const prior = await this.get(id);
+      if (prior?.payload.status === 'complete' && prior.payload.result?.status !== 'deferred') return prior.payload.result;
+      const result = await operation();
+      await this.save('action', id, { actionId: action.actionId, status: result?.status === 'deferred' ? 'deferred' : 'complete', result }, prior);
+      return result;
+    });
+  }
   /** The record id a lead with this payload has. @param {any} payload */
   leadId(payload) { return evolutionLeadId(payload); }
   /** Only closed operational codes cross the researcher's tenant boundary. @param {any} input */
@@ -159,6 +171,7 @@ export class EvolutionService {
     if (!input.id || !EVOLUTION_TRACKS.includes(input.track) || !EVOLUTION_TOOL_STATES.includes(input.status ?? 'active') || !EVOLUTION_DATA_LEVELS.includes(input.dataLevel ?? 'D0')) throw new HttpError(400, 'evolution_tool_invalid', 'Invalid tool identity or track.');
     if (input.dataRequirements && validateEvolutionDataRequirements(input.dataRequirements).length) throw new HttpError(400, 'evolution_requirements_invalid', 'Invalid data requirements.');
     const existing = await this.get(input.id);
+    assertEvolutionExperimentalPublication(this.config);
     if (existing) { if (canonicalJson([existing.payload.artifactDigest ?? null, existing.payload.entrypoint ?? null, existing.payload.publicationKind ?? null, existing.payload.dataRequirements ?? null, existing.payload.capabilityIds ?? null, existing.payload.track]) !== canonicalJson([input.artifactDigest ?? null, input.entrypoint ?? null, input.publicationKind ?? null, input.dataRequirements ?? null, input.capabilityIds ?? null, input.track])) throw new HttpError(409, 'evolution_version_immutable', 'A published version is immutable.'); return existing; }
     return this.save('tool', input.id, { ...input, ...evolutionMethodFields({ ...input, validationLevel: 'V0' }), assessments: [], createdAt: this.now().toISOString() });
   }
@@ -205,8 +218,9 @@ export class EvolutionService {
           && evolutionDataMatch(item.payload.dataRequirements, event.dataset).matched);
         const matched = available.find(Boolean);
         if (!matched) continue;
-        await this.enqueue('self-check', { userId: owner, projectId: wait.projectId, agendaId: wait.agendaId,
+        const queued = await this.enqueue('self-check', { userId: owner, projectId: wait.projectId, agendaId: wait.agendaId,
           waiterId: row.id, sourceEventId: event.id, toolId: matched.id, datasetId: event.datasetId }, `check:${row.id}:${event.id}:${matched.id}`);
+        if (queued?.status === 'deferred') throw new HttpError(409, queued.code, queued.reason);
         continue;
       }
       const woke = await this.wakeWait(row, owner, wait, event);

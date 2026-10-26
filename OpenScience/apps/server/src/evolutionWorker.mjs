@@ -111,6 +111,9 @@ export class EvolutionWorker {
         if (lost) throw new Error('Evolution work lease lost.');
         return await this.service.jobs.finish(job.userId, job.id, job.leaseToken, result ?? {});
       } catch (error) {
+        if (error?.code === 'evolution_search_paused') return this.service.jobs.fail(job.userId, job.id, job.leaseToken,
+          { code: 'evolution_search_paused', message: 'The retained event or operation waits for evolution search to resume.' },
+          { retry: true, refundAttempt: true, delayMs: 3600000 });
         // A model refusal of a run's spend limit does not say which limit it was, and the two are not alike: the day's
         // allowance frees in time, so the job keeps its checkpoints and waits for the window; a run's own cap does not free,
         // the same case costs the same again, and retrying it from scratch (each time a fresh project, dispatch id and

@@ -213,7 +213,7 @@ export class EvolutionDecisions {
     if (!row || row.payload.recordType !== 'evolution-decision') throw new HttpError(404, 'evolution_decision_missing', 'Decision not found.');
     if (input.expectedRevision !== row.revision) throw new HttpError(409, 'product_revision_conflict', 'Decision changed; reload before choosing.');
     let option = input.option ?? row.payload.recommended;
-    if (input.text && this.config.evolutionSearchPaused === true) return evolutionDeferred();
+    if (input.text && this.config.evolutionSearchPaused === true) throw new HttpError(409, 'evolution_search_paused', 'Decision interpretation waits while evolution search is paused.');
     if (input.text) {
       if (!this.callbacks.interpretOverride) throw new HttpError(503, 'evolution_override_unavailable', 'Text overrides need an interpretation callback.');
       option = await this.callbacks.interpretOverride(row.payload, input.text);
@@ -224,6 +224,7 @@ export class EvolutionDecisions {
       throw new HttpError(409, 'evolution_decision_executing', 'The decision is being carried out; reload and answer again.');
     }
     const saved = await this.execute(row, option, 'user');
+    if (saved?.status === 'deferred') throw new HttpError(409, saved.code, saved.reason);
     if (input.delegate === true && saved.payload.decisionClass !== 'C') {
       return this.service.save('decision', id, { ...saved.payload, delegate: true }, saved);
     }

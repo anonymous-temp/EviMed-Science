@@ -229,9 +229,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
       evolutionOptionId(decision.options, answer.option);
       return answer.option;
     },
-    execute: async action => {
-      const id = `evolution-action-${evolutionKey(action.actionId)}`, prior = await service.get(id);
-      if (prior?.payload.status === "complete") return prior.payload.result;
+    execute: async action => service.executeDecisionAction(action, async () => {
       evolutionOptionId(action.options, action.option);
       const selected = action.options.find(item => item.id === action.option), operation = evolutionExecutableOperation(action);
       let result;
@@ -248,9 +246,8 @@ export function createEvolution({ config, store, documents, jobs, database, usag
         result = await service.enqueue("build", { dossierId: updated.id, decisionActionId: action.actionId }, action.actionId);
       } else if (operation === "rescout") result = await service.enqueue("scout", { dossierId: action.subjectId, decisionActionId: action.actionId }, action.actionId);
       else throw new HttpError(400, "evolution_action_unsupported", "This action requires a separately authorized implementation.");
-      await service.save("action", id, { actionId: action.actionId, status: "complete", result }, prior);
       return result;
-    },
+    }),
   } });
   const maintenance = createEvolutionMaintenance({ service, judgeService, callbacks: {
     proposeReview: input => decisions.propose(input),

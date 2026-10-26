@@ -151,3 +151,30 @@ test('publication rechecks pause after asynchronous tool lookup', async () => {
   await assert.rejects(f.service.registerTool({ id: 'lookup-race', track: 'M' }), { code: 'evolution_search_paused' });
   assert.equal(await get('lookup-race'), null);
 });
+
+test('pause arriving during decision record retains action identity and queues build once after resume', async () => {
+  const f = evolutionServiceFixture();
+  const decisions = new EvolutionDecisions({ service: f.service, config: f.service.config, callbacks: { execute: action => f.service.executeDecisionAction(action, () => f.service.enqueue('build', { dossierId: 'd', decisionActionId: action.actionId }, action.actionId)) } });
+  let row = await f.service.save('decision', 'flip-record', { status: 'pending', options: [{ id: 'build', operation: 'build' }], recommended: 'build', history: [] });
+  const save = f.service.save.bind(f.service);
+  f.service.save = async (...args) => { const result = await save(...args); if (args[0] === 'decision' && args[2].status === 'executing') f.service.config.evolutionSearchPaused = true; return result; };
+  assert.equal((await decisions.execute(row, 'build', 'user')).status, 'deferred');
+  row = await f.service.get(row.id);
+  assert.equal(row.payload.status, 'executing'); const actionId = row.payload.execution.actionId;
+  f.service.config.evolutionSearchPaused = false;
+  const resumed = await decisions.execute(row, 'build', 'user');
+  await f.service.executeDecisionAction({ actionId }, () => { throw new Error('completed action was replayed'); });
+  assert.equal(resumed.payload.status, 'executed'); assert.equal(f.jobs.length, 1); assert.equal(f.jobs[0].payload.decisionActionId, actionId);
+});
+test('paused wake failures refund worker attempts and wait an hour without closing the event', async () => {
+  const f = paused(); f.service.config.evolutionEnabled = true; let failed;
+  f.service.jobs.claim = async () => ({ id: 'event-job', userId: 'operator', leaseToken: 'lease', kind: 'evolution-event', payload: { eventId: 'wake' } });
+  f.service.jobs.fail = async (...args) => { failed = args; return { deferred: true }; };
+  f.service.jobs.renew = async () => true;
+  await f.service.save('event', 'wake', { type: 'dataset-ready', status: 'queued' });
+  f.service.resolveWaiters = async () => { throw Object.assign(new Error('paused'), { code: 'evolution_search_paused', status: 409 }); };
+  const worker = new EvolutionWorker({ service: f.service, decisions: {}, maintenance: {}, config: f.service.config, lane: 'light' });
+  await worker.tick({ kinds: ['evolution-event'] });
+  assert.equal(failed[4].refundAttempt, true); assert.equal(failed[4].delayMs, 3600000);
+  assert.equal((await f.service.get('wake')).payload.status, 'queued');
+});

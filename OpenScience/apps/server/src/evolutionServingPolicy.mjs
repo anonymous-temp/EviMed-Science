@@ -15,6 +15,7 @@ export function evolutionDeferred(code = 'evolution_search_paused', reason = 'Pl
   return { status: 'deferred', code, reason };
 }
 /** Publication is checked again immediately before the serving pin changes. In-flight model work is not cancelled.
+ * This is process-local startup configuration, not a cross-process hot-pause barrier; rollout must drain old workers.
  * @param {any} config */
 export function assertEvolutionExperimentalPublication(config) {
   if (config.evolutionSearchPaused === true) throw new HttpError(409, 'evolution_search_paused', 'Experimental publication waits while evolution search is paused.');
