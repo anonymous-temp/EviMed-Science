@@ -65,14 +65,15 @@ export async function createRsiOnlineRuntime({ config, store, documents, jobs, d
           messages: [{ role: 'system', content: input.instructions + ' Return no tools, executable instructions, code, commands or permissions.' }, { role: 'user', content: JSON.stringify({ fields: input.fields, messages: input.messages }) }] } });
       return JSON.parse(response.choices?.[0]?.message?.content ?? '{}');
     } });
-  const importer = servingAdapters && new RsiCampaignImporter({ database, owner: PLATFORM_PUBLISHER_USER_ID,
+  const publicationOwner = servingAdapters?.publicationOwnerId ?? PLATFORM_PUBLISHER_USER_ID;
+  const importer = servingAdapters && new RsiCampaignImporter({ database, owner: publicationOwner,
     isBound: configured, currentTarget: servingAdapters.currentTarget, adapters: servingAdapters.adapters,
     verificationOptions: envelope => trust.verificationOptions(envelope, online), activationPolicy: manifest => trust.activationPolicy(manifest, online),
     verifyObservation: servingAdapters.verifyObservation });
   if (importer) {
     servingAdapters.connectImporter(importer);
     servingAdapters.setObservationReporter(async witness => {
-      const rows = await database.query("SELECT payload FROM evimed_product.documents WHERE user_id=$1 AND kind='knowledge' AND deleted_at IS NULL AND payload->>'recordType'='rsi-campaign-import' AND payload->>'operationId'=$2", [binding.userId, witness.operationId]);
+      const rows = await database.query("SELECT payload FROM evimed_product.documents WHERE user_id=$1 AND kind='knowledge' AND deleted_at IS NULL AND payload->>'recordType'='rsi-campaign-import' AND payload->>'operationId'=$2", [publicationOwner, witness.operationId]);
       if (rows.rows.length !== 1) throw new Error('rsi_online_observation_scope_invalid');
       return importer.observe(rows.rows[0].payload.id, { id: witness.id });
     });

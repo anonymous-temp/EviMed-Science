@@ -20,7 +20,7 @@ const key = id => `rsi-import:${createHash('sha256').update(id).digest('hex')}`
  * verificationOptions must authenticate issuer/evaluator and supply expectedIdentity, qualification and trustStore.
  */
 export class RsiCampaignImporter {
-  /** @param {{database:any,owner:string,verificationOptions:(envelope:any)=>Promise<any>,currentTarget:(surface:string,client:any)=>Promise<any>,adapters:any,activationPolicy:(manifest:any)=>Promise<any>,isBound?:()=>boolean,verifyObservation?:(proof:any,row:any)=>Promise<any>,now?:()=>string}} options */
+  /** @param {{database:any,owner:string,verificationOptions:(envelope:any)=>Promise<any>,currentTarget:(surface:string,client:any)=>Promise<any>,adapters:any,activationPolicy:(manifest:any)=>Promise<any>,isBound?:()=>boolean,verifyObservation?:(proof:any,row:any,options?:{transactionClient:any})=>Promise<any>,now?:()=>string}} options */
   constructor({database,owner,verificationOptions,currentTarget,adapters,activationPolicy,isBound=()=>false,verifyObservation=async()=>null,now=()=>new Date().toISOString()}) {
     this.database=database;this.documents=new ProductDocuments(database);this.owner=owner;this.verificationOptions=verificationOptions;this.currentTarget=currentTarget;this.adapters=adapters;this.activationPolicy=activationPolicy;this.isBound=isBound;this.verifyObservation=verifyObservation;this.now=now
   }
@@ -115,7 +115,7 @@ export class RsiCampaignImporter {
       const row=stored.payload;if(!['exposed','consumer-observed','broadly-active'].includes(row.state))return row
       const current=await this.currentTarget(row.surface,client)
       if(this.expired(row) || !this.compatible(row,current))return this.stop(client,stored,'campaign_target_changed')
-      const witness=await this.verifyObservation(proof,row)
+      const witness=await this.verifyObservation(proof,row,{transactionClient:client})
       if(!witness || witness.operationId!==row.operationId || witness.candidateDigest!==row.candidateDigest || !['candidate','control','shadow'].includes(witness.arm) || witness.revision!==(witness.arm==='control'?row.previousRevision:row.revision) || typeof witness.id!=='string' || !/^[a-zA-Z0-9_.:-]{1,160}$/.test(witness.id) || !/^\d{4}-\d{2}-\d{2}$/.test(witness.day) || !['ok','error','critical'].includes(witness.outcome))conflict('campaign_consumer_witness_invalid')
       if(witness.consumerDigest!==undefined && witness.consumerDigest!==row.evidenceReferences.consumerDigest)conflict('campaign_consumer_witness_invalid')
       if(witness.outcome==='critical' && !['corrupt-bytes','unauthorized-behavior','incompatible-generation','deterministic-regression'].includes(witness.criticalCode))conflict('campaign_consumer_witness_invalid')
