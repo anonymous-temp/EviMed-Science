@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
 import { chromium } from "playwright-core";
-import { ADDRESS_CASES, addressProbe, addressStateFindings, compositionFindings, familyFindings, forgetProjectChoice, measure, measureComposition, memoryMapHeadlineFindings, memoryReady, moduleReady, moduleResultProbe, moduleViewAddressHolds, moduleViewLabels, pageFindings, readMemoryMapHeadline, readModuleResult, routeReady, rowClickShown, scrollPage, verifyCompactWorkflowViews, verifyModuleNavigation, waitMemory, walkCalculationHistory, walkMemoryMap } from "../../../scripts/ops/ui-walk.mjs";
+import { ADDRESS_CASES, PAGE_TEMPLATES, addressProbe, addressStateFindings, compositionFindings, familyFindings, forgetProjectChoice, measure, measureComposition, memoryMapHeadlineFindings, memoryReady, moduleReady, moduleResultProbe, moduleViewAddressHolds, moduleViewLabels, pageFindings, readMemoryMapHeadline, readModuleResult, routeReady, rowClickShown, scrollPage, verifyCompactWorkflowViews, verifyModuleNavigation, waitMemory, walkCalculationHistory, walkMemoryMap } from "../../../scripts/ops/ui-walk.mjs";
 
 const executable = process.env.OPEN_SCIENCE_MANAGED_BROWSER_TEST_CHROME;
 const skip = !executable && "An explicit disposable Chromium executable is required; missing is not pass";
@@ -646,12 +646,14 @@ test("memory headline comparison reads all paged marks and restores the initial 
 
 
 
-test("Inbox selection controls are owned by one named toolbar, and their kinds count against the page's eight", { skip }, async () => {
+test("Inbox selection controls are owned by one named toolbar, and their kinds count against the page's budget", { skip }, async () => {
+  // The inbox's measured budget (page-templates.json); one ordinary kind past it is the defect.
+  const budget = PAGE_TEMPLATES.views.find(view => view.view === 'inbox').budgetOverride.controls;
   for (const defect of ['', 'no-toolbar', 'unnamed-toolbar', 'missing-name-reference', 'duplicate-toolbar', 'duplicate-primary', 'wrong-scope', 'wrong-owner', 'different-checkbox-style', 'arbitrary-owned-button', 'extra-ordinary-kind', 'new-quiet-kind', 'outside-main']) {
     const scope = 'unread:research';
     const checkbox = (row = false) => `<input type="checkbox" aria-label="${row ? 'Select row' : 'Select loaded'}" data-selection-for="${defect === 'wrong-owner' && row ? 'another-toolbar' : 'selected'}" data-selection-scope="${defect === 'wrong-scope' && row ? 'all:another-project' : scope}" style="height:${defect === 'different-checkbox-style' && row ? 18 : 16}px;width:16px;font-size:12px">`;
     const action = '<button class="bg-accent" style="height:28px;font-size:14px;border:0;border-radius:8px;background:#a34427">Mark selected read</button>';
-    const ordinary = Array.from({length:defect === 'extra-ordinary-kind' ? 7 : 6}, (_, i) => `<button style="height:${40+i*3}px;font-size:13px;border:0;background:none;border-radius:0">Ordinary ${i}</button>`).join('');
+    const ordinary = Array.from({length:defect === 'extra-ordinary-kind' ? budget - 1 : 6}, (_, i) => `<button style="height:${40+i*3}px;font-size:13px;border:0;background:none;border-radius:0">Ordinary ${i}</button>`).join('');
     const row = checkbox(true);
     await page.setContent(`<main><header data-page-header><h1>Inbox</h1></header>${ordinary}<div id="selected" ${defect === 'no-toolbar' ? '' : 'data-action-group="selection" role="toolbar"'} ${defect === 'unnamed-toolbar' ? '' : defect === 'missing-name-reference' ? 'aria-labelledby="missing-name"' : 'aria-label="Batch read"'} data-selection-scope="${scope}">${checkbox()}<button style="height:40px;font-size:${defect === 'new-quiet-kind' ? 15 : 13}px;border:0;background:none;border-radius:0">Clear selection</button>${action}${defect === 'duplicate-primary' ? action : ''}</div>${defect === 'duplicate-toolbar' ? '<div id="other" data-action-group="selection" role="toolbar" aria-label="Other selection">Other selection</div>' : ''}${defect === 'outside-main' ? '' : row}${defect === 'arbitrary-owned-button' ? '<button data-selection-for="selected">Unrelated action</button>' : ''}</main>${defect === 'outside-main' ? row : ''}`);
     const facts = await page.evaluate(measure, [[], []]);
