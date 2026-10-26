@@ -56,8 +56,12 @@ function pngSize(path: string): string {
 const publicFile = (url: string) => join(WEB, "public", url.split("?")[0]);
 
 describe("the web app manifest", () => {
-  it("installs EviMed standalone, opening a conversation, in Chinese", () => {
-    expect(manifest.short_name).toBe("EviMed");
+  it("installs EviMed Science standalone, opening a conversation, in Chinese", () => {
+    expect(manifest.short_name).toBe("EviMed Science");
+    expect(manifest.name).toBe("EviMed Science");
+    expect(html).toContain('<title>EviMed Science</title>');
+    expect(html).toContain('<meta name="application-name" content="EviMed Science" />');
+    expect(html).toContain('<meta name="apple-mobile-web-app-title" content="EviMed Science" />');
     expect(manifest.start_url).toBe("/app/chat");
     expect(manifest.id).toBe(manifest.start_url);
     expect(manifest.scope).toBe("/");
@@ -104,7 +108,7 @@ describe("the web app manifest", () => {
   });
 
   it("describes the product in words it still uses (appendix E #19)", () => {
-    expect(manifest.description).toBe("向 EviMed 提问、交办任务，在手机上查看结果");
+    expect(manifest.description).toBe("向 EviMed Science 提问、交办任务，在手机上查看结果");
     expect(manifest.description).not.toContain("运行记录");
   });
 });
@@ -199,7 +203,7 @@ describe("the icons are the EviMed mark in brand blue (appendix E #18, audit F-G
 
   it("links every icon with the cache buster that changed with it", () => {
     for (const icon of manifest.icons) expect(icon.src, icon.src).toMatch(/\?v=2$/);
-    expect(html).toContain('<link rel="manifest" href="/manifest.json?v=2" />');
+    expect(html).toContain('<link rel="manifest" href="/manifest.json?v=3" />');
     expect(html).toContain('<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png?v=2" />');
     expect(html).toContain('<link rel="icon" type="image/svg+xml" href="/src/assets/evimed-mark.svg" />');
   });

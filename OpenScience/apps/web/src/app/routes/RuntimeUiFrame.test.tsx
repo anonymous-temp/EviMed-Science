@@ -1,8 +1,9 @@
 import { useLayoutEffect, useRef } from "react";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { RuntimeUiFrame } from "./RuntimeUiFrame";
 import { SessionFrameHost } from "../layout/SessionFrameHost";
 import { useProjectStore } from "@/lib/projects";
 import { SessionRoute, GlobalHomeRoute } from "./SessionRoute";
@@ -20,8 +21,8 @@ import { renderHook } from "@testing-library/react";
 import { kernelThemeTokens } from "@evimed/design-tokens/kernel";
 import { errorCodeMessage, SIMULATED_WALLET_PAGES } from "@evimed/domain";
 
-const mocks = vi.hoisted(() => ({ putSourceScope: vi.fn(), getSourceScope: vi.fn(), saveToKnowledgeBase: vi.fn(), toastSuccess: vi.fn(), toastError: vi.fn(), create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), subscribe: vi.fn(), listSources: vi.fn(), me: vi.fn(), warm: vi.fn(), start: vi.fn(), status: vi.fn(), listAgents: vi.fn(), listSessions: vi.fn(), putSession: vi.fn(), allowance: vi.fn(), connectors: vi.fn(), saveConnector: vi.fn(), dispatch: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
-vi.mock("@/lib/sourceClient", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/sourceClient")>()), listSources: mocks.listSources, saveToKnowledgeBase: mocks.saveToKnowledgeBase }));
+const mocks = vi.hoisted(() => ({ locate: vi.fn(), cancel: vi.fn(), putSourceScope: vi.fn(), getSourceScope: vi.fn(), saveToKnowledgeBase: vi.fn(), toastSuccess: vi.fn(), toastError: vi.fn(), create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), subscribe: vi.fn(), listSources: vi.fn(), me: vi.fn(), warm: vi.fn(), start: vi.fn(), status: vi.fn(), listAgents: vi.fn(), listSessions: vi.fn(), putSession: vi.fn(), allowance: vi.fn(), connectors: vi.fn(), saveConnector: vi.fn(), dispatch: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
+vi.mock("@/lib/sourceClient", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/sourceClient")>()), listSources: mocks.listSources, saveToKnowledgeBase: mocks.saveToKnowledgeBase, locateSourceQuote: mocks.locate }));
 vi.mock("@/lib/toast", () => ({ toast: { success: mocks.toastSuccess, error: mocks.toastError } }));
 // The run's event stream, held by the test: the frame's run view follows it.
 vi.mock("@/lib/runEvents", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/runEvents")>()), subscribeRunEvents: mocks.subscribe }));
@@ -40,6 +41,7 @@ vi.mock("@/lib/apiClient", async importOriginal => ({
   fetchWebResearchAllowance: mocks.allowance, getWebSessionSourceScope: mocks.getSourceScope, putWebSessionSourceScope: mocks.putSourceScope,
   // The strip for a data source a run went without reads the account's connectors, saves one, and posts the follow-up.
   fetchWebConnectors: mocks.connectors, saveWebConnectorCredential: mocks.saveConnector, dispatchWebAgentRun: mocks.dispatch,
+  cancelWebAgentRun: mocks.cancel,
 }));
 // 循证 GEO's two calls: which GEO project this is, and writing an option to it.
 const geo = vi.hoisted(() => ({ listGeoProjects: vi.fn(), patchGeoProject: vi.fn(), getGeoProject: vi.fn() }));
@@ -60,6 +62,8 @@ const billing = (enabled: boolean) => ({
   month: { since: "2026-10-01T00:00:00.000Z", paid: 0, pending: 0 },
   commerce: { rechargeUrl: null, membershipUrl: null, ordersUrl: null, refundsUrl: null },
 });
+const nativeGeo=vi.hoisted(()=>({start:vi.fn(),status:vi.fn(),runs:vi.fn(),checks:vi.fn(),capability:vi.fn(),sourceScope:vi.fn(),stop:vi.fn()}));
+vi.mock("@/lib/geoNativeClient",async original=>({...await original<typeof import("@/lib/geoNativeClient")>(),startGeoConversation:nativeGeo.start,geoConversationStatus:nativeGeo.status,geoConversationRuns:nativeGeo.runs,geoConversationChecks:nativeGeo.checks,geoConversationCapability:nativeGeo.capability,geoConversationSourceScope:nativeGeo.sourceScope,stopGeoConversationRun:nativeGeo.stop}));
 const binding = { frameId: "frame-a", frameUrl: "https://host.example:8443/__evimed/f/frame-a/", expiresAt: Date.now() + 600_000, renewalToken: "renew-frame-a" };
 let testNavigate: ReturnType<typeof useNavigate>;
 let testPath = "/app/chat";
@@ -1032,6 +1036,18 @@ describe("native frame identity and readiness", () => {
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: "request-a", ok: true, sessionId: "session-canonical" });
     await waitFor(() => expect(screen.queryByText("正在打开")).toBeNull());
     expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-canonical");
+  });
+
+  it("positions task origin failure over its pane and recovers through retry", async () => {
+    mocks.profile.uiOrigin = "";
+    mocks.me.mockRejectedValueOnce(new Error("offline"));
+    taskPane.sessionId = "session-exec";
+    const { container } = mount(null, "/app/autopilot/agenda-one");
+    const alert = await screen.findByRole("alert");
+    expect(alert.closest("[data-task-frame]")).toHaveStyle({ left: "300px", top: "60px", width: "700px", height: "500px" });
+    mocks.me.mockImplementation(async () => { mocks.profile.uiOrigin = "https://host.example:8443"; return {}; });
+    await userEvent.click(within(alert).getByRole("button", { name: "重试" }));
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
   });
 
   it("shows an explicit unavailable state when the deployment has no native surface", async () => {
@@ -2359,5 +2375,97 @@ describe("conversation project history across global home", () => {
     expect(mocks.me).toHaveBeenCalledWith({ projectId: "project-p" });
     await userEvent.click(screen.getByText("Forward"));
     await waitFor(() => expect(useProjectStore.getState().currentId).toBe("default"));
+  });
+});
+
+
+describe("exact GEO scope in the existing native frame",()=>{
+  it("uses module start/status and signs the exact root without owned-project requests",async()=>{
+    const scope={kind:"geo" as const,geoProjectId:"geo-shared",sessionId:"shared-root"};
+    nativeGeo.start.mockResolvedValue({running:true});nativeGeo.status.mockResolvedValue({running:true});nativeGeo.runs.mockResolvedValue([]);nativeGeo.checks.mockResolvedValue([]);nativeGeo.capability.mockResolvedValue(null);
+    render(<MemoryRouter initialEntries={["/app/geo/geo-shared/chat/shared-root"]}><RuntimeUiFrame projectId="same-id" scope={scope} sessionId="shared-root" origin={mocks.profile.uiOrigin}/></MemoryRouter>);
+    await waitFor(()=>expect(mocks.create).toHaveBeenCalledWith("same-id",scope));
+    expect(nativeGeo.start).toHaveBeenCalledWith(scope);expect(mocks.start).not.toHaveBeenCalled();expect(mocks.status).not.toHaveBeenCalled();
+  });
+  it("forwards an explicit zero-document selection to the module conversation's source scope",async()=>{
+    const scope={kind:"geo" as const,geoProjectId:"geo-shared",sessionId:"shared-root"};
+    nativeGeo.start.mockResolvedValue({running:true});nativeGeo.status.mockResolvedValue({running:true});nativeGeo.runs.mockResolvedValue([]);nativeGeo.checks.mockResolvedValue([]);nativeGeo.capability.mockResolvedValue(null);
+    nativeGeo.sourceScope.mockReset().mockResolvedValue({sourceScope:[],sourceScopeMode:"selected"});
+    const {container}=render(<MemoryRouter initialEntries={["/app/geo/geo-shared/chat/shared-root"]}><RuntimeUiFrame projectId="same-id" scope={scope} sessionId="shared-root" origin={mocks.profile.uiOrigin}/></MemoryRouter>);
+    await waitFor(()=>expect(container.querySelector("iframe")).not.toBeNull());
+    const frame=container.querySelector("iframe")!;
+    emit(frame,{type:"evimed.runtime-ui.ready",projectId:"same-id"});
+    emit(frame,{type:"evimed.runtime-ui.source-scope",seq:2,projectId:"same-id",requestId:"scope-none",sessionId:"shared-root",sourceIds:[],sourceScopeMode:"selected"});
+    await waitFor(()=>expect(nativeGeo.sourceScope).toHaveBeenCalledWith(scope,[],"selected"));
+  });
+});
+
+describe("what the frame asks of the shell in a module conversation", () => {
+  const scope = { kind: "geo" as const, geoProjectId: "geo-shared", sessionId: "shared-root" };
+  const sourceId = `src_${"a".repeat(32)}`;
+  async function openScoped(owner: boolean) {
+    nativeGeo.start.mockResolvedValue({ running: true }); nativeGeo.status.mockResolvedValue({ running: true }); nativeGeo.checks.mockResolvedValue([]); nativeGeo.capability.mockResolvedValue(null);
+    nativeGeo.runs.mockReset().mockResolvedValue([{ id: "run-1", sessionId: "shared-root", status: "running", availableActions: [{ kind: "stop", scope: "run", targetId: "run-1" }] }]);
+    nativeGeo.stop.mockReset().mockResolvedValue({ run: { id: "run-1" } });
+    mocks.cancel.mockReset(); mocks.locate.mockReset(); mocks.saveToKnowledgeBase.mockReset(); mocks.toastError.mockReset(); mocks.toastSuccess.mockReset();
+    const view = render(<MemoryRouter initialEntries={["/app/geo/geo-shared/chat/shared-root"]}><PathProbe /><RuntimeUiFrame projectId="same-id" scope={scope} scopeOwner={owner} sessionId="shared-root" origin={mocks.profile.uiOrigin} /></MemoryRouter>);
+    await waitFor(() => expect(view.container.querySelector("iframe")).not.toBeNull());
+    return view.container.querySelector("iframe")!;
+  }
+  const send = (frame: HTMLIFrameElement, data: Record<string, unknown>) => emit(frame, { projectId: "same-id", ...data });
+
+  it("opens the owner's delivered file in the run's reader, not in a module page that has no such tab", async () => {
+    const frame = await openScoped(true);
+    send(frame, { type: "evimed.runtime-ui.open-artifact", seq: 2, runId: "run-1", path: "../../etc/passwd" });
+    expect(screen.getByTestId("path")).toHaveTextContent("/app/geo/geo-shared/chat/shared-root");
+    send(frame, { type: "evimed.runtime-ui.open-artifact", seq: 3, runId: "run-1", path: "deliverables/geo/article.md", anchor: "CLM-002" });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/runs/run-1/files/deliverables/geo/article.md"));
+    expect(mocks.toastError).not.toHaveBeenCalled();
+  });
+
+  it("stops the conversation's own run under the module's authority, for the owner and for a member alike", async () => {
+    for (const owner of [true, false]) {
+      const frame = await openScoped(owner);
+      send(frame, { type: "evimed.runtime-ui.stop-run", seq: 2, runId: "run-1" });
+      await waitFor(() => expect(nativeGeo.stop).toHaveBeenCalledWith(scope, "run-1"));
+      expect(nativeGeo.runs).toHaveBeenCalledWith(scope);
+      expect(mocks.cancel).not.toHaveBeenCalled();
+      // A run of another conversation is not stopped from this one.
+      send(frame, { type: "evimed.runtime-ui.stop-run", seq: 3, runId: "run-other" });
+      await waitFor(() => expect(nativeGeo.runs).toHaveBeenCalledTimes(2));
+      expect(nativeGeo.stop).toHaveBeenCalledTimes(1);
+      expect(mocks.toastError).not.toHaveBeenCalled();
+      cleanup();
+    }
+  });
+
+  it("looks up the owner's quotations and opens the owner's sources and knowledge base copy", async () => {
+    const frame = await openScoped(true);
+    mocks.locate.mockResolvedValue({ sourceId, title: "说明书", status: "verified", page: 3 });
+    mocks.saveToKnowledgeBase.mockResolvedValue({ path: "knowledge-base/chat/a.md", duplicate: false, sourceId });
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    send(frame, { type: "evimed.runtime-ui.source-citations", seq: 2, requestId: "cite-1", references: [{ sourceId, quote: "每周一次皮下注射" }] });
+    await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "evimed.runtime-ui.source-citations-result", requestId: "cite-1", ok: true, items: [expect.objectContaining({ sourceId })] }), expect.any(String)));
+    expect(mocks.locate).toHaveBeenCalledWith(sourceId, "每周一次皮下注射");
+    send(frame, { type: "evimed.runtime-ui.save-to-knowledge-base", seq: 3, runId: "run-1", path: "deliverables/geo/article.md" });
+    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledWith("已存入知识库，正在读取"));
+    expect(mocks.saveToKnowledgeBase).toHaveBeenCalledWith("deliverables/geo/article.md", { projectId: "same-id" });
+    send(frame, { type: "evimed.runtime-ui.open-source", seq: 4, sourceId, page: 3 });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent(`/app/files/${sourceId}`));
+    expect(mocks.toastError).not.toHaveBeenCalled();
+  });
+
+  it("never reads a member's own projects for the owner's file, source or knowledge base: the list is not drawn and the rest is said", async () => {
+    const frame = await openScoped(false);
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    send(frame, { type: "evimed.runtime-ui.source-citations", seq: 2, requestId: "cite-1", references: [{ sourceId, quote: "每周一次皮下注射" }] });
+    await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "evimed.runtime-ui.source-citations-result", requestId: "cite-1", ok: false }), expect.any(String)));
+    expect(mocks.locate).not.toHaveBeenCalled();
+    send(frame, { type: "evimed.runtime-ui.open-artifact", seq: 3, runId: "run-1", path: "deliverables/geo/article.md" });
+    send(frame, { type: "evimed.runtime-ui.save-to-knowledge-base", seq: 4, runId: "run-1", path: "deliverables/geo/article.md" });
+    send(frame, { type: "evimed.runtime-ui.open-source", seq: 5, sourceId });
+    expect(screen.getByTestId("path")).toHaveTextContent("/app/geo/geo-shared/chat/shared-root");
+    expect(mocks.saveToKnowledgeBase).not.toHaveBeenCalled();
+    expect(mocks.toastError.mock.calls.map(([text]) => text)).toEqual(["这份内容在项目所有者的资料里，请在对话右侧查看。", "只有项目所有者可以把这份文件存入知识库。", "这份内容在项目所有者的资料里，请在对话右侧查看。"]);
   });
 });

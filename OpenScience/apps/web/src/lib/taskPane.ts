@@ -1,3 +1,4 @@
+import type { GeoConversationScope } from "./geoNativeClient";
 import { useSyncExternalStore } from "react";
 import { geoIdFromChatPath } from "@/lib/geoLocation";
 import { isStudyChatPath } from "@/lib/studyLocation";
@@ -20,6 +21,13 @@ export interface TaskPaneRequest {
   projectId: string;
   /** The conversation the pane shows: the execution's, or the study's own. */
   sessionId: string;
+  scope?: GeoConversationScope;
+  /**
+   * Whether the person owns the module project the scoped conversation is in. A member acts in the owner's runtime through the module's
+   * own routes; what reads the owner's workspace or knowledge base through the person's own projects (a run's file page, a saved
+   * source, 存入知识库) runs only for the owner.
+   */
+  owner?: boolean;
 }
 
 /**

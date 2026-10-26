@@ -83,7 +83,7 @@ test("a document is pushed as <srcId>.md with vectors only and its tags, in one 
     assert.equal(seen[0].path, provenance["content-write-create"].path);
     // `replace` creates what is not there from v0.5.1, where `create` is only its alias: one call, never a 409 to fall back from.
     assert.deepEqual(seen[0].body, { uri, content: "# Alpha\n\ntext\n", wait: true, processing_mode: "vectors_only",
-      tags: ["src=src_00000000000000000000000000000001", `sha=${"a".repeat(64)}`, "doctype=paper"], tag_mode: "replace", mode: "replace" });
+      tags: ["src=src_00000000000000000000000000000001", `sha=${"a".repeat(64)}`, "doctype=paper", "rendition=49d32a1883784a6e5006e9ab2a74ed04cdfc3d86cd5bac7e8ddf6c6b92f1f709"], tag_mode: "replace", mode: "replace" });
     assert.equal(seen[0].headers["x-openviking-user"], openVikingUserId(USER));
     assert.equal(seen[0].headers["x-openviking-account"], "evimed");
     assert.equal(seen[0].headers["x-openviking-role"], undefined);

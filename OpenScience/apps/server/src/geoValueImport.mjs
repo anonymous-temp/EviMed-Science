@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 import { deliverableDir, GEO_RESEARCH_CAPABILITIES, geoValueObject } from "@evimed/domain";
 
+/** Existing capability eligibility, shared by native candidate discovery and the importer.
+ * @param {unknown} capability */
+export const geoValueCapabilitySupported = capability => typeof capability === "string"
+  && (capability.startsWith("geo-") || GEO_RESEARCH_CAPABILITIES.includes(capability));
+
 /**
  * Import optional analysis plus the original specialist output, even after a
  * partial run. A report is research material, not an automatically verified
@@ -16,10 +21,10 @@ import { deliverableDir, GEO_RESEARCH_CAPABILITIES, geoValueObject } from "@evim
  *
  * Answers the codes of the writes that failed (`failed`): a failed write is reported and the next one goes on, and the caller
  * decides whether the import is whole — a run's value that did not reach the profile is not something to forget (D-24).
- * @param {{ store: any, project: any, geoProject: any, run: any, readFile: Function, report: Function, capabilityOutputs?: (id: string) => Promise<string[]> }} input
+ * @param {{ store: any, project: any, geoProject: any, run: any, readFile: Function, report: Function, capabilityOutputs?: (id: string) => Promise<string[]>, valueOnly?: boolean }} input
  * @returns {Promise<{ failed: string[] }>}
  */
-export async function importGeoValue({ store, project, geoProject, run, readFile, report, capabilityOutputs = async () => [] }) {
+export async function importGeoValue({ store, project, geoProject, run, readFile, report, capabilityOutputs = async () => [], valueOnly = false }) {
   /** @type {string[]} */
   const failed = [];
   if (typeof store.writeValue !== "function") return { failed };
@@ -30,7 +35,7 @@ export async function importGeoValue({ store, project, geoProject, run, readFile
     if (!delivery?.id) continue;
     const capability = delivery.capability || run.effectiveAgentId || run.capabilityId || run.agentId;
     const research = GEO_RESEARCH_CAPABILITIES.includes(capability);
-    if (capability && !String(capability).startsWith("geo-") && !research) continue;
+    if (capability && !geoValueCapabilitySupported(capability)) continue;
     const base = deliverableDir(String(delivery.id));
     const optional = await readFile(project.workspaceDir, `${base}/geo-value.json`).catch(() => null);
     if (optional != null) try {
@@ -41,7 +46,7 @@ export async function importGeoValue({ store, project, geoProject, run, readFile
         else report("geo_value_json_invalid");
       } else report("geo_value_json_too_large");
     } catch { failed.push("geo_value_import_failed"); report("geo_value_import_failed"); }
-    if (!research) continue;
+    if (!research || valueOnly) continue;
     const materials = [];
     // Exact, bounded artifact names rather than a recursive scan or another model call.
     const declared = await capabilityOutputs(String(capability ?? "")).catch(() => []);

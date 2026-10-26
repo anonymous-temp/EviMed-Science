@@ -19,16 +19,18 @@ import { iconButtonClasses } from "@/components/ui/IconButton";
 import { navItemClasses } from "@/components/ui/NavItem";
 import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { DiagnosisReview } from "@/components/geo/DiagnosisReview";
 import { AnswerChecks } from "@/components/geo/AnswerChecks";
-import { useGeoFrame, useGeoToolbar } from "@/components/geo/geoFrame";
+import { geoMayConverse, useGeoFrame, useGeoToolbar } from "@/components/geo/geoFrame";
 import { useGeoEvidence } from "@/components/geo/geoProjectData";
 import { scrollBlockToTop } from "@/components/geo/geoScroll";
 import { questionGroupIndex, clusterName } from "@/components/geo/spine/clusterModel";
 import { ClusterDrawerHost } from "@/components/geo/spine/ClusterDrawerHost";
 import { ClusterLink } from "@/components/geo/spine/ClusterLink";
 import { useGeoDrawerAddress } from "@/components/geo/spine/drawerParams";
-import { claimKeyOf, claimRows, correctionBrief } from "@/components/geo/spine/errorModel";
+import { claimKeyOf, claimRows } from "@/components/geo/spine/errorModel";
 import { ErrorDrawer } from "@/components/geo/spine/ErrorDrawer";
+import { useCorrectionHandoff } from "@/components/geo/spine/useCorrectionHandoff";
 import { useGeoActions, useGeoQuestionSet } from "@/components/geo/spine/spineData";
 import { useOpenGeoConversation } from "@/components/geo/useOpenGeoConversation";
 import { answerFindings, type AnswerFinding } from "@/components/geo/answerFindings";
@@ -36,6 +38,7 @@ import { markAnswer, type AnswerParagraph } from "@/components/geo/answerMarks";
 import { engineName, GEO_ERROR_STATUS_WORDS, GEO_ERROR_TYPE_WORDS, GEO_POOL_KINDS, monthDay, zh } from "@/components/geo/geoText";
 import { readableSourceRef } from "@/components/geo/tabs/EvidenceTab";
 import { answerPath, MENTION_ONLY_WORD, mentionOnly, SNAPSHOT_STATUS_WORDS, tabPath } from "@/components/geo/tabs/geoTabText";
+import { useGeoPath } from "@/components/geo/useGeoPath";
 import { TabError, TabSkeleton, useGeoLoad } from "@/components/geo/tabs/geoTabKit";
 
 /** The sentence a direct link lands on where the module is off (the shell's off page says the same). */
@@ -86,7 +89,7 @@ export function GeoAnswerPage() {
   const claims = evidence.state.kind === "ready" && Array.isArray(evidence.state.data?.claims) ? evidence.state.data.claims : [];
   const everyAction = actions.state.kind === "ready" && Array.isArray(actions.state.data?.actions) ? actions.state.data.actions : [];
   const groups = questionSet.state.kind === "ready" ? questionSet.state.data?.groups : undefined;
-  return <Answer geoId={geoId} data={data} project={loadedProject} claims={claims} actions={everyAction} groups={groups} />;
+  return <Answer geoId={geoId} data={data} project={loadedProject} claims={claims} actions={everyAction} groups={groups} onAssessmentChanged={answer.reload} />;
 }
 
 /**
@@ -115,6 +118,7 @@ const BACK_NAMES = { accuracy: "准确与安全", questions: "问题与回答", 
  * its address included; one who opened the answer from a link has no such place, and is taken to the tab that holds it.
  */
 function BackLink({ geoId, fallback }: { geoId: string; fallback: keyof typeof BACK_NAMES }) {
+  const path = useGeoPath();
   const navigate = useNavigate();
   const arrived = useNavigationType();
   const fromInside = arrived !== "POP";
@@ -126,7 +130,7 @@ function BackLink({ geoId, fallback }: { geoId: string; fallback: keyof typeof B
           <ArrowLeft size={16} aria-hidden="true" />
         </button>
       ) : (
-        <Link to={tabPath(geoId, fallback)} aria-label={label} className={iconButtonClasses()}>
+        <Link to={path(tabPath(geoId, fallback))} aria-label={label} className={iconButtonClasses()}>
           <ArrowLeft size={16} aria-hidden="true" />
         </Link>
       )}
@@ -143,6 +147,7 @@ function Answer({
   claims,
   actions,
   groups,
+  onAssessmentChanged,
 }: {
   geoId: string;
   data: GeoAnswer;
@@ -150,10 +155,13 @@ function Answer({
   claims: GeoClaim[];
   actions: readonly GeoAction[];
   groups: Parameters<typeof questionGroupIndex>[0];
+  onAssessmentChanged: () => void;
 }) {
+  const path = useGeoPath();
   const navigate = useNavigate();
   const drawer = useGeoDrawerAddress();
   const open = useOpenGeoConversation();
+  const handoff = useCorrectionHandoff(geoId, project);
   const [asking, setAsking] = useState(false);
   const snapshot = data.snapshot;
   const question = data.question?.text || "回答";
@@ -193,7 +201,7 @@ function Answer({
       options: history.map((entry) => ({ value: entry.snapshotId, label: monthDay(entry.sampleDate) ?? entry.sampleDate })),
       value: snapshot.id,
       // Another day's answer replaces this one in the history: the way back is still the list.
-      onChange: (value) => { if (value && value !== snapshot.id) navigate(answerPath(geoId, value), { replace: true }); },
+      onChange: (value) => { if (value && value !== snapshot.id) navigate(path(answerPath(geoId, value)), { replace: true }); },
     }] : undefined,
     actions: screenshot ? (
       <a href={screenshot} target="_blank" rel="noreferrer" className={buttonClasses({ variant: "text", size: "sm" })}>
@@ -211,11 +219,13 @@ function Answer({
   const ask = () => {
     if (!target) return;
     setAsking(true);
-    const draft = lead
-      ? correctionBrief(lead, productName)
-      : zh`${engineName(snapshot.engine)}对“${question}”的回答${date ? `（${date}）` : ""}，对我们意味着什么，接下来该做什么？`;
-    // A request about one answer opens a fresh conversation: the project's latest may be a strategy run's own session.
-    void open({ projectId: target.projectId, sessionId: null }, draft).finally(() => setAsking(false));
+    // A wrong claim stages its records as the conversation's context and drafts only the sentence; talking an answer over has no records to stage.
+    if (lead) {
+      void handoff(lead, productName).finally(() => setAsking(false));
+      return;
+    }
+    const draft = zh`${engineName(snapshot.engine)}对“${question}”的回答${date ? `（${date}）` : ""}，对我们意味着什么，接下来该做什么？`;
+    void open({ projectId: target.projectId, sessionId: target.sessionId }, draft).finally(() => setAsking(false));
   };
   const groupMap = useMemo(() => questionGroupIndex(groups), [groups]);
   const opened = drawer.error ? everyClaim.find((claim) => claim.key === drawer.error) ?? null : null;
@@ -240,7 +250,7 @@ function Answer({
           </p>
         </div>
       </div>
-      {target && (
+      {target && geoMayConverse(project) && (
         // The answer's own step, not the module's next one: a secondary button in the answer's heading row, as 确认后联系 is in its
         // person's row (T3: the one primary action of a module page is the band header's).
         <Button data-geo-answer-primary="" variant="secondary" loading={asking} onClick={ask}>{lead ? "写纠错稿" : "在对话中处理"}</Button>
@@ -262,6 +272,7 @@ function Answer({
           <AnswerBody data={data} marked={marked} findings={found.findings} claims={claims} onOpen={(key) => drawer.open({ error: key })} />
           <AnswerChecks facts={data.facts} />
           <Citations citations={snapshot.citations} />
+          {project && <DiagnosisReview geoId={geoId} data={data} project={project} actions={actions} onAssessmentChanged={onAssessmentChanged} />}
           <Elsewhere geoId={geoId} current={snapshot.id} errors={found.elsewhere} unplaced={marked.unplaced} findings={found.findings} />
         </article>
       </div>
@@ -294,6 +305,7 @@ function engineWord(sibling: GeoAnswer["siblings"][number]): { text: string; wro
 }
 
 function Engines({ geoId, data, wrongCount }: { geoId: string; data: GeoAnswer; wrongCount: number }) {
+  const path = useGeoPath();
   const current = data.snapshot;
   const siblings = (Array.isArray(data.siblings) ? data.siblings : []).filter((sibling) => sibling && sibling.engine);
   if (!siblings.some((sibling) => sibling.engine === current.engine)) {
@@ -322,7 +334,7 @@ function Engines({ geoId, data, wrongCount }: { geoId: string; data: GeoAnswer; 
           return (
             <li key={sibling.engine} data-geo-sibling={sibling.engine}>
               {sibling.snapshotId && !selected ? (
-                <Link to={answerPath(geoId, sibling.snapshotId)} replace className={rowClass}>{label}</Link>
+                <Link to={path(answerPath(geoId, sibling.snapshotId))} replace className={rowClass}>{label}</Link>
               ) : (
                 <span aria-current={selected ? "page" : undefined} className={rowClass}>{label}</span>
               )}
@@ -466,10 +478,11 @@ function Elsewhere({
   unplaced: string[];
   findings: AnswerFinding[];
 }) {
+  const path = useGeoPath();
   const own = unplaced.map((sentence) => findings.find((finding) => finding.sentence.trim() === sentence.trim())).filter((finding): finding is AnswerFinding => !!finding);
   const count = errors.length + own.length;
   if (count === 0) return null;
-  const summary = own.length === 0 ? `更早的回答里也出现过（${errors.length} 条）` : `另有 ${count} 条讲错记录，原句不在上面的回答里`;
+  const summary = own.length === 0 ? `历史讲错记录（${errors.length} 条）` : `另有 ${count} 条核查记录`;
   return (
     <Disclosure summary={summary} className="mt-8">
       <ul data-geo-elsewhere="" className="flex flex-col divide-y divide-faint">
@@ -481,12 +494,12 @@ function Elsewhere({
         ))}
         {errors.map((error) => {
           const where = error.firstSnapshotId && error.firstSnapshotId !== current ? error.firstSnapshotId : error.snapshotId && error.snapshotId !== current ? error.snapshotId : null;
-          const detail = [monthDay(error.createdAt), GEO_ERROR_STATUS_WORDS[error.status]].filter(Boolean).join(" · ");
+          const detail = [monthDay(error.createdAt), (error.judgmentState === "withdrawn" ? "原判定已撤回" : GEO_ERROR_STATUS_WORDS[error.status])].filter(Boolean).join(" · ");
           return (
             <li key={error.id} className="flex flex-wrap items-baseline gap-x-2 py-2 text-ui text-text-2">
               <span className="min-w-0">{`“${error.statement}”`}</span>
               {detail && <span className="text-caption text-text-3">{detail}</span>}
-              {where && <Link to={answerPath(geoId, where)} replace className="text-caption text-link hover:underline">看那次回答</Link>}
+              {where && <Link to={path(answerPath(geoId, where))} replace className="text-caption text-link hover:underline">看那次回答</Link>}
             </li>
           );
         })}

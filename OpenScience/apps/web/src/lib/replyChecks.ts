@@ -54,6 +54,7 @@ export async function listReplyChecks(projectId: string, sessionId: string): Pro
 }
 
 export interface FrameReplyCheckOptions {
+  readChecks?: () => Promise<ReplyCheck[] | null>;
   projectId: string;
   /** The root session of the conversation on screen; null while none is open. */
   sessionId: string | null;
@@ -64,7 +65,7 @@ export interface FrameReplyCheckOptions {
 }
 
 /** Keeps the frame's reply checks current for the conversation on screen. */
-export function useFrameReplyChecks({ projectId, sessionId, enabled, post, pollMs = 10_000 }: FrameReplyCheckOptions): void {
+export function useFrameReplyChecks({ projectId, sessionId, enabled, post, readChecks, pollMs = 10_000 }: FrameReplyCheckOptions): void {
   const poster = useRef(post);
   poster.current = post;
   useEffect(() => {
@@ -74,7 +75,7 @@ export function useFrameReplyChecks({ projectId, sessionId, enabled, post, pollM
     let last = "";
     const read = async () => {
       try {
-        const checks = await listReplyChecks(projectId, sessionId);
+        const checks = await (readChecks ? readChecks() : listReplyChecks(projectId, sessionId));
         if (!active) return;
         if (checks === null) return; // Not enabled here: stop asking.
         const key = JSON.stringify(checks.map((check) => [check.id, check.status, check.verdicts.length, check.cautions.length]));
@@ -90,5 +91,5 @@ export function useFrameReplyChecks({ projectId, sessionId, enabled, post, pollM
       active = false;
       if (timer) clearTimeout(timer);
     };
-  }, [projectId, sessionId, enabled, pollMs]);
+  }, [projectId, sessionId, enabled, pollMs, readChecks]);
 }

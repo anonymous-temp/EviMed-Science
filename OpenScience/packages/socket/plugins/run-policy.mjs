@@ -73,6 +73,7 @@ import {
   isSubagentSession,
   listDirAt,
   onPreStep,
+  parentSessionOf,
   onClaimedPromptAssemble,
   onSessionEvent,
   onSessionStart,
@@ -126,6 +127,7 @@ import {
   stepPolicy,
   submissionVerdict,
   toolPolicy,
+  selectedGeoInputReadAllowed,
   unmetDependencies,
   NATIVE_CHILD_TOOL_DENY,
   CANCELLED_JOB_STOP_WAIT_MS,
@@ -147,6 +149,7 @@ import {
   upsertClaim,
 } from '../src/claimTools.mjs'
 import { validateEvidenceClaim } from '@evimed/domain/clinical-evidence'
+import { attendanceReceiptFor, attendanceReceiptsFileFor, verifyRunContextAuthority } from '@evimed/harness-port/run-context-authority'
 
 /**
  * The research server's quote locator (contract C7), by its base name. Given
@@ -156,6 +159,7 @@ import { validateEvidenceClaim } from '@evimed/domain/clinical-evidence'
 const QUOTE_LOCATOR = 'locate_quote'
 import { concurrentWriteNotice } from '../src/runPolicy.mjs'
 import { sha256Hex, skillBodyDigestAsync } from '../src/digest.mjs'
+import { ChildAttendance } from '../src/childAttendance.mjs'
 import { unreadableSubmission } from '@evimed/domain'
 
 const Schema = await configSchema()
@@ -179,6 +183,9 @@ export const inject = ['tools', 'agents', 'sessions', 'subagents', 'systemPrompt
  * @property {string} [revisionAuthorizeUrl]
  * @property {string} [tokenFile]
  * @property {number} [revisionAuthorizeTimeoutMs]
+ * @property {string} [attendancePublicKey]
+ * @property {string} [attendanceUserId]
+ * @property {string} [attendanceProjectId]
  * @property {boolean} reviewEnabled
  * @property {number} [reviewPollMs]
  * @property {number} [reviewWaitMs]
@@ -220,6 +227,12 @@ export const Config = Schema.object({
     .description('Path to the current workload token used only for the internal revision authorization call.'),
   revisionAuthorizeTimeoutMs: Schema.number().default(3000)
     .description('Bound for the internal revision authorization call.'),
+  attendancePublicKey: Schema.string().default('')
+    .description('Control-plane Ed25519 public verifier for attendance authority; never a signing secret.'),
+  attendanceUserId: Schema.string().default('')
+    .description('The account this runtime belongs to, bound by attendance signatures.'),
+  attendanceProjectId: Schema.string().default('')
+    .description('The project this runtime belongs to, bound by attendance signatures.'),
   // The same switch the review row and the guidance read. A submission runs
   // the review itself now, so this plugin has to know whether the deployment
   // composed one; asking the review plugin is not available to it (a preset row
@@ -380,6 +393,8 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   const state = new Map()
   /** A child may submit only the one parent-plan item that created it. */
   const childOwners = new Map()
+  /** A child keeps the attendance of the trusted parent turn that created it, even if its parent later moves on; released when it settles. */
+  const unattendedChildren = new ChildAttendance()
 
   /** @param {string} sessionId @returns {Record<string, any>} */
   const sessionState = (sessionId) => {
@@ -395,6 +410,11 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         knowledgeEntries: 0,
         contextInjected: false,
         contextRevision: '',
+        /** Set only by a matching protected dispatch index, cleared by a later native user input. */
+        unattended: false,
+        attendanceRevision: '',
+        attendanceIssuedAtMs: 0,
+        pendingAttendance: null,
         contextInjection: null,
         /** The dispatch's context block, read and waiting for the step it
          *  belongs to; see `deliverBrief`. */
@@ -474,6 +494,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   /** @param {string} childSessionId @param {Record<string, any>} entry @param {Record<string, any>} item */
   const bindChildOwner = (childSessionId, entry, item) => {
     if (!childSessionId) return
+    unattendedChildren.bind(childSessionId, entry.unattended === true)
     childOwners.set(childSessionId, {
       parentSessionId: entry.sessionId,
       runId: entry.runId,
@@ -499,6 +520,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   const awaitOwnedSubagent = async (run, childSessionId, sessionId) => {
     const collection = await collectSubagentRun(run)
     childOwners.delete(childSessionId)
+    unattendedChildren.release(childSessionId)
     if (collection.releaseError) diagnostics(sessionId)?.degrade?.(`child session ${childSessionId || '(unnamed)'} not released: ${collection.releaseError}`)
     if (!collection.ok) throw collection.error
     return toSubagentOutcome(run, collection.settled)
@@ -522,6 +544,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     const childSessionId = toSubagentOutcome(run, null).childSessionId
     abort.abort(new Error(`子代理的启动记录没有写成：${errorMessage(error)}`))
     childOwners.delete(childSessionId)
+    unattendedChildren.release(childSessionId)
     void awaitOwnedSubagent(run, childSessionId, sessionId).catch((failure) => {
       diagnostics(sessionId)?.degrade?.(`stopped child session ${childSessionId || '(unnamed)'} ended in a fault: ${errorMessage(failure)}`)
     })
@@ -746,33 +769,85 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     const entry = sessionState(String(agent.session.id ?? ''))
     entry.assembled = true
     let changed = false
+    if (entry.nativeRouteNeedsReset || claimed.turn > 0 && entry.nativeRouteTurn !== claimed.turn) {
+      entry.nativeRouteNeedsReset = false
+      entry.nativeRouteTurn = claimed.turn
+      if (entry.nativeGeoContextRef) {
+        entry.nativeGeoContextRef = null
+        entry.nativeGeoAnalysisRead = null
+        entry.nativeCapability = undefined
+        entry.inlineCapabilities.clear()
+        changed = applyRootNarrowing(agent, [])
+      }
+    }
     try {
       const revision = entry.contextRevision
       await loadBrief(ctx, agent, sessionState, config)
+      // The session's one receipts file, read once. A receipt restricts by its request id alone; it lifts a restriction only when it
+      // also signs the exact text the kernel claimed (`inputDigest`): a request id used again with other words proves nobody.
+      const receiptsFile = claimed.inputs.length ? parseJson((await readFileAt(ctx, entry.cwd, attendanceReceiptsFileFor(entry.sessionId))) ?? undefined) : null
+      const receipts = await Promise.all(claimed.inputs.map(async input => {
+        const authority = verifyRunContextAuthority(attendanceReceiptFor(receiptsFile, input.requestId), {
+          publicKey: config.attendancePublicKey ?? '', userId: config.attendanceUserId ?? '',
+          projectId: config.attendanceProjectId ?? '', sessionId: entry.sessionId,
+        })
+        if (authority?.contextRevision !== input.requestId) return null
+        return { ...authority, textMatches: authority.inputDigest !== null && authority.inputDigest === await sha256Hex(input.text) }
+      }))
+      const receiptUnattended = receipts.some(authority => authority?.unattended === true)
+      const receiptsAttended = receipts.length > 0 && receipts.every(authority => authority?.unattended === false && authority.textMatches)
+      const pending = entry.pendingAttendance
+      if (pending && pending.issuedAtMs > entry.attendanceIssuedAtMs
+        && claimed.inputs.some(input => input.requestId === pending.contextRevision)) {
+        adoptAttendance(entry, pending)
+      }
+      // A valid index — older, or this very request's — proves its own origin, not the words the kernel now claims: without a
+      // receipt that signs them, the claimed input is unattended until its native route proves a person below.
+      // Hold the narrow guard before awaiting native-route proof, including when that lookup fails or is unavailable.
+      const authorityEnabled = Boolean(config.attendancePublicKey && config.attendanceUserId && config.attendanceProjectId)
+      if (receiptUnattended) entry.unattended = true
+      else if (receiptsAttended) entry.unattended = false
+      else if (authorityEnabled && claimed.inputs.length) entry.unattended = true
       if (revision !== entry.contextRevision && entry.routedCapability) {
         entry.nativeManagedDispatch = true
         entry.inlineCapabilities.clear()
         changed = applyRootNarrowing(agent, [])
       }
-      if (claimed.inputs.length) {
+      if (claimed.inputs.length && !entry.nativeGeoContextRef) {
         const resolve = ctx.get('evimedNativeRoute')
         if (typeof resolve === 'function') {
           const inputs = await Promise.all(claimed.inputs.map(async (input) => ({ requestId: input.requestId, textDigest: await sha256Hex(input.text) })))
           const contexts = await resolve(entry.sessionId, inputs)
-          if (claimed.signal?.aborted) return false
+          if (claimed.signal?.aborted) return changed
           const matching = contexts.filter((/** @type {any} */ item) => inputs.some(input => input.requestId === item?.requestId && input.textDigest === item?.textDigest)
             && /^[a-f0-9]{64}$/.test(item?.digest ?? '') && typeof item?.route?.effectiveAgentId === 'string')
-          const ids = [...new Set(matching.map((/** @type {any} */ item) => item.route.effectiveAgentId))]
-          if (ids.length === 1) {
-            const manifest = inlineManifest(entry, ids[0])
+          // Only the native UI proxy creates these exact request+text snapshots in the control plane. Scheduled
+          // dispatches never do, so a matching snapshot proves a person is attending this newly claimed input.
+          if (!receiptUnattended && inputs.every(input => matching.some((/** @type {any} */ item) => item.requestId === input.requestId))) entry.unattended = false
+          // Adoption uses the initiating input, never a union of queued requests or a later matching route.
+          const selected = matching.find((/** @type {any} */ item) => item.requestId === inputs[0]?.requestId && item.textDigest === inputs[0]?.textDigest)
+          const capabilityId = selected?.route.effectiveAgentId
+          if (capabilityId) {
+            const manifest = inlineManifest(entry, capabilityId)
             // An ordinary route is also authoritative: it removes a former
             // capability's tools. Unknown/internal ids never authorize tools.
-            if (ids[0] === 'open-domain-answer' || (manifest && manifest.visibility !== 'internal')) {
-              entry.nativeCapability = ids[0] === 'open-domain-answer' ? '' : ids[0]
+            if (capabilityId === 'open-domain-answer' || (manifest && manifest.visibility !== 'internal')) {
+              entry.nativeCapability = capabilityId === 'open-domain-answer' ? '' : capabilityId
               entry.nativeManagedDispatch = Boolean(entry.routedCapability && (revision !== entry.contextRevision
                 || inputs.some(input => input.requestId === entry.contextRevision)))
               entry.inlineCapabilities.clear()
               changed = applyRootNarrowing(agent, []) || changed
+              entry.nativeGeoContextRef = /^gpc_[a-f0-9]{64}$/.test(selected.route.geoContextRef ?? '') ? selected.route.geoContextRef : null
+              entry.nativeGeoAnalysisRead = null
+              const generalized = selected.route.geoInputRead
+              const legacy = selected.route.geoAnalysisRead
+              const read = generalized ?? (legacy && typeof legacy === 'object' && Object.keys(legacy).length === 1 ? { referenceId: legacy.referenceId, what: 'analysis' } : null)
+              if (!entry.nativeManagedDispatch && capabilityId === 'open-domain-answer' && entry.nativeGeoContextRef
+                && read && typeof read === 'object' && Object.keys(read).length === 2 && ['analysis', 'signal'].includes(read.what)
+                && read.referenceId === entry.nativeGeoContextRef && (!generalized || !legacy)) {
+                entry.nativeGeoAnalysisRead = { referenceId: read.referenceId, what: read.what }
+                changed = applyRootNarrowing(agent, [`${MCP_TOOL_PREFIX}geo_read`]) || changed
+              }
             }
           }
         }
@@ -959,7 +1034,11 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   ctx.effect(() => onSessionStart(ctx, (agent) => {
     // A delegated child's own persona prefix and tool mask, or — for a child the kernel's `subagent` started — the
     // orchestration tools it may not use (`NATIVE_CHILD_TOOL_DENY`).
-    if (isSubagentSession(agent)) installChildComposition(agent, { deny: NATIVE_CHILD_TOOL_DENY })
+    if (isSubagentSession(agent)) {
+      const parent = parentSessionOf(agent)
+      unattendedChildren.inherit(String(agent.session.id ?? ''), parent, (id) => state.get(id)?.unattended === true)
+      installChildComposition(agent, { deny: NATIVE_CHILD_TOOL_DENY })
+    }
     narrowRootTools(agent)
     void loadBrief(ctx, agent, sessionState, config)
   }))
@@ -1086,6 +1165,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   ))
 
   ctx.effect(() => onSessionEvent(ctx, (session, event) => {
+    if (!session.subagent && ['turn/start', 'turn/end'].includes(event.type)) sessionState(session.sessionId).nativeRouteNeedsReset = true
     if (event.type !== 'assistant/message') return
     // Child work is represented by its subagent receipt and evidence rows.
     // Writing a child entry under the parent's runId would replace the root
@@ -1142,6 +1222,8 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     nativeChildOwners.set(childId, entry)
   }
   ctx.effect(() => onSubagentSettled(ctx, (childId) => {
+    // A settled child runs no further step: what it inherited goes with it.
+    unattendedChildren.release(childId)
     const entry = nativeChildOwners.get(childId)
     if (!entry) {
       // A delegation's child (collected by its own tool) or one whose call has not been observed yet.
@@ -1205,6 +1287,10 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   // ---- policy: path guard, budget, attempt ceiling ------------------------
   ctx.effect(() => onToolPolicy(ctx, (call) => {
     const { entry } = ownedSessionState(call.sessionId)
+    if (call.sessionId === entry.sessionId && entry.nativeGeoAnalysisRead && !entry.nativeManagedDispatch && !entry.nativeCapability
+      && call.name === `${MCP_TOOL_PREFIX}geo_read` && !selectedGeoInputReadAllowed(call.args, entry.nativeGeoAnalysisRead)) {
+      return { allow: false, code: 'geo_read_filter_invalid', reason: '请读取本次已选择的内容，使用绑定的 planContextRef 和分页参数。' }
+    }
     let writers = writersByRun.get(entry.runId)
     if (!writers) {
       writers = new Map()
@@ -1230,6 +1316,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     // and a child it started that has not settled. Counted against the run's total once, when the call is admitted.
     entry.nativeChildCalls ??= new Set()
     const decision = toolPolicy(call, {
+      unattended: unattendedChildren.get(call.sessionId) ?? entry.unattended === true,
       budget: entry.budget,
       limits: entry.limits,
       submitAttempts: entry.attempts.get(String(call.args?.deliverableId ?? '')) ?? 0,
@@ -3240,6 +3327,16 @@ async function loadBriefRevision(ctx, agent, entry, config) {
   if (contextRevision && indexedRunId && indexedRunId !== entry.runId) resetRunState(entry, indexedRunId)
   entry.contextInjected = true
   entry.contextRevision = contextRevision
+  const attendance = index?.protocol === RUN_CONTEXT_PROTOCOL ? verifyRunContextAuthority(index, {
+    publicKey: config.attendancePublicKey ?? '', userId: config.attendanceUserId ?? '',
+    projectId: config.attendanceProjectId ?? '', sessionId,
+  }) : null
+  // Workspace bytes can be replaced, including by Python os.replace. A forged revision or a replayed older attended
+  // dispatch never removes a trusted unattended restriction, even while the ordinary run context moves forward.
+  if (attendance && attendance.issuedAtMs > entry.attendanceIssuedAtMs) {
+    if (attendance.unattended) adoptAttendance(entry, attendance)
+    else entry.pendingAttendance = attendance
+  }
   // A native workflow may already have started before a later dispatch binds
   // context. A revision-bearing index is control-plane authority for the new
   // run; a legacy index keeps the native workflow's established identity.
@@ -3298,6 +3395,15 @@ async function loadBriefRevision(ctx, agent, entry, config) {
   entry.pendingContext = parts.length ? parts.join('\n\n') : null
 }
 
+/** A newly signed attended context is adopted only once its request is actually claimed.
+ * @param {Record<string,any>} entry @param {NonNullable<ReturnType<typeof verifyRunContextAuthority>>} attendance */
+function adoptAttendance(entry, attendance) {
+  entry.unattended = attendance.unattended
+  entry.attendanceRevision = attendance.contextRevision
+  entry.attendanceIssuedAtMs = attendance.issuedAtMs
+  entry.pendingAttendance = null
+}
+
 /** Reset only state owned by one ledger run; the session and in-flight
  * injection lock remain valid across follow-up turns.
  * @param {Record<string, any>} entry @param {string} runId
@@ -3333,6 +3439,8 @@ function resetRunState(entry, runId) {
   entry.wakeSuppressed = false
   entry.completed = false
   entry.inlineCapabilities = new Set()
+  entry.nativeGeoContextRef = null
+  entry.nativeGeoAnalysisRead = null
   entry.frozen = false
 }
 

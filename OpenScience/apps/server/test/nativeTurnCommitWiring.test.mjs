@@ -44,7 +44,8 @@ async function finishOneRun({ automated = false } = {}) {
     await done;
     // The hook arms the commit without waiting for it; its one settings read is a few turns of the event loop.
     for (const started = Date.now(); !app.nativeTurnCommit.armed.size && Date.now() - started < 1_000;) await new Promise((resolve) => setTimeout(resolve, 20));
-    const armed = [...app.nativeTurnCommit.armed.keys()].some((key) => key.endsWith(`\u0000${SESSION}`));
+    // Armed entries are keyed by account, memory namespace and conversation (`NativeTurnCommit.#arm`); the entry names its conversation.
+    const armed = [...app.nativeTurnCommit.armed.values()].some((entry) => entry.sessionId === SESSION);
     return { armed };
   } finally {
     app.nativeTurnCommit.close();

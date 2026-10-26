@@ -587,7 +587,7 @@ export class FrontierLeads {
     const yesterday = frontierDayWindow(new Date(today.start.getTime() - HOUR), this.timeZone);
     const rows = (await this.database.query(`SELECT i.genre, i.platform, i.channel, i.source_type, i.evidence_type, i.flags, i.safety_alert, i.lane
       FROM evimed_frontier.items i WHERE i.state = 'published' AND i.selected AND NOT i.safety_alert AND i.selected_rule = ANY($3::text[])
-        AND i.timeline_at >= $1 AND i.timeline_at < $2`, [yesterday.start, yesterday.end, [...FRONTIER_MIX_COUNTED_RULES]])).rows;
+        AND i.visible_at >= $1 AND i.visible_at < $2`, [yesterday.start, yesterday.end, [...FRONTIER_MIX_COUNTED_RULES]])).rows;
     /** @type {Record<string, number>} */
     const counts = {};
     for (const row of rows) {

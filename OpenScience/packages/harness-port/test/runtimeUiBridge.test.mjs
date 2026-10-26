@@ -722,3 +722,15 @@ test('legacy draft restoration never overwrites existing or unreadable native dr
     f.ctx.dispose();
   }
 });
+
+test('whole-file conversation context leaves the existing native draft intact', async () => {
+  const f = fixture();
+  /** @type {any[]} */ const stages = [];
+  /** @type {any} */ (f.target).__EVIMED_RESULT_REVISION__ = { clear() {}, stage: (/** @type {any} */ value) => stages.push(value) };
+  apply(f.ctx, {}, f.target); await settle();
+  const referenceId = `rr_${'c'.repeat(64)}`;
+  f.navigate({ intent: { kind: 'create', sessionId: 'session-new', resultRevision: { referenceId } } }); await settle();
+  assert.deepEqual(stages, [{ sessionId: 'session-new', referenceId, draft: '' }]);
+  assert.equal(f.calls.some(call => call[0] === 'draft'), false);
+  f.ctx.dispose();
+});

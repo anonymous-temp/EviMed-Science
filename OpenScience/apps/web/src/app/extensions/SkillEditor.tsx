@@ -5,7 +5,7 @@ import { Switch } from "@/components/ui/Switch";
 import type { SkillWrite } from "@/lib/skillLibraryClient";
 
 /** What the two prose fields are for, said under each: they are the skill's real shape, not a guess (the purpose is what the model reads to decide whether to load the skill, the text is what it follows once it has). */
-const PURPOSE_HINT = "写清什么时候该用它。对话里 EviMed 靠这一句决定要不要用到这个技能。";
+const PURPOSE_HINT = "写清什么时候该用它。对话里 EviMed Science 靠这一句决定要不要用到这个技能。";
 const INSTRUCTIONS_HINT = "写清怎么做：需要什么输入、分几步、产出什么、哪些事不能做。";
 const TITLE_EXAMPLE = "例如：随访资料整理";
 const PURPOSE_EXAMPLE = "例如：我给出一批随访记录，需要按时间整理成可核对的表格时使用。";
@@ -66,7 +66,7 @@ export function SkillEditor({ initial, busy, onSave, onCancel, create }: {
         onChange={event => change({ instructions: event.target.value })} />
       <p id={instructionsHint} className="mt-2 text-caption text-text-3">{INSTRUCTIONS_HINT}</p>
     </div>
-    {create && <Switch showLabel label={`保存后在“${create.projectName}”里使用`} checked={useInProject} disabled={busy} onChange={setUseInProject} />}
+    {create && <div className="rounded-card bg-surface-1 p-4"><Switch showLabel label={`保存后在“${create.projectName}”里使用`} checked={useInProject} disabled={busy} onChange={setUseInProject} /></div>}
     <div className="flex gap-2"><Button type="submit" loading={busy}>保存</Button><Button type="button" variant="text" disabled={busy} onClick={onCancel}>取消</Button></div>
   </form>;
 }

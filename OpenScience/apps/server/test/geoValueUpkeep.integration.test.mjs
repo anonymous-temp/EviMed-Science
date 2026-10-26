@@ -6,7 +6,7 @@ import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { GeoService } from "../src/geoService.mjs";
 import { GeoStore } from "../src/geoStore.mjs";
-import { GEO_VALUE_REFERENCES, createGeoValueUpkeep, pruneGeoValueProfiles } from "../src/geoValueUpkeep.mjs";
+import { GEO_VALUE_REFERENCES, GEO_VALUE_PRODUCT_REFERENCES, createGeoValueUpkeep, pruneGeoValueProfiles } from "../src/geoValueUpkeep.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL;
@@ -63,6 +63,10 @@ test("a project keeps its latest twenty versions, the first of each calendar mon
   await store.query("INSERT INTO evimed_geo.sources(id,user_id,geo_project_id,domain,value_context) VALUES($1,'alice',$2,'jksb.com.cn',$3::jsonb)", [`gsrc_${randomUUID()}`, project.id, JSON.stringify({ basisVersion: 4 })]);
   assert.deepEqual(GEO_VALUE_REFERENCES.map((reference) => reference.table).sort(), ["articles", "facts", "question_groups", "rounds", "schedule_marks", "sources"],
     "a reference added to the table needs a row in this test");
+  assert.deepEqual(GEO_VALUE_PRODUCT_REFERENCES.map(({ kind, recordType, discriminator, mode, value }) => ({ kind, recordType, discriminator, mode, value })), [
+    { kind: "geo-signal", recordType: "geo-signal", discriminator: "kind", mode: "source_changed", value: "d.payload #> '{basis,profileVersionAtDetection}'" },
+    { kind: "geo-plan-context", recordType: "geo-plan-context", discriminator: "mode", mode: "signal", value: "d.payload #> '{basis,event,profileVersionAtDetection}'" },
+  ], "product signal heads have their own schema-aware reference inventory and dedicated retention/read tests");
 
   const pruned = await pruneGeoValueProfiles(store, project.id, RULES);
   // Not kept: neither among the latest 22–41, nor a month's first (1, 9, 19), nor pointed to (2–7, and 12 by the research result).

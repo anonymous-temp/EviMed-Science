@@ -1,20 +1,20 @@
+import { PlanTab } from "./PlanTab";
+import { useGeoDestinationPath } from "../useGeoPath";
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { getGeoCluster, getGeoSources, type GeoAction, type GeoClusterView, type GeoSourceRow, type GeoProject } from "@/lib/geoClient";
-import { BarList } from "@/components/charts/BarList";
-import { concentrationFacts, concentrationTitle, SourceConcentration } from "@/components/charts/SourceConcentration";
+import { getGeoCluster, type GeoAction, type GeoClusterView, type GeoSourceRow, type GeoProject } from "@/lib/geoClient";
+import { GeoAnalysisWorkbench } from "../GeoAnalysisWorkbench";
 import { Button } from "@/components/ui/Button";
-import { ChartCard } from "@/components/ui/ChartCard";
-import { ChartGrid } from "@/components/ui/ChartGrid";
 import { Disclosure } from "@/components/ui/Disclosure";
 import type { FilterOption } from "@/components/ui/FilterChips";
 import { List, ListHeader, ListRow, type ListColumn } from "@/components/ui/ListRow";
 import { Note } from "@/components/ui/Note";
 import { Tag } from "@/components/ui/Tag";
-import { useGeoToolbar } from "../geoFrame";
-import { useSharedGeoLoad } from "../geoProjectData";
+import { useGeoReadScope, useGeoToolbar } from "../geoFrame";
+import { geoReadScopeQuery } from "@/lib/geoReadScope";
+import { useGeoSources, useScopedGeoLoad } from "../geoProjectData";
 import { engineName, GEO_SOURCE_LAYER_WORDS, zh } from "../geoText";
-import { GEO_VIEW_PARAM, geoDestinationPath } from "../geoTabs";
+import { GEO_VIEW_PARAM } from "../geoTabs";
 import { clusterName } from "../spine/clusterModel";
 import { ClusterLink } from "../spine/ClusterLink";
 import { ClusterDrawerHost } from "../spine/ClusterDrawerHost";
@@ -28,12 +28,11 @@ import {
   isPlaceable,
   kindCounts,
   kindOf,
-  OTHER_KIND,
   type Candidate,
 } from "../spine/sourceModel";
-import { useGeoActions, useGeoClusters } from "../spine/spineData";
+import { useGeoActions, useGeoClusters, useGeoQuestionCatalog } from "../spine/spineData";
 import { sourceKindWord, yuan } from "./geoTabText";
-import { StepPending, TabError, TabSkeleton, useGeoLoad } from "./geoTabKit";
+import { StepPending, TabError, TabSkeleton } from "./geoTabKit";
 import { GeoSourceDrawer } from "./GeoSourceDrawer";
 import { ShowMore, useShowMore } from "./showMore";
 
@@ -89,20 +88,25 @@ const KIND_PARAM = "kind";
  * and the open site is `?source=<domain>`, so a link from a group or a wrong claim lands on it.
  */
 export function SourcesTab({ geoId, project }: { geoId: string; project: GeoProject }) {
-  const { state, reload } = useGeoLoad(`sources:${geoId}`, () => getGeoSources(geoId));
+  const { state, reload } = useGeoSources(geoId);
+  const [planParams] = useSearchParams();
   const actions = useGeoActions(geoId);
   const clusters = useGeoClusters(geoId);
+  const catalog = useGeoQuestionCatalog(geoId);
   if (state.kind === "loading") return <TabSkeleton />;
   if (state.kind === "error") return <TabError message={state.message} onRetry={reload} />;
   const data = state.data;
   const sources = (Array.isArray(data?.sources) ? data.sources : []).filter((source) => source && source.domain);
-  if (sources.length === 0) return <StepPending geoId={geoId} project={project} step="sources" />;
+  if (sources.length === 0) return <><GeoAnalysisWorkbench geoId={geoId} project={project} initialView="V17" embedded /><StepPending geoId={geoId} project={project} step="sources" /><PlanTab geoId={geoId} project={project} selectionRef={data.selection?.reference} sourceUrl={planParams.get("planUrl")??undefined} /></>;
   const linkless = (Array.isArray(data?.linklessEngines) ? data.linklessEngines : []).filter(Boolean);
   const everyAction = actions.state.kind === "ready" && Array.isArray(actions.state.data?.actions) ? actions.state.data.actions : [];
-  const groups = clusters.state.kind === "ready" && Array.isArray(clusters.state.data?.groups) ? clusters.state.data.groups : [];
+  const groups = [...new Map([
+    ...(catalog.state.kind === "ready" ? catalog.state.data.groups : []),
+    ...(clusters.state.kind === "ready" && Array.isArray(clusters.state.data?.groups) ? clusters.state.data.groups : []),
+  ].map(group => [group.id, group])).values()];
   return (
     <div data-geo-tab="sources" className="flex flex-col gap-6">
-      <SourceList geoId={geoId} project={project} sources={sources} engines={project.engines} actions={everyAction} groups={groups} />
+      <SourceList geoId={geoId} project={project} sources={sources} engines={project.engines} actions={everyAction} groups={groups} selectionRef={data.selection?.reference} />
       {/* An engine whose citations had no link is not missing from the list
           by accident: it is said, not dropped (G8). */}
       {linkless.length > 0 && (
@@ -110,6 +114,7 @@ export function SourcesTab({ geoId, project }: { geoId: string; project: GeoProj
           {zh`${linkless.map(engineName).join("、")}的引用只有标题、没有链接，引用了哪些信源测不出`}
         </p>
       )}
+      <PlanTab geoId={geoId} project={project} selectionRef={data.selection?.reference} sourceUrl={planParams.get("planUrl") ?? undefined} sourceId={planParams.get("planSource") ?? sources.find(source => source.domain === planParams.get("source") || source.id === planParams.get("source"))?.id} />
       <ClusterDrawerHost geoId={geoId} project={project} />
     </div>
   );
@@ -149,6 +154,7 @@ function matchesOnly(source: GeoSourceRow, counts: SourceCounts, only: Only | nu
 
 interface Opened {
   key: string;
+  scopeKey: string;
   /** The engine filter when it was opened: the drawer lists the answers the row counted. */
   engine: string;
   focus: "wrong" | null;
@@ -156,7 +162,7 @@ interface Opened {
 
 /** The domains a group is related to: those its actions send articles to, and the sites cited most in answers to its questions. */
 function useRelatedDomains(geoId: string, cluster: string | null, actions: readonly GeoAction[]): ReadonlySet<string> | null {
-  const detail = useSharedGeoLoad<GeoClusterView | null>(`cluster:${geoId}:${cluster ?? "-"}`, () => (cluster ? getGeoCluster(geoId, cluster) : Promise.resolve(null)));
+  const detail = useScopedGeoLoad<GeoClusterView | null>(`cluster:${geoId}:${cluster ?? "-"}`, scope => (cluster ? scope ? getGeoCluster(geoId, cluster, scope) : getGeoCluster(geoId, cluster) : Promise.resolve(null)));
   return useMemo(() => {
     if (!cluster) return null;
     const domains = domainsOfGroup(actions, cluster);
@@ -172,6 +178,7 @@ function SourceList({
   engines,
   actions,
   groups,
+  selectionRef,
 }: {
   geoId: string;
   project: GeoProject;
@@ -179,7 +186,9 @@ function SourceList({
   engines: string[];
   actions: readonly GeoAction[];
   groups: ReadonlyArray<{ id: string; name: string }>;
+  selectionRef?: string;
 }) {
+  const geoDestinationPath = useGeoDestinationPath();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const change = useGeoSearchChange();
@@ -188,13 +197,18 @@ function SourceList({
   const [kindParam, setKindParam] = useGeoSearchParam(KIND_PARAM);
   const [onlyParam, setOnlyParam] = useGeoSearchParam("only");
   const view: SourcesView = params.get(GEO_VIEW_PARAM) === "placeable" ? "placeable" : "cited";
-  const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<{ key: SortKey; descending: boolean }>({ key: "cited", descending: true });
+  const [queryValue, setQueryValue] = useGeoSearchParam("sourceSearch");
+  const query = queryValue ?? "";
+  const setQuery = (value: string) => setQueryValue(value || null);
+  const sortKey: SortKey = ["cited", "wrong", "mentions"].includes(params.get("sourceSort") ?? "") ? params.get("sourceSort") as SortKey : "cited";
+  const sort = useMemo(() => ({ key: sortKey, descending: params.get("sourceOrder") !== "asc" }), [sortKey, params]);
   const [opened, setOpened] = useState<Opened | null>(null);
+  const scopeKey = geoReadScopeQuery(useGeoReadScope());
+  const currentOpened = opened?.scopeKey === scopeKey ? opened : null;
   const addressed = params.get(GEO_SOURCE_PARAM);
 
   const cited = useMemo(() => new Set(sources.flatMap((source) => Object.keys(source.cited ?? {}))), [sources]);
-  const listed = [...engines.filter((key) => cited.has(key)), ...[...cited].filter((key) => !engines.includes(key))];
+  const listed = [...engines, ...[...cited].filter((key) => !engines.includes(key))];
   const options: FilterOption<string>[] = [
     { value: "all", label: "全部引擎" },
     ...listed.map((key) => ({ value: key, label: engineName(key) })),
@@ -217,7 +231,6 @@ function SourceList({
     return kindCounts(forEngine.map((entry) => entry.source), (source) => citedBy.get(source) ?? 0);
   }, [forEngine]);
   const kind = kindParam && kinds.some((entry) => entry.key === kindParam || entry.label === kindParam) ? kindParam : null;
-  const concentration = useMemo(() => concentrationFacts(forEngine.map((entry) => entry.counts.cited)), [forEngine]);
 
   const rows = useMemo(() => forEngine
     .filter(({ source, counts }) => matchesOnly(source, counts, only))
@@ -231,10 +244,10 @@ function SourceList({
     .filter((candidate) => !needle || `${candidate.name} ${candidate.domain ?? ""}`.toLowerCase().includes(needle)), [candidates, cluster, needle]);
   const { visible, remaining, more } = useShowMore(rows, { first: SOURCES_SHOWN, step: SOURCES_SHOWN, resetKey: `${view}|${current}|${only}|${kind}|${cluster}|${needle}|${sort.key}|${sort.descending}` });
 
-  const activeKey = opened?.key ?? addressed;
+  const activeKey = currentOpened?.key ?? addressed;
   const drawerRow = activeKey ? sources.find((source) => source.domain === activeKey || (source.id || source.domain) === activeKey) ?? null : null;
   const openSource = (source: GeoSourceRow, engine: string, focus: "wrong" | null) => {
-    setOpened({ key: source.id || source.domain, engine, focus });
+    setOpened({ key: source.id || source.domain, engine, focus, scopeKey });
     setParams((previous) => {
       const copy = new URLSearchParams(previous);
       copy.set(GEO_SOURCE_PARAM, source.domain);
@@ -250,7 +263,7 @@ function SourceList({
     }, { replace: true });
   };
   // Pressing the sorted column again turns it over; another column starts from the most.
-  const sortBy = (key: string) => setSort((now) => (now.key === key ? { key: now.key, descending: !now.descending } : { key: key as SortKey, descending: true }));
+  const sortBy = (key: string) => change({ sourceSort: key, sourceOrder: sort.key === key && sort.descending ? "asc" : "desc" });
   const narrowed = (view === "cited" && (current !== "all" || only !== null || kind !== null)) || cluster !== null;
   const summary = view === "cited"
     ? `${needle ? "匹配 " : ""}${rows.length.toLocaleString("zh-CN")} 个信源`
@@ -289,9 +302,9 @@ function SourceList({
     <section aria-label="信源" className="flex flex-col gap-6">
       {view === "cited" && (
         <>
-          <SourcePictures kinds={kinds} selected={kind} onSelect={setKindParam} facts={concentration} />
+          <GeoAnalysisWorkbench geoId={geoId} project={project} initialView="V17" embedded />
           {rows.length === 0 ? (
-            <Note action={narrowed || needle ? <Button variant="secondary" size="sm" onClick={() => { change({ [GEO_ENGINE_PARAM]: null, only: null, [KIND_PARAM]: null, [GEO_CLUSTER_FILTER_PARAM]: null }); setQuery(""); }}>清除筛选</Button> : undefined}>
+            <Note action={narrowed || needle ? <Button variant="secondary" size="sm" onClick={() => change({ [GEO_ENGINE_PARAM]: null, only: null, [KIND_PARAM]: null, [GEO_CLUSTER_FILTER_PARAM]: null, sourceSearch: null })}>清除筛选</Button> : undefined}>
               {needle ? `没有包含“${query.trim()}”的信源。` : "没有符合的信源。"}
             </Note>
           ) : (
@@ -346,61 +359,19 @@ function SourceList({
           onActions={() => navigate(geoDestinationPath(geoId, { tab: "actions" }))}
         />
       )}
-      {drawerRow && (
+      {activeKey && (
         <GeoSourceDrawer
           geoId={geoId}
           project={project}
-          source={drawerRow}
-          engine={opened?.engine ?? "all"}
-          focus={opened?.focus ?? null}
+          source={drawerRow ?? { id: activeKey }}
+          engine={currentOpened?.engine ?? "all"}
+          selectionRef={selectionRef}
+          focus={currentOpened?.focus ?? null}
           served={served}
           onClose={closeSource}
         />
       )}
     </section>
-  );
-}
-
-/** The two pictures above the list: the kinds of site (a bar is the list's filter) and the citations' concentration. */
-function SourcePictures({
-  kinds,
-  selected,
-  onSelect,
-  facts,
-}: {
-  kinds: ReturnType<typeof kindCounts>;
-  selected: string | null;
-  onSelect: (kind: string | null) => void;
-  facts: ReturnType<typeof concentrationFacts>;
-}) {
-  if (facts.sites === 0) return null;
-  // The title is about the kinds the platform could name: 「其他」 is the sites it has no kind for, and "other is cited most" says
-  // nothing. A page where no site has a kind draws no kinds card, and the concentration has the row.
-  const named = kinds.filter((entry) => entry.key !== OTHER_KIND && entry.label !== "其他");
-  const rows = kinds.slice(0, 8).map((entry) => ({ key: entry.key, label: entry.label, value: entry.citations, unit: "次", note: `${entry.sites.toLocaleString("zh-CN")} 个站` }));
-  const concentration = {
-    key: "concentration",
-    span: (named.length === 0 ? 2 : 1) as 1 | 2,
-    node: (
-      <ChartCard title={concentrationTitle(facts)}>
-        <SourceConcentration facts={facts} />
-      </ChartCard>
-    ),
-  };
-  return (
-    <ChartGrid
-      rows={[named.length === 0 ? [concentration] : [
-        {
-          key: "kinds",
-          node: (
-            <ChartCard title={zh`${named[0].label}是被引用最多的一类，${named[0].citations.toLocaleString("zh-CN")} 次`}>
-              <BarList label="各类站点被引用的次数" rows={rows} selected={selected} onSelect={onSelect} tone="rival" />
-            </ChartCard>
-          ),
-        },
-        concentration,
-      ]]}
-    />
   );
 }
 

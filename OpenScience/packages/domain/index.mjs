@@ -25,6 +25,7 @@
  */
 
 export const DOMAIN_VERSION = '0.1.0'
+export { GEO_SIGNAL_KINDS, GEO_SIGNAL_STATES, GEO_SIGNAL_DISPOSITIONS, GEO_SIGNAL_STEPS, GEO_SIGNAL_STATE_LABELS_ZH, geoSignalLifecycle, geoSignalHref } from './src/geoSignals.mjs'
 export { availableRunActions, availableRunStepActions, runIsStalled } from './src/runActions.mjs'
 export { ARTIFACT_ROLES, artifactPresentation, compareArtifacts } from './src/artifactPresentation.mjs'
 export { frontierEventEvidenceCounts } from './src/frontierEventEvidence.mjs'
@@ -1653,6 +1654,8 @@ export {
   GEO_SOURCE_KIND_LABELS_ZH,
   GEO_SOURCE_LAYERS,
   GEO_SOURCE_LAYER_LABELS_ZH,
+  GEO_SOURCE_RELATIONSHIPS,
+  GEO_SOURCE_RELATIONSHIP_LABELS_ZH,
   GEO_STATEMENT_VERDICTS,
   GEO_STEPS,
   GEO_STEP_ACTION_LABELS_ZH,
@@ -1672,7 +1675,7 @@ export {
   geoVisibleQuestionOfReason,
   isGeoValue,
 } from './src/geoVocabulary.mjs'
-// geoMetrics — 20 exports: 「循证 GEO」's metric table (the owner's
+// geoMetrics — 「循证 GEO」's metric table (the owner's
 // geo-skills metrics.yaml as `geo/metrics.json`, with its constants and their
 // provenance), the probe sanity markers (`geo/sanity.json`), and the pure
 // computation — per-scope cells with Wilson intervals and the no-fake-number
@@ -1683,6 +1686,9 @@ export {
 // vocabularies are geoVocabulary's.
 export {
   GEO_METRICS,
+  GEO_MEASUREMENT_METHOD_VERSION,
+  geoAnswerAccuracy,
+  geoJudgementCoverage,
   GEO_METRIC_IDS,
   GEO_METRIC_POOL_IDS,
   GEO_METRIC_SCOPES,
@@ -1691,6 +1697,7 @@ export {
   computeGeoMetrics,
   computeGvi,
   geoCellRows,
+  geoMetricMembers,
   geoCitationHost,
   geoConstant,
   geoMetricDefinition,
@@ -2164,7 +2171,7 @@ export {
   vcrStudyPackageFindings,
 } from './src/vcrContracts.mjs'
 
-export { DOCUMENT_EXPORT_VERSION, DOCUMENT_RENDERER_VERSION, DOCUMENT_EXPORT_FORMATS, DOCUMENT_EXPORT_MIME, DOCUMENT_EXPORT_ERROR_MESSAGES, documentExportFormats, documentExportDigest } from "./src/documentExport.mjs";
+export { DOCUMENT_EXPORT_VERSION, DOCUMENT_RENDERER_VERSION, DOCUMENT_REPORT_EXPORT_FORMATS, DOCUMENT_EXPORT_FORMATS, DOCUMENT_EXPORT_MIME, DOCUMENT_EXPORT_ERROR_MESSAGES, documentExportFormats, documentExportDigest } from "./src/documentExport.mjs";
 
 // numberBinding — the one mechanism by which a number in a report is resolved from a result, not typed (plan 2026-10-02 §11.3 N06;
 // lifted out of the 「虚拟临床研究」 renderer, which keeps its own issue codes and sentences).
@@ -2572,3 +2579,6 @@ export { forecastRandom, empiricalCrps, discrimination, forecastMetrics, metricI
 export { evaluateTrialBenchmark } from './src/vcrTrialBenchmark.mjs'
 export { VCR_OBJECT_REFERENCE_KINDS, vcrObjectReference } from './src/vcrObjectReference.mjs';
 export { VCR_PREDICTION_LIMIT_LABELS_ZH, vcrPredictionLimit } from './src/vcrPredictionLimits.mjs';
+export { previewGeoQuestionImport, validateGeoMeasurementContract } from './src/geoQuestionImport.mjs'
+
+export { geoClaimApplicability, geoClaimAssessmentIdentity, geoStatementAssessmentIdentity, geoClaimForStatement, geoEnrichStatementIdentity } from './src/geoClaimAssessment.mjs'

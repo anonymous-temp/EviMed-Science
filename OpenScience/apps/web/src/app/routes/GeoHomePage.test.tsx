@@ -24,7 +24,7 @@ vi.mock("@/lib/geoClient", async (importOriginal) => ({
   patchGeoProject: client.patchGeoProject,
 }));
 
-// Opening a GEO conversation switches the shell's project; that has its own
+// Opening a GEO conversation resolves the exact module scope; that has its own
 // test (useOpenGeoConversation.test.tsx). Here it is the call it makes.
 vi.mock("@/components/geo/useOpenGeoConversation", () => ({ useOpenGeoConversation: () => client.open }));
 
@@ -182,7 +182,7 @@ describe("循证 GEO home", () => {
     renderHome();
     await screen.findByRole("list", { name: "循证 GEO 项目" });
     await userEvent.click(screen.getByRole("button", { name: "新建项目" }));
-    await waitFor(() => expect(client.open).toHaveBeenCalledWith({ projectId: "p-new", sessionId: "ses_new" }));
+    await waitFor(() => expect(client.open).toHaveBeenCalledWith({ geoId: "geo_new", projectId: "p-new", sessionId: "ses_new" }));
     expect(client.createGeoProject).toHaveBeenCalledWith({});
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
@@ -206,7 +206,7 @@ describe("循证 GEO home", () => {
     renderHome();
     await screen.findByText("还没有循证 GEO 项目");
     await userEvent.click(screen.getByRole("button", { name: "新建项目" }));
-    await waitFor(() => expect(client.open).toHaveBeenCalledWith({ projectId: "p-new", sessionId: "ses_new" }));
+    await waitFor(() => expect(client.open).toHaveBeenCalledWith({ geoId: "geo_new", projectId: "p-new", sessionId: "ses_new" }));
     expect(client.createGeoProject).toHaveBeenCalledWith({});
   });
 

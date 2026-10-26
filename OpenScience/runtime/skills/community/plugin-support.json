@@ -21,8 +21,17 @@
     "evimed-citation-bridge",
     "evimed-compaction",
     "evimed-duplicate-lines",
-    "evimed-cowork-bridge"
+    "evimed-cowork-bridge",
+    "skill-filesystem"
   ],
+  "requiredNativeProviders": {
+    "skill-filesystem": {
+      "module": "@evimed/dsh-socket/plugins/project-skills",
+      "scope": "preset",
+      "required": true,
+      "reason": "The native filesystem registry provider stays mounted for required methods and exact project invocation policy. Individual optional skills are controlled by the immutable project generation; the provider is not an optional engine toggle."
+    }
+  },
   "hostExtensions": [
     {
       "name": "dsh-loopx-plugin",

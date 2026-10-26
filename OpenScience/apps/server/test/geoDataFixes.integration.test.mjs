@@ -88,7 +88,7 @@ test("the fixes: a dry run reports and changes nothing; --apply writes them in o
   const state = async () => ({
     owned: (await q(`SELECT domain FROM evimed_geo.sources WHERE geo_project_id = $1 AND layer = 'owned' ORDER BY domain`, [ID])).map((row) => row.domain),
     product: (await q(`SELECT product, competitors FROM evimed_geo.projects WHERE id = $1`, [ID]))[0],
-    facts: await q(`SELECT snapshot_id, mentions_ours, failure_mode, reparsed_at FROM evimed_geo.facts ORDER BY snapshot_id`),
+    facts: await q(`SELECT snapshot_id, mentions_ours, failure_mode, reparsed_at, judge_extract, checks, statements FROM evimed_geo.facts ORDER BY snapshot_id`),
     errors: await q(`SELECT id, status, jsonb_array_length(materials) AS materials FROM evimed_geo.errors ORDER BY id`),
     collected: (await q(`SELECT collected_at FROM evimed_geo.questions WHERE id = 'q1'`))[0].collected_at,
     strategies: Number((await q(`SELECT count(*) AS n FROM evimed_geo.strategy WHERE geo_project_id = $1`, [ID]))[0].n),
@@ -103,7 +103,7 @@ test("the fixes: a dry run reports and changes nothing; --apply writes them in o
     "an unstated rival counted as multi-source already; saying so is still recorded");
   assert.deepEqual([dry.strategy.fields.sort(), dry.strategy.expectations, dry.strategy.sourcesWritten, dry.strategy.sourcesWithConditions, dry.strategy.refused],
     [["battlefield", "expectations", "gaps", "layout"], 1, 1, 1, []]);
-  assert.deepEqual(dry.materials, { pairs: 1, attached: 1, errors: 1 });
+  assert.deepEqual(dry.materials, { pairs: 1, attached: 1, errors: 1, crossAttached: 0, detached: 0, reopened: 0, unlisted: [] });
   assert.equal(dry.collected, 1);
   assert.equal(dry.recounted, 2);
   assert.equal(dry.remeasured, 1);
@@ -119,8 +119,14 @@ test("the fixes: a dry run reports and changes nothing; --apply writes them in o
   assert.deepEqual(now.owned, ["innoventbio.com"]);
   assert.deepEqual([now.product.product.singleSource, now.product.product.genericAliases], [true, ["玛仕度肽"]]);
   assert.deepEqual(now.product.competitors.map((/** @type {any} */ entry) => [entry.brandName, entry.singleSource]), [["穆峰达", true], ["诺和盈", false]]);
-  assert.deepEqual(now.facts.map((/** @type {any} */ row) => [row.mentions_ours, row.failure_mode]), [[true, "correct"], [true, "correct"]],
-    "玛仕度肽 is one holder's: the answers that named only it mention us");
+  assert.deepEqual(now.facts.map((/** @type {any} */ row) => [row.mentions_ours, row.failure_mode]), [[false, "omitted"], [false, "omitted"]],
+    "single-source generic attribution does not invent a literal brand mention");
+  assert.ok(now.facts.every((/** @type {any} */ row) => row.judge_extract.genericMentions.some((/** @type {any} */ entry) =>
+    entry.ours && entry.productAttributed && entry.matchedNames.includes("玛仕度肽"))), "the generic observations retain their product attribution");
+  assert.ok(now.facts.every((/** @type {any} */ row) => row.checks.judgementCoverage.status === "unknown"),
+    "historical judgments with no coverage metadata never become complete during recount");
+  assert.deepEqual(now.facts.map((/** @type {any} */ row) => row.statements), untouched.facts.map((/** @type {any} */ row) => row.statements),
+    "recount preserves the recorded statement judgments");
   assert.ok(now.facts.every((/** @type {any} */ row) => row.reparsed_at));
   assert.deepEqual(now.errors, [{ id: "e1", status: "acting", materials: 1 }, { id: "e2", status: "open", materials: 0 }]);
   assert.equal(new Date(now.collected).toISOString(), "2026-09-25T09:40:00.000Z");
@@ -153,6 +159,40 @@ test("the re-measure leaves a round that heard no answer unmeasured and removes 
   assert.deepEqual((await fix(true)).emptyRounds, { rounds: 0, cells: 0 }, "nothing left the second time");
 });
 
+test("a several-error batch's corrections are never paired by the batch, and corrections cross-attached before 2026-10-25 are detached by the pairs given", options, async () => {
+  await q(`TRUNCATE ${["metrics", "errors", "facts", "snapshots", "probe_jobs", "rounds", "questions", "question_groups", "question_sets", "claims", "journeys",
+    "sources", "articles", "orders", "strategy", "targets", "schedule_marks", "projects"].map((table) => `evimed_geo.${table}`).join(", ")} CASCADE`);
+  await seed();
+  // A second batch was given three errors and wrote two corrections, each registered without its errorIds (production, 2026-09-25):
+  // one corrects e3, one e4, and none e5. The 09-26 run paired every correction with every error: e3, e4 and e5 each hold both.
+  const material = (/** @type {string} */ id) => ({ kind: "article", articleId: id, path: `deliverables/geo-content-2/articles/${id}.md`, layer: "correction",
+    title: id, runId: "run_c2", at: "2026-09-26T08:00:00.000Z" });
+  for (const id of ["e3", "e4", "e5"]) {
+    await q(`INSERT INTO evimed_geo.errors (id, user_id, geo_project_id, fingerprint, engine, status, materials) VALUES ($1, $2, $3, $1, 'kimi', 'acting', $4::jsonb)`,
+      [id, USER, ID, JSON.stringify([material("art_e3"), material("art_e4")])]);
+  }
+  await q(`INSERT INTO evimed_geo.schedule_marks (geo_project_id, key, user_id, kind, state, run_id, detail)
+    VALUES ($1, 'run:content:2', $2, 'run', 'done', 'run_c2', '{"purpose":"content","errorIds":["e3","e4","e5"]}'::jsonb)`, [ID, USER]);
+  for (const id of ["art_e3", "art_e4"]) {
+    await q(`INSERT INTO evimed_geo.articles (id, user_id, geo_project_id, run_id, path, layer, title, gate, safety, status)
+      VALUES ($1, $2, $3, 'run_c2', $4, 'correction', $1, 'passed', 'clear', 'publishable')`, [id, USER, ID, `deliverables/geo-content-2/articles/${id}.md`]);
+  }
+  const held = async () => (await q(`SELECT id, status, materials FROM evimed_geo.errors WHERE id IN ('e3', 'e4', 'e5') ORDER BY id`))
+    .map((row) => [row.id, row.status, row.materials.map((/** @type {any} */ entry) => entry.articleId)]);
+
+  const reported = await runGeoDataFixes({ database, geoProjectId: ID, apply: true });
+  assert.deepEqual(reported.materials, { pairs: 1, attached: 1, errors: 1, crossAttached: 3, detached: 0, reopened: 0, unlisted: ["e3", "e4", "e5"] },
+    "the one-error batch is paired as before; the three-error batch pairs nothing by itself, and without pairs its cross-attached errors are only reported");
+  assert.deepEqual(await held(), [["e3", "acting", ["art_e3", "art_e4"]], ["e4", "acting", ["art_e3", "art_e4"]], ["e5", "acting", ["art_e3", "art_e4"]]]);
+
+  const pairs = [{ errorId: "e3", articleId: "art_e3" }, { errorId: "e4", articleId: "art_e4" }, { errorId: "e5", articleId: "art_none" }];
+  const fixed = await runGeoDataFixes({ database, geoProjectId: ID, apply: true, correctionPairs: pairs });
+  assert.deepEqual([fixed.materials.crossAttached, fixed.materials.detached, fixed.materials.reopened, fixed.materials.unlisted], [3, 4, 1, []]);
+  assert.deepEqual(await held(), [["e3", "acting", ["art_e3"]], ["e4", "acting", ["art_e4"]], ["e5", "open", []]],
+    "each keeps its own correction; the error no correction answers is 待处理 again");
+  assert.deepEqual((await runGeoDataFixes({ database, geoProjectId: ID, apply: true, correctionPairs: pairs })).materials.crossAttached, 0, "nothing left the second time");
+});
+
 test("the script's arguments: a project is required; the ruling's two domains are disowned unless kept", () => {
   assert.throws(() => parseGeoDataFixArguments([]), /--geo-project/);
   const parsed = parseGeoDataFixArguments(["--geo-project", "geo_1", "--our-single-source", "true", "--our-generic-alias", "玛仕度肽",
@@ -160,7 +200,7 @@ test("the script's arguments: a project is required; the ruling's two domains ar
     "--keep-owned", "--disown", "Example.com", "--no-materials"]);
   assert.deepEqual(parsed, { apply: false, geoProjectId: "geo_1", ourSingleSource: true, ourGenericAliases: ["玛仕度肽"],
     competitorSingleSource: { 穆峰达: false }, strategyFile: null,
-    disown: ["example.com"], materials: false, collected: true });
+    disown: ["example.com"], materials: false, correctionPairsFile: null, collected: true });
   assert.throws(() => parseGeoDataFixArguments(["--geo-project", "geo_1", "--our-single-source", "yes"]), /true or false/);
   assert.deepEqual(parseGeoDataFixArguments(["--geo-project", "geo_1", "--apply"]).disown, [...GEO_NOT_OWNED_DOMAINS]);
 });

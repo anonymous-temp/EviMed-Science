@@ -46,6 +46,30 @@ describe("the onboarding card", () => {
     expect(tracking.trackFrontierOnboarding).toHaveBeenCalledWith("onboarding-done", undefined);
   });
 
+  it("is a form whose submit is the step's one way on: 下一步 until the last question, then 完成; nothing goes on before an answer", async () => {
+    const close = vi.fn();
+    render(<FrontierOnboarding onClose={close} />);
+    const form = screen.getByRole("heading", { name: "你的角色" }).closest("form")!;
+    expect(form).not.toBeNull();
+    // The card's primary is the form's own action, not the page's (the page's stands in its header): the release walk of
+    // evimed-b559d4b7ebd0-1 read it as a page's primary action standing under the header's row.
+    expect(screen.getByRole("button", { name: "下一步" })).toHaveAttribute("type", "submit");
+    expect(screen.getByRole("button", { name: "跳过" })).toHaveAttribute("type", "button");
+    fireEvent.submit(form);
+    expect(screen.getByRole("heading", { name: "你的角色" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "医学生" }));
+    expect(screen.getByRole("heading", { name: "你的角色" })).toBeInTheDocument();
+    fireEvent.submit(form);
+    expect(screen.getByRole("heading", { name: "你的专科" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "心血管" }));
+    fireEvent.submit(form);
+    expect(await screen.findByRole("button", { name: "完成" })).toHaveAttribute("type", "submit");
+    fireEvent.submit(form);
+    await waitFor(() => expect(close).toHaveBeenCalledWith(true, expect.anything()));
+    expect(prefs.saveFrontierPrefs).toHaveBeenCalledTimes(1);
+    expect(prefs.saveFrontierPrefs).toHaveBeenCalledWith({ role: "student", specialties: ["cardiology"], interests: [], done: true });
+  });
+
   it("跳过 is there at every step and keeps what was chosen before it; a failed save keeps the card", async () => {
     const close = vi.fn();
     render(<FrontierOnboarding onClose={close} />);

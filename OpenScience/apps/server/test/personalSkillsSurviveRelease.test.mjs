@@ -99,16 +99,23 @@ async function startWith({ stamped, prepared }) {
   const manager = new RuntimeManager({ runtimeProvider: "docker", runtimeMode: "kernel", dataDir: "/unused-test-data" });
   // A null personal reference keeps the composite's frozen personal bytes out of this test
   // (they are verified on disk by `verifyPersonalSkillGeneration`); the comparison is of the skills.
-  const composite = { identity: OLD_IMAGE, bindings: { personalRevision: 3 }, projection: { plugins: [], personal: { reference: null, pins: stamped } } };
+  const composite = { identity: OLD_IMAGE, bindings: { personalRevision: 3 }, projection: { plugins: [{ extensionId: 'installed-fixture' }], personal: { reference: null, pins: stamped } } };
   manager.syncCapsuleMethods = async () => ({ count: 0 });
   manager.personalSkillGenerations = { prepareForRuntime: async () => (prepared === null ? null : generation("new", NEW_IMAGE, prepared)) };
   manager.extensionGenerationResolver = async () => composite;
   manager.prepareGeneration = async () => ({ joined: true });
+  let rebased = null, observedPersonal = undefined;
+  manager.rebasePersonalComposite = async (_project, candidate) => {
+    observedPersonal = candidate;
+    // This startup boundary fixture has no disk bytes; the real immutable projection is covered by the generation integration suite.
+    rebased = { ...composite, projection: { ...composite.projection, personal: { reference: null, pins: candidate?.pins ?? [] } } };
+    return rebased;
+  };
   const boundary = new Error("Stop before container or kernel startup");
   let plan;
   manager.provider = { preflight: async () => {}, prepare: async (_project, input) => { plan = input; throw boundary; } };
   await assert.rejects(manager.startKernel(project), (error) => error === boundary);
-  return { plan, composite };
+  return { plan, composite, rebased, observedPersonal };
 }
 
 test("a release does not unmount the extension of a project that also has personal skills", async () => {
@@ -118,7 +125,11 @@ test("a release does not unmount the extension of a project that also has person
 
 test("a fresh personal change after the composite was stamped still wins over it", async () => {
   for (const prepared of [[pin("review"), pin("draft")], [pin("review", 2)], [], null]) {
-    const { plan } = await startWith({ stamped: [pin("review")], prepared });
-    assert.equal(plan.extensionGeneration, null, JSON.stringify(prepared));
+    const { plan, composite, rebased, observedPersonal } = await startWith({ stamped: [pin("review")], prepared });
+    assert.notEqual(rebased, null, 'changed personal pins are recomposed before startup');
+    assert.equal(plan.extensionGeneration, rebased, JSON.stringify(prepared));
+    assert.deepEqual(plan.extensionGeneration.projection.plugins, composite.projection.plugins, 'an installed plugin is retained');
+    assert.deepEqual(plan.extensionGeneration.projection.personal.pins, prepared ?? [], 'only the latest personal selection is used');
+    assert.deepEqual(observedPersonal?.pins ?? null, prepared);
   }
 });

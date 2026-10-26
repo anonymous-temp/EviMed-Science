@@ -47,7 +47,7 @@ const screenshotName = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.(?:png|jpg|jpeg|webp)
 /** Calls one project's runtime may make to the probe in a minute, unless the deployment sets another (`OPEN_SCIENCE_GEO_PROBE_CALLS_PER_MINUTE`). */
 export const GEO_PROBE_CALLS_PER_MINUTE = 12;
 
-const maxQuestionLength = 2_000;
+const maxQuestionLength = 4_000;
 const maxAnswerLength = 200_000;
 const maxJsonResponseBytes = 8 * 1024 * 1024;
 const maxScreenshotBytes = 8 * 1024 * 1024;
@@ -145,8 +145,8 @@ function validatedScreenshotName(value) {
  *  @param {{ question?: unknown, provider?: unknown, providers?: unknown, deep?: unknown, newChat?: unknown }} body
  *  @returns {{ question: string, providers: string[], deep: 0 | 1, newChat: 0 | 1 }} */
 function validatedAsk(body) {
-  const question = typeof body.question === "string" ? body.question.trim() : "";
-  if (!question || question.length > maxQuestionLength || /[\0]/.test(question)) {
+  const question = typeof body.question === "string" ? body.question : "";
+  if (!question.trim() || question.length > maxQuestionLength || /[\0]/.test(question)) {
     throw gatewayError(400, "geo_probe_question_invalid", "The GEO probe question is missing or malformed.");
   }
   const requested = body.providers == null
@@ -270,6 +270,23 @@ async function readBoundedText(response, maxBytes, code) {
   return text;
 }
 
+/**
+ * The failure codes of a probe or inclusion job that prove its request never reached the provider: the probe host refused it
+ * (busy, rate limited, misconfigured, a request it would not take), could not be connected to at all, or had no such route, and the
+ * inclusion vendor refused the task before taking it. A one-shot cell that failed with one of these cost nothing and may be asked
+ * again without the person's acknowledgement; any other failure of a one-shot cell (a timeout, an upstream error after the send, an
+ * expired lease, a task the vendor took and never finished) may have been charged.
+ */
+export const GEO_UNDELIVERED_FAILURE_CODES = Object.freeze(["geo_probe_busy", "geo_probe_rate_limited", "probe_busy",
+  "geo_probe_unconfigured", "geo_probe_endpoint_invalid", "geo_probe_plaintext_forbidden", "geo_probe_unavailable", "geo_probe_not_found",
+  "geo_probe_question_invalid", "geo_probe_provider_invalid", "geo_probe_request_invalid", "geo_probe_request_too_large",
+  "geo_probe_flag_invalid", "geo_probe_op_invalid",
+  "media_market_request_invalid", "media_market_unconfigured", "geo_inclusion_disabled", "geo_inclusion_engine_not_allowed",
+  "media_market_unauthorized", "media_market_rate_limited", "media_market_refused"]);
+
+/** The transport's codes for a connection that failed after the request was written (undici and Node sockets). */
+const POST_SEND_TRANSPORT_CODES = new Set(["ECONNRESET", "EPIPE", "UND_ERR_SOCKET", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT", "UND_ERR_ABORTED"]);
+
 /** Map upstream HTTP to a code that says what the caller should do next.
  *
  *  409 is the one that matters: the probe serves one request at a time, and a
@@ -392,9 +409,14 @@ export function probeUpstream(config, { fetchImpl = fetch } = {}) {
         redirect: "error",
         signal,
       });
-    } catch {
+    } catch (error) {
       if (signal?.reason?.name === "TimeoutError") {
         throw gatewayError(504, "geo_probe_timeout", "The GEO probe timed out. This is a measurement failure, not a result.");
+      }
+      // A connection that broke after the request was written may have been asked of the engine: that is an upstream error (its
+      // delivery unknown), never "unreachable", which says the ask was never put to it — a one-shot cell may be asked again for free.
+      if (POST_SEND_TRANSPORT_CODES.has(String(/** @type {any} */ (error)?.cause?.code ?? ""))) {
+        throw gatewayError(502, "geo_probe_upstream_error", "The connection to the GEO probe broke after the request was sent. This is a measurement failure, not a result.");
       }
       throw gatewayError(502, "geo_probe_unavailable", "The GEO probe is unreachable. This is a measurement failure, not a result.");
     }

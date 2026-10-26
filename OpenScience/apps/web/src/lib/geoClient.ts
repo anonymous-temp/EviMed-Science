@@ -23,10 +23,12 @@
  *    “样本不足”, never the number (`GeoCellText` enforces it).
  */
 import { useEffect, useState } from "react";
+import { geoReadScopeQuery, type GeoReadScope, type GeoScopedView, type GeoMetricMembers, type GeoMetricSelector } from "./geoReadScope";
 import { fetchWebMe, WebApiError, webApiBase, type WebMe } from "./apiClient";
 import { formatRelativeTime } from "./format";
 import { productRequest } from "./productClient";
-import { programmeRunState, type ProgrammeRun } from "./programmeRuns";
+import { programmeRunState, type ProgrammeRunPage } from "./programmeRuns";
+import type { GeoAnalysisMembers, GeoAnalysisValue } from "./geoAnalysisClient";
 
 /* ---------------------------------------------------------------- vocabulary */
 
@@ -79,6 +81,11 @@ export interface GeoCell {
    * sends them: the first is where a click on the number lands.
    */
   snapshotIds?: string[];
+  /** The saved computation's judgment coverage; absent for historical calculations with unknown coverage. */
+  assessment?: { methodVersion: string; completeAnswers: number; partialAnswers: number; unknownAnswers: number; decidableAnswers?: number };
+  /** Null identifies a preserved historical calculation whose method is not recorded. */
+  methodVersion?: string | null;
+  members?: GeoMetricMembers;
 }
 
 /** One step of the program (`projects.steps[key]`, SPEC §2.2). */
@@ -189,7 +196,7 @@ export interface GeoOverview {
 }
 
 /** One project (`GET /api/geo/projects/:id`). */
-export interface GeoProject {
+export interface GeoProject extends GeoScopedView {
   id: string;
   projectId: string;
   name: string;
@@ -224,6 +231,8 @@ export interface GeoProject {
    * for the client, a step waiting on credits or one that failed. A to-do list, never a log of what is done; `[]` when nothing is asked.
    */
   needsYou: GeoNeedsYou[];
+  /** The durable signal reader is composed on this deployment. */
+  signalsSupported?: boolean;
 }
 
 /** The kinds of to-do the project view lists (`GEO_NEEDS_YOU_KINDS`), each a verb and the object it opens. */
@@ -287,6 +296,12 @@ export interface GeoJourney {
 export interface GeoQuestion {
   id: string;
   text: string;
+  originalId?: string | null;
+  originalGroup?: string | null;
+  originalRowIndex?: number | null;
+  clientTags?: string[];
+  classificationStatus?: "unclassified" | "suggested" | "confirmed";
+  collectedAt?: string | null;
   kind: "typical" | "real" | "label_safety" | "client";
   platform: string | null;
   sourceUrl: string | null;
@@ -299,7 +314,8 @@ export interface GeoQuestion {
 }
 export interface GeoQuestionGroup {
   id: string;
-  pool: GeoPool;
+  pool: GeoPool | null;
+  version?: number | null;
   name: string;
   typicalQuestion: string;
   journeyStage: string | null;
@@ -311,8 +327,9 @@ export interface GeoQuestionGroup {
   signal: "collected" | "partial" | "no_signal" | "client" | null;
   questions: GeoQuestion[];
 }
-export interface GeoQuestions {
-  sets: Array<{ version: number; lockedAt: string | null; measuredCount: number | null }>;
+export interface GeoQuestions extends GeoScopedView {
+  contract?: import("./geoQuestionWorkbenchClient").GeoMeasurementContract | null;
+  sets: Array<{ version: number; lockedAt: string | null; measuredCount: number | null; contract?: import("./geoQuestionWorkbenchClient").GeoMeasurementContract | null }>;
   version: number | null;
   groups: GeoQuestionGroup[];
 }
@@ -329,6 +346,11 @@ export interface GeoCitedSource {
   basis?: "inline_marker" | "no_retrieval" | "not_attributable" | (string & {}) | null;
 }
 export interface GeoErrorRow {
+  originalErrorAssessment?: {statement: unknown;claim: unknown;temporalBasis: "first_preserved_error_assessment"} | null;
+  currentClaim?: {version: number | null;applicability: GeoErrorRow["applicability"];temporalBasis: "current_claim_context"};
+  judgmentState?: "active" | "withdrawn";
+  judgmentCorrection?: { kind: string; snapshotId: string; assessmentVersion?: string; previousAssessmentVersion?: string; changedAt: string } | null;
+  judgmentHistory?: Array<{ kind: string; snapshotId: string; changedAt: string }>;
   id: string;
   engine: GeoEngine;
   statement: string;
@@ -347,6 +369,8 @@ export interface GeoErrorRow {
   firstSnapshotId?: string | null;
   /** Present on the answer page's rows: the claim's quote the statement contradicts. */
   evidenceQuote?: string | null;
+  claimVersion?: number | null;
+  applicability?: { population: string | null; elements: Record<string, unknown> | null; inLabel: boolean | null; validUntil: string | null; evidenceLevel: string | null } | null;
   claimId?: string | null;
   questionId?: string | null;
   /** The claim's fingerprint: every engine that tells the same wrong claim carries the same one (the key the list is grouped by). */
@@ -388,6 +412,7 @@ export interface GeoRoundRef {
 export type GeoAbsentReason = "login" | "paused" | "unavailable" | "no_answer";
 /** The project's errors counted over every row (`count(*)`), whatever the list below carries. `severe` is the live S3/S4 ones. */
 export interface GeoErrorCounts {
+  withdrawn?: number;
   total: number;
   open: number;
   acting: number;
@@ -395,7 +420,23 @@ export interface GeoErrorCounts {
   closed: number;
   severe: number;
 }
-export interface GeoDiagnosis {
+export interface GeoErrorSummary {
+  unit: "error_rows";
+  total: number;
+  byType: Record<string, number>;
+  bySeverity: Record<string, number>;
+  byEngine: Record<string, number>;
+  byStatus: Record<string, number>;
+  byTrace: Record<string, number>;
+  byEngineSeverity: Record<string, number>;
+}
+export interface GeoErrorPage { populationRevision?: string; offset: number; limit: number; total: number; shown: number; more: boolean; nextOffset: number | null }
+export interface GeoErrorFilters { errorFingerprint?: string; errorJudgmentState?: "active" | "withdrawn"; errorStatuses?: string[]; errorSeverities?: string[]; errorTypes?: string[]; errorSearch?: string; errorTrace?: string; errorLimit?: number; errorOffset?: number }
+export interface GeoDiagnosis extends GeoScopedView {
+  activeErrorSummary?: GeoErrorSummary;
+  errorSummary?: GeoErrorSummary;
+  scopeErrorSummary?: GeoErrorSummary;
+  errorPage?: GeoErrorPage;
   round: (GeoRoundRef & {
     surface: Record<string, unknown> | null;
     planned: number | null;
@@ -410,7 +451,7 @@ export interface GeoDiagnosis {
   rounds: GeoRoundRef[];
   byEngine: Array<{ engine: GeoEngine; mention: GeoCell; accuracy: GeoCell; citation: GeoCell; retrieval: GeoCell }>;
   byPool: Array<{ pool: GeoPool; mention: GeoCell; topCompetitor: string | null; mainIssue: string | null }>;
-  failureModes: { omitted: GeoCell; correct: GeoCell; wrongOurs: GeoCell; wrongCompetitor: GeoCell };
+  failureModes: { omitted: GeoCell; correct: GeoCell; wrongOurs: GeoCell; wrongCompetitor: GeoCell; unknown?: GeoCell; partial?: GeoCell; refused?: GeoCell };
   errors: GeoErrorRow[];
   /** The same errors by claim, one row per wrong claim with the engines that tell it. Absent from a server older than R19. */
   byClaim?: GeoErrorByClaim[];
@@ -437,6 +478,8 @@ export interface GeoBrandFact {
   count: number;
 }
 export interface GeoStatementFact {
+  claimVersion?: number | null;
+  applicability?: GeoErrorRow["applicability"];
   text: string;
   verdict: "correct" | "wrong" | "unverifiable";
   claimId: string | null;
@@ -514,6 +557,10 @@ export interface GeoSourceRow {
 
 /** One answer of the latest round that cites a source (`GET …/sources/:sourceId`). */
 export interface GeoSourceAnswer {
+  /** Preserved snapshot text is readable even when no judgment exists. */
+  answerText?: string | null;
+  /** Only the selected snapshot facts; null means unknown, not an inferred verdict. */
+  judgment?: unknown | null;
   snapshotId: string;
   engine: GeoEngine;
   questionId: string | null;
@@ -548,7 +595,8 @@ export interface GeoSourceHistoryPoint {
 }
 
 /** What a source row stands for: the answers its three numbers count. */
-export interface GeoSourceDetail {
+export interface GeoSourceDetail extends GeoScopedView {
+  answerPage?: { total: number; shown: number; more: boolean; nextOffset: number | null; offset?: number; limit?: number };
   source: Pick<GeoSourceRow, "id" | "domain" | "name" | "kind" | "layer" | "conditions" | "impostor" | "market">;
   round: { id: string; kind: string; sampleDate: string | null } | null;
   /** The engine the list was narrowed to, when it was. */
@@ -567,7 +615,7 @@ export interface GeoTier {
   placements: number | null;
   budgetCny: number | null;
 }
-export interface GeoSources {
+export interface GeoSources extends GeoScopedView {
   /** Engines whose citations of the latest full measurement had no links at all. */
   linklessEngines?: GeoEngine[];
   sources: GeoSourceRow[];
@@ -578,7 +626,15 @@ export interface GeoSources {
   chosenTier: GeoTierId | null;
 }
 
+export interface GeoPlanOutputLink {
+  contextRef:string; strategyVersion:number; basisDigest:string; actionKeys:string[]; groupIds:string[];
+  runId:string; requestId:string; articleId:string; resultVersionId:string; digest:string;
+}
 export interface GeoArticle {
+  planningLinks?: GeoPlanOutputLink[];
+  currentResultVersionId?: string | null;
+  contentSha256?: string | null;
+  onlineUpdateNeeded?: boolean;
   id: string;
   layer: GeoArticleLayer;
   title: string;
@@ -631,6 +687,10 @@ export interface GeoOrder {
   publishedUrl: string | null;
   checks: GeoOrderCheck[];
   updatedAt: string;
+  publishedAt?: string | null;
+  articleResultVersionId?: string | null;
+  articleDigest?: string | null;
+  cancellable?: boolean;
 }
 /** A page the brand published itself (百家号, 公众号, 官网 …): checked after publication as an order is, with no money behind it. */
 export interface GeoOwnedLink {
@@ -647,9 +707,13 @@ export interface GeoOwnedLink {
   citedBy: Array<{ engine: GeoEngine; firstSeen: string | null }>;
 }
 export interface GeoDistribution {
+  firstPublishedAt?: string | null;
   budget: { totalCny: number; dailyCny: number } | null;
   spentCny: number;
   reservedCny: number;
+  settledCny?: number;
+  refundedCny?: number;
+  availableCny?: number | null;
   suggestedBudgetCny: number | null;
   market: { configured: boolean };
   orders: GeoOrder[];
@@ -666,8 +730,10 @@ export interface GeoSeriesPoint {
   k: number | null;
   /** What the point's round measured (engines that answered, question set and pools, probe surface); null: no answer to name it from. Absent from an older server. */
   coverage?: string | null;
+  status?: GeoAnalysisValue['state'];
+  analysisMembers?: GeoAnalysisMembers | null;
 }
-export interface GeoMonitoring {
+export interface GeoMonitoring extends GeoScopedView {
   series: Array<{ key: string; points: GeoSeriesPoint[] }>;
   arms: {
     pilot: Array<{ date: string; value: number | null; coverage?: string | null }>;
@@ -676,8 +742,9 @@ export interface GeoMonitoring {
     netEffect: GeoCell & { noiseBand: number | null; noiseMeasured?: boolean | null };
   };
   byEngine: Array<{ engine: GeoEngine; points: GeoSeriesPoint[] }>;
-  /** Each registered rival's mention rate over the same questions as ours (M-16 beside M-01S), per full measurement. */
-  rivals?: Array<{ name: string; points: GeoSeriesPoint[] }>;
+  /** Selected pool-specific rival rates; ownPoints use that rival's exact eligible cohort. */
+  rivals?: Array<{ name: string; label?: string; entityKey?: string; pool?: string;
+    points: GeoSeriesPoint[]; ownPoints?: GeoSeriesPoint[]; unknownTimeCount?: number }>;
   cited: Array<{ articleId: string; title: string; engine: GeoEngine; firstSeen: string }>;
   newErrors: GeoErrorRow[];
   /** The next full measurement; null when none is coming (the project paused by its owner, measurement paused, monitoring not asked for). */
@@ -743,7 +810,7 @@ export interface GeoClusterRow {
   articles: { total: number; byStatus: Partial<Record<GeoArticleStatus, number>> };
 }
 
-export interface GeoClustersView {
+export interface GeoClustersView extends GeoScopedView {
   version: number | null;
   locked: boolean;
   /** The platform's floor: a rate is drawn only over this many answers. */
@@ -761,6 +828,7 @@ export interface GeoClustersView {
  * list it (see `unavailableBecause`). A source row always carries the same sixteen keys; only their values move.
  */
 export interface GeoActionSource {
+  url?: string | null;
   domain: string | null;
   channel: string | null;
   name: string | null;
@@ -862,7 +930,7 @@ export interface GeoActionsView {
   unmatched: Array<Record<string, unknown>>;
 }
 
-export interface GeoClusterView {
+export interface GeoClusterView extends GeoScopedView {
   group: GeoClusterRow;
   questions: Array<{
     id: string;
@@ -970,7 +1038,23 @@ export interface GeoStrategyEngine {
 }
 
 /** The plan page's one read (`GET …/strategy`): it replaces the page's use of the all-sources endpoint. */
+export interface GeoImplementationAction extends GeoAction {
+  work?: { mode: "new" | "modify_existing"; articleId?: string | null; resultVersionId?: string | null; digest?: string | null; audience?: string | null; outputs: string[] } | null;
+  sequence?: number | null;
+  timing?: { earliest?: string | null; latest?: string | null; durationDays?: { low: number; high: number } | null; basis: string } | null;
+  effort?: { unit: "hours" | "days"; low: number; high: number; basis: string } | null;
+  estimate?: { currency: "CNY"; low: number; high: number; basis: Array<{ kind: "source_price" | "supplied_quote"; id: string; digest: string | null }>; assumption: string | null; observedAt: string | null } | null;
+}
 export interface GeoStrategyView {
+  readingsKind?: "submitted_input" | "frozen_basis" | "selected_current" | "project_current";
+  scope?: GeoReadScope | null;
+  selection?: GeoScopedView["selection"] | null;
+  scopeKey?: string | null;
+  basisDigest?: string | null;
+  basis?: { priceReferences?:Array<{id:string;domain?:string|null;name?:string|null}>; schemaVersion: 1; capturedAt: string; selection: GeoScopedView["selection"]; scope: GeoReadScope; groups: Array<{id:string;name:string;setVersion:number;pool:string|null}>; targets: {version:number|null;rows:unknown[]}; focus:{sourceId:string|null;url:string|null;errorIds:string[]} } | null;
+  freshness?: { status: "current" | "needs_update" | "unknown"; reasons: string[] };
+  implementation?: { actions: GeoImplementationAction[] };
+  actualBudget?: {href:string};
   version: number | null;
   createdAt: string | null;
   runId: string | null;
@@ -994,6 +1078,7 @@ export interface GeoStrategyView {
     placements: number | null;
     budgetCny: number | null;
     targetCount: number;
+    targetNotes?: Array<{ metricId: string; name: string; pool: string | null; note: string }>;
   }>;
   battlefield: {
     id: string | null;
@@ -1034,6 +1119,8 @@ function finite(value: unknown): number | null {
 export function readGeoCell(raw: unknown): GeoCell {
   const value = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
   const status = typeof value.status === "string" && CELL_STATUSES.has(value.status) ? value.status as GeoCellStatus : "not_measurable";
+  const assessment = readGeoAssessment(value.assessment);
+  const members = readGeoMembers(value.members);
   return {
     value: finite(value.value),
     numerator: finite(value.numerator),
@@ -1043,10 +1130,32 @@ export function readGeoCell(raw: unknown): GeoCell {
     status,
     dataType: typeof value.dataType === "string" && DATA_TYPES.has(value.dataType) ? value.dataType as GeoDataType : "measured",
     ...(typeof value.reason === "string" && value.reason ? { reason: value.reason } : {}),
+    ...(assessment ? { assessment } : {}),
+    ...(members ? { members } : {}),
+    ...("methodVersion" in value ? { methodVersion: typeof value.methodVersion === "string" && value.methodVersion ? value.methodVersion : null } : {}),
     ...(Array.isArray(value.snapshotIds)
       ? { snapshotIds: value.snapshotIds.filter((snapshot): snapshot is string => typeof snapshot === "string" && snapshot.length > 0) }
       : {}),
   };
+}
+
+function readGeoMembers(raw: unknown): GeoMetricMembers | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const value = raw as GeoMetricMembers;
+  if (typeof value.selectionRef !== "string" || !value.selectionRef || typeof value.metric?.metricId !== "string"
+    || typeof value.metric.scope !== "string" || !Number.isSafeInteger(value.total) || value.total < 0) return undefined;
+  return value;
+}
+
+function readGeoAssessment(raw: unknown): GeoCell["assessment"] {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const value = raw as Record<string, unknown>;
+  const count = (item: unknown): item is number => typeof item === "number" && Number.isSafeInteger(item) && item >= 0;
+  if (typeof value.methodVersion !== "string" || !value.methodVersion || !count(value.completeAnswers)
+    || !count(value.partialAnswers) || !count(value.unknownAnswers)
+    || (value.decidableAnswers !== undefined && !count(value.decidableAnswers))) return undefined;
+  return { methodVersion: value.methodVersion, completeAnswers: value.completeAnswers, partialAnswers: value.partialAnswers,
+    unknownAnswers: value.unknownAnswers, ...(count(value.decidableAnswers) ? { decidableAnswers: value.decidableAnswers } : {}) };
 }
 
 function readSummary(raw: GeoProjectSummary): GeoProjectSummary {
@@ -1086,6 +1195,7 @@ function readProject(raw: GeoProject): GeoProject {
     steps,
     sessionId: typeof raw?.sessionId === "string" && raw.sessionId ? raw.sessionId : null,
     needsYou: Array.isArray(raw?.needsYou) ? raw.needsYou.filter((item) => item && typeof item.key === "string" && item.target) : [],
+    signalsSupported: raw?.signalsSupported === true,
     // A server that does not say is one from before the market switch: it
     // offered the budget, and so does this page.
     market: { configured: raw?.market?.configured !== false },
@@ -1124,11 +1234,11 @@ export async function listGeoProjects(): Promise<GeoProjectSummary[]> {
 }
 
 export function createGeoProject(input: { brandName?: string; coverageDays?: number; engines?: string[] } = {}) {
-  return productRequest<{ id: string; projectId: string; sessionId: string }>("/geo/projects", "POST", input);
+  return productRequest<{ id: string; projectId: string; sessionId: string | null }>("/geo/projects", "POST", input);
 }
 
-export async function getGeoProject(geoId: string): Promise<GeoProject> {
-  return readProject(await productRequest<GeoProject>(project(geoId)));
+export async function getGeoProject(geoId: string, scope?: GeoReadScope): Promise<GeoProject> {
+  return readProject(await productRequest<GeoProject>(`${project(geoId)}${geoReadScopeQuery(scope)}`));
 }
 
 /** Who speaks for the product: a company, or a doctor about their own specialty; the relation to the product is read at the top of every card. */
@@ -1195,9 +1305,11 @@ export interface GeoValue {
    * `uncertain` and `notApplicable` are counted beside it and outside the headline `represented / assessed`.
    * `basisVersion`: the value-profile version the latest round was judged against (null before any judged round).
    */
-  coverage: { assessed: number; represented: number; partial: number; contradicted: number; notAddressed: number; uncertain: number; notApplicable: number; value: number | null; basisVersion?: number | null };
+  coverage: { assessed: number; represented: number; partial: number; contradicted: number; notAddressed: number; uncertain: number; notApplicable: number; value: number | null; basisVersion?: number | null;
+    assessment?: { completeObservations: number; partialObservations: number; unknownObservations: number } };
   /** At most twenty, the ones that say something first and the most recent answers first; `coverage` counts every one of `observationsTotal`. */
-  observations: Array<{ findingId: string; status: string; quote: string; reason: string; engine: string; basisVersion: number | null; rubricVersion: string | null; askedAt: string | null }>;
+  observations: Array<{ findingId: string; status: string; quote: string; reason: string; engine: string; basisVersion: number | null; rubricVersion: string | null; askedAt: string | null;
+    recordedStatus?: string | null; judgementCoverage?: { status: "complete" | "partial" | "unknown"; reasons: string[]; answerChars: number; assessedChars: number } }>;
   observationsTotal?: number;
 }
 
@@ -1209,21 +1321,58 @@ export function getGeoJourney(geoId: string) {
   return productRequest<GeoJourney>(`${project(geoId)}/journey`);
 }
 
-export function getGeoQuestions(geoId: string, version?: number | null) {
-  return productRequest<GeoQuestions>(`${project(geoId)}/questions${version == null ? "" : `?version=${id(String(version))}`}`);
+export function getGeoQuestions(geoId: string, version?: number | GeoReadScope | null) {
+  const query = version && typeof version === "object" ? geoReadScopeQuery(version) : version == null ? "" : `?version=${id(String(version))}`;
+  return productRequest<GeoQuestions>(`${project(geoId)}/questions${query}`);
 }
 
 /** “移出测量问句”: the server writes a new question-set version without it. */
 export function unmeasureGeoQuestion(geoId: string, questionId: string) {
-  return productRequest<unknown>(`${project(geoId)}/questions/${id(questionId)}/unmeasure`, "POST", {});
+  return productRequest<{ version: number }>(`${project(geoId)}/questions/${id(questionId)}/unmeasure`, "POST", {});
 }
 
-export function getGeoDiagnosis(geoId: string, round?: string | null) {
-  return productRequest<GeoDiagnosis>(`${project(geoId)}/diagnosis${round ? `?round=${id(round)}` : ""}`);
+export function getGeoDiagnosis(geoId: string, scope?: GeoReadScope | string | null, filters?: GeoErrorFilters) {
+  const query = new URLSearchParams(geoReadScopeQuery(typeof scope === "string" ? { round: scope } : scope));
+  for (const [key, value] of Object.entries(filters ?? {})) {
+    if (Array.isArray(value)) for (const item of value) query.append(key, item);
+    else if (value != null) query.set(key, String(value));
+  }
+  return productRequest<GeoDiagnosis>(`${project(geoId)}/diagnosis${query.size ? `?${query}` : ""}`);
 }
+
+export interface GeoDiagnosisReview {
+  claimDetails?: Array<{ id: string; version: number; population: string | null; elements: Record<string, unknown>; inLabel?: boolean | null; validUntil?: string | null; evidenceLevel?: string | null; sourceRef: string; sourceLabel: string | null; statement: string; quote: string }>;
+  original?: { statements: GeoStatementFact[] } | null;
+  assessmentVersion: string | null;
+  state: string;
+  current: { statements: GeoStatementFact[] } | null;
+  historyPage?: { total: number; shown: number; more: boolean; nextBefore: number | null };
+  feedbackPage?: { total: number; shown: number; more: boolean; nextBefore: string | null };
+  history: Array<{ revision?: number; version: string; state: string; assessment: { statements: GeoStatementFact[]; judgedAt?: string | null } }>;
+  feedback: Array<{ id: string; statement: string; statementIdentity?: string; note: string; assessmentVersion: string; original: GeoStatementFact; status: string; result: { statements: GeoStatementFact[] } | null; error: { code: string } | null; createdAt: string }>;
+}
+export function getGeoDiagnosisReview(geoId: string, snapshotId: string, page: { feedbackBefore?: string; historyBefore?: number } = {}) {
+  const query = new URLSearchParams(Object.entries(page).map(([key, value]) => [key, String(value)]));
+  return productRequest<GeoDiagnosisReview>(`${project(geoId)}/diagnosis/reviews/${encodeURIComponent(snapshotId)}${query.size ? `?${query}` : ""}`);
+}
+export const submitGeoDiagnosisFeedback = (geoId: string, input: { snapshotId: string; statement: string; claimId: string | null; statementIdentity?: string; assessmentVersion: string; note: string; requestKey: string; selectionRef?: string | null }) => productRequest<{ id: string; jobId: string }>(`${project(geoId)}/diagnosis/feedback`, "POST", input);
 
 export function getGeoAnswer(geoId: string, snapshotId: string) {
   return productRequest<GeoAnswer>(`${project(geoId)}/answers/${id(snapshotId)}`);
+}
+
+export interface GeoObservationPage extends GeoScopedView {
+  items: Array<{ id: string; roundId: string | null; questionId: string | null; question: string | null; engine: string;
+    askedAt: string | null; status: string; answerText: string; answerTruncated: boolean }>;
+  total: number;
+  nextOffset: number | null;
+}
+
+/** Exact denominator contributors, using the cell's own saved reference and metric rather than a new latest read. */
+export function getGeoObservations(geoId: string, selectionRef: string, member?: GeoMetricSelector, offset = 0) {
+  const query = new URLSearchParams({ selectionRef, limit: "30", offset: String(offset) });
+  if (member) query.set("member", JSON.stringify(member));
+  return productRequest<GeoObservationPage>(`${project(geoId)}/snapshots?${query}`);
 }
 
 /**
@@ -1235,13 +1384,16 @@ export function geoScreenshotUrl(geoId: string, sha256: string): string {
   return `${root}${project(geoId)}/screenshots/${id(sha256)}`;
 }
 
-export function getGeoSources(geoId: string) {
-  return productRequest<GeoSources>(`${project(geoId)}/sources`);
+export function getGeoSources(geoId: string, scope?: GeoReadScope) {
+  return productRequest<GeoSources>(`${project(geoId)}/sources${geoReadScopeQuery(scope)}`);
 }
 
 /** One source's detail: the answers of the latest round that cite it, one engine's when `engine` is given. */
-export function getGeoSource(geoId: string, sourceId: string, engine?: string | null) {
-  return productRequest<GeoSourceDetail>(`${project(geoId)}/sources/${id(sourceId)}${engine ? `?engine=${encodeURIComponent(engine)}` : ""}`);
+export function getGeoSource(geoId: string, sourceId: string, scope?: GeoReadScope | string | null, page?: { answerLimit?: number; answerOffset?: number }) {
+  const query = new URLSearchParams(geoReadScopeQuery(typeof scope === "string" ? { engines: [scope] } : scope));
+  if (page?.answerLimit != null) query.set("answerLimit", String(page.answerLimit));
+  if (page?.answerOffset != null) query.set("answerOffset", String(page.answerOffset));
+  return productRequest<GeoSourceDetail>(`${project(geoId)}/sources/${id(sourceId)}${query.size ? `?${query}` : ""}`);
 }
 
 export function setGeoTier(geoId: string, tier: GeoTierId) {
@@ -1251,13 +1403,13 @@ export function setGeoTier(geoId: string, tier: GeoTierId) {
 /* ----------------------------------------------- the question group as the spine (R19) */
 
 /** Every question group with what the engines say about it, the errors against it, what is being done and what stands. */
-export function getGeoClusters(geoId: string) {
-  return productRequest<GeoClustersView>(`${project(geoId)}/clusters`);
+export function getGeoClusters(geoId: string, scope?: GeoReadScope) {
+  return productRequest<GeoClustersView>(`${project(geoId)}/clusters${geoReadScopeQuery(scope)}`);
 }
 
 /** One group in full: its questions with each engine's state, the sources its answers cite, its gaps, actions and effect. */
-export function getGeoCluster(geoId: string, groupId: string) {
-  return productRequest<GeoClusterView>(`${project(geoId)}/clusters/${id(groupId)}`);
+export function getGeoCluster(geoId: string, groupId: string, scope?: GeoReadScope) {
+  return productRequest<GeoClusterView>(`${project(geoId)}/clusters/${id(groupId)}${geoReadScopeQuery(scope)}`);
 }
 
 /** The actions, each carrying its group, with the page's lead sentence. */
@@ -1295,8 +1447,11 @@ export function createGeoOwnedLink(
 }
 
 /** The plan page's one read: targets as baseline → now → target with dates, battlefield, each engine's promise, the client's to-dos. */
-export function getGeoStrategy(geoId: string) {
-  return productRequest<GeoStrategyView>(`${project(geoId)}/strategy`);
+export function getGeoStrategy(geoId: string, scope?: GeoReadScope & {strategyVersion?:number;planContextRef?:string;sourceId?:string;url?:string}) {
+  const query = geoReadScopeQuery(scope);
+  const params = new URLSearchParams(query.replace(/^\?/, ""));
+  for (const key of ["strategyVersion", "planContextRef", "sourceId", "url"] as const) if (scope?.[key] != null) params.set(key, String(scope[key]));
+  return productRequest<GeoStrategyView>(`${project(geoId)}/strategy${params.size ? `?${params}` : ""}`);
 }
 
 export function getGeoArticles(geoId: string) {
@@ -1321,8 +1476,8 @@ export function getGeoArticleText(geoId: string, articleId: string) {
 }
 
 /** “放行”: the safety stop, after a person has looked at the article. */
-export function releaseGeoArticle(geoId: string, articleId: string) {
-  return productRequest<unknown>(`${project(geoId)}/articles/${id(articleId)}/release`, "POST", {});
+export function releaseGeoArticle(geoId: string, articleId: string, observed: { expectedResultVersionId: string | null; expectedDigest: string | null }) {
+  return productRequest<unknown>(`${project(geoId)}/articles/${id(articleId)}/release`, "POST", observed);
 }
 
 export function getGeoDistribution(geoId: string) {
@@ -1338,8 +1493,8 @@ export function cancelGeoOrder(geoId: string, orderId: string) {
   return productRequest<unknown>(`${project(geoId)}/orders/${id(orderId)}/cancel`, "POST", {});
 }
 
-export function getGeoMonitoring(geoId: string) {
-  return productRequest<GeoMonitoring>(`${project(geoId)}/monitoring`);
+export function getGeoMonitoring(geoId: string, scope?: GeoReadScope) {
+  return productRequest<GeoMonitoring>(`${project(geoId)}/monitoring${geoReadScopeQuery(scope)}`);
 }
 
 /**
@@ -1364,16 +1519,22 @@ export function exportGeo(geoId: string, kind: GeoExportKind) {
 /**
  * 「AI 运行」: the steps the programme ran in the project's own sessions, newest first — each named by what it was, with a state word and
  * a time, never an id. A record to read, not a conversation to go to (the person's own conversation is the project's `sessionId`).
+ *
+ * One page per call (the server's, at most fifty runs): the drawer opens on the first and reads the next from `nextCursor` when the
+ * reader asks — the record grows with every step of every week, and walking all of it on every open and every poll is not a read the
+ * reader asked for.
  */
-export async function getGeoProgrammeRuns(geoId: string): Promise<ProgrammeRun[]> {
-  const value = await productRequest<{ runs?: unknown }>(`${project(geoId)}/runs`);
-  const rows = Array.isArray(value?.runs) ? (value.runs as Array<Record<string, unknown>>) : [];
-  return rows.filter((row) => row && typeof row.sessionId === "string" && row.sessionId).map((row) => ({
+export async function getGeoProgrammeRuns(geoId: string, cursor?: string | null): Promise<ProgrammeRunPage> {
+  const value: { runs?: unknown; nextCursor?: string | null } = await productRequest(`${project(geoId)}/runs${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`);
+  const rows: Array<Record<string, unknown>> = Array.isArray(value?.runs) ? value.runs : [];
+  const next = typeof value?.nextCursor === "string" && value.nextCursor && value.nextCursor !== cursor ? value.nextCursor : null;
+  return { nextCursor: next, runs: rows.filter((row) => row && typeof row.sessionId === "string" && row.sessionId).map((row) => ({
     sessionId: String(row.sessionId),
+    ...(typeof row.runId === "string" && row.runId ? { runId: row.runId } : {}),
     label: typeof row.label === "string" && row.label.trim() ? row.label.trim() : "后台分析",
     state: programmeRunState(row.state),
     at: typeof row.startedAt === "string" && row.startedAt ? formatRelativeTime(row.startedAt) || null : null,
-  }));
+  })) };
 }
 
 /* -------------------------------------------------------------------- feature */
@@ -1460,3 +1621,7 @@ export const resolveGeoMarketOrder = (orderId: string, input: { created: boolean
 export const markGeoMarketOrderLost = (orderId: string, reason: string) =>
   productRequest<{ id: string; state: GeoOrderState }>(`/geo/market/orders/${id(orderId)}/lost`, "POST", { reason });
 export const clearGeoMarketStop = (note: string) => productRequest<{ cleared: boolean; day?: string }>("/geo/market/clear-stop", "POST", { note });
+
+export function stageGeoPlanContext(geoId: string, input: {requestKey:string;sessionId:string;mode:"strategy"|"content"|"analysis"|"signal";view?:import("./geoAnalysisClient").GeoAnalysisDescriptor;expectedDigest?:string;focus?:{rowKey:string;columnKey:string};intent?:"explain"|"compare"|"next_steps"|"analyse"|"review"|"correct";selectionRef?:string;strategyVersion?:number;sourceId?:string;url?:string;groupIds?:string[];errorIds?:string[];actionKeys?:string[];signalId?:string;expectedSignalRevision?:number;focusRefs?:string[];previousContextRef?:string}) {
+  return productRequest<{referenceId:string;sessionId:string;draft:string;state?:"staged"|"bound";requestId?:string|null}>(`${project(geoId)}/strategy/context`, "POST", input);
+}

@@ -17,13 +17,13 @@ export const MEMORY_GATEWAY_MESSAGE_OUTCOMES = Object.freeze(["forwarded", "plat
 export const MEMORY_GATEWAY_COMMIT_OUTCOMES = Object.freeze(["accepted", "nothing_pending", "not_learning", "rate_limited", "failed"]);
 /** Why a caller's conversation is not learned from or read (`memoryAdmission`). */
 export const MEMORY_ADMISSION_REASONS = Object.freeze([
-  "memory_off", "engine_unavailable", "internal_project", "automated_run", "paused", "trial", "clinical_context", "subagent", "before_reset",
+  "memory_off", "engine_unavailable", "internal_project", "automated_run", "paused", "trial", "clinical_context", "subagent", "unproven_session", "before_reset",
 ]);
 /** What the gateway refuses by name. */
 export const MEMORY_GATEWAY_REFUSALS = Object.freeze([
   "memory_gateway_unauthenticated", "memory_gateway_role_refused", "memory_gateway_route_refused", "memory_gateway_uri_refused",
   "memory_gateway_body_invalid", "memory_gateway_payload_too_large", "memory_gateway_rate_limited", "memory_gateway_tool_refused",
-  "memory_gateway_disabled",
+  "memory_gateway_disabled", "memory_scope_denied",
 ]);
 /** What became of the end of an attended turn (`nativeTurnCommit.mjs`): armed, folded into a later one (debounced), turned away
  *  (dropped at the bound, a platform-started turn, an attended turn already running again), or what the commit did. */

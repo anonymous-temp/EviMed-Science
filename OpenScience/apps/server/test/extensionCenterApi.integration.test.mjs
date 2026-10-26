@@ -70,10 +70,38 @@ test("actual hosted API binds library, native parsing, PostgreSQL CAS and CSRF w
     const content = { expectedRevision: 0, title: "My method", description: "Check supplied material", instructions: "Preserve all source quotations." };
     const skill = await request("/api/skills", "POST", content, 201);
     assert.equal(validated.length, 1); assert.equal(skill.payload.prepared, true); assert.equal(skill.payload.instructions, content.instructions);
+    const pendingTransfers = await request('/api/skills/transfers/pending');
+    assert.deepEqual(pendingTransfers.items, []);
+    const portableResponse = await fetch(`${base}/api/skills/${encodeURIComponent(skill.id)}/portable`, { headers: auth });
+    assert.equal(portableResponse.status, 200);
+    assert.match(portableResponse.headers.get('content-disposition'), /evimed-personal-skill\.json/);
+    const portable = await portableResponse.json();
+    assert.equal(portable.format, 'evimed-personal-skills');
+    assert.equal(portable.skills.length, 1);
+    assert.equal(portable.skills[0].sourceId, skill.id);
+    assert.equal(portable.skills[0].revisions[0].instructions, content.instructions);
     await request(`/api/skills/${encodeURIComponent(skill.id)}`, "PUT", { ...content, expectedRevision: 0, instructions: "Stale data" }, 409);
     assert.equal(validated.length, 1, "stale requests must not invoke preparation");
     await request("/api/projects/default/skills", "PUT", { expectedRevision: 0, skills: [{ skillId: skill.id, revision: 1 }] });
     const selection = await request("/api/projects/default/skills"); assert.equal(selection.payload.skills[0].digest, skill.payload.digest);
+    const platform = await request('/api/projects/default/skills/platform');
+    assert.equal(platform.revision, selection.revision);
+    assert.equal(platform.items.find(item => item.id === 'office:docx').provenance.kind, 'first-party');
+    const disabled = await request('/api/projects/default/skills/platform', 'PUT', { expectedRevision: platform.revision, disabled: ['curated:matplotlib'] });
+    // No runtime runs in this deployment: the saved choice takes effect when the next conversation starts one.
+    assert.equal(disabled.activation.phase, 'pending');
+    assert.equal(disabled.activation.live, false);
+    assert.equal(disabled.items.find(item => item.id === 'curated:matplotlib').enabled, false);
+    assert.equal((await request('/api/projects/default/skills')).payload.skills[0].digest, skill.payload.digest);
+    await request('/api/projects/default/skills/platform', 'PUT', { expectedRevision: disabled.revision, disabled: ['core:stats-integrity'] }, 409);
+    await request('/api/projects/default/skills/platform', 'PUT', { expectedRevision: selection.revision, disabled: [] }, 409);
+    const builtins = await request('/api/projects/default/plugins/builtin');
+    assert.equal(builtins.revision, disabled.revision);
+    const builtinOff = await request('/api/projects/default/plugins/builtin', 'PUT', { expectedRevision: builtins.revision, disabled: ['annotation'] });
+    assert.equal(builtinOff.items.find(item => item.id === 'annotation').enabled, false);
+    assert.equal(builtinOff.activation.phase, 'pending');
+    assert.equal((await request('/api/projects/default/skills/platform')).revision, builtinOff.revision);
+    assert.deepEqual((await request('/api/projects/default/skills/platform')).payload.disabled, ['curated:matplotlib']);
     // No actual native session dispatcher is supplied here; do not turn the saved project intent into a fake invocation.
     await request(`/api/projects/default/skills/${encodeURIComponent(skill.id)}/invoke`, "POST", { revision: 1, sessionId: "fixture-session", idempotencyKey: "fixture-invoke" }, 503);
     const uploaded = await fetch(`${base}/api/skills/uploads?kind=skill`, { method: "POST", headers: { ...auth, "content-type": "application/octet-stream" }, body: "---\nname: imported-native\ndescription: Upload\n---\n\nRead this source.\n" });

@@ -57,6 +57,16 @@ const migrations = new WeakMap();
 /** The schema name, written once. */
 export const FRONTIER_SCHEMA = "evimed_frontier";
 
+/** The zone the feed's days and clocks are read in: Beijing time, everywhere (owner, 2026-10-26). The web reads the same zone. */
+export const FRONTIER_FEED_TIME_ZONE = "Asia/Shanghai";
+
+/**
+ * The version of the rule that decides `items.timeline_at` (`frontierTimelineAt` in `frontierPipeline.mjs`): 1 was "our publication
+ * instant unless the source is more than 72 hours older", 2 is the source's own time. The migration writes it once the published
+ * items have been given the rule (`backfillTimelineRule`).
+ */
+export const FRONTIER_TIMELINE_RULE = 2;
+
 /**
  * The `meta` keys this module seeds, and what each counts. Values are JSON
  * numbers; `bumpFrontierVersion` is the one way a version moves.
@@ -74,6 +84,8 @@ export const FRONTIER_META_KEYS = Object.freeze({
   pluginManifest: "plugin_manifest",
   /** Bumped by every change of the tag tree (a promotion, a merge, a sleep): the in-memory vocabulary reloads on it. */
   tagsVersion: "tags_version",
+  /** The rule `timeline_at` was last given by (`FRONTIER_TIMELINE_RULE`); not a version, nothing bumps it. */
+  timelineRule: "timeline_rule",
 });
 
 /** The keys `bumpFrontierVersion` moves; the cursor and the manifest are not versions.
@@ -922,6 +934,46 @@ async function seedFrontierTags(client) {
 }
 
 /**
+ * Give every published item the current rule of `timeline_at` (`frontierTimelineAt`, written here in SQL), once: the `meta` key
+ * `timeline_rule` says which rule the stored values were last decided by, and a value that is not `FRONTIER_TIMELINE_RULE` means
+ * they were decided by an older one. One UPDATE moves only the rows whose value changes, the key is stored, and the content
+ * version moves once when a row did — an empty database, or one the rule already ran on, changes nothing. No `item_changes` row
+ * is written: the feed's notices and the evolution reader take one per item as news, and a moved axis is not news.
+ *
+ * - `instant`: the source's instant, or `visible_at` when the source's is later (`LEAST` ignores a missing date, which
+ *   leaves `visible_at`, as the rule says for no usable date).
+ * - `day`: `LEAST(visible_at, the last millisecond of the stated day in the feed's zone)`, the stated day being the UTC date
+ *   of `published_at` (every such date is stored at UTC midnight).
+ * - anything else (`inferred`): `visible_at`.
+ * @param {any} client
+ */
+export async function backfillTimelineRule(client) {
+  const stored = (await client.query("SELECT value FROM evimed_frontier.meta WHERE key = $1", [FRONTIER_META_KEYS.timelineRule])).rows[0]?.value;
+  if (metaNumber(stored) === FRONTIER_TIMELINE_RULE) return;
+  const moved = await client.query(`UPDATE evimed_frontier.items i SET timeline_at = r.at
+    FROM (SELECT id, CASE date_precision
+        WHEN 'instant' THEN LEAST(published_at, visible_at)
+        WHEN 'day' THEN LEAST(visible_at, (((published_at AT TIME ZONE 'UTC')::date + 1)::timestamp AT TIME ZONE $1::text) - interval '1 millisecond')
+        ELSE visible_at END AS at
+      FROM evimed_frontier.items WHERE state = 'published' AND visible_at IS NOT NULL) r
+    WHERE i.id = r.id AND r.at IS NOT NULL AND i.timeline_at IS DISTINCT FROM r.at`, [FRONTIER_FEED_TIME_ZONE]);
+  // An event's span is its visible members' first and last `timeline_at` (`FrontierEvents#refresh`), which only a joining report
+  // recomputes: the moved axis is given to every event here, or a settled one would keep a first report its own reports contradict.
+  if ((moved.rowCount ?? 0) > 0) {
+    await client.query(`UPDATE evimed_frontier.events e SET first_at = m.first_at, last_at = m.last_at, updated_at = clock_timestamp()
+      FROM (SELECT ei.event_id, min(i.timeline_at) AS first_at, max(i.timeline_at) AS last_at
+          FROM evimed_frontier.event_items ei
+          JOIN evimed_frontier.items i ON i.id = ei.item_id AND i.state = 'published'
+          JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
+          GROUP BY ei.event_id) m
+      WHERE e.id = m.event_id AND (e.first_at IS DISTINCT FROM m.first_at OR e.last_at IS DISTINCT FROM m.last_at)`);
+  }
+  await client.query(`INSERT INTO evimed_frontier.meta (key, value, updated_at) VALUES ($1, to_jsonb($2::integer), clock_timestamp())
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = clock_timestamp()`, [FRONTIER_META_KEYS.timelineRule, FRONTIER_TIMELINE_RULE]);
+  if ((moved.rowCount ?? 0) > 0) await bumpFrontierVersion(client);
+}
+
+/**
  * Create or bring up to date the frontier schema, and say which search legs it
  * supports.
  *
@@ -941,6 +993,7 @@ export async function migrateFrontier(database, { dimension }) {
     await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-frontier-v1'))");
     await client.query(sql());
     await seedFrontierTags(client);
+    await backfillTimelineRule(client);
     await client.query(EVIDENCE_ZONE_SQL);
     const trigramVersion = await ensureExtension(client, "pg_trgm");
     if (trigramVersion) {

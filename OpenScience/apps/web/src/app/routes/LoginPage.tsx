@@ -117,14 +117,14 @@ function signInMessage(error: unknown): string {
   // The brand once, the two fields by their labels, and the one button — no
   // eyebrow, no sentence about the workspace, no card and no footer
   // (2026-09-23 plan §5.10, mockup m12). The heading names the form for a
-  // screen reader; the page itself shows the brand, not a second 「EviMed」.
+  // screen reader; the page itself shows the brand, not a second wordmark.
   return (
     <main className="grid min-h-screen place-items-center bg-bg px-6 py-10 text-text">
       <PageTitle page={registering ? "注册" : "登录"} />
       <div className="w-full max-w-sm">
         <div className="mb-8 flex items-center justify-center gap-2.5">
           <span aria-hidden="true"><EviMedMark className="h-7 w-7" /></span>
-          <span className="text-display font-semibold">EviMed</span>
+          <span className="text-display font-semibold">EviMed Science</span>
         </div>
         <h1 className="sr-only">{registering ? "注册" : "登录"}</h1>
 

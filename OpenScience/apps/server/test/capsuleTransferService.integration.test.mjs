@@ -274,7 +274,7 @@ test("「知识与项目事实」 carries the researcher's own project facts onl
   // engine's, read through its store with only its wire doubled.
   const { NativeMemoryStore } = await import("../src/nativeMemoryStore.mjs");
   const { migrateNativeMemory } = await import("../src/nativeMemoryPersistence.mjs");
-  const { nativeMemoryRoot } = await import("../src/openVikingLayout.mjs");
+  const { nativeMemoryRoot, openVikingUserId, userRootUri } = await import("../src/openVikingLayout.mjs");
   const { NativeMemoryOverlay } = await import("../src/nativeMemoryOverlay.mjs");
   await migrateNativeMemory(database);
   const sharer=`transfer_${randomUUID()}`;
@@ -298,7 +298,7 @@ test("「知识与项目事实」 carries the researcher's own project facts onl
       ...[...bodies.keys()].filter((uri)=>uri.includes("/bulk")).map((uri)=>({uri,isDir:false,modTime:bulkTimes.get(uri),size:20,tags:["project=proj-bulk"]}))];
     const bulkTimes=new Map();
     const overlay=new NativeMemoryOverlay({database});
-    const nativeMemory=new NativeMemoryStore({sessions:{configured:true,memoryRoot:()=>root,tree:async()=>tree(),read:async(_user,uri)=>bodies.get(uri)??null},overlay});
+    const nativeMemory=new NativeMemoryStore({sessions:{configured:true,memoryRoot:()=>root,engineUser:openVikingUserId,userRoot:userRootUri,tree:async()=>tree(),read:async(_user,uri)=>bodies.get(uri)??null},overlay});
     const nativeTransfers=new CapsuleTransferService({documents,capsules,identities,dataDir:directory,nativeMemory});
     const capsule=await makeCapsule(capsules, sharer,{title:"Knowledge capsule"});
     // A sensitive file never leaves. (The engine's other files are the person's own statements: memory keeps only what they stated, confirmed or
@@ -403,7 +403,7 @@ test("native selected-scope export encrypts full engine bodies and imports throu
   const { NativeMemoryStore } = await import("../src/nativeMemoryStore.mjs");
   const { migrateNativeMemory } = await import("../src/nativeMemoryPersistence.mjs");
   await migrateNativeMemory(database);
-  const { nativeMemoryRoot } = await import("../src/openVikingLayout.mjs");
+  const { nativeMemoryRoot, openVikingUserId, userRootUri } = await import("../src/openVikingLayout.mjs");
   const { NativeMemoryOverlay } = await import("../src/nativeMemoryOverlay.mjs");
   const { createHash } = await import("node:crypto");
   const sharer = `native_transfer_${randomUUID()}`;
@@ -414,7 +414,7 @@ test("native selected-scope export encrypts full engine bodies and imports throu
     await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'native-cohort','Cohort',1024)", [sharer]);
     const uri = `${root}/projects/cohort.md`;
     const nativeMemory = new NativeMemoryStore({
-      sessions: { configured: true, memoryRoot: () => root,
+      sessions: { configured: true, memoryRoot: () => root, engineUser: openVikingUserId, userRoot: userRootUri,
         tree: async () => [{ uri, isDir: false, modTime: "2026-10-21", size: body.length, tags: ["project=native-cohort"] }], read: async () => body },
       overlay: new NativeMemoryOverlay({ database }),
     });

@@ -211,7 +211,7 @@ const WALK_TABLES = {
       {"view":"virtual-research-definitions","route":"/app/virtual-research?tab=definitions","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","rows":false},
       {"view":"files","route":"/app/files","pattern":"/app/files","family":"knowledge","template":"T1","budget":"data","shapes":2,"rows":true},
       {"view":"knowledge-pages","route":"/app/files?kind=wiki","pattern":"/app/files","family":"knowledge","template":"T1","shapes":2,"rows":true},
-      {"view":"knowledge-graph","route":"/app/files?kind=wiki&view=graph","pattern":"/app/files","family":"knowledge","template":"T4","shapes":3,"rows":true},
+      {"view":"knowledge-graph","route":"/app/files?kind=wiki&view=graph","pattern":"/app/files","family":"knowledge","template":"T4","budget":"data","shapes":3,"rows":true},
       {"view":"files-reader","discovered":true,"pattern":"/app/files/:sourceId","family":"knowledge-record","template":"T5","budget":"data","rows":false},
       {"view":"memory","route":"/app/memory?tab=self","pattern":"/app/memory","family":"memory","template":"T1","shapes":2,"rows":true},
       {"view":"memory-project","route":"/app/memory?tab=project","pattern":"/app/memory","family":"memory","template":"T1","shapes":2,"rows":true},
@@ -228,8 +228,8 @@ const WALK_TABLES = {
       {"view":"account-projects","route":"/app/account?tab=projects","pattern":"/app/account","family":"settings","template":"T6","rows":false},
       {"view":"account-notifications","route":"/app/account?tab=notifications","pattern":"/app/account","family":"settings","template":"T6","rows":false},
       {"view":"ops","route":"/app/ops","pattern":"/app/ops","family":"ops","template":"T4","budgetOverride":{"colors":6},"budgetNote":"the 前沿标签 card's 撤回 and 显示更多 are text buttons in text-2, which no other card of the page draws while it is healthy: 6 on the live walk of evimed-e22de8a9736e-1 (2026-10-24)","rows":false},
-      {"view":"extensions-plugins","route":"/app/extensions/plugins","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","shapes":2,"rows":true},
-      {"view":"extensions-skills","route":"/app/extensions/skills","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","shapes":2,"rows":true},
+      {"view":"extensions-discover","route":"/app/extensions/discover","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","shapes":2,"rows":false},
+      {"view":"extensions-installed","route":"/app/extensions/installed","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","shapes":2,"rows":true},
       {"view":"extensions-plugin-missing","route":"/app/extensions/plugins/impeccable-audit-missing","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","rows":false},
       {"view":"extensions-skill-missing","route":"/app/extensions/skills/impeccable-audit-missing","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","rows":false},
       {"view":"not-found","route":"/app/does-not-exist","pattern":"/app/*","family":"screen","template":"screen","rows":false},
@@ -2287,8 +2287,9 @@ export const PAGE_PROBES = {
 
 /** The record that is not there on each walked missing-record address: what the drawer says, its button, and the list it returns to. */
 export const MISSING_RECORDS = {
-  "extensions-plugin-missing": { sentence: "找不到这个插件，它可能已被移除。", back: "回到插件列表", to: "/app/extensions/plugins" },
-  "extensions-skill-missing": { sentence: "找不到这个技能，它可能已被移除。", back: "回到技能列表", to: "/app/extensions/skills" },
+  // The page's two views are 发现 and 已添加; a record's address opens 已添加, so that is the list its drawer returns to.
+  "extensions-plugin-missing": { sentence: "找不到这个插件，它可能已被移除。", back: "回到插件列表", to: "/app/extensions/installed" },
+  "extensions-skill-missing": { sentence: "找不到这个技能，它可能已被移除。", back: "回到技能列表", to: "/app/extensions/installed" },
 };
 
 /** The five views of 记忆地图, in the order its one row of switches shows them. */
@@ -2895,12 +2896,12 @@ export function skillDrawerProbe() {
  */
 export function skillDrawerFindings(opened, refused, writes) {
   const failures = [];
-  if (!opened) return ["extensions-skills@desktop: 新建技能 did not open a drawer"];
-  if (!opened.title) failures.push("extensions-skills@desktop: the new-skill drawer is not titled 新建技能");
-  if (opened.captions < 2) failures.push(`extensions-skills@desktop: the new-skill drawer has ${opened.captions} caption(s) under its fields (two)`);
-  if (!opened.switchLabel) failures.push("extensions-skills@desktop: the new-skill drawer has no switch for using the skill in this project");
-  if (refused && !(refused.needName && refused.needHow)) failures.push("extensions-skills@desktop: 保存 with empty fields does not say 请填写名称 and 请写出这个技能怎么做 in place");
-  if (writes.length) failures.push(`extensions-skills@desktop: 保存 with empty fields sent a request: ${writes.join(", ")}`);
+  if (!opened) return ["extensions-installed@desktop: 创建技能 did not open a drawer"];
+  if (!opened.title) failures.push("extensions-installed@desktop: the new-skill drawer is not titled 新建技能");
+  if (opened.captions < 2) failures.push(`extensions-installed@desktop: the new-skill drawer has ${opened.captions} caption(s) under its fields (two)`);
+  if (!opened.switchLabel) failures.push("extensions-installed@desktop: the new-skill drawer has no switch for using the skill in this project");
+  if (refused && !(refused.needName && refused.needHow)) failures.push("extensions-installed@desktop: 保存 with empty fields does not say 请填写名称 and 请写出这个技能怎么做 in place");
+  if (writes.length) failures.push(`extensions-installed@desktop: 保存 with empty fields sent a request: ${writes.join(", ")}`);
   return failures;
 }
 
@@ -3313,7 +3314,7 @@ const CLEANUP_WALK_WAIT_MS = 135_000;
 export const STEP_TARGETS = {
   "files-pdf": "the original of the knowledge base's first finished PDF, opened on its own page",
   "files-return": "a document opened from a search of the knowledge base, and both ways back to that search",
-  "extensions-skills-create": "the new-skill drawer, saved empty with every write refused",
+  "extensions-create": "the new-skill drawer, opened from the 「添加技能」 menu and saved empty with every write refused",
   "memory-map-drawer": "the first mark of 记忆地图's list, and the drawer it opens",
   "knowledge-graph-mark": "the first mark of the knowledge graph, and the page it opens",
   "evidence-matrix": "a finished package's evidence matrix, and the dialog a row opens",
@@ -3642,9 +3643,10 @@ export async function walkMemoryMap(page, base, route) {
 }
 
 /**
- * The new-skill drawer: opened from the 新建技能 menu, it says what its fields are for and offers to use the skill in this project,
- * and 保存 with every field empty names what is missing in place. The save button writes, so every request that is not a read is
- * refused in the browser before it leaves, and the step fails if one was tried.
+ * The new-skill drawer: opened from the header's 「添加技能」 menu by 创建技能, it says what its fields
+ * are for and offers to use the skill in this project, and 保存 with every field empty names what is missing in place. The save
+ * button writes, so every request that is not a read is refused in the browser before it leaves, and the step fails if one was
+ * tried. A control the step cannot find fails it: a walk that did not reach the drawer has not walked it.
  */
 async function walkSkillDrawer(page, base, route) {
   await openRoute(page, base, route);
@@ -3656,9 +3658,9 @@ async function walkSkillDrawer(page, base, route) {
   };
   await page.route("**/api/**", guard);
   try {
-    if (!await page.evaluate(clickNamed, ["button", "新建技能"])) return { failures: [], notices: ["extensions-skills@desktop: no 新建技能 button to open"] };
+    if (!await page.evaluate(clickNamed, ["button", "添加技能"])) return { failures: ["extensions-installed@desktop: no 「添加技能」 menu to open"] };
     await page.waitForTimeout(500);
-    if (!await page.evaluate(clickNamed, ["menuitem", "创建技能"])) return { failures: [], notices: ["extensions-skills@desktop: the 新建技能 menu has no 创建技能"] };
+    if (!await page.evaluate(clickNamed, ["menuitem", "创建技能"])) return { failures: ["extensions-installed@desktop: the 「添加技能」 menu has no 创建技能"] };
     await page.waitForTimeout(800);
     const opened = await page.evaluate(skillDrawerProbe);
     let refused = null;
@@ -4025,7 +4027,7 @@ async function main() {
             if (name === "files" && found.pdfTitle) await recordStep(report, failures, notices, "files-pdf", () => walkPdfPreview(page, base, route, found.pdfTitle));
             // A08 on the knowledge base: a search, a document opened from it, and both ways back (only where there is a document to open).
             if (name === "files" && clicked.rows.length > 0) await recordStep(report, failures, notices, "files-return", () => walkKnowledgeReturn(page, base, route));
-            if (name === "extensions-skills") await recordStep(report, failures, notices, "extensions-skills-create", () => walkSkillDrawer(page, base, route));
+            if (name === "extensions-installed") await recordStep(report, failures, notices, "extensions-create", () => walkSkillDrawer(page, base, route));
             if (name === "memory-map") await recordStep(report, failures, notices, "memory-map-drawer", () => walkMemoryMap(page, base, route));
             if (name === "knowledge-graph") await recordStep(report, failures, notices, "knowledge-graph-mark", () => walkKnowledgeGraph(page, base, route));
           }
@@ -4695,7 +4697,7 @@ export function handoffProbe([action]) {
  * the two equal): none of them sends. `originReference` (where the conversation came from) was added there and not here, and every
  * event page's 深入研究 read as carrying a field a draft does not need (r19-guards2).
  */
-export const HANDOFF_FIELDS = ["draft", "kind", "originReference", "projectId", "references", "requestId", "restoreDraft", "resultRevision", "sessionId", "vcrReference"];
+export const HANDOFF_FIELDS = ["draft", "geoPlanContext", "kind", "originReference", "projectId", "references", "requestId", "restoreDraft", "resultRevision", "scope", "sessionId", "vcrReference"];
 
 /**
  * The event page's hand-off, judged (A01). `before` is the event page, `after` the address and state once 「深入研究」 was pressed, and

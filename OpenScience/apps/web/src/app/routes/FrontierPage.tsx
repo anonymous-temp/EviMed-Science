@@ -365,8 +365,11 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       if (!active || current !== generation.current) return;
       seenVersion.current = contentVersion;
       const known = new Set(listing.items.map((item) => item.id));
-      const top = listing.items[0] ? Date.parse(listing.items[0].timelineAt) : 0;
-      const count = page.items.filter((item) => !known.has(item.id) && Date.parse(item.timelineAt) >= top).length;
+      // An item can arrive with an older timeline instant than the list's top (it sits at its source's own time), so what is new is
+      // told by when we published it: against the newest publication on screen.
+      const arrived = (item: { visibleAt: string | null; timelineAt: string }) => Date.parse(item.visibleAt ?? item.timelineAt);
+      const top = listing.items.reduce((newest, item) => Math.max(newest, arrived(item) || 0), 0);
+      const count = page.items.filter((item) => !known.has(item.id) && arrived(item) >= top).length;
       if (count > 0) {
         setFresh({ count, page, listing: { key, items: page.items, nextCursor: page.nextCursor, version: page.version, loadedAt: Date.now(), related: page.related } });
       }
@@ -934,7 +937,9 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       default:
         return (
           <>
-            <div className="space-y-4">
+            {/* A column with a gap, not space-y: the two wrappers are `contents`, and a margin on a box that draws nothing never shows (the strip
+              * sat on the hot card's edge). The gap falls between what they draw. */}
+            <div className="flex flex-col gap-4">
               <div data-frontier-list="safety" className="contents"><SafetyStrip alerts={safety} onRetry={() => setSafetyAttempt((value) => value + 1)} onOpened={opened} /></div>
               {!q && !filtered && <div data-frontier-list="hot" className="contents"><HotCard events={hot.current?.board?.events ?? []} onOpenAll={() => setView("hot")} /></div>}
             </div>

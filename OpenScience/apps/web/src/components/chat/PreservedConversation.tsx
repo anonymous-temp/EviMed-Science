@@ -1,18 +1,19 @@
+import { geoConversationHistory, type GeoConversationScope } from "@/lib/geoNativeClient";
 import { useEffect, useState } from "react";
 import { getWebConversationHistory, type PreservedConversationHistory } from "@/lib/apiClient";
 import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
 import { sourceCitationProse } from "@evimed/domain";
 
 /** A refused runtime leaves the already saved conversation readable, with no composer or side effects. */
-export function PreservedConversation({ projectId, sessionId }: { projectId: string; sessionId: string | null }) {
+export function PreservedConversation({ scope, projectId, sessionId }: { scope?: GeoConversationScope; projectId: string; sessionId: string | null }) {
   const [history, setHistory] = useState<PreservedConversationHistory | null>(null);
   useEffect(() => {
     let alive = true;
     setHistory(null);
-    if (sessionId) void getWebConversationHistory(sessionId, projectId)
+    if (sessionId) void (scope ? geoConversationHistory(scope) : getWebConversationHistory(sessionId, projectId))
       .then(value => { if (alive) setHistory(value); }).catch(() => {});
     return () => { alive = false; };
-  }, [projectId, sessionId]);
+  }, [projectId, sessionId, scope]);
   if (!history?.messages.length) return null;
   return <section aria-label="已保存的对话" className="min-h-0 flex-1 overflow-y-auto px-4 py-6 text-left text-text">
     <div className="mx-auto max-w-read space-y-6">

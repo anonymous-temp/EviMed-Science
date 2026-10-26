@@ -132,10 +132,10 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         if (disposed) return;
         // Retains the session for the main view, which is what makes its
         // scope (and so its composer) exist for the draft below.
-        target.__EVIMED_RESULT_REVISION__?.clear(); target.__EVIMED_VCR_SELECTION__?.clear();
+        target.__EVIMED_RESULT_REVISION__?.clear(); target.__EVIMED_GEO_PLAN__?.clear(); target.__EVIMED_VCR_SELECTION__?.clear();
         ctx.uiWorkspace.openSession(sessionId);
         let draftRestored;
-        if (intent.draft !== undefined || (Array.isArray(intent.references) && intent.references.length)) {
+        if (intent.draft !== undefined || intent.resultRevision || intent.geoPlanContext || (Array.isArray(intent.references) && intent.references.length)) {
           const scope = ctx.sessions.scope(sessionId);
           if (!scope) throw new Error('Native session scope unavailable');
           const input = ctx.conversation.input.for(scope);
@@ -156,9 +156,13 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
             if (!target.__EVIMED_VCR_SELECTION__) throw new Error('Research reference transport unavailable');
             target.__EVIMED_VCR_SELECTION__.stage({ sessionId, reference: intent.vcrReference, draft: intent.draft });
           }
+          if (intent.geoPlanContext) {
+            if (!target.__EVIMED_GEO_PLAN__) throw new Error('GEO planning transport unavailable');
+            target.__EVIMED_GEO_PLAN__.stage({ sessionId, referenceId: intent.geoPlanContext.referenceId, draft: intent.draft ?? '' });
+          }
           if (intent.resultRevision) {
             if (!target.__EVIMED_RESULT_REVISION__) throw new Error('Result revision transport unavailable');
-            target.__EVIMED_RESULT_REVISION__.stage({ sessionId, referenceId: intent.resultRevision.referenceId, draft: intent.draft });
+            target.__EVIMED_RESULT_REVISION__.stage({ sessionId, referenceId: intent.resultRevision.referenceId, draft: intent.draft ?? '' });
           }
         }
         activated = true; selectedSession = sessionId; previousSession = sessionId;
@@ -204,7 +208,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     const snapshot = ctx.sessions.list.getSnapshot();
     const sessionId = mainViewSession(snapshot, previousSession ?? null);
     if (sessionId === previousSession) return;
-    target.__EVIMED_RESULT_REVISION__?.clear(); target.__EVIMED_VCR_SELECTION__?.clear();
+    target.__EVIMED_RESULT_REVISION__?.clear(); target.__EVIMED_GEO_PLAN__?.clear(); target.__EVIMED_VCR_SELECTION__?.clear();
     previousSession = sessionId;
     selectedSession = sessionId;
     const lineage = sessionId === null ? {} : lineageOf(snapshot, sessionId);
@@ -492,9 +496,10 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     if (intent.restoreDraft !== undefined && typeof intent.restoreDraft !== 'boolean') return;
     if (intent.vcrReference && (typeof intent.vcrReference !== 'object' || JSON.stringify(intent.vcrReference).length > 4096 || typeof intent.draft !== 'string' || !intent.draft)) return;
     if (intent.resultRevision && (typeof intent.resultRevision.referenceId !== 'string'
-      || !/^rr_[a-f0-9]{64}$/.test(intent.resultRevision.referenceId) || typeof intent.draft !== 'string' || !intent.draft)) return;
+      || !/^rr_[a-f0-9]{64}$/.test(intent.resultRevision.referenceId))) return;
+    if (intent.geoPlanContext && (Object.keys(intent.geoPlanContext).length !== 1 || !/^gpc_[a-f0-9]{64}$/.test(intent.geoPlanContext.referenceId))) return;
     incoming = data.seq;
-    const signature = JSON.stringify([intent.kind, intent.sessionId, intent.draft ?? null, intent.restoreDraft === true, intent.vcrReference ?? null, intent.resultRevision?.referenceId ?? null, (intent.references ?? []).map((/** @type {{ id: string }} */ reference) => reference.id)]);
+    const signature = JSON.stringify([intent.kind, intent.sessionId, intent.draft ?? null, intent.restoreDraft === true, intent.vcrReference ?? null, intent.resultRevision?.referenceId ?? null, intent.geoPlanContext?.referenceId ?? null, (intent.references ?? []).map((/** @type {{ id: string }} */ reference) => reference.id)]);
     const existing = requests.get(data.requestId);
     if (existing) {
       if (existing.signature !== signature) return;
@@ -720,7 +725,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     searches.clear();
     pendingNavigation = undefined;
     if (target.__EVIMED_SHELL__) delete target.__EVIMED_SHELL__;
-    requests.clear(); target.__EVIMED_RESULT_REVISION__?.clear(); target.__EVIMED_VCR_SELECTION__?.clear(); target.__DSH_TRANSPORT__?.dispose?.();
+    requests.clear(); target.__EVIMED_RESULT_REVISION__?.clear(); target.__EVIMED_GEO_PLAN__?.clear(); target.__EVIMED_VCR_SELECTION__?.clear(); target.__DSH_TRANSPORT__?.dispose?.();
   }, 'evimed.runtime-ui.bridge');
 }
 

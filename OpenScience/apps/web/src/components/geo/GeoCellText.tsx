@@ -40,6 +40,8 @@ export function geoCellWord(cell: GeoCell | null | undefined, unit: GeoUnit = "p
   if (cell.status === "not_measurable" && cell.reason === "citations_without_links") return GEO_LINKLESS_WORD;
   if (cell.status === "not_measurable" && cell.reason === "engines_differ") return GEO_ENGINES_DIFFER_WORD;
   if (cell.status === "not_measurable" && cell.reason === "insufficient_sample") return "样本不足";
+  if (cell.status === "not_measurable" && cell.reason === "entity_extraction_incomplete") return "识别未完成";
+  if (cell.status === "not_measurable" && ["judgement_incomplete", "not_adjudicated"].includes(cell.reason ?? "")) return "尚无法判定";
   if (cell.status !== "ok" || cell.value === null) return "—";
   return formatGeoValue(cell.value, unit);
 }
@@ -62,7 +64,12 @@ export function geoSampleText(cell: GeoCell | null | undefined, unit: GeoUnit = 
 export function geoCellPhrase(cell: GeoCell | null | undefined, unit: GeoUnit = "percent"): string {
   const word = geoCellWord(cell, unit);
   const sample = geoSampleText(cell, unit);
-  return sample ? `${word}，${sample}` : word;
+  const coverage = cell?.assessment;
+  return [sample ? `${word}，${sample}` : word,
+    cell?.methodVersion === null ? "历史计算口径，核查范围待确认" : null,
+    coverage?.partialAnswers ? `${fmt(coverage.partialAnswers)} 次回答仅核查了部分内容` : null,
+    coverage?.unknownAnswers ? `${fmt(coverage.unknownAnswers)} 次回答的核查范围未确定` : null,
+  ].filter(Boolean).join("；");
 }
 
 function fmt(value: number): string {

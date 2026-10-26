@@ -51,7 +51,7 @@ export const RESULT_CORRECTION_KINDS = Object.freeze(["analytic", "evidence", "p
 export const RESULT_CORRECTION_STATES = Object.freeze(["changed", "identical", "unknown"]);
 
 /** What the researcher selected, by the vocabulary the revision's anchor already has. */
-export const RESULT_CORRECTION_ANCHOR_KINDS = Object.freeze(["text", "table-cell", "figure", "claim", "pdf-region", "rendered-element"]);
+export const RESULT_CORRECTION_ANCHOR_KINDS = Object.freeze(["file", "text", "table-cell", "figure", "claim", "pdf-region", "rendered-element"]);
 
 /** The most the researcher's own words take of one record; the ledger bounds a whole event at 4 KiB. */
 const INSTRUCTION_LIMIT = 600;

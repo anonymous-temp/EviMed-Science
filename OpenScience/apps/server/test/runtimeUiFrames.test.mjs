@@ -13,6 +13,24 @@ const user = { id: "user-one" };
 const project = { id: "project-one", userId: user.id };
 const session = { expiresAt: 100000 };
 
+test('delegated frame tickets preserve actor, owner, session and membership incarnation on renewal', async () => {
+  const { issueRuntimeUiFrame, renewRuntimeUiFrame, validateRuntimeUiFrame } = await import('../src/runtimeUiFrames.mjs');
+  const owned = { id: project.id, userId: 'owner' }, delegation = { kind: 'geo', actorId: user.id, ownerId: 'owner',
+    controlProjectId: project.id, geoProjectId: 'geo-exact', rootSessionId: 'shared-session', actorCreatedAt: 'actor-time',
+    ownerCreatedAt: 'owner-time', projectCreatedAt: 'project-time', geoCreatedAt: 'geo-time', membershipEpoch: 'a'.repeat(64) };
+  assert.throws(() => issueRuntimeUiFrame({ config, req, user, session, project: owned, now: 1000 }));
+  const frame = issueRuntimeUiFrame({ config, req, user, session, project: owned, delegation, now: 1000 });
+  assert.equal(frame.claims.version, 2); assert.notEqual(frame.claims.version, 1);
+  const cookieReq = { headers: { cookie: `${req.headers.cookie}; ${frame.cookie.split(';')[0]}` } };
+  const parsed = validateRuntimeUiFrame({ config, req: cookieReq, user, session, frameId: frame.frameId, now: 1001 });
+  assert.deepEqual(parsed.delegation, delegation);
+  const renewal = renewRuntimeUiFrame({ config, req, user, session, frameId: frame.frameId, renewalToken: frame.renewalToken, now: 2000 });
+  assert.deepEqual(renewal.claims.delegation, delegation); assert.equal(renewal.claims.version, 2);
+  for (const change of [{ ownerId: 'foreign' }, { actorId: 'other' }, { membershipEpoch: null }, { rootSessionId: '../foreign' }, { extra: true }]) {
+    assert.throws(() => issueRuntimeUiFrame({ config, req, user, session, project: owned, delegation: { ...delegation, ...change }, now: 1000 }));
+  }
+});
+
 async function frameApi(t) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "evimed-frame-api-"));
   const app = createWebApiApp({ ...config, dataDir, devAuth: true, runtimeMode: "mock", runtimeUiProxyEnabled: true });

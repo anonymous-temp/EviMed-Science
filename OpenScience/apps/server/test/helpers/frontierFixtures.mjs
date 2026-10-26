@@ -137,6 +137,8 @@ export async function insertItem(database, overrides = {}) {
     scores: { authority: 24, impact: 12, novelty: 5, relevance: null }, doi: null, pmid: null, openAccess: null, oaPdfUrl: null,
     abstract: null, mentions: [], ...overrides,
   };
+  // An item given only its timeline instant was seen at it too (the rule of a fresh item); the mix reads its day by `visible_at` (c4).
+  if (overrides.timelineAt !== undefined && overrides.visibleAt === undefined) item.visibleAt = item.timelineAt;
   const lexemes = tsvectorLiteral([item.title, item.titleZh, item.summaryZh].filter(Boolean).join("\n"));
   const inserted = await database.query(`INSERT INTO evimed_frontier.items (public_id, primary_source_id, canonical_url, identity_key, doi, pmid,
       title_raw, title_zh, summary_zh, reason_zh, lang, lane, source_type, evidence_type, evidence_basis, specialties, entities, flags,

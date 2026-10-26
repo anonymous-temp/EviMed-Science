@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "composition": {
     "source": "deploy/runtime-dsh/dump-config.baseline.json",
-    "sha256": "93889a770c2cf7e022b8cfe8391c0f86a557e0690633f0169678960cfeca9779",
+    "sha256": "b22050c5bf73dce4d225820c785d678cad2d7b21f5d37bbc1e86f19bc55a0b35",
     "bundles": [
       "@deepseek-ai/dsh-base",
       "@changfenhuang/dsh-annotation",
@@ -1602,7 +1602,7 @@
   },
   "preset": {
     "source": "packages/socket/presets/evimed-universal/agent.cordis.yml",
-    "sha256": "ffd2fabeba957c9d539331714b08e3025ad190a746a0391cebc15b9195d8102d",
+    "sha256": "1009d6630a2aa84d5bafac68a80ea774ec6c535ec6643f0dc13840df5b3e13dc",
     "rows": [
       {
         "id": "persona",
@@ -1681,7 +1681,7 @@
       },
       {
         "id": "skill-filesystem",
-        "name": "@deepseek-ai/dsh-skill-filesystem",
+        "name": "@evimed/dsh-socket/plugins/project-skills",
         "state": "enabled"
       },
       {

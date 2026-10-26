@@ -51,8 +51,8 @@ export type ErrorShow = "severe" | "open" | "acting" | "all";
 export const ERROR_SHOWS: readonly ErrorShow[] = Object.freeze(["severe", "open", "acting", "all"]);
 
 /** A live error that would reach a patient (S3 or S4). */
-export const isSevereError = (error: Pick<GeoErrorRow, "status" | "severity">): boolean =>
-  error.status !== "closed" && (error.severity === "S3" || error.severity === "S4");
+export const isSevereError = (error: Pick<GeoErrorRow, "status" | "severity" | "judgmentState">): boolean =>
+  error.judgmentState !== "withdrawn" && error.status !== "closed" && (error.severity === "S3" || error.severity === "S4");
 
 const SHOW_MATCHES: Readonly<Record<ErrorShow, (error: GeoErrorRow) => boolean>> = {
   severe: isSevereError,
@@ -64,7 +64,7 @@ const SHOW_MATCHES: Readonly<Record<ErrorShow, (error: GeoErrorRow) => boolean>>
 export interface ErrorFilter {
   show: ErrorShow;
   engine?: string | null;
-  type?: GeoErrorType | null;
+  type?: GeoErrorType | "unknown" | null;
   trace?: ErrorTrace | null;
   /** The questions of one question group: only the errors told in answers to them. */
   questions?: ReadonlySet<string> | null;
@@ -75,12 +75,13 @@ export interface ErrorFilter {
 export function filterErrors(errors: readonly GeoErrorRow[], filter: ErrorFilter): GeoErrorRow[] {
   const needle = (filter.query ?? "").trim().toLowerCase();
   return errors.filter((error) => {
+    if (filter.show !== "all" && error.judgmentState === "withdrawn") return false;
     if (!SHOW_MATCHES[filter.show](error)) return false;
     if (filter.engine && error.engine !== filter.engine) return false;
-    if (filter.type && error.errorType !== filter.type) return false;
+    if (filter.type && (error.errorType ?? "unknown") !== filter.type) return false;
     if (filter.trace && errorTrace(error) !== filter.trace) return false;
     if (filter.questions && !(error.questionId && filter.questions.has(error.questionId))) return false;
-    if (needle && !`${error.statement} ${error.evidenceQuote ?? ""}`.toLowerCase().includes(needle)) return false;
+    if (needle && !`${error.statement} ${error.evidenceQuote ?? ""} ${error.citedSource?.domain ?? ""} ${error.citedSource?.url ?? ""}`.toLowerCase().includes(needle)) return false;
     return true;
   });
 }
@@ -209,10 +210,34 @@ export function traceLine(claim: Pick<ClaimRow, "rows">): string | null {
 
 /* ------------------------------------------------------------- corrections */
 
-/** The brief a person's 「写纠错稿」 hands to the project's conversation, unsent: who said what, and what the label says instead. */
-export function correctionBrief(claim: Pick<ClaimRow, "engines" | "statement" | "evidenceQuote">, product: string): string {
+/**
+ * What the person asks for, in their words: who said what, what the label says instead, and the work. No identity of any record: a
+ * hand-off that stages its context (`stageGeoPlanContext`) carries those, and the composer holds only this sentence.
+ */
+export function correctionSentence(claim: Pick<ClaimRow, "engines" | "statement" | "evidenceQuote">, product: string, action: "article" | "conclusion" | "treatment" = "article"): string {
   const engines = claim.engines.map(engineName).join("、");
-  return zh`${engines}在回答里说“${claim.statement}”，和${product}的说明书不一致${claim.evidenceQuote ? `（说明书：${claim.evidenceQuote}）` : ""}。写一篇纠错稿，把正确的说法讲清楚。`;
+  const task = action === "conclusion" ? "根据证据更新项目结论及相关已有文章，保留原版和新版关联。" : action === "treatment" ? "创建对应出处或问题群的处置任务，记录任务及输出关联；只有后续实测才能确认错误是否消失。" : "写一篇纠错稿，把正确说法及适用条件讲清楚；已有相关文章时沿用文章修订流程。";
+  return zh`${engines}在回答里说“${claim.statement}”，需要核查${product}的相关依据${claim.evidenceQuote ? `（原文：${claim.evidenceQuote}）` : ""}。${task}`;
+}
+
+/**
+ * The words of a correction row's original judgment that a reader must hear before the work starts: the part of the original
+ * assessment (the claim's version and its conditions of application) that was not preserved. Empty where every row kept it. The
+ * rows' own values are never copied here — the staged context names the rows, and the conversation reads them from the record.
+ */
+export function correctionLimitation(claim: Partial<Pick<ClaimRow, "rows">>): string {
+  const unknown = claim.rows?.some(row => !row.originalErrorAssessment || row.claimVersion == null || row.applicability == null) ?? false;
+  return unknown ? "部分原始判定依据未保留，请先核实当时的结论版本及适用条件；不得用当前结论冒充原始依据。" : "";
+}
+
+/**
+ * What a person's 「写纠错稿」 puts in the composer, unsent: who said what, what the label says instead, and — where the original
+ * judgment was not kept — that limit, in a sentence. Nothing else: the identity of every record (the errors, their answers, the
+ * claim's version and conditions) is staged as the conversation's context (`stageGeoPlanContext`, see `useCorrectionHandoff`), so
+ * the person never sends a record's JSON as their own words.
+ */
+export function correctionDraft(claim: Pick<ClaimRow, "engines" | "statement" | "evidenceQuote"> & Partial<Pick<ClaimRow, "rows">>, product: string, action: "article" | "conclusion" | "treatment" = "article"): string {
+  return zh`${correctionSentence(claim, product, action)}${correctionLimitation(claim)}`;
 }
 
 /**

@@ -51,17 +51,20 @@ test("an envelope expires after its time to live and never returns", async () =>
   assert.equal(await context.routeFor(project, "session", ["A"], "A"), null);
 }, { ttlMs: 1000 }));
 
-test("a preparation that outlives its bound cannot write an envelope later", async () => fixture(async ({ context, project }) => {
-  await assert.rejects(context.prepare(project, request("slow")), { code: "native_route_timeout" });
-  await new Promise(resolve => setTimeout(resolve, 35));
-  assert.equal((await context.read(project, { sessionId: "session", inputs: [{ requestId: "slow", textDigest: hash("slow") }] })).routes.length, 0);
-}, { timeoutMs: 5, route: async () => { await new Promise(resolve => setTimeout(resolve, 25)); return { effectiveAgentId: "geo-content" }; } }));
+test("a slow classifier still freezes its route: the classifier bounds itself, and no second deadline cuts the request's identity short", async () => fixture(async ({ context, project }) => {
+  const frozen = await context.prepare(project, request("slow"));
+  assert.equal(frozen.route.effectiveAgentId, "geo-content");
+  const read = await context.read(project, { sessionId: "session", inputs: [{ requestId: "slow", textDigest: hash("slow") }] });
+  assert.equal(read.routes[0].digest, frozen.digest);
+}, { route: async () => { await new Promise(resolve => setTimeout(resolve, 25)); return { effectiveAgentId: "geo-content" }; } }));
 
-test("a learning pause or trial beginning after preparation prevents the queued input from reading its route, and prepares nothing new", async () => fixture(async ({ context, project }) => {
+test("the route is the request's identity, not a learning supplement: it is frozen and read whatever the learning switch says", async () => fixture(async ({ context, project }) => {
   await context.prepare(project, request("A"));
-  context.allowed = async () => false;
-  assert.deepEqual(await context.read(project, { sessionId: "session", inputs: [{ requestId: "A", textDigest: hash("A") }] }), { routes: [] });
-  assert.equal(await context.prepare(project, request("B")), null);
+  // No switch is consulted: a paused account's selected GEO request still needs its frozen route, and the run policy its attendance proof.
+  assert.equal("allowed" in context, false);
+  const read = await context.read(project, { sessionId: "session", inputs: [{ requestId: "A", textDigest: hash("A") }] });
+  assert.equal(read.routes[0].route.effectiveAgentId, "geo-content");
+  assert.equal((await context.prepare(project, request("B"))).route.effectiveAgentId, "geo-content");
 }));
 
 test("concurrent replays of one native request share the same frozen route", async () => {
@@ -106,4 +109,51 @@ test("a restart reuses the frozen route instead of classifying the input again",
   assert.equal((await restarted.prepare(project, request("A", "Initial evidence"))).digest, first.digest);
   assert.deepEqual(calls, ["Initial evidence"]);
   assert.equal((await restarted.routeFor(project, "session", ["A", "A"], "Initial evidence")).effectiveAgentId, "geo-content");
+}));
+
+test("a selected GEO input keeps its route fields, is classified once with its own request, and is adopted only under the forwarded text", async () => fixture(async ({ context, project, calls }) => {
+  const ref = "gpc_" + "a".repeat(64);
+  context.route = async (_project, _session, text, input) => {
+    calls.push(text); assert.deepEqual(input.requestIds, ["bound"]); assert.equal(input.request.requestId, "bound");
+    return { effectiveAgentId: "open-domain-answer", geoContextRef: ref, geoInputRead: { referenceId: ref, what: "analysis" }, geoAnalysisRead: { referenceId: ref }, question: text };
+  };
+  const forwarded = "Human\n<evimed_geo_plan_context>trusted</evimed_geo_plan_context>";
+  const frozen = await context.prepare(project, request("bound", forwarded));
+  assert.equal(frozen.route.geoContextRef, ref);
+  assert.deepEqual(frozen.route.geoInputRead, { referenceId: ref, what: "analysis" });
+  assert.equal(await context.routeFor(project, "session", ["bound"], "Human"), null, "original human text cannot adopt a different forwarded envelope");
+  assert.deepEqual(await context.routeFor(project, "session", ["bound"], "Human <evimed_geo_plan_context>trusted</evimed_geo_plan_context>"), frozen.route);
+  assert.equal((await context.prepare(project, request("bound", forwarded))).digest, frozen.digest);
+  assert.equal(calls.length, 1);
+}));
+
+test("a modified stored route cannot be read or adopted under the original envelope digest", async () => fixture(async ({ context, project }) => {
+  await context.prepare(project, request("owned"));
+  const file = context.file(project, "session", "owned");
+  const envelope = JSON.parse(await fs.readFile(file, "utf8"));
+  envelope.route.effectiveAgentId = "geo-strategy";
+  await fs.writeFile(file, JSON.stringify(envelope));
+  assert.deepEqual(await context.read(project, { sessionId: "session", inputs: [{ requestId: "owned", textDigest: hash("owned") }] }), { routes: [] });
+  assert.equal(await context.routeFor(project, "session", ["owned"], "owned"), null);
+}));
+
+test("adoption never borrows a later queued route when the initiating input has no envelope", async () => fixture(async ({ context, project }) => {
+  await context.prepare(project, request("later", "Same forwarded text"));
+  assert.equal(await context.routeFor(project, "session", ["initiating", "later"], "Same forwarded text"), null);
+  assert.equal((await context.routeFor(project, "session", ["later", "initiating"], "Same forwarded text")).effectiveAgentId, "geo-content");
+}));
+
+test("selected request identity validation and ordinary preparation share the same native bounds", async () => fixture(async ({ context, project }) => {
+  for (const requestId of ["", "x".repeat(513), "bad\nidentity", "bad\u007fidentity", 0, null, {}]) {
+    const input = request(/** @type {any} */ (requestId));
+    assert.throws(() => context.assertRequestIdentity(input), { code: "native_route_request_invalid" });
+    assert.equal(await context.prepare(project, input), null, "an ordinary unsupported native identity freezes nothing and refuses nothing");
+  }
+  assert.throws(() => context.assertRequestIdentity({ ...request("valid"), sessionId: "s".repeat(129) }), { code: "native_route_request_invalid" });
+  const boundary = request("x".repeat(512));
+  assert.doesNotThrow(() => context.assertRequestIdentity(boundary));
+  assert.ok(await context.prepare(project, boundary));
+  const steer = { ...request("legal-steer"), mode: "steer" };
+  assert.doesNotThrow(() => context.assertRequestIdentity(steer));
+  assert.equal(await context.prepare(project, steer), null, "a legal steer keeps the initiating route instead of preparing a new one");
 }));

@@ -239,7 +239,7 @@ export function createGeoQuestionBank({ store, measureDeps, database, config, en
     if (!project?.internal) return [];
     const rows = (await store.query(`SELECT e.statement, q.text AS question, c.statement AS claim FROM evimed_geo.errors e
         LEFT JOIN evimed_geo.questions q ON q.id = e.question_id LEFT JOIN evimed_geo.claims c ON c.id = e.claim_id
-      WHERE e.geo_project_id = $1 AND e.status <> 'closed' ORDER BY e.updated_at DESC LIMIT $2`, [project.id, ERRORS_MAX])).rows;
+      WHERE e.geo_project_id = $1 AND e.judgment_state='active' AND e.status <> 'closed' ORDER BY e.updated_at DESC LIMIT $2`, [project.id, ERRORS_MAX])).rows;
     counters.errorsRead += rows.length;
     /** @type {Map<string, { entityKeys: string[], count: number }>} */
     const groups = new Map();

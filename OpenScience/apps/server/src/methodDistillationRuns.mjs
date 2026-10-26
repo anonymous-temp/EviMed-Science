@@ -1,3 +1,5 @@
+import { contextPolicyIdentity } from "./geoContextItems.mjs";
+import { scopedMethodName } from "./geoContextProvenance.mjs";
 /**
  * Turning one finished run into at most one proposed method.
  *
@@ -579,16 +581,18 @@ export class MethodDistillationRuns {
    *   scriptUses?: { exemplars: (userId: string, hash: string) => Promise<{runId: string, at?: string, source: string}[]> } | null,
    *   verifyCode?: ((candidate: { files: Record<string, string>, dependencies: [] }, options: { signal?: AbortSignal }) => Promise<{ ok: boolean, issues: { code: string, message?: string, path?: string }[] }>) | null,
    *   onCodeSkill?: ((outcome: string) => void) | null,
+   *   contextProvenance?: any,
    *   onEvidence?: ((counts: { kept: number, dropped: number }) => void) | null}} dependencies
    *   `scriptUses` gives a `script` lesson the sources of the program that recurred; `verifyCode` runs a candidate's attached scripts and their tests in the disposable
    *   executor before any method that carries them is written (`onCodeSkill` counts `verified`, `failed`, `unavailable`).
    */
   constructor({ dispatch, readResult, learning, jobs = null, notifications = null, resolveProject = null, usedMethods = null, resetInstant = null,
-    similarity = null, resolveRun = null, scriptUses = null, verifyCode = null, onCodeSkill = null, onEvidence = null }) {
+    similarity = null, resolveRun = null, scriptUses = null, verifyCode = null, onCodeSkill = null, onEvidence = null, contextProvenance = null }) {
     if (typeof dispatch !== "function" || typeof readResult !== "function") {
       throw new TypeError("Method distillation requires the bounded run dispatcher and result reader.");
     }
     if (!learning) throw new TypeError("Method distillation requires the learning service.");
+    this.contextProvenance = contextProvenance;
     this.dispatch = dispatch;
     this.readResult = readResult;
     this.learning = learning;
@@ -612,8 +616,9 @@ export class MethodDistillationRuns {
    * @param {string} userId @param {string} query
    * @returns {Promise<any[]>}
    */
-  async #related(userId, query) {
-    const pool = await this.learning.listMethods(userId, { limit: RELATED_POOL }).then((page) => page.items ?? []).catch(() => []);
+  async #related(userId, query, policy = null) {
+    const pool = this.contextProvenance ? await this.contextProvenance.scopedMethods(userId, policy)
+      : await this.learning.listMethods(userId, { limit: RELATED_POOL }).then((page) => page.items ?? []).catch(() => []);
     if (!this.similarity || !query.trim() || pool.length <= MAX_RELATED) return pool.slice(0, MAX_RELATED);
     try {
       return (await this.similarity.nearest(query, pool, { limit: MAX_RELATED })).map((entry) => entry.method);
@@ -698,7 +703,17 @@ export class MethodDistillationRuns {
    */
   async execute({ job, project, run, feedback = [] }) {
     const trigger = String(job.payload?.trigger ?? "");
-    const transcript = await readRunTranscript(project, run.id).catch(() => null);
+    // A shared GEO project's lesson reads only what a person's attributed input said (`GeoContextProvenance.observeRun`): the user turns of
+    // the transcript are replaced by the observed human text, and nothing outside the project is shown.
+    const policy = await this.contextProvenance?.policyFor(project);
+    const shared = policy?.kind === 'geo-project';
+    const observation = shared ? await this.contextProvenance.observeRun(project, run) : null;
+    let transcript = await readRunTranscript(project, run.id).catch(() => null);
+    if (shared && transcript) transcript = { ...transcript, messages: transcript.messages.map(message => {
+      if (message.role !== 'user') return message;
+      const original = observation.humanMessages.find(item => item.seq === message.seq && (!message.sessionId || message.sessionId === run.sessionId));
+      return { ...message, parts: [{ type: 'text', text: original?.text ?? '' }] };
+    }) };
     // What the run left, read for its shape: the digest says what kind of thing it made, not only where it put it.
     const files = [...new Set(["artifacts", "unverifiedArtifacts", "outputFiles"].flatMap((field) => (Array.isArray(run?.[field]) ? run[field] : [])
       .map((/** @type {any} */ entry) => String(typeof entry === "string" ? entry : entry?.path ?? ""))))].filter(Boolean);
@@ -706,16 +721,28 @@ export class MethodDistillationRuns {
     const toolTraces = await readToolTraces(project, run.id);
     // The researcher's whole library, ranked by what this lesson is about: a method learnt in another project is the one to amend,
     // not a near-duplicate to write beside it.
-    const related = await this.#related(job.userId, lessonQueryText({ run, trigger, transcript, feedback, shapes }));
+    const related = await this.#related(job.userId, lessonQueryText({ run, trigger, transcript, feedback, shapes }), policy);
     // Each peer by run and project; a lesson queued before 2026-09-28 names
     // run ids only, all in its own project (`lessonPeers`).
     const peers = trigger === "routine"
       ? lessonPeers(job.payload).filter((peer) => peer.runId !== run.id).slice(0, MAX_PEER_RUNS)
       : [];
     const peerRuns = [];
+    const sourceObservations = observation ? [observation] : [];
+    if (shared) for (const sourceId of job.payload?.sourceRunIds ?? []) {
+      if (sourceObservations.some(source=>source.runId===sourceId)) continue;
+      const source=await this.contextProvenance.resolveSourceRun(job.userId,project.id,sourceId);
+      if (!source) throw new HttpError(409,'geo_learning_source_unverified','A correction source is unavailable.');
+      sourceObservations.push(await this.contextProvenance.observeRun(project,source));
+    }
     for (const peer of peers) {
+      if (shared && peer.projectId && peer.projectId !== policy.controlProjectId) continue;
       const peerProject = await this.#peerProject(job, project, peer);
       const peerRun = peerProject && this.resolveRun ? await this.resolveRun(peerProject, peer.runId).catch(() => null) : null;
+      if (shared) {
+        if (!peerRun || !peerProject) continue;
+        sourceObservations.push(await this.contextProvenance.observeRun(peerProject, peerRun));
+      } else if (this.contextProvenance && peerProject && (await this.contextProvenance.policyFor(peerProject)).kind === 'geo-project') continue;
       const peerFiles = ["artifacts", "unverifiedArtifacts", "outputFiles"].flatMap((field) => (Array.isArray(peerRun?.[field]) ? peerRun[field] : [])
         .map((/** @type {any} */ entry) => String(typeof entry === "string" ? entry : entry?.path ?? ""))).filter(Boolean);
       peerRuns.push({
@@ -726,14 +753,27 @@ export class MethodDistillationRuns {
         transcript: peerProject ? await readRunTranscript(peerProject, peer.runId).catch(() => null) : null,
       });
     }
-    const methodsUsed = this.usedMethods ? await this.usedMethods(project, run).catch(() => null) : null;
+    const methodsUsed = !shared && this.usedMethods ? await this.usedMethods(project, run).catch(() => null) : null;
     const scripts = trigger === "script" ? await this.#scriptsOf(job) : null;
-    const input = buildDistillationInput({ run, trigger, transcript, feedback, relatedMethods: related, peerRuns, methodsUsed, shapes, toolTraces, scripts });
-    const dispatchId = distillationDispatchId(run.id, trigger, typeof job.payload?.dispatchKey === "string" ? job.payload.dispatchKey.slice(0, 200) : "");
+    const input = buildDistillationInput({ run: shared ? {...run,question:observation.humanText} : run, trigger, transcript,
+      feedback: shared ? feedback.filter(event => typeof (event.detail?.quote ?? event.detail?.instruction) === 'string'
+        && sourceObservations.some(source=>source.humanText.includes(event.detail.quote ?? event.detail.instruction))) : feedback,
+      relatedMethods: related, peerRuns, methodsUsed, shapes, toolTraces, scripts });
+    if (shared && trigger==='correction' && sourceObservations.length>1) {
+      input.corrections.push(...sourceObservations.filter(source=>source.runId!==run.id).flatMap(source=>source.humanMessages.map(message=>
+        ({source:'accepted-input',recordId:message.referenceId,key:null,text:message.text}))));
+      input.signal='researcher';
+    }
+    // Shared results predating the frozen-input contract cannot be adopted.
+    const priorDispatchId = distillationDispatchId(run.id, trigger, typeof job.payload?.dispatchKey === "string" ? job.payload.dispatchKey.slice(0, 200) : "");
+    const dispatchId = priorDispatchId + (shared ? '-gcp1' : '');
+    const generationInputRef=shared?await this.contextProvenance.freezeInput(job.userId,policy,dispatchId,input,
+      input.relatedMethods.map(method=>related.find(row=>row.id===method.id)),sourceObservations):null;
     const identity = await this.dispatch({
       userId: job.userId,
       projectId: job.projectId,
       dispatchId,
+      ...(shared?{unprovenPriorDispatchId:priorDispatchId}:{}),
       job,
       capabilityId: "method-distillation",
       contractKind: "method-candidate",
@@ -757,7 +797,9 @@ export class MethodDistillationRuns {
     if (result.status !== "succeeded") {
       throw new HttpError(409, "method_distillation_run_failed", "The distillation run did not succeed.");
     }
-    const applied = await this.applyCandidate(job, run, result.output ?? {}, { signal: input.signal, evidence: evidenceCorpus(input), reactions: reactionCorpus(input) });
+    const applied = await this.applyCandidate(job, run, result.output ?? {}, { signal: input.signal,
+      evidence: shared ? new Map(sourceObservations.map(source => [source.runId, source.humanText])) : evidenceCorpus(input), reactions: reactionCorpus(input),
+      policy, sourceObservations, generationInputRef });
     return { state: "complete", ...identityRecord, ...applied };
   }
 
@@ -774,7 +816,7 @@ export class MethodDistillationRuns {
    * bodies to these. The lesson's `scope` — the capability it came from, or `conversation` — is stored with them, so a later run
    * of the same scope is offered the method (`learnedMethodMount.mjs`).
    * @param {any} job @param {any} run @param {Record<string, any>} output
-   * @param {{signal?: string, evidence?: Map<string, string>, reactions?: Map<string, string[]>, abortSignal?: AbortSignal}} [context] what the lesson's evidence was, read from the job when absent; and the text the distillation was shown, by run
+   * @param {{signal?: string, evidence?: Map<string, string>, reactions?: Map<string, string[]>, abortSignal?: AbortSignal, policy?: any, sourceObservations?: any[], generationInputRef?: string|null}} [context] what the lesson's evidence was, read from the job when absent; and the text the distillation was shown, by run
    */
   async applyCandidate(job, run, output, context = {}) {
     const candidate = output.candidate ?? output["method-candidate.json"] ?? output;
@@ -800,6 +842,16 @@ export class MethodDistillationRuns {
     const sourceProjectId = typeof job.payload?.sourceProjectId === "string" && job.payload.sourceProjectId
       ? job.payload.sourceProjectId
       : job.projectId && job.projectId !== LEARNING_PROJECT_ID ? String(job.projectId) : null;
+    const policy = context.policy ?? (sourceProjectId && this.contextProvenance
+      ? await this.contextProvenance.policyFor({userId:job.userId,id:sourceProjectId}) : null);
+    const shared = policy?.kind === 'geo-project';
+    if (shared) {
+      const project = await this.contextProvenance.projectFor(job.userId, sourceProjectId);
+      if (!project) throw new HttpError(409, 'geo_learning_source_unverified', 'The shared learning source cannot be verified.');
+      const observed = await this.contextProvenance.observeRun(project, run);
+      // Model evidence can quote only original authenticated human parts.
+      context.evidence = new Map((context.sourceObservations ?? [observed]).map(source => [source.runId, source.humanText]));
+    }
     const skillText = String(output.skill ?? output["SKILL.md"] ?? "");
     const parsed = parseSkillFrontmatter(skillText);
     if (parsed.issues.length) {
@@ -843,6 +895,8 @@ export class MethodDistillationRuns {
       feedbackEventIds: job.payload?.feedbackEventIds ?? [],
       ...(resultLinks.length ? { results: resultLinks } : {}),
       ...(sourceProjectId ? { sourceProjectId } : {}),
+      ...(context.generationInputRef ? {generationInputRef:context.generationInputRef} : {}),
+      ...(shared ? {contextPolicy:contextPolicyIdentity(policy), sourceRunIds:[...context.evidence.keys()]} : {}),
       ...(typeof run.effectiveAgentId === "string" && run.effectiveAgentId ? { capabilityId: run.effectiveAgentId } : {}),
       ...(job.payload?.trigger ? { trigger: String(job.payload.trigger) } : {}),
       signal,
@@ -870,9 +924,17 @@ export class MethodDistillationRuns {
     // under a name the library already holds is that method's next revision,
     // not a second method: without this it was refused as a revision conflict,
     // retried, and lost (the same name learnt in two projects).
-    const existing = operation === "create"
-      ? await this.learning.getMethod(job.userId, learnedMethodId(String(parsed.frontmatter?.name ?? ""))).catch(() => null)
-      : null;
+    const getTarget = async id => this.contextProvenance
+      ? this.contextProvenance.methodFor(job.userId, id, policy ?? {kind:'owned',ownerId:job.userId})
+      : this.learning.getMethod(job.userId, id).catch(() => null);
+    let existing = operation === "create" ? await getTarget(learnedMethodId(String(parsed.frontmatter?.name ?? ''))) : null;
+    if (operation === 'create' && !existing && this.contextProvenance) {
+      const collision = (await this.contextProvenance.rows(job.userId,'method')).some(row => row.id === learnedMethodId(String(parsed.frontmatter?.name ?? '')));
+      if (collision) {
+        parsed.frontmatter.name = scopedMethodName(parsed.frontmatter.name, policy ?? {kind:'owned',ownerId:job.userId});
+        existing = await getTarget(learnedMethodId(String(parsed.frontmatter.name)));
+      }
+    }
     if (operation === "create" && !existing) {
       const created = await this.learning.createCandidate(job.userId, {
         // The project it was learnt in, as provenance; the method itself is
@@ -894,7 +956,8 @@ export class MethodDistillationRuns {
     }
     const targetId = existing ? String(existing.id) : String(candidate?.targetMethodId ?? "");
     if (!targetId) throw new HttpError(422, "method_candidate_invalid", "An amend or merge must name the method it changes.");
-    const target = await this.learning.getMethod(job.userId, targetId);
+    const target = await getTarget(targetId);
+    if (!target) throw new HttpError(409,'geo_learning_target_unverified','The learning target is outside this project.');
     // A merge folds the methods it names into the target. They are read here, by the account's own ledger and never by the
     // candidate's word for them, and listed for retirement the way the builder's merges are (`pendingRetirements`,
     // `MethodConsolidation.completePendingMerges`): each stops once the merged method has cleared the harm test on runs of its own,
@@ -903,7 +966,8 @@ export class MethodDistillationRuns {
     const folded = [];
     if (operation === "merge" && !existing) {
       for (const foldedId of [...new Set((Array.isArray(candidate?.mergedMethodIds) ? candidate.mergedMethodIds : []).map(String))].filter((named) => named && named !== targetId).slice(0, MAX_RELATED - 1)) {
-        const method = await this.learning.getMethod(job.userId, foldedId).catch(() => null);
+        const method = await getTarget(foldedId);
+        if (!method && shared) throw new HttpError(409,"geo_learning_target_unverified","A merge source is outside this project.");
         if (method && method.payload?.status !== "retired") folded.push(method);
       }
     }
@@ -972,8 +1036,11 @@ export class MethodDistillationRuns {
    */
   async #enqueueIntegrate(job, methodId, revision = 0) {
     if (!this.jobs) return;
+    const sourceProjectId = job.payload?.sourceProjectId ?? job.projectId;
+    const origin = {sourceProjectId,...(job.payload?.contextPolicy ? {contextPolicy:job.payload.contextPolicy} : {}),
+      ...(job.payload?.inputReceiptRefs ? {inputReceiptRefs:job.payload.inputReceiptRefs} : {})};
     try {
-      await this.jobs.enqueue(job.userId, "consolidate", { action: "integrate", methodId }, {
+      await this.jobs.enqueue(job.userId, "consolidate", { action: "integrate", methodId, ...origin }, {
         idempotencyKey: `consolidate:integrate:${methodId}:${revision}`,
         projectId: LEARNING_PROJECT_ID,
       });
@@ -981,7 +1048,7 @@ export class MethodDistillationRuns {
       // isolated: evimed_learning_integrate_enqueue_failed_total
     }
     try {
-      await this.jobs.enqueue(job.userId, "consolidate", { action: "sleep", date: new Date().toISOString(), after: methodId }, {
+      await this.jobs.enqueue(job.userId, "consolidate", { action: "sleep", date: new Date().toISOString(), after: methodId, ...origin }, {
         idempotencyKey: `consolidate:sleep:after:${methodId}:${revision}`,
         projectId: LEARNING_PROJECT_ID,
       });

@@ -27,6 +27,7 @@ import { ShowMore } from "@/components/ui/ShowMore";
 import { Tag } from "@/components/ui/Tag";
 import type { ToolbarFilter } from "@/components/ui/Toolbar";
 import { FrontierSkeleton } from "./FrontierSkeleton";
+import { feedDayKey } from "./frontierText";
 
 const articlePath = (id: string) => `/app/frontier/items/${encodeURIComponent(id)}`;
 /** A congress's hub (`/app/frontier/congress/:id`). */
@@ -213,11 +214,9 @@ export function congressDates(start: string, end: string): string {
   return startMonth === endMonth ? `${monthDay(start)}—${Number(endDay)}日` : `${monthDay(start)}—${monthDay(end)}`;
 }
 
-/** Today's day key in the feed's zone (Asia/Shanghai), whatever the browser's zone is. */
+/** Today's day key in the feed's zone (Beijing time), whatever the browser's zone is. */
 function feedToday(now = Date.now()): string {
-  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" })
-    .formatToParts(new Date(now)).map((part) => [part.type, part.value]));
-  return `${parts.year}-${parts.month}-${parts.day}`;
+  return feedDayKey(now) ?? "";
 }
 
 /** Whole days from one day key to another. */

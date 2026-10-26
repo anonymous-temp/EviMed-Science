@@ -180,10 +180,10 @@ export const GEO_ROUND_STATUSES = frozen(['queued', 'running', 'done', 'partial'
 export const GEO_PROBE_JOB_STATUSES = frozen(['queued', 'leased', 'done', 'failed', 'skipped'])
 export const GEO_SNAPSHOT_STATUSES = frozen(['valid', 'suspect', 'refusal', 'failed'])
 export const GEO_STATEMENT_VERDICTS = frozen(['correct', 'wrong', 'unverifiable'])
-/** The four failure modes (漏提我方 / 讲对我方 / 讲错我方 / 讲错竞品), and `none` for an answer with nothing about us. */
-export const GEO_FAILURE_MODES = frozen(['omitted', 'correct', 'wrong_ours', 'wrong_competitor', 'none'])
+/** Failure modes plus explicit partial/unknown assessment; missing judgement is never correctness. */
+export const GEO_FAILURE_MODES = frozen(['omitted', 'correct', 'wrong_ours', 'wrong_competitor', 'none', 'partial', 'unknown'])
 export const GEO_FAILURE_MODE_LABELS_ZH = Object.freeze({
-  omitted: '漏提我方', correct: '讲对我方', wrong_ours: '讲错我方', wrong_competitor: '讲错竞品', none: '未涉及',
+  omitted: '漏提我方', correct: '讲对我方', wrong_ours: '讲错我方', wrong_competitor: '讲错竞品', none: '未涉及', partial: '部分核对', unknown: '尚无法判断',
 })
 
 /**
@@ -346,6 +346,8 @@ export const GEO_SOURCE_KIND_LABELS_ZH = Object.freeze({
 })
 export const GEO_SOURCE_LAYERS = frozen(['anchor', 'coverage', 'owned'])
 export const GEO_SOURCE_LAYER_LABELS_ZH = Object.freeze({ anchor: '锚点层', coverage: '覆盖层', owned: '自有层' })
+export const GEO_SOURCE_RELATIONSHIPS = frozen(['own', 'partner', 'competitor', 'other', 'unknown'])
+export const GEO_SOURCE_RELATIONSHIP_LABELS_ZH = Object.freeze({ own: '自有', partner: '合作', competitor: '竞品', other: '其他', unknown: '未确认' })
 
 /** Articles (内容). */
 export const GEO_ARTICLE_LAYERS = frozen(['deep', 'card', 'popular', 'qa', 'correction'])
@@ -452,23 +454,24 @@ export const GEO_ARTICLE_CHANNELS = frozen([...GEO_OWNED_LINK_PLATFORMS, 'media_
 export const GEO_ARTICLE_CHANNEL_LABELS_ZH = Object.freeze({ ...GEO_OWNED_LINK_PLATFORM_LABELS_ZH, media_market: '媒介集市（专业媒体）' })
 
 /** The runtime tools' words (`geo_read` / `geo_write`, spec §4). */
-export const GEO_READ_WHATS = frozen(['project', 'claims', 'questions', 'journey', 'diagnosis', 'metrics', 'snapshots', 'errors', 'sources',
+export const GEO_READ_WHATS = frozen(['analysis', 'signal', 'diagnosis_progress', 'project', 'claims', 'questions', 'journey', 'diagnosis', 'metrics', 'snapshots', 'errors', 'sources',
   'strategy', 'targets', 'articles', 'orders', 'owned_links', 'monitoring', 'cards', 'value', 'research', 'clusters', 'actions'])
-export const GEO_WRITE_WHATS = frozen(['product', 'claims', 'questions', 'lock_questions', 'journey', 'strategy', 'sources', 'targets',
+export const GEO_WRITE_WHATS = frozen(['product', 'claims', 'questions', 'preview_questions', 'start_diagnosis', 'recover_diagnosis', 'lock_questions', 'journey', 'strategy', 'sources', 'targets',
   'articles', 'placement_plan', 'owned_links', 'step', 'value', 'research', 'actions'])
 /** How a read or a write narrates in the conversation (`narration.mjs`). */
 export const GEO_READ_WHAT_LABELS_ZH = Object.freeze({
-  project: '项目概况', claims: '结论库', questions: '问题地图', journey: '旅程', diagnosis: '诊断', metrics: '指标', snapshots: '回答快照',
+  analysis: '所选数据分析', signal: '所选发现与资料',
+  diagnosis_progress: '诊断进展', project: '项目概况', claims: '结论库', questions: '问题地图', journey: '旅程', diagnosis: '诊断', metrics: '指标', snapshots: '回答快照',
   errors: '讲错记录', sources: '信源', strategy: '信源布局', targets: '三档目标', articles: '稿件', orders: '投放订单', owned_links: '自有发布',
   monitoring: '监测', cards: '证据卡片', value: '药品价值分析', research: '相关研究', clusters: '问句群', actions: '行动',
 })
 export const GEO_WRITE_WHAT_LABELS_ZH = Object.freeze({
-  product: '产品身份', claims: '结论库', questions: '问题地图', lock_questions: '锁定测量问句', journey: '旅程', strategy: '信源分析',
+  preview_questions: '预览原题', start_diagnosis: '开始诊断', recover_diagnosis: '恢复诊断', product: '产品身份', claims: '结论库', questions: '问题地图', lock_questions: '锁定测量问句', journey: '旅程', strategy: '信源分析',
   sources: '信源表', targets: '三档目标', articles: '稿件', placement_plan: '投放偏好', owned_links: '自有发布', step: '进度',
   value: '药品价值分析', research: '研究任务', actions: '行动',
 })
 /** The export runs 「⋯」 offers. */
-export const GEO_EXPORT_KINDS = frozen(['weekly', 'proposal'])
+export const GEO_EXPORT_KINDS = frozen(['weekly', 'proposal', 'selected'])
 
 /**
  * The action read model (`geoActions.mjs`): what the platform is doing, or is about to do, for one question group. The words are the

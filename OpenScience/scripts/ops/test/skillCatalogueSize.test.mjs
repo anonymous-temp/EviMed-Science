@@ -200,3 +200,22 @@ test("the installed kernel's limit and frame are the ones measured here (opt-in:
   assert.equal(kernel.descriptionMax, CATALOG_DESCRIPTION_MAX_LENGTH);
   assert.deepEqual(kernel.frameDrift, []);
 });
+
+test("every SKILL.md the image carries or delegation injects has frontmatter the kernel can read", async () => {
+  // 2026-10-25: the adopted biosequence-analysis method's description held an unquoted 「Biopython: FASTA…」, invalid YAML, so the
+  // kernel skipped the skill and only this file's character budget moved. A skill the kernel cannot read is a skill nobody gets.
+  const { readdirSync } = await import("node:fs");
+  /** @param {string} dir @returns {string[]} */
+  const skillFiles = (dir) => !existsSync(dir) ? [] : readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const target = path.join(dir, entry.name);
+    if (entry.isDirectory()) return entry.name === "node_modules" || entry.name === "__pycache__" ? [] : skillFiles(target);
+    return entry.name === "SKILL.md" ? [target] : [];
+  });
+  const roots = ["core", "evimed", "curated-scientific", "office", "community"].map((root) => path.join(repoRoot, "runtime/skills", root))
+    .concat([path.join(repoRoot, "..", "capability-skills"), path.join(repoRoot, "..", "capabilities")]);
+  const files = roots.flatMap(skillFiles);
+  assert.ok(files.length > 60, `found only ${files.length} SKILL.md files`);
+  const unreadable = files.filter((file) => readSkillFrontmatter(readFileSync(file, "utf8")) === null).map((file) => path.relative(repoRoot, file));
+  assert.deepEqual(unreadable, [], "frontmatter the kernel would skip: quote a description that holds ': ' or ' #'");
+  assert.equal(readSkillFrontmatter("---\nname: x-y\ndescription: Parse with Biopython: FASTA records\n---\n"), null, "the negative control reads as unreadable");
+});

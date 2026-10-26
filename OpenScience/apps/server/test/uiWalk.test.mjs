@@ -449,7 +449,7 @@ test("a page over its section budget fails, one inside it does not, and a page w
   // Measured at the desktop width, like the rest of the style budget.
   assert.deepEqual(pageFindings("files", "phone", clean({ sectionShapes: stacked }), []).failures, []);
   // The pages R10 rebuilt are all held to one, and the study's tabs to three.
-  for (const name of ["files", "memory", "frontier", "capabilities", "extensions-skills", "extensions-plugins", "virtual-research", "vcr-overview"]) {
+  for (const name of ["files", "memory", "frontier", "capabilities", "extensions-discover", "extensions-installed", "virtual-research", "vcr-overview"]) {
     assert.ok(Number.isInteger(SECTION_SHAPES_BY_PAGE[name]), `${name} has a section budget`);
   }
 });
@@ -854,11 +854,13 @@ function context() {
         }
         if (typeof fn === "function" && fn.name === "clickNamed") {
           const [role, name] = arg;
+          // FAKE_SKILL_MENU=missing: the page has no 「添加技能」 menu to open the create drawer from.
+          if (name === "添加技能" && process.env.FAKE_SKILL_MENU === "missing") return false;
           log({ clickNamed: name });
           if (name === "关闭" && process.env.FAKE_CLOSE !== "stuck") dialogOpen = false;
           if (name === "保存" && process.env.FAKE_SKILL_WRITE) for (const [, handler] of pageRoutes) handler({ request: () => ({ method: () => "POST", url: () => "https://evimed.example.org/api/personal-skills" }), abort: async () => log({ aborted: "POST" }), continue: async () => {}, fallback: async () => {} });
-          if (name === "回到插件列表") url = new URL("/app/extensions/plugins", url).href;
-          if (name === "回到技能列表") url = new URL(process.env.FAKE_BACK === "stay" ? "/app/extensions/skills/impeccable-audit-missing" : "/app/extensions/skills", url).href;
+          if (name === "回到插件列表") url = new URL("/app/extensions/installed", url).href;
+          if (name === "回到技能列表") url = new URL(process.env.FAKE_BACK === "stay" ? "/app/extensions/skills/impeccable-audit-missing" : "/app/extensions/installed", url).href;
           return true;
         }
         if (typeof fn === "function" && fn.name === "clickRowTitled") return true;
@@ -2097,10 +2099,10 @@ test("the new-skill drawer names its captions and its switch, names an empty fie
   const opened = { title: true, captions: 2, switchLabel: "保存后在“我的研究”里使用", needName: false, needHow: false };
   const refused = { ...opened, needName: true, needHow: true };
   assert.deepEqual(skillDrawerFindings(opened, refused, []), []);
-  assert.deepEqual(skillDrawerFindings(null, null, []), ["extensions-skills@desktop: 新建技能 did not open a drawer"]);
+  assert.deepEqual(skillDrawerFindings(null, null, []), ["extensions-installed@desktop: 创建技能 did not open a drawer"]);
   assert.equal(skillDrawerFindings({ ...opened, captions: 0, switchLabel: null, title: false }, refused, []).length, 3);
-  assert.deepEqual(skillDrawerFindings(opened, opened, []), ["extensions-skills@desktop: 保存 with empty fields does not say 请填写名称 and 请写出这个技能怎么做 in place"]);
-  assert.deepEqual(skillDrawerFindings(opened, refused, ["POST /api/personal-skills"]), ["extensions-skills@desktop: 保存 with empty fields sent a request: POST /api/personal-skills"]);
+  assert.deepEqual(skillDrawerFindings(opened, opened, []), ["extensions-installed@desktop: 保存 with empty fields does not say 请填写名称 and 请写出这个技能怎么做 in place"]);
+  assert.deepEqual(skillDrawerFindings(opened, refused, ["POST /api/personal-skills"]), ["extensions-installed@desktop: 保存 with empty fields sent a request: POST /api/personal-skills"]);
   const drawer = node("div", { attrs: { role: "dialog" } }, [
     node("h2", { text: "新建技能" }), node("p", { attrs: { id: "x-purpose-hint" }, text: "说明" }), node("p", { attrs: { id: "x-instructions-hint" }, text: "步骤" }),
     node("div", { attrs: { role: "switch", "aria-label": "保存后在“我的研究”里使用" } }), node("p", { text: "请填写名称" }),
@@ -2203,7 +2205,7 @@ test("the walk opens the pages whose ids the deployment's lists name: both studi
   const routeAt = log.findLastIndex((entry, index) => index < pressedAt && entry.route === String("**/api/**"));
   assert.ok(pressedAt >= 0 && routeAt >= 0 && log.findIndex((entry, index) => index > pressedAt && entry.unroute) > pressedAt);
   assert.equal(log.filter((entry) => entry.aborted).length, 0);
-  assert.deepEqual(Object.keys(report.steps).sort(), ["address-state", "evidence-matrix@desktop", "evidence-matrix@phone", "extensions-skills-create", "files-pdf", "files-return", "frontier-event-handoff", "knowledge-graph-mark", "memory-map-drawer"]);
+  assert.deepEqual(Object.keys(report.steps).sort(), ["address-state", "evidence-matrix@desktop", "evidence-matrix@phone", "extensions-create", "files-pdf", "files-return", "frontier-event-handoff", "knowledge-graph-mark", "memory-map-drawer"]);
 });
 
 test("a page that regresses on what R11 fixed fails the walk and names the page and the defect", async () => {
@@ -2232,12 +2234,14 @@ test("a page that regresses on what R11 fixed fails the walk and names the page 
   assert.ok((await failures({ FAKE_PROBE: "missingRecord" })).failures.includes("extensions-skill-missing@desktop: 「操作未完成」 on a record that is not there"));
   assert.ok((await failures({ FAKE_PROBE: "readingFolds" })).failures.includes("frontier-evidence@desktop: the fold 编写与核查 is open at first sight"));
   assert.ok((await failures({ FAKE_PROBE: "capabilityCards" })).failures.includes("capabilities@desktop: the tool cards still say 可运行"));
-  assert.ok((await failures({ FAKE_BACK: "stay" })).failures.includes("extensions-skill-missing@desktop: 回到技能列表 goes to /app/extensions/skills/impeccable-audit-missing (/app/extensions/skills)"));
+  assert.ok((await failures({ FAKE_BACK: "stay" })).failures.includes("extensions-skill-missing@desktop: 回到技能列表 goes to /app/extensions/skills/impeccable-audit-missing (/app/extensions/installed)"));
   const after = await failures({ FAKE_AFTER: "bad" });
   assert.ok(after.failures.includes("geo-sources@desktop: clicking the first source opened no drawer (a dialog holding data-geo-source-drawer)"));
   assert.ok(after.failures.includes("autopilot@desktop: the task bar names a time zone by its identifier: Asia/Shanghai"));
   assert.ok((await failures({ FAKE_PDF: "narrow" })).failures.includes("files@desktop: the original of a PDF is 559 px wide on its page (at least 560)"));
-  assert.ok((await failures({ FAKE_SKILL: "bare" })).failures.includes("extensions-skills@desktop: the new-skill drawer has 0 caption(s) under its fields (two)"));
+  assert.ok((await failures({ FAKE_SKILL: "bare" })).failures.includes("extensions-installed@desktop: the new-skill drawer has 0 caption(s) under its fields (two)"));
+  // A walk that cannot reach the create drawer has not walked it: a missing menu fails the step, never a notice.
+  assert.ok((await failures({ FAKE_SKILL_MENU: "missing" })).failures.includes("extensions-installed@desktop: no 「添加技能」 menu to open"));
   assert.ok((await failures({ FAKE_MATRIX: "search" })).failures.includes("evidence-matrix@desktop: searching for CLM-001 leaves 3 row(s) and “显示 3 / 3 条”"));
   assert.ok((await failures({ FAKE_MATRIX: "focus" })).failures.includes("evidence-matrix@phone: Escape does not return focus to the claim's row"));
 });
@@ -2246,7 +2250,7 @@ test("the new-skill drawer's 保存 sends nothing: a write the page tries is ref
   const { code, log, report } = await walk({ FAKE_SKILL_WRITE: "1" });
   assert.equal(code, 1);
   assert.deepEqual(log.filter((entry) => entry.aborted), [{ aborted: "POST" }]);
-  assert.ok(report.failures.includes("extensions-skills@desktop: 保存 with empty fields sent a request: POST /api/personal-skills"));
+  assert.ok(report.failures.includes("extensions-installed@desktop: 保存 with empty fields sent a request: POST /api/personal-skills"));
 });
 
 test("a row count, a headline's place and a title column are findings the baseline decides on, never failures of their own", async () => {
@@ -2539,6 +2543,10 @@ test("the event page's 深入研究 is read at the hand-off: the title, a link t
   const before = { path: "/app/frontier/events/ev_1", title: "某事件", button: true };
   const after = { path: "/app/chat", intent: { keys: ["draft", "kind", "projectId", "requestId", "sessionId"], kind: "create", draft, requestId: "req_1" } };
   assert.deepEqual(handoffFindings(before, after, before.path), { failures: [], notices: [] });
+  const selected = withState({ runtimeUiIntent: { ...intent, scope: { kind: "geo", geoProjectId: "geo", sessionId: "s" }, geoPlanContext: { referenceId: "gpc_selected" } } });
+  assert.deepEqual(selected.intent.keys, [...after.intent.keys, "geoPlanContext", "scope"].sort());
+  assert.deepEqual(handoffFindings(before, selected, before.path), { failures: [], notices: [] });
+  assert.equal(selected.intent.draft, draft, "the observer preserves the unsent draft without treating its context reference as a send");
   assert.deepEqual(handoffFindings({ ...before, button: false }, null, null).notices, ["frontier-event@desktop: not observable: the event page has no 深入研究 button, so the hand-off to the conversation was not read"]);
   assert.deepEqual(handoffFindings(null, null, null).notices.length, 1);
   assert.deepEqual(handoffFindings(before, { path: "/app/frontier/events/ev_1", intent: null }, null).notices, ["frontier-event@desktop: not observable: 深入研究 did not go to the conversation (/app/frontier/events/ev_1), so its draft was not read"]);

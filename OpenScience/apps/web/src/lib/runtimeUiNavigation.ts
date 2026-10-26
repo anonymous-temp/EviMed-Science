@@ -1,3 +1,4 @@
+import type { GeoConversationScope } from "./geoNativeClient";
 import { conversationReference, vcrObjectReference } from "@evimed/domain";
 import { getWebProjectId } from "./apiClient";
 
@@ -13,6 +14,8 @@ export interface RuntimeUiIntent {
   references?: Array<{ id: string; title: string }>;
   resultRevision?: { referenceId: string };
   vcrReference?: VcrObjectSelection;
+  geoPlanContext?: { referenceId: string };
+  scope?: GeoConversationScope;
 }
 
 export interface VcrObjectSelection {
@@ -33,9 +36,9 @@ export interface VcrObjectSelection {
  * what makes the router honour the choice instead of re-deciding it. Pass one
  * in when it was already bound.
  */
-export function newRuntimeUiIntent(draft?: string, sessionId?: string): RuntimeUiIntent {
+export function newRuntimeUiIntent(draft?: string, sessionId?: string, target?: {projectId:string;scope:GeoConversationScope}): RuntimeUiIntent {
   return {
-    kind: "create", projectId: getWebProjectId(), requestId: crypto.randomUUID(),
+    kind: "create", projectId: target?.projectId ?? getWebProjectId(), ...(target ? {scope:target.scope} : {}), requestId: crypto.randomUUID(),
     sessionId: sessionId && /^[A-Za-z0-9_-]{1,160}$/.test(sessionId) ? sessionId : crypto.randomUUID(),
     ...(draft === undefined ? {} : { draft }),
   };
@@ -50,8 +53,10 @@ export function runtimeUiIntentFromState(state: unknown, projectId: string): Run
     || typeof intent.requestId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(intent.requestId)
     || typeof intent.sessionId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(intent.sessionId)
     || (intent.draft !== undefined && (typeof intent.draft !== "string" || intent.draft.length > 100_000))) return null;
+  if (intent.scope && (intent.scope.kind !== "geo" || intent.scope.sessionId !== intent.sessionId || typeof intent.scope.geoProjectId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(intent.scope.geoProjectId) || intent.kind !== "open" || Object.keys(intent.scope).length !== 3)) return null;
+  if (intent.geoPlanContext && (Object.keys(intent.geoPlanContext).length !== 1 || !/^gpc_[a-f0-9]{64}$/.test(intent.geoPlanContext.referenceId))) return null;
   if (intent.resultRevision && (typeof intent.resultRevision.referenceId !== "string"
-    || !/^rr_[a-f0-9]{64}$/.test(intent.resultRevision.referenceId) || !intent.draft)) return null;
+    || !/^rr_[a-f0-9]{64}$/.test(intent.resultRevision.referenceId))) return null;
   if (intent.restoreDraft !== undefined && typeof intent.restoreDraft !== "boolean") return null;
   if (intent.vcrReference && (!intent.draft || !vcrObjectReference(intent.vcrReference))) return null;
   if (intent.originReference && !conversationReference(intent.originReference)) return null;

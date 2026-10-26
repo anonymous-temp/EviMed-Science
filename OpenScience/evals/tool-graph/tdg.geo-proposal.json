@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-proposal",
-  "version": "sha256:93b0ea957a463e0c6943759a19df87967f2718cf357967ac969be934e56e9c8b",
+  "version": "sha256:25354ea72eae831984162784f8136a0b903a57fb8ab775d0f3a98ef3656621ff",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 24,
@@ -449,13 +449,16 @@
     {
       "name": "mcp__evimed__geo_read",
       "source": "mcp",
-      "description": "Read this 循证 GEO project in the shapes its pages show. Cards carry checked quotes and citation ids. Value holds scoped findings, research and coverage; research lists specialist tasks. snapshots: engine answers. clusters: groups, k of n. actions: lean rows plus counts to quote, never add up; filter.key or groupId reads one whole. filter.version reads a prior value basis. Numeric cells keep denominators and status; unknown is never zero.",
+      "description": "循证 GEO pages: counts and unknowns. Filters: inclusive dates (Asia/Shanghai), engines, questionVersion, groups, pools. Reuse selectionRef and members.metric for exact snapshots. Comparisons are observational. analysis gives exact tables/members. planContextRef pages frozen input. signal reads bound inputs; targetKey pages 4000-character material parts. Actions give lean rows; filter.key or groupId reads one whole. version reads old value.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "what": {
             "type": "string",
             "enum": [
+              "analysis",
+              "signal",
+              "diagnosis_progress",
               "project",
               "claims",
               "questions",
@@ -484,6 +487,443 @@
               "version": {
                 "type": "integer",
                 "minimum": 1
+              },
+              "questionVersion": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "from": {
+                "type": "string",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+              },
+              "to": {
+                "type": "string",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+              },
+              "compareFrom": {
+                "type": "string",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+              },
+              "compareTo": {
+                "type": "string",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+              },
+              "comparisonMode": {
+                "type": "string",
+                "enum": [
+                  "common",
+                  "separate"
+                ]
+              },
+              "timeZone": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "timezone": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "engines": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "doubao",
+                    "qianwen",
+                    "deepseek",
+                    "yuanbao",
+                    "kimi",
+                    "baidu"
+                  ]
+                },
+                "maxItems": 100
+              },
+              "pools": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "P1",
+                    "P2",
+                    "P3",
+                    "P4"
+                  ]
+                },
+                "maxItems": 100
+              },
+              "groupIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80,
+                  "pattern": "^[A-Za-z0-9_-]+$"
+                },
+                "maxItems": 100
+              },
+              "clientTags": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                "maxItems": 100
+              },
+              "selectionRef": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              "viewId": {
+                "type": "string",
+                "enum": [
+                  "V01",
+                  "V02",
+                  "V03",
+                  "V04",
+                  "V05",
+                  "V06",
+                  "V07",
+                  "V08",
+                  "V09",
+                  "V10",
+                  "V11",
+                  "V12",
+                  "V13",
+                  "V14",
+                  "V15",
+                  "V16",
+                  "V17",
+                  "V18",
+                  "V19",
+                  "V20",
+                  "V21",
+                  "V22",
+                  "V23",
+                  "V24",
+                  "V25",
+                  "V26",
+                  "V27"
+                ]
+              },
+              "financeFacet": {
+                "type": "string",
+                "enum": [
+                  "ledger",
+                  "group"
+                ],
+                "description": "V25 only: ledger entries or explicit pinned group attribution, in CNY."
+              },
+              "targetVersion": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "V26 only: assert the target version preserved by the exact strategy basis."
+              },
+              "publicationFacet": {
+                "type": "string",
+                "enum": [
+                  "group",
+                  "audience",
+                  "channel"
+                ],
+                "description": "V23 only: exact need groups, intended audience or intended channel; actual publication platform remains separate."
+              },
+              "errorFacet": {
+                "type": "string",
+                "enum": [
+                  "type",
+                  "severity"
+                ],
+                "description": "V13 only: group distinct preserved error records by type or severity."
+              },
+              "errorView": {
+                "type": "string",
+                "enum": [
+                  "active",
+                  "withdrawn",
+                  "all"
+                ],
+                "description": "V13 only: current judgment state, separate from business handling."
+              },
+              "errorFingerprint": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 240,
+                "description": "Diagnosis only: exact canonical error group, independent of list pagination."
+              },
+              "evidenceKind": {
+                "type": "string",
+                "enum": [
+                  "claims",
+                  "findings"
+                ],
+                "description": "V16 only: exact claim/source support or separately counted finding-expression observations."
+              },
+              "metricId": {
+                "type": "string",
+                "pattern": "^M-[0-9]{2}[A-Z]?$"
+              },
+              "ownedMetricId": {
+                "type": "string",
+                "enum": [
+                  "M-08",
+                  "M-08S"
+                ],
+                "description": "V21 only: existing registered-owned metric; manual source annotations remain separate."
+              },
+              "dimension": {
+                "type": "string",
+                "enum": [
+                  "project",
+                  "engine",
+                  "group"
+                ]
+              },
+              "categoryMode": {
+                "type": "string",
+                "enum": [
+                  "original_group",
+                  "client_tags"
+                ]
+              },
+              "timeGrain": {
+                "type": "string",
+                "enum": [
+                  "day",
+                  "round"
+                ]
+              },
+              "entityKind": {
+                "type": "string",
+                "enum": [
+                  "brand",
+                  "generic"
+                ]
+              },
+              "entityKey": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              "sourceType": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "sourceSearch": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              "sourceRelationship": {
+                "type": "string",
+                "enum": [
+                  "all",
+                  "wrong",
+                  "mentions"
+                ]
+              },
+              "sourceLevel": {
+                "type": "string",
+                "enum": [
+                  "domain",
+                  "page"
+                ]
+              },
+              "sourceFacet": {
+                "type": "string",
+                "enum": [
+                  "engine",
+                  "group"
+                ]
+              },
+              "topN": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 50
+              },
+              "rowKey": {
+                "type": "string",
+                "maxLength": 160
+              },
+              "columnKey": {
+                "type": "string",
+                "maxLength": 160
+              },
+              "expectedDigest": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "planContextRef": {
+                "type": "string",
+                "pattern": "^gpc_[a-f0-9]{64}$"
+              },
+              "targetKey": {
+                "type": "string",
+                "maxLength": 160
+              },
+              "strategyVersion": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "url": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "sourceId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              "answerLimit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 500
+              },
+              "answerOffset": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 20000
+              },
+              "errorTrace": {
+                "type": "string",
+                "enum": [
+                  "traced",
+                  "unattributable",
+                  "noRetrieval"
+                ]
+              },
+              "errorJudgmentState": {
+                "type": "string",
+                "enum": [
+                  "active",
+                  "withdrawn"
+                ]
+              },
+              "errorStatuses": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "open",
+                    "acting",
+                    "awaiting_remeasure",
+                    "closed"
+                  ]
+                }
+              },
+              "errorSeverities": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "S0",
+                    "S1",
+                    "S2",
+                    "S3",
+                    "S4"
+                  ]
+                }
+              },
+              "errorTypes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "label_conflict",
+                    "number",
+                    "dropped_condition",
+                    "unfounded",
+                    "attribute_swap"
+                  ]
+                }
+              },
+              "errorSearch": {
+                "type": "string",
+                "maxLength": 240
+              },
+              "errorLimit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 500
+              },
+              "errorOffset": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100000
+              },
+              "member": {
+                "type": "object",
+                "description": "Copy members.metric from a cell to page its exact contributing snapshots.",
+                "properties": {
+                  "metricId": {
+                    "type": "string"
+                  },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "project",
+                      "pool",
+                      "engine",
+                      "pool_engine",
+                      "group",
+                      "arm"
+                    ]
+                  },
+                  "observationRound": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  },
+                  "observationDate": {
+                    "type": "string",
+                    "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+                  },
+                  "engine": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "pool": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "groupId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "arm": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "variant": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "rival": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "metricId",
+                  "scope"
+                ],
+                "additionalProperties": false
               },
               "audience": {
                 "type": "string",
@@ -541,7 +981,7 @@
               "offset": {
                 "type": "integer",
                 "minimum": 0,
-                "maximum": 10000
+                "maximum": 20000
               }
             },
             "additionalProperties": false
@@ -558,7 +998,9 @@
         "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
         "fields": []
       },
-      "typeTags": [],
+      "typeTags": [
+        "source_id"
+      ],
       "requiredTypeTags": [],
       "outputTypeTags": [],
       "stateEffect": "none"
@@ -566,7 +1008,7 @@
     {
       "name": "mcp__evimed__geo_write",
       "source": "mcp",
-      "description": "Write this 循证 GEO project; items are refused one by one. value merges findings by id. questions merges groups into the latest map by name+pool (data.replace:true: whole map); isMeasured:true marks probes for lock_questions; no answers needed. research queues {capabilityId,question,context?,rationale?}, run after this one. owned_links registers {url,platform,title,publishedAt,groupId?} or retires {id,status:retired}. actions: per gap.",
+      "description": "Write this 循证 GEO project. questions: groups merge into the map by name+pool (data.replace:true = whole map); rows+requestKey save original rows under a measurement contract. start_diagnosis measures a saved version; recover_diagnosis retries failed cells under a new requestKey (reuse one only to retry that call); acknowledgeUnknown only if the user accepts a possible billed duplicate. value merges by id; research runs after this run.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -576,6 +1018,9 @@
               "product",
               "claims",
               "questions",
+              "preview_questions",
+              "start_diagnosis",
+              "recover_diagnosis",
               "lock_questions",
               "journey",
               "strategy",
@@ -599,7 +1044,8 @@
             }
           },
           "data": {
-            "type": "object"
+            "type": "object",
+            "description": "Imported questions: rows[{text,originalId?,originalGroup?,clientTags?,kind?,sourceUrl?,collectedAt?,pool?,journeyStage?,audience?,isMeasured?,classificationStatus?}], contract{samplingMode:one_shot|recurring,engines,repeats(one_shot=1),metricIds,reportPresentation:summary|detailed,sourceBasis:answers|answers_and_project_sources},requestKey. Preserve original text; kind defaults client; real requires URL and date; classificationStatus is unclassified|suggested|confirmed. start_diagnosis:{version,requestKey}; recover_diagnosis:{roundId,requestKey,jobIds,acknowledgeUnknown?} for failed calls. Read diagnosis_progress with filter.round before recovery. Never default acknowledgeUnknown to true; keep a requestKey only when retrying the same call."
           }
         },
         "required": [

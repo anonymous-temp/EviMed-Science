@@ -46,6 +46,7 @@
  */
 
 import {
+  previewGeoQuestionImport,
   GEO_ACTION_KINDS, GEO_ACTION_PROMISES, GEO_ARTICLE_CHANNELS, GEO_PROMISE_CEILINGS, geoActionNotices,
   GEO_ARTICLE_GATES, GEO_ARTICLE_LAYERS, GEO_AUDIENCES, GEO_CLAIM_SOURCE_KINDS, GEO_CLAIM_STATUSES, GEO_COMPARISON_EVIDENCE_TYPES, GEO_ENGINE_LABELS_ZH, GEO_ENGINES,
   GEO_GAP_CLASSES, GEO_GAP_CLASS_LABELS_ZH,
@@ -53,7 +54,9 @@ import {
   GEO_RX_CLASSES, GEO_SOURCE_KINDS, GEO_SOURCE_KIND_LABELS_ZH, GEO_SOURCE_LAYERS, GEO_STEPS, GEO_STEP_STATUSES, GEO_TARGET_DATA_TYPES, GEO_TIERS,
   GEO_METRICS, GEO_WRITE_WHATS, deliverableDir, deliverableIdOfPath, geoClaimJourneyStage, geoConstant } from "@evimed/domain";
 import { GEO_OWNED_LINKS_MAX, geoOwnedLinkKey } from "./geoStore.mjs";
-import { HttpError } from "./security.mjs";
+import { GeoMeasureStore, geoRecoveryHeldCells } from "./geoMeasureStore.mjs";
+import { enqueueRound, GEO_ROUND_MAX_ASKS } from "./geoProbeQueue.mjs";
+import { HttpError, randomId } from "./security.mjs";
 
 /** @typedef {{ index?: number, indexes?: number[], count?: number, path?: string, group?: number, field?: string, code: string, message: string }} GeoIssue */
 
@@ -458,10 +461,86 @@ function validatedClaims(items, issues) {
   return claims;
 }
 
+/** Deterministic preview shared by HTTP and the native runtime. @param {unknown} data */
+export function geoQuestionImportPreview(data) {
+  try {
+    const preview = previewGeoQuestionImport(data);
+    if (preview.plannedCalls > GEO_ROUND_MAX_ASKS) throw new TypeError(`This diagnosis would require ${preview.plannedCalls} calls; a round permits at most ${GEO_ROUND_MAX_ASKS}. Reduce questions, engines or repeats before saving.`);
+    return preview;
+  }
+  catch (error) { throw failure(400, "geo_question_import_invalid", String(/** @type {Error} */ (error).message)); }
+}
+
+/** @param {import("./geoStore.mjs").GeoStore} store @param {any} project @param {Record<string, any>} data @param {any} [inclusion] */
+export async function geoStartDiagnosis(store, project, data, inclusion = null) {
+  if (Object.keys(data).some((key) => !["version", "requestKey"].includes(key)) || !Number.isSafeInteger(data.version) || data.version < 1
+    || typeof data.requestKey !== "string" || !/^[A-Za-z0-9._:-]{1,120}$/.test(data.requestKey)) throw failure(400, "geo_diagnosis_invalid", "Choose a saved question version and a request key.");
+  const set = (await store.questionSets(project.id)).find((item) => item.version === data.version);
+  if (!set?.contract) throw failure(409, "geo_contract_missing", "Save the question version with its measurement agreement first.");
+  const groups = await store.questionMap(project.id, data.version);
+  const questionIds = groups.flatMap((group) => group.questions.filter((q) => q.isMeasured && !q.retiredAt).map((q) => q.id));
+  if (!questionIds.length) throw failure(400, "geo_round_empty", "Select at least one original question.");
+  // A one-shot set is not locked into the recurring orchestrator. It is measured through this explicit start only.
+  const result = await enqueueRound({ store: new GeoMeasureStore(store.database), inclusion }, {
+    geoProjectId: project.id, kind: "single_step", questionIds, engines: set.contract.engines, repeat: set.contract.repeats,
+    contract: { ...set.contract, questionVersion: set.version }, requestKey: data.requestKey,
+  });
+  return { ...result, status: (await new GeoMeasureStore(store.database).round(result.roundId))?.status ?? "queued" };
+}
+
+/**
+ * Explicit recovery is a new, trace-linked round of an original one-shot diagnosis's failed cells. A cell an earlier recovery still
+ * holds (`geoRecoveryHeldCells`) is not recovered again; one whose earlier recovery provably never reached the provider is. A cell
+ * whose request may already have been charged — its delivery unknown, an inclusion task the vendor took (`external_ref`) and never
+ * finished, its hold expired — is recovered only with the person's `acknowledgeUnknown`, because the recovery pays again.
+ * @param {import("./geoStore.mjs").GeoStore} store @param {any} project @param {Record<string, any>} data */
+export async function geoRecoverDiagnosis(store, project, data) {
+  if (Object.keys(data).some((key) => !["roundId", "requestKey", "jobIds", "acknowledgeUnknown"].includes(key))
+    || typeof data.roundId !== "string" || typeof data.requestKey !== "string" || !/^[A-Za-z0-9._:-]{1,120}$/.test(data.requestKey)
+    || !Array.isArray(data.jobIds) || !data.jobIds.length || data.jobIds.length > 400 || data.jobIds.some((id) => typeof id !== "string")
+    || new Set(data.jobIds).size !== data.jobIds.length || data.acknowledgeUnknown != null && typeof data.acknowledgeUnknown !== "boolean") throw failure(400, "geo_recovery_invalid", "Name failed cells, a round and a request key.");
+  const measure = new GeoMeasureStore(store.database);
+  const round = await measure.round(data.roundId);
+  if (!round || round.geoProjectId !== project.id || round.userId !== project.userId) throw failure(404, "geo_round_not_found", "Diagnosis not found.");
+  if (round.surface?.measurementContract?.samplingMode !== "one_shot" || round.ref?.recoveryOf) throw failure(409, "geo_recovery_exhausted", "Only an original one-shot diagnosis is recovered; name the original diagnosis and its cells.");
+  const jobs = (await store.query(`SELECT j.id, j.question_id, j.engine, j.status, j.error_code, j.external_ref FROM evimed_geo.probe_jobs j WHERE j.round_id=$1 AND j.geo_project_id=$2 AND j.id=ANY($3::text[]) AND NOT EXISTS (SELECT 1 FROM evimed_geo.snapshots s WHERE s.probe_job_id=j.id AND s.status IN ('valid','refusal')) ORDER BY j.id`, [round.id, project.id, data.jobIds])).rows;
+  if (jobs.length !== data.jobIds.length || jobs.some((job) => !["failed", "skipped"].includes(job.status))) throw failure(400, "geo_recovery_invalid", "Recovery can only name failed or missing cells of this diagnosis.");
+  if ((await geoRecoveryHeldCells(store, project.id, round.id, data.jobIds)).size) throw failure(409, "geo_recovery_exhausted", "An earlier recovery of these cells is running, answered, or may have reached the provider; read diagnosis_progress first.");
+  if (jobs.some(geoRecoveryMayCharge) && data.acknowledgeUnknown !== true) throw failure(409, "geo_recovery_acknowledgment_required", "A failed request may already have reached the provider and been charged; recovery makes another, possibly billed, call only with acknowledgeUnknown.");
+  const roundId = await measure.createRound({ id: randomId("gr_"), userId: project.userId, geoProjectId: project.id, kind: "single_step",
+    setVersion: round.setVersion, engines: [...new Set(jobs.map((job) => String(job.engine)))], surface: round.surface, planned: jobs.length,
+    ref: { requestKey: data.requestKey, recoveryOf: round.id, recoveredJobIds: jobs.map((job) => job.id), explicitRecovery: true,
+      acknowledgeUnknown: data.acknowledgeUnknown === true, authorizedBy: project.actorId ?? project.userId }, now: new Date() },
+  jobs.map((job) => ({ questionId: String(job.question_id), engine: String(job.engine), repeatIndex: 0 })));
+  return { roundId, planned: jobs.length, status: (await measure.round(roundId))?.status ?? "queued", recoveryOf: round.id };
+}
+
+/**
+ * Whether asking a failed one-shot cell again may pay a second time: its request may have reached the provider (delivery unknown), or
+ * the inclusion vendor took a paid task for it (`external_ref`) that never finished (its hold expired).
+ * @param {{ error_code?: string | null, external_ref?: string | null }} job
+ */
+export function geoRecoveryMayCharge(job) {
+  return job.error_code === "delivery_unknown_no_automatic_retry" || job.error_code === "inclusion_hold_expired" || job.external_ref != null;
+}
+
+/** @param {ReturnType<typeof geoQuestionImportPreview>} preview */
+function importGroups(preview) {
+  /** @type {Map<string, any>} */
+  const groups = new Map();
+  for (const row of preview.rows) {
+    const key = JSON.stringify([row.originalGroup, row.pool, row.journeyStage, row.audience]);
+    if (!groups.has(key)) groups.set(key, { name: row.originalGroup ?? "Imported questions", pool: row.pool,
+      journeyStage: row.journeyStage, audience: row.audience, signal: "client", questions: [] });
+    groups.get(key).questions.push(row);
+  }
+  return [...groups.values()];
+}
+
 // --- the question map -----------------------------------------------------------------------
 
 const GROUP_FIELDS = Object.freeze(["valueContext", "pool", "name", "typicalQuestion", "journeyStage", "journeyStageNo", "audience", "bridge", "weight", "isControl", "signal", "questions"]);
-const QUESTION_FIELDS = Object.freeze(["text", "kind", "pool", "platform", "sourceUrl", "collectedAt", "isMeasured"]);
+const QUESTION_FIELDS = Object.freeze(["text", "kind", "pool", "platform", "sourceUrl", "collectedAt", "isMeasured", "originalId", "originalGroup", "clientTags", "classificationStatus"]);
 
 /**
  * A group name's leading internal number (「P1-01 品牌身份」): the method's
@@ -479,9 +558,8 @@ export function geoGroupName(name) {
 
 /**
  * @param {Record<string, any>} data @param {GeoIssue[]} issues
- * @param {string} [writtenAt] when the write reached the platform: a real phrasing written without its `collectedAt` was collected by then
  */
-function validatedGroups(data, issues, writtenAt = new Date().toISOString()) {
+function validatedGroups(data, issues) {
   const read = fields(data, issues, {});
   read.unknown(["groups", "note", "replace"]);
   const note = read.text("note", 500);
@@ -493,7 +571,6 @@ function validatedGroups(data, issues, writtenAt = new Date().toISOString()) {
   /** @type {any[]} */
   const groups = [];
   let total = 0;
-  let stamped = 0;
   data.groups.forEach((/** @type {unknown} */ entry, /** @type {number} */ index) => {
     if (notAnObject(entry, index, issues)) return;
     const item = /** @type {Record<string, any>} */ (entry);
@@ -534,6 +611,9 @@ function validatedGroups(data, issues, writtenAt = new Date().toISOString()) {
         // A question written without its kind is one the run wrote, not one a person was heard asking (2026-10-25: the default was
         // `real`, so a run's own questions reached the page as 真实问法, dated to the write and with no place they were said).
         kind: question.word("kind", GEO_QUESTION_KINDS, { fallback: "typical" }),
+        originalId: question.text("originalId", 300), originalGroup: question.text("originalGroup", 300),
+        clientTags: Array.isArray(/** @type {any} */ (questionEntry).clientTags) && /** @type {any} */ (questionEntry).clientTags.length <= 40 && /** @type {any} */ (questionEntry).clientTags.every((tag) => typeof tag === "string" && tag.length <= 100) ? /** @type {any} */ (questionEntry).clientTags : [],
+        classificationStatus: question.word("classificationStatus", ["unclassified", "suggested", "confirmed"], { fallback: "suggested" }),
         pool: question.word("pool", GEO_POOLS, { fallback: value.pool }),
         platform: question.word("platform", GEO_QUESTION_PLATFORMS),
         sourceUrl: question.url("sourceUrl"),
@@ -541,12 +621,9 @@ function validatedGroups(data, issues, writtenAt = new Date().toISOString()) {
         isMeasured: question.flag("isMeasured") ?? false,
       };
       if (question.refused) return;
-      // A real phrasing has a day it was heard (G9: 56 of 56 written without
-      // one). The run passes the post's own `collectedAt`; without it the
-      // phrasing was collected no later than this write, and says so.
-      if (parsed.kind === "real" && !parsed.collectedAt) {
-        parsed.collectedAt = writtenAt;
-        stamped += 1;
+      if (parsed.kind === "real" && (!parsed.collectedAt || !parsed.sourceUrl)) {
+        parsed.kind = null;
+        issues.push({ group: index, index: questionIndex, field: "sourceUrl", code: "notice", message: "The original phrasing is preserved with unknown provenance; real phrasings require a source URL and collection date." });
       }
       if (total >= GEO_WRITE_LIMITS.questions) {
         issues.push({ group: index, index: questionIndex, code: "too_many", message: `A set holds at most ${GEO_WRITE_LIMITS.questions} questions.` });
@@ -557,10 +634,6 @@ function validatedGroups(data, issues, writtenAt = new Date().toISOString()) {
     });
     groups.push(value);
   });
-  if (stamped) {
-    issues.push({ field: "collectedAt", code: "notice",
-      message: `${stamped} real phrasing(s) came without collectedAt and are dated to this write; pass each post's collectedAt from social_posts_search.` });
-  }
   return { groups, note, replace: replace === true, replaceRefused: replace === undefined };
 }
 
@@ -750,6 +823,11 @@ const LAYOUT_PARTS = Object.freeze({ layers: "layers", byEngine: "byEngine", by_
  */
 export const GEO_NOT_STORED = Object.freeze({
   "strategy.json": Object.freeze({
+    basis: "the control plane owns the frozen planning input",
+    scopeKey: "the control plane computes planning scope",
+    owner: "the authenticated project owns the plan",
+    revisions: "versions are allocated by the platform",
+    budgetsPaid: "actual payment belongs to the market ledger",
     schema: "the file's own format tag",
     deliverableId: "the deliverable's id is the run ledger's",
     contractKind: "the contract is the run ledger's",
@@ -860,9 +938,15 @@ export const GEO_STORED_FIELDS = Object.freeze({
   tierTarget: Object.freeze(["metricId", "pool", "note", "level", "hardLine", "engineScope"]),
   assumption: Object.freeze(["field", "value", "basis", "reason", "howToChange", "affects"]),
   noGo: Object.freeze(["item", "reason"]),
-  action: Object.freeze(["gapId", "groupId", "group", "gapClass", "class", "errorIds", "kind", "what", "engines", "sources", "promise", "basis", "reason", "metricId"]),
+  action: Object.freeze(["gapId", "groupId", "group", "gapClass", "class", "errorIds", "kind", "what", "engines", "sources", "promise", "basis", "reason", "metricId", "work", "sequence", "timing", "effort", "estimate"]),
+  actionWork: Object.freeze(["mode", "articleId", "resultVersionId", "digest", "audience", "outputs"]),
+  actionTiming: Object.freeze(["earliest", "latest", "durationDays", "basis"]),
+  actionRange: Object.freeze(["low", "high"]),
+  actionEffort: Object.freeze(["unit", "low", "high", "basis"]),
+  actionEstimate: Object.freeze(["currency", "low", "high", "basis", "assumption", "observedAt"]),
+  actionEstimateRef: Object.freeze(["kind", "id", "digest"]),
   actionWhat: Object.freeze(["layer", "title", "channel"]),
-  actionSource: Object.freeze(["domain", "why"]),
+  actionSource: Object.freeze(["domain", "why", "url"]),
 });
 
 /** The measured parts of the method's per-engine record: the platform's own rows, never stored twice (the measured lines of `GEO_NOT_STORED`). */
@@ -1086,6 +1170,37 @@ function validatedGap(raw, index, issues) {
  * words the platform checks against its own rows and annotates, never refuses.
  * @param {Record<string, any>} raw @param {number} index @param {GeoIssue[]} issues
  */
+/** Validate planning estimates without converting absent values into zero. */
+function validatedImplementation(given, issues, index) {
+  const notice = field => issues.push({ field: `actions[${index}].${field}`, code: "notice", message: "The planning value needs a supported reference and an ordered nonnegative range; it remains unestimated." });
+  const bounded = value => typeof value === "string" && value.length <= 1000 ? value : null;
+  const range = value => value && Number.isFinite(value.low) && Number.isFinite(value.high) && value.low >= 0 && value.high >= value.low;
+  let work = null, timing = null, effort = null, estimate = null;
+  const nestedFields = /** @type {Array<[string, readonly string[]]>} */ ([["work",GEO_STORED_FIELDS.actionWork],["timing",GEO_STORED_FIELDS.actionTiming],["effort",GEO_STORED_FIELDS.actionEffort],["estimate",GEO_STORED_FIELDS.actionEstimate]]);
+  for (const [name, stored] of nestedFields) {
+    if (isObject(given[name])) fields(given[name],issues,{index,path:`actions.${name}`}).unknown(stored);
+  }
+  if (isObject(given.timing?.durationDays)) fields(given.timing.durationDays,issues,{index,path:"actions.timing.durationDays"}).unknown(GEO_STORED_FIELDS.actionRange);
+  for (const ref of Array.isArray(given.estimate?.basis) ? given.estimate.basis : []) if (isObject(ref)) fields(ref,issues,{index,path:"actions.estimate.basis"}).unknown(GEO_STORED_FIELDS.actionEstimateRef);
+  if (given.work && ["new", "modify_existing"].includes(given.work.mode)
+    && Array.isArray(given.work.outputs) && given.work.outputs.length <= 20 && given.work.outputs.every(value => bounded(value))
+    && (given.work.audience == null || GEO_AUDIENCES.includes(given.work.audience))) {
+    work = { mode: given.work.mode, outputs: given.work.outputs, audience: given.work.audience ?? null,
+      articleId: bounded(given.work.articleId), resultVersionId: bounded(given.work.resultVersionId), digest: bounded(given.work.digest) };
+  } else if (given.work != null) notice("work");
+  if (given.timing && bounded(given.timing.basis) && (given.timing.durationDays == null || range(given.timing.durationDays))
+    && [given.timing.earliest, given.timing.latest].every(value => value == null || typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)))
+    && !(given.timing.earliest && given.timing.latest && given.timing.earliest > given.timing.latest)) timing = { earliest: given.timing.earliest ?? null, latest: given.timing.latest ?? null, durationDays: given.timing.durationDays ? {low:given.timing.durationDays.low,high:given.timing.durationDays.high} : null, basis: given.timing.basis };
+  else if (given.timing != null) notice("timing");
+  if (range(given.effort) && ["hours", "days"].includes(given.effort.unit) && bounded(given.effort.basis)) effort = { unit: given.effort.unit, low: given.effort.low, high: given.effort.high, basis: given.effort.basis };
+  else if (given.effort != null) notice("effort");
+  if (range(given.estimate) && given.estimate.currency === "CNY" && Array.isArray(given.estimate.basis) && given.estimate.basis.length > 0 && given.estimate.basis.length <= 20
+    && given.estimate.basis.every(ref => isObject(ref) && ["source_price", "supplied_quote"].includes(ref.kind) && bounded(ref.id) && (ref.digest == null || /^[a-f0-9]{64}$/.test(ref.digest)))) estimate = { currency: "CNY", low: given.estimate.low, high: given.estimate.high, basis: given.estimate.basis.map(ref => ({kind:ref.kind,id:ref.id,digest:ref.digest ?? null})),
+      assumption: bounded(given.estimate.assumption), observedAt: bounded(given.estimate.observedAt) };
+  else if (given.estimate != null) notice("estimate");
+  return { work, timing, effort, estimate, sequence: Number.isSafeInteger(given.sequence) && given.sequence >= 0 ? given.sequence : null };
+}
+
 function validatedAction(raw, index, issues) {
   const label = raw.gapClass ?? raw.class;
   /** @type {Record<string, any>} */
@@ -1112,10 +1227,11 @@ function validatedAction(raw, index, issues) {
     const reader = fields(/** @type {Record<string, any>} */ (source), issues, { index, path: `actions.sources[${position}]` });
     reader.unknown(GEO_STORED_FIELDS.actionSource);
     const domain = reader.text("domain", 253);
-    const value = { domain: domain ? domain.toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^www\./, "") : null, why: reader.text("why", 300) };
+    const value = { domain: domain ? domain.toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^www\./, "") : null, why: reader.text("why", 300), url: reader.text("url", 2000) };
     return value.domain && HOSTNAME.test(value.domain) ? value : null;
   }).filter((source) => source !== null) : [];
   const value = {
+    ...validatedImplementation(given, issues, index),
     gapId: item.text("gapId", 40),
     groupId: item.text("groupId", 80),
     group: item.text("group", 120),
@@ -1140,13 +1256,40 @@ function validatedAction(raw, index, issues) {
 }
 
 /**
+ * A narrative alias is optional: invalid or oversized text must not refuse its canonical value or siblings.
+ * Only a fully consumed alias belongs to the coverage vocabulary. The original remains in the run's file.
+ * @param {Record<string, any>} raw @param {string} canonical @param {number} max @param {boolean} multiline
+ * @param {GeoIssue[]} issues @param {{index?:number,path?:string}} where
+ */
+function tierNarrative(raw, canonical, max, multiline, issues, where) {
+  const value = fields(raw, issues, where).text(canonical, max, { multiline });
+  if (value === undefined || !Object.hasOwn(raw, "basis") || raw.basis == null) return { value, consumed: false };
+  const diagnostic = (/** @type {string} */ code, /** @type {string} */ reason) => {
+    issues.push({ ...(where.index == null ? {} : { index: where.index }), field: `${where.path ? `${where.path}.` : ""}basis`, code: `alias_${code}`,
+      message: `basis was kept only in the original file: ${reason}; valid ${canonical} and sibling fields were preserved.` });
+    return { value, consumed: false };
+  };
+  if (typeof raw.basis !== "string") return diagnostic("invalid", "it must be text");
+  const alias = multiline ? stripControls(raw.basis).trim() : stripControls(raw.basis).replace(/\s+/g, " ").trim();
+  if (!alias) return diagnostic("empty", "it has no narrative text");
+  if ([...alias].length > max) return diagnostic("too_long", `it exceeds ${max} characters`);
+  const normalized = (/** @type {string} */ text) => text.replace(/\s+/g, " ").trim();
+  const duplicate = value && (normalized(value) === normalized(alias)
+    || String(raw[canonical]).split(/\n\s*\n/).some(paragraph => normalized(stripControls(paragraph)) === normalized(alias)));
+  const merged = value && !duplicate ? `${value}${multiline ? "\n\n" : " "}${alias}` : value || alias;
+  if ([...merged].length > max) return diagnostic("too_long", `appending it would exceed ${max} characters`);
+  return { value: merged, consumed: true };
+}
+
+/**
  * One tier of a strategy write in words — what it buys, what it does not promise, how many content units — beside the numbers
  * `geo_write targets` holds. The numbers a tier restates are declined.
  * @param {Record<string, any>} raw @param {number} index @param {GeoIssue[]} issues
  */
 function validatedTier(raw, index, issues) {
   const item = fields(raw, issues, { index, path: "tiers" });
-  item.unknown(GEO_STORED_FIELDS.tier, Object.keys(GEO_NOT_STORED["tiers[]"]));
+  const summary = tierNarrative(raw, "summary", 600, true, issues, { index, path: "tiers" });
+  item.unknown([...GEO_STORED_FIELDS.tier, ...(summary.consumed ? ["basis"] : [])], Object.keys(GEO_NOT_STORED["tiers[]"]));
   const tier = String(raw.tier ?? "");
   if (!GEO_TIERS.includes(tier)) {
     issues.push({ index, field: "tiers.tier", code: "notice", message: `tier is one of: ${GEO_TIERS.join(", ")}; this entry was left out.` });
@@ -1154,14 +1297,15 @@ function validatedTier(raw, index, issues) {
   }
   const targets = objectList(raw, "targets", 40, issues, (entry, position) => {
     const reader = fields(entry, issues, { index, path: `tiers.targets[${position}]` });
-    reader.unknown(GEO_STORED_FIELDS.tierTarget, Object.keys(GEO_NOT_STORED["tiers[].targets[]"]));
-    const value = { metricId: reader.text("metricId", 24), pool: reader.text("pool", 40), note: reader.text("note", 500),
+    const note = tierNarrative(entry, "note", 500, false, issues, { index, path: `tiers.targets[${position}]` });
+    reader.unknown([...GEO_STORED_FIELDS.tierTarget, ...(note.consumed ? ["basis"] : [])], Object.keys(GEO_NOT_STORED["tiers[].targets[]"]));
+    const value = { metricId: reader.text("metricId", 24), pool: reader.text("pool", 40), note: note.value,
       level: reader.text("level", 30), hardLine: reader.flag("hardLine"), engineScope: reader.texts("engineScope", 10, 20) };
-    return reader.refused || !value.metricId ? null : Object.fromEntries(Object.entries(value).filter(([, entryValue]) => entryValue != null && !(Array.isArray(entryValue) && !entryValue.length)));
+    return reader.refused || note.value === undefined || !value.metricId ? null : Object.fromEntries(Object.entries(value).filter(([, entryValue]) => entryValue != null && !(Array.isArray(entryValue) && !entryValue.length)));
   });
-  const value = { tier, name: item.text("name", 120), summary: item.text("summary", 600, { multiline: true }), buys: item.text("buys", 800, { multiline: true }),
+  const value = { tier, name: item.text("name", 120), summary: summary.value, buys: item.text("buys", 800, { multiline: true }),
     notPromised: textList(raw.notPromised, 12).map((line) => line.slice(0, 300)), contentUnits: item.number("contentUnits", 0, 1000), targets };
-  if (item.refused) return null;
+  if (item.refused || summary.value === undefined) return null;
   return Object.fromEntries(Object.entries(value).filter(([key, entryValue]) => key === "tier" || (entryValue != null && !(Array.isArray(entryValue) && entryValue.length === 0))));
 }
 
@@ -1363,14 +1507,29 @@ export function geoStrategyFileCoverage(file) {
     each(`gaps[${index}].expectedPoints`, gap?.expectedPoints, GEO_STORED_FIELDS.expectedPoint, {});
   });
   each("expectations", source.expectations, GEO_STORED_FIELDS.expectation, GEO_NOT_STORED["expectations[]"]);
-  each("tiers", source.tiers, GEO_STORED_FIELDS.tier, GEO_NOT_STORED["tiers[]"]);
   (Array.isArray(source.tiers) ? source.tiers : []).forEach((/** @type {any} */ tier, /** @type {number} */ index) => {
-    each(`tiers[${index}].targets`, tier?.targets, GEO_STORED_FIELDS.tierTarget, GEO_NOT_STORED["tiers[].targets[]"]);
+    const summary = isObject(tier) ? tierNarrative(tier, "summary", 600, true, [], {}) : null;
+    walk(`tiers[${index}]`, tier, [...GEO_STORED_FIELDS.tier, ...(summary?.consumed ? ["basis"] : [])], GEO_NOT_STORED["tiers[]"]);
+    (Array.isArray(tier?.targets) ? tier.targets : []).forEach((/** @type {any} */ target, /** @type {number} */ position) => {
+      const note = isObject(target) ? tierNarrative(target, "note", 500, false, [], {}) : null;
+      walk(`tiers[${index}].targets[${position}]`, target, [...GEO_STORED_FIELDS.tierTarget, ...(note?.consumed ? ["basis"] : [])], GEO_NOT_STORED["tiers[].targets[]"]);
+    });
   });
   each("assumptions", source.assumptions, GEO_STORED_FIELDS.assumption, {});
   each("noGo", source.noGo ?? source.no_go, GEO_STORED_FIELDS.noGo, {});
   each("secondary", source.secondary, GEO_STORED_FIELDS.secondary, {});
   each("actions", source.actions, GEO_STORED_FIELDS.action, GEO_NOT_STORED["actions[]"]);
+  (Array.isArray(source.actions) ? source.actions : []).forEach((action,index)=>{
+    const prefix = `actions[${index}]`;
+    walk(`${prefix}.what`,action?.what,GEO_STORED_FIELDS.actionWhat,{});
+    each(`${prefix}.sources`,action?.sources,GEO_STORED_FIELDS.actionSource,{});
+    walk(`${prefix}.work`,action?.work,GEO_STORED_FIELDS.actionWork,{});
+    walk(`${prefix}.timing`,action?.timing,GEO_STORED_FIELDS.actionTiming,{});
+    walk(`${prefix}.timing.durationDays`,action?.timing?.durationDays,GEO_STORED_FIELDS.actionRange,{});
+    walk(`${prefix}.effort`,action?.effort,GEO_STORED_FIELDS.actionEffort,{});
+    walk(`${prefix}.estimate`,action?.estimate,GEO_STORED_FIELDS.actionEstimate,{});
+    each(`${prefix}.estimate.basis`,action?.estimate?.basis,GEO_STORED_FIELDS.actionEstimateRef,{});
+  });
   walk("battlefield", source.battlefield, GEO_STORED_FIELDS.battlefield, {});
   return { dropped: [...new Set(dropped)], declined };
 }
@@ -1817,7 +1976,7 @@ const isIntegrityViolation = (error) => typeof /** @type {any} */ (error)?.code 
  *   renameProject?: ((userId: string, projectId: string, name: string) => Promise<unknown>) | null,
  *   articleExists?: ((project: any, path: string) => Promise<boolean>) | null,
  *   articleGate?: ((project: any, ref: { runId: string | null, deliverableId: string | null, path: string, contentSha256?: string | null }) => Promise<string>) | null,
- *   researchMaxOpen?: number | null }} input
+ *   researchMaxOpen?: number | null, inclusion?: any, planningContext?:any }} input
  *   `articleGate` reads an article's gate from the run ledger, for the bytes the run declares (`contentSha256`); without it every article is `unverified`.
  *   `researchMaxOpen` is the most research tasks a project holds queued or running (`OPEN_SCIENCE_GEO_RESEARCH_MAX_OPEN`)
  * @returns {Promise<{ ok: boolean, ids: string[], issues: GeoIssue[], [key: string]: any }>}
@@ -1835,13 +1994,35 @@ export async function geoRuntimeWrite(input) {
   }
 }
 
+/** Project-owned input identity and price provenance apply to both strategy and incremental action writes. */
+async function validatePlanningReferences(store, project, actions, planningContext, issues) {
+  for (const action of actions) {
+        if (action.work?.mode === "modify_existing") {
+          const article = await store.getArticle(project.id, action.work.articleId);
+          if (!article || article.currentResultVersionId !== action.work.resultVersionId || article.contentSha256 !== action.work.digest) {
+            issues.push({ field: "actions.work", code: "notice", message: "The existing article version is unavailable; choose the current project-owned result." });
+            action.work = null;
+          }
+        }
+        if (action.estimate && !action.estimate.basis.every(ref => planningContext?.basis?.priceReferences?.some(saved => saved.kind === ref.kind && saved.id === ref.id && saved.digest === ref.digest))) {
+          issues.push({ field: "actions.estimate", code: "notice", message: "No preserved price or supplied quote supports this estimate; the amount remains unknown." }); action.estimate = null;
+        }
+        for (const source of action.sources ?? []) if (source.url && !planningContext?.basis?.sources.some(ref => ref.url === source.url)) {
+          issues.push({ field: "actions.sources.url", code: "notice", message: "This page is a placement candidate, not an observed citation in the selected input." });
+        }
+      }
+
+}
+
 /** @param {Parameters<typeof geoRuntimeWrite>[0]} input */
-async function writeToProject({ store, project, what, body, renameProject = null, articleGate = null, articleExists = null, researchMaxOpen = null }) {
+async function writeToProject({ store, project, what, body, renameProject = null, articleGate = null, articleExists = null, researchMaxOpen = null, inclusion = null, planningContext = null }) {
   if (!GEO_WRITE_WHATS.includes(what)) throw failure(400, "geo_write_what_invalid", `what must be one of: ${GEO_WRITE_WHATS.join(", ")}.`);
   if (!withinSize(body, GEO_WRITE_LIMITS.jsonBytes)) throw failure(413, "geo_request_too_large", "The write is larger than 256 KB.");
   /** @type {GeoIssue[]} */
   const issues = [];
   const userId = project.userId;
+  const planFields = planningContext ? { scopeKey: planningContext.scopeKey, basis: planningContext.basis, runId: planningContext.runId } : {};
+  const planOptions = { scopeKey: planningContext?.scopeKey ?? null };
   const done = (/** @type {string[]} */ ids, extra = {}) => {
     // The fields the platform has said it does not keep (`GEO_NOT_STORED`) are counted, never listed as issues: the run is told what
     // is kept once, in its capability's text, and an operator reads the count.
@@ -1902,7 +2083,28 @@ async function writeToProject({ store, project, what, body, renameProject = null
       const written = claims.length ? await store.upsertClaims(userId, project.id, claims) : [];
       return done(written.map((entry) => entry.id), { claims: written });
     }
+    case "preview_questions": {
+      return { ok: true, ids: [], issues: [], ...geoQuestionImportPreview(dataOf(body)) };
+    }
+    case "recover_diagnosis": {
+      const recovered = await geoRecoverDiagnosis(store, project, dataOf(body));
+      return done([recovered.roundId], recovered);
+    }
+    case "start_diagnosis": {
+      const started = await geoStartDiagnosis(store, project, dataOf(body), inclusion);
+      return done([started.roundId], started);
+    }
     case "questions": {
+      if (Object.hasOwn(dataOf(body), "rows")) {
+        const preview = geoQuestionImportPreview(dataOf(body));
+        if (!preview.requestKey) throw failure(400, "geo_question_import_invalid", "Save requires a requestKey for safe retries.");
+        const written = await store.writeQuestionSet(userId, project.id, { groups: importGroups(preview), note: preview.note,
+          requestKey: preview.requestKey, contract: preview.contract });
+        return done(written.groupIds, { ...written, contract: { ...preview.contract, questionVersion: written.version }, actualRows: preview.actualRows, plannedCalls: preview.plannedCalls });
+      }
+      if ((await store.questionSets(project.id))[0]?.contract) {
+        throw failure(409, "geo_contract_missing", "Revise this imported question set with rows, its measurement contract and a new requestKey, preserving original text and identifiers. A groups write cannot discard the agreement.");
+      }
       const { groups, note, replace, replaceRefused } = validatedGroups(dataOf(body), issues);
       // `replace` given as something other than true or false is a word the run has to correct: neither reading of it is safe.
       if (!groups.length || replaceRefused) return done([]);
@@ -1979,7 +2181,7 @@ async function writeToProject({ store, project, what, body, renameProject = null
     }
     case "strategy": {
       const data = dataOf(body);
-      if (!(await baselineMeasured(store, project.id))) { issues.push({ ...BASELINE_MISSING }); return done([]); }
+      if (!planningContext && !(await baselineMeasured(store, project.id))) { issues.push({ ...BASELINE_MISSING }); return done([]); }
       const strategy = validatedStrategy(data, issues);
       /** @type {string[]} */
       let sourceIds = [];
@@ -1998,31 +2200,33 @@ async function writeToProject({ store, project, what, body, renameProject = null
       // strategy version (G4 — sixteen versions, the last one empty, and the
       // page and the program read only the last).
       if (!Object.keys(strategy).length) {
-        const latest = await store.latestStrategy(project.id);
+        const latest = await store.latestStrategy(project.id, planOptions);
         return done(sourceIds, { version: latest?.version ?? null, sourceIds });
       }
       // What the strategy's own gaps and actions say about each other, said to the run that wrote them while it is in its turn: a
       // gap nobody answers, a number without its basis. Notices, never a refusal.
       if (strategy.gaps !== undefined || strategy.actions !== undefined) {
-        const held = strategy.gaps !== undefined && strategy.actions !== undefined ? null : await store.latestStrategy(project.id);
+        const held = strategy.gaps !== undefined && strategy.actions !== undefined ? null : await store.latestStrategy(project.id, planOptions);
         for (const notice of geoActionNotices({ gaps: strategy.gaps ?? held?.gaps ?? [], actions: strategy.actions ?? held?.actions ?? [] })) {
           issues.push({ field: notice.index != null ? `actions[${notice.index}]` : "gaps", ...(notice.gapId ? { gapId: notice.gapId } : {}), code: "notice", message: notice.message });
         }
       }
-      const written = await store.writeStrategy(userId, project.id, strategy);
+      await validatePlanningReferences(store, project, strategy.actions ?? [], planningContext, issues);
+      const written = await store.writeStrategy(userId, project.id, { ...strategy, ...planFields });
       return done([String(written.version)], { version: written.version, sourceIds, ...(written.unchanged ? { unchanged: true } : {}) });
     }
     case "actions": {
-      if (!(await baselineMeasured(store, project.id))) { itemsOf(body, GEO_WRITE_LIMITS.actions); issues.push({ ...BASELINE_MISSING }); return done([]); }
+      if (!planningContext && !(await baselineMeasured(store, project.id))) { itemsOf(body, GEO_WRITE_LIMITS.actions); issues.push({ ...BASELINE_MISSING }); return done([]); }
       const given = objectList({ actions: itemsOf(body, GEO_WRITE_LIMITS.actions) }, "actions", GEO_WRITE_LIMITS.actions, issues,
         (entry, index) => validatedAction(entry, index, issues)) ?? [];
       if (!given.length) return done([]);
-      const held = await store.latestStrategy(project.id);
+      const held = await store.latestStrategy(project.id, planOptions);
+      await validatePlanningReferences(store, project, given, planningContext, issues);
       const merged = mergedActions(held?.actions ?? [], given);
       for (const notice of geoActionNotices({ gaps: held?.gaps ?? [], actions: merged })) {
         issues.push({ field: notice.index != null ? `actions[${notice.index}]` : "gaps", ...(notice.gapId ? { gapId: notice.gapId } : {}), code: "notice", message: notice.message });
       }
-      const written = await store.writeStrategy(userId, project.id, { actions: merged });
+      const written = await store.writeStrategy(userId, project.id, { actions: merged, ...planFields });
       return done([String(written.version)], { version: written.version, actions: merged.length, ...(written.unchanged ? { unchanged: true } : {}) });
     }
     case "sources": {

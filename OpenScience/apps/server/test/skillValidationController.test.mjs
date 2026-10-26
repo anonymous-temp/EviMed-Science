@@ -31,6 +31,7 @@ async function fixture(t, hooks = {}) {
 import fs from 'node:fs';
 const state=${JSON.stringify(state)},mode=${JSON.stringify(mode)},started=${JSON.stringify(started)},captured=${JSON.stringify(captured)};
 const args=process.argv.slice(2), behavior=fs.readFileSync(mode,'utf8');
+if(args[0]==='info'){console.log('27.3.0');process.exit(0);}
 if(args[0]==='image'){console.log(${JSON.stringify(imageId)});process.exit(0);}
 if(args[0]==='inspect'){if(!fs.existsSync(state)){console.error('No such container');process.exit(1);}const current=JSON.parse(fs.readFileSync(state,'utf8'));if(/^[a-f0-9]{64}$/.test(args.at(-1))&&args.at(-1)!==current.Id){console.error('No such container');process.exit(1);}console.log(fs.readFileSync(state,'utf8'));process.exit(0);}
 if(args[0]==='create'){
@@ -171,8 +172,7 @@ test('output overflow, path leakage and failed cancellation never free uncertain
   await fs.writeFile(mode, 'ok')
 })
 
-test('version 9 keeps version 8\'s fixed validation reference and the version-7 citation start shape', async t => {
-  assert.equal(RUNTIME_CONTROLLER_PROTOCOL_VERSION, 14)
+test('the current protocol keeps the fixed validation reference and scoped citation start shape', async t => {
   const { config, reference } = await fixture(t)
   const client = new RuntimeControllerClient(config)
   let received
@@ -182,11 +182,12 @@ test('version 9 keeps version 8\'s fixed validation reference and the version-7 
   assert.equal(received[3].maxResponseBytes, 512 * 1024 + 1024)
   await client.startRuntime({ id: 'project', userId: 'alice', activeWorkspace: '' }, 12000, 'pw_0123456789012345')
   assert.deepEqual(Object.keys(received[2]).sort(), ['activeWorkspace', 'capsuleGatewayUrl', 'password', 'pluginConfig', 'port', 'projectId', 'publicSourceGatewayUrl', 'revisionGatewayUrl', 'userId'])
-  const server = createRuntimeController({ ...config, runtimeControllerSocket: path.join(config.dataDir, 'controller.sock'), production: false },
+  const server = createRuntimeController({ ...config, runtimeControllerSocket: path.join(config.dataDir, 'controller.sock'), production: false, maxRunningRuntimes: 1, maxRunningRuntimesPerUser: 1 },
     { skillValidation: { availableMemory: async () => 2 * 1024 ** 3 } })
   t.after(() => server.close())
   await server.listen()
   const actual = new RuntimeControllerClient({ ...config, runtimeControllerSocket: path.join(config.dataDir, 'controller.sock') })
+  assert.equal((await actual.health()).protocolVersion, RUNTIME_CONTROLLER_PROTOCOL_VERSION)
   assert.deepEqual(await actual.validatePersonalSkill(reference), output)
   await assert.rejects(actual.request('POST', '/v1/skills/validate', { ...reference, path: '/secret' }), { code: 'runtime_controller_payload_invalid' })
 })

@@ -1,3 +1,4 @@
+import { CONTEXT_ITEM_FIELDS, contextPolicyIdentity } from "./geoContextItems.mjs";
 /**
  * The work-style methods a project's active capsules contribute to a run.
  *
@@ -293,14 +294,22 @@ function confirmedAtMs(entry) {
  * @param {any} capsules @param {string} userId @param {string} capsuleId @param {string | null} projectId
  * @returns {Promise<any[]>}
  */
-async function mountableCapsuleEntries(capsules, userId, capsuleId, projectId) {
+async function mountableCapsuleEntries(capsules, userId, capsuleId, projectId, contextPolicy, contextItems, activation) {
   /** @type {any[]} */
   const candidates = [];
   let cursor = null;
   for (let page = 0; page < MAX_CAPSULE_ENTRY_PAGES; page += 1) {
     /** @type {any} */
-    const result = await capsules.entries(userId, capsuleId, { limit: CAPSULE_ENTRY_PAGE, cursor });
-    for (const entry of result?.items ?? []) {
+    const shared=contextPolicy?.kind === "geo-project";
+    const result = await capsules.entries(userId, capsuleId, { limit: CAPSULE_ENTRY_PAGE, cursor,
+      ...(shared ? {projectId,fields:CONTEXT_ITEM_FIELDS} : {}) });
+    for (let entry of result?.items ?? []) {
+      if(shared) {
+        if (!contextItems || !capsules.documents || !await contextItems.capsule(contextPolicy,activation,entry)) continue;
+        const full=await capsules.documents.get(userId,"fact",entry.id,{expectedRevision:entry.revision});
+        if(!full || full.revision!==entry.revision || !await contextItems.capsule(contextPolicy,activation,full)) continue;
+        entry=full;
+      }
       if (isMountableEntry(entry) && entryReaches(entry, projectId)) candidates.push(entry);
     }
     cursor = result?.nextCursor ?? null;
@@ -359,20 +368,22 @@ async function receivedCapsule(capsules, userId, selection) {
  * counter.
  *
  * @param {any} capsules `CapsuleService`
- * @param {{ userId: string, projectId: string | null, maxBytes?: number, onLeftOut?: ((entryId: string) => void) | null }} scope
+ * @param {{ userId: string, projectId: string | null, maxBytes?: number, contextPolicy?:any, contextItems?:any, onLeftOut?: ((entryId: string) => void) | null }} scope
  * @returns {Promise<{ id: string, directoryName: string, capsuleId: string, factKind: string, content: string, document: string, bytes: number, received: boolean }[]>}
  */
-export async function selectCapsuleMethods(capsules, { userId, projectId, maxBytes = MAX_MOUNTED_CAPSULE_METHOD_BYTES, onLeftOut = null }) {
+export async function selectCapsuleMethods(capsules, { userId, projectId, maxBytes = MAX_MOUNTED_CAPSULE_METHOD_BYTES, onLeftOut = null, contextPolicy = null, contextItems = null }) {
+  if(contextPolicy?.kind === "geo-project" && (contextPolicy.ownerId!==userId || contextPolicy.controlProjectId!==projectId)) return [];
   const active = (await capsules.active(userId)).items
     .filter((item, index, all) => all.findIndex((other) => other.capsuleId === item.capsuleId) === index)
     .slice(0, ACTIVE_CAPSULE_LIMIT);
   /** @type {{ id: string, directoryName: string, capsuleId: string, factKind: string, content: string, document: string, bytes: number, received: boolean, confirmedAt: number }[]} */
   const candidates = [];
+  const snapshots=new Map();
   for (const selection of active) {
     /** @type {any[]} */
     let entries;
     try {
-      entries = await mountableCapsuleEntries(capsules, userId, String(selection.capsuleId), projectId);
+      entries = await mountableCapsuleEntries(capsules, userId, String(selection.capsuleId), projectId, contextPolicy, contextItems, selection);
     } catch (error) {
       if (/** @type {any} */ (error)?.code === "capsule_not_found") continue;
       throw error;
@@ -382,9 +393,12 @@ export async function selectCapsuleMethods(capsules, { userId, projectId, maxByt
     // A pack the author or the operator took down mounts nothing, whatever list still names it.
     if (record?.payload?.takenDown) continue;
     for (const entry of entries) {
+      if(contextPolicy?.kind === "geo-project" && (!await capsules.inForce(userId,selection.capsuleId) || !await contextItems.capsule(contextPolicy,selection,entry))) continue;
+      snapshots.set(String(entry.id),{entry,selection});
       const origin = record ? sharedFrom(record, entry.payload) : null;
       const method = {
         id: String(entry.id),
+        ...(contextPolicy?.kind === "geo-project" ? {revision:entry.revision,contentDigest:entry.payload.contentDigest,contextPolicy:contextPolicyIdentity(contextPolicy)} : {}),
         directoryName: capsuleMethodDirectoryName(entry.id),
         capsuleId: String(selection.capsuleId),
         factKind: String(entry.payload.factKind),
@@ -419,6 +433,10 @@ export async function selectCapsuleMethods(capsules, { userId, projectId, maxByt
       // is counted.
       for (const left of candidates.slice(index, index + MAX_MOUNTED_CAPSULE_METHODS - selected.length)) onLeftOut?.(left.id);
       break;
+    }
+    if(contextPolicy?.kind === "geo-project") {
+      const snapshot=snapshots.get(candidate.id);
+      if(!await capsules.inForce(userId,candidate.capsuleId) || !await contextItems.capsule(contextPolicy,snapshot.selection,snapshot.entry)) continue;
     }
     bytes += candidate.bytes;
     selected.push(candidate);
@@ -482,7 +500,7 @@ export async function selectCapsuleMethods(capsules, { userId, projectId, maxByt
  *
  * @param {{ capsules: any, project: any, directory: string, learning?: any,
  *   learnedFamily?: "geo" | "research" | null, scopeId?: string | null, query?: string | null, similarity?: { nearest: Function, pairs: Function } | null,
- *   keep?: Iterable<string> | null, keepDirectory?: boolean, maxPromptBytes?: number, writeFile?: typeof writeFileAtomicNoFollow }} options
+ *   keep?: Iterable<string> | null, keepDirectory?: boolean, contextPolicy?:any, contextItems?:any, maxPromptBytes?: number, writeFile?: typeof writeFileAtomicNoFollow }} options
  * `capsule` is what the capsule half mounted, as the conversation panel shows
  * it (`memorySessions.mjs`): recorded here so a read of the panel does not
  * select the whole capsule again.
@@ -511,6 +529,8 @@ export async function materializeCapsuleMethods({
   similarity = null,
   keep = null,
   keepDirectory = false,
+  contextPolicy = null,
+  contextItems = null,
   maxPromptBytes = MAX_MOUNTED_CAPSULE_METHOD_BYTES,
   writeFile = writeFileAtomicNoFollow,
 }) {
@@ -520,7 +540,7 @@ export async function materializeCapsuleMethods({
   let leftOut = 0;
   const countLeftOut = () => { leftOut += 1; };
   const capsuleSelection = capsules
-    ? await selectCapsuleMethods(capsules, { userId, projectId, maxBytes: maxPromptBytes, onLeftOut: countLeftOut })
+    ? await selectCapsuleMethods(capsules, { userId, projectId, maxBytes: maxPromptBytes, onLeftOut: countLeftOut, contextPolicy, contextItems })
     : [];
   // The account's own entries are spent first; what received packs brought
   // waits until the learned methods have had theirs.
@@ -535,6 +555,7 @@ export async function materializeCapsuleMethods({
     ? await selectLearnedMethods(learning, {
       userId,
       projectId,
+      contextPolicy, contextItems,
       maxCount: Math.min(MAX_MOUNTED_LEARNED_METHODS, MAX_MOUNTED_CAPSULE_METHODS - ownMethods.length),
       maxBytes: maxPromptBytes - ownBytes,
       // A learned method is handed to a run as a card naming its file here,
@@ -570,7 +591,9 @@ export async function materializeCapsuleMethods({
   }
   // The platform's tier, last: what a run is given of the official packs is what is left of the room after everything of the person's own and
   // everything they were sent, chosen against their own methods (`selectOfficialMethods`: a method of theirs about the same thing wins).
-  const officialAll = capsules && typeof capsules.officialMethods === "function" ? await capsules.officialMethods(userId).catch(() => []) : [];
+  // A shared GEO project's context carries only the items its context authorization verified (`geoContextItems.mjs`), and the official
+  // tier is none of them: it is not mounted there (a GEO runtime's family already reads none of it, `selectOfficialMethods`).
+  const officialAll = contextPolicy?.kind !== "geo-project" && capsules && typeof capsules.officialMethods === "function" ? await capsules.officialMethods(userId).catch(() => []) : [];
   const officialMethods = await selectOfficialMethods(officialAll, {
     scopeId: scopeId ?? null,
     family: learnedFamily,
@@ -592,6 +615,16 @@ export async function materializeCapsuleMethods({
   spentBytes += officialMethods.reduce((total, method) => total + method.promptBytes, 0);
   const capsuleMethods = [...ownMethods, ...receivedMethods];
   const methods = [...ownMethods, ...learnedMethods, ...receivedMethods, ...officialMethods];
+  const recheck=async()=>{
+    if(contextPolicy?.kind!=="geo-project") return;
+    for(const method of methods) {
+      const row={id:method.id,revision:method.revision,payload:{contentDigest:method.contentDigest,...(method.capsuleId?{capsuleId:method.capsuleId}:{})}};
+      const allowed=method.capsuleId ? await capsules.inForce(userId,method.capsuleId) && await contextItems.capsule(contextPolicy,{capsuleId:method.capsuleId},row)
+        : await contextItems.method(contextPolicy,row);
+      if(!allowed) throw new Error("Method context authority changed");
+    }
+  };
+  await recheck();
   const learned = learnedMethods.map((method) => ({
     id: method.id,
     name: method.name,
@@ -603,17 +636,20 @@ export async function materializeCapsuleMethods({
     factKind: method.factKind, content: String(method.content).slice(0, 1000) }));
   const rank = { mode: /** @type {any} */ (learnedMethods).mode ?? null, topScore: /** @type {any} */ (learnedMethods).topScore ?? null };
   const reasons = new Map([...learnedMethods, ...officialMethods].map((method) => [method.directoryName, method.reason]));
-  const version = selectionVersion(methods.map((method) => ({ directory: method.directoryName, digest: String(method.digest ?? method.document ?? ""), reason: reasons.get(method.directoryName) ?? null })));
+  const policyIdentity=contextPolicy?.kind === "geo-project" ? contextPolicyIdentity(contextPolicy) : null;
+  const identities=policyIdentity ? methods.map(method=>({kind:method.capsuleId?"fact":"method",id:method.id,revision:method.revision,contentDigest:method.contentDigest,directoryName:method.directoryName,...(method.capsuleId?{capsuleId:method.capsuleId}:{})})) : [];
+  const selectionScope=policyIdentity ? {contextPolicy:policyIdentity,identities} : {};
+  const version = selectionVersion([...methods.map((method) => ({ directory: method.directoryName, digest: String(method.digest ?? method.document ?? ""), reason: reasons.get(method.directoryName) ?? null })), ...(policyIdentity ? [{directory:"context-policy",digest:JSON.stringify(policyIdentity),reason:null}] : [])]);
   const officialReceipt = officialMethods.map((method) => ({ id: method.id, name: method.name, digest: method.digest, directoryName: method.directoryName }));
   if (methods.length === 0 && !keepDirectory) {
     await fs.rm(directory, { recursive: true, force: true });
-    return { directory, count: 0, bytes: 0, promptBytes: 0, leftOut, learned, learnedBytes: 0, version, rank, capsule, official: officialReceipt, officialLeftOut: officialMethods.leftOut };
+    return { ...selectionScope, directory, count: 0, bytes: 0, promptBytes: 0, leftOut, learned, learnedBytes: 0, version, rank, capsule, official: officialReceipt, officialLeftOut: officialMethods.leftOut };
   }
   await fs.mkdir(directory, { recursive: true, mode: 0o700 });
   await assertNoSymlinkPath(project.rootDir, directory);
   // New and changed first, stale last (see above). What a running runtime was given and is still approved is written too, and stays.
   /** @type {any[]} */
-  const kept = [...(/** @type {any} */ (learnedMethods).kept ?? []), ...officialMethods.kept];
+  const kept = contextPolicy?.kind === "geo-project" ? [] : [...(/** @type {any} */ (learnedMethods).kept ?? []), ...officialMethods.kept];
   let bytes = 0;
   for (const method of [...methods, ...kept]) {
     // A code skill is a body plus the scripts it tells the run to execute.
@@ -644,12 +680,13 @@ export async function materializeCapsuleMethods({
   }
   // What the plugin lists, in the order of the selection: the researcher's own entries, the learned methods best first, what a
   // received pack brought. A learned method carries the reason it is there; a capsule entry none.
+  await recheck();
   // `leftOut` is the receipt of what the personal delta kept out of this selection (a plugin that predates it ignores the field).
   await writeFile(directory, path.join(directory, SELECTION_FILE), `${JSON.stringify({
-    version, methods: methods.map((method) => ({ directory: method.directoryName, reason: reasons.get(method.directoryName) ?? null })),
+    version, ...(contextPolicy ? {contextPolicy:contextPolicyIdentity(contextPolicy)} : {}), methods: methods.map((method) => ({ directory: method.directoryName, reason: reasons.get(method.directoryName) ?? null })),
     ...(officialMethods.leftOut.length ? { leftOut: officialMethods.leftOut } : {}),
   })}\n`, { encoding: "utf8", mode: 0o444 });
-  return { directory, count: methods.length, bytes, promptBytes: spentBytes, leftOut, learned, learnedBytes, version, rank, capsule, official: officialReceipt, officialLeftOut: officialMethods.leftOut };
+  return { ...selectionScope, directory, count: methods.length, bytes, promptBytes: spentBytes, leftOut, learned, learnedBytes, version, rank, capsule, official: officialReceipt, officialLeftOut: officialMethods.leftOut };
 }
 
 /**

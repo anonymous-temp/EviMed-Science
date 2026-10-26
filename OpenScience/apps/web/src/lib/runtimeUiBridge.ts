@@ -1,3 +1,4 @@
+import type { GeoConversationScope } from "./geoNativeClient";
 /**
  * The shell's half of what the kernel's page shows about a run: the run bound
  * to the conversation on screen, folded from the run's own event stream into
@@ -232,6 +233,8 @@ export function reportPathOf(state: FrameRunState): string | null {
 }
 
 export interface FrameRunBindingOptions {
+  scope?: GeoConversationScope;
+  readRuns?: () => Promise<WebAgentRun[]>;
   /** The root session of the conversation on screen; null while none is open. */
   sessionId: string | null;
   /** Off until the frame's bridge is listening. */
@@ -256,7 +259,7 @@ export interface FrameRunBindingOptions {
  * same conversation is a new run). Clears the frame's state when the
  * conversation changes or has no run.
  */
-export function useFrameRunBinding({ sessionId, enabled, postRunState, postEvidence, onRun, pollMs = 20_000 }: FrameRunBindingOptions): void {
+export function useFrameRunBinding({ scope, readRuns, sessionId, enabled, postRunState, postEvidence, onRun, pollMs = 20_000 }: FrameRunBindingOptions): void {
   const posts = useRef({ postRunState, postEvidence, onRun });
   posts.current = { postRunState, postEvidence, onRun };
 
@@ -273,6 +276,7 @@ export function useFrameRunBinding({ sessionId, enabled, postRunState, postEvide
     const sender = createThrottledSender<FrameRunState>((value) => posts.current.postRunState(value));
 
     const refreshEvidence = () => {
+      if (scope) { posts.current.postEvidence(null); return; }
       const reportPath = reportPathOf(state);
       const key = reportPath && state.runId ? `${state.runId}:${reportPath}:${state.state}:${(state.artifacts ?? []).length}` : "";
       if (key === evidenceKey) return;
@@ -300,6 +304,7 @@ export function useFrameRunBinding({ sessionId, enabled, postRunState, postEvide
       publish();
       if (sameRun && unsubscribe) return;
       unsubscribe?.();
+      if (scope) return;
       unsubscribe = subscribeRunEvents(run.id, (event) => {
         if (!active || state.runId !== run.id) return;
         const before = state.state;
@@ -312,10 +317,10 @@ export function useFrameRunBinding({ sessionId, enabled, postRunState, postEvide
 
     const lookup = async () => {
       try {
-        const runs = await listWebAgentRuns();
+        const runs = await (readRuns ? readRuns() : listWebAgentRuns());
         bind(boundRunFor(runs, sessionId));
       } catch { /* the ledger is unreachable for now; the next poll asks again */ }
-      if (active && state.state !== "running") schedule(pollMs);
+      if (active && (scope || state.state !== "running")) schedule(scope && state.state === "running" ? 3000 : pollMs);
     };
     function schedule(ms: number) {
       if (pollTimer) clearTimeout(pollTimer);
@@ -329,7 +334,7 @@ export function useFrameRunBinding({ sessionId, enabled, postRunState, postEvide
       unsubscribe?.();
       sender.cancel();
     };
-  }, [sessionId, enabled, pollMs]);
+  }, [sessionId, enabled, pollMs, scope, readRuns]);
 }
 
 /** One knowledge-base source the frame's `@` menu offers (`kb-result` items). */

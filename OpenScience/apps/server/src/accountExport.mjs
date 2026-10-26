@@ -43,6 +43,8 @@ const customerKinds = ["capsule", "fact", "method", "source", "source-unit", "kn
  * and a kind nothing here decided is no longer an outage: the export carries
  * what it has a contract for and states the rest in its own `omissions`. */
 export const UNEXPORTED_DOCUMENT_KINDS = Object.freeze({
+  "geo-plan-context": "deployment-bound GEO conversation records: project context policies, native session identities, accepted-request bindings and staging receipts are runtime authority, not portable content; selected analysis pages and source-input snapshots share this kind and require their parent context to interpret, so they leave through the existing selected-analysis export rather than this account archive",
+  "geo-signal": "GEO observation and handling records tied to this deployment's question selections, source versions, run requests and paged event materials; this account archive does not export the related GEO schema, so these records would be incomplete outside it; the existing selected-history analysis exports their preserved observations and handling state, without transferring request authority",
   "price-list": "declared in PRODUCT_KINDS but read and written by no product code, so nothing user-scoped is known to live under it; prices are platform data in the price-list registry, and the archive carries the lists its own usage rows name as priceLists",
   "method-trial": "an evaluation identity's time-limited instruction to mount named methods in one project's next launches, expired on read; it steers this deployment's runtime and means nothing outside it, and the methods it names are exported under method",
   "extension-generation": "which prepared package and skill generation a project's runtime was built from and which one is live; the platform derives it from the installations, defaults and skills that are themselves exported, and it is runtime authority an archive must never carry",
@@ -521,7 +523,16 @@ export async function withAccountExportSnapshot(database, user, config, operatio
     if (skillResources.resources.length) state.personalSkillResources = skillResources.resources;
     const data = Buffer.from(`${JSON.stringify(state)}\n`, "utf8");
     if (data.length > maxBytes) throw tooLarge();
-    return operation({ projects: tables.projects, data });
+    // Native pack collection may need the namespace registry from this exact
+    // snapshot. Borrow only this held client, not another pool connection or a
+    // transaction that happens to reuse the client after this callback ends.
+    let collecting = true;
+    const withDatabaseSnapshot = async work => {
+      if (!collecting) throw new HttpError(409, 'account_export_snapshot_closed', 'The account export snapshot has ended.');
+      return database.withTransactionClient(client, work);
+    };
+    try { return await operation({ projects: tables.projects, data, withDatabaseSnapshot }); }
+    finally { collecting = false; }
   });
 }
 

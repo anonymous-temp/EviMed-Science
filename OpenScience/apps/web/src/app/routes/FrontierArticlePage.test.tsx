@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import { parseFrontierItemDetail } from "@/lib/frontierClient";
-import { frontierItemDetail, rawChineseNews, rawOpenAccessPaper, rawStructuredAbstract, rawXPost } from "@/components/frontier/__fixtures__/frontierItems";
+import { frontierItemDetail, rawChineseNews, rawOpenAccessPaper, rawPolicy, rawStructuredAbstract, rawWechatCommentary, rawXPost } from "@/components/frontier/__fixtures__/frontierItems";
 import { expectComposed } from "@/test/expectComposed";
 import { useToastStore } from "@/lib/toast";
 import { Toaster } from "@/components/ui/Toaster";
@@ -45,21 +45,25 @@ function show(path = "/app/frontier/items/item-1") {
 }
 
 describe("a journal article", () => {
-  it("opens with its guide, its stored abstract in Chinese, its original title and the way to the original", async () => {
+  it("opens on the AI view: its guide and original title, the way to the original in the right column, and no text, no 来源 line", async () => {
+    wide();
     show();
     expect(await screen.findByRole("heading", { name: "口服 PCSK9 抑制剂降低主要心血管事件", level: 1 })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "AI 导读" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "摘要 · AI 翻译" })).toBeInTheDocument();
-    expect(screen.getByText("已保存的中文摘要")).toBeInTheDocument();
     expect(screen.getByText("Oral PCSK9 Inhibition and Cardiovascular Outcomes")).toBeInTheDocument();
-    // The end of the article: where it came from and the way to the original.
-    const end = screen.getByText(/^来源：/).parentElement!;
-    expect(end).toHaveTextContent("来源：NEJM· nejm.org打开原文");
-    const original = within(end).getByRole("link", { name: "打开原文" });
-    expect(original).toHaveAttribute("href", "https://www.nejm.org/doi/full/10.1056/example");
-    expect(original).toHaveAttribute("target", "_blank");
+    // The abstract is the text view's, not the page's: not drawn, not asked for, and the line under it is gone.
+    expect(screen.queryByRole("heading", { name: /^摘要/ })).not.toBeInTheDocument();
+    expect(screen.queryByText("已保存的中文摘要")).not.toBeInTheDocument();
+    expect(screen.queryByText(/^来源：/)).not.toBeInTheDocument();
     expect(client.fetchFrontierAbstractZh).not.toHaveBeenCalled();
     expect(client.markFrontierItemRead).toHaveBeenCalled();
+    // The way to the original is the column's, beside 查看摘要, and not the article's.
+    const rail = screen.getByRole("complementary", { name: "文章操作与推荐" });
+    const original = within(rail).getByRole("link", { name: "打开原文" });
+    expect(original).toHaveAttribute("href", "https://www.nejm.org/doi/full/10.1056/example");
+    expect(original).toHaveAttribute("target", "_blank");
+    expect(within(screen.getByRole("article", { name: "正文" })).queryByRole("link", { name: "打开原文" })).not.toBeInTheDocument();
+    expect(within(rail).getByRole("button", { name: "查看摘要" })).not.toHaveAttribute("aria-pressed");
     // The header is the title alone (owner: 「查看原文又跑到右上角去了」): the actions are the right column's, or the bar's.
     expectComposed(document.body, { tablists: 0, stepRail: false, toolbar: false });
     const header = document.querySelector("[data-page-header]") as HTMLElement;
@@ -67,8 +71,18 @@ describe("a journal article", () => {
     expect(within(header).queryAllByRole("link")).toEqual([]);
   });
 
+  it("opens its stored abstract, in Chinese and under its own name, on the text view, with the original title still over it", async () => {
+    show("/app/frontier/items/item-1?view=text");
+    expect(await screen.findByRole("heading", { name: "摘要 · AI 翻译" })).toBeInTheDocument();
+    expect(screen.getByText("已保存的中文摘要")).toBeInTheDocument();
+    expect(screen.getByText("Oral PCSK9 Inhibition and Cardiovascular Outcomes")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "AI 导读" })).not.toBeInTheDocument();
+    expect(client.fetchFrontierAbstractZh).not.toHaveBeenCalled();
+    expect(screen.queryByText(/^来源：/)).not.toBeInTheDocument();
+  });
+
   it("switches the abstract between 中文 and 原文, and keeps the choice for the session", async () => {
-    const { unmount } = show();
+    const { unmount } = show("/app/frontier/items/item-1?view=text");
     await screen.findByText("已保存的中文摘要");
     const switcher = screen.getByRole("group", { name: "摘要语言" });
     await userEvent.click(within(switcher).getByRole("button", { name: "原文" }));
@@ -76,14 +90,14 @@ describe("a journal article", () => {
     expect(screen.getByRole("heading", { name: "摘要 · 原文" })).toBeInTheDocument();
     expect(screen.queryByText("已保存的中文摘要")).not.toBeInTheDocument();
     unmount();
-    show();
+    show("/app/frontier/items/item-1?view=text");
     expect(await screen.findByText("Original abstract")).toBeInTheDocument();
   });
 
   it("requests the shared Chinese abstract when only an original is stored", async () => {
     client.fetchFrontierItem.mockResolvedValue({ ...frontierItemDetail({ id: "item-1" }), abstract: "Original abstract", abstractZh: null });
     client.fetchFrontierAbstractZh.mockResolvedValue({ abstractZh: "新生成的中文摘要", abstract: "Original abstract", note: null });
-    show();
+    show("/app/frontier/items/item-1?view=text");
     expect(await screen.findByText("新生成的中文摘要")).toBeInTheDocument();
     expect(client.fetchFrontierAbstractZh).toHaveBeenCalledWith("item-1");
   });
@@ -91,28 +105,46 @@ describe("a journal article", () => {
   it("names an original abstract as such where no Chinese one can be written, and offers a retry for a failed read", async () => {
     client.fetchFrontierItem.mockResolvedValue({ ...frontierItemDetail({ id: "item-1" }), abstract: "Background: original.", abstractZh: null });
     client.fetchFrontierAbstractZh.mockRejectedValueOnce(new WebApiError("down", { status: 503, code: null })).mockResolvedValueOnce(null);
-    show();
+    show("/app/frontier/items/item-1?view=text");
     await userEvent.click(await screen.findByRole("button", { name: "重试" }));
     const text = await screen.findByRole("region", { name: "摘要 · 原文" });
     expect(text.querySelector("[data-prose] p")).toHaveTextContent(/^Background: original\.$/);
   });
 
-  it("does not look for an abstract an item does not have, and draws no block for it", async () => {
+  it("does not look for an abstract an item does not have, and draws neither a block nor a switch for it", async () => {
+    wide();
     client.fetchFrontierItem.mockResolvedValue({ ...frontierItemDetail({ id: "item-1", flags: [{ key: "no-abstract", label: "无摘要" }] }), abstract: null, abstractZh: null });
     show();
     await screen.findByRole("heading", { name: "AI 导读" });
     expect(screen.queryByRole("heading", { name: /^摘要/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^查看(摘要|正文|全文)$/ })).not.toBeInTheDocument();
     expect(client.fetchFrontierAbstractZh).not.toHaveBeenCalled();
   });
 
-  it("keeps what the card left out of a paper: its facts, the free full text and what the paper is", async () => {
+  it("takes the switch away and returns to the AI view when the server has no abstract after all", async () => {
+    wide();
+    // A DOI offers an abstract; the server then has none in either language (the shared abstract request answers nothing).
+    client.fetchFrontierItem.mockResolvedValue({ ...frontierItemDetail({ id: "item-1", doi: "10.1000/x", flags: [] }), abstract: null, abstractZh: null });
+    client.fetchFrontierAbstractZh.mockResolvedValue(null);
+    show("/app/frontier/items/item-1?view=text");
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent(/^\/app\/frontier\/items\/item-1$/));
+    expect(await screen.findByRole("heading", { name: "AI 导读" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^查看摘要$|^AI 解读$/ })).not.toBeInTheDocument();
+  });
+
+  it("keeps what the card left out of a paper in the column's 出处: its facts and the free full text, and what the paper is in the byline", async () => {
+    wide();
     client.fetchFrontierItem.mockResolvedValue(frontierItemDetail({ id: "item-1", sourceType: "preprint", evidenceType: "preprint", evidenceTypeLabel: "预印本",
       flags: [{ key: "preprint", label: "预印本 · 未经同行评议" }], facts: { journal: "medRxiv", impact_factor: 78.456 },
       openAccess: { status: "gold", pdfUrl: "https://europepmc.org/articles/PMC1/pdf" }, abstract: "Abstract.", abstractZh: "中文摘要。" }));
     show();
-    await screen.findByText("中文摘要。");
-    for (const text of ["期刊", "medRxiv", "影响因子", "78.5", "预印本 · 未经同行评议"]) expect(document.body).toHaveTextContent(text);
-    expect(screen.getByRole("link", { name: "免费全文" })).toHaveAttribute("href", "https://europepmc.org/articles/PMC1/pdf");
+    const rail = await screen.findByRole("complementary", { name: "文章操作与推荐" });
+    const source = within(rail).getByRole("region", { name: "出处" });
+    for (const text of ["期刊", "medRxiv", "影响因子", "78.5"]) expect(source).toHaveTextContent(text);
+    expect(within(source).getByRole("link", { name: "免费全文" })).toHaveAttribute("href", "https://europepmc.org/articles/PMC1/pdf");
+    expect(document.body).toHaveTextContent("预印本 · 未经同行评议");
+    // The abstract itself waits behind the switch.
+    expect(screen.queryByText("中文摘要。")).not.toBeInTheDocument();
   });
 
   it("says a retraction in the safety colour over the text", async () => {
@@ -127,7 +159,7 @@ describe("a journal article", () => {
 describe("an X post with every block", () => {
   beforeEach(() => { client.fetchFrontierItem.mockResolvedValue(detail(rawXPost())); });
 
-  it("reads like AIHOT's detail page: byline, AI 导读, 正文 · AI 翻译, pictures, the quoted post, 来源, 事件后续 and the right column", async () => {
+  it("reads like AIHOT's detail page: byline, AI 导读, 正文 · AI 翻译, pictures, the quoted post, 事件后续 and the right column", async () => {
     wide();
     show("/app/frontier/items/x-post-0001");
     await screen.findByRole("heading", { name: "正文 · AI 翻译" });
@@ -136,7 +168,9 @@ describe("an X post with every block", () => {
     const byline = screen.getAllByText("@arena")[0].closest("div")!;
     expect(byline).toHaveTextContent(/Arena\.ai·@arena·X·.+·2 天前/);
     expect(byline.compareDocumentPosition(screen.getByRole("heading", { level: 1 })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(article).getByRole("link", { name: "在 X 查看原帖" })).toHaveAttribute("href", "https://x.com/arena/status/1");
+    const notes = screen.getByRole("complementary", { name: "文章操作与推荐" });
+    expect(within(notes).getByRole("link", { name: "在 X 查看原帖" })).toHaveAttribute("href", "https://x.com/arena/status/1");
+    expect(within(article).queryByRole("link", { name: "在 X 查看原帖" })).not.toBeInTheDocument();
     expect(screen.getByText(/基于超 7\.5K 真实会话净提升/)).toBeInTheDocument();
     expect(screen.getByText(/它以综合第 11 名的成绩上榜/)).toBeInTheDocument();
     // Two pictures, from this deployment's proxy.
@@ -149,7 +183,10 @@ describe("an X post with every block", () => {
     expect(within(quote).getByText("@arena")).toBeInTheDocument();
     expect(within(quote).getByText("原文")).toBeInTheDocument();
     expect(within(quote).getByRole("link", { name: "在 X 查看被引用的帖子" })).toHaveAttribute("href", "https://x.com/arena/status/0");
-    expect(article).toHaveTextContent("来源：Arena.ai· x.com");
+    // A post is the item: its text is on the page beside the 导读, whole, with no switch to a text view and no 来源 line under it.
+    expect(article).not.toHaveTextContent("来源：");
+    expect(within(notes).queryByRole("button", { name: /^(查看(正文|摘要|全文)|AI 解读)$/ })).not.toBeInTheDocument();
+    expect(article).toHaveAttribute("data-reader-view", "written");
     // 事件后续 · 2, each row its own article, with the way to the whole event.
     const followups = screen.getByRole("region", { name: "事件后续 · 2" });
     expect(within(followups).getByRole("link", { name: "查看事件全部 ›" })).toHaveAttribute("href", "/app/frontier/events/ev1");
@@ -157,13 +194,15 @@ describe("an X post with every block", () => {
     expect(rows.map((row) => within(row).getByText(/^(后续|同事件)$/).textContent)).toEqual(["后续", "同事件"]);
     expect(within(rows[0]).getByRole("link")).toHaveAttribute("href", "/app/frontier/items/f-1");
     expect(rows[0]).toHaveTextContent("Artificial Analysis · 2 天前");
-    // The right column: 推荐理由 with 精选, 「AI 评分」, its four parts and the reason; then 标签, every chip a link. No 主题.
-    const notes = screen.getByRole("complementary", { name: "文章操作与推荐" });
+    // The right column: 推荐理由 with 精选, 「AI 评分」, its four parts and the reason; then 出处 and 标签, every chip a link. No 主题.
     const reason = within(notes).getByRole("region", { name: "推荐理由" });
     expect(reason).toHaveTextContent("精选");
     expect(reason).toHaveTextContent("AI 评分 74");
     expect(reason).toHaveTextContent("实践影响22/30权威性22/30新颖性16/20国内相关性14/20");
     expect(reason).toHaveTextContent("读者可据此权衡 Agent 场景的性价比");
+    const source = within(notes).getByRole("region", { name: "出处" });
+    expect(source).toHaveTextContent("Arena.ai");
+    expect(source).toHaveTextContent("x.com");
     expect(within(notes).queryByRole("region", { name: "主题" })).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent("Agent 智能体");
     const tags = within(within(notes).getByRole("region", { name: "标签" })).getAllByRole("link");
@@ -173,20 +212,22 @@ describe("an X post with every block", () => {
     expectComposed(document.body, { tablists: 0, stepRail: false });
   });
 
-  it("puts the actions at the head of the right column, its top on the back row: 「在 X 查看原帖 ↗」 with ☆ and ⋯, then 深入研究", async () => {
+  it("puts the actions at the head of the right column, its top on the back row: 「在 X 查看原帖 ↗」, then 深入研究 with ☆ and ⋯", async () => {
     wide();
     show("/app/frontier/items/x-post-0001");
     const rail = await screen.findByRole("complementary", { name: "文章操作与推荐" });
     const controls = within(rail).getAllByRole("link").concat(within(rail).getAllByRole("button"));
     expect(within(rail).getAllByRole("link")[0]).toHaveAccessibleName("在 X 查看原帖");
     expect(within(rail).getAllByRole("link")[0]).toHaveAttribute("href", "https://x.com/arena/status/1");
-    expect(within(rail).getAllByRole("button").slice(0, 3).map((button) => button.getAttribute("aria-label") ?? button.textContent)).toEqual(["收藏", "更多操作", "深入研究"]);
+    // 深入研究 is the page's one primary button and leads its row; ☆ and ⋯ follow it. A post has no 查看正文: its text is on the page.
+    expect(within(rail).getAllByRole("button").slice(0, 3).map((button) => button.getAttribute("aria-label") ?? button.textContent)).toEqual(["深入研究", "收藏", "更多操作"]);
+    expect(within(rail).queryByRole("button", { name: /^查看/ })).not.toBeInTheDocument();
     expect(controls.length).toBeGreaterThan(3);
     // The rail is the column beside the page, from the back row down; the blocks follow in their order.
     const blocks = within(rail).getAllByRole("region").map((region) => region.getAttribute("aria-label")
       ?? (region.getAttribute("aria-labelledby") && document.getElementById(region.getAttribute("aria-labelledby")!)!.textContent));
     // The actions are a section of their own, so ☆ and ⋯ belong to the article and not to a list in its text.
-    expect(blocks).toEqual(["文章操作", "就此提问", "推荐理由", "标签"]);
+    expect(blocks).toEqual(["文章操作", "就此提问", "推荐理由", "出处", "标签"]);
     expect(rail.parentElement!.firstElementChild).toContainElement(screen.getByRole("navigation", { name: "返回" }));
     // No bar at the window's bottom where the column is there.
     expect(screen.queryByRole("navigation", { name: "阅读工具" })).not.toBeInTheDocument();
@@ -378,16 +419,31 @@ describe("不感兴趣 on a phone's reading page (c2-hide)", () => {
 describe("an open-access paper with its whole text", () => {
   beforeEach(() => { client.fetchFrontierItem.mockResolvedValue(detail(rawOpenAccessPaper())); });
 
-  it("sets the 导读 as the lead, a size above the text, and then the 解读, both before the text", async () => {
+  it("sets the 导读 as the lead, a size above the 解读, both in one measure and before it, with no text on the AI view", async () => {
     show("/app/frontier/items/oa-paper-1");
-    const text = await screen.findByRole("region", { name: "全文 · AI 翻译" });
-    const lead = screen.getByRole("region", { name: "AI 导读" });
+    const lead = await screen.findByRole("region", { name: "AI 导读" });
     const insight = screen.getByRole("region", { name: "AI 解读" });
-    // One paragraph each, the 导读 a step above the text: 18 / 20 where the text is 16 / 18 (below and from 1280 px), all at 1.8.
-    expect(within(lead).getByText(/口服 PCSK9 抑制剂使主要心血管事件风险降低 18%/)).toHaveClass("text-reading-lg", "xl:text-reading-xl");
-    expect(text.querySelector("[data-prose]")).toHaveClass("text-reading", "xl:text-reading-lg", "space-y-5", "max-w-measure-body", "xl:max-w-read");
+    // One paragraph each: the 导读 at 18 and the 解读 at 16 at every width, in the same 640 px measure.
+    const leadText = within(lead).getByText(/口服 PCSK9 抑制剂使主要心血管事件风险降低 18%/);
+    expect(leadText).toHaveClass("text-reading-lg", "max-w-measure-body");
+    expect(leadText).not.toHaveClass("xl:text-reading-xl");
+    const insightText = insight.querySelector("[data-prose]")!;
+    expect(insightText).toHaveClass("text-reading", "max-w-measure-body");
+    expect(insightText).not.toHaveClass("text-reading-lg");
     expect(lead.compareDocumentPosition(insight) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(insight.compareDocumentPosition(text) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The text is the other view's: nothing of it, and nothing that opens its parts, on this one.
+    expect(screen.queryByRole("region", { name: /^全文/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 3 })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "展开全文" })).not.toBeInTheDocument();
+  });
+
+  it("sets the text on its view at 16 and, from 1280 px, 18, one measure with the AI blocks, and leaves the AI blocks out", async () => {
+    show("/app/frontier/items/oa-paper-1?view=text");
+    const text = await screen.findByRole("region", { name: "全文 · AI 翻译" });
+    expect(text.querySelector("[data-prose]")).toHaveClass("text-reading", "xl:text-reading-lg", "space-y-5", "max-w-measure-body");
+    expect(screen.queryByRole("region", { name: "AI 导读" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "AI 解读" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "AI 要点" })).not.toBeInTheDocument();
   });
 
   it("links each report the 解读 cites to its own article by its title, lists them under it, and leaves an unnamed [n] as text", async () => {
@@ -423,13 +479,12 @@ describe("an open-access paper with its whole text", () => {
     expect(within(screen.getByRole("navigation", { name: "返回" })).getByRole("link")).toHaveTextContent("口服 PCSK9 抑制剂降低主要心血管事件");
   });
 
-  it("sets the full text's sections as headings, in Chinese and in the original", async () => {
-    show("/app/frontier/items/oa-paper-1");
+  it("sets the full text's sections as headings, whole, in Chinese and in the original", async () => {
+    show("/app/frontier/items/oa-paper-1?view=text");
     const text = await screen.findByRole("region", { name: "全文 · AI 翻译" });
-    // A paper's full text is folded to its preview under the 导读 and 要点 (ct-write W6): its first section, then 展开全文.
-    expect(within(text).getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual(["引言"]);
-    await userEvent.click(within(text).getByRole("button", { name: "展开全文" }));
+    // The whole text, with nothing folded: every section at once, and nothing to unfold.
     expect(within(text).getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual(["引言", "方法", "结果", "讨论"]);
+    expect(screen.queryByRole("button", { name: "展开全文" })).not.toBeInTheDocument();
     expect(text).not.toHaveTextContent("##");
     await userEvent.click(within(screen.getByRole("group", { name: "全文语言" })).getByRole("button", { name: "原文" }));
     const original = screen.getByRole("region", { name: "全文 · 原文" });
@@ -437,18 +492,19 @@ describe("an open-access paper with its whole text", () => {
     expect(within(original).getByRole("heading", { name: "Methods" }).closest("[lang]")).toHaveAttribute("lang", "en");
   });
 
-  it("folds a long full text to its first section's opening: a heading is never the last line before 展开全文", async () => {
+  it("has no fold left: a long full text is whole on its view, its last section and the end of it, and offers nothing to unfold", async () => {
     const section = (index: number) => `## 第 ${index} 节\n\n${"这是一段很长的正文。".repeat(30)}`;
     client.fetchFrontierItem.mockResolvedValue(detail(rawOpenAccessPaper({ body: { zh: Array.from({ length: 12 }, (_, index) => section(index + 1)).join("\n\n"),
       original: null, zhKind: "original-zh", complete: true, source: "body" } })));
-    show("/app/frontier/items/oa-paper-1");
+    show("/app/frontier/items/oa-paper-1?view=text");
     const text = await screen.findByRole("region", { name: "全文" });
+    expect(within(text).getAllByRole("heading", { level: 3 })).toHaveLength(12);
+    expect(within(text).getByRole("heading", { name: "第 12 节" })).toBeInTheDocument();
     const prose = text.querySelector("[data-prose]")!;
     expect(prose.lastElementChild!.tagName).toBe("P");
-    expect(prose.lastElementChild).toHaveClass("line-clamp-4");
-    expect(within(text).queryByRole("heading", { name: "第 2 节" })).not.toBeInTheDocument();
-    await userEvent.click(within(text).getByRole("button", { name: "展开全文" }));
-    expect(within(text).getByRole("heading", { name: "第 12 节" })).toBeInTheDocument();
+    expect(prose.lastElementChild).not.toHaveClass("line-clamp-4");
+    expect(prose.querySelector(".line-clamp-4")).toBeNull();
+    expect(screen.queryByRole("button", { name: "展开全文" })).not.toBeInTheDocument();
   });
 });
 
@@ -456,11 +512,10 @@ describe("a paper whose text is its structured abstract", () => {
   beforeEach(() => { client.fetchFrontierItem.mockResolvedValue(detail(rawStructuredAbstract())); });
 
   it("names the text 摘要 and sets each paragraph's own heading in 600, in Chinese and in the original", async () => {
-    show("/app/frontier/items/abstract-1");
+    show("/app/frontier/items/abstract-1?view=text");
     const text = await screen.findByRole("region", { name: "摘要 · AI 翻译" });
-    // Folded to its first paragraph under the 导读 and 要点 (ct-write W6), the rest a press away.
-    expect([...text.querySelectorAll("[data-prose] p > span")].map((head) => head.textContent)).toEqual(["背景："]);
-    await userEvent.click(within(text).getByRole("button", { name: "展开全文" }));
+    // Whole on the text view: every paragraph's own heading at once.
+    expect(within(text).queryByRole("button", { name: "展开全文" })).not.toBeInTheDocument();
     const heads = [...text.querySelectorAll("[data-prose] p > span")];
     expect(heads.map((head) => [head.textContent, head.className])).toEqual([["背景：", "font-semibold"], ["方法：", "font-semibold"], ["结果：", "font-semibold"]]);
     // The colon inside a sentence (「95% CI：」) is not a heading's.
@@ -474,7 +529,7 @@ describe("a paper whose text is its structured abstract", () => {
 
   it("sets no run-in heading in an article's own text, whatever its first words", async () => {
     client.fetchFrontierItem.mockResolvedValue(detail(rawChineseNews({ body: { zh: "变化一：降压目标值收紧。", original: null, zhKind: "original-zh", complete: true, source: "body" } })));
-    show("/app/frontier/items/cn-news-0001");
+    show("/app/frontier/items/cn-news-0001?view=text");
     const text = await screen.findByRole("region", { name: "正文" });
     expect(text.querySelector("[data-prose] p > span")).toBeNull();
     expect(text).toHaveTextContent("变化一：降压目标值收紧。");
@@ -482,21 +537,32 @@ describe("a paper whose text is its structured abstract", () => {
 
   it("runs the headings in where the abstract stands in for a missing text too", async () => {
     client.fetchFrontierItem.mockResolvedValue({ ...frontierItemDetail({ id: "item-1" }), abstract: "Background: original.\n\nMethods: a trial.", abstractZh: "背景：原文。\n\n方法：一项试验。" });
-    show();
+    show("/app/frontier/items/item-1?view=text");
     const text = await screen.findByRole("region", { name: "摘要 · AI 翻译" });
-    await userEvent.click(within(text).getByRole("button", { name: "展开全文" }));
     expect([...text.querySelectorAll("[data-prose] p > span")].map((head) => head.textContent)).toEqual(["背景：", "方法："]);
   });
 });
 
 describe("a Chinese news article", () => {
-  it("has its text in Chinese and no switch, its author beside its institution, and a specialty topic that narrows the feed", async () => {
+  it("shows no source title under a Chinese title the model wrote from it: the rewrite took the hook and the site name away", async () => {
+    wide();
+    client.fetchFrontierItem.mockResolvedValue(detail(rawChineseNews({ title: "刘建民团队两项卒中取栓研究同期发表于《新英格兰医学杂志》", titleZh: "刘建民团队两项卒中取栓研究同期发表于《新英格兰医学杂志》",
+      titleRaw: "刘建民教授团队两项原创卒中研究同日登顶《新英格兰医学杂志》-人民日报欧洲网-人民日报海外版欧洲刊_人民日报社_海外华文媒体门户" })));
+    show("/app/frontier/items/cn-news-0001");
+    expect(await screen.findByRole("heading", { level: 1, name: "刘建民团队两项卒中取栓研究同期发表于《新英格兰医学杂志》" })).toBeInTheDocument();
+    expect(screen.queryByText(/人民日报欧洲网/)).not.toBeInTheDocument();
+  });
+
+  it("opens on its AI view, has its text in Chinese behind 查看正文 with no language switch, its author beside its institution, and a specialty topic that narrows the feed", async () => {
+    wide();
     client.fetchFrontierItem.mockResolvedValue(detail(rawChineseNews()));
     show("/app/frontier/items/cn-news-0001");
-    expect(await screen.findByRole("heading", { name: "正文" })).toBeInTheDocument();
-    expect(screen.queryByRole("group", { name: "正文语言" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "AI 导读" })).toBeInTheDocument();
+    // The text is the other view's.
+    expect(screen.queryByRole("heading", { name: "正文" })).not.toBeInTheDocument();
     expect(screen.getByText("王编辑").closest("div")).toHaveTextContent(/医脉通·王编辑·/);
-    expect(within(screen.getByRole("article", { name: "正文" })).getByRole("link", { name: "打开原文" })).toBeInTheDocument();
+    const rail = screen.getByRole("complementary", { name: "文章操作与推荐" });
+    expect(within(rail).getByRole("link", { name: "打开原文" })).toHaveAttribute("href", "https://news.medlive.cn/article/1");
     // A score without a reason is 「AI 评分」 alone; 精选 only where the item is selected.
     const verdict = screen.getByRole("region", { name: "AI 评分" });
     expect(verdict).toHaveTextContent("AI 评分 58");
@@ -509,6 +575,11 @@ describe("a Chinese news article", () => {
     // A 导读 and no 解读: the block is not drawn for an item the server wrote none for.
     expect(screen.getByRole("region", { name: "AI 导读" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "AI 解读" })).not.toBeInTheDocument();
+    // 查看正文 opens the text, in Chinese and with no 中文 / 原文 switch (there is no original).
+    await userEvent.click(within(rail).getByRole("button", { name: "查看正文" }));
+    expect(await screen.findByRole("heading", { name: "正文" })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "正文语言" })).not.toBeInTheDocument();
+    expect(screen.getByText(/^国家药品监督管理局近日批准口服司美格鲁肽片上市。/)).toBeInTheDocument();
   });
 });
 
@@ -523,9 +594,11 @@ describe("an item whose blocks the server could not fill", () => {
     }
     expect(screen.queryByRole("button", { name: /^查看大图/ })).not.toBeInTheDocument();
     expect(screen.queryByText("引用")).not.toBeInTheDocument();
-    // What is left: who said it, where it came from, and the way to the original.
-    expect(screen.getByRole("article", { name: "正文" })).toHaveTextContent("来源：Arena.ai");
-    expect(within(screen.getByRole("article", { name: "正文" })).getByRole("link", { name: "打开原文" })).toBeInTheDocument();
+    // What is left: who said it, where it came from (出处, under the article on a narrow screen) and the way to the original (the bar's).
+    expect(screen.getByRole("region", { name: "出处" })).toHaveTextContent("Arena.ai");
+    expect(within(screen.getByRole("navigation", { name: "阅读工具" })).getByRole("link", { name: "打开原文" })).toBeInTheDocument();
+    // Nothing written and nothing to read: one view, so no switch.
+    expect(screen.queryByRole("button", { name: /^(正文|摘要|全文|AI 解读)$/ })).not.toBeInTheDocument();
   });
 
   it("says nothing of why a Chinese headline and guide are missing: the source headline and one plain way to the source (G5, 2026-10-25)", async () => {
@@ -577,7 +650,7 @@ describe("an item whose blocks the server could not fill", () => {
     show();
     const lead = await screen.findByRole("region", { name: "AI 导读" });
     expect(within(lead).getByText("FDA 批准 JEMPERLI 的补充申请，审评类别为标准审评。")).toBeInTheDocument();
-    expect(screen.queryByText("摘要")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /^摘要/ })).not.toBeInTheDocument();
   });
 });
 
@@ -586,7 +659,7 @@ describe("the page's states and its way back", () => {
     client.fetchFrontierItem.mockRejectedValueOnce(new Error("offline"));
     show();
     await userEvent.click(await screen.findByRole("button", { name: /重试/ }));
-    expect(await screen.findByText("已保存的中文摘要")).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "AI 导读" })).toBeInTheDocument();
   });
 
   it("distinguishes an unavailable article", async () => {
@@ -608,7 +681,7 @@ describe("the page's states and its way back", () => {
       { pathname: "/app/frontier", search: "?view=all&lane=safety", state: { frontierReading: reading } },
       { pathname: "/app/frontier/items/item-1", state: { evidenceFrom: { to: "/app/frontier?view=all&lane=safety", label: "前沿动态" } } },
     ]}><Routes><Route path="/app/frontier" element={<Feed />} /><Route path="/app/frontier/items/:itemId" element={<FrontierArticlePage />} /></Routes></MemoryRouter>);
-    await screen.findByText("已保存的中文摘要");
+    await screen.findByRole("region", { name: "AI 导读" });
     await userEvent.click(screen.getByRole("link", { name: "前沿动态" }));
     expect(JSON.parse(screen.getByTestId("restored").textContent!)).toEqual({ search: "?view=all&lane=safety", state: { frontierReading: reading } });
   });
@@ -657,7 +730,7 @@ describe("the text's addresses, lists and contents (2026-10-23)", () => {
   it("lists the contents in the right column at three sections or more, each a press away, and the one asked for marked", async () => {
     wide();
     client.fetchFrontierItem.mockResolvedValue(detail(rawOpenAccessPaper()));
-    show("/app/frontier/items/oa-paper-1");
+    show("/app/frontier/items/oa-paper-1?view=text");
     const rail = await screen.findByRole("complementary", { name: "文章操作与推荐" });
     const contents = within(rail).getByRole("navigation", { name: "本文目录" });
     expect(within(contents).getAllByRole("button").map((entry) => entry.textContent)).toEqual(["引言", "方法", "结果", "讨论"]);
@@ -668,23 +741,24 @@ describe("the text's addresses, lists and contents (2026-10-23)", () => {
     expect(heading.id).toMatch(/-sec-3$/);
   });
 
-  it("opens a long text's folded rest from the contents, to the section asked for", async () => {
+  it("has no contents on the AI view: 本文目录 comes with the text and goes with it", async () => {
     wide();
-    const section = (index: number) => `## 第 ${index} 节\n\n${"这是一段很长的正文。".repeat(30)}`;
-    client.fetchFrontierItem.mockResolvedValue(detail(rawOpenAccessPaper({ body: { zh: Array.from({ length: 12 }, (_, index) => section(index + 1)).join("\n\n"),
-      original: null, zhKind: "original-zh", complete: true, source: "body" } })));
+    client.fetchFrontierItem.mockResolvedValue(detail(rawOpenAccessPaper()));
     show("/app/frontier/items/oa-paper-1");
-    const contents = await screen.findByRole("navigation", { name: "本文目录" });
-    expect(screen.queryByRole("heading", { level: 3, name: "第 12 节" })).not.toBeInTheDocument();
-    await userEvent.click(within(contents).getByRole("button", { name: "第 12 节" }));
-    expect(await screen.findByRole("heading", { level: 3, name: "第 12 节" })).toBeInTheDocument();
-    await waitFor(() => expect(within(contents).getByRole("button", { name: "第 12 节" })).toHaveAttribute("aria-current", "location"));
+    const rail = await screen.findByRole("complementary", { name: "文章操作与推荐" });
+    expect(within(rail).queryByRole("navigation", { name: "本文目录" })).not.toBeInTheDocument();
+    expect(document.querySelector("[data-outline]")).toBeNull();
+    await userEvent.click(within(rail).getByRole("button", { name: "查看全文" }));
+    expect(within(await screen.findByRole("complementary", { name: "文章操作与推荐" })).getByRole("navigation", { name: "本文目录" })).toBeInTheDocument();
+    await userEvent.click(within(screen.getByRole("complementary", { name: "文章操作与推荐" })).getByRole("button", { name: "AI 解读" }));
+    expect(await screen.findByRole("region", { name: "AI 导读" })).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "本文目录" })).not.toBeInTheDocument();
   });
 
   it("has no contents under three sections", async () => {
     wide();
     client.fetchFrontierItem.mockResolvedValue(detail(rawOpenAccessPaper({ body: { zh: "## 方法\n\n一。\n\n## 结果\n\n二。", original: null, zhKind: "original-zh", complete: true, source: "body" } })));
-    show("/app/frontier/items/oa-paper-1");
+    show("/app/frontier/items/oa-paper-1?view=text");
     await screen.findByRole("heading", { level: 3, name: "方法" });
     expect(screen.queryByRole("navigation", { name: "本文目录" })).not.toBeInTheDocument();
     expect(document.querySelector("[data-outline]")).toBeNull();
@@ -692,10 +766,267 @@ describe("the text's addresses, lists and contents (2026-10-23)", () => {
 
   it("folds the contents above the text on a narrow screen", async () => {
     client.fetchFrontierItem.mockResolvedValue(detail(rawOpenAccessPaper()));
-    show("/app/frontier/items/oa-paper-1");
+    show("/app/frontier/items/oa-paper-1?view=text");
     const text = await screen.findByRole("region", { name: "全文 · AI 翻译" });
     const outline = document.querySelector("[data-outline]") as HTMLElement;
     expect(outline).toHaveTextContent("目录 · 4 节");
     expect(outline.compareDocumentPosition(text) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+// The reading page's two views (2026-10-26): the AI view — 导读, 要点, 解读, 事件后续 — and, behind 「查看正文」 at the head of the right
+// column (the bar's fifth tool on a narrow screen), the text whole. The view is in the address (`?view=text`) and replaces the entry.
+/** An item with every block the AI view has — 导读, 要点, 解读, 事件后续 — and a text of two paragraphs, which is not a post. */
+const whole = () => detail(rawPolicy({ id: "whole-1", insight: rawOpenAccessPaper().insight, followups: rawXPost().followups }));
+const railOf = () => screen.getByRole("complementary", { name: "文章操作与推荐" });
+const toolsOf = (bar: HTMLElement) => [...bar.querySelectorAll("button, a")].map((tool) => tool.textContent);
+
+describe("the AI view and the text view", () => {
+  beforeEach(() => { wide(); client.fetchFrontierItem.mockResolvedValue(whole()); });
+
+  it("opens on the AI view; 查看正文 swaps it for the text, the button then reads 「AI 解读」, the address gains view=text, and a second press returns", async () => {
+    show("/app/frontier/items/whole-1");
+    const article = await screen.findByRole("article", { name: "正文" });
+    // The AI view: 导读, 要点, 解读 and 事件后续, and nothing of the text.
+    expect(article).toHaveAttribute("data-reader-view", "written");
+    for (const name of ["AI 导读", "AI 要点", "AI 解读", "事件后续 · 2"]) expect(screen.getByRole("region", { name }), name).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "正文" })).not.toBeInTheDocument();
+    expect(screen.queryByText("为支持医疗技术创新，……")).not.toBeInTheDocument();
+    const toggle = within(railOf()).getByRole("button", { name: "查看正文" });
+    expect(toggle).not.toHaveAttribute("aria-pressed");
+    expect(screen.getByTestId("where")).not.toHaveTextContent("view=");
+
+    await userEvent.click(toggle);
+    // The text view: the whole text, and none of the AI blocks nor the event's follow-ups.
+    expect(await screen.findByRole("heading", { name: "正文" })).toBeInTheDocument();
+    expect(screen.getByText("为支持医疗技术创新，……")).toBeInTheDocument();
+    expect(screen.getByText("只需 1 家三级医院牵头直接向省级医保部门申报。")).toBeInTheDocument();
+    expect(article).toHaveAttribute("data-reader-view", "text");
+    for (const name of ["AI 导读", "AI 要点", "AI 解读", "事件后续 · 2"]) expect(screen.queryByRole("region", { name }), name).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "查看正文" })).not.toBeInTheDocument();
+    const back = within(railOf()).getByRole("button", { name: "AI 解读" });
+    expect(back).not.toHaveAttribute("aria-pressed");
+    expect(screen.getByTestId("where")).toHaveTextContent("/app/frontier/items/whole-1?view=text");
+
+    await userEvent.click(back);
+    expect(await screen.findByRole("region", { name: "AI 导读" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "事件后续 · 2" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "正文" })).not.toBeInTheDocument();
+    expect(within(railOf()).getByRole("button", { name: "查看正文" })).not.toHaveAttribute("aria-pressed");
+    expect(screen.getByTestId("where")).toHaveTextContent(/^\/app\/frontier\/items\/whole-1$/);
+  });
+
+  it("opens on the text view from an address that names it, and the 出处 and the rest of the column stay as they were", async () => {
+    show("/app/frontier/items/whole-1?view=text");
+    expect(await screen.findByRole("heading", { name: "正文" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "AI 导读" })).not.toBeInTheDocument();
+    const rail = railOf();
+    expect(within(rail).getByRole("button", { name: "AI 解读" })).not.toHaveAttribute("aria-pressed");
+    expect(within(rail).getByRole("region", { name: "出处" })).toBeInTheDocument();
+    expect(within(rail).getByRole("region", { name: "就此提问" })).toBeInTheDocument();
+  });
+
+  it("replaces the history entry and keeps the location state, so 「‹ 前沿动态」 returns to the list in one press however often the view was switched", async () => {
+    const reading = { query: "view=all&lane=safety", pages: 3, scroll: 640, expanded: ["whole-1"] };
+    const evidenceFrom = { to: "/app/frontier?view=all&lane=safety", label: "前沿动态" };
+    function Feed() { const location = useLocation(); return <pre data-testid="restored">{JSON.stringify({ search: location.search, state: location.state })}</pre>; }
+    function Held() { const location = useLocation(); return <pre data-testid="held">{JSON.stringify(location.state)}</pre>; }
+    render(<MemoryRouter initialIndex={1} initialEntries={[
+      { pathname: "/app/frontier", search: "?view=all&lane=safety", state: { frontierReading: reading } },
+      { pathname: "/app/frontier/items/whole-1", state: { evidenceFrom } },
+    ]}><Routes>
+      <Route path="/app/frontier" element={<Feed />} />
+      <Route path="/app/frontier/items/:itemId" element={<><FrontierArticlePage /><Held /><Where /></>} />
+    </Routes></MemoryRouter>);
+    await userEvent.click(await screen.findByRole("button", { name: "查看正文" }));
+    expect(await screen.findByRole("heading", { name: "正文" })).toBeInTheDocument();
+    expect(screen.getByTestId("where")).toHaveTextContent("?view=text");
+    expect(JSON.parse(screen.getByTestId("held").textContent!)).toEqual({ evidenceFrom });
+    await userEvent.click(screen.getByRole("button", { name: "AI 解读" }));
+    expect(await screen.findByRole("region", { name: "AI 导读" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "查看正文" }));
+    expect(await screen.findByRole("heading", { name: "正文" })).toBeInTheDocument();
+    expect(JSON.parse(screen.getByTestId("held").textContent!)).toEqual({ evidenceFrom });
+    // Three switches later the way back is still one press, to the list entry as it was.
+    await userEvent.click(screen.getByRole("link", { name: "前沿动态" }));
+    expect(JSON.parse(screen.getByTestId("restored").textContent!)).toEqual({ search: "?view=all&lane=safety", state: { frontierReading: reading } });
+  });
+
+  it("shows a post's text beside its 导读, whole, with no switch — and ignores an address that asks for the text view", async () => {
+    client.fetchFrontierItem.mockResolvedValue(detail(rawXPost()));
+    show("/app/frontier/items/x-post-0001?view=text");
+    expect(await screen.findByRole("region", { name: "AI 导读" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "正文 · AI 翻译" })).toBeInTheDocument();
+    expect(screen.getByRole("article", { name: "正文" })).toHaveAttribute("data-reader-view", "written");
+    expect(within(railOf()).queryByRole("button", { name: /^(查看(正文|摘要|全文)|AI 解读)$/ })).not.toBeInTheDocument();
+    // 事件后续 stays under it: the page is the AI view and the text at once.
+    expect(screen.getByRole("region", { name: "事件后续 · 2" })).toBeInTheDocument();
+  });
+
+  it("shows an item with nothing written about it as its text alone, with no switch", async () => {
+    client.fetchFrontierItem.mockResolvedValue(detail(rawChineseNews({ id: "bare-1", summary: null, lead: null, brief: null, insight: null })));
+    show("/app/frontier/items/bare-1");
+    expect(await screen.findByRole("heading", { name: "正文" })).toBeInTheDocument();
+    expect(screen.getByText(/^国家药品监督管理局近日批准口服司美格鲁肽片上市。/)).toBeInTheDocument();
+    for (const name of [/^AI (导读|要点|解读)$/, /事件后续/]) expect(screen.queryByRole("heading", { name }), String(name)).not.toBeInTheDocument();
+    expect(within(railOf()).queryByRole("button", { name: /^(查看(正文|摘要|全文)|AI 解读)$/ })).not.toBeInTheDocument();
+    // The way to the original and 深入研究 are the column's all the same.
+    expect(within(railOf()).getByRole("link", { name: "打开原文" })).toBeInTheDocument();
+    expect(within(railOf()).getByRole("button", { name: "深入研究" })).toBeInTheDocument();
+  });
+
+  it("has no switch for an item with neither a text nor an abstract: its 导读 alone, and no text view to open", async () => {
+    client.fetchFrontierItem.mockResolvedValue(detail(rawChineseNews({ id: "bare-2", body: null, media: [] })));
+    show("/app/frontier/items/bare-2?view=text");
+    expect(await screen.findByRole("region", { name: "AI 导读" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /^(正文|摘要|全文)/ })).not.toBeInTheDocument();
+    expect(within(railOf()).queryByRole("button", { name: /^(查看(正文|摘要|全文)|AI 解读)$/ })).not.toBeInTheDocument();
+    expect(client.fetchFrontierAbstractZh).not.toHaveBeenCalled();
+    expect(within(railOf()).getAllByRole("button").slice(0, 3).map((button) => button.getAttribute("aria-label") ?? button.textContent)).toEqual(["深入研究", "收藏", "更多操作"]);
+  });
+
+  it("shows a long text whole on its view, however many paragraphs: no fold, no 展开全文", async () => {
+    const paragraph = "研究人员在小细胞肺癌中发现了一种干细胞样状态，它与化学免疫治疗后的不良预后相关。".repeat(6);
+    client.fetchFrontierItem.mockResolvedValue(detail(rawChineseNews({ id: "long-1", body: { zh: Array.from({ length: 8 }, (_, index) => `第 ${index + 1} 段。${paragraph}`).join("\n\n"),
+      original: null, zhKind: "original-zh", complete: true, source: "body" } })));
+    show("/app/frontier/items/long-1");
+    await userEvent.click(await within(await screen.findByRole("complementary", { name: "文章操作与推荐" })).findByRole("button", { name: "查看正文" }));
+    const text = await screen.findByRole("region", { name: "正文" });
+    expect(within(text).getByText(/^第 1 段/)).toBeInTheDocument();
+    expect(within(text).getByText(/^第 8 段/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "展开全文" })).not.toBeInTheDocument();
+    expect(text.querySelector(".line-clamp-4")).toBeNull();
+  });
+
+  it.each([
+    { name: "an item whose text is a stored abstract", make: () => ({ ...frontierItemDetail({ id: "item-1" }), abstract: "Original abstract", abstractZh: "已保存的中文摘要" }), kind: "摘要" },
+    { name: "a paper whose text is its structured abstract", make: () => detail(rawStructuredAbstract()), kind: "摘要" },
+    { name: "an open-access paper's own full text", make: () => detail(rawOpenAccessPaper()), kind: "全文" },
+    { name: "a preprint server's own full text", make: () => detail(rawOpenAccessPaper({ sourceType: "preprint", evidenceType: "preprint" })), kind: "全文" },
+    { name: "a news report of a paper, though its text is a body", make: () => detail(rawOpenAccessPaper({ sourceType: "media" })), kind: "正文" },
+    { name: "a Chinese news article", make: () => detail(rawChineseNews()), kind: "正文" },
+    { name: "a 公众号 article", make: () => detail(rawWechatCommentary()), kind: "正文" },
+  ])("names the button for the text it opens (readerTextKind): $name reads 查看$kind", async ({ make, kind }) => {
+    client.fetchFrontierItem.mockResolvedValue(make());
+    show();
+    const toggle = await within(await screen.findByRole("complementary", { name: "文章操作与推荐" })).findByRole("button", { name: `查看${kind}` });
+    await userEvent.click(toggle);
+    // The text it opens carries the same name as its block's.
+    expect(await screen.findByRole("heading", { name: new RegExp(`^${kind}`) })).toBeInTheDocument();
+    expect(within(railOf()).getByRole("button", { name: "AI 解读" })).not.toHaveAttribute("aria-pressed");
+    expect(within(railOf()).queryByRole("button", { name: `查看${kind}` })).not.toBeInTheDocument();
+  });
+
+  it("asks for a paper's Chinese abstract only when its view is opened", async () => {
+    client.fetchFrontierItem.mockResolvedValue({ ...frontierItemDetail({ id: "item-1" }), abstract: "Original abstract", abstractZh: null });
+    client.fetchFrontierAbstractZh.mockResolvedValue({ abstractZh: "新生成的中文摘要", abstract: "Original abstract", note: null });
+    show();
+    await userEvent.click(await within(await screen.findByRole("complementary", { name: "文章操作与推荐" })).findByRole("button", { name: "查看摘要" }));
+    expect(await screen.findByText("新生成的中文摘要")).toBeInTheDocument();
+    expect(client.fetchFrontierAbstractZh).toHaveBeenCalledTimes(1);
+    expect(client.fetchFrontierAbstractZh).toHaveBeenCalledWith("item-1");
+  });
+});
+
+describe("出处 in the right column", () => {
+  const reported = [
+    { sourceId: "medpage", sourceName: "MedPage Today", url: "https://www.medpagetoday.com/a" },
+    { sourceId: "healio", sourceName: "Healio", url: "https://www.healio.com/b" },
+  ];
+
+  it("names the publisher and its site, the paper's facts, the free full text and the other reports, in the column's order after 推荐理由", async () => {
+    wide();
+    client.fetchFrontierItem.mockResolvedValue(detail(rawOpenAccessPaper({ facts: { impact_factor: 78.456 }, alsoReportedBy: reported, alsoReportedCount: 5 })));
+    show("/app/frontier/items/oa-paper-1");
+    const source = await within(await screen.findByRole("complementary", { name: "文章操作与推荐" })).findByRole("region", { name: "出处" });
+    expect(source).toHaveTextContent("NEJM");
+    expect(within(source).getByText("nejm.org")).toBeInTheDocument();
+    expect(source).toHaveTextContent("影响因子");
+    expect(source).toHaveTextContent("78.5");
+    expect(within(source).getByRole("link", { name: "免费全文" })).toHaveAttribute("href", "https://europepmc.org/articles/PMC1/pdf");
+    const others = within(source).getByRole("button", { name: "另有 5 家报道 ›" });
+    await userEvent.click(others);
+    expect((await screen.findAllByRole("menuitem")).map((entry) => entry.textContent)).toEqual(["MedPage Today", "Healio"]);
+    // Where it stands: after 推荐理由, before 标签 (and 专科).
+    const blocks = within(railOf()).getAllByRole("region").map((region) => region.getAttribute("aria-label")
+      ?? document.getElementById(region.getAttribute("aria-labelledby")!)?.textContent);
+    expect(blocks.indexOf("出处")).toBeGreaterThan(blocks.indexOf("推荐理由"));
+    expect(blocks.indexOf("出处")).toBeLessThan(blocks.indexOf("专科"));
+  });
+
+  it("says the site only where it is not the name, and nothing of the free full text or other reports where there are none", async () => {
+    wide();
+    client.fetchFrontierItem.mockResolvedValue(detail(rawChineseNews({ source: { id: "medlive", name: "news.medlive.cn", homepage: null, platformProduced: false } })));
+    show("/app/frontier/items/cn-news-0001");
+    const source = await within(await screen.findByRole("complementary", { name: "文章操作与推荐" })).findByRole("region", { name: "出处" });
+    expect(within(source).getAllByText("news.medlive.cn")).toHaveLength(1);
+    expect(within(source).queryByRole("link", { name: "免费全文" })).not.toBeInTheDocument();
+    expect(within(source).queryByRole("button", { name: /家报道/ })).not.toBeInTheDocument();
+  });
+
+  it("is under the article, in the notes, on a narrow screen — where there is no column", async () => {
+    client.fetchFrontierItem.mockResolvedValue(detail(rawOpenAccessPaper({ alsoReportedBy: reported, alsoReportedCount: 2 })));
+    show("/app/frontier/items/oa-paper-1");
+    const source = await screen.findByRole("region", { name: "出处" });
+    expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("article", { name: "正文" })).getByRole("region", { name: "出处" })).toBe(source);
+    expect(source).toHaveTextContent("NEJM");
+    expect(within(source).getByRole("link", { name: "免费全文" })).toBeInTheDocument();
+    expect(within(source).getByRole("button", { name: "另有 2 家报道 ›" })).toBeInTheDocument();
+  });
+
+  it("stays when the text view is open", async () => {
+    wide();
+    client.fetchFrontierItem.mockResolvedValue(detail(rawOpenAccessPaper()));
+    show("/app/frontier/items/oa-paper-1?view=text");
+    expect(await within(await screen.findByRole("complementary", { name: "文章操作与推荐" })).findByRole("region", { name: "出处" })).toHaveTextContent("NEJM");
+  });
+});
+
+describe("the narrow bar's fifth tool", () => {
+  it("is 「摘要」 / 「正文」 / 「全文」 beside 收藏, 深入研究, the original and ⋯, reads 「AI 解读」 while the text is open, and switches the view", async () => {
+    client.fetchFrontierItem.mockResolvedValue(whole());
+    show("/app/frontier/items/whole-1");
+    const bar = await screen.findByRole("navigation", { name: "阅读工具" });
+    expect(toolsOf(bar)).toEqual(["收藏", "正文", "深入研究", "打开原文", "更多"]);
+    expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+    const tool = within(bar).getByRole("button", { name: "正文" });
+    expect(tool).not.toHaveAttribute("aria-pressed");
+    expect(screen.getByRole("region", { name: "AI 导读" })).toBeInTheDocument();
+
+    await userEvent.click(tool);
+    expect(await screen.findByRole("heading", { name: "正文" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "AI 导读" })).not.toBeInTheDocument();
+    expect(toolsOf(bar)).toEqual(["收藏", "AI 解读", "深入研究", "打开原文", "更多"]);
+    expect(within(bar).getByRole("button", { name: "AI 解读" })).not.toHaveAttribute("aria-pressed");
+    expect(screen.getByTestId("where")).toHaveTextContent("/app/frontier/items/whole-1?view=text");
+
+    await userEvent.click(within(bar).getByRole("button", { name: "AI 解读" }));
+    expect(await screen.findByRole("region", { name: "AI 导读" })).toBeInTheDocument();
+    expect(toolsOf(bar)[1]).toBe("正文");
+    expect(screen.getByTestId("where")).toHaveTextContent(/^\/app\/frontier\/items\/whole-1$/);
+  });
+
+  it("is named for what the text is: 摘要 for an abstract, 全文 for an open-access paper's own text", async () => {
+    show("/app/frontier/items/item-1");
+    expect(toolsOf(await screen.findByRole("navigation", { name: "阅读工具" }))[1]).toBe("摘要");
+    cleanup();
+    client.fetchFrontierItem.mockResolvedValue(detail(rawOpenAccessPaper()));
+    show("/app/frontier/items/oa-paper-1");
+    expect(toolsOf(await screen.findByRole("navigation", { name: "阅读工具" }))[1]).toBe("全文");
+  });
+
+  it("is not there for a post, for an item with nothing written, or for an item with no text: four tools", async () => {
+    client.fetchFrontierItem.mockResolvedValue(detail(rawXPost()));
+    show("/app/frontier/items/x-post-0001");
+    expect(toolsOf(await screen.findByRole("navigation", { name: "阅读工具" }))).toEqual(["收藏", "深入研究", "查看原帖", "更多"]);
+    cleanup();
+    client.fetchFrontierItem.mockResolvedValue(detail(rawChineseNews({ id: "bare-1", summary: null, lead: null, brief: null, insight: null })));
+    show("/app/frontier/items/bare-1");
+    expect(toolsOf(await screen.findByRole("navigation", { name: "阅读工具" }))).toEqual(["收藏", "深入研究", "打开原文", "更多"]);
+    cleanup();
+    client.fetchFrontierItem.mockResolvedValue(detail(rawChineseNews({ id: "bare-2", body: null, media: [] })));
+    show("/app/frontier/items/bare-2");
+    expect(toolsOf(await screen.findByRole("navigation", { name: "阅读工具" }))).toEqual(["收藏", "深入研究", "打开原文", "更多"]);
   });
 });

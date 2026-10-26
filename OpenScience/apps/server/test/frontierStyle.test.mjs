@@ -38,6 +38,13 @@ test("the exemplars keep the rules they teach: a title under 40, one paragraph, 
   }
   assert.match(FRONTIER_SENTENCE_RULE, /一句只讲一件事/);
   assert.match(FRONTIER_TITLE_RULE, /不用问句和感叹号/);
+  // c4-title: no prefix label, no site or media name, at most 40 characters; and the exemplars teach none of what the rule bans.
+  assert.match(FRONTIER_TITLE_RULE, /开头不加期刊、会议或栏目名加竖线、方括号的前缀/);
+  assert.match(FRONTIER_TITLE_RULE, /不带网站或媒体名/);
+  assert.match(FRONTIER_TITLE_RULE, /最多 40 个字/);
+  for (const [genre, card] of Object.entries(FRONTIER_STYLE_CARDS)) {
+    for (const { title } of card.exemplars) assert.ok(!/[【】|｜丨!！?？]/.test(title), `${genre}: ${title}`);
+  }
   for (const { lead } of [...FRONTIER_STYLE_CARDS.safety.exemplars, ...FRONTIER_STYLE_CARDS.approval.exemplars].filter((exemplar) => exemplar.thin)) {
     assert.ok(!/停用|退回|核对|沟通|未列出|未提及|未涉及/.test(lead), lead);
   }

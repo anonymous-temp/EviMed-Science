@@ -384,7 +384,7 @@ export function createSourceUnderstandingRuntime({ config, store, sources, agent
                 // exists for the budget (2026-09-26 audit, M-2).
                 text: `${repairText || question}\n\n<evimed-source-understanding>${dispatchId}</evimed-source-understanding>\n${marker}`, system: prepared.system,
                 routedCapability: prepared.routedCapability, agent: selected.runtimeAgent, strictContext: true, model: `deepseek/${config.deepseekModel}`,
-                runId: dispatchedRun.id, allowBounded: true, requestId: dispatchedRun.kernelRequestIds?.at(-1),
+                runId: dispatchedRun.id, allowBounded: true, unattended: true, requestId: dispatchedRun.kernelRequestIds?.at(-1),
               });
             });
           } catch (error) {

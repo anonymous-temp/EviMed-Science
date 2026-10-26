@@ -181,7 +181,7 @@ services:
     entrypoint: ["python", "-c"]
     command:
       - |
-        import json, os, pathlib
+        import hashlib, json, os, pathlib
         # Every mode here is set once, while this process still owns the path.
         # It holds CAP_CHOWN and nothing else, so a path it has given away can
         # no longer be chmod'ed by it — not on this run, and not on the next
@@ -208,6 +208,7 @@ services:
                 # loop whose only symptom is an unhealthy container. Rejecting it
                 # here names the file instead.
                 json.loads(payload.decode('utf-8'))
+                config_digest = hashlib.sha256(payload).hexdigest()
             with open(temporary, 'wb') as stream:
                 stream.write(payload)
                 stream.flush()
@@ -215,6 +216,17 @@ services:
             os.chmod(temporary, 0o600)
             os.chown(temporary, owner, owner)
             os.replace(temporary, target)
+        # The web process deliberately cannot read the engine-owned 0600
+        # configuration. Keep only its digest available to historical local
+        # output verification, without copying credentials or granting DAC.
+        digest_temporary = output / 'ov.conf.sha256.tmp'
+        with open(digest_temporary, 'wb') as stream:
+            stream.write((config_digest + '\n').encode('ascii'))
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(digest_temporary, 0o600)
+        os.chown(digest_temporary, 0, 0)
+        os.replace(digest_temporary, output / 'ov.conf.sha256')
         # `storage.workspace` in the rendered configuration. The server mkdirs it
         # while loading that file, as uid 10001, and an empty volume arrives
         # owned by root — so the directory is created and given away here, where

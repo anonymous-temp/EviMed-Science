@@ -581,6 +581,47 @@ test("a step the allowance refuses stays queued and says what it waits on; once 
   assert.equal(busy.waiting ?? null, null);
 });
 
+test("a native GEO dispatch records the matching policy revision and reuses it across admission retries", options, async () => {
+  const world = harness(); const { project, user } = await newProject();
+  let revision = 'policy-1';
+  world.orchestrator.policies = { resolve: async () => ({ revisionId: revision, policy: { supplements: [
+    { capabilityId: 'geo-insight', text: `Instruction from ${revision}` },
+    { capabilityId: 'geo-content', text: 'Unrelated content instruction' },
+  ] } }) };
+  world.failures.push(new HttpError(409, 'runtime_busy', 'Admission deferred.'));
+  await world.orchestrator.runStep(user, project, 'evidence');
+  revision = 'policy-2';
+  await world.orchestrator.advance(project.id);
+  assert.equal(world.dispatched.length, 1);
+  assert.match(world.dispatched[0].brief, /Instruction from policy-1/);
+  assert.doesNotMatch(world.dispatched[0].brief, /policy-2|Unrelated content instruction/);
+  const mark = (await q("SELECT detail FROM evimed_geo.schedule_marks WHERE geo_project_id=$1 AND kind='run'", [project.id]))[0];
+  assert.equal(mark.detail.policyRevisionId, 'policy-1');
+  assert.equal(mark.detail.policyContext.capabilityId, 'geo-insight');
+});
+
+test("a deferred native GEO task drops invalidated policy instructions before any retry is sent", options, async () => {
+  const world = harness(); const { project, user } = await newProject();
+  let valid = true;
+  world.orchestrator.policies = {
+    resolve: async () => valid ? { revisionId: 'policy-invalidated-later', policy: { supplements: [{ capabilityId: 'geo-insight', text: 'Expired public policy instruction.' }] } }
+      : { revisionId: 'default:current', policy: { supplements: [] } },
+    revisionUsable: async () => valid,
+  };
+  world.failures.push(new HttpError(409, 'runtime_busy', 'Admission deferred.'));
+  await world.orchestrator.runStep(user, project, 'evidence');
+  valid = false;
+  await world.orchestrator.advance(project.id);
+  assert.equal(world.dispatched.length, 0, 'the old instructions must not reach the provider');
+  const waiting = (await q("SELECT state,detail FROM evimed_geo.schedule_marks WHERE geo_project_id=$1 AND kind='run'", [project.id]))[0];
+  assert.equal(waiting.state, 'pending'); assert.equal(waiting.detail.policyContext, null);
+  await world.orchestrator.advance(project.id);
+  assert.equal(world.dispatched.length, 1);
+  assert.doesNotMatch(world.dispatched[0].brief, /Expired public policy instruction/);
+  const sent = (await q("SELECT detail FROM evimed_geo.schedule_marks WHERE geo_project_id=$1 AND kind='run'", [project.id]))[0];
+  assert.equal(sent.detail.policyRevisionId, null);
+});
+
 test("a baseline that measured no answer fails the diagnosis: no 「诊断完成」, no noise, no strategy; 「让 AI 做」 measures again", options, async () => {
   const { world, project, user } = await lockedProgram();
   const first = world.enqueued[0].id;
@@ -641,6 +682,40 @@ test("a weekly round that heard no answer is no week: monitoring is not done by 
   assert.deepEqual([steps.monitoring.status, steps.monitoring.note], ["done", "第 1 周"]);
   assert.deepEqual(reports().map((run) => run.dispatchId), ["geo-export-weekly-2026-10-12-a1"]);
   await finishRun(world, control, world.dispatched.indexOf(reports()[0]));
+});
+
+test("a one-shot import leaves the weekly round on the monitored set; with only one-shot sets the week is skipped by name (2026-10-25)", options, async () => {
+  const world = harness({ at: "2026-10-01T00:00:00Z" });
+  const { project, userId } = await newProject();
+  await store.setStep(project.id, "monitoring", { requested: true });
+  await insightRunWrites(project);
+  for (const step of ["evidence", "journey"]) await store.setStep(project.id, step, { status: "done" });
+  await world.orchestrator.advance(project.id);
+  const diagnosis = world.enqueued.find((round) => round.geoProjectId === project.id && round.ref?.step === "diagnosis");
+  await finishRound(diagnosis.id, { finishedAt: "2026-09-28T00:00:00Z" });
+  await world.orchestrator.advance(project.id);
+  const monitoredVersion = diagnosis.ref.setVersion;
+  // A client's list is imported for a one-shot diagnosis: it is newer than the monitored set, and used to stop every recurring round.
+  const oneShot = { samplingMode: "one_shot", engines: ["deepseek"], repeats: 1, metricIds: ["M-01"], reportPresentation: "summary", sourceBasis: "answers" };
+  const imported = await store.writeQuestionSet(userId, project.id, { groups: [{ name: "Client list", questions: [{ text: "Which drug is best?", isMeasured: true }] }], contract: oneShot });
+  assert.ok(imported.version > monitoredVersion);
+  const { GeoMeasureStore } = await import("../src/geoMeasureStore.mjs");
+  assert.equal((await new GeoMeasureStore(database).measuredQuestions(project.id)).setVersion, monitoredVersion,
+    "the measurement's own question choice reads the monitored set, not the import");
+  const weeklyOf = (/** @type {string} */ week) => world.enqueued.find((round) => round.geoProjectId === project.id && round.ref?.week === week);
+  world.setClock("2026-10-04T19:10:00Z"); // Monday 2026-10-05 03:10 in Shanghai
+  await world.orchestrator.tickSchedules();
+  const weekly = weeklyOf("2026-10-05");
+  assert.ok(weekly, "the weekly round is still asked after a one-shot import");
+  assert.equal(weekly.contract, undefined, "of the monitored set, never under the one-shot agreement");
+  await finishRound(weekly.id, { finishedAt: "2026-10-04T19:20:00Z" });
+  // With every set one-shot nothing is left to monitor: the week is skipped, and says why.
+  await q(`UPDATE evimed_geo.question_sets SET contract = $2::jsonb WHERE geo_project_id = $1 AND contract IS NULL`, [project.id, JSON.stringify(oneShot)]);
+  world.setClock("2026-10-11T19:10:00Z");
+  await world.orchestrator.tickSchedules();
+  assert.equal(weeklyOf("2026-10-12"), undefined);
+  const [mark] = await q(`SELECT state, detail FROM evimed_geo.schedule_marks WHERE geo_project_id = $1 AND key = 'weekly:2026-10-12'`, [project.id]);
+  assert.deepEqual([mark?.state, mark?.detail?.reason], ["skipped", "one_shot_questions_only"]);
 });
 
 test("an urgent error the measurement could not tell is told by the program under its telling's key, and marked told (2026-10-25)", options, async () => {

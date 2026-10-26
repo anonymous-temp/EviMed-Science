@@ -1,13 +1,15 @@
 import { HttpError, readBody, readJson, sendJson } from "./security.mjs";
 
-/** @param {{store:any,service:any,maxJsonBytes:number,saveProject?:any}} dependencies */
-export function createSkillLibraryRoutes({ store, service, maxJsonBytes, saveProject = null }) {
+/** @param {{store:any,service:any,maxJsonBytes:number,saveProject?:any,savePlatform?:any,saveBuiltins?:any}} dependencies */
+export function createSkillLibraryRoutes({ store, service, maxJsonBytes, saveProject = null, savePlatform = null, saveBuiltins = null }) {
   return async (req, res) => {
     const url = new URL(req.url ?? "/", "http://evimed.local");
     const personal = /^\/api\/skills(?:\/([^/]+))?(?:\/([^/]+))?(?:\/([^/]+))?$/.exec(url.pathname);
     const projectRoute = /^\/api\/projects\/([^/]+)\/skills(?:\/([^/]+)\/invoke)?$/.exec(url.pathname);
     const catalogueRoute = /^\/api\/projects\/([^/]+)\/skills\/(effective|duplicate)(?:\/([^/]+))?$/.exec(url.pathname);
-    if (!personal && !projectRoute && !catalogueRoute) return false;
+    const platformRoute = /^\/api\/projects\/([^/]+)\/skills\/platform$/.exec(url.pathname);
+    const builtinRoute = /^\/api\/projects\/([^/]+)\/plugins\/builtin$/.exec(url.pathname);
+    if (!personal && !projectRoute && !catalogueRoute && !platformRoute && !builtinRoute) return false;
     const { user } = await store.ensureSessionUser(req, res, { allowDevAuth: false });
     await store.assertCsrf(req, url.pathname);
     if (!service) throw new HttpError(503, "product_state_unavailable", "Skill library storage is unavailable.");
@@ -17,7 +19,15 @@ export function createSkillLibraryRoutes({ store, service, maxJsonBytes, savePro
       try { return decodeURIComponent(value); }
       catch { throw new HttpError(400, "extension_contract_invalid", "Invalid skill path."); }
     };
-    if (catalogueRoute) {
+    if (builtinRoute) {
+      const project = await store.requireProject(user, decode(builtinRoute[1]));
+      if (req.method === 'GET') return reply(await service.projectBuiltins(user, project));
+      if (req.method === 'PUT') return reply(await (saveBuiltins ? saveBuiltins(user, project, await body()) : service.saveProjectBuiltins(user, project, await body())));
+    } else if (platformRoute) {
+      const project = await store.requireProject(user, decode(platformRoute[1]));
+      if (req.method === 'GET') return reply(await service.projectPlatform(user, project));
+      if (req.method === 'PUT') return reply(await (savePlatform ? savePlatform(user, project, await body()) : service.saveProjectPlatform(user, project, await body())));
+    } else if (catalogueRoute) {
       const project = await store.requireProject(user, decode(catalogueRoute[1]));
       if (catalogueRoute[2] === 'effective' && req.method === 'GET') {
         const allowed = catalogueRoute[3] ? ['sessionId', 'expectedRuntimeGeneration'] : ['sessionId'];

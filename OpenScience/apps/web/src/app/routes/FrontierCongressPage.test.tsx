@@ -96,6 +96,30 @@ describe("a congress's hub", () => {
     expect(screen.getAllByRole("heading", { level: 2 })[0]).toHaveTextContent("1 条");
   });
 
+  it("has its days as contents, folded above them, each a press away to its day; a hub of one day has none", async () => {
+    // A congress of a week ran to 17 windows with no contents (release walk of evimed-b559d4b7ebd0-1): a reading page's outline.
+    const { unmount } = renderHub();
+    await screen.findByRole("heading", { level: 1 });
+    const outline = document.querySelector("[data-outline]")!;
+    expect(outline).not.toBeNull();
+    expect(outline).toHaveTextContent("目录 · 2 节");
+    expect(outline.compareDocumentPosition(document.querySelector('[data-frontier-list="congress"]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const entries = within(outline as HTMLElement).getAllByRole("button", { hidden: true });
+    expect(entries.map((entry) => entry.textContent)).toEqual(["10月24日 周六 · 2 条", "10月23日 周五 · 1 条"]);
+    const scrollTo = vi.fn();
+    const scroller = document.querySelector(".overflow-y-auto") as HTMLElement;
+    scroller.scrollTo = scrollTo;
+    await userEvent.click(entries[1]);
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("heading", { level: 2, name: /10月23日/ }).id).toBe("congress-day-2026-10-23");
+    unmount();
+
+    client.fetchFrontierCongress.mockResolvedValue(hub({ itemCount: 2, days: [hub().days[0]] }));
+    renderHub();
+    await screen.findByRole("heading", { level: 1 });
+    expect(document.querySelector("[data-outline]")).toBeNull();
+  });
+
   it("shows the first ten items of a day and the rest on demand", async () => {
     const items = Array.from({ length: 14 }, (_, index) => ({ item: frontierItem({ id: `m${index}`, title: `第 ${index} 条` }), caveat: null }));
     client.fetchFrontierCongress.mockResolvedValue(hub({ itemCount: 14, days: [{ day: "2026-10-24", recap: null, items }] }));

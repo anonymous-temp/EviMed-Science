@@ -1,6 +1,11 @@
+import { useLocation, useNavigate } from "react-router";
 import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Check, X } from "lucide-react";
 import { getGeoSource, type GeoProject, type GeoSourceAnswer, type GeoSourceDetail, type GeoSourcePage, type GeoSourceRow } from "@/lib/geoClient";
+import { webErrorMessage, WebApiError } from "@/lib/apiClient";
+import { geoReadScopeQuery } from "@/lib/geoReadScope";
+import { geoMayConverse, useGeoFrame, useGeoReadScope } from "../geoFrame";
+import { useGeoPath } from "../useGeoPath";
 import { routeWord, unavailableWords } from "../spine/actionModel";
 import { clusterName } from "../spine/clusterModel";
 import { ClusterLink } from "../spine/ClusterLink";
@@ -12,12 +17,14 @@ import { Drawer } from "@/components/ui/Drawer";
 import { List, ListHeader, ListRow } from "@/components/ui/ListRow";
 import { ScrollRegion } from "@/components/ui/ScrollRegion";
 import { Tag } from "@/components/ui/Tag";
+import { Note } from "@/components/ui/Note";
 import { engineName, GEO_SOURCE_LAYER_WORDS, monthDay } from "../geoText";
 import { useOpenGeoConversation } from "../useOpenGeoConversation";
 import { answerPath, sourceDraft, sourceKindWord, yuan } from "./geoTabText";
 import { TabError, useGeoLoad } from "./geoTabKit";
 import { ShowMore, useShowMore } from "./showMore";
 import { sourceHistoryModel } from "./sourceHistory";
+import { SourceRelationship } from './SourceRelationship';
 
 /** Answers listed before 「显示更多」 in each of the drawer's two lists, and how many each press adds. */
 const ANSWERS_SHOWN = 10;
@@ -49,58 +56,112 @@ export function GeoSourceDrawer({
   project,
   source,
   engine,
+  selectionRef,
   focus,
   served,
   onClose,
 }: {
   geoId: string;
   project: GeoProject;
-  source: GeoSourceRow;
+  source: GeoSourceRow | Pick<GeoSourceRow, "id">;
   /** The engine the list was narrowed to, or `all`: the drawer lists the same answers the row counted. */
   engine: string;
+  /** The exact observation set whose source count was pressed. */
+  selectionRef?: string;
   /** Opened from the red count: the drawer rests on the answers that misstated us. */
   focus: "wrong" | null;
   /** What the project's actions say about sending an article here: the market's ranking carried by them, and the groups they are for. */
   served?: { groups: Array<{ id: string; name: string }>; candidate: Candidate | null } | null;
   onClose: () => void;
 }) {
+  const location = useLocation();
+  const navigate = useNavigate();
   const narrowed = engine === "all" ? null : engine;
-  const { state, reload } = useGeoLoad(`source:${geoId}:${source.id}:${engine}`, () => getGeoSource(geoId, source.id, narrowed));
-  const kind = sourceKindWord(source.kind);
+  const frame = useGeoFrame();
+  const scope = useGeoReadScope();
+  const selected = selectionRef ? { selectionRef } : scope ? { ...scope, ...(narrowed ? { engines: [narrowed] } : {}) } : narrowed;
+  const { state, reload } = useGeoLoad(`source:${geoId}:${source.id}:${engine}:${selectionRef ?? geoReadScopeQuery(scope)}:${project.selection?.dataRevision ?? ""}`, () => getGeoSource(geoId, source.id, selected));
+  const refreshView = () => {
+    if (frame?.refreshScope) frame.refreshScope(); else { frame?.reload(); frame?.data.invalidate(); }
+    onClose();
+  };
+  const showPlan = (url?:string) => {
+    const params = new URLSearchParams(location.search); params.set("planSource", source.id); params.delete("source"); params.delete("strategyVersion");
+    if (url) params.set("planUrl", url); else params.delete("planUrl");
+    onClose(); navigate(`${location.pathname}?${params}#implementation-plan`);
+  };
+  // An exact source action may address a record outside the bounded catalogue list.
+  // Show its normal loading/error state until the authorized detail supplies the record.
+  const displayedSource = state.kind === "ready" ? state.data.source : "domain" in source ? source : null;
+  const kind = sourceKindWord(displayedSource?.kind);
   return (
     <Drawer
-      title={source.name || source.domain}
-      description={(
+      title={displayedSource?.name || displayedSource?.domain || "信源"}
+      description={displayedSource ? (
         <>
-          <a href={`https://${source.domain}`} target="_blank" rel="noopener noreferrer" data-geo-source-link="" className="text-accent hover:underline">
-            {source.domain}
+          <a href={`https://${displayedSource.domain}`} target="_blank" rel="noopener noreferrer" data-geo-source-link="" className="text-accent hover:underline">
+            {displayedSource.domain}
             <ArrowUpRight size={16} aria-hidden="true" className="inline align-text-bottom" />
             <span className="sr-only">（在新标签页打开）</span>
           </a>
           {kind && ` · ${kind}`}
           {narrowed && ` · 只看${engineName(narrowed)}`}
         </>
-      )}
+      ) : undefined}
       onClose={onClose}
     >
-      <div data-geo-source-drawer={source.domain} className="flex min-h-full flex-col">
+      <div data-geo-source-drawer={displayedSource?.domain} className="flex min-h-full flex-col">
         <div className="flex flex-1 flex-col gap-6">
           {/* What an article here needs and costs, and the groups it serves, are the first screen: the answers behind the counts follow. */}
-          <Conditions source={state.kind === "ready" ? state.data.source : source} candidate={served?.candidate ?? null} />
+          {displayedSource && <>
+            <Conditions source={displayedSource} candidate={served?.candidate ?? null} />
+            <SourceRelationship key={`${geoId}:${displayedSource.domain}`} geoId={geoId} target={{ kind: 'domain', value: displayedSource.domain }} canEdit={!project.access || project.access.abilities.includes('edit')} onChanged={() => frame?.data.invalidate()} />
+            <Button onClick={() => showPlan()}>查看相关实施方案</Button>
+          </>}
           <Served groups={served?.groups ?? []} />
           {state.kind === "loading" && <p role="status" className="text-ui text-text-3">正在读取引用它的回答</p>}
-          {state.kind === "error" && <TabError message={state.message} onRetry={reload} />}
-          {state.kind === "ready" && <Answers geoId={geoId} project={project} detail={state.data} focus={focus} />}
-          {state.kind === "ready" && <Pages detail={state.data} />}
+          {state.kind === "error" && (state.stale ? <ChangedSource onRefresh={refreshView} /> : <TabError message={state.message} onRetry={reload} />)}
+          {state.kind === "ready" && <Answers geoId={geoId} project={project} detail={state.data} focus={focus} onRefresh={refreshView} />}
+          {state.kind === "ready" && <Pages geoId={geoId} project={project} detail={state.data} onPlan={showPlan} />}
           {state.kind === "ready" && <History detail={state.data} />}
         </div>
-        <Footer project={project} source={source} detail={state.kind === "ready" ? state.data : null} />
+        {displayedSource && <Footer project={project} source={displayedSource} detail={state.kind === "ready" ? state.data : null} />}
       </div>
     </Drawer>
   );
 }
 
-function Answers({ geoId, project, detail, focus }: { geoId: string; project: GeoProject; detail: GeoSourceDetail; focus: "wrong" | null }) {
+function ChangedSource({ onRefresh }: { onRefresh(): void }) {
+  return <Note tone="warn" action={<Button size="sm" variant="secondary" onClick={onRefresh}>更新信源列表</Button>}>引用回答已有更新，请从更新后的信源列表重新查看。</Note>;
+}
+
+function Answers({ geoId, project, detail: first, focus, onRefresh }: { geoId: string; project: GeoProject; detail: GeoSourceDetail; focus: "wrong" | null; onRefresh(): void }) {
+  const [extension, setExtension] = useState<{ first: GeoSourceDetail; detail: GeoSourceDetail } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [stale, setStale] = useState(false);
+  const alive = useRef(true);
+  const latest = useRef(first); latest.current = first;
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  const detail = extension?.first === first ? extension.detail : first;
+  const more = async () => {
+    const offset = detail.answerPage?.nextOffset;
+    if (busy || offset == null) return;
+    setBusy(true); setError("");
+    try {
+      const page = await getGeoSource(geoId, detail.source.id, detail.selection ? { selectionRef: detail.selection.reference } : detail.engine, { answerOffset: offset });
+      if (alive.current && latest.current === first) {
+        setExtension({ first, detail: { ...page,
+          answers: [...detail.answers, ...page.answers.filter(answer => !detail.answers.some(row => row.snapshotId === answer.snapshotId))] } });
+        shownWrong.more(); shownOthers.more();
+      }
+    } catch (caught) {
+      if (alive.current && latest.current === first) {
+        setStale(caught instanceof WebApiError && caught.status === 409);
+        setError(webErrorMessage(caught, { fallback: "回答明细暂时无法继续读取。" }));
+      }
+    } finally { if (alive.current) setBusy(false); }
+  };
   const answers = Array.isArray(detail.answers) ? detail.answers : [];
   const misstated = answers.filter((answer) => answer.misstated);
   const others = answers.filter((answer) => !answer.misstated);
@@ -117,14 +178,14 @@ function Answers({ geoId, project, detail, focus }: { geoId: string; project: Ge
     if (focus === "wrong" && node && typeof node.scrollIntoView === "function") node.scrollIntoView({ block: "start" });
   }, [focus, detail.source.id]);
 
-  if (!detail.round) return <p data-geo-source-none="" className="text-ui text-text-2">还没有完成的测量，这个站被引用的情况要等第一轮测量做完才有。</p>;
+  if (!detail.round && !detail.selection?.roundIds.length) return <p data-geo-source-none="" className="text-ui text-text-2">所选范围内还没有完成的测量。</p>;
   if (answers.length === 0) {
-    return <p data-geo-source-none="" className="text-ui text-text-2">{`最近一轮测量${when ? `（${when}）` : ""}里，没有回答引用这个站。`}</p>;
+    return <p data-geo-source-none="" className="text-ui text-text-2">{`${detail.scope ? "所选范围" : "最近一轮测量"}${when ? `（${when}）` : ""}里，没有回答引用这个站。`}</p>;
   }
   return (
     <>
       <p data-geo-source-counts="" className="text-caption text-text-3">
-        {`最近一轮测量${when ? `（${when}）` : ""}：${detail.counts.cited.toLocaleString("zh-CN")} 个回答引用了这个站，其中 ${detail.counts.wrongOurs.toLocaleString("zh-CN")} 个讲错了${product}，${detail.counts.mentionsOurs.toLocaleString("zh-CN")} 个提到了${product}。`}
+        {`${detail.scope ? "所选范围" : "最近一轮测量"}${when ? `（${when}）` : ""}：${detail.counts.cited.toLocaleString("zh-CN")} 个回答引用了这个站，其中 ${detail.counts.wrongOurs.toLocaleString("zh-CN")} 个讲错了${product}，${detail.counts.mentionsOurs.toLocaleString("zh-CN")} 个提到了${product}。`}
       </p>
       {misstated.length > 0 && (
         <section ref={wrongSection} aria-label="讲错的回答" data-geo-source-section="wrong">
@@ -150,6 +211,10 @@ function Answers({ geoId, project, detail, focus }: { geoId: string; project: Ge
           <ShowMore remaining={shownOthers.remaining} unit="个" onMore={shownOthers.more} />
         </section>
       )}
+      {stale ? <ChangedSource onRefresh={onRefresh} /> : error && <TabError message={error} onRetry={() => { void more(); }} />}
+      {detail.answerPage?.nextOffset != null && !stale && !shownWrong.remaining && !shownOthers.remaining && <Button variant="secondary" size="sm" loading={busy} onClick={() => { void more(); }}>
+        继续读取回答（已载入 {answers.length} / {detail.answerPage.total}）
+      </Button>}
     </>
   );
 }
@@ -163,9 +228,11 @@ function displayUrl(url: string): string {
  * 被引用的页面 (R14 N-11): the specific pages of this site that the latest round's answers cited — the page's title, its address
  * as an outside link, how many answers cited it and how many of those misstated us. The most cited eight, then all of them.
  */
-function Pages({ detail }: { detail: GeoSourceDetail }) {
+function Pages({ geoId, project, detail, onPlan }: { geoId: string; project: GeoProject; detail: GeoSourceDetail; onPlan:(url:string)=>void }) {
+  const frame = useGeoFrame();
   const pages = Array.isArray(detail.pages) ? detail.pages : [];
   const [all, setAll] = useState(false);
+  const [relationship, setRelationship] = useState<string | null>(null);
   if (pages.length === 0) return null;
   const total = typeof detail.pagesTotal === "number" ? detail.pagesTotal : pages.length;
   const shown = all ? pages : pages.slice(0, PAGES_SHOWN);
@@ -176,7 +243,9 @@ function Pages({ detail }: { detail: GeoSourceDetail }) {
       </h3>
       <ListHeader label="页面的数字" columns={[{ key: "cited", label: "被引用" }, { key: "wrong", label: "讲错的回答" }]} className="mt-2 max-sm:hidden" />
       <List divided label="被引用的页面">
-        {shown.map((page) => <PageRow key={page.url} page={page} />)}
+        {shown.map((page) => <div key={page.url}><PageRow page={page} /><Button variant="text" size="sm" onClick={() => onPlan(page.url)}>将此页面用于方案</Button><Button variant="text" size="sm" onClick={() => setRelationship(value => value === page.url ? null : page.url)}>页面归属</Button>
+          {relationship === page.url && <SourceRelationship key={`${geoId}:${page.url}`} geoId={geoId} target={{ kind: 'page', value: page.url }} canEdit={!project.access || project.access.abilities.includes('edit')} onChanged={() => frame?.data.invalidate()} />}
+        </div>)}
       </List>
       {pages.length > PAGES_SHOWN && (
         <div className="mt-2 flex justify-center">
@@ -256,13 +325,14 @@ function History({ detail }: { detail: GeoSourceDetail }) {
 
 /** 「引擎 · 问题 · 日期」, the wrong sentences under it as the answer page draws them; the row opens the answer. */
 function AnswerRow({ geoId, answer }: { geoId: string; answer: GeoSourceAnswer }) {
+  const path = useGeoPath();
   const line = [engineName(answer.engine), answer.question, monthDay(answer.askedAt)].filter(Boolean).join(" · ");
   const wrong = Array.isArray(answer.wrong) ? answer.wrong : [];
   return (
     <ListRow
       title={<span className="line-clamp-2">{line}</span>}
       titleProps={{ "data-geo-source-answer": answer.snapshotId }}
-      to={answerPath(geoId, answer.snapshotId)}
+      to={path(answerPath(geoId, answer.snapshotId))}
       meta={wrong.length > 0 ? (
         <span className="mt-1 flex flex-col gap-1.5">
           {wrong.map((sentence) => (
@@ -331,7 +401,7 @@ function Served({ groups }: { groups: ReadonlyArray<{ id: string; name: string }
 }
 
 /** One primary button, pinned under the content: the draft goes to the project's conversation and waits there to be sent. */
-function Footer({ project, source, detail }: { project: GeoProject; source: GeoSourceRow; detail: GeoSourceDetail | null }) {
+function Footer({ project, source, detail }: { project: GeoProject; source: Pick<GeoSourceRow,"name"|"domain">; detail: GeoSourceDetail | null }) {
   const open = useOpenGeoConversation();
   const [busy, setBusy] = useState(false);
   const product = project.product?.brandName || project.product?.genericName || project.name;
@@ -349,6 +419,7 @@ function Footer({ project, source, detail }: { project: GeoProject; source: GeoS
     setBusy(true);
     void open({ projectId: project.projectId }, draft).finally(() => setBusy(false));
   };
+  if (!geoMayConverse(project)) return null;
   return (
     <footer className="sticky -bottom-6 z-sticky -mx-6 -mb-6 mt-6 border-t border-border bg-surface px-6 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
       <Button data-geo-source-handoff="" loading={busy} onClick={handoff}>在对话中处理</Button>

@@ -1056,7 +1056,7 @@ repository-management workflows and names them in `installation.json` (R19, CLI 
 it has to `loopx-doc-registry`, one of the dropped six (`loopx.compatibility.skillEdit` in `deps-version.json`: a digest-bound edit of that one file,
 written back to the CLI's readback manifest, recorded in `installation.json` as `edits`; R19.2). The 「循证 GEO」 method
 pack is a skill root of a GEO project's runtime alone: the control plane decides per project and sends
-`geoSkills` to the runtime controller, whose protocol is **14** since R19 — a control plane and a controller of
+`geoSkills` to the runtime controller, whose protocol is **17** (the project's disabled platform skills and client bundles derived from the verified manifest since 2026-10-25; public attendance verification at 16; the OpenViking compile observation at 15; GEO scope since protocol 14) — a control plane and a controller of
 different protocol versions refuse each other at the first health call, so a release recreates the web service
 and `open-science-runtime-controller` together (the switch does: both images change). The web image carries the
 pack's **index** only (`runtime/skills/geo-private/geo-pack-index.json`, names and one sentence each), which a

@@ -1,5 +1,6 @@
+import { useGeoDestinationPath } from "../useGeoPath";
 import { useState, type ReactNode } from "react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import { webErrorMessage } from "@/lib/apiClient";
 import { stepAllowanceWait } from "@/lib/allowanceWait";
 import { runGeoStep, type GeoCell, type GeoProject, type GeoStepKey } from "@/lib/geoClient";
@@ -10,9 +11,10 @@ import { AllowanceTopUp } from "@/components/runs/AllowanceTopUp";
 import { Section } from "@/components/ui/Section";
 import { StepState, type StepInput } from "@/components/ui/StepState";
 import { GeoCellText } from "../GeoCellText";
+import { GeoMetricMembersDrawer } from "../GeoMetricMembersDrawer";
 import { useGeoFrame } from "../geoFrame";
 import { GEO_STEP_RECIPES } from "../geoStepRecipes";
-import { geoDestinationPath, GEO_STEP_HOME } from "../geoTabs";
+import { GEO_STEP_HOME } from "../geoTabs";
 import type { GeoUnit } from "../geoText";
 import { answerPath } from "./geoTabText";
 
@@ -77,6 +79,7 @@ export function stepWaiting(project: GeoProject, step: GeoStepKey): boolean {
  * the page reads itself again when it finishes. The conversation is the header's 「对话」.
  */
 export function StepPending({ geoId, project, step }: { geoId: string; project: GeoProject; step: GeoStepKey }) {
+  const geoDestinationPath = useGeoDestinationPath();
   const frame = useGeoFrame();
   const [busy, setBusy] = useState(false);
   const recipe = GEO_STEP_RECIPES[step];
@@ -183,12 +186,20 @@ export function CellLink({
   label?: string;
   className?: string;
 }) {
+  const [membersOpen, setMembersOpen] = useState(false);
+  const location = useLocation();
   const snapshot = firstSnapshot(cell, fallbackSnapshotId);
   const text = <GeoCellText cell={cell} unit={unit} layout={layout} />;
+  if (cell?.members?.selectionRef && cell.members.total > 0) return <>
+    <button type="button" data-geo-cell-link="" className={cn("rounded text-left hover:underline", className)} onClick={() => setMembersOpen(true)}>
+      {text}{label && <span className="sr-only">{`${label}，看回答`}</span>}
+    </button>
+    {membersOpen && <GeoMetricMembersDrawer geoId={geoId} members={cell.members} label={label} onClose={() => setMembersOpen(false)} />}
+  </>;
   if (!snapshot) return <span className={className}>{text}</span>;
   return (
     <Link
-      to={answerPath(geoId, snapshot)}
+      to={`${answerPath(geoId, snapshot)}${location.search}`}
       data-geo-cell-link=""
       className={cn("rounded hover:underline hover:decoration-border-control hover:underline-offset-4", className)}
     >

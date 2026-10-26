@@ -1472,6 +1472,9 @@ test("a valid, matching receipt makes its files the artifacts even when the tran
     const files = { "clinical-evidence-report.md": "# graded and unchanged\n", "clinical-evidence-matrix.json": "{\"claims\":[]}\n" };
     for (const [name, body] of Object.entries(files)) await writeFile(path.join(deliverableDir, name), body, "utf8");
     await writeFile(path.join(deliverableDir, "scratch.txt"), "left beside the package, named by no receipt\n", "utf8");
+    // This preexisting sibling is outside this run; keep its mtime unambiguously before millisecond run timestamps.
+    const earlier = new Date(Date.now() - 5000);
+    await utimes(path.join(deliverableDir, "scratch.txt"), earlier, earlier);
     await writeFile(path.join(project.workspaceDir, "delivery-receipt.json"), JSON.stringify({
       formatVersion: 1,
       runId: "run_live_valid",
@@ -5238,11 +5241,18 @@ test("every fetch-tool error code is classified, so a new one cannot default to 
     "../src/kbSearchGateway.mjs", "../src/kbBrowseGateway.mjs", "../src/frontierGateway.mjs",
     // 循证 GEO's gateway, the write module it hands writes to, and the social
     // channel behind `social_posts_search` (2026-09-25).
-    "../src/geoGateway.mjs", "../src/geoWrites.mjs", "../src/socialCrawlClient.mjs",
+    "../src/geoGateway.mjs", "../src/socialCrawlClient.mjs",
   ]) {
     const text = await readFile(new URL(relative, import.meta.url), "utf8");
     for (const [, code] of text.matchAll(/"((?:public_source|web_search|geo_probe|web_read|web_render|kb_search|kb_browse|frontier|geo|social_posts)_[a-z0-9_]+)"/g)) emitted.add(code);
   }
+  // The write module is shared with the GEO pages, and the gateway is its one exit to a run: a refusal reaches the run by its own
+  // name only when the gateway passes that name through; every other one is translated (`geo_write_payload_invalid`,
+  // `geo_read_filter_invalid`, `geo_request_too_large`). So of the module's codes, the passed-through ones are the run's
+  // (2026-10-25: the GEO v3 import, diagnosis and round codes are page codes the run never hears).
+  const { GEO_GATEWAY_PASS_THROUGH_CODES } = await import("../src/geoGateway.mjs");
+  const writes = await readFile(new URL("../src/geoWrites.mjs", import.meta.url), "utf8");
+  for (const [, code] of writes.matchAll(/"(geo_[a-z0-9_]+)"/g)) if (GEO_GATEWAY_PASS_THROUGH_CODES.has(code)) emitted.add(code);
   assert.ok(emitted.size > 30, `expected the real code set, found ${emitted.size}`);
 
   const unclassified = [...emitted]

@@ -118,7 +118,8 @@ const CEILING: Readonly<Record<string, readonly string[]>> = Object.freeze({
   可见度: ["12/400", "14/400", "18/600"],
   准确与安全: ["12/400", "14/400", "18/600", "32/600", "40/600"],
   问题与回答: ["12/400", "14/400", "14/600"],
-  信源: ["12/400", "14/400", "18/600"],
+  // The selected implementation plan now lives inside Sources; its nested headings use the existing fourth rung.
+  信源: ["12/400", "14/400", "14/600", "18/600"],
   行动: ["12/400", "14/400", "18/600"],
   方案: ["12/400", "14/400", "14/600", "18/600"],
 });
@@ -162,6 +163,7 @@ describe("每个页签至多四种字号 × 字重 (ratchet)", () => {
     const combos = await measured(tab(), ready);
     // The walk proves it walked: a tab that rendered nothing would pass any ceiling.
     expect(combos).toContain("12/400");
+    expect(combos.length).toBeLessThanOrEqual(4);
     expect(combos.filter((combo) => !CEILING[name].includes(combo)), `${name}: ${combos.join(" ")}`).toEqual([]);
     // Chinese is set at 400 or 600 only.
     expect(combos.filter((combo) => !combo.endsWith("/400") && !combo.endsWith("/600"))).toEqual([]);

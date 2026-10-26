@@ -65,3 +65,13 @@ test("disabled: nothing is sent", async () => {
     assert.equal(fake.state.requests.length, 0);
   } finally { await fake.close(); }
 });
+
+test("the actual inclusion and marketplace adapters preserve the entire original question", async () => {
+  const question = `  Original\n${"x".repeat(3989)}`;
+  let captured;
+  const market = new MediaMarketClient({ baseUrl: "https://fake.invalid", apiKey: "fake-test-key", minIntervalMs: 0,
+    fetchImpl: async (_url, options) => { captured = options.body.get("question"); return new Response(JSON.stringify({ code: 1, data: { request_id: "rq1" } })); } });
+  const client = new GeoInclusionClient({ market, config: { geoInclusionEngines: ["baidu"] } });
+  await client.submit({ engine: "baidu", keywords: ["Product"], question, thirdId: "gj_exact" });
+  assert.equal(captured, question);
+});

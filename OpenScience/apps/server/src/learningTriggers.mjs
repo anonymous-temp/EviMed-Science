@@ -88,6 +88,7 @@
  */
 
 import { METHOD_INDUCTION_MIN_TRAJECTORIES, artifactShapesMatch, isLearningCorrection, isResearcherOwnedWork } from "@evimed/domain";
+import { contextPolicyIdentity } from "./geoContextItems.mjs";
 import { isInternalProject } from "./internalProjects.mjs";
 import { recordSkippedBeforeReset } from "./memoryMetrics.mjs";
 import { endedBeforeReset, memoryPausedFor } from "./memorySettings.mjs";
@@ -120,12 +121,17 @@ export function learningScopeOf(run) {
  *  - `clinical_context` — the conversation read a patient record or a study's data, so its text is not the account's;
  *  - `paused` — the researcher stopped learning; `before_reset` — the conversation ended before the account reset its memory;
  *  - `trial` — a conversation trying someone else's capsule; `transcript_incomplete` — the history could not be read whole;
+ *  - `shared_automated` — a programme run of a shared GEO project: that project learns only from what a person typed into it, and
+ *    nobody typed into this one (a one-person project's programme runs are its owner's managed work, as above);
  *  - `run_unavailable`, `not_eligible`, `enqueue_failed` — a lesson that could not be attached to a run, to the rules, or to the queue.
  */
 export const LEARNING_REFUSAL_REASONS = Object.freeze([
   "not_finished", "not_researcher_work", "internal_project", "internal_agent", "clinical_context", "paused", "before_reset", "trial",
-  "transcript_incomplete", "run_unavailable", "not_eligible", "enqueue_failed",
+  "transcript_incomplete", "shared_automated", "run_unavailable", "not_eligible", "enqueue_failed",
 ]);
+
+/** Whether a run was started by the platform rather than typed by a person (`automated`, or a trigger that says so). @param {any} run */
+const automatedRun = (run) => run?.automated === true || run?.trigger === "automated";
 
 const DAY_MS = 86_400_000;
 
@@ -385,14 +391,16 @@ export class LearningTriggers {
    *   routinePeriodDays?: number,
    *   guestInfluence?: { assess: (userId: string, run: any) => Promise<{ guest: any[], uncorroborated: string[] }>,
    *     mark: (project: any, run: any, assessment: any) => Promise<unknown>, count?: (assessment: any) => void } | null,
+   *   contextProvenance?: any,
    *   evidence?: { afterRun: (project: any, run: any, options: { guestInfluence: boolean }) => Promise<unknown>,
    *     mirrorResultCorrected?: (project: any, input: { event: any, runId: string }) => Promise<unknown> } | null,
    *   onRefused?: ((reason: string) => void) | null }} dependencies
    */
   constructor({ jobs, agentRuns, memory = null, internalAgent = async () => false, sessionState = null, audit = async () => {},
     routinePeriodDays = ROUTINE_PERIOD_DAYS, guestInfluence = null, canReuseRun = null, canReuseRuns = null,
-    evidence = null, onRefused = null }) {
+    evidence = null, onRefused = null, contextProvenance = null }) {
     if (!jobs || !agentRuns) throw new TypeError("Learning triggers need the job queue and the run ledger.");
+    this.contextProvenance = contextProvenance;
     this.jobs = jobs;
     this.agentRuns = agentRuns;
     this.memory = memory;
@@ -488,7 +496,17 @@ export class LearningTriggers {
     const agentId = String(run.effectiveAgentId ?? "");
     const internal = agentId ? await Promise.resolve(this.internalAgent(agentId)).catch(() => false) : false;
     const reason = learningRefusal({ run, runs: ledger, project, internalAgent: () => internal });
-    return reason ? this.#refused(reason) : null;
+    if (reason) return this.#refused(reason);
+    // The shared path reads only attributed human input (`GeoContextProvenance.observeRun`): say so here, counted, instead of
+    // letting the lesson fail later as an enqueue error.
+    if (automatedRun(run) && await this.#sharedProject(project)) return this.#refused("shared_automated");
+    return null;
+  }
+
+  /** Whether the project is a shared GEO project now; an unreadable policy is left to the lesson's own path. @param {any} project */
+  async #sharedProject(project) {
+    if (!this.contextProvenance) return false;
+    return (await this.contextProvenance.policyFor(project).catch(() => null))?.kind === "geo-project";
   }
 
   /**
@@ -499,7 +517,21 @@ export class LearningTriggers {
    */
   async queue(project, run, lesson) {
     try {
-      await this.jobs.enqueue(project.userId, "distill", lesson.payload, { idempotencyKey: lesson.idempotencyKey, projectId: project.id });
+      const policy = await this.contextProvenance?.policyFor(project);
+      let payload = lesson.payload;
+      if (policy?.kind === 'geo-project') {
+        const sourceRunIds = [...new Set([run.id,...(payload.sourceRunIds??[]),...(payload.feedback??[]).flatMap(event=>event.detail?.sourceRunIds??[])])];
+        const observations = [];
+        for (const runId of sourceRunIds) {
+          const source = await this.contextProvenance.resolveSourceRun(project.userId,project.id,runId);
+          if (!source) throw new Error('A canonical learning source is unavailable.');
+          if (automatedRun(source)) { this.#refused("shared_automated"); return false; }
+          observations.push(await this.contextProvenance.observeRun(project,source));
+        }
+        payload = { ...payload, sourceProjectId: project.id, contextPolicy: contextPolicyIdentity(policy),
+          inputReceiptRefs: [...new Set(observations.flatMap(source=>source.inputReceiptRefs))], sourceRunIds };
+      }
+      await this.jobs.enqueue(project.userId, "distill", payload, { idempotencyKey: lesson.idempotencyKey, projectId: project.id });
       return true;
     } catch (error) {
       this.#refused("enqueue_failed");

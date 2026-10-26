@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
-import { FRONTIER_EDITOR_VERSION, FRONTIER_SCORE_VERSION, buildModelInput, sha256 } from "../src/frontierEditor.mjs";
+import { FRONTIER_EDITOR_VERSION, FRONTIER_SCORE_VERSION, FRONTIER_TITLE_VERSION, buildModelInput, sha256 } from "../src/frontierEditor.mjs";
 import { frontierAuthorityScore } from "@evimed/domain";
 import { FrontierDaily } from "../src/frontierDaily.mjs";
 import { FrontierGlossary } from "../src/frontierGlossary.mjs";
@@ -546,6 +546,10 @@ test("peak hours and the budget: non-urgent items are published title-only and e
   assert.equal(done.editor_diagnostics.attempts, 1);
   assert.equal(done.editor_diagnostics.editorVersion, FRONTIER_EDITOR_VERSION);
   assert.deepEqual(done.editor_diagnostics.fields, { title_zh: ["passed"], summary_zh: ["passed"] });
+  // c4-title: the edit that wrote the title writes the title rule that wrote it; a title-only wait wrote none.
+  assert.equal(done.editor_diagnostics.titleVersion, FRONTIER_TITLE_VERSION);
+  assert.equal(titleOnly.editor_diagnostics.titleVersion, undefined);
+  assert.equal(done.editor_diagnostics.scoreVersion, FRONTIER_SCORE_VERSION, "beside the score version, which it does not replace");
   assert.deepEqual(done.editor_diagnostics.scoresRaw, { impact: 60, novelty: 30, relevance: 10 }, "c2-style S9: the model's raw sub-scores, before the scale's end");
   assert.ok(done.rescored_at);
   assert.deepEqual(await changes(Number(done.id)), ["published", "rescored", "selected"]);

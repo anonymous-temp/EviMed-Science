@@ -1,6 +1,6 @@
 # EviMed Science (hosted SaaS)
 
-Brand name: **EviMed** — a general-purpose agent platform first and, on top of it, a professional layer for evidence-based medicine (owner, 2026-10-12).
+Brand name: **EviMed Science** — a general-purpose agent platform first and, on top of it, a professional layer for evidence-based medicine (owner, 2026-10-12).
 (Bundle identifier stays `com.ai4s.workbench` and
 internal `@ai4s/*` package names are unchanged — display branding only.)
 

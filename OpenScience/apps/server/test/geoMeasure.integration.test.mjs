@@ -14,7 +14,7 @@ import { GeoMeasureStore } from "../src/geoMeasureStore.mjs";
 import { enqueueRound, geoMeasureState, tickProbe } from "../src/geoProbeQueue.mjs";
 import { GEO_JUDGE_VERSION, GeoJudge, tickParse } from "../src/geoJudge.mjs";
 import { measureRound, netEffectRows, tickMetrics } from "../src/geoMetricsJob.mjs";
-import { noteErrorAction, tickErrors } from "../src/geoErrors.mjs";
+import { errorFingerprint, noteErrorAction, tickErrors } from "../src/geoErrors.mjs";
 import { coverageKeyOf, roundCoverages } from "../src/geoCoverage.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 import { GEO_TABLES_FOR_TESTS, fakeModel, judgeCallParts, seedGeoProject, startFakeProbe, testClock } from "./helpers/geoMeasureFixtures.mjs";
@@ -137,10 +137,11 @@ const judgeAnswers = (/** @type {{ answer: string, claimAlias: (fragment: string
     statements.push({ text: "玛仕度肽起始剂量为5 mg", verdict: "correct", claim: claimAlias("起始剂量"), evidence: "起始剂量为2 mg" });
   }
   return {
+    assessmentComplete: true,
     refusal: answer.includes("无法提供医疗建议") || answer.includes("我不便推荐具体药物"),
     statements,
     entities: answer.includes("二甲双胍片") ? ["二甲双胍片"] : [],
-    recommendations: answer.includes("医生通常推荐玛仕度肽") ? ["医生通常推荐玛仕度肽用于超重的糖尿病患者"] : [],
+    recommendations: answer.includes("医生通常推荐玛仕度肽") ? [{ text: "医生通常推荐玛仕度肽用于超重的糖尿病患者", entities: ["玛仕度肽"] }] : [],
     careHint: answer.includes("就医"),
     redFlagsExpected: ["F1"],
     redFlagsHit: answer.includes("剧烈腹痛") ? ["F1"] : [],
@@ -244,7 +245,7 @@ test("a round of 3 questions × 2 engines becomes answers, facts and numbers; a 
     assert.deepEqual(doubaoQ1.statements.map((/** @type {any} */ statement) => [statement.text, statement.verdict]), [["玛仕度肽每周注射一次", "correct"]],
       "the 5 mg verdict failed re-verification and is gone, not softened");
     assert.ok(doubaoQ1.warnings.includes("judge_dropped:statement:number_not_in_claim"));
-    assert.deepEqual(doubaoQ1.brands.map((/** @type {any} */ brand) => [brand.name, brand.position, brand.inRecommendation]), [["诺和泰", 1, true], ["玛仕度肽", 2, true]]);
+    assert.deepEqual(doubaoQ1.brands.map((/** @type {any} */ brand) => [brand.name, brand.position, brand.inRecommendation]), [["诺和泰", 1, false], ["玛仕度肽", 2, false]]);
     const refusals = await rows(`SELECT f.failure_mode FROM evimed_geo.facts f JOIN evimed_geo.snapshots s ON s.id = f.snapshot_id WHERE s.status = 'refusal'`);
     assert.deepEqual(refusals.map((row) => row.failure_mode), ["none", "none"]);
 
@@ -481,6 +482,13 @@ test("an answer asked before an error moved, in the same millisecond, is not a l
   await seed("geo_ms");
   const h = await harness();
   try {
+    const claim = (await h.deps.store.projectContext("geo_ms")).claims.find(row => row.key === "dosing");
+    const descriptor = { claimId: claim.id, claimKey: claim.key, claimVersion: claim.version,
+      applicability: { population: claim.population ?? null, elements: claim.elements ?? null, inLabel: claim.inLabel ?? null, validUntil: claim.validUntil ?? null, evidenceLevel: claim.evidenceLevel ?? null }, evidence: claim.quote };
+    const original = { ...descriptor, text: WRONG, verdict: "wrong" };
+    await database.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,question_id,engine,asked_at,status,answer_text)
+      VALUES('snap_origin','user_geo_ms','geo_ms','geo_ms_q1','deepseek','2026-09-25T14:00:00Z','valid',$1)`, [A_WRONG]);
+    await database.query(`INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,statements,judged_at) VALUES('snap_origin','user_geo_ms','geo_ms',$1::jsonb,'2026-09-25T14:00:00Z')`, [JSON.stringify([original])]);
     // The error moved at .123456; one answer without it was asked at .123100,
     // before that, and one at .123900, after. Read into JavaScript the error's
     // time is .123, and the earlier answer read as later and closed it.
@@ -488,11 +496,12 @@ test("an answer asked before an error moved, in the same millisecond, is not a l
         created_at, updated_at)
       VALUES ('err_ms', 'user_geo_ms', 'geo_ms', 'dosing', 'deepseek', 'geo_ms_q1', $1, 'awaiting_remeasure', '{"status":"done"}'::jsonb,
         '2026-09-25T14:00:00Z', '2026-09-25T15:00:00.123456Z')`, [WRONG]);
+    await database.query("UPDATE evimed_geo.errors SET claim_id=$1,first_snapshot_id='snap_origin',fingerprint=$2 WHERE id='err_ms'", [claim.id, errorFingerprint(original)]);
     const answer = async (/** @type {string} */ id, /** @type {string} */ askedAt) => {
       await database.query(`INSERT INTO evimed_geo.snapshots (id, user_id, geo_project_id, question_id, engine, asked_at, status, answer_text)
         VALUES ($1, 'user_geo_ms', 'geo_ms', 'geo_ms_q1', 'deepseek', $2, 'valid', $3)`, [id, askedAt, A_RIGHT]);
-      await database.query(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, statements, judged_at)
-        VALUES ($1, 'user_geo_ms', 'geo_ms', '[]'::jsonb, $2)`, [id, askedAt]);
+      await database.query(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, statements, judged_at, checks)
+        VALUES ($1, 'user_geo_ms', 'geo_ms', $3::jsonb, $2, '{"judgementCoverage":{"status":"complete"}}'::jsonb)`, [id, askedAt, JSON.stringify([{ ...descriptor, text: '玛仕度肽每周注射一次', verdict: 'correct' }])]);
     };
     await answer("snap_before", "2026-09-25T15:00:00.123100Z");
     assert.equal((await tickErrors(h.deps)).closed, 0, "asked before the error moved");
@@ -1586,7 +1595,7 @@ test("a changed registry counts the stored answers again in code: no judge call,
     assert.equal(h.model.calls.length, judged, "counting again asks no model");
     const after = await q2();
     assert.deepEqual(after.brands.filter((/** @type {any} */ brand) => brand.competitor).map((/** @type {any} */ brand) => [brand.name, brand.count]),
-      [["诺和泰", 2]], "a single-source generic is a mention of its product");
+      [["诺和泰", 1]], "single-source attribution does not alter literal brand counts");
     assert.deepEqual(after.statements, counted.statements, "the judge's verdicts are not touched");
     assert.notEqual(after.registry_key, counted.registry_key);
     assert.ok(after.reparsed_at);

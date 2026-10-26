@@ -191,9 +191,6 @@ function sourceProjectOf(provenance, projectId) {
   return null;
 }
 
-/** How many projects a method's provenance names at most; a method learned from more is no one project's. */
-const SOURCE_PROJECTS_LIMIT = 20;
-
 /** The reason written on a method stopped because the only project it was learnt in was deleted: the reader's sentence. */
 const PROJECT_DELETED_REASON = "它只是从已删除的项目里学到的，已停用。";
 
@@ -207,7 +204,7 @@ export function methodSourceProjects(provenance) {
   for (const value of [provenance?.sourceProjectId, ...(Array.isArray(provenance?.sourceProjectIds) ? provenance.sourceProjectIds : [])]) {
     if (typeof value === "string" && value.trim() && !found.includes(value)) found.push(value);
   }
-  return found.slice(0, SOURCE_PROJECTS_LIMIT);
+  return found;
 }
 
 /**
@@ -243,10 +240,11 @@ export class LearningService {
    * history, and used to arrive as quiet inbox records nobody read, under the
    * 「自动运行」 fold (plan 2026-09-23 §5.8).
    *
-   * @param {{documents: any, jobs?: any, now?: () => Date}} dependencies
+   * @param {{documents: any, jobs?: any, now?: () => Date, contextProvenance?: any}} dependencies
    */
-  constructor({ documents, jobs = null, now = () => new Date() }) {
+  constructor({ documents, jobs = null, now = () => new Date(), contextProvenance = null }) {
     if (!documents) throw new TypeError("The learning service needs the product document store.");
+    this.contextProvenance = contextProvenance;
     this.documents = documents;
     this.jobs = jobs;
     this.now = now;
@@ -272,6 +270,8 @@ export class LearningService {
    * @param {string | null} [methodId] the method whose write this is, when it may have come into force: `onTookEffect` is told it too
    */
   #mountChanged(userId, methodId = null) {
+    // A shared GEO project's learning write is told once its scope is settled (`GeoContextProvenance.deferMountChange`).
+    if (this.contextProvenance?.deferMountChange(() => this.#mountChanged(userId, methodId))) return;
     try { Promise.resolve(this.onMountChange?.(userId)).catch(() => {}); } catch { /* told, never asked */ }
     if (methodId) try { Promise.resolve(this.onTookEffect?.(userId, methodId)).catch(() => {}); } catch { /* told, never asked */ }
   }
@@ -323,8 +323,10 @@ export class LearningService {
    * @param {string} userId
    * @returns {Promise<(dependency: {name: string, digest: string}) => boolean>}
    */
-  async #digestResolver(userId) {
-    const page = await this.documents.list(userId, "method", { limit: 100, filter: { recordType: LEARNED_METHOD_RECORD_TYPE } });
+  async #digestResolver(userId, projectId = null) {
+    const policy = this.contextProvenance && projectId ? await this.contextProvenance.policyFor({userId,id:projectId}) : null;
+    const page = this.contextProvenance ? {items:await this.contextProvenance.scopedMethods(userId,policy)}
+      : await this.documents.list(userId, "method", { limit: 100, filter: { recordType: LEARNED_METHOD_RECORD_TYPE } });
     /** @type {Map<string, Set<string>>} */
     const digests = new Map();
     for (const document of page.items ?? []) {
@@ -355,7 +357,7 @@ export class LearningService {
    * @param {{projectId?: string|null, frontmatter: any, body: string, files?: any, provenance: any, dependencies?: any[], mountedTools?: readonly string[], display?: unknown, steps?: unknown, scope?: unknown}} input
    */
   async createCandidate(userId, input) {
-    const digest = this.#validated({ ...input, resolveDigest: await this.#digestResolver(userId) });
+    const digest = this.#validated({ ...input, resolveDigest: await this.#digestResolver(userId, sourceProjectOf(input.provenance, null)) });
     const name = String(input.frontmatter?.name ?? "");
     const id = learnedMethodId(name);
     // A method learnt from one lesson names the project the lesson was in. One derived from other methods (a merge, a factored-out shared part)
@@ -412,7 +414,7 @@ export class LearningService {
       // has one answer however it became effective.
       payload.statusChangedAt = payload.createdAt;
     }
-    await this.documents.put(userId, "method", productId(id, "method"), payload, {
+    await (this.contextProvenance ? this.contextProvenance.write.bind(this.contextProvenance) : this.documents.put.bind(this.documents))(userId, "method", productId(id, "method"), payload, {
       expectedRevision: 0,
       projectId: null,
     });
@@ -433,8 +435,14 @@ export class LearningService {
    * @param {{expectedRevision: number, frontmatter: any, body: string, files?: any, provenance?: any, dependencies?: any[], mountedTools?: readonly string[], display?: unknown, steps?: unknown, scope?: unknown}} input
    */
   async amendMethod(userId, methodId, input) {
-    const current = await this.getMethod(userId, methodId);
-    const digest = this.#validated({ ...input, resolveDigest: await this.#digestResolver(userId) });
+    let current;
+    if (this.contextProvenance) {
+      const projectId = sourceProjectOf(input.provenance,null);
+      const policy = projectId ? await this.contextProvenance.policyFor({userId,id:projectId}) : {kind:'owned',ownerId:userId};
+      current = await this.contextProvenance.methodFor(userId,methodId,policy);
+      if (!current) throw new HttpError(409,'geo_learning_target_unverified','The method belongs to another learning scope.');
+    } else current = await this.getMethod(userId, methodId);
+    const digest = this.#validated({ ...input, resolveDigest: await this.#digestResolver(userId, sourceProjectOf(input.provenance, null)) });
     const learning = withoutRetiredLearningKeys(resetLearningForDigest(current.payload.learning, digest));
     const bodyChanged = digest !== current.payload.contentDigest;
     const at = this.now().toISOString();
@@ -459,7 +467,8 @@ export class LearningService {
       learning,
       // The result versions each lesson was learnt from accumulate: the method names every pair it was shaped by.
       provenance: withResultLinks({ ...current.payload.provenance, ...input.provenance,
-        ...(sourceProjectId ? { sourceProjectId } : {}), ...(sourceProjectIds.length ? { sourceProjectIds } : {}) }, current.payload.provenance?.results),
+        ...(sourceProjectId ? { sourceProjectId } : {}), ...(sourceProjectIds.length ? { sourceProjectIds } : {}),
+        sourceRunIds:[...new Set([current.payload.provenance?.runId,...(current.payload.provenance?.sourceRunIds??[]),input.provenance?.runId,...(input.provenance?.sourceRunIds??[])].filter(Boolean))] }, current.payload.provenance?.results),
       // A new line when the revision brought one; otherwise the old one stands.
       ...(cleanMethodDisplay(input.display) ? { display: cleanMethodDisplay(input.display) } : {}),
       // New steps when the revision brought them; otherwise the old rendering
@@ -474,7 +483,7 @@ export class LearningService {
       updatedAt: at,
     };
     if (payload.files === undefined) delete payload.files;
-    await this.documents.put(userId, "method", methodId, payload, { expectedRevision: input.expectedRevision });
+    await (this.contextProvenance ? this.contextProvenance.write.bind(this.contextProvenance) : this.documents.put.bind(this.documents))(userId, "method", methodId, payload, { expectedRevision: input.expectedRevision });
     this.#mountChanged(userId, methodId);
     return this.getMethod(userId, methodId);
   }
@@ -507,9 +516,9 @@ export class LearningService {
     return this.getMethod(userId, methodId);
   }
 
-  /** @param {string} userId @param {string} methodId */
-  async getMethod(userId, methodId) {
-    const document = await this.documents.get(userId, "method", productId(methodId, "method"));
+  /** @param {string} userId @param {string} methodId @param {{expectedRevision?:number}} [options] */
+  async getMethod(userId, methodId, { expectedRevision = undefined } = {}) {
+    const document = await this.documents.get(userId, "method", productId(methodId, "method"), { expectedRevision });
     if (!isLearnedMethod(document)) throw new HttpError(404, "method_not_found", "The method is unavailable.");
     return document;
   }
@@ -522,7 +531,7 @@ export class LearningService {
    * the account's (`createCandidate`), and a filter on where it is filed would
    * find nothing.
    * @param {string} userId
-   * @param {{projectId?: string|null, status?: string, limit?: number, cursor?: string|null}} [options]
+   * @param {{projectId?: string|null, status?: string, limit?: number, cursor?: string|null, fields?: Record<string,true|number>|null}} [options]
    */
   async listMethods(userId, options = {}) {
     const filter = {
@@ -533,6 +542,7 @@ export class LearningService {
     return this.documents.list(userId, "method", {
       limit: options.limit ?? 50,
       cursor: options.cursor ?? null,
+      fields: options.fields ?? null,
       filter,
     });
   }
@@ -589,7 +599,13 @@ export class LearningService {
       /** @type {string} */ let key;
       // An id that cannot name a method names none; a read that fails is not taken for "not in force", it fails the decision.
       try { key = productId(id, "method"); } catch { continue; }
-      const other = await this.documents.get(userId, "method", key);
+      let other;
+      if (this.contextProvenance) {
+        const projectId=sourceProjectOf(payload.provenance,null);
+        const policy=projectId?await this.contextProvenance.policyFor({userId,id:projectId}):{kind:'owned',ownerId:userId};
+        const metadata=(await this.contextProvenance.rows(userId,'method',{recordType:LEARNED_METHOD_RECORD_TYPE})).find(row=>row.id===key);
+        if (metadata && await this.contextProvenance.authorize(policy,'method',metadata)) other=metadata;
+      } else other = await this.documents.get(userId, "method", key);
       if (isLearnedMethod(other) && other.payload.status === "approved") approved.add(id);
     }
     return (id) => approved.has(id);
@@ -1188,10 +1204,10 @@ export class LearningService {
    * Which effective methods a branch of the lifecycle wants stopped, with the branch (`code`) that decided and whether it acts
    * at once (`immediate`: a method the system inferred) or only proposes (one the researcher stated). The caller acts on the
    * first kind and reports the second; a stop is a status the researcher restores with one click.
-   * @param {string} userId @param {{projectId?: string|null, nowMs?: number, cap?: number, unusedAfterLoads?: number}} [options]
+   * @param {string} userId @param {{projectId?: string|null, nowMs?: number, cap?: number, unusedAfterLoads?: number, items?: any[]}} [options]
    */
   async retirementProposals(userId, options = {}) {
-    const page = await this.listMethods(userId, { ...options, limit: 100 });
+    const page = Array.isArray(options.items) ? {items:options.items} : await this.listMethods(userId, { ...options, limit: 100 });
     const items = page.items ?? [];
     const approved = new Set(items.filter((item) => item.payload.status === "approved").map((item) => item.id));
     /** @type {{document: any, proposal: any}[]} */

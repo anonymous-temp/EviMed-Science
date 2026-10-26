@@ -1,4 +1,6 @@
+import { verifyContextGeneration } from './runtimeContextGeneration.mjs';
 import {createRuntimeEgressProofStore} from './runtimeEgressProof.mjs';
+import { createOpenVikingCompileObserver } from "./openVikingCompileObserver.mjs";
 import { verifyPlatformSkillGeneration } from "./platformSkillSupply.mjs";
 import { createEvolutionVerificationController } from "./evolutionVerificationController.mjs";
 import {assertExtensionAssessmentAuthority} from './extensionAssessmentAuthority.mjs';
@@ -10,6 +12,7 @@ import { canonicalJson, isolatedToolRowIsAdmitted } from "@evimed/domain";
 import { verifyPersonalSkillGeneration } from "./personalSkillGenerationService.mjs";
 import { validatePluginConfig } from "./pluginService.mjs";
 import { spawn, spawnSync } from "node:child_process";
+import { createPublicKey } from "node:crypto";
 import fs from "node:fs/promises";
 import http from "node:http";
 import net from "node:net";
@@ -337,6 +340,7 @@ async function prepareControllerSocket(socketPath) {
 
 export function createRuntimeController(overrides = {}, hooks = {}) {
   const config = loadConfig(overrides);
+  const observeOpenVikingCompile = createOpenVikingCompileObserver(config, hooks.openVikingCompileObserver ?? {});
   const documents = createDocumentRenderController(config);
   const intake = createVcrIntakeController(config);
   const skillValidation = createSkillValidationController(config, hooks.skillValidation ?? {});
@@ -580,6 +584,16 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
     if (typeof geoSkills !== "boolean") {
       throw controllerFailure(400, "runtime_controller_geo_skills_invalid", "Runtime controller GEO method pack flag must be a boolean or absent.");
     }
+    const attendancePublicKey = payload.attendancePublicKey === undefined ? "" : payload.attendancePublicKey;
+    let attendanceKeyValid = typeof attendancePublicKey === "string" && attendancePublicKey === "";
+    if (typeof attendancePublicKey === "string" && /^[A-Za-z0-9_-]{59}$/.test(attendancePublicKey)) {
+      try {
+        const bytes = Buffer.from(attendancePublicKey, "base64url");
+        const key = createPublicKey({ key: bytes, type: "spki", format: "der" });
+        attendanceKeyValid = bytes.length === 44 && bytes.toString("base64url") === attendancePublicKey && key.asymmetricKeyType === "ed25519";
+      } catch { attendanceKeyValid = false; }
+    }
+    if (!attendanceKeyValid) throw controllerFailure(400, "runtime_controller_attendance_key_invalid", "Runtime controller attendance authority must be an Ed25519 public verifier or absent.");
     const pluginConfig = payload.pluginConfig;
     if (!pluginConfig || Object.keys(pluginConfig).sort().join(",") !== "enabled,revision,settings") throw new HttpError(400, "plugin_config_invalid", "Fixed plugin settings are required.");
     validatePluginConfig({ expectedRevision: pluginConfig.revision, enabled: pluginConfig.enabled, settings: pluginConfig.settings }, config.publicSourceGatewayTimeoutMs ?? 15000);
@@ -600,7 +614,8 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
       const existing = spawnSync(config.runtimeContainerBin, ['image', 'inspect', '--format', '{{.Id}}', personal.identity.baseRuntimeImageDigest], { encoding: 'utf8', timeout: 5000, maxBuffer: 65536 });
       if (existing.status !== 0 || existing.stdout.trim() !== personal.identity.baseRuntimeImageDigest) throw controllerFailure(503, 'runtime_image_unavailable', 'The pinned personal skill runtime image is unavailable.');
     }
-    const plan = buildRuntimeLaunchPlan(config, project, port, { modelGatewayProfile: payload.modelGatewayProfile ?? "", capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, memoryGatewayUrl, geoSkills, pluginConfig, platformSkillGeneration: platform?.reference ?? null,
+    const contextGeneration = payload.contextGeneration ? await verifyContextGeneration(config, project, payload.contextGeneration) : null;
+    const plan = buildRuntimeLaunchPlan(config, project, port, { modelGatewayProfile: payload.modelGatewayProfile ?? "", contextGeneration, capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, memoryGatewayUrl, attendancePublicKey, geoSkills, pluginConfig, platformSkillGeneration: platform?.reference ?? null, disabledPlatformSkills: personal?.platformSkills?.disabled ?? [], disabledClientBundles: personal?.platformSkills?.disabledPlugins ?? [],
       personalSkillGeneration: personal?.reference ?? null, personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extension?.reference ?? null, extensionImageId: extension?.identity.baseRuntimeImageDigest ?? null });
     plan.platformSkillGeneration = platform;
     if (plan.releaseProvenance) logUnverifiedRelease(project, plan.releaseProvenance);
@@ -746,6 +761,11 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
   async function handle(req, res) {
     const url = new URL(req.url ?? "/", "http://runtime.controller");
     try {
+      if (req.method === "GET" && url.pathname === "/v1/openviking/compile-observation") {
+        if (url.search) throw controllerFailure(400, "runtime_controller_payload_invalid", "This observation takes no parameters.");
+        sendJson(res, 200, { data: await observeOpenVikingCompile() });
+        return;
+      }
       if(req.method==='POST'&&url.pathname==='/v1/runtime/evolution-admission'){
         const payload=await readJson(req,1024);assertExactKeys(payload,[]);
         sendJson(res,200,{data:evolutionAdmissionAvailable()});return;
@@ -910,7 +930,7 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
         // Protocol 8 deliberately accepts this exact version-7 citation shape;
         // Selected extension generations add only a fixed opaque immutable reference.
         const allowed = url.pathname === "/v1/runtime/start"
-          ? ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig", "personalSkillGeneration", "extensionGeneration", "platformSkillGeneration", "memoryGatewayUrl", "geoSkills", "modelGatewayProfile"]
+          ? ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig", "personalSkillGeneration", "extensionGeneration", "platformSkillGeneration", "memoryGatewayUrl", "geoSkills", "modelGatewayProfile", "contextGeneration", "attendancePublicKey"]
           : ["userId", "projectId", "activeWorkspace"];
         assertExactKeys(payload, allowed);
         const project = await projectFromReference(config, payload);

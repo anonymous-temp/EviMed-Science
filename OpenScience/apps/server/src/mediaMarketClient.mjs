@@ -607,8 +607,9 @@ export class MediaMarketClient {
   async addInclusionTask({ platform, keywords, question, thirdId }) {
     if (!Number.isSafeInteger(platform) || platform < 1 || platform > 8) throw marketError(400, "media_market_request_invalid", "The platform is not one the vendor checks.");
     const words = [...new Set((Array.isArray(keywords) ? keywords : []).map((word) => text(word, 50).replace(/[,，]/g, " ").trim()).filter(Boolean))].slice(0, 10);
-    const cleanQuestion = text(question, 500);
-    if (!words.length || !cleanQuestion || !THIRD_ID.test(String(thirdId ?? ""))) {
+    // Application admission matches original imports. The vendor remains authoritative about accepted length; never rewrite a task to fit.
+    const cleanQuestion = typeof question === "string" && question.length <= 4000 ? question : "";
+    if (!words.length || !cleanQuestion.trim() || !THIRD_ID.test(String(thirdId ?? ""))) {
       throw marketError(400, "media_market_request_invalid", "The inclusion task needs brand words, a question and a reference.");
     }
     const { data } = await this.#call("/api/geo/add_shoulu", [

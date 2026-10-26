@@ -156,6 +156,37 @@ def build(output: Path, cache: Path | None = None) -> None:
     ))
 
 
+def reusable(output: Path) -> bool:
+    """Whether `output` is already the index this builder makes from the pinned inputs.
+
+    The index records the digests of the inputs it was built from, and the row counts it holds. A file whose record names
+    exactly the pinned inputs, whose counts are its own and whose integrity check passes is the same index, so it is
+    verified instead of being built again: a build does not need sideeffects.embl.de when it is handed the index a previous
+    build made (the publisher was unreachable for a day on 2026-10-25, and every image build that ran this step stopped).
+    """
+    if not output.is_file():
+        return False
+    try:
+        connection = sqlite3.connect("file:%s?mode=ro" % output, uri=True)
+        try:
+            if connection.execute("PRAGMA integrity_check").fetchone() != ("ok",):
+                return False
+            recorded = dict(connection.execute("SELECT key, value FROM metadata").fetchall())
+            names = connection.execute("SELECT count(*) FROM drug_names").fetchone()[0]
+            effects = connection.execute("SELECT count(*) FROM side_effects").fetchone()[0]
+        finally:
+            connection.close()
+    except sqlite3.Error:
+        return False
+    return (
+        recorded.get("release") == "SIDER 4.1 (2015-10-21)"
+        and recorded.get("drugNamesSha256") == SOURCES["drug_names.tsv"]["sha256"]
+        and recorded.get("sideEffectsSha256") == SOURCES["meddra_all_se.tsv.gz"]["sha256"]
+        and recorded.get("drugNameRows") == str(names) and names > 0
+        and recorded.get("sideEffectRows") == str(effects) and effects > 0
+    )
+
+
 def verify(output: Path) -> None:
     """Exercise the shipped query path without any external request."""
     import public_sources
@@ -189,7 +220,11 @@ def main() -> None:
     parser.add_argument("--source-cache", type=Path, help="Cache of pinned raw inputs; every read is reverified")
     arguments = parser.parse_args()
     output = arguments.output.resolve()
-    build(output, arguments.source_cache)
+    if reusable(output):
+        os.chmod(output, 0o444)
+        print("reused %s: built from the pinned inputs, sha256=%s" % (output, hashlib.sha256(output.read_bytes()).hexdigest()))
+    else:
+        build(output, arguments.source_cache)
     verify(output)
 
 

@@ -178,12 +178,14 @@ place it shadowed every Chinese face after it. HarmonyOS Sans and MiSans are gon
 by character: DOI, PMID, NCT, run id.
 
 The serif came back on 2026-09-26, confined (fusion plan §5.2). An evidence platform borrows its
-authority from the journals and every one of them is set in a serif, so the **wordmark**, the
+authority from the journals and every one of them is set in a serif, so the **standalone wordmark**, the
 **home headline** and the **title of a document** wear one — and nothing else does, because a
 serif on a button reads as an old intranet. Three rungs carry the family themselves
 (`text-wordmark`, `text-hero`, `text-doc-title` — a rule in the generated CSS binds it, since
 Tailwind's size scale cannot), so a page never names `font-serif` to get it. A report's title is
 `text-doc-title`; its sections are 18 / 600 in the sans.
+
+The navigation lockup is the compact exception (owner review, 2026-10-25): the full EviMed Science name uses the sans `text-ui` / 600 rung on one line. The notification control belongs with the account actions, leaving the brand and sidebar collapse control together even at the minimum sidebar width.
 
 ```
 "EviMed CJK Punct Serif", "Source Serif 4", "Songti SC", "Noto Serif SC", "Noto Serif CJK SC",
@@ -225,7 +227,7 @@ ones was a sixth pair. The release walk holds both (`typePairs` in the `data` an
 | `ui` | **14 / 22px** | interface text, chat, list rows, controls — the default |
 | `body` | 16 / 1.75 | report prose and the reading column |
 | `reading` · `reading-lg` · `reading-xl` | 16 · 18 · 20 / 1.8 | the frontier reader (2026-10-23): an article's text is `reading` below 1280 px and `reading-lg` from there (`text-reading xl:text-reading-lg`), its AI 导读 one step above (`reading-lg` → `reading-xl`), on the reading measure (`max-w-measure-body xl:max-w-read`, 40 CJK a line) — the scale's own sizes at a long text's line height, a responsive pair rather than a tenth size |
-| `wordmark` | 16 / 1.3 · serif | the EviMed lockup in the sidebar |
+| `wordmark` | 16 / 1.3 · serif | standalone brand lockups; the sidebar uses the compact sans `ui` rung |
 | `section` | 18 / 26px | a section heading inside an answer or a report |
 | `heading` | 20 / 28px | a card heading on a data page, a document title in a preview pane |
 | `title` | 24 / 32px | every page H1 |
@@ -373,7 +375,7 @@ bordered pill or bordered `<button>` outside it:
 | `ActivityStrip` | what is going on right now, under the rail: 「正在生成虚拟患者 · 计算 1,200 / 2,000」, elapsed, 取消; `variant="chip"` is the header's form. No percentage |
 | `Note` | the only way a sentence stands alone on a page: with an `action`, or as a `result` that holds a number which can open what it counts (the figure is the link colour at the sentence's weight). A bare string does not compile; `tone="warn"` is a pale amber band with the text colour — the ground says it, not amber text |
 | `Headline` | the data page's one sentence, each number a link to what it counts |
-| `Section` | the one block heading (18 / 600, `sub` 14 / 600) with a count and a `toolbar` slot |
+| `Section` | the one block heading (18 / 600, `sub` 14 / 600) with a count and a `toolbar` slot; `compact` uses 14 / 600 for catalogue group labels while preserving the section's heading level |
 | `FactList` | the one key / value `dl`, eight rows and then 「全部 N 项」 |
 | `ChartGrid` | charts by rows; a row's cells share a height and its spans fill it, so a grid has no hole |
 | `Outline` + `useOutline` | a long page's contents: a sticky column from 1024 px, a folded 「目录 · N 节」 below, or the bare list (`inline`) in a column that already sticks (the frontier reader's 「本文目录」); read off the headings the page rendered |

@@ -45,7 +45,7 @@ TOOL_NAMES = ("schedule_task", "update_task")
 # What the gateway answers a failure with, and what each means for the call (`@evimed/domain` `TASK_TOOL_ERROR_CODES`).
 RUN_FIXES = (
     "task_tools_request_invalid", "task_tools_request_too_large", "task_instruction_invalid", "task_title_invalid",
-    "task_schedule_invalid", "task_schedule_in_past", "task_id_invalid", "task_not_found", "task_update_empty", "task_paused_invalid",
+    "task_schedule_invalid", "task_schedule_in_past", "task_materials_invalid", "task_id_invalid", "task_not_found", "task_update_empty", "task_paused_invalid",
 )
 RETRYABLE_STATUSES = (429, 502, 503, 504)
 # The task moved under the call (edited on the page at the same moment): the call, made again, reads where it now stands.
@@ -62,6 +62,13 @@ _SCHEDULE_PROPERTIES = {
     },
     "date": {"type": "string", "pattern": DATE.pattern, "description": "once only: YYYY-MM-DD in timeZone, not in the past"},
     "timeZone": {"type": "string", "maxLength": 80, "description": "IANA zone; default Asia/Shanghai (中国标准时间)"},
+}
+
+
+_SOURCE_IDS_PROPERTY = {
+    "type": "array", "minItems": 1, "maxItems": 10,
+    "items": {"type": "string", "pattern": r"^src_[a-f0-9]{32}$"},
+    "description": "Add durable knowledge-base materials from this project; omitted references stay attached.",
 }
 
 
@@ -87,8 +94,8 @@ class TaskToolError(Exception):
                 ) + "."
             return hint
         if self.retryable:
-            return "Retry once; if it still fails, tell the researcher the task was not changed and that the 定时任务 page can do it."
-        return "Tell the researcher plainly that the task was not changed, and why; the 定时任务 page can do it."
+            return "Retry the same request once; if it still fails, say the saved state could not be confirmed and inspect the task on the 定时任务 page before creating another."
+        return "Tell the researcher why the request could not finish; do not claim nothing changed unless the saved state confirms it. Inspect the task on the 定时任务 page."
 
 
 def tool_definitions():
@@ -96,13 +103,13 @@ def tool_definitions():
         {
             "name": "schedule_task",
             "description": (
-                "Schedule a task the user asks for to repeat or to run once (「每个工作日早上 9 点给我一份昨天的行业要闻」「每周一汇总上周的销售表」"
-                "「下周五提醒我交周报」), as the 定时任务 page would: created and started at once with the platform's default budget, nothing to "
-                "confirm — call it once, for exactly what was asked. Any kind of work will do: each time it comes due the work is done as the "
-                "instruction says and the result is handed over in the task's own conversation. instruction is what to do each time, in the "
-                "user's words, with whatever it needs to stand alone (the subject, the format, where the files are); schedule.time is the clock "
-                "in timeZone (default Asia/Shanghai, 中国标准时间); weekly needs weekdays (1 = Monday … 7 = Sunday), once needs a date. Answers "
-                "with the task's id, schedule in words, time zone, next run and state: tell the user those. Not available inside a scheduled execution."
+                "Schedule work the user asks to repeat or run once (「每个工作日早上 9 点汇总行业要闻」「每周一汇总销售表」「下周五提醒交周报」). "
+                "Any kind of work is supported. New tasks start with the platform defaults; nothing to confirm. "
+                "instruction must stand alone: subject, output format and needed context. sourceIds optionally binds up to ten "
+                "knowledge-base files from this project; a filename or chat mention alone does not save a material reference. "
+                "schedule.time is HH:MM in timeZone (default Asia/Shanghai); weekly needs weekdays 1=Monday…7=Sunday, once needs a date. "
+                "Tell the user the returned schedule, zone, next run and actual state. An existing paused duplicate stays paused. "
+                "Unavailable inside unattended executions."
             ),
             "inputSchema": {
                 "type": "object",
@@ -110,6 +117,7 @@ def tool_definitions():
                     "instruction": {"type": "string", "minLength": 1, "maxLength": MAX_INSTRUCTION},
                     "schedule": {"type": "object", "properties": _SCHEDULE_PROPERTIES, "required": ["kind", "time"], "additionalProperties": False},
                     "title": {"type": "string", "minLength": 1, "maxLength": MAX_TITLE, "description": "optional; default is the instruction's opening"},
+                    "sourceIds": _SOURCE_IDS_PROPERTY,
                 },
                 "required": ["instruction", "schedule"],
                 "additionalProperties": False,
@@ -119,7 +127,7 @@ def tool_definitions():
             "name": "update_task",
             "description": (
                 "Change a scheduled task the user names (「改到每周一 8 点」「只要五条以内」「先停一停」): what it does, when it runs, "
-                "its title, or pause/re-enable it with paused. Pass only what changes; schedule fields left out keep their values. Pausing "
+                "its title, add sourceIds from this project, or pause/re-enable it with paused. Pass only what changes; schedule fields left out keep their values. Pausing "
                 "also cancels the task's work in flight (results already made stay). taskId is the id schedule_task answered with, or the "
                 "Episode ID of a scheduled execution you are in; a wrong id answers with the project's tasks. Answers with the task as it now stands."
             ),
@@ -131,6 +139,7 @@ def tool_definitions():
                     "schedule": {"type": "object", "properties": _SCHEDULE_PROPERTIES, "additionalProperties": False},
                     "title": {"type": "string", "minLength": 1, "maxLength": MAX_TITLE},
                     "paused": {"type": "boolean"},
+                    "sourceIds": _SOURCE_IDS_PROPERTY,
                 },
                 "required": ["taskId"],
                 "additionalProperties": False,
@@ -188,7 +197,7 @@ def _schedule(value, *, partial: bool) -> dict:
 def _validated(name: str, arguments) -> dict:
     if not isinstance(arguments, dict):
         raise TaskToolError("task_tools_request_invalid", "The call's arguments must be an object.")
-    allowed = {"instruction", "schedule", "title"} if name == "schedule_task" else {"taskId", "instruction", "schedule", "title", "paused"}
+    allowed = {"instruction", "schedule", "title", "sourceIds"} if name == "schedule_task" else {"taskId", "instruction", "schedule", "title", "paused", "sourceIds"}
     unknown = sorted(set(arguments) - allowed)
     if unknown:
         raise TaskToolError("task_tools_request_invalid", "%s takes: %s." % (name, ", ".join(sorted(allowed))))
@@ -209,6 +218,11 @@ def _validated(name: str, arguments) -> dict:
             if not isinstance(arguments["paused"], bool):
                 raise TaskToolError("task_paused_invalid", "paused must be true (pause) or false (re-enable).")
             payload["paused"] = arguments["paused"]
+    if "sourceIds" in arguments:
+        ids = arguments["sourceIds"]
+        if not isinstance(ids, list) or not 1 <= len(ids) <= 10 or not all(isinstance(item, str) and re.fullmatch(r"src_[a-f0-9]{32}", item) for item in ids):
+            raise TaskToolError("task_materials_invalid", "sourceIds must name between one and ten sources (src_…) from this project's knowledge base.")
+        payload["sourceIds"] = sorted(set(ids))
     if "title" in arguments:
         payload["title"] = _text(arguments["title"], "title", MAX_TITLE, "task_title_invalid")
     return payload
@@ -283,9 +297,20 @@ def _answer(name: str, data: dict) -> dict:
             "“%s” already was as asked — %s." % (title, _facts(data)))
         actions = ["Tell the researcher what changed and how the task stands now, in words."]
     warnings = []
+    if data.get("outcome") == "partial":
+        changed = ", ".join(data.get("changed") or [])
+        summary = "Saved %s for “%s”; the remaining change could not finish — %s." % (changed, title, _facts(data))
+        warnings.append("The saved changes remain in place. The requested operation is only partly complete.")
+        actions = ["Tell the user exactly what was saved and the current state. Retry only the fields in data.recovery using update_task; omit its operation metadata."]
+    elif name == "schedule_task" and data.get("created") is False and data.get("state") == "paused":
+        warnings.append("This existing task remains paused and has no scheduled run until re-enabled.")
+        actions.append("Explain that it remains paused. If the user wants it running, use update_task with this taskId and paused: false.")
     if data.get("state") == "completed":
         warnings.append("This task has no run left on its schedule; it is listed as done until its schedule gives it one.")
-    return {"status": "success", "summary": summary, "data": data, "warnings": warnings, "next_actions": actions}
+    incomplete = data.get("outcome") == "partial"
+    paused_duplicate = name == "schedule_task" and data.get("created") is False and data.get("state") == "paused"
+    return {"status": "warning" if incomplete or paused_duplicate else "success",
+            "summary": summary, "data": data, "warnings": warnings, "next_actions": actions}
 
 
 def call(name: str, arguments: dict) -> dict:

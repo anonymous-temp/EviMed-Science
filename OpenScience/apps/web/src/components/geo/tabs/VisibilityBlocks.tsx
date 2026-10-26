@@ -165,6 +165,6 @@ export function ClusterMatrixCard({
 }
 
 /** The pools that have a group, in their order: what the pool choice offers. */
-export function poolsOf(groups: readonly GeoClusterRow[]) {
+export function poolsOf(groups: readonly { pool: GeoClusterRow["pool"] | null }[]) {
   return GEO_POOLS.filter((pool) => groups.some((row) => row.pool === pool)).map((pool) => ({ value: pool, label: GEO_POOL_KINDS[pool] }));
 }

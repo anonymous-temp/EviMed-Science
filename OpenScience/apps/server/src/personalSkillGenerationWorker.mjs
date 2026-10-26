@@ -55,6 +55,7 @@ export class PersonalSkillGenerationWorker {
           if (scope.accountCreatedAt !== job.payload.accountCreatedAt || scope.projectCreatedAt !== job.payload.projectCreatedAt) throw new HttpError(409, 'plugin_generation_changed', 'Project ownership changed.')
           const current = await this.service.current(project)
           const candidate = current?.payload.desired
+          if (job.payload.proofRuntimeGeneration && this.runtime.runtimeGeneration(project) !== job.payload.proofRuntimeGeneration) return this.jobs.finish(job.userId, job.id, job.leaseToken, { superseded: true })
           if (!candidate || (candidate.reference?.generationHash ?? null) !== job.payload.generationHash || candidate.selectionRevision !== job.payload.selectionRevision) {
             return this.jobs.finish(job.userId, job.id, job.leaseToken, { superseded: true })
           }
@@ -62,7 +63,7 @@ export class PersonalSkillGenerationWorker {
             if (lost || !(await this.jobs.renew(job.userId, job.id, job.leaseToken, this.leaseMs))) throw new HttpError(409, 'product_job_lease_lost', 'Generation ownership expired.')
             const latest = await this.service.current(project)
             const user = await this.service.resolveUser(project)
-            const selected = await this.service.skills.projectSelections(user, project)
+            const selected = await this.service.skills.projectSelections(user, project, { activation: false })
             if ((latest?.payload.desired?.reference?.generationHash ?? null) !== (candidate.reference?.generationHash ?? null) || selected.revision !== candidate.selectionRevision) {
               throw new HttpError(409, 'product_revision_conflict', 'Project skills changed.')
             }
@@ -79,6 +80,7 @@ export class PersonalSkillGenerationWorker {
           if (!candidate.reference) {
             const prepared = await this.service.reconcile(await this.service.resolveUser(project), project)
             if (!prepared.reference) {
+              if ((prepared.platformSkills?.disabled ?? []).length || (prepared.platformSkills?.disabledPlugins ?? []).length) return this.defer(job)
               // Remove stale optional bytes at this exclusive idle boundary even
               // when their replacement image cannot currently be prepared.
               const baseline = { reference: null, pins: [], selectionRevision: candidate.selectionRevision, findings: [] }
@@ -105,11 +107,18 @@ export class PersonalSkillGenerationWorker {
             if (proof.pendingSession) return this.defer(job)
             await guard()
             return this.jobs.finishWithLease(job.userId, job.id, job.leaseToken, { phase: 'effective', generationHash: candidate.reference.generationHash },
-              c => this.service.markEffective(project, candidate, proof.generation, c))
+              async c => {
+                await this.service.markEffective(project, candidate, proof.generation, c)
+                if (proof.composite) await this.runtime.markPersonalCompositeEffective(project, proof.composite.candidate, proof.composite.proof, c)
+              })
           } catch (error) {
             await guard()
             // Restore the exact prior immutable bytes, or the ordinary built-in
-            // baseline. A failure of optional personal methods never stops it.
+            // baseline. A failure of optional personal methods never stops it,
+            // and neither does an optional preference (a platform skill or an
+            // integration switched off) that could not be proven: the project
+            // keeps serving and the state says the choice is not in effect
+            // (owner rulings 2026-10-10).
             const baseline = { reference: null, pins: [], selectionRevision: 0, findings: [] }
             let restored = previous
             try { await this.runtime.replacePersonalSkillRuntime(project, restored ?? baseline) }
@@ -123,9 +132,15 @@ export class PersonalSkillGenerationWorker {
               restored = null
             }
             await guard()
+            let restoredProof = null
+            try {
+              restoredProof = await this.runtime.probePersonalSkillGeneration(project, restored ?? baseline)
+              if (restoredProof.pendingSession) throw new HttpError(502, 'personal_skill_apply_failed', 'The restored skill composition could not be verified.')
+              if (restoredProof.composite) await this.runtime.markPersonalCompositeEffective(project, restoredProof.composite.candidate, restoredProof.composite.proof, client)
+            } catch { restored = null; restoredProof = null }
             const latest = await this.service.current(project)
             await this.service.documents.put(job.userId, 'extension-generation', latest.id, { ...latest.payload,
-              effective: restored, phase: restored ? 'rolled-back' : 'failed', error: 'personal_skill_apply_failed' },
+              effective: restored, runtimeGeneration: restoredProof?.generation ?? null, phase: restored ? 'rolled-back' : 'failed', error: 'personal_skill_apply_failed' },
             { expectedRevision: latest.revision, projectId: project.id, transactionClient: client })
             return this.jobs.finish(job.userId, job.id, job.leaseToken, { phase: restored ? 'rolled-back' : 'failed', error: 'personal_skill_apply_failed' })
           }

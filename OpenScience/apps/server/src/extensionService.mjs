@@ -13,11 +13,12 @@ const RESERVED=/^(?:ownerid|userid|role|qualified|proof|apikey|token|secret|pass
 /** Persistent metadata only. Native installation, qualification authority and activation are separate trusted workers. */
 export class ExtensionService {
   /** `policyState` is the deployment file's own label ('current' | 'stale' | null); `report` hears a qualification record that could not be read as a record, never the caller's concern.
-   * @param {any} database @param {{catalogue?:any[],access?:ExtensionAccess,proofAuthority?:any,cancelPreparation?:any,connectionList?:any,catalogueGeneratedAt?:string,policyState?:string|null,report?:((finding:{catalogueId:string,code:string})=>void)|null}} options */
-  constructor(database,{catalogue=[],access=new ExtensionAccess(),proofAuthority=null,cancelPreparation=null,connectionList=null,catalogueGeneratedAt='1970-01-01T00:00:00.000Z',policyState=null,report=null}={}) {
+   * @param {any} database @param {{catalogue?:any[],catalogueAvailability?:{state:string,reason:string|null},access?:ExtensionAccess,proofAuthority?:any,cancelPreparation?:any,connectionList?:any,catalogueGeneratedAt?:string,policyState?:string|null,report?:((finding:{catalogueId:string,code:string})=>void)|null}} options */
+  constructor(database,{catalogue=[],catalogueAvailability={state:'available',reason:null},access=new ExtensionAccess(),proofAuthority=null,cancelPreparation=null,connectionList=null,catalogueGeneratedAt='1970-01-01T00:00:00.000Z',policyState=null,report=null}={}) {
     this.database=database;this.documents=new ProductDocuments(database);this.jobs=new ProductJobs(database);this.access=access;
     this.proofAuthority=proofAuthority;this.cancelPreparation=cancelPreparation;this.catalogueGeneratedAt=catalogueGeneratedAt;
     this.connectionList=connectionList;this.policyState=policyState;this.report=report;
+    this.catalogueAvailability=Object.freeze({...catalogueAvailability});
     /** Last time each unreadable record was reported: a polled page must not write one line per request. @type {Map<string,number>} */
     this.reported=new Map();
     this.entries=new Map();
@@ -60,7 +61,7 @@ export class ExtensionService {
     const items=[];
     for(const entry of this.entries.values())if(`${entry.title} ${entry.id}`.toLowerCase().includes(query.toLowerCase()))items.push({id:entry.id,title:entry.title,
       coordinate:entry.coordinate,executionClass:entry.executionClass,integrity:entry.integrity,settingsSchema:entry.settingsSchema,...await this.evidence(entry)});
-    return{items,generatedAt:this.catalogueGeneratedAt,...(this.policyState?{policyState:this.policyState}:{})};
+    return{items,generatedAt:this.catalogueGeneratedAt,availability:this.catalogueAvailability,...(this.policyState?{policyState:this.policyState}:{})};
   }
   /** Only current actor/project references are listed; never credential values. @param {any} user @param {any} input */
   async connections(user,input) {
@@ -257,7 +258,7 @@ export class ExtensionService {
     const row=await this.database.transaction(async client=>{
       await this.access.account(user,client);const project=await this.access.project(user,projectId,{manage:true,client}),selections=[];
       const installations=new Map();
-      for(const id of [...ids].sort()){const installation=await this.read(user,'extension-installation',id,client);if(!installation)throw missing();installations.set(id,installation);}
+      for(const id of [...ids].sort()){const installation=await this.read(user,'extension-installation',id,client,true);if(!installation)throw missing();installations.set(id,installation);}
       // Install also takes this mutex only after its installation lock.
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`extension-project:${project.userId}:${project.id}`]);
       const previous=await this.read({id:project.userId},'extension-defaults',this.projectDocumentId(project.id),client);
@@ -266,7 +267,9 @@ export class ExtensionService {
         if(typeof selected.enabled!=='boolean')throw new HttpError(400,'extension_contract_invalid','Invalid extension selection.');
         const installation=installations.get(selected.installationId);
         const prior=previous?.payload.selections?.find(item=>item.installationId===selected.installationId);
-        const moved=prior&&(prior.integrity!==installation.payload.integrity||canonicalExtensionCoordinate(prior.coordinate)!==canonicalExtensionCoordinate(installation.payload.coordinate));
+        const removed=Boolean(installation.deleted_at||installation.deletedAt);
+        if(removed&&!prior)throw missing();
+        const moved=prior&&(removed||prior.integrity!==installation.payload.integrity||canonicalExtensionCoordinate(prior.coordinate)!==canonicalExtensionCoordinate(installation.payload.coordinate));
         if(moved){
           const sameSettings=canonicalJson(selected.settings)===canonicalJson(prior.settings);
           const refs=extensionArray(selected.connectionRefs,64).map(extensionIdentifier);

@@ -6,7 +6,7 @@ import { HttpError } from "./security.mjs";
  * metadata can never supply these identities or imply a qualification proof.
  * @param {any} runtime */
 export async function personalSkillRuntimeIdentity(runtime) {
-  const image = await runtime.inspectRuntimeImage();
+  const image = await (runtime.generationImageIdentity ? runtime.generationImageIdentity() : runtime.inspectRuntimeImage());
   if (!/^sha256:[a-f0-9]{64}$/.test(image?.imageId ?? "")) {
     throw new HttpError(503, "runtime_image_unavailable", "The personal skill runtime image is unavailable.");
   }

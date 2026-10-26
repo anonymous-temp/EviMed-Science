@@ -11,10 +11,21 @@ test("every file that records which version of a value profile something stood o
   // write or read a version number; a file not named here that uses one has found a reference to add to `GEO_VALUE_REFERENCES` (and to
   // this list, with the object that holds it).
   const accounted = {
+    "geoAnalysisEvidence.mjs": "copies the current profile version and complete finding definitions into self-contained journey analysis objects; no deferred profile lookup",
+    "geoAnalysisMetrics.mjs": "reads existing rounds.ref.evaluationBasis entity identity and frozen metadata for digests; no new profile pointer",
+    "geoAnalysisSupport.mjs": "reads existing facts judgment and frozen round versions, then copies complete finding definitions into support rows; no independent stored pointer",
+    "geoDiagnosisReview.mjs": "reuses the existing facts.judge_extract.valueBasisVersion pointer; assessment history stores no new value-profile pointer",
+    "geoErrors.mjs": "reads only frozen evaluationBasis.claims to match a historical claim identity, without storing a value-profile version",
     "geoJudge.mjs": "facts.judge_extract.valueBasisVersion: the version an answer was judged against",
+    "geoLearningSignals.mjs": "reads only evaluationBasis.claims; its assessment preserves those claims without retaining a value-profile version pointer",
+    "geoLegacyErrorIdentity.mjs": "reads only immutable frozen evaluationBasis.claims for identity promotion, never stores a value-profile version pointer",
     "geoMeasureStore.mjs": "rounds.ref.evaluationBasis.value.version: the profile a round froze when it started",
     "geoOrchestrator.mjs": "schedule_marks.detail.basisVersion: the version a research request was made on",
+    "geoReadScope.mjs": "reads only frozen evaluationBasis.claims to retain the exact error identity; no new value-profile version pointer is stored",
     "geoService.mjs": "the value read, which reports the basis version of the observations it counts",
+    "geoSignalDiscovery.mjs": "reads frozen claims for error identity and records source-change profileVersionAtDetection, protected by product signal and signal-context references",
+    "geoSignalInputs.mjs": "dereferences the bound signal context basis.event.profileVersionAtDetection to retrieve the preserved finding by digest",
+    "geoSignals.mjs": "stores source-change basis.profileVersionAtDetection and copies it into a staged signal context basis.event",
     "geoStore.mjs": "articles.value_context.basisVersion: the version an article stands on",
     "geoValueImport.mjs": "the research result the profile itself holds, copied from the request",
     "geoValueStore.mjs": "the coverage read, which groups the observations by the basis version of the answer",
@@ -22,7 +33,8 @@ test("every file that records which version of a value profile something stood o
   };
   const found = [];
   for (const name of (await readdir(SRC)).filter((entry) => /^geo.*\.mjs$/.test(entry)).sort()) {
-    if (/\b(?:basisVersion|valueBasisVersion|evaluationBasis)\b/.test(await readFile(new URL(name, SRC), "utf8"))) found.push(name);
+    // geoSignals copies the complete basis dynamically; keep that producer accounted for independently of its validation reads.
+    if (name === "geoSignals.mjs" || /\b(?:basisVersion|valueBasisVersion|evaluationBasis|profileVersionAtDetection)\b/.test(await readFile(new URL(name, SRC), "utf8"))) found.push(name);
   }
   assert.deepEqual(found, Object.keys(accounted).sort(), "a file that records a version of the profile is named here and in the table, or the pruning loses it");
 });

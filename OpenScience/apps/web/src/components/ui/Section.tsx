@@ -40,23 +40,25 @@ export function BlockHeading({ className, children }: { className?: string; chil
  * </Section>
  * ```
  */
-export function Section({ title, count, toolbar, level = "section", className, children }: {
+export function Section({ title, count, toolbar, level = "section", compact = false, className, children }: {
   title: string;
   /** A grey count at the heading's end: 12, or 「3 / 12」. */
   count?: number | string;
   /** The controls of this block alone, at the heading's far end. */
   toolbar?: ReactNode;
   level?: "section" | "sub";
+  /** Quiet catalogue groups retain their semantic heading level without competing with item titles. */
+  compact?: boolean;
   className?: string;
   children: ReactNode;
 }) {
   const headingId = useId();
   const Heading = level === "sub" ? "h3" : "h2";
   return (
-    <section aria-labelledby={headingId} className={cn(level === "sub" ? "mt-6 first:mt-0" : "mt-8 first:mt-0", className)}>
+    <section aria-labelledby={headingId} className={cn(level === "sub" || compact ? "mt-6 first:mt-0" : "mt-8 first:mt-0", className)}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="flex min-w-0 items-baseline gap-2">
-          <Heading id={headingId} className={cn("min-w-0 font-semibold text-text", level === "sub" ? "text-ui" : "text-section")}>{title}</Heading>
+          <Heading id={headingId} className={cn("min-w-0 font-semibold", compact ? "text-ui text-text-2" : level === "sub" ? "text-ui text-text" : "text-section text-text")}>{title}</Heading>
           {count !== undefined && <span className="shrink-0 text-caption tabular-nums text-text-3">{count}</span>}
         </div>
         {toolbar}

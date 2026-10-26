@@ -55,7 +55,7 @@
 
 import {
   LEARNING_CORRECTION_VERDICTS, LEARNING_EVIDENCE_VERDICTS, LEARNING_FOLLOW_UP_WINDOW_MS, LEARNING_RULE_VERDICTS, LEARNING_STEER_VERDICTS,
-  identifierShapesIn, learningRunOutcome,
+  identifierShapesIn, isLearningCorrection, isResearcherOwnedWork, learningRunOutcome,
 } from "@evimed/domain";
 import { followUpAnchors, renderFollowUpAnchors } from "@evimed/domain/follow-up-examples";
 import { readArtifactShapes } from "./artifactShapes.mjs";
@@ -287,11 +287,15 @@ export class LearningEvidence {
    *   examples?: { select: (message: string) => Promise<{ examples: any[], mode: string }> } | null,
    *   methodsOpened?: ((project: any, run: any) => Promise<{ id: string, digest: string, title: string, whenToUse: string }[]>) | null,
    *   resolveProject?: ((userId: string, projectId: string) => Promise<any>) | null,
+   *   contextProvenance?: any,
    *   readShapes?: typeof readArtifactShapes, report?: (reason: string) => void, observe?: (outcome: string) => void, periodDays?: number, now?: () => Date }} dependencies
+   *   `contextProvenance` names a shared GEO project's policy and observes what a person actually typed into a run of it
+   *   (`geoContextProvenance.mjs`): such a project learns only from attributed human input, inside the project.
    */
   constructor({ feedback, jobs, agentRuns, triggers, judge = null, scripts = null, examples = null, methodsOpened = null, resolveProject = null, readShapes = readArtifactShapes,
-    report = () => {}, observe = () => {}, periodDays = 90, now = () => new Date() }) {
+    report = () => {}, observe = () => {}, periodDays = 90, now = () => new Date(), contextProvenance = null }) {
     if (!feedback || !jobs || !agentRuns || !triggers) throw new TypeError("Learning evidence needs the feedback ledger, the job queue, the run ledger and the triggers.");
+    this.contextProvenance = contextProvenance;
     this.feedback = feedback;
     this.jobs = jobs;
     this.agentRuns = agentRuns;
@@ -366,11 +370,15 @@ export class LearningEvidence {
    * @param {any} project @param {any} run @param {{ guestInfluence?: boolean }} [options]
    */
   async afterRun(project, run, { guestInfluence = false } = {}) {
+    if (!isResearcherOwnedWork(run)) return { settle: null };
+    const policy = await this.contextProvenance?.policyFor(project);
+    const observation = policy?.kind === 'geo-project' ? await this.contextProvenance.observeRun(project, run) : null;
     if (Array.isArray(run.steers) && run.steers.length) {
       const judging = this.judge?.available === true;
-      const work = this.#recordSteers(project, run, { judge: judging });
+      const work = this.#recordSteers(project, run, { judge: judging, observation });
       if (judging) this.#background(work); else await work;
     }
+    if (observation) await this.#consumedFollowUp(project,run,observation).catch(()=>this.#failed('record_failed'));
     if (run.status !== "succeeded" || !leftFiles(run)) return { settle: null };
     const finished = Date.parse(String(run.finishedAt ?? ""));
     const due = new Date((Number.isFinite(finished) ? finished : this.now().getTime()) + LEARNING_FOLLOW_UP_WINDOW_MS);
@@ -384,16 +392,55 @@ export class LearningEvidence {
     }
   }
 
+  /** The attributed human input of a shared GEO project's run, or null for any other project. @param {any} project @param {any} run */
+  async #sharedObservation(project, run) {
+    const policy = await this.contextProvenance?.policyFor(project);
+    return policy?.kind === 'geo-project' ? this.contextProvenance.observeRun(project, run) : null;
+  }
+
+  /** Shared follow-ups become observations only after their exact native
+   * turn consumed. Sequence identity chooses the predecessor, never time. */
+  async #consumedFollowUp(project, run, observation) {
+    if (!this.judge?.available || !Number.isSafeInteger(run.nativeTurn?.startSeq)) return;
+    const transcript=await this.contextProvenance.readTranscript(project,run);
+    const starts=[...new Set(transcript.messages.filter(message=>!message.sessionId||message.sessionId===run.sessionId)
+      .map(message=>message.turnStartSeq).filter(seq=>Number.isSafeInteger(seq)&&seq<run.nativeTurn.startSeq))];
+    if (!starts.length) return;
+    const predecessor=Math.max(...starts),runs=await this.agentRuns.list(project);
+    const matches=runs.filter(previous=>previous.sessionId===run.sessionId&&previous.nativeTurn?.startSeq===predecessor);
+    if (matches.length!==1 || matches[0].status!=='succeeded') return;
+    const previous=matches[0];
+    if (await this.#triggers.refusalFor(project,previous,{runs})) return;
+    const earlier=await this.contextProvenance.observeRun(project,previous),message=observation.humanText;
+    if (!message || unsafeToKeep(message)) return;
+    // Read as an ordinary follow-up is (`readFollowUp`: the examples, and the second reading of an adoption).
+    const verdict=await readFollowUp({ judge: this.judge, examples: this.examples, observe: (outcome) => this.#saw(outcome) },
+      { message, previousRequest: earlier.humanText, methods: [], adoptable: deliveredSomething(previous) },
+      { userId: project.userId, projectId: project.id, runId: previous.id });
+    if ('failure' in verdict) { this.#failed(verdict.failure); return; }
+    const corrected = LEARNING_CORRECTION_VERDICTS.includes(verdict.verdict);
+    const {event}=await this.feedback.recordLearningEvidence(project.userId,{runId:previous.id,projectId:project.id,key:`consumed:${run.id}`,
+      detail:{evidence:'follow-up',...verdict,sessionId:run.sessionId,at:this.now().toISOString(),scope:learningScopeOf(previous),endedAt:previous.finishedAt,
+        ...(!corrected && leftFiles(previous) ? { shape: await this.#shapeOf(project, previous) } : {}),
+        sourceProjectId:project.id,sourceRunIds:[previous.id,run.id],inputReceiptRefs:[...new Set([...earlier.inputReceiptRefs,...observation.inputReceiptRefs])]}});
+    if (isLearningCorrection(event.detail)) await this.#triggers.afterCorrection(project,{event,runId:previous.id});
+    else if (verdict.verdict === "adopt") await this.#triggers.afterAdoption(project,{event,runId:previous.id});
+  }
+
   /**
    * What the researcher typed into a run, written as evidence in their own words, once each (the ledger keys a steer by its request). With
    * `judge`, the newest `MAX_STEERS_JUDGED` are read first, by the follow-up judge in `steer` mode, and carry its verdict, rule and the methods it
    * names; a steer that could not be read (no judge, too many in flight, an answer that fails a check) is recorded unjudged, which reads as a
    * correction. Idempotent: the settling of the run calls this without a judge to record any steer the background reading did not reach.
-   * @param {any} project @param {any} run @param {{ judge: boolean, count?: boolean }} options `count`: whether a steer that is not kept is counted
+   * @param {any} project @param {any} run @param {{ judge: boolean, count?: boolean, observation?: any }} options `count`: whether a steer that is not kept is counted;
+   *   `observation`: a shared GEO project's attributed input for the run, when the caller already read it (null: none, undefined: read it here)
    *   (the settling goes over the same steers again and counts nothing twice)
    */
-  async #recordSteers(project, run, { judge, count = true }) {
-    const steers = (Array.isArray(run.steers) ? run.steers : []).filter((/** @type {any} */ steer) => steer?.text);
+  async #recordSteers(project, run, { judge, count = true, observation = undefined }) {
+    // A shared GEO project's run keeps only the steers a person's attributed input actually carried, with the trace that says so.
+    const seen = observation === undefined ? await this.#sharedObservation(project, run) : observation;
+    const steers = (Array.isArray(run.steers) ? run.steers : []).filter((/** @type {any} */ steer) => steer?.text
+      && (!seen || seen.humanText.includes(String(steer.text))));
     const newest = new Set([...steers].sort((left, right) => String(right.at ?? "").localeCompare(String(left.at ?? ""))).slice(0, MAX_STEERS_JUDGED));
     const opened = judge && newest.size ? await this.#opened(project, run) : [];
     for (const steer of steers) {
@@ -401,7 +448,8 @@ export class LearningEvidence {
       const read = judge && newest.has(steer) ? await this.#readSteer(project, run, steer, opened) : null;
       await this.feedback.recordLearningEvidence(project.userId, {
         runId: run.id, projectId: project.id, key: String(steer.requestId ?? ""), occurredAt: steer.at,
-        detail: { evidence: "steer", quote: steer.text, ...(read ?? {}), sessionId: run.sessionId, at: steer.at ?? this.now().toISOString(), scope: learningScopeOf(run) },
+        detail: { ...(seen ? { inputReceiptRefs: seen.inputReceiptRefs, sourceRunIds: [run.id], sourceProjectId: project.id } : {}),
+          evidence: "steer", quote: steer.text, ...(read ?? {}), sessionId: run.sessionId, at: steer.at ?? this.now().toISOString(), scope: learningScopeOf(run) },
       }).catch(() => this.#failed("record_failed"));
     }
   }
@@ -437,6 +485,9 @@ export class LearningEvidence {
    */
   async mirrorResultCorrected(project, { event, runId }) {
     const run = (await this.agentRuns.list(project).catch(() => [])).find((/** @type {any} */ item) => item?.id === runId);
+    const policy = await this.contextProvenance?.policyFor(project);
+    const observation = policy?.kind === 'geo-project' && run ? await this.contextProvenance.observeRun(project, run) : null;
+    if (policy?.kind === 'geo-project' && (!observation || !event?.detail?.instruction || !observation.humanText.includes(event.detail.instruction))) return null;
     const instruction = typeof event?.detail?.instruction === "string" && !unsafeToKeep(event.detail.instruction) ? event.detail.instruction : null;
     await this.feedback.recordLearningEvidence(project.userId, {
       runId, projectId: project.id, key: String(event?.id ?? ""), occurredAt: event?.occurredAt,
@@ -455,6 +506,9 @@ export class LearningEvidence {
    * @returns {Promise<{ recorded: boolean, reason?: string, verdict?: string, runId?: string, queued?: string[] }>}
    */
   async onNewTurn(project, { sessionId, text, requestId = "", dispatchId = null }) {
+    // This callback runs before native consumption. Shared observations are
+    // recorded by afterRun once the authenticated input actually consumed.
+    if ((await this.contextProvenance?.policyFor(project))?.kind === 'geo-project') return { recorded: false, reason: 'input_not_consumed' };
     const message = String(text ?? "").trim();
     if (!message || !sessionId || !this.judge) return { recorded: false, reason: "no_judge" };
     const now = this.now().getTime();
@@ -605,19 +659,28 @@ export class LearningEvidence {
     // Silence is unknown, not approval: a run nobody accepted, adopted or used is neither clean nor corrected, and feeds nothing.
     if (outcome !== "clean") return { settled, routine: false, outcome };
     // A run the researcher kept may have run a program it has run before: counted toward a script lesson. Never a failure of the settling.
-    await this.scripts?.afterSettle(project, run).catch(() => null);
+    // A shared GEO project's runs feed no script lesson: the recurrence a code skill is counted over is the account's, across projects.
+    if ((await this.contextProvenance?.policyFor(project))?.kind !== 'geo-project') await this.scripts?.afterSettle(project, run).catch(() => null);
     if (!shape.length) return { settled, routine: false, outcome };
     // The clean runs of this scope in this run's period: the family a routine is counted over.
     const period = Math.floor(Date.parse(String(run.finishedAt ?? run.startedAt ?? "")) / this.periodMs);
     if (!Number.isFinite(period)) return { settled, routine: false, outcome };
     const resetAt = await this.#triggers.resetInstantOf?.(project.userId);
-    const family = (await this.feedback.cleanSettledRuns(project.userId, { scope, from: new Date(period * this.periodMs), to: new Date((period + 1) * this.periodMs) }))
+    const policy = await this.contextProvenance?.policyFor(project);
+    let family = (await this.feedback.cleanSettledRuns(project.userId, { scope,
+      ...(policy?.kind === 'geo-project' ? {projectId:policy.controlProjectId} : {}), from: new Date(period * this.periodMs), to: new Date((period + 1) * this.periodMs) }))
       // A run that ended before the account reset its memory is no peer of a routine, however recently it was settled (review M-11).
       .filter((member) => {
         if (!endedBeforeReset({ finishedAt: member.endedAt ?? member.at }, resetAt ?? null)) return true;
         recordSkippedBeforeReset("routine_peer");
         return false;
       });
+    if (policy?.kind === 'geo-project') family = family.filter(member => member.projectId === policy.controlProjectId);
+    else if (this.contextProvenance) {
+      const allowed = [];
+      for (const member of family) if (!member.projectId || (await this.contextProvenance.policyFor({userId:project.userId,id:member.projectId})).kind !== 'geo-project') allowed.push(member);
+      family = allowed;
+    }
     const guest = guestInfluence || await this.#triggers.guestInfluenced?.(project, run).catch(() => false) === true;
     const lesson = routineLessonFor({ run, scope, shape, family, guestInfluence: guest });
     const queued = lesson ? await this.#triggers.queue(project, run, lesson) : false;

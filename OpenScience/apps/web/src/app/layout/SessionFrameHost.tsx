@@ -6,6 +6,7 @@ import { isConversationRun } from "@/lib/conversations";
 import { conversationTitle } from "@/lib/conversationTitles";
 import { conversationProjectFromLocation } from "@/lib/runtimeUiNavigation";
 import { useProjectStore } from "@/lib/projects";
+import { geoIdFromChatPath } from "@/lib/geoLocation";
 import { chatPath, chatSessionId, isChatPath } from "@/lib/runLocation";
 import { isPanePath, useTaskPane } from "@/lib/taskPane";
 
@@ -79,14 +80,19 @@ function releasesSettled(pending: readonly Promise<void>[], ms: number): Promise
 export function SessionFrameHost() {
   const location = useLocation();
   const navigate = useNavigate();
-  const currentProjectId = useProjectStore((state) => state.currentId);
+  const ownedProjectId = useProjectStore((state) => state.currentId);
   const addressedProject = conversationProjectFromLocation(location) ?? ((location.state as { globalAssistant?: boolean } | null)?.globalAssistant ? "default" : null);
-  const waitingForProject = addressedProject !== null && currentProjectId !== addressedProject;
-  const onChat = isChatPath(location.pathname) && !waitingForProject;
+
   // A page asking for the frame over its pane — a task's execution, a study's own conversation — in this project.
   const taskPane = useTaskPane();
   const onPane = isPanePath(location.pathname);
-  const taskSession = onPane && taskPane && taskPane.projectId === currentProjectId ? taskPane.sessionId : null;
+  const geoPane = onPane && taskPane?.scope ? taskPane : null;
+  const currentProjectId = geoPane ? `geo:${geoPane.scope!.geoProjectId}:${geoPane.sessionId}` : ownedProjectId;
+  const scopedPanes = useRef(new Map<string, typeof geoPane>());
+  if (geoPane) scopedPanes.current.set(currentProjectId, geoPane);
+  const waitingForProject = addressedProject !== null && currentProjectId !== addressedProject;
+  const onChat = isChatPath(location.pathname) && !waitingForProject;
+  const taskSession = onPane && taskPane && (geoPane || taskPane.projectId === currentProjectId) ? taskPane.sessionId : null;
   // The frame is on screen: as the chat surface, or placed over a task's pane.
   const onSurface = onChat || taskSession !== null;
   const sessionId = onChat ? chatSessionId(location.pathname) : taskSession;
@@ -238,8 +244,8 @@ export function SessionFrameHost() {
     const afterRelease = evictedFor.current === admitted;
     evictedFor.current = null;
     if (onSurface && uiOrigin) return;
-    warmWebRuntime(admitted, { afterRelease });
-  }, [admitted, onSurface, uiOrigin]);
+    if (!geoIdFromChatPath(location.pathname) && !admitted.startsWith("geo:")) warmWebRuntime(admitted, { afterRelease });
+  }, [admitted, onSurface, uiOrigin, location.pathname]);
 
   // Where the task page's pane is, in this host's own coordinates, kept current. A pane moves with the window, the sidebar, the task
   // bar growing a line, a scroll: its size is observed, and so are the window and every scroll, and the host re-reads it each render.
@@ -272,17 +278,6 @@ export function SessionFrameHost() {
   }, [paneElement]);
   useLayoutEffect(() => { measure.current(); });
 
-  if (!uiOrigin) {
-    if (!onChat) return null;
-    if (originLoading) return <FrameSkeleton title={conversationTitle(sessionId)} />;
-    return (
-      <div role="alert" className="flex h-full flex-col items-center justify-center gap-3 text-ui text-error">
-        <p>对话暂时无法连接</p>
-        <Button variant="ghost" onClick={() => setOriginAttempt((value) => value + 1)}>重试</Button>
-      </div>
-    );
-  }
-
   // Over a task's pane the host itself takes no room and no clicks; only the frame's box, at the pane's rectangle, does.
   const placed = !onChat && taskSession !== null;
   const box = placed && placement ? { left: placement.left, top: placement.top, width: placement.width, height: placement.height } : undefined;
@@ -290,13 +285,21 @@ export function SessionFrameHost() {
     // Hidden rather than unmounted: see the note above.
     <div ref={root} className={cn(onChat ? "relative h-full w-full" : placed ? "pointer-events-none absolute inset-0" : "hidden")}
       data-session-surface={onChat ? "visible" : placed ? "task" : "hidden"}>
-      {cached.map((projectId) => {
+      {!uiOrigin && onSurface && (onChat || box) && <div data-task-frame={placed ? "" : undefined} className={cn("absolute pointer-events-auto", !placed && "inset-0")} style={box}>
+        {originLoading ? <FrameSkeleton title={conversationTitle(sessionId)} /> : <div role="alert" className="flex h-full flex-col items-center justify-center gap-3 text-ui text-error">
+          <p>对话暂时无法连接</p>
+          <Button variant="ghost" onClick={() => setOriginAttempt(value => value + 1)}>重试</Button>
+        </div>}
+      </div>}
+      {uiOrigin && cached.map((projectId) => {
         const here = projectId === currentProjectId;
         return (
           <div key={projectId} data-task-frame={placed && here ? "" : undefined}
             className={cn("absolute", !placed && "inset-0", (!here || (placed && !box)) && "hidden", placed && "pointer-events-auto")} style={here ? box : undefined}>
             <RuntimeUiFrame
-              projectId={projectId}
+              projectId={scopedPanes.current.get(projectId)?.projectId ?? projectId}
+              scope={scopedPanes.current.get(projectId)?.scope}
+              scopeOwner={scopedPanes.current.get(projectId)?.owner === true}
               origin={uiOrigin}
               sessionId={sessionId}
               active={onSurface && here}
@@ -308,7 +311,7 @@ export function SessionFrameHost() {
         );
       })}
       {/* This project has no surface yet: the one it displaces is still being released. */}
-      {onSurface && !cached.includes(currentProjectId) && (placed
+      {uiOrigin && onSurface && !cached.includes(currentProjectId) && (placed
         ? box && <div className="pointer-events-auto absolute" style={box}><FrameSkeleton title={conversationTitle(sessionId)} /></div>
         : <FrameSkeleton title={conversationTitle(sessionId)} />)}
     </div>

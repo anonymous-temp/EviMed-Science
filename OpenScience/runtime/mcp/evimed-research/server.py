@@ -1157,7 +1157,19 @@ def _validate(value, schema, path):
         if matches != 1:
             raise ValueError("%s must match exactly one allowed input form" % path)
     expected = schema.get("type")
-    if expected == "object":
+    if isinstance(expected, list):
+        # JSON Schema type arrays are a union, not oneOf: an integer can match both integer and number.
+        for allowed in expected:
+            try:
+                _validate(value, {**schema, "type": allowed}, path)
+                return
+            except ValueError:
+                continue
+        raise ValueError("%s must have one of the allowed types: %s" % (path, ", ".join(expected)))
+    if expected == "null":
+        if value is not None:
+            raise ValueError("%s must be null" % path)
+    elif expected == "object":
         if not isinstance(value, dict):
             raise ValueError("%s must be an object" % path)
         properties = schema.get("properties", {})
@@ -2246,7 +2258,9 @@ def _dispatch(name, arguments, execution_context=None):
             # run got a field wrong", and a write the store refused or one too
             # large in it, where it belongs.
             stop_reason = error.stop_reason()
-            if error.code == "geo_request_too_large":
+            if error.next_action():
+                next_action = error.next_action()
+            elif error.code == "geo_request_too_large":
                 next_action = "Send it again in smaller writes; nothing of this one was stored."
             elif stop_reason == "invalid_input":
                 next_action = "Correct the named field and call again."

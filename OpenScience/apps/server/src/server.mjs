@@ -2,6 +2,19 @@ import {RuntimePromptStops} from './runtimePromptStops.mjs';
 import {withSessionPromptAdmission} from './runtimePromptAdmission.mjs';
 import { resolveVcrReplyStudy,vcrReplyUsesStudy } from './vcrReplyContext.mjs';
 import { mirrorSourceRuntimeReplica } from "./sourceRuntimeReplica.mjs";
+import { canonicalJson } from "./geoStore.mjs";
+import { GeoNativeAuthority } from "./geoNativeAuthority.mjs";
+import { GeoNativeFramePolicy, createGeoFrameResolver } from "./geoNativeFramePolicy.mjs";
+import { GeoNativeInputs } from "./geoNativeInputs.mjs";
+import { GeoNativeSelections } from "./geoNativeSelections.mjs";
+import { GeoNativeMemoryContext } from "./geoNativeMemoryContext.mjs";
+import { GeoNativeMemoryRemember } from "./geoNativeMemoryRemember.mjs";
+import { ContextItemAuthorization, contextPolicyIdentity } from "./geoContextItems.mjs";
+import { GeoContextProvenance } from "./geoContextProvenance.mjs";
+import { platformSessionOf } from "./openVikingSessions.mjs";
+import { readVerifiedRunTranscript } from "./runTranscripts.mjs";
+import { GeoSharedContext } from "./geoSharedContext.mjs";
+import { createSharedKnowledgeContext } from "./sharedKnowledgeContext.mjs";
 import { createVcrStudyStart } from "./vcrStudyStart.mjs";
 import { WebVitals } from './webVitals.mjs';
 import { GeoJudge } from './geoJudge.mjs';
@@ -228,6 +241,7 @@ import { relationalIntegrity } from "./relationalIntegrity.mjs";
 import { MemoryIndexing } from "./memoryIndexing.mjs";
 import { OpenVikingEngine } from "./openVikingEngine.mjs";
 import { OpenVikingResources } from "./openVikingResources.mjs";
+import { OpenVikingCompileExecution } from "./openVikingCompileExecution.mjs";
 import { OpenVikingSourceSync, OpenVikingSourceSyncWorker, readableSourceProjects } from "./openVikingSourceSync.mjs";
 import { createOpenVikingModelCaller } from "./openVikingModelCaller.mjs";
 import { MemoryIndexWorker } from "./memoryIndexWorker.mjs";
@@ -308,6 +322,7 @@ import { runUsageKeys } from "./runUsage.mjs";
 import { inspectAutopilotDispatch, reclaimUnsentAutopilotRuntime } from "./autopilotDispatchRecovery.mjs";
 import { createAutopilotRunScope, episodeContextBlock, episodePlacementCounts, episodeVisibleText, noteEpisodePlacement } from "./autopilotEpisodeScope.mjs";
 import { createAutopilotRoutes } from "./autopilotRoutes.mjs";
+import { cancelScheduledRun } from "./autopilotRunCancellation.mjs";
 import { AutopilotWorker } from "./autopilotWorker.mjs";
 import { AutopilotPlanner, autopilotPlannerMetricFamily } from "./autopilotNextAction.mjs";
 // 「前沿动态」, the frontier feed (plan 2026-09-21 §7): the plugin client, the
@@ -378,6 +393,14 @@ import { FrontierComposer } from "./frontierComposer.mjs";
 // `geo` object (`geo.worker`, `geo.orchestrator`, `geo.market`, `geo.exporter`).
 import { GeoStore, deleteGeoProjectRows, deleteGeoUserRows, removeGeoScreenshotFiles } from "./geoStore.mjs";
 import { createGeoDeliveryImport } from "./geoDeliveryImport.mjs";
+import { createGeoArtifactRefresh, pinGeoRunOutputs } from "./geoPreservedRunImport.mjs";
+import { GeoPlanContext } from "./geoPlanContext.mjs";
+import { GeoSignals } from "./geoSignals.mjs";
+import { GeoSignalDiscovery } from "./geoSignalDiscovery.mjs";
+import { GeoSignalResults } from "./geoSignalResults.mjs";
+import { GeoSourceReviews } from "./geoSourceReviews.mjs";
+import { GeoSignalInputs } from "./geoSignalInputs.mjs";
+import { GeoArticleResults } from "./geoArticleResults.mjs";
 import { GeoCards } from "./geoCards.mjs";
 import { GeoMembers } from "./geoMembers.mjs";
 import { createGeoQuestionBank, questionBankSummary } from "./geoQuestionBank.mjs";
@@ -411,6 +434,8 @@ import { createOfficialZoneLookup } from "./vcrZoneLink.mjs";
 import { seedVcrCatalogue, vcrAudienceAllows, vcrReadiness } from "./vcrService.mjs";
 import { deleteVcrProjectRows, deleteVcrUserRows, removeVcrArtifacts } from "./vcrStoreBase.mjs";
 import { GeoMeasureStore } from "./geoMeasureStore.mjs";
+import { createGeoDiagnosisReview } from "./geoDiagnosisReview.mjs";
+import { createGeoLearningSignals } from "./geoLearningSignals.mjs";
 import { enqueueRound as enqueueGeoRound, geoMeasureState, tickProbe as tickGeoProbe } from "./geoProbeQueue.mjs";
 import { tickParse as tickGeoParse } from "./geoJudge.mjs";
 import { tickMetrics as tickGeoMetrics } from "./geoMetricsJob.mjs";
@@ -432,7 +457,7 @@ import { createMemoryAdmission } from "./memoryAdmission.mjs";
 import { isPlatformStartedRun } from "./memoryDispatch.mjs";
 import { OpenVikingSessions } from "./openVikingSessions.mjs";
 import { NativeMemoryOverlay } from "./nativeMemoryOverlay.mjs";
-import { NativeMemoryStore } from "./nativeMemoryStore.mjs";
+import { NativeMemoryStore, nativeConversationTitleKey } from "./nativeMemoryStore.mjs";
 import { NativeMemoryImport } from "./nativeMemoryImport.mjs";
 import { NativeMemoryWorker } from "./nativeMemoryWorker.mjs";
 import { NativeTurnCommit } from "./nativeTurnCommit.mjs";
@@ -1168,9 +1193,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const evolutionSignals = {record: async input => evolution?.loops.signals.record(input)};
   const evolutionModulePolicies = createModuleEvolutionPolicies({readPolicy: async moduleId => {
     if(!evolution) return null;
+    if(moduleId==='geo') return evolution.loops.policyBasis.readActive();
     const row=await evolution.service.get(`evolution-module-policy-${moduleId}`);
     return row?.payload.status==='active'?{revisionId:`${row.id}:${row.revision}`,policy:row.payload.policy}:null;
-  }});
+  },validateRevision:async(moduleId,revisionId)=>moduleId!=='geo'||Boolean(await evolution?.loops.policyBasis.revisionUsable(revisionId))});
   /** @type {ReturnType<typeof createEvidenceRecalculation> | null} */
   let evidenceRecalculation = null;
   /** @type {ReturnType<typeof createPredictionRegistry> | null} */
@@ -1187,6 +1213,29 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let officialPacks = null;
   const maintenanceMutation = (operation) => maintenanceService ? maintenanceService.withMutation(operation) : operation();
   const productDocuments = productDatabase ? new ProductDocuments(productDatabase) : null;
+  // The project floor survives GEO disable/removal and is reused by native context composition.
+  const sharedContextPolicies = productDatabase && productDocuments ? new GeoSharedContext({ database: productDatabase, documents: productDocuments }) : null;
+  let sharedKnowledgeContext = null;
+  /** @type {GeoNativeAuthority | null} */ let geoNativeAuthority = null;
+  /** @type {GeoNativeInputs | null} */ let geoNativeInputs = null;
+  /** @type {GeoNativeSelections | null} */ let geoNativeSelections = null;
+  const resolveContextSourceRun = async (userId, projectId, runId) => {
+    const run = await resolveLessonSourceRun(store, agentRuns, userId, projectId, runId);
+    return run ? { ...run, userId, projectId, automated: run.automated === true || run.trigger === "automated" } : null;
+  };
+  const contextItems = productDocuments && sharedContextPolicies ? new ContextItemAuthorization({ documents: productDocuments,
+    contextPolicies: sharedContextPolicies, resolveSourceRun: resolveContextSourceRun,
+    verifyAcceptedContext: request => contextProvenance.verifyAcceptedContext(request),
+    verifyMergedAncestor: request => contextProvenance.verifyMergedAncestor(request) }) : null;
+  const contextProvenance = productDocuments && sharedContextPolicies ? new GeoContextProvenance({ documents: productDocuments,
+    contextPolicies: sharedContextPolicies, contextItems,
+    nativeInputs: { forRun: (...args) => geoNativeInputs?.forRun(...args) ?? null },
+    resolveSourceRun: resolveContextSourceRun,
+    resolveProject: async (userId, projectId) => { const owner = await store.userById(userId); return owner ? store.requireProject(owner, projectId) : null; },
+    readTranscript: async (project, run) => ({ ...await readVerifiedRunTranscript(project, run, run.transcript?.sha256), sessionId: run.sessionId }),
+    historicalContextReceipt: (project, referenceId) => runtimeManager.historicalContextReceipt(project, referenceId) }) : null;
+  // KB reads also recognize actual automated module dispatches; memory eligibility stays narrower.
+  const sharedKnowledgeSessionProof = async (project, sessionId) => Boolean(await proveGeoKnowledgeSession(project, sessionId));
   const productJobs = productDatabase ? new ProductJobs(productDatabase) : null;
   // The one durable fact per source identifier (B5, plan 2026-10-05): the frontier feed, the evidence zone and the
   // Crossref lookup write what they saw about a retraction, correction, concern or new version; the result impact path,
@@ -1200,7 +1249,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const independentProductWork = work => productDatabase ? productDatabase.withoutTransactionClient(work) : work();
   const pluginService = productDatabase ? new PluginService(productDatabase, { jobs: productJobs, maxTimeoutMs: config.publicSourceGatewayTimeoutMs }) : null;
   const pluginRoutes = createPluginRoutes({ store, service: pluginService, maxJsonBytes: config.maxJsonBytes });
-  const inventoryRoutes = createInventoryRoutes({ store, pluginService, config });
+  const inventoryRoutes = createInventoryRoutes({ store, pluginService, config, builtinSettings: (user, project) => skillLibraryService?.projectBuiltins(user, project) ?? null });
   const extensionAccess = new ExtensionAccess({ store, studyAccess: async (user, projectId, { client }) => {
     if (!vcr) return null;
     const study = await vcr.store.studyByControlProject(user.id, projectId, client);
@@ -1223,6 +1272,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     access: extensionAccess, catalogue: overrides.extensionCatalogue ?? extensionDeployment.catalogue,
     proofAuthority: overrides.extensionProofAuthority ?? null,
     catalogueGeneratedAt: overrides.extensionCatalogueGeneratedAt ?? extensionDeployment.generatedAt,
+    catalogueAvailability: overrides.extensionCatalogue ? { state: 'available', reason: null }
+      : { state: extensionDeployment.status === 'configured' ? 'available' : 'unavailable',
+        reason: extensionDeployment.status === 'configured' ? null : extensionDeployment.status === 'unconfigured' ? 'catalogue_unconfigured' : 'catalogue_unavailable' },
     // Evidence labels, never gates (owner ruling 2026-10-04): the deployment file's own staleness travels to the
     // catalogue, and a qualification record that cannot be read as a record is logged for the operator while the
     // researcher sees the extension without a label.
@@ -1263,6 +1315,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // What each shipped or imported skill needs against what the runtime image installs: a label beside the package.
   const skillSupply = new SkillSupply({ config });
   const skillLibraryService = productDatabase ? new SkillLibraryService(productDatabase, {
+    builtinAvailability: { annotation: config.runtimeAnnotationEnabled !== false, mermaid: config.runtimeMermaidEnabled !== false },
     artifacts: skillArtifacts, supply: skillSupply,
     // The skills the platform ships, listed and read from the control plane's own packages — no runtime needed.
     platformCatalogue: createPlatformSkillCatalogue({ rootDir: config.rootDir, dataDir: config.dataDir, packAllowed: user => moduleState(config, user, "geo") === "on", loopxEnabled: config.loopxEnabled !== false }),
@@ -1289,12 +1342,29 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     },
   }) : null;
   const skillLibraryRoutes = createSkillLibraryRoutes({ store, service: skillLibraryService, maxJsonBytes: config.maxJsonBytes,
-    saveProject: (user, project, input) => pluginService.withAdmission(project, () => productDatabase.transaction(async () => {
+    saveProject: (user, project, input) => pluginService.withAdmission(project, async () => {
       const selection = await skillLibraryService.saveProjectSelections(user, project, input);
       if (config.runtimeMode !== "kernel") return selection;
-      const candidate = await personalSkillGenerations.reconcile(user, project);
-      return { ...selection, activation: { phase: "waiting", ...(candidate.waiting ? { code: "runtime_image_unavailable" } : {}) } };
-    })),
+      try { await personalSkillGenerations.reconcile(user, project); }
+      catch { await personalSkillGenerations.recordFailure(user, project, selection.revision); }
+      return skillLibraryService.projectSelections(user, project);
+    }),
+    savePlatform: (user, project, input) => pluginService.withAdmission(project, async () => {
+      const selection = await skillLibraryService.saveProjectPlatform(user, project, input);
+      if (config.runtimeMode === 'kernel') {
+        try { await personalSkillGenerations.reconcile(user, project); }
+        catch { await personalSkillGenerations.recordFailure(user, project, selection.revision); }
+      }
+      return skillLibraryService.projectPlatform(user, project);
+    }),
+    saveBuiltins: (user, project, input) => pluginService.withAdmission(project, async () => {
+      const selection = await skillLibraryService.saveProjectBuiltins(user, project, input);
+      if (config.runtimeMode === 'kernel') {
+        try { await personalSkillGenerations.reconcile(user, project); }
+        catch { await personalSkillGenerations.recordFailure(user, project, selection.revision); }
+      }
+      return skillLibraryService.projectBuiltins(user, project);
+    }),
   });
   const personalSkillTransfer = skillLibraryService ? new PersonalSkillTransfer({ skills: skillLibraryService, artifacts: skillArtifacts }) : null;
   const personalSkillTransferRoutes = createPersonalSkillTransferRoutes({ store, service: personalSkillTransfer, skills: skillLibraryService,
@@ -1352,6 +1422,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // The Resources and Compile half of the engine (`openVikingResources.mjs`): a project's documents as the files a compile
   // reads, and the wiki and the graph it writes. Built on the same client, so it exists exactly when the engine does.
   const openVikingResources = overrides.openVikingResources ?? new OpenVikingResources({ client: openVikingClient });
+  const sharedKnowledgeCompileExecution = new OpenVikingCompileExecution({ client: openVikingClient, controller: new RuntimeControllerClient(config),
+    documents: productDocuments, ensureOwner: () => ensureOpenVikingProject(store) });
   // The engine's own model calls, as a caller of the model gateway (`openVikingModelCaller.mjs`).
   const openVikingModelCaller = createOpenVikingModelCaller({ config, usageLedger, ensureOwner: () => ensureOpenVikingProject(store) });
   // Whether the capsule index has an index to write to. Decided by the same function the index provider reads, so that the writer
@@ -1371,17 +1443,23 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     timeoutMs: config.memoryGatewayTimeoutMs, fastTimeoutMs: Math.round(Number(config.memoryGatewayTimeoutMs ?? 4_000) / 3),
   });
   const nativeMemoryOverlay = overrides.nativeMemoryOverlay ?? new NativeMemoryOverlay({ database: productDatabase });
+  // The registered memory namespaces of an account: its own, and each shared GEO project's (`geoNativeMemoryContext.mjs`).
+  const nativeMemoryContexts = productDatabase && sharedContextPolicies ? new GeoNativeMemoryContext({ database: productDatabase,
+    documents: productDocuments, policies: sharedContextPolicies, sessions: openVikingSessions,
+    proveCapture: (memoryContext, sessionId) => proveGeoCapture({ userId: memoryContext.ownerId, id: memoryContext.projectId }, platformSessionOf(sessionId)),
+    settingsForOwner: userId => memorySettings.settings(userId) }) : null;
+  const nativeRememberJournal = nativeMemoryContexts ? new GeoNativeMemoryRemember({ contexts: nativeMemoryContexts, overlay: nativeMemoryOverlay }) : null;
   // The memory page, the map and the account's own operations, and the worker that reads what the engine did into the overlay,
   // replays what failed and carries a changed source's label into the files that name it.
   // One judge of whether a line says what another says: it holds a line the engine wrote near one the person removed out (one call a
   // commit) and finds the other lines that say what a line the person forgot said (`nativeMemoryRejections.mjs`, `nativeMemoryForgetEverywhere.mjs`).
   const rejectionJudge = createRejectionJudge({ config, usageLedger });
-  const nativeMemory = new NativeMemoryStore({ sessions: openVikingSessions, overlay: nativeMemoryOverlay, rejectionJudge,
+  const nativeMemory = new NativeMemoryStore({ sessions: openVikingSessions, overlay: nativeMemoryOverlay, memoryContexts: nativeMemoryContexts, rejectionJudge,
     report: (line) => process.stderr.write(`${line}\n`),
     // The conversation a memory came out of is named from the run ledger, which is composed further down.
     conversationTitles: (userId, refs) => nativeConversationTitles(userId, refs) });
   const nativeMemoryWorker = new NativeMemoryWorker({
-    config, memorySettings, sessions: openVikingSessions, overlay: nativeMemoryOverlay, nativeMemory,
+    config, memorySettings, sessions: openVikingSessions, overlay: nativeMemoryOverlay, nativeMemory, memoryContexts: nativeMemoryContexts,
     rejectionJudge,
     report: (line) => process.stderr.write(`${line}\n`),
   });
@@ -1467,7 +1545,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }
 
   const learningService = productDocuments
-    ? new LearningService({ documents: productDocuments, jobs: productJobs })
+    ? new LearningService({ documents: productDocuments, jobs: productJobs, contextProvenance })
     : null;
   // The loop's own counters (learningMetrics.mjs): the ones nothing durable
   // records, counted as launches and runs happen; the rest are read from the
@@ -1681,11 +1759,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   configurePasswordKdfGate({ concurrency: config.capsuleKdfConcurrency, maxWaiting: config.capsuleKdfMaxWaiting, maxWaitMs: config.capsuleKdfMaxWaitMs });
   // The researcher's standing profile and the decision whether a dispatch hands it over (review M6, `residentProfile.mjs`).
   const residentProfiles = new ResidentProfiles({
-    config, store: memorySettings, capsules: capsuleService,
+    config, store: memorySettings, capsules: capsuleService, contextPolicies: sharedContextPolicies,
     // The project's card, read as the memory page's 项目 tab reads it: the engine's own project-context file. Handed to a
     // conversation a person is in (`ResidentProfiles.forDispatch`); a deployment without the engine has no card to hand over.
     // What a conversation of the project is handed up front is the card and the project's other standing files (`residentCard`); the
-    // 项目 tab keeps reading the card alone (`projectCard`).
+    // 项目 tab keeps reading the card alone (`projectCard`). A shared GEO project's card is read from its own namespace.
     projectCard: config.memoryEngineEnabled ? (userId, projectId) => nativeMemory.residentCard(userId, projectId) : null,
   });
   const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir, scanner: capsuleScanner,
@@ -1929,6 +2007,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   });
   // 「导出到 Obsidian」: the project's documents as notes in one zip, under the archive limits the project and account exports obey.
   const knowledgeVault = sourceService && productDocuments ? new KnowledgeVaultExport({
+    contextFor: project => sharedKnowledgeContext?.forProject(project) ?? null,
     sources: sourceService, documents: productDocuments,
     readText: async (project, rel) => String(await readFileNoFollow(project.baseDir, resolveScopedPath(project.baseDir, rel), "utf8")),
     // Where the engine keeps the project's wiki and graph: how a compiled page's absolute links are told from its documents'.
@@ -2248,7 +2327,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     report: (code) => process.stderr.write(`${code}\n`) });
   const autopilotPlanner = new AutopilotPlanner(config, { usageLedger, policies:evolutionModulePolicies });
   const autopilotService = productDocuments && productJobs ? new AutopilotService({
-    documents: productDocuments, jobs: productJobs, usage: usageLedger, notifications: notificationService, entityVocabulary,
+    documents: productDocuments, jobs: productJobs, enabled: config.autopilotEnabled, usage: usageLedger, notifications: notificationService, entityVocabulary,
     // The account's own spending caps, which cover everything the researcher spends;
     // an agenda's daily and weekly caps count only the agenda's own (agendaBudget.mjs).
     accountCaps: () => ({ userDailySpendLimit: config.userDailySpendLimit, userWeeklySpendLimit: config.userWeeklySpendLimit }),
@@ -2261,7 +2340,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await resultImpacts.assertContinuation(userId, projectId, binding);
     },
   }) : null;
-  const autopilotRoutes = createAutopilotRoutes({ store, service: autopilotService, maxJsonBytes: config.maxJsonBytes,
+  const autopilotRoutes = createAutopilotRoutes({ store, service: autopilotService, enabled: config.autopilotEnabled, maxJsonBytes: config.maxJsonBytes,
     // One execution's own stop: the run is stopped the way its own cancel stops it (`stopRunForUser`), so the episode folds as
     // canceled through the ordinary completion. A run that is no longer running is not stopped again.
     stopRun: async (project, runId) => {
@@ -2522,8 +2601,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    *   articleRunId: (project: any, deliverableId: string) => Promise<string | null>,
    *   gradedSha256: (project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string | null>,
    *   cards: GeoCards, members: GeoMembers, refreshCards: (geoProject: any, controlProject: any) => ReturnType<GeoCards["refresh"]>, measureState?: any, questionBank?: ReturnType<typeof createGeoQuestionBank>,
-   *   valueUpkeep?: ReturnType<typeof createGeoValueUpkeep>, importDelivery: ReturnType<typeof createGeoDeliveryImport> } | null} */
+   *   valueUpkeep?: ReturnType<typeof createGeoValueUpkeep>, signals?: GeoSignals, signalDiscovery?: GeoSignalDiscovery, signalResults?: GeoSignalResults,
+   *   importDelivery: ReturnType<typeof createGeoDeliveryImport> } | null} */
   let geo = null;
+  /** @type {GeoArticleResults | null} */
+  let geoArticleResults = null;
+  /** @type {GeoPlanContext | null} */ let geoPlanContexts = null;
+  const geoPlanRevisionInputs = new WeakMap();
+  const geoPlanOwnWork = new WeakMap();
   if (config.geoEnabled && productDatabase) {
     const geoStore = new GeoStore({ database: productDatabase, entityVocabulary });
     const social = createSocialCrawlClient({ baseUrl: config.geoSocialUrl, timeoutMs: config.geoSocialTimeoutMs,
@@ -2543,7 +2628,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       (claim.artifactPath ? geoSourceReaderOf(controlProject)(claim.artifactPath) : null);
     geo = {
       store: geoStore,
-      service: new GeoService({ store: geoStore, config, social, cards: geoCards, metricName: (id) => geoMetricDefinition(id)?.name ?? null }),
+      service: new GeoService({ store: geoStore, config, social, cards: geoCards, documents: productDocuments, metricName: (id) => geoMetricDefinition(id)?.name ?? null }),
       social,
       worker: null,
       orchestrator: null,
@@ -2553,6 +2638,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       members: geoMembers,
       refreshCards: (geoProject, controlProject) => geoCards.refresh(geoProject, { readSource: geoSourceReader(controlProject) }),
       importDelivery: createGeoDeliveryImport({ store: geoStore,
+        beforeImport: async (project, run) => {
+          if (!resultProvenance || internalFor(project.userId, project.id)) return;
+          await resultCaptureQueue.drain();
+          await captureFinishedRun({ results: resultProvenance, project, run, readReceipt: readDeliveryReceipt });
+        },
+        afterImport: async (project, run) => { await geoArticleResults?.complete(project, run); await geoPlanContexts?.complete(project, run); },
+        planningContext: (project, run) => geoPlanContexts?.forRun(project, run),
+        readRunFile: async (project, run, relative) => {
+          const pinned = await pinGeoRunOutputs({ results: resultProvenance, project, run, context: null, paths: [relative] });
+          return pinned.readFile(project, run, relative);
+        },
         capabilityOutputs: async (id) => ((await agentRegistry)?.get?.(id)?.outputs ?? []).map(output => output.path),
         report: (code) => process.stderr.write(`geo import: ${code}\n`),
         // An attempt that lost a write is on the audit record as well as stderr, and in the metrics (`open_science_geo_run_import_total`).
@@ -2672,25 +2768,76 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     audit: (event, status, details) => securityAudit(config, event, status, details),
     projects: {
       create: (user, name) => createResearcherProject(user, { name }),
-      // The new project's first conversation, bound to `geo-insight` before it
-      // exists: the binding is what makes the router honour the choice. A
-      // registry without the capability (a build before it shipped) leaves the
-      // conversation unbound and says so (`bound: false`).
-      bindSession: async (user, projectId) => {
-        const sessionId = randomId("geo-");
-        const agent = (await agentRegistry)?.get?.("geo-insight") ?? null;
-        if (!agent) return { sessionId, bound: false };
-        const project = await store.requireProject(user, projectId);
-        await researchSessions.put(project, sessionId, { mode: "specialist", agentId: agent.id, agentVersion: agent.version });
-        return { sessionId, bound: true };
-      },
-      // The project's own conversation: the recorded one while it still exists; else (a project made before its own was recorded on it,
-      // or one whose recorded conversation the person deleted) the oldest one no programme step opened (a step's session is the AI-run
-      // record's, never the header's 「对话」). Null when the project has none of the person's, and the page begins one.
-      conversationSessionId: async (user, projectId, recorded = null) => {
-        const project = await store.requireProject(user, projectId);
-        if (recorded && await researchSessions.get(project, recorded).catch(() => null)) return recorded;
-        return personalConversationSessionId(project);
+      // Create the real primary only when the person explicitly opens it.
+      bindSession: async () => ({ sessionId: null, bound: false }),
+      // The project's own conversation: the native authority's primary (`geoNativeAuthority.primary`), the one a GEO frame is issued
+      // for. A project whose conversation was recorded on it before that pointer existed (`conversation_session_id`, 2026-10-24) keeps
+      // that one while `researchSessions.get` still finds it; one the person deleted gives way to the oldest one no programme step
+      // opened (`personalConversationSessionId`). The owner's read adopts it as the primary when the running kernel still lists it,
+      // under the same lock as an open (`GeoNativeAuthority.readPrimary`), so the next explicit open lands in it instead of beginning
+      // another; a member reads only what is already the primary. Null when there is none: the page's open settles it.
+      conversationSessionId: async (user, geoId) => geoNativeAuthority ? geoNativeAuthority.readPrimary(user, geoId) : null,
+      openConversation: async (user, geoId, target) => geoNativeAuthority.descriptor(user, geoId, target),
+      conversationRead: async (user, geoId, sessionId, action, body = undefined) => {
+        const resolved = await geoNativeAuthority.resolve(user, { kind: "geo", geoProjectId: geoId, sessionId }, { ability: action === "start" || body ? "run" : "read" });
+        const project = resolved.project;
+        if (action === "start") {
+          await runtimeManager.ensureContextPolicyGeneration(project);
+          await runtimeManager.start(project, { opening: true });
+          await runtimeManager.assertContextPolicyGeneration(project);
+          await authorizeOwnedNativeSession(await store.userById(project.userId), project, sessionId);
+          return runtimeManager.status(project);
+        }
+        if (action === "stop") {
+          // Ability `run` (a body): the run must be one of this conversation's, and it is stopped the way its own cancel stops it.
+          const runId = body?.runId;
+          if (typeof runId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(runId)) throw new HttpError(400, "invalid_payload", "The run is invalid.");
+          const run = (await agentRuns.list(project)).find(item => item.id === runId && item.sessionId === sessionId);
+          if (!run) throw new HttpError(404, "agent_run_not_found", "The run is unavailable.");
+          if (run.status !== "running") return { run, cancellation: { root: "not-running", children: [] } };
+          const children = agentRuns.knownChildSessions(run).map(childSessionId => ({ childSessionId, stop: "with-root" }));
+          const { root, canceled } = await stopRunForUser(project, run);
+          return { run: canceled, cancellation: { root, children } };
+        }
+        if (action === "status") return runtimeManager.status(project);
+        if (action === "capability") { const binding = await researchSessions.get(project, sessionId); return { capabilityId: binding?.mode === "specialist" ? binding.agentId : null }; }
+        if (action === "reply-checks") return { checks: await review?.service.replyChecksForSession({ userId: project.userId, projectId: project.id }, sessionId) ?? [] };
+        if (action === "sources" || action === "source-scope") {
+          const knowledge = await sharedKnowledgeContext?.forProject(project);
+          if (!knowledge) throw new HttpError(503, "product_state_unavailable", "The project sources are unavailable.");
+          // A shared project's sources are its context's; a GEO project its owner works in alone reads its knowledge base as
+          // any conversation of theirs does — its own documents and what is shared with it.
+          const shared = knowledge.kind === "geo-project";
+          const readable = async candidate => {
+            if (shared) return knowledge.acceptSource(candidate);
+            const source = await sourceService.get(project.userId, candidate.id).catch(() => null);
+            return Boolean(source && source.deletedAt == null && (source.projectId === project.id || (await sourceService.isShared(project.userId, source)) === true));
+          };
+          if (action === "sources") {
+            const items = []; let cursor = null;
+            do {
+              const page = await sourceService.list(project.userId, { projectId: project.id, state: "ready", limit: 100, cursor });
+              for (const item of page.items) if (!shared || await knowledge.acceptSource(item)) items.push({ id: item.id, title: item.title ?? item.name ?? item.id });
+              cursor = page.nextCursor;
+            } while (cursor);
+            return { items };
+          }
+          if (body) {
+            if (!Array.isArray(body.sourceIds) || body.sourceIds.length > 50 || !body.sourceIds.every(id => /^src_[a-f0-9]{32}$/.test(id))
+              || (body.sourceScopeMode !== undefined && body.sourceScopeMode !== "project" && body.sourceScopeMode !== "selected")) throw new HttpError(400, "invalid_payload", "The source selection is invalid.");
+            // `selected` with no document is "no document", as on the personal route; only `project` (or no mode and no id) lifts it.
+            const ids = requestedSourceScope(body.sourceIds, body.sourceScopeMode);
+            for (const id of ids ?? []) if (!await readable({ id })) throw new HttpError(404, "source_not_found", "Source not found.");
+            // The exact module identity is rechecked immediately before the existing session writer.
+            await geoNativeAuthority.resolve(user, { kind: "geo", geoProjectId: geoId, sessionId });
+            await researchSessions.setSourceScope(project, sessionId, ids, ids === null ? "project" : "selected");
+          }
+          const sourceScope = shared ? await knowledge.sourceScope(sessionId) : (await researchSessions.get(project, sessionId))?.sourceScope ?? null;
+          return { sourceScope, sourceScopeMode: sourceScope == null ? "project" : "selected", originReference: null };
+        }
+        const runs = (await agentRuns.list(project)).filter(run => run.sessionId === sessionId);
+        if (action === "history") return preservedConversationHistory(project, sessionId, runs);
+        return runs;
       },
       // What the programme did in the background, newest first: a read-only record, never a destination.
       programmeRuns: async (userId, projectId) => {
@@ -2706,6 +2853,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     },
     get orchestrator() { return geo?.orchestrator ?? null; },
     get market() { return geo?.market ?? null; },
+    get signals() { return geo?.signals ?? null; },
+    get signalResults() { return geo?.signalResults ?? null; },
+    get selectedExporter() { return documentExportService; },
     get exporter() { return geo?.exporter ?? null; },
     get members() { return geo?.members ?? null; },
     // The cards of the project's product zone: read as the project, written as its owner (the zone is the owner's).
@@ -2724,7 +2874,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           else if (article.path) {
             const owner = await store.userById(project.userId);
             const control = owner ? await store.requireProject(owner, project.projectId) : null;
-            if (control) text = await geoSourceReaderOf(control)(article.path);
+            if (control && article.currentResultVersionId && geoArticleResults) text = (await geoArticleResults.readVersion(control, article.currentResultVersionId)).text;
+            else if (control) text = await geoSourceReaderOf(control)(article.path);
           }
           if (text == null) throw new HttpError(404, "geo_article_text_unavailable", "The article's text is not available.");
           return { article, text };
@@ -2782,8 +2933,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       return { project, reference: { artifactId: source.artifactId, root: source.root ?? "workspace", workspace: project.activeWorkspace ?? "" },
         ...await freezeArtifactDocument(project, source) };
     },
-    authorize: async (user, payload) => {
-      if (payload.source.studyId) {
+    authorize: async (user, payload, ability = "read") => {
+      if (payload.source.kind === "geo-selected-analysis") {
+        if (!geo) throw new HttpError(404, "document_export_unavailable", "The document is unavailable.");
+        const project = await geo.service.requireProject(user, payload.source.geoId, ability === "read" ? "read" : "run");
+        if (project.projectId !== payload.projectId || project.userId !== payload.ownerId) throw new HttpError(404, "document_export_unavailable", "The document is unavailable.");
+      } else if (payload.source.studyId) {
         if (!vcrDocumentAdapter) throw new HttpError(404, "document_export_unavailable", "The document is unavailable.");
         const { project } = await vcrDocumentAdapter.authorize(user, payload.source);
         if (project.id !== payload.projectId || project.userId !== payload.ownerId) throw new HttpError(404, "document_export_unavailable", "The document is unavailable.");
@@ -2835,6 +2990,84 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }) : null;
   const resultRevisions = resultProvenance ? new ResultRevisionService({ results: resultProvenance,
     documents: productDocuments, config, mirror: (project, full, bytes) => runtimeManager.mirrorWorkspaceUpload(project, full, bytes) }) : null;
+  if (geo && resultProvenance && resultRevisions) geoArticleResults = new GeoArticleResults({ store: geo.store, service: geo.service,
+    results: resultProvenance, revisions: resultRevisions, documents: productDocuments, cards: geo.cards, parser: documentParser,
+    report: code => process.stderr.write(`geo article results: ${code}\n`) });
+  if (productDocuments && sharedContextPolicies) geoNativeAuthority = new GeoNativeAuthority({ store: geo?.store ?? new GeoStore({database:productDatabase}), accounts: store, service: geo?.service ?? null, documents: productDocuments,
+      results: null, runs: async project => { const owner = await store.userById(project.userId); return owner ? agentRuns.list(await store.requireProject(owner, project.projectId)) : []; },
+      createSession: project => runtimeManager.createRuntimeSession(project, { opening: true }),
+      adoptSession: (/** @type {any} */ identity) => existingGeoConversation(identity),
+      // A read never starts a runtime: a session is listed only by the runtime already running, and any failure reads as "not now".
+      sessionListed: async (project, sessionId) => authorizeOwnedNativeSession(await store.userById(project.userId), project, sessionId).then(() => true, () => false),
+      ensureSession: async (project, sessionId) => {
+        await runtimeManager.ensureContextPolicyGeneration(project);
+        await runtimeManager.start(project, { opening: true });
+        await runtimeManager.assertContextPolicyGeneration(project);
+        await authorizeOwnedNativeSession(await store.userById(project.userId), project, sessionId);
+      } });
+  if (geo && productDocuments) {
+    geoPlanContexts = new GeoPlanContext({ documents: productDocuments, store: geo.store, service: geo.service,
+      authorizeSession: async (user, project, sessionId) => {
+        await geoNativeAuthority.resolve(user, { kind: "geo", geoProjectId: project.id, sessionId });
+      },
+      runs: async project => { const control = await store.requireProject(await store.userById(project.userId), project.projectId); return control ? agentRuns.list(control) : []; },
+      articleResults: geoArticleResults,
+      consumedContexts: (...args) => geoNativeInputs?.consumedContexts(...args) ?? [] });
+    geo.service.planContexts = geoPlanContexts;
+    geo.signals = new GeoSignals({ documents: productDocuments, store: geo.store, service: geo.service,
+      runs: project => geoPlanContexts.runs(project),
+      resultForRun: async (project, run) => {
+        const control = await store.requireProject(await store.userById(project.userId), project.projectId);
+        const artifacts = [];
+        let cursor = null;
+        if (resultProvenance) do {
+          const page = await resultProvenance.list(project.userId, { projectId: project.projectId, runId: run.id, limit: 100, cursor });
+          artifacts.push(...page.items.filter(result => result.producer?.runId === run.id && result.producer?.sessionId === run.sessionId)
+            .map(result => ({ id: result.versionId, path: result.path, runId: run.id, sessionId: run.sessionId })));
+          cursor = page.nextCursor;
+        } while (cursor);
+        const history = await preservedConversationHistory(control, run.sessionId, [run], undefined, { runId: run.id });
+        const answer = { available: history.messages.some(message => message.role === "assistant" && message.text.trim()), partial: history.partial };
+        const professional = ["geo-insight", "geo-strategy", "geo-content", "geo-proposal"].includes(run.effectiveAgentId ?? run.agentId);
+        return { present: artifacts.length > 0 || !professional && answer.available, artifacts, answer };
+      } });
+    geo.service.signals = geo.signals;
+    const signalControlProject = async project => {
+      const owner = await store.userById(project.userId);
+      if (!owner) throw new HttpError(404, "geo_project_not_found", "The GEO project owner is unavailable.");
+      return store.requireProject(owner, project.projectId);
+    };
+    if (resultProvenance) geo.signalResults = new GeoSignalResults({ signals: geo.signals, contexts: geoPlanContexts, results: resultProvenance,
+      programmeRuns: async project => programmeRunsOf(await signalControlProject(project)), controlProject: signalControlProject });
+    if (geo.signalResults && resultProvenance) {
+      const reviews = new GeoSourceReviews({ bridge: geo.signalResults, results: resultProvenance, store: geo.store });
+      geo.signals.sourceReviewForRun = (project, signal, run, targets) => reviews.forRun(project, signal, run, targets);
+    }
+    geoNativeSelections = new GeoNativeSelections({ contexts: geoPlanContexts, revisions: resultRevisions, articles: geoArticleResults,
+      authorizeRequest: async (user, project, request) => {
+        const policy = await sharedContextPolicies.forProject(project);
+        const resolved = await geoNativeAuthority.resolve(user, { kind: "geo", geoProjectId: policy.geoProjectId, sessionId: request.sessionId });
+        if (resolved.project.userId !== project.userId || resolved.project.id !== project.id) throw new HttpError(403, "geo_member_forbidden", "The conversation project changed.");
+        return resolved;
+      } });
+    geoNativeInputs = new GeoNativeInputs({ database: productDatabase, documents: productDocuments, authority: geoNativeAuthority,
+      policies: sharedContextPolicies, contexts: geoPlanContexts, revisions: resultRevisions,
+      previewSelections: (...args) => geoNativeSelections.preview(...args),
+      resolveLaunchedContext: ({ project }) => runtimeManager.launchedContextReceipt(project),
+      proveSession: async ({ project, receipt, transcript, turn }) => {
+        const policy = await sharedContextPolicies.forProject(project);
+        const launched = await runtimeManager.historicalContextReceipt(project, receipt.runtime.launchedContextRef);
+        const identity = await geoNativeAuthority.retainedIdentity(project, policy);
+        await geoNativeAuthority.proveSession(identity, receipt.rootSessionId);
+        if (!launched || transcript.sessionId !== receipt.rootSessionId || !Number.isSafeInteger(turn.startSeq)
+          || !turn.inputs.some(input => input.sourceRequestId === receipt.native.requestId && input.turnStartSeq === turn.startSeq)
+          || launched.generation !== receipt.runtime.generation || launched.digest !== receipt.runtime.launchedContextDigest
+          || canonicalJson(launched.policy) !== canonicalJson(contextPolicyIdentity(policy))) return null;
+        return { namespaceId: policy.namespace.id, rootSessionId: receipt.rootSessionId, generation: launched.generation,
+          launchedContextRef: launched.referenceId, launchedContextDigest: launched.digest };
+      } });
+    geo.service.signalInputs = new GeoSignalInputs({ contexts: geoPlanContexts, service: geo.service, store: geo.store, articles: geoArticleResults });
+  }
   const resultEngine = overrides.resultReplayEngine ?? new ResultEngineRouter({ python: new ResultReplayClient({ config }),
     vcr: resultProvenance && vcr?.engine ? new ResultVcrReplay({ engine: vcr.engine, config,
       authorizeProject: (userId, projectId) => resultProvenance.scope(userId, projectId) }) : null });
@@ -3040,6 +3273,24 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    * @param {any} project
    * @returns {Promise<string | null>}
    */
+  /**
+   * The conversation a GEO project already has, for one whose primary conversation was never registered (made before GEO
+   * conversations were delegated, 2026-10-25): its recorded conversation while that still exists, else the oldest of the person's.
+   * Registered as the primary on the owner's read (`conversationSessionId`) and the owner's first open (`GeoNativeAuthority.descriptor`)
+   * once the kernel is seen to have it, so the project keeps opening the conversation it was worked in instead of a new, empty one.
+   * A failed read is not an absence: the pointer is written once, and falling through to the oldest conversation on a transient error
+   * would make that one the project's for good.
+   * @param {{ geo: any, project: any }} identity
+   */
+  async function existingGeoConversation(identity) {
+    const recorded = typeof identity.geo?.conversationSessionId === "string" && identity.geo.conversationSessionId ? identity.geo.conversationSessionId : null;
+    const binding = recorded ? await researchSessions.get(identity.project, recorded).catch((/** @type {any} */ error) => {
+      if (error?.code === "invalid_id") return null;
+      throw error;
+    }) : null;
+    if (binding) return recorded;
+    return personalConversationSessionId(identity.project);
+  }
   async function personalConversationSessionId(project) {
     const [sessions, runs] = await Promise.all([researchSessions.list(project), agentRuns.list(project)]);
     const programme = new Set(runs.filter((run) => run.automated === true || runRoleOf(run) === "programme").map((run) => run.sessionId));
@@ -3445,7 +3696,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // A new turn of a conversation is the researcher's answer to the run before it: read once for what it says about that run,
           // beside the adoption and never in front of it (learningEvidence.mjs).
           void learningEvidence?.onNewTurn(full, { sessionId, text, requestId: input?.requestIds?.[0] ?? "" }).catch(() => null);
-          return (await nativeInputRoute?.routeFor(full, sessionId, input?.requestIds, text)) ?? routeAdoptedInput(full, sessionId, text);
+          const frozen = await nativeInputRoute?.routeFor(full, sessionId, input?.requestIds, text);
+          // Only the authenticated immutable snapshot can commission a GEO turn over the persistent binding.
+          // A fallback classification or text that merely names a context has no such authority.
+          return frozen ? { ...frozen, routedOverBinding: /^gpc_[a-f0-9]{64}$/.test(frozen.geoContextRef ?? "") }
+            : routeAdoptedInput(full, sessionId, text);
         },
         ...(parent && origin !== "subagent" ? { forkedFrom: parent } : {}),
       });
@@ -3591,12 +3846,19 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (!runtimeManager.pluginOverrides.has(runtimeManager.key(project))) {
           void pluginService?.runtimeStarted(project).catch(() => { process.stderr.write("plugin first-launch verification enqueue failed\n"); });
         }
+        if (!runtimeManager.personalSkillOverrides.has(runtimeManager.key(project))) {
+          void personalSkillGenerations?.requestRuntimeProof(project, runtimeManager.runtimePersonalSkillGeneration(project), runtimeManager.runtimeGeneration(project))
+            .catch(() => { process.stderr.write('project skill runtime verification enqueue failed\n'); });
+        }
       });
     },
   });
   researchSessions.onSpecialistBound = (project, sessionId, agentId) => runtimeManager.writeSessionBinding?.(project, sessionId, agentId) ?? Promise.resolve(false);
   runtimeManager.pluginService = pluginService;
   runtimeManager.promptAdmissionDatabase=productDatabase;
+  runtimeManager.contextPolicies = sharedContextPolicies;
+  runtimeManager.contextItems = contextItems;
+  runtimeManager.contextDocuments = productDocuments;
   // The other half of the same seam. `syncCapsuleMethods` reads this before
   // every launch, and left unassigned it materializes an empty directory: the
   // work-style pack a user exported, imported and approved would reach no run,
@@ -3627,28 +3889,44 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    * What the conversations a native memory came out of were about, from the run ledger of the project each was held in: the title
    * the researcher or the platform gave it, else the question that began it. A conversation the researcher deleted answers `null`
    * (the memory page drops the link to it); one the ledger does not know, or a project that cannot be read, is simply not named.
-   * @param {string} userId @param {{ projectId: string, sessionId: string }[]} refs @returns {Promise<Record<string, string | null>>}
+   * @param {string} userId @param {import('./nativeMemoryStore.mjs').NativeConversationReference[]} refs @returns {Promise<Record<string, string | null>>}
    */
   async function nativeConversationTitles(userId, refs) {
     /** @type {Record<string, string | null>} */
     const titles = {};
-    /** @type {Map<string, string[]>} */
+    /** @type {Map<string, import('./nativeMemoryStore.mjs').NativeConversationReference[]>} */
     const byProject = new Map();
-    for (const ref of refs) byProject.set(ref.projectId, [...(byProject.get(ref.projectId) ?? []), ref.sessionId]);
+    for (const ref of refs) {
+      const key = nativeConversationTitleKey({ ...ref, sessionId: '' });
+      byProject.set(key, [...(byProject.get(key) ?? []), ref]);
+    }
     const owner = byProject.size ? await store.userById(userId).catch(() => null) : null;
     if (!owner) return titles;
-    for (const [projectId, sessionIds] of byProject) {
+    for (const projectRefs of byProject.values()) {
       try {
+        const { projectId, namespaceId, projectCreatedAt } = projectRefs[0];
+        const sameIncarnation = async () => {
+          if (!namespaceId) return true;
+          const database = 'database' in store ? store.database : null;
+          if (!projectCreatedAt || !database?.query) return false;
+          const row = (await database.query('SELECT created_at::text AS created FROM evimed_control.projects WHERE user_id=$1 AND id=$2', [userId, projectId])).rows[0];
+          return row?.created === projectCreatedAt;
+        };
+        // A historical namespace is preserved, but its public project id can
+        // now name another project. Never read that replacement's ledger.
+        if (!await sameIncarnation()) continue;
         const project = await store.requireProject(owner, projectId);
         const index = await agentRuns.conversationIndex(project);
-        for (const sessionId of sessionIds) {
-          const runs = index.get(sessionId) ?? [];
+        if (!await sameIncarnation()) continue;
+        for (const ref of projectRefs) {
+          const runs = index.get(ref.sessionId) ?? [];
           if (!runs.length) continue;
-          if (runs.every((run) => run.deleted === true)) { titles[sessionId] = null; continue; }
+          const key = nativeConversationTitleKey(ref);
+          if (runs.every((run) => run.deleted === true)) { titles[key] = null; continue; }
           // Newest first: the latest title anyone gave it, else the first question asked.
           const named = runs.find((run) => typeof run.title === "string" && run.title.trim());
           const title = String(named?.title ?? runs.at(-1)?.question ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
-          if (title) titles[sessionId] = title;
+          if (title) titles[key] = title;
         }
       } catch { /* a project that cannot be read names nothing */ }
     }
@@ -3665,6 +3943,108 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const listed = await runtimeManager.callKernel(runtime, current, "session/list", { _request: {} }, AbortSignal.timeout(10000)).catch(() => { throw new HttpError(503, "product_state_unavailable", "The native session inventory is unavailable."); });
     if (runtimeManager.runtimes.get(runtimeManager.key(current)) !== runtime || runtimeManager.runtimeGeneration(current) !== generation) throw new HttpError(503, "product_state_unavailable", "The native session inventory changed.");
     if (!sessionListItems(listed).some(item => item.sessionId === sessionId)) throw new HttpError(404, "runtime_session_not_found", "The current native session is unavailable.");
+  }
+  /** This read-only association is written by the trusted module dispatcher
+   * immediately before native forwarding, in its existing schedule mark. */
+  async function recordGeoKnowledgeDispatch(project, geoId, run, request) {
+    const policy = await sharedContextPolicies.forProject(project);
+    const launched = await runtimeManager.launchedContextReceipt(project);
+    const current = (await agentRuns.list(project)).find(item => item.id === run.id);
+    const binding = await researchSessions.get(project, request.sessionId);
+    if (policy.kind !== "geo-project" || policy.geoProjectId !== geoId || !launched || current?.automated !== true
+      || current.status !== "running" || current.sessionId !== request.sessionId || !current.kernelRequestIds?.includes(request.requestId)
+      || binding?.mode !== "specialist" || binding.agentId !== current.effectiveAgentId || binding.agentVersion !== current.effectiveAgentVersion)
+      throw new HttpError(409, "knowledge_scope_denied", "The module source context cannot be verified.");
+    const proof = { version: 1, geoProjectId: geoId, runId: current.id, dispatchId: current.dispatchId, sessionId: current.sessionId,
+      requestId: request.requestId, capabilityId: binding.agentId, capabilityVersion: binding.agentVersion,
+      routeReason: current.effectiveRouteReason, policy: contextPolicyIdentity(policy),
+      runtime: { generation: launched.generation, referenceId: launched.referenceId, digest: launched.digest } };
+    await geoNativeAuthority.recordKnowledgeDispatch(project, geoId, current, binding, proof);
+  }
+
+  /** Inventory, association and generation are independently current even
+   * when the canonical ledger is shared with other checks in this operation. */
+  async function proveGeoRootCapture(identity, project, launched, sessionId, rootSessionId, snapshot) {
+    try { await authorizeOwnedNativeSession(await store.userById(project.userId), project, rootSessionId); }
+    catch (error) { if (error?.status === 404 && rootSessionId !== sessionId) return null; throw error; }
+    const rootProofRefs = await geoNativeAuthority.proofReferences(identity, rootSessionId, snapshot);
+    if (rootSessionId === sessionId && runtimeManager.runtimeGeneration(project) === launched.generation)
+      return { rootSessionId, rootProofRefs, runtimeGeneration: launched.generation };
+    const childAddress = await runtimeManager.subagentAddressFor(project, rootSessionId, sessionId);
+    if (childAddress && runtimeManager.runtimeGeneration(project) === launched.generation)
+      return { rootSessionId, rootProofRefs, runtimeGeneration: launched.generation, childAddress };
+    return null;
+  }
+
+  /** Automated runs gain KB read association only, never memory capture,
+   * learning input, a GPC association or delegated browser authority. */
+  async function proveGeoKnowledgeSession(project, sessionId) {
+    if (!geoNativeAuthority || typeof sessionId !== "string") return null;
+    const policy = await sharedContextPolicies.forProject(project);
+    if (policy.kind !== "geo-project") return null;
+    const identity = await geoNativeAuthority.retainedIdentity(project, policy), canonicalProject = identity.project;
+    const launched = await runtimeManager.launchedContextReceipt(canonicalProject);
+    if (!launched) return null;
+    return geoNativeAuthority.withRunSnapshot(identity, async snapshot => {
+      const primary = await geoNativeAuthority.primary(identity, snapshot);
+      if (primary) {
+        const direct = await proveGeoRootCapture(identity, canonicalProject, launched, sessionId, primary, snapshot);
+        if (direct) return direct;
+      }
+      const registry = await agentRegistry;
+      for (const run of await geoNativeAuthority.runsInSnapshot(identity, snapshot)) {
+        if (run.automated !== true || run.status !== "running" || !run.dispatchId || !run.sessionId) continue;
+        const marks = await geoNativeAuthority.knowledgeDispatchMarks(project, policy.geoProjectId, run.dispatchId);
+        if (marks.length !== 1) continue;
+        const mark = marks[0], proof = mark.detail?.nativeKnowledgeDispatch;
+        const binding = await researchSessions.get(canonicalProject, run.sessionId), agent = registry.get(run.effectiveAgentId);
+        if (proof?.version !== 1 || proof.geoProjectId !== policy.geoProjectId || proof.runId !== run.id || proof.dispatchId !== run.dispatchId
+          || proof.sessionId !== run.sessionId || !run.kernelRequestIds?.includes(proof.requestId)
+          || mark.run_id && mark.run_id !== run.id || mark.session_id && mark.session_id !== run.sessionId
+          || mark.detail.capabilityId !== proof.capabilityId || proof.capabilityId !== run.effectiveAgentId
+          || proof.capabilityVersion !== run.effectiveAgentVersion || proof.routeReason !== run.effectiveRouteReason
+          || !agent || agent.version !== proof.capabilityVersion || binding?.mode !== "specialist"
+          || binding.agentId !== proof.capabilityId || binding.agentVersion !== proof.capabilityVersion
+          || canonicalJson(proof.policy) !== canonicalJson(contextPolicyIdentity(policy))
+          || proof.runtime?.generation !== launched.generation || proof.runtime.referenceId !== launched.referenceId || proof.runtime.digest !== launched.digest) continue;
+        const retained = await runtimeManager.historicalContextReceipt(canonicalProject, proof.runtime.referenceId);
+        if (!retained || canonicalJson(retained) !== canonicalJson(launched)) continue;
+        await authorizeOwnedNativeSession(await store.userById(project.userId), canonicalProject, run.sessionId);
+        const child = sessionId === run.sessionId ? null : await runtimeManager.subagentAddressFor(canonicalProject, run.sessionId, sessionId);
+        if ((sessionId === run.sessionId || child) && runtimeManager.runtimeGeneration(canonicalProject) === launched.generation)
+          return { rootSessionId: run.sessionId, runtimeGeneration: launched.generation };
+      }
+      return proveGeoCapture(canonicalProject, sessionId, snapshot);
+    });
+  }
+
+  async function proveGeoCapture(project, sessionId, retainedSnapshot = null) {
+    if (!geoNativeAuthority || typeof sessionId !== "string") return null;
+    const policy = await sharedContextPolicies.forProject(project);
+    if (policy.kind !== "geo-project") return null;
+    const identity = await geoNativeAuthority.retainedIdentity(project, policy);
+    const canonicalProject = identity.project;
+    const launched = await runtimeManager.launchedContextReceipt(canonicalProject);
+    if (!launched) return null;
+    const verify = async snapshot => {
+      const primary = await geoNativeAuthority.primary(identity, snapshot);
+      if (primary) {
+        const direct = await proveGeoRootCapture(identity, canonicalProject, launched, sessionId, primary, snapshot);
+        if (direct) return direct;
+      }
+      const roots = new Set((await geoNativeAuthority.runsInSnapshot(identity, snapshot)).map(run => run.sessionId));
+      roots.delete(primary);
+      // An exact historical root need not wait behind unrelated conversations.
+      const candidates = roots.has(sessionId) ? [sessionId, ...[...roots].filter(root => root !== sessionId)] : roots;
+      for (const rootSessionId of candidates) {
+        try { await geoNativeAuthority.proveSession(identity, rootSessionId, snapshot); }
+        catch (error) { if (error?.status === 404) continue; throw error; }
+        const proof = await proveGeoRootCapture(identity, canonicalProject, launched, sessionId, rootSessionId, snapshot);
+        if (proof) return proof;
+      }
+      return null;
+    };
+    return retainedSnapshot === null ? geoNativeAuthority.withRunSnapshot(identity, verify) : verify(retainedSnapshot);
   }
   if (skillLibraryService && config.runtimeMode === "kernel") {
     skillLibraryService.nativeCatalogue = new NativeSkillCatalogue({ runtimeManager, authorizeSession: authorizeOwnedNativeSession });
@@ -3817,6 +4197,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   agentRuns = new AgentRunStore(researchSessions, {
     promptStops:new RuntimePromptStops({database:productDatabase}),
     withPromptAdmission:(project,sessionId,operation)=>withSessionPromptAdmission(runtimeManager,project,sessionId,operation),
+    nativeInputs: geoNativeInputs,
     judgeService,
     agentRegistry,
     // The register judge leaves the platform's own projects unread, and reads a bounded number of report lines per run.
@@ -3875,7 +4256,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (!Number.isFinite(observedAt) || !Number.isFinite(launchedAt) || observedAt < launchedAt) return null;
       }
       const generation = runtimeManager.runtimePersonalSkillGeneration(project);
-      return generation?.reference ? { generationId: generation.reference.generationHash, pins: runtimeManager.runtimePersonalSkillPins(project) } : null;
+      return generation?.reference ? { generationId: generation.reference.generationHash, pins: runtimeManager.runtimePersonalSkillPins(project),
+        platformSkills: generation.platformSkills ?? { disabled: [] } } : null;
     },
     // Which workspace a run belongs to, re-derived rather than remembered. It
     // is asked on recovery, so a verification in flight when the control plane
@@ -3923,14 +4305,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // A researcher's new question, or a conversation deleted, is what
       // 与我相关 is read from: their profile is due at the next round.
       if (frontier && !internalFor(project.userId, project.id) && isResearcherOwnedWork(run)) frontier.profiles.noteConversation(project.userId, run);
-      // A finished run in a GEO project: the claim library its geo-insight
-      // deliverable holds is registered from the file (geoDeliveryImport.mjs).
-      // Not awaited here: the orchestrator asks for the same import when it
-      // folds the run, waits for this one or tries again if it failed, and only
-      // then reads what the run wrote (D-24).
-      if (geo && !internalFor(project.userId, project.id)) {
-        independentProductWork(() => geo.importDelivery(project, run)).catch((error) => process.stderr.write(`geo import: ${error?.code ?? error?.name ?? "failed"}\n`));
-      }
     },
     // The run's own projection of itself — evidence counts and budget — read
     // off the monitor's existing cycle and forwarded on the same channel as
@@ -4029,7 +4403,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           await securityAudit(config, "result.capture", "failed", { userId: project.userId, projectId: project.id,
             runId: run.id, code: error?.code ?? "result_capture_failed" });
         }
-        // The run's files and bindings are captured: what each revision it answered left is settled now.
+      }
+      // Import business metadata only after immutable bytes exist; even a cached import replays the idempotent result join.
+      if (geo && !internalFor(project.userId, project.id)) await step("geo.import", () => geo.importDelivery(project, run));
+      // The run's files, bindings and business links are captured: settle the corrections now.
+      if (resultProvenance) {
         try { await resultCorrections?.settle(project, run); } catch { /* the revision record stays as it was */ }
       }
       await attributeLateCalls(project, run);
@@ -4342,6 +4720,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     },
   });
   const resultCaptureRepairRoutes = createResultCaptureRepairRoutes({ store, runs: agentRuns, config, maxJsonBytes: config.maxJsonBytes,
+    refreshAndReconcile: geo && geoPlanContexts ? createGeoArtifactRefresh({ runs: agentRuns, results: resultProvenance, geo, contexts: geoPlanContexts }) : null,
     service: resultProvenance ? new ResultCaptureRepairService({ results: resultProvenance, runs: agentRuns, programme: evidenceProgramme }) : null });
   // The co-creation loop (evidence-flywheel plan §5.2, F05–F07): a result published as a card, research continued from a
   // card, the author page. All of it is the frontier's, so with the frontier off none of it is composed, no route
@@ -4385,6 +4764,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     ledgerBusy: async project => (await agentRuns.list(project)).some(run => run.status === "running"),
   }) : null;
   runtimeManager.personalSkillGenerations = personalSkillGenerations;
+  if (skillLibraryService && personalSkillGenerations) skillLibraryService.projectActivation = async (_user, project) => ({
+    state: await personalSkillGenerations.current(project), runtimeGeneration: runtimeManager.runtimeGeneration(project),
+    captured: runtimeManager.runtimePersonalSkillGeneration(project), builtins: runtimeManager.runtimes.get(runtimeManager.key(project))?.builtinPlugins,
+    // A 循证 GEO project's runtime mounts its shared context generation, which carries neither the personal generation nor
+    // the project's skill and integration choices: they are saved but do not apply there, and the page says so.
+    sharedContext: await runtimeManager.contextPolicyFor(project).then(policy => policy?.kind === "geo-project", () => null),
+  });
   if (productDatabase && config.runtimeMode === "kernel" && extensionDeployment.status === "configured"
     && typeof config.modelGatewaySigningSecret === "string" && config.modelGatewaySigningSecret.length >= 32) {
     hostedExtensions = extensionIntegrationFactory({ config, database: productDatabase, store, agentRuns, runtimeManager,
@@ -4397,17 +4783,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     service: personalSkillGenerations, runtime: runtimeManager, resolveProject: sourceProject,
     ledgerBusy: async project => (await agentRuns.list(project)).some(run => run.status === "running"),
   }) : null;
-  const prepareOwnedResearchContext = createResearchDispatchContext({ config, sourceService, researchSessions });
-  // The route of an input typed in the kernel's own window, frozen when the prompt is prepared: the capsule plugin's run policy reads it, and the
-  // adoption of the turn files the run under it. It rides the learning switch because what it serves is the researcher's methods (`refreshCapsuleMethods`).
-  if (learningService && config.learningEnabled) nativeInputRoute = new NativeInputRoute({
-    route: routeAdoptedInput,
-    allowed: async (project, sessionId) => {
-      if (!config.learningEnabled || internalFor(project.userId, project.id)) return false;
-      const state = await memoryPausedFor(memorySettings, project.userId, project.id, sessionId);
-      return !state.learning && !state.trial;
-    },
-  });
+  // A dispatch's context. A shared GEO project's conversation reads its sources through the project's own knowledge context.
+  const prepareOwnedResearchContext = createResearchDispatchContext({ config, sourceService, researchSessions,
+    knowledgeContext: { forProject: project => sharedKnowledgeContext?.forProject(project) ?? null } });
+  // The route of an input typed in the kernel's own window, frozen when the prompt is prepared: the capsule plugin's run policy reads it (the
+  // capability and the attendance proof), and the adoption of the turn files the run under it. Composed whatever the learning switch says: it is
+  // the request's identity, and a 循证 GEO selection is admitted only with its frozen route (`nativeInputRoute.mjs`).
+  nativeInputRoute = new NativeInputRoute({ route: routeAdoptedInput });
   if (sourceService) sourceUnderstandingRuntime = createSourceUnderstandingRuntime({
     config, store, sources: sourceService, agentRuns, runtimeManager, researchSessions,
     registry: agentRegistry, usageLedger, prepareContext: prepareResearchContext,
@@ -4455,7 +4837,23 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       sourceSyncWorker = new OpenVikingSourceSyncWorker({ jobs: productJobs, service: sourceSync, reconcileMs: config.knowledgeSourceSyncReconcileMs,
         projects: () => readableSourceProjects(productDatabase, { includeLibrary: true }) });
     }
+    sharedKnowledgeContext = createSharedKnowledgeContext({ contextPolicies: sharedContextPolicies, store, sources: sourceService,
+      documents: productDocuments, resources: openVikingResources, sourceSync,
+      compileExecutionFor: overrides.sharedKnowledgeCompileExecutionFor ?? ((policy, request, options) => sharedKnowledgeCompileExecution.forRequest(policy, request, options)),
+      sourceScope: async (identity, sessionId) => {
+        const owner = await store.userById(identity.userId);
+        const project = await store.requireProject(owner, identity.projectId);
+        const proof = await proveGeoKnowledgeSession(project, sessionId);
+        if (!proof?.rootSessionId) throw new HttpError(403, "knowledge_scope_denied", "The project source selection cannot be verified.");
+        const selection = (await researchSessions.get(project, proof.rootSessionId))?.sourceScope ?? null;
+        if (runtimeManager.runtimeGeneration(project) !== proof.runtimeGeneration)
+          throw new HttpError(403, "knowledge_scope_denied", "The project source selection changed during verification.");
+        return selection;
+      },
+      proveSession: (project, sessionId) => sharedKnowledgeSessionProof(project, sessionId),
+    });
     knowledgePages = new KnowledgePageService({
+      knowledgeContext: sharedKnowledgeContext,
       config, documents: productDocuments, jobs: productJobs, sources: sourceService, store, entries: knowledgeEntries,
       resources: openVikingResources, engine: openVikingEngine, sourceSync,
       // A page may cite a document of the account's library; its read-only copy there is the text the compile was given.
@@ -4498,6 +4896,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       prepareDependencies: (requests, options) => codeController.prepareEvolutionDependencies({ requests }, options) });
     const scriptUses = productDatabase ? new ScriptUses({ database: productDatabase, windowDays: config.transcriptRetentionDays }) : null;
     const distillation = new MethodDistillationRuns({
+      contextProvenance,
       scriptUses, verifyCode: (candidate, options) => codeVerification.verify(candidate, options), onCodeSkill: (outcome) => learningMetrics.observeCodeSkill(outcome),
       dispatch: dispatchLearningRun,
       readResult: (identity) => readLearningResult({ ...identity, capabilityId: "method-distillation" }),
@@ -4517,9 +4916,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       resolveRun: async (peerProject, runId) => (await agentRuns.list(peerProject).catch(() => [])).find((item) => item?.id === runId) ?? null,
       onEvidence: ({ kept, dropped }) => learningMetrics.observeEvidenceQuotes(kept, dropped),
     });
-    // A method that was just rewritten is read against up to five runs the person accepted, afterwards and never waited for (`methodReplay.mjs`).
+    // A method that was just rewritten is read against up to five runs the person accepted, afterwards and never waited for (`methodReplay.mjs`),
+    // inside the learning scope the method belongs to (a shared GEO project's runs for its methods, none of them for the account's own).
     const methodReplay = feedbackEvents ? new MethodReplay({
-      learning: learningService, feedback: feedbackEvents,
+      learning: learningService, feedback: feedbackEvents, contextProvenance,
       readTrajectory: createTrajectoryReader({
         resolveProject: async (userId, projectId) => {
           const user = await store.userById(userId);
@@ -4534,6 +4934,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       onStopped: (code) => learningMetrics.observeRetirement(code),
     }) : null;
     const consolidation = new MethodConsolidation({
+      contextProvenance,
       replay: methodReplay,
       // A card carried this many answered runs and never opened is stopped, with the count as the reason (`OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS`);
       // each stop is counted by the branch that decided.
@@ -4563,6 +4964,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // ledger (no database) there is nowhere to keep it.
     if (feedbackEvents) {
       learningEvidence = new LearningEvidence({
+      contextProvenance,
         feedback: feedbackEvents, jobs: productJobs, agentRuns, triggers: () => learningTriggers,
         judge: new FollowUpJudge(config, { usageLedger, fetchImpl: overrides.followUpFetch ?? globalThis.fetch }),
         // The few examples a reading is shown beside the judge's fixed contrasts, chosen by the meaning of the message with the methods' own
@@ -4606,6 +5008,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       } : null,
     });
     learningTriggers = new LearningTriggers({
+      contextProvenance,
       jobs: productJobs, agentRuns, memory: memorySettings, canReuseRun, canReuseRuns,
       evidence: learningEvidence, onRefused: (reason) => learningMetrics.observeTriggerRefused(reason),
       // A run that drew on a received pack no other account has vouched for still learns for its own account and is kept from
@@ -4737,7 +5140,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // runtime idle that long would yield its slot. Not the idle timeout: that
     // is how long a runtime stays warm (twelve hours), not how long work lasts.
     busyDelayMs: Math.min(86_400_000, Math.max(5 * 60_000, Number(config.runtimeIdleYieldAfterMs) + 60_000)),
-    cancelDispatched: async ({ userId, projectId, sessionId, episodeId, runId, verificationId, dispatchId, runtimeGeneration }) => {
+    cancelDispatched: async ({ userId, projectId, sessionId, episodeId, runId, verificationId, dispatchId, runtimeGeneration, finalAttempt }) => {
       const user = await store.userById(userId);
       if (!user) return;
       const project = await store.requireProject(user, projectId);
@@ -4746,26 +5149,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           episodeId, verificationId, dispatchId, runId, sessionId, runtimeGeneration,
         });
       }
-      let cancellationError = null;
-      try { await runtimeManager.cancelRuntimeSession(project, sessionId); }
-      catch (error) { cancellationError = error; }
-      let ledgerError = null;
-      try { await agentRuns.cancelSession(project, sessionId); }
-      catch (error) { ledgerError = error; }
-      const boundedScope = runtimeManager.boundedRuntimeScope(project);
-      let stopError = null;
-      if (boundedScope && boundedScope.runId === episodeId) {
-        try { await runtimeManager.endBoundedRuntime(project, episodeId); }
-        catch (error) { stopError = error; }
-        if (!stopError) cancellationError = null;
-      }
-      const failures = [cancellationError, ledgerError, stopError].filter(Boolean);
-      if (failures.length === 1) throw failures[0];
-      if (failures.length > 1) {
-        const combined = /** @type {AggregateError & {code?:string}} */ (new AggregateError(failures, "Autopilot cancellation did not complete."));
-        combined.code = failures[0]?.code ?? "autopilot_cancellation_failed";
-        throw combined;
-      }
+      return cancelScheduledRun({ runtimeManager, agentRuns, stopRun: stopRunForUser }, project,
+        { runId, sessionId, episodeId, runtimeGeneration, finalAttempt: finalAttempt === true });
     },
     // The second process: an independent re-check of one claim, in a fresh
     // session that was never told what the first run concluded or how, and in a
@@ -4881,7 +5266,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             // and strips the markers wherever they are.
             text: `${prompt}\n\n<evimed-autopilot-verification>${verification.verificationId}</evimed-autopilot-verification>\n${budgetMarker}`,
             system: prepared.system, routedCapability: prepared.routedCapability, memoryContext: prepared.memoryContext, agent: selected.runtimeAgent, strictContext: true,
-            model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: true,
+            model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: true, unattended: true,
             requestId: dispatchedRun.kernelRequestIds?.at(-1),
           });
         });
@@ -5062,7 +5447,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               system: `${prepared.system}${episodeContextBlock({ brief: episode.prompt, episodeId: episode.episodeId, marker: budgetMarker })}`,
               routedCapability: prepared.routedCapability,
               memoryContext: prepared.memoryContext, agent: selected.runtimeAgent, strictContext: true,
-              model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: !interactive,
+              model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: !interactive, unattended: true,
               requestId: dispatchedRun.kernelRequestIds?.at(-1),
             });
             await resident.delivered();
@@ -5152,9 +5537,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     ? subscriptionsForAudience({ subscriptions: zoneSubscriptions, userById: userId => store.userById(userId), allows: user => frontier.service.allows(user) }) : null;
   const memoryGatewayHandler = createMemoryGatewayHandler({
     config, runtimeManager, store, sessions: openVikingSessions, admission: memoryAdmission,
+    memoryContexts: nativeMemoryContexts, rememberJournal: nativeRememberJournal,
     overlay: nativeMemoryOverlay.configured ? nativeMemoryOverlay : null,
     // The capsule's half of a search (`memoryGateway.mjs`, item 9): the notes kept for the project, the packs in force, the zones it follows.
-    capsuleSearch: capsuleService ? createNativeCapsuleSearch({ service: capsuleService, subscriptions: recallSubscriptions }) : null,
+    capsuleSearch: capsuleService ? createNativeCapsuleSearch({ service: capsuleService, subscriptions: recallSubscriptions, contextItems }) : null,
     // The conversation's `forget` tool is the page's own deletion, by URI: the file, its revision, the rejection that keeps it away.
     memoryTool: nativeMemory,
   });
@@ -5162,12 +5548,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // the plugin commits only at a token threshold an ordinary conversation never reaches and when its session is disposed.
   // It goes through the gateway's own commit path, so the admission rule, the hourly bound and the ledger are the same.
   const nativeTurnCommit = new NativeTurnCommit({
-    config, memorySettings, sessions: openVikingSessions, admission: memoryAdmission,
+    config, memorySettings, sessions: openVikingSessions, admission: memoryAdmission, memoryContexts: nativeMemoryContexts,
     conversations: { runsOf: (project, sessionId) => agentRuns.conversationRuns(project, sessionId) },
     commit: memoryGatewayHandler.commitSession,
     report: (line) => process.stderr.write(`${line}\n`),
   });
-  const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService, nativeRoutes: nativeInputRoute, evaluationIsolation,
+  const capsuleGatewayHandler = createCapsuleGatewayHandler({ contextPolicies: sharedContextPolicies, contextItems, runtimeManager, store, service: capsuleService,
+    nativeRoutes: nativeInputRoute, evaluationIsolation,
     // The recall tool answers with at most this many (review M6): five unless the model asks, and never more than the most.
     recallLimit: config.memoryRecallToolLimit, recallMaxLimit: config.memoryRecallToolMaxLimit,
     subscriptions: recallSubscriptions,
@@ -5203,7 +5590,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // (`EVIDENCE_ORIGIN_NOTE`); the draft the researcher reads no longer says it.
           fromCard = await evidenceOriginNotes(evidencePublish?.origins, project, session ?? { sessionId });
           return [dispatched ? null : boundConversationNote(session, await agentRegistry),
-            await sourceConversationContext(sourceService, project, session, true)].filter(Boolean).join("\n") || null;
+            await sourceConversationContext(sourceService, project, session, true, (await sharedKnowledgeContext?.forProject(project)) ?? {})].filter(Boolean).join("\n") || null;
         })().catch(() => SOURCE_SCOPE_UNAVAILABLE_CONTEXT);
         return [...(bound ? [bound] : []), ...fromCard, ...await sessionDispatchNotes({ memorySettings, capsules: capsuleService }, userId, projectId, sessionId).catch(() => [])];
       },
@@ -5401,9 +5788,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     return resolveConversationSourceScope(researchSessions, project, sessionId);
   };
   const kbSearchGatewayHandler = createKbSearchGatewayHandler(config, runtimeManager, { index: kbIndex, evaluationIsolation,
+    ...(sharedKnowledgeContext ? { contextFor: identity => sharedKnowledgeContext.forWorkload(identity) } : {}),
     sourceScope: conversationSourceScope,
   });
   const kbBrowseGatewayHandler = createKbBrowseGatewayHandler(config, runtimeManager, { resources: openVikingResources, evaluationIsolation,
+    ...(sharedKnowledgeContext ? { contextFor: identity => sharedKnowledgeContext.forWorkload(identity) } : {}),
     sources: sourceService, library: libraryService, titleOf: (source) => projectSourceManifestRecord(source).display.title,
     sourceScope: conversationSourceScope,
     compiledScope: (identity, target) => knowledgePages.browseEligibility(identity.userId, identity.projectId, target.root, target.path),
@@ -5463,11 +5852,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const notifier = createGeoNotifier({ notifications: notificationService, store: geoParts.store, config, audit: geoAudit });
     const marketClient = overrides.mediaMarketClient ?? createMediaMarketClient(config, overrides.mediaMarketFetch ? { fetchImpl: overrides.mediaMarketFetch } : {});
     const inclusion = inclusionEnabled(config, marketClient) ? new GeoInclusionClient({ market: marketClient, config }) : null;
+    geoParts.service.inclusion = inclusion;
     /** The reviewed file behind an article, read from its project's workspace (what the market sends). @param {any} article @param {any} geoProject */
     const articleBody = async (article, geoProject) => {
       const owner = await store.userById(geoProject.userId);
       if (!owner || !article?.path) throw new HttpError(404, "geo_article_not_found", "The article's file is not available.");
       const project = await store.requireProject(owner, geoProject.projectId);
+      if (article.currentResultVersionId && geoArticleResults) {
+        const read = await geoArticleResults.readVersion(project, article.currentResultVersionId);
+        if (read.version.digest !== article.contentSha256) throw new HttpError(409, "geo_article_bytes_changed", "Article version changed.");
+        return { markdown: read.text, sourceDigest: read.version.digest };
+      }
       const file = resolveScopedPath(project.workspaceDir, article.path);
       return { markdown: String(await readFileNoFollow(project.workspaceDir, file, "utf8")) };
     };
@@ -5485,10 +5880,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     };
     /** @type {GeoOrchestrator | null} */
     let orchestrator = null;
+    const geoLearning = createGeoLearningSignals({ database: productDatabase, signals: () => evolution?.loops.signals, sourceChanges });
     const measureDeps = {
       judgeService,
       store: new GeoMeasureStore(productDatabase, {policies:evolutionModulePolicies}), config, usageLedger, inclusion, state: geoMeasureState(),
-      evolution:{communication:{offer:input=>/** @type {any} */ (evolutionLeadSources)?.communication?.offer(input)}},
+      learning: geoLearning,
       notify: (/** @type {any} */ event) => notifier.measurement(event),
       alertOperator: (/** @type {any} */ event) => notifier.alertOperator(event),
       // A measured round moves its project on now rather than at the next tick.
@@ -5506,6 +5902,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         }
       } : null,
     };
+    geoParts.service.diagnosisReview = createGeoDiagnosisReview({ database: productDatabase, store: measureDeps.store, config, usageLedger, learning: geoLearning });
     geoParts.measureState = measureDeps.state;
     // What the monitoring view says of a paused measurement: the breaker and the host pause of this process's probe loop.
     geoParts.service.probeState = () => measureDeps.state;
@@ -5521,7 +5918,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       evidenceMetricSections.questionBank = (query) => geoParts.questionBank.summary(query);
     }
     // The value profiles' upkeep (geoValueUpkeep.mjs): the module's own loop, always composed with it.
-    geoParts.valueUpkeep = createGeoValueUpkeep({ store: geoParts.store, sourceChanges, entityVocabulary, config, report: (code) => process.stderr.write(`geo value upkeep: ${code}\n`) });
+    geoParts.valueUpkeep = createGeoValueUpkeep({ store: geoParts.store, sourceChanges, entityVocabulary, learning: geoLearning, config, report: (code) => process.stderr.write(`geo value upkeep: ${code}\n`) });
+    if (geoParts.signals) {
+      geoParts.signals.notify = (project, row) => notifier.signal(project, row);
+      geoParts.signalDiscovery = new GeoSignalDiscovery({ store: geoParts.store, signals: geoParts.signals, report: code => process.stderr.write(`geo signals: ${code}\n`) });
+    }
     orchestrator = new GeoOrchestrator({
       store: geoParts.store, config, notifier, policies:evolutionModulePolicies,
       dispatchRun: overrides.geoDispatchRun ?? dispatchGeoRun,
@@ -5577,11 +5978,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       claimDay: (loop, day) => running.claimDay(loop, day),
       loops: {
         probe: () => tickGeoProbe(measureDeps),
-        parse: () => tickGeoParse(measureDeps),
+        parse: async () => {
+          await geoParts.service.diagnosisReview?.tick();
+          return tickGeoParse(measureDeps);
+        },
         metrics: () => tickGeoMetrics(measureDeps),
         errors: () => tickGeoErrors(measureDeps),
         ...(geoParts.questionBank ? { questionBank: () => geoParts.questionBank.tick() } : {}),
         valueUpkeep: () => geoParts.valueUpkeep.tick(),
+        ...(geoParts.signalDiscovery ? { signals: () => geoParts.signalDiscovery.tick() } : {}),
         orchestrator: () => running.tick(),
         schedules: () => running.tickSchedules(),
         catalogue: () => tickGeoCatalogue(marketDeps),
@@ -5802,6 +6207,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           system: `${prepared.system}${vcrBriefBlock(brief)}`,
           routedCapability: prepared.routedCapability, memoryContext: prepared.memoryContext, agent: selected.runtimeAgent, strictContext: true,
           model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: !interactive,
+          // A programme step: its context tells the model nobody will answer, and its signed attendance says the same.
+          unattended: true,
           requestId: dispatchedRun.kernelRequestIds?.at(-1),
         });
         await resident.delivered();
@@ -5889,6 +6296,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         await runtimeManager.dispatchPrompt(project, session.id, {
           recordPromptActor: async request => {
             await assertGeoProgramAuthority();
+            await recordGeoKnowledgeDispatch(project, geoProjectId, dispatchedRun, request);
             await recordExtensionPromptActor(user, project, request);
           },
           // The sentence first: the kernel names a session after its first message. The GEO mark always, open runtime or not: what the
@@ -5897,6 +6305,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           text: `${promptText}\n\n<evimed-geo-run>${geoRunId(dispatchId)}</evimed-geo-run>${marker ? `\n\n${marker}` : ""}`,
           system: `${prepared.system}${geoBriefBlock(brief)}`, routedCapability: prepared.routedCapability, memoryContext: prepared.memoryContext, agent: selected.runtimeAgent, strictContext: true,
           model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: !interactive,
+          // A programme step: its context tells the model nobody will answer, and its signed attendance says the same.
+          unattended: true,
           requestId: dispatchedRun.kernelRequestIds?.at(-1),
         });
         await resident.delivered();
@@ -5930,7 +6340,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     canRun: () => maintenanceService ? maintenanceService.claimingAllowed() : !productDatabase, webReader,
     report: code => process.stderr.write(`evolution: ${code}\n`) });
   if (evolution) {
-    evolution.loops.configureModules({ editor: frontier?.editor, planner: autopilotPlanner, runtimeSession:evolution.runtimeSession, engineBuilder:evolution.engineBuilder,
+    evolution.loops.configureModules({ editor: frontier?.editor, planner: autopilotPlanner, runtimeSession:evolution.runtimeSession, engineBuilder:evolution.engineBuilder, sourceChanges,
       readAvailability:async()=>{
         const entries=[...await availability.service.capabilities(null),...await availability.service.tools(null)];
         return entries.map(({kind,id,version,state})=>({kind,id,version,state}));
@@ -6118,21 +6528,33 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    * model classifier, then the answer line for anything they do not claim) --
    * reading the question out of the session's own transcript instead of a
    * request body.
-   * @param {Record<string, any>} project @param {string} sessionId @param {string} text
+   * `input` is the native request a prompt preparation routes (`NativeInputRoute.prepare`): a verified GEO selection of that request is routed
+   * on its original human text with the inputs it already supplied (`geoPlanContexts.routingInputForRequest`).
+   * @param {Record<string, any>} project @param {string} sessionId @param {string} text @param {{ requestIds?: string[], request?: any } | null} [input]
    */
-  async function routeAdoptedInput(project, sessionId, text) {
+  async function routeAdoptedInput(project, sessionId, text, input = null) {
     if (!text) return {};
     const binding = await researchSessions.get(project, sessionId);
     await assertPublicSessionPrompt(project, sessionId, binding);
     const registry = await agentRegistry;
-    if (binding?.mode === "specialist") return {
+    const selected = input?.request && geoPlanContexts ? await geoPlanContexts.routingInputForRequest(project, input.request) : null;
+    if (input?.request && geoPlanOwnWork.has(input.request) && (!selected || selected.referenceId !== geoPlanOwnWork.get(input.request))) {
+      throw new HttpError(503, "geo_plan_context_unavailable", "The selected request route could not be preserved.");
+    }
+    if (binding?.mode === "specialist" && !selected) return {
       effectiveAgentId: binding.agentId, effectiveAgentVersion: binding.agentVersion,
       effectiveRuntimeAgent: binding.runtimeAgent, effectiveRouteReason: "session-binding",
       estimatedMinutes: runEstimate(registry.get(binding.agentId)),
     };
-    const routableAgents = registry.list().filter((agent) => agent.id !== OPEN_DOMAIN_ANSWER_AGENT_ID);
+    const query = selected?.originalText ?? text;
+    const supplied = new Set(Object.keys(selected?.suppliedInputs ?? {}));
+    // Inputs already supplied by the verified GEO project are not missing from a short native request.
+    // Keep the human words and both classifier implementations unchanged; only this request's catalogue is qualified.
+    const routableAgents = registry.list().filter((agent) => agent.id !== OPEN_DOMAIN_ANSWER_AGENT_ID).map(agent => selected && agent.id.startsWith("geo-")
+      ? { ...agent, requiredInputs: (agent.requiredInputs ?? []).filter(key => !supplied.has(key)) } : agent);
+    const classifierTrace = {};
     const { specialist } = await routeOpenDomain({
-      query: text, agents: routableAgents, classifier: specialistClassifier,
+      query, agents: routableAgents, classifier: specialistClassifier, trace: classifierTrace,
       owner: { userId: project.userId, projectId: project.id },
     });
     const answerAgent = specialist ? null : registry.get(OPEN_DOMAIN_ANSWER_AGENT_ID);
@@ -6141,15 +6563,18 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           agentId: answerAgent.id,
           agentVersion: answerAgent.version,
           runtimeAgent: answerAgent.runtimeAgent,
-          reason: "unrouted:open-domain",
+          reason: classifierTrace.failure ? classifierFailureReason("unrouted:open-domain", classifierTrace.failure) : "unrouted:open-domain",
         }
       : null);
     return {
-      question: text,
+      question: query,
       effectiveAgentId: effective?.agentId ?? null,
       effectiveAgentVersion: effective?.agentVersion ?? null,
       effectiveRuntimeAgent: effective?.runtimeAgent ?? null,
       effectiveRouteReason: effective?.reason ?? null,
+      ...(selected ? { geoContextRef: selected.referenceId } : {}),
+      ...(["analysis", "signal"].includes(selected?.mode) && effective?.agentId === OPEN_DOMAIN_ANSWER_AGENT_ID
+        ? { geoInputRead: { referenceId: selected.referenceId, what: selected.mode } } : {}),
       estimatedMinutes: runEstimate(effective?.agentId ? registry.get(effective.agentId) : null),
     };
   }
@@ -6234,7 +6659,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     if(options.nativeContinuation && !originalAgent) throw new HttpError(404,'vcr_completion_origin_unavailable','The original research capability version is unavailable.');
     const route = options.nativeContinuation ? { effectiveAgentId:originalAgentId,
       effectiveAgentVersion:originalAgent.version, effectiveRuntimeAgent:originalAgent.runtimeAgent,
-      effectiveRouteReason:'vcr-job-completion' } : await routeAdoptedInput(project,sessionId,text);
+      effectiveRouteReason:'vcr-job-completion', estimatedMinutes:undefined } : await routeAdoptedInput(project,sessionId,text);
     // The same allowance question the page's own dispatch asks (§9.6), after
     // routing so the estimate is the capability's own and before a run exists.
     // A refusal reaches the channel as 「没有开始」 in the domain's sentence.
@@ -6314,6 +6739,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           runId: dispatchedRun.id,
           requestId: dispatchedRun.kernelRequestIds?.at(-1),
           strictContext: true,
+          // A person sent this from their channel (or started their study here) and reads the reply: `attended: true` above.
+          unattended: false,
         });
         await resident.delivered();
       } catch (error) {
@@ -6363,6 +6790,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       requestId: correctionRequestId,
       mode: "steer",
       strictContext: true,
+      // A person's correction from their channel.
+      unattended: false,
     });
     return { corrections: updated?.corrections ?? 0 };
   }
@@ -6569,11 +6998,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         releaseMutation = await maintenanceService.admitMutation();
       }
       if (await evimedAuthRoutes(req, res)) return;
-      if (await pluginRoutes(req, res)) return;
       if (await personalSkillTransferRoutes(req, res)) return;
+      if (await skillLibraryRoutes(req, res)) return;
+      if (await pluginRoutes(req, res)) return;
       if (await inventoryRoutes(req, res)) return;
       if (await extensionRoutes(req, res)) return;
-      if (await skillLibraryRoutes(req, res)) return;
       if (await capsuleRoutes(req, res)) return;
       if (await notificationRoutes(req, res)) return;
       if (await learningRoutes(req, res)) return;
@@ -6962,11 +7391,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const { user, session } = await store.ensureSessionUser(req, res, { allowDevAuth: false });
         if (req.headers["x-open-science-csrf"] !== session.csrfToken) throw new HttpError(403, "csrf_required", "A valid CSRF token is required.");
         const body = assertObject(await readJson(req, config.maxJsonBytes), "runtime UI frame");
-        if (Object.keys(body).some((key) => key !== "projectId")) throw new HttpError(400, "runtime_ui_frame_payload_invalid", "Only projectId is accepted.");
+        if (Object.keys(body).some((key) => !["projectId", "scope"].includes(key))) throw new HttpError(400, "runtime_ui_frame_payload_invalid", "The frame scope is invalid.");
         const projectId = assertString(body.projectId, "projectId", { max: 128 });
         assertClientProject(projectId);
-        const project = await store.requireProject(user, projectId);
-        const frame = issueRuntimeUiFrame({ config, req, user, session, project });
+        const resolved = body.scope ? await resolveGeoFrame(user, body.scope) : null;
+        const project = resolved?.project ?? await store.requireProject(user, projectId);
+        if (project.id !== projectId) throw new HttpError(403, "runtime_ui_frame_invalid", "The frame project changed.");
+        const frame = issueRuntimeUiFrame({ config, req, user, session, project, delegation: resolved?.principal ?? null });
         // The capsule's workspace-level profile is gone (it is part of the conversation's own context now,
         // `ResidentProfiles`): empty any the project still holds, so a turn typed into this window is not handed a stale one.
         // Not awaited — opening the window must not wait on a write — and the window's own boot takes far longer.
@@ -6989,7 +7420,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const frameId = pathname.slice("/api/runtime-ui/frames/".length, -"/renew".length);
         const renewalToken = assertString(body.renewalToken, "renewalToken", { max: 4096 });
         const frame = renewRuntimeUiFrame({ config, req, user, session, frameId, renewalToken });
-        await store.requireProject(user, frame.claims.projectId);
+        if (frame.claims.delegation) await resolveGeoFrame(user, { kind: "geo", geoProjectId: frame.claims.delegation.geoProjectId,
+          sessionId: frame.claims.delegation.rootSessionId }, frame.claims.delegation);
+        else await store.requireProject(user, frame.claims.projectId);
         runtimeUi.refreshFrameBinding(frame);
         res.setHeader("Set-Cookie", frame.cookie);
         res.setHeader("Cache-Control", "no-store");
@@ -7111,7 +7544,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (historyRoute && req.method === "GET") {
         const ctx = await context(req, res);
         const sessionId = decodeRouteComponent(historyRoute[1], "research session id");
-        sendJson(res, 200, { data: await preservedConversationHistory(ctx.project, sessionId, await agentRuns.list(ctx.project)) });
+        const runId = new URL(req.url ?? "/", "http://localhost").searchParams.get("runId");
+        sendJson(res, 200, { data: await preservedConversationHistory(ctx.project, sessionId, await agentRuns.list(ctx.project), undefined, { runId }) });
         return;
       }
 
@@ -7513,6 +7947,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             runId: dispatchedRun.id,
             requestId: dispatchedRun.kernelRequestIds?.at(-1),
             strictContext: true,
+            // The same decision the context got (`attended: !automated`): a person's dispatch is attended, a probe's, an audit's
+            // or an evaluation harness's is not, and the signed attendance says so.
+            unattended: automated,
           });
           // The profile is the conversation's from here: the next dispatch finds it there (`ResidentProfiles`).
           await resident.delivered();
@@ -7566,6 +8003,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           requestId: correctionRequestId,
           mode: "steer",
           strictContext: true,
+          // A person's correction of the run; a probe's or a harness's run (`automated`) stays a turn nobody attends.
+          unattended: run.automated === true,
         });
         sendJson(res, 202, { data: { id: runId, corrections: updated?.corrections ?? 0 } });
         return;
@@ -7708,7 +8147,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           const memory = memorySettings.configured ? await memorySettings.exportUserMemory(user.id) : null;
           let entries = appendMemoryArchiveEntry(await collectUserArchiveEntries(user, projects, config), memory, config);
           // An account on the native engine also carries the engine's own pack of its memory files (a ZIP with a hash per file).
-          if (await nativeMemoryHeldBy(user.id)) entries = appendBinaryArchiveEntry(entries, "memory/native-memory.zip", await nativeMemory.exportPack(user.id), config);
+          if (await nativeMemoryHeldBy(user.id)) {
+            const collectNative = () => nativeMemory.exportPack(user.id);
+            const pack = snapshot ? await snapshot.withDatabaseSnapshot(collectNative) : await collectNative();
+            entries = appendBinaryArchiveEntry(entries, "memory/native-memory.zip", pack, config);
+          }
           if (snapshot) entries = appendAccountStateArchiveEntry(entries, snapshot.data, config);
           await securityAudit(config, "account.export", "completed", { userId: user.id });
           await sendUserArchive(res, user, entries);
@@ -8343,7 +8786,40 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // The kernel's browser application, on an origin of its own. It is a
   // listener rather than a route because the application builds every URL it
   // fetches from `location.origin`; see `runtimeUiServer.mjs`.
+  const geoFrameResolver = createGeoFrameResolver({
+    resolve: (user, scope, claims) => geoNativeAuthority.resolve(user, scope, { claims }),
+    // What a verified context stays verified for: the runtime that launched it, and the policy's revision it was launched under.
+    contextStamp: async resolved => canonicalJson([runtimeManager.runtimeGeneration(resolved.project),
+      contextPolicyIdentity(await sharedContextPolicies.forProject(resolved.project))]),
+    verifyContext: async resolved => {
+      await runtimeManager.assertContextPolicyGeneration(resolved.project);
+      await authorizeOwnedNativeSession(await store.userById(resolved.project.userId), resolved.project, resolved.principal.rootSessionId);
+    },
+  });
+  /** @param {any} user @param {any} scope @param {any} [claims] @param {{ recheck?: any }} [options] */
+  async function resolveGeoFrame(user, scope, claims = null, options = {}) {
+    if (!geoNativeAuthority || !sharedContextPolicies) throw new HttpError(404, "geo_not_enabled", "The GEO conversation is unavailable.");
+    return geoFrameResolver(user, scope, claims, options);
+  }
+  const geoNativeSelectionRequests = new WeakSet();
   const runtimeUi = createRuntimeUiServer({
+    resolveDelegatedFrame: (user, delegation, options) => resolveGeoFrame(user, { kind: "geo", geoProjectId: delegation.geoProjectId, sessionId: delegation.rootSessionId }, delegation, options),
+    createDelegatedPolicy: async ({ user, project, claims }) => new GeoNativeFramePolicy({ authority: geoNativeAuthority,
+      runtimeManager, config, user, project, claims, acceptInput: null, nativeInputs: geoNativeInputs }),
+    prepareSelections: async (user, project, request) => {
+      if (!geoNativeSelections) return;
+      const policy = await sharedContextPolicies.forProject(project);
+      if (policy.kind !== "geo-project") return;
+      try { await geoNativeAuthority.resolve(user, { kind: "geo", geoProjectId: policy.geoProjectId, sessionId: request.sessionId }); }
+      catch (error) {
+        // An owner's ordinary unrelated native conversation keeps the existing
+        // path. A member or an explicit selected input may never fall through.
+        if (user.id !== project.userId || request.geoPlanContext !== undefined || request.evimedResultRevision !== undefined || error?.status !== 404) throw error;
+        return;
+      }
+      await geoNativeSelections.prepare(user, project, request);
+      geoNativeSelectionRequests.add(request);
+    },
     config,
     store,
     runtimeManager,
@@ -8367,27 +8843,71 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         ? (await agentRuns.list(project).catch(() => [])).find((run) => run.sessionId === sessionId && run.status === "running") : null;
       await credits.service.assertBalanceForStart(project.userId, binding?.mode === "specialist" ? binding.agentId : null, { ignoreHoldOf: working?.id ?? null });
     } : null,
+    // Best effort and counted inside (`open_science_attendance_receipt_write_failures_total{origin="native"}`): a receipt that could
+    // not be written makes the turn read as unattended at worst, and never refuses the person's message.
+    recordPromptAttendance: async (_user, project, request) => {
+      await runtimeManager.writePromptAttendance(project, request, { unattended: false, origin: "native" });
+    },
     recordPromptActor: recordExtensionPromptActor,
     bindVcrReference: (user, project, request) => bindVcrConversationReference(vcr, user, project, request),
-    bindResultRevision: resultRevisions ? (user, project, request) => resultRevisions.bind(user.id, project, request) : null,
-    // A conversation typed in the kernel's own window: the route of its input is frozen before the prompt goes, and so is what the runtime carries of
-    // the researcher's methods, chosen by what it asks (`RuntimeManager.refreshCapsuleMethods`). Neither refuses the prompt.
-    preparePrompt: nativeInputRoute || learningService ? async (project, request) => {
-      /** @type {any} */
-      let envelope = null;
-      /** @type {{ error: unknown } | null} */
-      let failed = null;
-      if (nativeInputRoute) {
-        try { envelope = await nativeInputRoute.prepare(project, request); } catch (error) { failed = { error }; }
+    prepareGeoPlan: async (user, project, request) => {
+      if (!geoPlanContexts) throw new HttpError(503, "geo_plan_context_unavailable", "Planning is unavailable.");
+      nativeInputRoute?.assertRequestIdentity(request);
+      await geoPlanContexts.prepare(user, project, request);
+    },
+    bindGeoPlan: async (user, project, request) => {
+      if (!geoPlanContexts) throw new HttpError(503, "geo_plan_context_unavailable", "Planning is unavailable.");
+      const planInput = await geoPlanContexts.bind(user, project, request);
+      geoPlanOwnWork.set(request, planInput?.id);
+      if (geoNativeSelectionRequests.has(request)) return;
+      const existing = (planInput?.actions ?? []).filter(action => action.work?.mode === "modify_existing");
+      if (existing.length === 1) geoPlanRevisionInputs.set(request, { versionId: existing[0].work.resultVersionId, digest: existing[0].work.digest,
+        target: { kind: "geo-article", geoProjectId: planInput.geoId, articleId: existing[0].work.articleId }, expectedHeadVersionId: existing[0].work.resultVersionId });
+    },
+    bindResultRevision: resultRevisions ? async (user, project, request) => {
+      if (geoNativeSelectionRequests.has(request)) return geoNativeSelections.bindResult(user, project, request);
+      if (geoPlanRevisionInputs.has(request) && request.evimedResultRevision === undefined) return resultRevisions.bindConversation(user.id, project, request, geoPlanRevisionInputs.get(request));
+      if (geoPlanOwnWork.has(request) && request.evimedResultRevision === undefined) return null;
+      if (geoArticleResults) {
+        const bound = await geoArticleResults.bind(user, project, request);
+        if (bound || request.evimedResultRevision === undefined) return bound;
       }
-      if (request?.mode !== "steer") {
-        await runtimeManager.refreshCapsuleMethods({ userId: project.userId, projectId: project.id, sessionId: String(request?.sessionId ?? ""),
-          query: nativeInputText(request?.content),
-          ...(envelope?.route ? { scopeId: runScopeOf(envelope.route.effectiveAgentId, OPEN_DOMAIN_ANSWER_AGENT_ID) } : {}) }).catch(() => null);
-      }
-      if (failed) throw failed.error;
-      return envelope;
+      return resultRevisions.bind(user.id, project, request);
     } : null,
+    // A conversation typed in the kernel's own window: the route of its input is frozen before the prompt goes, and so is what the runtime carries of
+    // the researcher's methods, chosen by what it asks (`RuntimeManager.refreshCapsuleMethods`). Neither refuses the prompt, except a selected GEO
+    // request whose route could not be preserved (`definitivelyRejected`, `prepareNativeContext`).
+    preparePrompt: async (project, request) => {
+      try {
+        let prepared = null;
+        /** @type {{ error: unknown } | null} */
+        let failed = null;
+        if (nativeInputRoute) {
+          try { prepared = await nativeInputRoute.prepare(project, request); } catch (error) { failed = { error }; }
+        }
+        if (request?.mode !== "steer") {
+          await runtimeManager.refreshCapsuleMethods({ userId: project.userId, projectId: project.id, sessionId: String(request?.sessionId ?? ""),
+            query: nativeInputText(request?.content),
+            ...(prepared?.route ? { scopeId: runScopeOf(prepared.route.effectiveAgentId, OPEN_DOMAIN_ANSWER_AGENT_ID) } : {}) }).catch(() => null);
+        }
+        if (failed) throw failed.error;
+        if (geoPlanOwnWork.has(request) && request.mode !== "steer" && (!prepared
+          || prepared.route?.geoContextRef !== geoPlanOwnWork.get(request)
+          || ![prepared.route?.effectiveAgentId, prepared.route?.effectiveAgentVersion, prepared.route?.effectiveRuntimeAgent]
+            .every(value => typeof value === "string" && value.length > 0))) {
+          throw new HttpError(503, "geo_plan_context_unavailable", "The selected request route could not be preserved.");
+        }
+        return prepared;
+      }
+      catch (error) {
+        if (geoPlanOwnWork.has(request)) {
+          const refused = error instanceof HttpError ? error : new HttpError(503, "geo_plan_context_unavailable", "The selected request route could not be preserved.");
+          refused.definitivelyRejected = true;
+          throw refused;
+        }
+        throw error;
+      }
+    },
     authorizeMutation: maintenanceService ? (operation) => maintenanceService.withMutation(operation) : null,
     // A message steered into a running turn from the kernel's window is counted
     // on that run — the learning loop's in-run correction signal.
@@ -8431,7 +8951,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }
 
   const scheduleAutopilot = async () => {
-    if (!autopilotService || !productDatabase || autopilotScheduleRun) return autopilotScheduleRun;
+    if (!config.autopilotEnabled || !autopilotService || !productDatabase || autopilotScheduleRun) return autopilotScheduleRun;
     const schedule = () => autopilotService.scheduleActive(productDatabase, async (row, error) => {
       await securityAudit(config, "autopilot.schedule", "failed", {
         userId: row.user_id, agendaId: row.id,
@@ -8676,7 +9196,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         handbookArmRetired = true;
         void retireHandbookArm({ database: productDatabase, report: (line) => process.stderr.write(`${line}\n`) }).catch(() => {});
       }
-      evidenceProgramme?.worker?.start();
+      // The evidence programme is scheduled work: it is armed only where scheduled tasks are on.
+      if (config.autopilotEnabled) evidenceProgramme?.worker?.start();
       review?.worker.start();
       geo?.worker?.start?.();
       vcr?.worker?.start?.();
@@ -8692,7 +9213,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       }
       await scheduleAutopilot();
       if (maintenanceService && !maintenanceService.claimingAllowed()) { pauseRecurringWork(); return; }
-      if (autopilotService && !autopilotScheduleTimer) {
+      if (config.autopilotEnabled && autopilotService && !autopilotScheduleTimer) {
         autopilotScheduleTimer = setInterval(() => { void scheduleAutopilot(); }, 60_000);
         autopilotScheduleTimer.unref();
       }
@@ -8765,6 +9286,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     nativeMemory,
     nativeMemoryWorker,
     nativeTurnCommit,
+    sharedContextPolicies, nativeMemoryContexts, nativeRememberJournal, geoNativeAuthority, geoNativeInputs, geoNativeSelections, contextItems, contextProvenance,
     sourceService,
     sourceWorker,
     knowledgePages,
@@ -9957,6 +10479,13 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
     "Workload tokens the control plane refused, by what the check was doing: the token itself, the runtime it names, whether it was the token the file holds now (superseded by a rewrite while in flight), or reading that file.",
     "counter",
     Object.entries(runtimeStats.workloadTokenRefusals ?? {}).map(([reason, value]) => ({ value: Number(value) || 0, labels: { reason } })),
+  );
+  addMetric(
+    lines,
+    "open_science_attendance_receipt_write_failures_total",
+    "Signed attendance receipts that could not be written (or mirrored to a remote runtime) before a prompt was forwarded, by where the prompt came from. The prompt is forwarded anyway; its turn reads as unattended unless its native route proves a person.",
+    "counter",
+    Object.entries(runtimeStats.attendanceReceiptWriteFailures ?? {}).map(([origin, value]) => ({ value: Number(value) || 0, labels: { origin } })),
   );
   addMetric(
     lines,

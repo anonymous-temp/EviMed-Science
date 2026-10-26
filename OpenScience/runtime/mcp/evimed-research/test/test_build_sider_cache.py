@@ -72,3 +72,46 @@ class SiderDownloadTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SiderReuseTests(unittest.TestCase):
+    """An index already built from the pinned inputs is reused, never one built from anything else (2026-10-25 outage)."""
+
+    def index(self, directory, **overrides):
+        import sqlite3
+        path = Path(directory) / "sider-4.1.sqlite"
+        connection = sqlite3.connect(path)
+        connection.executescript("""
+            CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID;
+            CREATE TABLE drug_names (compound_id TEXT, name TEXT, normalized_name TEXT);
+            CREATE TABLE side_effects (compound_id TEXT, concept_id TEXT, effect_name TEXT);
+            INSERT INTO drug_names VALUES ('CID1', 'aspirin', 'aspirin');
+            INSERT INTO side_effects VALUES ('CID1', 'C1', 'nausea');
+        """)
+        recorded = {
+            "release": "SIDER 4.1 (2015-10-21)",
+            "drugNamesSha256": builder.SOURCES["drug_names.tsv"]["sha256"],
+            "sideEffectsSha256": builder.SOURCES["meddra_all_se.tsv.gz"]["sha256"],
+            "drugNameRows": "1", "sideEffectRows": "1", **overrides,
+        }
+        connection.executemany("INSERT INTO metadata VALUES (?, ?)", list(recorded.items()))
+        connection.commit()
+        connection.close()
+        return path
+
+    def test_an_index_of_the_pinned_inputs_is_reused(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertTrue(builder.reusable(self.index(directory)))
+
+    def test_anything_else_is_built_again(self):
+        import tempfile
+        for overrides in ({"drugNamesSha256": "0" * 64}, {"sideEffectsSha256": "0" * 64}, {"sideEffectRows": "2"},
+                          {"release": "SIDER 4.0"}, {"drugNameRows": "0"}):
+            with tempfile.TemporaryDirectory() as directory:
+                self.assertFalse(builder.reusable(self.index(directory, **overrides)), overrides)
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertFalse(builder.reusable(Path(directory) / "absent.sqlite"))
+            garbage = Path(directory) / "garbage.sqlite"
+            garbage.write_bytes(b"not a database")
+            self.assertFalse(builder.reusable(garbage))

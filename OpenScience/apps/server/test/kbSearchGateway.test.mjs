@@ -12,9 +12,9 @@ const runtimeManager = {
   },
 };
 
-async function withGateway(t, { config = {}, index = null, sourceScope = undefined } = {}) {
+async function withGateway(t, { config = {}, index = null, sourceScope = undefined, contextFor = null } = {}) {
   const failures = [];
-  const handler = createKbSearchGatewayHandler({ kbSearchEnabled: true, kbSearchTimeoutMs: 1_000, ...config }, runtimeManager, { index, sourceScope });
+  const handler = createKbSearchGatewayHandler({ kbSearchEnabled: true, kbSearchTimeoutMs: 1_000, ...config }, runtimeManager, { index, sourceScope, contextFor });
   const server = createServer((req, res) => { void handler(req, res, (failure) => failures.push(failure)); });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
@@ -40,6 +40,52 @@ test("the runtime's own token names the account and project searched, and the an
   const defaults = await call({ query: "q" });
   assert.equal(defaults.status, 200);
   assert.deepEqual(calls[1], { userId: "user-1", projectId: "project-1", query: "q", limit: 8, sourceIds: null });
+});
+
+test('trusted project context excludes library before search and proves saved session scope independently', async t => {
+  const calls = [], acceptSource = async () => true;
+  let ordinaryScope = 0;
+  const f = await withGateway(t, { index: { search: async input => { calls.push(input); return {}; } },
+    // The sessionless check (`resolveConversationSourceScope`): null while no conversation of the project holds a selection.
+    sourceScope: async (_identity, sessionId) => { ordinaryScope += 1; assert.ok(!sessionId); return null; }, contextFor: async identity => {
+      assert.deepEqual(identity, { userId: 'user-1', projectId: 'project-1' });
+      return { kind: 'geo-project', acceptSource, sourceScope: async id => {
+        if (id !== 'proven-session') throw new Error('Session not proven');
+        return [];
+      } };
+    } });
+  assert.equal((await f.call({ query: 'q' })).status, 200);
+  assert.equal(calls[0].includeLibrary, false); assert.equal(calls[0].acceptSource, acceptSource);
+  assert.equal((await f.call({ query: 'q', sessionId: 'proven-session', sourceIds: [SOURCE] })).status, 200);
+  assert.deepEqual(calls[1].sourceIds, []);
+  assert.equal((await f.call({ query: 'q', sessionId: 'foreign-session' })).status, 503);
+  assert.equal(calls.length, 2); assert.equal(ordinaryScope, 1, 'only the sessionless call asks the project-wide check; a session is proved by the shared context');
+  assert.equal((await f.call({ query: 'q', includeLibrary: true })).status, 400);
+});
+
+test('a sessionless shared-context search is refused while a conversation of the project holds a selection', async t => {
+  let held = true, searched = 0;
+  const f = await withGateway(t, { index: { search: async () => { searched += 1; return {}; } },
+    sourceScope: async (_identity, sessionId) => {
+      if (sessionId) throw new Error('A session is the shared context\'s to prove');
+      if (held) throw new Error('Knowledge tools require native session context.');
+      return null;
+    },
+    contextFor: async () => ({ kind: 'geo-project', acceptSource: async () => true, sourceScope: async () => [SOURCE] }) });
+  assert.equal((await f.call({ query: 'q' })).status, 503);
+  assert.equal(searched, 0, 'no selection is broadened by leaving the session out');
+  assert.equal((await f.call({ query: 'q', sessionId: 'proven-session' })).status, 200);
+  held = false;
+  assert.equal((await f.call({ query: 'q' })).status, 200);
+  assert.equal(searched, 2);
+});
+
+test('an unavailable project policy never falls back to the ordinary source scope', async t => {
+  for (const value of [null, {}, { kind: 'unknown' }, { kind: 'geo-project' }]) {
+    let searched = false;
+    const f = await withGateway(t, { index: { search: async () => { searched = true; return {}; } }, contextFor: async () => value });
+    assert.equal((await f.call({ query: 'q' })).status, 503); assert.equal(searched, false);
+  }
 });
 
 test("no token, a stale token, another route or another method is refused before the index is asked", async (t) => {

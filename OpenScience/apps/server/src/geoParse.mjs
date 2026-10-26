@@ -7,8 +7,8 @@
  *
  * - **Only registered names are counted here, by one rule for every
  *   product** (`countedNames`): the brand, its other names and known
- *   misspellings, and the generic's forms only when a single holder markets
- *   the generic (`singleSource`), matched after case and width folding
+ *   misspellings, and literal brand aliases; generic forms and optional single-source attribution
+ *   are kept separately in `genericMentions`, matched after case and width folding
  *   (NFKC + lower case, so 「ＡＢＣ」 and 「abc」 are one name).
  *   Unregistered drug products in the answer (M-04C's denominator) are named
  *   by the model judge; code re-checks each one is really in the text and
@@ -16,15 +16,14 @@
  *   dosage-form regex is exactly the open-vocabulary pattern principle 5 rules
  *   out, and its own stop-word list is the evidence it never converged.
  * - **Counts do not double.** Aliases overlap (「某某口服液」 contains 「某某」);
- *   occurrences are counted without overlap, the longer alias winning at the
- *   same start — the owner's `_count_and_first`, so a share of voice is not
- *   inflated by the alias list.
+ *   every identity reads one non-overlapping set of exact aliases, the
+ *   longest match winning. A short brand inside a longer rival or generic
+ *   cannot create an extra occurrence or inflate a share of voice.
  * - **Position is rank, not offset**: 1 for the first registered brand the
  *   answer names, 2 for the second. `firstOurs` is rank 1.
- * - **"In a recommendation"** is a list item (a format — numbered or bulleted
- *   line) or a sentence the judge marked as recommending a product. Which
- *   sentences recommend is language, so it is the judge's; code only checks
- *   the sentence is in the answer and the brand is in the sentence.
+ * - **"In a recommendation"** requires the judge to name both a span and the
+ *   entities it recommends. Code checks the span against the answer and each
+ *   entity against that span. Formatting never supplies a semantic verdict.
  * - **A citation is in the body** only where the engine renders inline markers
  *   (`GEO_METRICS.engines[e].citation_display === 'inline_marker'`): the
  *   probe's own `in_body` when it sends one, else whether the n-th source's
@@ -40,11 +39,11 @@
  */
 
 import { createHash } from "node:crypto";
-import { GEO_METRICS, geoCitationHost, isOurCitation } from "@evimed/domain";
+import { GEO_METRICS, geoAnswerAccuracy, geoCitationHost, isOurCitation } from "@evimed/domain";
 import { stripPageChrome } from "./geoSanity.mjs";
 
 /** Written into `facts.parser_version`; bump when what is counted changes. */
-export const GEO_PARSER_VERSION = "geo-parse-1";
+export const GEO_PARSER_VERSION = "geo-parse-2";
 
 /** The most citations kept per snapshot. */
 export const GEO_CITATIONS_MAX = 50;
@@ -87,7 +86,9 @@ function uniqueFolded(values) {
 }
 
 /**
- * @typedef {{ name: string, ours: boolean, competitor: boolean, aliases: string[] }} GeoRegisteredBrand
+ * @typedef {{ name: string, ours: boolean, competitor: boolean, aliases: string[], genericAliases?: string[], singleSource?: boolean }} GeoRegisteredBrand
+ * @typedef {{ text: string, entities: string[] }} GeoRecommendation
+ * @typedef {{ name: string, ours: boolean, competitor: boolean, count: number, matchedNames: string[], productAttributed: boolean }} GeoGenericMention
  */
 
 /**
@@ -107,52 +108,34 @@ function genericForms(entry) {
 }
 
 /**
- * The names an answer is counted by for one product: its brand and the other
- * names of that product, and — only when one approved holder markets the
- * generic (`singleSource: true`) — the generic's forms as well.
- *
- * The rule is the same on both sides (owner's ruling 2026-09-26): a
- * single-source drug's generic name names that product and nobody else's, so
- * saying it is a mention of that product; a multi-source generic names every
- * holder's product, so only brand names count. Before the ruling our product
- * was counted by its brand alone while a rival counted by its generic too —
- * 84 answers that named only 玛仕度肽 were read as 「漏提我方」 while every
- * 替尔泊肽 was a mention of 穆峰达. An entry registered with no brand at all has
- * only its generic to be counted by, and keeps it.
+ * Literal brand names only. A generic stays a separate observation even when
+ * one holder markets it; attribution is not a literal brand mention.
  * @param {Record<string, any> | null | undefined} entry
  */
 export function countedNames(entry) {
-  const brand = strings(entry?.brandName);
+  const brand = uniqueFolded(strings(entry?.brandName));
   const generic = genericForms(entry);
-  const single = entry?.singleSource === true || brand.length === 0;
-  const names = uniqueFolded([...brand, ...strings(entry?.aliases), ...strings(entry?.misspellings)])
-    .filter((name) => single || !generic.includes(name));
-  return single ? uniqueFolded([...names, ...generic]) : names;
+  return uniqueFolded([...brand, ...strings(entry?.aliases), ...strings(entry?.misspellings)])
+    .filter((name) => brand.includes(name) || !generic.includes(name));
 }
 
 /**
- * The registered names: ours first, then each competitor.
- * @param {Record<string, any> | null | undefined} product  `projects.product`
- * @param {Array<Record<string, any>> | null | undefined} competitors  `projects.competitors`
+ * The registered identities, with literal brand and generic aliases separate.
+ * @param {Record<string, any> | null | undefined} product
+ * @param {Array<Record<string, any>> | null | undefined} competitors
  * @returns {GeoRegisteredBrand[]}
  */
 export function brandRegistry(product, competitors) {
   /** @type {GeoRegisteredBrand[]} */
   const registry = [];
-  const ourName = String(product?.brandName ?? "").trim();
-  // Our product is always entered by its brand; a product with none yet is
-  // not counted by its generic until the identity step says it is ours alone.
-  const ourAliases = strings(product?.brandName).length ? countedNames(product)
-    : uniqueFolded([...strings(product?.aliases), ...strings(product?.misspellings), ...(product?.singleSource === true ? genericForms(product) : [])]);
-  if (ourAliases.length) registry.push({ name: ourName || ourAliases[0], ours: true, competitor: false, aliases: ourAliases });
-  const ours = new Set(ourAliases);
-  for (const competitor of Array.isArray(competitors) ? competitors : []) {
-    const brand = String(competitor?.brandName ?? "").trim();
-    const name = brand || String(competitor?.genericName ?? "").trim();
-    if (!name) continue;
-    const aliases = countedNames(competitor).filter((alias) => !ours.has(alias));
-    if (!aliases.length || registry.some((entry) => entry.name === name)) continue;
-    registry.push({ name, ours: false, competitor: true, aliases });
+  const entries = [product, ...(Array.isArray(competitors) ? competitors : [])];
+  for (const [index, entry] of entries.entries()) {
+    if (!entry) continue;
+    const aliases = countedNames(entry).filter((alias) => !registry.some((item) => item.aliases.includes(alias)));
+    const genericAliases = genericForms(entry);
+    const name = String(entry.brandName || entry.genericName || aliases[0] || "").trim();
+    if (!name || (!aliases.length && !genericAliases.length) || registry.some((item) => item.name === name)) continue;
+    registry.push({ name, ours: index === 0, competitor: index !== 0, aliases, genericAliases, singleSource: entry.singleSource === true });
   }
   return registry;
 }
@@ -166,7 +149,7 @@ export function brandRegistry(product, competitors) {
 export function registryKey(registry, owned) {
   const canonical = {
     parser: GEO_PARSER_VERSION,
-    brands: registry.map((entry) => [entry.ours ? 1 : 0, entry.name, [...entry.aliases].sort()]),
+    brands: registry.map((entry) => [entry.ours ? 1 : 0, entry.name, [...entry.aliases].sort(), [...(entry.genericAliases ?? [])].sort(), entry.singleSource === true]),
     domains: [...new Set((owned?.domains ?? []).map((domain) => String(domain).toLowerCase()))].sort(),
     urls: [...new Set((owned?.urls ?? []).map(String))].sort(),
   };
@@ -174,42 +157,56 @@ export function registryKey(registry, owned) {
 }
 
 /**
- * Non-overlapping occurrences of any alias in a folded text, the longer alias
- * winning at the same start, and where the first one starts.
- * @param {string} folded @param {string[]} aliases  folded aliases
- * @returns {{ count: number, first: number | null }}
+ * One non-overlapping ownership set for literal aliases. Longer exact names
+ * win before shorter contained names; independent occurrences remain. All
+ * consumers (brands, generics, entities and recommendation anchoring) use it.
+ * @param {string} folded @param {string[]} aliases folded aliases
+ * @returns {Array<{ alias: string, start: number, end: number }>}
  */
-export function countMentions(folded, aliases) {
-  /** @type {Array<[number, number]>} */
-  const spans = [];
-  for (const alias of aliases) {
+export function matchedMentions(folded, aliases) {
+  const candidates = [];
+  for (const alias of new Set(aliases)) {
     if (!alias) continue;
     let start = 0;
     for (;;) {
       const index = folded.indexOf(alias, start);
       if (index < 0) break;
-      spans.push([index, index + alias.length]);
-      start = index + alias.length;
+      candidates.push({ alias, start: index, end: index + alias.length });
+      start = index + 1;
     }
   }
-  if (!spans.length) return { count: 0, first: null };
-  spans.sort((left, right) => left[0] - right[0] || (right[1] - right[0]) - (left[1] - left[0]));
-  let count = 0;
-  let lastEnd = -1;
-  for (const [begin, end] of spans) {
-    if (begin < lastEnd) continue;
-    count += 1;
-    lastEnd = end;
+  candidates.sort((left, right) => right.alias.length - left.alias.length || left.start - right.start);
+  const occupied = new Uint8Array(folded.length);
+  const found = [];
+  for (const span of candidates) {
+    if (occupied.subarray(span.start, span.end).some((value) => value !== 0)) continue;
+    occupied.fill(1, span.start, span.end);
+    found.push(span);
   }
-  return { count, first: spans[0][0] };
+  return found.sort((left, right) => left.start - right.start);
+}
+
+/**
+ * Count the same exact-alias ownership set used by the answer parser.
+ * @param {string} folded @param {string[]} aliases
+ * @returns {{ count: number, first: number | null }}
+ */
+export function countMentions(folded, aliases) {
+  const spans = matchedMentions(folded, aliases);
+  return { count: spans.length, first: spans[0]?.start ?? null };
 }
 
 // A list item is a format: a numbered or bulleted line. Closed set of markers.
-const LIST_ITEM = /^\s*(?:\d{1,2}\s*[.、)）]|[（(]\s*\d{1,2}\s*[)）]|[-*•·+]\s|[一二三四五六七八九十]{1,3}\s*、)/u;
+const LIST_ITEM = /^\s*(?:\d{1,2}\s*(?:[.](?!\d)|[、)）])|[（(]\s*\d{1,2}\s*[)）]|[-*•·+]\s|[一二三四五六七八九十]{1,3}\s*、)/u;
 
 /** The lines of a text that are list items, folded. @param {string} body */
 export function listItemLines(body) {
   return body.split(/\r?\n/u).filter((line) => LIST_ITEM.test(line)).map(foldText);
+}
+
+/** Remove closed list markers before reading quantities, preserving decimal doses. @param {string} body */
+export function stripListItemMarkers(body) {
+  return body.split(/\r?\n/u).map((line) => line.replace(LIST_ITEM, "")).join("\n");
 }
 
 const INLINE_MARKERS = Object.freeze([
@@ -253,6 +250,8 @@ export function citationRows(searchResults, answer, engine) {
  * @typedef {{ name: string, ours: boolean, competitor: boolean, position: number | null, inRecommendation: boolean, count: number }} GeoBrandFact
  * @typedef {object} GeoCodeFacts
  * @property {GeoBrandFact[]} brands
+ * @property {GeoGenericMention[]} genericMentions
+ * @property {number} entityMentions
  * @property {boolean} mentionsOurs
  * @property {boolean} firstOurs
  * @property {boolean} recommendedOurs
@@ -269,51 +268,56 @@ export function citationRows(searchResults, answer, engine) {
  * `recommendations` and `entities` come from the judge, already checked to be
  * in the answer; they may be empty.
  * @param {{ answer: unknown, citations?: GeoCitationRow[] | null, registry: GeoRegisteredBrand[],
- *   owned?: { domains?: string[], urls?: string[] }, recommendations?: string[], entities?: string[] }} input
+ *   owned?: { domains?: string[], urls?: string[] }, recommendations?: Array<GeoRecommendation | string>, entities?: string[] }} input
  * @returns {GeoCodeFacts}
  */
 export function parseAnswer({ answer, citations = [], registry, owned = {}, recommendations = [], entities = [] }) {
   const { body, stripped } = stripPageChrome(answer);
   const folded = foldText(body);
-  const listLines = listItemLines(body);
-  const recommending = recommendations.map(foldText);
-  const inRecommendation = (/** @type {string[]} */ aliases) => [...listLines, ...recommending]
-    .some((line) => aliases.some((alias) => line.includes(alias)));
-
-  const found = registry
-    .map((brand) => ({ brand, ...countMentions(folded, brand.aliases) }))
-    .filter((entry) => entry.count > 0)
-    .sort((left, right) => /** @type {number} */ (left.first) - /** @type {number} */ (right.first));
+  const registered = registry.flatMap((brand) => [...brand.aliases, ...(brand.genericAliases ?? [])]);
+  const seen = new Set();
+  const unregistered = entities.map((entity) => String(entity ?? "").trim()).filter((name) => {
+    const key = foldText(name);
+    if (key.length < 2 || seen.has(key) || registered.some((alias) => key.includes(alias) || alias.includes(key))) return false;
+    seen.add(key);
+    return true;
+  });
+  const aliases = [...registered, ...unregistered.map(foldText)];
+  const spans = matchedMentions(folded, aliases);
+  const spansFor = (/** @type {string[]} */ names) => spans.filter((span) => names.includes(span.alias));
+  // Old string-only extractions cannot distinguish recommended and negated
+  // products co-mentioned in a sentence. Preserve them in history, not counts.
+  const compact = compactText(body);
+  const recommending = recommendations.flatMap((entry) => {
+    if (!entry || typeof entry !== "object" || !compactText(entry.text) || !compact.includes(compactText(entry.text)) || !Array.isArray(entry.entities)) return [];
+    const named = new Set(matchedMentions(foldText(entry.text), aliases).map((span) => span.alias));
+    return [entry.entities.map(foldText).filter((name) => named.has(name))];
+  });
+  const inRecommendation = (/** @type {string[]} */ names) => recommending.some((recommended) => recommended.some((name) => names.includes(name)));
+  const found = registry.map((brand) => ({ brand, spans: spansFor(brand.aliases) }))
+    .filter((entry) => entry.spans.length > 0).sort((left, right) => left.spans[0].start - right.spans[0].start);
   /** @type {GeoBrandFact[]} */
   const brands = found.map((entry, index) => ({
-    name: entry.brand.name,
-    ours: entry.brand.ours,
-    competitor: entry.brand.competitor,
-    position: index + 1,
-    inRecommendation: inRecommendation(entry.brand.aliases),
-    count: entry.count,
+    name: entry.brand.name, ours: entry.brand.ours, competitor: entry.brand.competitor,
+    position: index + 1, inRecommendation: inRecommendation(entry.brand.aliases), count: entry.spans.length,
   }));
-
-  // Unregistered drug products the judge named: kept only when the name is in
-  // the answer and is not a registered one (or contains one), and counted here.
-  const registered = registry.flatMap((brand) => brand.aliases);
-  const seen = new Set(brands.map((brand) => foldText(brand.name)));
-  for (const entity of entities) {
-    const name = String(entity ?? "").trim();
-    const key = foldText(name);
-    if (key.length < 2 || seen.has(key)) continue;
-    if (registered.some((alias) => key === alias || key.includes(alias) || alias.includes(key))) continue;
-    const { count } = countMentions(folded, [key]);
-    if (!count) continue;
-    seen.add(key);
-    brands.push({ name, ours: false, competitor: false, position: null, inRecommendation: false, count });
+  const genericMentions = registry.map((brand) => ({ brand, spans: spansFor(brand.genericAliases ?? []) }))
+    .filter((entry) => entry.spans.length > 0).map(({ brand, spans: genericSpans }) => ({
+      name: brand.name, ours: brand.ours, competitor: brand.competitor, count: genericSpans.length,
+      matchedNames: (brand.genericAliases ?? []).filter((name) => genericSpans.some((span) => span.alias === name)),
+      productAttributed: brand.singleSource === true,
+    }));
+  for (const name of unregistered) {
+    const count = spansFor([foldText(name)]).length;
+    if (count) brands.push({ name, ours: false, competitor: false, position: null, inRecommendation: false, count });
   }
-
   const ours = brands.find((brand) => brand.ours) ?? null;
   const rows = Array.isArray(citations) ? citations : [];
   const ourCitations = rows.filter((citation) => isOurCitation(citation, owned));
   return {
     brands,
+    genericMentions,
+    entityMentions: spans.length,
     mentionsOurs: Boolean(ours),
     firstOurs: ours?.position === 1,
     recommendedOurs: Boolean(ours?.inRecommendation),
@@ -327,15 +331,15 @@ export function parseAnswer({ answer, citations = [], registry, owned = {}, reco
 }
 
 /**
- * The failure mode of one answer (plan §4.3): 讲错我方 when a statement about
- * us was judged wrong, 漏提我方 when we are not named, 讲对我方 otherwise; a
- * refusal is `none`. 讲错竞品 is never assigned here: there is no claim base
- * for competitors to judge against, and the owner's method logs it only.
- * @param {{ status: string, mentionsOurs: boolean, statements: Array<{ verdict?: string | null }> }} input
- * @returns {"omitted" | "correct" | "wrong_ours" | "none"}
+ * Wrong statements remain wrong even when other portions were not assessed.
+ * A mention with incomplete or unavailable judgement is never called correct.
+ * @param {{ status: string, mentionsOurs: boolean, statements: Array<{ verdict?: string | null }>,
+ *   checks?: Record<string, any>, judgedAt?: string | null }} input
+ * @returns {"omitted" | "correct" | "wrong_ours" | "none" | "partial" | "unknown"}
  */
-export function failureMode({ status, mentionsOurs, statements }) {
-  if (statements.some((statement) => statement.verdict === "wrong")) return "wrong_ours";
+export function failureMode({ status, mentionsOurs, statements, checks, judgedAt }) {
+  const accuracy = geoAnswerAccuracy({ statements, checks, ...(judgedAt !== undefined ? { judgedAt } : {}) });
+  if (accuracy === "wrong") return "wrong_ours";
   if (status === "refusal") return "none";
-  return mentionsOurs ? "correct" : "omitted";
+  return mentionsOurs ? accuracy : "omitted";
 }

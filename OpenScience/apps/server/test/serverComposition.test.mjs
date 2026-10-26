@@ -69,7 +69,8 @@ const RECURRING_SWEEPS = [
     name: "autopilot agenda scheduling",
     intervalMs: 60_000,
     startupRuns: 1,
-    statement: /SELECT user_id,id FROM evimed_product\.documents WHERE kind='agenda'/,
+    // The scheduling pass itself: the stop-work recovery also reads agendas (queued notices, stopped tasks) with the same opening.
+    statement: /SELECT user_id,id FROM evimed_product\.documents WHERE kind='agenda' AND deleted_at IS NULL AND payload->>'status'='active'/,
   },
   {
     key: "notificationDefaults",
@@ -99,6 +100,7 @@ const RECURRING_SWEEPS = [
 const USER_ID = "composition-user";
 const PROJECT_ID = "composition-project";
 const ACCOUNT_CREATED_AT = "2026-01-01 00:00:00.123456+00";
+const PROJECT_CREATED_AT = "2026-01-02 00:00:00.234567+00";
 
 /** A row as `evimed_product.documents` stores one. */
 function documentRow(kind, id, payload) {
@@ -177,6 +179,15 @@ class FakePool extends EventEmitter {
     const sql = oneLine(text);
     this.statements.push(sql);
     this.calls.push({ sql, values: Array.isArray(values) ? values : [] });
+    if (sql.startsWith('SELECT u.id AS "ownerId",u.created_at::text AS "ownerCreatedAt", p.id AS "projectId",p.created_at::text AS "projectCreatedAt" FROM evimed_control.users u JOIN evimed_control.projects p ON p.user_id=u.id')) {
+      const owned = values[0] === USER_ID && [PROJECT_ID, FRONTIER_PROJECT_ID].includes(values[1]);
+      return { rows: owned ? [{ ownerId: USER_ID, ownerCreatedAt: ACCOUNT_CREATED_AT, projectId: values[1], projectCreatedAt: PROJECT_CREATED_AT }] : [], rowCount: owned ? 1 : 0 };
+    }
+    if (sql === "SELECT to_regclass('evimed_geo.projects') IS NOT NULL AS present") return { rows: [{ present: this.geoProjects.size > 0 }], rowCount: 1 };
+    if (sql === 'SELECT id FROM evimed_geo.projects WHERE user_id=$1 AND project_id=$2') {
+      const rows = [...this.geoProjects.values()].filter(row => row.user_id === values[0] && row.project_id === values[1]).map(row => ({ id: row.id }));
+      return { rows, rowCount: rows.length };
+    }
     if (sql === "SELECT current_setting('transaction_isolation') AS isolation") return { rows: [{ isolation: this.transactionIsolation }], rowCount: 1 };
     if (sql === "SELECT clock_timestamp()::timestamptz(3) AS created_at") return { rows: [{ created_at: new Date() }], rowCount: 1 };
     if (/^SELECT \* FROM evimed_product\.documents WHERE user_id=\$1 AND kind=\$2 AND id=\$3/.test(sql)) {
@@ -199,7 +210,7 @@ class FakePool extends EventEmitter {
     // Everything below is what the feedback loop needs and nothing else needs:
     // each branch is gated on the one kind it serves, so no statement any other
     // test depends on changes its answer.
-    if (/^INSERT INTO evimed_product\.documents\(user_id,kind,id,payload,project_id\)/.test(sql) && values[1] === "method") {
+    if (/^INSERT INTO evimed_product\.documents\(user_id,kind,id,payload,project_id\)/.test(sql) && ["method", "geo-plan-context"].includes(values[1])) {
       const key = `${values[1]}:${values[2]}`;
       if (this.documents.has(key)) return { rows: [], rowCount: 0 };
       const row = { ...documentRow(values[1], values[2], JSON.parse(values[3])), project_id: values[4] ?? null };
@@ -348,7 +359,7 @@ class FakePool extends EventEmitter {
     }
     if (/^SELECT id, name, password_hash, auth_type, created_at::text AS account_created_at FROM evimed_control\.users WHERE id = \$1/.test(sql)) {
       return values[0] === USER_ID
-        ? { rows: [{ id: USER_ID, name: "Composed", password_hash: "", auth_type: "local", account_created_at: "2026-01-01 00:00:00+00" }], rowCount: 1 }
+        ? { rows: [{ id: USER_ID, name: "Composed", password_hash: "", auth_type: "local", account_created_at: ACCOUNT_CREATED_AT }], rowCount: 1 }
         : { rows: [], rowCount: 0 };
     }
     if (/^SELECT .* FROM evimed_geo\.projects WHERE id = \$1 AND user_id = \$2 AND deleted_at IS NULL$/.test(sql)) {
@@ -369,7 +380,7 @@ class FakePool extends EventEmitter {
       // The frontier feed's internal project, which its worker finds under
       // the operator account before its first batch.
       return values[0] === USER_ID && [PROJECT_ID, FRONTIER_PROJECT_ID].includes(values[1])
-        ? { rows: [{ id: values[1], name: "Composed project", active_workspace: "", quota_bytes: 1_000_000_000, archived_at: null, account_created_at: ACCOUNT_CREATED_AT }], rowCount: 1 }
+        ? { rows: [{ id: values[1], name: "Composed project", active_workspace: "", quota_bytes: 1_000_000_000, archived_at: null, created_at: PROJECT_CREATED_AT, account_created_at: ACCOUNT_CREATED_AT }], rowCount: 1 }
         : { rows: [], rowCount: 0 };
     }
     if (/^SELECT request_id,requested_at,expires_at(?:,durable_hold)? FROM evimed_product\.maintenance_lease/.test(sql)) {
@@ -667,7 +678,9 @@ test("the reranker and the index strictness reach both recall paths", async (t) 
 });
 
 test("startup arms every recurring sweep, and each timer really drives its own sweep", async (t) => {
-  const fixture = await composedApp(t);
+  // The production composition: agenda scheduling is armed only where scheduled tasks are on (OPEN_SCIENCE_AUTOPILOT_ENABLED,
+  // true in every hosted deployment), and the test below holds that it is not armed where they are off.
+  const fixture = await composedApp(t, { autopilotEnabled: true });
   const startup = fixture.evidence();
 
   for (const sweep of RECURRING_SWEEPS) {
@@ -697,8 +710,17 @@ test("startup arms the retry of unconfirmed container removals, and its timer dr
   assert.equal(passes >= 1, true, "no timer at the retry cadence runs the manager's pass");
 });
 
+test("with scheduled tasks off, startup never runs agenda scheduling and arms no timer that drives it", async (t) => {
+  const fixture = await composedApp(t, { autopilotEnabled: false });
+  const scheduling = RECURRING_SWEEPS.find((sweep) => sweep.key === "autopilotSchedule");
+  assert.ok(scheduling);
+  assert.equal(fixture.evidence()[scheduling.key] ?? 0, 0, "a deployment with scheduled tasks off still scheduled agendas at startup");
+  assert.equal(((await fixture.drivers()).get(scheduling.key) ?? []).length, 0, "a timer drives agenda scheduling although scheduled tasks are off");
+});
+
 for (const managedBrowserEnabled of [false, true]) test(`a maintenance pause clears every recurring timer and reopening re-arms them (managed browser=${managedBrowserEnabled})`, async (t) => {
   const fixture = await composedApp(t, {
+    autopilotEnabled: true,
     managedBrowserEnabled,
     managedBrowserCdpUrl: "http://127.0.0.1:9222",
     edgeProxyUrl: "https://proxy.example.org",
@@ -871,7 +893,7 @@ test("a verification runs in a workspace that does not contain the report it is 
   for (const row of verificationFixtureRows()) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
 
   const user = await fixture.app.store.userById(USER_ID);
-  assert.equal(user.accountCreatedAt, "2026-01-01 00:00:00+00", "the current-user fixture preserves the database account epoch");
+  assert.equal(user.accountCreatedAt, ACCOUNT_CREATED_AT, "the current-user fixture preserves the database account epoch");
   const project = await fixture.app.store.requireProject(user, PROJECT_ID);
   // The episode's own report, where the episode wrote it.
   await mkdir(path.join(project.workspaceDir, "reports"), { recursive: true });
@@ -1618,15 +1640,15 @@ test("循证 GEO is composed when on, its slot's worker runs with the recurring 
   const base = `http://127.0.0.1:${app.server.address().port}`;
   assert.ok(app.geo, "an enabled module with a product database is composed");
   assert.equal(app.geoService, app.geo.service);
-  assert.deepEqual(Object.keys(app.geo).sort(), ["articleExists", "articleGate", "articleRunId", "cards", "exporter", "gradedSha256", "importDelivery", "market", "measureState", "members", "orchestrator", "refreshCards", "renameProject", "service", "social", "store", "valueUpkeep", "worker"]);
+  assert.deepEqual(Object.keys(app.geo).sort(), ["articleExists", "articleGate", "articleRunId", "cards", "exporter", "gradedSha256", "importDelivery", "market", "measureState", "members", "orchestrator", "refreshCards", "renameProject", "service", "signalDiscovery", "signalResults", "signals", "social", "store", "valueUpkeep", "worker"]);
   assert.equal(typeof app.geo.articleExists, "function");
-  // Every slot is filled: the worker with all twelve loops wired (measurement,
-  // orchestration, market) and the value profiles' upkeep, the orchestrator,
+  // Every slot is filled: the worker's registered measurement, orchestration,
+  // market, signal and value-upkeep loops, the orchestrator,
   // the exporter and the market's user and operator hooks.
   const status = app.geo.worker.status();
   assert.deepEqual(status.missing, [], "every loop has its function");
   assert.deepEqual(Object.keys(status.loops), ["probe", "parse", "metrics", "errors", "orchestrator", "schedules", "catalogue", "orders", "poll",
-    "verify", "reconcile", "topups", "questionBank", "valueUpkeep"], "the question bank's loop is in the table and is not wired while its lever is off");
+    "verify", "reconcile", "topups", "questionBank", "valueUpkeep", "signals"], "the question bank's loop is in the table and is not wired while its lever is off");
   assert.equal(status.loops.valueUpkeep.wired, true, "the value profiles' upkeep is composed with the module (G10c, G10e)");
   assert.equal(typeof app.geo.valueUpkeep.tick, "function");
   assert.equal(typeof app.geo.orchestrator.runStep, "function");

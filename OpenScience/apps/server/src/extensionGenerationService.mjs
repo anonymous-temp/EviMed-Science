@@ -8,6 +8,7 @@ import {migrateProductStore,productInteger} from './productPersistence.mjs';
 import {defaultConfiguration,exportPluginPayload} from './pluginService.mjs';
 import {extensionRequestObject} from './extensionAccess.mjs';
 import {readQualificationLabel} from './extensionQualification.mjs';
+import {verifyPersonalSkillGeneration} from './personalSkillGenerationService.mjs';
 import {HttpError,openScopedDirectoryNoFollow,openScopedFileNoFollow,readStableFileHandle,writeFileExclusiveNoFollow,directorySize} from './security.mjs';
 /** @typedef {{extensionId:string,coordinate:any,integrity:string,artifactDigest:string,configRevision:number,configDigest:string,enabled:boolean,settings:Record<string,any>,connectionRefs:string[],compatibility?:string,sourceDocumentId?:string,adapterRevision?:string,receiptDigest?:string,assessmentAdmissionDigest?:string,executionClass?:string}} GenerationPlugin */
 const sha=value=>createHash('sha256').update(value).digest('hex'),digest=value=>'sha256:'+sha(canonicalJson(value));
@@ -104,13 +105,22 @@ export class ExtensionGenerationService{
   qualification(context){
     return readQualificationLabel(this.proofAuthority?()=>this.proofAuthority(context):null,{identity:context.identity});
   }
-  /** @param {any} user @param {string} projectId @param {any} client */
-  async snapshot(user,projectId,client){
+  /** @param {any} user @param {string} projectId @param {any} client @param {any} [personalOverride] */
+  async snapshot(user,projectId,client,personalOverride){
     const actorAccountCreatedAt=await this.extensions.access.account(user,client),project=await this.extensions.access.project(user,projectId,{manage:true,client}),ownerScope=await this.plugins.scope(project.userId,project,client);
     const trusted=await this.identities(project);for(const key of ['baseRuntimeImageDigest','adapterRevision','permissionProfileRevision'])if(!DIGEST.test(trusted[key]))throw invalid();
     const scope={ownerId:project.userId,projectId:project.id,actorId:user.id,actorAccountCreatedAt,actorMembershipEpoch:project.extensionMembershipEpoch??null,ownerAccountCreatedAt:ownerScope.accountCreatedAt,projectCreatedAt:ownerScope.projectCreatedAt};
     const desired=await this.documents.get(project.userId,'extension-defaults',this.extensions.projectDocumentId(project.id));
-    const personal=await this.documents.get(project.userId,'extension-generation',`personal-skills:project:${project.id}`),effectivePersonal=personal?.payload.effective??null;
+    const personal=await this.documents.get(project.userId,'extension-generation',`personal-skills:project:${project.id}`);
+    if(personalOverride){
+      const emptyBaseline=personalOverride.reference===null&&Array.isArray(personalOverride.pins)&&personalOverride.pins.length===0
+        &&!(personalOverride.platformSkills?.disabled??[]).length&&!(personalOverride.platformSkills?.disabledPlugins??[]).length;
+      if(!emptyBaseline&&![personal?.payload.desired,personal?.payload.effective,personal?.payload.lastGood].some(candidate=>canonicalJson(candidate?.reference??null)===canonicalJson(personalOverride.reference??null)))throw invalid();
+      if(personalOverride.reference){const verified=await verifyPersonalSkillGeneration(this.config,project,personalOverride.reference,trusted.baseRuntimeImageDigest);
+        if(canonicalJson(verified.pins)!==canonicalJson(personalOverride.pins)||canonicalJson(verified.platformSkills)!==canonicalJson(personalOverride.platformSkills))throw invalid();}
+      else if(personalOverride.pins?.length)throw invalid();
+    }
+    const effectivePersonal=personalOverride??personal?.payload.effective??null;
     const legacy=await legacyCitationProjection(this.plugins,project,client,trusted);
     /** @type {GenerationPlugin[]} */ const plugins=[legacy];const findings=[],bindings=[],qualification=[];
     for(const selected of desired?.payload.selections??[]){
@@ -147,7 +157,7 @@ export class ExtensionGenerationService{
     const pins=effectivePersonal?.pins??[];
     const identity={ownerId:project.userId,projectId:project.id,baseRuntimeImageDigest:trusted.baseRuntimeImageDigest,adapterRevision:trusted.adapterRevision,permissionProfileRevision:trusted.permissionProfileRevision,
       selections:plugins.map(plugin=>({extensionId:plugin.extensionId,artifactDigest:plugin.artifactDigest,configRevision:plugin.configRevision,configDigest:plugin.configDigest,connectionRefs:plugin.connectionRefs})),skills:pins.map(pin=>({skillId:pin.skillId,revision:pin.revision,digest:pin.digest}))};
-    const manifest={schemaVersion:1,reference:null,identity,scope,bindings:{desiredRevision:desired?.revision??0,legacyRevision:legacy.configRevision,personalRevision:personal?.revision??0,installations:bindings},projection:{plugins,personal:{reference:effectivePersonal?.reference??null,pins}},findings};
+    const manifest={schemaVersion:1,reference:null,identity,scope,bindings:{desiredRevision:desired?.revision??0,legacyRevision:legacy.configRevision,personalRevision:effectivePersonal?.selectionRevision??personal?.revision??0,installations:bindings},projection:{plugins,personal:{reference:effectivePersonal?.reference??null,pins,...(effectivePersonal?.platformSkills?{platformSkills:effectivePersonal.platformSkills}:{})}},findings};
     const hash=generationHash(manifest);manifest.reference={ownerHash:sha(project.userId),projectHash:sha(project.id),generationHash:hash};return{project,manifest,qualification};
   }
   /** Idempotent compatibility projection, without editing old citation rows or settings history. @param {any} user @param {string} projectId */
@@ -159,12 +169,48 @@ export class ExtensionGenerationService{
   }));}
   /** @param {any} project */
   current(project){return this.documents.get(project.userId,'extension-generation',stateId(project));}
+  /** Rebuild the existing composite inside the personal worker's exclusive project transaction. Every plugin pin and grant stays authoritative.
+   * The personal candidate is already owned by the existing generation ledger; this is not a second apply queue.
+   * @param {any} project @param {any} personalCandidate */
+  async rebasePersonal(project,personalCandidate,{whenUnchanged=false}={}){return this.database.transaction(client=>this.database.withTransactionClient(client,async()=>{
+    // Null is the selected ordinary baseline, never permission to resurrect the persisted personal generation.
+    const selectedPersonal=personalCandidate??{reference:null,pins:[],platformSkills:{disabled:[],disabledPlugins:[]}};
+    const state=await this.current(project),installed=state?.payload.effective;
+    if(!installed)return null;
+    await this.verifyManifest(project,installed.reference);
+    const actor={id:installed.scope.actorId,accountCreatedAt:installed.scope.actorAccountCreatedAt};
+    let observed,authorityLost=false;
+    try{observed=await this.snapshot(actor,project.id,client,selectedPersonal);}
+    catch(error){
+      if(![401,403,404].includes(error.status))throw error;
+      observed=await this.snapshot({id:project.userId},project.id,client,selectedPersonal);authorityLost=true;
+    }
+    const {manifest,qualification}=observed;
+    const functional=rows=>rows.map(({adapterRevision:_adapter,receiptDigest:_receipt,...row})=>row);
+    const same=authorityLost
+      ? functional(manifest.projection.plugins).every(row=>functional(installed.projection.plugins).some(prior=>canonicalJson(prior)===canonicalJson(row)))
+        && functional(manifest.bindings.installations).every(row=>functional(installed.bindings.installations).some(prior=>canonicalJson(prior)===canonicalJson(row)))
+        && installed.projection.plugins.filter(row=>!manifest.projection.plugins.some(current=>current.extensionId===row.extensionId)).every(row=>row.compatibility!=='legacy-citation-v1'&&manifest.findings.some(item=>item.extensionId===row.extensionId))
+      : canonicalJson(functional(manifest.projection.plugins))===canonicalJson(functional(installed.projection.plugins))
+        && canonicalJson(functional(manifest.bindings.installations))===canonicalJson(functional(installed.bindings.installations));
+    // A start (`whenUnchanged`) rebases only a composite whose selected plugins are functionally the installed ones; any other
+    // difference is the plugin apply worker's to settle, and the start goes on with the personal generation alone.
+    if(!same){if(whenUnchanged)return null;throw new HttpError(409,'product_revision_conflict','Project plugins changed before the skill update.');}
+    await this.publish(project,manifest,client);
+    const id=`extensions:generation:${manifest.reference.generationHash}`,immutable=await this.documents.get(project.userId,'extension-generation',id);
+    if(!immutable)await this.documents.put(project.userId,'extension-generation',id,manifest,{expectedRevision:0,projectId:project.id,transactionClient:client});
+    else if(canonicalJson(immutable.payload)!==canonicalJson(manifest))throw invalid();
+    if(state.payload.desired?.reference.generationHash!==manifest.reference.generationHash)await this.documents.put(project.userId,'extension-generation',state.id,
+      {...state.payload,desired:manifest,phase:'waiting',qualification,findings:manifest.findings},
+      {expectedRevision:state.revision,projectId:project.id,transactionClient:client});
+    return manifest;
+  }));}
   /** Core availability only: project ownership, citation settings and owner-selected personal instructions.
    * This is not an extension actor or operation grant. @param {any} project @param {any} client */
   async ordinaryRuntimeBaseline(project,client){
     const owner=await this.plugins.scope(project.userId,project,client),identity=await this.identities(project);
     const personal=await this.documents.get(project.userId,'extension-generation',`personal-skills:project:${project.id}`),effective=personal?.payload.effective;
-    return{owner,identity,personal:{reference:effective?.reference??null,pins:effective?.pins??[]},legacy:await legacyCitationProjection(this.plugins,project,client,identity)};
+    return{owner,identity,personal:{reference:effective?.reference??null,pins:effective?.pins??[],...(effective?.platformSkills?{platformSkills:effective.platformSkills}:{})},legacy:await legacyCitationProjection(this.plugins,project,client,identity)};
   }
   /** Atomic under the same global immutable-tree storage lock as personal skills. @param {any} project @param {any} manifest @param {any} client */
   async publish(project,manifest,client){

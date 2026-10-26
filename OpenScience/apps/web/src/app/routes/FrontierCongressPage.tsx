@@ -28,6 +28,7 @@ import { StateScreen } from "@/components/ui/StateScreen";
 import { Tag } from "@/components/ui/Tag";
 import { useShowMore, ShowMore } from "@/components/ui/ShowMore";
 import { FrontierCard } from "@/components/frontier/FrontierCard";
+import { ReaderOutline } from "@/components/frontier/FrontierReader";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { FrontierOffPage } from "@/components/frontier/FrontierStates";
 import { congressDates, monthDay } from "@/components/frontier/FrontierTrackView";
@@ -48,6 +49,12 @@ const LIST_PATH = "/app/frontier?view=track&segment=congresses";
 /** A day shows this many items first; the rest are one press away. */
 const DAY_FIRST = 10;
 const DAY_STEP = 20;
+/** A hub of this many days or more has its days as contents (a day is up to ten items and its 速递 before 「显示更多」). */
+const OUTLINE_FROM_DAYS = 2;
+/** A day's heading, which the contents go to. */
+const dayHeadingId = (day: string) => `congress-day-${day}`;
+/** The items a day shows: a card the reader said 不感兴趣 to leaves the day, as on the topic page. */
+const dayRows = (day: FrontierCongressHub["days"][number]) => day.items.filter(({ item }) => !item.state.hidden);
 
 const STATUS_WORDS: Record<string, string> = { ongoing: "进行中", upcoming: "即将召开", recent: "已结束", later: "尚未开始", past: "已结束" };
 
@@ -155,6 +162,13 @@ function HubBody({ hub, onItem }: { hub: FrontierCongressHub; onItem: (item: Fro
   };
   const heading = congress.name && congress.name !== congress.code ? `${congress.code} · ${congress.name}` : congress.code;
   const shown = days.filter((entry) => entry.items.length > 0 || entry.recap);
+  // The days are the page's contents (DESIGN.md T5: a long reading page has an outline): folded above them at every width, because the
+  // reading column has no room for a column beside it; each day a press away. A congress of a week ran to 17 windows with none (release
+  // walk of evimed-b559d4b7ebd0-1).
+  const outline = shown.length >= OUTLINE_FROM_DAYS ? shown.map((entry) => {
+    const count = dayRows(entry).length;
+    return { id: dayHeadingId(entry.day), text: count > 0 ? `${shortDate(entry.day)} · ${count} 条` : shortDate(entry.day), level: 2 as const };
+  }) : [];
   return (
     <HubFrame
       title={heading}
@@ -169,6 +183,7 @@ function HubBody({ hub, onItem }: { hub: FrontierCongressHub; onItem: (item: Fro
         </div>
       )}
     >
+      {outline.length > 0 && <div className="mt-6"><ReaderOutline entries={outline} layout="folded" /></div>}
       <div data-frontier-list="congress" className="mt-6 space-y-8">
         {shown.length === 0 ? <CongressEmpty hub={hub} /> : shown.map((entry) => (
           <DaySection key={entry.day} day={entry} onStar={(item) => void update(item, "star")} onHide={(item) => void update(item, "hide")} />
@@ -206,10 +221,9 @@ function CongressEmpty({ hub }: { hub: FrontierCongressHub }) {
 
 /** One day: its heading, its recap, its items (the first few, the rest on demand). */
 function DaySection({ day, onStar, onHide }: { day: FrontierCongressHub["days"][number]; onStar: (item: FrontierItem) => void; onHide: (item: FrontierItem) => void }) {
-  // A card the reader said 不感兴趣 to leaves the day, as on the topic page.
-  const rows = day.items.filter(({ item }) => !item.state.hidden);
+  const rows = dayRows(day);
   const more = useShowMore(rows, { first: DAY_FIRST, step: DAY_STEP, resetKey: day.day });
-  const headingId = `congress-day-${day.day}`;
+  const headingId = dayHeadingId(day.day);
   return (
     <section aria-labelledby={headingId}>
       <h2 id={headingId} className="mb-3 flex min-w-0 items-baseline gap-2 text-section font-semibold text-text">

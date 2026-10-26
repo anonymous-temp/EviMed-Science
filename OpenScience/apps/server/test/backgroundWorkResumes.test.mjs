@@ -176,3 +176,33 @@ test("without a way to release the run, a retired understanding reads as the fai
   await assert.rejects(plain.runs.execute(plain.request), { code: "source_understanding_run_failed" });
   assert.deepEqual(plain.calls.map((call) => Object.keys(call)[0]), ["dispatch"], "an ordinary cancel releases nothing");
 });
+
+
+test("an unproved legacy shared dispatch is stale in every state before adoption, workspace mutation or spending", async () => {
+  const prior = "method-distillation-legacy";
+  for (const status of ["pending", "running", "failed", "succeeded", "canceled"]) {
+    for (const suffix of ["", "-a2"]) {
+      const calls = [];
+      const project = { id: LEARNING_PROJECT_ID, userId: "u1", baseDir: "/never-visit-unproved-input", workspaceDir: "/never-visit-unproved-input/workspace" };
+      const forbidden = async () => { calls.push("mutation-or-spending"); throw new Error("Unexpected side effect"); };
+      const runtime = createLearningRuntime({
+        config: {}, store: { userById: async () => ({ id: "u1" }), requireProject: async () => project },
+        agentRuns: { list: async () => [{ id: "old-run", status, dispatchId: prior + suffix }], existingDispatch: forbidden, scheduleMonitor: forbidden, dispatch: forbidden },
+        runtimeManager: { reserveBoundedRuntimeSession: forbidden, dispatchPrompt: forbidden }, researchSessions: {},
+        registry: Promise.resolve(new Map()), usageLedger: { assertWithinLimits: forbidden }, prepareContext: forbidden,
+      });
+      await assert.rejects(runtime.dispatch({ userId: "u1", projectId: "default", job: { userId: "u1" },
+        dispatchId: prior + "-gcp1", unprovenPriorDispatchId: prior, capabilityId: "method-distillation", input: {}, question: "q" }),
+      { code: "geo_learning_input_stale" }, `${status}${suffix}`);
+      assert.deepEqual(calls, [], "A stale unproved job never pays to regenerate");
+    }
+  }
+});
+
+test("ordinary pending dispatch adoption keeps its original identity without a provenance migration guard", async () => {
+  const prior = "method-distillation-ordinary";
+  const runtime = learningWith([{ id: "ordinary-run", sessionId: "ordinary-session", dispatchId: prior, status: "running" }]);
+  assert.deepEqual(await runtime.dispatch({ userId: "u1", projectId: "default", job: { userId: "u1" }, dispatchId: prior,
+    capabilityId: "method-distillation", input: {}, question: "q" }),
+  { runId: "ordinary-run", sessionId: "ordinary-session", dispatchId: prior });
+});

@@ -143,7 +143,7 @@ describe("a new page's heading takes focus after a route change", () => {
     await waitFor(() => expect(heading).toHaveFocus());
     expect(heading).toHaveAttribute("tabindex", "-1");
     // Title first, then the heading.
-    expect(titlesWhenFocused).toEqual(["知识库 · EviMed"]);
+    expect(titlesWhenFocused).toEqual(["知识库 · EviMed Science"]);
     // Not a tab stop: Tab leaves it for the next control rather than landing on it again.
     await user.tab();
     expect(heading).not.toHaveFocus();
