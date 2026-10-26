@@ -1676,7 +1676,10 @@ export function moduleViewAddressHolds(module, label, initial, before, after, { 
     return [...from.searchParams].every(([name, value]) => name === "result" || to.searchParams.get(name) === value);
   }
   if (!key || !(path === `${base}/${key}` || (key === "overview" && path === base))) return false;
-  if (session && to.searchParams.get("session") !== session) return false;
+  // An addressed conversation travels in the address; the project's own does not (it is where every open begins, and a copy of its id turned
+  // an open into a request for exactly that session). The walk cannot tell the two apart from the address, so a session that is carried
+  // must be the same one, and one that is not carried is the project's own.
+  if (session && to.searchParams.has("session") && to.searchParams.get("session") !== session) return false;
   if (to.searchParams.get("step") !== from.searchParams.get("step")) return false;
   return to.searchParams.get("view") === (key === previous ? from.searchParams.get("view") : null);
 }

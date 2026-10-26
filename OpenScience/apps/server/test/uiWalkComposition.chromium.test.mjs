@@ -513,6 +513,9 @@ test("module destination contracts retain GEO query context and addressed sessio
   assert.equal(moduleViewAddressHolds('geo', '问题与回答', initial, before, initial + '/questions?session=ses-a&step=diagnosis'), true);
   assert.equal(moduleViewAddressHolds('geo', '问题与回答', initial, before, initial + '/questions?session=ses-a'), false);
   assert.equal(moduleViewAddressHolds('geo', '总览', initial, before, initial + '/overview?session=ses-a&step=diagnosis'), true);
+  // The project's own conversation is not copied into a result address; a different one that is carried is still refused.
+  assert.equal(moduleViewAddressHolds('geo', '总览', initial, before, initial + '/overview?step=diagnosis'), true);
+  assert.equal(moduleViewAddressHolds('geo', '总览', initial, before, initial + '/overview?session=ses-b&step=diagnosis'), false);
   const vcr = 'https://walk.test/app/virtual-research/s1';
   assert.equal(moduleViewAddressHolds('vcr', '总览', vcr, vcr + '/trial', vcr + '/overview'), true);
   assert.equal(moduleViewAddressHolds('vcr', '试验', vcr, vcr + '/trial', vcr + '/trial'), true, 'reselecting the actual current result is allowed');
