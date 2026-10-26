@@ -345,8 +345,20 @@ test("memory readiness waits for data, distinguishes errors, and requires the ad
   await page.unroute("http://memory.walk/**");
 });
 
+test("map readiness waits for the map's own sentence or empty state, not only for the skeleton to be gone", { skip }, async () => {
+  // Between the settings and the map's own request the page draws neither a skeleton nor a list: "nothing is loading" was true then.
+  await page.route("http://map-ready.walk/**", (route) => route.fulfill({ contentType: "text/html; charset=utf-8", body: '<main><div role="tablist" aria-label="记忆"><button role="tab" aria-selected="true">地图</button></div><input aria-label="搜索记忆地图"><div data-page-body></div></main>' }));
+  await page.goto("http://map-ready.walk/app/memory/map");
+  assert.equal(await page.evaluate(memoryReady, { map: true, selected: "地图" }), false);
+  await page.evaluate(() => { globalThis.document.querySelector("[data-page-body]").innerHTML = '<p data-headline>EviMed 记住了你的 3 件事。</p>'; });
+  assert.equal(await page.evaluate(memoryReady, { map: true, selected: "地图" }), true);
+  await page.evaluate(() => { globalThis.document.querySelector("[data-page-body]").innerHTML = '<div data-empty>还没有记住什么</div>'; });
+  assert.equal(await page.evaluate(memoryReady, { map: true, selected: "地图" }), true);
+  await page.unroute("http://map-ready.walk/**");
+});
+
 test("map addressed state checks query and view through Back and reload, and rejects parameter loss", { skip }, async () => {
-  const content = '<main><div role="tablist" aria-label="记忆"><button role="tab" aria-selected="true">地图</button></div><div role="group" aria-label="地图的视图"><button aria-pressed="true">维度</button></div><input aria-label="搜索记忆地图" value="探针"><div data-page-body>Data</div></main>';
+  const content = '<main><div role="tablist" aria-label="记忆"><button role="tab" aria-selected="true">地图</button></div><div role="group" aria-label="地图的视图"><button aria-pressed="true">维度</button></div><input aria-label="搜索记忆地图" value="探针"><div data-page-body><p data-headline>EviMed 记住了你的 0 件事。</p></div></main>';
   await page.route("http://map.walk/**", (route) => route.fulfill({ contentType: "text/html; charset=utf-8", body: content }));
   await page.goto("http://map.walk/app/memory/map?view=dims&q=" + encodeURIComponent("探针"));
   await page.waitForFunction(memoryReady, { map: true, selected: "地图", query: "探针" });
@@ -413,7 +425,7 @@ test("calculation result choices include conversation only with its canonical se
 
 
 test("twelve unfiltered map marks retain exact drawer identity through reload, Back and Close; zero is not coverage", { skip }, async () => {
-  const html = (count) => `<meta charset="utf-8"><main><div role="tablist" aria-label="记忆"><button role="tab" aria-selected="true">地图</button></div><input aria-label="搜索记忆地图"><div data-page-body><ul aria-label="标记">${Array.from({ length: count }, (_, i) => `<li><button data-row-title="Mark ${i}" onclick="history.pushState({},'', '?open=record:m${i}');render()">Mark ${i}</button></li>`).join("")}</ul>${count ? "" : "<p data-empty>No marks yet</p>"}</div><div id="drawer"></div></main><script>function render(){const host=globalThis.document.querySelector('#drawer');host.replaceChildren();if(new URLSearchParams(location.search).has('open')){const dialog=globalThis.document.createElement('div');dialog.setAttribute('role','dialog');const close=globalThis.document.createElement('button');close.textContent='关闭';close.onclick=()=>{history.replaceState({},'',location.pathname);render()};dialog.append(close);host.append(dialog)}}addEventListener('popstate',render);render()</script>`;
+  const html = (count) => `<meta charset="utf-8"><main><div role="tablist" aria-label="记忆"><button role="tab" aria-selected="true">地图</button></div><input aria-label="搜索记忆地图"><p data-headline>EviMed 记住了你的 ${count} 件事。</p><div data-page-body><ul aria-label="标记">${Array.from({ length: count }, (_, i) => `<li><button data-row-title="Mark ${i}" onclick="history.pushState({},'', '?open=record:m${i}');render()">Mark ${i}</button></li>`).join("")}</ul>${count ? "" : "<p data-empty>No marks yet</p>"}</div><div id="drawer"></div></main><script>function render(){const host=globalThis.document.querySelector('#drawer');host.replaceChildren();if(new URLSearchParams(location.search).has('open')){const dialog=globalThis.document.createElement('div');dialog.setAttribute('role','dialog');const close=globalThis.document.createElement('button');close.textContent='关闭';close.onclick=()=>{history.replaceState({},'',location.pathname);render()};dialog.append(close);host.append(dialog)}}addEventListener('popstate',render);render()</script>`;
   for (const count of [12, 0]) {
     await page.route("http://marks.walk/**", (route) => route.fulfill({ contentType: "text/html; charset=utf-8", body: html(count) }));
     const result = await walkMemoryMap(page, "http://marks.walk", "/app/memory/map");

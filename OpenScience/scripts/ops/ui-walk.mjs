@@ -4664,6 +4664,10 @@ export function memoryReady(wanted) {
   if (!box || (wanted.query !== undefined && box.value !== wanted.query)) return false;
   if ([...main.querySelectorAll("[role='alert'], [data-inline-alert='error'], [data-inline-alert='warning']")].some(visible)) return true;
   if ([...main.querySelectorAll(".animate-pulse, [aria-busy='true']")].some(visible)) return false;
+  // The map's own data: the sentence over it (an empty capsule has one too) or its empty state. The page mounts its controls, reads its
+  // settings and draws no skeleton in the moment before the map is asked for, and "nothing is loading" was true then: the walk read the
+  // lists of a map that had not arrived and called the page unobservable (fixture walks of 2026-10-26).
+  if (wanted.map && !main.querySelector("[data-headline], [data-empty]")) return false;
   return Boolean(main.querySelector("[data-page-body]"));
 }
 
