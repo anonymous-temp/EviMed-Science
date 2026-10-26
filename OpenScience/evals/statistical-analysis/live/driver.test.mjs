@@ -99,8 +99,21 @@ test('explicitly resuming a supplied executed package needs artifacts, not a new
     manifest: [{ path: 'analysis-results.json', sha256: 'saved' }, { path: 'statistical-report.md', sha256: 'saved' }, { path: 'analysis.py', sha256: 'saved' }],
     tools: [{ name: 'read', status: 'completed', error: false }],
   } };
-  assert.equal(analysisEvidence(record, [], 'resume').complete, true);
+  const evidence = analysisEvidence(record, [], 'resume');
+  assert.equal(evidence.structuralComplete, true);
+  assert.equal(evidence.complete, false);
+  assert.equal(evidence.reuseVerification, 'requires-independent-judge');
+  assert.equal(analysisEvidence({ ...record, artifacts: { ...record.artifacts, tools: [{ name: 'bash', status: 'completed', error: false }] } }, [], 'resume').complete, false);
   assert.equal(analysisEvidence({ ...record, artifacts: { manifest: [], tools: [] } }, [], 'resume').complete, false);
+});
+
+test('audit and check files can be actual numerical outputs; mode typos are rejected', () => {
+  const make = (filename) => ({ run: { effectiveAgentId: 'open-domain-answer' }, artifacts: {
+    manifest: [{ path: filename, sha256: 'checked' }, { path: 'statistical-report.md', sha256: 'report' }, { path: 'audit.py', sha256: 'code' }],
+    tools: [{ name: 'bash', status: 'completed', error: false }],
+  } });
+  for (const name of ['numerical-audit.json', 'prediction-check.json']) assert.equal(analysisEvidence(make(name), [], 'audit').complete, true);
+  assert.throws(() => analysisEvidence(make('results.json'), [], 'udpate'), /Unknown evidence mode/);
 });
 
 test('a numerical report audit may use the conversation route but still requires executed findings', () => {
