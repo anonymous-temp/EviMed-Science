@@ -151,6 +151,65 @@ These images show invented local UI fixtures, not real patients or a validated m
 4. **External dataset / remote CI.** Cold-cache SIDER retrieval still times out at its official HTTPS endpoint locally. CI now isolates that required failing dataset check from the code suites and revalidates cached bytes, but does not hide outages. The new pushed revision's GitHub checks must be assessed on that revision separately.
 5. **Production and customer validation.** No deployment, production recruitment-data retirement, real patient-data acceptance, target-population calibration or regulatory qualification has been performed. These were outside this local handoff, and simulated or source-bound output must not be labeled clinical validation.
 
+## Closure of the remaining gaps (2026-10-26, second review round)
+
+The reviewer of `fadbb3395` re-checked this revision against the thirteen blocking items of the review and closed the gaps
+above as follows. The rule applied: finish what code and existing regression checks can establish, and rule on the rest
+from evidence already on record rather than open new experiments.
+
+**Blocking items, verified in code.** Conversation task scopes are listed nowhere and carry a Chinese name (B3); a result
+the originating turn already read gets no paid continuation (B4); finish hooks run per hook for every terminal path (B5);
+the outbox and hook replay are bounded, backed off, partitioned per account and configured in `config.mjs` (B6); patient
+sources check the path-derived origin and earlier human messages are selectable (B7); centered Cox centers, coefficient
+scale and trial identity are bound (B8); the retirement archive is encrypted, re-sealable after erasure, rendered in UTC and
+restorable (B9); home starters open the general assistant (B11); historical follow-up has an authorized read and export (B12);
+the ordinary root carries three compact VCR tools of 4,453 schema characters in all (13,404 before), the other three only
+under verified VCR context (B13). Two items were not finished and are fixed in this round:
+
+- B10: the T0 matching hint still promised 「转诊和随访」, and the accrual fields and the historical accrual timeline read
+  「招募」; they now read 「逐个核对患者」 and 「入组」.
+- A stop pressed in the kernel's window was refused when its stop intent could not be written (the remediation made
+  `recordStop` throw). A stop is never held back by its record now (review F4, principle 19); the failure is audited.
+
+**Gap 1, main synchronization — done.** Main `f85d37bbe` (381 commits) and then `9614de895` (the integration release's walk and
+GEO page fixes) are merged. The twenty-plus conflicts and their resolutions are in the two merge commits; the semantic ones
+are the native prompt path (main's signed attendance receipt and GEO plan envelope beside this branch's per-session prompt
+admission and VCR selection envelope; the admitted prompt goes through main's context-policy-guarded `send`) and the walk
+(GEO views take main's `rail` workflow, VCR views keep `objects`). `evals/acceptance-ledger.json` now counts six vcr-matching
+briefs, the one failure the pushed `3e0894c47` showed in CI.
+
+**Gap 2, enabled-VCR live acceptance — not run, by decision.** The two native probes on record (matching in ordinary
+conversation; a cold calculation with its same-conversation continuation) already exercised the live path, the paths changed
+since are covered by unit, transport and PostgreSQL tests, and the catalogue cost the 29-case comparison was meant to expose
+is a deterministic number (B13 above). A new three-arm model campaign would not change a decision. The release walk and the
+first real use after deployment are where the live behaviour is next observed.
+
+**Gap 3, general-task quality — not attributable to this branch; closed.** With VCR off the B and C first requests carried a
+byte-identical catalogue (46 tools, 38,528 characters); G13 exceeded its retrieval budget in all three arms and G16 hit the
+five-minute test budget in B and C alike; G02's heading style differs in one stochastic sample. None of the three points at
+code this branch changed, so no repeated sampling is added.
+
+**Gap 4, CI.** The public dataset is its own job and fails only on the external SIDER outage. Main itself carries a stale
+`WEB_DOCKERFILE_SHA256` (`ab52b59d4` changed `deploy/web/Dockerfile` without re-pinning the reviewed recipe), which fails
+`release-full-build.test.mjs` (13) and `evolutionDevelopmentPackaging.test.mjs` (1) on main and on this branch alike; it is
+left to main's release owner, since re-pinning is that recipe's review.
+
+**Gap 5, production and customer validation** stays outside this change: nothing was deployed and no production data was
+touched.
+
+**Residual risk to watch after deployment.** The per-session prompt admission holds one PostgreSQL client (the control
+plane's pool has 10 by default) from admission until the kernel acknowledges the prompt — normally well under a second, at
+most `runtimePromptAdmissionTimeoutMs` (30 s). A kernel that stops acknowledging while several conversations send at once
+could hold several clients. `runtimePromptAdmissionStatus` counts attempts, queueing and timeouts; if timeouts appear, release
+the client before the wire wait.
+
+**Local verification on Linux after both merges** (`f48680a92` and the fixes on it): all five typechecks, lint, eleven
+generated-artifact checks, the source-secret and hosted-compliance audits; web **5,553/5,553**; domain, port, socket and
+contracts **2,121 passed, 14 environment skips, 0 failed** (after the first merge); ops **310** with one failure that passes
+with a private `TMPDIR`; server **9,093 passed / 14 failed** of 12,401 (the 14 are main's stale Dockerfile pin above; the rest
+need PostgreSQL and skip without it). PostgreSQL product-state and the engine seam are left to CI, which
+runs them on the pushed revision.
+
 ## Limits
 
 Source anchoring proves literal provenance, not clinical applicability. A custom unregistered trial name cannot automatically establish global independence from all differently named reports; that remains a reviewable source assertion. No customer patient dataset, hidden in-trial outcome, clinical model calibration, production migration, regulator acceptance or production deployment was used or established here. SIDER remains a pinned external dependency: an unavailable cold cache remains a failing dataset check rather than synthetic success.
