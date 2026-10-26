@@ -213,7 +213,11 @@ async function main() {
     const user = await app.store.userById(options.user);
     await furnish(app, user, { password, base: `http://127.0.0.1:${options.port}`, engine, setCompile: (/** @type {any} */ script) => { compile = script; } });
     await saveFixtureEngine(engine, path.join(options.dataDir, "walk-engine-snapshot.json"), options.databaseUrl, options.user);
-    log("the fixture is furnished");
+    // The module's own conversations are opened in the mock kernel the same as after a restart: a first start that skipped it answered the
+    // header's 「对话」 with 「服务暂时不可用」 (the native session inventory is empty until a runtime holds the sessions), and only the
+    // second start of the same fixture walked clean.
+    const conversations = await warmFixtureConversations(app, await app.store.userById(options.user), options.user);
+    log(`the fixture is furnished; ${conversations} mock module conversations opened`);
   } else {
     const restored = await restoreFixtureEngine(engine, app.store.database, path.join(options.dataDir, "walk-engine-snapshot.json"), options.databaseUrl, options.user);
     const conversations = await warmFixtureConversations(app, await app.store.userById(options.user), options.user);
