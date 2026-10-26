@@ -1,6 +1,6 @@
 import { isComposingKey } from "@/lib/compositionKeys";
 import { useEffect, useId, useRef } from "react";
-import { trapTab, registerFocusLayer, isTopFocusLayer } from "@/lib/focusTrap";
+import { trapTab, registerFocusLayer, ownsKeyboard } from "@/lib/focusTrap";
 import { Button } from "@/components/ui/Button";
 
 /**
@@ -64,7 +64,7 @@ export function ConfirmDialog({
     const unregister = registerFocusLayer(dialogRef.current);
     cancelRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (!isTopFocusLayer(dialogRef.current)) return;
+      if (!ownsKeyboard(dialogRef.current, e)) return;
       if (e.key === "Escape" && !isComposingKey(e)) { e.preventDefault(); e.stopPropagation(); if (!working.current) cancel.current(); }
       if (e.key === "Tab") trapTab(dialogRef.current, e);
     };

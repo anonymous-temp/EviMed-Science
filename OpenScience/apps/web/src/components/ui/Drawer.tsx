@@ -4,7 +4,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { focusableIn, trapTab, registerFocusLayer, isTopFocusLayer } from "@/lib/focusTrap";
+import { focusableIn, trapTab, registerFocusLayer, ownsKeyboard } from "@/lib/focusTrap";
 import { IconButton } from "@/components/ui/IconButton";
 
 /**
@@ -72,7 +72,7 @@ export function Drawer({
     const onKey = (event: KeyboardEvent) => {
       // A dialog opened from inside the drawer (a confirmation, an edit form) is a modal layer of its
       // own: while it is up Tab and Escape are its, not this panel's, or one Escape would close both.
-      if (!isTopFocusLayer(panelRef.current)) return;
+      if (!ownsKeyboard(panelRef.current, event)) return;
       if (event.key === "Escape" && !isComposingKey(event)) {
         // Handled: another listener on the document (the sidebar's, below `lg`) must not close its own layer with the same press.
         event.preventDefault();

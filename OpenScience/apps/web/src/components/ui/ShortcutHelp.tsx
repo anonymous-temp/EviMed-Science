@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { isMacPlatform } from "@/lib/platform";
-import { trapTab } from "@/lib/focusTrap";
+import { isTopFocusLayer, registerFocusLayer, trapTab } from "@/lib/focusTrap";
 import { useUiStore } from "@/lib/store";
 import { IconButton } from "@/components/ui/IconButton";
 
@@ -51,7 +51,7 @@ export function ShortcutHelp() {
       }
       // Consume Esc only while the panel is open — a marked-handled Esc must
       // not also interrupt a running agent turn (LiveSessionPage listens too).
-      if (e.key === "Escape" && openRef.current) {
+      if (e.key === "Escape" && openRef.current && isTopFocusLayer(panelRef.current)) {
         e.preventDefault();
         setOpen(false);
       }
@@ -66,6 +66,9 @@ export function ShortcutHelp() {
       window.removeEventListener(SHORTCUT_HELP_TOGGLE_EVENT, onToggle);
     };
   }, []);
+
+  // While open it is a modal layer: a drawer or dialog beneath it must leave Tab and Escape to it.
+  useEffect(() => (open ? registerFocusLayer(panelRef.current) : undefined), [open]);
 
   // Focus the panel on open; hand focus back to the previously focused element
   // on close so keyboard users land where they were.

@@ -1,7 +1,7 @@
 import { isComposingKey } from "@/lib/compositionKeys";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
-import { focusableIn, registerFocusLayer, isTopFocusLayer, trapTab } from "@/lib/focusTrap";
+import { focusableIn, registerFocusLayer, ownsKeyboard, trapTab } from "@/lib/focusTrap";
 import { useUnsavedGuard } from "@/lib/useUnsavedGuard";
 import { IconButton } from "./IconButton";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -31,7 +31,7 @@ export function FormDialog({ title, children, onClose, busy = false, dirty = fal
     const field = focusableIn(panel.current).find(element => element.matches("input,textarea,select"));
     (field ?? panel.current)?.focus();
     const key = (event: KeyboardEvent) => {
-      if (!isTopFocusLayer(panel.current)) return;
+      if (!ownsKeyboard(panel.current, event)) return;
       if (event.key === "Escape" && !isComposingKey(event)) { event.preventDefault(); event.stopPropagation(); requestClose.current(); }
       else trapTab(panel.current, event);
     };
