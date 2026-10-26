@@ -59,12 +59,12 @@ export function analysisEvidence(record, before, mode) {
   const priorAnalysis = before.some(resultFile)
     && before.some((file) => /(?:report|报告).*\.(?:md|html|docx)$/.test(file.path))
     && before.some((file) => /\.(?:py|R|r|ipynb)$/.test(file.path));
-  const conversationContinuation = mode !== 'analysis' && priorAnalysis && record.run.effectiveAgentId === 'open-domain-answer';
+  const conversationContinuation = mode !== 'analysis' && (priorAnalysis || mode === 'resume') && record.run.effectiveAgentId === 'open-domain-answer';
   if (record.run.effectiveAgentId !== 'statistical-analysis' && !conversationContinuation) reasons.push('unexpected_route');
   if (!results.length || !reports.length || !code.length) reasons.push('analysis_artifacts_missing');
   if (mode === 'reuse') {
     if (!results.length || results.some((file) => previous.get(file.path) !== file.sha256)) reasons.push('numerical_results_not_reused');
-  } else {
+  } else if (mode !== 'resume') {
     if (!executed) reasons.push('successful_execution_not_observed');
     if (!results.some((file) => previous.get(file.path) !== file.sha256)) reasons.push('new_results_not_observed');
     if (!reports.some((file) => previous.get(file.path) !== file.sha256)) reasons.push('new_report_not_observed');
