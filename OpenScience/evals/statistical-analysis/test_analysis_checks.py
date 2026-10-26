@@ -306,3 +306,22 @@ def test_huge_invalid_probability_is_counted_without_overflow():
     assert result["counts"]["invalidProbabilityRows"] == 1
     assert result["counts"]["validTestRows"] == 5
     json.dumps(result, allow_nan=False)
+
+
+@pytest.mark.parametrize("stage_name", ["model", "imputer"])
+def test_empty_fit_scope_is_not_checked_for_every_stage(stage_name):
+    result = audit(fit_stages=[{"name": stage_name, "fitIds": []}])
+    assert result["checks"]["fitScope"][0]["status"] == "not_checked"
+    assert result["checks"]["fitScope"][0]["reason"] == "fit_scope_empty"
+    assert any(item["reason"] == "fit_scope_empty" and item["stage"] == stage_name for item in result["notChecked"])
+    assert result["validation"]["status"] == "not_established"
+    assert result["metrics"]["scope"] == "valid_test_rows_descriptive"
+
+
+def test_empty_report_bindings_do_not_claim_a_completed_check():
+    result = checks().compare_reported_numbers({"n": 100}, [])
+    assert result["status"] == "partial"
+    assert result["reason"] == "no_comparisons"
+    assert result["counts"] == {"requested": 0, "matched": 0, "mismatched": 0, "notChecked": 0}
+    assert result["comparisons"] == []
+    assert result["proseChecked"] is False
