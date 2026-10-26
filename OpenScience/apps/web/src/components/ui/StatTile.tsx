@@ -86,7 +86,7 @@ export function StatTile({
   const tile = (
     <div role="group" aria-label={label} className={cn("flex min-w-0 flex-col p-4", dense && "max-sm:p-3", className)}>
       <p className="truncate text-caption text-text-3">{label}</p>
-      {measured && <span className="sr-only">{measured.scope}{measured.observedAt && formatDateTime(measured.observedAt) ? ` · 观测于 ${formatDateTime(measured.observedAt)}` : ""}</span>}
+      {measured && <span className="sr-only">范围：{measured.scope}{measured.observedAt && formatDateTime(measured.observedAt) ? ` · 观测于 ${formatDateTime(measured.observedAt)}` : ""}</span>}
       <p
         data-stat-value
         className={cn(

@@ -87,10 +87,10 @@ describe("StatTile", () => {
   // R1 P2-5: a screen reader was told 「观测时间未知」 on every tile, or the raw ISO text; a time that is not known is not mentioned.
   it("gives a screen reader the scope, and the observation time in Beijing time only when there is one", () => {
     const { rerender } = render(<StatTile label="提及率" reading={measurement(31, "%", "最近一轮", "2026-09-26T08:00:00Z")} />);
-    expect(screen.getByRole("group", { name: "提及率" })).toHaveTextContent("最近一轮 · 观测于 2026/9/26 16:00:00");
+    expect(screen.getByRole("group", { name: "提及率" })).toHaveTextContent("范围：最近一轮 · 观测于 2026/9/26 16:00:00");
     expect(screen.getByRole("group", { name: "提及率" })).not.toHaveTextContent("T08:00");
     rerender(<StatTile label="提及率" reading={measurement(31, "%", "最近一轮")} />);
-    expect(screen.getByRole("group", { name: "提及率" })).toHaveTextContent("最近一轮");
+    expect(screen.getByRole("group", { name: "提及率" })).toHaveTextContent("范围：最近一轮");
     expect(screen.getByRole("group", { name: "提及率" })).not.toHaveTextContent(/未知|观测/);
   });
 
