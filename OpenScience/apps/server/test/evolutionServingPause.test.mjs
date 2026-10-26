@@ -106,3 +106,48 @@ test('paused release replay admission requires no runtime or paid budget and byp
   const worker = new EvolutionWorker({ service: f.service, decisions: {}, maintenance: {}, config: f.service.config, lane: 'heavy' });
   assert.equal(await worker.tick({ kinds: ['evolution-evaluate'] }), null);
 });
+
+test('public paused decision choices and delegated/text choices return typed recoverable errors', async () => {
+  const f = paused(); let interpreted = false;
+  const decisions = new EvolutionDecisions({ service: f.service, config: f.service.config, callbacks: { interpretOverride: () => { interpreted = true; } } });
+  const row = await f.service.save('decision', 'public', { status: 'pending', options: [{ id: 'build', operation: 'build' }], recommended: 'build', history: [] });
+  for (const input of [{ option: 'build' }, { option: 'build', delegate: true }, { text: 'build', delegate: true }]) {
+    await assert.rejects(decisions.resolve(row.id, { expectedRevision: row.revision, ...input }), { code: 'evolution_search_paused', status: 409 });
+  }
+  assert.equal(interpreted, false); assert.equal((await f.service.get(row.id)).payload.status, 'pending');
+});
+test('paused dataset wake retains its event until unpause can queue the self-check exactly once', async () => {
+  const f = evolutionServiceFixture();
+  await f.service.registerTool({ id: 'wake-tool', track: 'M', artifactDigest: 'pin' });
+  await f.service.waitFor({ userId: 'alice', projectId: 'a', agendaId: 'agenda', toolId: 'wake-tool', dataRequirements: { schema: { fields: [] } } });
+  const event = await f.service.save('event', 'wake-data', { id: 'wake-data', type: 'dataset-ready', userId: 'alice', projectId: 'a', datasetId: 'data', dataset: { semanticsChecksPassed: true }, status: 'queued' }, null, 'alice');
+  f.service.config.evolutionSearchPaused = true;
+  const worker = new EvolutionWorker({ service: f.service, decisions: {}, maintenance: {}, config: f.service.config });
+  const job = { kind: 'evolution-event', payload: { eventId: event.id, eventOwnerId: 'alice' } };
+  await assert.rejects(worker.perform(job), { code: 'evolution_search_paused' });
+  assert.equal((await f.service.get(event.id, 'alice')).payload.status, 'queued');
+  f.service.config.evolutionSearchPaused = false;
+  await worker.perform(job); await worker.perform(job);
+  assert.equal(f.jobs.filter(job => job.kind === 'evolution-self-check').length, 1);
+  assert.equal((await f.service.get(event.id, 'alice')).payload.status, 'processed');
+});
+test('decision journal retries paused enqueue and old completed deferral without duplicating work', async () => {
+  const f = paused(); const action = { actionId: 'flip' };
+  const work = () => f.service.enqueue('build', { dossierId: 'd' }, 'flip');
+  const first = await f.service.executeDecisionAction(action, work);
+  assert.equal(first.status, 'deferred');
+  assert.equal((await f.service.get(`evolution-action-${(await import('../src/evolutionService.mjs')).evolutionKey(action.actionId)}`)).payload.status, 'deferred');
+  f.service.config.evolutionSearchPaused = false;
+  await f.service.executeDecisionAction(action, work); await f.service.executeDecisionAction(action, work);
+  assert.equal(f.jobs.length, 1);
+  const legacyId = `evolution-action-${(await import('../src/evolutionService.mjs')).evolutionKey('legacy')}`;
+  await f.service.save('action', legacyId, { actionId: 'legacy', status: 'complete', result: { status: 'deferred', code: 'evolution_search_paused' } });
+  await f.service.executeDecisionAction({ actionId: 'legacy' }, () => f.service.enqueue('build', { dossierId: 'legacy' }, 'legacy'));
+  assert.equal(f.jobs.length, 2);
+});
+test('publication rechecks pause after asynchronous tool lookup', async () => {
+  const f = evolutionServiceFixture(); const get = f.service.get.bind(f.service);
+  f.service.get = async (...args) => { const result = await get(...args); f.service.config.evolutionSearchPaused = true; return result; };
+  await assert.rejects(f.service.registerTool({ id: 'lookup-race', track: 'M' }), { code: 'evolution_search_paused' });
+  assert.equal(await get('lookup-race'), null);
+});
