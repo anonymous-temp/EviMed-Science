@@ -40,7 +40,7 @@ export async function finalizeCampaign({completed,manifest,inputs,files,evidence
  if(completed.binding!==binding||state.binding!==binding||completed.reportDigest!==rsiDigest(state)||state.campaignId!==manifest.id||rsiDigest(inputs.registration)!==manifest.registration.digest)fail('campaign_checkpoint_changed');
  if(Date.parse(now)>=Date.parse(manifest.deadline)||!Number.isFinite(Date.parse(now))||!Number.isFinite(Date.parse(expiresAt))||Date.parse(expiresAt)<=Date.parse(now)||Date.parse(expiresAt)>Date.parse(manifest.deadline))fail('campaign_bundle_expired');
  for(const stage of ['development','confirmation'])if(state.stages[stage]?.status!=='completed'||rsiDigest(state.stages[stage].result)!==state.stages[stage].resultDigest)fail('campaign_stage_uncertain');
- if(!state.frozenPolicy||rsiDigest(state.frozenPolicy)!==state.frozenPolicyDigest||!Number.isFinite(Date.parse(state.frozenAt)))fail('campaign_frozen_policy_changed');
+ if(!state.frozenPolicy||rsiDigest(state.frozenPolicy)!==state.frozenPolicyDigest||!Number.isFinite(Date.parse(state.frozenAt))||Date.parse(state.frozenAt)<Date.parse(manifest.createdAt)||Date.parse(state.frozenAt)>Date.parse(now)||state.frozenPolicy.registrationDigest!==manifest.registration.digest||state.frozenPolicy.developmentResultDigest!==state.stages.development.resultDigest)fail('campaign_frozen_policy_changed');
  const sourceRows=manifest.data.sources;
  for(const s of sourceRows)if(rsiDigest(inputs.sources[s.id])!==s.digest)fail('campaign_source_changed');
  const dev=sourceRows.find(s=>s.role==='development'),confirmation=sourceRows.find(s=>s.role==='confirmation');
@@ -52,7 +52,7 @@ export async function finalizeCampaign({completed,manifest,inputs,files,evidence
  if(!closure.qualified||consumerDigest!==currentTarget.dependencyDigest)fail('campaign_consumer_changed');
  if(manifest.surface!=='frontier-selection'||files.length!==1||files[0].path!=='policy.json'||files[0].content!==canonicalRsiJson({selectionThreshold:state.frozenPolicy.threshold}))fail('campaign_frozen_candidate_changed');
  const expected={binding,candidateDigest,frozenPolicyDigest:state.frozenPolicyDigest,registrationDigest:manifest.registration.digest,datasetDigest:rsiDigest(inputs.sources),consumerDigest,corpusDigest:confirmation.digest};
- if(Object.entries(expected).some(([k,v])=>evidence[k]!==v)||Date.parse(evidence.confirmationOpenedAt)<=Date.parse(state.frozenAt)||!Number.isFinite(Date.parse(evidence.confirmationOpenedAt)))fail('campaign_evidence_binding_changed');
+ if(Object.entries(expected).some(([k,v])=>evidence[k]!==v)||Date.parse(evidence.confirmationOpenedAt)<=Date.parse(state.frozenAt)||!Number.isFinite(Date.parse(evidence.confirmationOpenedAt))||Date.parse(evidence.confirmationOpenedAt)>Date.parse(now))fail('campaign_evidence_binding_changed');
  const roots=inputs.registration.sourceRoots;
  if(!roots||!Array.isArray(roots[dev.id])||!roots[dev.id].length||!Array.isArray(roots[confirmation.id])||!roots[confirmation.id].length||roots[dev.id].some(r=>roots[confirmation.id].includes(r)))fail('campaign_confirmation_not_independent');
  const consumerProof=evidence.consumerProof;
@@ -62,7 +62,7 @@ export async function finalizeCampaign({completed,manifest,inputs,files,evidence
  if(!Array.isArray(groupProof)||groupProof.length!==statistics?.registration?.groups?.length||new Set(groupProof.map(g=>g.sourceRoot)).size!==groupProof.length||new Set(groupProof.map(g=>g.id)).size!==groupProof.length||groupProof.some(g=>g.exposure!=='sealed'||!roots[confirmation.id].includes(g.sourceRoot)||!statistics.registration.groups.some(row=>row.id===g.id)))fail('campaign_source_group_proof_invalid');
  if(!q||q.status!=='qualified'||!profile.qualificationDigests?.includes(rsiDigest(q))||!q.claims?.includes(manifest.claim)||q.consumerDigest!==consumerDigest||q.procedureDigest!==rsiDigest(statistics.registration.procedure)||!profile.procedureDigests?.includes(q.procedureDigest)||(!Number.isFinite(Date.parse(q.expiresAt))||Date.parse(q.expiresAt)<=Date.parse(now)))fail('campaign_procedure_not_qualified');
  if(purpose!=='production'||q.testOnly===true||q.evidenceScope!=='population-task-family')fail('campaign_evidence_scope_not_release_eligible');
- if(rsiDigest(statistics.registration)!==rsiDigest(inputs.registration.statistics)||statistics.receipt.confirmation_exposed!==false||statistics.receipt.look!==1||!Object.hasOwn(statistics.registration.claims,manifest.claim))fail('campaign_statistics_binding_changed');
+ if(rsiDigest(statistics.registration)!==rsiDigest(inputs.registration.statistics)||statistics.receipt.confirmation_exposed!==false||statistics.receipt.look!==1||!Object.hasOwn(statistics.registration.claims,manifest.claim)||manifest.registration.procedure!==statistics.registration.procedure.id)fail('campaign_statistics_binding_changed');
  const evaluated=await evaluateStatistics({...statistics,receipt:{...statistics.receipt,now,registration_digest:'bound-by-runner'}},{pythonExecutable:statisticsPython,modulePath:statisticsModulePath});
  if(evaluated.decision!=='qualified'||evaluated.evidenceScope!=='population-task-family')fail('campaign_statistics_not_qualified');
  if(loadSigners)({publisher,evaluator}=await loadSigners());
