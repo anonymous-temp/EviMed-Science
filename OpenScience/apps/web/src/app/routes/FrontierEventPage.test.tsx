@@ -17,7 +17,8 @@ vi.mock("@/lib/frontierClient", async (importOriginal) => ({
 
 const HOUR = 3_600_000;
 const ago = (hours: number) => new Date(Date.now() - hours * HOUR).toISOString();
-const FIRST = new Date(2026, 8, 22, 18, 1).toISOString();
+// 18:01 in Beijing, whatever the machine's zone is.
+const FIRST = "2026-09-22T10:01:00.000Z";
 
 function event(overrides: Partial<FrontierEvent> = {}): FrontierEvent {
   return {

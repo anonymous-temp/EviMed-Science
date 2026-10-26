@@ -67,9 +67,10 @@ vi.mock("@/lib/apiClient", async (importOriginal) => ({
 
 const HOUR = 3_600_000;
 const ago = (hours: number) => new Date(Date.now() - hours * HOUR).toISOString();
-// Day groups are the reader's calendar days, so the fixtures sit on known days
-// whatever hour the suite runs at: "today" a second ago, the rest before midnight.
-const MIDNIGHT = new Date().setHours(0, 0, 0, 0);
+// Day groups are Beijing calendar days (whatever the machine's zone is), so the fixtures sit on known days
+// whatever hour the suite runs at: "today" a second ago, the rest before Beijing's midnight.
+const BEIJING_DAY = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+const MIDNIGHT = Date.parse(`${BEIJING_DAY}T00:00:00+08:00`);
 const beforeMidnight = (hours: number) => new Date(MIDNIGHT - hours * HOUR).toISOString();
 
 function status(overrides: Partial<FrontierStatus> = {}): FrontierStatus {
@@ -104,14 +105,14 @@ function board(events: FrontierHotEvent[], overrides: Partial<FrontierHotBoard> 
 }
 
 const followedZone = { id: "ez_1", title: "房颤抗凝", evidenceCount: 4 };
-const today = frontierItem({ id: "today-1", title: "今天的一条 RCT", timelineAt: new Date(Date.now() - 1000).toISOString(), score: 86, scoreBand: "high" });
+const today = frontierItem({ id: "today-1", title: "今天的一条 RCT", timelineAt: new Date(Date.now() - 1000).toISOString(), visibleAt: new Date(Date.now() - 1000).toISOString(), score: 86, scoreBand: "high" });
 const yesterday = frontierItem({ id: "yesterday-1", title: "昨天的一条指南", timelineAt: beforeMidnight(6) });
 const alert = frontierItem({ id: "alert-1", title: "I 级召回：葡萄糖注射液含不锈钢颗粒", safetyAlert: true, lane: "safety", laneLabel: "药物安全",
   evidenceType: "safety-notice", evidenceTypeLabel: "安全通告", source: { id: "fda-recalls", name: "FDA" }, timelineAt: ago(2) });
 const alert2 = frontierItem({ id: "alert-2", title: "氯巴占口服混悬液条形码错误", safetyAlert: true, source: { id: "mhra", name: "英国 MHRA" }, timelineAt: ago(30) });
 const oldAlert = frontierItem({ id: "alert-old", title: "三天前的召回", safetyAlert: true, source: { id: "fda-recalls", name: "FDA" }, timelineAt: ago(60) });
 /** Newer than `today`, for what arrives above the top of the list. */
-const newer = frontierItem({ id: "newer-1", title: "刚发布的一条", timelineAt: new Date().toISOString() });
+const newer = frontierItem({ id: "newer-1", title: "刚发布的一条", timelineAt: new Date().toISOString(), visibleAt: new Date().toISOString() });
 
 /** The main list; the strip's safety notices are asked with `safety`. */
 let feed: (query: FrontierItemsQuery) => Promise<FrontierItemsPage>;
@@ -770,6 +771,57 @@ describe("the feed", () => {
   });
 });
 
+describe("the new-items hint", () => {
+  const publishedNow = (id: string, title: string, timelineAt: string) => frontierItem({ id, title, timelineAt, visibleAt: new Date().toISOString() });
+
+  it("counts an item that arrives with an older timeline instant (a source's own time) by when it was published", async () => {
+    const late = publishedNow("late-1", "来源自己的时间更早的一条", beforeMidnight(30));
+    let calls = 0;
+    feed = async () => {
+      calls += 1;
+      return calls === 1 ? page([today], { version: "1" }) : page([late, today], { version: "2" });
+    };
+    client.fetchFrontierStatus.mockResolvedValue(status({ versions: { content: "2", hot: null, daily: null } }));
+    renderPage();
+    await userEvent.click(await screen.findByRole("button", { name: "有 1 条新的" }));
+    expect(await screen.findByText("来源自己的时间更早的一条")).toBeInTheDocument();
+  });
+
+  it("does not count an unseen item that was published before the newest one on screen", async () => {
+    const earlier = frontierItem({ id: "earlier-1", title: "更早发布的一条", timelineAt: beforeMidnight(30), visibleAt: new Date(Date.now() - 3 * HOUR).toISOString() });
+    let calls = 0;
+    feed = async () => {
+      calls += 1;
+      return calls === 1 ? page([today], { version: "1" }) : page([today, earlier], { version: "2" });
+    };
+    client.fetchFrontierStatus.mockResolvedValue(status({ versions: { content: "2", hot: null, daily: null } }));
+    renderPage();
+    await screen.findByText("今天的一条 RCT");
+    await waitFor(() => expect(feedQueries().length).toBeGreaterThanOrEqual(2));
+    await new Promise((resolve) => { setTimeout(resolve, 20); });
+    expect(screen.queryByRole("button", { name: /条新的/ })).not.toBeInTheDocument();
+  });
+
+  it("tells the newest publication on screen from the list's first row", async () => {
+    // The first row was published long ago; a later row most recently. An unseen item published before that newest one is not new, even
+    // though its source's own time is later than the first row's.
+    const first = frontierItem({ id: "first-1", title: "第一行", timelineAt: beforeMidnight(1), visibleAt: new Date(Date.now() - 5 * HOUR).toISOString() });
+    const second = frontierItem({ id: "second-1", title: "第二行", timelineAt: beforeMidnight(2), visibleAt: new Date(Date.now() - 1 * HOUR).toISOString() });
+    const between = frontierItem({ id: "between-1", title: "中间发布的一条", timelineAt: beforeMidnight(0.5), visibleAt: new Date(Date.now() - 3 * HOUR).toISOString() });
+    let calls = 0;
+    feed = async () => {
+      calls += 1;
+      return calls === 1 ? page([first, second], { version: "1" }) : page([first, second, between], { version: "2" });
+    };
+    client.fetchFrontierStatus.mockResolvedValue(status({ versions: { content: "2", hot: null, daily: null } }));
+    renderPage();
+    await screen.findByText("第二行");
+    await waitFor(() => expect(feedQueries().length).toBeGreaterThanOrEqual(2));
+    await new Promise((resolve) => { setTimeout(resolve, 20); });
+    expect(screen.queryByRole("button", { name: /条新的/ })).not.toBeInTheDocument();
+  });
+});
+
 describe("the four states", () => {
   it("shows the feed's skeleton while the first page is on its way", async () => {
     feed = () => new Promise(() => {});
@@ -937,11 +989,11 @@ describe("the actions on a card", () => {
   });
 
   it("shows 「AI 评分」 and never a number the contract does not send", async () => {
-    // The card's time is today's 17:23 seen from today's 20:00: with the real clock, a run between 17:00 and 17:59 saw a
+    // The card's time is today's 17:23 (Beijing time) seen from today's 20:00: with the real clock, a run between 17:00 and 17:59 saw a
     // future timestamp, which the card shows as now (「17:4x」), and the "no 17 anywhere else" check below failed.
-    vi.useFakeTimers({ toFake: ["Date"], now: new Date(new Date().setHours(20, 0, 0, 0)) });
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(`${BEIJING_DAY}T20:00:00+08:00`) });
     onTestFinished(() => { vi.useRealTimers(); });
-    const timelineAt = new Date(new Date().setHours(17, 23, 0, 0)).toISOString();
+    const timelineAt = new Date(`${BEIJING_DAY}T17:23:00+08:00`).toISOString();
     const title = "87 项研究中的 RCT";
     const summary = "29 个中心纳入 17 至 87 岁患者，随访 13 个月。";
     feed = async () => page([frontierItem({ ...today, title, summary, timelineAt })]);
@@ -971,7 +1023,7 @@ describe("热榜", () => {
   ];
 
   it("ranks the events with their heat over a 24-hour trend, and explains nothing about how heat is counted", async () => {
-    client.fetchFrontierHotBoard.mockResolvedValue(board(events, { takenAt: new Date(new Date().setHours(22, 40, 0, 0)).toISOString() }));
+    client.fetchFrontierHotBoard.mockResolvedValue(board(events, { takenAt: new Date(`${BEIJING_DAY}T22:40:00+08:00`).toISOString() }));
     renderPage("/app/frontier?view=hot");
     const list = await screen.findByRole("list", { name: "热榜" });
     const rows = within(list).getAllByRole("listitem");
@@ -1405,8 +1457,9 @@ it("puts the date in the meta row, and no time column, in the lists that are not
   ] });
   renderPage("/app/frontier?view=foryou");
   const card = await screen.findByRole("article", { name: "与你相关的一条" });
-  const date = new Date(MIDNIGHT - 30 * HOUR);
-  expect(card).toHaveTextContent(`肿瘤学年鉴 · ${date.getMonth() + 1}月${date.getDate()}日`);
+  // Beijing's wall clock is UTC+8: shift the instant and read its UTC fields.
+  const date = new Date(MIDNIGHT - 30 * HOUR + 8 * HOUR);
+  expect(card).toHaveTextContent(`肿瘤学年鉴 · ${date.getUTCMonth() + 1}月${date.getUTCDate()}日`);
   expect(card.closest("li")!.querySelector(".w-14")).toBeNull();
 });
 

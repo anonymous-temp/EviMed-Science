@@ -365,8 +365,11 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       if (!active || current !== generation.current) return;
       seenVersion.current = contentVersion;
       const known = new Set(listing.items.map((item) => item.id));
-      const top = listing.items[0] ? Date.parse(listing.items[0].timelineAt) : 0;
-      const count = page.items.filter((item) => !known.has(item.id) && Date.parse(item.timelineAt) >= top).length;
+      // An item can arrive with an older timeline instant than the list's top (it sits at its source's own time), so what is new is
+      // told by when we published it: against the newest publication on screen.
+      const arrived = (item: { visibleAt: string | null; timelineAt: string }) => Date.parse(item.visibleAt ?? item.timelineAt);
+      const top = listing.items.reduce((newest, item) => Math.max(newest, arrived(item) || 0), 0);
+      const count = page.items.filter((item) => !known.has(item.id) && arrived(item) >= top).length;
       if (count > 0) {
         setFresh({ count, page, listing: { key, items: page.items, nextCursor: page.nextCursor, version: page.version, loadedAt: Date.now(), related: page.related } });
       }

@@ -22,7 +22,6 @@ import {
   type FrontierScoreBand,
   type FrontierTrendPoint,
 } from "@/lib/frontierClient";
-import { dayKey } from "@/lib/inboxGroups";
 import { relativeTime } from "@/lib/runPresentation";
 
 /* ------------------------------------------------------------------ actions */
@@ -126,49 +125,103 @@ export function originalLinkLabel(item: Pick<FrontierItem, "platform">): string 
 
 /* -------------------------------------------------------------------- times */
 
+/**
+ * The zone every time of the feed is read in: Beijing time, whatever the browser's zone is (owner, 2026-10-26: an article its
+ * source posted at 19:00 stood under 「今天」 at 05:59 in a browser that was not on Beijing time). The server cuts its days
+ * in the same zone (`FRONTIER_FEED_TIME_ZONE`).
+ */
+export const FEED_TIME_ZONE = "Asia/Shanghai";
+
 const WEEKDAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 
-/** `YYYY-MM-DD` → a Date at local midnight, or null. */
-function localDay(key: string): Date | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key);
-  if (!match) return null;
-  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-  return Number.isNaN(date.getTime()) ? null : date;
+/** A moment's calendar fields in the feed's zone. */
+interface FeedMoment {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
 }
 
-/** 「9月22日 周二」. */
+let feedFormat: Intl.DateTimeFormat | null = null;
+
+/** A moment as its wall clock in the feed's zone, or null for one that cannot be read. */
+function feedMoment(value: string | number | Date | null | undefined): FeedMoment | null {
+  if (value === null || value === undefined || value === "") return null;
+  const at = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(at.getTime())) return null;
+  feedFormat ??= new Intl.DateTimeFormat("en-CA", {
+    timeZone: FEED_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  });
+  const parts: Record<string, number> = {};
+  for (const part of feedFormat.formatToParts(at)) if (part.type !== "literal") parts[part.type] = Number(part.value);
+  const { year, month, day, hour, minute } = parts;
+  if (![year, month, day, hour, minute].every(Number.isFinite)) return null;
+  return { year, month, day, hour, minute };
+}
+
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/** `YYYY-MM-DD` of a moment in the feed's zone, or null: the key a day group and 「今天」 are decided by. */
+export function feedDayKey(value: string | number | Date | null | undefined): string | null {
+  const at = feedMoment(value);
+  return at ? `${at.year}-${pad(at.month)}-${pad(at.day)}` : null;
+}
+
+/**
+ * The calendar day a source stated, from the moment it is stored at: the UTC date (a source that gives a day and no hour is stored at
+ * 00:00Z of it), as `YYYY-MM-DD`; null for a value that is not a time.
+ */
+export function statedDayKey(value: string | number | Date | null | undefined): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  const at = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(at.getTime()) ? null : at.toISOString().slice(0, 10);
+}
+
+/** 「9月22日 周二」, from a `YYYY-MM-DD` key; the weekday is the key's own, whatever the browser's zone is. */
 export function shortDate(key: string): string {
-  const date = localDay(key);
-  return date ? `${date.getMonth() + 1}月${date.getDate()}日 ${WEEKDAYS[date.getDay()]}` : key;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key);
+  if (!match) return key;
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return key;
+  return `${month}月${day}日 ${WEEKDAYS[date.getUTCDay()]}`;
 }
 
-/** 「14:05」, the local clock; empty for a time that cannot be read. */
+/** 「14:05」, the clock in Beijing time; empty for a time that cannot be read. */
 export function clock(value: string | number | null): string {
-  if (value === null) return "";
-  const at = new Date(value);
-  if (Number.isNaN(at.getTime())) return "";
-  return `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+  const at = feedMoment(value);
+  return at ? `${pad(at.hour)}:${pad(at.minute)}` : "";
 }
 
-/** 「9月22日 18:01」: a moment named in full, when it is the fact itself (an event's first report). */
+/** 「9月22日 18:01」: a moment named in full, when it is the fact itself (an event's first report). Beijing time. */
 export function dateClock(value: string | null): string {
-  if (!value) return "";
-  const at = new Date(value);
-  if (Number.isNaN(at.getTime())) return "";
-  return `${at.getMonth() + 1}月${at.getDate()}日 ${clock(value)}`;
+  const at = feedMoment(value);
+  return at ? `${at.month}月${at.day}日 ${pad(at.hour)}:${pad(at.minute)}` : "";
 }
 
 /** 「14:05」 today, 「9月22日 14:05」 before: when something was last read. */
 export function stamp(value: string | null, now = Date.now()): string {
   if (!value) return "";
-  return dayKey(value) === dayKey(now) ? clock(value) : dateClock(value);
+  return feedDayKey(value) === feedDayKey(now) ? clock(value) : dateClock(value);
 }
 
-/** 「2 小时前」 / 「9/20」: how long ago something happened; empty for no time. */
+/**
+ * A day as a list dates it, in Beijing time: 「9月22日」 within this year, 「2025-09-22」 before it (`formatDay`'s forms, read in
+ * the feed's zone). Empty for a value that is not a time.
+ */
+export function feedDay(value: string | number | Date | null | undefined, now = Date.now()): string {
+  const at = feedMoment(value);
+  if (!at) return "";
+  return at.year === feedMoment(now)?.year ? `${at.month}月${at.day}日` : `${at.year}-${pad(at.month)}-${pad(at.day)}`;
+}
+
+/** 「2 小时前」 / 「9月20日」: how long ago something happened, and past a day the Beijing date; empty for no time. */
 export function ago(value: string | null, now = Date.now()): string {
   if (!value) return "";
   const ms = Date.parse(value);
-  return Number.isNaN(ms) ? "" : relativeTime(ms, now);
+  if (Number.isNaN(ms)) return "";
+  return now - ms >= 86_400_000 ? feedDay(ms, now) : relativeTime(ms, now);
 }
 
 /**
@@ -188,21 +241,29 @@ export function sinceText(value: string | null, now = Date.now()): string {
 }
 
 /**
- * When an item came, in a list that is not cut into days (与我相关, a search by relevance, an event's list), said in the card's meta row
- * after its source: the clock today (「09:06」), the day before (「10月20日」), the year too before this one. A day-grouped list
- * has the clock in its own column instead (`clock`).
+ * The clock an item stands under in the list (Beijing time), empty for an item whose source gave a day and no hour: its place in the
+ * day is where we saw it, which says nothing about when it was said (`date_precision: day`).
  */
-export function metaTime(item: Pick<FrontierItem, "timelineAt">, now = Date.now()): string {
-  const key = dayKey(item.timelineAt);
+export function itemClock(item: Pick<FrontierItem, "timelineAt" | "datePrecision">): string {
+  return item.datePrecision === "day" ? "" : clock(item.timelineAt);
+}
+
+/**
+ * When an item came, in a list that is not cut into days (与我相关, a search by relevance, an event's list), said in the card's meta row
+ * after its source: the clock today (「09:06」; 「今天」 for an item that has no hour), the day before (「10月20日」), the year too before
+ * this one. A day-grouped list has the clock in its own column instead (`itemClock`). Beijing time.
+ */
+export function metaTime(item: Pick<FrontierItem, "timelineAt"> & Partial<Pick<FrontierItem, "datePrecision">>, now = Date.now()): string {
+  const key = feedDayKey(item.timelineAt);
   if (!key) return "";
-  if (key === dayKey(now)) return clock(item.timelineAt);
+  if (key === feedDayKey(now)) return item.datePrecision === "day" ? "今天" : clock(item.timelineAt);
   const [year, month, day] = key.split("-").map(Number);
-  return year === new Date(now).getFullYear() ? `${month}月${day}日` : `${year}年${month}月${day}日`;
+  return year === feedMoment(now)?.year ? `${month}月${day}日` : `${year}年${month}月${day}日`;
 }
 
 /** A day group's heading: 「今天 · 10月23日 周四 · 11 条」, 「10月22日 周三 · 40 条」 — the count once the whole day is on screen. */
 export function dayHeading(day: Pick<ItemDay, "key" | "label" | "items">, whole: boolean, now = Date.now()): string {
-  return [day.key === dayKey(now) ? "今天" : null, day.label, whole ? `${day.items.length} 条` : null].filter(Boolean).join(" · ");
+  return [day.key === feedDayKey(now) ? "今天" : null, day.label, whole ? `${day.items.length} 条` : null].filter(Boolean).join(" · ");
 }
 
 /* ---------------------------------------------------------------------- links */
@@ -280,15 +341,15 @@ export interface ItemDay {
 }
 
 /**
- * The list, cut into the reader's days by the list's own axis (`timelineAt`).
+ * The list, cut into days by the list's own axis (`timelineAt`), in Beijing time.
  * Items arrive newest first, so a day is a run of neighbours; a day is never
- * split in two even when the server's order and the local calendar disagree.
+ * split in two even when the server's order and the calendar disagree.
  */
 export function groupByDay(items: readonly FrontierItem[]): ItemDay[] {
   const days: ItemDay[] = [];
   const byKey = new Map<string, ItemDay>();
   for (const item of items) {
-    const key = dayKey(item.timelineAt) ?? "unknown";
+    const key = feedDayKey(item.timelineAt) ?? "unknown";
     let day = byKey.get(key);
     if (!day) {
       day = { key, label: key === "unknown" ? "日期不明" : shortDate(key), items: [] };
