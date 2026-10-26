@@ -1,6 +1,7 @@
 import { useId, type ReactNode } from "react";
 import { Link } from "react-router";
 import { cn } from "@/lib/cn";
+import { formatDateTime } from "@/lib/format";
 import type { Measured, MetricReading } from "@/lib/measurement";
 import { Tooltip } from "@/components/ui/Tooltip";
 
@@ -85,7 +86,7 @@ export function StatTile({
   const tile = (
     <div role="group" aria-label={label} className={cn("flex min-w-0 flex-col p-4", dense && "max-sm:p-3", className)}>
       <p className="truncate text-caption text-text-3">{label}</p>
-      {measured && <span className="sr-only">{measured.scope} · {measured.observedAt ? `观测时间 ${measured.observedAt}` : "观测时间未知"}</span>}
+      {measured && <span className="sr-only">{measured.scope}{measured.observedAt && formatDateTime(measured.observedAt) ? ` · 观测于 ${formatDateTime(measured.observedAt)}` : ""}</span>}
       <p
         data-stat-value
         className={cn(

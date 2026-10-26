@@ -1,4 +1,5 @@
 import { measurement } from "@/lib/measurement";
+import { Freshness } from "./Freshness";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { TOOLTIP_DELAYS } from "@evimed/design-tokens";
 import userEvent from "@testing-library/user-event";
@@ -81,6 +82,16 @@ describe("StatTile", () => {
     // The leading tile is first, at the band's own metric rung: a 40 px figure was a sixth pair on a data page (owner, 2026-10-19).
     expect(within(tile).getByText("61")).toHaveClass("text-metric");
     expect(within(tile).getByText("61")).not.toHaveClass("text-metric-lg");
+  });
+
+  // R1 P2-5: a screen reader was told 「观测时间未知」 on every tile, or the raw ISO text; a time that is not known is not mentioned.
+  it("gives a screen reader the scope, and the observation time in Beijing time only when there is one", () => {
+    const { rerender } = render(<StatTile label="提及率" reading={measurement(31, "%", "最近一轮", "2026-09-26T08:00:00Z")} />);
+    expect(screen.getByRole("group", { name: "提及率" })).toHaveTextContent("最近一轮 · 观测于 2026/9/26 16:00:00");
+    expect(screen.getByRole("group", { name: "提及率" })).not.toHaveTextContent("T08:00");
+    rerender(<StatTile label="提及率" reading={measurement(31, "%", "最近一轮")} />);
+    expect(screen.getByRole("group", { name: "提及率" })).toHaveTextContent("最近一轮");
+    expect(screen.getByRole("group", { name: "提及率" })).not.toHaveTextContent(/未知|观测/);
   });
 
   it("has a skeleton of its own, and says a missing number in words", () => {
@@ -511,5 +522,16 @@ describe("colour that is the data keeps it in a Windows contrast theme (spec §1
     expect(container.querySelector("[data-heat-step]")).toHaveAttribute("data-forced-colors", "preserve");
     expect(screen.getByText("—")).not.toHaveAttribute("data-forced-colors");
     expect(preserved(container.querySelector("span.bg-heat-0"))).not.toBeNull();
+  });
+});
+
+describe("Freshness", () => {
+  it("draws the last successful read when it is known, and no sentence at all when it is not", () => {
+    const { rerender } = render(<Freshness at="2026-09-26T08:00:00Z" error="刷新失败" onRetry={() => {}} />);
+    expect(screen.getByText(/上次成功读取/)).toHaveTextContent("上次成功读取 2026/9/26 16:00:00");
+    expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
+    rerender(<Freshness at={null} error="刷新失败" onRetry={() => {}} />);
+    expect(screen.queryByText(/上次成功读取|未知/)).not.toBeInTheDocument();
+    expect(screen.getByText("刷新失败")).toBeInTheDocument();
   });
 });

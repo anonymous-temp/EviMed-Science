@@ -4,7 +4,7 @@ import { cn } from "@/lib/cn";
 
 /**
  * Component: Button; owner: H; rules: DS21, DESIGN.md component adoption.
- * Anatomy: optional spinner slot and visible action label.
+ * Anatomy: visible action label, with a spinner before it only while loading.
  * Variants: primary, secondary, text, danger; ghost aliases secondary; sm/md/lg.
  * States: loading keeps focus and guards activation even with legacy disabled=busy; idle prerequisites use native disabled.
  * Hit area: token control heights; caller chooses size.
@@ -88,9 +88,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       onClick={(event) => { if (loading) { event.preventDefault(); event.stopPropagation(); return; } onClick?.(event); }}
       onKeyDown={(event) => { if (loading && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); event.stopPropagation(); return; } onKeyDown?.(event); }}
     >
-      {loading !== undefined && <span aria-hidden="true" className="inline-flex h-4 w-4 shrink-0 items-center justify-center">
-        {loading && <Loader2 size={16} className="animate-spin" />}
-      </span>}
+      {/* The spinner takes its 16 px only while it spins: about 170 buttons pass `loading={false}` at rest, and a permanent empty slot
+          pushed each one's label 16 px off centre and made every small button wider. The label stays visible beside it. */}
+      {loading && <span aria-hidden="true" className="inline-flex h-4 w-4 shrink-0 items-center justify-center"><Loader2 size={16} className="animate-spin" /></span>}
       {children}
     </button>
   );

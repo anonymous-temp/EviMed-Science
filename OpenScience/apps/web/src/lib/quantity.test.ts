@@ -13,6 +13,15 @@ describe("scientific quantities", () => {
     expect(parsed).toEqual({ ok: true, value: .25 });
     expect(formatQuantity(.25, percent)).toBe("25");
     expect(parseQuantity("101", percent).ok).toBe(false);
+    // Not by multiplying: 14.3 / 100 and 0.07 * 100 are not exact in binary floating point.
+    expect(parseQuantity("14.3", percent)).toEqual({ ok: true, value: 0.143 });
+    expect(formatQuantity(0.07, percent)).toBe("7");
+    expect(formatQuantity(0.143, percent)).toBe("14.3");
+    for (const shown of ["0.1", "0.7", "7", "14.3", "33.3", "57.1", "99.99", "0.000001", "100"]) {
+      const parsed = parseQuantity(shown, percent);
+      expect(parsed.ok && formatQuantity(parsed.value, percent), shown).toBe(shown);
+    }
+    expect(formatQuantity(0, percent)).toBe("0");
     expect(parseQuantity("0.25", { ...percent, scale: "fraction" })).toEqual({ ok: true, value: .25 });
   });
   it("enforces integer, exponent and precision policy without clamping", () => {

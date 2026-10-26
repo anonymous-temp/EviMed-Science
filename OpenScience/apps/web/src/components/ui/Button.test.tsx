@@ -99,10 +99,12 @@ it("guards busy mouse, keyboard and submit activation while preserving focus and
  expect(click).not.toHaveBeenCalled();expect(submit).not.toHaveBeenCalled();
 });
 
-it("reserves a spinner slot only for busy-capable actions and keeps long labels visible even when initially loading",()=>{
+it("draws the spinner's room only while it spins, keeps a long label visible beside it, and leaves a resting button centred",()=>{
  const label="Save this deliberately long action label";const view=render(<Button loading>{label}</Button>);
  const button=screen.getByRole('button',{name:label});expect(button).toHaveTextContent(label);expect(button.querySelector('.invisible')).toBeNull();
- expect(button.querySelector('.w-4')).not.toBeNull();view.rerender(<Button loading={false}>{label}</Button>);expect(button.querySelector('.w-4')).not.toBeNull();
+ expect(button.querySelector('.w-4 .animate-spin')).not.toBeNull();
+ // At rest — whether `loading` is false or absent — there is no empty slot pushing the label off centre.
+ view.rerender(<Button loading={false}>{label}</Button>);expect(button.querySelector('.w-4')).toBeNull();expect(button.querySelector('svg')).toBeNull();
  view.rerender(<Button>{label}</Button>);expect(button.querySelector('.w-4')).toBeNull();
 });
 
