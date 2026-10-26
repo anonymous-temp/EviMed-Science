@@ -2582,3 +2582,6 @@ export { evaluateTrialBenchmark } from './src/vcrTrialBenchmark.mjs'
 export { previewGeoQuestionImport, validateGeoMeasurementContract } from './src/geoQuestionImport.mjs'
 
 export { geoClaimApplicability, geoClaimAssessmentIdentity, geoStatementAssessmentIdentity, geoClaimForStatement, geoEnrichStatementIdentity } from './src/geoClaimAssessment.mjs'
+
+export { RSI_CAMPAIGN_LIMITS, RSI_CAMPAIGN_SCHEMA_VERSION, RSI_CAMPAIGN_CLAIMS, RSI_CAMPAIGN_SURFACES,
+  rsiCampaignIssues, rsiLabBindingIssues, rsiCompatibilityIssues, rsiBudgetAdmission, rsiCampaignMonth } from './src/rsiCampaign.mjs'

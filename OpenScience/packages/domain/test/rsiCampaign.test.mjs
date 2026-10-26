@@ -9,21 +9,25 @@ const manifest = () => ({ schemaVersion: 1, id: 'campaign-20261026', surface: 'f
   models: { solver: { provider: 'deepseek', model: 'deepseek-flash' }, improver: { provider: 'deepseek', model: 'deepseek-flash' }, reviewer: { provider: 'dashscope', model: 'qwen3.8-max' } },
   target: { surface: 'frontier-selection', dependencyDigest: digest, baselineRevision: 'default:selection-v1' },
   registration: { digest, procedure: 'paired-group-t-fixed-v1', claim: 'targeted-repair' },
-  data: { classification: 'public', sources: [{ id: 'sealed-pool', digest, role: 'confirmation', exposure: 'sealed' }] } })
+  data: /** @type {{ classification: string, sources: { id: string, digest: string, role: string, exposure: string }[], authorization?: { id: string, sourceRunId: string, sourceRevision: string, purpose: string, minimized: boolean } }} */ ({ classification: 'public', sources: [{ id: 'sealed-pool', digest, role: 'confirmation', exposure: 'sealed' }] }) })
 
 test('campaign manifests preserve owner budgets and permit preregistered repair without requiring savings', () => {
   assert.deepEqual(RSI_CAMPAIGN_LIMITS, { campaignCny: 1000, monthCny: 30000 })
   assert.deepEqual(rsiCampaignIssues(manifest()), [])
-  for (const [field, value] of [['campaignCny', 1000.01], ['monthCny', 30000.01]]) {
+  /** @type {[keyof ReturnType<typeof manifest>['budget'], number][]} */
+  const invalidBudgets = [['campaignCny', 1000.01], ['monthCny', 30000.01]]
+  for (const [field, value] of invalidBudgets) {
     const input = manifest(); input.budget[field] = value
     assert.ok(rsiCampaignIssues(input).includes('campaign_budget_invalid'))
   }
 })
 
 test('non-automated, changed claim, hidden raw tenant scope and unknown candidate surfaces are refused', () => {
-  for (const mutate of [m => { m.automated = false }, m => { m.registration.claim = 'efficiency' },
+  /** @type {Array<(m: ReturnType<typeof manifest>) => void>} */
+  const mutations = [m => { m.automated = false }, m => { m.registration.claim = 'efficiency' },
     m => { m.data.classification = 'tenant-database' }, m => { m.candidateKind = 'plugin' }, m => { m.surface = 'root-permissions' },
-    m => { m.models.improver = { provider: 'anthropic', model: 'claude' } }]) {
+    m => { m.models.improver = { provider: 'anthropic', model: 'claude' } }]
+  for (const mutate of mutations) {
     const input = manifest(); mutate(input); assert.notEqual(rsiCampaignIssues(input).length, 0)
   }
 })
@@ -62,6 +66,7 @@ test('reserve-before-spend uses finite money and accounts for outstanding reserv
   assert.equal(rsiBudgetAdmission(input).admitted, true)
   assert.equal(rsiBudgetAdmission({ ...input, requestCny: 50.01 }).admitted, false)
   assert.equal(rsiBudgetAdmission({ ...input, monthReservedCny: 51 }).reason, 'campaign_month_budget_exceeded')
+  assert.equal(rsiBudgetAdmission({ ...input, campaignActualCny: 10, campaignReservedCny: 0 }, { campaignCny: 20, monthCny: 30000 }).admitted, false)
   for (const value of [NaN, Infinity, -1, '0', null]) assert.equal(rsiBudgetAdmission({ ...input, campaignActualCny: value }).reason, 'campaign_budget_unknown')
 })
 
