@@ -59,7 +59,7 @@ export function analysisEvidence(record, before, mode) {
   const priorAnalysis = before.some(resultFile)
     && before.some((file) => /(?:report|报告).*\.(?:md|html|docx)$/.test(file.path))
     && before.some((file) => /\.(?:py|R|r|ipynb)$/.test(file.path));
-  const conversationContinuation = mode !== 'analysis' && (priorAnalysis || mode === 'resume') && record.run.effectiveAgentId === 'open-domain-answer';
+  const conversationContinuation = mode !== 'analysis' && (priorAnalysis || ['resume', 'audit'].includes(mode)) && record.run.effectiveAgentId === 'open-domain-answer';
   if (record.run.effectiveAgentId !== 'statistical-analysis' && !conversationContinuation) reasons.push('unexpected_route');
   if (!results.length || !reports.length || !code.length) reasons.push('analysis_artifacts_missing');
   if (mode === 'reuse') {
