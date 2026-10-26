@@ -3,6 +3,7 @@ import csv
 import json
 import subprocess
 import sys
+import shutil
 from pathlib import Path
 
 import pytest
@@ -30,6 +31,21 @@ def test_supplement_normalizes_units_and_accounts_for_duplicate_and_missing_pati
     assert result['duplicates'] == 1
     assert result['missing'] == 2
     assert result['nA'] == result['nB'] == 49
+
+
+def test_coding_correction_cannot_hide_changed_measurements_or_patients(tmp_path):
+    shutil.copytree(FIXTURES, tmp_path, dirs_exist_ok=True)
+    file = tmp_path / 'coding-correction.csv'
+    with file.open() as handle:
+        rows = list(csv.DictReader(handle))
+    for row in rows:
+        row['marker_mm'] = str(float(row['marker_mm']) + 100)
+    with file.open('w') as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+    with pytest.raises(ValueError, match='group-only'):
+        comparison_reference(tmp_path, corrected=True)
 
 
 def test_missing_misbound_or_nonfinite_metrics_never_pass():
