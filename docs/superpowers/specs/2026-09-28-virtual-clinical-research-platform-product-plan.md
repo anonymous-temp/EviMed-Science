@@ -1078,7 +1078,7 @@ availability, or evidence of access to vendor private applications.
 The owner subsequently removed recruitment/OA operations, retained patient
 matching, and required conversation-first tool execution with explicit
 task-specific data requirements. The current scope is recorded in
-[the AI-native product reset](/Users/wangzeyuan/Desktop/EviMedScience/docs/superpowers/specs/2026-10-25-vcr-ai-native-product-reset.md).
+[the AI-native product reset](2026-10-25-vcr-ai-native-product-reset.md).
 Its fixed decisions supersede the corresponding recruitment and method-first
 presentation requirements above. This original proposal remains historical
 context; retaining it does not authorize implementing the removed OA scope.

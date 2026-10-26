@@ -126,13 +126,13 @@ subordinate. That correction remains relevant to the present audit.
 
 | Document | Role in the original scope |
 |---|---|
-| [September 28 v1 product proposal](/Users/wangzeyuan/Desktop/EviMedScience/docs/superpowers/specs/2026-09-28-virtual-clinical-research-platform-product-plan.md:10) | Four core workspaces; generality; source-specific visibility; complete journeys; 24 acceptance scenarios |
-| [September 28 v2 product plan](/Users/wangzeyuan/Desktop/EviMedScience/docs/superpowers/specs/2026-09-28-EviMed虚拟临研平台方案.md:14) | Expanded source-backed plan, four core workspaces, seven-step study, literature parameterization and operational integration |
-| [Original v2 mockups](/Users/wangzeyuan/Desktop/EviMedScience/docs/superpowers/specs/2026-09-28-virtual-clinical-research-assets/mockups/SPEC.md) | Home, cohort, individual patient, control, trial, matching, recruitment, models, and package views |
-| [September 28 build contract](/Users/wangzeyuan/Desktop/EviMedScience/docs/superpowers/specs/2026-09-28-vcr-build-contract.md:143) | Frontend ownership, first-level placement, four creation actions and seven study tabs |
-| [September 29 integration contract](/Users/wangzeyuan/Desktop/EviMedScience/docs/superpowers/specs/2026-09-29-vcr-integration-contract.md:1) | Repairs real seams; separates implementation from deployment and partner acceptance |
-| [September 30 status and gaps](/Users/wangzeyuan/Desktop/EviMedScience/docs/superpowers/specs/2026-09-30-vcr-status-and-gaps.md) | Explicit original gaps and distinctions between fixtures, repository checks, deployment, and partner evidence |
-| [October 19/20 workflow rectification](/Users/wangzeyuan/Desktop/EviMedScience/docs/superpowers/plans/2026-10-19-workflow-rectification.md:149) | Later usability decisions and acceptance backlog |
+| [September 28 v1 product proposal](../../docs/superpowers/specs/2026-09-28-virtual-clinical-research-platform-product-plan.md#L10) | Four core workspaces; generality; source-specific visibility; complete journeys; 24 acceptance scenarios |
+| [September 28 v2 product plan](../../docs/superpowers/specs/2026-09-28-EviMed虚拟临研平台方案.md#L14) | Expanded source-backed plan, four core workspaces, seven-step study, literature parameterization and operational integration |
+| [Original v2 mockups](../../docs/superpowers/specs/2026-09-28-virtual-clinical-research-assets/mockups/SPEC.md) | Home, cohort, individual patient, control, trial, matching, recruitment, models, and package views |
+| [September 28 build contract](../../docs/superpowers/specs/2026-09-28-vcr-build-contract.md#L143) | Frontend ownership, first-level placement, four creation actions and seven study tabs |
+| [September 29 integration contract](../../docs/superpowers/specs/2026-09-29-vcr-integration-contract.md#L1) | Repairs real seams; separates implementation from deployment and partner acceptance |
+| [September 30 status and gaps](../../docs/superpowers/specs/2026-09-30-vcr-status-and-gaps.md) | Explicit original gaps and distinctions between fixtures, repository checks, deployment, and partner evidence |
+| [October 19/20 workflow rectification](../../docs/superpowers/plans/2026-10-19-workflow-rectification.md#L149) | Later usability decisions and acceptance backlog |
 
 The v2 plan is approximately 1,199 lines. It still explicitly states that the
 four research workspaces are the main product and that matching/recruitment
@@ -143,7 +143,7 @@ product name remains “虚拟临床研究”; this review does not propose rena
 
 ### 3.2 Which later decisions legitimately supersede the original mockups
 
-Current [OpenScience instructions](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/AGENTS.md:262)
+Current [OpenScience instructions](../../OpenScience/AGENTS.md#L262)
 record the October 20 owner decision:
 
 - VCR home lists studies with one New Study action.
@@ -225,11 +225,11 @@ showed 52 entries including research capabilities and calculation methods.
 
 Key foundation evidence:
 
-- [Persistent objects](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/server/src/vcrPersistence.mjs:625)
-- [Jobs and results](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/server/src/vcrJobs.mjs:1519)
-- [Method vocabulary](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/packages/domain/src/vcrEngineJob.mjs:90)
-- [R dispatch](/Users/wangzeyuan/Desktop/EviMedScience/项目代码/vcr-engine/R/engine.R:64)
-- [Scenario model seeds](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/server/src/vcrService.mjs:225)
+- [Persistent objects](../../OpenScience/apps/server/src/vcrPersistence.mjs#L625)
+- [Jobs and results](../../OpenScience/apps/server/src/vcrJobs.mjs#L1519)
+- [Method vocabulary](../../OpenScience/packages/domain/src/vcrEngineJob.mjs#L90)
+- [R dispatch](../../项目代码/vcr-engine/R/engine.R#L64)
+- [Scenario model seeds](../../OpenScience/apps/server/src/vcrService.mjs#L225)
 
 ## 6. Detailed findings
 
@@ -251,8 +251,8 @@ A synthetic in-memory patient with visits containing outcomes 10, 11 and 12
 returned only the first visit and trajectories:null. No private data or
 production job was involved.
 
-- [Longitudinal output](/Users/wangzeyuan/Desktop/EviMedScience/项目代码/vcr-engine/R/longitudinal.R:242)
-- [First-row selection](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/server/src/vcrRows.mjs:403)
+- [Longitudinal output](../../项目代码/vcr-engine/R/longitudinal.R#L242)
+- [First-row selection](../../OpenScience/apps/server/src/vcrRows.mjs#L403)
 
 **Impact:** the original promise “inspect a virtual patient's trajectory” fails
 even when longitudinal results have been generated.
@@ -269,8 +269,8 @@ external-control estimators are fake.
 The model_comparator route is labeled unsupported in the service and
 orchestrator. Registering a disease-model card cannot complete this route.
 
-- [Service route](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/server/src/vcrService.mjs:419)
-- [Orchestrator refusal](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/server/src/vcrOrchestrator.mjs:737)
+- [Service route](../../OpenScience/apps/server/src/vcrService.mjs#L419)
+- [Orchestrator refusal](../../OpenScience/apps/server/src/vcrOrchestrator.mjs#L737)
 
 **Impact:** the model → virtual patient → model comparator → trial-design chain
 is not a complete supported workflow.
@@ -298,10 +298,10 @@ than the patient-set table/result. Design conversion is separate and currently
 limited to fixed continuous/binary cases, with parameter uncertainty explicitly
 not estimated.
 
-- [Generated identities](/Users/wangzeyuan/Desktop/EviMedScience/项目代码/vcr-engine/R/engine.R:820)
-- [Patient-record access](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/server/src/vcrRecords.mjs:195)
-- [Separate prediction result handling](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/server/src/vcrOrchestrator.mjs:1069)
-- [Design conversion limits](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/server/src/vcrLongitudinal.mjs:335)
+- [Generated identities](../../项目代码/vcr-engine/R/engine.R#L820)
+- [Patient-record access](../../OpenScience/apps/server/src/vcrRecords.mjs#L195)
+- [Separate prediction result handling](../../OpenScience/apps/server/src/vcrOrchestrator.mjs#L1069)
+- [Design conversion limits](../../OpenScience/apps/server/src/vcrLongitudinal.mjs#L335)
 
 **Acceptance:** inspect a saved cohort member, create scenario A/B predictions,
 retain explicit member correspondence and provenance, and reuse the selected
@@ -316,10 +316,10 @@ The prediction/longitudinal view is shown only when ready data already contains
 records. The setup/import controls live inside that view. A longitudinal read
 error does not have an equivalent visible error/retry state in the parent.
 
-- [Parent visibility](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/web/src/components/vcr/tabs/PatientsTab.tsx:76)
-- [Panel visibility](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/web/src/components/vcr/VcrLongitudinalPanel.tsx:34)
-- [Setup actions](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/web/src/components/vcr/VcrLongitudinalPanel.tsx:115)
-- [Test asserting hidden state](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/web/src/components/vcr/tabs/PatientsTab.test.tsx:494)
+- [Parent visibility](../../OpenScience/apps/web/src/components/vcr/tabs/PatientsTab.tsx#L76)
+- [Panel visibility](../../OpenScience/apps/web/src/components/vcr/VcrLongitudinalPanel.tsx#L34)
+- [Setup actions](../../OpenScience/apps/web/src/components/vcr/VcrLongitudinalPanel.tsx#L115)
+- [Test asserting hidden state](../../OpenScience/apps/web/src/components/vcr/tabs/PatientsTab.test.tsx#L494)
 
 **Acceptance:** a new study can discover the prediction workflow, understand
 which input/model is missing, and reach setup. Uninitialized, unavailable,
@@ -333,9 +333,9 @@ When the initial matching view has no results, its bare state removes the
 toolbar containing these navigation choices. The user must first produce other
 data to discover the broader operational product.
 
-- [Visibility condition](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/web/src/components/vcr/tabs/MatchingTab.tsx:167)
-- [Toolbar rendering](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/web/src/components/vcr/tabs/MatchingTab.tsx:218)
-- [Tests fixing that absence as expected](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/web/src/components/vcr/tabs/RecruitTabs.test.tsx:432)
+- [Visibility condition](../../OpenScience/apps/web/src/components/vcr/tabs/MatchingTab.tsx#L167)
+- [Toolbar rendering](../../OpenScience/apps/web/src/components/vcr/tabs/MatchingTab.tsx#L218)
+- [Tests fixing that absence as expected](../../OpenScience/apps/web/src/components/vcr/tabs/RecruitTabs.test.tsx#L432)
 
 **Acceptance:** an empty study can discover both matching directions, site
 setup, referral tracking and follow-up, with useful prerequisite explanations
@@ -351,9 +351,9 @@ to registering a site without giving a registration path in that view.
 Follow-up lacks a complete interface for observation windows, exposure/outcome
 records, missingness, loss to follow-up and pending tasks.
 
-- [Recruitment ledger](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/web/src/components/vcr/tabs/MatchingTab.tsx:631)
-- [Sites](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/web/src/components/vcr/tabs/MatchingTab.tsx:748)
-- [Follow-up](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/web/src/components/vcr/tabs/MatchingTab.tsx:818)
+- [Recruitment ledger](../../OpenScience/apps/web/src/components/vcr/tabs/MatchingTab.tsx#L631)
+- [Sites](../../OpenScience/apps/web/src/components/vcr/tabs/MatchingTab.tsx#L748)
+- [Follow-up](../../OpenScience/apps/web/src/components/vcr/tabs/MatchingTab.tsx#L818)
 
 Backend transitions exist and should be reused. The finding is not that all
 records or APIs are missing.
@@ -366,7 +366,7 @@ follow-up observations/tasks. Each event has a responsible party and timestamp.
 A contactReferral action updates records and audit state; it is not proof of
 message delivery. Preserve manual contact confirmation and any actual outbound
 delivery receipt as different facts.
-[Contact implementation](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/server/src/vcrContact.mjs:159).
+Contact implementation (`OpenScience/apps/server/src/vcrContact.mjs:159`, retired by the reset).
 
 ### F07 — Matching does not bridge every supported data source and direction into recruitment
 
@@ -378,9 +378,9 @@ trial matching has candidate trials and ranking, but the referral record links
 to the study's matching assessments without a corresponding candidate-trial
 association.
 
-- [Referral creation condition](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/server/src/vcrComposition.mjs:828)
-- [External trial candidates](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/server/src/vcrPatientTrials.mjs:304)
-- [Referral schema](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/server/src/vcrPersistence.mjs:1227)
+- [Referral creation condition](../../OpenScience/apps/server/src/vcrComposition.mjs#L828)
+- [External trial candidates](../../OpenScience/apps/server/src/vcrPatientTrials.mjs#L304)
+- [Referral schema](../../OpenScience/apps/server/src/vcrPersistence.mjs#L1227)
 
 **Acceptance:** test document and table patients separately; test study-to-
 patient and patient-to-external-trial routes separately. Appropriate candidates
@@ -396,10 +396,10 @@ The general study_specific follow-up path rejects treatment, outcome,
 randomization_arm, progression_date and last_dose_date and requires exit date/
 reason, without a source/policy argument.
 
-- [Original partner-specific scope](/Users/wangzeyuan/Desktop/EviMedScience/docs/superpowers/specs/2026-09-28-virtual-clinical-research-platform-product-plan.md:579)
-- [Gateway field restrictions](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/server/src/vcrGateway.mjs:1658)
-- [Follow-up handling](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/server/src/vcrRecruit.mjs:701)
-- [Source-scoped data access that should remain](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/server/src/vcrAccess.mjs:244)
+- [Original partner-specific scope](../../docs/superpowers/specs/2026-09-28-virtual-clinical-research-platform-product-plan.md#L579)
+- [Gateway field restrictions](../../OpenScience/apps/server/src/vcrGateway.mjs#L1658)
+- Follow-up handling (`OpenScience/apps/server/src/vcrRecruit.mjs:701`, retired by the reset)
+- [Source-scoped data access that should remain](../../OpenScience/apps/server/src/vcrAccess.mjs#L244)
 
 **Impact:** a future fully authorized study cannot use the general follow-up
 path for data that its source contract permits.
@@ -421,11 +421,11 @@ terminology/definitions and are not outcome models. The event-history provider
 requires configuration. Mechanistic package validation is not a PBPK/QSP
 execution environment.
 
-- [Scenario seeds](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/server/src/vcrService.mjs:225)
-- [Literature model bindings](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/server/src/vcrModelSources.mjs:8)
-- [Knowledge packages](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/packages/domain/src/vcrKnowledgePackData.mjs:22)
-- [Provider dependency](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/server/src/vcrForecastProvider.mjs:13)
-- [Mechanistic package check](/Users/wangzeyuan/Desktop/EviMedScience/项目代码/vcr-engine/R/population.R:701)
+- [Scenario seeds](../../OpenScience/apps/server/src/vcrService.mjs#L225)
+- [Literature model bindings](../../OpenScience/apps/server/src/vcrModelSources.mjs#L8)
+- [Knowledge packages](../../OpenScience/packages/domain/src/vcrKnowledgePackData.mjs#L22)
+- [Provider dependency](../../OpenScience/apps/server/src/vcrForecastProvider.mjs#L13)
+- [Mechanistic package check](../../项目代码/vcr-engine/R/population.R#L701)
 
 **Acceptance:** distinguish registered metadata, evidence-parameterized
 simulation, callable predictor, imported predictions, and independently
@@ -445,9 +445,9 @@ The workbench retains study information, but sidebar active-state logic follows
 the path prefix. The user is visually moved from VCR into Research Tools while
 working on the study.
 
-- [Study method links](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/web/src/components/vcr/VcrStudyMethods.tsx:21)
-- [Workbench context](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/web/src/app/routes/VcrMethodWorkbenchPage.tsx:66)
-- [Sidebar active state](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/web/src/components/sidebar/Sidebar.tsx:106)
+- Study method links (`OpenScience/apps/web/src/components/vcr/VcrStudyMethods.tsx:21`, retired by the reset)
+- [Workbench context](../../OpenScience/apps/web/src/app/routes/VcrMethodWorkbenchPage.tsx#L66)
+- [Sidebar active state](../../OpenScience/apps/web/src/components/sidebar/Sidebar.tsx#L106)
 
 **Acceptance:** standalone calculations keep their global tools identity;
 study-bound calculations keep the study's identity, inputs, current step and
@@ -465,10 +465,10 @@ rules, not recursion, columns, comparison operators and typed values,
 between/in/not_in, and scenario fields for time zero, exit and a second set
 of comparison rules.
 
-- [Method form integration](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/web/src/components/vcr/VcrMethodRunner.tsx:273)
-- [Rule arrays](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/web/src/components/vcr/VcrScenarioEditor.tsx:52)
-- [Structured rule controls](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/web/src/components/vcr/VcrScenarioEditor.tsx:95)
-- [Cohort scenario schema](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/packages/domain/src/vcrScenarioSchemas.mjs:420)
+- Method form integration (`OpenScience/apps/web/src/components/vcr/VcrMethodRunner.tsx:273`, retired by the reset)
+- Rule arrays (`OpenScience/apps/web/src/components/vcr/VcrScenarioEditor.tsx:52`, retired by the reset)
+- Structured rule controls (`OpenScience/apps/web/src/components/vcr/VcrScenarioEditor.tsx:95`, retired by the reset)
+- [Cohort scenario schema](../../OpenScience/packages/domain/src/vcrScenarioSchemas.mjs#L420)
 
 These are structured controls, not a requirement to type raw JSON. This
 does not establish arbitrary clinical temporal-expression support, but it
@@ -489,10 +489,10 @@ The historical September 30 gap document already separates repository checks,
 fixtures, release-time acceptance and partner-data evidence. Later scoped
 release acceptance still documents uncovered cases.
 
-- [Frontend fixture boundary](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/web/src/components/vcr/__fixtures__/serverFixtures.ts:4)
-- [No-results operational navigation test](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/web/src/components/vcr/tabs/RecruitTabs.test.tsx:463)
-- [Historical acceptance limits](/Users/wangzeyuan/Desktop/EviMedScience/docs/superpowers/specs/2026-09-30-vcr-status-and-gaps.md)
-- [Latest scoped closure](/Users/wangzeyuan/Desktop/EviMedScience/docs/superpowers/plans/2026-10-19-workflow-rectification.md:349)
+- [Frontend fixture boundary](../../OpenScience/apps/web/src/components/vcr/__fixtures__/serverFixtures.ts#L4)
+- [No-results operational navigation test](../../OpenScience/apps/web/src/components/vcr/tabs/RecruitTabs.test.tsx#L463)
+- [Historical acceptance limits](../../docs/superpowers/specs/2026-09-30-vcr-status-and-gaps.md)
+- [Latest scoped closure](../../docs/superpowers/plans/2026-10-19-workflow-rectification.md#L349)
 
 **Acceptance:** add connected first-use, multi-visit, multi-scenario, cross-role,
 data-source-specific and operational journeys. Keep existing numerical and
@@ -784,7 +784,7 @@ published marketing screenshots.
 
 The VCR entry is visibly above Evidence GEO. The account had no VCR studies.
 
-![Live VCR home](/Users/wangzeyuan/Desktop/EviMedScience/docs/ui-ux-audit/2026-10-25-vcr-product-alignment/live-vcr-home.png)
+*Live VCR home* (capture not committed)
 
 ### 13.2 New study is a question-led entry
 
@@ -792,7 +792,7 @@ The form offers study design, literature planning and existing-data analysis.
 It defaults to defining the study, with an option to advance the full workflow.
 Nothing was submitted.
 
-![New study form](/Users/wangzeyuan/Desktop/EviMedScience/docs/ui-ux-audit/2026-10-25-vcr-product-alignment/live-new-study.png)
+*New study form* (capture not committed)
 
 ### 13.3 Calculation methods are prominently discoverable in Research Tools
 
@@ -800,7 +800,7 @@ The live catalogue showed seven calculation task groups, alongside other
 research capabilities. This supports the user's observation about tool
 placement, but not a claim that the VCR module was deleted.
 
-![Research Tools](/Users/wangzeyuan/Desktop/EviMedScience/docs/ui-ux-audit/2026-10-25-vcr-product-alignment/live-research-tools.png)
+*Research Tools* (capture not committed)
 
 ### 13.4 Patient simulation opens as an explicit numerical workbench
 
@@ -810,19 +810,19 @@ all four options were verified enabled in the DOM. An accessibility snapshot
 initially described options as disabled, so that description was not used as
 evidence of a product defect.
 
-![Patient-outcome workbench](/Users/wangzeyuan/Desktop/EviMedScience/docs/ui-ux-audit/2026-10-25-vcr-product-alignment/live-patient-outcome-method.png)
+*Patient-outcome workbench* (capture not committed)
 
 The longitudinal variant requests visit times and individual/measurement
 assumptions. This is a valid mathematical simulator; it does not prove the
 individual-patient inspection or disease-model journeys are complete.
 
-![Longitudinal configuration](/Users/wangzeyuan/Desktop/EviMedScience/docs/ui-ux-audit/2026-10-25-vcr-product-alignment/live-longitudinal-method.png)
+*Longitudinal configuration* (capture not committed)
 
 ## 14. Reproduction and commands
 
 ### 14.1 Frontend checks
 
-Working directory: /Users/wangzeyuan/Desktop/EviMedScience/OpenScience
+Working directory: OpenScience
 
     pnpm --filter @ai4s/web exec vitest run \
       src/app/virtual-research/VcrHomePage.test.tsx \
@@ -836,7 +836,7 @@ React act warnings were retained.
 
 ### 14.2 Backend/domain checks
 
-Working directory: /Users/wangzeyuan/Desktop/EviMedScience/OpenScience
+Working directory: OpenScience
 
     node --test --test-reporter=spec \
       packages/domain/test/vcrEngineJob.test.mjs \
@@ -854,7 +854,7 @@ The backend reviewer executed the following pure in-memory case. It uses no
 patient data and makes no network or persistence calls.
 
     node --input-type=module <<'NODE'
-    import { patientRecord } from '/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/server/src/vcrRows.mjs';
+    import { patientRecord } from './apps/server/src/vcrRows.mjs';
 
     const headers = ['patientId', 'arm', 'visit', 'time', 'y'];
     const table = {
@@ -900,7 +900,7 @@ its captures are the review deliverables.
 
 After this audit, the owner explicitly removed recruitment/OA operations and
 required conversation-first execution of research tools. See
-[the current product reset](/Users/wangzeyuan/Desktop/EviMedScience/docs/superpowers/specs/2026-10-25-vcr-ai-native-product-reset.md).
+[the current product reset](../../docs/superpowers/specs/2026-10-25-vcr-ai-native-product-reset.md).
 
 The findings remain a record of the audited implementation, but recommendations
 to finish referral, site CRM and follow-up task workflows are superseded.

@@ -125,4 +125,4 @@ The specification's Appendix A remains the DS01–DS21 ownership map. The follow
 | AT49 | Combobox/date/file tests and gallery; async/IME/date/parse boundaries |
 | AT50 | 72 public component contracts plus generated 3.0.0 identities; external adoption unverified |
 
-Evidence root (local, not published): `/Users/wangzeyuan/.codex/visualizations/2026/09/26/01a0dde0-10c1-7011-9f8c-49f9912139f5/implementation-2026-10-26/`; native fixture `/tmp/evimed-native-designv3d`. Preserve old failed logs and distinguish the final receipts. The coordinator must update pending results before claiming integrated acceptance or a verified remote head.
+Preserve old failed logs and distinguish the final receipts. The coordinator must update pending results before claiming integrated acceptance or a verified remote head.
