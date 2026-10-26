@@ -191,8 +191,10 @@ code this branch changed, so no repeated sampling is added.
 
 **Gap 4, CI.** The public dataset is its own job and fails only on the external SIDER outage. Main itself carries a stale
 `WEB_DOCKERFILE_SHA256` (`ab52b59d4` changed `deploy/web/Dockerfile` without re-pinning the reviewed recipe), which fails
-`release-full-build.test.mjs` (13) and `evolutionDevelopmentPackaging.test.mjs` (1) on main and on this branch alike; it is
-left to main's release owner, since re-pinning is that recipe's review.
+`release-full-build.test.mjs` (13) and `evolutionDevelopmentPackaging.test.mjs` (1) on main and on this branch alike, and on
+this branch's CI it stopped the web job before durable product state, billing, extension boundaries and the frontend ran. The
+change it missed only copies `packages/contracts/openviking/compile-scope-proof.json` into the final stage and is already live,
+so the pin is re-recorded here for the current Dockerfile.
 
 **Gap 5, production and customer validation** stays outside this change: nothing was deployed and no production data was
 touched.
@@ -206,8 +208,8 @@ the client before the wire wait.
 **Local verification on Linux after both merges** (`f48680a92` and the fixes on it): all five typechecks, lint, eleven
 generated-artifact checks, the source-secret and hosted-compliance audits; web **5,553/5,553**; domain, port, socket and
 contracts **2,121 passed, 14 environment skips, 0 failed** (after the first merge); ops **310** with one failure that passes
-with a private `TMPDIR`; server **9,093 passed / 14 failed** of 12,401 (the 14 are main's stale Dockerfile pin above; the rest
-need PostgreSQL and skip without it). PostgreSQL product-state and the engine seam are left to CI, which
+with a private `TMPDIR`; server **9,093 passed / 14 failed** of 12,401 (the 14 are main's stale Dockerfile pin above, 22/22 after the re-pin; the
+rest need PostgreSQL and skip without it). PostgreSQL product-state and the engine seam are left to CI, which
 runs them on the pushed revision.
 
 ## Limits
