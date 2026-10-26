@@ -314,6 +314,8 @@ test('field focus belongs to the theme lifecycle and serializes without imports'
   assert.equal(styles[0].textContent, fieldFocusStylesheet());
   assert.doesNotMatch(fieldFocusStylesheet(), /box-shadow|border:|dsw-focus-ring-color/);
   assert.match(fieldFocusStylesheet(), /Highlight !important/);
+  // The ring has a colour whatever the theme body defines: identity ink, else the native primary text, else the system highlight.
+  assert.match(fieldFocusStylesheet(), /outline: 2px solid var\(--dsw-specific-brand-ink, var\(--dsw-alias-label-primary, Highlight\)\) !important;/);
   const serialized = Function(`${BODY.parts.map((part) => part.toString()).join('\n')}\nreturn fieldFocusStylesheet();`)();
   assert.equal(serialized, fieldFocusStylesheet());
   ctx.dispose();

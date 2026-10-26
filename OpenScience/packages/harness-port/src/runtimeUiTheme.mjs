@@ -95,14 +95,17 @@ export function evimedFontFaces(vocabulary) {
 
 /**
  * Owned field-only focus decoration in the optional theme body. The native
- * field's border and shadow remain its own, including validation errors.
+ * field's border and shadow remain its own, including validation errors. The
+ * ink is the identity ink; with the theme body off or a kernel that does not
+ * define it, the native primary text colour, and `Highlight` last, so the ring
+ * is never an invalid (and so invisible) declaration.
  * Buttons and non-text input controls retain their native action focus.
  * @returns {string}
  */
 export function fieldFocusStylesheet() {
   const fields = 'body :is(input:not([type]), input[type="text"], input[type="number"], input[type="date"], input[type="datetime-local"], input[type="month"], input[type="week"], input[type="time"], input[type="email"], input[type="search"], input[type="url"], input[type="tel"], input[type="password"], select, textarea, [contenteditable="true"], [contenteditable="plaintext-only"]):focus-visible';
   return `${fields} {
-  outline: 2px solid var(--dsw-specific-brand-ink) !important;
+  outline: 2px solid var(--dsw-specific-brand-ink, var(--dsw-alias-label-primary, Highlight)) !important;
   outline-offset: 2px !important;
 }
 @media (forced-colors: active) {
