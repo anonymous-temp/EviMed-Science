@@ -18,13 +18,25 @@ export function rsiOnlineConfigurationIssues(value) {
   if (!Number.isFinite(value?.extractionDailyCny) || value.extractionDailyCny <= 0 || value.extractionDailyCny > 20) issues.push('rsi_online_extraction_budget_invalid');
   return [...new Set(issues)];
 }
-/** Invalid or missing bindings cannot initialize a cloud client. @param {string|null|undefined} file */
+/** The production transport section alone: what publishing a withdrawal needs. @param {any} value */
+function rsiWithdrawalTransport(value) {
+  const transport = value?.transport;
+  if (!transport || typeof transport !== 'object' || Array.isArray(transport) || value.schemaVersion !== 1) return null;
+  if (Object.keys(transport).some(key => !['role','region','endpoint','incidentBucket','bundleBucket','identityRefs'].includes(key))
+    || transport.identityRefs && Object.keys(transport.identityRefs).some(key => !['production','lab'].includes(key))) return null;
+  return transport.role === 'production' && transport.region === 'cn-beijing' && !rsiOssConfigurationIssues(transport).length ? transport : null;
+}
+/** Invalid or missing bindings cannot initialize a cloud client. A withdrawal is owed whatever else changed, so a valid
+ * transport section and the agreement reference are returned even when the full configuration is not.
+ * @param {string|null|undefined} file
+ * @returns {Promise<{configuration:any, transport:any, agreementRef:string|null, issues:string[]}>} */
 export async function loadRsiOnlineConfiguration(file) {
-  if (!file) return { configuration: null, issues: ['rsi_online_configuration_missing'] };
+  if (!file) return { configuration: null, transport: null, agreementRef: null, issues: ['rsi_online_configuration_missing'] };
   try {
     if (!isAbsolute(file)) throw new Error('invalid');
     const configuration = await readRsiDeploymentRecord(file);
     const issues = rsiOnlineConfigurationIssues(configuration);
-    return { configuration: issues.length ? null : configuration, issues };
-  } catch { return { configuration: null, issues: ['rsi_online_configuration_unreadable'] }; }
+    const agreementRef = typeof configuration?.agreementRef === 'string' && isAbsolute(configuration.agreementRef) ? configuration.agreementRef : null;
+    return { configuration: issues.length ? null : configuration, transport: rsiWithdrawalTransport(configuration), agreementRef, issues };
+  } catch { return { configuration: null, transport: null, agreementRef: null, issues: ['rsi_online_configuration_unreadable'] }; }
 }

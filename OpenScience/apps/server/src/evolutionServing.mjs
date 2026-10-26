@@ -21,11 +21,13 @@ import { evolutionScientificUse } from './evolutionScientificUse.mjs';
 import { evolutionCompletedResult } from './evolutionUsage.mjs';
 import { readRunTranscript } from './runTranscripts.mjs';
 import { quarantineRetiredEvolutionJobs } from './evolutionRetiredJobs.mjs';
+import { createEvolutionSelfCheck } from './evolutionSelfCheck.mjs';
+import { evolutionMonthlyMetrics } from './evolutionMetrics.mjs';
 
 /** Published tools, account-local feedback and existing product continuation only.
  * Experimental composition is reachable exclusively from the offline campaign entry.
  * @param {any} dependencies */
-export function createEvolutionServing({config,store,documents,jobs,database,notifications,registry,runtimeManager,agentRuns,controller,autopilot,evaluationIsolation,sourceChanges=null,canRun=async()=>true,resolvePositiveEvidence=null,report=()=>{}}) {
+export function createEvolutionServing({config,store,documents,jobs,database,notifications,registry,runtimeManager,agentRuns,controller,autopilot,evaluationIsolation,dataSemantics=null,sourceChanges=null,canRun=async()=>true,resolvePositiveEvidence=null,report=()=>{}}) {
  if(!config.evolutionEnabled||!database||!documents||!jobs)return null;
  // Serving mode is a composition role, independent of the historical search pause switch.
  const servingConfig={...config,evolutionSearchPaused:true,evolutionServingOnly:true};
@@ -51,15 +53,25 @@ export function createEvolutionServing({config,store,documents,jobs,database,not
   return offline();
  })}});
  const maintenance=createEvolutionMaintenance({service,callbacks:{
-  // Harm evidence opens a review. Serving never promotes it into an automatic retirement.
+  // Harm evidence opens a review an operator answers; unanswered, a harm review takes its protective option (`unansweredOption`), restorably.
   proposeReview:async input=>{const id=`evolution-decision-${evolutionKey([input.category,input.subjectId,input.materialVersion??1])}`;const known=await service.get(id);const row=known??await service.save('decision',id,{...input,decisionClass:'C',status:'pending',createdAt:service.now().toISOString(),history:[],overridden:false});return decisions.deliver(row);},
   restorePin:pin=>supply.activate(pin),retirePin:id=>supply.retire(id),
-  notifyAffected:async({toolId,reason})=>{await supply.retire(toolId);const uses=await database.query("SELECT user_id,project_id,id FROM evimed_product.documents WHERE kind='knowledge' AND deleted_at IS NULL AND payload->>'recordType'='evolution-use' AND payload->>'toolId'=$1",[toolId]);const retired=await service.get(toolId),wording=evolutionRetirementNotice({name:retired?.payload.name??retired?.payload.description,toolId,reason});for(const row of uses.rows)await notifications.create(row.user_id,{noticeType:'notify',...wording,source:{type:'system',id:row.id},projectId:row.project_id,idempotencyKey:`evolution-retired:${row.id}:${toolId}`});}
+  notifyAffected:async({toolId,reason})=>{await supply.retire(toolId);const uses=await database.query("SELECT user_id,project_id,id FROM evimed_product.documents WHERE kind='knowledge' AND deleted_at IS NULL AND payload->>'recordType'='evolution-use' AND payload->>'toolId'=$1",[toolId]);const retired=await service.get(toolId),wording=evolutionRetirementNotice({name:retired?.payload.name??retired?.payload.description,toolId,reason});for(const row of uses.rows)await notifications.create(row.user_id,{noticeType:'notify',...wording,source:{type:'system',id:row.id},projectId:row.project_id,idempotencyKey:`evolution-retired:${row.id}:${toolId}`});},
+  // The operators' monthly funnel figures: reads of the ledger only (the metrics-only pass merges, builds and registers nothing).
+  monthlyMetrics:async(month,{previous=null}={})=>{
+   const start=new Date(`${month}-01T00:00:00.000Z`),end=new Date(start);end.setUTCMonth(end.getUTCMonth()+1);
+   const spending=(await database.query("SELECT coalesce(sum(actual_cost) FILTER (WHERE status='settled'),0) AS cost, count(*) FILTER (WHERE status IN ('reserved','uncertain') OR (status='settled' AND actual_cost IS NULL))::integer AS incomplete FROM evimed_usage.model_requests WHERE purpose='evolution' AND created_at >= $1 AND created_at < $2",[start.toISOString(),end.toISOString()])).rows[0];
+   return evolutionMonthlyMetrics({month,previous,now:service.now(),tools:await service.tools(),dossiers:await service.dossiers(),evaluations:await service.list('evaluation'),decisions:await service.list('decision'),
+    uses:(await database.query("SELECT payload FROM evimed_product.documents WHERE kind='knowledge' AND deleted_at IS NULL AND payload->>'recordType'='evolution-use'")).rows,
+    budgetSummary:{costCny:Number(spending?.incomplete)?null:Number(spending?.cost??0)}});
+  },
  }});
  const feedback=createEvolutionFeedback({service,maintenance,resolvePositiveEvidence});
  service.callbacks.observeFeedback=feedback.observeFeedback;
- const worker=createEvolutionServingWorker({service,integration,decisions,config:servingConfig,canRun,
-  quarantine: () => quarantineRetiredEvolutionJobs(database, config.operatorUsers[0])});
+ // A published tool on a researcher's own dataset, in the isolated executor: the agenda waiting on that dataset resumes from it.
+ const selfCheck=dataSemantics?createEvolutionSelfCheck({service,dataSemantics,store,controller,supply,config}):null;
+ const worker=createEvolutionServingWorker({service,integration,decisions,maintenance,selfCheck,config:servingConfig,canRun,
+  quarantine:admission=>quarantineRetiredEvolutionJobs(database,config.operatorUsers[0],{admission})});
   const routes = createEvolutionRoutes({ store, service, decisions, worker, config: servingConfig, evidenceRegistration: null, capabilityMap: async () => (await service.get('evolution-capability-map'))?.payload ?? null, isOperator: user => config.operatorUsers.includes(user.id),
     registerEvaluationPolicy: async (user, { projectId, policy }) => { await store.requireProject(user, projectId); return evaluationIsolation.registerPending({ userId: user.id, projectId }, policy); },
     evaluationAudit: async (user, { projectId }) => { const project = await store.requireProject(user, projectId); return Promise.all((await agentRuns.list(project)).map(run => evaluationIsolation.audit(run.id))); },

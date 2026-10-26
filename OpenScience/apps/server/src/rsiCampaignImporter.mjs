@@ -10,6 +10,11 @@ import { rsiActivationReceipt, rsiCampaignSelection, rsiCampaignFuse } from './r
 function conflict(code) { throw new HttpError(409,code,'Campaign activation refused.') }
 /** @param {string} id */
 const key = id => `rsi-import:${createHash('sha256').update(id).digest('hex')}`
+/** Identities kept on the journal for reading; exact deduplication is the per-witness marker. */
+const RECENT_WITNESSES = 32
+// A surface has at most one campaign in these states; an older stopped or rolled-back journal written later must never
+// hide it from selection.
+const SELECTION_ORDER = "CASE payload->>'state' WHEN 'staged' THEN 0 WHEN 'exposed' THEN 0 WHEN 'consumer-observed' THEN 0 WHEN 'broadly-active' THEN 0 WHEN 'stopped' THEN 1 ELSE 2 END, updated_at DESC"
 
 /** Deployment callbacks are authority, never manifest-supplied attestations.
  * publish/inspect/rollback must be idempotent under operationId and return installed identity.
@@ -65,7 +70,7 @@ export class RsiCampaignImporter {
       if(siblings.rows.some(({payload})=>payload.campaignId===m.campaignId || payload.surface===m.surface && !['stopped','rolled-back','rejected'].includes(payload.state))) conflict('campaign_replay_or_surface_busy')
       const admissionRow={surface:m.surface,evidenceReferences:{procedureDigest:m.verdict.procedureDigest,consumerDigest:m.verdict.consumerDigest},authenticatedAdmissionIdentity:options.authenticatedAdmissionIdentity??null}
       if(!await this.admitted(admissionRow))return {state:'rejected',issues:['campaign_trust_revoked']}
-      return this.write(client,{authenticatedAdmissionIdentity:options.authenticatedAdmissionIdentity??null,recordType:'rsi-campaign-import',id:m.id,campaignId:m.campaignId,envelopeDigest,bundleDigest:verified.bundleDigest,candidateDigest:m.verdict.candidateDigest,qualificationDigest:m.verdict.qualificationDigest,evidenceReferences:Object.fromEntries(['registrationDigest','datasetDigest','measurementDigest','consumerDigest','evaluatorDigest','procedureDigest','corpusDigest'].map(name=>[name,m.verdict[name]])),surface:m.surface,kind:m.kind,target:m.target,expiresAt:m.expiresAt,previousRevision:m.target.baselineRevision,operationId:`rsi-${rsiDigest([this.owner,m.id,verified.bundleDigest])}`,phase:policy.mode==='shadow'?'stage':'activate',mode:policy.mode,cohortPercent:policy.cohortPercent??0,policy:{minExecutions:policy.minExecutions??null,minDays:policy.minDays??null,maxErrors:policy.maxErrors??null,allowExpansion:policy.allowExpansion===true,afterShadow:policy.afterShadow??null,cohortSteps:steps??null},stageIndex:0,stageHistory:[],state:'staged',observations:{candidateExecutions:0,controlExecutions:0,errors:0,days:[],witnessIds:[]},stagedAt:this.now()},0)
+      return this.write(client,{authenticatedAdmissionIdentity:options.authenticatedAdmissionIdentity??null,recordType:'rsi-campaign-import',id:m.id,campaignId:m.campaignId,envelopeDigest,bundleDigest:verified.bundleDigest,candidateDigest:m.verdict.candidateDigest,qualificationDigest:m.verdict.qualificationDigest,evidenceReferences:Object.fromEntries(['registrationDigest','datasetDigest','measurementDigest','consumerDigest','evaluatorDigest','procedureDigest','corpusDigest'].map(name=>[name,m.verdict[name]])),surface:m.surface,kind:m.kind,target:m.target,expiresAt:m.expiresAt,previousRevision:m.target.baselineRevision,operationId:`rsi-${rsiDigest([this.owner,m.id,verified.bundleDigest])}`,phase:policy.mode==='shadow'?'stage':'activate',mode:policy.mode,cohortPercent:policy.cohortPercent??0,policy:{minExecutions:policy.minExecutions??null,minDays:policy.minDays??null,maxErrors:policy.maxErrors??null,allowExpansion:policy.allowExpansion===true,afterShadow:policy.afterShadow??null,cohortSteps:steps??null},stageIndex:0,stageHistory:[],state:'staged',observations:{candidateExecutions:0,controlExecutions:0,errors:0,days:[],witnessCount:0,witnessChain:null,recentWitnessIds:[]},stagedAt:this.now()},0)
     })
     if(staged.state==='stopped')return this.rollback(staged.id)
     if(staged.state!=='staged')return staged
@@ -139,11 +144,14 @@ export class RsiCampaignImporter {
       if(witness.outcome==='critical' ? !Number.isSafeInteger(witness.stageIndex??0) || (witness.stageIndex??0)<0 || (witness.stageIndex??0)>(row.stageIndex??0) : (witness.stageIndex??0)!==(row.stageIndex??0))conflict('campaign_consumer_witness_stage_changed')
       if(witness.consumerDigest!==undefined && witness.consumerDigest!==row.evidenceReferences.consumerDigest)conflict('campaign_consumer_witness_invalid')
       if(witness.outcome==='critical' && !['corrupt-bytes','unauthorized-behavior','incompatible-generation','deterministic-regression'].includes(witness.criticalCode))conflict('campaign_consumer_witness_invalid')
-      const o=structuredClone(row.observations)
-      if(o.witnessIds.includes(witness.id))return row
-      if(o.witnessIds.length>=10000 && witness.outcome!=='critical')conflict('campaign_observation_capacity')
-      // Evidence bounds never disable the deterministic emergency fuse.
-      if(o.witnessIds.length<10000)o.witnessIds.push(witness.id)
+      // Exactly once per witness without a list that grows with exposure (a journal is one bounded product record): a
+      // marker per counted witness in this transaction, and on the journal only counts, the latest identities and a
+      // digest chain over every counted identity. There is no capacity limit, so the emergency fuse always applies.
+      const marker=`observed:${row.id}:${witness.id}`
+      if(await this.read(client,marker))return row
+      await this.documents.put(this.owner,'knowledge',key(marker),{recordType:'rsi-campaign-observation',journalId:row.id,witnessId:witness.id,observedAt:this.now()},{expectedRevision:0,transactionClient:client})
+      const {witnessIds:_legacy,...counted}=structuredClone(row.observations)
+      const o={...counted,witnessCount:(counted.witnessCount??0)+1,witnessChain:createHash('sha256').update(`${counted.witnessChain??''}\n${witness.id}`).digest('hex'),recentWitnessIds:[...(counted.recentWitnessIds??[]),witness.id].slice(-RECENT_WITNESSES)}
       const candidate=witness.arm!=='control'
       if(candidate){o.candidateExecutions++;o.errors+=witness.outcome==='ok'?0:1;if(!o.days.includes(witness.day))o.days.push(witness.day)}else o.controlExecutions++
       if(candidate && witness.outcome==='critical')o.criticalCode=witness.criticalCode
@@ -158,7 +166,7 @@ export class RsiCampaignImporter {
         if(!await this.admitted(row))return this.stop(client,stored,'campaign_trust_revoked')
         if(!this.isBound() || this.expired(row) || !this.compatible(row,target))return this.stop(client,stored,'campaign_target_changed')
         const history=[...(row.stageHistory??[]),{stageIndex:row.stageIndex??0,mode:row.mode,cohortPercent:row.cohortPercent,candidateExecutions:o.candidateExecutions,controlExecutions:o.controlExecutions,errors:o.errors,days:o.days,completedAt:this.now()}]
-        const fresh={candidateExecutions:0,controlExecutions:0,errors:0,days:[],witnessIds:o.witnessIds}
+        const fresh={candidateExecutions:0,controlExecutions:0,errors:0,days:[],witnessCount:o.witnessCount,witnessChain:o.witnessChain,recentWitnessIds:o.recentWitnessIds}
         if(row.mode==='shadow' && row.policy.afterShadow==='global') {
           // Commit activation intent before the external effect; resume reuses operation identity.
           next={...next,mode:'global',phase:'activate',state:'staged',stageIndex:(row.stageIndex??0)+1,stageHistory:history,observations:fresh,activationRequestedAt:this.now()}
@@ -191,7 +199,7 @@ export class RsiCampaignImporter {
   async select(surface,context={}) {
     const result=await this.transaction(async client=>{
       const current=await this.currentTarget(surface,client)
-      const records=await client.query("SELECT payload,revision FROM evimed_product.documents WHERE user_id=$1 AND kind='knowledge' AND payload->>'recordType'='rsi-campaign-import' AND payload->>'surface'=$2 AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 1 FOR UPDATE",[this.owner,surface])
+      const records=await client.query(`SELECT payload,revision FROM evimed_product.documents WHERE user_id=$1 AND kind='knowledge' AND payload->>'recordType'='rsi-campaign-import' AND payload->>'surface'=$2 AND deleted_at IS NULL ORDER BY ${SELECTION_ORDER} LIMIT 1 FOR UPDATE`,[this.owner,surface])
       const stored=records.rows[0],row=stored?.payload
       if(!row)return {selection:{revision:current.baselineRevision,arm:'control'}}
       const trusted=await this.admitted(row)
@@ -211,6 +219,17 @@ export class RsiCampaignImporter {
       })
     }
     return result.selection
+  }
+  /** Fail safe for a consumer whose critical observation could not be recorded: stop selection of this operation
+   * durably, then compensate. Idempotent; a decided journal is returned as it is. @param {string} operationId @param {string} reason */
+  async halt(operationId,reason) {
+    const stopped=await this.transaction(async client=>{
+      const rows=await client.query("SELECT payload,revision FROM evimed_product.documents WHERE user_id=$1 AND kind='knowledge' AND payload->>'recordType'='rsi-campaign-import' AND payload->>'operationId'=$2 AND deleted_at IS NULL FOR UPDATE",[this.owner,operationId])
+      if(rows.rows.length!==1)return null
+      const stored=rows.rows[0]
+      return ['stopped','rolled-back','rejected'].includes(stored.payload.state)?stored.payload:this.stop(client,stored,reason)
+    })
+    return stopped?.state==='stopped'?this.rollback(stopped.id):stopped
   }
   /** Cheap absence check preserves the native policy path when no bundle was ever admitted.
    * This ignores configuration intentionally: an existing revoked journal must still reconcile.

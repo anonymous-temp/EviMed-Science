@@ -28,19 +28,26 @@ before(async()=>{
 });
 after(async()=>{if(database){await database.query('DELETE FROM evimed_control.users WHERE id=ANY($1::text[])',[[owner,...accounts]]);await database.close();}});
 const request=(patch={})=>{const id=randomUUID();return{id,userId:owner,projectId:'evimed-evolution',purpose:'evolution',estimatedCost:0.6,dailyLimit:50,model:'deepseek-v4-flash',priceVersion:'evimed-reference-2026-09-05',currency:'CNY',requestFingerprint:createHash('sha256').update(id).digest('hex'),...patch};};
-test('three distinct accounts are counted privately and only five open a shared lead; signal replay is race-safe',options,async()=>{
+test('one researcher opens a shared lead and a summary at once, more accounts are counted privately, and signal replay is race-safe',options,async()=>{
  const signals=createEvolutionSignals({service,capabilityIds:async()=>['statistical-analysis']});
+ assert.deepEqual(signals.floors,{user:1,operator:1},'the researcher floor is one account');
  const lead=userId=>({track:'M',source:'runtime-failure',gapCode:'method-missing',userId,projectId:'research',sourceEventId:'closed-event',method:'private tenant prose'});
- for(const id of accounts.slice(0,3))await service.addLead(lead(id));
- const accumulating=(await service.list('lead'))[0];assert.equal(accumulating.payload.distinctAccounts,3);assert.equal(accumulating.payload.status,'accumulating');
- assert.equal((await database.query("SELECT count(*)::int AS n FROM evimed_product.jobs WHERE user_id=$1 AND kind='evolution-scout'",[owner])).rows[0].n,0);
+ await service.addLead(lead(accounts[0]));
+ const opened=(await service.list('lead'))[0];assert.equal(opened.payload.distinctAccounts,1);assert.equal(opened.payload.status,'queued');
+ assert.equal((await database.query("SELECT count(*)::int AS n FROM evimed_product.jobs WHERE user_id=$1 AND kind='evolution-scout'",[owner])).rows[0].n,1,'the first researcher\'s lead is scouted at once');
+ for(const id of accounts.slice(1,3))await service.addLead(lead(id));
+ const counted=(await service.list('lead'))[0];assert.equal(counted.payload.distinctAccounts,3);assert.equal(counted.payload.status,'queued');
+ assert.ok(!JSON.stringify(counted).includes('private')&&accounts.every(id=>!JSON.stringify(counted).includes(id)),'the lead names no account and carries no tenant prose');
  const signal=id=>({userId:id,projectId:'research',eventId:'demand-event',kind:'unmet-demand',moduleId:'tools',capability:'statistical-analysis',operation:'transform',dataShape:'table',reason:'missing-tool',privateText:'never aggregate'});
  await Promise.all(accounts.slice(0,3).flatMap(id=>Array.from({length:3},()=>signals.record(signal(id)))));
- assert.equal((await signals.aggregate()).length,0);
+ const early=await Promise.all(Array.from({length:4},()=>signals.aggregate()));
+ assert.ok(early.every(items=>items.length===1&&items[0].revision===1),'concurrent passes over the same signals write one summary once');
+ assert.equal(early[0][0].payload.distinctAccounts,3);assert.equal(early[0][0].payload.occurrences,3,'three replays of one event by one account are one signal');
  for(const id of accounts.slice(3)){await service.addLead(lead(id));await signals.record(signal(id));}
  const shared=(await service.list('lead'))[0];assert.equal(shared.payload.distinctAccounts,5);assert.equal(shared.payload.occurrences,5);
  const summaries=await Promise.all(Array.from({length:4},()=>signals.aggregate()));
- const [summary]=summaries[0];assert.ok(summaries.every(items=>items[0].revision===1));assert.equal(summary.payload.distinctAccounts,5);assert.equal(summary.payload.occurrences,5);
+ const [summary]=summaries[0];assert.ok(summaries.every(items=>items[0].revision===2&&items[0].id===early[0][0].id),'the same summary grows to the next revision, once');
+ assert.equal(summary.payload.distinctAccounts,5);assert.equal(summary.payload.occurrences,5);
  assert.ok(!JSON.stringify(summary).includes('private'));assert.ok(accounts.every(id=>!JSON.stringify(summary).includes(id)));
  assert.equal((await signals.record(signal(accounts[0]))).revision,1);
 });

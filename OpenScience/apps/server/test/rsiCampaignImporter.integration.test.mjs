@@ -176,3 +176,41 @@ test('cohort expansion follows registered steps with fresh observations for each
  row=await p.importer.observe('bundle',execution(row,7));assert.equal(row.state,'consumer-observed')
  row=await p.importer.observe('bundle',execution(row,8));assert.equal(row.state,'broadly-active');assert.equal(p.activations(),1)
 }))
+test('the observation journal stays one bounded record while every witness counts exactly once',skip,()=>withDatabase(async(database,owner)=>{
+ const f=await fixture(database,owner),p=progressionAdapters(f,{mode:'shadow',minExecutions:100000,minDays:90,maxErrors:0})
+ let row=await p.importer.importBundle(f.envelope)
+ const size=async()=>(await database.query("SELECT octet_length(payload::text) AS n FROM evimed_product.documents WHERE user_id=$1 AND payload->>'recordType'='rsi-campaign-import'",[owner])).rows[0].n
+ // Real witness identities (rsi-witness:<sha256>): an identity list on the journal passed the 256 KiB record limit near 3,300.
+ const witness=(/** @type {number} */ n)=>execution(row,n,{id:`rsi-witness:${rsiDigest(['execution',n])}`})
+ for(let n=1;n<=40;n++)row=await p.importer.observe('bundle',witness(n))
+ const bounded=await size()
+ for(let n=41;n<=3400;n++)row=await p.importer.observe('bundle',witness(n))
+ assert.ok(await size()-bounded<=8,'only the counters\' digits grow')
+ assert.deepEqual([row.observations.witnessCount,row.observations.candidateExecutions,row.observations.recentWitnessIds.length,row.observations.witnessIds],[3400,3400,32,undefined])
+ assert.equal(row.state,'consumer-observed')
+ // A witness long out of the recent window is still counted once.
+ assert.equal((await p.importer.observe('bundle',witness(1))).observations.candidateExecutions,3400)
+}))
+test('selection prefers the active campaign over a later write to an old decided one, and halt stops durably',skip,()=>withDatabase(async(database,owner)=>{
+ const f=await fixture(database,owner),receipts=new Map()
+ f.options.adapters.policy={inspect:async({operationId,phase})=>receipts.get(`${operationId}:${phase}`)??null,
+  publish:async input=>{receipts.set(`${input.operationId}:${input.phase}`,{installed:true,phase:input.phase,operationId:input.operationId,candidateDigest:rsiDigest(f.files),revision:`candidate-${input.operationId.slice(-8)}`})},
+  rollback:async input=>({...input,installed:true})}
+ const second=await signRsiCampaignBundle({manifest:{...f.manifest,id:'bundle-2',campaignId:'campaign-2'},files:f.files,keyId:'publisher',signer:bytes=>sign(null,bytes,privateKey)})
+ const original=f.options.verificationOptions
+ f.options.verificationOptions=async envelope=>({...await original(envelope),expectedIdentity:envelope===second?{id:'bundle-2',campaignId:'campaign-2'}:{id:'bundle',campaignId:'campaign'}})
+ const importer=new RsiCampaignImporter(f.options)
+ const first=await importer.importBundle(f.envelope)
+ assert.equal((await importer.observe('bundle',{trusted:true,id:'critical',operationId:first.operationId,candidateDigest:rsiDigest(f.files),arm:'shadow',revision:first.revision,day:'2026-10-26',outcome:'critical',criticalCode:'corrupt-bytes'})).state,'rolled-back')
+ const active=await importer.importBundle(second)
+ assert.equal(active.state,'exposed')
+ // A late write to the old campaign's journal (a retried compensation) makes it the most recently updated record.
+ await database.query("UPDATE evimed_product.documents SET updated_at=clock_timestamp()+interval '1 minute' WHERE user_id=$1 AND payload->>'id'='bundle'",[owner])
+ const selected=await importer.select(f.target.surface,{userId:'u',projectId:'p'})
+ assert.deepEqual([selected.operationId,selected.shadowRevision],[active.operationId,active.revision])
+ assert.equal((await importer.halt(active.operationId,'campaign_observation_unrecorded')).state,'rolled-back')
+ assert.equal((await importer.halt(active.operationId,'campaign_observation_unrecorded')).state,'rolled-back')
+ const journal=await database.query("SELECT payload FROM evimed_product.documents WHERE user_id=$1 AND payload->>'id'='bundle-2'",[owner])
+ assert.equal(journal.rows[0].payload.stopReason,'campaign_observation_unrecorded')
+ assert.equal((await importer.select(f.target.surface,{userId:'u',projectId:'p'})).operationId,undefined)
+}))

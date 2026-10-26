@@ -3,6 +3,13 @@ import { createHash } from 'node:crypto';
 const fields = ['problem', 'reproduction', 'expectedBehavior', 'actualBehavior'];
 const binding = ['userId', 'projectId', 'sourceRunId', 'sourceRevision', 'authorizationId'];
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const sha = text => createHash('sha256').update(text).digest('hex');
+// In unicode mode a surrogate pair is one code point, so this matches unpaired surrogates only.
+const LONE_SURROGATE = /\p{Cs}/u;
+/** Failures that belong to the source revision or to one extraction: a retry cannot succeed and would pay the model
+ * again, so the job ends and the incident is recorded as not exportable with the code. */
+export const RSI_INCIDENT_TERMINAL_CODES = Object.freeze(['rsi_incident_sensitive_material', 'rsi_incident_quote_mismatch',
+  'rsi_incident_invalid_shape', 'rsi_incident_source_unbounded', 'rsi_incident_export_unbounded']);
 // Inspect the actual strings, not their JSON serialization: serialization escapes quoted keys.
 // Decode a bounded number of common nested JSON escape layers, then inspect assignments.
 const sensitiveKey = /^(?:api[_-]?key|password|secret|access[_-]?token|authorization|workload[_-]?(?:token|identity))$/i;
@@ -29,9 +36,9 @@ function diagnosticOnly(value, messages) {
   const result = {};
   for (const key of fields) {
     const item = value[key];
-    if (!item || Object.keys(item).sort().join(',') !== 'anchors,text' || typeof item.text !== 'string' || !item.text.trim() || item.text.length > 2000 || !Array.isArray(item.anchors) || item.anchors.length < 1 || item.anchors.length > 4) throw new Error('rsi_incident_invalid_shape');
+    if (!item || Object.keys(item).sort().join(',') !== 'anchors,text' || typeof item.text !== 'string' || !item.text.trim() || item.text.length > 2000 || LONE_SURROGATE.test(item.text) || !Array.isArray(item.anchors) || item.anchors.length < 1 || item.anchors.length > 4) throw new Error('rsi_incident_invalid_shape');
     const anchors = item.anchors.map(anchor => {
-      if (!anchor || Object.keys(anchor).sort().join(',') !== 'messageId,quote' || typeof anchor.quote !== 'string' || !anchor.quote.trim() || anchor.quote.length > 800 || !messages.some(m => m.id === anchor.messageId && m.text.includes(anchor.quote))) throw new Error('rsi_incident_quote_mismatch');
+      if (!anchor || Object.keys(anchor).sort().join(',') !== 'messageId,quote' || typeof anchor.quote !== 'string' || !anchor.quote.trim() || anchor.quote.length > 800 || LONE_SURROGATE.test(anchor.quote) || !messages.some(m => m.id === anchor.messageId && m.text.includes(anchor.quote))) throw new Error('rsi_incident_quote_mismatch');
       return { messageId: anchor.messageId, quote: anchor.quote };
     });
     result[key] = { text: item.text, anchors };
@@ -44,14 +51,32 @@ function diagnosticOnly(value, messages) {
  * agreements, current project/clinical rights, and return only the relevant failure messages.
  * extract is an approved model gateway port, never an authority for export permission.
  * headObject returns null only for a definitive absence; unknown outcomes must throw.
+ * configured admits new exports; canWithdraw admits withdrawal publication, which needs only the transport identity.
  * @param {any} dependencies */
-export function createRsiIncidentExports({ documents, jobs, deploymentOwnerId, deploymentProjectId, readAuthorizedTranscript, extract, putObject, headObject, configured = () => false, now = () => new Date() }) {
+export function createRsiIncidentExports({ documents, jobs, deploymentOwnerId, deploymentProjectId, readAuthorizedTranscript, extract, putObject, headObject, configured = () => false, canWithdraw = configured, now = () => new Date() }) {
   if (typeof deploymentOwnerId !== 'string' || !deploymentOwnerId || typeof deploymentProjectId !== 'string' || !deploymentProjectId) throw new Error('rsi_incident_deployment_owner_required');
   // These deployment identities are trusted constructor inputs, never request/model fields.
   // The customer account/project can be deleted without cascading this publication journal.
   const get = id => documents.get(deploymentOwnerId, 'knowledge', id);
   const save = (id, payload, previous) => documents.put(deploymentOwnerId, 'knowledge', id, payload, { expectedRevision: previous?.revision ?? 0, projectId: deploymentProjectId });
   const update = (row, patch) => save(row.id, { ...row.payload, ...patch, updatedAt: now().toISOString() }, row);
+  const transportReady = () => typeof putObject === 'function' && typeof headObject === 'function';
+  // The body quotes the customer's conversation verbatim, so it never enters the journal or any revision row. It is held
+  // in a companion record that is created empty and then filled and cleared by counter writes, which update the row in
+  // place and record no revision: after the upload or the withdrawal no copy of the body remains in the database.
+  const bodyId = id => `rsi-incident-body-${id.slice('rsi-incident-'.length)}`;
+  const emptyBody = id => ({ recordType: 'rsi-incident-body', incidentId: id, kind: null, digest: null, serializedBody: null });
+  async function holdBody(row, kind, serializedBody, bodyDigest) {
+    let held = await get(bodyId(row.id));
+    if (!held) held = await save(bodyId(row.id), emptyBody(row.id), null);
+    await documents.put(deploymentOwnerId, 'knowledge', bodyId(row.id), { ...emptyBody(row.id), kind, digest: bodyDigest, serializedBody },
+      { expectedRevision: held.revision, projectId: deploymentProjectId, telemetry: true });
+  }
+  async function releaseBody(row) {
+    const held = await get(bodyId(row.id));
+    if (held && held.payload.serializedBody !== null) await documents.put(deploymentOwnerId, 'knowledge', bodyId(row.id), emptyBody(row.id),
+      { expectedRevision: held.revision, projectId: deploymentProjectId, telemetry: true });
+  }
   async function owned(userId, id) {
     const row = await get(id);
     if (!row || row.payload.userId !== userId || row.payload.recordType !== 'rsi-incident-export') throw new Error('rsi_incident_not_found');
@@ -74,45 +99,66 @@ export function createRsiIncidentExports({ documents, jobs, deploymentOwnerId, d
     const serializedBody = JSON.stringify(body);
     if (Buffer.byteLength(serializedBody) > 65536) throw new Error('rsi_incident_export_unbounded');
     assertSafe(body);
-    const objectDigest = digest(body), idempotencyKey = `${row.id}:${kind}`;
-    const pending = { kind, body, serializedBody, digest: objectDigest, idempotencyKey, streamId: row.id, generation: kind === 'withdrawal' ? 2 : 1 };
+    const objectDigest = sha(serializedBody), idempotencyKey = `${row.id}:${kind}`;
+    // Bytes first: a journal that names a pending object can always find its exact bytes.
+    await holdBody(row, kind, serializedBody, objectDigest);
+    const pending = { kind, digest: objectDigest, idempotencyKey, streamId: row.id, generation: kind === 'withdrawal' ? 2 : 1 };
     row = await update(row, { status: kind === 'withdrawal' ? 'withdrawing' : 'exporting', pending });
     return transmit(row);
   }
   async function transmit(row) {
     const pending = row.payload.pending;
-    if (JSON.stringify(pending.body) !== pending.serializedBody || digest(pending.body) !== pending.digest || Buffer.byteLength(pending.serializedBody) > 65536) throw new Error('rsi_incident_intent_changed');
-    assertSafe(pending.body);
     const existing = await headObject({ idempotencyKey: pending.idempotencyKey, digest: pending.digest, streamId: row.id, generation: pending.generation });
     if (existing && existing.digest !== pending.digest) throw new Error('rsi_incident_object_conflict');
     if (!existing) {
       if (pending.kind === 'incident' && (!(await source(row.payload)) || (await get(row.id)).payload.invalidated)) return withdraw(await get(row.id));
+      // The digest of the exact stored bytes is the intent; key order of any parsed copy is irrelevant.
+      const held = (await get(bodyId(row.id)))?.payload;
+      if (held?.kind !== pending.kind || held.digest !== pending.digest || typeof held.serializedBody !== 'string'
+        || Buffer.byteLength(held.serializedBody) > 65536 || sha(held.serializedBody) !== pending.digest) {
+        const latest = await get(row.id);
+        if (latest.revision !== row.revision) return latest.payload.status === 'withdrawn' ? latest : processRow(latest);
+        throw new Error('rsi_incident_intent_changed');
+      }
+      const body = JSON.parse(held.serializedBody);
+      assertSafe(body);
       row = await update(row, { status: row.payload.status });
       // Publisher must keep generation 2 withdrawal dominant over any late generation 1 write.
-      const receipt = await putObject({ ...pending });
+      const receipt = await putObject({ ...pending, body, serializedBody: held.serializedBody });
       if (receipt?.digest !== pending.digest) throw new Error('rsi_incident_upload_unconfirmed');
     }
     const latest = await get(row.id);
     if (pending.kind === 'incident' && (latest.payload.invalidated || !(await source(row.payload)))) return withdraw(latest);
     if (latest.revision !== row.revision) return latest.payload.status === 'withdrawn' ? latest : processRow(latest);
-    return update(row, { status: pending.kind === 'withdrawal' ? 'withdrawn' : 'exported', exportedDigest: pending.kind === 'incident' ? pending.digest : row.payload.exportedDigest, pending: null });
+    const done = await update(row, { status: pending.kind === 'withdrawal' ? 'withdrawn' : 'exported', exportedDigest: pending.kind === 'incident' ? pending.digest : row.payload.exportedDigest, pending: null });
+    await releaseBody(done);
+    return done;
   }
   async function withdraw(row) {
     if (row.payload.status === 'withdrawn') return row;
-    if (row.payload.pending?.kind === 'withdrawal') return transmit(row);
+    if (row.payload.pending?.kind === 'withdrawal') return canWithdraw() && transportReady() ? transmit(row) : row;
     // Publish a tombstone whenever an upload may be in flight or have succeeded.
     if (!row.payload.invalidated) row = await update(row, { invalidated: true, status: 'withdrawal-pending' });
-    if (!row.payload.exportedDigest && row.payload.pending?.kind !== 'incident') return update(row, { status: 'withdrawn', pending: null });
-    if (!configured()) return row;
+    // Once invalidated the incident body is never needed again, whether or not the withdrawal can be published yet.
+    await releaseBody(row);
+    if (!row.payload.exportedDigest && row.payload.pending?.kind !== 'incident') {
+      const done = await update(row, { status: 'withdrawn', pending: null });
+      await releaseBody(done);
+      return done;
+    }
+    if (!canWithdraw() || !transportReady()) return row;
     return send(row, 'withdrawal', { schemaVersion: 1, incidentId: row.id, generation: 2, type: 'withdrawal', reason: 'source-no-longer-authorized', sourceRevision: row.payload.sourceRevision });
   }
   async function processRow(row) {
     if (row.payload.status === 'withdrawn') return row;
-    if (!configured() || typeof putObject !== 'function' || typeof headObject !== 'function') return update(row, { status: row.payload.invalidated ? 'withdrawal-pending' : 'awaiting-configuration' });
+    if (!transportReady() || !canWithdraw()) return update(row, { status: row.payload.invalidated ? 'withdrawal-pending' : 'awaiting-configuration' });
     if (row.payload.invalidated) return withdraw(row);
     if (row.payload.pending?.kind === 'withdrawal') return transmit(row);
     const current = await source(row.payload);
     if (!current) return withdraw(row);
+    if (row.payload.status === 'not-exportable') return row;
+    // Withdrawal needs only the transport identity; a new export needs every deployment binding.
+    if (!configured()) return row.payload.status === 'exported' ? row : update(row, { status: 'awaiting-configuration' });
     if (row.payload.pending) return transmit(row);
     if (row.payload.status === 'exported') return row;
     if (!Array.isArray(current.messages) || current.messages.length < 1 || current.messages.length > 40 || current.messages.some(m => typeof m.id !== 'string' || typeof m.text !== 'string') || JSON.stringify(current.messages).length > 32000) throw new Error('rsi_incident_source_unbounded');
@@ -125,12 +171,26 @@ export function createRsiIncidentExports({ documents, jobs, deploymentOwnerId, d
     const body = { schemaVersion: 1, incidentId: row.id, generation: 1, dataScope: 'authorized-incident', authorizationId: row.payload.authorizationId, sourceRunId: row.payload.sourceRunId, sourceRevision: row.payload.sourceRevision, diagnostic };
     return send(row, 'incident', body);
   }
-  async function process({ userId, id }) { return processRow(await owned(userId, id)); }
+  /** A terminal failure is recorded on the journal before it is reported, so no later attempt extracts again.
+   * @param {string} id @param {() => Promise<any>} operation */
+  async function settled(id, operation) {
+    try { return await operation(); } catch (error) {
+      if (RSI_INCIDENT_TERMINAL_CODES.includes(error?.message)) {
+        const latest = await get(id);
+        if (latest && !latest.payload.pending && !latest.payload.invalidated && !['withdrawn', 'exported', 'not-exportable'].includes(latest.payload.status)) {
+          await update(latest, { status: 'not-exportable', failureCode: error.message });
+          await releaseBody(latest);
+        }
+      }
+      throw error;
+    }
+  }
+  async function process({ userId, id }) { const row = await owned(userId, id); return settled(row.id, () => processRow(row)); }
   // Deployment worker only: no customer identity is accepted or bypassed by a request route.
   async function processPending({ id }) {
     const row = await get(id);
     if (!row || row.payload.recordType !== 'rsi-incident-export') throw new Error('rsi_incident_not_found');
-    return processRow(row);
+    return settled(row.id, () => processRow(row));
   }
   async function invalidate({ userId, id }) {
     let row = await owned(userId, id);
@@ -138,27 +198,43 @@ export function createRsiIncidentExports({ documents, jobs, deploymentOwnerId, d
     row = await update(row, { invalidated: true, status: 'withdrawal-pending' });
     return withdraw(row);
   }
-    /** Trusted source lifecycle hook, called before the customer rows are removed. Journals are
-   * found through the deployment owner plus exact source bindings, never a tenant-wide scan.
-   * @param {{userId:string,projectId?:string,sourceRunId?:string}} input */
-  async function invalidateSource({ userId, projectId, sourceRunId }) {
-    if (typeof userId !== 'string' || !userId) throw new Error('rsi_incident_source_owner_required');
-    const filter = { recordType: 'rsi-incident-export', userId, ...(projectId ? { projectId } : {}), ...(sourceRunId ? { sourceRunId } : {}) };
+  /** Mark every bound, not yet withdrawn journal, then queue one deployment-owned withdrawal job each. A failed earlier
+   * withdrawal job is re-armed: a withdrawal is owed until it is published. @param {any} filter @param {(row:any)=>boolean} select */
+  async function invalidateWhere(filter, select) {
     const ids = [];
     let cursor = null;
     do {
       const page = await documents.list(deploymentOwnerId, 'knowledge', { limit: 100, cursor, filter });
       for (const row of page.items) {
-        if (row.payload.userId !== userId || (projectId && row.payload.projectId !== projectId) || (sourceRunId && row.payload.sourceRunId !== sourceRunId)) throw new Error('rsi_incident_source_binding_mismatch');
+        if (row.payload.recordType !== 'rsi-incident-export' || !select(row)) continue;
         // Durable invalidation precedes any network request and remains even if that request fails.
         if (row.payload.status !== 'withdrawn' && !row.payload.invalidated) await update(row, { invalidated: true, status: 'withdrawal-pending' });
+        // A deleted source takes its verbatim body with it now, not when the withdrawal is published.
+        if (row.payload.pending?.kind !== 'withdrawal') await releaseBody(row);
         ids.push(row.id);
       }
       cursor = page.nextCursor;
     } while (cursor);
     // Existing deployment-owned deferred jobs retry publishing. No network operation blocks deletion.
-    for (const id of ids) await jobs.enqueue(deploymentOwnerId, 'rsi-incident-export', { id }, { idempotencyKey: `${id}:withdrawal`, projectId: deploymentProjectId });
+    for (const id of ids) await jobs.enqueue(deploymentOwnerId, 'rsi-incident-export', { id }, { idempotencyKey: `${id}:withdrawal`, projectId: deploymentProjectId, rearmFailed: true });
     return { invalidated: ids };
   }
-  return { offer, process, processPending, invalidate, invalidateSource };
+  /** Trusted source lifecycle hook, called before the customer rows are removed. Journals are
+   * found through the deployment owner plus exact source bindings, never a tenant-wide scan.
+   * @param {{userId:string,projectId?:string,sourceRunId?:string}} input */
+  async function invalidateSource({ userId, projectId, sourceRunId }) {
+    if (typeof userId !== 'string' || !userId) throw new Error('rsi_incident_source_owner_required');
+    const filter = { recordType: 'rsi-incident-export', userId, ...(projectId ? { projectId } : {}), ...(sourceRunId ? { sourceRunId } : {}) };
+    return invalidateWhere(filter, row => {
+      if (row.payload.userId !== userId || (projectId && row.payload.projectId !== projectId) || (sourceRunId && row.payload.sourceRunId !== sourceRunId)) throw new Error('rsi_incident_source_binding_mismatch');
+      return true;
+    });
+  }
+  /** A removed or replaced deployment agreement withdraws everything offered under an earlier one; null means no
+   * agreement is in force. Only marks and queues: the worker publishes when the transport identity is bound.
+   * @param {string|null} currentAgreementId */
+  async function invalidateAgreement(currentAgreementId) {
+    return invalidateWhere({ recordType: 'rsi-incident-export' }, row => row.payload.status !== 'withdrawn' && (!currentAgreementId || row.payload.authorizationId !== currentAgreementId));
+  }
+  return { offer, process, processPending, invalidate, invalidateSource, invalidateAgreement };
 }

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { rsiCampaignSelection, rsiCampaignFuse, rsiActivationReceipt } from '../src/rsiCampaignActivation.mjs'
 const row = { id: 'bundle', operationId: 'op', phase:'stage', candidateDigest: 'a'.repeat(64), revision: 'next', previousRevision: 'base', mode: 'shadow', state: 'exposed', cohortPercent: 100 }
 test('shared-feed shadow always serves incumbent and pins ongoing runs', () => {
- assert.deepEqual(rsiCampaignSelection(row, {userId:'u',projectId:'p'}), {revision:'base',arm:'control',shadowRevision:'next',operationId:'op'})
+ assert.deepEqual(rsiCampaignSelection(row, {userId:'u',projectId:'p'}), {revision:'base',arm:'control',shadowRevision:'next',operationId:'op',candidateDigest:'a'.repeat(64)})
  assert.equal(rsiCampaignSelection({...row, mode:'cohort'}, {runPin:'base'}).revision,'base')
  assert.equal(rsiCampaignSelection({...row, mode:'cohort',state:'stopped'}, {}).revision,'base')
 })
@@ -24,3 +24,13 @@ test('shadow pins cannot turn a shadow execution into serving publication',()=>{
 })
 
 test('activation intent never serves candidate before inspected active receipt',()=>{assert.equal(rsiCampaignSelection({...row,mode:'global',state:'staged'},{runPin:'next'}).revision,'base')})
+
+test('every arm of an exposed campaign names the candidate under observation, so control executions are countable',()=>{
+ const cohort={...row,mode:'cohort',cohortPercent:0.0001}
+ const control=rsiCampaignSelection(cohort,{userId:'u',projectId:'p'})
+ assert.equal(control.arm,'control');assert.equal(control.revision,'base');assert.equal(control.candidateDigest,'a'.repeat(64))
+ const pinned=rsiCampaignSelection({...row,mode:'global'},{runPin:'base'})
+ assert.equal(pinned.arm,'control');assert.equal(pinned.candidateDigest,'a'.repeat(64))
+ assert.equal(rsiCampaignSelection({...row,mode:'global'},{}).candidateDigest,'a'.repeat(64))
+ assert.equal(rsiCampaignSelection({...row,state:'staged'},{}).candidateDigest,undefined,'nothing is observed before exposure')
+})

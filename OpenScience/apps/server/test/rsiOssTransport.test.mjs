@@ -58,3 +58,12 @@ test('authorization and network HEAD errors are never treated as absence', () =>
   }
   assert.equal(calls.filter(call => call[0] === 'put').length, 0);
 }));
+test('a pending body reordered by a jsonb round trip still uploads its exact serialized bytes', () => fixture(async ({ prod, objects }) => {
+  const row = pending();
+  // PostgreSQL jsonb stores keys shortest first, then bytewise: the JSON.stringify order is not preserved.
+  const reordered = Object.fromEntries(Object.entries(row.body).sort(([a], [b]) => a.length - b.length || (a < b ? -1 : 1)));
+  assert.notEqual(JSON.stringify(reordered), row.serializedBody);
+  assert.equal((await prod.putObject({ ...row, body: reordered })).digest, row.digest);
+  assert.equal(objects.get('fixture-incidents/rsi/v1/incidents/incident-123/1.json').bytes.toString(), row.serializedBody);
+  await assert.rejects(prod.putObject({ ...pending('withdrawal'), body: { ...reordered, generation: 2, sourceRunId: 'other' } }), /incident_invalid/);
+}));

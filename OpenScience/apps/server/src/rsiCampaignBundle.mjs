@@ -2,13 +2,24 @@ import { createHash, createPublicKey, KeyObject, verify } from 'node:crypto'
 import { RSI_CAMPAIGN_SURFACES, rsiCompatibilityIssues } from '../../../packages/domain/src/rsiCampaign.mjs'
 
 const MAX_BYTES = 2 * 1024 * 1024
-/** Canonical JSON rejects values JSON would silently discard. @param {any} value @returns {string} */
+// In unicode mode a surrogate pair is one astral code point, so this matches unpaired surrogates only.
+const LONE_SURROGATE = /\p{Cs}/u
+/** RFC 8785 (JCS), byte-compatible with Python rfc8785 0.1.4: keys sorted by UTF-16 code units (the default sort),
+ * ECMAScript number and string serialization. Values JCS cannot represent are refused, never coerced: non-finite
+ * numbers, integral values outside +-(2^53-1) and unpaired UTF-16 surrogates in strings or keys throw a TypeError;
+ * values JSON would silently discard throw too. @param {any} value @returns {string} */
 export function canonicalRsiJson(value) {
-  if (value === null || typeof value === 'boolean' || typeof value === 'string' || typeof value === 'number' && Number.isFinite(value)) return JSON.stringify(value)
-  if (Array.isArray(value)) return `[${value.map(canonicalRsiJson).join(',')}]`
+  if (value === null || typeof value === 'boolean') return JSON.stringify(value)
+  if (typeof value === 'string') { if (LONE_SURROGATE.test(value)) throw new TypeError('campaign_json_invalid'); return JSON.stringify(value) }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || Number.isInteger(value) && !Number.isSafeInteger(value)) throw new TypeError('campaign_json_invalid')
+    return JSON.stringify(value)
+  }
+  if (Array.isArray(value)) return `[${Array.from(value, canonicalRsiJson).join(',')}]`
   if (!value || typeof value !== 'object' || ![Object.prototype, null].includes(Object.getPrototypeOf(value))) throw new Error('campaign_json_invalid')
   const keys = Object.keys(value).sort()
   if (keys.some(key => ['__proto__', 'prototype', 'constructor'].includes(key))) throw new Error('campaign_json_invalid')
+  if (keys.some(key => LONE_SURROGATE.test(key))) throw new TypeError('campaign_json_invalid')
   return `{${keys.map(key => `${JSON.stringify(key)}:${canonicalRsiJson(value[key])}`).join(',')}}`
 }
 /** @param {any} value */

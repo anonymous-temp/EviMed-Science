@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createRsiOssClient } from './rsiOssClient.mjs';
+import { canonicalRsiJson } from './rsiCampaignBundle.mjs';
 
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const MAX_BUNDLE = 5 * 1024 * 1024;
@@ -65,7 +66,13 @@ export async function createRsiOssTransport(config, options = {}) {
     async putObject(pending) {
       requireRole('production');
       const generation = pending.kind === 'withdrawal' ? 2 : pending.kind === 'incident' ? 1 : 0;
-      if (!generation || pending.generation !== generation || pending.body?.generation !== generation || pending.body?.incidentId !== pending.streamId || JSON.stringify(pending.body) !== pending.serializedBody || pending.idempotencyKey !== `${pending.streamId}:${pending.kind}`) throw new Error('rsi_oss_incident_invalid');
+      // The uploaded bytes are serializedBody; a stored body object may have been reordered by a jsonb round trip,
+      // so it is compared in canonical form, never by its JSON.stringify key order.
+      let body = null;
+      try { body = typeof pending.serializedBody === 'string' ? JSON.parse(pending.serializedBody) : null; } catch { body = null; }
+      let sameBody = false;
+      try { sameBody = pending.body === undefined || canonicalRsiJson(pending.body) === canonicalRsiJson(body); } catch { sameBody = false; }
+      if (!generation || pending.generation !== generation || body?.generation !== generation || body?.incidentId !== pending.streamId || !sameBody || pending.idempotencyKey !== `${pending.streamId}:${pending.kind}`) throw new Error('rsi_oss_incident_invalid');
       const bytes = Buffer.from(pending.serializedBody);
       if (bytes.length > 65536 || sha(bytes) !== hash(pending.digest)) throw new Error('rsi_oss_incident_invalid');
       if (generation === 1 && await head('incidentBucket', incidentKey(pending.streamId, 2))) throw new Error('rsi_oss_incident_withdrawn');

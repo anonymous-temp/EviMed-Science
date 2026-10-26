@@ -11,7 +11,9 @@ test('one researcher qualifies while operator floor retains its independent one-
   assert.deepEqual(evolutionAccountFloors({}), { user: 1, operator: 1 });
   assert.deepEqual(evolutionAccountFloors({ evolutionOperatorSignalFloor: 3 }), { user: 1, operator: 3 });
   assert.equal(evolutionAccountFloors({ evolutionOperatorSignalFloor: 9 }).operator, 5, 'operator tuning remains capped independently of the user floor');
-  for (const bad of [0, -2, Number.NaN, 'x', null, undefined]) assert.equal(evolutionAccountFloors({ evolutionOperatorSignalFloor: bad }).operator, 1, String(bad));
+  for (const unset of [null, undefined]) assert.equal(evolutionAccountFloors({ evolutionOperatorSignalFloor: unset }).operator, 1, String(unset));
+  // Not a whole number of accounts: refused by name, never read as another number (2.5 used to become 1 in silence).
+  for (const bad of [2.5, 1.5, 0, -2, Number.NaN, Number.POSITIVE_INFINITY, 'x', '3']) assert.throws(() => evolutionAccountFloors({ evolutionOperatorSignalFloor: bad }), { code: 'evolution_setting_invalid' }, String(bad));
   assert.deepEqual(['operator', 'user', undefined, 'other'].map(evolutionAccountClass), ['operator', 'user', 'user', 'user']);
 });
 test('the setting is read from the environment and held to one to five', () => {

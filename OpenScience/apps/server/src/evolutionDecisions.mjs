@@ -115,8 +115,38 @@ export class EvolutionDecisions {
     const saved = await this.service.save('decision', id, { ...input, decisionClass, status: 'pending', createdAt: this.now().toISOString(), history: [], overridden: false });
     if (decisionClass === 'A') return this.execute(saved, input.recommended, 'autonomous');
     if (decisionClass === 'D') return saved;
-    if (cards >= (this.config.evolutionMaxDecisionCards ?? 3)) return this.execute(saved, input.conservative, 'conservative');
+    if (cards >= (this.config.evolutionMaxDecisionCards ?? 3)) return this.execute(saved, await this.unansweredOption(saved), 'conservative');
     return saved;
+  }
+  /**
+   * What a card nobody answered takes. A harm review's is its protective option, the soft retirement the same decision reverses,
+   * whatever was stored as conservative: cards written before 2026-10-26 named `keep`, and keeping a tool the harm test flagged
+   * silenced its alarm with nobody having decided it. Every other card takes its conservative option.
+   * @param {any} row
+   */
+  async unansweredOption(row) {
+    const subject = typeof row.payload.subjectId === 'string' ? await this.service.get(row.payload.subjectId) : null;
+    if (subject?.payload?.recordType === 'evolution-maintenance-review' && subject.payload.kind === 'sequential-harm') {
+      const protective = row.payload.options.find((/** @type {any} */ item) => (item.operation ?? item.id) === 'maintenance-retire');
+      if (protective) return protective.id;
+    }
+    return row.payload.conservative;
+  }
+  /** Whether serving (and a pause) can carry out this option of the card. @param {any} row @param {string} option */
+  servable(row, option) {
+    try { return Boolean(option) && evolutionServingDecision(evolutionExecutableOperation({ ...row.payload, option })); } catch { return false; }
+  }
+  /**
+   * Close a card serving cannot carry out, its work moved to the offline lab: terminal, said once (`retired-to-lab`), and the execution
+   * it was stuck on kept in its history for the lab. A later answer with an option serving can carry out still supersedes it (`resolve`).
+   * @param {any} row @param {string} source
+   */
+  async closeToLab(row, source) {
+    const { execution, ...payload } = row.payload;
+    const at = this.now().toISOString();
+    return this.service.save('decision', row.id, { ...payload, status: 'closed', closedReason: 'retired-to-lab', closedAt: at,
+      history: [...(payload.history ?? []), { actionId: execution?.actionId ?? null, previous: payload.selected ?? null, selected: null,
+        option: execution?.option ?? null, source, closed: 'retired-to-lab', at }] }, row);
   }
   /** Clock starts when delivery succeeds, not when the proposal is stored. @param {any} row */
   async deliver(row) {
@@ -146,14 +176,15 @@ export class EvolutionDecisions {
     const row = await this.service.get(id);
     if (row && this.config.evolutionSearchPaused === true) {
       if (row.payload.status !== 'executing' && (row.payload.status !== 'pending' || !row.payload.deliveredAt || Date.parse(row.payload.dueAt) > this.now().getTime())) return row;
-      const option = row.payload.status === 'executing' ? row.payload.execution.option : row.payload.conservative;
-      if (option && evolutionServingDecision(evolutionExecutableOperation({ ...row.payload, option }))) return this.execute(row, option, row.payload.status === 'executing' ? row.payload.execution.source : 'conservative', row.payload.execution?.evidence);
-      return evolutionDeferred();
+      const option = row.payload.status === 'executing' ? row.payload.execution.option : await this.unansweredOption(row);
+      if (option && this.servable(row, option)) return this.execute(row, option, row.payload.status === 'executing' ? row.payload.execution.source : 'conservative', row.payload.execution?.evidence);
+      // Serving cannot carry out an experiment and never will: the card closes once, its execution kept for the offline lab. A pause defers.
+      return this.config.evolutionServingOnly === true ? this.closeToLab(row, 'serving') : evolutionDeferred();
     }
     if (row?.payload.status === 'executing') return this.execute(row, row.payload.execution.option, row.payload.execution.source, row.payload.execution.evidence);
     if (!row || row.payload.status !== 'pending' || !row.payload.deliveredAt || Date.parse(row.payload.dueAt) > this.now().getTime()) return row;
     if (row.payload.decisionClass === 'D') return this.execute(row, row.payload.alternative ?? row.payload.conservative, 'resource-alternative');
-    if (row.payload.decisionClass === 'C') return this.execute(row, row.payload.conservative, 'default', { oneWayDoor: true });
+    if (row.payload.decisionClass === 'C') return this.execute(row, await this.unansweredOption(row), 'default', { oneWayDoor: true });
     let refreshed, reviewed;
     try {
       if (!this.callbacks.refresh || !this.callbacks.review) throw new HttpError(503, 'evolution_review_unavailable', 'Expiry requires fresh evidence and independent review.');
@@ -172,7 +203,7 @@ export class EvolutionDecisions {
     const expiry = { state: 'review-unavailable', attempts, of: EVOLUTION_EXPIRY_REVIEW_ATTEMPTS, code, at };
     if (attempts >= EVOLUTION_EXPIRY_REVIEW_ATTEMPTS) {
       const noted = await this.service.save('decision', row.id, { ...row.payload, expiry: { ...expiry, state: 'conservative-taken' } }, row);
-      return this.execute(noted, row.payload.conservative, 'conservative', { reviewUnavailable: { code, attempts } });
+      return this.execute(noted, await this.unansweredOption(row), 'conservative', { reviewUnavailable: { code, attempts } });
     }
     const saved = await this.service.save('decision', row.id, { ...row.payload, expiry }, row);
     await this.service.enqueue('decision', { decisionId: row.id }, `expire:${row.id}:retry:${attempts}`,
@@ -181,7 +212,9 @@ export class EvolutionDecisions {
   }
   /** @param {any} row @param {string} option @param {string} source @param {any} evidence */
   async execute(row, option, source, evidence = {}) {
-    if (this.config.evolutionSearchPaused === true && !evolutionServingDecision(evolutionExecutableOperation({ ...row.payload, option }))) return evolutionDeferred();
+    if (this.config.evolutionSearchPaused === true && !evolutionServingDecision(evolutionExecutableOperation({ ...row.payload, option }))) {
+      return this.config.evolutionServingOnly === true ? evolutionDeferred('evolution_offline_only', 'Platform experiments run only in offline campaigns.') : evolutionDeferred();
+    }
     if (!row.payload.options.some((/** @type {any} */ item) => item.id === option)) throw new HttpError(400, 'evolution_option_invalid', 'Unknown decision option.');
     const actionId = row.payload.status === 'executing' ? row.payload.execution.actionId : `${row.id}:${row.revision}:${option}`;
     if (row.payload.status !== 'executing') row = await this.service.save('decision', row.id, { ...row.payload, status: 'executing', execution: { actionId, option, source, evidence } }, row);
@@ -209,9 +242,17 @@ export class EvolutionDecisions {
   }
   /** Late replies intentionally supersede a default branch. @param {string} id @param {any} input */
   async resolve(id, input) {
-    const row = await this.service.get(id);
+    let row = await this.service.get(id);
     if (!row || row.payload.recordType !== 'evolution-decision') throw new HttpError(404, 'evolution_decision_missing', 'Decision not found.');
     if (input.expectedRevision !== row.revision) throw new HttpError(409, 'product_revision_conflict', 'Decision changed; reload before choosing.');
+    // Serving: the operator closes a card whose work moved to the offline lab, a stranded execution included.
+    if (input.close !== undefined) {
+      if (input.close !== 'retired-to-lab' || this.config.evolutionServingOnly !== true) throw new HttpError(400, 'evolution_close_invalid', 'Only serving closes a card, as retired to the offline lab.');
+      if (row.payload.status === 'closed') return row;
+      if (row.payload.status === 'executed') throw new HttpError(409, 'evolution_decision_decided', 'The decision was carried out; answer it with an option instead.');
+      if (row.payload.status === 'executing' && this.servable(row, row.payload.execution.option)) throw new HttpError(409, 'evolution_decision_executing', 'The decision is being carried out; reload and answer again.');
+      return this.closeToLab(row, 'user');
+    }
     let option = input.option ?? row.payload.recommended;
     if (input.text && this.config.evolutionSearchPaused === true) throw new HttpError(409, 'evolution_search_paused', 'Decision interpretation waits while evolution search is paused.');
     if (input.text) {
@@ -221,7 +262,11 @@ export class EvolutionDecisions {
     // An answer that arrives while the expiry (or another answer) is carrying out a different option must not borrow its
     // action identity: the record would then say the person's option was chosen while the other was executed.
     if (row.payload.status === 'executing' && (row.payload.execution.source !== 'user' || row.payload.execution.option !== option)) {
-      throw new HttpError(409, 'evolution_decision_executing', 'The decision is being carried out; reload and answer again.');
+      // An execution serving can never carry out (an experiment, moved to the offline lab) does not hold the card: an answer serving can
+      // carry out supersedes it, and the stranded execution stays in the card's history.
+      const stranded = this.config.evolutionServingOnly === true && !this.servable(row, row.payload.execution.option) && this.servable(row, option);
+      if (!stranded) throw new HttpError(409, 'evolution_decision_executing', 'The decision is being carried out; reload and answer again.');
+      row = await this.closeToLab(row, 'user');
     }
     const saved = await this.execute(row, option, 'user');
     if (saved?.status === 'deferred') throw new HttpError(409, saved.code, saved.reason);
@@ -247,7 +292,12 @@ export class EvolutionDecisions {
       let slots = (this.config.evolutionMaxDecisionCards ?? 3) - all.filter(row => row.payload.cardDay === day).length;
       for (const row of pending) {
         if (slots-- > 0) await this.deliver(row);
-        else await this.execute(row, row.payload.decisionClass === 'C' ? row.payload.conservative : row.payload.recommended, row.payload.decisionClass === 'C' ? 'conservative' : 'autonomous');
+        else {
+          const [option, source] = row.payload.decisionClass === 'C' ? [await this.unansweredOption(row), 'conservative'] : [row.payload.recommended, 'autonomous'];
+          // Serving closes a card whose default is an experiment instead of deferring it at every digest.
+          if (this.config.evolutionServingOnly === true && !this.servable(row, option)) await this.closeToLab(row, 'serving');
+          else await this.execute(row, option, source);
+        }
       }
       all = await this.service.list('decision');
       const today = all.filter(row => inWindow(row.payload.decidedAt ?? row.createdAt));

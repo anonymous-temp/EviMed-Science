@@ -58,7 +58,7 @@ import { createDocumentExportRoutes } from "./documentExportRoutes.mjs";
 import { createVcrDocumentAdapter } from "./vcrDocumentExport.mjs";
 import { RuntimeControllerClient } from "./runtimeControllerClient.mjs";
 import { createEvolutionServing } from "./evolutionServing.mjs";
-import { createRsiOnlineRuntime } from "./rsiOnlineRuntime.mjs";
+import { createRsiOnlineRuntime, createRsiSourceInvalidation } from "./rsiOnlineRuntime.mjs";
 import { createRsiServingAdapters } from "./rsiServingAdapters.mjs";
 import { createEvaluationIsolation } from "./evaluationIsolation.mjs";
 import { EVOLUTION_GATEWAY_PATH } from "./evolutionGateway.mjs";
@@ -1183,10 +1183,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let evolution = null;
   /** @type {any} */ let rsiOnline = null;
   /** @type {any} */ let rsiServingAdapters = null;
-  const invalidateRsiSource = async input => {
-    const online = await initializeRsiOnline();
-    return online?.invalidateSource(input);
-  };
+  // A source deletion never waits on the optional RSI layer succeeding: a failure is said with a closed code and retried
+  // from a deployment-owned job (`createRsiSourceInvalidation` never throws). The job store is read when it is called.
+  const invalidateRsiSource = createRsiSourceInvalidation({ initialize: () => initializeRsiOnline(), jobs: () => productJobs,
+    report: code => process.stderr.write(`rsi: ${code}\n`) });
   const evolutionSignals = {record: async input => evolution?.signals.record(input)};
   const evolutionModulePolicies = createModuleEvolutionPolicies({readPolicy: async (moduleId, policyScope) => {
     if(!evolution) return null;
@@ -6272,7 +6272,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   });
   evolution = createEvolutionServing({ config, store, documents: productDocuments, jobs: productJobs, database: productDatabase,
     notifications: notificationService, registry: agentRegistry, runtimeManager, agentRuns,
-    evaluationIsolation, autopilot: autopilotService, resolvePositiveEvidence, sourceChanges,
+    evaluationIsolation, autopilot: autopilotService, resolvePositiveEvidence, sourceChanges, dataSemantics,
     controller: overrides.evolutionController ?? new RuntimeControllerClient(config),
     canRun: () => maintenanceService ? maintenanceService.claimingAllowed() : !productDatabase,
     report: code => process.stderr.write(`evolution: ${code}\n`) });
@@ -6312,14 +6312,19 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   async function initializeRsiOnline() {
     if (rsiOnline || !productDocuments || !productJobs || !productDatabase) return rsiOnline;
     if (!rsiInitialization) rsiInitialization = (async () => {
-      const servingAdapters = evolution ? createRsiServingAdapters({ config, service: evolution.service, documents: productDocuments,
-        database: productDatabase, supply: evolution.supply, store, runtimeManager, sourceChanges }) : null;
-      rsiServingAdapters = servingAdapters;
-      if (servingAdapters) evolutionModulePolicies.evaluateFrontierSelection = servingAdapters.evaluateFrontierSelection;
-      rsiOnline = await createRsiOnlineRuntime({ config, store, documents: productDocuments, jobs: productJobs, database: productDatabase,
+      const report = (/** @type {string} */ code) => process.stderr.write(`rsi: ${code}\n`);
+      // Opt-in: without the deployment file no serving adapter or importer exists and module policy reads keep their own path.
+      const servingAdapters = evolution && config.rsiOnlineConfigFile ? createRsiServingAdapters({ config, service: evolution.service, documents: productDocuments,
+        database: productDatabase, supply: evolution.supply, store, runtimeManager, sourceChanges, report }) : null;
+      const online = await (overrides.rsiOnlineRuntimeFactory ?? createRsiOnlineRuntime)({ config, store, documents: productDocuments, jobs: productJobs, database: productDatabase,
         agentRuns, assertModelAccess: assertVcrCloudAccess, usageLedger, servingAdapters,
-        canRun: () => maintenanceService ? maintenanceService.claimingAllowed() : !productDatabase,
-        report: code => process.stderr.write(`rsi: ${code}\n`) });
+        canRun: () => maintenanceService ? maintenanceService.claimingAllowed() : !productDatabase, report });
+      // Wired into policy reads only once the runtime that owns its importer exists.
+      if (servingAdapters && online?.importer) {
+        rsiServingAdapters = servingAdapters;
+        evolutionModulePolicies.evaluateFrontierSelection = servingAdapters.evaluateFrontierSelection;
+      }
+      rsiOnline = online;
       return rsiOnline;
     })().catch(error => { rsiInitialization = null; throw error; });
     return rsiInitialization;
@@ -9033,8 +9038,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     if (recurringWorkStarted || (maintenanceService && !maintenanceService.claimingAllowed())) return;
     recurringWorkStarted = true;
     try {
-      await initializeRsiOnline();
-
+      // Optional: a failure is said with a closed code and never keeps the other workers from starting.
+      await initializeRsiOnline().catch(() => { process.stderr.write("rsi: rsi_online_initialization_failed\n"); });
       managedBrowser.start?.();
       pluginApplyWorker?.start();
       if (config.runtimeMode === "kernel") personalSkillWorker?.start();
@@ -9213,6 +9218,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // empty list — a test of a collision that could not see either side of it.
     learningWorker,
     evolution,
+    // The opt-in RSI layer's composition, as tests and operators read it; null pieces were never created.
+    rsi: { status: () => ({ runtime: Boolean(rsiOnline), configured: Boolean(rsiOnline?.configured?.()), importer: Boolean(rsiOnline?.importer),
+      servingAdapters: Boolean(rsiServingAdapters), frontierSelection: typeof evolutionModulePolicies.evaluateFrontierSelection === "function" }),
+      invalidateSource: invalidateRsiSource },
     evaluationIsolation,
     // 「前沿动态」: null when the module is off or there is no product database.
     frontier,

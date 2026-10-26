@@ -16,8 +16,10 @@ export async function readRsiDeploymentRecord(file) {
   } finally { await handle.close(); }
 }
 const only = (record, keys) => record && typeof record === 'object' && !Array.isArray(record) && Object.keys(record).every(key => keys.includes(key));
-/** The operator's agreement record is authority for this purpose, never a client consent flag. @param {any} online */
-export async function createRsiDeploymentAuthority(online) {
+/** The operator's agreement record is authority for this purpose, never a client consent flag. With tolerateMissing a
+ * record that cannot be read at start is no agreement in force (isBound false, agreementId null) instead of a throw;
+ * every later call reads the record again. @param {any} online @param {{tolerateMissing?:boolean}} [options] */
+export async function createRsiDeploymentAuthority(online, { tolerateMissing = false } = {}) {
   async function current() {
     const record = await readRsiDeploymentRecord(online.agreementRef);
     if (!only(record, ['id','version','purpose','providers','scope']) || typeof record.id !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(record.id)
@@ -26,8 +28,9 @@ export async function createRsiDeploymentAuthority(online) {
       || !['deepseek','dashscope'].every(provider => record.providers.includes(provider))) throw new Error('rsi_deployment_agreement_invalid');
     return { record, authorizationId: `rsi-agreement-${rsiDigest(record)}` };
   }
-  const initial = await current();
-  return { agreementId: initial.authorizationId, isBound: () => true,
+  let initial = null;
+  try { initial = await current(); } catch (error) { if (!tolerateMissing) throw error; }
+  return { agreementId: initial?.authorizationId ?? null, isBound: () => initial !== null,
     async currentAgreementId() { return (await current()).authorizationId; },
     async authorizeIncident({ agreementId, user, project, run }) {
       const latest = await current();

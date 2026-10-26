@@ -30,10 +30,16 @@ export function parseRsiPolicyCandidate(surface, files) {
   return policy
 }
 /** Immutable inactive versions and phase-specific durable publication receipts. Candidate code is never imported.
- * @param {{config:any,service:any,documents?:any,database:any,supply?:any,store?:any,runtimeManager?:any,sourceChanges?:any,publicationOwnerId?:string}} dependencies */
-export function createRsiServingAdapters({ config, service, database, documents = new ProductDocuments(database), publicationOwnerId = PLATFORM_PUBLISHER_USER_ID }) {
+ * @param {{config:any,service:any,documents?:any,database:any,supply?:any,store?:any,runtimeManager?:any,sourceChanges?:any,publicationOwnerId?:string,report?:(code:string)=>void}} dependencies */
+export function createRsiServingAdapters({ config, service, database, documents = new ProductDocuments(database), publicationOwnerId = PLATFORM_PUBLISHER_USER_ID, report = () => {} }) {
   let importer = /** @type {any} */ (null)
   let observationReporter = /** @type {any} */ (null)
+  /** @type {Record<string, number>} closed failure code -> count */
+  const failures = Object.create(null)
+  /** @param {string} code */
+  const failed = code => { failures[code] = (failures[code] ?? 0) + 1; report(code) }
+  // Operations whose critical observation could not be recorded: served the incumbent here until stopped durably.
+  const halted = new Set()
   const rootDir = config.rootDir ?? fileURLToPath(new URL('../../../', import.meta.url))
   const defaults = (/** @type {string} */ moduleId) => moduleId === 'frontier' ? { selectionThreshold: frontierSelectThreshold(config) }
     : moduleId === 'autopilot' ? { plannerInstructions: AUTOPILOT_PLANNER_INSTRUCTIONS } : { supplements: [] }
@@ -143,9 +149,11 @@ export function createRsiServingAdapters({ config, service, database, documents 
   /** @param {string} moduleId @param {any} context */
   async function readPolicy(moduleId, context = {}) {
     const surface = Object.keys(components).find(key => components[key][0] === moduleId && (moduleId !== 'frontier' || key === 'frontier-selection'))
+    // No campaign on this surface: an ordinary read, never the publication fence.
+    if (!importer || !surface || importer.hasCampaign && !await importer.hasCampaign(surface)) { await migrateProductStore(database); return incumbent(moduleId, database) }
     const baseline = await fenced(null, client => incumbent(moduleId, client))
-    if (!importer || !surface || importer.hasCampaign && !await importer.hasCampaign(surface)) return baseline
     const selection = await importer.select(surface, context)
+    if (selection.operationId && halted.has(selection.operationId)) return baseline
     // Null is an explicit refusal of an unsafe pointer. No legacy fallback may revive it.
     if (!selection.revision) return { revisionId: `default:${rsiDigest(defaults(moduleId))}`, policy: defaults(moduleId) }
     if (selection.revision === baseline.revisionId) return { ...baseline, selection }
@@ -160,18 +168,47 @@ export function createRsiServingAdapters({ config, service, database, documents 
   async function evaluateFrontierSelection(input, context = {}) {
     const frozen = structuredClone(input)
     if (!importer) return frontierMixSelect(frozen)
-    // Resolve once at actual execution, not again after the selector has already run.
-    const admitted = await readPolicy('frontier', context)
+    // The feed's round never depends on the campaign layer staying healthy: any failure here is counted under a
+    // closed code and the round gets a selection — the caller's own input when no policy could be resolved.
+    let admitted
+    try { admitted = await readPolicy('frontier', context) } catch { failed('rsi_serving_policy_unavailable'); return frontierMixSelect(frozen) }
     const selection = admitted.selection
     const result = frontierMixSelect({ ...frozen, threshold: admitted.policy.selectionThreshold })
     if (!selection?.operationId) return result
+    let witness, incumbentResult
+    try {
+      ({ witness, incumbentResult } = await observedSelection(frozen, selection, context, result))
+    } catch (error) {
+      failed('rsi_serving_witness_unavailable')
+      if (error?.code === 'campaign_installed_bytes_changed') await halt(selection.operationId)
+      return result
+    }
+    if (!witness) return result
+    try {
+      await fenced(null, async client => { if (!await read(client, witness.id)) await insert(client, witness.id, { ...witness, recordType: 'rsi-consumer-witness' }) })
+      if (observationReporter) await observationReporter(witness)
+    } catch {
+      failed('rsi_serving_observation_failed')
+      // A regression the campaign never heard of must not keep its candidate serving: fail safe to the incumbent.
+      if (witness.outcome === 'critical') await halt(selection.operationId)
+    }
+    return witness.outcome === 'critical' ? incumbentResult : result
+  }
+  /** @param {string} operationId */
+  async function halt(operationId) {
+    halted.add(operationId)
+    try { await importer?.halt?.(operationId, 'campaign_observation_unrecorded') } catch { failed('rsi_serving_halt_unrecorded') }
+  }
+  /** Same frozen pool, actual selector: the witness of one execution, or none when there is nothing to observe.
+   * @param {any} frozen @param {any} selection @param {any} context @param {any} result */
+  async function observedSelection(frozen, selection, context, result) {
     const candidateRevision = selection.shadowRevision ?? (selection.arm === 'candidate' ? selection.revision : null)
     const consumerTarget = await currentTarget('frontier-selection', null)
-    if (!consumerTarget.qualified) return result
+    if (!consumerTarget.qualified) return {}
     let version, candidateResult = result
     if (candidateRevision) {
       const revoked = await fenced(null, client => read(client, id(['revoked', 'frontier-selection', candidateRevision])))
-      if (revoked) return result
+      if (revoked) return {}
       version = await fenced(null, client => read(client, candidateRevision))
       if (!version || version.payload.surface !== 'frontier-selection' || rsiDigest(version.payload.files) !== version.payload.candidateDigest) refuse('campaign_installed_bytes_changed')
       const candidate = parseRsiPolicyCandidate('frontier-selection', version.payload.files)
@@ -180,7 +217,7 @@ export function createRsiServingAdapters({ config, service, database, documents 
     // A control observation must still bind the candidate under observation. The
     // importer supplies its immutable identity, never the model or the client.
     const candidateDigest = version?.payload.candidateDigest ?? selection.candidateDigest
-    if (!candidateDigest) return result
+    if (!candidateDigest) return {}
     const baseline = await fenced(null, client => incumbent('frontier', client))
     const incumbentResult = frontierMixSelect({ ...structuredClone(frozen), threshold: baseline.policy.selectionThreshold })
     const protectedIds = new Set(frozen.candidates.filter(row => row.safety).map(row => row.id))
@@ -195,13 +232,13 @@ export function createRsiServingAdapters({ config, service, database, documents 
       consumerSourceDigest: rsiDigest(consumerTarget.entries.filter(entry => ['apps/server/src/frontierPipeline.mjs', 'packages/domain/src/frontierMix.mjs'].includes(entry.path))),
       incumbentRevision: baseline.revisionId, incumbentResultDigest: rsiDigest(incumbentResult), candidateResultDigest: rsiDigest(candidateResult),
       incumbentPicks: incumbentResult.picks.length, candidatePicks: candidateResult.picks.length }
-    await fenced(null, async client => { if (!await read(client, witness.id)) await insert(client, witness.id, { ...witness, recordType: 'rsi-consumer-witness' }) })
-    if (observationReporter) await observationReporter(witness)
-    return regression ? incumbentResult : result
+    return { witness, incumbentResult }
   }
 
   const unsupported = { async publish() { refuse('campaign_runtime_scope_unsupported') }, async inspect() { return null }, async rollback() { refuse('campaign_runtime_scope_unsupported') } }
   return { publicationOwnerId, currentTarget, evaluateFrontierSelection,
+    /** Counts by closed code of what the serving path could not do; selection went on each time. */
+    observationFailures: () => ({ ...failures }),
     /** @param {any} reporter */ setObservationReporter(reporter) { observationReporter = reporter },
     /** A submitted model assertion cannot become a witness. @param {any} proof @param {any} row @param {{transactionClient?:any}} [options] */
     async verifyObservation(proof, row, options = {}) {

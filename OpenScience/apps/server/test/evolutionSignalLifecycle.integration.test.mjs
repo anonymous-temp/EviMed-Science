@@ -62,14 +62,27 @@ test('same-size membership changes create a fresh opaque generation; disappearin
   for (const forbidden of ['private-snapshot', 'private-assessment', owner, ...researchers]) assert.ok(!JSON.stringify(publicRows).includes(forbidden));
 });
 
-test('researcher floor five to four retires the prior summary and prevents growth from using it', options, async () => {
+test('withdrawing researcher signals one by one keeps the summary while any account remains, then retires it and keeps growth from using it', options, async () => {
   for (const userId of researchers) await signals.record(input('researcher-private-snapshot', { userId }));
   const summary = (await signals.aggregate()).find(row => row.payload.accountClass === 'user');
   assert.equal(summary.payload.distinctAccounts, 5);
-  await signals.transition({ ...input('researcher-private-snapshot', { userId: researchers[0] }), expectedVersion: 'private-assessment-v1', state: 'invalidated' });
-  assert.equal((await signals.aggregate()).length, 0);
-  assert.equal((await service.get(summary.id)).payload.state, 'inactive');
+  const withdraw = userId => signals.transition({ ...input('researcher-private-snapshot', { userId }), expectedVersion: 'private-assessment-v1', state: 'invalidated' });
+  await withdraw(researchers[0]);
+  const fewer = await signals.aggregate();
+  assert.equal(fewer.length, 1, 'the researcher floor is one account: four remaining accounts still make a summary');
+  assert.equal(fewer[0].id, summary.id); assert.equal(fewer[0].payload.state, 'active'); assert.equal(fewer[0].payload.distinctAccounts, 4); assert.equal(fewer[0].payload.occurrences, 4);
   const offered = [];
-  await createEvolutionGrowth({ service, database, opportunity: async value => offered.push(value) }).collect();
-  assert.deepEqual(offered, []);
+  const growth = createEvolutionGrowth({ service, database, opportunity: async value => offered.push(value) });
+  await growth.collect();
+  assert.equal(offered.length, 1, 'growth reads the live summary'); assert.equal(offered[0].features.distinctAccounts, 4);
+  for (const userId of researchers.slice(1, -1)) await withdraw(userId);
+  const last = await signals.aggregate();
+  assert.equal(last.length, 1); assert.equal(last[0].payload.distinctAccounts, 1, 'one remaining researcher is still enough');
+  await withdraw(researchers.at(-1));
+  assert.equal((await signals.aggregate()).length, 0, 'no account left, no summary');
+  const retired = await service.get(summary.id);
+  assert.equal(retired.payload.state, 'inactive'); assert.equal(retired.payload.distinctAccounts, undefined); assert.equal(retired.payload.occurrences, undefined);
+  offered.length = 0;
+  await growth.collect();
+  assert.deepEqual(offered, [], 'a retired summary is not offered to growth');
 });

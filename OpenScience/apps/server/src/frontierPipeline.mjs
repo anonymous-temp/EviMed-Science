@@ -1027,7 +1027,7 @@ export class FrontierPipeline {
       titleDuplicates: 0, notices: 0, laneFloor: 0, preprintLane: 0, selected: 0, capped: 0, releaseFailures: 0,
       // The day's mix (`#mix`): items it selected, by rule; and rounds whose 30-day genre percentiles could not be read (the
       // floor places then ask the absolute floor, as before).
-      mix: /** @type {Record<string, number>} */ ({}), mixGenreFloorFailures: 0, scoreCeilings: 0, practiceAdmitted: 0, supersededBySafety: 0,
+      mix: /** @type {Record<string, number>} */ ({}), mixGenreFloorFailures: 0, mixSelectionFallbacks: 0, scoreCeilings: 0, practiceAdmitted: 0, supersededBySafety: 0,
       editSkipped: { unavailable: 0, exhausted: 0, throttled: 0, peak: 0 },
       // Rows released to wait out a provider balance refusal, never charged an attempt.
       providerRefusedWaits: 0,
@@ -2495,9 +2495,17 @@ export class FrontierPipeline {
         // A congress in its window (the domain's calendar) lets the research group rise for conference reports.
         const selectionInput = { candidates, threshold: this.threshold, events, congressActive: frontierActiveCongresses(day).length > 0,
           preprintPlaces: this.preprintLanePerDay, preprintMinScore: this.preprintLaneMinScore, genreFloors };
-        const result = this.policies.evaluateFrontierSelection
-          ? await this.policies.evaluateFrontierSelection(selectionInput, { executionId: `frontier-mix:${day}:${now.toISOString()}`, now })
-          : frontierMixSelect(selectionInput);
+        // The serving policy's selector is advice to the mix, like `policies.resolve`: when it fails, the day's mix is the pipeline's own
+        // selection at its configured threshold (the input's), counted, and never a failed round.
+        let result;
+        try {
+          result = this.policies.evaluateFrontierSelection
+            ? await this.policies.evaluateFrontierSelection(selectionInput, { executionId: `frontier-mix:${day}:${now.toISOString()}`, now })
+            : frontierMixSelect(selectionInput);
+        } catch {
+          this.counters.mixSelectionFallbacks += 1;
+          result = frontierMixSelect(selectionInput);
+        }
         for (const pick of result.picks) {
           const updated = await client.query(`UPDATE evimed_frontier.items SET selected = true, selected_rule = $2, selected_at = $3,
               updated_at = clock_timestamp() WHERE id = $1 AND state = 'published' AND NOT selected`, [pick.id, pick.rule, now]);

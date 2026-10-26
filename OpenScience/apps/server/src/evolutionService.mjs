@@ -1,4 +1,4 @@
-import { evolutionServingJob, evolutionDeferred, assertEvolutionExperimentalPublication } from './evolutionServingPolicy.mjs';
+import { evolutionServingAction, evolutionServingJob, evolutionDeferred, assertEvolutionExperimentalPublication } from './evolutionServingPolicy.mjs';
 import { trustedEvolutionNativeName } from './evolutionToolRouting.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { canonicalJson, EVOLUTION_TRACKS, EVOLUTION_TOOL_STATES, EVOLUTION_DATA_LEVELS, EVOLUTION_GAP_CODES, EVOLUTION_LEAD_SOURCES, evolutionMethodFields, evolutionValidationLevel, evolutionToolVisible, evolutionDataMatch, validateEvolutionDataRequirements } from '@evimed/domain';
@@ -74,22 +74,33 @@ export class EvolutionService {
   }
   /** @param {string} action @param {any} payload @param {string} key @param {Date} runAfter */
   async enqueue(action, payload, key, runAfter = this.now()) {
-    if (this.config.evolutionServingOnly === true && !['event','decision'].includes(action)) return evolutionDeferred('evolution_offline_only', 'Experimental work is retained for an offline campaign.');
-    if (this.config.evolutionSearchPaused === true && !evolutionServingJob(`evolution-${action}`, payload)) return evolutionDeferred();
+    if (this.config.evolutionServingOnly === true) { if (!evolutionServingAction(action, payload)) return evolutionDeferred('evolution_offline_only', 'Experimental work is retained for an offline campaign.'); }
+    else if (this.config.evolutionSearchPaused === true && !evolutionServingJob(`evolution-${action}`, payload)) return evolutionDeferred();
     return this.jobs.enqueue(await this.owner(), `evolution-${action}`, payload, { idempotencyKey: `evolution:${key}`, projectId: EVOLUTION_PROJECT_ID,
       maxAttempts: Math.max(1, Math.min(10, this.config.evolutionMaxJobAttempts ?? 3)), runAfter });
   }
   /** The journal acknowledges only completed side effects. Old complete/deferral records remain retryable.
+   * One action runs at a time: its advisory lock is held by a transaction that writes nothing, on a connection of its own, and the
+   * action runs outside it (and outside any transaction of the caller). A lifecycle step of the action (`retire`, `restoreReview`)
+   * therefore commits the progress it must keep in its own transaction: nested in this one it was a savepoint, and a failure after a
+   * pin had changed on disk rolled the ledger record of that change back with the rest.
    * @param {any} action @param {()=>Promise<any>} operation */
   async executeDecisionAction(action, operation) {
     const id = `evolution-action-${evolutionKey(action.actionId)}`;
-    return this.withLock(`action:${action.actionId}`, async () => {
+    const run = async () => {
       const prior = await this.get(id);
       if (prior?.payload.status === 'complete' && prior.payload.result?.status !== 'deferred') return prior.payload.result;
       const result = await operation();
       await this.save('action', id, { actionId: action.actionId, status: result?.status === 'deferred' ? 'deferred' : 'complete', result }, prior);
       return result;
-    });
+    };
+    const database = this.documents.database;
+    if (!database) return run();
+    const outside = (/** @type {() => Promise<any>} */ work) => typeof database.withoutTransactionClient === 'function' ? database.withoutTransactionClient(work) : work();
+    return outside(() => database.transaction(async (/** @type {any} */ client) => {
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`evimed-evolution:action:${action.actionId}`]);
+      return run();
+    }));
   }
   /** The record id a lead with this payload has. @param {any} payload */
   leadId(payload) { return evolutionLeadId(payload); }
@@ -219,13 +230,10 @@ export class EvolutionService {
           && evolutionDataMatch(item.payload.dataRequirements, event.dataset).matched);
         const matched = available.find(Boolean);
         if (!matched) continue;
+        // Serving runs it (an already published tool on the researcher's own dataset); a legacy pause keeps the event to queue it once after the pause.
         const queued = await this.enqueue('self-check', { userId: owner, projectId: wait.projectId, agendaId: wait.agendaId,
           waiterId: row.id, sourceEventId: event.id, toolId: matched.id, datasetId: event.datasetId }, `check:${row.id}:${event.id}:${matched.id}`);
-        if (queued?.status === 'deferred') {
-          if (this.config.evolutionServingOnly !== true) throw new HttpError(409, queued.code, queued.reason);
-          await this.save('waiter', row.id, { ...wait, selfCheckIntent: { status: 'deferred', reason: queued.code,
-            sourceEventId: event.id, toolId: matched.id, datasetId: event.datasetId, at: this.now().toISOString() } }, row, owner);
-        }
+        if (queued?.status === 'deferred') throw new HttpError(409, queued.code, queued.reason);
         continue;
       }
       const woke = await this.wakeWait(row, owner, wait, event);
