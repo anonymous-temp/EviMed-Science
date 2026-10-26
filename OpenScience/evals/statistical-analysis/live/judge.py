@@ -115,7 +115,7 @@ def prediction_reference(source, returned, *, id_column, probability_column, sou
     positive = p >= threshold
     tp, tn = int(sum(positive & (y == 1))), int(sum(~positive & (y == 0)))
     fp, fn = int(sum(positive & (y == 0))), int(sum(~positive & (y == 1)))
-    return {'n': len(y), 'events': int(sum(y)), 'auc': float(roc_auc_score(y, p)),
+    return {'n': len(y), 'events': int(sum(y)), 'prevalence': float(np.mean(y)), 'auc': float(roc_auc_score(y, p)),
             'averagePrecision': float(average_precision_score(y, p)), 'brier': float(np.mean((p-y)**2)),
             'tp': tp, 'tn': tn, 'fp': fp, 'fn': fn,
             'sensitivity': tp/(tp+fn), 'specificity': tn/(tn+fp),
