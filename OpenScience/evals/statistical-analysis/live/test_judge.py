@@ -61,6 +61,7 @@ def test_prediction_reference_uses_source_malignant_label_and_actual_returned_pr
     source = [{'id': '0', 'breast_cancer_yn': '0'}, {'id': '1', 'breast_cancer_yn': '1'}, {'id': '2', 'breast_cancer_yn': '0'}, {'id': '3', 'breast_cancer_yn': '1'}]
     returned = [{'id': str(i), 'p': p} for i, p in enumerate([.9, .2, .7, .4])]
     result = prediction_reference(source, returned, id_column='id', probability_column='p', threshold=.3)
+    assert result['prevalence'] == .5
     assert result['auc'] == 1
     assert result['brier'] == pytest.approx(.075)
     assert result['tp'] == 2 and result['fp'] == 1 and result['tn'] == 1
