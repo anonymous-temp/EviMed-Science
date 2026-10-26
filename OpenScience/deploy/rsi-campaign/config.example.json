@@ -1,0 +1,11 @@
+{
+  "host": {"provider": "alibaba", "purpose": "rsi-lab", "instanceId": "", "region": ""},
+  "transport": {"endpoint": "", "region": "", "incidentBucket": "", "bundleBucket": ""},
+  "signer": {"keyId": "", "publicKeySha256": ""},
+  "authority": {"role": "rsi-lab", "accountId": "", "dataDir": "", "databaseRole": ""},
+  "budget": {"campaignCny": 1000, "monthCny": 30000},
+  "providers": {
+    "deepseekFlash": {"provider": "deepseek", "model": "deepseek-flash", "credentialRef": ""},
+    "qwenMax": {"provider": "dashscope", "model": "qwen3.8-max", "credentialRef": ""}
+  }
+}
