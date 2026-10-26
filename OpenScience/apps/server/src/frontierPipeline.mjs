@@ -2480,6 +2480,8 @@ export class FrontierPipeline {
             summarized: row.summarized === true, besideSelected: row.beside_selected === true,
             // A republisher (frontier-selection.json) takes no place under the line.
             floorEligible: frontierFloorEligible(row.primary_source_id),
+            // The research's own record (a journal's or a preprint server's item) fills a research place before a report of research.
+            primary: row.source_source_type === "journal" || row.source_source_type === "preprint",
             addsValue: typeof row.adds_value === "boolean" ? row.adds_value : null,
             eventId: row.event_id == null ? null : String(row.event_id),
           };
