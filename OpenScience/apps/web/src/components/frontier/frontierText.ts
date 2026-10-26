@@ -70,10 +70,22 @@ export const CARD_MAX_TAGS = 3;
  * The eyebrow tag of a card: what the item is — its genre (「行业动态」「政策法规」「会议报道」, ct-write 2026-10-24) — and for a paper its
  * design (「RCT」), which says more than 「研究论文」. None for a safety alert, which says 「安全警示」 first already.
  */
-export function cardEyebrow(item: Pick<FrontierItem, "evidenceType" | "evidenceTypeLabel" | "safetyAlert" | "flags" | "laneLabel" | "genre" | "genreLabel">): string | null {
+export function cardEyebrow(item: Pick<FrontierItem, "evidenceType" | "evidenceTypeLabel" | "safetyAlert" | "flags" | "laneLabel" | "genre" | "genreLabel">
+  & Partial<Pick<FrontierItem, "industryKind" | "industryKindLabel">>): string | null {
   if (item.safetyAlert) return null;
   if (item.genre === "paper") return evidenceTag(item) ?? item.genreLabel;
+  // 行业动态 says what kind of business news it is beside the genre (「行业动态 · 融资与上市」, c5-biz 2026-10-26).
+  const kind = industryKindTag(item);
+  if (item.genre === "industry" && item.genreLabel && kind) return `${item.genreLabel} · ${kind}`;
   return item.genreLabel || evidenceTag(item) || item.laneLabel || null;
+}
+
+/**
+ * The kind of 行业动态 an item shows beside its genre (c5-biz 2026-10-26: 交易与授权, 融资与上市, 人事与组织, 公司经营, 研发管线), or none:
+ * an item the model has not named has no kind, and 「其他」 says nothing the genre has not said, so it is filtered by and never drawn.
+ */
+export function industryKindTag(item: Partial<Pick<FrontierItem, "industryKind" | "industryKindLabel">>): string | null {
+  return item.industryKind && item.industryKind !== "other" ? item.industryKindLabel || null : null;
 }
 
 /** 「AI 评分」: one name everywhere — the card's pill, the reader's 推荐理由, a screen reader. */
@@ -294,7 +306,7 @@ export function metaTime(item: Pick<FrontierItem, "timelineAt"> & Partial<Pick<F
 }
 
 /** A day group's heading: 「今天 · 10月23日 周四 · 11 条」, 「10月22日 周三 · 40 条」 — the count once the whole day is on screen. */
-export function dayHeading(day: Pick<ItemDay, "key" | "label" | "items">, whole: boolean, now = Date.now()): string {
+export function dayHeading(day: Pick<ItemDay<unknown>, "key" | "label" | "items">, whole: boolean, now = Date.now()): string {
   return [day.key === feedDayKey(now) ? "今天" : null, day.label, whole ? `${day.items.length} 条` : null].filter(Boolean).join(" · ");
 }
 
@@ -365,21 +377,22 @@ export function sameAddress(a: string, b: string): boolean {
 
 /* ---------------------------------------------------------------------- days */
 
-export interface ItemDay {
+export interface ItemDay<T = FrontierItem> {
+  /** `2026-09-22`, or `unknown` for an item with no readable time. */
   key: string;
-  /** 「9月22日 周二」. */
+  /** 「9月22日 周二」, or 「日期不明」. */
   label: string;
-  items: FrontierItem[];
+  items: T[];
 }
 
 /**
- * The list, cut into days by the list's own axis (`timelineAt`), in Beijing time.
- * Items arrive newest first, so a day is a run of neighbours; a day is never
- * split in two even when the server's order and the calendar disagree.
+ * The list, cut into days by the list's own axis (`timelineAt`), in Beijing time. The feed's items and an event's reports are both
+ * cut by it. Items arrive newest first, so a day is a run of neighbours; a day is never split in two even when the server's order and
+ * the calendar disagree, and a time that cannot be read is a day of its own.
  */
-export function groupByDay(items: readonly FrontierItem[]): ItemDay[] {
-  const days: ItemDay[] = [];
-  const byKey = new Map<string, ItemDay>();
+export function groupByDay<T extends { timelineAt: string }>(items: readonly T[]): Array<ItemDay<T>> {
+  const days: Array<ItemDay<T>> = [];
+  const byKey = new Map<string, ItemDay<T>>();
   for (const item of items) {
     const key = feedDayKey(item.timelineAt) ?? "unknown";
     let day = byKey.get(key);
@@ -469,10 +482,13 @@ export function hotRowMeta(event: Pick<FrontierHotEvent, "sourceCount72h" | "pri
 
 const WINDOW_SPANS: Readonly<Record<FrontierHotWindow, string>> = Object.freeze({ current: "近 72 小时", week: "近 7 天", month: "近 30 天" });
 
-/** 「近 72 小时 · 22:40 更新」: the span a ranking covers and when it was taken. */
+/** 「（北京时间）」: whose clock a stamp that states a time is read on, said once on the stamp (c5-reader, 2026-10-26). */
+export const FEED_ZONE_NOTE = `（${zoneName(FEED_TIME_ZONE)}）`;
+
+/** 「近 72 小时 · 22:40 更新（北京时间）」: the span a ranking covers and when it was taken. */
 export function hotBoardStamp(window: FrontierHotWindow, takenAt: string | null): string {
   const taken = clock(takenAt);
-  return taken ? `${WINDOW_SPANS[window]} · ${taken} 更新` : WINDOW_SPANS[window];
+  return taken ? `${WINDOW_SPANS[window]} · ${taken} 更新${FEED_ZONE_NOTE}` : WINDOW_SPANS[window];
 }
 
 /**
@@ -513,13 +529,6 @@ export function sparkline(points: readonly FrontierTrendPoint[], width: number, 
 }
 
 /* --------------------------------------------------------------------- event */
-
-/** 「期刊 1 · 媒体 1」: the institutions of the last 72 hours by kind; else their number; else nothing. */
-export function institutionsLine(event: Pick<FrontierEvent, "institutions72h" | "sourceCount72h">): string | null {
-  const kinds = event.institutions72h?.byType ?? [];
-  if (kinds.length > 0) return kinds.map((kind) => `${kind.label} ${kind.count}`).join(" · ");
-  return event.sourceCount72h > 0 ? `${event.sourceCount72h} 家` : null;
-}
 
 /** 「有论文原文」, 「有一手材料」 or 「暂无」: whether the parties' own texts are among the reports. */
 export function primaryHeld(event: Pick<FrontierEvent, "primary" | "hasPrimary" | "items">): string {

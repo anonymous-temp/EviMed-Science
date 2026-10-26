@@ -39,6 +39,7 @@ import {
   SCORE_LABEL,
   dateClock,
   evidenceTag,
+  industryKindTag,
   isSocialItem,
   originalLinkLabel,
   sameAddress,
@@ -180,6 +181,8 @@ export function ReaderByline({ item, className }: { item: FrontierItem; classNam
   const evidence = bylineEvidence(item);
   // What the item is (ct-write 2026-10-24): its genre, except a safety alert's, which 「安全警示」 says already.
   const genre = item.safetyAlert && item.genre === "safety" ? null : item.genreLabel;
+  // 行业动态 says its kind beside the genre (c5-biz 2026-10-26).
+  const kind = industryKindTag(item);
   const flags = item.flags.filter((flag) => CARD_FLAG_KEYS.has(flag.key));
   const parts = [
     <span key="name" className="text-text">{name}</span>,
@@ -202,6 +205,7 @@ export function ReaderByline({ item, className }: { item: FrontierItem; classNam
       ))}
       {item.source.platformProduced && <Tag>EviMed 出品</Tag>}
       {genre && <Tag>{genre}</Tag>}
+      {kind && <Tag>{kind}</Tag>}
       {evidence && <Tag>{evidence}</Tag>}
       {item.practice && <Tag tone="accent">{PRACTICE_LABEL}</Tag>}
     </div>

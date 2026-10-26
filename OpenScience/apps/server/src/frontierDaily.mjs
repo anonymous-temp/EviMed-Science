@@ -696,11 +696,15 @@ export class FrontierDaily {
     return { day, state };
   }
 
-  /** The archive, newest first. @param {number} [limit] */
-  async list(limit = 30) {
+  /**
+   * The archive, newest first; with `before` (a day, `YYYY-MM-DD`) the issues of the days before it — the page after a full one.
+   * @param {number} [limit] @param {string | null} [before]
+   */
+  async list(limit = 30, before = null) {
     await this.ready();
     const rows = (await this.database.query(`SELECT day::text AS day, lead, cardinality(item_ids) AS items, generated_at
-      FROM evimed_frontier.dailies ORDER BY day DESC LIMIT $1`, [Math.max(1, Math.min(60, Math.floor(limit) || 30))])).rows ?? [];
+      FROM evimed_frontier.dailies WHERE $2::date IS NULL OR day < $2::date ORDER BY day DESC LIMIT $1`,
+    [Math.max(1, Math.min(60, Math.floor(limit) || 30)), before && DAY_PATTERN.test(before) ? before : null])).rows ?? [];
     return rows.map((row) => ({ day: row.day, title: typeof row.lead?.title === "string" ? row.lead.title : null,
       itemCount: Number(row.items ?? 0), generatedAt: iso(row.generated_at) }));
   }

@@ -1,0 +1,383 @@
+{
+ "at": "2026-10-26T14:45:32.966Z",
+ "editor": "frontierEditor.mjs",
+ "editorVersion": "frontier-editor-1.d0fc0ac43e64",
+ "model": "deepseek-flash",
+ "runs": 3,
+ "passed": 87,
+ "total": 93,
+ "results": [
+  {
+   "kind": "industry-kind",
+   "id": "kind-deal-licence",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "deal",
+    "deal",
+    "deal"
+   ],
+   "why": "a licence with an upfront payment and milestones is a deal, whoever the company is"
+  },
+  {
+   "kind": "industry-kind",
+   "id": "kind-deal-acquisition-zh",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "deal",
+    "deal",
+    "deal"
+   ],
+   "why": "an acquisition reported in Chinese trade media is a deal; the kind is judged by the event, not the language"
+  },
+  {
+   "kind": "industry-kind",
+   "id": "kind-deal-codevelopment",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "deal",
+    "deal",
+    "deal"
+   ],
+   "why": "a co-development and commercialisation agreement is a deal, not pipeline progress"
+  },
+  {
+   "kind": "industry-kind",
+   "id": "kind-financing-series-b",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "financing",
+    "financing",
+    "financing"
+   ],
+   "why": "a venture round is financing"
+  },
+  {
+   "kind": "industry-kind",
+   "id": "kind-financing-ipo-zh",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "financing",
+    "financing",
+    "financing"
+   ],
+   "why": "a listing on an exchange is financing, even though it also says something about the pipeline"
+  },
+  {
+   "kind": "industry-kind",
+   "id": "kind-financing-notes",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "financing",
+    "financing",
+    "financing"
+   ],
+   "why": "a convertible note offering is financing"
+  },
+  {
+   "kind": "industry-kind",
+   "id": "kind-people-ceo",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "people",
+    "people",
+    "people"
+   ],
+   "why": "a change of chief executive is people and organisation"
+  },
+  {
+   "kind": "industry-kind",
+   "id": "kind-people-reorg-zh",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "people",
+    "people",
+    "people"
+   ],
+   "why": "setting up or splitting an organisation is people and organisation, not operations"
+  },
+  {
+   "kind": "industry-kind",
+   "id": "kind-operations-earnings",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "operations",
+    "operations",
+    "operations"
+   ],
+   "why": "quarterly results are company operations"
+  },
+  {
+   "kind": "industry-kind",
+   "id": "kind-operations-layoffs",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "operations",
+    "operations",
+    "operations"
+   ],
+   "why": "layoffs and a plant closure are company operations"
+  },
+  {
+   "kind": "industry-kind",
+   "id": "kind-operations-patent",
+   "passed": 0,
+   "runs": 3,
+   "answers": [
+    null,
+    null,
+    null
+   ],
+   "why": "a patent dispute is company operations"
+  },
+  {
+   "kind": "industry-kind",
+   "id": "kind-pipeline-readout",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "pipeline",
+    "pipeline",
+    "pipeline"
+   ],
+   "why": "a company's announcement of a trial readout is pipeline progress"
+  },
+  {
+   "kind": "industry-kind",
+   "id": "kind-pipeline-submission-zh",
+   "passed": 0,
+   "runs": 3,
+   "answers": [
+    null,
+    null,
+    null
+   ],
+   "why": "an accepted marketing application announced by the company is pipeline progress, not a regulator's approval"
+  },
+  {
+   "kind": "industry-kind",
+   "id": "kind-pipeline-discontinued",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "pipeline",
+    "pipeline",
+    "pipeline"
+   ],
+   "why": "stopping a development program is pipeline progress"
+  },
+  {
+   "kind": "industry-kind",
+   "id": "kind-main-event-deal-not-financing",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "deal",
+    "deal",
+    "deal"
+   ],
+   "why": "a deal that is paid for by a share purchase is still a deal when the message is mainly about the agreement (the main event decides)"
+  },
+  {
+   "kind": "industry-kind",
+   "id": "kind-control-paper",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    null,
+    null,
+    null
+   ],
+   "why": "a control: a published trial is not 行业动态, so it carries no kind"
+  },
+  {
+   "kind": "industry-kind-batch",
+   "id": "kind-deal-licence",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "deal",
+    "deal",
+    "deal"
+   ],
+   "why": "a licence with an upfront payment and milestones is a deal, whoever the company is"
+  },
+  {
+   "kind": "industry-kind-batch",
+   "id": "kind-deal-acquisition-zh",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "deal",
+    "deal",
+    "deal"
+   ],
+   "why": "an acquisition reported in Chinese trade media is a deal; the kind is judged by the event, not the language"
+  },
+  {
+   "kind": "industry-kind-batch",
+   "id": "kind-deal-codevelopment",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "deal",
+    "deal",
+    "deal"
+   ],
+   "why": "a co-development and commercialisation agreement is a deal, not pipeline progress"
+  },
+  {
+   "kind": "industry-kind-batch",
+   "id": "kind-financing-series-b",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "financing",
+    "financing",
+    "financing"
+   ],
+   "why": "a venture round is financing"
+  },
+  {
+   "kind": "industry-kind-batch",
+   "id": "kind-financing-ipo-zh",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "financing",
+    "financing",
+    "financing"
+   ],
+   "why": "a listing on an exchange is financing, even though it also says something about the pipeline"
+  },
+  {
+   "kind": "industry-kind-batch",
+   "id": "kind-financing-notes",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "financing",
+    "financing",
+    "financing"
+   ],
+   "why": "a convertible note offering is financing"
+  },
+  {
+   "kind": "industry-kind-batch",
+   "id": "kind-people-ceo",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "people",
+    "people",
+    "people"
+   ],
+   "why": "a change of chief executive is people and organisation"
+  },
+  {
+   "kind": "industry-kind-batch",
+   "id": "kind-people-reorg-zh",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "people",
+    "people",
+    "people"
+   ],
+   "why": "setting up or splitting an organisation is people and organisation, not operations"
+  },
+  {
+   "kind": "industry-kind-batch",
+   "id": "kind-operations-earnings",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "operations",
+    "operations",
+    "operations"
+   ],
+   "why": "quarterly results are company operations"
+  },
+  {
+   "kind": "industry-kind-batch",
+   "id": "kind-operations-layoffs",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "operations",
+    "operations",
+    "operations"
+   ],
+   "why": "layoffs and a plant closure are company operations"
+  },
+  {
+   "kind": "industry-kind-batch",
+   "id": "kind-operations-patent",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "operations",
+    "operations",
+    "operations"
+   ],
+   "why": "a patent dispute is company operations"
+  },
+  {
+   "kind": "industry-kind-batch",
+   "id": "kind-pipeline-readout",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "pipeline",
+    "pipeline",
+    "pipeline"
+   ],
+   "why": "a company's announcement of a trial readout is pipeline progress"
+  },
+  {
+   "kind": "industry-kind-batch",
+   "id": "kind-pipeline-submission-zh",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "pipeline",
+    "pipeline",
+    "pipeline"
+   ],
+   "why": "an accepted marketing application announced by the company is pipeline progress, not a regulator's approval"
+  },
+  {
+   "kind": "industry-kind-batch",
+   "id": "kind-pipeline-discontinued",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "pipeline",
+    "pipeline",
+    "pipeline"
+   ],
+   "why": "stopping a development program is pipeline progress"
+  },
+  {
+   "kind": "industry-kind-batch",
+   "id": "kind-main-event-deal-not-financing",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "deal",
+    "deal",
+    "deal"
+   ],
+   "why": "a deal that is paid for by a share purchase is still a deal when the message is mainly about the agreement (the main event decides)"
+  }
+ ]
+}

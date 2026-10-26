@@ -7,7 +7,7 @@
  * stay right. It calls the live model through the platform's own
  * `FrontierEditor`, so the prompts under test are the ones that ship.
  *
- *   node evals/frontier-editing/run_eval.mjs [--runs 3] [--key-file <path>] [--only <case-id>] [--kind all|lane|same-event|evidence-type|flags] [--editor <module>]
+ *   node evals/frontier-editing/run_eval.mjs [--runs 3] [--key-file <path>] [--only <case-id>] [--kind all|lane|same-event|evidence-type|flags|industry-kind] [--editor <module>]
  *
  * `--editor` runs another copy of `frontierEditor.mjs` (placed beside it, so
  * its imports resolve) — the control arm of a prompt change.
@@ -41,7 +41,7 @@ const editor = new FrontierEditor({ deepseekProviderEnabled: true, deepseekApiKe
   { owner: { userId: "eval", projectId: "eval" } });
 const allowedLanes = FRONTIER_LANES.filter((lane) => lane !== "mixed");
 const wanted = (/** @type {{ id: string }} */ item) => !values.only || item.id === values.only;
-if (!["all", "lane", "same-event", "evidence-type", "flags"].includes(values.kind)) throw new Error("--kind must be all, lane, same-event, evidence-type, or flags");
+if (!["all", "lane", "same-event", "evidence-type", "flags", "industry-kind"].includes(values.kind)) throw new Error("--kind must be all, lane, same-event, evidence-type, flags, or industry-kind");
 const runsKind = (/** @type {string} */ kind) => values.kind === "all" || values.kind === kind;
 
 /** @type {any[]} */
@@ -82,6 +82,37 @@ for (const item of (runsKind("flags") ? (cases.flags ?? []).filter(wanted) : [])
   const passed = answers.filter(ok).length;
   results.push({ kind: "flags", id: item.id, passed, runs, answers, why: item.why });
   console.log(`${passed === runs ? "PASS" : "FAIL"} flags ${item.id} ${passed}/${runs} ${JSON.stringify(answers)}`);
+}
+// The kind of 行业动态 (c5-biz): the edit's own answer, as it is stored (a kind belongs to an item the model also calls industry, so any other
+// genre reads as none), and the backfill's call over the same cases in batches - a case passes a run when the answer is one of `expect`
+// (null for a control that must carry no kind).
+const kindCases = runsKind("industry-kind") ? (cases.industry_kind ?? []).filter(wanted) : [];
+for (const item of kindCases) {
+  const answers = [];
+  for (let run = 0; run < runs; run += 1) {
+    const edited = await editor.edit({ ...item.edit, allowedLanes, defaults: { lane: "pipeline" } });
+    answers.push(edited.output ? (edited.output.genre === "industry" ? edited.output.industryKind : null) : `error:${edited.error}`);
+  }
+  const passed = answers.filter((answer) => item.expect.includes(answer)).length;
+  results.push({ kind: "industry-kind", id: item.id, passed, runs, answers, why: item.why });
+  console.log(`${passed === runs ? "PASS" : "FAIL"} industry-kind ${item.id} ${passed}/${runs} ${JSON.stringify(answers)}`);
+}
+// The backfill's call: the items that expect a kind, FRONTIER_INDUSTRY_KIND_BATCH to a call.
+const askable = kindCases.filter((item) => !item.expect.includes(null));
+if (askable.length) {
+  const answers = askable.map(() => /** @type {Array<string | null>} */ ([]));
+  for (let run = 0; run < runs; run += 1) {
+    for (let at = 0; at < askable.length; at += 10) {
+      const batch = askable.slice(at, at + 10);
+      const kinds = await editor.classifyIndustryKinds(batch.map((item) => ({ sourceName: item.edit.sourceName, title: item.edit.titleRaw, excerpt: item.edit.summary })));
+      batch.forEach((_, index) => answers[at + index].push(kinds[index]));
+    }
+  }
+  askable.forEach((item, index) => {
+    const passed = answers[index].filter((answer) => item.expect.includes(answer)).length;
+    results.push({ kind: "industry-kind-batch", id: item.id, passed, runs, answers: answers[index], why: item.why });
+    console.log(`${passed === runs ? "PASS" : "FAIL"} industry-kind-batch ${item.id} ${passed}/${runs} ${JSON.stringify(answers[index])}`);
+  });
 }
 for (const item of (runsKind("same-event") ? cases.same_event.filter(wanted) : [])) {
   const answers = [];

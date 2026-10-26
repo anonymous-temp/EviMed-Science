@@ -100,6 +100,8 @@ interface ToolbarChipsBase {
   placeholder?: string;
   /** Inside 「筛选」 at every width (`oneRow`). */
   folded?: boolean;
+  /** Said before the chosen option in its token (「行业动态 · 融资与上市」), for a group whose options do not name what they belong to. */
+  tokenPrefix?: string;
   /**
    * Not counted on 「筛选」 and no token of its own: what it chooses the page says elsewhere (热门标签 sets the chosen tag, which is the
    * page's own token).
@@ -285,11 +287,12 @@ function groupToken(filter: ToolbarPanelGroup): ToolbarToken | null {
   const onRemove = () => clearGroup(filter);
   if (filter.kind === "toggle") return { label: filter.label, onRemove, filter: true };
   if (filter.kind === "select") return { label: optionLabel(filter.options, filter.value ?? ""), onRemove, filter: true };
+  const named = (text: string) => filter.tokenPrefix ? `${filter.tokenPrefix} · ${text}` : text;
   if (filter.multi) {
     const first = optionLabel(filter.options, filter.value[0] ?? "");
-    return { label: filter.value.length > 1 ? `${first} 等 ${filter.value.length} 个` : first, onRemove, filter: true };
+    return { label: named(filter.value.length > 1 ? `${first} 等 ${filter.value.length} 个` : first), onRemove, filter: true };
   }
-  return { label: optionLabel(filter.options, filter.value), onRemove, filter: true };
+  return { label: named(optionLabel(filter.options, filter.value)), onRemove, filter: true };
 }
 
 /** Lets go of one group. */
