@@ -47,7 +47,9 @@ requests exit 2. NumPy, sklearn and statsmodels are imported only for metrics.
 from __future__ import annotations
 
 import argparse
+from bisect import bisect_right
 from collections import Counter, defaultdict
+from fractions import Fraction
 import json
 import math
 from numbers import Integral, Real
@@ -58,7 +60,7 @@ import warnings
 
 def _missing(value):
     return value is None or (isinstance(value, str) and not value.strip()) or (
-        isinstance(value, Real) and not isinstance(value, bool) and math.isnan(value))
+        isinstance(value, Real) and not isinstance(value, Integral) and math.isnan(value))
 
 
 def _key(value):
@@ -68,7 +70,7 @@ def _key(value):
         return ("boolean", value)
     if isinstance(value, str):
         return ("string", value)
-    if isinstance(value, Real) and math.isfinite(value):
+    if isinstance(value, Integral) or (isinstance(value, Real) and math.isfinite(value)):
         return ("number", value)
     return None
 
@@ -76,6 +78,8 @@ def _key(value):
 def _number(value, *, strings=False):
     if isinstance(value, bool) or not isinstance(value, (Real, str) if strings else Real):
         return None
+    if isinstance(value, Integral):
+        return int(value)
     try:
         number = float(value)
     except (ValueError, OverflowError):
@@ -290,9 +294,10 @@ def _metrics(y, probabilities, bins, threshold, positive_label, negative_label, 
         return _unsupported("sklearn_unavailable")
     single = len(set(y)) < 2
     calibration_bins = []
+    boundaries = [index / bins for index in range(bins + 1)]
     sums = [[0, 0.0, 0] for _ in range(bins)]
     for event, probability in zip(y, probabilities):
-        index = min(int(probability * bins), bins - 1)
+        index = min(bisect_right(boundaries, probability) - 1, bins - 1)
         sums[index][0] += 1
         sums[index][1] += probability
         sums[index][2] += event
@@ -451,12 +456,17 @@ def compare_reported_numbers(results, comparisons):
         elif expected is None or reported is None:
             checked.append({**item, "reason": "source_or_reported_value_unknown_or_nonfinite"})
         else:
-            tolerance = max(absolute, relative * abs(expected))
-            difference = abs(reported - expected)
-            if not math.isfinite(tolerance) or not math.isfinite(difference):
+            # Rational arithmetic preserves exact integer counts and declared
+            # decimal rounding tolerances, including mixed int/float bindings.
+            tolerance_exact = max(Fraction(str(absolute)), Fraction(str(relative)) * abs(Fraction(str(expected))))
+            difference_exact = abs(Fraction(str(reported)) - Fraction(str(expected)))
+            try:
+                tolerance = int(tolerance_exact) if tolerance_exact.denominator == 1 else float(tolerance_exact)
+                difference = int(difference_exact) if difference_exact.denominator == 1 else float(difference_exact)
+            except OverflowError:
                 checked.append({**item, "reason": "comparison_arithmetic_nonfinite"})
                 continue
-            checked.append({**item, "status": "match" if difference <= tolerance else "mismatch", "source": binding["source"],
+            checked.append({**item, "status": "match" if difference_exact <= tolerance_exact else "mismatch", "source": binding["source"],
                             "expected": expected, "reported": reported, "absoluteDifference": difference, "tolerance": tolerance})
     counts = Counter(item["status"] for item in checked)
     return {"schemaVersion": 1, "kind": "reported_number_audit", "status": "partial" if counts["not_checked"] else "complete",
