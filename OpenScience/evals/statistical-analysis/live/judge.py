@@ -9,6 +9,8 @@ differences; another justified estimator needs its own independent reference.
 """
 import argparse
 import csv
+import hashlib
+import importlib.metadata
 import json
 import math
 from pathlib import Path
@@ -112,20 +114,55 @@ def main():
     args = parser.parse_args()
     root = Path(args.artifacts).resolve()
     spec = json.loads(Path(args.bindings).read_text())
+    inputs = []
+
+    def receipt(file, role):
+        payload = file.read_bytes()
+        inputs.append({'role': role, 'path': str(file), 'sha256': hashlib.sha256(payload).hexdigest(), 'bytes': len(payload)})
+        return payload
+
+    receipt(Path(args.bindings).resolve(), 'bindings')
+    receipt(Path(__file__).resolve(), 'judge')
+    fixtures = Path(__file__).parent / 'fixtures'
+    fixture_manifest = json.loads(receipt(Path(__file__).with_name('fixture-sources.json'), 'fixture-manifest'))
+
+    def fixture(name):
+        file = fixtures / name
+        payload = receipt(file, 'fixture')
+        if hashlib.sha256(payload).hexdigest() != fixture_manifest['sha256'][name]:
+            raise ValueError('Fixture differs from its recorded source digest.')
+        return file
+
     checks = []
     for turn in spec['turns']:
         workspace = root / f'turn-{turn["index"]}' / 'workspace'
         file = (workspace / turn['results']).resolve()
         if not file.is_relative_to(workspace):
             raise ValueError('Result file must be inside the captured workspace.')
-        actual = json.loads(file.read_text())
-        reference = comparison_reference(Path(__file__).parent / 'fixtures', **turn.get('referenceOptions', {}))
+        actual = json.loads(receipt(file, 'results'))
+        kind = turn.get('referenceKind', 'comparison')
+        if kind == 'prediction':
+            predictions = (workspace / turn['predictions']).resolve()
+            if not predictions.is_relative_to(workspace):
+                raise ValueError('Predictions must be inside the captured workspace.')
+            receipt(predictions, 'predictions')
+            with fixture('breast-cancer.csv').open() as source, predictions.open() as returned:
+                reference = prediction_reference(list(csv.DictReader(source)), list(csv.DictReader(returned)), **turn['predictionOptions'])
+        elif kind == 'comparison':
+            options = turn.get('referenceOptions', {})
+            fixture('coding-correction.csv' if options.get('corrected') else 'cohort.csv')
+            if options.get('supplement'):
+                fixture('supplement.csv')
+            reference = comparison_reference(fixtures, **options)
+        else:
+            raise ValueError('Unknown independent reference kind.')
         expected = {name: reference[name] for name in turn['required']}
         if not expected:
             raise ValueError('At least one independent reference is required.')
         result = check_bindings(actual, expected, turn['bindings'])
         checks.append({'turn': turn['index'], **result})
-    report = {'scope': 'explicitly_bound_numerical_values_only', 'passed': bool(checks) and all(row['passed'] for row in checks), 'checks': checks}
+    report = {'scope': 'explicitly_bound_numerical_values_only', 'passed': bool(checks) and all(row['passed'] for row in checks), 'checks': checks,
+              'inputs': inputs, 'versions': {name: importlib.metadata.version(name) for name in ('numpy', 'scipy', 'scikit-learn')}}
     Path(args.out).write_text(json.dumps(report, indent=2, allow_nan=False) + '\n')
     return 0 if report['passed'] else 1
 
