@@ -66,6 +66,9 @@ def test_prediction_reference_uses_source_malignant_label_and_actual_returned_pr
     assert result['tp'] == 2 and result['fp'] == 1 and result['tn'] == 1
     with pytest.raises(ValueError):
         prediction_reference(source, returned + [returned[0]], id_column='id', probability_column='p')
+    split = [{**row, 'split': 'test' if i < 2 else 'train'} for i, row in enumerate(returned)]
+    heldout = prediction_reference(source, split, id_column='id', probability_column='p', split_column='split', test_label='test')
+    assert heldout['n'] == 2 and heldout['brier'] == pytest.approx(.025)
 
 
 def test_cli_prediction_uses_frozen_source_and_records_exact_bytes(tmp_path):
