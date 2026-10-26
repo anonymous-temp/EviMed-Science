@@ -98,15 +98,15 @@ export function rsiCompatibilityIssues(expected, current) {
 export function rsiBudgetAdmission(input, limits = RSI_CAMPAIGN_LIMITS) {
   const names = ['campaignActualCny', 'campaignReservedCny', 'monthActualCny', 'monthReservedCny', 'requestCny']
   if (!record(input) || names.some(name => !finite(input[name]) || input[name] < 0 || input[name] > 100000000) || input.requestCny <= 0) return { admitted: false, reason: 'campaign_budget_unknown' }
-  if (!finite(limits?.campaignCny) || limits.campaignCny <= 0 || limits.campaignCny > RSI_CAMPAIGN_LIMITS.campaignCny
-    || !finite(limits?.monthCny) || limits.monthCny <= 0 || limits.monthCny > RSI_CAMPAIGN_LIMITS.monthCny) return { admitted: false, reason: 'campaign_budget_unknown' }
+  if (!finite(limits?.campaignCny) || limits.campaignCny < 1e-8 || limits.campaignCny > RSI_CAMPAIGN_LIMITS.campaignCny
+    || !finite(limits?.monthCny) || limits.monthCny < 1e-8 || limits.monthCny > RSI_CAMPAIGN_LIMITS.monthCny) return { admitted: false, reason: 'campaign_budget_unknown' }
   // Existing model settlement has sub-cent precision. Round commitments up to 1e-8 CNY; never under-reserve due to floating point addition.
   /** @param {number} value */
   const units = value => Math.ceil(value * 100000000)
   const request = units(input.requestCny)
   if (names.some(name => !Number.isSafeInteger(units(input[name])))) return { admitted: false, reason: 'campaign_budget_unknown' }
-  if (units(input.campaignActualCny) + units(input.campaignReservedCny) + request > units(limits.campaignCny)) return { admitted: false, reason: 'campaign_budget_exceeded' }
-  if (units(input.monthActualCny) + units(input.monthReservedCny) + request > units(limits.monthCny)) return { admitted: false, reason: 'campaign_month_budget_exceeded' }
+  if (units(input.campaignActualCny) + units(input.campaignReservedCny) + request > Math.floor(limits.campaignCny * 100000000)) return { admitted: false, reason: 'campaign_budget_exceeded' }
+  if (units(input.monthActualCny) + units(input.monthReservedCny) + request > Math.floor(limits.monthCny * 100000000)) return { admitted: false, reason: 'campaign_month_budget_exceeded' }
   return { admitted: true, reason: null }
 }
 
