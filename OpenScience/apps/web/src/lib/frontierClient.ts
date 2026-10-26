@@ -156,7 +156,7 @@ export interface FrontierItemState {
 /** One enrichment fact: a word, a number, a yes/no, a list, or a small record of those. */
 export type FrontierFact = string | number | boolean | string[] | Record<string, string | number | boolean>;
 
-const EDITOR_DIAGNOSTIC_CODES = ["passed", "empty", "length", "link", "language", "number", "source_missing", "answer_invalid", "withheld", "not_checked"] as const;
+const EDITOR_DIAGNOSTIC_CODES = ["passed", "empty", "length", "link", "language", "number", "marks", "source_missing", "answer_invalid", "withheld", "not_checked"] as const;
 type EditorDiagnosticCode = typeof EDITOR_DIAGNOSTIC_CODES[number];
 export interface FrontierEditorDiagnostics {
   schemaVersion: 1;

@@ -198,7 +198,8 @@ describe("a card", () => {
   });
 
   it("in a day group, puts the clock in its own column with a dot, the accent for 精选, and says 精选 where not every item is", () => {
-    renderCard(frontierItem({ timelineAt: new Date(2026, 8, 22, 9, 5).toISOString() }), { markSelected: true, grouped: true });
+    // 09:05 in Beijing, whatever the machine's zone is.
+    renderCard(frontierItem({ timelineAt: "2026-09-22T01:05:00.000Z" }), { markSelected: true, grouped: true });
     const item = screen.getByRole("listitem");
     const column = item.querySelector(".w-14");
     expect(within(column as HTMLElement).getByText("09:05")).toHaveClass("tabular-nums");
@@ -210,8 +211,41 @@ describe("a card", () => {
     expect(within(item).getByText("精选")).toHaveClass("sr-only");
   });
 
+  it("in a day group, reads the clock in Beijing time: 11:00Z is 19:00, and 16:30Z is the next day's 00:30", () => {
+    renderCard(frontierItem({ timelineAt: "2026-10-25T11:00:00.000Z" }), { grouped: true });
+    expect(within(screen.getByRole("listitem").querySelector(".w-14") as HTMLElement).getByText("19:00")).toBeInTheDocument();
+    cleanup();
+    renderCard(frontierItem({ timelineAt: "2026-10-25T16:30:00.000Z" }), { grouped: true });
+    expect(within(screen.getByRole("listitem").querySelector(".w-14") as HTMLElement).getByText("00:30")).toBeInTheDocument();
+  });
+
+  it("in a day group, an item whose source gave only the day has no clock, in the column or on a phone, and keeps the column and its dot", () => {
+    renderCard(frontierItem({ datePrecision: "day", timelineAt: "2026-09-22T01:05:00.000Z", selected: true }), { markSelected: true, grouped: true });
+    const item = screen.getByRole("listitem");
+    const column = item.querySelector(".w-14");
+    expect(column).not.toBeNull();
+    expect(column?.querySelector("time")).toBeNull();
+    expect(column?.querySelector(".bg-accent")).not.toBeNull();
+    expect(item).not.toHaveTextContent("09:05");
+    expect(item.querySelector(".sm\\:hidden .tabular-nums")).toBeNull();
+  });
+
+  it("in a list not cut into days, an item with only a day says 「今天」 where an instant says its clock", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-22T06:00:00.000Z"));
+    try {
+      renderCard(frontierItem({ datePrecision: "day", timelineAt: "2026-09-22T01:05:00.000Z", source: { id: "annonc", name: "肿瘤学年鉴" } }));
+      expect(within(screen.getByRole("listitem")).getByRole("article")).toHaveTextContent("肿瘤学年鉴 · 今天");
+      cleanup();
+      renderCard(frontierItem({ datePrecision: "instant", timelineAt: "2026-09-22T01:05:00.000Z", source: { id: "annonc", name: "肿瘤学年鉴" } }));
+      expect(within(screen.getByRole("listitem")).getByRole("article")).toHaveTextContent("肿瘤学年鉴 · 09:05");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("in a list not cut into days, has no time column and says the date in its meta row after the source", () => {
-    renderCard(frontierItem({ timelineAt: new Date(2026, 9, 20, 9, 5).toISOString(), source: { id: "annonc", name: "肿瘤学年鉴" } }));
+    renderCard(frontierItem({ timelineAt: "2026-10-20T01:05:00.000Z", source: { id: "annonc", name: "肿瘤学年鉴" } }));
     const item = screen.getByRole("listitem");
     expect(item.querySelector(".w-14")).toBeNull();
     expect(within(item).getByRole("article")).toHaveTextContent("肿瘤学年鉴 · 10月20日");

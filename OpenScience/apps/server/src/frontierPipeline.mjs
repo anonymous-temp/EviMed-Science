@@ -42,9 +42,12 @@ import { FRONTIER_SOURCE_STREAM_COLUMNS } from "./frontierSourceColumns.mjs";
  *   needs screening waits for the budget (collect only). Safety feeds,
  *   regulators and authority-5 journals are edited at peak and past 80% of
  *   the budget (plan §10.3.6, §10.3.10).
- * - **`timeline_at` is decided once, at publication** (review #11): the
- *   publication instant, or the source's date when that is more than 72 hours
- *   older. An item that waited five days for its abstract still reaches today.
+ * - **`timeline_at` is decided once, at publication** (`frontierTimelineAt`; the
+ *   owner's ruling of 2026-10-26 replaced review #11's 72-hour rule): the
+ *   source's own time, never later than the moment we published it. An item
+ *   that waited five days for its abstract sits at the source's own day, not
+ *   today; a source that dates a day and no hour keeps our arrival instant on
+ *   its own day (Beijing time) and the end of its day after that.
  * - **Every reader-visible change moves `meta.content_version` in the same
  *   transaction** (review #14), and leaves an `item_changes` row for
  *   downstream copies.
@@ -95,12 +98,12 @@ import {
   isFrontierMastheadTitle,
   isPeak,
 } from "@evimed/domain";
-import { FRONTIER_REASON_VERSION, FRONTIER_RETAG_BATCH, FRONTIER_SCORE_VERSION } from "./frontierEditor.mjs";
+import { FRONTIER_REASON_VERSION, FRONTIER_RETAG_BATCH, FRONTIER_SCORE_VERSION, FRONTIER_TITLE_VERSION, frontierTitleMarks } from "./frontierEditor.mjs";
 import { FRONTIER_EDITOR_VERSION, frontierEditorDiagnostics, sha256, FRONTIER_SCREEN_BATCH, FRONTIER_SCREEN_EXCERPT_CHARS, buildModelInput, frontierParagraphs,
   isChineseProse, isChineseTitle } from "./frontierEditor.mjs";
 import { isDiscoveryOnlySource } from "./evolutionDiscoverySources.mjs";
 import { FrontierGlossary, FrontierGlossaryStore } from "./frontierGlossary.mjs";
-import { bumpFrontierVersion, migrateFrontier } from "./frontierPersistence.mjs";
+import { bumpFrontierVersion, FRONTIER_FEED_TIME_ZONE, migrateFrontier } from "./frontierPersistence.mjs";
 import { FrontierTagStore } from "./frontierTags.mjs";
 import { frontierFullTextParagraphs, frontierSettledParagraphs, frontierTidyBasis, frontierTidyVerdict, FRONTIER_TIDY_LIMITS } from "./frontierReaderTidy.mjs";
 import { FRONTIER_ASK_VERSION, frontierWriteAsk } from "./frontierAsk.mjs";
@@ -191,8 +194,6 @@ export function frontierProviderUnavailable(error) {
 export function frontierCallDeferred(code) {
   return frontierProviderUnavailable(code) || ["usage_budget_exceeded", "insufficient_quota", "frontier_editor_unavailable"].includes(String(code));
 }
-/** The 72-hour rule of `timeline_at` (plan §6.1). */
-export const FRONTIER_TIMELINE_WINDOW_MS = 72 * HOUR;
 /**
  * The lowest score a place under the selection line is given from (the genre mix's floors, the preprint lane, a Chinese
  * item under the line, a paper in its rewrite's place: `@evimed/domain` `FRONTIER_MIX_FLOOR_SCORE`). It was the lane
@@ -706,14 +707,31 @@ export function frontierItemFlags({ source, entry, item, text, modelFlags = [], 
 }
 
 /**
- * `timeline_at` at publication: the publication instant, or the source's
- * own date when that is more than 72 hours older (plan §6.1, review #11).
- * @param {Date} visibleAt @param {Date | string | null} publishedAt @returns {Date}
+ * `timeline_at` at publication: the source's own time (the list's axis, its day groups and its clock column; owner ruling of
+ * 2026-10-26, which replaced plan §6.1's "our publication instant unless the source is more than 72 hours older" — that rule
+ * showed an article its source posted at 19:00 under 05:59 the next morning). `precision` is the item's `date_precision`:
+ *
+ * - `instant`: the source's instant, unless it is after `visibleAt` — a date ahead of our clock is not believed.
+ * - `day`: the source stated a calendar day and no hour (stored at UTC midnight of that date, so the date is the UTC date of
+ *   `publishedAt`). An item we saw on that day in `FRONTIER_FEED_TIME_ZONE` keeps its arrival instant; an older one sits at the
+ *   last millisecond of its day there.
+ * - `inferred` (or no usable date): `visibleAt`.
+ *
+ * The backfill in `frontierPersistence.mjs` (`FRONTIER_TIMELINE_RULE`) writes the same rule in SQL; a test holds the two equal.
+ * @param {Date} visibleAt @param {Date | string | null} publishedAt @param {string | null | undefined} [precision] @returns {Date}
  */
-export function frontierTimelineAt(visibleAt, publishedAt) {
-  const published = publishedAt ? new Date(publishedAt).getTime() : NaN;
-  if (!Number.isFinite(published) || visibleAt.getTime() - published <= FRONTIER_TIMELINE_WINDOW_MS) return visibleAt;
-  return new Date(published);
+export function frontierTimelineAt(visibleAt, publishedAt, precision) {
+  const published = publishedAt ? new Date(publishedAt) : null;
+  const at = published ? published.getTime() : NaN;
+  if (!published || !Number.isFinite(at)) return visibleAt;
+  if (precision === "instant") return at <= visibleAt.getTime() ? published : visibleAt;
+  if (precision === "day") {
+    // Noon UTC of the stated date is that same date in Beijing (UTC+8), so the zone's window of it is the stated day's.
+    const noon = new Date(Date.UTC(published.getUTCFullYear(), published.getUTCMonth(), published.getUTCDate(), 12));
+    const lastMoment = new Date(frontierDayWindow(noon, FRONTIER_FEED_TIME_ZONE).end.getTime() - 1);
+    return lastMoment.getTime() < visibleAt.getTime() ? lastMoment : visibleAt;
+  }
+  return visibleAt;
 }
 
 /**
@@ -1703,12 +1721,12 @@ export class FrontierPipeline {
     const since = new Date(now.getTime() - TITLE_DUPLICATE_WINDOW_MS);
     if (capabilities?.trigram) {
       const found = await client.query(`SELECT id FROM evimed_frontier.items
-        WHERE state = 'published' AND lane = $1 AND timeline_at > $2 AND similarity(title_raw, $3) >= $4
+        WHERE state = 'published' AND lane = $1 AND visible_at > $2 AND similarity(title_raw, $3) >= $4
         ORDER BY similarity(title_raw, $3) DESC, id LIMIT 1`, [lane, since, title, TITLE_DUPLICATE_SIMILARITY]);
       return found.rows[0] ? Number(found.rows[0].id) : null;
     }
     const found = await client.query(`SELECT id, title_raw FROM evimed_frontier.items
-      WHERE state = 'published' AND lane = $1 AND timeline_at > $2 ORDER BY timeline_at DESC LIMIT 2000`, [lane, since]);
+      WHERE state = 'published' AND lane = $1 AND visible_at > $2 ORDER BY visible_at DESC LIMIT 2000`, [lane, since]);
     const match = found.rows.find((row) => titleKey(row.title_raw) === key);
     return match ? Number(match.id) : null;
   }
@@ -2301,12 +2319,18 @@ export class FrontierPipeline {
         safetyAlert, fields.verification, fields.editorVersion,
         fields.editorModel, context.now, fields.tags, genre.genre, genre.basis, Boolean(output), FRONTIER_REASON_VERSION,
         practiceReason !== undefined, practiceReason ?? null]);
-      if (output && ceiled) {
+      // The title rule's version is stamped only on a title that is clean of its marks: a translation the edit let through with a 「｜」,
+      // or a Chinese source's title kept because its rewrite was refused, stays for `frontier-rewrite --steps title`, whose call sends a
+      // marked answer back once (c4 review).
+      const titleStamped = Boolean(fields.titleZh) && frontierTitleMarks(fields.titleZh).length === 0;
+      if (output && (ceiled || titleStamped)) {
         // Which scoring wrote the parts, and what lowered one, are kept with the model's raw numbers, for the operator and for fitting a
-        // ceiling; neither is served.
+        // ceiling; neither is served. The title rule that wrote the title is kept the same way (c4-title: `titleVersion`, what
+        // `frontier-rewrite --steps title` reads), when the title shown is clean of the rule's marks (above).
         await client.query(`UPDATE evimed_frontier.items SET editor_diagnostics = CASE WHEN editor_diagnostics->>'schemaVersion' = '1'
             THEN editor_diagnostics || $2::jsonb ELSE editor_diagnostics END WHERE id = $1`,
-        [item.id, JSON.stringify({ scoreVersion: FRONTIER_SCORE_VERSION, ...(ceiled.reasons.length ? { capped: ceiled.reasons } : {}) })]);
+        [item.id, JSON.stringify({ ...(ceiled ? { scoreVersion: FRONTIER_SCORE_VERSION, ...(ceiled.reasons.length ? { capped: ceiled.reasons } : {}) } : {}),
+          ...(titleStamped ? { titleVersion: FRONTIER_TITLE_VERSION } : {}) })]);
       }
       if (output) {
         await client.query("UPDATE evimed_frontier.item_texts SET model_input = $2, model_input_sha256 = $3 WHERE item_id = $1",
@@ -2348,7 +2372,7 @@ export class FrontierPipeline {
       const texts = (await client.query("SELECT publication_types FROM evimed_frontier.item_texts WHERE item_id = $1", [itemId])).rows[0];
       const linkFlags = await this.#linkFlags(client, item);
       const flags = orderedFlags([...new Set([...item.flags, ...linkFlags])]);
-      const timelineAt = frontierTimelineAt(now, item.published_at);
+      const timelineAt = frontierTimelineAt(now, item.published_at, item.date_precision);
       // Only a safety alert is selected as it is published; every other selection is the day's mix, at the end of the round.
       const decision = frontierSelectionDecision({
         safetyAlert: item.safety_alert, verification: item.verification, scoreTotal: item.score_total,
@@ -2357,7 +2381,9 @@ export class FrontierPipeline {
       });
       const bypass = decision.rule === "safety-bypass";
       if (bypass) this.counters.selected += 1;
-      this.#mixDay(context, timelineAt);
+      // The mix counts an item on the day we published it, not its source's day (c4 review: a paper stated yesterday and seen this
+      // morning would otherwise meet yesterday's research places already filled — selection is sticky); `timeline_at` is the list's axis.
+      this.#mixDay(context, now);
       await client.query(`UPDATE evimed_frontier.items SET state = 'published', visible_at = $2::timestamptz, timeline_at = $3::timestamptz,
           flags = $4, selected = $5::boolean, selected_rule = $6,
           selected_at = CASE WHEN $5::boolean THEN $2::timestamptz ELSE NULL END, lexemes = $7::tsvector,
@@ -2380,7 +2406,7 @@ export class FrontierPipeline {
       const item = (await client.query(`SELECT i.*, ${frontierBesideSelectedSql("i")} AS beside_selected FROM evimed_frontier.items i
         WHERE i.id = $1 FOR UPDATE OF i`, [itemId])).rows[0];
       if (!item || item.state !== "published" || item.selected) return;
-      this.#mixDay(context, new Date(item.timeline_at));
+      this.#mixDay(context, new Date(item.visible_at ?? item.timeline_at));
       if (item.beside_selected) return;
       const source = (await client.query("SELECT * FROM evimed_frontier.sources WHERE id = $1", [item.primary_source_id])).rows[0];
       const texts = (await client.query("SELECT publication_types FROM evimed_frontier.item_texts WHERE item_id = $1", [itemId])).rows[0];
@@ -2399,8 +2425,9 @@ export class FrontierPipeline {
   }
 
   /**
-   * Hand an item's day to the round's mix (`#mix`): the days published or re-scored items fall on, each with an instant in it.
-   * @param {any} context @param {Date} timelineAt
+   * Hand an item's day to the round's mix (`#mix`): the days published or re-scored items fall on — the day we published each, in the
+   * feed's zone (`visible_at`), the day the mix reads its candidates by — each with an instant in it.
+   * @param {any} context @param {Date} timelineAt the instant whose day is handed over (an item's `visible_at`)
    */
   #mixDay(context, timelineAt) {
     if (!context || !(timelineAt instanceof Date) || !Number.isFinite(timelineAt.getTime())) return;
@@ -2415,6 +2442,8 @@ export class FrontierPipeline {
    * the day's published items and the other reports of their events are read, `frontierMixSelect` picks what the day still
    * selects, and the picks are written with their rule — `threshold`, `genre-floor`, `zh-target`, `preprint-lane` or
    * `event-primary`. It replaced the lane floor and the preprint lane (whose places are now inside the research group).
+   * A day here is the day we published its items (`visible_at`, c4 review 2026-10-26), not the source's day the list shows them under:
+   * an item that arrives after its stated day takes a place in today's mix, which is still open, as it did under the 72-hour rule.
    * Sticky like every selection: what a day already selected counts against its groups and sources and is never taken back.
    * A floor place under the line asks its genre's own bar (`@evimed/domain` `FRONTIER_MIX_GENRE_FLOOR`, c2-fixes 2026-10-25),
    * the 80th percentile of the genre's published scores of the last 30 days, read once per round (`#genreFloors`).
@@ -2442,7 +2471,7 @@ export class FrontierPipeline {
           FROM evimed_frontier.items i
           JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
           LEFT JOIN evimed_frontier.item_texts t ON t.item_id = i.id
-          WHERE i.state = 'published' AND i.timeline_at >= $1 AND i.timeline_at < $2`, [start, end])).rows;
+          WHERE i.state = 'published' AND i.visible_at >= $1 AND i.visible_at < $2`, [start, end])).rows;
         if (!rows.length) return;
         const eventIds = [...new Set(rows.map((/** @type {any} */ row) => row.event_id).filter((id) => id != null).map(String))];
         /** @type {Record<string, Array<{ id: string, genre: string, evidenceType: string | null, selected: boolean, rule: string | null, safety: boolean }>>} */
@@ -2480,6 +2509,8 @@ export class FrontierPipeline {
             summarized: row.summarized === true, besideSelected: row.beside_selected === true,
             // A republisher (frontier-selection.json) takes no place under the line.
             floorEligible: frontierFloorEligible(row.primary_source_id),
+            // The research's own record (a journal's or a preprint server's item) fills a research place before a report of research.
+            primary: row.source_source_type === "journal" || row.source_source_type === "preprint",
             addsValue: typeof row.adds_value === "boolean" ? row.adds_value : null,
             eventId: row.event_id == null ? null : String(row.event_id),
           };
@@ -3679,8 +3710,8 @@ export class FrontierPipeline {
     const modelKey = String(this.embedder.modelKey);
     const rows = (await this.database.query(`SELECT i.id, i.title_raw, i.title_zh, i.summary_zh FROM evimed_frontier.items i
       LEFT JOIN evimed_frontier.item_vectors v ON v.item_id = i.id AND v.model_key = $1
-      WHERE i.state = 'published' AND v.item_id IS NULL AND i.timeline_at > $2
-      ORDER BY i.timeline_at DESC, i.id DESC LIMIT $3`,
+      WHERE i.state = 'published' AND v.item_id IS NULL AND i.visible_at > $2
+      ORDER BY i.visible_at DESC, i.id DESC LIMIT $3`,
     [modelKey, new Date(context.now.getTime() - FRONTIER_EMBED_WINDOW_MS), EMBED_BATCH])).rows;
     if (!rows.length) return 0;
     let vectors;

@@ -16,6 +16,14 @@ describe("a date on an evidence page", () => {
       expect(evidenceDate(value)).not.toMatch(/\d\/\d/);
     }
   });
+  it("reads Beijing time, whatever the browser's zone is", () => {
+    // 16:30Z is half past midnight on the next day in Beijing.
+    expect(evidenceDay("2026-10-01T16:30:00Z")).toBe("10月2日");
+    expect(evidenceDate("2026-10-01T16:30:00Z")).toBe("10月2日 00:30");
+    expect(evidenceDate("2026-10-01T11:00:00Z")).toBe("10月1日 19:00");
+    // The year turns in Beijing first.
+    expect(evidenceDay("2025-12-31T17:00:00Z")).toBe("1月1日");
+  });
   it("adds the clock to the folded record's date, and shows what is not a date as it was written", () => {
     expect(evidenceDate("2026-10-01T12:00:00Z")).toMatch(/^10月1日 \d{2}:\d{2}$/);
     expect(evidenceDay("下周")).toBe("下周");

@@ -61,11 +61,11 @@ describe("就此提问 on the reading page (c3-ask)", () => {
     expect(within(block).getAllByRole("button").map((button) => button.textContent)).toEqual([...QUESTIONS, "自己提问…"]);
     const names = within(rail).getAllByRole("region").map((region) => region.getAttribute("aria-label")
       ?? (region.getAttribute("aria-labelledby") && document.getElementById(region.getAttribute("aria-labelledby")!)!.textContent));
-    expect(names).toEqual(["文章操作", "就此提问", "推荐理由", "专科"]);
+    expect(names).toEqual(["文章操作", "就此提问", "推荐理由", "出处", "专科"]);
     expect(screen.getAllByRole("region", { name: "就此提问" })).toHaveLength(1);
   });
 
-  it("is at the end of the article on a narrow screen, after where it came from and before the notes", async () => {
+  it("is at the end of the article on a narrow screen, before the notes (出处 among them)", async () => {
     show();
     const article = await screen.findByRole("article", { name: "正文" });
     const block = within(article).getByRole("region", { name: "就此提问" });

@@ -1,16 +1,16 @@
-import { formatClock, formatDay } from "@/lib/format";
+import { clock, feedDay } from "./frontierText";
 
 /**
  * A moment as an evidence page prints it where the clock matters (a folded record): the day the app's way — 「10月1日」 within this
- * year, the full date before it — and the time. A value that is not a date is shown as written.
+ * year, the full date before it — and the time, in Beijing time like the rest of the feed. A value that is not a date is shown as written.
  */
 export const evidenceDate = (value: string) => {
-  const day = formatDay(value);
-  return day ? `${day} ${formatClock(value)}` : value;
+  const day = feedDay(value);
+  return day ? `${day} ${clock(value)}` : value;
 };
 
 /**
  * The same moment as a day alone: what a reader's line says (「更新于 10月7日」). It was Intl's zh-CN default, 「2026/10/7」, which no other
- * page writes (spec §14.3; review L-7); the clock is for the folded record. A value that is not a date is shown as written.
+ * page writes (spec §14.3; review L-7); the clock is for the folded record. Beijing time. A value that is not a date is shown as written.
  */
-export const evidenceDay = (value: string) => formatDay(value) || value;
+export const evidenceDay = (value: string) => feedDay(value) || value;

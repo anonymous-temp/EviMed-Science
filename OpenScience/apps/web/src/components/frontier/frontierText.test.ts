@@ -1,52 +1,125 @@
 import { describe, expect, it } from "vitest";
 import { frontierItem } from "./__fixtures__/frontierItems";
-import {
-  cardEyebrow,
-  dailyMeta,
-  dayHeading,
-  evidenceTag,
-  groupByDay,
-  hotBoardStamp,
-  hotRowMeta,
-  institutionsLine,
-  itemMarkdown,
-  primaryHeld,
-  rankChangeLabel,
-  rankLabel,
-  rankTone,
-  askDraft,
-  itemLine,
-  researchDraft,
-  topicAskDraft,
-  metaTime,
-  originalLinkLabel,
-  sameAddress,
-  scoreBand,
-  scoreBreakdown,
-  shortUrl,
-  sparkline,
-  splitUrls,
-  stamp,
-  trimUrl,
-} from "./frontierText";
+import { FEED_TIME_ZONE, ago, cardEyebrow, clock, dailyMeta, dateClock, dayHeading, evidenceTag, feedDay, feedDayKey, groupByDay, hotBoardStamp, hotRowMeta, institutionsLine, itemMarkdown, primaryHeld, rankChangeLabel, rankLabel, rankTone, askDraft, itemClock, itemLine, researchDraft, topicAskDraft, metaTime, originalLinkLabel, sameAddress, scoreBand, scoreBreakdown, shortDate, shortUrl, sparkline, splitUrls, stamp, statedDayKey, trimUrl, isStatedDayEnd, sinceText } from "./frontierText";
 import type { FrontierItem } from "@/lib/frontierClient";
 
-// Local noon, so "today" and "yesterday" do not depend on the test machine's zone.
-const NOW = new Date(2026, 8, 22, 12, 0, 0).getTime();
-const at = (day: number, hour: number, minute = 0) => new Date(2026, 8, day, hour, minute, 0).toISOString();
+// The feed reads Beijing time whatever the machine's zone is (UTC+8, no daylight saving): `at` is the instant of a Beijing wall clock,
+// so a test says what a reader in Beijing sees and holds in every zone it is run in (CI is UTC; run it under TZ=America/Los_Angeles too).
+const at = (day: number, hour: number, minute = 0) => new Date(Date.UTC(2026, 8, day, hour - 8, minute, 0)).toISOString();
+const NOW = Date.parse(at(22, 12));
 
 describe("when a card says it came", () => {
   it("is, in a list not cut into days, the clock today and the date before — never 「昨天」 in a narrow column", () => {
     expect(metaTime(frontierItem({ timelineAt: at(22, 8, 30) }), NOW)).toBe("08:30");
     expect(metaTime(frontierItem({ timelineAt: at(21, 8, 30) }), NOW)).toBe("9月21日");
     expect(metaTime(frontierItem({ timelineAt: at(18, 8, 30) }), NOW)).toBe("9月18日");
-    expect(metaTime(frontierItem({ timelineAt: new Date(2025, 11, 30, 9).toISOString() }), NOW)).toBe("2025年12月30日");
+    expect(metaTime(frontierItem({ timelineAt: new Date(Date.UTC(2025, 11, 30, 1)).toISOString() }), NOW)).toBe("2025年12月30日");
   });
 
   it("says when something was last read: the clock today, the date before", () => {
     expect(stamp(at(22, 7, 40), NOW)).toBe("07:40");
     expect(stamp(at(20, 7, 40), NOW)).toBe("9月20日 07:40");
     expect(stamp(null, NOW)).toBe("");
+  });
+});
+
+describe("Beijing time, whatever the browser's zone is", () => {
+  it("reads the clock, the date and the day of a moment in the feed's zone", () => {
+    expect(FEED_TIME_ZONE).toBe("Asia/Shanghai");
+    // The production case: posted 11:00Z, 19:00 in Beijing.
+    expect(clock("2026-10-25T11:00:00Z")).toBe("19:00");
+    expect(dateClock("2026-10-25T11:00:00Z")).toBe("10月25日 19:00");
+    expect(feedDayKey("2026-10-25T11:00:00Z")).toBe("2026-10-25");
+    // 16:30Z is half past midnight, the next Beijing day.
+    expect(clock("2026-10-25T16:30:00Z")).toBe("00:30");
+    expect(dateClock("2026-10-25T16:30:00Z")).toBe("10月26日 00:30");
+    expect(feedDayKey("2026-10-25T16:30:00Z")).toBe("2026-10-26");
+    // The day turns at 16:00Z, and midnight reads 00:00, never 24:00.
+    expect(clock("2026-10-25T15:59:59Z")).toBe("23:59");
+    expect(feedDayKey("2026-10-25T15:59:59Z")).toBe("2026-10-25");
+    expect(clock("2026-10-25T16:00:00Z")).toBe("00:00");
+    expect(feedDayKey("2026-10-25T16:00:00Z")).toBe("2026-10-26");
+    // A year end crosses in Beijing first.
+    expect(dateClock("2026-12-31T17:00:00Z")).toBe("1月1日 01:00");
+    expect(feedDayKey(Date.parse("2026-12-31T17:00:00Z"))).toBe("2027-01-01");
+  });
+
+  it("says nothing for what is not a time", () => {
+    for (const bad of [null, "", "soon", "2026-13-45T00:00:00Z"]) {
+      expect(clock(bad)).toBe("");
+      expect(dateClock(bad)).toBe("");
+      expect(feedDayKey(bad)).toBeNull();
+      expect(statedDayKey(bad)).toBeNull();
+      expect(feedDay(bad)).toBe("");
+    }
+  });
+
+  it("takes today, and the day a stamp is under, from the Beijing day", () => {
+    const justAfterMidnight = Date.parse("2026-10-25T17:00:00Z"); // 10月26日 01:00 in Beijing
+    expect(stamp("2026-10-25T16:30:00Z", justAfterMidnight)).toBe("00:30");
+    expect(stamp("2026-10-25T11:00:00Z", justAfterMidnight)).toBe("10月25日 19:00");
+    const [today] = groupByDay([frontierItem({ id: "a", timelineAt: "2026-10-25T16:30:00Z" })]);
+    expect(dayHeading(today, false, justAfterMidnight)).toBe("今天 · 10月26日 周一");
+    expect(dayHeading(today, false, Date.parse("2026-10-25T15:00:00Z"))).toBe("10月26日 周一");
+  });
+
+  it("cuts the list into Beijing days: 11:00Z and 16:30Z of one UTC day are two", () => {
+    const days = groupByDay([
+      frontierItem({ id: "late", timelineAt: "2026-10-25T16:30:00Z" }),
+      frontierItem({ id: "evening", timelineAt: "2026-10-25T11:00:00Z" }),
+      frontierItem({ id: "early", timelineAt: "2026-10-24T16:00:00Z" }),
+    ]);
+    expect(days.map((day) => [day.key, day.label, day.items.map((item) => item.id).join()])).toEqual([
+      ["2026-10-26", "10月26日 周一", "late"],
+      ["2026-10-25", "10月25日 周日", "evening,early"],
+    ]);
+  });
+
+  it("takes the weekday from the key itself", () => {
+    expect(shortDate("2026-10-25")).toBe("10月25日 周日");
+    expect(shortDate("2026-10-26")).toBe("10月26日 周一");
+    expect(shortDate("2026-01-01")).toBe("1月1日 周四");
+    expect(shortDate("2026-02-30")).toBe("2026-02-30");
+    expect(shortDate("tomorrow")).toBe("tomorrow");
+  });
+
+  it("names the day a source stated by the date it is stored at", () => {
+    expect(statedDayKey("2026-10-25T00:00:00Z")).toBe("2026-10-25");
+    expect(statedDayKey("2026-10-25T00:00:00.000+00:00")).toBe("2026-10-25");
+  });
+
+  it("dates a day the way a list does: the month within this year, the full date before it", () => {
+    const now = Date.parse("2026-10-26T04:00:00Z");
+    expect(feedDay("2026-10-25T16:30:00Z", now)).toBe("10月26日");
+    expect(feedDay("2025-12-31T17:00:00Z", now)).toBe("1月1日");
+    expect(feedDay("2025-09-22T12:00:00Z", now)).toBe("2025-09-22");
+    // The year turns in Beijing, not in the reader's zone.
+    expect(feedDay("2026-12-31T17:00:00Z", Date.parse("2026-12-31T17:30:00Z"))).toBe("1月1日");
+  });
+
+  it("gives how long ago for a day, and the Beijing date past it", () => {
+    const now = Date.parse("2026-10-26T04:00:00Z");
+    expect(ago("2026-10-26T02:00:00Z", now)).toBe("2 小时前");
+    expect(ago("2026-10-25T16:30:00Z", now)).toBe("11 小时前");
+    expect(ago("2026-10-24T16:30:00Z", now)).toBe("10月25日");
+    expect(ago(null, now)).toBe("");
+    expect(ago("soon", now)).toBe("");
+  });
+});
+
+describe("an item whose source gave a day and no hour", () => {
+  const day = (over: Partial<FrontierItem> = {}) => frontierItem({ datePrecision: "day", timelineAt: at(22, 9, 15), ...over });
+
+  it("has no clock in a day group, and says 「今天」 today and the date before in a list that is not cut into days", () => {
+    expect(itemClock(day())).toBe("");
+    expect(metaTime(day(), NOW)).toBe("今天");
+    expect(metaTime(day({ timelineAt: at(21, 23, 59) }), NOW)).toBe("9月21日");
+  });
+
+  it("keeps the clock of an instant, and of an item we only dated ourselves", () => {
+    expect(itemClock(frontierItem({ datePrecision: "instant", timelineAt: at(22, 9, 15) }))).toBe("09:15");
+    expect(itemClock(frontierItem({ datePrecision: "inferred", timelineAt: at(22, 9, 15) }))).toBe("09:15");
+    expect(metaTime(frontierItem({ datePrecision: "instant", timelineAt: at(22, 9, 15) }), NOW)).toBe("09:15");
   });
 });
 
@@ -299,5 +372,30 @@ describe("an address in a text", () => {
   it("is the item's own address whatever its scheme, its www., its trailing slash or its fragment", () => {
     expect(sameAddress("http://www.fda.gov/a/", "https://fda.gov/a#top")).toBe(true);
     expect(sameAddress("https://fda.gov/a", "https://fda.gov/b")).toBe(false);
+  });
+});
+
+describe("a moment that stands for a day and no hour (c4 review: the made-up 23:59)", () => {
+  // frontierTimelineAt places a day-precision item that reached us after its day at 23:59:59.999 Beijing time: 15:59:59.999Z.
+  const dayEnd = "2026-10-25T15:59:59.999Z";
+  const now = Date.parse("2026-10-26T03:00:00.000Z"); // 11:00 on the 26th in Beijing
+  it("is recognised by its exact last millisecond in Beijing time, and nothing else is", () => {
+    expect(isStatedDayEnd(dayEnd)).toBe(true);
+    expect(isStatedDayEnd("2026-10-25T15:59:59.000Z")).toBe(false);
+    expect(isStatedDayEnd("2026-10-25T15:58:59.999Z")).toBe(false);
+    expect(isStatedDayEnd("2026-10-25T23:59:59.999Z")).toBe(false);
+    expect(isStatedDayEnd(null)).toBe(false);
+    expect(isStatedDayEnd("not a time")).toBe(false);
+  });
+  it("has no clock, and its date and how long ago are said in days", () => {
+    expect(clock(dayEnd)).toBe("");
+    expect(dateClock(dayEnd)).toBe("10月25日");
+    expect(ago(dayEnd, now)).toBe("昨天");
+    expect(sinceText(dayEnd, now)).toBe("昨天");
+    expect(ago("2026-10-22T15:59:59.999Z", now)).toBe("4 天前");
+    expect(sinceText("2026-08-01T15:59:59.999Z", now)).toBe("");
+    // An ordinary moment keeps its clock and its hours.
+    expect(clock("2026-10-25T11:00:00.000Z")).toBe("19:00");
+    expect(sinceText("2026-10-25T23:00:00.000Z", now)).toBe("4 小时前");
   });
 });
