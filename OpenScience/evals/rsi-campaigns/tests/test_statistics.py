@@ -40,7 +40,7 @@ class DecisionTests(unittest.TestCase):
         self.assertNotEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'qualified')
 
     def test_targeted_repair_large_effect_without_savings(self):
-        reg, rows, receipt = fixture('targeted-repair')
+        reg, rows, receipt = fixture('targeted-repair', n=80)
         for row in rows:
             if row['arm'] == 'candidate':
                 row['quality'] += .15 + (int(row['group']) % 5) * .002
@@ -74,6 +74,21 @@ class DecisionTests(unittest.TestCase):
             if mutation == 'budget': receipt['expired_budget'] = True
             with self.subTest(mutation=mutation):
                 self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
+
+    def test_nonfinite_and_missing_cost_are_unknown(self):
+        for value in (None, float('nan'), float('inf'), -1):
+            reg, rows, receipt = fixture()
+            rows[0]['cost'] = value
+            result = MODULE.evaluate(reg, rows, receipt)
+            self.assertEqual(result['decision'], 'inconclusive')
+            __import__('json').dumps(result, allow_nan=False)
+
+    def test_family_repeat_changes_require_reregistration(self):
+        reg, rows, receipt = fixture()
+        reg['families']['office']['repeats'] = 10
+        self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
+        receipt['registration_digest'] = MODULE.registration_digest(reg)
+        self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
 
     def test_paired_t_zero_variance_requires_explicit_finite_mode(self):
         reg, rows, receipt = fixture()
