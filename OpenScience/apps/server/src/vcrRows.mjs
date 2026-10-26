@@ -48,8 +48,14 @@ const COLUMN_WORDS = Object.freeze(/** @type {Record<string, { label: string, va
   status: { label: "结局事件", values: { 1: "发生事件", 0: "删失" } },
   entry: { label: "入组时间" },
   y: { label: "结局" },
+  prediction: { label: "模型预测值" },
+  score: { label: "评分" },
+  reason: { label: "未预测原因" },
   x: { label: "基线协变量" },
   visit: { label: "访视" },
+  observationCount: { label: "观测记录数" },
+  lastObservationTime: { label: "末次观测时间" },
+  lastObservedValue: { label: "末次观测值" },
 }));
 
 /** @param {unknown} value @returns {value is Record<string, any>} */
@@ -171,6 +177,53 @@ export async function loadRowTable(file, { maxCells = VCR_ROWS_CACHE_CELLS } = {
 /** Forget every held table: a test's, and a restore's. */
 export function clearRowTableCache() { cache.clear(); }
 
+/** A longitudinal row is a visit, not a person. The list presents one explicit summary per identity.
+ * @param {VcrRowTable} table @returns {VcrRowTable}
+ */
+export function patientSummaryTable(table) {
+  if (!table.header.includes("visit") || !table.header.includes(VCR_ROWS_ID_COLUMN)) return table;
+  const idAt = table.header.indexOf(VCR_ROWS_ID_COLUMN);
+  const timeAt = table.header.indexOf("time");
+  const visitAt = table.header.indexOf("visit");
+  const yAt = table.header.indexOf("y");
+  const at = timeAt >= 0 ? timeAt : visitAt;
+  const kept = table.header.map((key, index) => ({ key, index })).filter(({ key }) => !["visit", "time", "y"].includes(key));
+  /** @type {Map<string, { first: string[], last: string[], count: number }>} */
+  const people = new Map();
+  for (const row of table.rows) {
+    const id = row[idAt];
+    if (!id) continue;
+    const held = people.get(id);
+    if (!held) people.set(id, { first: row, last: row, count: 1 });
+    else {
+      held.count += 1;
+      if (Number(row[at]) < Number(held.first[at])) held.first = row;
+      if (Number(row[at]) > Number(held.last[at])) held.last = row;
+    }
+  }
+  const header = [...kept.map(column => column.key), "observationCount", "lastObservationTime", "lastObservedValue"];
+  const rows = [...people.values()].map(person => [...kept.map(column => person.first[column.index]), String(person.count), person.last[at] ?? "", yAt >= 0 ? person.last[yAt] : ""]);
+  return { header, rows, columns: columnsOf(header, rows), complete: table.complete };
+}
+
+/** Select all of one person's visits without truncating to the row cache's prefix.
+ * @param {string} file @param {string} patientId @param {{prediction?:boolean}} [options] @returns {Promise<Record<string, any> | null>}
+ */
+export async function patientRecordOfFile(file, patientId, options = {}) {
+  /** @type {string[]} */ let header = [];
+  /** @type {string[][]} */ const rows = [];
+  let index = -1;
+  for await (const row of readCsvRows(file)) {
+    if (!header.length) { header = row.map(name => name.trim()); index = header.indexOf(VCR_ROWS_ID_COLUMN); if (index < 0) return null; continue; }
+    if (row[index] === patientId) {
+      if (rows.length >= VCR_ROWS_PAGE_MAX) throw Object.assign(new Error("A patient record exceeds the bounded observation window."), { code: "vcr_rows_too_large" });
+      rows.push(row);
+    }
+  }
+  if (!header.includes("visit") && !options.prediction) throw Object.assign(new Error("The full comparison table is too large."), { code: "vcr_rows_too_large" });
+  return patientRecord({ header, rows, columns: columnsOf(header, rows), complete: true }, patientId, options);
+}
+
 // --- a page ---------------------------------------------------------------------------------------------------------------
 
 /**
@@ -240,6 +293,7 @@ export function pageColumns(table) {
  *   | { ok: false, issue: VcrRowsQueryIssue }}
  */
 export function pageOfTable(table, query) {
+  table = patientSummaryTable(table);
   const shown = table.columns.filter((column) => !LABEL_COLUMNS.has(column.key));
   const byKey = new Map(table.columns.map((column) => [column.key, column]));
   const limit = Math.max(1, Math.min(VCR_ROWS_PAGE_MAX, Math.trunc(Number(query.limit ?? VCR_ROWS_PAGE_DEFAULT)) || VCR_ROWS_PAGE_DEFAULT));
@@ -326,6 +380,7 @@ export async function pageOfFile(file, query) {
   for await (const row of readCsvRows(file)) {
     if (!header.length) {
       header = row.map((name) => name.trim());
+      if (header.includes("visit") && header.includes(VCR_ROWS_ID_COLUMN)) return { ok: false, issue: { error: "too_large", column: VCR_ROWS_ID_COLUMN } };
       // The kind of a column of a table too long to hold: read from the first rows, which is what its page can say.
       columns = header.map((key, index) => ({ key, index, kind: "text", missing: 0 }));
       continue;
@@ -397,14 +452,18 @@ function survivalAt(steps, time) {
  * A patient's own record: who they are at baseline, what happened to them, where they stand among their arm, and — only when the
  * table holds an outcome for each assumption — both trajectories.
  *
- * @param {VcrRowTable} table @param {string} patientId
+ * @param {VcrRowTable} table @param {string} patientId @param {{prediction?:boolean}} [options]
  * @returns {Record<string, any> | null} null when the table holds no such patient
  */
-export function patientRecord(table, patientId) {
+export function patientRecord(table, patientId, options = {}) {
   const idColumn = table.columns.find((column) => column.key === VCR_ROWS_ID_COLUMN);
   if (!idColumn) return null;
-  const row = table.rows.find((candidate) => candidate[idColumn.index] === patientId);
-  if (!row) return null;
+  const observations = table.rows.filter(candidate => candidate[idColumn.index] === patientId);
+  if (!observations.length) return null;
+  const visit = table.columns.find(column => column.key === "visit");
+  const observationTimeColumn = table.columns.find(column => column.key === "time") ?? visit;
+  if (visit && observationTimeColumn) observations.sort((a, b) => Number(a[observationTimeColumn.index]) - Number(b[observationTimeColumn.index]));
+  const row = observations[0];
   const word = (/** @type {string} */ key, /** @type {unknown} */ value) => {
     const map = COLUMN_WORDS[key]?.values;
     return map && value !== null && value !== undefined ? map[String(value)] ?? null : null;
@@ -420,7 +479,8 @@ export function patientRecord(table, patientId) {
     const value = cellOf(column, row);
     const text = word(column.key, value);
     const entry = { key: column.key, label: COLUMN_WORDS[column.key]?.label ?? null, value, ...(text ? { text } : {}) };
-    (OUTCOME_COLUMNS.has(column.key) ? outcome : baseline).push(entry);
+    if (visit && ["visit", "time", "y", "y0", "y1", "status"].includes(column.key)) continue;
+    (OUTCOME_COLUMNS.has(column.key) || (options.prediction && ["prediction", "score", "reason"].includes(column.key)) ? outcome : baseline).push(entry);
   }
   const get = (/** @type {string} */ key) => {
     const column = table.columns.find((candidate) => candidate.key === key);
@@ -453,7 +513,7 @@ export function patientRecord(table, patientId) {
         armMean: values.length ? values.reduce((sum, entry) => sum + entry, 0) / values.length : null, armSize: values.length };
   }
   // Both assumptions' trajectories, only where the engine left both outcomes in the table: `y0`/`y1`, `time0`/`time1`.
-  /** @type {Array<{ arm: string, label: string, values: Record<string, string | number | null> }> | null} */
+  /** @type {Array<{ arm: string, label: string, values: Record<string, string | number | null>, series?: Array<Record<string, string | number | null>> }> | null} */
   let trajectories = null;
   const pairs = ["y", "time", "status"].map((base) => {
     const names = [[`${base}0`, `${base}1`], [`${base}_0`, `${base}_1`]].find(([zero, one]) => table.columns.some((c) => c.key === zero) && table.columns.some((c) => c.key === one));
@@ -462,6 +522,14 @@ export function patientRecord(table, patientId) {
   if (pairs.length) {
     trajectories = ["0", "1"].map((which) => ({
       arm: which, label: COLUMN_WORDS.arm.values?.[which] ?? which,
+      ...(visit ? { series: observations.map(observation => ({
+        visit: cellOf(visit, observation), time: observationTimeColumn ? cellOf(observationTimeColumn, observation) : null,
+        ...Object.fromEntries(pairs.map(pair => {
+          const selected = /** @type {NonNullable<typeof pair>} */ (pair);
+          const column = table.columns.find(candidate => candidate.key === (which === "0" ? selected.zero : selected.one));
+          return [selected.base, column ? cellOf(column, observation) : null];
+        })),
+      })) } : {}),
       values: Object.fromEntries(pairs.map((pair) => [/** @type {NonNullable<typeof pair>} */ (pair).base, get(which === "0" ? /** @type {NonNullable<typeof pair>} */ (pair).zero : /** @type {NonNullable<typeof pair>} */ (pair).one)])),
     }));
   }
@@ -469,6 +537,7 @@ export function patientRecord(table, patientId) {
     id: patientId,
     arm: arm === null ? null : { value: arm, label: COLUMN_WORDS.arm.values?.[arm] ?? arm },
     baseline, outcome, position, trajectories,
+    ...(visit ? { observations: observations.map(observation => Object.fromEntries(table.columns.filter(column => !LABEL_COLUMNS.has(column.key) && column.key !== VCR_ROWS_ID_COLUMN).map(column => [column.key, cellOf(column, observation)]))), observationCount: observations.length } : {}),
   };
 }
 

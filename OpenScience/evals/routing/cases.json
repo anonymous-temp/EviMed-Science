@@ -465,6 +465,48 @@
       "message": "/meta-analysis 把这些试验合并成一个效应量",
       "expect": "meta-analysis",
       "note": "a leading /<capability-id> routes by name; the model is not asked"
+    },
+    {
+      "id": "vcr-native-matching",
+      "source": "VCR reset 2026-10-25",
+      "message": "这是患者病历和试验方案，帮我看看哪些入排标准符合，哪些资料还缺，逐条标出依据。",
+      "expect": "none"
+    },
+    {
+      "id": "vcr-native-population",
+      "source": "VCR reset 2026-10-25",
+      "message": "先按这篇文献的基线特征生成一组虚拟队列，再让我看其中一个虚拟患者的轨迹，把假设和真实观察分清楚。",
+      "expect": "none"
+    },
+    {
+      "id": "vcr-native-comparator",
+      "source": "VCR reset 2026-10-25",
+      "message": "这份试验组数据和院外对照能做合成对照吗？先检查起点、缺失值和人群差异，再决定能不能比较疗效。",
+      "expect": "none"
+    },
+    {
+      "id": "vcr-native-design",
+      "source": "VCR reset 2026-10-25",
+      "message": "用刚才保存的队列和对照模型比较这两个虚拟试验方案，看看把样本量改小以后把握度和试验时长怎么变。",
+      "expect": "none"
+    },
+    {
+      "id": "vcr-short-patient",
+      "source": "PR 17 Chinese conversation routing review",
+      "message": "帮这个病人找试验",
+      "expect": "none"
+    },
+    {
+      "id": "vcr-matching-followup",
+      "source": "PR 17 Chinese conversation routing review",
+      "message": "沿用刚才那份病历，补上肝功能结果之后重新看看哪些试验可能适合。",
+      "expect": "none"
+    },
+    {
+      "id": "vcr-explicit-specialist",
+      "source": "PR 17 Chinese conversation routing review",
+      "message": "/vcr-analysis 用当前研究的数据分析这个方案",
+      "expect": "vcr-analysis"
     }
   ]
 }

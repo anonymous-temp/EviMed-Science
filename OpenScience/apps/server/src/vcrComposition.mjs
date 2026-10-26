@@ -27,10 +27,7 @@ import { clinicalDocumentWindow } from './vcrDocumentWindow.mjs';
  *   protocol's criteria and the instant into a `match_criteria` job; a local
  *   executor loads the facts and the documents **server-side by study** (never
  *   from the job's scenario, which a run could write); and when the job has
- *   finished a hook persists each subject's assessment, turns the candidates
- *   into referrals in `candidate` (the control plane, never the model) and tells
- *   the coordinators. The contact stop is not in this flow at all
- *   (`vcrContact.mjs`).
+ *   finished a hook persists each subject's scientific assessment. Matching has no recruitment side effects.
  * - **A package that is off is absent, not broken.** With no data-plane
  *   directory configured, `dataPlane` is null and every tier above T0 answers
  *   「数据平面未接入」 by name (the service's own `unavailable` shape); with no
@@ -86,10 +83,10 @@ import { VcrEvidenceStore } from "./vcrEvidenceStore.mjs";
 import { VcrJobs } from "./vcrJobs.mjs";
 import { VcrKnowledge } from "./vcrKnowledge.mjs";
 import { VcrKnowledgeStore } from "./vcrKnowledgeStore.mjs";
-import { createVcrContact } from "./vcrContact.mjs";
 import { VcrMatchStore } from "./vcrMatchStore.mjs";
 import { VcrCandidateTrialStore } from "./vcrCandidateTrialStore.mjs";
 import { createPatientTrials } from "./vcrPatientTrials.mjs";
+import { matchingAssessmentEvidence } from "./vcrMatchingEvidence.mjs";
 import { VcrMembers } from "./vcrMembers.mjs";
 import { createVcrModelPlans } from "./vcrModelDocuments.mjs";
 import { createVcrSeal } from "./vcrSeal.mjs";
@@ -101,10 +98,8 @@ import { createVcrRecords } from "./vcrRecords.mjs";
 import { VcrStore } from "./vcrStore.mjs";
 import { createChictrAdapter, createTrialRegistryClient } from "./trialRegistryClient.mjs";
 import { createVcrImporter } from "./vcrImport.mjs";
-import {
-  VCR_ACCRUAL_MEASURES, accrualBacktestSlices, accrualForecastScenario, backtestAccrualCoverage, candidateReferrals,
-  parseProbabilityByMonth, readAccrualForecast, referralFunnel, screenFailuresByCriterion, siteProfileStatus,
-} from "./vcrRecruit.mjs";
+import { parseProbabilityByMonth, readAccrualForecast } from "./vcrAccrual.mjs";
+import { matchingCandidates } from "./vcrMatchingCandidates.mjs";
 import {
   VCR_MATCHING_VOCABULARY_VERSION, matchingInputDigest, assessSubject, eligibilityCounts, frozenAsOf, languageKeysOf, requiresLanguageJudgment,
 } from "./vcrMatching.mjs";
@@ -120,6 +115,11 @@ import { MATCHING_SNAPSHOT_PREFIX, freezeMatchingInputs, hydrateMatchingInputs, 
  */
 export function vcrDataPlaneSeam({ dataPlane, access }) {
   return {
+    /** @param {any} study @param {{id:string}} user */
+    async taskInputs(study, user) {
+      await access.require({ studyId: study.id, actor: user.id, ability: "read", purpose: "page" });
+      return dataPlane.taskInputAvailability(study, user);
+    },
     /** @param {any} study @param {{ id: string }} user */
     async tab(study, user) {
       const decision = await access.judge({
@@ -427,13 +427,36 @@ export function vcrDocumentsSeam({ dataPlane }) {
      * or from a document that now has a reviewed projection (its own text is what a run reads), is not.
      * @param {any} study @param {any[]} entries @param {string} subjectKey */
     async runtimeEvidence(study, entries, subjectKey) {
+      return this.projectEvidence(study, entries, subjectKey, null);
+    },
+    /** @param {any} study @param {any[]} entries @param {string} subjectKey @param {{id:string}} viewer */
+    async viewEvidence(study, entries, subjectKey, viewer) {
+      return this.projectEvidence(study, entries, subjectKey, viewer);
+    },
+    /** Each selected cell is re-read from its immutable snapshot under the current viewer's grant.
+     * @param {any} study @param {any[]} entries @param {string} subjectKey @param {{id:string}|null} viewer */
+    async projectEvidence(study, entries, subjectKey, viewer) {
       const decisions = new Map();
       const result = [];
       for (const entry of entries) {
         const source = entry.source ?? entry.locator ?? entry;
+        if (source.snapshotId && source.field && dataPlane?.subjectTableEvidenceBatch) {
+          const key = `snapshot:${source.snapshotId}`;
+          if (!decisions.has(key)) {
+            const fields = [...new Set(entries.map(item => item.source ?? item.locator ?? item)
+              .filter(item => item.snapshotId === source.snapshotId && item.field).map(item => String(item.field)))];
+            decisions.set(key, await dataPlane.subjectTableEvidenceBatch({ studyId: study.id, snapshotId: source.snapshotId,
+              fields, subjectKey, principal: viewer?.id ?? study.userId, purpose: VCR_JOB_PURPOSE,
+              external: !viewer, cloudContext: viewer ? null : study.cloudContext }).catch(() => ({})));
+          }
+          const cell = decisions.get(key)?.[source.field];
+          if (cell && (!source.sourceHash || source.sourceHash === cell.locator.sourceHash)) result.push({ ...entry, ...cell, quoteKind: "snapshot_cell" });
+          continue;
+        }
         const id = String(source.documentId ?? '');
         if (!id) continue;
-        if (!decisions.has(id)) decisions.set(id, await this.runtimeRead(study, { subjectKey, documentId: id }).catch(() => null));
+        if (!decisions.has(id)) decisions.set(id, await (viewer ? this.read({ ...study, userId: viewer.id }, { subjectKey, documentId: id })
+          : this.runtimeRead(study, { subjectKey, documentId: id })).catch(() => null));
         const document = decisions.get(id);
         const quote = source.quote ?? entry.quote;
         if (document?.id === id && typeof quote === 'string' && document.text.slice(source.start, source.end) === quote) result.push(entry);
@@ -536,14 +559,14 @@ export function clinicalEnrichmentOn(studyIds, studyId) {
 /**
  * The matching seam: the page's tab, the runtime's read, and the flow's own
  * steps — freezing a job, persisting its assessments, re-evaluating what has
- * come due, and the accrual forecast built from the referral ledger. Built from
+ * come due. Built from
  * the store and the evaluator's pure functions (a verdict is not a service), so
  * the object the service and the gateway read through is assembled here.
  *
  * @param {{ matchStore: VcrMatchStore, store: VcrStore, jobs?: VcrJobs | null,
- *   getNotifier?: (() => any) | null, report?: (code: string) => void, now?: () => Date, dataPlaneDir?: string, subjectTable?:any, documents?:any, clinicalEnabled?:(study:any)=>boolean, clinicalContext?:(study:any,criteria:any[])=>Promise<any> }} parts
+ *   report?: (code: string) => void, now?: () => Date, dataPlaneDir?: string, subjectTable?:any, documents?:any, clinicalEnabled?:(study:any)=>boolean, clinicalContext?:(study:any,criteria:any[])=>Promise<any> }} parts
  */
-export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTable = null, jobs = null, getNotifier = null, report = () => {}, now = () => new Date(), dataPlaneDir = "", clinicalEnabled = () => true, clinicalContext = async () => null }) {
+export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTable = null, jobs = null, report = () => {}, now = () => new Date(), dataPlaneDir = "", clinicalEnabled = () => true, clinicalContext = async () => null }) {
   /** @param {any} study */
   const languageKeys = async (study, /** @type {string|null} */ protocolVersionId = null) => {
     const criteria = await matchStore.listCriteria({ studyId: study.id, protocolVersionId }).catch(() => []);
@@ -556,13 +579,9 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
     /** @param {any} study */
     async tab(study) {
       const protocol = await store.latestProtocolVersion(study.id).catch(() => null);
-      const [criteria, assessments, referrals, sites, progress, funnelRows, tallies, criterionFunnel] = await Promise.all([
+      const [criteria, assessments, tallies, criterionFunnel] = await Promise.all([
         protocol ? matchStore.listCriteria({ studyId: study.id, protocolVersionId: protocol.id }).catch(() => []) : [],
         matchStore.listAssessments({ studyId: study.id, limit: 200, latestOnly: true }).catch(() => []),
-        matchStore.listReferrals({ studyId: study.id }).catch(() => []),
-        matchStore.listSites(study.id).catch(() => []),
-        matchStore.referralProgress(study.id).catch(() => new Map()),
-        matchStore.siteFunnel(study.id).catch(() => []),
         matchStore.assessmentTallies(study.id, protocol?.id ?? null).catch(() => ({})),
         matchStore.criterionFunnelRows(study.id, protocol?.id ?? null).catch(() => []),
       ]);
@@ -576,15 +595,7 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
         })),
         tallies,
         criterionFunnel,
-        candidates: candidateReferrals({ studyId: study.id, assessments }),
-        // The ledger's own rows, ids included: the contact stop is asked of a
-        // referral (`POST …/referrals/:id/contact`), and a candidate that is only
-        // an assessment has no id to ask it of.
-        referrals: referrals.slice(0, 200),
-        funnel: referralFunnel(referrals, progress),
-        screenFailures: screenFailuresByCriterion(referrals, criteria),
-        sites: sites.map((site) => ({ ...site, verification: siteProfileStatus(site, now()) })),
-        siteFunnel: funnelRows,
+        candidates: matchingCandidates({ studyId: study.id, assessments }),
       };
     },
 
@@ -603,6 +614,15 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
      * @param {any} study @param {Record<string, any>} filter
      */
     async runtimeRead(study, filter) {
+      if(filter.kind==='contract') return {
+        factContract:clinicalEnabled(study) ? CLINICAL_FACT_CONTRACT : null,
+        note:'Examples describe syntax only. Use only criteria and facts supported by the supplied protocol and preserved patient material. Do not guess internal message sequence numbers.',
+        patientContext:{tool:'vcr_write',what:'patient_context',data:{}},
+        protocolWrite:{tool:'vcr_write',what:'protocol',data:{criteria:[{kind:'inclusion',criterionType:'demographic',sourceText:'Exact protocol wording',requirement:{op:'compare',variable:'age',comparator:'between',value:18,highValue:65,unit:'year'}}]}},
+        factWrite:{tool:'vcr_write',what:'fact',items:[{subjectKey:'returned subjectKey',documentId:'returned documentId',variable:'age',value:45,unit:'year',surface:'45 years',quote:'Exact preserved original quote'}]},
+        evaluate:{tool:'vcr_simulate',action:'start',kind:'match_criteria'},
+        terminologyRead:{what:'matching',filter:{kind:'terminology'}},
+      };
       if (filter.snapshotId) {
         const snapshot = await matchStore.matchingSnapshot(study.id, String(filter.snapshotId));
         const progress = await matchStore.matchingProgress(study.id, String(filter.snapshotId));
@@ -617,15 +637,14 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
       const protocol = filter.protocolVersionId ? (await matchStore.protocols(study.id, String(filter.protocolVersionId)))[0] ?? null
         : await matchStore.latestProtocol(study.id).catch(() => null);
       if (!protocol) {
-        return { protocol: null, criteria: [], subjects: [], note: "还没有入排条件：先在方案步骤里写入排条件。" };
+        return {protocol:null,criteria:[],subjects:[],contractRead:{what:'matching',filter:{kind:'contract'}},note:'No criteria are saved. Read the contract, then structure only the supplied protocol with vcr_write; a separate study-definition workflow is not required.'};
       }
       const criteria = await matchStore.listCriteria({ studyId: study.id, protocolVersionId: protocol.id });
       const subjectKey = filter?.subjectKey ? String(filter.subjectKey) : null;
       const withdrawn = await matchStore.withdrawnSubjects?.(study.id) ?? new Set();
       const view = {
-        factContract: clinicalEnabled(study) ? CLINICAL_FACT_CONTRACT : null,
-        terminology: clinicalEnabled(study) ? await clinicalContext(study,criteria).catch(() => null) : null,
         protocol,
+        contractRead:{what:'matching',filter:{kind:'contract'}},
         criteria: criteria.map((criterion) => ({
           id: criterion.id, ordinal: criterion.ordinal, kind: criterion.kind, criterionType: criterion.criterionType,
           sourceText: criterion.sourceText, requirement: criterion.requirement, applicability: criterion.applicability,
@@ -633,6 +652,7 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
           languageKeys: languageKeysOf(criterion.requirement, criterion.id),
         })),
       };
+      if(filter.kind==='terminology') return {protocol,terminology:clinicalEnabled(study) ? await clinicalContext(study,criteria).catch(()=>null) : null};
       // A subject whose consent was withdrawn is read as that and nothing else: no assessment, no facts, no work to owe.
       if (subjectKey && withdrawn.has(subjectKey)) return { ...view, subjectKey, withdrawn: true, assessment: null, semanticFields: [], facts: [], requests: [] };
       if (subjectKey) {
@@ -644,25 +664,12 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
         const full = assessment ? await matchStore.getAssessment(assessment.id, study.id) : null;
         const answered = Object.keys(judgments.get(subjectKey) ?? {});
         const cloudFacts = documents ? await documents.runtimeEvidence(study, facts, subjectKey) : [];
-        const cloudJudgments = full ? await Promise.all(full.judgments.map(async judgment => ({ ...judgment,
-          evidence: documents ? await documents.runtimeEvidence(study, list(judgment.evidence), subjectKey) : [] }))) : [];
+        const projectedAssessment = await matchingAssessmentEvidence({ documents, study, assessment: full, subjectKey });
         return {
-          ...view, subjectKey,
-          assessment: full ? {
-            summary: full.summary, asOf: full.asOf, protocolVersionId: full.protocolVersionId,
-            // How many of the criteria stand where — counts of criteria for this one subject,
-            // not of people, so they are a plain object and not cells.
-            criteriaCounts: Object.fromEntries(Object.entries(object(full.counts))
-              .filter(([key]) => ["satisfied", "not_satisfied", "unknown", "pending_recheck", "notApplicable"].includes(key))),
-            evidenceGaps: full.evidenceGaps,
-            judgments: cloudJudgments.map((judgment) => ({
-              criterionId: judgment.criterionId, state: judgment.state, applicable: judgment.applicable, decidedBy: judgment.decidedBy,
-              recheckAt: judgment.recheckAt,
-              // The state a person set is a fact about the criterion; who set it, and what they wrote, are not the run's.
-              overrideState: judgment.overrideState,
-              evidence: list(judgment.evidence).map((item) => ({ quote: object(item).quote ?? "", locator: object(item).locator ?? null })),
-            })),
-          } : null,
+          subjectKey,
+          assessment: projectedAssessment && filter.id ? {...projectedAssessment,judgments:projectedAssessment.judgments.filter(row=>row.criterionId===String(filter.id)),judgmentsTotal:projectedAssessment.judgments.length,criterionFound:view.criteria.some(row=>row.id===String(filter.id))} : projectedAssessment,
+          ...view,
+          ...(filter.id ? {criteria:view.criteria.filter(row=>row.id===String(filter.id)),criterionId:String(filter.id)} : {}),
           semanticFields: clinicalSemanticFields(cloudFacts),
           facts: cloudFacts.map((fact) => ({ id: fact.id, variable: fact.variable, value: fact.value, unit: fact.unit, polarity: fact.polarity,
             occurredAt: fact.occurredAt, visibleAt: fact.visibleAt, surface: fact.surface, source: fact.source, clinical: fact.clinical ?? null })),
@@ -781,7 +788,8 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
           const built = await this.matchScenario(study, selection.snapshotId ? single : { ...single, asOf: at, protocolVersionId });
           if (!built.ok) throw new HttpError(409, 'vcr_criteria_missing', built.message);
           const { job } = await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: 'match_criteria',
-            scenario: built.scenario, inputs: built.inputs, detail: { origin: actor, protocolVersionId: built.protocolVersionId },
+            scenario: built.scenario, inputs: built.inputs, runId:study.executionOrigin?.runId ?? null,
+            detail: { origin: actor, protocolVersionId: built.protocolVersionId,...(study.completionOrigin ? {conversationOrigin:study.completionOrigin} : {}) },
             idempotencyKey: `vcr:${study.id}:matching:${built.protocolVersionId}` });
           queued.push({ jobId: job.id, state: job.state, protocolVersionId: built.protocolVersionId });
         } catch (error) { unavailable.push({ protocolVersionId, code: String(/** @type {any} */ (error)?.code ?? 'vcr_matching_unavailable') }); }
@@ -792,8 +800,7 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
     /**
      * The finish hook of the job queue (`jobs.addFinishHook`): a `match_criteria`
      * job that succeeded has its per-subject assessments persisted, its
-     * candidates turned into referrals in `candidate` (the control plane; never
-     * the model) and the coordinators told. Every step isolates its own errors:
+     * scientific assessments preserved without recruitment side effects. Every step isolates its own errors:
      * a subject whose row cannot be written is reported and the rest are kept.
      * @param {Record<string, any>} done what `jobs.finish` answered
      */
@@ -804,11 +811,9 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
       if (!study) return { persisted: 0 };
       const result = object(done.engineResult);
       const diagnostics = object(result.diagnostics);
-      const held = await matchStore.listReferrals({ studyId: study.id, limit: 5000 }).catch(() => []);
-      const live = new Set(held.filter((referral) => referral.state !== "screen_failed").map((referral) => referral.subjectKey));
-
       /** @type {any[]} */
       const saved = [];
+      let failed = 0;
       for (const assessment of list(result.assessments)) {
         try {
           saved.push(await matchStore.saveAssessment({
@@ -820,44 +825,12 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
             },
           }));
         } catch (error) {
+          failed++;
           report(String(/** @type {any} */ (error)?.code ?? "vcr_assessment_save_failed"));
         }
       }
-      let created = 0;
-      let needsEvidence = 0;
-      // A row of the subject table is a person the study already holds data on, not a patient a site might be asked to
-      // contact: its verdicts are saved and counted, and no referral is made for it. A person who also has documents is
-      // the recruitment flow's as before.
-      const tableOnly = new Set(list(result.assessments).filter((assessment) => assessment?.source === "subject_table").map((assessment) => String(assessment.subjectKey)));
-      // The referral ledger is the study's: one live row per person, following the study's CURRENT protocol. A panel
-      // evaluates other versions beside it (D03); those verdicts are recorded and shown like any other and never reach
-      // the ledger, because making a referral again re-points an existing one at the newest assessment while keeping its
-      // state, which would leave a candidate of the current protocol pointing at another protocol's verdict (E-05).
-      const current = await matchStore.latestProtocol(study.id).catch((/** @type {any} */ error) => {
-        report(String(error?.code ?? "vcr_referral_create_failed"));
-        return null;
-      });
-      const ledgerBound = saved.filter((assessment) => current && assessment.protocolVersionId === current.id && !tableOnly.has(String(assessment.subjectKey)));
-      for (const candidate of candidateReferrals({ studyId: study.id, assessments: ledgerBound })) {
-        try {
-          const referral = await matchStore.createReferral({
-            userId: study.userId,
-            referral: { studyId: study.id, subjectKey: candidate.subjectKey, assessmentId: candidate.assessmentId, state: candidate.state,
-              actor: "control-plane", note: "由匹配评估生成" },
-          });
-          if (!live.has(candidate.subjectKey)) {
-            created += 1;
-            if (referral?.state === "needs_evidence") needsEvidence += 1;
-          }
-        } catch (error) {
-          report(String(/** @type {any} */ (error)?.code ?? "vcr_referral_create_failed"));
-        }
-      }
-      const notifier = getNotifier?.();
-      if (created > 0 && notifier?.newCandidates) {
-        await notifier.newCandidates(study, { batchKey: String(job.id), candidates: created, needsEvidence }).catch(() => null);
-      }
-      return { persisted: saved.length, candidates: created };
+      if (failed) throw Object.assign(new Error('Matching assessments remain to be filed.'),{code:'vcr_assessment_save_failed'});
+      return { persisted: saved.length, candidates: matchingCandidates({ studyId: study.id, assessments: saved }).length };
     },
 
     /**
@@ -915,70 +888,6 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
       const assessment = await matchStore.reviewAssessment({ id: String(input.assessmentId), reviewedBy: String(user.id), userId: study.userId, studyId: study.id });
       if (!assessment) throw new HttpError(404, "vcr_assessment_not_found", "这个评估不属于本研究。");
       return assessment;
-    },
-
-    /**
-     * The accrual forecast's scenario, from the referral ledger: each site's
-     * posterior is its prior plus what the ledger says it enrolled and the months
-     * it has been open (`accrualForecastScenario`); the screen failure prior is
-     * the ledger's own screen failures against its enrolments. What the run states
-     * is only the target, the event target and hazard, and the months it wants a
-     * probability for.
-     * @param {any} study @param {Record<string, any>} request
-     */
-    async accrualScenario(study, request) {
-      const target = request?.target;
-      if (!Number.isInteger(target) || target < 1 || target > 10_000_000) return { ok: false, message: "target 是入组目标的例数（1 到 10000000 的整数）。" };
-      if ((request?.eventTarget != null) !== (request?.eventHazard != null)) return { ok: false, message: "eventTarget 和 eventHazard 要一起写。" };
-      if (request?.eventTarget != null && !(Number.isInteger(request.eventTarget) && request.eventTarget >= 1 && request.eventTarget <= target)) {
-        return { ok: false, message: "eventTarget 是 1 到 target 之间的整数。" };
-      }
-      if (request?.eventHazard != null && !(Number.isFinite(request.eventHazard) && request.eventHazard > 0)) return { ok: false, message: "eventHazard 是每例每月的事件风险，大于 0。" };
-      if (request?.byTimes != null && !(Array.isArray(request.byTimes) && request.byTimes.length >= 1 && request.byTimes.length <= 100
-        && request.byTimes.every((/** @type {unknown} */ month, /** @type {number} */ at) => Number.isFinite(month) && Number(month) > 0 && (at === 0 || Number(month) > Number(request.byTimes[at - 1]))))) {
-        return { ok: false, message: "byTimes 是递增的月数列表（最多 100 个）。" };
-      }
-      const [sites, referrals] = await Promise.all([matchStore.listSites(study.id), matchStore.listReferrals({ studyId: study.id, limit: 5000 })]);
-      if (!sites.length) return { ok: false, message: "还没有中心档案：先写入中心（vcr_write what:site），再做入组预测。" };
-      const at = now();
-      /** @type {Record<string, { enrolled: number, monthsOpen: number }>} */
-      const histories = {};
-      for (const site of sites) {
-        const opened = site.activatedOn ? Date.parse(String(site.activatedOn)) : Number.NaN;
-        const monthsOpen = Number.isFinite(opened) && opened < at.getTime() ? (at.getTime() - opened) / (30.4375 * 86_400_000) : 0;
-        if (monthsOpen > 0) histories[site.id] = { enrolled: referrals.filter((referral) => referral.siteId === site.id && referral.state === "enrolled").length, monthsOpen };
-      }
-      const built = accrualForecastScenario({
-        sites, target, asOf: at, eventTarget: request?.eventTarget ?? null, eventHazard: request?.eventHazard ?? null,
-        byTimes: request?.byTimes ?? null, siteHistories: histories,
-        screenFailure: { failed: referrals.filter((referral) => referral.state === "screen_failed").length,
-          passed: referrals.filter((referral) => referral.state === "enrolled").length },
-      });
-      return { ok: true, scenario: built.scenario, notes: built.notes };
-    },
-
-    /**
-     * The registered accrual forecasts scored against the ledger's enrolments:
-     * the measured coverage of their 80% prediction intervals, with its Wilson
-     * bounds and no pass mark (AC-37).
-     * @param {any} study
-     */
-    async accrualBacktest(study) {
-      const [forecasts, timeline] = await Promise.all([store.forecasts(study.id), matchStore.enrollmentTimeline(study.id)]);
-      const slices = accrualBacktestSlices({
-        now: now(), enrollments: timeline,
-        forecasts: forecasts.filter((forecast) => forecast.kind === "accrual").map((forecast) => {
-          const prediction = object(forecast.prediction);
-          const measure = list(prediction.measures).find((entry) => object(entry).name === VCR_ACCRUAL_MEASURES.lastPatientIn);
-          return { asOf: forecast.createdAt, target: prediction.target, interval: object(measure).interval ?? prediction.interval ?? null };
-        }),
-      });
-      return backtestAccrualCoverage({ slices });
-    },
-
-    /** The dated enrolments the forecast is compared with. @param {any} study */
-    async enrollmentTimeline(study) {
-      return matchStore.enrollmentTimeline(study.id);
     },
 
     /**
@@ -1095,7 +1004,6 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
 
   const access = new VcrAccess({ store: dataStore });
   const members = new VcrMembers({ store: dataStore, access });
-  const contact = createVcrContact({ store: matchStore });
   // One judge for the plane and the members' service: a decision the plane makes
   // is the decision the page shows.
   // The two intake conversions (a record document to text, a figure to curve
@@ -1154,6 +1062,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     chictrAdapter: vcrChictrAdapter({ config, fetchImpl: call, connectorCredentials }),
   });
   const evidence = createVcrEvidencePipeline({ store: evidenceStore, registry, jobs });
+  jobs.baselineVerifier = input => evidence.verifyBaselineTable(input);
   const digitizer = createVcrCurveDigitizer({ config, controller: intakeController, counters: intakeCounters, report });
   const curves = createVcrCurveEvidence({ store: evidenceStore, studyStore: store, access, digitizer, resolveProject: async study => {
     if (!projectStore) throw new HttpError(503, 'vcr_curve_provenance_unavailable', 'Source image access is unavailable.');
@@ -1166,14 +1075,12 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   /** @type {any} */
   let composed = null;
   const matching = vcrMatchingSeam({
-    matchStore, store, documents, subjectTable, jobs, report, getNotifier: () => composed?.notifier ?? null, dataPlaneDir: String(config.vcrDataPlaneDir ?? ""),
+    matchStore, store, documents, subjectTable, jobs, report, dataPlaneDir: String(config.vcrDataPlaneDir ?? ""),
     clinicalEnabled: study => clinicalEnrichmentOn(config.vcrClinicalStudyIds, study.id),
     clinicalContext: async (study,criteria) => clinicalTerminologyContext((await knowledge.studyPack(study))?.pack,criteria),
   });
-  // A matching job that has finished has its assessments persisted, its
-  // candidates made referrals and its coordinators told — by the control plane,
-  // after the job's own rows have committed, and never undoing them.
-  jobs.addFinishHook((done) => matching.onJobFinished(done));
+  // Persist scientific assessments after the job commits, without recruitment side effects.
+  jobs.addFinishHook((done) => matching.onJobFinished(done),'matching');
   const dataPlaneSeam = dataPlane ? vcrDataPlaneSeam({ dataPlane, dataStore, access }) : null;
 
   const patientTrials = createPatientTrials({ candidateStore, matchStore, documents, subjectTable, config, report });
@@ -1200,6 +1107,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   // researcher renamed since is left alone, like GEO's — the old name is the study's own, or one nobody gave.
   if (projectStore?.renameProject) {
     store.onStudyNamed = async ({ study, previousName }) => {
+      if (study.scope === "conversation") return;
       const owner = await projectStore.userById(study.userId);
       if (!owner) return;
       const current = (await projectStore.listProjects(owner)).find((/** @type {any} */ project) => project.id === study.projectId);
@@ -1229,7 +1137,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   composed = {
     publications, simulations, frontierEvents, predictions, records,
     store, dataStore, matchStore, erasure, candidateStore, patientTrials, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal,
-    access, members, contact, dataPlane, dataPlaneSeam, documents, engine, engineProbe, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
+    access, members, dataPlane, dataPlaneSeam, documents, engine, engineProbe, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     intake: { counters: intakeCounters, extractor, importer, digitizer },
     // Composed later, beside the other modules' workers (server.mjs).
     notifier: null, orchestrator: null, worker: null, exporter: null, review: null,
@@ -1338,6 +1246,7 @@ export async function vcrMetricsSnapshot(vcr) {
     matchingProducers,
     service: vcr.service?.counters ?? {},
     jobs: vcr.jobs?.status?.() ?? null,
+    completions:vcr.completions?.status?.() ?? null,
     orchestrator: vcr.orchestrator?.status?.() ?? null,
     worker: vcr.worker?.status?.() ?? null,
     engine: vcr.engineStatus ?? null,
@@ -1403,6 +1312,8 @@ export function vcrMetricFamilies(enabled, snapshot) {
     add("jobs_total", "What the job queue did since this process started.", "counter",
       Object.entries(snapshot.jobs.counters).map(([outcome, value]) => ({ labels: { outcome }, value: Number(value) })));
   }
+  if (snapshot.completions) add("completions_total", "Durable calculation result delivery outcomes since process start.", "counter",
+    Object.entries(snapshot.completions).map(([outcome,value])=>({labels:{outcome},value:Number(value)})));
   if (snapshot.orchestrator?.counters) {
     add("orchestrator_total", "What the orchestrator did since this process started.", "counter",
       Object.entries(snapshot.orchestrator.counters).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));

@@ -1,3 +1,4 @@
+import { vcrAnalyticComputationBasis } from "./vcrScientificBasis.mjs";
 import { presentVcrReview } from "./vcrViewsKit.mjs";
 import { createHash } from "node:crypto";
 import { documentExportDigest } from "@evimed/domain";
@@ -40,7 +41,7 @@ import {
   VCR_MODEL_INTERFACE_LABELS_ZH, VCR_REGISTRY_ALLOCATION_LABELS_ZH, VCR_REGISTRY_MASKING_LABELS_ZH, VCR_REGISTRY_PHASE_LABELS_ZH, VCR_REVIEW_KIND_LABELS_ZH, VCR_ROLE_ABILITIES, VCR_STALE_REASON_LABELS_ZH,
   VCR_STEP_LABELS_ZH, VCR_STEPS, VCR_TWIN_LABELS_ZH, VCR_TWIN_EVIDENCE, VCR_VALUE_SOURCE_LABELS_ZH,
   VCR_TRIAL_DESIGN_LABELS_ZH,
-  allowanceWaitingSentence, intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin, vcrModelCardIssues, vcrModelInterfaceOf, vcrNext,
+  allowanceWaitingSentence, intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin, vcrModelCardIssues, vcrModelInterfaceOf,
 } from "@evimed/domain";
 
 import { VCR_ENGINE_RETRYABLE_CODES } from "./vcrEngineClient.mjs";
@@ -87,6 +88,7 @@ export function budgetView(budget) {
 
 /** The words a job kind is shown as. */
 export const JOB_KIND_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
+  fit_survival_model: "拟合人群生存模型", apply_prognostic_model: "应用已发表的预后模型",
   forecast_trajectories: '纵向结果预测', evaluate_forecast: '预测与观测验证', compare_forecasts: '预测情景比较', benchmark_trial_effect: '试验效果预测验证',
   profile_snapshot: "数据快照画像", build_cohort: "构建队列", generate_population: "生成情景人群",
   literature_population: "文献人群", synthesize_population: "合成人群", population_quality: "人群质量报告",
@@ -465,7 +467,7 @@ export function numberString(value, precision, mcse = null) {
  *   allResults?: readonly Record<string, any>[], exports?: readonly Record<string, any>[] }} input
  */
 export function presentSummary({ study, results, allResults, stale, jobs, scenarios, comparators, grid, decisions = [], exports = [], now }) {
-  const { designs } = presentDesigns({ study, scenarios, results, allResults, stale, executions: new Map(), grid, decisions, forecastResults: [], now });
+  const { designs } = presentDesigns({ study, scenarios, results, allResults, stale, executions: new Map(), grid, decisions, now });
   return {
     id: study.id,
     projectId: study.projectId,
@@ -481,46 +483,6 @@ export function presentSummary({ study, results, allResults, stale, jobs, scenar
     updatedAt: zhTime(study.updatedAt, now) ?? "",
     createdAt: study.createdAt,
   };
-}
-
-/**
- * 「招募待办」: what a coordinator has to confirm or chase, from the referral
- * ledger. Only the studies where this account may contact patients.
- * @param {ReadonlyArray<{ study: Record<string, any>, referrals: readonly Record<string, any>[], sites: readonly Record<string, any>[] }>} groups
- * @param {Date} now
- */
-export function presentTodos(groups, now) {
-  /** @type {Array<Record<string, any>>} */
-  const todos = [];
-  for (const { study, referrals, sites } of groups) {
-    const ready = referrals.filter((referral) => referral.state === "contactable");
-    if (ready.length) {
-      todos.push({
-        id: `${study.id}:contact`, kind: "contact", studyId: study.id,
-        title: ready.length === 1 ? `${ready[0].subjectKey} 待确认联系` : `${ready[0].subjectKey} 等 ${ready.length} 人待确认联系`,
-        detail: study.name, action: { label: "去确认", tab: "matching" },
-      });
-    }
-    const needs = referrals.filter((referral) => referral.state === "needs_evidence");
-    if (needs.length) {
-      todos.push({
-        id: `${study.id}:evidence`, kind: "evidence", studyId: study.id,
-        title: `${needs.length} 人待补证`, detail: study.name, action: { label: "去看缺口", tab: "matching" },
-      });
-    }
-    for (const site of sites) {
-      const verified = site.verifiedAt ? new Date(site.verifiedAt).getTime() : null;
-      const days = verified === null ? null : Math.floor((now.getTime() - verified) / 86_400_000);
-      if (days === null || days > 90) {
-        todos.push({
-          id: `${study.id}:site:${site.id}`, kind: "site", studyId: study.id,
-          title: `${site.name} 的资料${days === null ? "还没有核实过" : `已 ${days} 天没有核实`}`, detail: study.name,
-          action: { label: "去看中心", tab: "matching" },
-        });
-      }
-    }
-  }
-  return todos.slice(0, 12);
 }
 
 /**
@@ -671,9 +633,7 @@ export function presentStudy(bundle) {
     status: study.status,
     purpose: study.purpose ?? "programme",
     steps: study.purpose === "calculation" ? [] : publicSteps(study.steps),
-    // The step the study should do next, from the one function every sentence that names "next" reads (`vcrNext`), and one short
-    // finding per step with its one number (`vcrStepSummaries`): the step bar and the primary action are drawn from these.
-    next: study.purpose === "calculation" ? null : vcrNext({ steps: study.steps, described: Boolean(text(study.question) || bundle.definition) }),
+
     stepSummaries: study.purpose === "calculation" ? [] : vcrStepSummaries(bundle, designs),
     sessionId: null,
     abilities: abilitiesOf(roles ?? []),
@@ -871,7 +831,7 @@ export function presentDeliverable(row, index, all, now) {
 // --- designs (shared by the overview and the trial tab) ------------------------------------------------------------------
 
 /** The measure names a design's table reads, whichever stage computed them. */
-const DESIGN_MEASURES = Object.freeze(["power", "type_one_error", "assurance", "expected_sample_size", "expected_events", "required_total", "required_events", "cost"]);
+const DESIGN_MEASURES = Object.freeze(["power", "type_one_error", "assurance", "expected_sample_size", "expected_events", "required_total", "required_events", "duration_months", "cost"]);
 
 /**
  * What a design has been computed with, by stage: the analytic size, the simulated operating characteristics and the success
@@ -978,7 +938,7 @@ function crossCheckOf(stages) {
  * @returns {{ designs: Array<Record<string, any>>, rows: Array<Record<string, any>> }}
  */
 export function presentDesigns(bundle) {
-  const { scenarios, stale, executions, grid, decisions, forecastResults = [] } = bundle;
+  const { scenarios, stale, executions, grid, decisions } = bundle;
   // The newest row of each label is the design; older rows are its history.
   /** @type {Map<string, Record<string, any>>} */
   const latest = new Map();
@@ -1044,26 +1004,26 @@ export function presentDesigns(bundle) {
       if (!stage) continue;
       for (const measure of stage.measures) {
         const measureName = String(object(measure).name ?? "");
-        if (!DESIGN_MEASURES.includes(measureName)) continue;
+        if (!DESIGN_MEASURES.includes(measureName) || (measureName === "duration_months" && name !== "simulation")) continue;
         measures[measureName === "required_total" ? "sample_size" : measureName] = measureValue(measure, {
           kind: "trial_scenario", result: stage.result, execution: executionOfStage(name) ?? execution, staleMark, tab: "trial" });
       }
     }
-    // Duration comes from the accrual forecast filed for this design, never
-    // from the design's own simulation.
-    const forecast = forecastResults.find((/** @type {any} */ entry) => entry.subjectId === scenario.id || entry.subjectId === scenario.resultId);
-    const lastPatient = forecast ? list(forecast.measures).find((/** @type {any} */ entry) => ["last_patient_in_months", "expected_completion_time"].includes(String(object(entry).name))) : null;
-    if (forecast && lastPatient) {
-      measures.duration_months = measureValue(lastPatient, { kind: "accrual_forecast", result: forecast, tab: "trial" });
-    }
+    // Accrual is a distinct result and quantity; it never substitutes for mean full-study duration.
+    const accrual = everyResult.filter(row => row.kind === "accrual_forecast" && row.subjectId === scenario.id)
+      .sort((a, b) => Number(b.version) - Number(a.version) || String(b.createdAt).localeCompare(String(a.createdAt)))[0];
+    const lastPatientIn = list(accrual?.measures).map(object).find(row => row.name === "last_patient_in_months");
+    if (lastPatientIn) measures.last_patient_in_months = measureValue(lastPatientIn, {
+      kind: "accrual_forecast", result: accrual, staleMark: markFor(stale, resultNode(accrual)), tab: "trial" });
     const cost = numeric(object(scenario.configuration).cost ?? object(object(scenario.configuration).cost).value);
     if (cost !== null && !measures.cost) {
       measures.cost = { value: cost, text: null, unit: "万元", source: "assumed", interval: null, mcse: null, review: null, precision: 0,
         reason: null, stale: false, detail: null };
     }
     const beaten = dominated.get(scenario.id) ?? null;
+    const computationBasis = beaten || !stages.analytic ? null : vcrAnalyticComputationBasis({ ...stages.analytic.result, measures: stages.analytic.measures, diagnostics: stages.analytic.diagnostics }, executionOfStage("analytic"));
     return {
-      id: scenario.id,
+      id: scenario.id, version: scenario.version, ...(result ? { resultId: result.id, resultVersion: result.version } : {}),
       code,
       name: designName(scenario, code),
       dominated: Boolean(beaten),
@@ -1074,6 +1034,7 @@ export function presentDesigns(bundle) {
       method: beaten ? null : designMethod(stages),
       replicates: beaten ? null : (executionOfStage("simulation")?.replicates ?? null),
       crossCheck: beaten ? null : crossCheckOf(stages),
+      ...(computationBasis ? { computationBasis } : {}),
       _scenario: scenario,
       _result: result,
       _stale: resultMark ?? designMark,
@@ -1507,7 +1468,7 @@ function packageSections({ cover, bundle, model }) {
   for (const result of allResultsOf(bundle)) {
     if (!["population", "patient_set", "comparator", "trial_scenario", "accrual_forecast"].includes(result.kind)) continue;
     // A superseded result of a design the study no longer has is history, not a finding.
-    const subject = subjectOf.get(result.id) ?? (result.kind === "accrual_forecast" ? `${scenarioIds.get(result.subjectId) ?? "招募"}的入组预测` : null);
+    const subject = subjectOf.get(result.id) ?? (result.kind === "accrual_forecast" ? `${scenarioIds.get(result.subjectId) ?? "设计假设"}的入组时间模拟` : null);
     if (!subject) continue;
     for (const entry of list(result.measures)) {
       const value = measureValue(entry, { kind: result.kind, result });
@@ -1521,6 +1482,11 @@ function packageSections({ cover, bundle, model }) {
     table: resultRows.length ? { columns: ["指标", "取值", "范围", "蒙特卡洛标准误"], rows: resultRows } : null,
     note: resultRows.length ? null : "还没有可写入研究包的结果。",
   });
+  const sizing = presentDesigns(bundle).designs.filter(design => design.computationBasis);
+  if (sizing.length) add({ id: "sample-size-basis", title: "样本量计算依据", table: {
+    columns: ["方案", "计算公式", "试验组 / 对照组 / 合计", "目标功效", "校验功效", "校验方法"],
+    rows: sizing.map(design => { const basis = design.computationBasis; return [design.name, basis.formula, `${basis.nTreatment} / ${basis.nControl} / ${basis.total}`, String(basis.targetPower), String(basis.powerAtAllocatedN), basis.powerCheckBasis]; }),
+  }, note: "正态和 Schoenfeld 样本量为近似计算；校验功效使用分组取整后的实际人数。" });
   const runs = [...bundle.executions.values()];
   if (runs.length) {
     add({

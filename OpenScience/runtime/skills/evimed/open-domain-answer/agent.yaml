@@ -30,6 +30,9 @@ optionalTools:
   - drug_label_search
   - pharmacy_reference_search
   - frontier_search
+  - vcr_read
+  - vcr_write
+  - vcr_simulate
 dataSources:
   - uploaded-files
   - literature

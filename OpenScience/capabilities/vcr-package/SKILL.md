@@ -3,13 +3,16 @@ name: vcr-package
 description: 把一项「虚拟临床研究」写成可检查、可复现的研究包；报告里的每个数都是指向结果字段的引用，由平台渲染。
 ---
 
-# 研究包与对外资料
+# Requested research packages and reports
 
-## 模型不产生数字
+Write a package only when the user or an explicit deliverable dispatch asks for
+one. Ordinary matching, cohort exploration or design questions can finish with a
+conversation answer plus saved objects/results. Do not expand them into a full
+research programme or require all sections before delivering useful work.
 
-**你写字，不写数。** 报告里每一个数都写成 `{{n:结果字段}}` 的引用，平台按研究已保存的结果渲染。你手打进正文的数字，平台在报告里写成「未计算」，并在 `mcp__evimed__vcr_write` 的返回值里当作问题标出来。需要一个数而结果里没有，就写清楚它没有被算出来，不要从对话记录里抄一个，也不要"大约"。
+## Shared operating contract
 
-这不是一道检查，是构造：数字改了，报告跟着改；一个数在结果里找不到对应字段，说明那句话没有依据。
+Read [../vcr-protocol/references/operating-contract.md](../vcr-protocol/references/operating-contract.md) before this workflow; reuse it when already loaded in this conversation. It defines task scope, data requirements, evidence and continuation boundaries.
 
 ## 先读
 

@@ -7,7 +7,7 @@ import test from "node:test";
 import { VCR_WORKER_LOOPS, VcrWorker, createVcrWorkerLoops, withVcrWorkerWarnings } from "../src/vcrWorker.mjs";
 
 test("the seven loops, their cadences and which of them are leased", () => {
-  assert.deepEqual(VCR_WORKER_LOOPS.map((loop) => loop.name), ["jobs", "orchestrator", "recompute", "recheck", "frontierEvents", "packSources", "drafts"]);
+  assert.deepEqual(VCR_WORKER_LOOPS.map((loop) => loop.name), ["jobs", "localJobs", "completions", "orchestrator", "recompute", "recheck", "frontierEvents", "packSources", "drafts"]);
   const packs = VCR_WORKER_LOOPS.find((loop) => loop.name === "packSources");
   assert.deepEqual([packs?.leased, packs?.optional], [true, true], "a platform pack is watched once, by whichever control plane sees it first, and only while the switch is on");
   const events = VCR_WORKER_LOOPS.find((loop) => loop.name === "frontierEvents");

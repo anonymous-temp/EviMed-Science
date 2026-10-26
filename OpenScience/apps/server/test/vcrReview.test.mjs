@@ -51,6 +51,16 @@ test('evidence checks verify actual preserved bytes and model input omits plane 
   assert.ok(changed.deterministic.findings.some(row => row.kind === 'reference_unresolvable'));
 });
 
+test('a preserved literature reference uses the trusted source reader proof and never the registry-only join', () => {
+  const literature = { id: 'article1', quote: 'Age was 62 years.', locator: { kind: 'literature_text', verification: 'verified', sourceId: 'src1', generation: 2, sourceHash: 'a'.repeat(64) } };
+  const payload = { ...model, assumptions: [{ key: 'age', version: 1, evidenceIds: ['article1'] }] };
+  const input = { model: payload, results: [], executions: [], evidence: [literature], reports: [], forModel: value => value };
+  assert.ok(buildVcrReviewInput(input).deterministic.findings.some(row => row.kind === 'reference_unresolvable'));
+  assert.ok(!buildVcrReviewInput({ ...input, verifiedLiteratureIds: new Set(['article1']) }).deterministic.findings.some(row => row.kind === 'reference_unresolvable'));
+  assert.ok(buildVcrReviewInput({ ...input, evidence: [{ ...literature, locator: { ...literature.locator, verification: 'quote_not_found' } }], verifiedLiteratureIds: new Set(['article1']) })
+    .deterministic.findings.some(row => row.kind === 'reference_unresolvable'));
+});
+
 test('multistage tracing binds a verified engine stage and the exact recorded aggregate separately', () => {
   const stage = { ...result, measures: [{ name: 'power', value: 0.8 }] };
   const aggregate = { ...result, measures: [{ name: 'required_events', value: 138 }, ...stage.measures], version: 2 };

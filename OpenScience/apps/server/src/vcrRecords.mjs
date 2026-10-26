@@ -29,6 +29,7 @@
  * @module vcrRecords
  */
 
+import { vcrExecutionReceiptVerified } from "./vcrEngineClient.mjs";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import fs from "node:fs/promises";
@@ -42,7 +43,7 @@ import { VCR_DERIVED_SOURCES } from "./vcrJobs.mjs";
 import { assertDataPlaneRoot } from "./vcrDataPlane.mjs";
 import { POPULATION_METHOD_WORDS } from "./vcrPopulationProfileView.mjs";
 import { qualityReportView } from "./vcrViewsTabs.mjs";
-import { loadRowTable, outcomeStatistics, pageOfFile, pageOfTable, patientRecord, profileOfTable } from "./vcrRows.mjs";
+import { loadRowTable, outcomeStatistics, pageOfFile, pageOfTable, patientRecord, patientRecordOfFile, patientSummaryTable, profileOfTable } from "./vcrRows.mjs";
 import { vcrCalibration } from "./vcrCalibration.mjs";
 
 /** @param {unknown} value @returns {Record<string, any>} */
@@ -52,14 +53,17 @@ const list = (value) => (Array.isArray(value) ? value : []);
 
 /** What each downloadable result is, and the table of it that is kept. */
 const DOWNLOADS = Object.freeze(/** @type {Record<string, { tables: readonly string[], title: string, file: string }>} */ ({
+  model_prediction: { tables: ["prognostic-predictions"], title: "合成人群预测", file: "synthetic-population-predictions" },
+  comparator: { tables: ["prognostic-predictions"], title: "模型预测基准", file: "model-benchmark" },
   population: { tables: ["population", "synthetic-population"], title: "合成人群", file: "synthetic-population" },
-  patient_set: { tables: ["virtual-patients"], title: "虚拟患者", file: "virtual-patients" },
+  patient_set: { tables: ["virtual-patients", "prognostic-predictions"], title: "虚拟患者", file: "virtual-patients" },
 }));
 
 /** The methods whose output is a person-level table of synthetic rows. */
 const METHOD_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({
   ...Object.fromEntries(Object.entries({ "population.scenario": "scenario", "population.literature": "literature", "population.synthpop": "empirical_synthetic" })
     .map(([method, kind]) => [method, POPULATION_METHOD_WORDS[kind]])),
+  "model.prognostic_apply": "对合成人群应用来源绑定的预后方程；不是观察结局",
   "patients.continuous": "按研究设定的虚拟患者仿真器生成（连续终点）",
   "patients.binary": "按研究设定的虚拟患者仿真器生成（二分类终点）",
   "patients.longitudinal": "按研究设定的虚拟患者仿真器生成（纵向轨迹，混合效应模型）",
@@ -104,9 +108,10 @@ export function createVcrRecords({ store, config = {} }) {
       ? await store.one(`SELECT method, inputs, finished_at FROM ${VCR_SCHEMA}.executions WHERE id = $1 AND study_id = $2`, [result.executionId, study.id]) : null;
     const method = String(execution?.method ?? "");
     // The rows of a real patient never leave: the method must be one that writes synthetic ones, and what it read must not be real.
-    const synthetic = /** @type {Record<string, string>} */ (VCR_DERIVED_SOURCES)[method] === "synthetic";
+    const prediction = method === "model.prognostic_apply";
+    const synthetic = /** @type {Record<string, string>} */ (VCR_DERIVED_SOURCES)[method] === "synthetic" || (prediction && await independentGeneration(study, resultId));
     const read = list(execution?.inputs).map(object);
-    const realInput = method !== "population.synthpop" && read.some((input) => input.kind === "snapshot" || (input.valueSource && input.valueSource !== "synthetic"));
+    const realInput = method !== "population.synthpop" && read.some((input) => input.kind === "snapshot" || (["snapshot_file", "analysis_table"].includes(input.kind) && input.valueSource !== "synthetic"));
     if (!synthetic || realInput) throw refusal("vcr_records_not_synthetic");
     const table = list(result.tables).map(object).find((entry) => download.tables.includes(String(entry.name)) && String(entry.location ?? "").startsWith("derived/"));
     if (!table || !/^[a-f0-9]{64}$/.test(String(table.sha256 ?? "")) || !vcrLocationIsValid(String(table.location))) throw refusal("vcr_records_not_found");
@@ -152,7 +157,48 @@ export function createVcrRecords({ store, config = {} }) {
     return { ...found, file: opened.file, bytes: opened.bytes };
   }
 
+  /** Model reads are restricted to independently generated lineage, not a synthetic label alone.
+   * Empirical synthesis and uploaded tables retain their existing controlled-data workflows.
+   * @param {{id:string}} study @param {string} resultId @param {Set<string>} [seen]
+   */
+  async function independentGeneration(study, resultId, seen = new Set()) {
+    if (seen.has(resultId) || seen.size >= 16) return false;
+    const branch = new Set(seen); branch.add(resultId);
+    const result = await store.result(study.id, resultId);
+    const execution = result?.executionId ? await store.one(`SELECT method,inputs,receipt,output_hash FROM ${VCR_SCHEMA}.executions WHERE id=$1 AND study_id=$2`, [result.executionId, study.id]) : null;
+    if (!execution || !vcrExecutionReceiptVerified(execution) || !["population.scenario", "population.literature", "patients.continuous", "patients.binary", "patients.time_to_event", "patients.longitudinal", "model.prognostic_apply"].includes(execution.method)) return false;
+    if (execution.method === "model.prognostic_apply" && !list(execution.inputs).some(input => ["snapshot_file", "analysis_table"].includes(input.kind))) return false;
+    for (const input of list(execution.inputs).map(object)) {
+      if (input.kind === "snapshot") return false;
+      if (!["snapshot_file", "analysis_table"].includes(input.kind)) continue;
+      if (input.valueSource !== "synthetic" || typeof input.id !== "string" || !input.id.includes(":")) return false;
+      const [parentId, tableName] = input.id.split(":");
+      const parent = await store.result(study.id, parentId);
+      const table = list(parent?.tables).map(object).find(row => row.name === tableName);
+      if (!table || table.sha256 !== input.hash || table.location !== input.location || !(await independentGeneration(study, parentId, branch))) return false;
+    }
+    return true;
+  }
+
   return {
+    /** Bounded generated records for the authenticated study conversation; no path/hash is returned.
+     * @param {{id:string}} study @param {string} resultId @param {{subjectKey?:string,limit?:number,offset?:number}} [filter]
+     */
+    async modelRead(study, resultId, filter = {}) {
+      if (!(await independentGeneration(study, resultId))) return { available: false, code: "vcr_cloud_processing_not_authorized",
+        message: "这份记录未确认来自独立生成过程；经验合成或上传数据仍通过受控数据流程使用。" };
+      const found = await readable(study, resultId);
+      const table = await loadRowTable(found.file);
+      if (filter.subjectKey) {
+        const record = table.complete ? patientRecord(table, filter.subjectKey, { prediction: found.method === "model.prognostic_apply" }) : await patientRecordOfFile(found.file, filter.subjectKey, { prediction: found.method === "model.prognostic_apply" });
+        if (!record) throw refusal("vcr_patient_not_found");
+        return { available: true, source: found.method === "model.prognostic_apply" ? "predicted" : "synthetic", targetClass: "synthetic", resultId, record };
+      }
+      const page = table.complete ? pageOfTable(table, filter) : await pageOfFile(found.file, filter);
+      if ("issue" in page) throw refusal(page.issue.error === "too_large" ? "vcr_rows_too_large" : "vcr_rows_query_invalid");
+      const { ok: _ok, ...data } = page;
+      return { available: true, source: found.method === "model.prognostic_apply" ? "predicted" : "synthetic", targetClass: "synthetic", resultId, ...data };
+    },
     /**
      * The CSV of a result's generated records: the comment lines, then the table as the engine wrote it.
      * @param {{ id: string }} study @param {string} resultId
@@ -162,7 +208,7 @@ export function createVcrRecords({ store, config = {} }) {
       const found = await locate(study, resultId);
       const opened = await open(found.table);
       const lines = [
-        "# 合成数据，不是真实患者。",
+        found.method === "model.prognostic_apply" ? "# 合成人群的模型预测，不是真实观察结局。" : "# 合成数据，不是真实患者。",
         `# 生成方法：${METHOD_WORDS[found.method] ?? "引擎生成"}。`,
         ...(found.uses.length ? [`# 允许用途：${found.uses.join("、")}。合成的记录不进真实外部对照。`] : ["# 合成的记录不进真实外部对照。"]),
         ...(found.quality ? ["# 这份记录由真实数据经验合成而来：质量与泄露检查在同名的 .quality.json 里，一起使用。"] : []),
@@ -196,9 +242,9 @@ export function createVcrRecords({ store, config = {} }) {
     async record(study, resultId, patientId, kind = null) {
       const found = await readable(study, resultId, kind);
       const table = await loadRowTable(found.file);
-      const record = table.complete ? patientRecord(table, patientId) : null;
+      const record = table.complete ? patientRecord(table, patientId, { prediction: found.method === "model.prognostic_apply" }) : await patientRecordOfFile(found.file, patientId, { prediction: found.method === "model.prognostic_apply" });
       if (!record) throw refusal("vcr_patient_not_found");
-      return { result: found.result.id, ...record };
+      return { result: found.result.id, ...record, ...(found.method === "model.prognostic_apply" ? { source: "predicted", targetClass: "synthetic" } : {}) };
     },
 
     /**
@@ -222,15 +268,17 @@ export function createVcrRecords({ store, config = {} }) {
         if (structuredErrors) return { available: false, state: "error", code: "vcr_records_unavailable", message: "记录读取失败；已保留汇总结果。" };
         throw refusal("vcr_records_unavailable");
       }
+      const personTable = patientSummaryTable(table);
       const statistics = table.complete ? outcomeStatistics(table) : null;
       const executionJob = found.result.executionId
         ? await store.one(`SELECT j.scenario FROM ${VCR_SCHEMA}.executions e JOIN ${VCR_SCHEMA}.jobs j ON j.id = e.job_id
             WHERE e.id = $1 AND e.study_id = $2`, [found.result.executionId, study.id]).catch(() => null) : null;
       return {
         result: found.result.id,
-        rows: table.rows.length,
+        rows: table.complete ? personTable.rows.length : null,
+        observationRows: table.header.includes("visit") && table.complete ? table.rows.length : null,
         complete: table.complete,
-        profile: profileOfTable(table, { labels }),
+        profile: profileOfTable(personTable, { labels }),
         calibration: vcrCalibration({ statistics, scenario: executionJob?.scenario ?? null, cards, unitWord }),
       };
     },

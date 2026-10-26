@@ -287,7 +287,8 @@ describe("when there is no evidence yet", () => {
     const first = draw(<DataTab studyId={STUDY_ID} study={study((s) => { s.steps.evidence = { status: "none", requested: false }; })} />);
     const recipe = await waitFor(() => { const node = first.container.querySelector("[data-vcr-step-empty='evidence']"); if (!node) throw new Error("no recipe"); return node as HTMLElement; });
     await userEvent.click(within(recipe).getByRole("button", { name: "找证据、整理假设卡" }));
-    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/run`, "POST", { step: "evidence" }));
+    expect(first.spies.openChat).toHaveBeenCalledWith(expect.any(String), { kind: "step", studyId: STUDY_ID, objectId: "evidence" });
+    expect(network.productRequest.mock.calls.some(([, method]) => method === "POST")).toBe(false);
     first.unmount();
 
     installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}/data`]: { ...raw, evidenceNote: "证据库在本部署没有接入。" } });
@@ -318,4 +319,13 @@ describe("a card's own words", () => {
     if (used) expect(used.closest("section")?.querySelector("a")).not.toBeNull();
     expect(detail.querySelector("ul.divide-y, ol.divide-y")).toBeNull();
   });
+});
+
+it("can gather evidence for a task that already has a question without requiring a PICO form", async () => {
+  installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}/data`]: fixture("empty/data.json") });
+  const task = study(s => { s.purpose = "task"; s.question = "按患者资料核对入排条件"; s.definition = null; s.steps.definition = { status: "none", requested: false }; s.steps.evidence = { status: "none", requested: false }; });
+  const { spies } = draw(<DataTab studyId={STUDY_ID} study={task} />);
+  await userEvent.click(await screen.findByRole("button", { name: "找证据、整理假设卡" }));
+  expect(spies.openChat).toHaveBeenCalledWith(expect.any(String), { kind: "step", studyId: STUDY_ID, objectId: "evidence" });
+  expect(screen.queryByRole("button", { name: "说明研究问题" })).toBeNull();
 });

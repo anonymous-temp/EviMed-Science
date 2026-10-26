@@ -72,7 +72,7 @@ test('a whole source-bound run qualifies only methods with executed explicit num
   assert.ok(evidence.methods.length >= 27, 'the 24 methods of the first release and the robustness methods');
   assert.ok(evidence.methods.every(entry => entry.numericTests.caseIds.length >= 1 && entry.numericTests.referenceCases.length >= 1));
   const analytic = evidence.methods.find(entry => entry.method === 'design.analytic');
-  assert.deepEqual(analytic.numericTests.caseIds, ['N01b', 'N06b', 'N06c', 'N06f']);
+  assert.deepEqual(analytic.numericTests.caseIds, ['N01b', 'N06b', 'N06c', 'N06f', 'N53a', 'N53c', 'N53e']);
   assert.match(analytic.numericTests.referenceCases[0].reference, /rpact::getDesignGroupSequential/);
   assert.match(analytic.numericTests.referenceCases[0].reference, /d_rp < 1e-4 && d_g4 < 1e-4/);
   assert.equal(analytic.version, VCR_ENGINE_METHODS['design.analytic'].version);
@@ -171,9 +171,9 @@ test('missing source references and structural-only method coverage cannot fabri
   input.source = { ...input.source, caseFiles: input.source.caseFiles.map(file => ({ ...file, bytes: Buffer.from(file.bytes.toString().replace('d_rp < 1e-4 && d_g4 < 1e-4', 'a structural smoke check')) })) };
   assert.throws(() => generate(input), /numeric_reference_missing/);
   const structural = await fixture(); structural.report.methodsByCase = { E05: Object.keys(structural.source.methods) };
-  assert.throws(() => generate(structural), /numeric_reference_missing/);
+  assert.throws(() => generate(structural), /current_method_reference_missing/);
   const unmapped = await fixture(); unmapped.report.methodsByCase = { N01b: 'design.simulate' };
-  assert.throws(() => generate(unmapped), /numeric_reference_missing/);
+  assert.throws(() => generate(unmapped), /current_method_reference_missing/);
 });
 
 test('a dispatched method with no reference case fails the evidence and names itself; nothing is left "unmeasured" quietly', async () => {
@@ -199,7 +199,7 @@ test('the real source: every method the engine dispatches has a reference case t
   assert.deepEqual(referenceProblems(methods, definitions), []);
   // the check is not vacuous: a registry with one method more fails it
   assert.deepEqual(methodsWithoutReference([...methods, 'comparator.added_later'], definitions), ['comparator.added_later']);
-  assert.deepEqual([...new Set(referenceProblems(methods, new Map([['N29', { lines: ['an edited case'] }]])).map(problem => problem.caseId))], ['N29']);
+  assert.deepEqual([...new Set(referenceProblems(['matching.evaluate'], new Map([['N29', { lines: ['an edited case'] }]])).map(problem => problem.caseId))], ['N29']);
 });
 
 test('GitHub success must belong to the same completed job, run, revision and immutable artifact', () => {

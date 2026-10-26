@@ -1,6 +1,6 @@
 import { geoConversationCapability, geoConversationChecks, geoConversationRuns, geoConversationSources, geoConversationSourceScope, geoConversationStatus, startGeoConversation, stopGeoConversationRun, type GeoConversationScope } from "@/lib/geoNativeClient";
 import { geoChatPath, geoIdFromChatPath } from "@/lib/geoLocation";
-import { putConversationReference } from "@/lib/apiClient";
+import { putConversationReference, stageVcrConversationReference } from "@/lib/apiClient";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { errorCodeMessage, runtimeLockMessage, runtimeStartRecovery, SIMULATED_WALLET_PAGES } from "@evimed/domain";
@@ -966,6 +966,7 @@ export function RuntimeUiFrame({ projectId, origin, scope, scopeOwner = false, s
             || (request.kind === "open" && message.sessionId !== request.sessionId)))) return;
         incoming.current = message.seq;
         if (!message.ok) { setError({ ...frameFailure("这条对话暂时无法打开"), newTask: !scope && request.kind === "open" }); return; }
+        if (request.restoreDraft && message.draftRestored === false) toast.error("输入框已有内容或暂不能确认草稿状态，旧草稿仍已保留。可先查看当前输入，再返回恢复。");
         currentRequest.current = null; setPending(false); setNavigated(true);
         mirroredSession.current = { sessionId: message.sessionId, attempt };
         setFrameTask(message.sessionId);
@@ -1022,11 +1023,12 @@ export function RuntimeUiFrame({ projectId, origin, scope, scopeOwner = false, s
     void (async () => {
       if (scope && (intent.scope?.geoProjectId !== scope.geoProjectId || intent.sessionId !== scope.sessionId || intent.kind !== "open" || intent.originReference)) throw new Error("Conversation scope changed");
       if (intent.originReference) await putConversationReference(intent.sessionId, projectId, intent.originReference);
+      const stagedReference = intent.vcrReference ? await stageVcrConversationReference(intent.sessionId, projectId, intent.vcrReference) : undefined;
       if (!alive) return;
       iframe.current?.contentWindow?.postMessage({
       type: "evimed.runtime-ui.navigate", version: 1, frameId: binding.frameId, projectId,
       requestId: intent.requestId, seq: ++outgoing.current,
-      intent: { kind: intent.kind, sessionId: intent.sessionId, ...(intent.draft === undefined ? {} : { draft: intent.draft }), ...(intent.resultRevision ? { resultRevision: intent.resultRevision } : {}), ...(intent.geoPlanContext ? { geoPlanContext: intent.geoPlanContext } : {}), ...(intent.references ? { references: intent.references } : {}) },
+      intent: { kind: intent.kind, sessionId: intent.sessionId, ...(intent.draft === undefined ? {} : { draft: intent.draft }), ...(intent.restoreDraft ? { restoreDraft: true } : {}), ...(intent.resultRevision ? { resultRevision: intent.resultRevision } : {}), ...(stagedReference ? { vcrReference: stagedReference } : {}), ...(intent.geoPlanContext ? { geoPlanContext: intent.geoPlanContext } : {}), ...(intent.references ? { references: intent.references } : {}) },
     }, origin);
     })().catch(() => { if (alive) setError(frameFailure("无法保存引用，请重试")); });
     return () => { alive = false; };

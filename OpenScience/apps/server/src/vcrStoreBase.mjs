@@ -24,7 +24,7 @@
  * @module vcrStoreBase
  */
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -43,7 +43,7 @@ export const VCR_ID_PREFIXES = Object.freeze({
   population: "pop", patientSet: "pts", comparator: "cmp", scenario: "scn", grid: "grd",
   model: "mdl", method: "mth",
   job: "job", execution: "exe", result: "res", forecast: "fct",
-  assessment: "mas", judgment: "jdg", referral: "ref", event: "rev", site: "ste", episode: "fup",
+  assessment: "mas", judgment: "jdg", episode: "fup",
   review: "rvw", decision: "dec", contact: "reg", export: "exp",
   modelAssessment: "mia", modelPlan: "mpv",
   simulation: "sim", candidate: "pcn", signal: "sig",
@@ -255,12 +255,14 @@ export async function deleteVcrProjectRows(client, userId, projectId) {
   if (!exists.rowCount) return { deleted: false, studyId: null, artifacts: noArtifacts() };
   const found = await client.query(
     `SELECT id FROM ${VCR_SCHEMA}.studies WHERE user_id = $1 AND project_id = $2`, [userId, projectId]);
-  const studyId = found.rows[0]?.id ?? null;
-  if (!studyId) return { deleted: false, studyId: null, artifacts: noArtifacts() };
-  const artifacts = await collectArtifacts(client, [studyId]);
-  await removeDraftPacksOf(client, [studyId]);
-  await client.query(`DELETE FROM ${VCR_SCHEMA}.studies WHERE id = $1`, [studyId]);
-  return { deleted: true, studyId, artifacts };
+  const studyIds=found.rows.map(row=>String(row.id));
+  const studyId=studyIds[0] ?? null;
+  await client.query(`DELETE FROM ${VCR_SCHEMA}.conversation_completions WHERE user_id=$1 AND project_id=$2`,[userId,projectId]);
+  if (!studyIds.length) return {deleted:false,studyId:null,artifacts:noArtifacts()};
+  const artifacts=await collectArtifacts(client,studyIds);
+  await removeDraftPacksOf(client,studyIds);
+  await client.query(`DELETE FROM ${VCR_SCHEMA}.studies WHERE user_id=$1 AND project_id=$2`,[userId,projectId]);
+  return {deleted:true,studyId,artifacts};
 }
 
 /**
@@ -276,9 +278,17 @@ export async function deleteVcrUserRows(client, userId) {
   const exists = await client.query(
     "SELECT 1 FROM information_schema.schemata WHERE schema_name = $1", [VCR_SCHEMA]);
   if (!exists.rowCount) return { deleted: false, artifacts: noArtifacts() };
+  // Archive restore must not resurrect a deleted account's historical roles or OA rows in someone else's study.
+  // Older installations may be erased before the additive retirement schema has been migrated.
+  await client.query(`CREATE TABLE IF NOT EXISTS ${VCR_SCHEMA}.retirement_erased_accounts (
+    user_hash text PRIMARY KEY CHECK (user_hash ~ '^[a-f0-9]{64}$'), erased_at timestamptz NOT NULL DEFAULT now())`);
   const owned = await client.query(`SELECT id FROM ${VCR_SCHEMA}.studies WHERE user_id = $1`, [userId]);
   const artifacts = await collectArtifacts(client, owned.rows.map((row) => String(row.id)), userId);
+  await client.query(`DELETE FROM ${VCR_SCHEMA}.conversation_completions WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM ${VCR_SCHEMA}.studies WHERE user_id = $1`, [userId]);
+  // Parent before ledger: the online archival snapshot also locks studies before the erasure ledger.
+  await client.query(`INSERT INTO ${VCR_SCHEMA}.retirement_erased_accounts(user_hash) VALUES($1) ON CONFLICT DO NOTHING`,
+    [createHash("sha256").update(String(userId), "utf8").digest("hex")]);
   await client.query(`DELETE FROM ${VCR_SCHEMA}.members WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM ${VCR_SCHEMA}.grants WHERE grantee = $1`, [userId]);
   await client.query(`DELETE FROM ${VCR_SCHEMA}.sources WHERE user_id = $1`, [userId]);

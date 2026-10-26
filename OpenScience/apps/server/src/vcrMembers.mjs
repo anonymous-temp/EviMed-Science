@@ -36,7 +36,7 @@
  * @module vcrMembers
  */
 
-import { VCR_MEMBER_ROLES, VCR_MEMBER_ROLE_LABELS_ZH, VCR_ROLE_ABILITIES, roleAllows } from "@evimed/domain";
+import { VCR_MEMBER_ROLES, VCR_MEMBER_ROLE_LABELS_ZH, VCR_RETIRED_MEMBER_ROLE_LABELS_ZH, VCR_ROLE_ABILITIES, roleAllows } from "@evimed/domain";
 
 import { VcrAccess, VCR_ACCESS_CODES } from "./vcrAccess.mjs";
 import { HttpError } from "./security.mjs";
@@ -101,7 +101,7 @@ export class VcrMembers {
       ...entry,
       name: personName(names, entry.userId),
       roles: [...entry.roles].sort(),
-      roleLabels: [...entry.roles].sort().map((role) => /** @type {any} */ (VCR_MEMBER_ROLE_LABELS_ZH)[role] ?? role),
+      roleLabels: [...entry.roles].sort().map((role) => /** @type {any} */ ({ ...VCR_MEMBER_ROLE_LABELS_ZH, ...VCR_RETIRED_MEMBER_ROLE_LABELS_ZH })[role] ?? "未知角色"),
       abilities: abilitiesOfRoles(entry.roles),
     }));
   }
@@ -138,7 +138,7 @@ export class VcrMembers {
     await this.access.require({ actor: request.actor, studyId: request.studyId, ability: MANAGE });
     const userId = String(request.userId ?? "").trim();
     if (!userId) throw refuse(400, VCR_MEMBER_CODES.selfRequired);
-    if (!VCR_MEMBER_ROLES.includes(String(request.role))) throw refuse(400, VCR_MEMBER_CODES.roleUnknown);
+    if (!VCR_MEMBER_ROLES.includes(String(request.role)) && !Object.hasOwn(VCR_RETIRED_MEMBER_ROLE_LABELS_ZH, String(request.role))) throw refuse(400, VCR_MEMBER_CODES.roleUnknown);
     const study = await this.store.studyForAccess(request.studyId);
     if (!study) throw refuse(404, VCR_ACCESS_CODES.studyNotFound);
     // The owner has no member row, so there is nothing here to remove — and

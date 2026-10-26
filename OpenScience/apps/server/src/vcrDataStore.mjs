@@ -835,7 +835,7 @@ export class VcrDataStore extends VcrStoreBase {
     return vcrSnapshotFromRow(rows[0]);
   }
 
-  /** @param {{ studyId?: string | null, sourceId?: string | null }} query */
+  /** @param {{ studyId?: string | null, sourceId?: string | null, limit?: number }} query */
   async listSnapshots(query) {
     /** @type {unknown[]} */
     const values = [];
@@ -843,8 +843,9 @@ export class VcrDataStore extends VcrStoreBase {
     if (query.studyId) { values.push(query.studyId); conditions.push(`study_id = $${values.length}`); }
     if (query.sourceId) { values.push(query.sourceId); conditions.push(`source_id = $${values.length}`); }
     if (!conditions.length) throw new TypeError("listSnapshots needs a study or a source.");
+    const limit = query.limit == null ? "" : ` LIMIT $${values.push(Math.max(1, Math.min(100, Math.floor(query.limit))))}`;
     const rows = await this.rows(
-      `SELECT * FROM ${this.schema}.snapshots WHERE ${conditions.join(" AND ")} ORDER BY frozen_at DESC, id`, values);
+      `SELECT * FROM ${this.schema}.snapshots WHERE ${conditions.join(" AND ")} ORDER BY frozen_at DESC, id${limit}`, values);
     return rows.map(vcrSnapshotFromRow);
   }
 

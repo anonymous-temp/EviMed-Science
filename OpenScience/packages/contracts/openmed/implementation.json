@@ -1276,14 +1276,14 @@
         "apps/server/src/vcrComposition.mjs",
         "apps/server/src/vcrService.mjs",
         "apps/server/src/vcrMatchStore.mjs",
-        "apps/server/src/vcrRecruit.mjs"
+        "apps/server/src/vcrViewsTabs.mjs"
       ],
       "acceptance": "A new laboratory report updates the relevant judgments and produces a traceable diff. A what-if threshold change is labeled a scenario and never alters the frozen protocol. Counts respect small-cell suppression and zero-fact candidates.",
       "owner": "VCR product / methods",
       "nativeIntegrationPoints": [
         "OpenScience/apps/server/src/vcrMatching.mjs",
-        "OpenScience/apps/server/src/vcrRecruit.mjs",
-        "OpenScience/apps/server/src/vcrContact.mjs",
+        "OpenScience/apps/server/src/vcrViewsTabs.mjs",
+        "OpenScience/apps/server/src/vcrPatientContext.mjs",
         "OpenScience/apps/server/src/vcrService.mjs"
       ],
       "upstreamCapabilityIds": [
@@ -1755,7 +1755,7 @@
       "formerStatus": "conditional_not_activated",
       "evidence": [
         "apps/server/src/vcrMatching.mjs",
-        "apps/server/src/vcrRecruit.mjs",
+        "apps/server/src/vcrViewsTabs.mjs",
         "capabilities/vcr-matching/SKILL.md"
       ],
       "acceptance": "A missing test is a research evidence gap, not a diagnosis or a treatment recommendation. Measure definitions, time windows and denominators are versioned and understood by the intended user.",

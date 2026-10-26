@@ -38,12 +38,12 @@ beforeEach(() => {
 afterEach(() => restoreRoom());
 
 describe("对照 · the routes and the record in use", () => {
-  it("names the four routes this version computes, in plan order, each with the state it has at this tier — as rows that can be pressed", async () => {
+  it("names the five supported routes, in plan order, each with the state it has at this tier — as rows that can be pressed", async () => {
     const { container } = draw();
     await screen.findByRole("list", { name: "对照路线" });
     const routes = [...container.querySelectorAll("[data-vcr-route]")].map((node) => node.getAttribute("data-vcr-route"));
-    // the model-prediction comparator is not computed by this version: the server does not offer it as a route (it is listed as 暂不支持 in the method library)
-    expect(routes).toEqual(["prognostic_adjustment", "external_control", "literature_control", "hybrid_control"]);
+    // A prediction benchmark is a distinct route, preserving the source of its predicted outcomes.
+    expect(routes).toEqual(["prognostic_adjustment", "external_control", "literature_control", "model_comparator", "hybrid_control"]);
     const row = (route: string) => container.querySelector(`[data-vcr-route='${route}']`) as HTMLElement;
     expect(row("prognostic_adjustment")).toHaveTextContent("预后校正");
     expect(row("prognostic_adjustment").closest("li")).toHaveTextContent("不适用");
@@ -108,7 +108,7 @@ describe("对照 · the routes and the record in use", () => {
     expect(container.querySelector("[data-master-detail]")).toHaveAttribute("data-master-detail", "single");
     expect(container.querySelector("[data-vcr-route]")).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "全部路线" }));
-    expect(container.querySelectorAll("[data-vcr-route]")).toHaveLength(4);
+    expect(container.querySelectorAll("[data-vcr-route]")).toHaveLength(5);
     expect(container.querySelector("[data-vcr-diagnostics]")).toBeNull();
     await userEvent.click(container.querySelector("[data-vcr-route='external_control']") as HTMLElement);
     await found(container, "[data-vcr-route-record='external_control']");
@@ -246,7 +246,9 @@ describe("对照 · comparability and the prior", () => {
     expect(container.querySelector("[data-vcr-dimension]")).toBeNull();
     expect(container.textContent).not.toContain("十个维度都还没有评估");
     await userEvent.click(within(note).getByRole("button", { name: "评估可比性" }));
-    expect(spies.openChat).toHaveBeenCalledWith(VCR_ASSESS_COMPARABILITY_DRAFT);
+    expect(spies.openChat).toHaveBeenCalledWith(expect.stringContaining(VCR_ASSESS_COMPARABILITY_DRAFT), expect.objectContaining({ kind: "comparator", studyId: STUDY_ID }));
+    const draft = spies.openChat.mock.calls[0][0];
+    expect(draft).not.toMatch(/std_|res_|literature_control|external_control/);
   });
 
   it("puts a borrowed prior's numbers in a key / value list of their own, apart from the weights — and what a prior effective sample size is, on hover", async () => {
@@ -315,9 +317,51 @@ describe("对照 · before there is a comparison", () => {
     installVcrServer(network.productRequest, { [tab("comparator")]: fixture("empty/comparator.json") });
     const raw = fixture("ev201/study.json");
     raw.steps.comparator = { status: "none", requested: false };
-    const { container } = draw(readVcrStudy(raw));
+    const { container, spies } = draw(readVcrStudy(raw));
     const recipe = await found(container, "[data-vcr-step-empty='comparator']");
     await userEvent.click(within(recipe).getByRole("button", { name: "设计对照" }));
-    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/run`, "POST", { step: "comparator" }));
+    expect(spies.openChat).toHaveBeenCalledWith(expect.any(String), { kind: "step", studyId: STUDY_ID, objectId: "comparator" });
+    expect(network.productRequest.mock.calls.some(([, method]) => method === "POST")).toBe(false);
   });
+});
+
+it("binds a comparability draft to the explicitly displayed comparator and result versions", async () => {
+  const raw = fixture("ev201/comparator.json");
+  raw.selection = { id: "cmp_saved", version: 4, resultId: "result_saved", resultVersion: 7, route: "literature_control" };
+  raw.dimensions = raw.dimensions.map((dimension: any) => ({ ...dimension, state: "unknown", reason: null }));
+  installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+  const { spies } = draw();
+  await userEvent.click(await screen.findByRole("button", { name: "评估可比性" }));
+  const draft = spies.openChat.mock.calls[0][0];
+  expect(draft).toContain("版本 4");
+  expect(draft).not.toMatch(/cmp_saved|result_saved|external_control/);
+  expect(spies.openChat.mock.calls[0][1]).toEqual({ kind: "comparator", studyId: STUDY_ID, objectId: "cmp_saved", version: 4, resultId: "result_saved", resultVersion: 7 });
+});
+
+it("shows a scoped prognostic benchmark in its original scale and keeps its causal limitation explicit", async () => {
+  const raw = fixture("ev201/comparator.json");
+  raw.routes = [{ route: "model_comparator", state: "limited", selected: true }];
+  raw.predictionBenchmark = { sourceCondition: "standard_care", endpoint: { type: "binary", horizon: 12, timeUnit: "months" }, mean: { value: 0.27, source: "predicted" }, outcomeSd: null, relativeScore: null, absoluteRiskAvailable: true, causalEffectIdentified: false, limits: ["Predictions are not observed control outcomes or an independent increase in sample size."] };
+  installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+  draw();
+  const section = (await screen.findByRole("heading", { name: "模型预测基准" })).closest("section")!;
+  expect(section).toHaveTextContent("标准治疗");
+  expect(section).toHaveTextContent("二分类结局 · 12 月");
+  expect(section).toHaveTextContent("0.27");
+  expect(section).not.toHaveTextContent("27%");
+  expect(section).toHaveTextContent("不识别治疗效果");
+  expect(section).toHaveTextContent("不增加独立样本量");
+});
+
+it("keeps an unavailable absolute risk absent rather than treating a relative score as a zero outcome", async () => {
+  const raw = fixture("empty/comparator.json");
+  raw.routes = [{ route: "model_comparator", state: "limited", selected: true }];
+  raw.predictionBenchmark = { sourceCondition: "natural_history", endpoint: { type: "time_to_event", horizon: 1, timeUnit: "years" }, mean: null, outcomeSd: null, relativeScore: { value: 1.8, source: "predicted" }, absoluteRiskAvailable: false, causalEffectIdentified: false, limits: [] };
+  installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+  draw();
+  const section = (await screen.findByRole("heading", { name: "模型预测基准" })).closest("section")!;
+  expect(section).toHaveTextContent("平均相对预后评分");
+  expect(section).toHaveTextContent("1.8");
+  expect(section).toHaveTextContent("未提供适用的基线风险");
+  expect(within(section).queryByText("人群预测均值")).toBeNull();
 });

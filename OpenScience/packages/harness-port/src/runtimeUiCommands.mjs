@@ -722,9 +722,12 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         return h('div', {
           'data-evimed-tool-starters': model.id,
           style: { flexBasis: '100%', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '8px', minWidth: 0 },
-        }, starters.map((/** @type {{ label: string, draft: string }} */ starter) => h('button', {
-          key: starter.label, type: 'button', title: starter.draft, style: starterStyle, onClick: () => fill(starter.draft),
-        }, h('span', { style: starterText }, starter.label))));
+        }, starters.map((/** @type {{ label: string, draft: string, requirement?: string, minimumFields?: string, inputLabel?: string }} */ starter) => model.vcr ? h('div', {
+          key: starter.label, style: { display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0, width: '100%', textAlign: 'left' },
+        }, h('button', { type: 'button', title: starter.draft, style: starterStyle, onClick: () => fill(starter.draft) }, h('span', { style: starterText }, starter.label)),
+          h('span', { style: { fontSize: '12px', overflowWrap: 'anywhere' } }, [starter.inputLabel, starter.requirement].filter(Boolean).join(' · ')),
+          starter.minimumFields ? h('details', null, h('summary', { style: { cursor: 'pointer', fontSize: '12px' } }, '查看最低字段'), h('p', { style: { fontSize: '12px', margin: '8px 0', overflowWrap: 'anywhere' } }, starter.minimumFields)) : null)
+          : h('button', { key: starter.label, type: 'button', title: starter.draft, style: starterStyle, onClick: () => fill(starter.draft) }, h('span', { style: starterText }, starter.label))));
       }
       if (!model.starters.length) return null;
       return h('span', { 'data-evimed-tool-starters': model.id, style: { display: 'contents' } },

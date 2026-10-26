@@ -183,3 +183,12 @@ test("the routing eval cases are well formed: every expectation is none or a spe
   }
   assert.ok(cases.filter((item) => ![item.expect].flat().includes("none")).length >= 20);
 });
+test('module-only workflows are excluded from classifier candidates while explicit structured choices remain',async()=>{
+ const hidden=registry.get('vcr-protocol');assert.equal(hidden.listed,false);
+ let seen;
+ const model={classify:async(_query,candidates)=>{seen=candidates;return null;}};
+ const routed=await routeOpenDomain({query:'为这位患者匹配研究',agents,classifier:model});assert.equal(routed.specialist,null);
+ assert.ok(seen.every(agent=>agent.listed!==false));assert.ok(!seen.some(agent=>agent.id==='vcr-protocol'));
+ const command=await routeOpenDomain({query:'/vcr-protocol 整理方案',agents,classifier:model});assert.equal(command.specialist.agentId,'vcr-protocol');
+ const geo=await routeOpenDomain({query:'/geo-content 生成内容',agents,classifier:model});assert.equal(geo.specialist.agentId,'geo-content');
+});

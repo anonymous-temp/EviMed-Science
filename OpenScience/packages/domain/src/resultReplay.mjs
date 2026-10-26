@@ -1,6 +1,10 @@
 /** Scientific agreement is evaluated independently from serialized bytes.
  * Missing values, incompatible units and absent tolerances never imply success. */
-export const RESULT_REPLAY_METHODS = Object.freeze(["meta.dl", "faers.signals", "bibliometric.network", "design.analytic", "comparator.evalue"]);
+export const RESULT_R_REPLAY_METHOD_KINDS = Object.freeze({
+  'design.analytic':'design_analytic', 'comparator.evalue':'evalue', 'design.simulate':'design_simulation',
+  'design.assurance':'assurance', 'accrual.poisson_gamma':'accrual_forecast', 'comparator.map_prior':'map_prior',
+});
+export const RESULT_REPLAY_METHODS = Object.freeze(["meta.dl", "faers.signals", "bibliometric.network", ...Object.keys(RESULT_R_REPLAY_METHOD_KINDS)]);
 
 /** @param {any} before @param {any} after */
 export function compareResultNumbers(before, after) {

@@ -18,6 +18,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  public-dataset:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      # The index built from the pinned SIDER inputs is kept between runs: the builder reuses a cached index whose record names
+      # exactly those inputs (`reusable`) and builds it only when there is none, so a day the publisher is unreachable
+      # (2026-10-25) no longer stops every run. The key names the two input digests the builder pins.
+      - name: Restore the pinned SIDER index
+        uses: actions/cache/restore@v4
+        with:
+          path: OpenScience/runtime/mcp/evimed-research/data/sider-4.1.sqlite
+          key: sider-4.1-6427a3e3-119b2f53
+      # When there is no index to reuse, the pinned raw inputs are read from this cache (every read reverified) before the
+      # publisher is asked.
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/sider-inputs
+          key: sider-inputs-${{ hashFiles('OpenScience/runtime/mcp/evimed-research/build_sider_cache.py') }}
+      # This remains a failing check on an outage or integrity mismatch. It is
+      # independent so an external host cannot prevent the code suites running.
+      - name: Build and smoke the pinned public dataset
+        run: python3 runtime/mcp/evimed-research/build_sider_cache.py --source-cache "$RUNNER_TEMP/sider-inputs"
+
+      - name: Keep the pinned SIDER index
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: OpenScience/runtime/mcp/evimed-research/data/sider-4.1.sqlite
+          key: sider-4.1-6427a3e3-119b2f53
+
   web:
     runs-on: ubuntu-22.04
     timeout-minutes: 75
@@ -80,25 +111,6 @@ jobs:
       - name: Fetch bundled ai4s-skills pack
         shell: bash
         run: bash scripts/dev/fetch-skills.sh
-
-      # The index built from the pinned SIDER inputs is kept between runs: the builder reuses a cached index whose record names
-      # exactly those inputs (`reusable`) and builds it only when there is none, so a day the publisher is unreachable
-      # (2026-10-25) no longer stops every run. The key names the two input digests the builder pins.
-      - name: Restore the pinned SIDER index
-        uses: actions/cache/restore@v4
-        with:
-          path: OpenScience/runtime/mcp/evimed-research/data/sider-4.1.sqlite
-          key: sider-4.1-6427a3e3-119b2f53
-
-      - name: Build and smoke the pinned public dataset
-        run: python3 runtime/mcp/evimed-research/build_sider_cache.py
-
-      - name: Keep the pinned SIDER index
-        uses: actions/cache/save@v4
-        continue-on-error: true
-        with:
-          path: OpenScience/runtime/mcp/evimed-research/data/sider-4.1.sqlite
-          key: sider-4.1-6427a3e3-119b2f53
 
       - name: Test domain, port, socket and upstream contracts
         run: CI=true pnpm test:packages
@@ -716,7 +728,8 @@ jobs:
           node --test --test-concurrency=1 \
             apps/server/test/vcrEngineContract.integration.test.mjs \
             apps/server/test/vcrIntake.integration.test.mjs \
-            apps/server/test/vcrKnowledgeEngine.integration.test.mjs
+            apps/server/test/vcrKnowledgeEngine.integration.test.mjs \
+            apps/server/test/vcrModelScience.integration.test.mjs
           NO_COLOR=1 node --test --test-reporter=spec --test-concurrency=1 \
             apps/server/test/resultReplayLifecycle.integration.test.mjs \
             2>&1 | tee "$RUNNER_TEMP/result-replay-five-paths.log"

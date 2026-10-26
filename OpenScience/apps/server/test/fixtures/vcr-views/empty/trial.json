@@ -8,6 +8,7 @@
   "powerCurve": null,
   "decision": null,
   "forecasts": [],
+  "accrualForecasts": [],
   "milestones": [],
   "schedule": null,
   "regulatory": [],

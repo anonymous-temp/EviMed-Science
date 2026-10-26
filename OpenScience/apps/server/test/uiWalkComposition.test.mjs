@@ -72,12 +72,12 @@ test("the band holds: it is sticky, it is where the scroll area starts after the
   // The tab list and the rail are in the band or they scroll away.
   const loose = good({ tablists: [{ label: "项目视图", tabs: 8, dots: 0, inChrome: false, inToolbar: false, inSection: false, ...box(400) }], stepRail: { ...box(300), folded: false, count: 8, inChrome: false, steps: [] } });
   assert.deepEqual(texts("geo-plan", "desktop", loose), ["geo-plan@desktop: [chrome] the tab list “项目视图” is outside the band, so it scrolls away", "geo-plan@desktop: [chrome] the step rail is outside the band, so it scrolls away"]);
-  // A module page has a band and steps: a rail, or a tab row with a state dot on its tabs (虚拟临床研究's: the overview is not a step).
+  // GEO retains workflow navigation; VCR exposes saved research objects without a mandatory step rail.
   assert.deepEqual(rules("geo-plan", "desktop", good({ chrome: null })), ["chrome"]);
-  assert.match(texts("vcr-trial", "desktop", good({ stepRail: null }))[0], /\[step-rail\] a module page shows no steps/);
-  const dotted = good({ stepRail: null, tablists: [{ label: "研究视图", tabs: 7, dots: 6, inChrome: true, inToolbar: false, inSection: false, ...box(100) }] });
-  assert.deepEqual(rules("vcr-trial", "desktop", dotted), []);
-  assert.deepEqual(rules("vcr-trial", "desktop", good({ stepRail: null, tablists: [{ label: "研究视图", tabs: 7, dots: 1, inChrome: true, inToolbar: false, inSection: false, ...box(100) }] })), ["step-rail"]);
+  assert.match(texts("vcr-trial", "desktop", good({ stepRail: null, tablists: [] }))[0], /\[chrome\] the research workspace must expose one pinned result-view selector/);
+  assert.deepEqual(rules("vcr-trial", "desktop", good({ stepRail: null, tablists: [], viewSelector: { count: 1 } })), []);
+  assert.deepEqual(rules("vcr-trial", "desktop", good({ stepRail: null, tablists: [], viewSelector: { count: 0 } })), ["chrome"]);
+  assert.deepEqual(rules("vcr-trial", "desktop", good({ tablists: [], viewSelector: { count: 1 } })), ["step-rail"]);
 });
 
 test("a page keeps to its template's slots: a list page has no step rail, a settings page no tab list or toolbar", () => {
@@ -213,10 +213,9 @@ test("循证 GEO's eight steps are its navigation (V3 plan, 2026-10-23): no seco
     assert.match(selector[0], /\[chrome\] the module's steps are its navigation: a second, project-level result selector/);
     assert.ok(rules("geo-plan", viewport, { ...rail, stepRail: { ...rail.stepRail, count: 7 } }).includes("step-rail"));
     assert.ok(rules("geo-plan", viewport, { ...rail, stepRail: null }).includes("step-rail"), "the steps are the navigation: without them there is none");
-    // 虚拟临床研究 keeps its rail and one pinned selector.
-    const study = { ...rail, stepRail: { ...rail.stepRail, count: 7 } };
-    assert.ok(rules("vcr-trial", viewport, study).includes("chrome"));
-    assert.deepEqual(rules("vcr-trial", viewport, { ...study, viewSelector: { count: 1, top: 148 } }), []);
+    // 虚拟临床研究 has no step rail since the 2026-10-25 reset: its six result destinations are one pinned selector.
+    assert.ok(rules("vcr-trial", viewport, rail).includes("chrome"), "VCR requires its research-object selector, not GEO workflow controls");
+    assert.deepEqual(rules("vcr-trial", viewport, { ...rail, stepRail: null, viewSelector: { count: 1, top: 148 } }), []);
   }
   const pages = Object.fromEntries(["geo-overview", "geo-plan"].map((name) => [`${name}@desktop`, { composition: rail }]));
   assert.ok(!familyFindings(pages).some((entry) => entry.rule === "module-steps"));

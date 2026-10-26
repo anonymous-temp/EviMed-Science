@@ -373,6 +373,7 @@ vcr_population_literature <- function(table, n, correlation = NULL,
   out$kind <- "literature"
   out$modelTier <- "literature"
   out$correlationSource <- correlation_source
+  out$correlationVerification <- if (identical(correlation_source, "cited")) "declared_citation_not_verified_by_engine" else "assumed"
   out$applicability <- "source_trial_population"
   out$columnSources <- stats::setNames(rep("aggregate", length(vars)), vapply(vars, function(v) v$name, character(1)))
   if (!is.null(correlation)) out$columnSources[["(correlation)"]] <- if (identical(correlation_source, "assumed")) "assumed" else "aggregate"

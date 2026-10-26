@@ -29,6 +29,7 @@ export function createResultGateway({ runtimeManager, store, service, agentRuns,
       const fields = operation === "start" ? ["method", "inputPath", "parameters", "requestId"] : operation === "render" ? ["templatePath", "outputPath", "calculations"] : ["jobId"];
       if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(key => !fields.includes(key))) throw new HttpError(400, "result_calculation_invalid", "Unsupported calculation fields.");
       let result;
+      let observationOrigin=null;
       if (operation === "start" || operation === "render") {
         let context;
         /** @type {any} */
@@ -41,7 +42,7 @@ export function createResultGateway({ runtimeManager, store, service, agentRuns,
           const fresh = await identity(token);
           if (fresh.userId !== auth.userId || fresh.projectId !== auth.projectId) throw new HttpError(403, "result_invocation_unavailable", "The calculation scope changed.");
           ownedSession = resolveSession(project, context.sessionId);
-          const transcript = await runtimeManager.sessionTranscript(project, context.sessionId, { wake: false,
+          const transcript = await runtimeManager.sessionTranscript(project, context.sessionId, { wake: false,currentTurn:true,
             ...(ownedSession?.child ? { parentSessionId: ownedSession.parentSessionId } : {}) });
           const turn = transcript?.turns?.at(-1);
           const calls = (transcript?.messages ?? []).flatMap(message => (message.parts ?? []).map(part => ({ message, part })))
@@ -63,6 +64,7 @@ export function createResultGateway({ runtimeManager, store, service, agentRuns,
         const run = (await agentRuns.activeRuns(project)).find(item => item.id === ownedSession?.runId || item.sessionId === context.sessionId);
         const origin = { sessionId: context.sessionId, callId: context.callId, runId: run?.id ?? null,
           parentSessionId: ownedSession?.parentSessionId ?? null, branchId: ownedSession?.branchId ?? null };
+        observationOrigin={...origin,rootSessionId:origin.parentSessionId ?? origin.sessionId};
         if (operation === "render") {
           if (!lineage) throw new HttpError(503, "result_calculation_unavailable", "Calculations are unavailable.");
           result = await lineage.render(user.id, project, input, origin, revalidate);
@@ -70,7 +72,25 @@ export function createResultGateway({ runtimeManager, store, service, agentRuns,
       } else {
         if (typeof input.jobId !== "string" || !/^replay_[a-f0-9]{64}$/.test(input.jobId)) throw new HttpError(400, "result_calculation_invalid", "Invalid calculation identity.");
         await identity(token);
+        if(req.headers['x-evimed-execution-context']) {
+          let context;
+          try {context=JSON.parse(String(req.headers['x-evimed-execution-context']));} catch {throw new HttpError(403,'result_invocation_unavailable','Invalid native calculation context.');}
+          if(context?.v!==1 || !['sessionId','callId'].every(key=>typeof context[key]==='string' && /^[A-Za-z0-9_-]{1,160}$/.test(context[key]))) throw new HttpError(403,'result_invocation_unavailable','Invalid native calculation context.');
+          const owned=resolveSession(project,context.sessionId);
+          const transcript=await runtimeManager.sessionTranscript(project,context.sessionId,{wake:false,currentTurn:true,...(owned?.child ? {parentSessionId:owned.parentSessionId}:{})});
+          const turn=transcript?.turns?.at(-1);
+          const calls=(transcript?.messages ?? []).flatMap(message=>(message.parts ?? []).map(part=>({message,part}))).filter(item=>item.part.type==='tool' && item.part.callId===context.callId);
+          const call=calls[0];
+          if(transcript?.sessionId!==context.sessionId || transcript.truncated || !turn || turn.end!==null || calls.length!==1 || call.part.status!=='pending'
+            || call.message.turnStartSeq!==turn.startSeq || ![mcpToolName('research_calculate'),'research_calculate'].includes(call.part.tool)
+            || call.part.input?.action!==operation || call.part.input?.jobId!==input.jobId) throw new HttpError(403,'result_invocation_unavailable','The native status call is unavailable.');
+          const run=(await agentRuns.activeRuns(project)).find(item=>item.id===owned?.runId || item.sessionId===context.sessionId);
+          if(run) observationOrigin={runId:run.id,rootSessionId:run.sessionId,callId:context.callId};
+        }
         result = operation === "status" ? await service.status(user.id, project.id, input.jobId) : await service.cancel(user.id, project.id, input.jobId);
+      }
+      if(observationOrigin && ['succeeded','failed','canceled'].includes(result?.state) && service.observeTerminal) {
+        await service.observeTerminal(user.id,project.id,result.id ?? input.jobId,observationOrigin,result);
       }
       sendJson(res, operation === "start" ? 202 : 200, { data: result });
     } catch (error) {

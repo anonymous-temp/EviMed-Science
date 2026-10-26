@@ -4881,3 +4881,33 @@ test("a platform skill idle-guard no-op never announces a newly created runtime"
   assert.equal(manager.runtimes.get(manager.key(project)), warm);
   assert.equal(manager.starts.size, 0);
 });
+
+test('native invocation reads the current turn without walking thousands of older messages',async()=>{
+ const manager=new RuntimeManager({});manager.runtimes.set(`${project.userId}:${project.id}`,{});let pages=0;
+ manager.callKernel=async(_runtime,_project,method,_args)=>{
+  if(method==='session/list')return{items:[{sessionId:'long_session',projections:{asOfSeq:10000}}]};
+  assert.equal(method,'session/page');pages++;
+  if(pages>1)throw new Error('Older conversation history is irrelevant to this proof');
+  return{hasMore:true,records:[{event:{seq:9998,type:'turn/start',data:{turn:2000}}},{event:{seq:9999,type:'tool/call',data:{callId:'current_call',tool:'vcr_read',arguments:{what:'study'}}}}]};
+ };
+ const transcript=await manager.sessionTranscript(project,'long_session',{wake:false,currentTurn:true});
+ assert.equal(pages,1);assert.equal(transcript.truncated,false);assert.equal(transcript.turns.length,1);assert.equal(transcript.turns[0].startSeq,9998);
+});
+
+test('completion inbox probes preserve the original idle timer and do not hold a reclamation connection',async()=>{
+ const manager=Object.create(RuntimeManager.prototype);const timer=setTimeout(()=>{},600000);timer.unref();
+ manager.config={runtimeIdleTimeoutMs:600000};manager.key=()=> 'u:p';manager.runtimes=new Map([['u:p',{}]]);
+ manager.runtimeActivity=new Map([['u:p',{activeProxies:0,lastUseAt:1,idleTimer:timer}]]);manager.enforceProxyCapacity=()=>{};
+ manager.withRuntimeDeadline=fn=>fn();manager.callKernel=async()=>{assert.equal(manager.runtimeActivity.get('u:p').activeProxies,0);assert.equal(manager.activeProxyCount(),1);return{items:[]};};
+ try{for(let i=0;i<3;i++)await manager.sessionInbox({id:'p',userId:'u'},'root');
+  const activity=manager.runtimeActivity.get('u:p');assert.equal(activity.lastUseAt,1);assert.equal(activity.idleTimer,timer);assert.equal(manager.activeProxyCount(),0);
+ }finally{clearTimeout(timer);}
+});
+
+test('conditional continuation admission runs after runtime preparation and refuses before the prompt wire',async()=>{
+ const manager=new RuntimeManager({});const runtime=fakeRuntime(project.id);manager.runtimes.set(manager.key(project),runtime);let laterHumanCompleted=false,checks=0;const wire=[];
+ manager.assertInteractiveRuntimeAvailable=()=>{};manager.assertPersonalSkillPromptGeneration=async()=>{};manager.refreshCapsuleMethods=async()=>{laterHumanCompleted=true;};manager.enforceProjectQuota=async()=>{};
+ manager.callKernel=async(_runtime,_project,method)=>{wire.push(method);return{};};
+ await assert.rejects(manager.dispatchPrompt(project,'root',{text:'Original computation completion',beforePrompt:async()=>{checks++;assert.equal(laterHumanCompleted,true);throw Object.assign(new Error('A newer human turn already completed'),{code:'vcr_completion_disclosed'});}}),error=>error.code==='vcr_completion_disclosed' && error.definitivelyRejected===true);
+ assert.equal(checks,1);assert.ok(wire.includes('session/create'));assert.ok(!wire.includes('session/prompt'));
+});

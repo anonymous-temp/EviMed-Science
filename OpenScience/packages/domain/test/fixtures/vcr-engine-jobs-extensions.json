@@ -614,6 +614,48 @@
         "inputs": [],
         "replicates": 2000
       }
+    },
+    {
+      "name": "longitudinal: current generator with stable member identity",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0,
+            3,
+            6,
+            9,
+            12
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "effect": -0.2,
+            "sd": 3,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": 0.3,
+              "correlation": -0.2
+            }
+          },
+          "dropoutPerVisit": 0.1
+        },
+        "inputs": []
+      }
     }
   ],
   "invalid": [
@@ -1164,7 +1206,7 @@
         "studyId": "std_1",
         "kind": "generate_patients_longitudinal",
         "method": "patients.longitudinal",
-        "methodVersion": "1.1.0",
+        "methodVersion": "9.0.0",
         "protocolVersion": 1,
         "seed": 20261007,
         "cpuSecondsLimit": 600,

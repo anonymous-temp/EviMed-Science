@@ -1,10 +1,11 @@
+import type { VcrObjectSelection } from "@/lib/runtimeUiNavigation";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
 import { ChevronLeft, MessageSquare, MoreHorizontal } from "lucide-react";
 import { vcrCalculationPath } from "@/lib/vcrMethodLocation";
 import { toast } from "@/lib/toast";
 import { webErrorMessage } from "@/lib/apiClient";
-import { cancelVcrStudy, runVcrStep, type VcrStudy, type VcrTabKey } from "@/lib/vcrClient";
+import { cancelVcrStudy, type VcrStudy, type VcrTabKey } from "@/lib/vcrClient";
 import { PageShell } from "@/components/layout/PageShell";
 import type { ActivityStripProps } from "@/components/ui/ActivityStrip";
 import { Button, buttonClasses } from "@/components/ui/Button";
@@ -12,12 +13,10 @@ import { Drawer } from "@/components/ui/Drawer";
 import { IconButton } from "@/components/ui/IconButton";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import type { ToolbarProps } from "@/components/ui/Toolbar";
-import { Tooltip } from "@/components/ui/Tooltip";
 import { StudyFrameContext, type StudyFrameApi, type StudyPanelKey, type StudyPrimary } from "./studyFrameContext";
-import { useVcrRun } from "./useVcrRun";
 import { budgetWaitOf } from "./VcrBudgetDialog";
-import { leadJob, isMoving, jobLabel, runDetailLine, stepAction, studyVersion, waitingSentence } from "./vcrActivity";
-import { stepsOfTab, vcrWorkflowSteps, VCR_HOME_PATH, VCR_TAB_ITEMS } from "./vcrTabs";
+import { leadJob, jobLabel, runDetailLine, stepAction, studyVersion, waitingSentence } from "./vcrActivity";
+import { VCR_HOME_PATH, VCR_TAB_ITEMS } from "./vcrTabs";
 import { intendedUseLabel, tierLabel } from "./vcrText";
 
 /** The one view of a study that is not a tab: its conversation. */
@@ -27,7 +26,7 @@ export type StudyView = VcrTabKey | "chat";
 export const STUDY_PANEL_ID = "vcr-tab-panel";
 
 /**
- * Shared study chrome for results and its canonical native conversation. The seven actual steps remain visible; one View selector
+ * Shared study chrome for results and its canonical native conversation. One View selector
  * opens result workspaces, and each workspace contributes its contextual controls to the same toolbar. Calculations retain only
  * contextual result navigation. The runtime pane and composer are owned by the resident native frame.
  */
@@ -40,14 +39,12 @@ export interface StudyFrameProps {
   /** The header's 「⋯」: the page owns what each entry opens. */
   menu: readonly MenuEntry[];
   /** The way into the conversation, with a draft waiting in its composer. Navigation inside the page. */
-  onChat: (draft?: string) => void;
+  onChat: (draft?: string, reference?: VcrObjectSelection) => void;
   /** Opens one of the page's panels (the menu's records and dialogs) for a tab that asks. */
   onPanel: (panel: StudyPanelKey) => void;
   /** Opens the study's own address for a tab. */
   onView: (view: StudyView) => void;
   children: ReactNode;
-  onMethods?: () => void;
-  methodsOpen?: boolean;
 }
 
 /**
@@ -83,16 +80,14 @@ export function activityStripOf(study: VcrStudy, handlers: { onCancel?: () => vo
   return null;
 }
 
-export function StudyFrame({ studyId, study, view, reload, menu, onChat, onPanel, onView, children, onMethods, methodsOpen }: StudyFrameProps) {
-  const { run, busy } = useVcrRun(study, { refresh: reload });
+export function StudyFrame({ studyId, study, view, reload, menu, onChat, onPanel, onView, children }: StudyFrameProps) {
+  const [params, setParams] = useSearchParams();
+  const individual = params.get("level") === "individual" || params.has("patient");
   const [toolbar, setToolbar] = useState<ToolbarProps | null | undefined>(undefined);
   const [tabPrimary, setTabPrimary] = useState<StudyPrimary | null>(null);
   const [cancelling, setCancelling] = useState(false);
-  const [params] = useSearchParams();
   const programme = study.purpose !== "calculation";
   const mayRun = study.abilities.includes("run");
-  const moving = isMoving(study.activity);
-  const next = study.next;
 
   const cancel = useCallback(() => {
     if (cancelling) return;
@@ -121,27 +116,15 @@ export function StudyFrame({ studyId, study, view, reload, menu, onChat, onPanel
   // The open tab's own primary (选定方案 on 试验) takes the header's primary look unless the budget waits, which lets the study go on and
   // outranks it; either way the next step is the quiet one beside it, and the header never holds two solid buttons.
   const tabButton = tabPrimary ? <Button variant={waitingBudget ? "secondary" : "primary"} onClick={tabPrimary.onSelect}>{tabPrimary.label}</Button> : null;
-  const primaryTaken = waitingBudget || tabPrimary !== null;
-  const nextButton = programme && study.status !== "draft" && next && mayRun && !moving ? (() => {
-    const button = (
-      <Button variant={primaryTaken ? "secondary" : "primary"} loading={busy} onClick={() => run(() => runVcrStep(studyId, next.step), "这一步无法开始，请稍后重试。")}>
-        {`${next.reason === "retry" ? "接着做" : next.reason === "refresh" ? "重新做" : "下一步"}：${next.label}`}
-      </Button>
-    );
-    // Why it is the next one, when it is not simply the next: the step was not finished, or what it rests on changed.
-    return next.reasonText ? <Tooltip content={next.reasonText}>{button}</Tooltip> : button;
-  })() : null;
   const strip = activityStripOf(study, { onCancel: mayRun ? cancel : undefined, cancelling });
-  // The domain steps remain visible in conversation; result views use one contextual selector.
-  const steps = useMemo(() => vcrWorkflowSteps(study), [study]);
-  const selectedStep = params.get("step") ?? (view === "chat" ? study.activity?.run?.step ?? study.next?.step : stepsOfTab(view)[0]);
   const controls = view === "chat" ? undefined : toolbar;
   const bandToolbar: ToolbarProps = {
     ...(controls ?? {}), views: undefined,
-    actions: <>{controls?.actions}{view !== "chat" && onMethods && <Button variant="text" size="sm" onClick={onMethods}>{methodsOpen ? "返回本步结果" : "选择方法"}</Button>}</>,
-    filters: [{ kind: "select", label: "查看", value: view, pinned: true,
+    actions: controls?.actions,
+    filters: [{ kind: "select", label: "查看", value: view === "patients" ? "population" : view, pinned: true,
       options: [...(programme || study.conversation.sessionId ? [{ value: "chat", label: "对话" }] : []), ...(programme ? VCR_TAB_ITEMS : VCR_TAB_ITEMS.filter(item => ["overview", "data", "population", "matching"].includes(item.key))).map(item => ({ value: item.key, label: item.label }))],
       onChange: next => { if (next) onView(next as StudyView); } },
+      ...(view === "population" || view === "patients" ? [{ kind: "select" as const, label: "人群与患者", value: individual ? "individual" : "cohort", options: [{ value: "cohort", label: "队列总览" }, { value: "individual", label: "个体患者" }], onChange: (next: string | null) => { if (next) setParams(previous => { const updated = new URLSearchParams(previous); updated.set("level", next); if (next === "cohort") updated.delete("patient"); return updated; }); } }] : []),
       ...(controls?.views ? [{ kind: "select" as const, label: controls.views.label, value: controls.views.value, options: controls.views.items.map(item => ({ value: item.value, label: item.label })), onChange: (next: string | null) => { if (next) controls.views?.onChange(next); } }] : []),
       ...(controls?.filters ?? [])],
   };
@@ -162,17 +145,15 @@ export function StudyFrame({ studyId, study, view, reload, menu, onChat, onPanel
           <>
             {budgetButton}
             {tabButton}
-            {nextButton}
             {view !== "chat" && (programme || study.conversation.sessionId) && <Button variant="secondary" onClick={() => onChat()}>
               <MessageSquare size={16} aria-hidden="true" />
-              对话
+              研究对话
             </Button>}
             <Menu label="更多操作" items={[...menu]}>
               <IconButton icon={MoreHorizontal} label="更多操作" className="data-[state=open]:bg-surface-2 data-[state=open]:text-text" />
             </Menu>
           </>
         )}
-        steps={programme ? { label: "研究进度", steps, activeSteps: selectedStep ? [selectedStep] : [], visible: true, showState: true } : undefined}
         {...(strip ? { activity: strip } : {})}
         toolbar={bandToolbar}
         contentClassName={view === "chat" ? "mt-3" : undefined}

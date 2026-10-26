@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, expect, it, vi } from "vitest";
 import { VcrMethodResult } from "./VcrMethodResult";
-import { VcrMethodResultCharts, readMethodResultSeries } from "./VcrMethodResultCharts";
+import { VcrMethodResultCharts, readMethodResultSeries, readFittedSurvivalSeries } from "./VcrMethodResultCharts";
 import { DistributionGrid } from "./patients/DistributionGrid";
 import type { VcrGeneratedRow } from "@/lib/vcrClient";
 const api = vi.hoisted(() => ({ getVcrMethodResult: vi.fn(), getVcrPatients: vi.fn(), getVcrTrial: vi.fn() }));
@@ -106,4 +106,21 @@ it("names the engine E-value measures while preserving authored labels and retai
   const table = await screen.findByRole("table", { name: "本次计算指标" });
   expect(table).toHaveTextContent("E-value"); expect(table).toHaveTextContent("置信限 E-value"); expect(table).toHaveTextContent("作者指定指标");
   expect(table).not.toHaveTextContent("e_value"); expect(table).toHaveTextContent("2.61"); expect(measures).toEqual(before);
+});
+
+it("labels retained fitted and published-model measures in reader language", async () => {
+  api.getVcrMethodResult.mockResolvedValue({ result: { id: "model_result", kind: "model", measures: ["fitted_median", "aic", "predicted_population_mean", "predicted_outcome_sd", "mean_relative_score"].map(name => ({ name, value: 2 })) }, records: { available: false } });
+  render(<VcrMethodResult studyId="study_1" job={{ id: "model_job", kind: "fit_survival_model", state: "succeeded" }} />);
+  const table = await screen.findByRole("table", { name: "本次计算指标" });
+  for (const label of ["拟合生存中位时间", "AIC", "人群预测均值", "预测结局标准差", "平均相对预后评分"]) expect(table).toHaveTextContent(label);
+});
+it("distinguishes fitted parameter uncertainty and extrapolation from patient percentiles", () => {
+  const curve = [{ time: 0, survival: 1, risk: 0, extrapolated: false }, { time: 12, survival: 0.6, risk: 0.4, extrapolated: false }, { time: 24, survival: 0.3, risk: 0.7, extrapolated: true }];
+  const parsed = readFittedSurvivalSeries(curve);
+  expect(parsed[1].label).toBe("模型外推"); expect(parsed[1].dashed).toBe(true); expect(parsed[0].atRisk).toBeUndefined();
+  render(<VcrMethodResultCharts method="model.survival_fit" result={{ id: "fit", kind: "model", diagnostics: { model: { curve, medianParameterQuantiles: { p10: 14, p50: 18, p90: 22 } } } }} />);
+  expect(screen.getByRole("heading", { name: "拟合中位时间的参数不确定性" })).toBeInTheDocument();
+  expect(screen.getByText("10% 参数分位")).toBeInTheDocument();
+  expect(screen.queryByText(/患者.*百分位/)).toBeNull();
+  expect(screen.queryByRole("group", { name: "风险人数" })).toBeNull();
 });

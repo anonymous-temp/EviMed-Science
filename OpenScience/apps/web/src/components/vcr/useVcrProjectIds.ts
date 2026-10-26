@@ -77,12 +77,14 @@ export function useVcrProjects(enabled: boolean, projectsKey: string, currentId?
     void getVcrHome()
       .then((home) => {
         if (!live.current) return;
-        const studyOf = new Map(home.studies.map((study) => [study.projectId, study.id] as const));
+        const studyOf = new Map(home.studies.filter(study => study.purpose !== "task").map((study) => [study.projectId, study.id] as const));
         const calculations = new Map(home.studies.filter(study => study.purpose === "calculation").map(study => [study.projectId, study.id]));
         const studies = new Set(studyOf.keys());
-        const drafts = new Set(home.draftProjectIds);
+        const taskProjects = new Set(home.studies.filter(study => study.purpose === "task").map(study => study.projectId));
+        const drafts = new Set(home.draftProjectIds?.filter(id => !taskProjects.has(id)));
         // What the list now says is the truth: a hint it has caught up with (the project is a study or a draft there) is forgotten.
         const hints = hinted.size;
+        for (const projectId of taskProjects) hinted.delete(projectId);
         for (const projectId of studies) hinted.delete(projectId);
         for (const projectId of drafts) hinted.delete(projectId);
         setSets((previous) => (same(previous, { studies, drafts, studyOf, calculations }) ? previous : { studies, drafts, studyOf, calculations }));

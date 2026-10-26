@@ -87,8 +87,7 @@ test('a subject withdraws consent: their text is overwritten, the rows and hashe
   const { target, doc1, doc2, docS2, s1, s2, projection } = f;
   const textLocation = (await vcr.dataStore.getSourceFile(target.id, doc1.id)).location;
   const aliasInPlane = path.join(directory, 'alias-of-chart-1');
-  const referralBefore = (await vcr.matchStore.listReferrals({ studyId: target.id })).find(row => row.subjectKey === s1);
-  assert.ok(referralBefore && !['withdrawn', 'screen_failed'].includes(referralBefore.state));
+  assert.equal(typeof vcr.matchStore.listReferrals,"undefined");
   const manifest = await vcr.store.one('SELECT location, projection_hash, manifest_hash FROM evimed_vcr.document_projections WHERE id=$1', [projection.id]);
   const assessmentBefore = (await vcr.matchStore.listAssessments({ studyId: target.id, subjectKey: s1 }))[0];
   const judgmentsBefore = (await vcr.matchStore.getAssessment(assessmentBefore.id, target.id)).judgments;
@@ -97,7 +96,7 @@ test('a subject withdraws consent: their text is overwritten, the rows and hashe
   // The trials the patient was judged against (「给患者找试验」) quote the chart as well.
   const trial = await vcr.patientTrials.writeTrial(target, { subjectKeys: [s1], trial: { registry: 'clinicaltrials.gov', registryId: 'NCT06000099', title: 'Synthetic trial', phase: 'PHASE2',
     status: 'RECRUITING', conditions: ['NSCLC'], locations: { total: 1, countries: ['China'], sites: [] }, url: 'https://clinicaltrials.gov/study/NCT06000099', recordHash: 'd'.repeat(64),
-    retrievedAt: '2026-10-10T07:00:00.000Z', eligibilityText: '' }, criteria: [{ kind: 'inclusion', criterionType: 'demographic', sourceText: 'Age >= 18',
+    retrievedAt: '2026-10-10T07:00:00.000Z', eligibilityText: 'Age >= 18' }, criteria: [{ kind: 'inclusion', criterionType: 'demographic', sourceText: 'Age >= 18',
     requirement: { op: 'compare', variable: 'age', comparator: 'gte', value: 18, unit: 'year' }, applicability: null, sourceLocator: {}, evidenceNeeded: [], reviewState: 'ai_set' }] });
   assert.equal(trial.evaluation.evaluated.length, 1, JSON.stringify(trial.evaluation));
   const candidateEvidence = async () => (await vcr.store.rows('SELECT evidence FROM evimed_vcr.candidate_trial_judgments')).flatMap(row => row.evidence);
@@ -106,7 +105,7 @@ test('a subject withdraws consent: their text is overwritten, the rows and hashe
   await fs.link(path.join(directory, textLocation), aliasInPlane);
 
   const report = await vcr.dataPlane.withdrawSubject({ studyId: target.id, subjectKey: s1, actor: 'owner', reason: 'patient request' });
-  assert.deepEqual([report.files, report.projections, report.referralsClosed], [2, 1, 1]);
+  assert.deepEqual([report.files, report.projections], [2, 1]);
   assert.equal(report.factsRemoved, 1, 'the fact no evaluation used is deleted');
   assert.equal(report.factsRedacted, 2, 'the facts the evaluation was frozen on keep their rows');
   assert.equal(report.judgmentsRedacted, 1);
@@ -187,10 +186,7 @@ test('a subject withdraws consent: their text is overwritten, the rows and hashe
   assert.equal(second.diagnostics.errors, 1);
   assert.deepEqual(second.diagnostics.errorCodes, ['vcr_subject_withdrawn']);
 
-  // Their referral closed as 退出, so nobody contacts them.
-  const referralAfter = (await vcr.matchStore.listReferrals({ studyId: target.id })).find(row => row.subjectKey === s1);
-  assert.equal(referralAfter.state, 'withdrawn');
-  assert.equal((await vcr.matchStore.listReferralEvents(referralAfter.id)).at(-1).note, '知情同意已撤回');
+  assert.equal('referralsClosed' in report,false,'withdrawal no longer queries retired tables');
 
   // The audit trail keeps the hashes and counts and never a word.
   const audits = await vcr.store.rows("SELECT action, object, detail FROM evimed_vcr.audit WHERE study_id=$1 AND action IN ('subject.withdraw','source.file.erase','document.projection.retire')", [target.id]);
@@ -297,4 +293,33 @@ test('the overwrite replaces a file in place, refuses a symlink and a location o
     assert.equal(await fs.readFile(path.join(dir, 'outside.txt'), 'utf8'), 'keep', 'a symlink is never followed');
     await assert.rejects(shredPlaneFile(dir, '../elsewhere.txt'), { code: 'vcr_data_plane_location_outside' });
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
+});
+
+test('a source-less history-only subject withdraws through the composed data plane and disappears from JSON and CSV', options, async () => {
+  const target = await vcr.store.createStudy({ userId: 'history-owner', projectId: `history_${Math.random().toString(16).slice(2)}`,
+    name: 'Historical observation withdrawal', question: 'Preserved scientific observations', dataTier: 'T0' });
+  const foreign = await vcr.store.createStudy({ userId: 'foreign-owner', projectId: `foreign_${Math.random().toString(16).slice(2)}`,
+    name: 'Other owned study', question: 'Other scope', dataTier: 'T0' });
+  const subjectKey = 'HISTORY_ONLY';
+  await vcr.matchStore.query(`INSERT INTO evimed_vcr.followup_episodes
+    (id, study_id, user_id, subject_key, kind, observations)
+    VALUES ($1,$2,$3,$4,'routine_care',$5::jsonb)`,
+  [`${target.id}_history`, target.id, target.userId, subjectKey, JSON.stringify([{ variable: 'ecog', value: 2 }])]);
+  assert.equal((await vcr.service.followupHistory({ id: target.userId }, target.id)).episodes.length, 1);
+  assert.match((await vcr.service.followupHistory({ id: target.userId }, target.id, { format: 'csv' })).csv, /ecog/);
+  await assert.rejects(vcr.dataPlane.withdrawSubject({ actor: foreign.userId, studyId: target.id, subjectKey }),
+    { status: 404, code: 'vcr_study_not_found' }, 'another owner cannot withdraw the retained history');
+  await assert.rejects(vcr.dataPlane.withdrawSubject({ actor: foreign.userId, studyId: foreign.id, subjectKey }),
+    { status: 404, code: 'vcr_subject_not_found' }, 'subject recognition remains scoped to its owned study');
+  const withdrawn = await vcr.dataPlane.withdrawSubject({ actor: target.userId, studyId: target.id, subjectKey });
+  assert.equal(withdrawn.subjectKey, subjectKey);
+  assert.deepEqual((await vcr.service.followupHistory({ id: target.userId }, target.id)).episodes, []);
+  const csv = await vcr.service.followupHistory({ id: target.userId }, target.id, { format: 'csv' });
+  assert.deepEqual(csv.episodes, []);
+  assert.doesNotMatch(csv.csv, /HISTORY_ONLY|ecog/);
+  const repeated = await vcr.dataPlane.withdrawSubject({ actor: target.userId, studyId: target.id, subjectKey });
+  assert.equal(repeated.subjectKey, subjectKey);
+  assert.deepEqual((await vcr.service.followupHistory({ id: target.userId }, target.id)).episodes, []);
+  const rows = await vcr.matchStore.rows('SELECT subject_key FROM evimed_vcr.subject_withdrawals WHERE study_id=$1', [target.id]);
+  assert.deepEqual(rows.map(row => row.subject_key), [subjectKey], 'the real withdrawal path writes one stable tombstone');
 });

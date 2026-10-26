@@ -155,18 +155,23 @@ test("a projection read through the VCR gateway is filed under the conversation 
   const at = original.indexOf("王小明");
   const projection = await plan.createDocumentProjection({ studyId: study.id, documentId: upload.file.id, actor: user.id, sourceHash: projectionHash(original),
     spans: [{ start: at, end: at + 3, kind: "person" }], attestation: "Reviewed synthetic canary" });
-  const read = () => post("/internal/vcr/v1/read", { what: "subject_document", filter: { subjectKey: upload.file.detail.subjectKey, documentId: projection.id } });
+  const readBody={what:'subject_document',filter:{subjectKey:upload.file.detail.subjectKey,documentId:projection.id}};
+  let nativeHeaders={};
+  const read=()=>post('/internal/vcr/v1/read',readBody,nativeHeaders);
 
   // No run is running in the project: the read cannot be filed under any conversation, so it is refused and nothing was served.
   const orphan = await read();
   assert.equal(orphan.status, 403);
-  assert.match(orphan.body, /vcr_cloud_run_unattributed/);
+  assert.match(orphan.body, /vcr_invocation_unavailable/);
   assert.equal(JSON.parse(orphan.body).data, undefined);
 
   // A conversation runs in the project, as the run ledger records it, with a subagent the progress tracker knows.
   const run = (await app.agentRuns.reserveRun(project, { sessionId: "conversation-a", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null },
     { dispatchId: "dispatch-chain", baselineCursor: null })).run;
   app.agentRuns.progressTracker(run.id).children.add("child-session");
+  await app.vcr.store.setConversationSession(study.id,'conversation-a');
+  app.runtimeManager.sessionTranscript=async(_project,sessionId)=>({sessionId,truncated:false,turns:[{startSeq:1,end:null}],messages:[{turnStartSeq:1,parts:[{type:'tool',callId:sessionId==='hidden-programme-proof' ? 'programme-read' : 'clinical-read',status:'pending',tool:'mcp__evimed__vcr_read',input:sessionId==='hidden-programme-proof' ? {what:'study'} : readBody}]}]});
+  nativeHeaders={'x-evimed-execution-context':JSON.stringify({v:1,sessionId:'conversation-a',callId:'clinical-read'})};
 
   const served = await read();
   assert.equal(served.status, 200, served.body);
@@ -174,6 +179,19 @@ test("a projection read through the VCR gateway is filed under the conversation 
   assert.ok(!served.body.includes("王小明"), "the surrogate reached the runtime, not the name");
   const filed = await app.vcr.store.rows("SELECT session_id, run_id FROM evimed_vcr.cloud_reads WHERE study_id=$1", [study.id]);
   assert.deepEqual(filed.map((row) => [row.session_id, row.run_id]), [["conversation-a", run.id]], "filed under the conversation and the run the ledger names");
+
+  // The actual server must retain full trusted programme metadata, not activeRuns' id-only projection.
+  const registry=await app.agentRuns.researchSessions.agentRegistry;
+  const capability=registry.get('vcr-protocol');
+  await app.agentRuns.researchSessions.put(project,'hidden-programme-proof',{mode:'specialist',agentId:capability.id,agentVersion:capability.version});
+  const hidden=(await app.agentRuns.reserveRun(project,await app.agentRuns.researchSessions.get(project,'hidden-programme-proof'),{
+    dispatchId:'vcr-hidden-proof-dispatch',baselineCursor:null,question:'Hidden programme fixture',automated:true,
+    effectiveAgentId:capability.id,effectiveAgentVersion:capability.version,effectiveRuntimeAgent:capability.runtimeAgent,effectiveRouteReason:'vcr:definition'})).run;
+  await app.vcr.store.query("INSERT INTO evimed_vcr.schedule_marks (study_id,key,user_id,kind,state,dispatch_id,run_id) VALUES ($1,'run:hidden-proof',$2,'run','running','vcr-hidden-proof-dispatch',$3)",[study.id,user.id,hidden.id]);
+  const programmeRead=await post('/internal/vcr/v1/read',{what:'study'},{'x-evimed-execution-context':JSON.stringify({v:1,sessionId:'hidden-programme-proof',callId:'programme-read'})});
+  assert.equal(programmeRead.status,200,programmeRead.body);
+  assert.equal((await app.vcr.store.rows('SELECT 1 FROM evimed_vcr.studies WHERE user_id=$1 AND project_id=$2',[user.id,project.id])).length,1,'hidden native programme call retains its exact scheduler study');
+  await app.agentRuns.finishInternal(project,hidden.id,{status:'failed',errorCode:'synthetic_done',artifacts:[]});
 
   // While the permission stands, the conversation and its subagent are answered.
   assert.equal((await ask("conversation-a")).status, 200);

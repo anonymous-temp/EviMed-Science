@@ -1,3 +1,4 @@
+import { vcrPredictionLimit } from "@evimed/domain";
 import { vcrPopulationGenerationInput } from "./vcrSubjects.mjs";
 import { presentVcrReview } from "./vcrViewsKit.mjs";
 /**
@@ -32,11 +33,11 @@ import { presentVcrReview } from "./vcrViewsKit.mjs";
 import {
   VCR_COMPARABILITY_DIMENSION_LABELS_ZH, VCR_COMPARABILITY_DIMENSIONS, VCR_COMPARATOR_ROUTES, VCR_COMPARATOR_ROUTE_LABELS_ZH,
   VCR_CONCLUSIONS, VCR_CRITERION_TYPE_LABELS_ZH, VCR_DATA_TIERS, VCR_DATA_TIER_LABELS_ZH, VCR_E10_CONDITIONS,
-  VCR_E10_CONDITION_LABELS_ZH, VCR_ELIGIBILITY_SUMMARY_LABELS_ZH, VCR_FOLLOWUP_KIND_LABELS_ZH,
-  VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_POPULATION_KIND_LABELS_ZH, VCR_REFERRAL_STATES, VCR_ROUTE_MIN_TIER,
+  VCR_E10_CONDITION_LABELS_ZH, VCR_ELIGIBILITY_SUMMARY_LABELS_ZH,
+  VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_POPULATION_KIND_LABELS_ZH, VCR_ROUTE_MIN_TIER,
   VCR_SMD_FLOOR, VCR_ASSUMPTION_SOURCE_KIND_LABELS_ZH, VCR_TWIN_LABELS_ZH, VCR_VALUE_SOURCES, VCR_ESTIMAND_LABELS_ZH,
   VCR_ENDPOINT_TYPE_LABELS_ZH, VCR_PERFORMANCE_MEASURE_LABELS_ZH, VCR_REVIEW_KIND_LABELS_ZH, parseLineageNode,
-  VCR_ANALYSIS_TABLE_LABELS_ZH, VCR_MEMBER_ROLE_LABELS_ZH, VCR_MISSING_REASONS, VCR_MISSING_REASON_LABELS_ZH,
+  VCR_ANALYSIS_TABLE_LABELS_ZH, VCR_MEMBER_ROLE_LABELS_ZH, VCR_RETIRED_MEMBER_ROLE_LABELS_ZH, VCR_MISSING_REASONS, VCR_MISSING_REASON_LABELS_ZH,
   VCR_QUALITY_CATEGORY_LABELS_ZH, VCR_TIME_KINDS, VCR_TIME_KIND_LABELS_ZH, VCR_VALUE_SOURCE_LABELS_ZH,
   VCR_PROGNOSTIC_QUALIFICATION, VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH, VCR_ROBUSTNESS_STAGES, VCR_ROBUSTNESS_STAGE_LABELS_ZH,
   VCR_MODEL_RISK_RULE_LABELS_ZH, VCR_RATING_LABELS_ZH, knownErrorCodeMessage, vcrAssessmentIssues, vcrAssessmentRows,
@@ -256,7 +257,7 @@ export function presentPopulationTab(bundle) {
     version: `人群 v${current.version}${protocol ? `（方案 v${protocol.version}）` : ""}`,
     kind: (/** @type {Record<string, string>} */ (VCR_POPULATION_KIND_LABELS_ZH))[current.kind] ?? current.kind,
     versions: populations.map((/** @type {any} */ population) => ({
-      id: population.id,
+      id: population.id, version: population.version, ...(population.resultId ? { resultId: population.resultId, resultVersion: resultById(bundle, population.resultId)?.version } : {}),
       generationInput: vcrPopulationGenerationInput(population, resultById(bundle, population.resultId), executionOf(bundle, resultById(bundle, population.resultId))),
       label: `人群 v${population.version}`,
       stale: Boolean(markFor(stale, vcrObjectNode("population", population))),
@@ -358,6 +359,7 @@ export function presentPopulationTab(bundle) {
   const total = numeric(first?.remaining) ?? numeric(current?.counts?.realPatients);
   return {
     version: view.version,
+    selection: current ? { objectId: current.id, version: current.version, ...(result ? { resultId: result.id, resultVersion: result.version } : {}) } : null,
     kind: view.kind,
     // What the study called this population: 「按方案条件查覆盖」 for the one made from the protocol's own criteria.
     name: current ? text(current.name) : null,
@@ -501,6 +503,7 @@ export function presentPatientsTab(bundle) {
   const described = table ? generatedProfileRows(table.profile) : null;
   return {
     model,
+    selection: current ? { objectId: current.id, version: current.version, ...(result ? { resultId: result.id, resultVersion: result.version } : {}) } : null,
     records: table ? { result: table.result, rows: table.rows, arms: list(table.calibration?.arms) } : null,
     profile: described ?? [],
     profileKind: described ? "generated" : null,
@@ -545,7 +548,7 @@ export function presentPatientsTab(bundle) {
     counts: current ? countsView(result?.counts && Object.keys(result.counts).length ? result.counts : current.counts, { tier: study.dataTier, scope: current.name || null }) : null,
     stale: staleNote(marks),
     partial: partialOf(bundle, ["patient_set"], "这次生成"),
-    sets: patientSets.map((/** @type {any} */ set) => ({ id: set.id, label: `虚拟患者集 v${set.version}`, stale: Boolean(markFor(stale, vcrObjectNode("patient_set", set))) })),
+    sets: patientSets.map((/** @type {any} */ set) => ({ id: set.id, version: set.version, ...(set.resultId ? { resultId: set.resultId, resultVersion: resultById(bundle, set.resultId)?.version } : {}), label: `虚拟患者集 v${set.version}`, stale: Boolean(markFor(stale, vcrObjectNode("patient_set", set))) })),
   };
 }
 
@@ -705,6 +708,16 @@ export function presentComparatorTab(bundle) {
   // another method's effect estimate must not relabel that comparison.
   const sensitivityOnly = execution?.method === "comparator.evalue";
   return {
+    versions: comparators.map(row => ({ objectId: row.id, version: row.version, label: row.name || `对照版本 ${row.version}`, ...(row.resultId ? { resultId: row.resultId, resultVersion: resultById(bundle, row.resultId)?.version } : {}) })),
+    selection: shown ? { id: shown.id, version: shown.version, resultId: result?.id ?? null, resultVersion: result?.version ?? null, route: shown.route } : null,
+    predictionBenchmark: shown?.route === "model_comparator" && execution?.method === "model.prognostic_apply" ? {
+      sourceCondition: diagnostics.sourceCondition ?? null, endpoint: diagnostics.endpoint ?? null,
+      mean: measureOf("predicted_population_mean") ? value(measureOf("predicted_population_mean")) : null,
+      outcomeSd: measureOf("predicted_outcome_sd") ? value(measureOf("predicted_outcome_sd")) : null,
+      relativeScore: measureOf("mean_relative_score") ? value(measureOf("mean_relative_score")) : null,
+      absoluteRiskAvailable: diagnostics.absoluteRiskAvailable === true, causalEffectIdentified: false,
+      limits: list(diagnostics.limits).map(vcrPredictionLimit),
+    } : null,
     headline: shown && conclusion && conclusion !== "not_estimable"
       ? sensitivityOnly
         ? `未测量混杂敏感性分析：${conclusion === "limited" ? "结果有限制" : "已计算"}；输入效应值的来源需另行核实${diagnostics.inputsAssumed === true ? "，输入为假设" : ""}。`
@@ -864,7 +877,7 @@ export function presentTrialTab(bundle) {
   const decision = decisions[0] ?? null;
   const columnSpec = [
     ["required_events", "所需事件数", "例"], ["sample_size", "样本量", "例"], ["expected_events", "期望事件数", null], ["power", "功效", "%"], ["assurance", "成功把握", "%"],
-    ["type_one_error", "I 类错误", "%"], ["expected_sample_size", "期望样本量", "例"], ["duration_months", "末例入组中位", "月"], ["cost", "成本", "万元"],
+    ["type_one_error", "I 类错误", "%"], ["expected_sample_size", "期望样本量", "例"], ["duration_months", "平均研究时长", "月"], ["last_patient_in_months", "末例入组（入组假设模拟）", "月"], ["cost", "成本", "万元"],
   ];
   const columns = columnSpec
     .filter(([key]) => live.some((design) => design.measures[/** @type {string} */ (key)]))
@@ -903,9 +916,27 @@ export function presentTrialTab(bundle) {
     return { ...design, record: row?._result ? recordOf(row) : null };
   });
   const forecastRows = forecasts.map((forecast) => forecastView(forecast, now));
-  const milestones = designRows.filter((row) => !row.dominated && row.measures.duration_months).map((row) => ({
-    design: row.code, name: row.name, items: [{ key: "last_patient_in", label: "末例入组", value: row.measures.duration_months }],
-  }));
+  const milestones = designRows.filter(row => !row.dominated).map(row => ({
+    design: row.code, name: row.name, items: [
+      ...(row.measures.duration_months ? [{ key: "trial_duration", label: "平均研究时长", value: row.measures.duration_months }] : []),
+      ...(row.measures.last_patient_in_months ? [{ key: "last_patient_in", label: "末例入组（入组假设模拟）", value: row.measures.last_patient_in_months }] : []),
+    ],
+  })).filter(row => row.items.length);
+  const accrualForecasts = allResultsOf(bundle).filter(row => row.kind === "accrual_forecast").map(result => {
+    const scenario = scenarios.find(row => row.id === result.subjectId);
+    const design = designs.find(row => row.id === scenario?.id);
+    const read = bundle.accrualReads?.get(result.id);
+    const value = name => {
+      const raw = list(result.measures).map(object).find(row => row.name === name);
+      return raw ? measureValue(raw, { kind: "accrual_forecast", result, tab: "trial", staleMark: markFor(bundle.stale, resultNode(result)) }) : null;
+    };
+    const probabilityByMonth = list(read?.probabilityByMonth ?? object(result.diagnostics).probabilityByMonth).map(object)
+      .filter(row => numeric(row.month) !== null && Number(row.month) >= 0 && numeric(row.probability) !== null && Number(row.probability) >= 0 && Number(row.probability) <= 1)
+      .map(row => ({ month: Number(row.month), probability: Number(row.probability) }));
+    return { id: result.id, version: result.version, scenarioId: scenario?.id ?? null, scenarioVersion: scenario?.version ?? null,
+      design: design?.code ?? null, name: design?.name ?? "入组假设模拟", lastPatientIn: value("last_patient_in_months"),
+      targetEvents: value("target_events_months"), probabilityByMonth };
+  });
   const goal = text(decision?.question) ?? text(object(grid?.comparisonGoal).text) ?? null;
   return {
     headline: trialHeadline(designs),
@@ -927,6 +958,7 @@ export function presentTrialTab(bundle) {
       options: designs.map((design) => ({ id: design.id, label: design.code, name: design.name, disabled: design.dominated })),
     } : null,
     forecasts: forecastRows,
+    accrualForecasts,
     milestones,
     // The protocol's visit schedule (「访视日程」) and the study's regulatory contacts (「监管沟通记录」): records, not results.
     schedule: reportSchedule(bundle.schedule),
@@ -1163,18 +1195,17 @@ function presentPatientTrials(bundle, held) {
  * @param {Record<string, any>} bundle @param {{ view?: string | null, candidate?: string | null, direction?: string | null }} [query]
  */
 export function presentMatchingTab(bundle, query = {}) {
-  const { study, now, match, roles } = bundle;
-  const view = ["matching", "referral", "sites", "followup"].includes(String(query.view)) ? String(query.view) : "matching";
+  const { study, now, match } = bundle;
+  const view = "matching";
   if (!match) {
-    return { view, available: false, unavailable: { code: "vcr_matching_unavailable", message: "匹配与招募在本部署尚未接入；其余步骤照常。" },
+    return { view, available: false, unavailable: { code: "vcr_matching_unavailable", message: "匹配评估在本部署尚未接入；其余步骤照常。" },
       funnel: [], candidates: [], selected: null, gaps: [], counts: null };
   }
-  const { criteria, referrals, sites, siteFunnel, followups, tallies, openByAssessment, gapsByCriterion, pendingReview, subjects, protocol } = match;
+  const { criteria, tallies, openByAssessment, gapsByCriterion, pendingReview, subjects, protocol } = match;
   /** The names the data tab lists the reviewed documents under, by the id a citation carries (the document's own or its reviewed text's). @type {Map<string, string>} */
   const documentNames = match.documentNames instanceof Map ? match.documentNames : new Map();
   const codes = criterionCodes(criteria);
   const criterionCode = (/** @type {string} */ id) => codes.get(id) ?? "";
-  const referralBySubject = new Map(referrals.map((/** @type {any} */ referral) => [referral.subjectKey, referral]));
   const total = Object.values(tallies).reduce((sum, value) => sum + Number(value), 0);
   const count = (/** @type {string} */ key) => (key in tallies ? Number(tallies[key]) : null);
   const funnel = total ? [
@@ -1188,13 +1219,10 @@ export function presentMatchingTab(bundle, query = {}) {
       || SUMMARY_ORDER.indexOf(a.summary) - SUMMARY_ORDER.indexOf(b.summary) || Number(a.counts?.unknown ?? 0) - Number(b.counts?.unknown ?? 0)
       || String(a.subjectKey).localeCompare(String(b.subjectKey)));
   const candidateOf = (/** @type {any} */ row) => {
-    const referral = referralBySubject.get(row.subjectKey) ?? null;
     const counts = object(row.counts);
     return {
       id: String(row.subjectKey),
-      referralId: referral?.id ?? null,
       summary: `${Number(counts.satisfied ?? 0)} 条满足 · ${Number(counts.unknown ?? 0)} 条未知 · ${Number(counts.pending_recheck ?? 0)} 条待复评`,
-      site: referral?.siteId ? (sites.find((/** @type {any} */ site) => site.id === referral.siteId)?.name ?? null) : null,
       eligibility: row.summary,
       // What the evaluation rested on has changed since, or was withdrawn: said as a state beside the person (依据已更新 / 已撤回).
       ...(row.basis ? { basis: row.basis } : {}),
@@ -1212,7 +1240,6 @@ export function presentMatchingTab(bundle, query = {}) {
     const judgments = new Map(list(selectedAssessment.judgments).map((/** @type {any} */ row) => [row.criterionId, row]));
     const rows = criteria.map((/** @type {any} */ criterion) => judgementView(criterion, criterionCode(criterion.id), judgments.get(criterion.id) ?? null, now, documentNames));
     const verdict = verdictOf(selectedAssessment.summary, rows);
-    const referral = referralBySubject.get(chosen.id) ?? null;
     return {
       candidate: chosen,
       // The person's newest assessment: what a re-judgment and a countersignature are addressed to.
@@ -1227,19 +1254,10 @@ export function presentMatchingTab(bundle, query = {}) {
       ],
       criteria: rows,
       verdict,
-      canContact: Boolean(referral && referral.state === "contactable"),
-      referralId: referral?.id ?? null,
-      referralState: referral?.state ?? null,
       priority: chosen.priority,
       // The id says that somebody countersigned (the page offers the countersignature only where nobody has); the name is what is shown.
       reviewedBy: selectedAssessment.reviewedBy ?? null,
       reviewedByName: personName(bundle.people, selectedAssessment.reviewedBy),
-      // Every move on the person's referral, oldest first: to where, when, by
-      // whom — a name, the platform's own hand, or the neutral label for an
-      // account that is gone; never an account id — and what was said with it.
-      trace: list(match.referralEvents).map((/** @type {any} */ event) => ({
-        state: event.toState, at: zhTime(event.occurredAt, now), by: personName(bundle.people, event.actor), note: text(event.note),
-      })),
     };
   })() : null;
   const ordinalOf = (/** @type {string} */ id) => Number(criteria.find((/** @type {any} */ criterion) => criterion.id === id)?.ordinal ?? 0);
@@ -1251,61 +1269,6 @@ export function presentMatchingTab(bundle, query = {}) {
       detail: text(criteria.find((/** @type {any} */ c) => c.id === id)?.sourceText),
       count: gap.unknown,
     })).filter((gap) => gap.count > 0);
-  const ledgerCounts = new Map(VCR_REFERRAL_STATES.map((state) => [state, 0]));
-  for (const referral of referrals) ledgerCounts.set(referral.state, (ledgerCounts.get(referral.state) ?? 0) + 1);
-  const ledger = referrals.length ? VCR_REFERRAL_STATES.map((state) => ({
-    state, count: ledgerCounts.get(state) ?? 0, note: null, waiting: state === "contactable" && (ledgerCounts.get(state) ?? 0) > 0,
-  })) : [];
-  const forecastResult = match.forecastResult
-    ?? (bundle.forecastResults ?? []).find((/** @type {any} */ result) => !bundle.scenarios.some((/** @type {any} */ scenario) => scenario.id === result.subjectId)) ?? null;
-  const forecast = forecastResult ? {
-    target: numeric(object(object(forecastResult.diagnostics).model).target),
-    xLabels: [], actual: [], median: [], band: [], markers: [],
-    rows: list(forecastResult.measures).filter((measure) => ["last_patient_in_months", "target_events_months", "expected_completion_time"].includes(String(object(measure).name))
-      || String(object(measure).name).startsWith("probability_by_")).slice(0, 4).map((measure) => ({
-      key: String(object(measure).name), label: measureLabel(String(object(measure).name)),
-      value: measureValue(measure, { kind: "accrual_forecast", result: forecastResult, tab: "matching" }), note: null, lead: String(object(measure).name) === "last_patient_in_months",
-    })),
-    basis: [
-      ...(sites.length ? [`${sites.length} 个中心`] : []),
-      ...(referrals.some((/** @type {any} */ referral) => referral.state === "enrolled")
-        ? [`已入组 ${referrals.filter((/** @type {any} */ referral) => referral.state === "enrolled").length} 例`] : []),
-    ],
-    at: zhTime(forecastResult.createdAt, now),
-  } : null;
-  const siteRows = sites.map((/** @type {any} */ site) => {
-    const funnelRow = siteFunnel.find((/** @type {any} */ entry) => entry.siteId === site.id);
-    const states = object(funnelRow?.states);
-    const verified = site.verifiedAt ? new Date(site.verifiedAt).getTime() : null;
-    const days = verified === null ? null : Math.floor((now.getTime() - verified) / 86_400_000);
-    const stale = days === null || days > 90;
-    const slots = numeric(object(site.capacity).slots);
-    const used = numeric(object(site.capacity).used) ?? 0;
-    return {
-      id: site.id,
-      name: site.name,
-      place: text(object(site.capability).place ?? object(site.capability).city),
-      state: site.activatedOn ? "已启动" : "未启动",
-      stateNote: site.activatedOn ? zhDate(site.activatedOn, now) : null,
-      // A capacity nobody has checked is not a capacity: number and date, or neither.
-      capacity: !stale && slots !== null ? `剩余 ${Math.max(0, slots - used)} 个名额` : null,
-      competing: list(site.competing).length ? `${list(site.competing).length} 项` : null,
-      referred: numeric(states.referred) ?? 0,
-      waiting: numeric(states.contacted) ?? 0,
-      enrolled: numeric(states.enrolled) ?? 0,
-      checkedAt: site.verifiedAt ? zhDate(site.verifiedAt, now) : null,
-      alert: stale ? (days === null ? "资料还没有核实过" : `资料已 ${days} 天没有核实`) : null,
-      needs: list(object(site.capability).unmet).map(String),
-      contacts: list(site.contacts).length,
-    };
-  });
-  const followup = followups.map((episode) => ({
-    id: episode.id,
-    label: (/** @type {Record<string, string>} */ (VCR_FOLLOWUP_KIND_LABELS_ZH))[episode.kind] ?? episode.kind,
-    kind: (/** @type {Record<string, string>} */ (VCR_FOLLOWUP_KIND_LABELS_ZH))[episode.kind] ?? episode.kind,
-    detail: `${episode.subjectKey}${episode.exitReason ? ` · ${episode.exitReason}` : ""}`,
-    at: zhDate(episode.windowStart ?? episode.createdAt, now),
-  }));
   const eligible = count("eligible");
   const insufficient = (count("insufficient_evidence") ?? 0) + (count("pending") ?? 0);
   return {
@@ -1338,12 +1301,7 @@ export function presentMatchingTab(bundle, query = {}) {
     selected,
     gaps,
     pendingReview: pendingReview.length ? { count: pendingReview.length, subjects: pendingReview.slice(0, 20) } : null,
-    ledger,
-    forecast,
-    sites: siteRows,
-    followup,
     protocol: protocol ? { version: protocol.version, title: text(protocol.title) } : null,
-    abilities: { contact: abilitiesOf(roles ?? []).includes("contact_patients") },
     counts: total ? countsView({ realPatients: total }, { tier: study.dataTier }) : null,
   };
 }
@@ -1719,7 +1677,7 @@ export function presentIntake(bundle) {
       grants: list(source.grants).map((raw2) => {
         const grant = object(raw2);
         const grantee = String(grant.grantee ?? "");
-        const role = grantee.startsWith("role:") ? (/** @type {Record<string, string>} */ (VCR_MEMBER_ROLE_LABELS_ZH))[grantee.slice(5)] : null;
+        const role = grantee.startsWith("role:") ? (/** @type {Record<string, string>} */ ({ ...VCR_MEMBER_ROLE_LABELS_ZH, ...VCR_RETIRED_MEMBER_ROLE_LABELS_ZH }))[grantee.slice(5)] : null;
         return {
           // A role and the whole study are words; an account is its name, or the neutral label once the account is gone — never its id.
           id: String(grant.id), grantee, granteeLabel: role ? `角色：${role}` : grantee.startsWith("study:") ? "本研究的所有成员" : personName(bundle.people, grantee) ?? "",

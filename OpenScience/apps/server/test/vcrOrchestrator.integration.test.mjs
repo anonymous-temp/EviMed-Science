@@ -36,7 +36,6 @@ import { VcrAccess } from "../src/vcrAccess.mjs";
 import { createVcrGatewayHandler, vcrRuntimeWrite } from "../src/vcrGateway.mjs";
 import { backfillResultSubjects } from "../src/vcrSubjects.mjs";
 import { Readable } from "node:stream";
-import { VCR_ACCRUAL_MEASURES } from "../src/vcrRecruit.mjs";
 import { VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_STEPS, lineageNode } from "@evimed/domain";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
@@ -211,12 +210,19 @@ function finishStageLast(t, lastKind) {
   const original = store.rows;
   store.rows = async (query, values = []) => {
     const rows = await original.call(store, query, values);
-    if (!/SELECT\s+id,\s*study_id\s+FROM\s+evimed_vcr\.jobs\s+WHERE\s+state\s*=\s*'running'/u.test(query) || rows.length < 2) return rows;
+    if (!/SELECT\s+id,\s*method,\s*kind\s+FROM\s+evimed_vcr\.jobs\s+WHERE\s+state\s*=\s*'running'/u.test(query) || rows.length < 2) return rows;
     const jobs = await original.call(store, "SELECT id,kind FROM evimed_vcr.jobs WHERE id=ANY($1::text[])", [rows.map(row => row.id)]);
     const kinds = new Map(jobs.map(job => [job.id, job.kind]));
     return rows.sort((a, b) => Number(kinds.get(a.id) === lastKind) - Number(kinds.get(b.id) === lastKind));
   };
-  t.after(() => { store.rows = original; });
+  const originalAdvance=VcrJobs.prototype.advance;
+  const pending=new Map();
+  VcrJobs.prototype.advance=function(job){
+    const work=job.kind===lastKind ? Promise.resolve().then(()=>Promise.all([...pending.values()])).then(()=>originalAdvance.call(this,job)) : originalAdvance.call(this,job);
+    if(job.kind!==lastKind) pending.set(job.id,work);
+    return work.finally(()=>pending.delete(job.id));
+  };
+  t.after(() => { store.rows = original; VcrJobs.prototype.advance=originalAdvance; });
 }
 
 /**
@@ -655,9 +661,11 @@ test("R10 no background run goes out before there is a definition: nothing is sa
 function conversationGateway(module, study) {
   const runtimeManager = { assertActiveModelGatewayToken: () => ({ userId: study.userId, projectId: study.projectId }) };
   const handler = createVcrGatewayHandler({ vcrEnabled: true, vcrAudience: "all", modelGatewayInternalUrl: "http://127.0.0.1:8788/internal/models/v1" }, runtimeManager,
-    { vcr: { service: module.service, store, jobs: module.jobs, orchestrator: module.orchestrator } });
+    { vcr: { service: module.service, store, jobs: module.jobs, orchestrator: module.orchestrator },
+      resolveInvocation:async()=>({userId:study.userId,projectId:study.projectId,rootSessionId:'native-fixture',sessionId:'native-fixture',callId:'call-fixture',runId:null}) });
   return async (/** @type {string} */ operation, /** @type {Record<string, any>} */ body) => {
-    const req = Object.assign(Readable.from([Buffer.from(JSON.stringify(body))]), { method: "POST", url: `/internal/vcr/v1/${operation}`, headers: { authorization: "Bearer t" } });
+    await store.setConversationSession(study.id,'native-fixture');
+    const req = Object.assign(Readable.from([Buffer.from(JSON.stringify(body))]), { method: "POST", url: `/internal/vcr/v1/${operation}`, headers: { authorization: "Bearer t",'x-evimed-execution-context':'native-fixture' } });
     const res = { status: 0, body: "", writeHead(/** @type {number} */ status) { this.status = status; return this; }, end(/** @type {string} */ chunk = "") { this.body = String(chunk); } };
     await handler(req, res);
     return { status: res.status, ...JSON.parse(res.body) };
@@ -1332,54 +1340,14 @@ test("AC-21 a review countersigns one version, and reads as changed once that ve
   assert.equal(bare.intendedUseCeiling.reasons.some((reason) => reason.code === "not_reviewed"), false);
 });
 
-test("AC-23 an accrual forecast and a design's key predictions are registered automatically with the time they were made, and enrolment is held against them", options, async () => {
-  let clock = new Date("2027-01-10T00:00:00Z");
-  const module = compose({ now: () => clock });
-  const { study } = await computedStudy(module, "forecast");
-  // The simulation that just landed registered its key predictions, frozen with the instant they were made.
-  const trialForecasts = (await store.forecasts(study.id)).filter((forecast) => forecast.kind === "trial");
-  assert.equal(trialForecasts.length, 1);
-  assert.equal(trialForecasts[0].prediction.measures.power.mcse, 0.0031);
-  assert.match(trialForecasts[0].payloadHash, /^[a-f0-9]{64}$/);
-  assert.equal(trialForecasts[0].actual, null, "registered before the outcome exists");
-
-  // An accrual forecast is queued the way the runtime queues one (the sites' posteriors are the platform's own): its prediction is registered on landing.
-  await module.jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "accrual_forecast", cpuSecondsLimit: 60,
-    scenario: { sites: [{ id: "ste_1", alpha: 6, beta: 3, startTime: 0, enrolled: 2, exposureTime: 3 }, { id: "ste_2", alpha: 4, beta: 4, startTime: 2 }], target: 60 },
-    idempotencyKey: `vcr:${study.id}:accrual` });
-  await drainJobs(module, study);
-  const [accrual] = (await store.forecasts(study.id)).filter((forecast) => forecast.kind === "accrual");
-  assert.equal(accrual.version, 1);
-  assert.equal(accrual.prediction.median, 14.2);
-  assert.equal(accrual.prediction.baseline, 2);
-  // The shape the accrual backtest scores registered forecasts from: the measure with its interval, and the target.
-  assert.equal(accrual.prediction.measures[0].name, VCR_ACCRUAL_MEASURES.lastPatientIn);
-  assert.deepEqual(accrual.prediction.interval, { kind: "prediction", low: 11.1, high: 18.9 });
-  assert.equal(accrual.prediction.target, 60);
-  assert.deepEqual(accrual.prediction.sites, [{ rate: 2, start: 0 }, { rate: 1, start: 2 }]);
-  const registered = accrual.payloadHash;
-  assert.equal((await store.forecasts(study.id)).filter((forecast) => forecast.kind === "accrual").length, 1, "once per job");
-
-  // Nothing is compared while the study keeps no referral at all: an enrolment of zero would read as a forecast missed by all of it.
-  clock = new Date("2027-03-10T00:00:00Z");
-  await module.orchestrator.advance(study.id);
-  assert.equal((await store.forecasts(study.id)).find((forecast) => forecast.id === accrual.id).actual, null);
-
-  // Two months on, eight people enrolled where the posteriors expected about 2 + 2·2 + 1·0 = 6... and then a study far under: one.
-  await store.query(`INSERT INTO evimed_vcr.referrals (id, study_id, user_id, subject_key, state, contact_approved_by, contact_approved_at, enrolled_on)
-    VALUES ('ref_1', $1, $2, 's_1', 'enrolled', $2, now(), '2027-02-01')`, [study.id, study.userId]);
-  await module.orchestrator.advance(study.id);
-  const compared = (await store.forecasts(study.id)).find((forecast) => forecast.id === accrual.id);
-  assert.equal(compared.actual.enrolled, 1);
-  assert.equal(compared.actual.predictedEnrolled, 6, "2 already enrolled + 2/month × 2 + 1/month × 0 after its start at month 2, over the two months since the forecast");
-  assert.equal(compared.payloadHash, registered, "the registered prediction is never edited");
-  const drift = module.notices.filter((notice) => notice.title.includes("实际入组偏离预测"));
-  assert.equal(drift.length, 1);
-  assert.match(drift[0].body, /预测 6 例，实际 1 例/);
-  // Checking again does not send it again.
-  await module.orchestrator.advance(study.id);
-  await module.orchestrator.advance(study.id);
-  assert.equal(module.notices.filter((notice) => notice.title.includes("实际入组偏离预测")).length, 1);
+test("design forecasts remain scientific while optional Poisson-Gamma calculations create no operational feedback", options, async()=>{
+ let clock=new Date("2027-01-10T00:00:00Z");const module=compose({now:()=>clock});const {study}=await computedStudy(module,"forecast");
+ const forecasts=(await store.forecasts(study.id)).filter(row=>row.kind==="trial");assert.equal(forecasts.length,1);assert.equal(forecasts[0].prediction.measures.power.mcse,0.0031);
+ await module.jobs.enqueue({studyId:study.id,userId:study.userId,kind:"accrual_forecast",cpuSecondsLimit:60,scenario:{sites:[{id:"assumption_1",alpha:6,beta:3,startTime:0}],target:60},idempotencyKey:`vcr:${study.id}:abstract-accrual`});
+ await drainJobs(module,study);assert.equal((await store.results(study.id,"accrual_forecast")).length,1,"the optional deterministic design result remains usable");
+ assert.equal((await store.forecasts(study.id)).filter(row=>row.kind==="accrual").length,0,"no live recruitment prediction is registered");
+ clock=new Date("2027-03-10T00:00:00Z");await module.orchestrator.advance(study.id);
+ assert.equal(module.notices.some(row=>row.title.includes("实际入组偏离预测")),false);assert.equal((await store.forecasts(study.id)).find(row=>row.id===forecasts[0].id).actual,null);
 });
 
 test("a forecast's hash covers the time it was made: the same numbers registered later are a different claim", options, async () => {

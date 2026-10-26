@@ -267,11 +267,12 @@ test("the keys read inside a node answer a refusal, and a gate that does not hol
 });
 
 test("the kinds the platform builds name the keys a run states, and the gateway's refusal uses the same list", () => {
-  assert.deepEqual(Object.keys(VCR_RUN_SCENARIO_FIELDS).sort(), ["accrual_forecast", "match_criteria", "pool_evidence"]);
+  assert.deepEqual(Object.keys(VCR_RUN_SCENARIO_FIELDS).sort(), ["match_criteria", "pool_evidence"]);
   for (const [kind, fields] of Object.entries(VCR_RUN_SCENARIO_FIELDS)) {
     assert.deepEqual(help.kinds[kind].platformBuilt, [...fields], kind);
   }
   // What a run states of an accrual forecast is a subset of what the method reads.
   const read = new Set(vcrScenarioRows("accrual.poisson_gamma").rows.map((row) => row.path));
-  for (const field of VCR_RUN_SCENARIO_FIELDS.accrual_forecast) assert.ok(read.has(field), field);
+  for (const field of ["target", "sites[].enrolled", "sites[].exposureTime"]) assert.ok(read.has(field), field);
+  assert.equal(help.kinds.accrual_forecast.platformBuilt, undefined, "accrual uses supplied design assumptions, never an operational ledger");
 });

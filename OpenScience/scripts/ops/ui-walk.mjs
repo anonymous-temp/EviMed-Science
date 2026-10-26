@@ -203,11 +203,10 @@ const WALK_TABLES = {
       {"view":"frontier-congress","discovered":true,"pattern":"/app/frontier/congress/:congressId","family":"frontier-congress","template":"T5","budget":"frontier","budgetOverride":{"typePairs":6},"budgetNote":"a congress hub (c3-track), as the topic page: 12/400 meta, 14/400 the dates and caveats, 16/400 the day's 「AI 速递」, 16/600 the items' titles, 18/600 the days' headings, 24/600 the title — 6 pairs (fixture walk 2026-10-25)","rows":false},
       {"view":"frontier-topic","discovered":true,"pattern":"/app/frontier/topics/:topicId","family":"frontier-topic","template":"T5","budget":"frontier","budgetOverride":{"typePairs":6},"budgetNote":"a hot-event topic's reading page: 12/400 meta, 14/400 the question and the peg, 16/400 the cited overview, 16/600 the items' titles, 18/600 the three section headings, 24/600 the title — 6 pairs (c2-leads 2026-10-25, measured with the walk's functions at both sizes)","rows":false},
       {"view":"capabilities","route":"/app/capabilities","pattern":"/app/capabilities","family":"capabilities","template":"T1","shapes":2,"rows":false},
-      {"view":"method-workbench","primaryPlacement":"method-workbench","route":"/app/capabilities/methods/comparator.evalue","pattern":"/app/capabilities/methods/:methodId","family":"data","template":"T4","budget":"data","rows":false},
+      {"view":"method-workbench","route":"/app/capabilities/methods/comparator.evalue","pattern":"/app/capabilities/methods/:methodId","family":"data","template":"T4","budget":"data","rows":false},
       {"view":"calculation-history","discovered":true,"pattern":"/app/capabilities/calculations/:studyId/:tab?","family":"calculation-workbench","template":"T1","rows":true},
       {"view":"geo","route":"/app/geo","pattern":"/app/geo","family":"geo-home","template":"T1","budget":"data","shapes":2,"rows":true},
       {"view":"virtual-research","route":"/app/virtual-research","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","shapes":2,"rows":true},
-      {"view":"virtual-research-models","route":"/app/virtual-research?tab=models","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","budgetOverride":{"borders":4},"budgetNote":"a list beside its record: the band's hairline and the table's header rule (one kind), the selected tab's underline, the rows' faint rules (list, fact list and table share one kind) and the divider between the list and the record (r19-guards2, measured)","rows":false},
       {"view":"virtual-research-precedents","route":"/app/virtual-research?tab=precedents","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","rows":false},
       {"view":"virtual-research-definitions","route":"/app/virtual-research?tab=definitions","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","rows":false},
       {"view":"files","route":"/app/files","pattern":"/app/files","family":"knowledge","template":"T1","budget":"data","shapes":2,"rows":true},
@@ -243,13 +242,13 @@ const WALK_TABLES = {
       {"view":"geo-plan","module":"geo","tab":"/plan","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"rail","budget":"geo","rows":false},
       {"view":"geo-evidence","module":"geo","tab":"/evidence","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"rail","budget":"geo","rows":false},
       {"view":"geo-answer","discovered":true,"pattern":"/app/geo/:geoId/answers/:snapshotId","family":"geo-record","band":"geo","template":"T3","workflow":"rail","templateNote":"one answer is read inside the module band, under 问题与回答 (router.tsx; pageComposition.test.tsx holds it there with the eight-step rail): a module page (`band`: held to the module tabs' band by module-chrome), not a reader of its own — r19-guards2, from the fixture walk","budget":"geo","rows":false},
-      {"view":"vcr-overview","module":"vcr","tab":"","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
-      {"view":"vcr-population","module":"vcr","tab":"/population","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
-      {"view":"vcr-patients","module":"vcr","tab":"/patients","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
-      {"view":"vcr-comparator","module":"vcr","tab":"/comparator","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
-      {"view":"vcr-trial","module":"vcr","tab":"/trial","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
-      {"view":"vcr-matching","module":"vcr","tab":"/matching","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
-      {"view":"vcr-data","module":"vcr","tab":"/data","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
+      {"view":"vcr-overview","module":"vcr","workflow":"objects","tab":"","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
+      {"view":"vcr-population","module":"vcr","workflow":"objects","tab":"/population","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
+      {"view":"vcr-patients","module":"vcr","workflow":"objects","variant":"population","tab":"/population?level=individual","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
+      {"view":"vcr-comparator","module":"vcr","workflow":"objects","tab":"/comparator","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
+      {"view":"vcr-trial","module":"vcr","workflow":"objects","tab":"/trial","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
+      {"view":"vcr-matching","module":"vcr","workflow":"objects","tab":"/matching","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
+      {"view":"vcr-data","module":"vcr","workflow":"objects","tab":"/data","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
       {"view":"evidence-matrix","discovered":true,"pattern":"/app/runs/:runId/files/*","family":"run-file","template":"T5","budget":"data","rows":false}
     ],
     "unwalked": [
@@ -430,50 +429,6 @@ const WALK_TABLES = {
     "额度的钱包还没有接通，暂时不会扣费；接通后自动恢复。"
   ]
 };
-// Canonical frontend grouping, compiled at build time from vcrMethodDisplay.ts; never a hand-maintained taxonomy.
-const WALK_METHOD_GROUPING = (() => {
-const exports = {};
-const VCR_LONGITUDINAL_METHODS = {"forecast.trajectories":{"version":"1.0.0","modelTier":null},"forecast.evaluate":{"version":"1.1.0","modelTier":null},"forecast.compare":{"version":"1.1.0","modelTier":null},"forecast.trial_benchmark":{"version":"1.0.0","modelTier":null}};
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.METHOD_FAMILIES = void 0;
-exports.methodTask = methodTask;
-exports.methodEntryId = methodEntryId;
-exports.methodEntries = methodEntries;
-exports.completeMethodCatalogue = completeMethodCatalogue;
-exports.METHOD_FAMILIES = ["查看数据与构建人群", "模拟患者结局", "从证据整理参数", "外部对照与效应", "样本量与试验设计", "稳健性分析", "招募与匹配"];
-const PATIENT_MODES = ["patients.binary", "patients.continuous", "patients.time_to_event", "patients.longitudinal"];
-const ROBUSTNESS = ["comparator.evalue", "comparator.covariate_sets", "comparator.negative_control", "comparator.tipping_point", "forecast.evaluate", "forecast.compare", "forecast.trial_benchmark"];
-function methodTask(method) {
-    if (/^(profile|cohort|population)\./.test(method))
-        return exports.METHOD_FAMILIES[0];
-    if (method.startsWith("patients.") || method === "forecast.trajectories")
-        return exports.METHOD_FAMILIES[1];
-    if (method.startsWith("evidence."))
-        return exports.METHOD_FAMILIES[2];
-    if (/^(accrual|matching)\./.test(method))
-        return exports.METHOD_FAMILIES[6];
-    if (ROBUSTNESS.includes(method))
-        return exports.METHOD_FAMILIES[5];
-    if (method.startsWith("comparator."))
-        return exports.METHOD_FAMILIES[3];
-    if (method.startsWith("design."))
-        return exports.METHOD_FAMILIES[4];
-    return "其他方法";
-}
-function methodEntryId(method) { return PATIENT_MODES.includes(method.method ?? method.id) ? "patient-outcomes" : method.id; }
-function methodEntries(methods) {
-    const seen = new Set();
-    return methods.filter(method => { const id = methodEntryId(method); if (seen.has(id))
-        return false; seen.add(id); return true; });
-}
-const FORECAST_TITLES = { "forecast.trajectories": "预测后续轨迹", "forecast.evaluate": "验证预测与后续结局", "forecast.compare": "比较预测版本", "forecast.trial_benchmark": "验证试验效果预测" };
-/** The domain owns these four protocols; an older server catalogue can omit rows, never their identity. Availability is checked against each study's actual inputs. */
-function completeMethodCatalogue(methods) {
-    return [...methods, ...Object.entries(VCR_LONGITUDINAL_METHODS).filter(([id]) => !methods.some(row => (row.method ?? row.id) === id)).map(([id, protocol]) => ({ id, method: id, name: FORECAST_TITLES[id], version: protocol.version }))];
-}
-return exports;
-})();
 // END EMBEDDED WALK TABLES
 
 /** The page table: every view the walk visits with its template, budgets and the kinds of check it is held to. @type {any} */
@@ -740,13 +695,18 @@ export async function discoverCalculationHistory(context, base, studies, failure
  * project's seven tabs and an answer; the 虚拟临床研究 studies' seven tabs each; the 前沿动态 zone, card, author and event pages.
  * Each is None where the module is off for the account or the list is empty — the home pages are walked either way. A page left out
  * for want of an id is a notice, never a pass that looks like a walk.
- * @param {any} context a logged-in browser context @param {string} base @param {Array<string | Finding>} notices @param {string[]} failures
+ * @param {any} context a logged-in browser context @param {string} base @param {Array<string | Finding>} notices @param {string[]} failures @param {string[]} [only]
  * @returns {Promise<{ routes: Array<[string, string]>, matrix: string | null, pdfTitle: string | null, keyless: string[] }>}
  */
-async function discoverRoutes(context, base, notices, failures) {
+async function discoverRoutes(context, base, notices, failures, only = []) {
   /** @type {Array<[string, string]>} */
   const routes = [];
-  const skip = (name, why) => notices.push(`${name}: not walked — ${why}`);
+  const skip = (name, why) => {
+    const view = name.split(":")[0];
+    const selected = only.length === 0 || only.some(choice => choice === view || budgetKey(choice) === budgetKey(view)
+      || view === "vcr-*@2" && choice.startsWith("vcr-"));
+    if (selected) notices.push(`${name}: not walked — ${why}`);
+  };
 
   const geo = (await readData(context, base, "/api/geo/projects", failures))?.projects;
   const geoId = Array.isArray(geo) && typeof geo[0]?.id === "string" ? geo[0].id : null;
@@ -1661,7 +1621,7 @@ export async function readModuleResult(page, target) {
 /** Expected result choices, including the canonical conversation only where it exists. */
 export function moduleViewLabels(module, programme = true, canonical = false) {
   if (module === "geo") return ["对话", "总览", "可见度", "准确与安全", "问题与回答", "信源", "行动", "方案", "依据"];
-  return [...(programme || canonical ? ["对话"] : []), ...(programme ? ["总览", "定义与证据", "人群", "虚拟患者", "对照", "试验", "匹配与招募"] : ["总览", "定义与证据", "人群", "匹配与招募"])];
+  return [...(programme || canonical ? ["对话"] : []), ...(programme ? ["总览", "匹配", "人群与患者", "对照", "试验", "依据"] : ["总览", "匹配", "人群与患者", "依据"])];
 }
 
 /** Standalone walk mirror of vcrTabs.vcrTabPath, studyLocation.vcrChatPath, geoLocation.geoChatPath and
@@ -1675,8 +1635,8 @@ export function moduleViewAddressHolds(module, label, initial, before, after, { 
   const match = start.pathname.match(module === "geo" ? /^\/app\/geo\/([^/]+)/u : programme ? /^\/app\/virtual-research\/([^/]+)/u : /^\/app\/capabilities\/calculations\/([^/]+)/u);
   if (!match) return false;
   const id = match[1];
-  const labels = module === "geo" ? ["总览", "可见度", "准确与安全", "问题与回答", "信源", "行动", "方案", "依据"] : ["总览", "定义与证据", "人群", "虚拟患者", "对照", "试验", "匹配与招募"];
-  const keys = module === "geo" ? ["overview", "visibility", "accuracy", "questions", "sources", "actions", "plan", "evidence"] : ["overview", "data", "population", "patients", "comparator", "trial", "matching"];
+  const labels = module === "geo" ? ["总览", "可见度", "准确与安全", "问题与回答", "信源", "行动", "方案", "依据"] : ["总览", "匹配", "人群与患者", "对照", "试验", "依据"];
+  const keys = module === "geo" ? ["overview", "visibility", "accuracy", "questions", "sources", "actions", "plan", "evidence"] : ["overview", "matching", "population", "comparator", "trial", "data"];
   const key = keys[labels.indexOf(label)];
   const base = module === "geo" ? `/app/geo/${id}` : programme ? `/app/virtual-research/${id}` : `/app/capabilities/calculations/${id}`;
   const path = to.pathname.replace(/\/$/u, "");
@@ -1709,7 +1669,7 @@ export async function verifyModuleNavigation(page, module, { programme = true, c
   await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
   await readModuleResult(page, `${module} initial view`);
   const initial = page.url();
-  const expected = module === "geo" ? 8 : 7;
+  const expected = module === "geo" ? 8 : 0;
   const rail = page.locator("[data-page-chrome] [data-step-rail]");
   const steps = rail.locator("[data-rail-step]");
   const ids = await steps.evaluateAll((items) => items.map((item) => item.getAttribute("data-rail-step")));
@@ -1827,7 +1787,7 @@ export function compositionFindings(name, viewportName, c) {
   for (const list of tablists) if (c.chrome && !list.inChrome && !list.inToolbar) add("chrome", `the tab list “${list.label}” is outside the band, so it scrolls away`);
   if (c.stepRail && !c.stepRail.inChrome) add("chrome", "the step rail is outside the band, so it scrolls away");
   if (template) {
-    if ((view?.module || view?.band) && c.viewSelector) {
+    if ((view?.module || view?.band) && c.viewSelector && view?.workflow !== "objects") {
       const expected = (view.module ?? view.band) === "vcr" ? 7 : 8;
       if (!c.stepRail || c.stepRail.folded || c.stepRail.count !== expected) add("step-rail", `the module must show all ${expected} workflow steps`);
       if (c.stepRail?.steps?.some((step) => !step.state || !step.href || !step.stateVisible)) add("step-rail", "a workflow step has no visible state or destination");
@@ -1840,7 +1800,11 @@ export function compositionFindings(name, viewportName, c) {
     }
     // 虚拟临床研究's tab row is its step bar (a dot of state on every tab but the overview, which is not a step).
     const dotted = tablists.some((list) => list.dots >= 2 && list.dots >= list.tabs - 1);
-    if (template.stepRail === "every-tab") {
+    if (view?.workflow === "objects") {
+      if (c.stepRail || tablists.length > 0) add("step-rail", "the research workspace must not restore retired step navigation");
+      if (!c.chrome || c.viewSelector?.count !== 1) add("chrome", "the research workspace must expose one pinned result-view selector");
+    }
+    if (template.stepRail === "every-tab" && view?.workflow !== "objects") {
       if (!c.chrome) add("chrome", "a module page has no band ([data-page-chrome]) for its steps and tabs");
       if (!c.stepRail && !dotted && view?.workflow !== "compact") add("step-rail", "a module page shows no steps: no [data-step-rail], and no tab row whose tabs carry a state dot");
     }
@@ -3545,66 +3509,33 @@ export function knowledgeReturnFindings(title, read) {
   return { failures, notices };
 }
 
-/** The calculation catalogue first chooses a task family, then displays its methods. This is filtering, not a drawer.
- * Kept separate from the generic row verdict so an unrelated state change cannot certify an inert record row.
- */
-export function calculationTaskFamilyReady(family) {
-  const visible = (el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0 && (typeof el.checkVisibility !== "function" || el.checkVisibility());
-  const main = document.querySelector("main");
-  if (!main) return false;
-  const selected = [...main.querySelectorAll("[data-page-chrome] button[aria-label]")].some((el) => visible(el) && el.getAttribute("aria-label") === `计算任务：${family}`);
-  const chooser = [...main.querySelectorAll("ul[aria-label='选择计算任务']")].some(visible);
-  const lists = [...main.querySelectorAll("[data-vcr-method-catalogue] ul[aria-label]")].filter(visible);
-  return selected && !chooser && lists.length === 1 && lists[0].getAttribute("aria-label") === family
-    && [...lists[0].querySelectorAll("[data-vcr-method]")].some((el) => visible(el) && Boolean(el.getAttribute("data-vcr-method")));
+/** Authenticated history read, serialized independently like every browser probe. */
+export async function calculationHistoryProbe(study) {
+  const response = await fetch(`/api/vcr/studies/${encodeURIComponent(study)}/jobs`, { credentials: "same-origin" });
+  if (!response.ok) throw new Error(`calculation history could not be read (HTTP ${response.status})`);
+  return (await response.json())?.data?.jobs;
 }
 
-/** Authenticated same-origin catalogue read, serialized independently like every browser probe. */
-export async function calculationMethodCatalogueProbe() {
-  const response = await fetch("/api/vcr/models", { credentials: "same-origin" });
-  if (!response.ok) throw new Error(`calculation task catalogue could not be read (HTTP ${response.status})`);
-  return (await response.json())?.data;
-}
-
-/** Derive displayed identities from the authenticated catalogue using the product's embedded, source-checked grouping helpers. */
-export function calculationFamilyMethodIds(catalogue, family) {
-  if (!Array.isArray(catalogue?.methods)) throw new Error("calculation task catalogue has no readable methods");
-  const complete = WALK_METHOD_GROUPING.completeMethodCatalogue(catalogue.methods);
-  const entries = WALK_METHOD_GROUPING.methodEntries(complete);
-  return entries.filter(method => WALK_METHOD_GROUPING.methodTask(method.method ?? method.id) === family).map(WALK_METHOD_GROUPING.methodEntryId);
-}
-
-/** Actually select a task, read its matching method list, and open its first method in this calculation's scope. */
-export async function walkCalculationTaskFamily(page, { timeout = 15_000 } = {}) {
+/** Reopen a saved calculation by its exact server-owned job and method in the same study. */
+export async function walkCalculationHistory(page, { timeout = 15_000 } = {}) {
   const initial = new URL(page.url());
   const match = /^\/app\/capabilities\/calculations\/([^/]+)\/?$/u.exec(initial.pathname);
-  if (!match) throw new Error("calculation task selection has no calculation workspace identity");
-  const chooser = page.getByRole("list", { name: "选择计算任务", exact: true });
-  const control = chooser.locator("button[data-row-title]").first();
-  const family = (await control.innerText()).trim();
-  if (!family) throw new Error("calculation task selection has no named task");
-  const catalogue = await page.evaluate(calculationMethodCatalogueProbe);
-  const allowed = new Set(calculationFamilyMethodIds(catalogue, family));
-  if (allowed.size === 0) throw new Error(`calculation task ${family} has no declared catalogue methods`);
-  await control.click();
-  await page.waitForFunction(calculationTaskFamilyReady, family, { timeout }).catch((cause) => {
-    throw new Error(`calculation task ${family} did not produce its matching method list and selected filter`, { cause });
+  if (!match) throw new Error("calculation history has no workspace identity");
+  const studyId = decodeURIComponent(match[1]);
+  const jobs = await page.evaluate(calculationHistoryProbe, studyId);
+  const job = Array.isArray(jobs) ? jobs[0] : null;
+  if (typeof job?.id !== "string" || !job.id || typeof job?.method !== "string" || !job.method) {
+    throw new Error("calculation history has no saved job with a method identity");
+  }
+  await page.getByRole("list", { name: "此计算空间的历史", exact: true }).locator("button[data-row-title]").first().click();
+  const expected = `/app/capabilities/methods/${encodeURIComponent(job.method)}`;
+  await page.waitForFunction(({ origin, path, study, jobId }) => location.origin === origin && location.pathname === path
+    && new URLSearchParams(location.search).get("study") === study && new URLSearchParams(location.search).get("job") === jobId,
+    { origin: initial.origin, path: expected, study: studyId, jobId: job.id }, { timeout }).catch((cause) => {
+    throw new Error("calculation history did not open its exact saved method, study and job", { cause });
   });
-  if (new URL(page.url()).pathname !== initial.pathname) throw new Error("calculation task selection left its calculation workspace");
-  const methods = page.getByRole("list", { name: family, exact: true }).locator("[data-vcr-method]");
-  const methodIds = await methods.evaluateAll((items) => items.map((item) => item.getAttribute("data-vcr-method")));
-  const method = methodIds[0];
-  if (!method || new Set(methodIds).size !== methodIds.length) throw new Error("calculation task methods have no distinct identities");
-  const unexpected = methodIds.filter(id => !allowed.has(id));
-  if (unexpected.length) throw new Error(`calculation task ${family} lists unknown or wrong-family catalogue methods: ${unexpected.join(", ")}`);
-  await methods.first().click();
-  const expected = `/app/capabilities/methods/${encodeURIComponent(method)}`;
-  await page.waitForFunction(({ origin, path, study }) => location.origin === origin && location.pathname === path && new URLSearchParams(location.search).get("study") === study,
-    { origin: initial.origin, path: expected, study: decodeURIComponent(match[1]) }, { timeout }).catch((cause) => {
-    throw new Error("calculation task method did not open its exact method and study destination", { cause });
-  });
-  await page.locator("[data-vcr-method-workbench]").waitFor({ state: "visible", timeout });
-  return { family, methodIds, method, studyId: decodeURIComponent(match[1]), address: new URL(page.url()).pathname + new URL(page.url()).search };
+  await page.getByText("本次运行配置", { exact: true }).waitFor({ state: "visible", timeout });
+  return { method: job.method, studyId, jobId: job.id, address: new URL(page.url()).pathname + new URL(page.url()).search };
 }
 
 /**
@@ -3648,9 +3579,9 @@ async function walkRowClicks(page, base, route, name, popups) {
       // A route's shell can be ready while its issue is still loading. Wait for the named list after each reload;
       // carrying its earlier numeric position into a partial response could click nothing or a different lane.
       await page.waitForFunction(rowProbe, ["has", labels[index]], { timeout: 30_000 });
-      if (name === "calculation-history" && labels[index] === "选择计算任务") {
-        const task = await walkCalculationTaskFamily(page);
-        rows.push({ label: labels[index], shown: true, after: { kind: "calculation-task-family", ...task } });
+      if (name === "calculation-history" && labels[index] === "此计算空间的历史") {
+        const saved = await walkCalculationHistory(page);
+        rows.push({ label: labels[index], shown: true, after: { kind: "calculation-history", ...saved } });
         continue;
       }
       const external = await page.evaluate(rowProbe, ["external", labels[index]]);
@@ -3916,7 +3847,7 @@ async function main() {
     const meAtStart = await context.request.get(`${base}/api/me`).catch(() => null);
     const meData = meAtStart?.ok() ? (await meAtStart.json().catch(() => ({})))?.data ?? {} : {};
     const operator = meData.operator === true;
-    const found = await discoverRoutes(context, base, notices, failures);
+    const found = await discoverRoutes(context, base, notices, failures, setting.only);
     const everything = [...ROUTES, ...found.routes];
     // A name that is no view of this walk is a typo that would walk nothing and pass.
     const unknown = setting.only.filter((name) => !everything.some(([view]) => view === name || budgetKey(view) === name));
@@ -4795,7 +4726,7 @@ export function handoffProbe([action]) {
  * the two equal): none of them sends. `originReference` (where the conversation came from) was added there and not here, and every
  * event page's 深入研究 read as carrying a field a draft does not need (r19-guards2).
  */
-export const HANDOFF_FIELDS = ["draft", "geoPlanContext", "kind", "originReference", "projectId", "references", "requestId", "resultRevision", "scope", "sessionId"];
+export const HANDOFF_FIELDS = ["draft", "geoPlanContext", "kind", "originReference", "projectId", "references", "requestId", "restoreDraft", "resultRevision", "scope", "sessionId", "vcrReference"];
 
 /**
  * The event page's hand-off, judged (A01). `before` is the event page, `after` the address and state once 「深入研究」 was pressed, and

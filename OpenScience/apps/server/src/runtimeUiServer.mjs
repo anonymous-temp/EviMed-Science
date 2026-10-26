@@ -1,3 +1,4 @@
+import {withSessionPromptAdmission} from './runtimePromptAdmission.mjs';
 import { handleManagedBrowserRequest } from './managedBrowserRoutes.mjs';
 import { MODEL_REASONING_EFFORTS } from "./modelReasoningPolicy.mjs";
 /** The native browser application on an isolated origin, with immutable per-frame project bindings. */
@@ -273,7 +274,7 @@ function assertNativeModelSelection(config, payload) {
 /**
  * `agentRuns` is the run ledger a message steered into a running turn is
  * counted on (`recordSteer`); `audit` reports a count that could not be written.
- * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, balanceGate?:((project:any,payload:any)=>Promise<void>)|null, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, recordPromptActor?:((user:any,project:any,request:any)=>Promise<any>)|null, recordPromptAttendance?:((user:any,project:any,request:any)=>Promise<any>)|null, bindResultRevision?:((user:any,project:any,request:any)=>Promise<any>)|null, bindGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareSelections?:((user:any,project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
+ * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, balanceGate?:((project:any,payload:any)=>Promise<void>)|null, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, recordPromptActor?:((user:any,project:any,request:any)=>Promise<any>)|null, recordPromptAttendance?:((user:any,project:any,request:any)=>Promise<any>)|null, bindResultRevision?:((user:any,project:any,request:any)=>Promise<any>)|null, bindVcrReference?:((user:any,project:any,request:any)=>Promise<any>)|null, bindGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareSelections?:((user:any,project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
  *   recordUploadAttempt?: ((project: any) => Promise<void>) | null, managedBrowser?: any, authorizeOpenSession?:((user:any,project:any,sessionId:string)=>Promise<void>)|null,
  *   resolveDelegatedFrame?:((user:any,delegation:any,options?:{recheck?:any})=>Promise<{project:any,principal:any}>)|null,
  *   createDelegatedPolicy?:((identity:any)=>Promise<any>)|null,
@@ -282,7 +283,7 @@ function assertNativeModelSelection(config, payload) {
  *   audit?: (event: string, detail: Record<string, any>) => Promise<void> }} deps
  * @returns {{ server: import('node:http').Server, releaseFrame: (frameId: string, userId: string) => Promise<number>, refreshFrameBinding: (renewed: any) => number, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
  */
-export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, balanceGate = null, authorizePrompt = null, preparePrompt = null, recordPromptActor = null, recordPromptAttendance = null, bindResultRevision = null, bindGeoPlan = null, prepareGeoPlan = null, prepareSelections = null, authorizeMutation = null,
+export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, balanceGate = null, authorizePrompt = null, preparePrompt = null, recordPromptActor = null, recordPromptAttendance = null, bindResultRevision = null, bindVcrReference = null, bindGeoPlan = null, prepareGeoPlan = null, prepareSelections = null, authorizeMutation = null,
   agentRuns = null, managedBrowser = null, authorizeOpenSession = null, recordUploadAttempt = null, noteFileRead = null, resolveDelegatedFrame = null, createDelegatedPolicy = null, audit = async () => {} }) {
   /** The person's signed attendance receipt, written before the prompt is forwarded and never a reason to refuse it (review F5):
    * a missing receipt makes the turn read as unattended at worst. The writer counts its own failures
@@ -353,8 +354,9 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
   /**
    * A stop pressed in the kernel's own window (`session/cancel`) is the researcher's, and is noted on the run it
    * stops before it reaches the kernel (review F4): the monitor reading the aborted turn would otherwise write a
-   * cancel nobody is named for, which is not charged. An observation, not a check: it never refuses, and one
-   * that could not be written is audited while the stop goes on.
+   * cancel nobody is named for, which is not charged. The durable intent also invalidates unsent automatic
+   * continuations. An observation, not a check: a stop is never held back because its intent could not be
+   * written (principle 19) — the failure is audited and the stop goes on to the kernel.
    * @param {any} project @param {any} payload the native `{ args: { request: { sessionId } } }`
    */
   async function recordStop(project, payload) {
@@ -397,6 +399,11 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
   async function bindNativeResult(user, project, payload) {
     const request = payload?.args?.request;
     if (!request) return;
+    if (request.evimedVcrReference !== undefined) {
+      if (!bindVcrReference) throw new HttpError(503, "vcr_unavailable", "Research selection is unavailable.");
+      await bindVcrReference(user, project, request);
+      delete request.evimedVcrReference;
+    }
     if (request.geoPlanContext !== undefined) {
       if (!bindGeoPlan) throw new HttpError(503, "geo_plan_context_unavailable", "Planning context is unavailable.");
       await bindGeoPlan(user, project, request);
@@ -741,6 +748,8 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     };
     let workspaceBody = null;
     let promptBody = null;
+    let stopBody = null;
+    let admissionSignal=null;
     let modelBody = null;
     let loopxBody = null;
     if (method === "loopx.goalbar") {
@@ -772,7 +781,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       req.__openScienceProxyBody = raw;
       let stop = null;
       try { stop = JSON.parse(raw.toString("utf8")); } catch { /* the kernel refuses a body it cannot read */ }
-      if (stop?.type === "client-request" && stop.method === "session/cancel") await recordStop(project, stop.payload);
+      if (stop?.type === "client-request" && stop.method === "session/cancel") stopBody=stop;
     }
     if (method === "session/selectModel") {
       if (req.method !== "POST") { sendDenied(res, method); return; }
@@ -858,6 +867,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     let nativeInputRequest = null;
     const forward = () => runtimeManager.proxy(req, res, project, frame.suffix, {
       surface: "ui",
+      admissionSignal,
       uiBasePath: frame.prefix,
       revalidate,
       ...(scoped?.nativeInputs && nativeInputRequest ? {
@@ -889,13 +899,17 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         if (current.scoped) await current.scoped.recordInput(promptBody?.payload?.args?.request);
         await bindNativeResult(current.user, current.project, promptBody?.payload);
         await attend(current.user, current.project, promptBody?.payload?.args?.request);
-        await recordNativeActor(current.user, current.project, promptBody?.payload);
         await prepareNativeContext(project, promptBody?.payload);
-        // A journaled input's words reach the run from its receipt; any other is recorded here, as on the owner's own frame.
-        if (!current.scoped?.journals(promptBody?.payload?.args?.request)) await recordSteer(project, promptBody?.payload);
         req.__openScienceProxyBody = Buffer.from(JSON.stringify(promptBody));
         req.headers["content-length"] = String(req.__openScienceProxyBody.length);
-        return forward();
+        await runtimeManager.start(project);
+        return withSessionPromptAdmission(runtimeManager,project,promptBody?.payload?.args?.request?.sessionId,async signal=>{
+          admissionSignal=signal;
+          await recordNativeActor(current.user,current.project,promptBody?.payload);
+          // A journaled input's words reach the run from its receipt; any other is recorded here, as on the owner's own frame.
+          if (!current.scoped?.journals(promptBody?.payload?.args?.request)) await recordSteer(project,promptBody?.payload);
+          signal.throwIfAborted();return forward();
+        });
       };
       const authorized = () => scoped ? scoped.runInput(nativeInputRequest, admitted) : admitted();
       try {
@@ -911,14 +925,23 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     if (method === "session/prompt") {
       if (authorizeMutation) await authorizeMutation(forwardPrompt);
       else await forwardPrompt();
+    } else if(method==='session/cancel' && stopBody) {
+      await runtimeManager.start(project);
+      await withSessionPromptAdmission(runtimeManager,project,stopBody.payload?.args?.request?.sessionId ?? stopBody.payload?.args?.sessionId,async signal=>{
+        admissionSignal=signal;await recordStop(project,stopBody.payload);signal.throwIfAborted();return forward();
+      });
     } else if (method === "session/selectModel") {
       const select = async () => { await authorizePromptSession(project, modelBody?.payload); return forward(); };
       if (authorizeMutation) await authorizeMutation(select); else await select();
-    } else if (loopxBody?.payload.op === "start") {
+    } else if (['start','pause'].includes(loopxBody?.payload.op)) {
       const start = async () => {
         const current = await resolveFrame(snapshot, null);
-        await recordNativeActor(current.user, current.project, { args: { request: { sessionId: loopxBody.payload.sessionId } } });
-        return forward();
+        await runtimeManager.start(project);
+        return withSessionPromptAdmission(runtimeManager,project,loopxBody.payload.sessionId,async signal=>{
+          admissionSignal=signal;
+          await recordNativeActor(current.user,current.project,{args:{request:{sessionId:loopxBody.payload.sessionId}}});
+          if(loopxBody.payload.op==='pause')await recordStop(project,{args:{request:{sessionId:loopxBody.payload.sessionId}}});signal.throwIfAborted();return forward();
+        });
       };
       const admitted = () => runtimeManager.pluginService
         ? runtimeManager.pluginService.withAdmission(project, start, { prompt: true }) : start();
@@ -1014,12 +1037,12 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
             if (currentActor.scoped) await currentActor.scoped.recordInput(payload?.args?.request);
             await bindNativeResult(currentActor.user, currentActor.project, payload);
             await attend(currentActor.user, currentActor.project, payload?.args?.request);
-            await recordNativeActor(currentActor.user, currentActor.project, payload);
             await prepareNativeContext(project, payload);
           }
         };
         const observe = async (endpoint, payload = null) => {
           if (endpoint === "session/prompt") {
+            await recordNativeActor(currentActor.user, currentActor.project, payload);
             if (!currentActor.scoped?.journals(payload?.args?.request)) await recordSteer(project, payload);
           } else if (endpoint === "session/cancel") {
             await recordStop(project, payload);

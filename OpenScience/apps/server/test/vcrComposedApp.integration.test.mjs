@@ -149,13 +149,13 @@ async function furnishedStudy(name = "EV-201") {
   const created = await call("owner", "POST", "/api/vcr/studies", { name, question: "在 ITT 人群中 X 相对 Y 的总生存期", dataTier: "T0", intendedUse: "exploratory" });
   assert.equal(created.status, 201, created.text);
   const { id, projectId } = created.body.data;
-  const site = await context.app.vcr.matchStore.upsertSite({ site: { studyId: id, name: "中心 A" }, userId: accounts.owner });
   for (const [who, role] of Object.entries(ROLE_OF)) {
-    const detail = role === "site" ? { siteId: site.id } : undefined;
+    if (["site","recruiter"].includes(role)) continue;
+    const detail = undefined;
     const added = await call("owner", "POST", `/api/vcr/studies/${id}/members`, { userId: accounts[/** @type {keyof typeof accounts} */ (who)], role, ...(detail ? { detail } : {}) });
     assert.equal(added.status, 201, `${who} as ${role}: ${added.text}`);
   }
-  return { id, projectId, siteId: site.id };
+  return { id, projectId, siteId: null };
 }
 
 /** @type {Promise<{ id: string, projectId: string, siteId: string }> | null} */
@@ -187,6 +187,7 @@ function requests(target, ids) {
     // A request that no card answers: the point of the grid is who is refused, and a write that reaches nothing proves that as well.
     "POST /studies/:id/cards": async () => ["POST", `${S}/cards`, { kind: "criteria", set: { "99.requirement.value": 1 } }],
     "GET /studies/:id/longitudinal": async () => ["GET", `${S}/longitudinal`, undefined],
+    "GET /studies/:id/followup-history": async () => ["GET", `${S}/followup-history`, undefined],
     "POST /studies/:id/longitudinal/histories": async () => ["POST", `${S}/longitudinal/histories`, {}],
     "POST /studies/:id/longitudinal/predictions": async () => ["POST", `${S}/longitudinal/predictions`, {}],
     "POST /studies/:id/longitudinal/benchmarks": async () => ["POST", `${S}/longitudinal/benchmarks`, {}],
@@ -237,9 +238,6 @@ function requests(target, ids) {
     "GET /studies/:id/members": async () => ["GET", `${S}/members`, undefined],
     "POST /studies/:id/members": async () => ["POST", `${S}/members`, { userId: `newcomer${suffix}`, role: "viewer" }],
     "DELETE /studies/:id/members/:user": async () => ["DELETE", `${S}/members/newcomer${suffix}?role=viewer`, undefined],
-    "GET /studies/:id/referrals": async () => ["GET", `${S}/referrals`, undefined],
-    "POST /studies/:id/referrals/:referral/transition": async () => ["POST", `${S}/referrals/${ids.transition}/transition`, { to: "contactable" }],
-    "POST /studies/:id/referrals/:referral/contact": async () => ["POST", `${S}/referrals/${ids.contact}/contact`, { reason: "符合入选标准" }],
     // A person's hand on an assessment: allowed roles reach the seam, which
     // answers 404 for an assessment this study does not have.
     "POST /studies/:id/assessments/:assessment/judgments/:criterion/override": async () => ["POST", `${S}/assessments/asm_none/judgments/crt_none/override`, { state: "not_satisfied", note: "病历写明曾用过该药" }],
@@ -279,14 +277,11 @@ test("CS-45 every route, driven through the real server as the owner and as each
   const walked = { allowed: 0, denied: 0 };
   /** @type {string[]} */
   const problems = [];
-  const cast = /** @type {[string, string[]][]} */ ([["owner", ["lead"]], ...Object.entries(ROLE_OF).map(([who, role]) => [who, [role]])]);
+  const cast = /** @type {[string, string[]][]} */ ([["owner", ["lead"]], ...Object.entries(ROLE_OF).filter(([,role])=>!["site","recruiter"].includes(role)).map(([who, role]) => [who, [role]])]);
   for (const [who, held] of cast) {
-    // Fresh referrals per caller, each at the start of the ledger and at this study's site.
-    const fresh = async () => (await context.app.vcr.matchStore.createReferral({
-      referral: { studyId: study.id, subjectKey: `S-${who}-${++counter}`, siteId: study.siteId, actor: "test" }, userId: accounts.owner })).id;
     const exportRow = await context.app.vcr.store.createExport({ studyId: study.id, userId: accounts.owner, kind: "study_package" });
     const ids = {
-      contact: await fresh(), transition: await fresh(), exportId: exportRow.id,
+      exportId: exportRow.id,
       disposable: async () => {
         const made = await call("owner", "POST", "/api/vcr/studies", { name: `可删除-${who}-${++counter}` });
         assert.equal(made.status, 201, made.text);
@@ -307,12 +302,21 @@ test("CS-45 every route, driven through the real server as the owner and as each
       // authority; study export alone cannot read its underlying documents.
       const allowed = (key === "POST /studies/:id/start" ? abilities.every(ability => holdsAny(held, [ability])) : holdsAny(held, abilities)) && (!key.includes('/correction-cases') || holdsAny(held, ['read_patient_level']));
       const label = `${who} (${held.join("+")}) ${key} -> ${answer.status} ${String(answer.body?.code ?? "")}`;
+      if (key === "GET /studies/:id/followup-history" && allowed) {
+        assert.equal(answer.status, 200, `${label}: an authorized history reader must reach the composed service`);
+        assert.equal(answer.body.data.readOnly, true);
+        assert.ok(Array.isArray(answer.body.data.episodes));
+      }
       if (answer.status >= 500) problems.push(`${label}: a server error — ${answer.text.slice(0, 160)}`);
       else if (allowed && answer.status === 403) problems.push(`${label}: refused, but the role holds ${abilities.join(" or ")}`);
       else if (!allowed && answer.status !== 403) problems.push(`${label}: not refused, and the role holds none of ${abilities.join(", ")}`);
       else if (allowed) walked.allowed += 1;
       else walked.denied += 1;
     }
+    const historyExport = await call(who, "GET", `/api/vcr/studies/${study.id}/followup-history?format=csv`);
+    const mayExportHistory = holdsAny(held, ["read_patient_level"]) && holdsAny(held, ["export"]);
+    assert.equal(historyExport.status, mayExportHistory ? 200 : 403, `${who}: historical CSV requires patient-level read and export`);
+    if (mayExportHistory) assert.match(historyExport.text, /subject,?"?|"subject"/);
   }
   assert.deepEqual(problems, [], problems.join("\n"));
   assert.ok(walked.allowed >= 70 && walked.denied >= 90, `walked ${walked.allowed} allowed and ${walked.denied} refused requests; the grid was not driven`);
@@ -361,9 +365,10 @@ test("CS-1 what the routes write reaches the module's own tables, under the sess
   assert.deepEqual((await rows(`SELECT decided_by FROM evimed_vcr.decisions WHERE study_id = $1`, [study.id])).map((row) => row.decided_by), [accounts.lead]);
   // A card edited again is the next version, and the study page shows the caller its own abilities.
   assert.equal((await call("datamanager", "POST", `${S}/assumptions`, { key: "event_rate", name: "事件率", pointValue: 0.35 })).body.data.version, 2);
-  const page = await call("recruiter", "GET", S);
-  assert.deepEqual(page.body.data.roles, ["recruiter"]);
-  assert.ok(page.body.data.abilities.includes("contact_patients") && !page.body.data.abilities.includes("run"));
+  const page = await call("viewer", "GET", S);
+  assert.deepEqual(page.body.data.roles, ["viewer"]);
+  assert.equal(page.body.data.abilities.includes("contact_patients"),false);
+  assert.equal(page.body.data.abilities.includes("run"),false);
   assert.equal((await call("owner", "GET", S)).body.data.abilities.includes("manage_study"), true);
   // The audit trail names the writer, not the owner.
   const audited = await rows(`SELECT actor FROM evimed_vcr.audit WHERE study_id = $1 AND action = 'vcr.review.add' ORDER BY occurred_at`, [study.id]);
@@ -409,93 +414,18 @@ test("AC-25 C2-11 a card a person writes as 「外部证据」 cites only what t
   assert.equal(foreign.body.code, "vcr_evidence_unverified");
 });
 
-test("C2-12 the ledger the browser reads carries the keys its reader takes, all of them for the lead and a site's own only for a site; a model is adopted from the library page", options, async () => {
-  const study = await sharedStudy();
-  const S = `/api/vcr/studies/${study.id}`;
-  const otherSite = await context.app.vcr.matchStore.upsertSite({ site: { studyId: study.id, name: "中心 B" }, userId: accounts.owner });
-  for (const [subjectKey, siteId] of [["S-own-1", study.siteId], ["S-own-2", study.siteId], ["S-other-1", otherSite.id]]) {
-    await context.app.vcr.matchStore.createReferral({ referral: { studyId: study.id, subjectKey, siteId, actor: "test" }, userId: accounts.owner });
-  }
-  const lead = await call("lead", "GET", `${S}/referrals`);
-  assert.equal(lead.status, 200, lead.text);
-  assert.deepEqual(lead.body.data.referrals.map((/** @type {any} */ row) => row.subjectKey).sort(), ["S-other-1", "S-own-1", "S-own-2"]);
-  // The keys `readVcrReferrals` in the web client takes: a change on either side is a red test here.
-  for (const key of ["id", "subjectKey", "state", "siteId", "assessmentId", "contactApprovedBy", "contactApprovedAt", "screenFailReason", "enrolledOn", "updatedAt"]) {
-    assert.ok(key in lead.body.data.referrals[0], `the ledger row has ${key}`);
-  }
-  const site = await call("site", "GET", `${S}/referrals`);
-  assert.deepEqual(site.body.data.referrals.map((/** @type {any} */ row) => row.subjectKey).sort(), ["S-own-1", "S-own-2"], "a site reads its own referrals only");
-  assert.equal((await call("lead", "GET", `${S}/referrals?state=contactable`)).body.data.referrals.length, 0);
-
-  // The library preserves cited trials separately from an assessed population; registration alone grants no applicability.
-  const adopted = await call("owner", "POST", "/api/vcr/models", { name: `page-model-${suffix}`, version: "2.1.0", risk: "medium", endpointType: "time_to_event", sources: ["NCT02296125", "CTR20990001"] });
-  assert.equal(adopted.status, 201, adopted.text);
-  const model = (await rows(`SELECT tier, risk, applicability FROM evimed_vcr.models WHERE name = $1`, [`page-model-${suffix}`]))[0];
-  assert.equal(model.tier, "literature");
-  assert.equal(model.risk, "medium");
-  assert.deepEqual(model.applicability.sources, ["NCT02296125", "CTR20990001"]);
-  assert.equal(model.applicability.population, undefined, "unassessed population is not inferred from source identifiers");
-  const library = await call("owner", "GET", "/api/vcr/models");
-  const libraryModel = library.body.data.models.find((/** @type {any} */ row) => row.name === `page-model-${suffix}`);
-  assert.ok(libraryModel);
-  assert.deepEqual(libraryModel.sourceRefs, ["NCT02296125", "CTR20990001"], "the canonical browser view preserves both cited trials");
-  assert.equal(libraryModel.scope, null);
+test("legacy recruitment HTTP URLs return retirement, while model adoption stays available",options,async()=>{
+ const study=await sharedStudy();for(const [method,route] of [["GET","referrals"],["POST","referrals/ref_old/contact"],["POST","referrals/ref_old/transition"]]) {
+  const answer=await call("owner",method,`/api/vcr/studies/${study.id}/${route}`,method==="POST"?{}:undefined);
+  assert.equal(answer.status,410,answer.text);assert.equal(answer.body.code,"vcr_recruitment_retired");
+ }
+ assert.equal(typeof context.app.vcr.matchStore.createReferral,"undefined");
 });
 
-test("PA-11 the first human stop, through HTTP: a coordinator confirms one patient by name; a viewer and a site cannot; the second click writes nothing more", options, async () => {
-  const study = await furnishedStudy("联系确认研究");
-  const S = `/api/vcr/studies/${study.id}`;
-  const referral = await context.app.vcr.matchStore.createReferral({ referral: { studyId: study.id, subjectKey: "S-http-1", siteId: study.siteId, actor: "matching" }, userId: accounts.owner });
-  for (const who of ["viewer", "site", "clinician", "statistician", "datamanager", "stranger"]) {
-    const refused = await call(who, "POST", `${S}/referrals/${referral.id}/contact`, {});
-    assert.equal(refused.status, who === "stranger" ? 404 : 403, `${who}: ${refused.text}`);
-  }
-  assert.equal((await context.app.vcr.matchStore.getReferral(referral.id)).state, "candidate", "nothing moved");
-  // The approver is not a field of the request.
-  assert.equal((await call("recruiter", "POST", `${S}/referrals/${referral.id}/contact`, { approvedBy: accounts.lead })).status, 400);
-
-  const confirmed = await call("recruiter", "POST", `${S}/referrals/${referral.id}/contact`, { reason: "符合全部入选标准", note: "已电话前核对病历" });
-  assert.equal(confirmed.status, 200, confirmed.text);
-  assert.equal(confirmed.body.data.referral.state, "contacted");
-  assert.equal(confirmed.body.data.referral.contactApprovedBy, accounts.recruiter, "the approver is the session's account");
-  const again = await call("second", "POST", `${S}/referrals/${referral.id}/contact`, {});
-  assert.equal(again.status, 200);
-  assert.equal(again.body.data.alreadyContacted, true);
-  assert.equal(again.body.data.referral.contactApprovedBy, accounts.recruiter, "a second coordinator does not replace the first name");
-  assert.deepEqual((await context.app.vcr.matchStore.listReferralEvents(referral.id)).map((event) => event.toState), ["candidate", "contactable", "contacted"]);
-  assert.deepEqual((await rows(`SELECT actor FROM evimed_vcr.audit WHERE object = $1 AND action = 'vcr.referral.contact_approved'`, [referral.id])).map((row) => row.actor), [accounts.recruiter]);
-
-  // The move route is no way around the stop: an unconfirmed referral cannot be put into a contact state.
-  const other = await context.app.vcr.matchStore.createReferral({ referral: { studyId: study.id, subjectKey: "S-http-2", siteId: study.siteId, actor: "matching" }, userId: accounts.owner });
-  assert.equal((await call("recruiter", "POST", `${S}/referrals/${other.id}/transition`, { to: "contactable" })).status, 200);
-  const stopped = await call("recruiter", "POST", `${S}/referrals/${other.id}/transition`, { to: "contacted" });
-  assert.deepEqual([stopped.status, stopped.body.code], [403, "vcr_contact_not_approved"]);
-  // A site moves its own site's referral through its own stage, and the read is scoped the same way.
-  await context.app.vcr.store.database.query(`UPDATE evimed_vcr.referrals SET state = 'site_responded', contact_approved_by = 'li' WHERE id = $1`, [referral.id]);
-  assert.equal((await call("site", "POST", `${S}/referrals/${referral.id}/transition`, { to: "screening" })).status, 200);
-  const foreign = await context.app.vcr.matchStore.createReferral({ referral: { studyId: study.id, subjectKey: "S-http-3", actor: "matching" }, userId: accounts.owner });
-  const siteRead = await call("site", "GET", `${S}/referrals`);
-  assert.deepEqual(siteRead.body.data.referrals.map((row) => row.id).sort(), [referral.id, other.id].sort(), "a site reads its own site's referrals only");
-  assert.ok((await call("viewer", "GET", `${S}/referrals`)).body.data.referrals.some((row) => row.id === foreign.id), "a role that reads the study reads them all");
-  assert.equal((await call("site", "POST", `${S}/referrals/${foreign.id}/transition`, { to: "contactable" })).status, 403);
-
-  // What the stop itself refuses is in the module's audit, under the caller's study;
-  // what the caller's role could not even ask for is in the platform's security log.
-  const withdrawn = await context.app.vcr.matchStore.createReferral({ referral: { studyId: study.id, subjectKey: "S-http-4", actor: "matching" }, userId: accounts.owner });
-  await context.app.vcr.store.database.query(`UPDATE evimed_vcr.referrals SET state = 'withdrawn' WHERE id = $1`, [withdrawn.id]);
-  const notContactable = await call("recruiter", "POST", `${S}/referrals/${withdrawn.id}/contact`, {});
-  assert.deepEqual([notContactable.status, notContactable.body.code], [409, "vcr_referral_transition_invalid"]);
-  assert.deepEqual((await rows(`SELECT outcome, reason, actor FROM evimed_vcr.audit WHERE object = $1 AND action = 'vcr.referral.contact'`, [withdrawn.id])).map((row) => [row.outcome, row.reason, row.actor]),
-    [["refused", "vcr_referral_transition_invalid", accounts.recruiter]]);
-  await new Promise((resolve) => setTimeout(resolve, 200));
-  const security = (await readFile(path.join(context.dataDir, ".openscience", "security.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line))
-    .filter((entry) => entry.action === "vcr.referral.contact" && String(entry.detail ?? "").includes(study.id));
-  const outcomeOf = (/** @type {string} */ who) => security.filter((entry) => entry.userId === accounts[/** @type {keyof typeof accounts} */ (who)]).map((entry) => [entry.status, entry.code]);
-  assert.deepEqual(outcomeOf("viewer"), [["refused", "vcr_forbidden"]]);
-  assert.deepEqual(outcomeOf("site"), [["refused", "vcr_forbidden"]]);
-  assert.deepEqual(outcomeOf("stranger"), [["refused", "vcr_study_not_found"]]);
-  assert.deepEqual(outcomeOf("recruiter"), [["completed", referral.id], ["refused", "vcr_referral_transition_invalid"]],
-    "the confirmation is 'completed' and the attempt the stop refused is 'refused', each with its own line");
+test("retired recruitment memberships cannot regain contact ability through HTTP",options,async()=>{
+ const study=await sharedStudy();for(const role of ["site","recruiter"]) {
+  const answer=await call("owner","POST",`/api/vcr/studies/${study.id}/members`,{userId:accounts.stranger,role});assert.equal(answer.status,400);assert.equal(answer.body.code,"vcr_member_role_invalid");
+ }
 });
 
 test("CW-3 members: added and removed through the routes, the owner cannot be removed, and a removed member loses the study", options, async () => {
@@ -515,9 +445,9 @@ test("CW-3 members: added and removed through the routes, the owner cannot be re
   assert.equal((await call("lead", "GET", S)).status, 404, "a removed member is no longer in the study");
   // A member with two roles loses both when none is named, and one when one is.
   await call("owner", "POST", `${S}/members`, { userId: accounts.stranger, role: "viewer" });
-  await call("owner", "POST", `${S}/members`, { userId: accounts.stranger, role: "recruiter" });
+  await call("owner", "POST", `${S}/members`, { userId: accounts.stranger, role: "statistical_reviewer" });
   assert.equal((await call("owner", "DELETE", `${S}/members/${accounts.stranger}?role=viewer`)).body.data.removed, 1);
-  assert.equal((await call("stranger", "GET", S)).status, 200, "the recruiter role remains");
+  assert.equal((await call("stranger", "GET", S)).status, 200, "the statistical reviewer role remains");
   assert.equal((await call("owner", "DELETE", `${S}/members/${accounts.stranger}`)).body.data.removed, 1);
   assert.equal((await call("stranger", "GET", S)).status, 404);
 });
@@ -525,7 +455,7 @@ test("CW-3 members: added and removed through the routes, the owner cannot be re
 test("CS-7 the study list does not name a study to an account whose only role is a site; changing what the study is takes the lead", options, async () => {
   const study = await furnishedStudy("列表研究");
   const seen = async (/** @type {string} */ who) => (await call(who, "GET", "/api/vcr/studies")).body.data.studies.map((/** @type {any} */ row) => row.id);
-  for (const who of ["owner", "lead", "viewer", "clinician", "statistician", "datamanager", "recruiter"]) assert.ok((await seen(who)).includes(study.id), who);
+  for (const who of ["owner", "lead", "viewer", "clinician", "statistician", "datamanager"]) assert.ok((await seen(who)).includes(study.id), who);
   assert.equal((await seen("site")).includes(study.id), false, "a site reads referrals, not the study");
   assert.equal((await seen("stranger")).includes(study.id), false);
   const S = `/api/vcr/studies/${study.id}`;
@@ -711,7 +641,7 @@ test("PA-10 PB-10 CS-41 data intake through the real server: source, upload, fie
   const csv = `${cohort.join("\n")}\n`;
 
   // A data manager registers; a viewer, a statistician and a recruiter cannot.
-  for (const who of ["viewer", "statistician", "recruiter", "site", "clinician"]) {
+  for (const who of ["viewer", "statistician", "clinician"]) {
     assert.equal((await call(who, "POST", `${S}/data/sources`, { name: "越权登记" })).status, 403, `${who} may not register a source`);
   }
   assert.equal((await call("stranger", "POST", `${S}/data/sources`, { name: "陌生人" })).status, 404);

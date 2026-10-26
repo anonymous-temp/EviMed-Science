@@ -3,6 +3,7 @@
 import hashlib
 import io
 import sys
+import tempfile
 import unittest
 import urllib.error
 from pathlib import Path
@@ -13,6 +14,17 @@ import build_sider_cache as builder
 
 
 class SiderDownloadTests(unittest.TestCase):
+    def test_cache_is_reverified_and_never_needs_network_when_valid(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory)
+            with mock.patch.object(builder.urllib.request, "urlopen", return_value=io.BytesIO(self.payload)):
+                self.assertEqual(builder.download(self.spec, cache), self.payload)
+            with mock.patch.object(builder.urllib.request, "urlopen", side_effect=AssertionError("offline")):
+                self.assertEqual(builder.download(self.spec, cache), self.payload)
+                (cache / self.spec["sha256"]).write_bytes(b"modified cache")
+                with self.assertRaisesRegex(SystemExit, "SIDER input changed"):
+                    builder.download(self.spec, cache)
+
     def setUp(self):
         self.payload = b"verified public dataset\n"
         self.spec = {

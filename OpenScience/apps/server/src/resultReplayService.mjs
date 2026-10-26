@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { RESULT_REPLAY_METHODS, compareResultNumbers, diagnosticApplicability, engineJobSnapshot, isResultDigest, normalizeResultPath, projectResultMethod, resultMethodDifference } from "@evimed/domain";
+import { vcrAnalyticComputationBasis } from "./resultVcrReplay.mjs";
+import { RESULT_REPLAY_METHODS, RESULT_R_REPLAY_METHOD_KINDS, compareResultNumbers, diagnosticApplicability, engineJobSnapshot, isResultDigest, normalizeResultPath, projectResultMethod, resultMethodDifference } from "@evimed/domain";
 import { methodRecord } from "@evimed/domain/method-records";
 import { migrateProductStore } from "./productPersistence.mjs";
 import { CONTROL_PLANE_SCHEMA } from "./controlPlaneDatabase.mjs";
@@ -37,15 +38,16 @@ export function replayEnvironment(recorded, current) {
  * @param {any} answer */
 export function ranMethod(answer) {
   const record = answer?.methodRecord ?? answer?.receipt?.methodRecord;
-  return record ? projectResultMethod({ ...record, seeded: false, seed: null }) : null;
+  return record ? projectResultMethod({ ...record, seeded: record.seeded === true, seed: record.seeded === true ? record.seed : null }) : null;
 }
 
 /** The method record an engine offers now, from its capability answer.
- * @param {any} capability */
-function offeredMethod(capability) {
+ * @param {any} capability @param {number|null} [seed] */
+function offeredMethod(capability, seed = null) {
   const record = capability?.methodRecord
     ?? (typeof capability?.engineMethodVersion === "string" ? { id: capability.method, version: capability.engineMethodVersion } : null);
-  return record ? projectResultMethod({ ...record, seeded: false, seed: null }) : null;
+  const seeded=methodRecord(capability?.method)?.seeded===true;
+  return record ? projectResultMethod({ ...record, seeded, seed:seeded ? seed : null }) : null;
 }
 
 /** @param {any} method */
@@ -154,7 +156,8 @@ export class ResultReplayService {
       if (!error && prepared && answer?.resultPath) await this.preservePartialOwned(job, prepared, answer, client);
       const current = await this.documents.get(job.userId, "result-replay", row.id);
       await this.documents.put(job.userId, "result-replay", row.id, { ...current.payload,
-        cleanup: error ? "unknown" : "confirmed", ...(error ? { stopError: "result_replay_stop_unconfirmed" } : { stopError: null }) },
+        cleanup: error ? "unknown" : "confirmed", ...(typeof answer?.resultError==='string' && /^[a-z][a-z0-9_]{0,79}$/.test(answer.resultError) ? {engineCode:answer.resultError} : {}),
+        ...(error ? { stopError: "result_replay_stop_unconfirmed" } : { stopError: null }) },
       { projectId: job.projectId, expectedRevision: current.revision, transactionClient: client });
       return { error };
     });
@@ -292,7 +295,7 @@ export class ResultReplayService {
     } finally { await file.handle.close(); }
     const parameters = input.parameters ?? {};
     if (!parameters || typeof parameters !== "object" || Array.isArray(parameters) || Object.keys(parameters).length > 8
-      || Object.entries(parameters).some(([key, value]) => !["yates", "correctZeroCells", "maxNodes", "seed", "cpuSecondsLimit"].includes(key)
+      || Object.entries(parameters).some(([key, value]) => !["yates", "correctZeroCells", "maxNodes", "seed", "replicates", "cpuSecondsLimit"].includes(key)
         || !(typeof value === "boolean" || Number.isSafeInteger(value)))) throw new HttpError(400, "result_recipe_invalid", "Unsupported calculation parameters.");
     const inputVersion = await this.results.captureFile({ userId, project, relativePath: inputPath, expectedDigest: hash(bytes),
       producer: { ...producer, kind: "tool", eventId: `input:${producer.callId}` } });
@@ -316,7 +319,7 @@ export class ResultReplayService {
         { idempotencyKey: id, projectId: project.id, maxAttempts: 3, transactionClient: client });
       await this.documents.put(project.userId, "result-replay", id, { recordType: "result-replay", id, projectId: project.id,
         versionId: null, requestedBy: userId, jobId: job.id, state: "queued", initial: { recipe, inputVersionId: inputVersion.versionId,
-          producer, capability, ...(supersedesVersionId ? { supersedesVersionId } : {}) }, createdAt: new Date().toISOString() }, { projectId: project.id, expectedRevision: 0, transactionClient: client });
+          producer, capability, continuation:{schema:1,kind:"native-calculation"}, ...(supersedesVersionId ? { supersedesVersionId } : {}) }, createdAt: new Date().toISOString() }, { projectId: project.id, expectedRevision: 0, transactionClient: client });
     };
     if (this.documents.database) { await migrateProductStore(this.documents.database); await this.documents.database.transaction(operation); }
     else await operation(null);
@@ -355,14 +358,34 @@ export class ResultReplayService {
     return { project, row };
   }
 
+  /** A verified pending native status call observed this exact terminal generation.
+   * @param {string} userId @param {string} projectId @param {string} id @param {any} origin @param {any} answer */
+  async observeTerminal(userId,projectId,id,origin,answer) {
+    for(let attempt=0;attempt<3;attempt++) {
+      const {project,row}=await this.owned(userId,projectId,id);
+      const producer=row.payload.initial?.producer;
+      const state=(await this.jobs.get(project.userId,row.payload.jobId))?.status ?? row.payload.state;
+      const resultKey=row.payload.outputVersionId ?? 'none';
+      if(!producer || producer.runId!==origin.runId || (producer.parentSessionId ?? producer.sessionId)!==origin.rootSessionId
+        || !['succeeded','failed','canceled'].includes(state) || state!==answer.state || resultKey!==(answer.outputVersionId ?? 'none')) return false;
+      try {
+        await this.documents.put(project.userId,'result-replay',id,{...row.payload,terminalObservation:{runId:origin.runId,rootSessionId:origin.rootSessionId,callId:origin.callId,state,resultKey}},
+          {projectId:project.id,expectedRevision:row.revision,telemetry:true});
+        return true;
+      } catch(error) {if(error?.code!=='product_revision_conflict' || attempt===2) throw error;}
+    }
+    return false;
+  }
+
   async status(userId, projectId, id) {
     const { project, row } = await this.owned(userId, projectId, id);
     const job = await this.jobs.get(project.userId, row.payload.jobId);
     return { id, projectId, versionId: row.payload.versionId, state: row.payload.cleanup === "unknown" ? "ownership_unknown" : job?.status ?? row.payload.state,
       outputVersionId: row.payload.outputVersionId ?? null, comparison: row.payload.comparison ?? null, environment: row.payload.environment ?? null,
+      ...(row.payload.computationBasis ? { computationBasis: row.payload.computationBasis } : {}),
       resultVersionId: row.payload.outputVersionId ?? null, artifacts: row.payload.artifacts ?? [],
       partial: row.payload.partial === true,
-      error: row.payload.stopError ? { code: row.payload.stopError } : job?.error ? { code: job.error.code } : null, cleanup: row.payload.cleanup ?? null };
+      error: row.payload.stopError ? { code: row.payload.stopError,...(row.payload.engineCode ? {engineCode:row.payload.engineCode} : {}) } : job?.error ? { code: job.error.code,...(row.payload.engineCode ? {engineCode:row.payload.engineCode} : {}) } : null, cleanup: row.payload.cleanup ?? null };
   }
 
   /**
@@ -484,7 +507,8 @@ export class ResultReplayService {
     const execution = { userId: project.userId, projectId: project.id, jobId: job.id, recipeDigest: replayDigest(recipe), method: recipe.method };
     if (row.payload.execution && replayDigest(row.payload.execution) !== replayDigest(execution)) throw new HttpError(409, "result_replay_scope_invalid", "The calculation identity changed.");
     const recordedMethod = frozen.method ?? null;
-    const currentMethod = offeredMethod(available);
+    const currentSeed=methodRecord(available.method)?.seeded===true ? recipe.parameters?.seed ?? JSON.parse(input.bytes.toString("utf8")).seed ?? 1 : null;
+    const currentMethod = offeredMethod(available,currentSeed);
     const environment = replayEnvironment({ codeDigest: frozen.recipe.codeDigest, environmentDigest: frozen.recipe.environmentDigest, ...(recordedMethod ? { method: recordedMethod } : {}) },
       { ...current, ...(currentMethod ? { method: currentMethod } : {}) });
     return { project, row, original, frozen, recipe, execution, environment, capability: available };
@@ -536,7 +560,7 @@ export class ResultReplayService {
     const current = await this.documents.get(job.userId, "result-replay", prepared.row.id);
     await this.jobs.finishWithLease(job.userId, job.id, job.leaseToken, { outputVersionId: output.versionId, comparison }, async client => {
       await this.documents.put(job.userId, "result-replay", current.id, { ...current.payload, state: "succeeded", cleanup: "confirmed", partial: false,
-        outputVersionId: output.versionId, comparison, artifacts: answer.artifacts.map(item => ({ path: item.path, sha256: item.sha256, bytes: item.bytes })) },
+        outputVersionId: output.versionId, comparison, ...(prepared.computationBasis ? { computationBasis: prepared.computationBasis } : {}), artifacts: answer.artifacts.map(item => ({ path: item.path, sha256: item.sha256, bytes: item.bytes })) },
       { projectId: job.projectId, expectedRevision: current.revision, transactionClient: client });
     });
     return output;
@@ -582,7 +606,7 @@ export class ResultReplayService {
     if (!artifact || !isResultDigest(artifact.sha256)) throw new HttpError(409, "result_replay_receipt_invalid", "The engine's byte record does not list the result file with its sha256, so the result cannot be checked and was not saved.");
     const payload = await this.readOutput(prepared.project, artifact, 8 * 1024 * 1024);
     prepared.applicability = replayApplicability(prepared.recipe.method, payload);
-    if (["design.analytic", "comparator.evalue"].includes(prepared.recipe.method)) {
+    if (Object.hasOwn(RESULT_R_REPLAY_METHOD_KINDS,prepared.recipe.method)) {
       const receiptPath = `result-replays/${job.id}/output/receipt.json`;
       const receiptArtifact = answer.artifacts.find(item => item.path === receiptPath);
       const receipt = await this.readOutput(prepared.project, receiptArtifact, 1024 * 1024);
@@ -600,6 +624,8 @@ export class ResultReplayService {
     } else if (payload.receipt?.recipeDigest !== prepared.execution.recipeDigest || replayDigest(payload.machineValues) !== replayDigest(answer.machineValues)) {
       throw new HttpError(409, "result_replay_receipt_invalid", "The numbers the engine reported do not match the result file it saved, so none of it was saved as a result.");
     }
+    // Derive only from the artifact whose bytes and receipt were verified above, never adapter-supplied metadata.
+    prepared.computationBasis = vcrAnalyticComputationBasis(payload);
     const inputs = [{ kind: "data", id: prepared.frozen.inputVersionId, versionId: prepared.frozen.inputVersionId,
       digest: prepared.recipe.input.sha256, availability: "captured" }];
     // What the engine ran, as its own receipt measured it: the method and version, the code files and installed packages

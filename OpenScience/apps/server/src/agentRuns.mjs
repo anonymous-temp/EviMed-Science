@@ -1,3 +1,4 @@
+import {RuntimePromptStops} from './runtimePromptStops.mjs';
 import { mergeInputAttribution } from "./geoNativeInputs.mjs";
 import { PLATFORM_SKILL_GENERATION_MAX_PINS } from './platformSkillLimits.mjs';
 import { normalizeDisabledPlatformSkills, normalizeDisabledBuiltinPlugins } from '@evimed/domain/platform-skill-policy';
@@ -4390,6 +4391,8 @@ export class AgentRunStore {
     this.model = String(options.model ?? "").trim();
     this.maxRuns = options.maxRuns ?? defaultMaxRuns;
     this.maxBytes = options.maxBytes ?? defaultMaxBytes;
+    this.promptStops=options.promptStops ?? new RuntimePromptStops({maxBytes:this.maxBytes});
+    this.withPromptAdmission=options.withPromptAdmission ?? ((_project,_session,operation)=>operation());
     this.now = options.now ?? (() => new Date());
     // Long-lived monitors must not inherit a dispatch's checked-out database
     // transaction. Their reads retain the normal project/run authorization.
@@ -5015,6 +5018,7 @@ export class AgentRunStore {
     legacyRunId = null,
     startedAt = null,
     goal = null,
+    beforeReserve = null,
   } = {}) {
     return withProjectStorageMutation(project, async () => {
       const events = parseEvents(await readLedgerText(project, this.maxBytes));
@@ -5124,6 +5128,9 @@ export class AgentRunStore {
         ...(personalSkillGeneration ? { personalSkillGeneration } : {}),
         ...(platformSkillGeneration ? { platformSkillGeneration } : {}),
       };
+      // The caller's final admission check sees the same immutable ledger
+      // snapshot that this reservation owns under the project storage lock.
+      if (beforeReserve) await beforeReserve({runs:[...runs.values()]});
       const text = serializeNext(events, event, this.maxBytes);
       if (dispatchId) this.dispatchOwners.add(id);
       try {
@@ -5164,7 +5171,7 @@ export class AgentRunStore {
     if (snapshot || platform) await this.recordLearning(project, runId, { ...(snapshot ? { personalSkillGeneration: snapshot } : {}), ...(platform ? { platformSkillGeneration: platform } : {}) });
   }
 
-  async dispatch(project, input, sendPrompt) {
+  async dispatch(project, input, sendPrompt, {beforeReserve=null} = {}) {
     const {
       sessionId,
       dispatchId,
@@ -5211,7 +5218,7 @@ export class AgentRunStore {
     const pinned = routedOverBinding && session.mode === "specialist"
       ? { ...session, agentId: selected.effectiveAgentId, agentVersion: selected.effectiveAgentVersion, runtimeAgent: selected.effectiveRuntimeAgent }
       : session;
-    const reservation = await this.reserveRun(project, pinned, { baselineCursor, dispatchId, dispatchFingerprint, agendaId, automated, estimatedMinutes, question, ...selected, effectiveProducts });
+    const reservation = await this.reserveRun(project, pinned, { baselineCursor, dispatchId, dispatchFingerprint, agendaId, automated, estimatedMinutes, question, ...selected, effectiveProducts,beforeReserve });
     const record = reservation.run;
     if (!reservation.owner) return this.existingDispatch(project, record);
     this.projects.set(`${project.userId}:${project.id}`, project);
@@ -6130,24 +6137,29 @@ export class AgentRunStore {
   /**
    * Record that the user asked for a run to stop, before the stop reaches the kernel (review F4). The run is named
    * by its id (the runs page's stop) or by the session the kernel's own `session/cancel` names. Nothing that is not
-   * running, or not this project's, is noted. Never throws: attributing a stop is an observation, and a stop is
-   * never held up by it.
+   * owned by this project can be targeted. Durable intent suppresses later automatic admissions for existing
+   * runs; future human requests remain independent. Kernel outcome and transient cancellation attribution are
+   * separate facts, so this never declares a turn canceled before the kernel reports it.
    * @param {any} project @param {{ runId?: string | null, sessionId?: string | null }} target
    * @returns {Promise<string | null>} the run it was noted for
    */
-  async noteStopRequest(project, { runId = null, sessionId = null } = {}) {
-    try {
-      const wanted = typeof runId === "string" && runId ? runId : null;
-      const session = typeof sessionId === "string" && sessionId ? sessionId : null;
-      if (!wanted && !session) return null;
-      const run = (await this.list(project)).find((item) => item.status === "running" && (wanted ? item.id === wanted : item.sessionId === session));
-      if (!run) return null;
-      this.stopRequests.set(run.id, this.now().getTime());
-      return run.id;
-    } catch {
-      return null;
-    }
+  async noteStopRequest(project,{runId=null,sessionId=null}={}) {
+    const wanted=typeof runId==='string'&&runId?runId:null;
+    const session=typeof sessionId==='string'&&sessionId?sessionId:null;
+    if(!wanted&&!session)return null;
+    const known=await this.list(project),target=wanted?known.find(run=>run.id===wanted):null;
+    const scope=session ?? target?.sessionId;if(!scope)return null;
+    return this.withPromptAdmission(project,scope,async()=>{
+      const runs=await this.list(project),selected=runs.filter(run=>wanted?run.id===wanted:run.sessionId===scope);
+      // Exact existing IDs make stop intent monotonic without suppressing a
+      // later explicit human request or depending on wall-clock comparisons.
+      await this.promptStops.record(project,scope,selected.map(run=>run.id));
+      const active=selected.find(run=>run.status==='running');
+      if(active)this.stopRequests.set(active.id,this.now().getTime());
+      return active?.id ?? null;
+    });
   }
+  async promptStopRequested(project,sessionId,runId){return this.promptStops.has(project,sessionId,runId);}
 
   /**
    * A runtime stop the user asked for (stop or restart of their own runtime, deleting the project or the

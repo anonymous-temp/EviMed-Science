@@ -707,6 +707,24 @@ test("AC-06 a blank treatment is counted under its missing reason and never beco
   assert.deepEqual(deriveAnalysisShapes({ tables: [cohort], entries: notApplicable, key }).treatment.arm, { recorded: 2, unknown: 0, notApplicable: 2, missingReason: null });
 });
 
+test("observations before and after a hidden trial period do not supply its treatment or fill the interval", () => {
+  const cohort = { name: "cohort.csv", header: TABLES[0].header, rows: [["SYNTHETIC-1", "", "62", "12", "0"]] };
+  const visits = { name: "visits.csv", header: ["PATIENT_NO", "VISIT_DATE", "SBP"], rows: [
+    ["SYNTHETIC-1", "2025-01-01", "160"], ["SYNTHETIC-1", "2025-12-01", "120"],
+  ] };
+  const map = [...GOOD_MAP.map(entry => entry.column === "ARM" ? { ...entry, missingReason: "restricted_in_trial" } : entry),
+    { table: "visits.csv", column: "VISIT_DATE", role: "visit_date", timeKind: "occurred_at" }];
+  const entries = validateFieldMap(normalizeFieldMap(map).columns, [cohort, visits]).columns;
+  const derived = deriveAnalysisShapes({ tables: [cohort, visits], entries, key: Buffer.alloc(32, 9) });
+  const arm = derived.shapes.subject.header.indexOf("arm");
+  assert.equal(derived.shapes.subject.rows[0][arm], "");
+  assert.equal(derived.treatment.arm.unknown, 1);
+  assert.equal(derived.treatment.arm.missingReason, "restricted_in_trial");
+  assert.equal(derived.shapes.longitudinal.rows.length, 2);
+  assert.ok(derived.shapes.longitudinal.rows.every(row => ["160", "120"].includes(row[derived.shapes.longitudinal.header.indexOf("AVAL")])));
+  assert.deepEqual(derived.shapes.longitudinal.rows.map(row => row[derived.shapes.longitudinal.header.indexOf("ADT")]), ["2025-01-01", "2025-12-01"]);
+});
+
 test("AC-03 a column names its own value source, and a table of mixed columns is never called observed", () => {
   assert.deepEqual([...VCR_COLUMN_SOURCE_ORDER].sort(), [...VCR_REAL_PATIENT_SOURCES].sort(), "the order ranks exactly the real-patient sources");
   assert.equal(weakestSource(["observed", "observed"], "observed"), "observed");

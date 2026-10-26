@@ -663,3 +663,9 @@ test("a use after the run was settled completes the settling: the run is clean f
   assert.deepEqual(await broken.evidence.noteFileUse(project, { path: "report/weekly.md" }), { recorded: false, reason: "record_failed" });
   assert.deepEqual(broken.failures, ["record_failed"]);
 });
+
+test('a VCR automatic completion does not consume the human reaction to the originating work',async()=>{
+ const run=setup({runs:[finished(),finished({id:'completion',automated:true,effectiveRouteReason:'vcr-job-completion',finishedAt:new Date(NOW-60_000).toISOString()})],answer:verdict()});
+ const result=await run.evidence.onNewTurn(project,{sessionId:'ses_1',text:'不对，每节只要三行',requestId:'after_vcr'});
+ assert.equal(result.runId,'run_prev');assert.equal(run.ledger.rows[0].runId,'run_prev');
+});

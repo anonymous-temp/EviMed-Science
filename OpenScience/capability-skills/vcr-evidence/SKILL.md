@@ -5,27 +5,45 @@ metadata:
   evimed-agent: vcr-evidence
 ---
 
-# 虚拟临床研究 — 证据参数化
+# Evidence and parameter grounding
 
-你把一项研究要用的参数**从证据里做出来**，而不是让研究者自己填。人群、虚拟患者、
-对照和试验四个工作区共用你写出来的假设卡：他们读的是你的数，所以每个数都要能指回原文。
+Find and preserve the closest appropriate scientific evidence before asking for
+statistical inputs. The user supplies the scientific question and available data;
+the AI retrieves, structures and reconciles source parameters.
 
-工作语言与交付文字一律简体中文。药名、终点名、登记号、原文引用照原样写，不要改写。
+## Shared operating contract
 
-## 一条规矩，先读它
+Read [../vcr-protocol/references/operating-contract.md](../vcr-protocol/references/operating-contract.md) before this workflow; reuse it when already loaded in this conversation. It defines task scope, data requirements, evidence and continuation boundaries.
 
-**数字只能来自两个地方：从原文里抽出来的，或者引擎算出来的。你自己一个数都不许写。**
+## Registry and literature evidence
 
-- 抽出来的数，必须能在这条登记记录的保全文本里**逐字找到**：引文逐字出现在记录里，
-  值、置信区间的两端、样本量和事件数**都要出现在引文里**。平台在写入前用确定性的程序逐个核对；
-  核对不过的值只留一条「未通过」的记录，**永远进不了假设卡**。所以不要「凭印象补一个差不多的数」。
-- 合并值、I²、τ²、预测区间由平台的统计引擎算。你不做加权、不算异质性、
-  不估区间、不把置信区间当预测区间用。引擎没给回结果，就不出这张卡，并在报告里写明原因。
-- 假设卡的数（`pointValue`、分布）在证据卡上**不由你写**：平台从被引用的证据行或合并结果里取，
-  你写的数会被当场拒绝（`vcr_write_field_forbidden`）。只有「专家设定」和「情景假设」两种卡由你给数，
-  并且卡上照实标着「假设」。
+Search publications/full text and trusted registries in parallel when useful.
+Registries establish design, eligibility, status and reported results where present;
+planned enrollment is not completed outcome evidence. Preserve source/fetch dates
+and actual coverage. Do not re-enable CDE or ICTRP integrations or invent unavailable
+registry text. Similarity ranks leads; it does not establish comparability.
 
-## 六步
+For preserved articles/abstracts/tables use `mcp__evimed__vcr_write` what `evidence_item` with
+`literatureSource: {sourceId,generation,textSha256}` rather than a registry source,
+plus `evidenceKind: "baseline"|"outcome"|"design"`, exact `quote` and
+`locator: {start,end,parts?}`. Parts can locate CI bounds, n, events and units in
+separate exact spans. Original numeric values and units must be present. The
+service checks ownership, generation, bytes and spans. Keep supplied `valueSource`
+(`extracted` versus `calculated`) rather than upgrading derived values.
+
+For literature baseline synthesis, a statistic is named explicitly, for example
+`age.mean`, `age.sd` or `sex.proportions[0]`, with `evidenceKind: "baseline"`.
+The population's `baselineBindings` name the variable, field, optional index,
+`evidenceId` and target unit. The platform verifies every binding. Only documented
+percent-to-proportion conversion is automatic; do not guess clinical units.
+
+A computed value whose source proof verifies only its quoted inputs remains
+`quoted_inputs_only`, not a verified reported value. Preserve it as a derived or
+assumed scenario and its calculation gap; do not admit it to reported-baseline or
+historical-control evidence. An unavailable/stale source is an advisory finding;
+keep earlier useful outputs and show their specific limitation.
+
+## Reference workflow for an evidence task
 
 ### 1. 读研究与已有的东西
 
@@ -218,3 +236,9 @@ For each horizon, report the requested heldout population, evaluated rows, missi
 Read both `records` and `related`; `relatedIds.evaluation` is the latest evaluation of a prediction. `filter.id` selects that exact record, whereas `filter.parentId` finds its evaluations. Never infer absence of validation from an empty page or an incompatible id/kind filter. A metric marked `availability: computed` is available even if its interval has zero width; `unavailableReason` applies only to null values. CRPS can be computed from predictive samples without an SD. Zero observed events with adequate follow-up allow Brier, but not AUROC/AP. A plan that was not frozen has unknown timing relative to outcome access; it is not proof of a late plan. Read current job status before saying an earlier queued job is still queued.
 
 Longitudinal records now expose stable `numberPath` references in `report_model.longitudinal.byId`. Read both records and related; a `prediction_set` groups independently usable endpoint ids from one external upload. Sensitivity/model/update comparisons use `compare_forecasts` with the named mode and common calendar targets. Keep these outputs separate from observed clinical facts; local data partitions and input masking do not establish the external model's training independence.
+
+## Independent trial units and derived inputs
+
+A document is not an independent study. For a literature item that may enter pooling, supply `trialIdentity: {registry, registryId}` or `{trialKey}` and its exact preserved span at `locator.parts.trialIdentity`. Different trials reported in one article keep distinct trial identities; registry and article reports of the same trial remain one unit. Missing identities and duplicates are reported, not counted as new participants or independent studies.
+
+Derived literature inputs use `locator.inputs` entries `{start, end, quote, value}` with exact UTF-16 spans and a complete literal number. A letter, arbitrary substring or clipped decimal cannot establish an input. These entries verify inputs only; their output is not a reported source value and cannot become a direct external-evidence assumption without actual calculation evidence. Compound units and symbol case retain their meaning.

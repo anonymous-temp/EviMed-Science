@@ -1,3 +1,4 @@
+import {withSessionPromptAdmission,runtimePromptAdmissionStatus} from './runtimePromptAdmission.mjs';
 import { contextGenerationPaths, prepareContextGeneration, verifyContextGeneration, remediateStartupContext } from './runtimeContextGeneration.mjs';
 import { contextPolicyIdentity, sameContextPolicy } from './geoContextItems.mjs';
 import { PLATFORM_SKILLS_RUNTIME_DIR, platformSkillGenerationRoot, verifyPlatformSkillGeneration } from "./platformSkillSupply.mjs";
@@ -78,6 +79,7 @@ import {
   sendJson,
   writeFileAtomicNoFollow,
   writeJsonFileAtomicNoFollow,
+  withProjectStorageMutation,
 } from "./security.mjs";
 
 /**
@@ -3545,6 +3547,7 @@ export class RuntimeManager {
     onRuntimeStop = async () => {},
     onRuntimeStopping = async () => {},
     onSessionAbort = async () => {},
+    readPromptStop = null,
     onRuntimeStart = () => {},
     hasRunningRuns = async () => false,
     runtimeCreationMutation = async operation => operation(),
@@ -3556,6 +3559,7 @@ export class RuntimeManager {
     this.recordRuntimeEgressDispatch = recordRuntimeEgressDispatch;
     this.readRuntimeEgressRun = readRuntimeEgressRun;
     /** @type {any} */ this.pluginService = null;
+    /** @type {any} Server-owned database for the short per-session prompt fence. */ this.promptAdmissionDatabase=null;
     /** @type {any} Immutable personal methods, assigned only by the composition root. */
     this.platformSkillSupply = null;
     this.platformSkillScopes = new Map();
@@ -3707,6 +3711,7 @@ export class RuntimeManager {
     this.onRuntimeStopping = onRuntimeStopping;
     /** @type {(project: any, sessionId: any) => any} */
     this.onSessionAbort = onSessionAbort;
+    this.readPromptStop=readPromptStop;
     /** @type {(project: any, runtime: any) => any} */
     this.onRuntimeStart = onRuntimeStart;
     /**
@@ -5685,7 +5690,7 @@ export class RuntimeManager {
    * delegated its full-text retrieval was refused for "a path no evidence tool
    * reported preserving" that a child had in fact preserved.
    */
-  async sessionTranscript(project, sessionId, { wake = true, address = null, parentSessionId = null } = {}) {
+  async sessionTranscript(project, sessionId, { wake = true, address = null, parentSessionId = null, currentTurn = false, maxPages = 200, beforeSeq: requestedBeforeSeq = undefined } = {}) {
     const runtime = wake ? await this.start(project) : this.runtimes.get(this.key(project));
     if (!runtime) {
       throw new HttpError(409, "runtime_not_running", "Runtime is not running for session history monitoring.");
@@ -5736,7 +5741,7 @@ export class RuntimeManager {
       /** @type {Record<string, any>[][]} */
       const pages = [];
       /** @type {number | undefined} */
-      let beforeSeq;
+      let beforeSeq = requestedBeforeSeq;
       // Whether the walk backwards reached the start of the session. See the
       // note on the adapter's copy: this is the only truthful truncation
       // signal, and deriving one by comparing sequence numbers instead
@@ -5744,7 +5749,7 @@ export class RuntimeManager {
       let exhausted = false;
       // 200 pages x 25 messages bounds a transcript at 5000 messages -- the
       // page shrink above must not quietly shrink the whole readable run.
-      for (let page = 0; page < 200; page += 1) {
+      for (let page = 0; page < Math.max(1, Math.min(200, currentTurn ? 20 : maxPages)); page += 1) {
         let value;
         try {
           value = await this.withRuntimeDeadline(
@@ -5786,6 +5791,13 @@ export class RuntimeManager {
         }
         const pageEntries = Array.isArray(value?.records) ? value.records : [];
         pages.unshift(pageEntries);
+        // Invocation proof needs only the open turn. Older history may be arbitrarily
+        // long; its absence is not truncation of this authenticated turn.
+        if (currentTurn && pageEntries.some(entry => entry?.event?.type === 'turn/start')) {
+          const normalized = normalizeTranscript(sessionId, pages.flat());
+          const turn = normalized.turns.at(-1);
+          if (turn) return { ...normalized, messages: normalized.messages.filter(message => message.turnStartSeq === turn.startSeq), turns: [turn], exhausted: false, truncated: false, currentTurn: true };
+        }
         if (!value?.hasMore || !pageEntries.length) { exhausted = true; break; }
         const firstSeq = Number(pageEntries[0]?.event?.seq ?? NaN);
         if (!Number.isFinite(firstSeq)) break;
@@ -5837,7 +5849,13 @@ export class RuntimeManager {
   async sessionInbox(project, sessionId) {
     const runtime = this.runtimes.get(this.key(project));
     if (!runtime) return null;
-    this.beginProxy(project);
+    // Worker observation is bounded by proxy capacity, but is not runtime use:
+    // preserve both lastUseAt and the already scheduled idle deadline.
+    this.enforceProxyCapacity(project);
+    const key=this.key(project);
+    const activity=this.runtimeActivity.get(key) ?? {activeProxies:0,idleTimer:null,lastUseAt:Date.parse(runtime.startedAt ?? '') || 0};
+    this.runtimeActivity.set(key,activity);
+    activity.passiveProxies=(activity.passiveProxies ?? 0)+1;
     try {
       const value = await this.withRuntimeDeadline(
         (signal) => this.callKernel(runtime, project, "session/list", { _request: {} }, signal),
@@ -5846,7 +5864,7 @@ export class RuntimeManager {
       );
       return sessionInboxOf(sessionListItems(value).find((item) => String(item?.sessionId) === String(sessionId)));
     } finally {
-      this.endProxy(project);
+      activity.passiveProxies=Math.max(0,activity.passiveProxies-1);
     }
   }
 
@@ -5921,7 +5939,7 @@ export class RuntimeManager {
    * or null when it was routed to none; the index states it, and that is where the runtime reads it. A dispatch that writes
    * no context (a steer) leaves it out, and the index keeps what the context on disk was routed to.
    *
-   * @param {{ text: string, system?: string | null, routedCapability?: string | null, memoryContext?: string | null, agent?: string | null, model?: string | null, runId?: string | null, requestId?: string, strictContext?: boolean, allowBounded?: boolean, unattended?: boolean, mode?: 'queue' | 'steer', recordPromptActor?:(request:any)=>Promise<void> }} input
+   * @param {{ text: string, system?: string | null, routedCapability?: string | null, memoryContext?: string | null, agent?: string | null, model?: string | null, runId?: string | null, requestId?: string, strictContext?: boolean, allowBounded?: boolean, unattended?: boolean, mode?: 'queue' | 'steer', recordPromptActor?:(request:any)=>Promise<void>, beforePrompt?: ((context?:{signal:AbortSignal})=>Promise<void>) | null }} input
    * `unattended`: whether nobody is in this turn to answer a question, signed into the turn's attendance receipt. Stated by every
    * caller from the same decision its research context gets (`attended`); a person-initiated path says `false`.
    * @returns {Promise<void>}
@@ -5954,7 +5972,7 @@ export class RuntimeManager {
     }
   }
 
-  async dispatchAdmittedPrompt(project, sessionId, { text, system = null, routedCapability = undefined, memoryContext = null, runId = null, requestId = randomId("req_"), strictContext = false, allowBounded = false, unattended = undefined, mode = "queue", recordPromptActor = null }) {
+  async dispatchAdmittedPrompt(project, sessionId, { text, system = null, routedCapability = undefined, memoryContext = null, runId = null, requestId = randomId("req_"), strictContext = false, allowBounded = false, unattended = undefined, mode = "queue", recordPromptActor = null, beforePrompt = null }) {
     // Background work whose runtime a researcher's start just took says so, so
     // its owner waits and asks again instead of counting a failed attempt
     // (`RUNTIME_YIELDED_CODE`). Nothing was sent: the prompt is refused whole.
@@ -6045,17 +6063,41 @@ export class RuntimeManager {
         mode: mode === "steer" ? "steer" : "queue",
         content: [{ type: "text", text }],
       };
-      // The trusted caller binds the exact native request only after unsent
-      // admission failures, before the kernel can execute its tools.
-      if (recordPromptActor) await recordPromptActor(promptRequest);
-      if(runId&&this.config.evolutionEnabled===true&&isEvolutionProject(project.id)){
-        try{await this.recordRuntimeEgressDispatch?.(project,runId,new Date().toISOString());}catch{/* Without a durable dispatch cutoff exposure remains unknown. */}
+      let promptSent=false;
+      try {
+        await withSessionPromptAdmission(this,project,sessionId,async signal=>{
+          // Bind the authenticated actor under the same fence as native input.
+          if(recordPromptActor) await recordPromptActor(promptRequest);
+          if(runId && this.config.evolutionEnabled===true && isEvolutionProject(project.id)) {
+            try {await this.recordRuntimeEgressDispatch?.(project,runId,new Date().toISOString());}
+            catch {/* Without a durable dispatch cutoff exposure remains unknown. */}
+          }
+          signal.throwIfAborted();
+          await withProjectStorageMutation(project,async()=>{
+            signal.throwIfAborted();
+            // Proof reads precede the final ledger read. The project ledger and
+            // session admission stay excluded until this short RPC acknowledges.
+            if(runId && this.readPromptStop && await this.readPromptStop(project,sessionId,runId)) {
+              throw Object.assign(new HttpError(409,'runtime_prompt_rejected','The researcher stopped this pending input.'),{definitivelyRejected:true});
+            }
+            if(beforePrompt) {
+              try {await beforePrompt({signal});}
+              catch(error) {error.definitivelyRejected=true;throw error;}
+            }
+            signal.throwIfAborted();
+            promptSent=true;
+            await this.withRuntimeDeadline(
+              // main's guarded `send` keeps the context-policy generation check on the admitted path.
+              wireSignal=>send("session/prompt",{request:promptRequest},AbortSignal.any([wireSignal,signal])),
+              "runtime_prompt_acceptance_unknown",
+              "Runtime prompt acceptance could not be confirmed.",
+            );
+          });
+        });
+      } catch(error) {
+        if(!promptSent) error.definitivelyRejected=true;
+        throw error;
       }
-      await this.withRuntimeDeadline(
-        (signal) => send("session/prompt", { request: promptRequest }, signal),
-        "runtime_prompt_acceptance_unknown",
-        "Runtime prompt acceptance could not be confirmed.",
-      );
     } finally {
       this.endProxy(project);
     }
@@ -6454,6 +6496,7 @@ export class RuntimeManager {
       running: this.runtimes.size,
       starting: this.starts.size,
       proxy,
+      promptAdmissions:runtimePromptAdmissionStatus(this),
       quota: {
         monitored: this.runtimeQuotaMonitors.size,
         intervalMs: positiveLimit(this.config.runtimeQuotaCheckIntervalMs),
@@ -7911,7 +7954,7 @@ export class RuntimeManager {
   /**
    * @param {any} req @param {any} res @param {Record<string, any>} project @param {string} suffix
    * @param {{ surface?: string, uiBasePath?: string, revalidate?: () => Promise<void>, uiAssetPrefix?: string | null,
-   *           immutable?: boolean, rebaseDocument?: boolean, fileBody?: boolean, beforeForward?: (() => Promise<void>) | null,
+   *           immutable?: boolean, rebaseDocument?: boolean, fileBody?: boolean, beforeForward?: (() => Promise<void>) | null, admissionSignal?: AbortSignal | null,
    *           observeResponse?: ((input:{body:Buffer,status:number,contentType:string})=>Promise<void>) | null,
    *           observeFailure?: ((input:{status:number|null,errorCode:string})=>Promise<void>) | null,
    *           transformResponse?: ((input:{body:Buffer,status:number,contentType:string})=>Promise<Buffer>) | null }} [options]
@@ -7921,7 +7964,7 @@ export class RuntimeManager {
    *   `fileBody` says the request carries a file, not an RPC: it is held to
    *   `maxFileBytes` instead of the JSON ceiling, and never parsed as JSON.
    */
-  async proxy(req, res, project, suffix, { surface = "runtime", uiBasePath = "/api/runtime-ui/", revalidate = undefined, uiAssetPrefix = null, immutable = false, rebaseDocument = true, fileBody = false, beforeForward = null, transformResponse = null, observeResponse = null, observeFailure = null } = {}) {
+  async proxy(req, res, project, suffix, { surface = "runtime", uiBasePath = "/api/runtime-ui/", revalidate = undefined, uiAssetPrefix = null, immutable = false, rebaseDocument = true, fileBody = false, beforeForward = null, transformResponse = null, observeResponse = null, observeFailure = null, admissionSignal = null } = {}) {
     const startedAt = Date.now();
     const method = req.method ?? "GET";
     const target = surface === "ui" ? uiProxyAuditTarget(suffix) : proxyAuditTarget(suffix);
@@ -8003,7 +8046,7 @@ export class RuntimeManager {
           method,
           headers,
           body,
-          signal: controller.signal,
+          signal: admissionSignal ? AbortSignal.any([controller.signal,admissionSignal]) : controller.signal,
         });
         clearTimeout(connectTimer);
       } catch (err) {
@@ -8019,6 +8062,7 @@ export class RuntimeManager {
         await this.onSessionAbort(project, abortedSessionId);
       }
       streaming = (upstreamRes.headers.get("content-type") ?? "").toLowerCase().includes("text/event-stream");
+      if(admissionSignal && streaming) throw new HttpError(502,"runtime_wire_protocol_mismatch","Prompt admission must return its bounded RPC acknowledgement.");
       if (streaming && transformResponse) throw new HttpError(403, "runtime_ui_method_denied", "This scoped frame uses the native multiplexed event stream.");
       const responseHeaders = sanitizedRuntimeResponseHeaders(upstreamRes, runtime, project, {
         surface,
@@ -8547,13 +8591,14 @@ export class RuntimeManager {
   activeProxyCount() {
     let count = 0;
     for (const activity of this.runtimeActivity.values()) {
-      count += activity.activeProxies ?? 0;
+      count += (activity.activeProxies ?? 0)+(activity.passiveProxies ?? 0);
     }
     return count;
   }
 
   activeProxyCountForProject(project) {
-    return this.runtimeActivity.get(this.key(project))?.activeProxies ?? 0;
+    const activity=this.runtimeActivity.get(this.key(project));
+    return (activity?.activeProxies ?? 0)+(activity?.passiveProxies ?? 0);
   }
 
   hasAttachedOrStartingRuntime(project) {
@@ -8622,8 +8667,15 @@ export class RuntimeManager {
       if (socket.destroyed) { release(); return; }
       await proxyRuntimeUiMux({
         req, socket, head, runtime,
+        acceptanceTimeoutMs:Number(this.config.runtimePromptAdmissionTimeoutMs ?? 30000),
         maxPayload: Math.max(1024, Number(this.config.maxJsonBytes) || 12 * 1024 * 1024),
         ...policy,
+        submit:(endpoint,operation,payload)=> {
+          if(!['session/prompt','session/cancel'].includes(endpoint)) return operation();
+          const sessionId=payload?.args?.request?.sessionId ?? payload?.args?.sessionId;
+          if(endpoint==='session/cancel' && typeof sessionId!=='string') return operation();
+          return withSessionPromptAdmission(this,project,sessionId,operation);
+        },
         admit: (endpoint, operation, payload) => {
           if (endpoint !== "session/prompt") return policy.admitOperation ? policy.admitOperation(endpoint, payload, operation) : policy.withAuthority ? policy.withAuthority(operation) : operation();
           const prompt = async () => {

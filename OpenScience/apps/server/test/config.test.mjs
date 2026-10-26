@@ -1034,3 +1034,9 @@ test("the engine's service key is read from its file and never from a value that
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('same-session prompt admission has one bounded configured acceptance deadline',()=>{
+ assert.equal(loadConfig({rootDir:repoRoot}).runtimePromptAdmissionTimeoutMs,30000);
+ for(const value of [500,60000])assert.equal(loadConfig({rootDir:repoRoot,runtimePromptAdmissionTimeoutMs:value}).runtimePromptAdmissionTimeoutMs,value);
+ for(const value of [0,499,60001,NaN,Infinity])assert.throws(()=>loadConfig({rootDir:repoRoot,runtimePromptAdmissionTimeoutMs:value}),/OPEN_SCIENCE_RUNTIME_PROMPT_ADMISSION_TIMEOUT_MS/);
+});
