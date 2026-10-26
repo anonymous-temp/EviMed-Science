@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SHORT_BODY_CHARS, insightParts, readerBodyPresentation, readerOutline, readerParagraphs, shownText } from "./FrontierReader";
+import { insightParts, isPost, readerOutline, readerParagraphs, readerTextKind, shownText } from "./FrontierReader";
 
 describe("the reader's paragraphs", () => {
   it("takes a full text's `## ` paragraphs as its section headings, in either language", () => {
@@ -119,26 +119,22 @@ describe("the reader's text structure (2026-10-23)", () => {
   });
 });
 
-describe("how a text is shown, by its genre (ct-write W6)", () => {
-  const body = (zh: string, source: "body" | "abstract" | "excerpt" = "body") => ({ zh, original: null, zhKind: "original-zh" as const, complete: true, source });
-  const short = "短。";
-  const long = "长".repeat(SHORT_BODY_CHARS);
-  it("folds a paper's abstract and full text to a preview, naming them 摘要 and 全文", () => {
-    expect(readerBodyPresentation({ genre: "paper", platform: null }, body(short, "abstract"))).toEqual({ kind: "摘要", fold: "preview", readOriginal: false });
-    expect(readerBodyPresentation({ genre: "preprint", platform: null }, body(short, "body"))).toEqual({ kind: "全文", fold: "preview", readOriginal: false });
+describe("what a text is called and whether it has a view of its own (ct-write W6, 2026-10-26)", () => {
+  const body = (source: "body" | "abstract" | "excerpt") => ({ source });
+  it("names an abstract 摘要, a journal's or a preprint server's own text 全文, and anything else 正文", () => {
+    expect(readerTextKind({ sourceType: "journal" }, body("abstract"))).toBe("摘要");
+    expect(readerTextKind({ sourceType: "media" }, body("abstract"))).toBe("摘要");
+    expect(readerTextKind({ sourceType: "journal" }, body("body"))).toBe("全文");
+    expect(readerTextKind({ sourceType: "preprint" }, body("body"))).toBe("全文");
+    // A news report of a paper is the report's text, not the paper's.
+    expect(readerTextKind({ sourceType: "media" }, body("body"))).toBe("正文");
+    expect(readerTextKind({ sourceType: "journal" }, body("excerpt"))).toBe("正文");
   });
-  it("folds a 公众号 article with 阅读原文, whatever its genre, and shows a post whole", () => {
-    expect(readerBodyPresentation({ genre: "commentary", platform: "wechat" }, body(short))).toEqual({ kind: "正文", fold: "preview", readOriginal: true });
-    expect(readerBodyPresentation({ genre: "approval", platform: "wechat" }, body(short))).toEqual({ kind: "正文", fold: "preview", readOriginal: true });
-    expect(readerBodyPresentation({ genre: "social", platform: "x" }, body(long))).toEqual({ kind: "正文", fold: "open", readOriginal: false });
-  });
-  it("folds a policy, a guideline, a trial record and a reading; opens news-like text while short", () => {
-    for (const genre of ["policy", "guideline", "trial", "commentary"] as const) {
-      expect(readerBodyPresentation({ genre, platform: "web" }, body(short)).fold).toBe("preview");
-    }
-    for (const genre of ["news", "industry", "approval", "safety", "conference", "roundup"] as const) {
-      expect(readerBodyPresentation({ genre, platform: "web" }, body(short)).fold).toBe("open");
-      expect(readerBodyPresentation({ genre, platform: null }, body(long)).fold).toBe("preview");
-    }
+  it("shows a post's text beside what was written about it, and a 公众号 article in a view of its own", () => {
+    expect(isPost({ platform: "x" })).toBe(true);
+    expect(isPost({ platform: "weibo" })).toBe(true);
+    expect(isPost({ platform: "wechat" })).toBe(false);
+    expect(isPost({ platform: "web" })).toBe(false);
+    expect(isPost({ platform: null })).toBe(false);
   });
 });
