@@ -32,26 +32,20 @@ import { useOpenGeoConversation } from "./useOpenGeoConversation";
  * be asked offers no 接着做 until it can be (a retry would ask nobody again).
  */
 export function NeedsYou({ geoId, project }: { geoId: string; project: GeoProject }) {
-  const geoDestinationPath = useGeoDestinationPath();
   const monitoring = useGeoMonitoring(geoId);
   const pause = measurementPause(monitoring.state.kind === "ready" ? monitoring.state.data.measurement : null);
   const items = project.needsYou;
   const paused = pause?.paused ? pause : null;
   if (items.length === 0 && !paused) return null;
   return (
-    <Section title="需要你" count={items.length + (paused ? 1 : 0)} className="mt-0">
+    <>
+    {paused && <Section title="监测状态" className="mt-0"><p role="status" className="text-ui text-text-2" data-geo-measurement="paused">{paused.short}：{paused.detail}</p></Section>}
+    {items.length > 0 && <Section title="需要你" count={items.length} className="mt-0">
       <List divided label="需要你处理的事">
-        {paused && (
-          <ListRow
-            title={paused.short}
-            titleProps={{ "data-geo-measurement": "paused" }}
-            meta={paused.detail}
-            to={geoDestinationPath(geoId, GEO_STEP_HOME.monitoring)}
-          />
-        )}
         {items.map((item) => <NeedsYouRow key={item.key} geoId={geoId} project={project} item={item} pause={paused} />)}
       </List>
-    </Section>
+    </Section>}
+    </>
   );
 }
 

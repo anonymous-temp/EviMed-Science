@@ -165,6 +165,8 @@ export const WEB_DOCKERFILE = "deploy/web/Dockerfile";
 // the pack: the pack is the owner's and proprietary. No other instruction changed.
 // 2026-10-25 (memory capsule next round, platform): one added line — the image carries the platform's official starter packs (`capsules/official/`,
 // the text of each method, read and published once at start by `officialPackSources.mjs`). No other instruction changed.
+// 2026-10-26: reviewed ab52b59d4 against its parent: only the OpenViking compile-scope-proof.json
+// COPY and its explanatory comment were added; stages, commands, secrets and build arguments are unchanged.
 export const WEB_DOCKERFILE_SHA256 = "sha256:81ddc6225e84617ce3ab2f43b148fc070dd338d13fdc11d2bb8a22e506516087";
 export const WEB_INPUTS = Object.freeze([
   "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "deps-version.json",

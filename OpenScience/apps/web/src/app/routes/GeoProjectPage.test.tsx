@@ -877,12 +877,12 @@ describe("the project's conversation for a role that may not converse", () => {
   it("for a role that may, a conversation that cannot be opened says so with 重试, which asks again", async () => {
     client.open.mockResolvedValue(false);
     renderProject("/app/geo/geo_masi/chat");
-    expect(await screen.findByRole("alert")).toHaveTextContent("对话暂时无法打开，请稍后重试。");
+    expect(await screen.findByRole("note")).toHaveTextContent("对话暂时无法打开，请稍后重试。");
     expect(client.open).toHaveBeenCalledTimes(1);
     client.open.mockResolvedValue(true);
     await userEvent.click(screen.getByRole("button", { name: "重试" }));
     await waitFor(() => expect(client.open).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("note")).not.toBeInTheDocument());
   });
 });
 

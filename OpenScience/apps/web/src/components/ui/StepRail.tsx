@@ -55,6 +55,18 @@ export interface StepRailProps {
   showState?: boolean;
 }
 
+/**
+ * Component: StepRail; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Named ordered step navigation with marks, state words and optional trailing fact.
+ * Variants: visible/showState; default narrow Menu fallback.
+ * States: activeSteps denotes current scope independently of supplied state.
+ * Hit area: 40px row or 56px with state; shared menu chip on narrow view.
+ * Keyboard: Native links/buttons; narrow Menu owns arrows/Escape.
+ * Long content: Expanded rail scrolls horizontally; trailing fact truncates; Tooltip exposes summary.
+ * Theme: Success/info/warn marks; accent current-step rule.
+ * Responsive: useNarrow selects compact Menu unless visible is set.
+ * Verification: StepRail.test.tsx and Composition.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function StepRail({ label, steps, activeSteps = [], trailing, className, visible = false, showState = false }: StepRailProps) {
   const narrow = useNarrow();
   const navigate = useNavigate();

@@ -153,6 +153,42 @@ async function furnishTrack(database, insertComposedItem, { hoursAgo, log }) {
   log(`frontier: ${approvals.length} approvals and ${guidelines.length} guidelines tracked; congress ${congress.id} (${frontierCongressStatus(congress, today)}) with ${ids.length} reports`);
 }
 
+/** Furnish one wholly synthetic outside-event topic through the current topic pipeline and its validators. */
+export async function furnishTopic(database, log) {
+  const { FrontierTopics, FRONTIER_TOPIC_WRITE_INSTRUCTIONS } = await load("src", "frontierTopics.mjs");
+  const { migrateFrontierLeads } = await load("src", "frontierLeads.mjs");
+  await migrateFrontierLeads(database);
+  const title = "示例城市跑步活动后的运动风险讨论";
+  const snapshots = [20, 5].map(minutes => ({ board: "weibo", fetchedAt: new Date(Date.now() - minutes * 60000).toISOString(),
+    entries: [{ title, rank: 1, heat: 999, desc: "示例城市举办跑步活动，参与者讨论运动前健康评估。全部内容为界面测试合成。", url: "https://synthetic-topic.example.org/running" }] }));
+  const topic = { title: "跑步前需要做哪些健康评估？", question: "健康成年人参加跑步活动前，需要关注哪些风险因素，什么情况下应先咨询医生？", peg: "", peg_entry: null,
+    entities: { diseases: [], drugs: [] }, queries: { zh_reports: ["跑步 运动前健康评估"], zh_evidence: ["运动前健康评估 指南"], en_evidence: ["preparticipation screening exercise guideline"], stats: [] } };
+  const topics = new FrontierTopics({ database, plugin: { configured: true, hotLists: async () => ({ boards: snapshots }) },
+    editor: { callJson: async () => ({ groups: [{ members: [1], medical_members: [1], domain: "society", medical: true, needs_private_health: false, subject_names: [], question: topic.question, same_as: null, confidence: 1 }] }),
+      writeJson: async (instructions, _input, _max, { verify }) => {
+        const checked = verify(instructions === FRONTIER_TOPIC_WRITE_INSTRUCTIONS ? topic : { overview_zh: "" });
+        return { verification: checked.issues.length ? "dropped" : "passed", output: checked.output, issues: checked.issues };
+      } }, config: { frontierOutsideEventEnabled: true } });
+  const result = await topics.tick();
+  log(`frontier: synthetic outside-event topic ${JSON.stringify(result)}`);
+  if (!result.accepted) throw new Error("The synthetic outside-event fixture topic did not pass the current pipeline.");
+}
+
+/** Deterministic stand-in for the current grouping wire: only identical synthetic registry IDs may join. */
+export function fixtureGroupAnswer(messages) {
+  const input = String(messages.at(-1)?.content ?? "");
+  const registries = text => new Set(text.match(/NCT9\d{7}/gu) ?? []);
+  const same = (left, right) => [...registries(left)].some(id => registries(right).has(id));
+  if (input.includes("【报道 A】")) {
+    const [left, right = ""] = input.split("【报道 B】");
+    return { relation: same(left, right) ? "SAME_OCCURRENCE" : "UNRELATED", confidence: 1, difference: "Synthetic fixture registry identity" };
+  }
+  const [report, ...candidates] = input.split(/【候选 C\d+】/u);
+  return { query: "Synthetic fixture registry identity", decisions: candidates.map((candidate, index) => ({ id: `C${index + 1}`,
+    relation: same(report, candidate.split("【已入选】")[0]) ? "SAME_OCCURRENCE" : "UNRELATED", confidence: 1, note: "Synthetic fixture registry identity" })),
+    selection: { addsValue: true, reason: "Synthetic companion report" } };
+}
+
 /**
  * @param {any} app @param {any} user the fixture account
  * @param {{ log: (line: string) => void }} context
@@ -175,11 +211,12 @@ export async function furnishFrontier(app, user, { log }) {
     app.frontier.editor.owner = await ensureFrontierProject({ store: app.store, config: app.config });
     composer.events.editor = {
       available: true, model: "walk-fixture",
-      judgeSameEvent: async (/** @type {{ candidates: unknown[] }} */ input) => ({ verdicts: input.candidates.map(() => "yes"), error: null, attempts: 1 }),
-      writeEventDigest: async (/** @type {{ reports: any[] }} */ input) => {
-        const first = input.reports[0] ?? {};
-        const title = String(first.titleZh ?? first.title_zh ?? first.title ?? "这件事");
-        return { verification: "passed", digestZh: `${title}。共有 ${input.reports.length} 家机构报道，一手材料与转述报道各自的要点见下。`, latestZh: String(input.reports.at(-1)?.titleZh ?? title), error: null };
+      callJson: async (messages) => fixtureGroupAnswer(messages),
+      writeJson: async (_instructions, input, _max, { verify }) => {
+        const summary = input.match(/^导读：(.+)$/mu)?.[1] ?? "同一合成事件的报道与原始资料供界面测试读取。";
+        const title = input.match(/^中文标题：(.+)$/mu)?.[1] ?? "合成测试事件的报道与原始资料";
+        const checked = verify({ title, digest: `${summary}以上均为界面测试的合成资料，不代表真实研究或真实事件。` });
+        return { verification: checked.issues.length ? "dropped" : "passed", output: checked.output, issues: checked.issues };
       },
     };
     composer.daily.editor = { available: true, model: "walk-fixture", writeDaily: async () => ({ verification: "passed", aiMinuteZh: "今天与临床相关的 AI 进展有 3 条，其中一条是前瞻性评估。", error: null }) };
@@ -234,6 +271,7 @@ export async function furnishFrontier(app, user, { log }) {
     log(`frontier: ${events} events, ${hot} hot snapshot(s), ${dailies} daily issue(s)`);
   } else log("frontier: no composer — the events, the hot list and the daily were not made");
   await furnishTrack(database, insertComposedItem, { hoursAgo, log });
+  await furnishTopic(database, log);
 
   return furnishZones(app, user, { log });
 }

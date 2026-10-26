@@ -652,7 +652,7 @@ describe("记忆胶囊", () => {
     await user.click(screen.getByRole("button", { name: "记忆设置" }));
     await user.click(await screen.findByRole("menuitem", { name: "已忘记的内容" }));
     const drawer = await screen.findByRole("dialog", { name: "已忘记的内容" });
-    expect(await within(drawer).findByRole("alert")).toHaveTextContent("暂时读不到已停用的做法。");
+    expect(await within(drawer).findByRole("note")).toHaveTextContent("暂时读不到已停用的做法。");
     expect(within(drawer).queryByText("没有已忘记的内容")).toBeNull();
   });
 
@@ -700,12 +700,12 @@ describe("记忆胶囊", () => {
     listAllMethods.mockRejectedValueOnce(new Error("methods down"));
     open();
     // The facts read; the methods did not: one line, and the tab that needs them says nothing of 「还没有」.
-    expect(await screen.findByRole("alert")).toHaveTextContent("没有读到全部记忆。");
+    expect(await screen.findByRole("note")).toHaveTextContent("没有读到全部记忆。");
     expect(await screen.findByRole("button", { name: /药学背景/ })).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: /^做法/ }));
     expect(screen.queryByText("还没有学到的做法")).toBeNull();
     await user.click(screen.getByRole("button", { name: "重试" }));
-    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("note")).toBeNull());
     expect(await screen.findByRole("button", { name: /提交前给成品做最后把关/ })).toBeInTheDocument();
   });
 
@@ -714,7 +714,7 @@ describe("记忆胶囊", () => {
     fetchMyCapsule.mockRejectedValue(new Error("down"));
     listAllMethods.mockRejectedValue(new Error("down"));
     open();
-    expect(await screen.findByRole("alert")).toHaveTextContent("没有读到全部记忆。");
+    expect(await screen.findByRole("note")).toHaveTextContent("没有读到全部记忆。");
     expect(screen.queryByText("还没有关于你的记忆")).toBeNull();
     expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
   });

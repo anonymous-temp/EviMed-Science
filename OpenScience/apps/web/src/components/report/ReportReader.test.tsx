@@ -156,7 +156,7 @@ describe("ReportReader", () => {
     renderReader();
     await userEvent.click(await screen.findByRole("tab", { name: "证据矩阵 2" }));
     const table = screen.getByRole("table", { name: "证据矩阵：2 条结论" });
-    const alert = await screen.findByRole("alert");
+    const alert = await screen.findByRole("note");
     expect(alert).toHaveTextContent("核对结果暂时读取不到");
     expect(within(table).queryByText(/暂无核对结果|未核对|核对中/)).toBeNull();
     mocks.readClaimVerification.mockResolvedValue({
@@ -165,7 +165,7 @@ describe("ReportReader", () => {
     });
     await userEvent.click(within(alert).getByRole("button", { name: "重试" }));
     expect(await within(screen.getByRole("table", { name: "证据矩阵：2 条结论" })).findByText("✓ 引文已核对")).toBeInTheDocument();
-    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("note")).toBeNull();
   });
 
   it("opens a claim of the matrix tab in a drawer beside the report, with its quotation and check", async () => {
@@ -287,7 +287,7 @@ describe("version-bound report evidence", () => {
     await userEvent.click(await screen.findByRole("tab", { name: "证据矩阵 2" }));
     const table = screen.getByRole("table", { name: "证据矩阵：2 条结论" });
     expect(within(table).queryByText(/暂无核对结果|未核对|核对中/)).toBeNull();
-    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("note")).toBeNull();
   });
   it("shows the frozen checks on the matrix tab of an old version", async () => {
     renderReader({ immutableVersion: version({ status: "available", matrixText: JSON.stringify(matrix),

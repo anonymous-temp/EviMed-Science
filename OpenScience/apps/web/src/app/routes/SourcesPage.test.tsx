@@ -713,14 +713,16 @@ describe("知识库", () => {
       // 2026-10-13: a recording is kept as an original like any other file; until then it was refused here by its name.
       const files = [new File(["x"], "a.pdf"), new File(["x"], "b.wav")];
       mocks.pickFiles.mockResolvedValue(files);
-      mocks.uploadFilesToWorkspace.mockResolvedValue(["knowledge-base/a.pdf", "knowledge-base/b.wav"]);
+      mocks.uploadFilesToWorkspace.mockImplementation(async (files: File[]) => files.map(file => `knowledge-base/${file.name}`));
       renderPage();
       await userEvent.click(await screen.findByRole("button", { name: "范围：我的研究" }));
       await userEvent.click(await screen.findByRole("menuitemradio", { name: "疳证 Meta 文献检索" }));
       await userEvent.click(await screen.findByRole("button", { name: "添加" }));
       await userEvent.click(await screen.findByRole("menuitem", { name: "上传文件" }));
-      await waitFor(() => expect(mocks.uploadFilesToWorkspace).toHaveBeenCalledWith(files, "knowledge-base", "base", "paper-1"));
-      expect(mocks.pickFiles).toHaveBeenCalledWith("");
+      await userEvent.upload(screen.getByLabelText(/选择资料文件/, { selector: "input" }), files);
+      await waitFor(() => expect(mocks.uploadFilesToWorkspace).toHaveBeenCalledTimes(2));
+      files.forEach(file => expect(mocks.uploadFilesToWorkspace).toHaveBeenCalledWith([file], "knowledge-base", "base", "paper-1", expect.any(Function)));
+      expect(mocks.pickFiles).not.toHaveBeenCalled();
       expect(mocks.toastError).not.toHaveBeenCalled();
       expect(mocks.toastSuccess).toHaveBeenCalledWith("已上传 2 个文件");
     });
@@ -733,7 +735,8 @@ describe("知识库", () => {
       await userEvent.click(await screen.findByRole("menuitemradio", { name: "所有项目共享" }));
       await userEvent.click(await screen.findByRole("button", { name: "添加" }));
       await userEvent.click(await screen.findByRole("menuitem", { name: "上传文件" }));
-      await waitFor(() => expect(mocks.uploadFilesToWorkspace).toHaveBeenCalledWith(expect.anything(), "knowledge-base", "base", "default"));
+      await userEvent.upload(screen.getByLabelText(/选择资料文件/, { selector: "input" }), new File(["x"], "a.pdf"));
+      await waitFor(() => expect(mocks.uploadFilesToWorkspace).toHaveBeenCalledWith(expect.anything(), "knowledge-base", "base", "default", expect.any(Function)));
       expect(await screen.findByRole("button", { name: "范围：我的研究" })).toBeInTheDocument();
     });
 
@@ -1158,17 +1161,43 @@ describe("知识库", () => {
     fireEvent.dragEnter(zone, transfer());
     expect(screen.getByText("松开即可上传")).toBeInTheDocument();
     fireEvent.drop(zone, transfer([file]));
-    await waitFor(() => expect(mocks.uploadFilesToWorkspace).toHaveBeenCalledWith([file], "knowledge-base", "base", "default"));
+    await waitFor(() => expect(mocks.uploadFilesToWorkspace).toHaveBeenCalledWith([file], "knowledge-base", "base", "default", expect.any(Function)));
+  });
+
+  it.each(["resolve", "reject", "unmount"])("stops old-account upload callbacks after %s", async outcome => {
+    let finish!: () => void;
+    mocks.uploadFilesToWorkspace.mockImplementationOnce(() => new Promise((yes, no) => { finish = () => outcome === "reject" ? no(new Error("old private failure")) : yes(["private-a.pdf"]); }));
+    const { container, unmount } = renderPage();
+    await screen.findByText(guideline.display.title);
+    const { fireEvent, act } = await import("@testing-library/react");
+    fireEvent.drop(container.firstElementChild as HTMLElement, { dataTransfer: { types: ["Files"], files: [new File(["a"], "a.pdf"), new File(["b"], "b.pdf")] } });
+    await waitFor(() => expect(mocks.uploadFilesToWorkspace).toHaveBeenCalledTimes(1));
+    const { WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT } = await import("@/lib/sessionLifecycle");
+    if (outcome === "unmount") unmount();
+    else { window.dispatchEvent(new Event(WEB_SESSION_ENDED_EVENT)); window.dispatchEvent(new Event(WEB_SESSION_STARTED_EVENT)); }
+    await act(async () => { finish(); });
+    expect(mocks.uploadFilesToWorkspace).toHaveBeenCalledTimes(1);
+    expect(mocks.toastSuccess).not.toHaveBeenCalled(); expect(mocks.toastError).not.toHaveBeenCalled();
+  });
+
+  it("continues same-session uploads after an individual file refusal", async () => {
+    mocks.uploadFilesToWorkspace.mockRejectedValueOnce(new WebApiError("refused", { status: 400 })).mockResolvedValueOnce(["b.pdf"]);
+    const { container } = renderPage(); await screen.findByText(guideline.display.title);
+    const { fireEvent } = await import("@testing-library/react");
+    fireEvent.drop(container.firstElementChild as HTMLElement, { dataTransfer: { types: ["Files"], files: [new File(["a"], "a.pdf"), new File(["b"], "b.pdf")] } });
+    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledWith("已上传 1 个文件"));
+    expect(mocks.uploadFilesToWorkspace).toHaveBeenCalledTimes(2);
   });
 
   it("takes source code, a notebook, a mail, an archive and a recording dropped on it, and turns none of them away", async () => {
-    mocks.uploadFilesToWorkspace.mockResolvedValue(["a", "b", "c", "d", "e"]);
+    mocks.uploadFilesToWorkspace.mockImplementation(async (files: File[]) => files.map(file => file.name));
     const { container } = renderPage();
     await screen.findByText(guideline.display.title);
     const files = ["offlineMerge.ts", "stocktake-variance.ipynb", "复盘.eml", "资料.zip", "周会录音.mp3"].map((name) => new File(["x"], name));
     const { fireEvent } = await import("@testing-library/react");
     fireEvent.drop(container.firstElementChild as HTMLElement, { dataTransfer: { types: ["Files"], files } });
-    await waitFor(() => expect(mocks.uploadFilesToWorkspace).toHaveBeenCalledWith(files, "knowledge-base", "base", "default"));
+    await waitFor(() => expect(mocks.uploadFilesToWorkspace).toHaveBeenCalledTimes(files.length));
+    files.forEach(file => expect(mocks.uploadFilesToWorkspace).toHaveBeenCalledWith([file], "knowledge-base", "base", "default", expect.any(Function)));
     expect(mocks.toastError).not.toHaveBeenCalled();
     expect(mocks.toastSuccess).toHaveBeenCalledWith("已上传 5 个文件");
   });

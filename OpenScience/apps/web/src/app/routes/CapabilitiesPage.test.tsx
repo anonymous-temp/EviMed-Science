@@ -198,7 +198,8 @@ describe("CapabilitiesPage", () => {
   it("shows the list's shape while the catalogue loads", async () => {
     mocks.listWebResearchAgents.mockReturnValue(new Promise(() => {}));
     const { container } = renderPage();
-    expect(container.querySelector(".animate-pulse")).toBeInTheDocument();
+    expect(container.querySelector(".animate-pulse")).not.toBeInTheDocument();
+    await waitFor(() => expect(container.querySelector(".animate-pulse")).toBeInTheDocument());
     // The deployment's answer about billing lands meanwhile, and changes nothing here.
     await act(async () => {});
     expect(container.querySelector(".animate-pulse")).toBeInTheDocument();
@@ -472,10 +473,10 @@ describe("CapabilitiesPage", () => {
   it("offers a retry when the catalogue could not be loaded, rather than a dead error line", async () => {
     mocks.listWebResearchAgents.mockRejectedValueOnce(new WebApiError("later", { status: 503, code: "service_unavailable" }));
     renderPage();
-    expect(await screen.findByRole("alert")).toHaveTextContent("无法加载工具目录");
+    expect(await screen.findByRole("note")).toHaveTextContent("无法加载工具目录");
     mocks.listWebResearchAgents.mockResolvedValueOnce(agents);
     await userEvent.click(screen.getByRole("button", { name: /重试/ }));
-    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("note")).not.toBeInTheDocument());
     expect(screen.getByRole("button", { name: /药品安全性分析/ })).toBeInTheDocument();
   });
 

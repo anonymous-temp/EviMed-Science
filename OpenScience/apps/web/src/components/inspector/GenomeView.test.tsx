@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { GenomeView } from "./GenomeView";
@@ -64,3 +64,29 @@ describe("GenomeView", () => {
   });
 });
 
+
+it("lets keyboard readers select a decoded feature", async () => {
+  render(<GenomeView filename="ann.bed" text={BED} />);
+  await userEvent.click(screen.getByRole("button", { name: /geneA/ }));
+  expect(screen.getByRole("status")).toHaveTextContent("geneA");
+});
+
+it.each(["pointerCancel", "lostPointerCapture", "pointerUp", "escape", "contig"])("ends %s drag without a synthetic pan and allows another drag", (ending) => {
+  render(<GenomeView filename="ann.bed" text={BED} />);
+  const region = screen.getByRole("region", { name: /基因组视图/ });
+  region.setPointerCapture = vi.fn();
+  region.hasPointerCapture = () => true;
+  region.releasePointerCapture = vi.fn();
+  const before = region.querySelector("svg")!.innerHTML;
+  fireEvent.pointerDown(region, { pointerId: 1, clientX: 100 });
+  expect(region).toHaveClass("cursor-grabbing");
+  if (ending === "escape") fireEvent.keyDown(region, { key: "Escape" });
+  else if (ending === "contig") fireEvent.change(screen.getByRole("combobox"), { target: { value: "1" } });
+  else fireEvent[ending as "pointerCancel" | "lostPointerCapture" | "pointerUp"](region, { pointerId: 1 });
+  expect(region).toHaveClass("cursor-grab");
+  if (ending !== "contig") expect(region.querySelector("svg")!.innerHTML).toBe(before);
+  fireEvent.pointerDown(region, { pointerId: 2, clientX: 100 });
+  expect(region).toHaveClass("cursor-grabbing");
+  fireEvent.keyDown(region, { key: "Escape" });
+  expect(region).toHaveClass("cursor-grab");
+});

@@ -43,6 +43,18 @@ function PillFace({ label, value }: { label: string; value: number }) {
 const PILL = "inline-flex h-tag shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2";
 
 /** The parts as one row each: the name, a thin bar of its share, and 「x/30」. */
+/**
+ * Component: ScoreBars; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Definition list of score parts with decorative share bars and printed values.
+ * Variants: Caller part labels, values and maxima.
+ * States: No loading/missing validation; caller owns numerical truth.
+ * Hit area: No built-in action target; supplied child controls own their geometry.
+ * Keyboard: No focus stop or key handler added; child controls keep native semantics.
+ * Long content: Fixed-width labels/readouts; bars shrink within remaining width.
+ * Theme: Accent bars on neutral tracks; semantic text.
+ * Responsive: Rows flex within parent width.
+ * Verification: Marks.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function ScoreBars({ parts, className }: { parts: readonly ScorePart[]; className?: string }) {
   return (
     <dl className={cn("space-y-1.5", className)}>
@@ -61,6 +73,18 @@ export function ScoreBars({ parts, className }: { parts: readonly ScorePart[]; c
   );
 }
 
+/**
+ * Component: ScorePill; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Label/value pill; optional portalled breakdown with ScoreBars and note.
+ * Variants: high/medium/low; static without parts.
+ * States: Local open state with delayed pointer transitions.
+ * Hit area: h-tag button when parts exist; static span otherwise.
+ * Keyboard: Focus/tap opens; Escape/outside closes through Radix; no auto focus.
+ * Long content: Pill is nowrap; breakdown note retained.
+ * Theme: Current tier uses accent-soft/neutral surfaces; independent status is not inferred.
+ * Responsive: Intrinsic pill; collision-aware fixed-width popover.
+ * Verification: Marks.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function ScorePill({ label, value, tier, parts, note, className }: {
   /** The score's name (「AI 评分」), on the pill and in its accessible name. */
   label: string;

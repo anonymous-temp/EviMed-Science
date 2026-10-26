@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { IconButton } from "@/components/ui/IconButton";
 import { Menu } from "@/components/ui/Menu";
-import { Switch } from "@/components/ui/Switch";
+import { AsyncSwitch } from "@/components/ui/AsyncSwitch";
 
 /**
  * The memory page's header controls: one switch and one 「⋯」 (2026-10-07 plan
@@ -66,6 +66,7 @@ export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotte
       onSettingsChanged?.();
     } catch (error) {
       toast.error(`没有改成：${webErrorMessage(error, { fallback: "请稍后重试。" })}`);
+      throw error;
     } finally {
       setBusy(false);
     }
@@ -95,12 +96,13 @@ export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotte
       {failed
         ? <span className="text-caption text-text-3">记忆开关暂时读取不到</span>
         : settings && (
-          <Switch
+          <AsyncSwitch
+            readChecked={async () => { const fresh = await fetchMemorySettings(); setSettings(fresh); return !fresh.learningPaused && !fresh.recallPaused; }}
             showLabel
             label="记忆"
             checked={memoryOn}
-            disabled={busy}
-            onChange={() => void change({ learningPaused: memoryOn, recallPaused: memoryOn }, memoryOn ? "已暂停" : "已开启")}
+            pending={busy}
+            onChange={() => change({ learningPaused: memoryOn, recallPaused: memoryOn }, memoryOn ? "已暂停" : "已开启")}
           />
         )}
       <Menu
@@ -121,7 +123,7 @@ export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotte
                 pausedProjects: projectPaused
                   ? settings.pausedProjects.filter((id) => id !== projectId)
                   : [...settings.pausedProjects, projectId],
-              }, projectPaused ? "本项目已恢复使用记忆" : "本项目已停用记忆");
+              }, projectPaused ? "本项目已恢复使用记忆" : "本项目已停用记忆").catch(() => undefined);
             },
           },
           { label: "重置记忆", destructive: true, disabled: busy, onSelect: () => setConfirmingReset(true) },

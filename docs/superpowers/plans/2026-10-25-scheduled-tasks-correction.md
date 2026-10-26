@@ -72,3 +72,9 @@ Real DSH + DeepSeek evidence (host-process provider with the production socket/p
 Local evidence is retained under `outputs/audit/reports/scheduled-tasks-20261025/`; raw runtime logs and credentials are not committed. No production task, external messaging channel or deployment was changed. Production rollout validation remains a deployment activity; this work ends with a reviewed local commit. A future release must ship API, controller protocol 15 and runtime image together.
 
 The supplemental serialized controller/cloud compatibility group passed 95 checks; three opt-in disposable-container/evolution isolation checks remained disabled. Their implementation was not changed by this task (only protocol-version assertions were updated). The core scheduling/database/native-kernel acceptance above ran directly without skips. Local test apps and their future schedules were stopped after evidence capture.
+
+## UI acceptance handoff — 2026-10-26
+
+The product-specific requirements below are transferred from design specification v3.0 to this module authority. They are acceptance requirements, not a claim that pending product implementation has shipped. Shared component, state, ownership and proof rules are maintained in [Frontend Design System v3.1](../../../OpenScience/docs/FRONTEND_DESIGN_SYSTEM.md). Later explicit owner decisions update this plan without creating another design-system copy of the product scope.
+
+Schedules display instruction, scope, timezone, recurrence and next occurrence before enabling. Distinguish enabled/paused, last execution, failure, waiting for input and next run. The task opens its own conversation and useful results. Creation examples are optional and editable; one primary action states that creation also enables. Do not claim a successful recurring execution from a dialog screenshot.

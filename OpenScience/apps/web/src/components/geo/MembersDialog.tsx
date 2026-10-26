@@ -61,7 +61,7 @@ export function MembersDialog({ geoId, onClose }: { geoId: string; onClose: () =
   };
 
   return (
-    <FormDialog title="成员" onClose={onClose} busy={saving}>
+    <FormDialog title="成员" onClose={onClose} busy={saving} dirty={userId.length > 0 || hospital.length > 0 || department.length > 0}>
       <ul aria-label="成员列表" className="flex flex-col divide-y divide-faint">
         {(data?.members ?? []).map((member) => (
           <li key={member.userId} className="flex items-center gap-3 py-2 text-ui">
@@ -74,7 +74,7 @@ export function MembersDialog({ geoId, onClose }: { geoId: string; onClose: () =
         ))}
       </ul>
       {manage && (
-        <form className="mt-4 flex flex-col gap-3" onSubmit={add} noValidate>
+        <form className="mt-4 flex flex-col gap-3" onSubmit={add} noValidate><fieldset disabled={saving} className="contents">
           <Input label="成员的账号" autoComplete="off" value={userId} onChange={(event) => setUserId(event.target.value)} />
           <FilterChips<GeoMemberRole> label="角色" options={ROLE_OPTIONS} value={role} onChange={(next) => { if (next) setRole(next); }} />
           {role === "medical_reviewer" && (
@@ -85,7 +85,7 @@ export function MembersDialog({ geoId, onClose }: { geoId: string; onClose: () =
           )}
           <p className="text-caption text-text-3">{ROLE_NOTE[role]}</p>
           <div className="flex justify-end"><Button type="submit" loading={saving}>添加</Button></div>
-        </form>
+        </fieldset></form>
       )}
       {error && <p role="alert" className="mt-3 text-ui text-danger">{error}</p>}
     </FormDialog>

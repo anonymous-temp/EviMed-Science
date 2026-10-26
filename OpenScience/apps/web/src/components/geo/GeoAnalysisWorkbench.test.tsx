@@ -307,8 +307,8 @@ describe('what the analysis says about its own availability', () => {
     read.mockReset().mockResolvedValue(ready({ availability: { status: 'ready', reasons: [] }, rows: [{ key: 'row', label: '品牌', metricId: null, dimensions: {}, values: {} }], page: { total: 1, shown: 1, nextOffset: null } }));
     const { container } = render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} embedded /></MemoryRouter>);
     await screen.findByText('品牌');
-    // the row count is the only sentence on the page: no availability note, and no bare 0 where `reasons.length &&` would leave one
-    expect([...container.querySelectorAll('[data-note]')].map((note) => note.textContent)).toEqual(['共 1 行，当前显示 1 行。']);
+    // Reading guidance and row count remain; a complete view adds no availability warning or stray zero.
+    expect([...container.querySelectorAll('[data-note]')].map((note) => note.textContent)).toEqual(['实测、对照与当前目标分别显示；空白不计为零。趋势图和导出均包含全部所选数据。', '共 1 行，当前显示 1 行。']);
     expect(bareZeros(container)).toEqual([]);
   });
 

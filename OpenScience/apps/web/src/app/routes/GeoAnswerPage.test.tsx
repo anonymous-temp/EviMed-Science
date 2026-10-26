@@ -95,7 +95,7 @@ describe("one answer", () => {
     // The answer's own step, not the module's next one: a secondary button (T3: the module's primary is the band header's).
     expect(screen.getByRole("button", { name: "写纠错稿" })).not.toHaveClass("bg-accent");
     // The engine's answer is the record's content, not a sentence of the page's (the walk's orphan-sentence, r19-guards2).
-    expect(document.querySelector("[data-geo-answer] [data-prose] [data-geo-wrong]")).not.toBeNull();
+    expect(document.querySelector("[data-geo-answer] [data-prose] p[data-geo-answer-prose=original] [data-geo-wrong]")).not.toBeNull();
     await userEvent.click(screen.getByRole("button", { name: /测量日期/ }));
     await userEvent.click(screen.getByRole("menuitemradio", { name: "9月22日" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/answers/snap_deepseek_old");

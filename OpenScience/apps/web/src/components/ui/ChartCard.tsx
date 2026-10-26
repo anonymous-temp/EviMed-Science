@@ -21,6 +21,18 @@ import { cn } from "@/lib/cn";
 
 export type ChartCardState = "content" | "loading" | "empty" | "error";
 
+/**
+ * Component: ChartCard; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Heading, meta, wrapping legend, plot state and linked shared footnote.
+ * Variants: content/loading/empty/error; explicit or contextual heading level.
+ * States: Caller selects state; retry is optional; footnote appears only with content.
+ * Hit area: Optional retry uses small secondary Button.
+ * Keyboard: No focus stop or key handler added; child controls keep native semantics.
+ * Long content: Heading and legend wrap; fixed skeleton height does not size actual chart.
+ * Theme: Semantic surface, danger feedback and skeleton roles.
+ * Responsive: min-w-0 content; child chart owns plot resizing.
+ * Verification: ChartCard.test.tsx and DataPrimitives.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function ChartCard({
   title,
   level,
@@ -95,6 +107,18 @@ export function ChartCard({
  * a colour. The mark's colour is the data, so it keeps it in a Windows
  * contrast theme (`data-forced-colors="preserve"`, spec §10.9 rule 6); the
  * name beside it takes the theme's colours like any text.
+ */
+/**
+ * Component: LegendMark; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Decorative series mark beside readable legend text.
+ * Variants: line, dash or band; caller supplies series color.
+ * States: Static; series identity is data, not selection.
+ * Hit area: No built-in action target; supplied child controls own their geometry.
+ * Keyboard: No focus stop or key handler added; child controls keep native semantics.
+ * Long content: Text is retained without truncation.
+ * Theme: Data color is explicitly preserved in forced colors; text follows theme.
+ * Responsive: Inline mark does not shrink; parent legend owns wrapping.
+ * Verification: ChartCard.test.tsx and DataPrimitives.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
  */
 export function LegendMark({
   color,

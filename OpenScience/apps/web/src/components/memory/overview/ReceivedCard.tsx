@@ -3,9 +3,9 @@ import { LoadError } from "@/components/cards/LoadError";
 import { Button } from "@/components/ui/Button";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Note } from "@/components/ui/Note";
-import { Switch } from "@/components/ui/Switch";
+import { AsyncSwitch } from "@/components/ui/AsyncSwitch";
 import { CAPSULE_ENTRY_TYPES, fromSender, providedBy } from "@/lib/capsuleText";
-import { announceMemoryChanged, disableCapsule, enableReceivedCapsule, type ReceivedCapsule } from "@/lib/memoryClient";
+import { announceMemoryChanged, disableCapsule, enableReceivedCapsule, fetchReceivedCapsules, type ReceivedCapsule } from "@/lib/memoryClient";
 import { productErrorMessage } from "@/lib/productClient";
 import { toast } from "@/lib/toast";
 import { OverviewCard, Recipe, RecipeButton, type CardState } from "./OverviewCard";
@@ -55,6 +55,7 @@ export function ReceivedCardView({ state, card, workStyle, onRetry, onRetryWorkS
       onChanged();
     } catch (error) {
       toast.error(`没有完成：${productErrorMessage(error)}`);
+      throw error;
     } finally {
       setBusy(null);
     }
@@ -86,9 +87,10 @@ export function ReceivedCardView({ state, card, workStyle, onRetry, onRetryWorkS
                       ? <span>{pack.takenDown.by === "operator" ? "已被平台下架并停用" : "作者已撤回，这份已停用"}</span>
                       : <span>{[pack.card?.author ? (pack.official ? providedBy(pack.card.author) : fromSender(pack.card.author)) : null, pack.card?.summary || contents(pack)].filter(Boolean).join(" · ")}</span>}
                     trailing={(
-                      <Switch
-                        label={`启用“${pack.title}”`} checked={pack.enabled} disabled={busy !== null || Boolean(pack.takenDown)}
-                        onChange={(next) => void (next ? enable(pack) : disable(pack))}
+                      <AsyncSwitch
+                        readChecked={async () => { const packs = await fetchReceivedCapsules(); return packs.find(item => item.id === pack.id)?.enabled ?? false; }}
+                        label={`启用“${pack.title}”`} checked={pack.enabled} pending={busy !== null} disabled={Boolean(pack.takenDown)}
+                        onChange={(next) => (next ? enable(pack) : disable(pack))}
                       />
                     )}
                   />

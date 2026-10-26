@@ -43,6 +43,18 @@ export interface MenuHeading {
 
 export type MenuEntry = MenuItem | MenuHeading | "separator";
 
+/**
+ * Component: Menu; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Caller/default trigger plus portalled grouped menu with checks and separators.
+ * Variants: start/end alignment; destructive and disabled items.
+ * States: Local open state; caller owns selected/disabled facts.
+ * Hit area: Trigger geometry is caller-owned; menu rows are h-8.
+ * Keyboard: Arrow/Home/End traversal, native selection and Escape/focus return.
+ * Long content: Item labels truncate; long menus scroll within Radix-reported available height.
+ * Theme: Surface/border/text and destructive roles; shared motion policy.
+ * Responsive: Radix collision placement and available-size limits keep popup scrolling local.
+ * Verification: Primitives.test.tsx and LazyMenu.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function Menu({
   items,
   label,
@@ -104,7 +116,7 @@ export function Menu({
           }}
           // The popover tier (60), above a dialog, so a menu opened inside one
           // is still seen (spec §7.4); drops 4 px as it opens.
-          className={cn("z-popover min-w-40 animate-menu-in rounded-card border border-border bg-surface p-1 shadow-e2 outline-none", className)}
+          className={cn("z-popover max-h-[var(--radix-popover-content-available-height)] min-w-40 max-w-[var(--radix-popover-content-available-width)] overflow-y-auto animate-menu-in rounded-card border border-border bg-surface p-1 shadow-e2 outline-none", className)}
         >
           <div ref={list} role="menu" aria-label={label} tabIndex={-1} onKeyDown={onKeyDown} className="flex flex-col outline-none">
             {items.map((item, index) => item === "separator" ? (

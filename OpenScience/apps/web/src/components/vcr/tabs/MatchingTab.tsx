@@ -21,6 +21,7 @@ import { DataTable } from "@/components/ui/DataTable";
 import { Headline } from "@/components/ui/Headline";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Section } from "@/components/ui/Section";
+import { measurement } from "@/lib/measurement";
 import { StatTile } from "@/components/ui/StatTile";
 import { Tag } from "@/components/ui/Tag";
 import type { ToolbarFilter } from "@/components/ui/Toolbar";
@@ -296,7 +297,8 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
           <StatTile
             key={step.key}
             label={step.label}
-            value={<span className={cn(step.tone === "attention" && "text-warn-strong", step.tone === "accent" && "text-accent")}>{numberText(step.count, 0)}</span>}
+            reading={measurement(step.count, "", step.label)}
+            renderMeasured={reading => <span className={cn(step.tone === "attention" && "text-warn-strong", step.tone === "accent" && "text-accent")}>{numberText(reading.value, 0)}</span>}
             note={step.note ?? undefined}
           />
         ))}

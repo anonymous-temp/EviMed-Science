@@ -124,8 +124,8 @@ test("the web image's index lists the method pack where the folder is not, and a
   const catalogue = createPlatformSkillCatalogue({ rootDir: root, packAllowed: (user) => user.id === "member" });
   const geo = (await catalogue.list(member)).items.filter((item) => item.group === SKILL_DISPLAY_GEO_GROUP);
   assert.deepEqual(geo.map((item) => [item.id, item.title, item.use, item.canCopy]), [
-    ["geo-private:geo-care-nodes", "geo-care-nodes", "Maps the nodes of a care pathway.", false],
-    ["geo-private:geo-verify-product-label", "Verify the label", "Checks the claim against the label.", false],
+    ["geo-private:geo-care-nodes", "就医安全与提问节点", "Maps the nodes of a care pathway.", false],
+    ["geo-private:geo-verify-product-label", "产品身份与说明书核验", "Checks the claim against the label.", false],
   ]);
   const detail = await catalogue.read("geo-private:geo-care-nodes", member);
   assert.equal(detail.instructions, null, "the index holds no text: the drawer says so plainly");
@@ -267,4 +267,16 @@ test("the routes answer an account only, with the id as one segment", async (t) 
   const copy = await fetch(`${base}/api/skills/platform/${"core:stats-integrity"}/copy`, { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ title: "副本", idempotencyKey: "k" }) });
   assert.equal(copy.status, 201);
   assert.deepEqual(calls, [["list", "reader"], ["read", "core:stats-integrity"], ["read", "gone:none"], ["copy", "core:stats-integrity", "副本"]]);
+});
+
+test("a known method pack folder uses the reviewed Chinese task name and honors an explicit Chinese title", async () => {
+  const root = await tempRoot();
+  await skill(root, "runtime/skills/geo-private/skills/geo-care-nodes", "---\nname: geo-care-nodes\ndescription: Public test metadata.\n---\n\nSynthetic fixture\n");
+  await skill(root, "runtime/skills/geo-private/skills/geo-verify-product-label", "---\nname: geo-verify-product-label\ntitle: 现有中文说明书任务\ndescription: Public test metadata.\n---\n\nSynthetic fixture\n");
+  const catalogue = createPlatformSkillCatalogue({ rootDir: root, packAllowed: () => true });
+  const rows = (await catalogue.list({ id: "member" })).items.filter(item => item.group === SKILL_DISPLAY_GEO_GROUP);
+  assert.deepEqual(rows.map(item => [item.id, item.title]), [
+    ["geo-private:geo-care-nodes", "就医安全与提问节点"],
+    ["geo-private:geo-verify-product-label", "现有中文说明书任务"],
+  ]);
 });

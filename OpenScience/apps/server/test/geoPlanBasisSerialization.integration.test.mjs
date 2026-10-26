@@ -58,3 +58,34 @@ test('fresh signal bases use their persisted JSON identity while legacy recorded
   await f.adapter.stage(f.user, f.project.id, body);
   assert.deepEqual(await f.adapter.resolve(f.user, f.project, row.id), legacy, 'an existing receipt is not rewritten or re-certified');
 });
+
+
+test('browsing a selected historical group does not freeze an oversized planning payload', options, async t => {
+  const f = await fixture(t);
+  for (const version of [1, 2]) {
+    await f.store.query("INSERT INTO evimed_geo.question_groups(id,user_id,geo_project_id,set_version,pool,name) VALUES($1,$2,$3,$4,'P2',$5)", [`basis-g${version}`, f.user.id, f.project.id, version, `Version ${version}`]);
+    await f.store.query("INSERT INTO evimed_geo.questions(id,user_id,geo_project_id,group_id,set_version,text,pool) VALUES($1,$2,$3,$4,$5,'Synthetic question','P2')", [`basis-q${version}`, f.user.id, f.project.id, `basis-g${version}`, version]);
+  }
+  await f.store.query("UPDATE evimed_geo.rounds SET set_version=1 WHERE id='dated-round'");
+  await f.store.query("UPDATE evimed_geo.snapshots SET question_id='basis-q1' WHERE id='dated-answer'");
+  const originalTargets = f.store.latestTargets.bind(f.store);
+  f.store.latestTargets = async (...args) => ({ ...await originalTargets(...args), rows: [{ note: 'x'.repeat(210000) }] });
+  await assert.rejects(freezeGeoPlanBasis(f.store, f.project, { round: 'dated-round' }), error => error.code === 'geo_plan_basis_too_large');
+  const originalStrategy = f.service.spine.strategy.bind(f.service.spine);
+  f.service.spine.strategy = async (spine, ...args) => ({ ...await originalStrategy(spine, ...args), selectedGroups: spine.groups.map(group => ({ id: group.id, setVersion: group.setVersion ?? group.set_version })) });
+  const read = await f.service.strategy(f.user, f.project.id, { round: 'dated-round' });
+  assert.equal(read.readingsKind, 'selected_current');
+  assert.equal(read.basis, null);
+  assert.deepEqual(read.selectedGroups, [{ id: 'basis-g1', setVersion: 1 }]);
+  assert.ok(!read.selectedGroups.some(group => group.id === 'basis-g2'));
+  await assert.rejects(f.service.strategy({ id: 'another-owner' }, f.project.id, { round: 'dated-round' }), error => error.status === 404 || error.status === 403);
+});
+
+test('an empty selected question catalogue does not fall back to live project groups', options, async t => {
+  const f = await fixture(t);
+  await f.store.query("INSERT INTO evimed_geo.question_groups(id,user_id,geo_project_id,set_version,pool,name) VALUES('unselected-current',$1,$2,2,'P2','Unselected live group')", [f.user.id, f.project.id]);
+  const originalStrategy = f.service.spine.strategy.bind(f.service.spine);
+  f.service.spine.strategy = async (spine, ...args) => ({ ...await originalStrategy(spine, ...args), selectedGroups: spine.groups.map(group => group.id) });
+  const read = await f.service.strategy(f.user, f.project.id, { round: 'dated-round' });
+  assert.deepEqual(read.selectedGroups, []);
+});

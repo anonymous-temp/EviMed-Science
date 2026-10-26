@@ -30,18 +30,21 @@ export function TaskDialog({ projectId, available = true, agenda, recommendation
   onAdopted: (id: string) => void;
 }) {
   const [recommendation, setRecommendation] = useState<Recommendation | undefined>(initialRecommendation);
+  const [dirty, setDirty] = useState(false);
   const [recorded, setRecorded] = useState(false);
   const [adopting, setAdopting] = useState(false);
   const busy = saving || adopting;
-  const locked = busy || recorded || !available;
-  return <FormDialog title={agenda ? "编辑任务" : "新建任务"} busy={busy} onClose={() => { if (!busy) onClose(); }}>
+  const locked = busy || recorded || !available || dirty;
+  return <FormDialog title={agenda ? "编辑任务" : "新建任务"} busy={busy} dirty={dirty} onClose={() => { if (!busy) onClose(); }}>
+    {(requestClose, markSaved) => <>
     {/* A template replaces the form's content, so the form is made again for it. */}
     <TaskForm key={recommendation?.title ?? "blank"} projectId={projectId} agenda={agenda} recommendation={recommendation} showBudgets={showBudgets} schedulingAvailable={available} disabled={adopting}
-      onRecorded={record => { setRecorded(true); onRecorded(record); }} onBusyChange={onBusyChange} onCancel={onClose} onSaved={onSaved} />
+      onRecorded={record => { markSaved(); setRecorded(true); onRecorded(record); }} onBusyChange={onBusyChange} onDirtyChange={setDirty} onCancel={requestClose} onSaved={record => { markSaved(); onSaved(record); }} />
     {!agenda && <fieldset disabled={locked} className="min-w-0"><section aria-label="从推荐开始" className="mt-6 space-y-3 border-t border-border pt-4">
-      <h3 className="text-ui font-semibold text-text">从推荐开始</h3>
+      <h3 className="text-ui font-semibold text-text">从推荐开始{dirty && " · 请先保存或取消当前修改"}</h3>
       <List divided>{RECOMMENDATIONS.map(item => <ListRow key={item.title} title={item.title} meta={<span className="line-clamp-1">{item.prompt}</span>} onOpen={() => { if (!locked) setRecommendation(item); }} />)}</List>
       <EvolutionOpportunities projectId={projectId} onAdopted={onAdopted} onBusyChange={value => { setAdopting(value); onBusyChange(value); }} />
     </section></fieldset>}
+    </>}
   </FormDialog>;
 }

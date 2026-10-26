@@ -1,3 +1,4 @@
+import { formatRelativeTime } from "./format";
 import { describe, expect, it } from "vitest";
 import type { InboxItem } from "@/lib/inboxClient";
 import { dayKey, dayLabel, groupInbox, inboxGroupTitle, inboxSourceOf, inboxWhen, orderInbox, severityOf } from "./inboxGroups";
@@ -30,9 +31,9 @@ describe("dayLabel", () => {
 describe("inboxWhen", () => {
   const now = new Date(2026, 8, 18, 15, 0).getTime();
   it("is the clock today and the day before that, never both", () => {
-    expect(inboxWhen(new Date(2026, 8, 18, 8, 0).toISOString(), now)).toBe("08:00");
-    expect(inboxWhen(new Date(2026, 8, 17, 20, 0).toISOString(), now)).toBe("昨天");
-    expect(inboxWhen(new Date(2026, 8, 12, 9, 0).toISOString(), now)).toBe("9月12日");
+    expect(inboxWhen(new Date(2026, 8, 18, 8, 0).toISOString(), now)).toBe("7 小时前");
+    expect(inboxWhen(new Date(2026, 8, 17, 20, 0).toISOString(), now)).toBe("19 小时前");
+    expect(inboxWhen(new Date(2026, 8, 12, 9, 0).toISOString(), now)).toBe(formatRelativeTime(new Date(2026, 8, 12, 9, 0), new Date(now)));
     expect(inboxWhen("not a date", now)).toBe("");
   });
 });
@@ -118,4 +119,17 @@ describe("groupInbox", () => {
     expect(inboxSourceOf(item({ source: null }))).toBe("system");
     expect(inboxSourceOf(wrong("1"))).toBe("geo");
   });
+});
+
+it("folds producer-owned operator incidents and recovery with latest state and history", () => {
+  const notices = [
+    item({ id: "failed", title: "监测不可用", severity: "attention", source: { type: "system", id: "ops-alert-monitor" } }),
+    item({ id: "recovered", title: "已恢复：监测不可用", severity: "info", createdAt: "2026-09-19T02:00:00Z", source: { type: "system", id: "ops-alert-monitor" } }),
+  ];
+  const rows = groupInbox(notices);
+  expect(rows).toHaveLength(1);
+  if (rows[0].kind !== "group") throw new Error("Expected incident history");
+  expect(rows[0].group.latest.id).toBe("recovered");
+  expect(inboxGroupTitle(rows[0].group)).toBe("已恢复：监测不可用 · 2 条历史");
+  expect(groupInbox([...notices, item({ id: "safety", severity: "safety", source: notices[0].source })])).toHaveLength(2);
 });

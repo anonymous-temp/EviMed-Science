@@ -823,10 +823,11 @@ describe("the new-items hint", () => {
 });
 
 describe("the four states", () => {
-  it("shows the feed's skeleton while the first page is on its way", async () => {
+  it("shows the feed's skeleton after 300ms while the first page is on its way", async () => {
     feed = () => new Promise(() => {});
     const { container } = renderPage();
-    expect(container.querySelector(".animate-pulse")).not.toBeNull();
+    expect(container.querySelector(".animate-pulse")).toBeNull();
+    await waitFor(() => expect(container.querySelector(".animate-pulse")).not.toBeNull());
     // Everything around the list still arrives; the list alone is waiting.
     expect(await screen.findByRole("region", { name: "安全警示" })).toBeInTheDocument();
     expect(container.querySelector(".animate-pulse")).not.toBeNull();
@@ -850,7 +851,7 @@ describe("the four states", () => {
       return page([today]);
     };
     renderPage();
-    const alertBox = await screen.findByRole("alert");
+    const alertBox = await screen.findByRole("note");
     fail = false;
     await userEvent.click(within(alertBox).getByRole("button", { name: "重试" }));
     expect(await screen.findByText("今天的一条 RCT")).toBeInTheDocument();
@@ -949,7 +950,13 @@ describe("the actions on a card", () => {
     await waitFor(() => expect(screen.queryByRole("group", { name: "不感兴趣" })).not.toBeInTheDocument());
     expect(await screen.findByRole("article", { name: "今天的一条 RCT" })).toBeInTheDocument();
     expect(client.unhideFrontierItem).not.toHaveBeenCalled();
-    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    const failureMessage = await screen.findByText("服务暂时不可用，请稍后重试。", { selector: "[data-toast] button" });
+    const failureToast = failureMessage.closest("[data-toast]");
+    expect(failureToast).toBeVisible();
+    expect(failureToast).toHaveAttribute("data-toast-tone", "error");
+    expect(failureToast).not.toHaveAttribute("role");
+    expect(client.hideFrontierItem).toHaveBeenCalledTimes(1);
+    expect(client.hideFrontierItem).toHaveBeenCalledWith("today-1");
   });
 
   it("saves to the knowledge base, and stops offering it where the server has no such route", async () => {
@@ -1033,9 +1040,9 @@ describe("热榜", () => {
     expect(rows[0]).toHaveTextContent("2 家机构报道 · 含原始论文 · 3 小时前更新");
     expect(rows[0]).toHaveTextContent("38 热度");
     expect(rows[0].querySelector("svg[data-sparkline] path")).not.toBeNull();
-    expect(within(rows[2]).getByText("新")).toHaveClass("bg-accent-soft");
+    expect(within(rows[2]).getByText("新")).toHaveClass("bg-surface-2", "text-text-2");
     expect(within(rows[2]).getByText("暂无走势")).toBeInTheDocument();
-    expect(within(rows[3]).getByText("升温")).toHaveClass("bg-warn-soft");
+    expect(within(rows[3]).getByText("升温")).toHaveClass("bg-surface-2", "text-text-2");
     // One title edge: every row's title link carries the marker the release walk measures.
     for (const row of rows) expect(row.querySelector("[data-row-title]")).not.toBeNull();
     expect(screen.getByText("近 72 小时 · 22:40 更新")).toBeInTheDocument();
@@ -1388,7 +1395,7 @@ describe("关注, the reader's own place (owner, 2026-10-25)", () => {
     it("says that the follows could not be read, rather than that there are none", async () => {
       client.listFrontierFollows.mockRejectedValue(new WebApiError("down", { status: 502 }));
       renderPage("/app/frontier?view=following&follow=all");
-      expect(await screen.findByRole("alert")).toHaveTextContent("服务暂时不可用，请稍后重试。");
+      expect(await screen.findByRole("note")).toHaveTextContent("服务暂时不可用，请稍后重试。");
       expect(screen.queryByText("关注药物、主题、专科或证据专区，它们的新动态会汇总在这里。")).not.toBeInTheDocument();
       client.listFrontierFollows.mockResolvedValue([]);
       await userEvent.click(screen.getByRole("button", { name: "重试" }));

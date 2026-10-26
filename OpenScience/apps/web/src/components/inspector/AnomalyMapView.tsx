@@ -1,14 +1,20 @@
+import { Button } from "@/components/ui/Button";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { divergingColor, parseAnomaly, type AnomalyGrid } from "@/lib/anomaly";
+import { viewerKey } from "./viewerKeyboard";
 import { parseFailureMessage } from "@/lib/errorText";
 
 /**
- * Climate-anomaly map (P1-3, earth): renders a gridded `.anom` field on an
- * equirectangular (plate carrée) projection with a zero-centered diverging
- * colormap (blue↔white↔red) and a graticule with °N/°S/°E/°W labels — the
- * correct transform + diverging colormap the discipline expects. Offline, from
- * the file alone; theme-independent like the other scientific viewers.
+ * Anatomy: named viewer/content region, local controls and decoded readout.
+ * Variants: file-format branches retain the source's scientific meaning.
+ * States: setup, readable content, empty/invalid input and selected value.
+ * Hit area: native controls; the drawing surface accepts pointer input.
+ * Keyboard: native controls; focused drawing shortcuts never intercept editors.
+ * Long content: bounded content scrolls; scientific units remain visible.
+ * Theme: app chrome follows tokens; fixed scientific stages retain their palette.
+ * Responsive behavior: drawing coordinates track the available container.
+ * Verification: adjacent tests and ScientificViewerGallery; physical AT/touch unverified.
  */
 export function AnomalyMapView({ filename, text }: { filename: string; text: string }) {
   const parsed = useMemo<{ grid: AnomalyGrid | null; error: string | null }>(() => {
@@ -46,6 +52,7 @@ function niceStep(span: number): number {
 
 function Map({ filename, grid }: { filename: string; grid: AnomalyGrid }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const selectionLocked = useRef(false);
   const [hover, setHover] = useState<{ lat: number; lon: number; v: number } | null>(null);
 
   const cols = grid.lons.length;
@@ -97,7 +104,9 @@ function Map({ filename, grid }: { filename: string; grid: AnomalyGrid }) {
   const latLines: number[] = [];
   for (let l = Math.ceil(latMin / latStep) * latStep; l <= latMax; l += latStep) latLines.push(l);
 
-  const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
+  const onMove = (e: React.PointerEvent<SVGSVGElement> | React.MouseEvent<SVGSVGElement>) => {
+    if (e.type !== "click" && selectionLocked.current) return;
+    selectionLocked.current = e.type === "click";
     const rect = e.currentTarget.getBoundingClientRect();
     const lon = lonMin + ((e.clientX - rect.left) / rect.width) * lonSpan;
     const lat = latMax - ((e.clientY - rect.top) / rect.height) * latSpan;
@@ -110,11 +119,16 @@ function Map({ filename, grid }: { filename: string; grid: AnomalyGrid }) {
   return (
     <div className="flex h-full flex-col bg-[#0f1320]">
       <div className="flex items-center gap-2 border-b border-white/10 bg-black/20 px-3 py-2">
-        <span className="min-w-0 flex-1 truncate font-mono text-caption text-white/50">
+        <span className="min-w-0 flex-1 truncate font-mono text-caption text-white/70">
           {filename} · {cols}×{rows} 网格{grid.unit ? ` · ${grid.unit}` : ""}
         </span>
       </div>
 
+      <div className="flex flex-wrap gap-2 px-3 text-caption text-white/90">
+        <label>纬度 <select aria-label="网格纬度" className="bg-black text-white" value={hover?.lat ?? grid.lats[0]} onChange={(e) => { selectionLocked.current = true; const ri = grid.lats.indexOf(Number(e.target.value)); const ci = grid.lons.indexOf(hover?.lon ?? grid.lons[0]); setHover({ lat: grid.lats[ri], lon: grid.lons[ci], v: grid.values[ri][ci] }); }}>{grid.lats.map((lat) => <option key={lat} value={lat}>{fmtLat(lat)}</option>)}</select></label>
+        <label>经度 <select aria-label="网格经度" className="bg-black text-white" value={hover?.lon ?? grid.lons[0]} onChange={(e) => { selectionLocked.current = true; const ci = grid.lons.indexOf(Number(e.target.value)); const ri = grid.lats.indexOf(hover?.lat ?? grid.lats[0]); setHover({ lat: grid.lats[ri], lon: grid.lons[ci], v: grid.values[ri][ci] }); }}>{grid.lons.map((lon) => <option key={lon} value={lon}>{fmtLon(lon)}</option>)}</select></label>
+        <Button variant="secondary" size="md" type="button" onClick={() => { selectionLocked.current = true; setHover({ lat: hover?.lat ?? grid.lats[0], lon: hover?.lon ?? grid.lons[0], v: grid.values[grid.lats.indexOf(hover?.lat ?? grid.lats[0])][grid.lons.indexOf(hover?.lon ?? grid.lons[0])] }); }}>读取网格</Button>
+      </div>
       <div className="flex min-h-0 flex-1 items-center justify-center p-4">
         <div className="relative w-full max-w-read" style={{ aspectRatio: `${W} / ${H}` }}>
           <canvas
@@ -123,16 +137,26 @@ function Map({ filename, grid }: { filename: string; grid: AnomalyGrid }) {
             style={{ imageRendering: "pixelated" }}
           />
           <svg
+            {...{ tabIndex: 0, role: "region", "aria-label": "异常网格视图" }}
+            onKeyDown={(e) => {
+              if (!viewerKey(e) || e.shiftKey) return;
+              if (e.key === "Escape") { selectionLocked.current = false; setHover(null); e.preventDefault(); return; }
+              let ci = grid.lons.indexOf(hover?.lon ?? grid.lons[0]), ri = grid.lats.indexOf(hover?.lat ?? grid.lats[0]);
+              if (e.key === "ArrowLeft") ci--; else if (e.key === "ArrowRight") ci++; else if (e.key === "ArrowUp") ri++; else if (e.key === "ArrowDown") ri--; else if (e.key === "0") { ci = 0; ri = 0; } else if (e.key !== "Enter") return;
+              ci = Math.max(0, Math.min(cols - 1, ci)); ri = Math.max(0, Math.min(rows - 1, ri));
+              selectionLocked.current = true;
+              setHover({ lat: grid.lats[ri], lon: grid.lons[ci], v: grid.values[ri][ci] }); e.preventDefault();
+            }}
             viewBox={`0 0 ${W} ${H}`}
             preserveAspectRatio="none"
             className="absolute inset-0 h-full w-full"
-            onMouseMove={onMove}
-            onMouseLeave={() => setHover(null)}
-          >
+            onPointerMove={onMove}
+            onClick={onMove}
+            >
             {lonLines.map((l) => (
               <g key={`lon${l}`}>
                 <line x1={xAt(l)} y1={0} x2={xAt(l)} y2={H} stroke="#ffffff" strokeOpacity={0.18} strokeWidth={0.75} />
-                <text x={xAt(l) + 2} y={H - 4} className="fill-white/55" style={{ fontSize: 10, fontFamily: "monospace" }}>
+                <text x={xAt(l) + 2} y={H - 4} fill="#fff" stroke="#0f1320" strokeWidth={3} paintOrder="stroke" style={{ fontSize: 10, fontFamily: "monospace" }}>
                   {fmtLon(l)}
                 </text>
               </g>
@@ -140,7 +164,7 @@ function Map({ filename, grid }: { filename: string; grid: AnomalyGrid }) {
             {latLines.map((l) => (
               <g key={`lat${l}`}>
                 <line x1={0} y1={yAt(l)} x2={W} y2={yAt(l)} stroke="#ffffff" strokeOpacity={0.18} strokeWidth={0.75} />
-                <text x={2} y={yAt(l) - 2} className="fill-white/55" style={{ fontSize: 10, fontFamily: "monospace" }}>
+                <text x={2} y={yAt(l) - 2} fill="#fff" stroke="#0f1320" strokeWidth={3} paintOrder="stroke" style={{ fontSize: 10, fontFamily: "monospace" }}>
                   {fmtLat(l)}
                 </text>
               </g>
@@ -157,14 +181,14 @@ function Map({ filename, grid }: { filename: string; grid: AnomalyGrid }) {
 
       <div className="flex items-center gap-3 border-t border-white/10 px-3 py-2">
         <Colorbar absMax={grid.absMax} unit={grid.unit} />
-        <div className="ml-auto min-h-[1.25rem] text-right font-mono text-caption text-white/70">
+        <div role="status" className="ml-auto min-h-[1.25rem] text-right font-mono text-caption text-white/70">
           {hover ? (
             <>
               {fmtLat(hover.lat)}, {fmtLon(hover.lon)} ·{" "}
               {Number.isFinite(hover.v) ? `${hover.v > 0 ? "+" : ""}${hover.v.toPrecision(3)}` : "无数据"}
             </>
           ) : (
-            <span className="text-white/30">悬停查看网格单元</span>
+            <span className="text-white/70">方向键选择网格，Enter 读取；也可点击或选择坐标</span>
           )}
         </div>
       </div>
@@ -196,9 +220,9 @@ function Colorbar({ absMax, unit }: { absMax: number; unit?: string }) {
   }, []);
   return (
     <div className="flex items-center gap-2">
-      <span className="font-mono text-caption text-white/50">−{absMax.toPrecision(3)}</span>
+      <span className="font-mono text-caption text-white/70">−{absMax.toPrecision(3)}</span>
       <canvas ref={ref} className="h-2.5 w-44 rounded-sm ring-1 ring-white/15" />
-      <span className="font-mono text-caption text-white/50">
+      <span className="font-mono text-caption text-white/70">
         +{absMax.toPrecision(3)}
         {unit ? ` ${unit}` : ""}
       </span>

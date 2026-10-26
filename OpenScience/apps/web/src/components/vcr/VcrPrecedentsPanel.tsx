@@ -1,3 +1,4 @@
+import { isSubmitKey } from "@/lib/compositionKeys";
 import { registryCoverageSummary, VcrRegistryCoverage } from "./VcrRegistryCoverage";
 import { useState } from "react";
 import { ExternalLink, Library } from "lucide-react";
@@ -51,7 +52,7 @@ export function VcrPrecedentsPanel() {
           if (!next.trim()) setAsked("");
         },
         onClear: () => { setQuery(""); setAsked(""); },
-        inputProps: { onKeyDown: (event) => { if (event.key === "Enter") setAsked(query.trim()); } },
+        inputProps: { onKeyDown: (event) => { if (isSubmitKey(event)) setAsked(query.trim()); } },
       },
       summary: !asked && state.kind === "ready" ? `已保存 ${state.data.precedents.length} 项` : undefined,
     });

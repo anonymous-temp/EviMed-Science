@@ -164,3 +164,7 @@ test('a page the control plane did not serve keeps the kernel language', () => {
   assert.deepEqual(locale.selected, []);
   assert.deepEqual(locale.languages, []);
 });
+
+test('the native picker separates content additions from advanced diagnostics', () => {
+  assert.deepEqual(EVIMED_DICTIONARIES.command, { 'section.add': '添加内容', 'section.commands': '高级命令与诊断' });
+});

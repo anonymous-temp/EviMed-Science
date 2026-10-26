@@ -6741,8 +6741,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           runId: dispatchedRun.id,
           requestId: dispatchedRun.kernelRequestIds?.at(-1),
           strictContext: true,
-          // A person sent this from their channel (or started their study here) and reads the reply: `attended: true` above.
-          unattended: false,
+          // Calculation completion resumes unattended; a person's channel message remains attended.
+          unattended: options.nativeContinuation === true,
         });
         await resident.delivered();
       } catch (error) {

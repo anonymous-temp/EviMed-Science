@@ -76,6 +76,8 @@ test("the band holds: it is sticky, it is where the scroll area starts after the
   assert.deepEqual(rules("geo-plan", "desktop", good({ chrome: null })), ["chrome"]);
   assert.match(texts("vcr-trial", "desktop", good({ stepRail: null, tablists: [] }))[0], /\[chrome\] the research workspace must expose one pinned result-view selector/);
   assert.deepEqual(rules("vcr-trial", "desktop", good({ stepRail: null, tablists: [], viewSelector: { count: 1 } })), []);
+  assert.deepEqual(rules("vcr-trial", "desktop", good({ stepRail: { ...box(80), inChrome: true, folded: false, count: 1, steps: [{ state: "active", href: "/matching", stateVisible: true }] }, tablists: [], viewSelector: { count: 1 } })), []);
+  assert.ok(rules("vcr-trial", "desktop", good({ stepRail: { ...box(80), inChrome: true, folded: true, count: 1, steps: [] }, tablists: [], viewSelector: { count: 1 } })).includes("step-rail"));
   assert.deepEqual(rules("vcr-trial", "desktop", good({ stepRail: null, tablists: [], viewSelector: { count: 0 } })), ["chrome"]);
   assert.deepEqual(rules("vcr-trial", "desktop", good({ tablists: [], viewSelector: { count: 1 } })), ["step-rail"]);
 });
@@ -219,4 +221,23 @@ test("循证 GEO's eight steps are its navigation (V3 plan, 2026-10-23): no seco
   }
   const pages = Object.fromEntries(["geo-overview", "geo-plan"].map((name) => [`${name}@desktop`, { composition: rail }]));
   assert.ok(!familyFindings(pages).some((entry) => entry.rule === "module-steps"));
+});
+
+
+test("adopted GEO exposes only contextual analysis siblings while retaining all eight steps", () => {
+  for (const [step, selectors] of [["diagnosis", 1], ["sources", 1], ["monitoring", 1], ["evidence", 0], [null, 0]]) {
+    const facts = good({ tablists: [], viewSelector: { count: 0 }, geoContext: { adopted: true, step, selectors } });
+    assert.ok(!rules("geo-plan", "desktop", facts).includes("chrome"));
+    assert.ok(rules("geo-plan", "desktop", { ...facts, geoContext: { ...facts.geoContext, selectors: selectors ? 0 : 1 } }).includes("chrome"));
+    assert.ok(rules("geo-plan", "desktop", { ...facts, stepRail: { ...facts.stepRail, count: 7 } }).includes("step-rail"));
+  }
+});
+
+
+test("a named selection toolbar has one local primary; row markers and duplicate primaries remain findings", () => {
+  const primary = { text: "Mark selected read", ...box(128), inHeader: false, excused: false, localGroup: { kind: "selection", declared: true, primaries: 1 } };
+  assert.ok(!rules("inbox", "desktop", good({ primaries: [primary] })).includes("primary-action"));
+  for (const localGroup of [{ kind: "selection", declared: true, primaries: 2 }, { kind: "selection", declared: false, primaries: 1 }, null]) {
+    assert.ok(rules("inbox", "desktop", good({ primaries: [{ ...primary, localGroup }] })).includes("primary-action"));
+  }
 });

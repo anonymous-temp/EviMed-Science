@@ -97,3 +97,9 @@ export function useProjectLabels(): Map<string, string> {
   const projects = useProjectStore((state) => state.projects);
   return useMemo(() => projectLabels(projects), [projects]);
 }
+
+/** A shrinkable prefix and a reserved tail; CSS may shorten only the prefix. */
+export function projectLabelParts(label: string): { prefix: string; tail: string } {
+  const characters = Array.from(label);
+  return characters.length <= 22 ? { prefix: label, tail: "" } : { prefix: characters.slice(0, -10).join(""), tail: characters.slice(-10).join("") };
+}

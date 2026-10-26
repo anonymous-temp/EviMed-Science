@@ -36,14 +36,26 @@ describe("研究机会, a group of the scheduled tasks", () => {
     client.adoptEvolutionOpportunity.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     const busy = vi.fn(); const adopted = vi.fn();
     render(<MemoryRouter><TaskDialog projectId="project-one" showBudgets={false} saving={false} onBusyChange={busy} onClose={() => {}} onRecorded={() => {}} onSaved={() => {}} onAdopted={adopted} /></MemoryRouter>);
-    await userEvent.type(screen.getByLabelText("任务指令"), "不要同时创建第二项任务");
     await userEvent.click(await screen.findByRole("button", { name: "创建研究议程" }));
+    await userEvent.type(screen.getByLabelText("任务指令"), "不要同时创建第二项任务");
+    expect(screen.getByLabelText("任务指令")).toHaveValue("");
     expect(screen.getByRole("button", { name: "创建并启用" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "行业要闻日报" })).toBeDisabled();
     expect(busy).toHaveBeenLastCalledWith(true);
     await act(async () => { finish({ id: "adopted-task" }); });
     expect(adopted).toHaveBeenCalledWith("adopted-task");
     expect(busy).toHaveBeenLastCalledWith(false);
+  });
+  it("preserves a dirty task draft instead of replacing it with an opportunity or template", async () => {
+    client.listEvolutionOpportunities.mockResolvedValue([opportunity("op-1", "跟进新试验")]);
+    render(<MemoryRouter><TaskDialog projectId="project-one" showBudgets={false} saving={false} onBusyChange={() => {}} onClose={() => {}} onRecorded={() => {}} onSaved={() => {}} onAdopted={() => {}} /></MemoryRouter>);
+    await userEvent.type(screen.getByLabelText("任务指令"), "保留这个未保存的任务");
+    const adopt = await screen.findByRole("button", { name: "创建研究议程" });
+    expect(adopt).toBeDisabled();
+    expect(screen.getByRole("button", { name: "行业要闻日报" })).toBeDisabled();
+    await userEvent.click(adopt);
+    expect(client.adoptEvolutionOpportunity).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("任务指令")).toHaveValue("保留这个未保存的任务");
   });
   it("does not allow adoption while a form save is pending", async () => {
     client.listEvolutionOpportunities.mockResolvedValue([opportunity("op-1", "跟进新试验")]);

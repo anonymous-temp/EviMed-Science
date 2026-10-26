@@ -21,7 +21,7 @@ import { yuan } from "./geoTabText";
 import { Assumptions, Battlefield, ClientToDos, EnginePromises, Targets } from "./PlanStrategy";
 
 /** Shared contextual plan composition, including the legacy plan destination. */
-export function PlanTab({ geoId, project, sourceId, sourceUrl, selectionRef }: { geoId: string; project: GeoProject; sourceId?: string; sourceUrl?:string; selectionRef?:string }) {
+export function PlanTab({ geoId, project, sourceId, sourceUrl, selectionRef }: { geoId: string; project: GeoProject; sourceId?: string; sourceUrl?:string; selectionRef?:string; embedded?:boolean }) {
   const [params] = useSearchParams();
   const location = useLocation();
   const requestedVersion = Number(params.get("strategyVersion"));
@@ -68,7 +68,7 @@ export function PlanTab({ geoId, project, sourceId, sourceUrl, selectionRef }: {
         {plan.summary && <p data-prose="" className="max-w-measure text-ui">{plan.summary}</p>}
         <PlanActions plan={plan} canUse={mayConverse} disabled={busy || plan.version == null} onUse={(action) => void handoff(action)} />
       </Section>
-      <GeoAnalysisWorkbench key={`frozen-plan:${plan.version??"none"}`} geoId={geoId} project={project} initialView="V26" initialDescriptor={{viewId:"V26",...(plan.version!=null?{strategyVersion:plan.version}:{})}} embedded/>
+      <GeoAnalysisWorkbench key={`frozen-plan:${plan.version??"none"}`} geoId={geoId} project={project} initialView="V26" title="方案目标与实测分析" initialDescriptor={{viewId:"V26",...(plan.version!=null?{strategyVersion:plan.version}:{})}} embedded/>
       <Targets geoId={geoId} plan={plan} onChosen={() => { reload(); frame?.data.invalidate(); }} />
       <Battlefield geoId={geoId} plan={plan} />
       <EnginePromises plan={plan} />

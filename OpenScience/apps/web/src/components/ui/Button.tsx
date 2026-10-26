@@ -3,29 +3,16 @@ import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 /**
- * The one button: three looks and three heights (2026-09-23 plan §4).
- *
- *  - `primary` — solid accent. A view has at most one.
- *  - `secondary` — a quiet grey ground and no border. There is no outline
- *    button any more: bordered buttons were on every row of every page, and
- *    a border is what made a list of six rows read as a form.
- *  - `text` — no ground at all, for a page-header action such as 「全部已读」.
- *  - `danger` — solid red, for the confirming button of a destructive
- *    confirmation and nowhere else. A destructive action that is not the
- *    view's main one is `secondary` or `text` with `destructive`.
- *
- * Heights (spec §16.3, appendix E #9): 28 inside a row, a table or a toolbar
- * (`sm`, 14 px text), 36 on a page, a form, a dialog (`md`, the default), 44
- * for a form's primary action and the login (`lg`) — the heights the Vue
- * shell's Element Plus theme already had, so one product has one set. They
- * are the token heights (`h-sm` / `h-control` / `h-form-primary`), not steps
- * of the spacing scale. The 2026-09-23 set was 24 / 32 / 40.
- *
- * `ghost` is the retired name of `secondary`; it renders the new look so a
- * page nobody has touched yet loses its border with everyone else's.
- *
- * `buttonClasses` exposes the same look as a class string for the rare cases
- * that cannot render a <button> (an <a> that must keep link semantics).
+ * Component: Button; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: optional spinner slot and visible action label.
+ * Variants: primary, secondary, text, danger; ghost aliases secondary; sm/md/lg.
+ * States: loading keeps focus and guards activation even with legacy disabled=busy; idle prerequisites use native disabled.
+ * Hit area: token control heights; caller chooses size.
+ * Keyboard: native Enter/Space with busy duplicate guards.
+ * Long content: single-line intrinsic label width.
+ * Theme: semantic action and foreground tokens.
+ * Responsive: intrinsic or caller full width.
+ * Verification: Button.test.tsx; browser geometry and AT remain separate.
  */
 
 export type ButtonVariant = "primary" | "secondary" | "text" | "danger" | "ghost";
@@ -81,24 +68,29 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: ButtonSize;
   /** Red text on a secondary or text button. */
   destructive?: boolean;
-  /** Shows a spinner, sets aria-busy and disables the button. */
+  /** Shows a spinner, sets aria-busy and guards activation without losing focus. */
   loading?: boolean;
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant = "primary", size = "md", destructive = false, loading = false, type = "button", disabled, className, children, ...rest },
+  { variant = "primary", size = "md", destructive = false, loading, type = "button", disabled, className, children, onClick, onKeyDown, ...rest },
   ref,
 ) {
   return (
     <button
       ref={ref}
       type={type}
-      disabled={disabled || loading}
+      disabled={disabled && !loading}
+      aria-disabled={loading || undefined}
       aria-busy={loading || undefined}
       className={buttonClasses({ variant, size, destructive, className })}
       {...rest}
+      onClick={(event) => { if (loading) { event.preventDefault(); event.stopPropagation(); return; } onClick?.(event); }}
+      onKeyDown={(event) => { if (loading && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); event.stopPropagation(); return; } onKeyDown?.(event); }}
     >
-      {loading && <Loader2 size={16} className="animate-spin" aria-hidden="true" />}
+      {loading !== undefined && <span aria-hidden="true" className="inline-flex h-4 w-4 shrink-0 items-center justify-center">
+        {loading && <Loader2 size={16} className="animate-spin" />}
+      </span>}
       {children}
     </button>
   );

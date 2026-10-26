@@ -1,3 +1,4 @@
+import { PendingFeedback } from "@/components/ui/PendingFeedback";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { Search } from "lucide-react";
@@ -244,7 +245,7 @@ function ToolRow({ agent, estimate, busy, onOpen }: { agent: CapabilityUi; estim
 /** The list's shape while the catalogue loads: a heading and six grey rows. */
 function ToolListSkeleton() {
   return (
-    <div className="animate-pulse" aria-hidden="true">
+    <PendingFeedback><div className="animate-pulse" aria-hidden="true">
       <div className="mb-3 h-5 w-24 rounded bg-surface-2" />
       {Array.from({ length: 6 }, (_, index) => (
         <div key={index} className="flex items-start gap-3 px-2 py-3">
@@ -255,6 +256,6 @@ function ToolListSkeleton() {
           </div>
         </div>
       ))}
-    </div>
+    </div></PendingFeedback>
   );
 }

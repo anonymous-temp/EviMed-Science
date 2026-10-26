@@ -313,7 +313,7 @@ describe("patient matching scientific evidence requests", () => {
     const button = screen.getByRole("button", { name: "记录待补证项" });
     await userEvent.click(button);
     await userEvent.click(button);
-    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("aria-disabled", "true");
     expect(server.calls.filter(call => call.method === "POST")).toHaveLength(1);
     await act(async () => finish({}));
     await waitFor(() => expect(button).toBeEnabled());
@@ -674,7 +674,7 @@ describe("患者匹配 — the controls stay while another page is read", () => 
     await chooseFrom(/^查看方案/, "EV-201 方案 v2");
     await waitFor(() => expect(matchingReads(server).some((query) => query.get("protocolVersionId") === "prt_2")).toBe(true));
     // The page for prt_2 has not arrived: the tab is loading, and the controls are the ones the reader was using.
-    expect(document.querySelector("[data-vcr-loading='tab']")).not.toBeNull();
+    await waitFor(() => expect(document.querySelector("[data-vcr-loading='tab']")).not.toBeNull());
     expect(screen.getByRole("button", { name: "查看方案：EV-201 方案 v2" })).toBe(chip);
     expect(panel).toHaveAttribute("open");
     expect(within(group()).getByRole("checkbox", { name: "EV-201 方案 v2" })).toBeChecked();

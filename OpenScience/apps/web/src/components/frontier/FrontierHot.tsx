@@ -48,7 +48,7 @@ export function HotTopics({ topics }: { topics: readonly FrontierTopicSummary[] 
         {topics.map((topic) => (
           <li key={topic.id} className="border-b border-border py-3 first:pt-0">
             <Link state={origin} onClick={rememberFrontierPosition} to={topicPath(topic.id)} data-row-title className="group flex min-h-control min-w-0 items-center rounded text-ui">
-              <span data-prose="" className="min-w-0 text-body font-semibold text-text group-hover:text-accent max-sm:line-clamp-2 sm:truncate">{topic.title}</span>
+              <span data-prose="" className="min-w-0 text-ui font-semibold text-text group-hover:text-accent max-sm:line-clamp-2 sm:truncate">{topic.title}</span>
             </Link>
             <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-caption text-text-3">
               <Tag>{topic.domainLabel}</Tag>
@@ -86,7 +86,7 @@ export function HotCard({ events, onOpenAll }: { events: readonly FrontierHotEve
       padding="p-3"
       header={(
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-body font-semibold leading-6 text-text">当前热点</h2>
+          <h2 className="text-section font-semibold leading-6 text-text">当前热点</h2>
           <button type="button" onClick={onOpenAll} className={cn(INLINE_ACTION, "-mr-1.5 px-1.5 text-accent")}>完整热榜 ›</button>
         </div>
       )}
@@ -187,17 +187,17 @@ function HotRow({ event }: { event: FrontierHotEvent }) {
   const origin = useFrontierOrigin();
   return (
     <li className="flex gap-3 border-b border-border py-4">
-      <span className={cn("w-10 shrink-0 text-body font-semibold leading-9 tabular-nums", rankTone(event.rank))}>{rankLabel(event.rank)}</span>
+      <span className={cn("w-10 shrink-0 text-ui font-semibold leading-9 tabular-nums", rankTone(event.rank))}>{rankLabel(event.rank)}</span>
       <div className="min-w-0 flex-1">
         {/* The badge stands beside the link, not in it: a tag is a label and is never part of a control (DESIGN.md rule 7). After it, not
             before: a badge in front moved the title of the rows that have one off the left edge of the titles of those that do not. */}
         <div className="flex min-h-control min-w-0 items-center gap-1.5">
           <Tooltip content={event.title} kind="label" whenTruncated>
             <Link state={origin} onClick={rememberFrontierPosition} to={eventPath(event.id)} data-row-title className="group flex min-h-control min-w-0 items-center rounded text-ui">
-              <span className="min-w-0 text-body font-semibold text-text group-hover:text-accent max-sm:line-clamp-2 sm:truncate">{event.title}</span>
+              <span className="min-w-0 text-ui font-semibold text-text group-hover:text-accent max-sm:line-clamp-2 sm:truncate">{event.title}</span>
             </Link>
           </Tooltip>
-          {event.badge && <Tag tone={event.badge === "new" ? "accent" : "warn"}>{event.badge === "new" ? "新" : "升温"}</Tag>}
+          {event.badge && <Tag tone="neutral">{event.badge === "new" ? "新" : "升温"}</Tag>}
         </div>
         <p className="text-caption text-text-3">{hotRowMeta(event)}</p>
       </div>

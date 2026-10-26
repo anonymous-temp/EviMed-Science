@@ -1,3 +1,4 @@
+import { PendingFeedback } from "@/components/ui/PendingFeedback";
 import { cn } from "@/lib/cn";
 
 /**
@@ -15,7 +16,7 @@ function Bar({ className }: { className?: string }) {
 export function FilesSkeleton() {
   const widths = ["w-3/4", "w-1/2", "w-2/3", "w-3/5", "w-1/2", "w-2/3"];
   return (
-    <div className="animate-pulse p-2" aria-hidden>
+    <PendingFeedback><div className="animate-pulse p-2" aria-hidden>
       {widths.map((w, i) => (
         // 36 px — the list-row height, so nothing jumps when the rows arrive.
         <div key={i} className="flex h-9 items-center gap-2 px-2">
@@ -24,7 +25,7 @@ export function FilesSkeleton() {
           <Bar className="ml-auto h-3 w-9 shrink-0" />
         </div>
       ))}
-    </div>
+    </div></PendingFeedback>
   );
 }
 
@@ -32,7 +33,7 @@ export function FilesSkeleton() {
 export function RunsSkeleton({ filter = true }: { filter?: boolean }) {
   const widths = ["w-1/2", "w-2/3", "w-2/5", "w-3/5", "w-1/3", "w-1/2"];
   return (
-    <div className="animate-pulse" aria-hidden>
+    <PendingFeedback><div className="animate-pulse" aria-hidden>
       {filter && (
         <div className="flex flex-wrap items-center gap-2 px-2 py-2">
           <Bar className="h-control min-w-[12rem] flex-1 rounded" />
@@ -51,14 +52,14 @@ export function RunsSkeleton({ filter = true }: { filter?: boolean }) {
           <Bar className="ml-auto h-3 w-12 shrink-0" />
         </div>
       ))}
-    </div>
+    </div></PendingFeedback>
   );
 }
 
 /** Memory page — the two-column card grid. */
 export function MemorySkeleton() {
   return (
-    <div className="mt-6 grid animate-pulse items-start gap-3 md:grid-cols-2" aria-hidden>
+    <PendingFeedback><div className="mt-6 grid animate-pulse items-start gap-3 md:grid-cols-2" aria-hidden>
       {[3, 2, 3, 2].map((lines, i) => (
         <div key={i} className="rounded-card border border-border bg-surface p-4">
           <div className="flex items-center justify-between">
@@ -76,6 +77,6 @@ export function MemorySkeleton() {
           </div>
         </div>
       ))}
-    </div>
+    </div></PendingFeedback>
   );
 }

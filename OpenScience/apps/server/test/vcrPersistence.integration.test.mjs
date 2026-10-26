@@ -147,3 +147,61 @@ test("a job is claimed once: the index the worker leases on exists and is partia
   assert.equal(rows.length, 1);
   assert.match(rows[0].indexdef, /WHERE \(state = ANY/);
 });
+
+test("role upgrades retain retired history while rejecting new retired roles and allow grant revocation", options, async () => {
+  const id = await seedStudy();
+  const source = vcrId("source");
+  await q(`INSERT INTO evimed_vcr.sources (id, user_id, study_id, name) VALUES ($1, $2, $3, 'Historical source')`, [source, USER, id]);
+  // Reconstruct a pre-retirement database, without changing any historical row.
+  for (const table of ["members", "grants"]) {
+    await q(`ALTER TABLE evimed_vcr.${table} DROP CONSTRAINT ${table}_role_check`);
+    await q(`ALTER TABLE evimed_vcr.${table} DROP CONSTRAINT vcr_${table}_active_roles`);
+    await q(`ALTER TABLE evimed_vcr.${table} ADD CONSTRAINT ${table}_role_check CHECK (role IN ('lead', 'clinical_reviewer', 'statistical_reviewer', 'data_manager', 'viewer', 'site', 'recruiter'))`);
+  }
+  for (const role of ["site", "recruiter"]) {
+    await q(`INSERT INTO evimed_vcr.members (study_id, user_id, role) VALUES ($1, $2, $3)`, [id, `historical-${role}`, role]);
+    await q(`INSERT INTO evimed_vcr.grants (id, source_id, study_id, user_id, grantee, role) VALUES ($1, $2, $3, $4, $5, $6)`,
+      [`historical-${role}`, source, id, USER, `historical-${role}`, role]);
+  }
+  await migrateVcr(Object.create(database));
+  assert.equal((await q(`SELECT * FROM evimed_vcr.members WHERE study_id=$1`, [id])).length, 2);
+  assert.equal((await q(`SELECT * FROM evimed_vcr.grants WHERE source_id=$1`, [source])).length, 2);
+  for (const role of ["site", "recruiter", "invented"]) {
+    await assert.rejects(q(`INSERT INTO evimed_vcr.members (study_id, user_id, role) VALUES ($1, 'new-member', $2)`, [id, role]), /check constraint/i);
+    await assert.rejects(q(`INSERT INTO evimed_vcr.grants (id, source_id, user_id, grantee, role) VALUES ($1, $2, $3, 'new-grantee', $4)`,
+      [`new-${role}`, source, USER, role]), /check constraint/i);
+  }
+  await q(`INSERT INTO evimed_vcr.members (study_id, user_id, role) VALUES ($1, 'new-data-manager', 'data_manager')`, [id]);
+  await q(`UPDATE evimed_vcr.grants SET revoked_at=now() WHERE source_id=$1`, [source]);
+  assert.equal((await q(`SELECT * FROM evimed_vcr.grants WHERE source_id=$1 AND revoked_at IS NOT NULL`, [source])).length, 2);
+  const read = () => q(`SELECT conname, oid::text FROM pg_constraint WHERE connamespace='evimed_vcr'::regnamespace AND contype='c' ORDER BY conname`);
+  const first = await read();
+  await migrateVcr(Object.create(database));
+  assert.deepEqual(await read(), first, "historical rows do not make repeated migrations recreate checks");
+});
+
+test("preexisting stale active-role checks upgrade for members and grants without reopening retired roles", options, async () => {
+  const id = await seedStudy();
+  const source = vcrId("source");
+  await q(`INSERT INTO evimed_vcr.sources (id, user_id, study_id, name) VALUES ($1, $2, $3, 'Role upgrade source')`, [source, USER, id]);
+  // Both named constraints exist before migration; the grant's two-column
+  // predicate is outside the generic single-column vocabulary refresh.
+  for (const table of ["members", "grants"]) {
+    await q(`ALTER TABLE evimed_vcr.${table} DROP CONSTRAINT vcr_${table}_active_roles`);
+    const predicate = table === "grants" ? "revoked_at IS NOT NULL OR role IS NULL OR " : "";
+    await q(`ALTER TABLE evimed_vcr.${table} ADD CONSTRAINT vcr_${table}_active_roles CHECK (${predicate}role IN ('lead', 'viewer')) NOT VALID`);
+  }
+  await assert.rejects(q(`INSERT INTO evimed_vcr.members (study_id, user_id, role) VALUES ($1, 'upgraded-member', 'data_manager')`, [id]), /check constraint/i);
+  await assert.rejects(q(`INSERT INTO evimed_vcr.grants (id, source_id, user_id, grantee, role) VALUES ('upgraded-grant', $1, $2, 'upgraded-member', 'data_manager')`, [source, USER]), /check constraint/i);
+  await migrateVcr(Object.create(database));
+  await q(`INSERT INTO evimed_vcr.members (study_id, user_id, role) VALUES ($1, 'upgraded-member', 'data_manager')`, [id]);
+  await q(`INSERT INTO evimed_vcr.grants (id, source_id, user_id, grantee, role) VALUES ('upgraded-grant', $1, $2, 'upgraded-member', 'data_manager')`, [source, USER]);
+  for (const role of ["site", "recruiter", "invented"]) {
+    await assert.rejects(q(`INSERT INTO evimed_vcr.members (study_id, user_id, role) VALUES ($1, 'blocked-member', $2)`, [id, role]), /check constraint/i);
+    await assert.rejects(q(`INSERT INTO evimed_vcr.grants (id, source_id, user_id, grantee, role) VALUES ($1, $2, $3, 'blocked-member', $4)`, [`blocked-${role}`, source, USER, role]), /check constraint/i);
+  }
+  const read = () => q(`SELECT conname, oid::text FROM pg_constraint WHERE connamespace='evimed_vcr'::regnamespace AND contype='c' ORDER BY conname`);
+  const first = await read();
+  await migrateVcr(Object.create(database));
+  assert.deepEqual(await read(), first, "upgraded active-role checks retain their identity on restart");
+});

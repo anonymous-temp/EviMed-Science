@@ -152,7 +152,7 @@ describe("总览", () => {
       }));
       const list = rows();
       expect(document.querySelector('[data-vcr-step-row="matching"]')).toBeNull();
-      expect(list[0]).toHaveTextContent(/前|刚刚|今天|昨天|月/);
+      expect(list[0]).toHaveTextContent(/前|刚刚|\d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
     });
 
     it("tells a step in line from one that is running, and neither from one nobody has started", () => {

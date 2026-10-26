@@ -1,3 +1,8 @@
+import { WebApiError } from "@/lib/apiClient";
+import { sessionGeneration, StaleSessionError } from "@/lib/sessionLifecycle";
+import { Combobox } from "@/components/ui/Combobox";
+import { FileDrop, type FileDropItem } from "@/components/ui/FileDrop";
+import { FormDialog } from "@/components/ui/FormDialog";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useLocation, useNavigate, useNavigationType, useSearchParams } from "react-router";
 import { Cloud, Download, FileUp, Folder, Globe, Plus, RefreshCw, Search, StickyNote, Upload } from "lucide-react";
@@ -159,11 +164,15 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<SourceRecord | null>(null);
   const [duplicatesFor, setDuplicatesFor] = useState<string | null>(null);
-  const [dialog, setDialog] = useState<"link" | "note" | null>(null);
+  const [dialog, setDialog] = useState<"link" | "note" | "upload" | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [folderRefresh, setFolderRefresh] = useState(0);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const uploadEpoch = useRef(0);
+  useLayoutEffect(() => () => { uploadEpoch.current++; }, []);
+  const [uploadItems, setUploadItems] = useState<FileDropItem[]>([]);
+  const [uploadProject, setUploadProject] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   // 从网盘导入 is offered only when there is a drive to open: OpenList configured and a storage mounted under its tenant
   // root (`/api/me` `features.openList`). An entry that led to a drive with nothing in it answered every browse with an
@@ -412,26 +421,48 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
 
   // Upload: the whole page is its drop target. Files go to the project the page lists.
   const uploadFiles = async (dropped?: File[]) => {
+    const owner = sessionGeneration(), epoch = uploadEpoch.current;
+    const valid = () => owner === sessionGeneration() && epoch === uploadEpoch.current;
     setUploading(true);
     try {
       const { accepted, refused } = partitionKnowledgeBaseFiles(dropped ?? await pickFiles(KNOWLEDGE_BASE_ACCEPT));
+      if (!valid()) return;
       // The formats are said here, to the file that was refused, and nowhere else on the page.
       if (refused.length > 0) {
         toast.error(`没有上传：${refused.map((file) => `${file.name}（${file.reason}）`).join("、")}。${KNOWLEDGE_BASE_UPLOAD_HINT}`);
       }
-      const names = accepted.length > 0 ? await uploadFilesToWorkspace(accepted, KNOWLEDGE_ROOT, "base", addProjectId) : [];
+      const names: string[] = [];
+      const targetProject = dialog === "upload" ? uploadProject ?? addProjectId : addProjectId;
+      if (accepted.length > 0 && dialog !== "upload") { setUploadProject(targetProject); setDialog("upload"); }
+      const pending = accepted.map((file, index) => ({ id: `${Date.now()}-${index}`, name: file.name, state: "transferring" as const }));
+      setUploadItems(pending);
+      // One existing upload request per file preserves partial outcomes without promising cancellation or byte progress.
+      for (let index = 0; index < accepted.length; index++) {
+        if (!valid()) return;
+        const entry = pending[index];
+        try {
+          const saved = await uploadFilesToWorkspace([accepted[index]], KNOWLEDGE_ROOT, "base", targetProject, valid);
+          if (!valid()) return;
+          names.push(...saved);
+          setUploadItems(current => current.map(item => item.id === entry.id ? { ...item, state: "transferred" } : item));
+        } catch (failure) {
+          if (!valid() || failure instanceof StaleSessionError || failure instanceof WebApiError && failure.status === 401) return;
+          setUploadItems(current => current.map(item => item.id === entry.id ? { ...item, state: "failed", error: webErrorMessage(failure) } : item));
+        }
+      }
       if (names.length > 0) {
         // The row says 「正在读取」 until the document can be used; the toast says only what happened.
         toast.success(`已上传 ${names.length} 个文件`);
-        added();
+        if (targetProject !== addProjectId) setScope({ kind: "project", projectId: targetProject });
+        else added();
       }
     } catch (failure) {
-      toast.error(`无法上传文件：${webErrorMessage(failure)}`);
+      if (valid() && !(failure instanceof StaleSessionError)) toast.error(`无法上传文件：${webErrorMessage(failure)}`);
     } finally {
-      setUploading(false);
+      if (valid()) setUploading(false);
     }
   };
-  const { dragging, dropProps } = useFileDrop({ disabled: !hasWebApi, onDrop: (files) => void uploadFiles(files) });
+  const { dragging, dropProps } = useFileDrop({ disabled: !hasWebApi || uploading, onDrop: (files) => void uploadFiles(files) });
 
   const onLinkAdded = () => { setDialog(null); toast.success("已添加，正在读取"); added(); };
   // A note just written opens on its own page, where its editor is; the list it came from is the way back (the shared
@@ -518,7 +549,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
 
   const addMenu = (label = "添加") => (
     <Menu label="添加" items={[
-      { label: "上传文件", icon: FileUp, onSelect: () => void uploadFiles() },
+      { label: "上传文件", icon: FileUp, onSelect: () => { setUploadProject(addProjectId); setDialog("upload"); } },
       { label: "添加网页链接", icon: Globe, onSelect: () => setDialog("link") },
       { label: "新建笔记", icon: StickyNote, onSelect: () => setDialog("note") },
       ...(driveOffered ? [{ label: "从网盘导入", icon: Cloud, onSelect: () => setConnecting(true) }] : []),
@@ -674,6 +705,11 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
             onImported={() => { added(); }} onFolderRegistered={() => setFolderRefresh((value) => value + 1)} />
         </Drawer>
       )}
+      {dialog === "upload" && <FormDialog title="上传资料" onClose={() => setDialog(null)} busy={uploading}>
+        <div className="flex flex-col gap-4"><Combobox clearable={false} label="保存到项目" value={uploadProject ?? addProjectId} options={scopeMenu.groups.flatMap(group => group.choices).filter(choice => projects.some(project => project.id === choice.id))} onChange={id => { if (id) setUploadProject(id); }} disabled={uploading} />
+        <FileDrop label="选择资料文件" hint={<>{KNOWLEDGE_BASE_UPLOAD_HINT}传输完成后，资料列表会分别显示读取和可搜索状态。同名文件按服务器规则处理。</>} accept={KNOWLEDGE_BASE_ACCEPT} disabled={uploading} onFiles={files => void uploadFiles(files)} items={uploadItems} />
+        </div>
+      </FormDialog>}
       {dialog === "link" && <AddLinkDialog projectId={addProjectId} onClose={() => setDialog(null)} onAdded={onLinkAdded} />}
       {dialog === "note" && <NewNoteDialog projectId={addProjectId} onClose={() => setDialog(null)} onAdded={onNoteAdded} />}
       {duplicatesFor && (

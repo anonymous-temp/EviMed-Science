@@ -65,3 +65,12 @@ describe("projectLabels", () => {
     for (const project of projects) expect(backward.get(project.id)).toBe(forward.get(project.id));
   });
 });
+
+it("reserves the distinguishing project tail independently of prefix clipping", async () => {
+  const { projectLabelParts } = await import("./projectNames");
+  const name = "同一系列的临床研究共享前缀共享前缀 · 第 2 个";
+  const parts = projectLabelParts(name);
+  expect(parts.prefix + parts.tail).toBe(name);
+  expect(parts.tail.endsWith("第 2 个")).toBe(true);
+  expect(projectLabelParts("短项目名")).toEqual({ prefix: "短项目名", tail: "" });
+});

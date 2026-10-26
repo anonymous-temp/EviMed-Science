@@ -249,6 +249,7 @@ it("the long task's entry skill is listed under its own group with the long task
   await userEvent.click(screen.getByRole("tab", { name: "已添加" }));
   const added = (await screen.findByRole("button", { name: "长任务" })).closest("li")!;
   expect(within(added).queryByRole("switch")).not.toBeInTheDocument();
+  expect(within(added).queryByRole("button", { name: /应用/ })).not.toBeInTheDocument();
 });
 
 it("the 循证 GEO method pack's index is its own group with the module's radar, and its retired name still finds it without being shown", async () => {
@@ -276,6 +277,7 @@ it("memory is a link to its own page, not a drawer; the long task and the basics
   for (const title of ["长任务", "基础能力"]) {
     const item = screen.getByRole("button", { name: title }).closest("li")!;
     expect(within(item).queryByRole("switch")).not.toBeInTheDocument();
+    expect(within(item).queryByRole("button", { name: /应用/ })).not.toBeInTheDocument();
   }
   expect(screen.queryByText(/系统提供|始终开启/)).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: "基础能力" }));

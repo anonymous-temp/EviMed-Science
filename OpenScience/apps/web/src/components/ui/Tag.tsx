@@ -11,9 +11,9 @@ import { Tooltip } from "@/components/ui/Tooltip";
  * names. `data-tag` is what the walk and `pageComposition.test.tsx` read: a
  * tag inside a control, or with a role, is a control dressed as a label.
  *
- * Colour is for safety: `safety` is the only tone a page uses as a matter of
- * course. `accent` and `warn` exist for the two state badges of the frontier
- * hot list (“新” and “升温”) and nothing else. There were about seventeen tag
+ * Neutral is the default for metadata and popularity. `safety`, `accent`
+ * and `warn` remain explicit tones; callers must assign a semantic role,
+ * never infer evidence quality from popularity. There were about seventeen tag
  * recipes, five of them on one frontier card (2026-09-23 inventory §2.1); a
  * screen now carries at most two kinds — this one, and a filter chip.
  */
@@ -34,6 +34,18 @@ export function tagClasses({ tone = "neutral", className }: { tone?: TagTone; cl
   );
 }
 
+/**
+ * Component: Tag; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Static metadata span with optional label Tooltip.
+ * Variants: neutral/safety/accent/warn; no action handlers.
+ * States: Supplied tone; not a verification or interaction state.
+ * Hit area: No built-in action target; supplied child controls own their geometry.
+ * Keyboard: No focus stop or key handler added; child controls keep native semantics.
+ * Long content: Single-line nowrap metadata; tooltip may expand abbreviations.
+ * Theme: Neutral metadata or explicit semantic tone; no inferred popularity meaning.
+ * Responsive: Intrinsic nonshrinking h-tag label.
+ * Verification: Primitives.test.tsx and lookKinds.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function Tag({
   tone = "neutral",
   title,

@@ -23,3 +23,15 @@ describe('centered form dialog',()=>{
   await userEvent.keyboard('{Escape}');expect(close).toHaveBeenCalledOnce();
  });
 });
+
+it('keeps a linked persistent summary and guards dirty Escape and backdrop exits',async()=>{
+ const close=vi.fn();render(<FormDialog title="Edit" dirty onClose={close} errors={[{message:'Name required',fieldId:'edit-name'}]} footer={<button>Save</button>}><input id="edit-name" aria-label="Name"/></FormDialog>);
+ await userEvent.click(screen.getByRole('link',{name:'Name required'}));expect(screen.getByLabelText('Name')).toHaveFocus();
+ await userEvent.keyboard('{Escape}');expect(close).not.toHaveBeenCalled();expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+ await userEvent.click(screen.getByRole('button',{name:'取消'}));expect(close).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole('dialog').parentElement!);await userEvent.click(screen.getByRole('button',{name:'放弃修改'}));expect(close).toHaveBeenCalledOnce();
+});
+it('does not pin all busy Tab presses to the panel',async()=>{
+ render(<FormDialog title="Edit" busy onClose={()=>{}}><input aria-label="A"/><input aria-label="B"/></FormDialog>);
+ expect(screen.getByLabelText('A')).toHaveFocus();await userEvent.tab();expect(screen.getByLabelText('B')).toHaveFocus();
+});

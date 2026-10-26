@@ -24,6 +24,18 @@ export function useShowMore<T>(rows: readonly T[], { first, step, resetKey }: { 
  * server a page at a time knows there is more but not how much: `remaining={null}` is then 「显示更多」 and no number, which
  * is true where 「还有 1 个」 would not be (R19: the inbox and the zone lists had a bare 「加载更多」 each).
  */
+/**
+ * Component: ShowMore; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Centered secondary text Button naming remaining items.
+ * Variants: Known remaining count or unknown count.
+ * States: Nonpositive known count hides; loading guards activation.
+ * Hit area: Small Button geometry.
+ * Keyboard: Native Button activation.
+ * Long content: Count formatted zh-CN; label remains single-line.
+ * Theme: Shared text Button roles.
+ * Responsive: Centered local row; caller owns list pagination and width.
+ * Verification: DataPrimitives.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function ShowMore({ remaining, unit, onMore, loading = false }: { remaining: number | null; unit: string; onMore: () => void; loading?: boolean }) {
   if (remaining !== null && remaining <= 0) return null;
   return (

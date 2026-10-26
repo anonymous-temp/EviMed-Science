@@ -210,3 +210,21 @@ describe("schedule preview and ordinary materials", () => {
     expect(mocks.startAgenda).toHaveBeenLastCalledWith("with-materials", 1);
   });
 });
+
+it("reports a task's actual draft baseline, keeps failed edits dirty and clears it only on confirmed save", async () => {
+  const agenda = task({ kind: "daily", time: "07:00", timeZone: "Asia/Shanghai" });
+  const dirty = vi.fn(), saved = vi.fn();
+  mocks.updateAgenda.mockRejectedValueOnce(new Error("offline")).mockResolvedValue({ ...agenda, revision: 2 });
+  render(<TaskForm projectId="project-one" agenda={agenda} onDirtyChange={dirty} onSaved={saved} onRecorded={noop} onBusyChange={noop} onCancel={noop} />);
+  expect(dirty).toHaveBeenLastCalledWith(false);
+  fireEvent.change(screen.getByLabelText("任务指令"), { target: { value: "修改后的任务指令" } });
+  expect(dirty).toHaveBeenLastCalledWith(true);
+  fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
+  await waitFor(() => expect(mocks.updateAgenda).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(screen.getByRole("button", { name: "保存修改" })).not.toHaveAttribute("aria-busy", "true"));
+  expect(dirty).toHaveBeenLastCalledWith(true);
+  expect(screen.getByLabelText("任务指令")).toHaveValue("修改后的任务指令");
+  fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
+  await waitFor(() => expect(saved).toHaveBeenCalledOnce());
+  expect(dirty).toHaveBeenLastCalledWith(false);
+});

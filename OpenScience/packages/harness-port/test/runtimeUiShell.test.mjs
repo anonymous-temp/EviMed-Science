@@ -6,6 +6,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { colorRole } from '@evimed/design-tokens';
+import { kernelThemeTokens } from '@evimed/design-tokens/kernel';
 
 import { EVIMED_FAVICON, GEOMETRY_KERNEL_PIN, apply, inject, shellStylesheet } from '../src/runtimeUiShell.mjs';
 import { fakeCtx, fakeTarget, kernelSlots, kitFor, renderStatic } from './helpers/frameFakes.mjs';
@@ -41,8 +43,11 @@ test('the left column, the three brand slots and the hero workspace picker are o
   const mark = renderStatic(occupants['sidebar.brand.mark'].component, { size: 34, className: 'fish' });
   assert.match(mark, /width="34"/);
   assert.match(mark, /aria-label="EviMed"/);
+  assert.match(mark, /viewBox="0 0 32 32"/);
+  assert.match(mark, /d="M25\.90815,23\.256664C/);
+  assert.doesNotMatch(mark, /<circle/, 'the native frame uses the current molecule geometry');
   assert.match(mark, /class="fish"/);
-  assert.match(mark, /var\(--dsw-alias-state-business-primary/, 'the mark follows the theme layer rather than a literal colour');
+  assert.match(mark, /var\(--dsw-specific-brand-ink/, 'the mark follows the theme layer rather than a literal colour');
   // Not the deepseek ramp: under direction A its 500 step is the working line's grey.
   assert.doesNotMatch(mark, /deepseek-500/);
   assert.equal(renderStatic(occupants['sidebar.brand.name'].component), '<span style="font-weight:600">EviMed</span>');
@@ -202,13 +207,13 @@ test('a page the control plane served is branded whether or not it is embedded',
   const icon = f.target.document.head.children.find((/** @type {any} */ node) => node.attributes?.rel === 'icon');
   assert.ok(icon, "the document's icon is replaced, not left as the kernel's whale");
   assert.equal(icon.attributes.href, EVIMED_FAVICON);
-  // The EviMed molecule in brand blue (spec §3.2); the retired teal plus is gone.
-  assert.match(EVIMED_FAVICON, /^data:image\/svg\+xml,.*fill='%230a5dc1'/, 'the icon carries the brand blue');
-  assert.match(EVIMED_FAVICON, /d='M25\.90815,23\.256664C/, 'the icon is the molecule mark');
-  assert.doesNotMatch(EVIMED_FAVICON, /00756b|63c5b9/i, 'the retired teal is gone');
-  // Well-formed once decoded: one svg with one path.
   const decoded = decodeURIComponent(EVIMED_FAVICON.slice('data:image/svg+xml,'.length));
-  assert.match(decoded, /^<svg xmlns='http:\/\/www\.w3\.org\/2000\/svg' viewBox='0 0 32 32'><path [^<>]+\/><\/svg>$/);
+  assert.ok(decoded.includes(`path{fill:${colorRole('brand-ink', 'light')}}`));
+  assert.ok(decoded.includes(`@media(prefers-color-scheme:dark){path{fill:${colorRole('brand-ink', 'dark')}}}`));
+  assert.match(decoded, /d="M25\.90815,23\.256664C/, 'the icon is the molecule mark');
+  assert.doesNotMatch(decoded, /00756b|63c5b9/i, 'the retired teal is gone');
+  assert.equal((decoded.match(/<path /g) ?? []).length, 1);
+  assert.deepEqual(kernelThemeTokens()['--dsw-specific-brand-ink'], { light: colorRole('brand-ink', 'light'), dark: colorRole('brand-ink', 'dark') });
 });
 
 test('unloading the body removes its stylesheet', () => {

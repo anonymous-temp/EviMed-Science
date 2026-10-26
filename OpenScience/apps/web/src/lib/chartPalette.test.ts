@@ -1,4 +1,5 @@
-import { CHART_SERIES } from "@evimed/design-tokens";
+import { cie76, contrastRatio } from "@evimed/design-tokens/contrast";
+import { CHART_COLORS, CHART_OWN, CHART_SERIES, colorRole } from "@evimed/design-tokens";
 import { describe, expect, it } from "vitest";
 import { seriesColor, CHART_PALETTE_LIGHT, CHART_PALETTE_DARK } from "@ai4s/shared";
 
@@ -13,9 +14,8 @@ describe("chart palette (single source of truth)", () => {
   });
 
   it("assigns categorical hues in fixed order and wraps only past 8", () => {
-    // Slot 1 is the brand: in a comparison "ours" is the brand and every rival
-    // is a grey. Adjacent ΔE (CIE76) is ≥ 22 in both schemes, over the 15 floor
-    // the 2026-09-18 dataviz validator set.
+    // Scientific categorical slots retain their data palette; comparison identity
+    // uses the independent own-versus-rivals contract measured below.
     expect(CHART_PALETTE_LIGHT.categorical).toEqual([
       "#0a5dc1", "#e07b39", "#1d9a87", "#7b5cd6", "#c94f7c", "#c7a12b", "#5a626b", "#b4bcc5",
     ]);
@@ -35,4 +35,17 @@ describe("chart palette (single source of truth)", () => {
       expect(new Set(palette.sequential).size).toBe(palette.sequential.length);
     }
   });
+});
+
+
+it("separates comparison identity from every grey rival in both themes", () => {
+  for (const scheme of ["light", "dark"] as const) {
+    for (const rival of CHART_COLORS.rivals) {
+      expect(cie76(CHART_OWN[scheme], rival)).toBeGreaterThanOrEqual(15);
+      for (const ground of ["bg", "surface"]) {
+        expect(contrastRatio(CHART_OWN[scheme], colorRole(ground, scheme))).toBeGreaterThanOrEqual(3);
+        expect(contrastRatio(rival, colorRole(ground, scheme))).toBeGreaterThanOrEqual(3);
+      }
+    }
+  }
 });

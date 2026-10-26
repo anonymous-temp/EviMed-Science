@@ -1,3 +1,4 @@
+import { PendingFeedback } from "@/components/ui/PendingFeedback";
 import { type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { CircleDashed, History, MessageSquare, TriangleAlert, UsersRound } from "lucide-react";
@@ -62,7 +63,7 @@ function Bar({ className }: { className: string }) {
 /** The home list's first paint: rows shaped like the studies they stand in for. */
 export function VcrListSkeleton() {
   return (
-    <div className="animate-pulse" aria-hidden="true" data-vcr-loading="home">
+    <PendingFeedback><div className="animate-pulse" aria-hidden="true" data-vcr-loading="home">
       {["w-2/5", "w-1/3", "w-1/2"].map((width) => (
         <div key={width} className="flex items-start gap-6 border-b border-border px-2 py-5">
           <div className="flex flex-1 flex-col gap-2">
@@ -73,14 +74,14 @@ export function VcrListSkeleton() {
           <Bar className="h-4 w-24" />
         </div>
       ))}
-    </div>
+    </div></PendingFeedback>
   );
 }
 
 /** A study page's first paint: the tab row and a conclusion with the table under it. */
 export function VcrStudySkeleton() {
   return (
-    <div className="animate-pulse" aria-hidden="true" data-vcr-loading="study">
+    <PendingFeedback><div className="animate-pulse" aria-hidden="true" data-vcr-loading="study">
       <div className="flex h-10 items-end gap-6 border-b border-border">
         {Array.from({ length: 7 }, (_, index) => <Bar key={index} className="mb-3 h-3.5 w-14" />)}
       </div>
@@ -88,14 +89,14 @@ export function VcrStudySkeleton() {
       <div className="mt-4 flex flex-col gap-px rounded-panel border border-border bg-border">
         {Array.from({ length: 4 }, (_, index) => <Bar key={index} className="h-12 rounded-none" />)}
       </div>
-    </div>
+    </div></PendingFeedback>
   );
 }
 
 /** A tab's first paint. */
 export function VcrTabSkeleton({ rows = 4 }: { rows?: number }) {
   return (
-    <div data-vcr-loading="tab" className="animate-pulse" aria-hidden="true">
+    <PendingFeedback><div data-vcr-loading="tab" className="animate-pulse" aria-hidden="true">
       <Bar className="h-sm w-48 rounded-full" />
       {Array.from({ length: rows }, (_, index) => (
         <div key={index} className="mt-4 flex flex-col gap-2 border-b border-faint pb-4">
@@ -103,7 +104,7 @@ export function VcrTabSkeleton({ rows = 4 }: { rows?: number }) {
           <Bar className="h-3 w-1/4" />
         </div>
       ))}
-    </div>
+    </div></PendingFeedback>
   );
 }
 

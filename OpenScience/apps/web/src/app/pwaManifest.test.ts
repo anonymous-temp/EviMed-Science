@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { COLOR_RAMPS, COLOR_ROLES, colorRole } from "@evimed/design-tokens";
+import { COLOR_ROLES, colorRole } from "@evimed/design-tokens";
 
 /**
  * The web app manifest: what a phone's “添加到主屏幕” installs. A Feishu card
@@ -13,9 +13,9 @@ import { COLOR_RAMPS, COLOR_ROLES, colorRole } from "@evimed/design-tokens";
  *
  * The icons are the EviMed molecule mark (spec §3.2, appendix E #18, audit
  * F-G8), rasterized from two sources in `src/assets/`: `evimed-app-icon.svg`
- * — a white ground, the mark in brand blue with a 12 % margin — at 192, 512
- * and the 180 px Apple touch icon; and `evimed-app-icon-maskable.svg` — brand
- * blue to the edges, the mark in white inside the centre 60 % — at 512, which
+ * — a warm-paper ground, the mark in neutral ink with a 12 % margin — at 192, 512
+ * and the 180 px Apple touch icon; and `evimed-app-icon-maskable.svg` — neutral ink
+ * to the edges, the mark in warm paper inside the centre 60 % — at 512, which
  * is also the Feishu bot's avatar. The server caches unhashed files for a
  * year, so a changed icon needs a new `?v=`.
  */
@@ -72,8 +72,7 @@ describe("the web app manifest", () => {
   it("takes its colours from the tokens: the light canvas, as the page's own theme-color does", () => {
     // The manifest has one colour, and the page's per-scheme meta tags take
     // over once it has loaded. Read the role rather than a primitive step: the
-    // canvas has moved twice (cool paper grey, white, and now the blue-grey the
-    // fusion brought), and a test pinned to a ramp step would have gone green on
+    // canvas has changed with the approved brand direction, and a test pinned to a ramp step would have gone green on
     // the wrong colour each time. In the stylesheet the role points at its step,
     // so the assertion follows the same indirection.
     const canvas = colorRole("bg", "light");
@@ -82,6 +81,7 @@ describe("the web app manifest", () => {
     expect(manifest.theme_color).toBe(canvas);
     expect(manifest.background_color).toBe(canvas);
     expect(html).toContain(`<meta name="theme-color" media="(prefers-color-scheme: light)" content="${canvas}" />`);
+    expect(html).toContain(`<meta name="theme-color" media="(prefers-color-scheme: dark)" content="${colorRole('bg', 'dark')}" />`);
   });
 
   it("lists icons that exist at the sizes they claim, a maskable one among them", () => {
@@ -167,22 +167,23 @@ function share(path: string, hex: string): number {
   return hits / (width * height);
 }
 
-describe("the icons are the EviMed mark in brand blue (appendix E #18, audit F-G8)", () => {
-  const brand = COLOR_RAMPS.brand[600];
+describe("the icons use neutral identity ink independently from action colour", () => {
+  const brand = colorRole("brand-ink", "light");
+  const paper = colorRole("surface", "light");
   const retiredTeal = "#00756b";
 
-  it("draws the app icons on white with the mark in brand blue, and the maskable one blue to the edge", () => {
+  it("draws the app icons on warm paper and keeps the maskable icon ink to the edge", () => {
     for (const icon of ["/icons/evimed-192.png", "/icons/evimed-512.png", "/icons/apple-touch-icon.png"]) {
-      expect(share(publicFile(icon), "#ffffff"), icon).toBeGreaterThan(0.6);
+      expect(share(publicFile(icon), paper), icon).toBeGreaterThan(0.6);
       expect(share(publicFile(icon), brand), icon).toBeGreaterThan(0.1);
     }
     const maskable = publicFile("/icons/evimed-maskable-512.png");
     expect(share(maskable, brand)).toBeGreaterThan(0.6);
-    expect(share(maskable, "#ffffff")).toBeGreaterThan(0.05);
+    expect(share(maskable, paper)).toBeGreaterThan(0.05);
     // The edge is ground, so any mask a platform cuts keeps the whole mark.
     const { width, channels, data } = pngPixels(maskable);
-    expect([...data.subarray(0, 3)]).toEqual([10, 93, 193]);
-    expect([...data.subarray((width - 1) * channels, (width - 1) * channels + 3)]).toEqual([10, 93, 193]);
+    expect([...data.subarray(0, 3)]).toEqual([1, 3, 5].map((offset) => parseInt(brand.slice(offset, offset + 2), 16)));
+    expect([...data.subarray((width - 1) * channels, (width - 1) * channels + 3)]).toEqual([1, 3, 5].map((offset) => parseInt(brand.slice(offset, offset + 2), 16)));
   });
 
   it("leaves no retired teal in public/ — not in a file's text, not in an icon's pixels", () => {
@@ -194,6 +195,7 @@ describe("the icons are the EviMed mark in brand blue (appendix E #18, audit F-G
       if (file.endsWith(".png")) expect(share(file, retiredTeal), file).toBe(0);
       else expect(readFileSync(file, "utf8").toLowerCase(), file).not.toContain("00756b");
     }
+    expect(read("src/assets/evimed-mark.svg")).toContain(`@media(prefers-color-scheme:dark){path{fill:${colorRole("brand-ink", "dark")}}}`);
     for (const source of ["src/assets/evimed-mark.svg", "src/assets/evimed-app-icon.svg", "src/assets/evimed-app-icon-maskable.svg"]) {
       const svg = read(source).toLowerCase();
       expect(svg, source).not.toContain("00756b");
@@ -202,9 +204,9 @@ describe("the icons are the EviMed mark in brand blue (appendix E #18, audit F-G
   });
 
   it("links every icon with the cache buster that changed with it", () => {
-    for (const icon of manifest.icons) expect(icon.src, icon.src).toMatch(/\?v=2$/);
+    for (const icon of manifest.icons) expect(icon.src, icon.src).toMatch(/\?v=3$/);
     expect(html).toContain('<link rel="manifest" href="/manifest.json?v=3" />');
-    expect(html).toContain('<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png?v=2" />');
+    expect(html).toContain('<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png?v=3" />');
     expect(html).toContain('<link rel="icon" type="image/svg+xml" href="/src/assets/evimed-mark.svg" />');
   });
 

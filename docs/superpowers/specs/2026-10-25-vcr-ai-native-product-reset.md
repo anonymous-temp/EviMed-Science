@@ -2,9 +2,10 @@
 
 2026-10-25 | Product direction and implementation contract
 
-Last updated: 2026-10-26.
-
-Status: approved product direction, incorporating the October 25 reset review and October 26 implementation boundaries. The original document preceded implementation; local code/verification is recorded in the implementation plan and handoffs. This specification is not evidence of live-model, clinical or production acceptance. No deployment or serving-database operation is authorized by this implementation task.
+Status: the scope removals and conversation-first requirement below come from
+the owner's current instruction. The proposed information architecture and
+implementation sequence are design recommendations. No product code or
+production functionality was changed in preparing this document.
 
 ## 1. Decisions that supersede earlier plans
 
@@ -31,7 +32,8 @@ satisfies the requirement without another upload.
 
 These decisions supersede the recruitment/OA portions of the September 28
 plans and the October 25 audit's recommendations to finish that OA workflow.
-They also supersede the VCR portions of the October 10 feature-retention, October 14/19 fixed-step/configuration and October 20 presentation requirements. VCR methods are not ordinary-user calculators in the Research Tools catalogue. GEO keeps its eight-step workflow. The general
+They also supersede the October 20 presentation requirement to expose VCR
+methods as ordinary-user tools in the Research Tools catalogue. The general
 platform remains general-purpose; this reset concerns the VCR method surface.
 
 ## 2. The concepts, expressed as user decisions
@@ -46,7 +48,9 @@ platform remains general-purpose; this reset concerns the VCR method surface.
 
 ### 2.1 Cohort and virtual patient are related but not identical
 
-A cohort defines membership and population structure. It may be real, derived or synthetic, or a declared distribution before records have been materialized. An empirically derived synthetic dataset retains its ancestry and source permissions; it is not independently generated merely because its rows are synthetic.
+A cohort defines membership and population structure. It may consist of
+observed people, synthetic people, or a declared distribution before records
+have been materialized.
 
 A virtual patient is an individual modeled object. A synthetic baseline row
 can be one such object's starting point; adding a disease or outcome model
@@ -78,7 +82,8 @@ generation or models, observation/censoring, and an analysis. It can internally
 use virtual patients, or use an analytical/reference calculation without
 materializing individual records.
 
-Its primary outputs describe study-design behavior. An assumed treatment effect used to evaluate power is not an AI-discovered real treatment effect. Here virtual trial means trial-design simulation, not a decentralized trial or evidence of drug approval.
+Its primary outputs describe study-design behavior. An assumed treatment
+effect used to evaluate power is not an AI-discovered real treatment effect.
 
 ### 2.4 Matching is an independent task
 
@@ -92,7 +97,8 @@ an enrollment workflow.
 
 ## 3. Recommended product structure
 
-Keep the first-level “虚拟临床研究” entry. Inside it, reuse the existing native conversation/composer and four recognizable task entry points that fill unsent drafts:
+Keep the first-level “虚拟临床研究” entry. Inside it, use one research
+conversation and four recognizable task entry points:
 
 1. Patient Matching.
 2. Cohorts and Virtual Patients.
@@ -128,7 +134,7 @@ Suggested example intents:
 Reuse the native DSH conversation and composer. Do not add a second chat box
 inside each result card or replace the native file/browser pane.
 
-The six result destinations are overview, matching, population/patients, comparator, trial and evidence/data. Group and individual views share the population workspace; old patient URLs remain readable. The main study area presents saved results as relevant objects:
+The main study area presents saved results as relevant objects:
 
 - cohort composition and selection;
 - patient records and complete supported trajectories;
@@ -147,9 +153,9 @@ statistical tools.
 
 ## 4. How conversational execution should work
 
-User goal → inspect available inputs and saved objects → retrieve and preserve evidence → bind source-supported parameters → ask only for unavailable facts that change the next operation → choose supported methods/models → execute tools in the verified native task context → read saved results and uncertainty → explain/visualize → revise in the same conversation.
-
-Preserve exact source generations, hashes, quotation spans and literal units. Numerical baseline statistics bind to explicitly verified source fields. Derived values verify quoted inputs only, not reported observed baselines. Nearby evidence supports only labeled exploratory assumptions and sensitivity ranges; it does not establish transportability.
+User goal → inspect available inputs → identify essential missing information
+→ choose methods/models → bind a minimal research context → execute tools
+→ read saved results → explain and visualize → support a natural-language revision.
 
 AI may:
 
@@ -188,13 +194,27 @@ remain usable in subsequent conversation.
 Do not make the user manually poll a job ID, navigate to a generic method page,
 or repeat the original goal after a tool finishes.
 
-### 4.3 Reuse native tools with verified task ownership
+### 4.3 Current code already supplies the main tool mechanism
 
-The existing VCR read/write/simulate, registry, curve-digitization and evidence-pooling tools remain the mechanism; narrow aggregate calculations also reuse `research_calculate`. The gateway verifies the exact pending native invocation and its actual root run before resolving an owned account/project/root-conversation task scope. A scheduler dispatch resolves only its associated programme study. General projects/sessions are not rebound, and no newest/sole-study fallback is allowed. A patient source is an owned human-message reference or preserved upload, reread server-side; model-authored patient prose is not clinical observation.
+The existing VCR capability declares read, write and simulate tools:
 
-Durable terminal-job and new aggregate-replay completion returns to the exact originating conversation, preserving attribution and dispatch identity through retries and restarts. Busy origins wait; unavailable/deleted origins are explicit and never open another chat. Cancellation never restarts work, and historical calculations do not trigger retrospective continuations. Durable finish consumers land saved objects before delivery.
+- [Analysis capability](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/capabilities/vcr-analysis/capability.yaml:13)
+- [MCP computation bridge](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/runtime/mcp/evimed-research/vcr_platform.py:990)
+- [Gateway study binding](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/server/src/vcrGateway.mjs:2126)
 
-Local matching/evaluation uses a bounded local executor lane independent of the heavy engine queue. This creates no second R worker and makes no claim of parallel R execution. Immutable configurations, result ownership, de-duplication, budgets, permission decisions, honest errors and numerical provenance remain. See [current technical architecture](../../../OpenScience/docs/TECHNICAL_DESIGN.md) §5.6 for the seams.
+The gateway resolves the acting account/project and a research context.
+An ordinary global conversation without that context currently receives
+vcr_no_study. A conversation-first product therefore needs a background
+create-or-bind operation for the minimum authorized context; hiding forms
+alone does not solve this.
+
+The current startup also supplements every initial brief with a study-definition
+instruction. Replace that forced task with operation-specific context:
+[vcrStudyStart.mjs](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/server/src/vcrStudyStart.mjs:43).
+
+Keep immutable configurations, result ownership, de-duplication, budgets,
+tool errors and numerical provenance. This is an interaction/orchestration
+change, not a proposal for a new agent kernel or new calculator engine.
 
 ## 5. Data requirements: visible at the point of intent
 
@@ -213,7 +233,7 @@ a spreadsheet.
 | Predict for a real patient's baseline using an existing suitable model | Baseline information and a compatible, available model | No historical training dataset from the user is necessarily required |
 | Train/calibrate a new clinical trajectory model | Suitable longitudinal exposure/outcome data and validation plan | Normally yes, or an independently authorized equivalent data source |
 | Research a literature comparator or historical benchmark | Traceable published evidence and a research question | No uploaded patient dataset is inherently required |
-| Estimate a target study's actual comparative effect | Comparable target/control exposure and outcome IPD, index dates and confounders | Yes for actual external-control analysis; published curves alone are a weaker descriptive benchmark |
+| Estimate a target study's actual comparative effect | Target-study outcomes and an appropriate comparison source | Real outcome information is required; matching/weighting generally needs suitable IPD |
 | Build a model-based predicted comparator | Target baselines/population plus an appropriate outcome model | Baselines required; historical model data may come from another authorized source |
 | Compare hypothetical trial designs | Endpoints, population/design assumptions and a supported generator or analytical method | No uploaded patient dataset is inherently required |
 | Calibrate a trial simulation to a customer's actual population/outcomes | Suitable authorized customer records | Yes, for that empirical calibration claim |
@@ -235,7 +255,7 @@ another upload. Optional materials are labeled optional.
 
 A reference protocol or published trial is not a patient dataset. A reconstructed
 survival curve is not complete observed patient-level covariate data. A file
-upload succeeding does not prove that exposure, endpoint and time zero are mapped. Pre-enrolment records, exit date/reason and post-trial care cannot reconstruct hidden study treatment, intervening outcomes or causal effects. Missing facts remain unknown, never exclusions, satisfied criteria or zero. Selected-record grants and cloud permission remain separate from aggregate small-cell suppression. Native `generated_records` requires verified independent generation ancestry; empirical/upload-derived records stay on the controlled path. A synthetic label alone grants no cloud permission.
+upload succeeding does not prove that exposure, endpoint and time zero are mapped.
 
 ## 6. Expected results for the four task entry points
 
@@ -328,7 +348,8 @@ hiding the pages is insufficient.
 - existing historical records and exportability according to their retention
   and access policies.
 
-The user removed operational functionality, not existing scientific study data. Preserve longitudinal observations and read-only historical follow-up. For the three retired OA tables and recruiter/site roles, the owner approved archive-first offline retirement in principle. `OpenScience/scripts/ops/vcr-retire-recruitment.mjs` prepares a private verified v2 archive, preserving PostgreSQL JSON text losslessly and checking typed restoration. An explicit transaction locks approved sources before READ COMMITTED comparison and uses RESTRICT; no startup deletion or CASCADE. Legacy retired grants may be revoked. All old writers must be stopped and prevented from restarting before later explicit offline execution. This no-deployment task does not operate on the serving database.
+The user removed operational functionality, not existing study data. Do not
+purge historical records as an incidental cleanup.
 
 Scientific reevaluation when new data arrive may be requested as a research
 task. Do not preserve automatic recruiter queues under another name.
@@ -345,7 +366,13 @@ task. Do not preserve automatic recruiter queues under another name.
 | Withdrawal closes referral cases | Remove obsolete OA coupling while retaining actual data-use withdrawal behavior |
 | Matching skill generates recruitment drafts and explains site/follow-up operations | Restrict the skill to evidence-backed matching and assessment outputs |
 
-The coupling table above records the migration obligations. Current owners are `vcrMatchingCandidates.mjs`, `vcrConversationCompletions.mjs`, `vcrGateway.mjs`, `vcrErasureStore.mjs` and the explicit retirement utility; removed contact/OA modules are not future integration points.
+Source pointers:
+
+- [Matching completion and operational side effects](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/server/src/vcrComposition.mjs:802)
+- [Finish-hook registration](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/server/src/vcrComposition.mjs:1173)
+- [Operational runtime writers](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/server/src/vcrGateway.mjs:1631)
+- [Contact behavior](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/server/src/vcrContact.mjs:159)
+- [Operational forecast](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/server/src/vcrComposition.mjs:929)
 
 ## 8. Method UI retirement
 
@@ -362,7 +389,12 @@ Existing result/configuration deep links should continue to show preserved
 outputs with a path back to their research conversation. Do not silently lose
 historical work or duplicate the calculation implementation.
 
-The capability catalogue, read-only historical method result view and exact object-to-conversation actions retain compatible addresses. No historical component or method route authorizes a new calculator journey.
+Current components to reuse or retire at the presentation boundary:
+
+- [Catalogue entry](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/web/src/app/routes/CapabilitiesPage.tsx:185)
+- [Study method entry](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/web/src/components/vcr/VcrStudyMethods.tsx:21)
+- [Current shared runner](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/web/src/components/vcr/VcrMethodRunner.tsx:61)
+- [Existing action-to-conversation pattern](/Users/wangzeyuan/Desktop/EviMedScience/OpenScience/apps/web/src/components/vcr/tabs/TrialTab.tsx:120)
 
 ## 9. Revised implementation priority
 
@@ -446,16 +478,12 @@ conversation-first execution has passed a live acceptance run.
 Implement against the new scope, reuse the current DSH/tool/data infrastructure,
 and preserve unrelated work already in progress in this shared checkout.
 
-## 13. Scoped model and design contract (2026-10-26)
+## UI acceptance handoff — 2026-10-26
 
-The review's model routes are a capability roadmap, not a blanket implementation claim. Current deterministic execution is scoped to `model.survival_fit` and `model.prognostic_apply` alongside the existing engine methods. Survival fits use intercept-only `survival::survreg` for exponential, Weibull, lognormal and loglogistic distributions; observed records and reconstructed pseudo-IPD remain distinct. Source condition and explicit selected arm are required before a fit becomes a control baseline. Curves/diagnostics survive even when no downstream adapter exists: the current reference-patient/design adapter supports exponential/Weibull only and never silently approximates lognormal/loglogistic fits.
+The product-specific requirements below are transferred from design specification v3.0 to this module authority. They are acceptance requirements, not a claim that pending product implementation has shipped. Shared component, state, ownership and proof rules are maintained in [Frontend Design System v3.1](../../../OpenScience/docs/FRONTEND_DESIGN_SYSTEM.md). Later explicit owner decisions update this plan without creating another design-system copy of the product scope.
 
-Published equations are typed linear/logistic/Cox specifications with exact source numerical/semantic bindings, predictor units/coding, centering/scaling and endpoint/horizon. Source text is never evaluated as code. A Cox equation lacking baseline survival/reference supports relative scores only; a linear expectation without residual SD is not an outcome distribution. Registration, executability, source applicability, calibration and clinical validation remain separate. Fitting a population baseline does not establish an individual causal twin.
+Apply the October 25 AI-native reset as the current direction. Native conversation is the operating entry. Numerical tools remain validated infrastructure; ordinary users do not have to navigate a standalone VCR method catalogue/form to begin a task. Compatible historical links and saved objects remain accessible.
 
-A saved prognostic prediction may support a scoped benchmark or compatible control-design input, with immutable model/result/population selection and separately supplied treatment-effect assumptions. It does not identify a treatment effect, create observed controls, add real/effective sample size or replace an RCT. Actual external-control, literature-benchmark, randomized prognostic-adjustment and hybrid-borrowing routes retain their different data/estimand requirements.
+Build only the current task's context. Matching/cohort construction does not require invented trial endpoints, treatment effects or a definition-versus-full-program choice. Reuse authorized connected sources. Explain task-specific requirements: patient information, patient-level dataset, longitudinal observations or compatible model.
 
-Fit p10/p50/p90 variants are median-parameter sensitivity with fixed shape, not joint parameter uncertainty, outcome percentiles or assurance. Mean full-study duration uses simulation `duration_months`; optional abstract Poisson–Gamma accrual reports last-patient-in timing separately, without CRM sites. Clinical generalizability and real-model/user-path acceptance require their own evidence.
-
-### 13.1 Saved-model design recipe
-
-A saved model enters a trial through `trial_scenario.configuration.modelResultId` and `modelResultVersion`; `modelParameterQuantile` selects `p10`, `p50` or `p90` (default `p50`). A design grid places the same immutable references in `dimensions.base` and may use `modelParameterQuantile: "all"` to compare the three parameter scenarios. The server resolves and verifies the saved execution, binds endpoint/horizon/source condition and derives the compatible control input. Model outputs do not supply an assumed treatment effect. Quantiles are parameter sensitivity with fixed shape, not patient percentiles or assurance.
+Preserve cohorts, virtual patients, comparator research, simulation and historical configuration/result versions as distinct scientific objects. Display AI interpretation alongside deterministic results without calling estimates observations. Remove recruitment operations from the target UX: contact, referral/site CRM, enrollment funnels, operational forecasting and follow-up assignments. Evidence-backed bidirectional patient/trial matching remains. Research follow-up observations and protocol measurement schedules remain scientific data. The reset is not a claim that current deployed screens already implement it.

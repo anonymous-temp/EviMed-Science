@@ -215,6 +215,7 @@ describe("准确与安全: the list is by claim", () => {
     // the severe ones: S4 and S3 that are live
     expect(claimKeys()).toEqual(["fp_b", "fp_a"]);
     await userEvent.click(within(status).getByRole("button", { name: /^全部/ }));
+    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 1 条说法" }));
     expect(claimKeys()).toEqual(["fp_b", "fp_a", "fp_c", "fp_d"]);
     // the closed one is set down, not red
     expect(claimRow("fp_d")).not.toBeNull();
@@ -275,13 +276,13 @@ describe("准确与安全: the list is by claim", () => {
     expect(within(status).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["严重3", "待处理97", "处置中3", "全部104"]);
     expect(claimKeys()).toHaveLength(3);
     await userEvent.click(within(status).getByRole("button", { name: /^全部/ }));
-    // Five on the first screen: the two pictures above carry rows of their own, and a data page's first screen holds twenty.
-    expect(claimKeys()).toHaveLength(5);
+    // Three claims initially share the first screen with the diagnostic charts; expansion preserves all claims.
+    expect(claimKeys()).toHaveLength(3);
     expect(client.getGeoDiagnosis).toHaveBeenCalledWith("geo_1", expect.any(Object), expect.objectContaining({ errorLimit: 20, errorOffset: 0 }));
-    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 25 条说法" }));
-    expect(claimKeys()).toHaveLength(15);
-    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 15 条说法" }));
-    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 5 条说法" }));
+    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 27 条说法" }));
+    expect(claimKeys()).toHaveLength(13);
+    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 17 条说法" }));
+    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 7 条说法" }));
     expect(claimKeys()).toHaveLength(30);
     expect(screen.queryByRole("button", { name: /显示更多/ })).toBeNull();
     // the gravest first, the closed one last
@@ -337,6 +338,7 @@ describe("准确与安全: the band's toolbar", () => {
     const search = screen.getByTestId("search").textContent ?? "";
     for (const name of ["engine=", "type=", "trace=", "cluster="]) expect(search).not.toContain(name);
     expect(search).toContain("show=all");
+    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 1 条说法" }));
     expect(claimKeys()).toEqual(["fp_b", "fp_a", "fp_c", "fp_d"]);
   });
 
@@ -359,7 +361,8 @@ describe("准确与安全: by engine", () => {
     const told = deepseek.querySelector("[data-geo-claim='fp_a']")!.closest("li") as HTMLElement;
     expect(told).not.toHaveTextContent("千问");
     expect(told).toHaveTextContent("出处 baike.baidu.com（百科词条）");
-    // a claim three engines tell is a row in each of the three sections
+    // Expanding retains every engine-specific occurrence of a claim.
+    await userEvent.click(screen.getByRole("button", { name: /显示更多/ }));
     expect(document.querySelectorAll("[data-geo-claim='fp_a']")).toHaveLength(3);
   });
 });
@@ -488,6 +491,7 @@ describe("准确与安全: the charts and the list share one selection", () => {
     expect(bar).toHaveAttribute("aria-pressed", "true");
     await userEvent.click(bar);
     expect(screen.getByTestId("search")).not.toHaveTextContent("engine=");
+    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 1 条说法" }));
     expect(claimKeys()).toEqual(["fp_b", "fp_a", "fp_c", "fp_d"]);
   });
 
@@ -498,6 +502,7 @@ describe("准确与安全: the charts and the list share one selection", () => {
     expect(claimKeys()).toEqual(["fp_b"]);
     const toolbar = document.querySelector("[data-toolbar]") as HTMLElement;
     await userEvent.click(within(toolbar).getByRole("button", { name: /类型：与说明书冲突/ }));
+    await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 1 条说法" }));
     expect(claimKeys()).toEqual(["fp_b", "fp_a", "fp_c", "fp_d"]);
   });
 

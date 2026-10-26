@@ -1,3 +1,4 @@
+import { PendingFeedback } from "@/components/ui/PendingFeedback";
 import { Radar } from "lucide-react";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { PageShell } from "@/components/layout/PageShell";
@@ -25,7 +26,7 @@ function Bar({ className }: { className: string }) {
 /** The home list's first paint: rows shaped like the projects they stand in for. */
 export function GeoListSkeleton() {
   return (
-    <div className="animate-pulse" aria-hidden="true">
+    <PendingFeedback><div className="animate-pulse" aria-hidden="true">
       {["w-1/3", "w-1/4", "w-2/5"].map((width) => (
         <div key={width} className="flex h-16 items-center gap-6 border-b border-border px-2">
           <div className="flex flex-1 flex-col gap-2">
@@ -36,20 +37,20 @@ export function GeoListSkeleton() {
           <Bar className="h-4 w-16" />
         </div>
       ))}
-    </div>
+    </div></PendingFeedback>
   );
 }
 
 /** A project page's first paint: the tab row and four metric blocks. */
 export function GeoProjectSkeleton() {
   return (
-    <div className="animate-pulse" aria-hidden="true">
+    <PendingFeedback><div className="animate-pulse" aria-hidden="true">
       <div className="flex h-10 items-end gap-6 border-b border-border">
         {Array.from({ length: 9 }, (_, index) => <Bar key={index} className="mb-3 h-3.5 w-8" />)}
       </div>
       <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {Array.from({ length: 4 }, (_, index) => <Bar key={index} className="h-36 rounded-card" />)}
       </div>
-    </div>
+    </div></PendingFeedback>
   );
 }

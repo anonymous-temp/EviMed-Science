@@ -54,6 +54,18 @@ export function iconButtonClasses({ size = "md", destructive = false, active = f
   );
 }
 
+/**
+ * Component: IconButton; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Named native icon button wrapped in label-only Tooltip.
+ * Variants: sm/md, active and destructive.
+ * States: Native disabled; active is caller-controlled.
+ * Hit area: Token square size with coarse-pointer expansion.
+ * Keyboard: Native Enter/Space; Tooltip does not duplicate accessible name.
+ * Long content: Visible icon only; complete name stays in aria-label.
+ * Theme: Semantic neutral/destructive text and active surface.
+ * Responsive: Fixed square; caller positions it.
+ * Verification: Primitives.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(
   { icon: Icon, label, size = "md", destructive = false, active = false, type = "button", className, title, ...rest },
   ref,

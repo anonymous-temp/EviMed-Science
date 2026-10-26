@@ -4,7 +4,7 @@ import { Disclosure } from "@/components/ui/Disclosure";
 import { Drawer } from "@/components/ui/Drawer";
 import { Input } from "@/components/ui/Input";
 import { List, ListRow } from "@/components/ui/ListRow";
-import { Switch } from "@/components/ui/Switch";
+import { ApplyControl } from "./ApplyControl";
 import { formatClock, formatDay } from "@/lib/format";
 import type { WebPluginConfiguration } from "@/lib/apiClient";
 import type { Inventory, InventoryItem } from "@/lib/extensionsClient";
@@ -44,7 +44,7 @@ export function CitationDrawer({ item, citation, projectName, groupTitle, onClos
   const min = Math.ceil((plugin?.limits.minTimeoutMs ?? 2000) / 1000), max = Math.floor((plugin?.limits.maxTimeoutMs ?? 15000) / 1000);
   const savedSeconds = typeof desired?.settings.timeoutMs === "number" ? String(Math.round(desired.settings.timeoutMs / 1000)) : "";
   const seconds = edit ?? savedSeconds;
-  useEffect(() => { setEdit(null); }, [savedSeconds]);
+
   const revision = desired?.revision ?? 0;
   useEffect(() => {
     if (!plugin || revision === 0) { setSaved([]); return; }
@@ -60,12 +60,13 @@ export function CitationDrawer({ item, citation, projectName, groupTitle, onClos
   // A tool the item has no sentence for is not shown: a name is not a description.
   const tools = (plugin?.tools ?? []).map(name => item.toolSentences?.[name]).filter((sentence): sentence is string => Boolean(sentence));
   return (
-    <Drawer title={item.title} description={item.publisher ? `${item.publisher} · ${groupTitle}` : groupTitle} onClose={onClose}>
+    <Drawer title={item.title} description={item.publisher ? `${item.publisher} · ${groupTitle}` : groupTitle} onClose={onClose} dirty={dirty} busy={busy}>
       <div className="flex flex-col gap-6">
         <div className="flex items-center gap-3"><Tag>插件</Tag><RepositoryLink href={skillRepositoryUrl(item.repository)} title={item.title} /></div>
         <div className="flex items-center justify-between gap-3 rounded-card bg-surface-1 p-4">
-          <Switch showLabel label={`在“${projectName ?? "当前项目"}”里使用`} checked={desired?.enabled ?? false} disabled={busy || !desired} onChange={enabled => void save({ enabled })} />
+          <ApplyControl showLabel label={`在“${projectName ?? "当前项目"}”里使用`} checked={desired?.enabled ?? false} disabled={busy || !desired} onChange={enabled => void save({ enabled })} />
         </div>
+        {plugin && !waiting && !failed && <p role="status" className="text-ui text-text-2">{plugin.effective?.enabled ? "当前已启用" : "当前未启用"}</p>}
         {waiting && <p role="status" className="text-ui text-text-2">保存后在下次对话生效</p>}
         {failed && <p role="status" className="flex items-center gap-2 text-ui text-text-2">这项设置没能生效。<Button size="sm" variant="text" disabled={busy} onClick={() => void retry()}>重试</Button></p>}
         {error && <p role="alert" className="text-ui text-error">{error}</p>}
@@ -77,7 +78,7 @@ export function CitationDrawer({ item, citation, projectName, groupTitle, onClos
           <Disclosure summary="高级设置">
             <div className="flex flex-col gap-5 pt-2">
               {timeoutField && (
-                <form className="flex flex-col gap-2" noValidate onSubmit={event => { event.preventDefault(); if (!invalid && dirty) void save({ timeoutMs: value * 1000 }); }}>
+                <form className="flex flex-col gap-2" noValidate onSubmit={event => { event.preventDefault(); if (!invalid && dirty) void save({ timeoutMs: value * 1000 }).then(success => { if (success) setEdit(null); }); }}>
                   <Input label="请求超时（秒）" type="number" min={min} max={max} step={1} value={seconds} disabled={busy} error={dirty && invalid ? `请输入 ${min}–${max} 之间的整数。` : undefined} onChange={event => setEdit(event.target.value)} />
                   <div><Button type="submit" size="sm" variant="secondary" loading={busy} disabled={!dirty || invalid}>保存</Button></div>
                 </form>

@@ -25,7 +25,7 @@ export function ProducerDialog({ geoId, initial, onSaved, onCancel }: { geoId: s
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const submit = (event: FormEvent) => {
+  const submit = (event: FormEvent, markSaved: () => void) => {
     event.preventDefault();
     if (saving) return;
     if (kind === "doctor" && !name.trim()) { setError("请填医生的姓名。"); return; }
@@ -41,13 +41,13 @@ export function ProducerDialog({ geoId, initial, onSaved, onCancel }: { geoId: s
       } : {}),
     };
     void patchGeoProject(geoId, { producer })
-      .then(() => onSaved())
+      .then(() => { markSaved(); onSaved(); })
       .catch((caught: unknown) => { setSaving(false); setError(webErrorMessage(caught, { fallback: "出品方无法保存，请稍后重试。" })); });
   };
 
   return (
-    <FormDialog title="出品方" onClose={onCancel} busy={saving}>
-      <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
+    <FormDialog title="出品方" onClose={onCancel} busy={saving} dirty={kind !== (initial?.kind ?? "enterprise") || name !== (initial?.name ?? "") || hospital !== (initial?.hospital ?? "") || department !== (initial?.department ?? "") || specialty !== (initial?.specialty ?? "")}>
+      {(requestClose, markSaved) => <form className="flex flex-col gap-4" onSubmit={event => submit(event, markSaved)} noValidate><fieldset disabled={saving} className="contents">
         <FilterChips<"enterprise" | "doctor"> label="出品方类型" options={KIND_OPTIONS} value={kind} onChange={(next) => { if (next) setKind(next); }} />
         <Input label={kind === "doctor" ? "医生姓名" : "企业名称（可留空，用说明书上的持证商）"} autoComplete="off" value={name} onChange={(event) => setName(event.target.value)} />
         {kind === "doctor" && (
@@ -59,10 +59,10 @@ export function ProducerDialog({ geoId, initial, onSaved, onCancel }: { geoId: s
         )}
         {error && <p role="alert" className="text-ui text-danger">{error}</p>}
         <div className="mt-2 flex justify-end gap-2">
-          <Button variant="secondary" onClick={onCancel}>取消</Button>
+          <Button variant="secondary" onClick={requestClose}>取消</Button>
           <Button type="submit" loading={saving}>保存</Button>
         </div>
-      </form>
+      </fieldset></form>}
     </FormDialog>
   );
 }

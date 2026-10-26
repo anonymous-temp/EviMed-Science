@@ -668,7 +668,7 @@ async function readData(context, base, pathname, failures) {
 
 /** A calculation's historical list has answered; a visible failure is terminal, never an empty-history success. */
 export function calculationHistoryReady() {
-  return [...document.querySelectorAll("main ul[aria-label='此计算空间的历史'] > li, main [role='alert']")].some((el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0);
+  return [...document.querySelectorAll("main ul[aria-label='此计算空间的历史'] > li, main [role='alert'], main [data-inline-alert='error']")].some((el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0);
 }
 
 /** Find a genuine calculation with frozen, readable history. Programme studies and unreadable results cannot stand in for it. */
@@ -970,8 +970,18 @@ export function pageFindings(name, viewportName, measured, httpErrors) {
   if (viewportName === "phone" && measured.overflowX) failures.push(`${current}: the page overflows horizontally at 390 px`);
   if (viewportName === "desktop") {
     const budget = { ...BUDGET, ...(BUDGET_BY_PAGE[key] ?? {}) };
-    if (measured.controlKinds > budget.controls) budgetFindings.push(`${current}: ${measured.controlKinds} kinds of control (budget ${budget.controls})`);
-    if (measured.colorKinds > budget.colors) budgetFindings.push(`${current}: ${measured.colorKinds} text colours (budget ${budget.colors})`);
+    const selection = measured.selectionControls;
+    const selectionAllowance = key === "inbox" && selection?.valid === true && selection.present === true
+      && selection.checkboxKinds.length === 1 && selection.primaryKinds.length === 1 && selection.exclusiveKinds.length <= 2
+      && selection.exclusiveKinds.every(kind => [...selection.checkboxKinds, ...selection.primaryKinds].includes(kind))
+      ? new Set(selection.exclusiveKinds).size : 0;
+    if (key === "inbox" && selection?.present && !selection.valid) failures.push(`${current}: the selection controls have no unique named toolbar, consistent scope, native checkbox kind or unique primary`);
+    if (measured.controlKinds - selectionAllowance > budget.controls) budgetFindings.push(`${current}: ${measured.controlKinds} kinds of control${selectionAllowance ? ` (${selectionAllowance} exclusive selection kinds)` : ""} (budget ${budget.controls})`);
+    const runningPalette = measured.workflowPalette;
+    const vcrRunningPalette = templateOf(name).view?.workflow === "objects" && measured.colorKinds === 8
+      && runningPalette?.runningInformation === true && runningPalette.palette.length === 8
+      && runningPalette.colors.length === 8 && runningPalette.colors.every(color => runningPalette.palette.includes(color));
+    if (measured.colorKinds > budget.colors && !vcrRunningPalette) budgetFindings.push(`${current}: ${measured.colorKinds} text colours (budget ${budget.colors})`);
     if (measured.borderKinds > budget.borders) budgetFindings.push(`${current}: ${measured.borderKinds} kinds of border (budget ${budget.borders})`);
     if (measured.pageLefts.length > 1) budgetFindings.push(`${current}: the page's blocks start on ${measured.pageLefts.length} left edges (${measured.pageLefts.join(", ")})`);
     for (const lefts of measured.rowTitleLefts) {
@@ -986,7 +996,11 @@ export function pageFindings(name, viewportName, measured, httpErrors) {
     // Four pairs a page; a data page (the `data` and `geo` budgets: metric figures, two levels of heading) five — the owner's ruling
     // of 2026-10-19, DESIGN.md §「The nine sizes」.
     const typeBudget = /** @type {any} */ (budget).typePairs ?? TYPE_PAIR_NOTICE;
-    if (pairs.length > typeBudget) notices.push(finding("type-pairs", current, `${current}: ${pairs.length} font-size × weight pairs (rule ${typeBudget}): ${pairs.join(", ")}`, pairs.length));
+    const answerPairs = ["12px/400", "14px/400", "14px/600", "16px/400", "18px/600", "24px/600"];
+    const reading = measured.answerReading;
+    const geoAnswerReading = key === "geo-answer" && reading?.surface === true && reading.originalNodes > 0 && reading.misplacedBodyNodes === 0
+      && pairs.length === answerPairs.length && new Set(pairs).size === answerPairs.length && pairs.every(pair => answerPairs.includes(pair));
+    if (pairs.length > typeBudget && !geoAnswerReading) notices.push(finding("type-pairs", current, `${current}: ${pairs.length} font-size × weight pairs (rule ${typeBudget}): ${pairs.join(", ")}`, pairs.length));
   }
   failures.push(...budgetFindings);
   return { failures, notices };
@@ -1059,7 +1073,7 @@ export function assertWalkAuthenticated(url) {
 /** A visible failed read is not a successfully loaded module without its chrome. */
 export function routeLoadProbe() {
   const visible = (el) => { const box = el.getBoundingClientRect(); const style = getComputedStyle(el); return box.width > 0 && box.height > 0 && style.visibility !== "hidden" && style.display !== "none"; };
-  const alerts = [...document.querySelectorAll("main [role='alert']")].filter(visible);
+  const alerts = [...document.querySelectorAll("main [role='alert'], main [data-inline-alert='error']")].filter(visible);
   const failed = alerts.find((el) => [...el.querySelectorAll("button")].some((button) => visible(button) && button.textContent?.trim() === "重试"));
   return { failed: Boolean(failed), message: failed?.textContent?.replace(/\s+/g, " ").trim().slice(0, 160) ?? null };
 }
@@ -1507,7 +1521,10 @@ export function measureComposition([options] = [{}]) {
         primaries: workbench.querySelectorAll(".bg-accent").length, position: getComputedStyle(bar).position, initialReachable, room, held,
         beforeContent: workbench.querySelectorAll("[data-vcr-method-configuration]").length === 1 && workbench.querySelectorAll("[data-vcr-method-results]").length === 1 && targets.every((target) => target && !bar.contains(target) && Boolean(bar.compareDocumentPosition(target) & Node.DOCUMENT_POSITION_FOLLOWING)) };
     }
-    return { text: nameOf(el), ...at, run, markedRun: Boolean(bar), inHeader: el.closest("[data-page-header]") !== null || at.top <= titleBottom + 8, excused: el.closest("[data-empty], [data-step-state], [data-state-screen], form") !== null };
+    const group = el.closest("form, [data-action-group='selection']");
+    const localGroup = group ? { kind: group.tagName.toLowerCase() === "form" ? "form" : "selection", primaries: [...group.querySelectorAll("button.bg-accent, a.bg-accent, [role='button'].bg-accent")].filter(visible).length,
+      declared: group.tagName.toLowerCase() === "form" || (group.getAttribute("role") === "toolbar" && Boolean(group.getAttribute("aria-label") || group.getAttribute("aria-labelledby"))) } : null;
+    return { text: nameOf(el), ...at, localGroup, run, markedRun: Boolean(bar), inHeader: el.closest("[data-page-header]") !== null || at.top <= titleBottom + 8, excused: el.closest("[data-empty], [data-step-state], [data-state-screen], form") !== null };
   });
 
   // A tab or a chip that counts nothing (a trailing number that is 0) is a switch to an empty place.
@@ -1545,6 +1562,12 @@ export function measureComposition([options] = [{}]) {
   const read = {
     viewport: { width: window.innerWidth, height: window.innerHeight }, height, title, chrome, stepRail,
     workbenchActions: { workbenches: live("[data-vcr-method-workbench]").length, bars: live("[data-vcr-method-workbench] [data-vcr-run-actions]").length },
+    geoContext: (() => {
+      const header = live("[data-page-header] button");
+      const current = live("[data-page-chrome] [data-rail-step]").filter(el => el.querySelector("[aria-current='step']"));
+      const step = current.length === 1 ? current[0].getAttribute("data-rail-step") : null;
+      return { adopted: header.some(el => nameOf(el) === "项目总览"), step, requestedStep: new URL(location.href).searchParams.get("step"), selectors: live("[data-page-chrome] button[aria-label]").filter(el => /^分析视图：/.test(el.getAttribute("aria-label") ?? "")).length };
+    })(),
     viewSelector: (() => {
       const choices = live("[data-page-chrome] button[aria-label]").filter((el) => /^查看：/.test(el.getAttribute("aria-label") ?? ""));
       return { count: choices.length, top: choices[0] ? box(choices[0]).top : null };
@@ -1584,7 +1607,8 @@ export function moduleReady() {
   const main = document.querySelector("main");
   const visible = (el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0;
   const body = main?.querySelector("[data-page-body]");
-  return Boolean(body) && ![...body.querySelectorAll(".animate-pulse:not([data-forced-colors='preserve']), [aria-busy='true'], [role='status']")].some((el) => visible(el) && (el.getAttribute("role") !== "status" || el.textContent?.trim() === "正在载入"));
+  const content = body && Boolean(body.textContent?.trim() || [...body.querySelectorAll("canvas, svg, img, iframe, video, [data-study-pane='conversation'], [data-frame-skeleton]")].some(visible));
+  return Boolean(content) && ![...body.querySelectorAll(".animate-pulse:not([data-forced-colors='preserve']), [aria-busy='true'], [role='status']")].some((el) => visible(el) && (el.getAttribute("role") !== "status" || el.textContent?.trim() === "正在载入"));
 }
 
 /** Read the selected result, not its toolbar or the native conversation surface. A retry panel alone is a failed read;
@@ -1596,13 +1620,13 @@ export function moduleResultProbe() {
   if (!body) return { status: "unobservable", coverage: false, errors: [], warnings: [], empty: [] };
   const native = document.querySelector("[data-page-chrome] button[aria-label='查看：对话']") ?? body.querySelector("[data-study-pane='conversation'], [data-frame-skeleton], iframe[title='对话']");
   if (native && visible(native)) return { status: "conversation", coverage: false, boundary: "native conversation inspected separately; no runtime started", errors: [], warnings: [], empty: [] };
-  const alerts = [...body.querySelectorAll("[role='alert']")].filter(visible);
+  const alerts = [...body.querySelectorAll("[role='alert'], [data-inline-alert='error'], [data-inline-alert='warning']")].filter(visible);
   const retry = alerts.filter((alert) => [...alert.querySelectorAll("button, a")].some((control) => /^(?:重试|重新载入|重新加载)$/u.test(control.textContent?.trim() ?? "")));
   const warnings = alerts.filter((alert) => !retry.includes(alert)).map((alert) => alert.textContent?.trim().slice(0, 180));
   const empty = [...body.querySelectorAll("[data-empty]")].filter(visible).map((el) => el.textContent?.trim().slice(0, 120));
   const wholeFailure = [...body.querySelectorAll("[data-state-screen][role='alert']")].some(visible);
   const retained = [...body.querySelectorAll("table tr:has(td), ul li, ol li, dl dd, [data-stat-band], [data-chart], canvas, [data-prose], article")]
-    .filter((el) => visible(el) && !el.closest("[role='alert'], [data-empty], [data-step-state], [data-state-screen], [data-study-pane]"));
+    .filter((el) => visible(el) && !el.closest("[role='alert'], [data-inline-alert], [data-empty], [data-step-state], [data-state-screen], [data-study-pane]"));
   const errors = retry.map((alert) => alert.textContent?.trim().slice(0, 180));
   const status = wholeFailure || (retry.length > 0 && retained.length === 0) ? "error"
     : retained.length > 0 ? (alerts.length > 0 ? "partial" : "content") : empty.length > 0 ? "empty" : "unobservable";
@@ -1613,7 +1637,15 @@ export function moduleResultProbe() {
 export async function readModuleResult(page, target) {
   await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  const result = await page.evaluate(moduleResultProbe);
+  let result = await page.evaluate(moduleResultProbe);
+  if (result.status === "unobservable") {
+    // PendingFeedback mounts its loading children after a 300ms quiet phase.
+    // A tab may already show aside controls during that phase; those are not its result.
+    await page.waitForTimeout(300);
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+    result = await page.evaluate(moduleResultProbe);
+  }
   if (result.status === "error") throw new Error(`${target}: selected result could not be read: ${result.errors.join("; ") || "terminal page failure"}`);
   return result;
 }
@@ -1661,6 +1693,11 @@ export function moduleViewAddressHolds(module, label, initial, before, after, { 
   return to.searchParams.get("view") === (key === previous ? from.searchParams.get("view") : null);
 }
 
+/** The adopted GEO workflow exposes only the analysis siblings of its selected step. */
+export function geoContextViewLabels(step) {
+  return ({ diagnosis: ["可见度", "准确与安全"], sources: ["信源", "方案"], monitoring: ["趋势", "执行记录"] })[step] ?? [];
+}
+
 /**
  * Exercise the visible rail and pinned result selector; navigation only, never a workflow Start action. `views: false` is a module whose
  * steps are its navigation (循证 GEO's `rail`, page table): every step is clicked and read, and there is no selector to go through.
@@ -1699,9 +1736,44 @@ export async function verifyModuleNavigation(page, module, { programme = true, c
     recordCoverage(`step ${id}`, result);
     destinations.push({ id, state, address: actual.pathname + actual.search + actual.hash, result });
   }
+  if (module === "geo" && await page.locator("[data-page-header]").getByRole("button", { name: "项目总览", exact: true }).count() === 1) {
+    const views = [];
+    for (const entry of destinations) {
+      await page.goto(new URL(entry.address, initial).href, { waitUntil: "domcontentloaded" });
+      await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+      const expectedLabels = geoContextViewLabels(entry.id);
+      const selector = page.locator("[data-page-chrome]").getByRole("button", { name: /^分析视图：/ });
+      if (await selector.count() !== (expectedLabels.length ? 1 : 0)) throw new Error(`GEO step ${entry.id}: contextual analysis selector does not match its workflow`);
+      for (const label of expectedLabels) {
+        await selector.click();
+        const choices = page.getByRole("menuitemradio");
+        const shown = (await choices.allTextContents()).map(text => text.trim());
+        if (shown.length !== expectedLabels.length || expectedLabels.some(choice => !shown.includes(choice))) throw new Error(`GEO step ${entry.id}: unexpected contextual destinations: ${shown.join(", ")}`);
+        const before = page.url();
+        await choices.filter({ hasText: new RegExp(`^${label}$`, "u") }).click();
+        await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+        const canonicalLabel = label === "趋势" ? "可见度" : label === "执行记录" ? "行动" : label;
+        if (!moduleViewAddressHolds(module, canonicalLabel, initial, before, page.url(), { programme })) throw new Error(`GEO step ${entry.id}: ${label} did not reach its canonical destination`);
+        const result = await readModuleResult(page, `geo step ${entry.id} view ${label}`);
+        recordCoverage(`step ${entry.id} view ${label}`, result);
+        views.push({ label, step: entry.id, address: new URL(page.url()).pathname + new URL(page.url()).search, result });
+      }
+    }
+    const header = page.locator("[data-page-header]");
+    await header.getByRole("button", { name: "项目总览", exact: true }).click();
+    await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+    if (!/^\/app\/geo\/[^/]+\/?$/u.test(new URL(page.url()).pathname)) throw new Error("GEO header overview did not reach the project overview");
+    await header.getByRole("button", { name: "对话", exact: true }).click();
+    await page.waitForFunction(() => /\/chat(?:\/|$)/u.test(location.pathname), undefined, { timeout: 15_000 });
+    await page.goto(initial, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+    return { destinations, views, notices };
+  }
   const labels = selector ? moduleViewLabels(module, programme, canonical) : [];
   const views = [];
-  for (const label of labels) {
+  // Read the ordinary results before the native conversation, whose runtime is inspected separately.
+  const navigationLabels = [...labels.filter(label => label !== "对话"), ...labels.filter(label => label === "对话")];
+  for (const label of navigationLabels) {
     const selector = page.locator("[data-page-chrome]").getByRole("button", { name: /^查看：/ });
     if (await selector.count() !== 1) throw new Error("the module has no unique pinned result selector");
     await selector.click();
@@ -1715,7 +1787,10 @@ export async function verifyModuleNavigation(page, module, { programme = true, c
     // Result effects publish contextual toolbar controls after the body commits. Let those effects settle before opening its menu.
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     if (!moduleViewAddressHolds(module, label, initial, before, page.url(), { programme })) throw new Error(`${module} view ${label}: selector label changed without reaching its canonical destination (${new URL(page.url()).pathname + new URL(page.url()).search})`);
-    if (programme && await rail.locator("[data-rail-step]").count() !== expected) throw new Error(`the rail disappeared in ${label}`);
+    if (programme) {
+      const retainedIds = await rail.locator("[data-rail-step]").evaluateAll(items => items.map(item => item.getAttribute("data-rail-step")));
+      if (retainedIds.length !== ids.length || ids.some(id => !retainedIds.includes(id))) throw new Error(`the rail changed in ${label}`);
+    }
     const result = await readModuleResult(page, `${module} view ${label}`);
     recordCoverage(`view ${label}`, result);
     views.push({ label, address: new URL(page.url()).pathname + new URL(page.url()).search, result });
@@ -1833,10 +1908,13 @@ export function compositionFindings(name, viewportName, c) {
   }
   for (const primary of c.primaries) {
     const run = primary.run;
+    const local = primary.localGroup;
+    const localAction = local?.declared && local.primaries === 1;
+    if (local && (!local.declared || local.primaries !== 1)) add("primary-action", `the ${local.kind} action group containing “${primary.text}” must be named and contain exactly one primary action`, local.primaries);
     const workbenchRun = view?.primaryPlacement === "method-workbench" && run && run.named && run.height >= 44 && run.bars === 1 && run.primaries === 1
       && run.beforeContent && run.position === "sticky" && run.initialReachable
       && (run.room <= 0 || (run.held && run.held.scrolled >= Math.min(100, run.room) && run.held.reachable && Math.abs(run.held.after - run.held.expected) <= BAND_TOLERANCE_PX));
-    if (primary.markedRun && view?.primaryPlacement === "method-workbench" ? !workbenchRun : !primary.inHeader && !primary.excused) add("primary-action", `the primary action “${primary.text}” is at ${primary.top} px, below the header's row`, primary.top);
+    if (primary.markedRun && view?.primaryPlacement === "method-workbench" ? !workbenchRun : !primary.inHeader && !primary.excused && !localAction) add("primary-action", `the primary action “${primary.text}” is at ${primary.top} px, below the header's row`, primary.top);
   }
   for (const zero of c.zeroCounts) add("zero-count", `the ${zero.role} “${zero.text}” counts 0: a switch to an empty place is hidden or disabled`);
 
@@ -2242,7 +2320,7 @@ export function pageProbe([kind, arg]) {
   }
   if (kind === "dailyEmpty") {
     // What the daily view says for a day that has no issue: an empty state (a title and a description) or an error (a alert with 重试).
-    const alert = all("[role='alert']").find(visible);
+    const alert = all("[role='alert'], [data-inline-alert='error'], [data-inline-alert='warning']").find(visible);
     const lines = all("p, div").filter((el) => visible(el) && el.children.length === 0).map(words).filter(Boolean);
     const title = lines.find((text) => /没有日报|日报.{0,24}发布|暂无日报|尚未发布/.test(text)) ?? null;
     return {
@@ -2368,6 +2446,27 @@ export function memoryMapHeadlineFindings(current, read) {
   const amber = drawn.filter((mark) => mark.warn).length;
   if (amber !== looks) failures.push(`${current}: the headline says ${looks} need a look and the list marks ${amber}`);
   return { failures, notices };
+}
+
+/** Read the complete visible mark list by its own paging controls, retaining the initial paged state as evidence. */
+export async function readMemoryMapHeadline(page) {
+  let expanded = 0;
+  const before = await page.evaluate(pageProbe, ["memoryMap"]);
+  try {
+    while (expanded < 100 && await page.locator("[data-show-more]:visible").count()) {
+      const rows = await page.locator("main ul[aria-label='标记'] > li").count();
+      await page.locator("[data-show-more]:visible").first().click();
+      expanded += 1;
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+      if (await page.locator("main ul[aria-label='标记'] > li").count() <= rows) throw new Error("memory map paging did not reveal additional marks");
+    }
+    return { ...await page.evaluate(pageProbe, ["memoryMap"]), initialMore: before.more, expanded };
+  } finally {
+    if (expanded) {
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await waitMemory(page, true, { selected: "地图" });
+    }
+  }
 }
 
 /** The parts of the overview, in the order its cards stand. */
@@ -2917,7 +3016,7 @@ export function skillDrawerFindings(opened, refused, writes) {
 export function cleanupProbe() {
   const words = (el) => (el.textContent ?? "").replace(/\s+/g, " ").trim();
   const cover = document.querySelector("[data-frame-skeleton]");
-  const alert = [...document.querySelectorAll("[role='alert']")].find((el) => el.getBoundingClientRect().width > 0);
+  const alert = [...document.querySelectorAll("[role='alert'], [data-inline-alert='error'], [data-inline-alert='warning']")].find((el) => el.getBoundingClientRect().width > 0);
   // The conversation frame on screen with no cover: the project's runtime was already up, and a refused start is then rightly
   // ignored, so the cover cannot be exercised here (release-11 walk, the owner's runtime running).
   const frame = [...document.querySelectorAll("iframe")].find((el) => { const box = el.getBoundingClientRect(); return box.width > 200 && box.height > 200; });
@@ -3102,6 +3201,17 @@ export function measure([leakSources, backOfficeSources, retiredSources = [], op
   }
   const texty = all.filter((el) => [...el.childNodes].some((node) => node.nodeType === 3 && node.textContent.trim()));
   const colors = texty.map((el) => getComputedStyle(el).color);
+  const roleProbe = document.createElement("span");
+  roleProbe.style.display = "none";
+  document.body.append(roleProbe);
+  const palette = ["--text", "--text-2", "--text-3", "--accent-fg", "--accent", "--warn-strong", "--ok", "--info"].map(role => {
+    roleProbe.style.color = `var(${role})`;
+    return getComputedStyle(roleProbe).color;
+  });
+  roleProbe.remove();
+  const information = texty.filter(el => getComputedStyle(el).color === palette[7]);
+  const workflowPalette = { colors: [...new Set(colors)], palette: [...new Set(palette)],
+    runningInformation: information.length > 0 && information.every(el => Boolean(el.closest("[data-activity='strip'][data-activity-state='running']"))) };
   // Type pairs are counted in the page body, not the sidebar: the rule is
   // about what a page sets, and the chrome is the same on every page.
   const typeScope = document.querySelector("main") ?? document.body;
@@ -3109,6 +3219,13 @@ export function measure([leakSources, backOfficeSources, retiredSources = [], op
     const cs = getComputedStyle(el);
     return `${cs.fontSize}/${cs.fontWeight}`;
   }))].sort();
+  // DS04/DS19: this registered answer reader keeps its original response readable at 16px;
+  // compact facts and correction controls retain their own roles on the same surface.
+  const answerText = texty.filter(el => typeScope.contains(el) && getComputedStyle(el).fontSize === "16px" && getComputedStyle(el).fontWeight === "400");
+  const originalAnswerNode = el => Boolean(el.closest("[data-geo-answer] [data-prose] p[data-geo-answer-prose='original']"))
+    && !el.closest("button, a, input, select, summary, [role='button'], [role='tab']");
+  const answerReading = { surface: Boolean(document.querySelector("main [data-geo-answer]")),
+    originalNodes: answerText.filter(originalAnswerNode).length, misplacedBodyNodes: answerText.filter(el => !originalAnswerNode(el)).length };
   // A control's height, the first part of its look. A text control's height
   // is its number of lines, and a headline that wraps is the same control as
   // one that does not: an inline link by its display, and a text-only control
@@ -3143,6 +3260,7 @@ export function measure([leakSources, backOfficeSources, retiredSources = [], op
     return `${Math.round(r.height)}h`;
   };
   const looks = new Map();
+  const controlElements = all.filter(el => el.matches("button, a, [role='button'], [role='tab'], select, input, summary"));
   const controlLooks = all.filter((el) => el.matches("button, a, [role='button'], [role='tab'], select, input, summary")).map((el) => {
     const cs = getComputedStyle(el);
     const r = el.getBoundingClientRect();
@@ -3159,6 +3277,35 @@ export function measure([leakSources, backOfficeSources, retiredSources = [], op
     }
     return look;
   });
+  // A selection surface owns only its native checkbox kind and its unique primary.
+  // A style reused elsewhere on the page is still part of the ordinary inventory.
+  const selectionBars = all.filter(el => el.matches("[data-action-group='selection']"));
+  const owned = controlElements.filter(el => el.getAttribute("data-selection-for") !== null);
+  const selectionControls = { present: selectionBars.length > 0 || owned.length > 0, valid: false, checkboxKinds: [], primaryKinds: [], exclusiveKinds: [] };
+  if (selectionBars.length === 1) {
+    const bar = selectionBars[0], id = bar.id, scope = bar.getAttribute("data-selection-scope");
+    const primary = controlElements.filter(el => bar.contains(el) && el.classList.contains("bg-accent"));
+    const boxes = owned.filter(el => el.matches("input[type='checkbox']"));
+    const local = new Set([...boxes, ...primary]);
+    const checkboxKinds = [...new Set(boxes.map(el => controlLooks[controlElements.indexOf(el)]))];
+    const primaryKinds = [...new Set(primary.map(el => controlLooks[controlElements.indexOf(el)]))];
+    const named = (bar.getAttribute("aria-label") || (bar.getAttribute("aria-labelledby") ?? "").split(/\s+/u).map(reference => document.getElementById(reference)?.textContent ?? "").join(" ")).trim();
+    const valid = Boolean(id && scope && bar.closest("main") && bar.getAttribute("role") === "toolbar" && named
+      && document.querySelectorAll(`[id="${CSS.escape(id)}"]`).length === 1 && primary.length === 1 && boxes.length > 0
+      && owned.length === boxes.length && checkboxKinds.length === 1 && primaryKinds.length === 1
+      && boxes.some(el => bar.contains(el)) && boxes.every(el => el.getAttribute("data-selection-for") === id && el.getAttribute("data-selection-scope") === scope && el.closest("main") === bar.closest("main"))
+      && controlElements.filter(el => bar.contains(el) && !local.has(el)).every(el => {
+        const look = controlLooks[controlElements.indexOf(el)];
+        return el.matches("button:not(.bg-accent)") && Boolean((el.getAttribute("aria-label") || el.textContent || "").trim())
+          && controlElements.some((other, index) => !bar.contains(other) && controlLooks[index] === look);
+      }));
+    const kinds = new Set([...checkboxKinds, ...primaryKinds]);
+    selectionControls.valid = valid;
+    selectionControls.checkboxKinds = checkboxKinds;
+    selectionControls.primaryKinds = primaryKinds;
+    selectionControls.exclusiveKinds = valid ? [...kinds].filter(kind => controlElements.every((el, index) => controlLooks[index] !== kind || local.has(el))) : [];
+  }
+
 
   // One left edge: the title, what stands over it (the way back, 「‹ 虚拟临床研究」)
   // and the page body's top-level blocks, and within a list every row's title.
@@ -3226,10 +3373,13 @@ export function measure([leakSources, backOfficeSources, retiredSources = [], op
   return {
     title: document.title,
     controlKinds: kinds(controlLooks),
+    selectionControls,
     controlLooks: Object.fromEntries(looks),
     colorKinds: kinds(colors),
+    workflowPalette,
     borderKinds: kinds(borders),
     sizeWeightPairs,
+    answerReading,
     pageLefts,
     rowTitleLefts,
     subtitle: header ? [...header.querySelectorAll("p")].filter(visible).map((el) => el.textContent.trim().slice(0, 60)) : [],
@@ -3250,9 +3400,13 @@ export function measure([leakSources, backOfficeSources, retiredSources = [], op
 export function routeReady() {
   const routeMain = document.querySelector("main");
   if (!routeMain || routeMain.getBoundingClientRect().width === 0) return false;
-  return ![...routeMain.querySelectorAll('[role="status"]')].some((node) => {
+  const body = routeMain.querySelector("[data-page-body]");
+  const content = body && Boolean(body.textContent?.trim() || [...body.querySelectorAll("canvas, svg, img, iframe, video, [data-study-pane='conversation'], [data-frame-skeleton]")].some(el => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0));
+  if (body && !content) return false;
+  if (/^\/app\/(?:geo|virtual-research)\/[^/]+(?:\/|$)/u.test(location.pathname) && !routeMain.querySelector("[data-page-chrome], [data-state-screen], [role='alert']")) return false;
+  return ![...routeMain.querySelectorAll('[role="status"], .animate-pulse:not([data-forced-colors="preserve"]), [data-geo-tab-loading], [data-vcr-loading]')].some((node) => {
     const rect = node.getBoundingClientRect();
-    return node.textContent?.trim() === "正在载入" && rect.width > 0 && rect.height > 0
+    return (node.getAttribute("role") !== "status" || node.textContent?.trim() === "正在载入") && rect.width > 0 && rect.height > 0
       && getComputedStyle(node).visibility !== "hidden";
   });
 }
@@ -4007,7 +4161,7 @@ async function main() {
               notices.push(`${current}: no data source without a key is unset, so the 可选 rows were not read`);
               continue;
             }
-            const read = await page.evaluate(pageProbe, [kind, arg]);
+            const read = kind === "memoryMap" ? await readMemoryMapHeadline(page) : await page.evaluate(pageProbe, [kind, arg]);
             (report.pages[current].probes ||= {})[kind] = read;
             const judged = probeFindings(name, viewportName, kind, read);
             failures.push(...judged.failures);
@@ -4532,7 +4686,7 @@ export function memoryReady(wanted) {
   if (!selected || (wanted.selected && !selected.textContent?.trim().startsWith(wanted.selected))) return false;
   const box = [...main.querySelectorAll("input")].find((el) => el.getAttribute("aria-label") === (wanted.map ? "搜索记忆地图" : "搜索记忆") && visible(el));
   if (!box || (wanted.query !== undefined && box.value !== wanted.query)) return false;
-  if ([...main.querySelectorAll("[role='alert']")].some(visible)) return true;
+  if ([...main.querySelectorAll("[role='alert'], [data-inline-alert='error'], [data-inline-alert='warning']")].some(visible)) return true;
   if ([...main.querySelectorAll(".animate-pulse, [aria-busy='true']")].some(visible)) return false;
   return Boolean(main.querySelector("[data-page-body]"));
 }
@@ -4540,7 +4694,7 @@ export function memoryReady(wanted) {
 /** Wait for memory data as well as its controls; fail an unreadable page instead of calling it empty. */
 export async function waitMemory(page, map, state = {}) {
   await page.waitForFunction(memoryReady, { map, ...state }, { timeout: 30_000 });
-  const errors = await page.locator("main [role='alert']").allTextContents();
+  const errors = await page.locator("main [role='alert'], main [data-inline-alert='error']").allTextContents();
   if (errors.length) throw new Error(`memory data could not be read: ${errors.join("; ").slice(0, 180)}`);
 }
 

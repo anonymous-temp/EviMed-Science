@@ -148,6 +148,10 @@ export function evimedDictionaries() {
     // ledger — is what this product calls the run (the view ring reads 对话 ·
     // 运行 since 2026-09-22; the product's own 运行 tab it replaced drew a
     // summary of the same run in fewer words).
+    command: {
+      'section.add': '添加内容',
+      'section.commands': '高级命令与诊断',
+    },
     trajectory: {
       'view.trajectory': '运行',
     },

@@ -1,4 +1,6 @@
-import { useId, useRef, useState } from "react";
+import { useUnsavedGuard } from "@/lib/useUnsavedGuard";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
 import { Switch } from "@/components/ui/Switch";
@@ -19,14 +21,17 @@ const INSTRUCTIONS_EXAMPLE = "适用情况：…\n需要的输入：…\n步骤�
  * so. Editing keeps the same captions and none of that. A name, purpose or text that is empty or only spaces is named in place and
  * sends nothing: the server would refuse it with a toast that names no field.
  */
-export function SkillEditor({ initial, busy, onSave, onCancel, create }: {
-  initial: SkillWrite; busy: boolean;
+export function SkillEditor({ initial, busy, onSave, onCancel, create, onDirtyChange }: {
+  initial: SkillWrite; busy: boolean; onDirtyChange?: (dirty: boolean) => void;
   /** `useInProject` is the create form's switch; an edit never turns it on. */
   onSave: (value: SkillWrite, useInProject: boolean) => void; onCancel: () => void;
   create?: { projectName: string };
 }) {
   const [value, setValue] = useState(initial);
   const [useInProject, setUseInProject] = useState(true);
+  const dirty = JSON.stringify(value) !== JSON.stringify(initial) || (!!create && !useInProject);
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
+  const closeGuard = useUnsavedGuard(dirty, onCancel, busy);
   const [errors, setErrors] = useState<{ title?: string; description?: string; instructions?: string }>({});
   const titleField = useRef<HTMLInputElement>(null), instructionsField = useRef<HTMLTextAreaElement>(null), purposeField = useRef<HTMLTextAreaElement>(null);
   const base = useId();
@@ -52,7 +57,7 @@ export function SkillEditor({ initial, busy, onSave, onCancel, create }: {
     if (next.instructions !== undefined && errors.instructions) setErrors({ ...errors, instructions: undefined });
   };
 
-  return <form className="flex flex-col gap-4" noValidate onSubmit={event => { event.preventDefault(); if (!busy) submit(); }}>
+  return <><form className="flex flex-col gap-4" noValidate onSubmit={event => { event.preventDefault(); if (!busy) submit(); }}>
     <Input ref={titleField} label="名称" value={value.title} maxLength={80} aria-required="true" disabled={busy}
       placeholder={create ? TITLE_EXAMPLE : undefined} error={errors.title} onChange={event => change({ title: event.target.value })} />
     <div>
@@ -67,6 +72,6 @@ export function SkillEditor({ initial, busy, onSave, onCancel, create }: {
       <p id={instructionsHint} className="mt-2 text-caption text-text-3">{INSTRUCTIONS_HINT}</p>
     </div>
     {create && <div className="rounded-card bg-surface-1 p-4"><Switch showLabel label={`保存后在“${create.projectName}”里使用`} checked={useInProject} disabled={busy} onChange={setUseInProject} /></div>}
-    <div className="flex gap-2"><Button type="submit" loading={busy}>保存</Button><Button type="button" variant="text" disabled={busy} onClick={onCancel}>取消</Button></div>
-  </form>;
+    <div className="flex gap-2"><Button type="submit" loading={busy}>保存</Button><Button type="button" variant="text" disabled={busy} onClick={closeGuard.requestClose}>取消</Button></div>
+  </form>{closeGuard.confirming && <ConfirmDialog title="放弃未保存的修改？" confirmLabel="放弃修改" onConfirm={closeGuard.discard} onCancel={closeGuard.keepEditing} />}</>;
 }

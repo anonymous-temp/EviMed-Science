@@ -110,7 +110,8 @@ it("loads older installation records once using the server cursor, and lists the
   show();
   const more = await screen.findByRole("button", { name: "更早的记录" });
   fireEvent.click(more); fireEvent.click(more);
-  expect(extensions.extensionHistory).toHaveBeenCalledTimes(2); expect(more).toBeDisabled();
+  expect(extensions.extensionHistory).toHaveBeenCalledTimes(2); expect(more).toHaveAttribute("aria-disabled", "true");
+  expect(more).not.toBeDisabled();
   expect(extensions.extensionHistory).toHaveBeenLastCalledWith(installed.id, 3);
   await act(async () => oldPage.resolve({ items: [{ revision: 2, coordinate: nextCoordinate, removed: false, recordedAt: "2026-10-05T08:30:00.000Z" }], nextBeforeRevision: null }));
   expect(screen.getAllByText(/ · 版本 /)).toHaveLength(2);

@@ -1,3 +1,5 @@
+import { sessionGeneration, subscribeSessionBoundary } from "./sessionLifecycle";
+import { announce } from "./announce";
 import { create } from "zustand";
 import { TOAST_DURATIONS } from "@evimed/design-tokens";
 
@@ -8,13 +10,22 @@ export interface ToastAction {
 }
 
 export interface ToastOptions {
+  /** Capture before asynchronous work; a former account cannot publish into a new session. */
+  sessionGeneration?: number;
   action?: ToastAction;
+  eventId?: string;
+  entityId?: string;
+  /** Repeat aggregation applies only to explicit event+entity identities without actions. */
+  dedupMs?: number;
 }
 
 export interface Toast {
   id: number;
   tone: "success" | "error";
   message: string;
+  occurrences: number;
+  lastOccurredAt: number;
+  eventKey?: string;
   action?: ToastAction;
 }
 
@@ -65,10 +76,24 @@ export const useToastStore = create<ToastState>((set, get) => {
   return {
     toasts: [],
     push: (tone, message, options) => {
+      if (options?.sessionGeneration !== undefined && options.sessionGeneration !== sessionGeneration()) return;
+      const now = Date.now();
+      // Legacy calls have no task identity: preserve every card instead of merging
+      // unrelated tasks with the same text. Action cards remain separate so no undo
+      // callback or operation history disappears into a counter.
+      const eventKey = options?.eventId && options?.entityId && !options.action
+        ? JSON.stringify([options.eventId, options.entityId, tone, message.replace(/\s+/g, " ").trim()]) : undefined;
+      const repeated = eventKey ? get().toasts.find(item => item.eventKey === eventKey && now - item.lastOccurredAt < (options?.dedupMs ?? 5000)) : undefined;
+      if (repeated) {
+        set(state => ({ toasts: state.toasts.map(item => item.id === repeated.id ? { ...item, occurrences: item.occurrences + 1, lastOccurredAt: now } : item) }));
+        announce(message, { eventId: options!.eventId!, entityId: options!.entityId!, dedupMs: options?.dedupMs });
+        return;
+      }
       const id = nextId++;
+      announce(message, { eventId: options?.eventId ?? `toast:${id}`, entityId: options?.entityId ?? "global", dedupMs: options?.dedupMs });
       // The oldest leaves first, even an error: a fourth message is newer news.
       for (const old of get().toasts.slice(0, Math.max(0, get().toasts.length - (MAX_TOASTS - 1)))) remove(old.id);
-      set((s) => ({ toasts: [...s.toasts, { id, tone, message, action: options?.action }] }));
+      set((s) => ({ toasts: [...s.toasts, { id, tone, message, action: options?.action, occurrences: 1, lastOccurredAt: now, eventKey }] }));
       const ms = toastDuration(tone, Boolean(options?.action));
       if (ms !== null) schedule(id, ms);
     },
@@ -98,3 +123,9 @@ export const toast = {
   success: (message: string, options?: ToastOptions) => useToastStore.getState().push("success", message, options),
   error: (message: string, options?: ToastOptions) => useToastStore.getState().push("error", message, options),
 };
+
+subscribeSessionBoundary(() => {
+  for (const timer of timers.values()) clearTimeout(timer.handle);
+  timers.clear();
+  useToastStore.setState({ toasts: [] });
+});

@@ -1,3 +1,4 @@
+import { safetyReading } from "../geoOverviewModel";
 import { GeoAnalysisWorkbench } from "../GeoAnalysisWorkbench";
 import { useMemo, useState } from "react";
 import {
@@ -70,7 +71,7 @@ import { ShowMore, useShowMore } from "./showMore";
  * data page's first screen holds twenty (the walk's `rows-ceiling`). The five most serious come first, as the list is sorted; the
  * heading says how many there are.
  */
-const FIRST_SHOWN = 5;
+const FIRST_SHOWN = 3;
 const PAGE = 10;
 const SAFETY_METRICS: ReadonlyArray<{ ids: readonly string[]; polarity: "up" | "down" }> = [
   { ids: ["M-11"], polarity: "up" },
@@ -140,7 +141,8 @@ function Accuracy({
     {
       key: "severe",
       label: "严重讲错",
-      value: String(counts.severe),
+      reading: safetyReading(diagnosis),
+      value: safetyReading(diagnosis).kind === "measured" ? String(counts.severe) : "未测",
       unit: "条" as string | undefined,
       placeholder: false,
       hint: undefined as string | undefined,
@@ -299,12 +301,11 @@ function Accuracy({
           <StatTile
             key={tile.key}
             label={tile.label}
-            value={tile.value}
-            unit={tile.unit}
+            reading={tile.reading}
+            renderMeasured={() => tile.value}
             hint={tile.hint}
             lead={tile.lead}
             tone={tile.tone}
-            placeholder={tile.placeholder}
             delta={<Delta value={tile.delta} unit="point" polarity={tile.polarity} tone={tile.tone === "safety" ? "safety" : "default"} />}
             note={tile.note}
           />

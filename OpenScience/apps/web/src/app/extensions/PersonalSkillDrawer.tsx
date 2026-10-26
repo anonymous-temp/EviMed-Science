@@ -6,7 +6,7 @@ import { Disclosure } from "@/components/ui/Disclosure";
 import { Drawer } from "@/components/ui/Drawer";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Menu } from "@/components/ui/Menu";
-import { Switch } from "@/components/ui/Switch";
+import { ApplyControl } from "./ApplyControl";
 import { Toolbar } from "@/components/ui/Toolbar";
 import { Tag } from "@/components/ui/Tag";
 import { FilesSkeleton } from "@/components/cards/Skeletons";
@@ -51,6 +51,7 @@ export function PersonalSkillDrawer({ skillId, projectId, onClose, onChanged, on
   const [skill, setSkill] = useState<PersonalSkill | null>(null), [history, setHistory] = useState<SkillVersion[]>([]);
   const [defaults, setDefaults] = useState<SkillSelectionRecord | null>(null), [selection, setSelection] = useState<SkillSelectionRecord | null>(null), [supply, setSupply] = useState<SkillSupplyResult | null>(null);
   const [error, setError] = useState<string | null>(null), [missing, setMissing] = useState(false), [busy, setBusy] = useState(false), [editing, setEditing] = useState(false), [removing, setRemoving] = useState(false), [compared, setCompared] = useState<SkillVersion | null>(null);
+  const [dirty, setDirty] = useState(false);
   const [view, setView] = useState<"content" | "versions">("content");
   const load = useCallback(async () => {
     const request = ++generation.current;
@@ -92,10 +93,10 @@ export function PersonalSkillDrawer({ skillId, projectId, onClose, onChanged, on
   );
   if (missing) return <Drawer title="技能" onClose={onClose}><MissingRecord noun="技能" list="回到技能列表" onBack={onClose} /></Drawer>;
   return (
-    <Drawer title={skill?.payload.title ?? "技能"} description="我的技能" onClose={onClose} actions={menu || undefined}>
+    <Drawer title={skill?.payload.title ?? "技能"} description="我的技能" onClose={onClose} dirty={editing && dirty} busy={busy} actions={menu || undefined}>
       {error && <p role="alert" className="mb-4 text-ui text-error">{error}<Button variant="text" disabled={busy} onClick={() => void load()}>刷新</Button></p>}
       {!skill ? !error && <FilesSkeleton /> : editing ? (
-        <SkillEditor key={skill.revision} initial={{ expectedRevision: skill.revision, title: skill.payload.title, description: skill.payload.description, instructions: skill.payload.instructions }} busy={busy} onSave={value => void save(value)} onCancel={() => setEditing(false)} />
+        <SkillEditor onDirtyChange={setDirty} key={skill.revision} initial={{ expectedRevision: skill.revision, title: skill.payload.title, description: skill.payload.description, instructions: skill.payload.instructions }} busy={busy} onSave={value => void save(value)} onCancel={() => setEditing(false)} />
       ) : (
         <div className="flex flex-col gap-6">
           <Toolbar label="技能内容" views={{ label: "技能内容", items: [{ value: "content", label: "内容" }, { value: "versions", label: "版本" }], value: view, onChange: next => setView(next as "content" | "versions") }} />
@@ -106,12 +107,12 @@ export function PersonalSkillDrawer({ skillId, projectId, onClose, onChanged, on
                 <p role="status" className="text-ui text-text-2">{skillActivationText(!!currentSelection, selection?.activation)}</p>
                 <div className="flex flex-col gap-3">
                   {selection?.activation?.phase !== "not-applicable" && <div className="flex items-center justify-between gap-3">
-                    <Switch showLabel label={`在“${projectName ?? "当前项目"}”里使用`} checked={!!currentSelection} disabled={busy || !selection}
+                    <ApplyControl showLabel label={`在“${projectName ?? "当前项目"}”里使用`} checked={!!currentSelection} disabled={busy || !selection}
                       onChange={checked => void act(() => saveProjectSkills(projectId, selection!.revision, select(selection!.payload.skills, checked)))} />
                     {stale && <Button size="sm" variant="text" disabled={busy || !selection} onClick={() => void act(() => saveProjectSkills(projectId, selection!.revision, select(selection!.payload.skills, true)))}>更新到最新内容</Button>}
                   </div>}
                   <div className="flex items-center justify-between gap-3">
-                    <Switch showLabel label="新项目默认使用" checked={!!defaultSelection} disabled={busy || !defaults}
+                    <ApplyControl showLabel label="新项目默认使用" checked={!!defaultSelection} disabled={busy || !defaults}
                       onChange={checked => void act(() => savePersonalSkillDefaults(defaults!.revision, select(defaults!.payload.skills, checked)))} />
                     {staleDefault && <Button size="sm" variant="text" disabled={busy || !defaults} onClick={() => void act(() => savePersonalSkillDefaults(defaults!.revision, select(defaults!.payload.skills, true)))}>更新到最新内容</Button>}
                   </div>

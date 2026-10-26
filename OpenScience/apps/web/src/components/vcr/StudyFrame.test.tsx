@@ -69,9 +69,9 @@ describe("the one band over every view of a study", () => {
     draw();
     const band = document.querySelector("[data-page-chrome]") as HTMLElement;
     expect(band).toHaveClass("sticky", "top-0");
-    expect(within(band).queryByRole("navigation", { name: "研究进度" })).toBeNull();
+    expect(within(band).getByRole("navigation", { name: "研究进度" })).toBeInTheDocument();
     // The tab row IS the step bar: there is no second rail of the same seven things.
-    expect(document.querySelectorAll("[data-step-rail]")).toHaveLength(0);
+    expect(document.querySelectorAll("[data-step-rail]")).toHaveLength(1);
     const body = document.querySelector("[data-page-body]") as HTMLElement;
     expect(band.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -117,7 +117,7 @@ describe("the one band over every view of a study", () => {
     expect(screen.getByRole("button", { name: "查看：对话" })).toBeInTheDocument();
     expect(screen.queryByRole("tablist")).toBeNull();
     expect(screen.queryByRole("button", { name: "研究对话" })).toBeNull();
-    expect(document.querySelectorAll("[data-rail-step]")).toHaveLength(0);
+    expect(document.querySelectorAll("[data-rail-step]").length).toBeGreaterThan(0);
   });
 });
 
@@ -260,4 +260,12 @@ describe("what a study's frame offers a tab alone", () => {
     expect(screen.getByTestId("lone")).toHaveTextContent("没有页面");
     await act(async () => undefined);
   });
+});
+
+it("shows only the matching task's process while keeping result destinations reachable", () => {
+  draw({ study: study(raw => { raw.steps = { matching: { status: "queued", requested: true }, trial: { status: "none", requested: false } }; }), view: "chat" });
+  const progress = screen.getByRole("navigation", { name: "研究进度" });
+  expect(progress.querySelectorAll("[data-rail-step]")).toHaveLength(1);
+  expect(progress.querySelector('[data-rail-step="matching"]')).toHaveTextContent("排队中");
+  expect(progress.querySelector('[data-rail-step="trial"]')).toBeNull();
 });

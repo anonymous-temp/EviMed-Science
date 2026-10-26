@@ -11,16 +11,15 @@ import { Disclosure } from "@/components/ui/Disclosure";
  *
  * Four states, each said three ways — shape, colour, word:
  *
- *  - `done` — a filled accent disc with a tick, and an accent connector.
- *  - `active` — an accent ring: being worked on now.
- *  - `waiting` — an accent ring inside an accent halo, and the note in the
- *    accent: **this is the step waiting for the reader**, and it is the one
+ *  - `done` — a filled success-green disc with a tick, and a green connector.
+ *  - `active` — an information ring: being worked on now.
+ *  - `waiting` — an information ring inside a pale information halo, and the note: **this is the step waiting for the reader**, and it is the one
  *    thing on the page a person must act on.
  *  - `todo` — a quiet ring.
  *
  * Two more are for `StepRail`, the one-row version of this rail that stays at
  * the top of a module's every tab: `partial` (the step is part done and
- * nothing is running: an accent ring on a pale ground) and `attention` (a step
+ * nothing is running: an information ring on its pale ground) and `attention` (a step
  * that did not finish, or is out of date: an amber diamond). The marks, the
  * words and the narrow-screen hook are exported so the one-row rail extends
  * this file's vocabulary and does not restate it.
@@ -57,6 +56,18 @@ export interface RailStep {
   to?: string;
 }
 
+/**
+ * Component: ProgressRail; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Ordered producer steps with state marks, readable state and optional result links.
+ * Variants: Six RailState values; optional mobile summary disclosure.
+ * States: Caller supplies step status; no inferred completion percentage.
+ * Hit area: Step links and native disclosure; no actionable mark.
+ * Keyboard: Native links/summary; no roving tab sequence.
+ * Long content: Step names/notes truncate; full values remain in DOM.
+ * Theme: Green done, information active/waiting/partial, warning attention.
+ * Responsive: Two/four/eight-column grid; narrow summary folds when supplied.
+ * Verification: DataPrimitives.test.tsx and StepBarParts.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function ProgressRail({
   label,
   steps,
@@ -89,7 +100,7 @@ export function ProgressRail({
               aria-hidden="true"
               className={cn(
                 "absolute left-4 right-0 top-1.5 hidden h-px lg:block",
-                step.state === "done" ? "bg-accent" : "bg-border",
+                step.state === "done" ? "bg-ok" : "bg-border",
               )}
             />
           )}
@@ -127,6 +138,18 @@ function Body({ step }: { step: RailStep }) {
 }
 
 /** The mark itself: drawn, because no icon fits inside a 14 px disc. */
+/**
+ * Component: RailMark; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Decorative status span with tick or diamond.
+ * Variants: done/active/waiting/partial/attention/todo.
+ * States: Pure rendering of supplied state.
+ * Hit area: 14px drawing; no interaction target.
+ * Keyboard: aria-hidden decoration; parent must provide state words.
+ * Long content: No text; parent owns label.
+ * Theme: Success/information/warning/control-border roles; attention preserves color.
+ * Responsive: Fixed nonshrinking mark.
+ * Verification: DataPrimitives.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function RailMark({ state }: { state: RailState }) {
   return (
     <span
@@ -136,15 +159,15 @@ export function RailMark({ state }: { state: RailState }) {
         "relative z-sticky block h-3.5 w-3.5 shrink-0",
         // An amber diamond is the one mark that is not a disc.
         state === "attention" ? "grid place-items-center" : "rounded-full",
-        state === "done" && "bg-accent",
-        state === "active" && "border-2 border-accent bg-surface",
-        state === "waiting" && "border-2 border-accent bg-surface ring-4 ring-accent-soft",
-        state === "partial" && "border-2 border-accent bg-accent-soft",
+        state === "done" && "bg-ok",
+        state === "active" && "border-2 border-info bg-surface",
+        state === "waiting" && "border-2 border-info bg-surface ring-4 ring-info-soft",
+        state === "partial" && "border-2 border-info bg-info-soft",
         state === "todo" && "border border-border-control bg-surface",
       )}
     >
       {state === "done" && (
-        <svg viewBox="0 0 14 14" className="h-3.5 w-3.5 text-accent-fg">
+        <svg viewBox="0 0 14 14" className="h-3.5 w-3.5 text-bg">
           <path d="M4 7.2l2 2 4-4.4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       )}

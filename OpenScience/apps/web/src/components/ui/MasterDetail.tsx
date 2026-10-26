@@ -42,6 +42,18 @@ type Collapse =
   | { narrow: "swap"; detailTitle?: undefined; onCloseDetail?: undefined }
   | { narrow?: "drawer"; detailTitle: string; onCloseDetail: () => void };
 
+/**
+ * Component: MasterDetail; owner: H; rules: DS21, DESIGN.md component adoption.
+ * Anatomy: Named list/detail regions with measured container and optional Drawer.
+ * Variants: Narrow drawer or swap; configurable list width/detail minimum.
+ * States: Selected chooses narrow detail; ResizeObserver chooses split.
+ * Hit area: Child controls own targets; Drawer supplies close.
+ * Keyboard: Split regions add no focus management; Drawer handles modal focus.
+ * Long content: Children own scroll; each pane allows min-height/width shrink.
+ * Theme: Page background and split divider.
+ * Responsive: Split at listWidth + detailMin; initial width measured synchronously.
+ * Verification: MasterDetail.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
+ */
 export function MasterDetail({
   list,
   detail,

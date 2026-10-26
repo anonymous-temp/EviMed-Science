@@ -1,3 +1,4 @@
+import { isSubmitKey } from "@/lib/compositionKeys";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import {
@@ -278,7 +279,7 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
           onClear: () => { setQ(""); setQuery(""); },
           inputProps: {
             disabled: editing || adding,
-            onKeyDown: (event) => { if (event.key === "Enter") { event.preventDefault(); setQuery(q.trim()); } },
+            onKeyDown: (event) => { if (isSubmitKey(event)) { event.preventDefault(); setQuery(q.trim()); } },
             onCompositionStart: () => { composing.current = true; },
             onCompositionEnd: (event) => { composing.current = false; setQ(event.currentTarget.value); setComposed((value) => value + 1); },
           },

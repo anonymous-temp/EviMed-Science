@@ -405,7 +405,7 @@ describe("试验 · the decision", () => {
     await userEvent.click(save);
     await userEvent.click(save);
     expect(network.productRequest.mock.calls.filter(([path, method]) => String(path).endsWith("/decisions") && method === "POST")).toHaveLength(1);
-    expect(save).toBeDisabled();
+    expect(save).toHaveAttribute("aria-disabled", "true");
     release({});
     await waitFor(() => expect(toasts.success).toHaveBeenCalled());
   });

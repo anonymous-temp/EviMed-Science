@@ -34,7 +34,7 @@
  * Seeding is idempotent: the account is made once (a second start finds it and seeds nothing), and `--reseed` drops nothing — to start
  * from nothing, drop the database. Each part is a function of its own below so that a part can be read, run or changed alone.
  */
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -88,6 +88,60 @@ export function assertThrowawayDatabase(url) {
   const parsed = new URL(url);
   if (!["127.0.0.1", "localhost", "::1"].includes(parsed.hostname)) throw new Error(`refusing ${parsed.hostname}: the fixture is only furnished into a database on this machine`);
   if (!/^\/evimed_test[a-z0-9_]*$/.test(parsed.pathname)) throw new Error(`refusing database ${parsed.pathname.slice(1)}: its name must start with evimed_test`);
+}
+
+/** Save only the synthetic engine's bytes, preserving the same fixture across process restarts. */
+export async function saveFixtureEngine(engine, file, databaseUrl, user) {
+  assertThrowawayDatabase(databaseUrl);
+  const identity = createHash("sha256").update(`${databaseUrl}|${user}`).digest("hex");
+  const files = [...engine.files].map(([uri, value]) => ({ uri, body: value.content.toString("base64"), tags: value.tags, modTime: value.modTime }));
+  await writeFile(file, JSON.stringify({ version: 1, identity, files }), { mode: 0o600 });
+}
+
+/** A fixture restart restores its stand-in, never replacing production memory reads with overlay data. */
+export async function restoreFixtureEngine(engine, database, file, databaseUrl, user) {
+  assertThrowawayDatabase(databaseUrl);
+  const identity = createHash("sha256").update(`${databaseUrl}|${user}`).digest("hex");
+  let snapshot = null;
+  try { snapshot = JSON.parse(await readFile(file, "utf8")); } catch (error) { if (error.code !== "ENOENT") throw error; }
+  if (snapshot) {
+    if (snapshot.version !== 1 || snapshot.identity !== identity || !Array.isArray(snapshot.files)) throw new Error("The engine snapshot belongs to a different fixture or has an invalid format.");
+    for (const value of snapshot.files) engine.files.set(value.uri, { content: Buffer.from(value.body, "base64"), tags: value.tags, modTime: value.modTime });
+    return snapshot.files.length;
+  }
+  // Older synthetic fixtures have no snapshot. Their exact preserved native files can seed the stand-in once.
+  const rows = (await database.query("SELECT uri,body,memory_type,project_id,updated_at FROM evimed_memory.native_files WHERE user_id=$1 AND body IS NOT NULL", [user])).rows;
+  for (const row of rows) engine.files.set(row.uri, { content: Buffer.from(row.body, "utf8"), tags: [`memory_type=${row.memory_type}`, ...(row.project_id ? [`project=${row.project_id}`] : [])], modTime: new Date(row.updated_at).toISOString() });
+  if (!rows.length) throw new Error("The existing fixture has no preserved engine files; furnish a fresh throwaway database.");
+  await saveFixtureEngine(engine, file, databaseUrl, user);
+  return rows.length;
+}
+
+/** Restore only the synthetic module session inventory that furnishing originally created. No model prompt is submitted. */
+export async function warmFixtureConversations(app, user, fixtureUser = FIXTURE_USER) {
+  if (user.id !== fixtureUser) throw new Error("Fixture conversation restoration requires its exact synthetic account.");
+  if (app.config.runtimeMode !== "mock") throw new Error("Fixture conversation restoration requires the mock runtime.");
+  const rows = (await app.store.database.query("SELECT project_id,conversation_session_id FROM evimed_geo.projects WHERE user_id=$1 AND deleted_at IS NULL", [user.id])).rows;
+  let restored = 0;
+  for (const row of rows) {
+    const project = await app.store.requireProject(user, row.project_id);
+    if (project.userId !== fixtureUser || project.id !== row.project_id) throw new Error("Fixture conversation project identity changed.");
+    const runs = await app.agentRuns.list(project);
+    const sessions = [...new Set([row.conversation_session_id, ...runs.map(run => run.sessionId)].filter(value => typeof value === "string" && value))];
+    if (!sessions.length) continue;
+    const runtime = await app.runtimeManager.start(project);
+    if (runtime.kind !== "mock") throw new Error("Fixture restoration cannot alter a real runtime.");
+    // The mock has no provider token. Give this one process epoch the named synthetic generation
+    // seam native-routing tests use, so real generation and inventory checks remain exercised.
+    runtime.modelGatewayTokenJti ??= `walk-fixture-generation-${randomBytes(18).toString("hex")}`;
+    for (const sessionId of sessions) {
+      await app.runtimeManager.callKernel(runtime, project, "session/create", { request: {
+        sessionId, cwd: runtime.proxyWorkspaceDir ?? project.workspaceDir, title: "Synthetic restored module conversation", agentPreset: "evimed-universal",
+      } }, AbortSignal.timeout(10000));
+      restored += 1;
+    }
+  }
+  return restored;
 }
 
 /** @param {string} line */
@@ -148,9 +202,12 @@ async function main() {
     if (!(await app.store.userById(FIXTURE_OPERATOR).catch(() => null))) await app.store.createUser(FIXTURE_OPERATOR, randomBytes(24).toString("base64url"), "walk operator");
     const user = await app.store.userById(options.user);
     await furnish(app, user, { password, base: `http://127.0.0.1:${options.port}`, engine, setCompile: (/** @type {any} */ script) => { compile = script; } });
+    await saveFixtureEngine(engine, path.join(options.dataDir, "walk-engine-snapshot.json"), options.databaseUrl, options.user);
     log("the fixture is furnished");
   } else {
-    log("the account exists: nothing was furnished again");
+    const restored = await restoreFixtureEngine(engine, app.store.database, path.join(options.dataDir, "walk-engine-snapshot.json"), options.databaseUrl, options.user);
+    const conversations = await warmFixtureConversations(app, await app.store.userById(options.user), options.user);
+    log(`the account exists: restored ${restored} synthetic engine files and ${conversations} mock module conversations; no database data was furnished again`);
   }
 
   process.stdout.write(
