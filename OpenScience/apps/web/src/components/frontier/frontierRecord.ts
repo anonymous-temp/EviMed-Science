@@ -1,7 +1,6 @@
 /**
  * What the daily's archive and the event's record say (c5-reader, 2026-10-26): the issues of the archive cut into months, the three
- * things an issue is read for first, the stamp of when an issue came out, an event's reports cut into Beijing days and the moments
- * of its record. Pure functions, so each is tested once here and the components stay about layout.
+ * things an issue is read for first, the stamp of when an issue came out and the moments of an event's record. Pure functions, so each is tested once here and the components stay about layout.
  *
  * Every day and every clock is Beijing's (`FEED_TIME_ZONE`), whatever zone the browser is in; no source's own words are read here
  * and no score is made — the ranking an issue was composed with is the only one used.
@@ -79,6 +78,9 @@ export const TOP_THINGS = 3;
  * server scored highest (the weight each lane is ordered by), the issue's own order where two score alike or none does. The safety
  * alerts keep their own block directly below and are not among them. Null with fewer than three to show — two things are not a list of
  * three, and the lead then stands as it did.
+ *
+ * The server freezes each lane's order when it composes an issue but names no order across lanes, so lanes are compared by the item's
+ * `score` as the read carries it: a re-score after the issue came out can reorder the three (never their lane's own order).
  */
 export function topThings(issue: Pick<FrontierDaily, "lead" | "sections">): TopThing[] | null {
   const lead: TopThing | null = issue.lead ? { item: issue.lead.item, text: issue.lead.text ?? issue.lead.item.summary, event: issue.lead.event } : null;
@@ -89,6 +91,16 @@ export function topThings(issue: Pick<FrontierDaily, "lead" | "sections">): TopT
     .sort((a, b) => (b.item.score ?? -1) - (a.item.score ?? -1) || a.laneAt - b.laneAt || a.at - b.at);
   const things = [...(lead ? [lead] : []), ...rest.map((entry) => ({ item: entry.item, text: entry.item.summary, event: null }))].slice(0, TOP_THINGS);
   return things.length === TOP_THINGS ? things : null;
+}
+
+/**
+ * The lanes of an issue as the rows below 「先看三件事」 draw them: without the items already shown above (the lead is in no lane), and
+ * without a lane that had nothing else. With no three things the lanes are the issue's own.
+ */
+export function sectionsBelow(issue: Pick<FrontierDaily, "sections">, things: readonly TopThing[] | null): FrontierDaily["sections"] {
+  if (!things) return issue.sections;
+  const shown = new Set(things.map((thing) => thing.item.id));
+  return issue.sections.map((section) => ({ ...section, items: section.items.filter((item) => !shown.has(item.id)) })).filter((section) => section.items.length > 0);
 }
 
 /* ------------------------------------------------------------------ freshness */
@@ -115,34 +127,4 @@ export function recordMoment(value: string | null, now = Date.now()): string {
   const year = feedDayKey(value)?.slice(0, 4);
   const current = feedDayKey(now)?.slice(0, 4);
   return year && year !== current ? `${year}年${text}` : text;
-}
-
-/** One Beijing day of an event's reports. */
-export interface ReportDay<T> {
-  /** `2026-09-22`, or `unknown` for a report with no readable time. */
-  key: string;
-  /** 「9月22日 周二」, with 「今天」 before today's. */
-  label: string;
-  items: T[];
-}
-
-/**
- * An event's reports cut into Beijing days, by the time each stands at on the event's timeline, in the order given: a day is the run of
- * its neighbours and is never split in two, and the days follow the first report of each — newest day first on a newest-first list.
- */
-export function reportDays<T extends { timelineAt: string }>(items: readonly T[], now = Date.now()): Array<ReportDay<T>> {
-  const today = feedDayKey(now);
-  const days: Array<ReportDay<T>> = [];
-  const byKey = new Map<string, ReportDay<T>>();
-  for (const item of items) {
-    const key = feedDayKey(item.timelineAt) ?? "unknown";
-    let day = byKey.get(key);
-    if (!day) {
-      day = { key, label: key === "unknown" ? "日期不明" : `${key === today ? "今天 · " : ""}${shortDate(key)}`, items: [] };
-      byKey.set(key, day);
-      days.push(day);
-    }
-    day.items.push(item);
-  }
-  return days;
 }

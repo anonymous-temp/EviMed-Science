@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { frontierItem } from "./__fixtures__/frontierItems";
-import { FEED_TIME_ZONE, ago, cardEyebrow, clock, dailyMeta, dateClock, dayHeading, evidenceTag, feedDay, feedDayKey, groupByDay, hotBoardStamp, hotRowMeta, institutionsLine, itemMarkdown, primaryHeld, rankChangeLabel, rankLabel, rankTone, askDraft, itemClock, itemLine, researchDraft, topicAskDraft, metaTime, originalLinkLabel, sameAddress, scoreBand, scoreBreakdown, shortDate, shortUrl, sparkline, splitUrls, stamp, statedDayKey, trimUrl, isStatedDayEnd, sinceText } from "./frontierText";
+import { FEED_TIME_ZONE, ago, cardEyebrow, clock, dailyMeta, dateClock, dayHeading, evidenceTag, feedDay, feedDayKey, groupByDay, hotBoardStamp, hotRowMeta, itemMarkdown, primaryHeld, rankChangeLabel, rankLabel, rankTone, askDraft, itemClock, itemLine, researchDraft, topicAskDraft, metaTime, originalLinkLabel, sameAddress, scoreBand, scoreBreakdown, shortDate, shortUrl, sparkline, splitUrls, stamp, statedDayKey, trimUrl, isStatedDayEnd, sinceText } from "./frontierText";
 import type { FrontierItem } from "@/lib/frontierClient";
 
 // The feed reads Beijing time whatever the machine's zone is (UTC+8, no daylight saving): `at` is the instant of a Beijing wall clock,
@@ -136,6 +136,27 @@ describe("the day groups", () => {
       ["9月21日 周一", "c"],
       ["9月19日 周六", "d"],
     ]);
+  });
+
+  it("cut an event's reports the same way: by Beijing day in the order given, a day once, an unreadable time in a day of its own", () => {
+    const at = (timelineAt: string) => ({ timelineAt });
+    const days = groupByDay([
+      at("2026-10-26T03:00:00.000Z"), // today in Beijing
+      at("2026-10-25T17:00:00.000Z"), // 26 October 01:00 in Beijing: still that day, though yesterday in UTC
+      at("2026-10-25T10:00:00.000Z"),
+      at("2026-10-24T02:00:00.000Z"),
+      at("2026-10-25T04:00:00.000Z"), // the order interleaves the 25th: the day is not split
+      at("never"),
+    ]);
+    expect(days.map((day) => [day.key, day.label, day.items.length])).toEqual([
+      ["2026-10-26", "10月26日 周一", 2],
+      ["2026-10-25", "10月25日 周日", 2],
+      ["2026-10-24", "10月24日 周六", 1],
+      ["unknown", "日期不明", 1],
+    ]);
+    // 今天 is the heading's, from the Beijing day of the instant asked about
+    const now = Date.parse("2026-10-26T04:00:00.000Z");
+    expect(days.map((day) => dayHeading(day, false, now))).toEqual(["今天 · 10月26日 周一", "10月25日 周日", "10月24日 周六", "日期不明"]);
   });
 
   it("are headed 「今天 · 9月22日 周二 · 2 条」 — 今天 only for today, the count only for a whole day", () => {
@@ -286,13 +307,6 @@ describe("a trend line", () => {
 });
 
 describe("the event page's side column", () => {
-  it("counts the institutions by kind, else their number, else says nothing", () => {
-    expect(institutionsLine({ sourceCount72h: 2, institutions72h: { total: 2, byType: [{ type: "journal", label: "期刊", count: 1 }, { type: "media", label: "媒体", count: 1 }] } }))
-      .toBe("期刊 1 · 媒体 1");
-    expect(institutionsLine({ sourceCount72h: 7 })).toBe("7 家");
-    expect(institutionsLine({ sourceCount72h: 0, institutions72h: { total: 0, byType: [] } })).toBeNull();
-  });
-
   it("says whether the parties' own texts are among the reports", () => {
     expect(primaryHeld({ primary: "paper", items: [] })).toBe("有论文原文");
     expect(primaryHeld({ primary: null, hasPrimary: true, items: [] })).toBe("有一手材料");

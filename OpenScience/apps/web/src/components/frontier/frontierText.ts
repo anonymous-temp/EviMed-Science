@@ -306,7 +306,7 @@ export function metaTime(item: Pick<FrontierItem, "timelineAt"> & Partial<Pick<F
 }
 
 /** A day group's heading: 「今天 · 10月23日 周四 · 11 条」, 「10月22日 周三 · 40 条」 — the count once the whole day is on screen. */
-export function dayHeading(day: Pick<ItemDay, "key" | "label" | "items">, whole: boolean, now = Date.now()): string {
+export function dayHeading(day: Pick<ItemDay<unknown>, "key" | "label" | "items">, whole: boolean, now = Date.now()): string {
   return [day.key === feedDayKey(now) ? "今天" : null, day.label, whole ? `${day.items.length} 条` : null].filter(Boolean).join(" · ");
 }
 
@@ -377,21 +377,22 @@ export function sameAddress(a: string, b: string): boolean {
 
 /* ---------------------------------------------------------------------- days */
 
-export interface ItemDay {
+export interface ItemDay<T = FrontierItem> {
+  /** `2026-09-22`, or `unknown` for an item with no readable time. */
   key: string;
-  /** 「9月22日 周二」. */
+  /** 「9月22日 周二」, or 「日期不明」. */
   label: string;
-  items: FrontierItem[];
+  items: T[];
 }
 
 /**
- * The list, cut into days by the list's own axis (`timelineAt`), in Beijing time.
- * Items arrive newest first, so a day is a run of neighbours; a day is never
- * split in two even when the server's order and the calendar disagree.
+ * The list, cut into days by the list's own axis (`timelineAt`), in Beijing time. The feed's items and an event's reports are both
+ * cut by it. Items arrive newest first, so a day is a run of neighbours; a day is never split in two even when the server's order and
+ * the calendar disagree, and a time that cannot be read is a day of its own.
  */
-export function groupByDay(items: readonly FrontierItem[]): ItemDay[] {
-  const days: ItemDay[] = [];
-  const byKey = new Map<string, ItemDay>();
+export function groupByDay<T extends { timelineAt: string }>(items: readonly T[]): Array<ItemDay<T>> {
+  const days: Array<ItemDay<T>> = [];
+  const byKey = new Map<string, ItemDay<T>>();
   for (const item of items) {
     const key = feedDayKey(item.timelineAt) ?? "unknown";
     let day = byKey.get(key);
@@ -528,13 +529,6 @@ export function sparkline(points: readonly FrontierTrendPoint[], width: number, 
 }
 
 /* --------------------------------------------------------------------- event */
-
-/** 「期刊 1 · 媒体 1」: the institutions of the last 72 hours by kind; else their number; else nothing. */
-export function institutionsLine(event: Pick<FrontierEvent, "institutions72h" | "sourceCount72h">): string | null {
-  const kinds = event.institutions72h?.byType ?? [];
-  if (kinds.length > 0) return kinds.map((kind) => `${kind.label} ${kind.count}`).join(" · ");
-  return event.sourceCount72h > 0 ? `${event.sourceCount72h} 家` : null;
-}
 
 /** 「有论文原文」, 「有一手材料」 or 「暂无」: whether the parties' own texts are among the reports. */
 export function primaryHeld(event: Pick<FrontierEvent, "primary" | "hasPrimary" | "items">): string {

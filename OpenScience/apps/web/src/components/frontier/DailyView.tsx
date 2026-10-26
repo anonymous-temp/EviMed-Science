@@ -24,7 +24,7 @@ import type { ToolbarFilter } from "@/components/ui/Toolbar";
 import { useNarrow } from "@/lib/useMediaQuery";
 import { FrontierSkeleton } from "./FrontierSkeleton";
 import { INLINE_ACTION, dailyMeta, rankLabel, scheduleLabel, shortDate } from "./frontierText";
-import { archiveEntryName, archiveMonths, dayInMonth, issuedStamp, monthKey, topThings, type TopThing } from "./frontierRecord";
+import { archiveEntryName, archiveMonths, dayInMonth, issuedStamp, monthKey, sectionsBelow, topThings, type TopThing } from "./frontierRecord";
 
 /** 往期 in a menu (the weekly's, an empty day's, a phone's without months) lists this many issues: two weeks, a menu that fits a laptop screen. */
 const ARCHIVE_SHOWN = 14;
@@ -149,11 +149,20 @@ async function copyMarkdown(markdown: string) {
   }
 }
 
-/** The lanes an issue has, safety first, each with its count: what 「分类」 lists. */
-function issueLanes(issue: FrontierDaily) {
+/**
+ * What an issue draws: its three things (a day's with enough to show; a week has none) and the lanes under them, which skip the items
+ * already shown above — the lead is in no lane, and a lane that had nothing else is not drawn.
+ */
+function issueParts(issue: FrontierDaily, weekly: boolean) {
+  const things = weekly ? null : topThings(issue);
+  return { things, sections: sectionsBelow(issue, things) };
+}
+
+/** The lanes an issue draws, safety first, each with its count: what 「分类」 lists. */
+function issueLanes(issue: FrontierDaily, weekly: boolean) {
   return [
     ...(issue.safety.length > 0 ? [{ id: "safety-alerts", title: "安全警示", count: issue.safety.length }] : []),
-    ...issue.sections.map((section) => ({ id: section.lane, title: section.laneLabel || "其他", count: section.items.length })),
+    ...issueParts(issue, weekly).sections.map((section) => ({ id: section.lane, title: section.laneLabel || "其他", count: section.items.length })),
   ];
 }
 
@@ -188,7 +197,7 @@ const OLDER_MONTHS = "older";
 export function dailyControls(state: DailyState, { weekly = false, onDay, beside = false }: { weekly?: boolean; onDay: (day: string) => void; beside?: boolean }): { filters: ToolbarFilter[]; actions: ReactNode } {
   const issue = state.issue;
   if (!issue || state.error || state.index === null) return { filters: [], actions: null };
-  const lanes = issueLanes(issue);
+  const lanes = issueLanes(issue, weekly);
   const months = weekly ? [] : archiveMonths(state.index);
   const browse = state.browse;
   const column = beside && !weekly;
@@ -202,7 +211,9 @@ export function dailyControls(state: DailyState, { weekly = false, onDay, beside
       ...(lanes.length >= 3 ? [{ kind: "select" as const, label: "分类", options: lanes.map((lane) => ({ value: lane.id, label: `${lane.title} ${lane.count}` })), value: null, onChange: (id: string | null) => { if (id) goToLane(id); } }] : []),
       ...(split ? [{
         kind: "select" as const, label: "月份",
-        options: [...months.map((entry) => ({ value: entry.key, label: `${entry.label} · ${entry.entries.length} 期` })), ...(state.more ? [{ value: OLDER_MONTHS, label: "更早的日报" }] : [])],
+        // The page of the archive ends inside a month more often than at its edge: while older issues remain unread, the oldest month
+        // held is not whole, and a count of it would be a wrong one — it is named without.
+        options: [...months.map((entry, at) => ({ value: entry.key, label: state.more && at === months.length - 1 ? entry.label : `${entry.label} · ${entry.entries.length} 期` })), ...(state.more ? [{ value: OLDER_MONTHS, label: "更早的日报" }] : [])],
         value: null,
         onChange: (key: string | null) => { if (key === OLDER_MONTHS) state.more?.load(); else if (key) browse.setMonth(key); },
       }] : []),
@@ -291,9 +302,9 @@ function IssueBody({ issue, state, weekly, laneLimit, expansion, onDay }: { issu
   const origin = useFrontierOrigin();
   const { previous, next } = neighbours(issue, state.index ?? []);
   const leadText = issue.lead ? issue.lead.text ?? issue.lead.item.summary : null;
-  // 先看三件事: the issue's lead and the two items its lanes score highest — the lead stands in them, so it is not drawn twice. A week keeps its
-  // headline, and a day with fewer than three to show keeps its lead as it was.
-  const things = weekly ? null : topThings(issue);
+  // 先看三件事: the issue's lead and the two items its lanes score highest, each as a title and its 导读; the lanes below skip them. A week keeps
+  // its headline and its lanes, and a day with fewer than three to show keeps its lead as it was.
+  const { things, sections } = issueParts(issue, weekly);
   return (
     <>
       {things && <TopThings things={things} />}
@@ -318,7 +329,7 @@ function IssueBody({ issue, state, weekly, laneLimit, expansion, onDay }: { issu
       )}
 
       {issue.safety.length > 0 && <DailySection key={`${issue.day}-safety-alerts`} expansion={expansion} expansionId={`digest:${weekly ? "week" : "day"}:${issue.day}:safety-alerts`} id="safety-alerts" title="安全警示" items={issue.safety} safety limit={laneLimit} />}
-      {issue.sections.map((section) => <DailySection key={`${issue.day}-${section.lane}`} expansion={expansion} expansionId={`digest:${weekly ? "week" : "day"}:${issue.day}:${section.lane}`} id={section.lane} title={section.laneLabel || "其他"} items={section.items} limit={laneLimit} />)}
+      {sections.map((section) => <DailySection key={`${issue.day}-${section.lane}`} expansion={expansion} expansionId={`digest:${weekly ? "week" : "day"}:${issue.day}:${section.lane}`} id={section.lane} title={section.laneLabel || "其他"} items={section.items} limit={laneLimit} />)}
 
       {issue.followedQueries && issue.followedQueries.length > 0 && <FollowedQueries follows={issue.followedQueries} />}
       {issue.followedZones && issue.followedZones.length > 0 && <FollowedZones zones={issue.followedZones} />}
@@ -380,17 +391,36 @@ function DailyArchive({ index, current, onDay, more }: { index: FrontierDailySum
 }
 
 /**
- * 先看三件事: the three things an issue is read for first, each one row of the lanes' own kind — its title, its 导读 and its source —
- * and, for the lead, the way to its event. Numbered like the lanes' rows, since the order is the issue's.
+ * 先看三件事: the three things an issue is read for first, each a title (which opens the addressed reader) and its 导读 sentence and
+ * nothing more — not a lane row, whose source and 详情 would be the same item drawn twice: the lanes below skip these three — and, for
+ * the lead, the way to its event after its sentence. Numbered like the lanes' rows, since the order is the issue's.
  */
 function TopThings({ things }: { things: TopThing[] }) {
+  const origin = useFrontierOrigin();
   return (
     <section aria-labelledby="daily-top-things" className="mt-5">
       <h3 id="daily-top-things" className="flex items-baseline gap-2">
         <span className="text-body font-semibold text-text">先看三件事</span>
       </h3>
       <ol aria-label="先看三件事" className="mt-1">
-        {things.map((thing, index) => <DailyRow key={thing.item.id} item={thing.item} number={index + 1} safety={false} summary={thing.text} clamp="line-clamp-2" event={thing.event} />)}
+        {things.map((thing, index) => (
+          <li key={thing.item.id} className="flex gap-2 border-b border-border py-3">
+            <span className="w-8 shrink-0 text-caption leading-6 tabular-nums text-text-3">{rankLabel(index + 1)}</span>
+            <div className="min-w-0 flex-1">
+              <p data-row-title data-prose="" className="text-body font-semibold leading-6 text-text"><ArticleLink item={thing.item}>{thing.item.title}</ArticleLink></p>
+              {(thing.text || thing.event) && (
+                <p data-prose="" className="mt-1 line-clamp-2 max-w-measure text-ui text-text-2">
+                  {thing.text}
+                  {thing.event && (
+                    <Link state={origin} onClick={rememberFrontierPosition} to={`/app/frontier/events/${encodeURIComponent(thing.event.id)}`} className={cn(INLINE_ACTION, "ml-1 px-1 align-middle text-accent")}>
+                      事件页 ›
+                    </Link>
+                  )}
+                </p>
+              )}
+            </div>
+          </li>
+        ))}
       </ol>
     </section>
   );

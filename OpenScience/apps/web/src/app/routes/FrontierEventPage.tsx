@@ -37,12 +37,15 @@ import {
   INLINE_ACTION,
   ago,
   dateClock,
+  dayHeading,
   eventResearchDraft,
+  groupByDay,
   itemClock,
   primaryHeld,
   updatedText,
+  type ItemDay,
 } from "@/components/frontier/frontierText";
-import { recordMoment, reportDays, type ReportDay } from "@/components/frontier/frontierRecord";
+import { recordMoment } from "@/components/frontier/frontierRecord";
 
 type EventState =
   | { kind: "loading" }
@@ -385,7 +388,7 @@ function ReportTimeline({ rows, toolbar }: { rows: Array<FrontierItem & { role: 
   return (
     <Section title="报道时间线" count={rows.length} toolbar={toolbar} className="mt-0">
       <div data-event-timeline="">
-        {reportDays(rows).map((day) => <TimelineDay key={day.key} day={day} />)}
+        {groupByDay(rows).map((day) => <TimelineDay key={day.key} day={day} />)}
       </div>
     </Section>
   );
@@ -395,15 +398,16 @@ function ReportTimeline({ rows, toolbar }: { rows: Array<FrontierItem & { role: 
  * One Beijing day of the timeline: its label (in the page's own 14 / 400, the heading level under the timeline's) and how many reports it
  * holds, over its rows.
  */
-function TimelineDay({ day }: { day: ReportDay<FrontierItem & { role: FrontierEventRole }> }) {
+function TimelineDay({ day }: { day: ItemDay<FrontierItem & { role: FrontierEventRole }> }) {
   const headingId = useId();
+  const label = dayHeading(day, false);
   return (
     <section aria-labelledby={headingId} className="mt-6 first:mt-0">
       <h3 id={headingId} className="mb-1 flex items-baseline gap-2 text-ui text-text">
-        {day.label}
+        {label}
         <span className="text-caption tabular-nums text-text-3">{day.items.length} 篇</span>
       </h3>
-      <ol aria-label={`${day.label}的报道`} className="ml-1 border-l border-border">
+      <ol aria-label={`${label}的报道`} className="ml-1 border-l border-border">
         {day.items.map((item) => <TimelineRow key={item.id} item={item} clock />)}
       </ol>
     </section>

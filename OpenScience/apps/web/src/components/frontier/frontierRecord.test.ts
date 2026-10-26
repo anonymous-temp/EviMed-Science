@@ -9,7 +9,7 @@ import {
   monthKey,
   monthLabel,
   recordMoment,
-  reportDays,
+  sectionsBelow,
   topThings,
 } from "./frontierRecord";
 
@@ -84,6 +84,16 @@ describe("先看三件事", () => {
     const things = topThings({ lead: null, sections: [lane("a", [item("u1", null), item("u2", null), item("s", 0)])] })!;
     expect(things[0].item.id).toBe("s");
   });
+
+  it("leaves the lanes below without the items shown above, and without a lane that had nothing else", () => {
+    const sections = [lane("a", [item("a1", 40), item("a2", 91)]), lane("b", [item("b1", 77)]), lane("c", [item("c1", 10), item("c2", 5)])];
+    const things = topThings({ lead, sections })!;
+    expect(things.map((thing) => thing.item.id)).toEqual(["lead", "a2", "b1"]);
+    expect(sectionsBelow({ sections }, things).map((section) => [section.lane, section.items.map((one) => one.id)])).toEqual([["a", ["a1"]], ["c", ["c1", "c2"]]]);
+    // the issue's own lanes are not changed, and with no three things they are the lanes as they were
+    expect(sections[0].items).toHaveLength(2);
+    expect(sectionsBelow({ sections }, null)).toBe(sections);
+  });
 });
 
 describe("the freshness stamps", () => {
@@ -118,27 +128,5 @@ describe("an event's record", () => {
     expect(recordMoment("2026-09-14T15:59:59.999Z", NOW)).toBe("9月14日");
     expect(recordMoment(null, NOW)).toBe("");
     expect(recordMoment("soon", NOW)).toBe("");
-  });
-
-  const at = (timelineAt: string) => ({ timelineAt });
-
-  it("cuts the reports into Beijing days in the order given, a day once, with today named", () => {
-    const days = reportDays([
-      at("2026-10-26T03:00:00.000Z"), // today in Beijing
-      at("2026-10-25T17:00:00.000Z"), // 26 October 01:00 in Beijing: still today, though yesterday in UTC
-      at("2026-10-25T10:00:00.000Z"),
-      at("2026-10-24T02:00:00.000Z"),
-    ], NOW);
-    expect(days.map((day) => [day.key, day.label, day.items.length])).toEqual([
-      ["2026-10-26", "今天 · 10月26日 周一", 2],
-      ["2026-10-25", "10月25日 周日", 1],
-      ["2026-10-24", "10月24日 周六", 1],
-    ]);
-  });
-
-  it("does not split a day the order interleaves, and keeps an unreadable time in a group of its own", () => {
-    const days = reportDays([at("2026-10-25T03:00:00.000Z"), at("2026-10-24T03:00:00.000Z"), at("2026-10-25T04:00:00.000Z"), at("never")], NOW);
-    expect(days.map((day) => [day.key, day.items.length])).toEqual([["2026-10-25", 2], ["2026-10-24", 1], ["unknown", 1]]);
-    expect(days.at(-1)?.label).toBe("日期不明");
   });
 });

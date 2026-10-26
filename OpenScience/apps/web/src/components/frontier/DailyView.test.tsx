@@ -57,10 +57,11 @@ describe("the issue's header", () => {
   });
 
   it("lists the lanes with their counts in 分类, safety first, and takes the reader to the one chosen without changing the address", async () => {
+    // The three things at the head take their rows out of the lanes: the evidence lane's first three are among them, so it lists five.
     showWithToolbar(issue());
     await userEvent.click(screen.getByRole("button", { name: "分类" }));
     const menu = await screen.findByRole("menu", { name: "分类" });
-    expect(within(menu).getAllByRole("menuitemradio").map((entry) => entry.textContent)).toEqual(["安全警示 1", "临床证据 8", "指南共识 2", "研发产业 1"]);
+    expect(within(menu).getAllByRole("menuitemradio").map((entry) => entry.textContent)).toEqual(["安全警示 1", "临床证据 5", "指南共识 2", "研发产业 1"]);
     await userEvent.click(within(menu).getByRole("menuitemradio", { name: "指南共识 2" }));
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
     expect(scrollIntoView.mock.contexts[0]).toBe(document.getElementById("daily-guideline"));
@@ -73,7 +74,7 @@ describe("the issue's header", () => {
   });
 
   it("keeps the safety alerts and drug-safety lane separately named and addressable", async () => {
-    showWithToolbar(issue({ sections: [lane("safety", "药物安全", 2), lane("guideline", "指南共识", 1)] }));
+    showWithToolbar(issue({ sections: [lane("safety", "药物安全", 2), lane("guideline", "指南共识", 1)] }), { weekly: true });
     expect(screen.getByRole("region", { name: "安全警示 1" })).not.toBe(screen.getByRole("region", { name: "药物安全 2" }));
     for (const [name, id] of [["安全警示 1", "daily-safety-alerts"], ["药物安全 2", "daily-safety"]]) {
       await userEvent.click(screen.getByRole("button", { name: "分类" }));
@@ -84,7 +85,8 @@ describe("the issue's header", () => {
   });
 
   it("counts the safety alerts as a lane, so two lanes and an alert are three", () => {
-    showWithToolbar(issue({ sections: [lane("evidence", "临床证据", 3), lane("guideline", "指南共识", 2)] }));
+    // six rows in one lane: the three at the head leave it three, and the other lane two
+    showWithToolbar(issue({ sections: [lane("evidence", "临床证据", 6), lane("guideline", "指南共识", 2)] }));
     expect(screen.getByRole("button", { name: "分类" })).toBeInTheDocument();
   });
 
@@ -114,9 +116,9 @@ describe("a row", () => {
 });
 
 describe("a day's lanes in full, a week's in a preview", () => {
-  it("shows every row of a day's lane", () => {
+  it("shows every row of a day's lane that the three things at the head do not hold", () => {
     show(issue());
-    expect(within(screen.getByRole("list", { name: "临床证据" })).getAllByRole("listitem")).toHaveLength(8);
+    expect(within(screen.getByRole("list", { name: "临床证据" })).getAllByRole("listitem")).toHaveLength(5);
     expect(screen.queryByRole("button", { name: /展开其余/ })).not.toBeInTheDocument();
   });
 
@@ -170,13 +172,17 @@ describe("先看三件事", () => {
   });
   const things = () => within(screen.getByRole("list", { name: "先看三件事" })).getAllByRole("listitem");
 
-  it("is the lead and the two items the lanes score highest, each with its 导读 and its source, in a list of its own at the head of the issue", () => {
+  it("is the lead and the two items the lanes score highest, each a title and its 导读 and no more, in a list of its own at the head of the issue", () => {
     show(three());
     expect(screen.getByRole("heading", { level: 3, name: "先看三件事" })).toBeInTheDocument();
     expect(things().map((row) => row.querySelector("[data-row-title]")?.textContent)).toEqual(["FDA 发布新方法学专题", "e2 标题", "g1 标题"]);
-    expect(things().map((row) => row.querySelector("[data-prose]:not([data-row-title])")?.textContent)).toEqual(["FDA 发布直接最终规则。", "e2 的导读", "g1 的导读"]);
+    expect(things().map((row) => row.querySelector("[data-prose]:not([data-row-title])")?.textContent)).toEqual(["FDA 发布直接最终规则。事件页 ›", "e2 的导读", "g1 的导读"]);
     expect(things().map((row) => row.firstElementChild?.textContent)).toEqual(["01", "02", "03"]);
-    expect(within(things()[1]).getByText(frontierItem().source.name)).toBeInTheDocument();
+    // not a row of a lane: no source line and no 详情, the title opens the reader
+    for (const row of things()) {
+      expect(within(row).queryByText(frontierItem().source.name)).not.toBeInTheDocument();
+      expect(within(row).queryByRole("link", { name: "详情" })).not.toBeInTheDocument();
+    }
     // It is the first block under the header; the lanes follow.
     const header = screen.getByRole("banner");
     expect(header.nextElementSibling).toBe(screen.getByRole("heading", { level: 3, name: "先看三件事" }).closest("section"));
@@ -193,6 +199,28 @@ describe("先看三件事", () => {
     show(three());
     expect(screen.queryByRole("region", { name: "头条" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "FDA 发布新方法学专题" })).toHaveLength(1);
+  });
+
+  it("is not drawn again in its lane: the lanes under it skip the three, with their counts and 分类 following, and a lane with nothing else goes", () => {
+    const daily = three({ sections: lanes(["evidence", [scored("e1", 40), scored("e2", 91)]], ["guideline", [scored("g1", 77)]], ["industry", [scored("i1", 5)]]) });
+    showWithToolbar(daily);
+    expect(screen.getAllByRole("link", { name: "e2 标题" })).toHaveLength(1);
+    expect(screen.getAllByRole("link", { name: "g1 标题" })).toHaveLength(1);
+    expect(within(screen.getByRole("list", { name: "evidence" })).getAllByRole("listitem").map((row) => row.querySelector("[data-row-title]")?.textContent)).toEqual(["e1 标题"]);
+    // g1 was its lane's only item: the lane is not drawn empty, and its heading is not left over
+    expect(screen.queryByRole("list", { name: "guideline" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 3, name: /^guideline/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: "evidence 1" })).toBeInTheDocument();
+    const lanesMenu = dailyControls(state(daily), { onDay: () => {} }).filters.find((filter) => filter.label === "分类");
+    expect(lanesMenu?.kind === "select" && lanesMenu.options.map((option) => option.label)).toEqual(["安全警示 1", "evidence 1", "industry 1"]);
+  });
+
+  it("leaves the lanes whole where there is no three: a week, or a day with fewer than three to show", () => {
+    show(three(), { weekly: true, laneLimit: 5 });
+    expect(within(screen.getByRole("list", { name: "evidence" })).getAllByRole("listitem")).toHaveLength(2);
+    cleanup();
+    show(three({ safety: [], sections: lanes(["evidence", [scored("only", 60)]]) }));
+    expect(within(screen.getByRole("list", { name: "evidence" })).getAllByRole("listitem")).toHaveLength(1);
   });
 
   it("leaves the safety alerts to their own block under it, whatever their score", () => {
@@ -376,6 +404,15 @@ describe("the archive beside the issue", () => {
       expect(setMonth).toHaveBeenCalledWith("2026-09");
       const chosen = filters(withArchive({ browse: { month: "2026-09", setMonth } }));
       expect(labelled(chosen, "往期").options.map((option) => option.label)).toEqual(["9月30日 周三", "9月29日 周二"]);
+    });
+
+    it("gives the oldest month no count while older issues remain unread: the page ended inside it", () => {
+      const more = { loading: false, load: () => {} };
+      const held = labelled(filters(withArchive({ browse: { month: null, setMonth: () => {} }, more })), "月份");
+      expect(held.options.map((option) => option.label)).toEqual(["2026年10月 · 2 期", "2026年9月", "更早的日报"]);
+      // with nothing older the whole of every month is held, and each says so
+      const whole = labelled(filters(withArchive({ browse: { month: null, setMonth: () => {} }, more: null })), "月份");
+      expect(whole.options.map((option) => option.label)).toEqual(["2026年10月 · 2 期", "2026年9月 · 2 期"]);
     });
 
     it("offers the next page of the archive as the last month, where a full page was read", () => {
