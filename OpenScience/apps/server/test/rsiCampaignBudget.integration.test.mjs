@@ -50,3 +50,16 @@ test('owner caps apply atomically within a campaign and across all lab campaigns
   await assert.rejects(ledger.reserve({campaignId:'invalid',stageKey:'one',amountCny:-1}),{code:'campaign_budget_unknown'});
  }finally{await database.query('DELETE FROM evimed_control.users WHERE id=$1',[owner]);await database.close();}
 });
+test('existing holds lose spending authority after overrun or tightened limits; limits never coerce', {skip:!url&&'Disposable localhost PostgreSQL required'},async()=>{
+ const database=new ControlPlaneDatabase({databaseUrl:url,databasePoolMax:4,databaseConnectionTimeoutMs:2000});const owner=`rsi_${randomUUID().replaceAll('-','')}`;
+ try{
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES ($1,'RSI dispatch fuse','development')",[owner]);
+  const configuration=boundLab(owner);configuration.budget.monthCny=1000;
+  const ledger=new RsiCampaignBudget({database,configuration,now:()=> '2026-10-26T01:00:00Z'});
+  for(const value of ['1000',true,Infinity,0.000000001])await assert.rejects(ledger.reserve({campaignId:'bad',stageKey:'bad',amountCny:1,limits:{campaignCny:value,monthCny:1000}}),{code:'campaign_budget_unknown'});
+  await ledger.reserve({campaignId:'a',stageKey:'first',amountCny:800});await ledger.reserve({campaignId:'b',stageKey:'hold',amountCny:200});
+  await ledger.beginSpend({campaignId:'a',stageKey:'first'});await ledger.settle({campaignId:'a',stageKey:'first',actualCny:1100,outcome:'failed'});
+  assert.equal((await ledger.beginSpend({campaignId:'b',stageKey:'hold'})).reason,'campaign_month_budget_exceeded');
+  assert.equal((await ledger.reserve({campaignId:'b',stageKey:'hold',amountCny:200})).authorized,false);
+ }finally{await database.query('DELETE FROM evimed_control.users WHERE id=$1',[owner]);await database.close();}
+});
