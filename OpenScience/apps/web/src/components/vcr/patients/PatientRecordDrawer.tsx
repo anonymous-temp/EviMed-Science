@@ -60,7 +60,7 @@ function Record({ record, labels }: { record: VcrPatientRecord; labels: Readonly
       {outcome.length > 0 && (
         <Section title={record.source === "predicted" ? "预测值" : "结局"} level="sub"><FactList rows={outcome} /></Section>
       )}
-      {(record.observations?.length ?? 0) > 0 && <Section title="纵向观测" level="sub"><DataTable label="该患者的全部观测记录" rowKey={row => `${row.visit}:${row.time}`} columns={[
+      {(record.observations?.length ?? 0) > 0 && <Section title="纵向记录" level="sub"><DataTable label="该患者的全部纵向记录" rowKey={row => `${row.visit}:${row.time}`} columns={[
         { key: "visit", header: "访视", cell: row => row.visit ?? "—" },
         { key: "time", header: "时间", cell: row => row.time ?? "—" },
         { key: "y", header: "记录值", cell: row => row.y ?? "—" },
@@ -70,12 +70,11 @@ function Record({ record, labels }: { record: VcrPatientRecord; labels: Readonly
       )}
       {record.trajectories && record.trajectories.length > 0 && (
         <Section title="两种假设下" level="sub">
-          <FactList
-            rows={record.trajectories.map((entry) => ({
-              label: entry.label,
-              value: Object.entries(entry.values).map(([key, value]) => `${labels[key] ?? key} ${value === null ? "—" : numberText(value)}`).join(" · "),
-            }))}
-          />
+          {record.trajectories.map(entry => entry.series?.length ? <DataTable key={entry.arm} label={`${entry.label}的完整轨迹`} rowKey={row => `${row.visit}:${row.time}`} columns={[
+            { key: "visit", header: "访视", cell: row => row.visit ?? "—" },
+            { key: "time", header: "时间", cell: row => row.time ?? "—" },
+            { key: "y", header: "假设下的取值", cell: row => row.y ?? "—" },
+          ]} rows={entry.series} /> : <FactList key={entry.arm} rows={[{ label: entry.label, value: Object.entries(entry.values).map(([key, value]) => `${labels[key] ?? key} ${value === null ? "—" : numberText(value)}`).join(" · ") }]} />)}
         </Section>
       )}
     </div>

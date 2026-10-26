@@ -1032,6 +1032,16 @@ describe("ProjectBrowser — a study of the 虚拟临床研究 group", () => {
   });
 
 
+  it("keeps two task scopes from changing a general project's module or sibling session links", async () => {
+    mocks.getVcrHome.mockResolvedValue({ studies: [{ id: "task_a", projectId: "p-heart", purpose: "task" }, { id: "task_b", projectId: "p-heart", purpose: "task" }], draftProjectIds: [] });
+    mocks.runs["p-heart"] = [run({ id: "first", question: "每周报告" }), run({ id: "second", question: "匹配患者" })];
+    const seen = vi.fn();
+    render(<MemoryRouter initialEntries={["/app/chat"]}><ProjectBrowser vcr onCurrentModule={seen} /></MemoryRouter>);
+    expect(await screen.findByRole("link", { name: /每周报告/ })).toHaveAttribute("href", "/app/chat/ses-first?project=p-heart");
+    expect(screen.getByRole("link", { name: /匹配患者/ })).toHaveAttribute("href", "/app/chat/ses-second?project=p-heart");
+    await waitFor(() => expect(seen).toHaveBeenLastCalledWith(null));
+  });
+
   it("keeps an explicit null canonical session separate from an ordinary sibling", async () => {
     mocks.runs["p-heart"] = [run({ id: "sibling", question: "另一段讨论" })];
     const withdraw = announceOpenStudy({ studyId: "std_1", projectId: "p-heart", sessionId: null });

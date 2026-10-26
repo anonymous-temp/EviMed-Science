@@ -1,3 +1,5 @@
+import {RuntimePromptStops} from './runtimePromptStops.mjs';
+import {withSessionPromptAdmission} from './runtimePromptAdmission.mjs';
 import { resolveVcrReplyStudy,vcrReplyUsesStudy } from './vcrReplyContext.mjs';
 import { mirrorSourceRuntimeReplica } from "./sourceRuntimeReplica.mjs";
 import { createVcrStudyStart } from "./vcrStudyStart.mjs";
@@ -37,6 +39,7 @@ import { createDataSemanticsGateway, DATA_SEMANTICS_GATEWAY_PATH } from "./dataS
 import { createTaskToolsGateway, TASK_TOOLS_GATEWAY_PATH } from "./taskToolsGateway.mjs";
 import { createDataSemanticsRoutes } from "./dataSemanticsRoutes.mjs";
 import { ResultExportService } from "./resultExport.mjs";
+import { bindVcrConversationReference, validateVcrConversationReference } from "./vcrConversationReference.mjs";
 import { ResultRevisionService } from "./resultRevision.mjs";
 import { ResultCorrectionService } from "./resultCorrection.mjs";
 import { createResultReuseRoutes } from "./resultReuseRoutes.mjs";
@@ -141,7 +144,7 @@ import { OfficialPacks, officialPackMetricFamilies } from "./officialPacks.mjs";
 import { OFFICIAL_PACKS_DIR } from "./officialPackSources.mjs";
 import { createMethodAppliedOutcomes } from "./methodAppliedOutcomes.mjs";
 import { persistExecutedToolEdges, persistToolTraces } from "./toolExecutionEdges.mjs";
-import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, conversationTurnRouteReason, deliverableDir, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, geoVisibleQuestionOfReason, isChargeableResearchRun, isConversationTurnRun, isResearcherOwnedWork, isVerificationRun, meetsPasswordMinimum, mountedMethodDigest, runRoleOf, usagePurposeOfRun, VCR_STEP_CAPABILITIES, VCR_CAPABILITIES } from "@evimed/domain";
+import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, conversationTurnRouteReason, deliverableDir, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, geoVisibleQuestionOfReason, isChargeableResearchRun, isConversationTurnRun, isResearcherOwnedWork, isVerificationRun, meetsPasswordMinimum, mountedMethodDigest, runRoleOf, usagePurposeOfRun, VCR_STEP_CAPABILITIES } from "@evimed/domain";
 import { requestedSourceScope, ResearchSessionStore } from "./researchSessions.mjs";
 import { boundConversationNote, prepareResearchContext } from "./researchContext.mjs";
 import { preservedConversationHistory } from "./conversationHistory.mjs";
@@ -3500,6 +3503,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     },
     agentRegistry,
     recordRuntimeEgressDispatch: (project, runId, at) => agentRuns?.recordRuntimeEgressDispatch(project, runId, at),
+    readPromptStop: (project,sessionId,runId)=>agentRuns?.promptStopRequested(project,sessionId,runId),
     readRuntimeEgressRun: async (project, runId) => {
       const user = await store.userById(project.userId);
       if (!user) return null;
@@ -3592,6 +3596,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   });
   researchSessions.onSpecialistBound = (project, sessionId, agentId) => runtimeManager.writeSessionBinding?.(project, sessionId, agentId) ?? Promise.resolve(false);
   runtimeManager.pluginService = pluginService;
+  runtimeManager.promptAdmissionDatabase=productDatabase;
   // The other half of the same seam. `syncCapsuleMethods` reads this before
   // every launch, and left unassigned it materializes an empty directory: the
   // work-style pack a user exported, imported and approved would reach no run,
@@ -3810,6 +3815,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    *   verification: ReturnType<typeof createEvidenceSourceVerification> } | null} */
   let evidencePublish = null;
   agentRuns = new AgentRunStore(researchSessions, {
+    promptStops:new RuntimePromptStops({database:productDatabase}),
+    withPromptAdmission:(project,sessionId,operation)=>withSessionPromptAdmission(runtimeManager,project,sessionId,operation),
     judgeService,
     agentRegistry,
     // The register judge leaves the platform's own projects unread, and reads a bounded number of report lines per run.
@@ -5422,9 +5429,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     isHumanMessage: async (origin,message) => (await agentRuns.list(await sourceProject(origin))).some(run => run.sessionId === origin.rootSessionId
       && run.automated !== true && (Number.isSafeInteger(message.turnStartSeq) && run.nativeTurn?.startSeq === message.turnStartSeq
         || message.sourceRequestId && run.kernelRequestIds?.includes(message.sourceRequestId))),
-    transcript:async origin => runtimeManager.sessionTranscript(await sourceProject(origin),origin.rootSessionId,{wake:false}) });
+    transcript:async (origin,options={}) => runtimeManager.sessionTranscript(await sourceProject(origin),origin.rootSessionId,{wake:false,...options}) });
   const vcrGatewayHandler = createVcrGatewayHandler(config, runtimeManager, {
     vcr,
+    resolveStudyConversation,
     resolveInvocation: async (identity, header, operation, body) => {
       const project = await sourceProject(identity);
       return verifyVcrInvocation({ header, operation, body, project, runtimeManager,
@@ -5655,10 +5663,19 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       audit: vcrAudit,
     });
     vcr.completions = new VcrConversationCompletions({
-      store: vcr.store, jobs:vcr.jobs,
+      store: vcr.store, jobs:vcr.jobs, config,
+      readOrigin:async (project,runId)=>(await agentRuns.list(project)).find(run=>run.id===runId) ?? null,
+      readRuns:project=>agentRuns.list(project),
+      readCurrentInput:async(project,sessionId)=>{
+        const transcript=await runtimeManager.sessionTranscript(project,sessionId,{wake:false,currentTurn:true});
+        const input=(transcript.messages ?? []).filter(message=>message.role==='user' && message.source==='user').at(-1);
+        return input ? {requestId:input.sourceRequestId,turnStartSeq:input.turnStartSeq} : null;
+      },
       resolve:createVcrCompletionResolver({accounts:store,studies:vcr.store,sessions:researchSessions,allows:user=>vcr.service.allows(user)}),
       inbox: async (project,sessionId) => {
-        await runtimeManager.start(project);
+        // A stopped runtime cannot be busy. Only a dispatch that passed the spend
+        // guards starts it; probing a blocked continuation never keeps it warm.
+        if (!runtimeManager.runtimes.has(runtimeManager.key(project))) return {running:false,queued:0};
         const state=await runtimeManager.sessionInbox(project,sessionId);
         if(!state) throw new HttpError(404,'research_session_not_found','The original native conversation is unavailable.');
         return state;
@@ -5669,9 +5686,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         return dispatchChannelRun(user,project,sessionId,dispatchId,text,{ ...options,originalQuestion:original.question ?? text,continuationRoute:{effectiveAgentId:original.effectiveAgentId ?? original.agentId ?? OPEN_DOMAIN_ANSWER_AGENT_ID,
           effectiveAgentVersion:original.effectiveAgentVersion ?? original.agentVersion ?? null} });
       },
-      notify: (row,reason) => notificationService?.create(row.user_id,{ noticeType:'notify',projectId:row.project_id,
-        title:'研究计算已结束',body:reason === 'unavailable' ? '原对话或研究已不可用，未自动继续。' : '计算结果已保存。',
-        source:{type:'thread',id:row.root_session_id},idempotencyKey:`${row.id}:unavailable` }),
+      notify: (row,reason) => {
+        if(!notificationService) throw new HttpError(503,'vcr_completion_notice_unavailable','Completion notifications are unavailable.');
+        return notificationService.create(row.user_id,{ noticeType:'notify',projectId:row.project_id,
+        title:'研究计算已结束',body:reason === 'unavailable' ? '原对话或研究已不可用，未自动继续。' : '计算结果已保存，可在原对话中继续查看。',
+        source:{type:'thread',id:row.root_session_id},idempotencyKey:`${row.id}:unavailable` });
+      },
       report: code => process.stderr.write(`vcr completion: ${code}\n`),
     });
     vcr.worker = new VcrWorker({
@@ -6211,7 +6231,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const registry = await agentRegistry;
     const originalAgentId=options.continuationRoute?.effectiveAgentId ?? OPEN_DOMAIN_ANSWER_AGENT_ID;
     const originalAgent=registry.get(originalAgentId);
-    if(options.nativeContinuation && (!originalAgent || options.continuationRoute?.effectiveAgentVersion && originalAgent.version!==options.continuationRoute.effectiveAgentVersion)) throw new HttpError(404,'vcr_completion_origin_unavailable','The original research capability version is unavailable.');
+    if(options.nativeContinuation && !originalAgent) throw new HttpError(404,'vcr_completion_origin_unavailable','The original research capability version is unavailable.');
     const route = options.nativeContinuation ? { effectiveAgentId:originalAgentId,
       effectiveAgentVersion:originalAgent.version, effectiveRuntimeAgent:originalAgent.runtimeAgent,
       effectiveRouteReason:'vcr-job-completion' } : await routeAdoptedInput(project,sessionId,text);
@@ -6224,7 +6244,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const answerAgent = routed ? null : registry.get(OPEN_DOMAIN_ANSWER_AGENT_ID);
     const routableAgents = registry.list().filter((agent) => agent.id !== OPEN_DOMAIN_ANSWER_AGENT_ID);
     const dispatch = async () => {
-      if (options.beforeReserve) await options.beforeReserve();
       return agentRuns.dispatch(project, {
       sessionId,
       dispatchId,
@@ -6282,10 +6301,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           const state = await runtimeManager.sessionInbox(project, session.sessionId);
           if (!state || state.running !== false || state.queued !== 0) throw new HttpError(409, "vcr_conversation_busy", "The study conversation is busy. Retry when it finishes.");
         }
-        if (options.beforePrompt) await options.beforePrompt();
         promptAttempted = true;
         await runtimeManager.dispatchPrompt(project, session.sessionId, {
           recordPromptActor: request => recordExtensionPromptActor(user, project, request),
+          ...(options.beforePrompt ? {beforePrompt:options.beforePrompt} : {}),
           text: promptText,
           system: options.systemSupplement ? `${prepared.system ?? ""}\n\n${options.systemSupplement}` : prepared.system,
           routedCapability: prepared.routedCapability,
@@ -6301,7 +6320,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (options.dispatchFingerprint && !promptAttempted) error.definitivelyRejected = true;
         throw error;
       }
-    });
+    },{beforeReserve:options.beforeReserve ?? null});
     };
     return pluginService ? pluginService.withAdmission(project, dispatch) : dispatch();
   }
@@ -7098,6 +7117,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
 
       // The knowledge-base documents one conversation is limited to (design reference N-14): `kb_search` searches
       // only these, and the conversation's context lists only these. An empty list lifts the limit.
+      const vcrReferenceRoute = /^\/api\/research-sessions\/([^/]+)\/vcr-reference$/.exec(pathname);
+      if (vcrReferenceRoute && req.method === "POST") {
+        const ctx = await context(req, res);
+        const body = await readJson(req, 4096);
+        const reference = await validateVcrConversationReference(vcr, ctx.user, ctx.project, decodeRouteComponent(vcrReferenceRoute[1], "session id"), body);
+        sendJson(res, 200, { data: reference });
+        return;
+      }
+
       const originReferenceRoute = /^\/api\/research-sessions\/([^/]+)\/origin-reference$/.exec(pathname);
       if (originReferenceRoute && req.method === "PUT") {
         const ctx = await context(req, res);
@@ -8340,6 +8368,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await credits.service.assertBalanceForStart(project.userId, binding?.mode === "specialist" ? binding.agentId : null, { ignoreHoldOf: working?.id ?? null });
     } : null,
     recordPromptActor: recordExtensionPromptActor,
+    bindVcrReference: (user, project, request) => bindVcrConversationReference(vcr, user, project, request),
     bindResultRevision: resultRevisions ? (user, project, request) => resultRevisions.bind(user.id, project, request) : null,
     // A conversation typed in the kernel's own window: the route of its input is frozen before the prompt goes, and so is what the runtime carries of
     // the researcher's methods, chosen by what it asks (`RuntimeManager.refreshCapsuleMethods`). Neither refuses the prompt.
@@ -10177,6 +10206,9 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
       { value: Number(cleanup.retries?.failed) || 0, labels: { result: "failed" } },
     ],
   );
+  const promptAdmission=runtimeStats.promptAdmissions ?? {};
+  addMetric(lines,"open_science_runtime_prompt_admission_active","Same-session prompt admission RPCs in flight.","gauge",{value:promptAdmission.active ?? 0});
+  addMetric(lines,"open_science_runtime_prompt_admission_total","Same-session prompt admission outcomes.","counter",['attempted','queued','admitted','failed','timedOut'].map(outcome=>({labels:{outcome},value:promptAdmission[outcome] ?? 0})));
   addMetric(lines, "open_science_runtime_proxy_active", "Active runtime proxy requests and streams.", "gauge", {
     value: runtimeStats.proxy?.active ?? 0,
   });

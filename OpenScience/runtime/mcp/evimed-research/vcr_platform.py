@@ -77,8 +77,8 @@ from immutable_capture import managed_workspace, ImmutableCaptureError
 # equal to the server's.
 READ_WHATS = (
     "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
-    "precedents", "matching", "subject_document", "model_source", "generated_records", "results", "report_model", "snapshot_profile", "models", "jobs",
-    "trial_registry_record", "pack", "library", "model_assessments", "longitudinal", "candidate_trials", "soa", "regulatory_contacts",
+    "precedents", "matching", "subject_document", "followup_history", "model_source", "generated_records", "results", "report_model", "snapshot_profile", "models", "jobs",
+    "trial_registry_record", "patient_context", "pack", "library", "model_assessments", "longitudinal", "candidate_trials", "soa", "regulatory_contacts",
 )
 WRITE_WHATS = ("task_context", "patient_context",
     "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
@@ -213,6 +213,7 @@ def _detailed_tool_definitions():
                             "protocolVersionId": ID,
                             "query": {"type": "string", "minLength": 1, "maxLength": 200},
                             "limit": {"type": "integer", "minimum": 1, "maximum": READ_MAX_LIMIT, "default": 20},
+                            "beforeSeq": {"type": "integer", "minimum": 0},
                             "offset": {"type": "integer", "minimum": 0, "maximum": 1048576},
                         },
                         "additionalProperties": False,
@@ -469,14 +470,22 @@ def _detailed_tool_definitions():
 def tool_definitions():
     """Compact root catalogue; the workflow skill and shape action carry detail."""
     descriptions = {
-        "vcr_read": "Read the current conversation's research objects and evidence. what=study gives task context; subject_document reads original patient material through existing permission and quote checks. matching filter.kind=contract returns write syntax; filter.subjectKey plus filter.id reads one criterion without repeated schemas. matching and candidate_trials retain criterion evidence and unknowns; filter.subjectKey selects a platform pseudonym. No invented eligibility or clinical validity. Use the virtual clinical research skill for details.",
-        "vcr_write": "Save research objects in this conversation. what=task_context opens an independent task context; patient_context data={messageSeq?} preserves an authenticated human message, or data={sourceId} an owned uploaded original. It accepts no patient prose from the model. Preserve sourced quotes and use the returned subjectKey/documentId for facts and trial matching. candidate_trial stores registry-linked eligibility. Other objects use their structured contract; computed results are never writable. For numerical configuration use vcr_simulate action shape with design_analytic, design_simulation, generate_patients, generate_patients_continuous, generate_patients_binary or generate_population.",
-        "vcr_simulate": "Run a bounded research calculation on the current conversation's objects: start, status, cancel. action shape and kind return the exact method scenario and examples: never guess a key; invalid input is refused by the field's path. Inputs kind:'snapshot' name owned data; the vcr-analysis skill describes the workflow. Start returns a durable job; a long job continues in this same conversation when it finishes. Failure, cancellation and partial results stay explicit. modelId requires immutable modelVersion. Narrow aggregate calculations also use research_calculate without a study.",
+        "vcr_read": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists authenticated human-message references (filter beforeSeq/limit); use messageSeq to preserve an earlier case. subject_document reads permitted original material. trial_registry_record reads one registry (filter registryId). matching filter.kind=contract gives write syntax; candidate_trials reads patient trial matches.",
+        "vcr_write": "Save a research object; candidate_trial stores registry-linked eligibility. Never write calculated results. patient_context data={messageSeq} preserves a listed original human case, or {sourceId} an owned human upload; no model-written prose. task_context opens an independent hidden task. Use the VCR workflow skill for object contracts and vcr_simulate action=shape for numerical inputs.",
+        "vcr_simulate": "Run, read or cancel research calculations. action=shape with kind returns exact fields and examples before start; do not guess keys. Long jobs resume here only when they outlive this turn. Failures, cancellations and partials remain explicit. modelId requires modelVersion. Narrow aggregate methods also use research_calculate without a study.",
     }
     tools = _detailed_tool_definitions()
     for tool in tools:
         if tool["name"] in descriptions:
             tool["description"] = descriptions[tool["name"]]
+            # The wrapper and gateway retain their complete validation. The root
+            # learns method-specific fields from shape, not a permanent schema.
+            props = tool["inputSchema"]["properties"]
+            for name in ("filter", "data", "scenario", "selection"):
+                if name in props:
+                    props[name] = {"type": "object"}
+            if "items" in props:
+                props["items"] = {"type": "array", "items": {"type": "object"}}
     return tools
 
 
@@ -637,7 +646,7 @@ def read(arguments: dict) -> dict:
     warnings = []
     next_actions = []
     if what == "matching" and (arguments.get("filter") or {}).get("kind") not in ("contract", "terminology"):
-        next_actions.append("Read matching filter.kind=contract for exact protocol/fact write envelopes; patient_context data={} selects the authenticated user material without guessing messageSeq.")
+        next_actions.append("Read matching filter.kind=contract for exact protocol/fact write envelopes; vcr_read what=patient_context lists authenticated human cases; preserve the chosen messageSeq rather than guessing it.")
         if data.get("subjectKey"):
             if data.get("assessment") is None:
                 next_actions.append("No computed assessment is saved yet. Start vcr_simulate action=start kind=match_criteria, then read matching with this subjectKey when it completes. Do not invent judgments.")

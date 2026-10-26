@@ -135,7 +135,7 @@ import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { vcrId } from "./vcrStoreBase.mjs";
 import { jobSummaryFromRow, resultFromRow } from "./vcrStore.mjs";
 import { HttpError } from "./security.mjs";
-import { VcrEngineError, vcrComputedOutputHash, vcrResultEchoIssues } from "./vcrEngineClient.mjs";
+import { VcrEngineError, vcrComputedOutputHash, vcrResultEchoIssues, vcrExecutionReceiptVerified } from "./vcrEngineClient.mjs";
 import { vcrPopulationGenerationInput } from "./vcrSubjects.mjs";
 import { assertDataPlaneRoot } from "./vcrDataPlane.mjs";
 
@@ -494,7 +494,7 @@ export class VcrJobs {
    *   notifier?: { budgetConfirm?: (study: any, job: any) => Promise<unknown> } | null,
    *   dataPlane?: { resolveEngineInputs: (input: Record<string, any>) => Promise<Array<Record<string, any>>> } | null,
    *   engineObserver?: { observe: (answered: boolean, code?: string | null) => void } | null,
-   *   baselineVerifier?: ((input:{userId:string,studyId:string,baselineTable:any[],bindings:any[]})=>Promise<any>) | null,
+   *   baselineVerifier?: ((input:{userId:string,studyId:string,baselineTable:any[],bindings:any[],correlationSource?:string})=>Promise<any>) | null,
    *   now?: () => Date, report?: (code: string) => void }} dependencies
    *   `localExecutors` is keyed by method id (`matching.evaluate` is the
    *   matching package's); anything not named there goes to the engine.
@@ -520,11 +520,12 @@ export class VcrJobs {
     this.report = report;
     this.owner = `vcr-${process.pid}-${Math.random().toString(36).slice(2, 10)}`;
     this.counters = { enqueued: 0, deduplicated: 0, claimed: 0, dispatched: 0, succeeded: 0, failed: 0, canceled: 0,
-      awaitingBudget: 0, budgetHeld: 0, partial: 0, resubmitted: 0, exhausted: 0, mismatched: 0, tablesStored: 0 };
+      awaitingBudget: 0, budgetHeld: 0, partial: 0, resubmitted: 0, exhausted: 0, mismatched: 0, tablesStored: 0, finishHookFailed:0, finishHookExhausted:0, finishHookApplied:0, localClaimed:0 };
     /** @type {string | null} */
     this.lastError = null;
     /** @type {Array<(outcome: Record<string, any>) => Promise<unknown> | unknown>} */
     this.finishHooks = [];
+    this.finishHookKeys = new WeakMap();
     /** @type {any[]} rows failed by the claim for having no attempts left, until the worker has told the orchestrator */
     this.reaped = [];
   }
@@ -540,7 +541,8 @@ export class VcrJobs {
    * throws is reported and never undoes the job.
    * @param {(outcome: Record<string, any>) => Promise<unknown> | unknown} hook
    */
-  addFinishHook(hook) {
+  addFinishHook(hook, key = `hook:${this.finishHooks.length}`) {
+    this.finishHookKeys.set(hook,key);
     this.finishHooks.push(hook);
     return this;
   }
@@ -548,36 +550,61 @@ export class VcrJobs {
   /** Replay post-commit consumers from immutable executions. A durable lease fences
    * concurrent finish callbacks, process restarts and completion reconciliation. */
   async reconcileFinishHooks() {
-    const rows = await this.store.rows(`SELECT id FROM ${VCR_SCHEMA}.jobs WHERE state IN ('succeeded','failed','canceled')
-      AND checkpoint ? 'conversationOrigin' AND COALESCE(checkpoint->>'completionHooksApplied','false')<>'true'
-      AND (checkpoint->>'completionHooksLeaseUntil' IS NULL OR (checkpoint->>'completionHooksLeaseUntil')::timestamptz<now())
-      ORDER BY finished_at LIMIT 20`);
+    const rows = await this.store.rows(`WITH eligible AS (SELECT id,user_id,finished_at,
+      row_number() OVER (PARTITION BY user_id ORDER BY finished_at,id) AS account_order
+      FROM ${VCR_SCHEMA}.jobs WHERE state IN ('succeeded','failed','canceled')
+      AND COALESCE(checkpoint->>'completionHooksApplied','false')<>'true'
+      AND COALESCE(checkpoint->>'completionHooksExhausted','false')<>'true'
+      AND (finished_at<now()-make_interval(secs=>$2) OR checkpoint->>'completionHooksRunAfter' IS NULL OR (checkpoint->>'completionHooksRunAfter')::timestamptz<=now())
+      AND (checkpoint->>'completionHooksLeaseUntil' IS NULL OR (checkpoint->>'completionHooksLeaseUntil')::timestamptz<now()))
+      SELECT id FROM eligible ORDER BY account_order,finished_at,id LIMIT $1`,[this.config.vcrCompletionReconcileBatch ?? 50,Number(this.config.vcrCompletionMaxAgeMs ?? 86400000)/1000]);
     for (const row of rows) await this.deliverFinishHooks(String(row.id));
     return rows.length;
   }
 
   async deliverFinishHooks(jobId, supplied = null) {
+    const expired=await this.store.one(`UPDATE ${VCR_SCHEMA}.jobs SET checkpoint=(checkpoint-'completionHooksLeaseUntil') || '{"completionHooksExhausted":true}'::jsonb
+      WHERE id=$1 AND state IN ('succeeded','failed','canceled') AND finished_at<now()-make_interval(secs=>$2)
+      AND COALESCE((checkpoint->>'completionHooksAttempts')::integer,0)>0
+      AND COALESCE(checkpoint->>'completionHooksApplied','false')<>'true' AND COALESCE(checkpoint->>'completionHooksExhausted','false')<>'true'
+      AND (checkpoint->>'completionHooksLeaseUntil' IS NULL OR (checkpoint->>'completionHooksLeaseUntil')::timestamptz<now()) RETURNING id`,
+    [jobId,Number(this.config.vcrCompletionMaxAgeMs ?? 86400000)/1000]);
+    if(expired) {this.counters.finishHookExhausted++;this.report('vcr_finish_hooks_exhausted');return;}
     const row = await this.store.one(`UPDATE ${VCR_SCHEMA}.jobs SET checkpoint=checkpoint ||
-      jsonb_build_object('completionHooksLeaseUntil',(now()+interval '5 minutes')::text)
-      WHERE id=$1 AND state IN ('succeeded','failed','canceled') AND checkpoint ? 'conversationOrigin'
+      jsonb_build_object('completionHooksLeaseUntil',(now()+make_interval(secs=>$2))::text,
+        'completionHooksAttempts',COALESCE((checkpoint->>'completionHooksAttempts')::integer,0)+1)
+      WHERE id=$1 AND state IN ('succeeded','failed','canceled')
         AND COALESCE(checkpoint->>'completionHooksApplied','false')<>'true'
-        AND (checkpoint->>'completionHooksLeaseUntil' IS NULL OR (checkpoint->>'completionHooksLeaseUntil')::timestamptz<now()) RETURNING *`,[jobId]);
-    if (!row) {
-      if (!supplied) return;
-      const current = await this.#row(jobId);
-      if (object(current?.checkpoint).conversationOrigin) return;
-    }
-    const execution = row && !supplied ? await this.store.one(`SELECT * FROM ${VCR_SCHEMA}.executions WHERE job_id=$1 ORDER BY created_at DESC LIMIT 1`,[jobId]) : null;
-    const done = supplied ?? { action:'finished',state:row.state,job:jobSummaryFromRow(row),
+        AND COALESCE(checkpoint->>'completionHooksExhausted','false')<>'true'
+        AND (checkpoint->>'completionHooksRunAfter' IS NULL OR (checkpoint->>'completionHooksRunAfter')::timestamptz<=now())
+        AND (checkpoint->>'completionHooksLeaseUntil' IS NULL OR (checkpoint->>'completionHooksLeaseUntil')::timestamptz<now()) RETURNING *`,
+    [jobId,Math.max(1,Number(this.config.vcrCompletionLeaseMs ?? 300000)/1000)]);
+    if (!row) return;
+    const execution = !supplied ? await this.store.one(`SELECT * FROM ${VCR_SCHEMA}.executions WHERE job_id=$1 ORDER BY created_at DESC LIMIT 1`,[jobId]) : null;
+    const done = supplied ?? {action:'finished',state:row.state,job:jobSummaryFromRow(row),
       result:await this.resultOf(String(row.study_id),jobId),execution,
-      engineResult:object(execution?.receipt).stageOutput ?? null,error:row.error,partial:object(row.error).partial===true };
-    try {
-      for (const hook of this.finishHooks) await hook(done);
-      if (row) await this.store.query(`UPDATE ${VCR_SCHEMA}.jobs SET checkpoint=(checkpoint-'completionHooksLeaseUntil') || '{"completionHooksApplied":true}'::jsonb WHERE id=$1`,[jobId]);
-    } catch(error) {
-      this.report(codeOf(error));
-      if (row) await this.store.query(`UPDATE ${VCR_SCHEMA}.jobs SET checkpoint=checkpoint-'completionHooksLeaseUntil' WHERE id=$1`,[jobId]);
+      engineResult:object(execution?.receipt).stageOutput ?? null,error:row.error,partial:object(row.error).partial===true};
+    const applied=new Set(list(object(row.checkpoint).completionHooksDone));
+    let failed=false;
+    for (const hook of this.finishHooks) {
+      const key=this.finishHookKeys.get(hook) ?? `hook:${this.finishHooks.indexOf(hook)}`;
+      if (applied.has(key)) continue;
+      try {
+        await hook(done);
+        applied.add(key);
+        await this.store.query(`UPDATE ${VCR_SCHEMA}.jobs SET checkpoint=jsonb_set(checkpoint,'{completionHooksDone}',$2::jsonb) WHERE id=$1`,[jobId,JSON.stringify([...applied])]);
+      } catch(error) { failed=true;this.counters.finishHookFailed++;this.report(codeOf(error)); }
     }
+    const attempts=Number(row.checkpoint?.completionHooksAttempts ?? 1);
+    const maxAge=Number(this.config.vcrCompletionMaxAgeMs ?? 86400000);
+    const exhausted=failed && (attempts>=Number(this.config.vcrCompletionMaxAttempts ?? 12)
+      || this.now().getTime()-new Date(row.finished_at ?? row.updated_at ?? this.now()).getTime()>=maxAge);
+    const delay=Math.min(Number(this.config.vcrCompletionRetryMaxMs ?? 900000),Number(this.config.vcrCompletionRetryMs ?? 15000)*2**Math.min(20,Math.max(0,attempts-1)));
+    await this.store.query(`UPDATE ${VCR_SCHEMA}.jobs SET checkpoint=(checkpoint-'completionHooksLeaseUntil') ||
+      jsonb_build_object('completionHooksApplied',$2::boolean,'completionHooksExhausted',$3::boolean,
+        'completionHooksRunAfter',(now()+make_interval(secs=>$4))::text) WHERE id=$1`,[jobId,!failed,exhausted,failed ? delay/1000 : 0]);
+    if (exhausted) {this.counters.finishHookExhausted++;this.report('vcr_finish_hooks_exhausted');}
+    if (!failed) this.counters.finishHookApplied++;
   }
 
   // --- budget -----------------------------------------------------------------------
@@ -690,14 +717,14 @@ export class VcrJobs {
       if (!this.baselineVerifier || direct != null && configured != null && canonicalScenarioJson(direct) !== canonicalScenarioJson(configured)) {
         throw new HttpError(400, "vcr_job_scenario_invalid", "Literature population statistics require exact source bindings; use a scenario population for explicitly assumed distributions.");
       }
-      const checked = await this.baselineVerifier({ userId: String(input.userId), studyId,
+      const checked = await this.baselineVerifier({ userId: String(input.userId), studyId, correlationSource: scenario.correlationSource,
         baselineTable: scenario.baselineTable, bindings: direct ?? configured });
       if (!checked?.ok) throw this.#invalid("vcr_job_scenario_invalid", list(checked?.issues).map(issue => ({
         code: "vcr_evidence_unverified", field: `baselineBindings.${issue.variable ?? ""}.${issue.field ?? ""}`, detail: String(issue.code ?? "baseline_evidence_unverified") })));
       const { baselineBindings: _metadata, ...numeric } = scenario;
       scenario = numeric;
       asked = [...asked.filter(entry => object(entry).kind !== "evidence"), ...checked.evidenceIds.map(id => ({ kind: "evidence", id }))];
-      baselineDetail = { baselineBindings: checked.bindings, literatureBaseline: { verification: "source_verified", bindings: checked.bindings,
+      baselineDetail = { baselineBindings: checked.bindings, literatureBaseline: { verification: "marginals_source_verified", correlation: "assumed", bindings: checked.bindings,
         evidenceIds: checked.evidenceIds, scope: "quoted_statistics_only", transportability: "not_validated" } };
     }
     /** @type {Record<string, any>} */
@@ -888,19 +915,19 @@ export class VcrJobs {
 
   /** Available owned reconstructions, without paths or patient rows. @param {string} studyId */
   async reconstructionResults(studyId) {
-    const rows = await this.store.rows(`SELECT r.*, c.origin AS curve_origin,
+    const rows = await this.store.rows(`SELECT r.*, e.receipt AS execution_receipt, e.output_hash AS execution_output_hash, c.origin AS curve_origin,
         c.digitization #>> '{calibration,x,unit}' AS curve_time_unit
       FROM ${VCR_SCHEMA}.results r
       JOIN ${VCR_SCHEMA}.executions e ON e.id=r.execution_id AND e.study_id=r.study_id
       JOIN ${VCR_SCHEMA}.jobs j ON j.id=e.job_id AND j.study_id=r.study_id
       JOIN ${VCR_SCHEMA}.curve_extractions c ON c.id=j.checkpoint->>'curveReceiptId' AND c.study_id=r.study_id
       WHERE r.study_id=$1 AND e.method='evidence.reconstruct_km'
-        AND e.receipt @> '{"signed":true}'::jsonb
         AND EXISTS (SELECT 1 FROM jsonb_array_elements(r.tables) t WHERE t->>'name'='reconstructed-ipd'
           AND t->>'location' LIKE 'derived/%' AND t->>'sha256' ~ '^[a-f0-9]{64}$')
       ORDER BY r.created_at DESC LIMIT 100`, [studyId]);
     const choices = [];
     for (const row of rows) {
+      if (!vcrExecutionReceiptVerified({ receipt: row.execution_receipt, output_hash: row.execution_output_hash })) continue;
       const result = resultFromRow(row);
       const table = list(result.tables).find(candidate => object(candidate).name === VCR_RECONSTRUCTION_REFERENCE.table);
       if (!vcrLocationIsValid(String(table?.location ?? ""))) continue;
@@ -927,13 +954,13 @@ export class VcrJobs {
       throw new HttpError(409, "vcr_derived_table_missing", "上一步的输出表没有存入数据平面：这一步需要它，暂时算不了。");
     }
     const execution = result.executionId
-      ? await this.store.one(`SELECT method, receipt, job_id FROM ${VCR_SCHEMA}.executions WHERE id = $1 AND study_id = $2`, [result.executionId, studyId]) : null;
+      ? await this.store.one(`SELECT method, receipt, output_hash, job_id FROM ${VCR_SCHEMA}.executions WHERE id = $1 AND study_id = $2`, [result.executionId, studyId]) : null;
     const source = /** @type {Record<string, string>} */ (VCR_DERIVED_SOURCES)[String(execution?.method ?? "")];
     if (!source) throw new HttpError(400, "vcr_derived_table_unsupported", "这张表不能作为另一项计算的输入。");
     if (entry.bindTo !== undefined) {
       if (source !== VCR_RECONSTRUCTION_REFERENCE.source) throw new HttpError(400, "vcr_derived_table_unsupported", "The comparator requires reconstructed curve data.");
       const producer = execution?.job_id ? await this.store.one(`SELECT scenario, inputs, checkpoint FROM ${VCR_SCHEMA}.jobs WHERE study_id=$1 AND id=$2`, [studyId, execution.job_id]) : null;
-      if (execution?.method !== "evidence.reconstruct_km" || object(execution.receipt).signed !== true
+      if (execution?.method !== "evidence.reconstruct_km" || !vcrExecutionReceiptVerified(execution)
         || !producer?.checkpoint?.curveReceiptId || !producer.checkpoint.curveImageHash || !producer.checkpoint.curvePointsHash || !this.curveVerifier) {
         throw new HttpError(409, "vcr_curve_provenance_unavailable", "The reconstruction has no verified curve source receipt.");
       }
@@ -1102,6 +1129,7 @@ export class VcrJobs {
       return claimed.rows;
     });
     this.counters.claimed += rows.length;
+    if (lane === 'local') this.counters.localClaimed += rows.length;
     this.counters.exhausted += this.reaped.length;
     return rows.map((row) => ({ ...jobSummaryFromRow(row), leaseOwner: String(row.lease_owner) }));
   }
@@ -1189,15 +1217,15 @@ export class VcrJobs {
    * the engine is told afterwards and a failure to reach it does not un-cancel
    * anything (AC-38). What the engine had computed is fetched later
    * (`recoverCanceled`).
-   * @param {string} studyId @param {string} jobId @param {{ actor?: string }} [options]
+   * @param {string} studyId @param {string} jobId @param {{ actor?: string, rootSessionId?: string | null }} [options]
    */
-  async cancel(studyId, jobId, { actor = "" } = {}) {
-    const row = await this.store.one(`UPDATE ${VCR_SCHEMA}.jobs
+  async cancel(studyId, jobId, { actor = "", rootSessionId = null } = {}) {
+    const row=await this.store.one(`UPDATE ${VCR_SCHEMA}.jobs
       SET state = 'canceled', cancel_requested = true, finished_at = now(), updated_at = now(),
           lease_owner = NULL, lease_until = NULL,
-          error = COALESCE(error, '{}'::jsonb) || jsonb_build_object('code', 'vcr_job_canceled', 'actor', $3::text)
+          error = COALESCE(error, '{}'::jsonb) || jsonb_build_object('code', 'vcr_job_canceled', 'actor', $3::text, 'rootSessionId', $5::text)
       WHERE study_id = $1 AND id = $2 AND state = ANY($4::text[]) RETURNING *`,
-    [studyId, jobId, String(actor), [...VCR_JOB_OPEN_STATES]]);
+    [studyId, jobId, String(actor), [...VCR_JOB_OPEN_STATES],rootSessionId]);
     if (!row) {
       const existing = await this.store.job(studyId, jobId);
       if (!existing) throw new HttpError(404, "vcr_job_not_found", "Job not found.");
@@ -1322,7 +1350,7 @@ export class VcrJobs {
     return this.finish(String(row.id), {
       status: ended, result: { ...result, tables }, signed: answer.signed === true, cpuSeconds, leaseOwner: owner, leaseAttempt: Number(row.attempts),
       verifiedStage: JSON.parse(vcrResultOutputPayload(result)),
-      outputHash: vcrComputedOutputHash(result),
+      outputHash: vcrComputedOutputHash(result), hashVerified:true,
       // A run the engine refused or stopped says why in its issues: the reason it
       // names is the job's own error, not a bare 「failed」 (a partial result
       // that a spent CPU budget cut short keeps its numbers *and* says so).
@@ -1633,7 +1661,7 @@ export class VcrJobs {
    *
    * @param {string} jobId
    * @param {{ status: string, result?: Record<string, any> | null, error?: Record<string, any> | null, signed?: boolean,
-   *   local?: boolean, verifiedStage?: Record<string, any>, cpuSeconds?: number, startedAt?: string | null, leaseOwner?: string | null, leaseAttempt?: number | null, outputHash?: string | null }} outcome
+   *   local?: boolean, verifiedStage?: Record<string, any>, cpuSeconds?: number, startedAt?: string | null, leaseOwner?: string | null, leaseAttempt?: number | null, outputHash?: string | null, hashVerified?: boolean }} outcome
    */
   async finish(jobId, outcome) {
     const row = await this.#row(jobId);
@@ -1677,6 +1705,7 @@ export class VcrJobs {
           replicates: result.replicates === undefined ? (row.replicates == null ? null : Number(row.replicates)) : result.replicates,
           outputHash: outcome.outputHash ?? result?.manifest?.outputHash ?? null,
           receipt: { signed: outcome.signed === true, local: outcome.local === true, status,
+            ...(outcome.hashVerified === true ? {hashVerified:true,outputHash:outcome.outputHash} : {}),
             ...(outcome.verifiedStage ? { stageVerified: true, stageOutput: outcome.verifiedStage } : {}),
             ...(detail.engineJobId ? { engineJobId: String(detail.engineJobId) } : {}), ...(partial ? { partial: true } : {}) },
           cpuSeconds: Number(outcome.cpuSeconds ?? result?.manifest?.cpuSeconds ?? 0),
@@ -1839,7 +1868,7 @@ export class VcrJobs {
         jobId: String(row.id), studyId: String(row.study_id), userId: String(row.user_id), method: String(row.method),
         methodVersion: String(row.method_version ?? ""), scenarioHash: String(row.scenario_hash ?? ""), inputs: list(row.inputs),
         environment: object(result.manifest), seed: Number(result.seed ?? row.seed ?? 0), replicates: result.replicates ?? null,
-        outputHash: result?.manifest?.outputHash ?? null, receipt: { signed, canceled: true, partial: true, status: "canceled",
+        outputHash: result?.manifest?.outputHash ?? null, receipt: { signed, hashVerified:true,outputHash:vcrComputedOutputHash(result),canceled: true, partial: true, status: "canceled",
           stageVerified: true, stageOutput: JSON.parse(vcrResultOutputPayload(result)) },
         cpuSeconds: Number(result?.manifest?.cpuSeconds ?? 0), startedAt: result?.manifest?.startedAt ?? null,
         finishedAt: result?.manifest?.finishedAt ?? this.now().toISOString(),
@@ -1854,7 +1883,7 @@ export class VcrJobs {
       const updated = (await client.query(`UPDATE ${VCR_SCHEMA}.executions SET receipt=receipt || $2::jsonb WHERE id=$1 RETURNING receipt`,
         [execution.id, JSON.stringify(proof)])).rows[0];
       execution.receipt = updated.receipt;
-      await client.query(`UPDATE ${VCR_SCHEMA}.jobs SET checkpoint=checkpoint-'completionHooksApplied',error = COALESCE(error, '{}'::jsonb) || jsonb_build_object('partial', true),
+      await client.query(`UPDATE ${VCR_SCHEMA}.jobs SET checkpoint=checkpoint-'completionOutboxRecorded'-'completionHooksApplied'-'completionHooksDone'-'completionHooksAttempts'-'completionHooksExhausted'-'completionHooksRunAfter',error = COALESCE(error, '{}'::jsonb) || jsonb_build_object('partial', true),
         cpu_seconds_used = GREATEST(cpu_seconds_used, $2::numeric) WHERE id = $1`, [String(row.id), Number(result?.manifest?.cpuSeconds ?? 0)]);
       this.counters.partial += 1;
       return { job: jobSummaryFromRow(locked), result: recorded, execution };

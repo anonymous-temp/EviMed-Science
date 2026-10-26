@@ -77,7 +77,7 @@ test('native VCR gateway opens tasks in the exact root session and rejects chang
  const handler=createVcrGatewayHandler({vcrEnabled:true},runtime,{vcr,resolveInvocation:async(_i,header,operation,body)=>verifyVcrInvocation({header,operation,body,project,runtimeManager:runtime,resolveSession:()=>null,runs:[{id:'run_gateway',sessionId:'global_a'},{id:'run_gateway_b',sessionId:'global_b'}]})});
  const invoke=async(session,body)=>{const req=Readable.from([Buffer.from(JSON.stringify(body))]);Object.assign(req,{method:'POST',url:'/internal/vcr/v1/read',headers:{authorization:'Bearer test','x-evimed-execution-context':JSON.stringify({v:1,sessionId:session,callId:'call'})}});let status,answer;const res={writeHead:code=>{status=code;},end:bytes=>{answer=JSON.parse(bytes);}};await handler(req,res);return{status,answer};};
  const a=await invoke('global_a',{what:'study'}),b=await invoke('global_b',{what:'study'});assert.equal(a.status,200);assert.equal(b.status,200);
- const contexts=await vcr.store.rows("SELECT id,conversation_session_id FROM evimed_vcr.studies WHERE user_id='gateway_user'");assert.equal(contexts.length,2);assert.notEqual(contexts[0].id,contexts[1].id);
+ const contexts=await vcr.store.rows("SELECT id,conversation_session_id FROM evimed_vcr.studies WHERE user_id='gateway_user'");assert.equal(contexts.length,0,'reads use transient contexts without creating studies');
  assert.equal((await invoke('global_a',{what:'matching'})).status,403);
 });
 test('legacy retired-role grants remain readable and can be revoked while new active grants are refused',options,async()=>{
@@ -97,6 +97,8 @@ test('a failed post-commit consumer is replayed before a native completion is de
  assert.equal(calls,1);let delivered=0;
  const service=new VcrConversationCompletions({store:vcr.store,jobs:vcr.jobs,resolve:async()=>({user:{id:'owner'},project:{id:'default'},session:{mode:'open-domain'}}),
   inbox:async()=>({running:false,queued:0}),dispatch:async()=>{delivered++;},notify:async()=>{}});
+ await service.tick();assert.equal(calls,1,'failed hooks respect backoff');
+ await vcr.store.query("UPDATE evimed_vcr.jobs SET checkpoint=checkpoint-'completionHooksRunAfter' WHERE id=$1",[queued.job.id]);
  await service.tick();assert.equal(calls,2);assert.equal(delivered,1);await service.tick();assert.equal(delivered,1);
 });
 test('patient intake shares its transaction client and succeeds concurrently with a one-connection pool',options,async()=>{
@@ -223,4 +225,140 @@ test('reply facts isolate ended ordinary task conversations, canonical and progr
  const programme=await facts('hidden_reply',{run:{id:'ended_programme',status:'succeeded',sessionId:'hidden_reply',effectiveRouteReason:'vcr:analysis',dispatchId:'reply_dispatch'}});assert.equal(programme.studyId,legacy.id);
  await vcr.store.softDeleteStudy(a.id,userId);assert.equal(await facts('reply_a'),null);assert.deepEqual(values(await facts('reply_b')),[91]);
  assert.equal(Number((await vcr.store.one('SELECT count(*) AS n FROM evimed_vcr.studies WHERE user_id=$1',[userId])).n),before);
+});
+
+test('conversation task contexts never enter study or project-classification lists and deletion is explicit',options,async()=>{
+ const context=await vcr.store.taskContext(origin('unlisted_task'));
+ assert.ok(!(await vcr.store.listStudies('owner')).some(row=>row.id===context.id));
+ assert.ok(!(await vcr.store.draftStudies('owner')).some(row=>row.id===context.id));
+ await vcr.store.query('UPDATE evimed_vcr.studies SET deleted_at=now() WHERE id=$1',[context.id]);
+ await assert.rejects(vcr.store.taskContext(origin('unlisted_task')),{code:'vcr_task_context_deleted',status:410});
+});
+test('outbox interleaves accounts when one has more than a batch of busy completions',options,async()=>{
+ await vcr.store.query('DELETE FROM evimed_vcr.conversation_completions');
+ for(let i=0;i<18;i++)await vcr.store.query(`INSERT INTO evimed_vcr.conversation_completions
+  (id,user_id,project_id,root_session_id,result_key,dispatch_id,fingerprint,payload,created_at) VALUES ($1,$2,'default','session','none',$3,$4,$5::jsonb,now()-interval '1 minute')`,
+  [`fair_${i}`,i===17?'other':'owner',`fair_dispatch_${i}`,'a'.repeat(64),JSON.stringify({state:'succeeded',runId:'original'})]);
+ const delivered=[];const completion=new VcrConversationCompletions({store:vcr.store,config:{vcrCompletionBatch:5},resolve:async row=>({user:{id:row.user_id},project:{id:'default',userId:row.user_id},session:{}}),
+  inbox:async project=>({running:project.userId==='owner',queued:0}),dispatch:async user=>{delivered.push(user.id);},notify:async()=>{}});
+ await completion.deliver();assert.deepEqual(delivered,['other']);
+});
+test('exhausted hooks do not block independent consumers or later accounts',options,async()=>{
+ const study=await vcr.store.taskContext(origin('bounded_hooks'));
+ const queue=new (await import('../src/vcrJobs.mjs')).VcrJobs({store:vcr.store,config:{vcrCompletionMaxAttempts:1}});
+ const queued=await queue.enqueue({studyId:study.id,userId:'owner',kind:'design_analytic',scenario:{design:{kind:'two_arm_fixed'},endpoint:{type:'binary'},truth:{controlRate:0.3,treatmentRate:0.5}},idempotencyKey:'bounded_hooks'});
+ let failing=0,independent=0;queue.addFinishHook(async()=>{failing++;throw Object.assign(new Error('Synthetic persistent consumer failure'),{code:'fixture_consumer_failure'});},'failed_consumer');
+ queue.addFinishHook(async()=>{independent++;},'independent_consumer');
+ await vcr.store.query("UPDATE evimed_vcr.jobs SET state='failed',finished_at=now() WHERE id=$1",[queued.job.id]);
+ await queue.deliverFinishHooks(queued.job.id);await queue.reconcileFinishHooks();
+ const row=await vcr.store.one('SELECT checkpoint FROM evimed_vcr.jobs WHERE id=$1',[queued.job.id]);
+ assert.equal(failing,1);assert.equal(independent,1);assert.equal(row.checkpoint.completionHooksExhausted,true);assert.ok(row.checkpoint.completionHooksDone.includes('independent_consumer'));
+});
+
+test('a durable terminal read recorded after reconciliation consumes the exact job generation',options,async()=>{
+ await vcr.store.query('DELETE FROM evimed_vcr.conversation_completions');
+ const study=await vcr.store.taskContext(origin('late_observation'));
+ await vcr.store.query(`INSERT INTO evimed_vcr.jobs (id,study_id,user_id,kind,method,method_version,state,scenario,scenario_hash,seed,cpu_seconds_limit,max_attempts,idempotency_key,checkpoint,finished_at)
+  VALUES ('late_observation_job',$1,'owner','design_analytic','design.analytic','1.2.0','failed','{}','hash',1,60,3,'late_observation_job',$2::jsonb,now())`,[study.id,JSON.stringify({conversationOrigin:origin('late_observation')})]);
+ let paid=0;const service=new VcrConversationCompletions({store:vcr.store,resolve:async row=>row.job_id==='late_observation_job'?{user:{id:'owner'},project:{id:'default'},session:{}}:null,inbox:async()=>({running:false,queued:0}),dispatch:async()=>{paid++;},notify:async()=>{}});
+ await service.reconcile();
+ await vcr.store.query(`UPDATE evimed_vcr.jobs SET checkpoint=checkpoint || jsonb_build_object('originTerminalObservation',$2::jsonb) WHERE id=$1`,['late_observation_job',JSON.stringify({runId:'run',rootSessionId:'late_observation',callId:'status_call',state:'failed',resultKey:'none'})]);
+ await service.deliver();assert.equal(paid,0);
+ const row=await vcr.store.one("SELECT state,last_error FROM evimed_vcr.conversation_completions WHERE job_id='late_observation_job'");assert.equal(row.state,'delivered');assert.equal(row.last_error,'vcr_completion_observed');
+});
+test('restart beyond maximum age terminalizes jobs and replays once, including a hook backoff beyond expiry',options,async()=>{
+ await vcr.store.query('DELETE FROM evimed_vcr.conversation_completions');
+ const study=await vcr.store.taskContext(origin('expired_recovery'));
+ await vcr.store.query(`INSERT INTO evimed_vcr.jobs (id,study_id,user_id,kind,method,method_version,state,scenario,scenario_hash,seed,cpu_seconds_limit,max_attempts,idempotency_key,checkpoint,finished_at)
+  VALUES ('expired_recovery_job',$1,'owner','design_analytic','design.analytic','1.2.0','failed','{}','hash',1,60,3,'expired_recovery_job',$2::jsonb,now()-interval '2 minutes')`,[study.id,JSON.stringify({conversationOrigin:origin('expired_recovery'),completionHooksAttempts:1,completionHooksRunAfter:new Date(Date.now()+60000).toISOString()})]);
+ await database.query(`INSERT INTO evimed_product.documents (user_id,kind,id,project_id,payload,updated_at) VALUES ('owner','result-replay','expired_replay','default',$1::jsonb,now()-interval '2 minutes')`,[JSON.stringify({recordType:'result-replay',state:'failed',requestedBy:'owner',initial:{producer:{sessionId:'expired_replay_root',runId:'expired_run',callId:'call'},continuation:{schema:1,kind:'native-calculation'}}})]);
+ const queue=new (await import('../src/vcrJobs.mjs')).VcrJobs({store:vcr.store,config:{vcrCompletionMaxAgeMs:60000}});let paid=0,notices=0;
+ const service=new VcrConversationCompletions({store:vcr.store,jobs:queue,config:{vcrCompletionMaxAgeMs:60000},resolve:async()=>({user:{id:'owner'},project:{id:'default'},session:{}}),inbox:async()=>({running:false,queued:0}),dispatch:async()=>{paid++;},notify:async()=>{notices++;}});
+ await service.tick();const first=notices;assert.ok(first>=2);assert.equal(paid,0);
+ const job=await vcr.store.one("SELECT checkpoint FROM evimed_vcr.jobs WHERE id='expired_recovery_job'");assert.equal(job.checkpoint.completionHooksExhausted,true);assert.equal(job.checkpoint.completionOutboxRecorded,true);
+ const rows=await vcr.store.rows("SELECT state,last_error FROM evimed_vcr.conversation_completions WHERE job_id='expired_recovery_job' OR payload->>'replayId'='expired_replay'");assert.equal(rows.length,2);assert.ok(rows.every(row=>row.state==='unavailable' && row.last_error==='vcr_completion_exhausted'));
+ await service.tick();assert.equal(notices,first,'expiry is disclosed once');
+ await vcr.store.query("UPDATE evimed_vcr.conversation_completions SET updated_at=now()-interval '8 days' WHERE job_id='expired_recovery_job' OR payload->>'replayId'='expired_replay'");
+ await service.tick();await service.tick();
+ assert.equal((await vcr.store.rows("SELECT id FROM evimed_vcr.conversation_completions WHERE job_id='expired_recovery_job' OR payload->>'replayId'='expired_replay'")).length,0,'pruned notices do not resurrect their durable producers');
+ assert.equal(notices,first);
+});
+test('native aggregate terminal acknowledgements bind exact run, root and result generation',options,async()=>{
+ const {ProductDocuments}=await import('../src/productStore.mjs');const {ResultReplayService}=await import('../src/resultReplayService.mjs');const docs=new ProductDocuments(database);
+ const payload={recordType:'result-replay',state:'failed',requestedBy:'owner',jobId:'ack_job',initial:{producer:{runId:'ack_run',sessionId:'ack_child',parentSessionId:'ack_root'},continuation:{schema:1,kind:'native-calculation'}}};
+ await docs.put('owner','result-replay','ack_replay',payload,{projectId:'default',expectedRevision:0});
+ const service=new ResultReplayService({documents:docs,results:{scope:async()=>({id:'default',userId:'owner'})},jobs:{get:async()=>({status:'failed'})},engine:{}});
+ assert.equal(await service.observeTerminal('owner','default','ack_replay',{runId:'other',rootSessionId:'ack_root',callId:'status'},{state:'failed',outputVersionId:null}),false);
+ assert.equal(await service.observeTerminal('owner','default','ack_replay',{runId:'ack_run',rootSessionId:'ack_root',callId:'status'},{state:'failed',outputVersionId:'wrong_generation'}),false);
+ assert.equal(await service.observeTerminal('owner','default','ack_replay',{runId:'ack_run',rootSessionId:'ack_root',callId:'status'},{state:'failed',outputVersionId:null}),true);
+ const row=await docs.get('owner','result-replay','ack_replay');assert.deepEqual(row.payload.terminalObservation,{runId:'ack_run',rootSessionId:'ack_root',callId:'status',state:'failed',resultKey:'none'});
+});
+
+test('a real durable inbox write with a lost response retries once under the same notification identity',options,async()=>{
+ await vcr.store.query('DELETE FROM evimed_vcr.conversation_completions');
+ const {NotificationService}=await import('../src/notificationService.mjs');const notifications=new NotificationService(database);const now=Date.now();let attempts=0,paid=0;const noticeIds=[];
+ await vcr.store.query(`INSERT INTO evimed_vcr.conversation_completions (id,user_id,project_id,root_session_id,result_key,dispatch_id,fingerprint,payload)
+  VALUES ('notice_retry_completion','owner','default','notice_retry_root','none','notice_retry_dispatch',$1,$2::jsonb)`,['d'.repeat(64),JSON.stringify({state:'succeeded',runId:'notice_origin',completedAt:new Date(now-2000).toISOString()})]);
+ const runs=[{id:'notice_origin',sessionId:'notice_retry_root',status:'succeeded',startedAt:new Date(now-10000).toISOString(),finishedAt:new Date(now-1000).toISOString()}];
+ const service=new VcrConversationCompletions({store:vcr.store,readRuns:async()=>runs,resolve:async()=>({user:{id:'owner'},project:{id:'default'},session:{}}),inbox:async()=>({running:false,queued:0}),dispatch:async()=>{paid++;},
+  notify:async row=>{attempts++;const item=await notifications.create(row.user_id,{noticeType:'notify',projectId:row.project_id,title:'Synthetic computation finished',body:'The preserved result is available in the original conversation.',source:{type:'thread',id:row.root_session_id},idempotencyKey:`${row.id}:unavailable`});noticeIds.push(item.id);if(attempts===1)throw Object.assign(new Error('Synthetic lost notification response after commit'),{code:'notification_response_lost'});return item;}});
+ await service.deliver();let row=await vcr.store.one("SELECT state,last_error FROM evimed_vcr.conversation_completions WHERE id='notice_retry_completion'");assert.equal(row.state,'pending');assert.equal(row.last_error,'vcr_completion_notice_failed:notification_response_lost');
+ await vcr.store.query("UPDATE evimed_vcr.conversation_completions SET run_after=now() WHERE id='notice_retry_completion'");await service.deliver();
+ row=await vcr.store.one("SELECT state,attempts FROM evimed_vcr.conversation_completions WHERE id='notice_retry_completion'");assert.equal(row.state,'delivered');assert.equal(row.attempts,2);assert.equal(paid,0);assert.equal(new Set(noticeIds).size,1);
+ const items=(await notifications.list('owner')).items.filter(item=>item.source?.id==='notice_retry_root');assert.equal(items.length,1);
+});
+
+test('the session prompt fence excludes another controller in PostgreSQL while other sessions proceed',options,async()=>{
+ const {withSessionPromptAdmission}=await import('../src/runtimePromptAdmission.mjs');const config={runtimePromptAdmissionTimeoutMs:2000};const left={config,promptAdmissionDatabase:database},right={config,promptAdmissionDatabase:database};
+ let enter,release;const entered=new Promise(resolve=>{enter=resolve;}),ack=new Promise(resolve=>{release=resolve;});const events=[];
+ const managed=withSessionPromptAdmission(left,{userId:'owner',id:'default'},'pg_admission',async()=>{events.push('managed');enter();await ack;events.push('ack');});await entered;
+ const human=withSessionPromptAdmission(right,{userId:'owner',id:'default'},'pg_admission',async()=>{events.push('human');});
+ await withSessionPromptAdmission(right,{userId:'owner',id:'default'},'different_session',async()=>{events.push('other');});assert.deepEqual(events,['managed','other']);
+ release();await managed;await human;assert.deepEqual(events,['managed','other','ack','human']);
+});
+
+test('session admission borrows a live plugin transaction with a one-connection pool and restores its timeout settings',options,async()=>{
+ const {withSessionPromptAdmission}=await import('../src/runtimePromptAdmission.mjs');const {PluginService}=await import('../src/pluginService.mjs');
+ const small=new ControlPlaneDatabase({databaseUrl:isolated.url,databasePoolMax:1,databaseConnectionTimeoutMs:500});const manager={config:{runtimePromptAdmissionTimeoutMs:2000},promptAdmissionDatabase:small};
+ try{
+  const plugin=new PluginService(small);const project={userId:'owner',id:'default'};let queried=0;
+  await plugin.withAdmission(project,async()=>{
+   const before=(await small.query("SELECT current_setting('statement_timeout') AS value")).rows[0].value;
+   await withSessionPromptAdmission(manager,project,'one_connection_prompt',async()=>{assert.equal((await small.query('SELECT 1 AS value')).rows[0].value,1);queried++;});
+   assert.equal((await small.query("SELECT current_setting('statement_timeout') AS value")).rows[0].value,before);
+   await assert.rejects(withSessionPromptAdmission(manager,project,'one_connection_prompt',async()=>{throw Object.assign(new Error('Synthetic conditional refusal'),{code:'vcr_completion_disclosed'});}),{code:'vcr_completion_disclosed'});
+   assert.equal((await small.query("SELECT current_setting('statement_timeout') AS value")).rows[0].value,before);
+   assert.equal((await small.query('SELECT 1 AS value')).rows[0].value,1,'a refused admission leaves the enclosing transaction usable');
+  },{prompt:true});assert.equal(queried,1);
+ }finally{await small.close();}
+});
+
+test('one-connection prompt preparation cannot invert the local fence against a native stop',options,async()=>{
+ const {withSessionPromptAdmission}=await import('../src/runtimePromptAdmission.mjs');const {PluginService}=await import('../src/pluginService.mjs');
+ const small=new ControlPlaneDatabase({databaseUrl:isolated.url,databasePoolMax:1,databaseConnectionTimeoutMs:500});const manager={config:{runtimePromptAdmissionTimeoutMs:1500},promptAdmissionDatabase:small};
+ let enter,release;const entered=new Promise(resolve=>{enter=resolve;}),prepared=new Promise(resolve=>{release=resolve;});const events=[];
+ try{
+  const plugin=new PluginService(small),project={userId:'owner',id:'default'};
+  const prompt=plugin.withAdmission(project,async()=>{events.push('preparing');enter();await prepared;return withSessionPromptAdmission(manager,project,'stop_order',async()=>{events.push('prompt-wire');});},{prompt:true});
+  await entered;const cancel=withSessionPromptAdmission(manager,project,'stop_order',async()=>{events.push('cancel-wire');});await new Promise(resolve=>setTimeout(resolve,20));release();
+  const settled=await Promise.allSettled([prompt,cancel]);assert.ok(settled.every(result=>result.status==='fulfilled'));assert.deepEqual(events,['preparing','prompt-wire','cancel-wire']);
+ }finally{await small.close();}
+});
+test('a pool-blocked admission settles at its own deadline and never submits after late checkout',options,async()=>{
+ const {withSessionPromptAdmission}=await import('../src/runtimePromptAdmission.mjs');const small=new ControlPlaneDatabase({databaseUrl:isolated.url,databasePoolMax:1,databaseConnectionTimeoutMs:3000});
+ let enter,release;const entered=new Promise(resolve=>{enter=resolve;}),released=new Promise(resolve=>{release=resolve;});const holder=small.withClient(async()=>{enter();await released;});await entered;
+ const manager={config:{runtimePromptAdmissionTimeoutMs:500},promptAdmissionDatabase:small};let late=0;
+ try{
+  const start=performance.now();await assert.rejects(withSessionPromptAdmission(manager,{userId:'owner',id:'default'},'pool_deadline',async()=>{late++;}),{code:'runtime_prompt_admission_busy'});assert.ok(performance.now()-start<2000);
+  release();await holder;manager.config.runtimePromptAdmissionTimeoutMs=2000;
+  await withSessionPromptAdmission(manager,{userId:'owner',id:'default'},'pool_deadline',async()=>{assert.equal((await small.query('SELECT 1 AS value')).rows[0].value,1);});assert.equal(late,0);
+ }finally{release();await holder;await small.close();}
+});
+test('stop intents are monotonic across controllers/restart and survive an EPIPE without claiming a kernel cancel',options,async()=>{
+ const {withSessionPromptAdmission}=await import('../src/runtimePromptAdmission.mjs');const {RuntimePromptStops}=await import('../src/runtimePromptStops.mjs');const project={userId:'owner',id:'default'};
+ const first=new RuntimePromptStops({database}),second=new RuntimePromptStops({database}),manager={config:{runtimePromptAdmissionTimeoutMs:2000},promptAdmissionDatabase:database};
+ await Promise.all([first.record(project,'monotonic_stop',['old_run']),second.record(project,'monotonic_stop',['reserved_run'])]);
+ await assert.rejects(withSessionPromptAdmission(manager,project,'monotonic_stop',async()=>{await first.record(project,'monotonic_stop',['lost_ack_run']);throw Object.assign(new Error('Synthetic transport loss'),{code:'EPIPE'});}),{code:'EPIPE'});
+ const restarted=new RuntimePromptStops({database});for(const id of ['old_run','reserved_run','lost_ack_run'])assert.equal(await restarted.has(project,'monotonic_stop',id),true);
+ assert.equal(await restarted.has(project,'other_session','old_run'),false);assert.equal(await restarted.has(project,'monotonic_stop','new_explicit_human'),false);
 });

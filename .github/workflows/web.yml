@@ -18,6 +18,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  public-dataset:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/sider-inputs
+          key: sider-inputs-${{ hashFiles('OpenScience/runtime/mcp/evimed-research/build_sider_cache.py') }}
+      # This remains a failing check on an outage or integrity mismatch. It is
+      # independent so an external host cannot prevent the code suites running.
+      - name: Build and smoke the pinned public dataset
+        run: python3 runtime/mcp/evimed-research/build_sider_cache.py --source-cache "$RUNNER_TEMP/sider-inputs"
+
   web:
     runs-on: ubuntu-22.04
     timeout-minutes: 75
@@ -80,9 +94,6 @@ jobs:
       - name: Fetch bundled ai4s-skills pack
         shell: bash
         run: bash scripts/dev/fetch-skills.sh
-
-      - name: Build and smoke the pinned public dataset
-        run: python3 runtime/mcp/evimed-research/build_sider_cache.py
 
       - name: Test domain, port, socket and upstream contracts
         run: CI=true pnpm test:packages

@@ -152,8 +152,16 @@ RUN set -eux; \
       shipped <- rownames(installed.packages(lib.loc = .Library, priority = c("base", "recommended"))); \
       clash <- intersect(want[, 1], shipped); \
       if (length(clash)) stop("a lock lists packages that ship with R: ", paste(clash, collapse = ", ")); \
-      install.packages(want[, 1], lib = Sys.getenv("VCR_R_LIBS"), repos = c(CRAN = Sys.getenv("CRAN_MIRROR")), \
-                       type = "source", dependencies = NA, Ncpus = as.integer(Sys.getenv("R_BUILD_NCPUS", "2")))'; \
+      options(timeout = 180, HTTPUserAgent = sprintf("R/%s R (%s)", getRversion(), paste(getRversion(), R.version[["platform"]], R.version[["arch"]], R.version[["os"]]))); \
+      for (attempt in seq_len(3L)) { \
+        installed <- installed.packages(lib.loc = Sys.getenv("VCR_R_LIBS"))[, "Version"]; \
+        got <- unname(installed[want[, 1]]); \
+        missing <- want[is.na(got) | got != want[, 2], 1]; \
+        if (!length(missing)) break; \
+        install.packages(missing, lib = Sys.getenv("VCR_R_LIBS"), repos = c(CRAN = Sys.getenv("CRAN_MIRROR")), \
+                         type = "source", dependencies = NA, Ncpus = as.integer(Sys.getenv("R_BUILD_NCPUS", "2"))); \
+        if (attempt < 3L) Sys.sleep(2^attempt); \
+      }'; \
     Rscript -e 'site <- normalizePath(Sys.getenv("VCR_R_LIBS")); \
       .libPaths(c(site, .libPaths())); \
       lines <- readLines("/tmp/vcr-locks/want.tsv"); \

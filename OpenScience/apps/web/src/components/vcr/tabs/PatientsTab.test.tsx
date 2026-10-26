@@ -305,7 +305,7 @@ describe("虚拟患者 · the charts", () => {
     const failed = await found(container, "[data-vcr-step-failed='patients']");
     expect(within(failed).getByText("这一步未完成")).toBeInTheDocument();
     expect(failed.querySelector("[data-vcr-partial]")).toHaveTextContent("这次生成算完了 1,200 / 2,000 次重复就停下了，下面是已完成部分的结果。");
-    expect(within(failed).getByRole("button", { name: "接着做" })).toBeInTheDocument();
+    expect(within(failed).getByRole("button", { name: "在对话中继续" })).toBeInTheDocument();
     // The data are still there, under it.
     const people = await screen.findByRole("table", { name: "患者" });
     expect(failed.compareDocumentPosition(people) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -393,8 +393,8 @@ describe("虚拟患者 · what the band offers", () => {
     await screen.findByRole("table", { name: "患者" });
     const chips = within(band(container));
     expect(chips.getByRole("button", { name: "下载 CSV" })).toBeInTheDocument();
-    expect(chips.getByRole("button", { name: "重新生成" })).toBeInTheDocument();
-    expect(chips.getByRole("button", { name: "改设定" })).toBeInTheDocument();
+    expect(chips.getByRole("button", { name: "在对话中生成新版本" })).toBeInTheDocument();
+    expect(chips.getByRole("button", { name: "在对话中调整" })).toBeInTheDocument();
     expect(container.querySelectorAll("[data-page-chrome]")).toHaveLength(1);
   });
 
@@ -403,8 +403,8 @@ describe("虚拟患者 · what the band offers", () => {
     await screen.findByRole("table", { name: "患者" });
     const chips = within(band(container));
     expect(chips.getByRole("button", { name: "下载 CSV" })).toBeInTheDocument();
-    expect(chips.queryByRole("button", { name: "重新生成" })).toBeNull();
-    expect(chips.queryByRole("button", { name: "改设定" })).toBeNull();
+    expect(chips.queryByRole("button", { name: "在对话中生成新版本" })).toBeNull();
+    expect(chips.queryByRole("button", { name: "在对话中调整" })).toBeNull();
   });
 
   it("downloads the table through the records route, under the file's own name; a refusal is a toast", async () => {
@@ -416,7 +416,7 @@ describe("虚拟患者 · what the band offers", () => {
     await screen.findByRole("table", { name: "患者" });
     await userEvent.click(within(band(container)).getByRole("button", { name: "下载 CSV" }));
     await waitFor(() => expect(click).toHaveBeenCalled());
-    expect(String(web.fetchWithWebAuth.mock.calls[0][0])).toMatch(/\/vcr\/studies\/std_1\/records\/res_7\.csv$/);
+    expect(String(web.fetchWithWebAuth.mock.calls[0][0])).toBe(`/api/vcr/studies/${STUDY_ID}/records/${fixture("ev201/patients.json").records.result}.csv`);
     expect((click.mock.contexts[0] as HTMLAnchorElement).download).toBe("virtual-patients.csv");
 
     click.mockClear();

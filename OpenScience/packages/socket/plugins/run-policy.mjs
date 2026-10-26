@@ -1309,7 +1309,20 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       if (childId) trackNativeChild(entry, childId)
     }
     if (outcome.status !== 'completed') return
-    if (call.name !== 'write' && call.name !== 'edit') return
+    // A successful gateway response proves that this account has research access.
+    // The root opens a compact entry first; its heavy schemas then join this turn
+    // through the same upstream restriction used for capability grants.
+    if (['vcr_read','vcr_write','vcr_simulate'].some(toolName=>call.name===toolName || call.name===mcpToolName(toolName))) {
+      const agent=ctx.get('agents')?.get?.(call.agentId)
+      let value=/** @type {any} */ (outcome.structured)
+      if (!value && outcome.text) {try {value=JSON.parse(outcome.text)} catch { /* no verified gateway envelope */ }}
+      const data=value?.data ?? value
+      if(agent && !isSubagentSession(agent) && data && value?.status!=='error' && data.ok!==false && data.available!==false && !data.error && !data.code && (data.what || data.action)) {
+        const scope=rootScopes.get(agent)
+        if(scope) applyRootNarrowing(agent,[...scope.allowed,...['trial_registry_record','curve_digitize','evidence_pool'].map(mcpToolName).filter(toolName=>registeredToolNames(ctx).includes(toolName))])
+      }
+    }
+    if (call.name !== 'write'  && call.name !== 'edit') return
     const path = String(call.args?.path ?? call.args?.file_path ?? '')
     if (!path) return
     const { entry } = ownedSessionState(call.sessionId)

@@ -125,7 +125,7 @@ describe("总览", () => {
       const list = rows();
       expect(list).toHaveLength(7);
       const names = ["定义", "证据", "人群", "患者", "对照", "试验", "匹配"];
-      const tabs = ["data", "data", "population", "patients", "comparator", "trial", "matching"];
+      const tabs = ["data", "data", "population", "population?level=individual", "comparator", "trial", "matching"];
       list.forEach((row, index) => {
         expect(row).toHaveTextContent(names[index]);
         expect(within(row).getByRole("link")).toHaveAttribute("href", address(tabs[index]));
@@ -183,8 +183,8 @@ describe("总览", () => {
       const api = frame();
       draw(study(), api);
       const region = screen.getByRole("region", { name: "需要关注" });
-      await userEvent.click(within(region).getByRole("button", { name: "接着做" }));
-      expect(api.openChat).toHaveBeenCalledWith(expect.stringContaining(STUDY_ID));
+      await userEvent.click(within(region).getByRole("button", { name: "在对话中继续" }));
+      expect(api.openChat).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ kind: "step", studyId: STUDY_ID }));
     });
 
     it("sends the stale line to the change log, which is the frame's drawer", async () => {
@@ -196,7 +196,7 @@ describe("总览", () => {
 
     it("offers no 接着做 to a reader who may not run a step", () => {
       draw(study((raw) => { raw.abilities = ["read"]; }));
-      expect(screen.queryByRole("button", { name: "接着做" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "在对话中继续" })).toBeNull();
     });
 
     it("is not drawn at all while there is nothing in it", () => {

@@ -88,12 +88,6 @@
       "waiting": null
     }
   },
-  "next": {
-    "step": "patients",
-    "label": "生成虚拟患者",
-    "reason": "retry",
-    "reasonText": "上次没有做完"
-  },
   "stepSummaries": {
     "definition": {
       "note": "v1",
@@ -604,6 +598,9 @@
     "designs": [
       {
         "id": "scn_1",
+        "version": 1,
+        "resultId": "res_1",
+        "resultVersion": 1,
         "code": "A",
         "name": "单臂 + 文献对照",
         "dominated": false,
@@ -824,6 +821,40 @@
               }
             }
           },
+          "last_patient_in_months": {
+            "value": 11.7,
+            "text": null,
+            "unit": "个月",
+            "source": "predicted",
+            "interval": {
+              "kind": "prediction",
+              "low": 9.2,
+              "high": 15,
+              "level": 80
+            },
+            "mcse": 0.05,
+            "review": "ai_set",
+            "precision": 2,
+            "reason": null,
+            "stale": false,
+            "detail": {
+              "kind": "run",
+              "title": "末例入组",
+              "fields": [
+                {
+                  "label": "蒙特卡洛标准误",
+                  "value": "0.05"
+                }
+              ],
+              "quote": null,
+              "quoteSource": null,
+              "ref": {
+                "kind": "result",
+                "id": "res_4",
+                "tab": "trial"
+              }
+            }
+          },
           "cost": {
             "value": 1450,
             "text": null,
@@ -850,6 +881,9 @@
       },
       {
         "id": "scn_2",
+        "version": 2,
+        "resultId": "res_2",
+        "resultVersion": 1,
         "code": "B",
         "name": "2:1 随机",
         "dominated": false,
@@ -1120,6 +1154,40 @@
               }
             }
           },
+          "last_patient_in_months": {
+            "value": 16.4,
+            "text": null,
+            "unit": "个月",
+            "source": "predicted",
+            "interval": {
+              "kind": "prediction",
+              "low": 13.9,
+              "high": 19.3,
+              "level": 80
+            },
+            "mcse": 0.05,
+            "review": "ai_set",
+            "precision": 2,
+            "reason": null,
+            "stale": false,
+            "detail": {
+              "kind": "run",
+              "title": "末例入组",
+              "fields": [
+                {
+                  "label": "蒙特卡洛标准误",
+                  "value": "0.05"
+                }
+              ],
+              "quote": null,
+              "quoteSource": null,
+              "ref": {
+                "kind": "result",
+                "id": "res_5",
+                "tab": "trial"
+              }
+            }
+          },
           "cost": {
             "value": 3900,
             "text": null,
@@ -1146,6 +1214,9 @@
       },
       {
         "id": "scn_3",
+        "version": 3,
+        "resultId": "res_3",
+        "resultVersion": 1,
         "code": "C",
         "name": "1:1 随机 + 一次期中分析",
         "dominated": false,
@@ -1416,6 +1487,40 @@
               }
             }
           },
+          "last_patient_in_months": {
+            "value": 19.6,
+            "text": null,
+            "unit": "个月",
+            "source": "predicted",
+            "interval": {
+              "kind": "prediction",
+              "low": 16.7,
+              "high": 23.2,
+              "level": 80
+            },
+            "mcse": 0.05,
+            "review": "ai_set",
+            "precision": 2,
+            "reason": null,
+            "stale": false,
+            "detail": {
+              "kind": "run",
+              "title": "末例入组",
+              "fields": [
+                {
+                  "label": "蒙特卡洛标准误",
+                  "value": "0.05"
+                }
+              ],
+              "quote": null,
+              "quoteSource": null,
+              "ref": {
+                "kind": "result",
+                "id": "res_6",
+                "tab": "trial"
+              }
+            }
+          },
           "cost": {
             "value": 4600,
             "text": null,
@@ -1442,6 +1547,9 @@
       },
       {
         "id": "scn_4",
+        "version": 4,
+        "resultId": "res_7",
+        "resultVersion": 1,
         "code": "D",
         "name": "1:1 随机 无期中",
         "dominated": true,
@@ -1489,21 +1597,21 @@
     ],
     "changes": [
       {
-        "id": "result:res_4",
+        "id": "result:res_8",
         "at": "今天 10:52",
         "text": "匹配评估的结果已更新",
         "by": null,
         "state": null
       },
       {
-        "id": "result:res_5",
+        "id": "result:res_9",
         "at": "今天 10:45",
         "text": "数据快照画像的结果已更新",
         "by": null,
         "state": null
       },
       {
-        "id": "result:res_6",
+        "id": "result:res_10",
         "at": "今天 10:38",
         "text": "证据合并的结果已更新",
         "by": null,

@@ -18,7 +18,7 @@ import {
   criterionConfusion, criterionFunnel, dueRechecks, eligibilityCounts, errorLayer, evaluateCriterion,
   evaluateRequirement, evidenceGaps, factsVisibleAt, frozenAsOf, interRaterAgreement, kleeneAnd, kleeneNot, kleeneOr,
   labelClinicalPriority, matchingAssessmentDocument, matchingEvaluationReport, matchingReportDiff, patientMatchingMetrics,
-  pendingReviewExclusions, requiresLanguageJudgment, runMatchingEvaluation, separateLedgers,
+  pendingReviewExclusions, requiresLanguageJudgment, runMatchingEvaluation,
   summarizeEligibility, verifyFactEvidence, windowStart, withinWindow, VCR_FACT_VOID_REASONS,
 } from "../src/vcrMatching.mjs";
 import { clinicalFactView, validateCapabilityManifest, vcrMatchingFindings } from "@evimed/domain";
@@ -500,22 +500,6 @@ test("the model's clinical priority is carried, labelled, and never merged into 
   assert.equal(Object.keys(counts).includes("score"), false, "the priority never enters the deterministic summary");
 });
 
-test("the five ledgers are five fields, and eligibility is not one of the other four", () => {
-  const ledgers = separateLedgers({
-    summary: "eligible",
-    counts: { unknown: 2, pending_recheck: 1 },
-    willingness: "interested",
-    siteCapacity: { siteId: "ste-1", slotsAvailable: 0 },
-    referralState: "contactable",
-  });
-  assert.deepEqual(Object.keys(ledgers).sort(), [
-    "businessProgress", "clinicalEligibility", "evidenceSufficiency", "patientWillingness", "siteCapacity",
-  ]);
-  assert.equal(ledgers.clinicalEligibility, "eligible");
-  assert.equal(ledgers.evidenceSufficiency.sufficient, false, "eligible on the criteria is not evidence-complete");
-  assert.equal(ledgers.siteCapacity.slotsAvailable, 0, "and a full site does not change the eligibility");
-});
-
 // ----------------------------------------------------- the whole assessment
 
 test("AC-14 a full assessment keeps the gaps, the void facts and the blocking exclusions on the record", () => {
@@ -774,10 +758,12 @@ test("the capability declares itself the way the module needs it to", async () =
 test("the skill says the two things a run must not get wrong, and names its required outputs", async () => {
   const authored = await readFile(path.join(repoRoot, "capabilities", "vcr-matching", "SKILL.md"), "utf8");
   const shipped = await readFile(path.join(repoRoot, "capability-skills", "vcr-matching", "SKILL.md"), "utf8");
+  const operating = await readFile(path.join(repoRoot, "capabilities", "vcr-protocol", "references", "operating-contract.md"), "utf8");
   assert.equal(authored, shipped, "the authored skill and the shipped copy are one document");
   assert.match(authored, /The evaluator computes the final verdict/);
-  assert.match(authored, /No contact, referral, site CRM/);
-  assert.match(authored, /Unknown eligibility is never exclusion, a negative finding or zero/);
+  assert.match(authored, /\.\.\/vcr-protocol\/references\/operating-contract\.md/);
+  assert.match(operating, /No contact, referral, site CRM/);
+  assert.match(operating, /Unknown eligibility is never exclusion, a negative finding or zero/);
   assert.match(authored, /unknown coverage, not an eligible verdict/);
   for (const name of ["matching-assessment.md", "matching.json"]) assert.ok(authored.includes(name), name);
 });

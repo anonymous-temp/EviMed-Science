@@ -1,4 +1,5 @@
 import { Link, useNavigate, useParams } from "react-router";
+import { formatDateTime } from "@/lib/format";
 import { VCR_JOB_METHODS } from "@evimed/domain";
 import { getVcrMethodHistory, getVcrModels, getVcrStudy } from "@/lib/vcrClient";
 import { vcrMethodPath } from "@/lib/vcrMethodLocation";
@@ -27,7 +28,7 @@ function CalculationScope({ studyId }: { studyId: string }) {
     {history.state.kind === "loading" ? <VcrTabSkeleton rows={1} /> : history.state.kind === "error" ? <VcrTabError message={history.state.message} onRetry={history.reload} /> : history.state.data.jobs.length === 0 ? <EmptyState title="这里还没有历史计算" action={<Link to="/app/virtual-research" className="text-link">开始研究对话</Link>} /> : <Section title="历史计算"><List label="此计算空间的历史" divided>{history.state.data.jobs.map(job => {
       const method = job.method ?? (VCR_JOB_METHODS as Record<string, string>)[job.kind];
       const title = catalogue.state.kind === "ready" ? catalogue.state.data.methods.find(row => (row.method ?? row.id) === method)?.name : null;
-      return <ListRow key={job.id} title={title ?? job.label ?? "方法计算"} meta={job.createdAt ?? job.updatedAt} onOpen={method ? () => navigate(vcrMethodPath(method, { studyId, jobId: job.id })) : undefined} />;
+      return <ListRow key={job.id} title={title ?? job.label ?? "方法计算"} meta={job.createdAt || job.updatedAt ? formatDateTime(job.createdAt ?? job.updatedAt ?? "") : "时间未记录"} onOpen={method ? () => navigate(vcrMethodPath(method, { studyId, jobId: job.id })) : undefined} />;
     })}</List></Section>}
 
   </PageShell>;

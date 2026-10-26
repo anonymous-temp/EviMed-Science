@@ -1,5 +1,6 @@
+import type { VcrObjectSelection } from "@/lib/runtimeUiNavigation";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { ChevronLeft, MessageSquare, MoreHorizontal } from "lucide-react";
 import { vcrCalculationPath } from "@/lib/vcrMethodLocation";
 import { toast } from "@/lib/toast";
@@ -38,7 +39,7 @@ export interface StudyFrameProps {
   /** The header's 「⋯」: the page owns what each entry opens. */
   menu: readonly MenuEntry[];
   /** The way into the conversation, with a draft waiting in its composer. Navigation inside the page. */
-  onChat: (draft?: string) => void;
+  onChat: (draft?: string, reference?: VcrObjectSelection) => void;
   /** Opens one of the page's panels (the menu's records and dialogs) for a tab that asks. */
   onPanel: (panel: StudyPanelKey) => void;
   /** Opens the study's own address for a tab. */
@@ -80,6 +81,8 @@ export function activityStripOf(study: VcrStudy, handlers: { onCancel?: () => vo
 }
 
 export function StudyFrame({ studyId, study, view, reload, menu, onChat, onPanel, onView, children }: StudyFrameProps) {
+  const [params, setParams] = useSearchParams();
+  const individual = params.get("level") === "individual" || params.has("patient");
   const [toolbar, setToolbar] = useState<ToolbarProps | null | undefined>(undefined);
   const [tabPrimary, setTabPrimary] = useState<StudyPrimary | null>(null);
   const [cancelling, setCancelling] = useState(false);
@@ -121,6 +124,7 @@ export function StudyFrame({ studyId, study, view, reload, menu, onChat, onPanel
     filters: [{ kind: "select", label: "查看", value: view === "patients" ? "population" : view, pinned: true,
       options: [...(programme || study.conversation.sessionId ? [{ value: "chat", label: "对话" }] : []), ...(programme ? VCR_TAB_ITEMS : VCR_TAB_ITEMS.filter(item => ["overview", "data", "population", "matching"].includes(item.key))).map(item => ({ value: item.key, label: item.label }))],
       onChange: next => { if (next) onView(next as StudyView); } },
+      ...(view === "population" || view === "patients" ? [{ kind: "select" as const, label: "人群与患者", value: individual ? "individual" : "cohort", options: [{ value: "cohort", label: "队列总览" }, { value: "individual", label: "个体患者" }], onChange: (next: string | null) => { if (next) setParams(previous => { const updated = new URLSearchParams(previous); updated.set("level", next); if (next === "cohort") updated.delete("patient"); return updated; }); } }] : []),
       ...(controls?.views ? [{ kind: "select" as const, label: controls.views.label, value: controls.views.value, options: controls.views.items.map(item => ({ value: item.value, label: item.label })), onChange: (next: string | null) => { if (next) controls.views?.onChange(next); } }] : []),
       ...(controls?.filters ?? [])],
   };

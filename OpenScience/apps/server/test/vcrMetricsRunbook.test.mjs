@@ -30,6 +30,7 @@ const everything = /** @type {any} */ ({
   matchingProducers: [{ model: "deepseek-v4-flash", receipts: 1 }, { model: "unrecorded", receipts: 1 }],
   service: { studiesCreated: 0, reads: 0, writes: 0, writeIssues: 0, notFound: 0, tabs: 0 },
   jobs: { counters: { enqueued: 0, succeeded: 0, failed: 0 } },
+  completions:{reconciled:2,attempted:3,delivered:1,observed:1,canceled:0,retried:1,exhausted:0,unavailable:0,notificationFailed:0,pruned:0},
   engine: { configured: true },
   // The plane's counters: which basis a cloud read stood on, and what a withdrawal and a changed basis did.
   cloud: { cloudReadsDeploymentAgreements: 0, cloudReadsSourcePermission: 0, cloudReadsRefused: 0, withdrawals: 0, documentsErased: 0,
@@ -67,4 +68,11 @@ test("the runbook sends operators to the series that measure the rest, and promi
   assert.match(paragraph, /latency[^.]*finished_at/);
   assert.match(paragraph, /spend[^.]*evimed_usage\.model_requests/);
   assert.doesNotMatch(paragraph, /Compare unknowns, incomplete assessments, fact-write issues, eligible recall, latency/);
+});
+
+
+test("the completion metrics retain observed in-turn results separately from dispatched delivery and retries",()=>{
+ const completion=families.get("open_science_vcr_completions_total");assert.ok(completion);
+ const values=Object.fromEntries(completion.series.map(series=>[series.labels?.outcome,series.value]));
+ assert.equal(values.attempted,3);assert.equal(values.delivered,1);assert.equal(values.observed,1);assert.equal(values.retried,1);assert.equal(values.notificationFailed,0);
 });

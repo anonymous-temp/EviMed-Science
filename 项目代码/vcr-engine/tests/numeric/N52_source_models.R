@@ -20,7 +20,9 @@ vcr_case("N52b", c("AC-04"), function() {
   censor <- stats::runif(300, 4, 15)
   time <- pmin(event, censor); status <- as.numeric(event <= censor)
   errors <- vapply(c("exponential", "weibull", "lognormal", "loglogistic"), function(distribution) {
-    fit <- vcr_fit_survival_baseline(time, status, distribution, c(3,9,18))
+    input <- vcr_test_input(data.frame(USUBJID=paste0("B",seq_along(time)),time=time,status=status),paste0("n52b_",distribution))
+    job <- .n52_fit_job(distribution);job$inputs<-list(input);job$scenario$inputId<-input$id;job$scenario$horizons<-c(3,9,18)
+    fit <- vcr_test_run(job)$diagnostics$model
     # Independent likelihood optimized from base-R density/survival functions, no survreg fit reused.
     negative_loglik <- function(theta) {
       mu <- theta[1]; sigma <- if (distribution == "exponential") 1 else exp(theta[2])
@@ -39,6 +41,7 @@ vcr_case("N52b", c("AC-04"), function() {
     }
     initial <- if (distribution == "exponential") log(stats::median(time)) else c(log(stats::median(time)), 0)
     reference <- stats::optim(initial, negative_loglik, method = "BFGS", control = list(reltol = 1e-12, maxit = 2000))
+    if(reference$convergence != 0) return(Inf)
     max(abs(fit$location - reference$par[1]), if (length(reference$par) > 1) abs(log(fit$aftScale) - reference$par[2]) else 0)
   }, numeric(1))
   list(pass = all(errors < 2e-4), detail = paste(names(errors), format(errors, digits=4), collapse = "; "))
@@ -111,9 +114,11 @@ vcr_case("N52h", c("AC-04", "AC-31"), function() {
   legacy<-vcr_test_job("patients.continuous",within(sc,rm(pairing)),list(input),seed=812,job_id="old");legacy$methodVersion<-"1.0.0"
   old<-vcr_test_run(legacy,output_dir=dir);old_data<-vcr_test_table(old,"virtual-patients",dir)
   old_id<-paste0("vp_",substr(vcr_sha256("812:old:1"),1,12))
-  set.seed(812,kind=VCR_RNG_KIND);assign(".Random.seed",parallel::nextRNGStream(.Random.seed),envir=.GlobalEnv);reference_draws<-runif(5)
+  effective_seed <- strtoi(substr(vcr_sha256("patient-pairing-v1:812:population_v1"),1,7),16L)
+  set.seed(effective_seed,kind=VCR_RNG_KIND);assign(".Random.seed",parallel::nextRNGStream(.Random.seed),envir=.GlobalEnv);reference_draws<-runif(5)
   vcr_patient_randomization(vcr_test_job("patients.continuous",repeated,list(input),seed=812));actual_draws<-runif(5)
-  list(pass=identical(a$data$patientId,b$data$patientId) && identical(a$data$patientId,c$data$patientId) &&
+  other_key<-sc;other_key$pairing$key<-"another_population_v1";different<-run(other_key,"job_d")
+  list(pass=!identical(a$data$y,different$data$y) && identical(a$data$patientId,b$data$patientId) && identical(a$data$patientId,c$data$patientId) &&
     max(abs((b$data$y-a$data$y)-0.7*a$data$arm))<1e-12 && !identical(a$data$y,c$data$y) && old_data$patientId[1]==old_id && identical(reference_draws,actual_draws),
     detail="Different paired job ids retain immutable cohort identities and arm-specific common draws; replicate 2 changes draws, legacy 1.0 preserves historical ids")
 })
@@ -138,4 +143,55 @@ vcr_case("N52j", c("AC-04", "AC-27"), function() {
   list(pass=identical(result$status,"succeeded") && result$counts$realPatients==1 && result$diagnostics$cohort$startingRows==3 &&
     result$diagnostics$cohort$keptRows==1 && identical(table$patientId,"S2") && abs(result$measures[[1]]$value-expected)<1e-12,
     detail="Only the selected older cohort member S2 is predicted; excluded/unknown rows do not reappear as whole-snapshot controls")
+})
+
+vcr_case("N52k", c("AC-04", "AC-27"), function() {
+  # Mandatory locked flexsurv oracle: transformations, median, survival, AIC and delta spread.
+  if (!requireNamespace("flexsurv", quietly = TRUE) || !requireNamespace("numDeriv", quietly = TRUE)) stop("N52k requires the locked flexsurv and numDeriv libraries")
+  set.seed(521L, kind = "Mersenne-Twister")
+  event <- stats::rweibull(500, shape = 1.7, scale = 11)
+  censor <- stats::runif(500, 3, 22); time <- pmin(event, censor); status <- as.numeric(event <= censor)
+  horizons <- c(3, 9, 18)
+  errors <- vapply(c("exponential", "weibull", "lognormal", "loglogistic"), function(distribution) {
+    input <- vcr_test_input(data.frame(USUBJID=paste0("K",seq_along(time)),time=time,status=status),paste0("n52k_",distribution))
+    job <- .n52_fit_job(distribution);job$inputs<-list(input);job$scenario$inputId<-input$id;job$scenario$horizons<-horizons
+    fitted <- vcr_test_run(job)$diagnostics$model
+    oracle <- flexsurv::flexsurvreg(survival::Surv(time, status) ~ 1, dist = switch(distribution, exponential="exp", weibull="weibull", lognormal="lnorm", loglogistic="llogis"))
+    # flexsurv drops vector names for its one-parameter exponential model.
+    # Restore the oracle's own parameter names before applying named transforms.
+    parameters <- stats::setNames(oracle$res[, "est"], oracle$dlist$pars)
+    theta <- stats::setNames(stats::coef(oracle), oracle$dlist$pars)
+    # These base distribution functions share neither survreg nor the engine's adapters.
+    median_of <- function(p) switch(distribution, exponential=log(2)/p["rate"], weibull=p["scale"]*log(2)^(1/p["shape"]), lognormal=exp(p["meanlog"]), loglogistic=p["scale"])
+    survival_of <- function(p) switch(distribution, exponential=pexp(horizons,p["rate"],lower.tail=FALSE), weibull=pweibull(horizons,p["shape"],p["scale"],lower.tail=FALSE), lognormal=plnorm(horizons,p["meanlog"],p["sdlog"],lower.tail=FALSE), loglogistic=plogis((log(horizons)-log(p["scale"]))*p["shape"],lower.tail=FALSE))
+    from_theta <- function(t) { p <- exp(t); if(distribution=="lognormal") p["meanlog"] <- t["meanlog"]; p }
+    g <- numDeriv::grad(function(t) log(median_of(from_theta(stats::setNames(t,names(theta))))), theta)
+    se_reference <- sqrt(as.numeric(t(g) %*% stats::vcov(oracle) %*% g))
+    quantile_reference <- exp(log(median_of(parameters)) + qnorm(c(.1,.5,.9))*se_reference)
+    emitted <- fitted$distribution[names(fitted$distribution)!="kind"]
+    parameter_reference <- if(distribution=="exponential") parameters["rate"] else if(distribution=="lognormal") parameters[c("meanlog","sdlog")] else parameters[c("shape","scale")]
+    curve <- vapply(fitted$curve,function(point) point$survival,numeric(1))
+    max(abs(unlist(emitted)-unname(parameter_reference)), abs(fitted$median-median_of(parameters)), abs(curve-survival_of(parameters)), abs(fitted$aic-stats::AIC(oracle)), abs(unlist(fitted$medianParameterQuantiles)-quantile_reference))
+  },numeric(1))
+  list(pass=all(is.finite(errors)) && all(errors < 2e-3), detail=paste("flexsurv independent complete-output max errors:",paste(names(errors),format(errors,digits=4),collapse="; ")))
+})
+vcr_case("N52l", c("AC-04", "AC-27"), function() {
+  families <- c("exponential","weibull","lognormal","loglogistic")
+  none <- vapply(families,function(f) !vcr_fit_survival_baseline(c(1,2,3,4,6),c(0,0,0,0,0),f,c(3))$estimable,logical(1))
+  one <- lapply(families,function(f) vcr_fit_survival_baseline(c(1,2,3,4,6),c(0,0,1,0,0),f,c(3)))
+  two <- lapply(families,function(f) vcr_fit_survival_baseline(c(1,2,3,4,6),c(1,0,0,0,1),f,c(3)))
+  list(pass=all(none) && one[[1]]$estimable && all(vapply(one[-1],function(f) !f$estimable && f$rule=="too_few_events",logical(1))) && all(vapply(two,function(f) isTRUE(f$estimable),logical(1))), detail="One event supports exponential only; every two-parameter family requires two events before convergence checks")
+})
+vcr_case("N52m", c("AC-04"), function() {
+  transforms <- c("identity","log","log1p","square","indicator")
+  error <- vapply(transforms,function(transform) {
+    raw <- if(transform=="indicator") c("female","male") else c(2,4)
+    x <- switch(transform,identity=c(2,4),log=log(c(2,4)),log1p=log1p(c(2,4)),square=c(4,16),indicator=c(0,1))
+    term <- list(column="x",coefficient=.4,transform=transform,unit=if(transform=="indicator")"category"else"units",center=mean(x),scale=10)
+    if(transform=="indicator") {term$category<-"male";term$levels<-c("female","male")}
+    model <- list(family="logistic",intercept=-1,terms=list(term))
+    result <- vcr_apply_prognostic_equation(data.frame(x=raw),model,list(x=term$unit))
+    max(abs(result$prediction-plogis(-1+.4*(x-mean(x))/10)))
+  },numeric(1))
+  list(pass=all(error<1e-12),detail="Typed transforms precede centering/scaling; identity/log/log1p/square/indicator agree with independent closed forms")
 })

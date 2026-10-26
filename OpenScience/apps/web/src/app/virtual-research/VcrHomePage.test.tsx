@@ -10,7 +10,7 @@ const network = vi.hoisted(() => ({ productRequest: vi.fn() }));
 vi.mock("@/lib/productClient", () => network);
 const me = vi.hoisted(() => ({ fetchWebMe: vi.fn() }));
 vi.mock("@/lib/apiClient", async original => ({ ...(await original<typeof import("@/lib/apiClient")>()), fetchWebMe: me.fetchWebMe }));
-const store = vi.hoisted(() => ({ currentId: "global-project", select: vi.fn(async (_id: string, land?: () => void) => land?.()) }));
+const store = vi.hoisted(() => ({ currentId: "geo-project", select: vi.fn(async (_id: string, land?: () => void) => land?.()) }));
 vi.mock("@/lib/projects", () => ({ useProjectStore: (selector: (state: typeof store) => unknown) => selector(store) }));
 function Probe() { const location = useLocation(); return <pre data-testid="location">{JSON.stringify({ path: location.pathname, state: location.state })}</pre>; }
 function draw(path = "/app/virtual-research") { return render(<MemoryRouter initialEntries={[path]}><Routes><Route path="/app/virtual-research" element={<VcrHomePage />} /><Route path="*" element={<Probe />} /></Routes></MemoryRouter>); }
@@ -21,10 +21,13 @@ it.each(["患者匹配", "人群与患者", "合成对照", "虚拟试验"])("op
   draw(); await userEvent.click(await screen.findByRole("button", { name: label }));
   const location = JSON.parse(screen.getByTestId("location").textContent!);
   expect(location.path).toBe("/app/chat");
+  expect(location.state.globalAssistant).toBe(true);
+  expect(location.state.conversationProjectId).toBe("default");
+  expect(location.state.runtimeUiIntent.projectId).toBe("default");
   expect(location.state.runtimeUiIntent.draft).toBeTruthy();
   expect(location.state.capabilityId).toBeUndefined();
   expect(server.calls.filter(call => call.method === "POST")).toEqual([]);
-  expect(store.select).toHaveBeenCalledWith("global-project", expect.any(Function));
+  expect(store.select).toHaveBeenCalledWith("default", expect.any(Function));
 });
 it("keeps per-task input requirements visible on an empty account", async () => {
   server = installVcrServer(network.productRequest, { "GET /vcr/studies": { studies: [], reviews: [] } }); draw();
@@ -33,7 +36,7 @@ it("keeps per-task input requirements visible on an empty account", async () => 
   expect(screen.getByText(/文献驱动的合成人群无需患者数据集/)).toBeInTheDocument();
   expect(screen.queryByRole("textbox", { name: "研究问题" })).toBeNull();
 });
-it.each(["?new=1", "?tab=models"])("does not reopen an old creation form or method catalogue at %s", async query => {
+it.each(["?new=1"])("does not reopen an old creation form or method catalogue at %s", async query => {
   draw(`/app/virtual-research${query}`); await screen.findByRole("button", { name: "患者匹配" });
   expect(screen.queryByText("方法库")).toBeNull(); expect(screen.queryByRole("textbox", { name: "研究问题" })).toBeNull();
   expect(server.calls.filter(call => call.method === "POST")).toEqual([]);
@@ -67,4 +70,21 @@ it("keeps legacy calculations in a disclosure and preserves their addressed hist
   await userEvent.click(screen.getByText("历史独立计算 · 1"));
   expect(screen.getByRole("link", { name: "Saved calculation" })).toHaveAttribute("href", "/app/capabilities/calculations/legacy_calc");
   expect(screen.getByRole("searchbox", { name: "搜索研究" })).toBeInTheDocument();
+});
+
+it("opens saved models at the compatible address without a calculator catalogue", async () => {
+  draw("/app/virtual-research?tab=models");
+  expect(await screen.findByRole("list", { name: "保存的模型与参数" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "患者匹配" })).toBeNull();
+  expect(document.querySelector("[data-vcr-method-catalogue]")).toBeNull();
+});
+it("keeps task entry above list filters when search changes and opens minimum fields by keyboard", async () => {
+  draw(); await screen.findByRole("link", { name: /EV-201 二线/ });
+  const introduction = document.querySelector("[data-page-introduction]")!;
+  const toolbar = document.querySelector("[data-toolbar]")!;
+  expect(introduction.compareDocumentPosition(toolbar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  await userEvent.type(screen.getByRole("searchbox", { name: "搜索研究" }), "none");
+  expect(screen.getByRole("button", { name: "患者匹配" })).toBeInTheDocument();
+  await userEvent.click(screen.getAllByRole("button", { name: "查看最低字段与材料形式" })[0]);
+  expect(screen.getByRole("dialog", { name: "患者匹配需要的材料" })).toHaveTextContent("记忆胶囊");
 });

@@ -1,5 +1,7 @@
 # VCR AI-native reset: local acceptance
 
+> Historical first-round record. The [PR 17 remediation record](2026-10-26-vcr-pr17-review-remediation.md) supersedes its readiness conclusions, including the original continuation and numerical-test claims. This file is retained as provenance.
+
 Date: 2026-10-26. Base: `1aa0f7c3f`. Branch: `codex/vcr-ai-native-reset-20261025`.
 Scope: implementation, local verification and GitHub handoff. No deployment or serving-database operation.
 

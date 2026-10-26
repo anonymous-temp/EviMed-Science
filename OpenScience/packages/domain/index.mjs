@@ -1812,6 +1812,7 @@ export {
   VCR_MAP_CONFLICT_BOUND,
   VCR_MEMBER_ROLES,
   VCR_MEMBER_ROLE_LABELS_ZH,
+  VCR_RETIRED_MEMBER_ROLE_LABELS_ZH,
   VCR_MIN_CELL_SIZE,
   VCR_MISSING_REASONS,
   VCR_MISSING_REASON_LABELS_ZH,
@@ -2569,3 +2570,5 @@ export { forecastRandom, empiricalCrps, discrimination, forecastMetrics, metricI
   continuousBaselines, ipcwBrier, evaluateForecast, compareForecasts, forecastDesignInputs, forecastShiftDiagnostics } from './src/vcrForecastEvaluation.mjs'
 
 export { evaluateTrialBenchmark } from './src/vcrTrialBenchmark.mjs'
+export { VCR_OBJECT_REFERENCE_KINDS, vcrObjectReference } from './src/vcrObjectReference.mjs';
+export { VCR_PREDICTION_LIMIT_LABELS_ZH, vcrPredictionLimit } from './src/vcrPredictionLimits.mjs';

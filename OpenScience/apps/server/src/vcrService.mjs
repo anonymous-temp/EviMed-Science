@@ -1,3 +1,4 @@
+import { followupHistoryCsv, presentFollowupHistory } from './vcrFollowupHistory.mjs';
 import { resolveVcrReplyStudy } from './vcrReplyContext.mjs';
 /**
  * What 「虚拟临床研究」's pages are served (build contract 2026-09-28 §3.1), the
@@ -59,6 +60,7 @@ import {
 import { dominatedScenarioMap, numeric, withReviewState, zhUnit } from "./vcrViewsKit.mjs";
 import { vcrReportModel } from "./vcrRender.mjs";
 import { readSchedule } from "./vcrScheduleView.mjs";
+import { vcrExecutionReceiptVerified } from "./vcrEngineClient.mjs";
 import { buildModelAnalysis, isModelDocumentKind, readModelAnalysisInputs } from "./vcrModelDocuments.mjs";
 import { buildVcrActivity, readRunMarks } from "./vcrStudyStatus.mjs";
 
@@ -70,8 +72,8 @@ export const VCR_READ_MAX_ITEMS = 50;
 /** What a runtime read may ask for. Closed; the MCP tool's schema copies it. */
 export const VCR_READ_WHATS = Object.freeze([
   "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
-  "precedents", "matching", "subject_document", "model_source", "generated_records", "results", "report_model", "snapshot_profile", "models", "jobs",
-  "trial_registry_record", "pack", "library", "model_assessments", "longitudinal", "candidate_trials", "soa", "regulatory_contacts",
+  "precedents", "matching", "subject_document", "followup_history", "model_source", "generated_records", "results", "report_model", "snapshot_profile", "models", "jobs",
+  "trial_registry_record", "patient_context", "pack", "library", "model_assessments", "longitudinal", "candidate_trials", "soa", "regulatory_contacts",
 ]);
 
 /**
@@ -543,8 +545,8 @@ export class VcrService {
     const drafts = await this.store.draftStudies(String(user.id));
     const spokenIn = this.packages.draftSpokenIn;
     const spoken = spokenIn
-      ? (await Promise.all(drafts.map(async (study) => ((await Promise.resolve(spokenIn(study)).catch(() => true)) ? study : null)))).filter(Boolean)
-      : [];
+      ? (await Promise.all(drafts.map(async (study) => (String(study.question ?? "").trim() || (await Promise.resolve(spokenIn(study)).catch(() => true))) ? study : null))).filter(Boolean)
+      : drafts.filter(study => String(study.question ?? "").trim());
     const spokenIds = new Set(spoken.map((study) => study.id));
     const studies = [...spoken, ...await this.store.listStudies(String(user.id))];
     const groups = await Promise.all(studies.map(async (study) => {
@@ -565,7 +567,25 @@ export class VcrService {
       const summary = presentSummary({ study, results, allResults, stale, jobs, scenarios, comparators, grid, decisions, exports, now });
       return { study, summary, reviews, roles };
     }));
-    const home = { studies: groups.map((group) => group.summary) };
+    const home = { studies: groups.map((group) => ({ ...group.summary,
+      originatingSessionId: group.study.conversationSessionId ?? null,
+      ...(group.study.status === "draft" && String(group.study.question ?? "").trim() ? { draftText: group.study.question } : {}) })) };
+    /** @type {Record<string, any>} */ const taskInputs = Object.fromEntries(["matching", "cohort", "patient", "comparator", "trial"].map(key => [key, { status: "missing", sources: [] }]));
+    const inspected = groups.slice(0, 12);
+    let unknown = groups.length > inspected.length || !this.packages.dataPlane?.taskInputs;
+    for (const { study } of inspected) {
+      try {
+        const inputs = await this.packages.dataPlane?.taskInputs?.(study, user);
+        if (!inputs) { unknown = true; continue; }
+        unknown ||= inputs.partial === true;
+        for (const key of Object.keys(taskInputs)) taskInputs[key].sources.push(...(inputs[key] ?? []));
+      } catch { unknown = true; }
+    }
+    for (const input of Object.values(taskInputs)) {
+      input.status = input.sources.length ? "available" : unknown ? "unknown" : "missing";
+      input.sources = input.sources.slice(0, 20);
+    }
+    home.taskInputs = taskInputs;
     const reviews = presentReviewNotes(groups.map((group) => ({ study: group.study, reviews: group.reviews })), now);
     if (reviews.length) home.reviews = reviews;
     // The projects of the drafts nobody has spoken in: they are not on the list, and the sidebar leaves them out of its project list.
@@ -910,6 +930,38 @@ export class VcrService {
     }
   }
 
+  /** Preserved observations are human-only until source/cloud authority can be proved.
+   * @param {{id:string}} user @param {string} id @param {Record<string,any>} [query] */
+  async followupHistory(user, id, query = {}) {
+    const study = await this.requireStudy(user, id);
+    if (!this.packages.access?.require || !this.packages.matchStore?.listFollowupEpisodes) {
+      throw failure(503, "vcr_matching_unavailable", "历史观察暂时不可用。");
+    }
+    await this.packages.access.require({ actor: user.id, studyId: study.id, ability: "read_patient_level", purpose: "vcr" });
+    if (query.format === "csv") await this.packages.access.require({ actor: user.id, studyId: study.id, ability: "export", purpose: "vcr" });
+    const bounded = (value, fallback, ceiling) => Math.min(ceiling, Math.max(0, Math.floor(Number(value) || fallback)));
+    const limit = Math.max(1, bounded(query.limit, 50, 100));
+    const offset = bounded(query.offset, 0, 1000000);
+    const rows = await this.packages.matchStore.listFollowupEpisodes({ studyId: study.id,
+      subjectKey: query.subjectKey ? String(query.subjectKey) : null, limit: limit + 1, offset });
+    const withdrawn = await this.packages.matchStore.withdrawnSubjects(study.id);
+    const episodes = rows.slice(0, limit).filter(row => !withdrawn.has(row.subjectKey)).map(presentFollowupHistory);
+    const answer = { available: true, readOnly: true, episodes, page: { limit, offset, nextOffset: rows.length > limit ? offset + limit : null },
+      notice: "历史观察仅供读取；试验受限字段不可见，出组记录不代表原试验疗效。导出包含当前页。" };
+    await this.store.audit?.({ studyId: study.id, userId: study.userId, actor: user.id, action: query.format === "csv" ? "followup_history.export" : "followup_history.read",
+      object: study.id, detail: { limit, offset, episodes: episodes.length } });
+    return query.format === "csv" ? { ...answer, csv: followupHistoryCsv(episodes) } : answer;
+  }
+
+  /** Runtime gets a location and capability descriptor, never legacy clinical text without source/cloud authorization.
+   * @param {any} study */
+  async followupHistoryForRuntime(study) {
+    await this.packages.access?.require?.({ actor: study.userId, studyId: study.id, ability: "read", purpose: "vcr" });
+    return { available: Boolean(this.packages.matchStore), readOnly: true, cloudContentAvailable: false,
+      browserPath: `/app/virtual-research/${encodeURIComponent(study.id)}/data`,
+      message: "历史观察可在“依据”中按当前账号权限读取或导出；未证明原记录的云端授权，不向模型提供患者内容。" };
+  }
+
   /**
    * `GET /api/vcr/studies/:id/export/:exportId`: one package for the reader.
    * @param {{ id: string }} user @param {string} id @param {string} exportId
@@ -979,10 +1031,13 @@ export class VcrService {
       now: this.now(), study, definition, results: reviewedResults, allResults: reviewedAll, stale, reviews: reviews.map(review => ({ ...review, current: vcrReviewIsCurrent(review, { results, stale, current: currentNodes, exports }) })), jobs, budget, assumptions, members, exports, decisions,
       roles, scenarios, comparators: reviewedComparators, comparator: reviewedComparators[0] ?? null, populations: reviewedPopulations, patientSets, grid, forecasts, models,
       executions, protocol, seal: vcrSealState(study), schedule, regulatory,
-      forecastResults: reviewedAll.filter((result) => result.kind === "accrual_forecast"),
       criteria: protocol ? await this.store.criteria(protocol.id) : [], jobMarks,
       currentNodes,
     };
+    if (tab === "trial" && this.packages.matching?.readAccrual) {
+      bundle.accrualReads = new Map(await Promise.all(reviewedAll.filter(result => result.kind === "accrual_forecast")
+        .map(async result => /** @type {[string, any]} */ ([result.id, await this.packages.matching.readAccrual(result)]))));
+    }
     if (tab === "data" || wants) {
       bundle.edges = await this.store.edges(study.id);
       /** @type {Array<[string, any[]]>} */
@@ -1133,7 +1188,7 @@ export class VcrService {
    * @param {any} study @param {Record<string, string>} query @param {{id:string}} viewer
    */
   async #match(study, query, viewer) {
-    if (["referral", "sites", "followup"].includes(String(query.view))) throw new HttpError(410, "vcr_recruitment_retired", "招募与随访运营已停用；匹配评估仍可使用。");
+    if (["referral", "sites", "followup"].includes(String(query.view))) throw new HttpError(410, "vcr_recruitment_retired", "该运营流程已停用；患者匹配仍可使用，历史观察可在“依据”中只读查看或导出。");
     const matchStore = this.packages.matchStore;
     if (!matchStore) return null;
     const protocols = typeof matchStore.protocols === 'function' ? await matchStore.protocols(study.id) : [];
@@ -1374,9 +1429,9 @@ export class VcrService {
   async fittedModelCard(user, study, resultId) {
     await this.requireStudy(user, study.id);
     const result = await this.store.result(study.id, resultId);
-    const execution = result?.executionId ? await this.store.one(`SELECT method,receipt FROM ${VCR_SCHEMA}.executions WHERE id=$1 AND study_id=$2`, [result.executionId, study.id]) : null;
+    const execution = result?.executionId ? await this.store.one(`SELECT method,receipt,output_hash FROM ${VCR_SCHEMA}.executions WHERE id=$1 AND study_id=$2`, [result.executionId, study.id]) : null;
     const model = object(object(result?.diagnostics).model);
-    if (!result || execution?.method !== "model.survival_fit" || object(execution.receipt).signed !== true || model.estimable !== true) {
+    if (!result || execution?.method !== "model.survival_fit" || !vcrExecutionReceiptVerified(execution) || model.estimable !== true) {
       throw failure(400, "vcr_model_invalid", "Select a verified, estimable survival-baseline fit from this study.");
     }
     const distribution = object(model.distribution);
@@ -1546,6 +1601,7 @@ export class VcrService {
       throw failure(400, "vcr_read_what_invalid", `what must be one of: ${VCR_READ_WHATS.join(", ")}.`);
     }
     this.counters.reads += 1;
+    if (!study.id && !['trial_registry_record','models','library'].includes(what)) return { available:true,empty:true,study:null,scope:'conversation' };
     const payload = await this.#runtimeRead(study, what, filter);
     // This one projection has already verified the entire generated lineage; synthetic counts are not patient disclosure cells.
     if (what === "generated_records") return stripPlaneAddresses(payload);
@@ -1554,6 +1610,9 @@ export class VcrService {
 
   /** @param {any} study @param {string} what @param {Record<string, any>} filter */
   async #runtimeRead(study, what, filter) {
+    if (what === "followup_history") return this.followupHistoryForRuntime(study);
+    // Only the gateway has the verified native root invocation needed to locate a selected patient's context.
+    if (what === "patient_context") return { candidates: [], nextBeforeSeq: null };
     const limit = Math.min(VCR_READ_MAX_ITEMS, Math.max(1, Number(filter.limit ?? 20)));
     switch (what) {
       case "study": {

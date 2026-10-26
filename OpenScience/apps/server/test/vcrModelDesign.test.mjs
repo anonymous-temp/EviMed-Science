@@ -60,3 +60,12 @@ test('published prognostic planning preserves the selected generated table, real
   const control=vcrBuildStages({kind:'comparator',row:comparator},{...context,populations:[real]});assert.equal(control.ok,true,JSON.stringify(control));assert.deepEqual(control.stages[0].scenario.cohortRules,rules);
   const conflict=vcrBuildStages({kind:'comparator',row:{...comparator,configuration:{...comparator.configuration,cohortRules:[{name:'all',rule:{op:'compare',column:'age',comparator:'gte',value:0}}]}}},{...context,populations:[real]});assert.equal(conflict.ok,false);
 });
+
+test('model quantiles cross every declared treatment truth and retain each truth provenance',()=>{
+  const context={study:{id:'std',dataTier:'T0'},definition:{endpointType:'time_to_event'},assumptions:[],modelResult:result};
+  const configuration={...base,truth:{},modelResultId:result.id,modelResultVersion:2,modelParameterQuantile:'all'};
+  const grid=vcrBuildStages({kind:'design_grid',row:{dimensions:{base:configuration,designs:[{kind:'two_arm_fixed',nTreat:50,nControl:50}]},truthScenarios:[{label:'low',hazardRatio:.6},{label:'middle',hazardRatio:.7},{label:'high',hazardRatio:.8}]}},context);
+  assert.equal(grid.ok,true,JSON.stringify(grid));assert.equal(grid.stages[0].scenario.truths.length,9);
+  assert.equal(new Set(grid.stages[0].scenario.truths.map(row=>`${row.hazardRatio}/${row.controlDistribution.scale}`)).size,9);
+  assert.deepEqual(grid.stages[0].detail.modelDesign.scenarios.map(row=>row.truthIndex),[0,0,0,1,1,1,2,2,2]);
+});

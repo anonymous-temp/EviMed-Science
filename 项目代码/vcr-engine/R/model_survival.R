@@ -7,7 +7,7 @@ vcr_fit_survival_baseline <- function(time, status, distribution, horizons) {
       any(!is.finite(time)) || any(time <= 0) || any(!(status %in% c(0, 1)))) {
     vcr_abort("scenario_value_invalid", "scenario", "The fit needs positive times, binary event indicators and a supported distribution.")
   }
-  if (!length(time) || sum(status) == 0) return(list(estimable = FALSE, rule = "too_few_events"))
+  if (!length(time) || sum(status) < if (distribution == "exponential") 1L else 2L) return(list(estimable = FALSE, rule = "too_few_events"))
   warned <- FALSE
   fit <- tryCatch(withCallingHandlers(
     survival::survreg(survival::Surv(time, status) ~ 1, dist = distribution),

@@ -337,15 +337,16 @@ test('what the chip leaves unsaid is the platform\'s default, and a setting the 
 });
 
 // 虚拟临床研究: the same chip through its five capabilities, and — once the shell has
-// found the study — 起点 and 预期用途 beside it and six single-task starters.
+// found the study — 起点 and 预期用途 beside it and four task starters.
 const VCR_OPTIONS = {
   sessionId: 'session-a', controls: true, canSetUse: true,
   start: 'auto', startOptions: [{ id: 'auto', label: '自动' }, { id: 'cohort', label: '队列' }, { id: 'patients', label: '患者' }, { id: 'comparator', label: '对照' }, { id: 'trial', label: '试验' }],
   intendedUse: 'exploratory', useOptions: [{ id: 'exploratory', label: '探索' }, { id: 'design_support', label: '研究设计支持' }],
   starters: [
-    { label: '估算样本量', draft: '帮我估算样本量：' }, { label: '外部对照可行性', draft: '评估外部对照是否可行：' },
-    { label: '找先例和参数', draft: '帮我找同类试验先例和参数：' }, { label: '生成合成数据', draft: '帮我生成合成数据：' },
-    { label: '匹配患者', draft: '帮我匹配患者：' }, { label: '完整研究', draft: '帮我做一个完整的研究：' },
+    { label: '患者匹配', draft: '帮我匹配患者：', requirement: '需要原始病例或真实患者数据', minimumFields: '诊断、治疗与检查时间' },
+    { label: '人群与患者', draft: '帮我研究人群：', requirement: '合成人群可先用文献' },
+    { label: '合成对照', draft: '帮我评估对照：', requirement: '效果分析需结局数据' },
+    { label: '虚拟试验', draft: '帮我比较试验设计：', requirement: '可先用文献参数' },
   ],
 };
 
@@ -365,7 +366,7 @@ test('a 虚拟临床研究 conversation reads 「虚拟临床研究」 whichever
   assert.doesNotMatch(drawn, /起点|预期用途|aria-haspopup/, 'no settings before the shell has found the study');
 });
 
-test('the 虚拟临床研究 chip carries 起点 and 预期用途 in its menu once the shell has found the study, and six single-task starters on the blank conversation', () => {
+test('the 虚拟临床研究 chip carries 起点 and 预期用途 in its menu once the shell has found the study, and four task starters with visible minimum inputs on the blank conversation', () => {
   const f = frame();
   const chip = toolbarChip(f);
   const hero = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.hero.agentPreset');
@@ -386,7 +387,10 @@ test('the 虚拟临床研究 chip carries 起点 and 预期用途 in its menu on
   const blank = renderStatic(hero.component);
   assert.match(blank, /虚拟临床研究/);
   const labels = [...blank.matchAll(/<button type="button" title="[^"]+"[^>]*><span[^>]*>([^<]+)<\/span><\/button>/g)].map((match) => match[1]);
-  assert.deepEqual(labels, ['估算样本量', '外部对照可行性', '找先例和参数', '生成合成数据', '匹配患者', '完整研究']);
+  assert.deepEqual(labels, ['患者匹配', '人群与患者', '合成对照', '虚拟试验']);
+  assert.match(blank, /需要原始病例或真实患者数据/);
+  assert.match(blank, /<summary[^>]*>查看最低字段<\/summary>/);
+  assert.doesNotMatch(blank, /<button[^>]*>[^<]*需要原始病例或真实患者数据/);
 
   // A reader who may neither write nor lead has no menu at all: the settings
   // are not theirs, and a control the server would refuse is not offered.
@@ -398,7 +402,7 @@ test('the 虚拟临床研究 chip carries 起点 and 预期用途 in its menu on
   // A conversation in a project that is not a study: the chip and the starters, nothing to write to.
   f.kit.hub.deliver('vcr', { ...VCR_OPTIONS, controls: false });
   assert.doesNotMatch(renderStatic(chip.component), /aria-haspopup/);
-  assert.match(renderStatic(hero.component), /估算样本量/);
+  assert.match(renderStatic(hero.component), /患者匹配/);
   // Another conversation: the options go with the tool until the shell speaks.
   f.kit.hub.deliver('session', { sessionId: 'session-b' });
   assert.equal(renderStatic(chip.component), '');

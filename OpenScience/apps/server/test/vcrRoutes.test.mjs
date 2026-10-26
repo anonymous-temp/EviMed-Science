@@ -119,6 +119,7 @@ function fixture({ who = OWNER, roles = {}, overrides = {}, operators = [], sett
     allows: (/** @type {any} */ user) => vcrAudienceAllows(config, user),
     isOperator: (/** @type {any} */ user) => operators.includes(String(user?.id)),
     async listStudies() { calls.push(["list"]); return { studies: [] }; },
+    async followupHistory() { return {available:true,readOnly:true,episodes:[],page:{limit:50,offset:0,nextOffset:null}}; },
     async requireStudy(/** @type {any} */ user, /** @type {string} */ id) {
       // The service resolves the account's own study, or a study it is a member of.
       const member = String(user.id) === study.userId || (roles[String(user.id)] ?? []).length > 0;
@@ -467,6 +468,7 @@ test("the study lead holds review_any: it countersigns every kind, which no othe
  * @type {Record<string, [string, string, any]>}
  */
 const REQUESTS = {
+  "GET /studies/:id/followup-history": ["GET", "/api/vcr/studies/std_1/followup-history", undefined],
   "GET /studies/:id/longitudinal": ["GET", "/api/vcr/studies/std_1/longitudinal", undefined],
   "POST /studies/:id/longitudinal/histories": ["POST", "/api/vcr/studies/std_1/longitudinal/histories", {}],
   "POST /studies/:id/longitudinal/predictions": ["POST", "/api/vcr/studies/std_1/longitudinal/predictions", {}],
@@ -879,7 +881,7 @@ test("every code these routes emit is one this module declares", async () => {
   // are declared here because this is the list the page reads and the domain's
   // registry takes verbatim. Naming them keeps that true: a declared code that
   // nobody raises is dropped, not left as decoration.
-  const fromElsewhere = ["vcr_conversation_busy", "vcr_conversation_unavailable", "vcr_calculation_research_required", "vcr_study_not_found", "vcr_study_paused", "vcr_tab_not_found", "vcr_referral_not_found", "vcr_model_exists", "vcr_export_not_found",
+  const fromElsewhere = ["vcr_conversation_busy", "vcr_conversation_unavailable", "vcr_calculation_research_required", "vcr_study_not_found", "vcr_study_paused", "vcr_tab_not_found", "vcr_model_exists", "vcr_export_not_found",
     "vcr_pack_not_found", "vcr_pack_invalid", "vcr_definition_not_found", "vcr_definition_invalid",
     "vcr_publication_not_found", "vcr_publication_not_ready", "vcr_publication_patient_data", "vcr_pack_not_curated",
     "vcr_prediction_number_refused", "vcr_prediction_scenario_not_found", "vcr_prediction_not_from_engine", "vcr_prediction_unreadable",

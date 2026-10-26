@@ -44,6 +44,35 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
     },
     clear() { stagedRevision = null; sentRevision = null; },
   };
+  /** @type {{sessionId:string,reference:any,draft:string} | null} */ let stagedVcr = null;
+  /** @type {{sessionId:string,requestId:string,text:string,reference:any} | null} */ let sentVcr = null;
+  const vcrSelections = {
+    /** @param {{sessionId:string,reference:any,draft:string}} value */
+    stage(value) {
+      if (!value || !/^[A-Za-z0-9_-]{1,160}$/.test(value.sessionId) || !value.reference || typeof value.reference !== 'object' || JSON.stringify(value.reference).length > 4096 || typeof value.draft !== 'string' || !value.draft) throw failure('Invalid research reference');
+      stagedVcr = { ...value }; sentVcr = null;
+    },
+    clear() { stagedVcr = null; sentVcr = null; },
+  };
+  /** An explicit selection is session context. Wording edits never change the selected versions.
+   * @param {string} method @param {any} payload */
+  function researchPayload(method, payload) {
+    if (method === 'session/cancel') { vcrSelections.clear(); return payload; }
+    if (method !== 'session/prompt') return payload;
+    const request = payload?.args?.request;
+    if (!request || typeof request.requestId !== 'string') return payload;
+    const text = Array.isArray(request.content) ? request.content.filter((/** @type {any} */ part) => part?.type === 'text' && typeof part.text === 'string').map((/** @type {any} */ part) => part.text).join('\n') : '';
+    let reference;
+    if (sentVcr && sentVcr.sessionId === request.sessionId && sentVcr.requestId === request.requestId && sentVcr.text === text) reference = sentVcr.reference;
+    else if (stagedVcr) {
+      const staged = stagedVcr; vcrSelections.clear();
+      if (staged.sessionId === request.sessionId) {
+        reference = staged.reference;
+        sentVcr = { sessionId: request.sessionId, requestId: request.requestId, text, reference };
+      }
+    }
+    return reference ? { ...payload, args: { ...payload.args, request: { ...request, evimedVcrReference: reference } } } : payload;
+  }
   /** Attach only to the submitted native request for this session and draft.
    * The control plane strips this envelope before calling the kernel.
    * @param {string} method @param {any} payload */
@@ -192,10 +221,10 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
         let body;
         try { body = JSON.parse(init.body); } catch { /* the server rejects malformed native RPCs */ }
         if (body?.type === 'client-request' && body.method === 'session/prompt') {
-          const payload = revisionPayload(body.method, body.payload);
+          const payload = researchPayload(body.method, revisionPayload(body.method, body.payload));
           if (payload !== body.payload) outgoing = { ...init, body: JSON.stringify({ ...body, payload }) };
         }
-      } else if (url.pathname.endsWith('/session/cancel')) revisions.clear();
+      } else if (url.pathname.endsWith('/session/cancel')) { revisions.clear(); vcrSelections.clear(); }
       return nativeFetch(scopedUrl(input, '/api/'), { ...outgoing, credentials: 'same-origin', redirect: 'error' });
     },
     /** @param {string} input */
@@ -258,7 +287,7 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
           queue.push({ message, bytes }); queuedBytes += bytes; receiveQueuedBytes += bytes; wake?.();
         },
       };
-      const abort = () => { if (endpoint === 'session/prompt') revisions.clear(); inbox.fail(signal.reason ?? failure('Runtime stream cancelled')); };
+      const abort = () => { if (endpoint === 'session/prompt') { revisions.clear(); vcrSelections.clear(); } inbox.fail(signal.reason ?? failure('Runtime stream cancelled')); };
       streams.set(id, inbox);
       signal.addEventListener('abort', abort, { once: true });
       try {
@@ -273,7 +302,7 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
           if (signal.aborted) cancel();
         });
         if (signal.aborted) throw signal.reason;
-        send(socket, { type: 'open', streamId: id, endpoint, payload: revisionPayload(endpoint, payload) }); opened = true;
+        send(socket, { type: 'open', streamId: id, endpoint, payload: researchPayload(endpoint, revisionPayload(endpoint, payload)) }); opened = true;
         while (true) {
           if (failed) throw error;
           if (!queue.length) await new Promise(resolve => { wake = () => resolve(undefined); });
@@ -294,7 +323,7 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
     },
     dispose() {
       if (disposed) return;
-      disposed = true; revisions.clear(); cancelConnect?.();
+      disposed = true; revisions.clear(); vcrSelections.clear(); cancelConnect?.();
       if (carrier) lose(carrier, failure('Runtime frame disposed'));
     },
   };
@@ -318,6 +347,7 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
       return nativeFetch(scopedUrl(input, '/api/'), { ...init, credentials: 'same-origin', redirect: 'error' });
     },
   };
+  Object.defineProperty(target, '__EVIMED_VCR_SELECTION__', { value: Object.freeze(vcrSelections) });
   Object.defineProperty(target, '__EVIMED_RESULT_REVISION__', { value: Object.freeze(revisions) });
   Object.defineProperty(target, '__DSH_TRANSPORT__', { value: Object.freeze(hooks) });
   Object.defineProperty(target, '__DSH_FILE_UPLOAD__', { value: Object.freeze(uploads) });

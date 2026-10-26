@@ -294,3 +294,32 @@ test('the overwrite replaces a file in place, refuses a symlink and a location o
     await assert.rejects(shredPlaneFile(dir, '../elsewhere.txt'), { code: 'vcr_data_plane_location_outside' });
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
 });
+
+test('a source-less history-only subject withdraws through the composed data plane and disappears from JSON and CSV', options, async () => {
+  const target = await vcr.store.createStudy({ userId: 'history-owner', projectId: `history_${Math.random().toString(16).slice(2)}`,
+    name: 'Historical observation withdrawal', question: 'Preserved scientific observations', dataTier: 'T0' });
+  const foreign = await vcr.store.createStudy({ userId: 'foreign-owner', projectId: `foreign_${Math.random().toString(16).slice(2)}`,
+    name: 'Other owned study', question: 'Other scope', dataTier: 'T0' });
+  const subjectKey = 'HISTORY_ONLY';
+  await vcr.matchStore.query(`INSERT INTO evimed_vcr.followup_episodes
+    (id, study_id, user_id, subject_key, kind, observations)
+    VALUES ($1,$2,$3,$4,'routine_care',$5::jsonb)`,
+  [`${target.id}_history`, target.id, target.userId, subjectKey, JSON.stringify([{ variable: 'ecog', value: 2 }])]);
+  assert.equal((await vcr.service.followupHistory({ id: target.userId }, target.id)).episodes.length, 1);
+  assert.match((await vcr.service.followupHistory({ id: target.userId }, target.id, { format: 'csv' })).csv, /ecog/);
+  await assert.rejects(vcr.dataPlane.withdrawSubject({ actor: foreign.userId, studyId: target.id, subjectKey }),
+    { status: 404, code: 'vcr_study_not_found' }, 'another owner cannot withdraw the retained history');
+  await assert.rejects(vcr.dataPlane.withdrawSubject({ actor: foreign.userId, studyId: foreign.id, subjectKey }),
+    { status: 404, code: 'vcr_subject_not_found' }, 'subject recognition remains scoped to its owned study');
+  const withdrawn = await vcr.dataPlane.withdrawSubject({ actor: target.userId, studyId: target.id, subjectKey });
+  assert.equal(withdrawn.subjectKey, subjectKey);
+  assert.deepEqual((await vcr.service.followupHistory({ id: target.userId }, target.id)).episodes, []);
+  const csv = await vcr.service.followupHistory({ id: target.userId }, target.id, { format: 'csv' });
+  assert.deepEqual(csv.episodes, []);
+  assert.doesNotMatch(csv.csv, /HISTORY_ONLY|ecog/);
+  const repeated = await vcr.dataPlane.withdrawSubject({ actor: target.userId, studyId: target.id, subjectKey });
+  assert.equal(repeated.subjectKey, subjectKey);
+  assert.deepEqual((await vcr.service.followupHistory({ id: target.userId }, target.id)).episodes, []);
+  const rows = await vcr.matchStore.rows('SELECT subject_key FROM evimed_vcr.subject_withdrawals WHERE study_id=$1', [target.id]);
+  assert.deepEqual(rows.map(row => row.subject_key), [subjectKey], 'the real withdrawal path writes one stable tombstone');
+});

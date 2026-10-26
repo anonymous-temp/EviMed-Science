@@ -461,7 +461,7 @@ export class LearningEvidence {
     const all = await this.agentRuns.list(project).catch(() => []);
     const runs = dispatchId ? all.filter((/** @type {any} */ run) => run?.dispatchId !== dispatchId) : all;
     const previous = runs
-      .filter((/** @type {any} */ run) => run?.sessionId === sessionId && run.status === "succeeded" && Number.isFinite(Date.parse(String(run.finishedAt ?? ""))))
+      .filter((/** @type {any} */ run) => run?.sessionId === sessionId && run.effectiveRouteReason !== "vcr-job-completion" && run.status === "succeeded" && Number.isFinite(Date.parse(String(run.finishedAt ?? ""))))
       .sort((/** @type {any} */ left, /** @type {any} */ right) => Date.parse(right.finishedAt) - Date.parse(left.finishedAt))[0];
     if (!previous || now - Date.parse(previous.finishedAt) > LEARNING_FOLLOW_UP_WINDOW_MS) return { recorded: false, reason: "no_previous_run" };
     // A run still going in this session is the turn this message is queued behind, not one it reacts to.

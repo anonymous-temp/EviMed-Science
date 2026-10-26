@@ -235,3 +235,30 @@ vcr_case("N46f", c("AC-04", "AC-30"), function() {
        detail = sprintf("1 and 8 cores: the table is byte-identical (%s) and so is the output hash (%s); a null effect is a legal scenario; refused by name: an unlisted key (%s), visits out of order (%s), one visit (%s)",
                         same_table, same_hash, refusals[["key"]], refusals[["visits"]], refusals[["short"]]))
 })
+
+vcr_case("N46g", c("AC-02", "AC-09", "AC-31"), function() {
+  sc <- .n46_scenario(n=30,effect=-.25,dropout=.4)
+  dir<-tempfile("n46pair-");dir.create(dir);on.exit(unlink(dir,recursive=TRUE),add=TRUE)
+  r<-.n46_run(sc,4611L,"paired",dir);d<-vcr_test_table(r,"virtual-patients",dir)
+  legacy_job<-vcr_test_job("patients.longitudinal",sc,seed=4611L,job_id="job_n46paired");legacy_job$methodVersion<-"1.0.0"
+  old<-vcr_test_run(legacy_job,output_dir=dir);previous<-vcr_test_table(old,"virtual-patients",dir)
+  list(pass=all(c("y0","y1")%in%names(d)) && max(abs((d$y1-d$y0)-sc$truth$effect*d$time))<1e-12 && max(abs(d$y-ifelse(d$arm==1,d$y1,d$y0)))<1e-12 && identical(d$y,previous$y) && identical(d$visit,previous$visit) && r$counts$generatedRecords==60 && r$diagnostics$observations==nrow(d) && nrow(d)<60*length(sc$visits) && old$counts$generatedRecords==nrow(previous) && !("y0"%in%names(previous)), detail="Both modeled outcomes exist at every observed visit only; factual values/dropout and legacy record-count replay are unchanged")
+})
+
+vcr_case("N46h", c("AC-04", "AC-31"), function() {
+  dir<-tempfile("n46legacy-columns-");dir.create(dir);on.exit(unlink(dir,recursive=TRUE),add=TRUE)
+  details<-character(0)
+  outcomes<-vapply(c("y0","y1"),function(name) {
+    population<-data.frame(age=c(40,50,60,70));population[[name]]<-1:4
+    input<-vcr_test_input(population,paste0("legacy_",name),source="synthetic")
+    sc<-.n46_scenario(n=2,visits=list(0,1));job<-vcr_test_job("patients.longitudinal",sc,list(input),seed=99L,job_id=paste0("legacy_",name))
+    job$methodVersion<-"1.0.0";legacy<-vcr_test_run(job,output_dir=dir)
+    if(!identical(legacy$status,"succeeded"))return(FALSE)
+    rows<-vcr_test_table(legacy,"virtual-patients",dir)
+    job$methodVersion<-"1.1.0";current<-vcr_test_run(job,output_dir=dir)
+    checks<-c(name%in%names(rows),identical(as.numeric(rows[[name]]),as.numeric(rep(1:4,each=2))),identical(current$status,"failed"),identical(current$diagnostics$issues[[1]]$code,"scenario_value_invalid"))
+    details<<-c(details,paste(name,paste(checks,collapse="/")))
+    all(checks)
+  },logical(1))
+  list(pass=all(outcomes),detail=paste("Legacy 1.0 populations retain formerly legal y0/y1 covariates; current paired-output versions refuse those collisions:",paste(details,collapse="; ")) )
+})

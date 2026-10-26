@@ -1,3 +1,4 @@
+import { resumeVcrStep } from "../vcrConversationActions";
 import { Link } from "react-router";
 import { VCR_STEPS, VCR_STEP_STATUS_LABELS_ZH } from "@evimed/domain";
 import { type VcrAttention, type VcrCountKey, type VcrStepKey, type VcrStudy, type VcrTabKey } from "@/lib/vcrClient";
@@ -91,7 +92,7 @@ function StepList({ study, studyId }: { study: VcrStudy; studyId: string }) {
             <ListRow
               key={step}
               title={stepName(step)}
-              to={vcrTabPath(studyId, VCR_STEP_TABS[step])}
+              to={`${vcrTabPath(studyId, VCR_STEP_TABS[step])}${step === "patients" ? "?level=individual" : ""}`}
               titleProps={{ "data-vcr-step-row": step }}
               leading={<RailMark state={state} />}
               trailing={(
@@ -139,7 +140,7 @@ function Attention({ items, study, studyId }: { items: readonly VcrAttention[]; 
     else if (item.kind === "step_failed") {
       const step = failed[failedAt++];
       if (step && mayRun) {
-        action = <Button size="sm" variant="secondary" onClick={() => frame?.openChat(`继续研究 ${studyId} 中未完成的${stepName(step)}，先检查已保存结果和失败原因，复用有效部分。`)}>接着做</Button>;
+        action = <Button size="sm" variant="secondary" onClick={() => resumeVcrStep(frame, studyId, step)}>在对话中继续</Button>;
       }
     } else if (item.kind === "stale") {
       action = <Button size="sm" variant="text" onClick={() => frame?.openPanel("changes")}>看变更记录</Button>;

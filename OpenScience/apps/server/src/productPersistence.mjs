@@ -152,6 +152,16 @@ CREATE TABLE IF NOT EXISTS evimed_product.revisions (
   PRIMARY KEY (user_id,kind,id,revision),
   FOREIGN KEY (user_id,kind,id) REFERENCES evimed_product.documents(user_id,kind,id) ON DELETE CASCADE
 );
+-- The bounded, cross-account native-calculation completion reconciler.
+CREATE INDEX IF NOT EXISTS product_result_replay_unrecorded_completion_idx ON evimed_product.documents (updated_at,user_id) WHERE kind='result-replay' AND deleted_at IS NULL AND payload->>'completionOutboxResultKey' IS DISTINCT FROM COALESCE(payload->>'outputVersionId','none');
+CREATE INDEX IF NOT EXISTS product_result_replay_completion_idx ON evimed_product.documents (updated_at,user_id)
+  WHERE kind='result-replay' AND deleted_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS evimed_product.prompt_stop_intents (
+ user_id text NOT NULL,project_id text NOT NULL,session_id text NOT NULL,run_id text NOT NULL,
+ PRIMARY KEY(user_id,project_id,session_id,run_id),
+ FOREIGN KEY(user_id,project_id) REFERENCES evimed_control.projects(user_id,id) ON DELETE CASCADE
+);
 CREATE TABLE IF NOT EXISTS evimed_product.jobs (
   id text PRIMARY KEY,
   user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,

@@ -2537,3 +2537,9 @@ export async function putConversationReference(sessionId: string, projectId: str
   });
   await parseApiResponse(res);
 }
+
+/** Validate a selected saved object before placing its native draft. */
+export async function stageVcrConversationReference(sessionId: string, projectId: string, reference: import("./runtimeUiNavigation").VcrObjectSelection): Promise<import("./runtimeUiNavigation").VcrObjectSelection> {
+  const res = await fetchWithWebAuth(apiUrl(`/research-sessions/${encodeURIComponent(sessionId)}/vcr-reference`), { method: "POST", headers: { "Content-Type": "application/json", "X-Open-Science-Project": projectId }, body: JSON.stringify(reference) });
+  return parseApiResponse<import("./runtimeUiNavigation").VcrObjectSelection>(res);
+}

@@ -187,6 +187,7 @@ function requests(target, ids) {
     // A request that no card answers: the point of the grid is who is refused, and a write that reaches nothing proves that as well.
     "POST /studies/:id/cards": async () => ["POST", `${S}/cards`, { kind: "criteria", set: { "99.requirement.value": 1 } }],
     "GET /studies/:id/longitudinal": async () => ["GET", `${S}/longitudinal`, undefined],
+    "GET /studies/:id/followup-history": async () => ["GET", `${S}/followup-history`, undefined],
     "POST /studies/:id/longitudinal/histories": async () => ["POST", `${S}/longitudinal/histories`, {}],
     "POST /studies/:id/longitudinal/predictions": async () => ["POST", `${S}/longitudinal/predictions`, {}],
     "POST /studies/:id/longitudinal/benchmarks": async () => ["POST", `${S}/longitudinal/benchmarks`, {}],
@@ -301,12 +302,21 @@ test("CS-45 every route, driven through the real server as the owner and as each
       // authority; study export alone cannot read its underlying documents.
       const allowed = (key === "POST /studies/:id/start" ? abilities.every(ability => holdsAny(held, [ability])) : holdsAny(held, abilities)) && (!key.includes('/correction-cases') || holdsAny(held, ['read_patient_level']));
       const label = `${who} (${held.join("+")}) ${key} -> ${answer.status} ${String(answer.body?.code ?? "")}`;
+      if (key === "GET /studies/:id/followup-history" && allowed) {
+        assert.equal(answer.status, 200, `${label}: an authorized history reader must reach the composed service`);
+        assert.equal(answer.body.data.readOnly, true);
+        assert.ok(Array.isArray(answer.body.data.episodes));
+      }
       if (answer.status >= 500) problems.push(`${label}: a server error — ${answer.text.slice(0, 160)}`);
       else if (allowed && answer.status === 403) problems.push(`${label}: refused, but the role holds ${abilities.join(" or ")}`);
       else if (!allowed && answer.status !== 403) problems.push(`${label}: not refused, and the role holds none of ${abilities.join(", ")}`);
       else if (allowed) walked.allowed += 1;
       else walked.denied += 1;
     }
+    const historyExport = await call(who, "GET", `/api/vcr/studies/${study.id}/followup-history?format=csv`);
+    const mayExportHistory = holdsAny(held, ["read_patient_level"]) && holdsAny(held, ["export"]);
+    assert.equal(historyExport.status, mayExportHistory ? 200 : 403, `${who}: historical CSV requires patient-level read and export`);
+    if (mayExportHistory) assert.match(historyExport.text, /subject,?"?|"subject"/);
   }
   assert.deepEqual(problems, [], problems.join("\n"));
   assert.ok(walked.allowed >= 70 && walked.denied >= 90, `walked ${walked.allowed} allowed and ${walked.denied} refused requests; the grid was not driven`);

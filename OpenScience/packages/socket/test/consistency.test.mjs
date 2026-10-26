@@ -3664,7 +3664,7 @@ test('screening counts unresolved decisions separately from exclusions', async (
 // a session whose persistent binding and previous tools name another method.
 test('claimed native routes settle first-request tools and replace stale capability grants', async () => {
   const { MCP_TOOL_NAMES } = await import('@evimed/domain');
-  // VCR tools are now root-visible. Disjoint non-root fixture tools keep grant replacement observable.
+  // Disjoint fixture tools keep capability grant replacement observable beside the compact VCR entry.
   const capabilities = [
     { id: 'vcr-protocol', skills: [], tools: ['mcp__evimed__meta_analysis'], produces: [] },
     { id: 'vcr-evidence', skills: [], tools: ['mcp__evimed__drug_safety_analysis'], produces: [] },
@@ -3681,7 +3681,7 @@ test('claimed native routes settle first-request tools and replace stale capabil
   f.files.set(`/workspace/${workspaceLayout.sessionBindingFile('native-session')}`, JSON.stringify({ capability: 'vcr-protocol' }));
   f.start();
   await f.step(1, { inputs: [message('ordinary')] });
-  assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__curve_digitize'), 'ordinary native work can use the globally offered digitizer');
+  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__curve_digitize'), 'ordinary work opens compact context before specialist tools');
   assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__vcr_simulate'), 'ordinary native work can use research computations');
   assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__drug_safety_analysis'));
   assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__meta_analysis'));
@@ -3708,7 +3708,7 @@ test('forged native context cannot grant tools and a current managed dispatch wi
   f.ctx.provide('evimedNativeRoute', async () => [{ requestId: 'foreign-request', digest: 'd'.repeat(64), route: { effectiveAgentId: 'vcr-evidence' } }]);
   f.start();
   await f.step(1, { inputs: [message] });
-  assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__curve_digitize'), 'global tool availability does not depend on a claimed capability');
+  assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__curve_digitize'), 'a claimed capability does not unlock specialist VCR schemas');
   assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__drug_safety_analysis'));
   f.ctx.provide('evimedNativeRoute', async () => [{ requestId: 'current', textDigest: await sha256Hex('current'), digest: 'forged', route: { effectiveAgentId: 'vcr-evidence' } }]);
   await f.step(2, { inputs: [message] });
@@ -3738,4 +3738,15 @@ test('forged native context cannot grant tools and a current managed dispatch wi
   await f.step(5);
   assert.ok(f.requests.at(-1)?.tools.includes('mcp__evimed__meta_analysis'), 'new managed dispatch supersedes the prior native capability');
   assert.ok(!f.requests.at(-1)?.tools.includes('mcp__evimed__drug_safety_analysis'), 'managed dispatch replaces the old native grant');
+});
+
+test('ordinary VCR entry grants heavy tools only after a successful authenticated compact call',async()=>{
+ const {MCP_TOOL_NAMES}=await import('@evimed/domain');
+ const heavy=['trial_registry_record','curve_digitize','evidence_pool'].map(name=>`mcp__evimed__${name}`);
+ const f=await nativePolicyFixture({registered:[...MCP_TOOL_NAMES,'bash','read','skill']});
+ f.start();await f.step(1);
+ for(const name of heavy) assert.ok(!f.requests[0].tools.includes(name),name);
+ f.ctx.emit(SEAMS.events.toolObserved,{agent:f.agent,name:'mcp__evimed__vcr_read',callId:'read',arguments:{what:'study'}},{value:{data:{what:'study',study:null}}});
+ await f.step(1);
+ for(const name of heavy) assert.ok(f.requests[1].tools.includes(name),name);
 });

@@ -72,6 +72,9 @@ before(async () => {
     const bound = await app.vcr.store.one("SELECT run_id,session_id FROM evimed_vcr.schedule_marks WHERE run_id=$1", [request.runId]);
     assert.equal(bound?.run_id, request.runId, "the first reserved run is bound before native execution");
     assert.equal(bound?.session_id, session);
+    // The real RuntimeManager owns the pre-wire hook; a recorder replacing it
+    // must execute the same callback before recording a native submission.
+    if(request.beforePrompt) await request.beforePrompt();
     record.prompts.push({ session, ...request, nativeQueued: record.nativeQueued });
     if (record.failPrompt) throw Object.assign(new Error(record.failPrompt), { code: record.failPrompt });
     return { accepted: true };

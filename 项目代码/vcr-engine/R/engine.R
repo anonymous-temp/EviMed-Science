@@ -643,7 +643,7 @@ vcr_job_population_literature <- function(job, output_dir = NULL, ...) {
        measures = list(vcr_measure("generated_records", pop$n, source = "synthetic")),
        counts = pop$counts,
        diagnostics = list(kind = pop$kind, applicability = pop$applicability,
-                          correlationSource = pop$correlationSource, modelTier = pop$modelTier,
+                          correlationSource = pop$correlationSource, correlationVerification = pop$correlationVerification, modelTier = pop$modelTier,
                           valueSource = "synthetic", columnSources = as.list(pop$columnSources),
                           correlationSensitivity = pop$correlationSensitivity,
                           constraintEnforcement = pop$constraintEnforcement,
@@ -1577,8 +1577,27 @@ vcr_job_design_analytic <- function(job, ...) {
       # patient and understated N (CE-10).
       p_ev <- (1 - alloc) * p0 + alloc * p1
       add("event_probability", p_ev); add("event_probability_control", p0); add("event_probability_treatment", p1)
-      add("required_patients", ceiling(ev / p_ev))
-      if (!is.null(gs)) add("max_patients", ceiling(ev * inflation / p_ev))
+      if (integer_allocation) {
+        raw <- list(treat = ev / p_ev * alloc, control = ev / p_ev * (1 - alloc), total = ev / p_ev)
+        allocated <- vcr_integer_allocation(raw)
+        add("required_patients", allocated$total); add("required_treatment", allocated$treatment); add("required_control", allocated$control)
+        expected_events <- allocated$treatment * p1 + allocated$control * p0
+        delta <- abs(log(hr)) * sqrt(expected_events * allocated$treatment / allocated$total * allocated$control / allocated$total)
+        diag$sampleSize <- list(basis = "schoenfeld_event_probability", formula = "schoenfeld_lachin_foulkes",
+          rounding = "ceiling_each_arm_then_sum", unrounded = raw, targetPower = power,
+          nTreatment = allocated$treatment, nControl = allocated$control, total = allocated$total,
+          allocationRequested = alloc, allocationAchieved = allocated$treatment / allocated$total,
+          powerCheckBasis = "logrank_martingale_integral", powerAtAllocatedN = vcr_logrank_power(hr, dist, allocated$treatment, allocated$control, A, Fu, eta, alpha, vcr_scalar(sc$accrual$maxFollowup, Inf), sided = sided)$power,
+          schoenfeldPowerAtAllocatedN = pnorm(delta - qnorm(1 - alpha / sided)) + if (sided == 2) pnorm(-delta - qnorm(1 - alpha / sided)) else 0,
+          expectedEventsAtAllocatedN = expected_events)
+        if (!is.null(gs)) {
+          max_allocated <- vcr_integer_allocation(list(treat = raw$treat * inflation, control = raw$control * inflation, total = raw$total * inflation))
+          add("max_patients", max_allocated$total); add("max_treatment", max_allocated$treatment); add("max_control", max_allocated$control)
+        }
+      } else {
+        add("required_patients", ceiling(ev / p_ev))
+        if (!is.null(gs)) add("max_patients", ceiling(ev * inflation / p_ev))
+      }
     }
   } else if (identical(e, "continuous")) {
     eff <- .vcr_need(tr$effect, "scenario.truth.effect", "A continuous design states the effect to detect.")

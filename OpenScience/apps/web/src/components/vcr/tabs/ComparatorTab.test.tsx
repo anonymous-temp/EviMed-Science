@@ -246,14 +246,9 @@ describe("对照 · comparability and the prior", () => {
     expect(container.querySelector("[data-vcr-dimension]")).toBeNull();
     expect(container.textContent).not.toContain("十个维度都还没有评估");
     await userEvent.click(within(note).getByRole("button", { name: "评估可比性" }));
-    expect(spies.openChat).toHaveBeenCalledWith(expect.stringContaining(VCR_ASSESS_COMPARABILITY_DRAFT));
-    expect(spies.openChat).toHaveBeenCalledWith(expect.stringContaining(`当前研究 ${STUDY_ID}`));
+    expect(spies.openChat).toHaveBeenCalledWith(expect.stringContaining(VCR_ASSESS_COMPARABILITY_DRAFT), expect.objectContaining({ kind: "comparator", studyId: STUDY_ID }));
     const draft = spies.openChat.mock.calls[0][0];
-    expect(draft).toContain("对照路线 literature_control");
-    expect(draft).toContain(raw.rmst.value.detail.ref.id);
-    expect(draft).not.toContain("prognostic_adjustment");
-    expect(draft).not.toContain("external_control");
-    expect(draft).toContain("不替换为更新的结果");
+    expect(draft).not.toMatch(/std_|res_|literature_control|external_control/);
   });
 
   it("puts a borrowed prior's numbers in a key / value list of their own, apart from the weights — and what a prior effective sample size is, on hover", async () => {
@@ -325,7 +320,7 @@ describe("对照 · before there is a comparison", () => {
     const { container, spies } = draw(readVcrStudy(raw));
     const recipe = await found(container, "[data-vcr-step-empty='comparator']");
     await userEvent.click(within(recipe).getByRole("button", { name: "设计对照" }));
-    expect(spies.openChat).toHaveBeenCalledWith(expect.stringContaining(`当前研究（${STUDY_ID}）`));
+    expect(spies.openChat).toHaveBeenCalledWith(expect.any(String), { kind: "step", studyId: STUDY_ID, objectId: "comparator" });
     expect(network.productRequest.mock.calls.some(([, method]) => method === "POST")).toBe(false);
   });
 });
@@ -338,10 +333,9 @@ it("binds a comparability draft to the explicitly displayed comparator and resul
   const { spies } = draw();
   await userEvent.click(await screen.findByRole("button", { name: "评估可比性" }));
   const draft = spies.openChat.mock.calls[0][0];
-  expect(draft).toContain("对照对象 cmp_saved v4");
-  expect(draft).toContain("结果版本 v7");
-  expect(draft).toContain("已显示的结果 result_saved");
-  expect(draft).not.toContain("external_control");
+  expect(draft).toContain("版本 4");
+  expect(draft).not.toMatch(/cmp_saved|result_saved|external_control/);
+  expect(spies.openChat.mock.calls[0][1]).toEqual({ kind: "comparator", studyId: STUDY_ID, objectId: "cmp_saved", version: 4, resultId: "result_saved", resultVersion: 7 });
 });
 
 it("shows a scoped prognostic benchmark in its original scale and keeps its causal limitation explicit", async () => {

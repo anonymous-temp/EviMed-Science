@@ -1,3 +1,4 @@
+import { VcrVersionComparison } from "../VcrVersionComparison";
 import { useState } from "react";
 import { CircleCheck, Download, TriangleAlert } from "lucide-react";
 import {
@@ -75,8 +76,9 @@ function PopulationView({ studyId, study, data, reload, onStudyChanged }: {
   reload: () => void;
   onStudyChanged?: () => void;
 }) {
-  const [busy, setBusy] = useState<"download" | "regenerate" | null>(null);
+  const [busy, setBusy] = useState<"download" | null>(null);
   const frame = useStudyFrame();
+  const [comparing, setComparing] = useState(false);
   const failed = study.steps.population?.status === "failed";
   const nothing = !data.version && data.criteria.length === 0 && data.attrition.length === 0 && data.profile.length === 0
     && data.generated.length === 0 && !data.outcome && !data.quality && !data.records;
@@ -92,7 +94,7 @@ function PopulationView({ studyId, study, data, reload, onStudyChanged }: {
       .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "记录暂时无法下载，请稍后重试。" })))
       .finally(() => setBusy(null));
   };
-  const ask = (request: string) => frame?.openChat(`${request}。当前研究 ${studyId}，人群版本 ${data.version ?? "尚未生成"}，结果 ${data.records?.result ?? "无"}。请先读取这些版本，保留原结果并说明变化。`);
+  const ask = (request: string) => frame?.openChat(`${request}。请读取“${data.version ?? "当前人群"}”，保留原结果并说明变化。`, data.selection ? { kind: "population", studyId, ...data.selection } : { kind: "step", studyId, objectId: "population" });
 
   // --- the band's one row -----------------------------------------------------------------------------------------------
   const actions: VcrToolbarAction[] = [];
@@ -101,19 +103,21 @@ function PopulationView({ studyId, study, data, reload, onStudyChanged }: {
     if (generated) {
       if (data.download) actions.push({ key: "download", label: "下载记录", icon: Download, loading: busy === "download", onSelect: download });
       if (mayWrite) {
-        actions.push({ key: "settings", label: "改设定", quiet: true, onSelect: () => ask("调整人群设定") });
-        actions.push({ key: "regenerate", label: "重新生成", onSelect: () => ask("按当前证据生成一个可比较的新队列版本") });
+        actions.push({ key: "settings", label: "在对话中调整", quiet: true, onSelect: () => ask("调整人群设定") });
+        actions.push({ key: "regenerate", label: "在对话中生成新版本", onSelect: () => ask("按当前证据生成一个可比较的新队列版本") });
       }
     } else if (mayWrite && data.criteria.length > 0) {
-      actions.push({ key: "criteria", label: "改入排数值", quiet: true, onSelect: () => ask("比较修改入排条件后的人群变化") });
+      actions.push({ key: "criteria", label: "在对话中调整条件", quiet: true, onSelect: () => ask("比较修改入排条件后的人群变化") });
     }
   }
+  if (!nothing && frame) actions.push({ key: "compare", label: "比较版本", quiet: true, onSelect: () => setComparing(true) });
+  const comparison = comparing ? <VcrVersionComparison studyId={studyId} kind="population" versions={data.versions.flatMap(row => row.version ? [{ ...row, objectId: row.id, version: row.version }] : [])} onClose={() => setComparing(false)} /> : null;
   const summary = [data.version, data.kind].filter(Boolean).join(" · ");
   useVcrToolbar(actions.length > 0 || (!nothing && summary)
     ? { label: "人群的操作", ...(summary ? { summary } : {}), ...(actions.length > 0 ? { actions: <VcrToolbarActions actions={actions} /> } : {}) }
     : null);
 
-  const templates = <VcrDefinitionsSection studyId={studyId} knowledge={data.knowledge} canWrite={mayWrite} canRun={study.abilities.includes("run")} onChanged={changed} />;
+  const templates = <>{comparison}<VcrDefinitionsSection studyId={studyId} knowledge={data.knowledge} canWrite={mayWrite} canRun={study.abilities.includes("run")} onChanged={changed} /></>;
   if (nothing) return <div className="flex flex-col gap-6">{templates}{failed
     ? <VcrStepFailed studyId={studyId} study={study} step="population" partial={data.partial} />
     : <VcrStepPending studyId={studyId} study={study} step="population" />}</div>;

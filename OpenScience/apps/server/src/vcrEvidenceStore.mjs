@@ -283,7 +283,7 @@ export class VcrEvidenceStore extends VcrStoreBase {
       // precedent, arm and endpoint; it is the newest only when nothing else
       // exists. Only then is the verified filter applied.
       const failedHandEntry = `COALESCE(locator->>'authoredBy' = 'run' AND (value IS NULL OR locator->>'verification' IS DISTINCT FROM 'verified'), false)`;
-      const sourceIdentity = `COALESCE(precedent_id, NULLIF(locator->>'sourceId',''), NULLIF(source_ref,''), id)`;
+      const sourceIdentity = `COALESCE(NULLIF(detail->>'trialIdentity',''), CASE WHEN source_ref ~ '^(ctgov|clinicaltrials.gov|chictr|ctis):[A-Za-z0-9-]+$' THEN CASE WHEN split_part(source_ref,':',1)='ctgov' THEN 'clinicaltrials.gov' ELSE split_part(source_ref,':',1) END || ':' || upper(split_part(source_ref,':',2)) END, precedent_id, NULLIF(locator->>'sourceId',''), NULLIF(source_ref,''), id)`;
       return this.rows(
         `SELECT * FROM (
            SELECT DISTINCT ON (${sourceIdentity}, parameter, arm, endpoint_key) *

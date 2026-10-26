@@ -56,10 +56,11 @@
  * @module vcrRoutes
  */
 
+import {vcrAnalyticComputationBasis} from './vcrScientificBasis.mjs';
 import {
   VCR_ACTIONS, VCR_ASSESSMENT_KEY, VCR_ASSESSMENT_LIMITS, VCR_ASSESSMENT_RATING_FIELDS, VCR_ASSESSMENT_TEXT_FIELDS, VCR_RATINGS,
   VCR_ASSUMPTION_SOURCE_KINDS, VCR_CRITERION_STATES, VCR_DATA_TIERS, VCR_EXPORT_KINDS, VCR_INTENDED_USES, VCR_JOB_KINDS,
-  VCR_JOB_METHODS, VCR_MEMBER_ROLES, VCR_REVIEW_KINDS, VCR_STEPS, VCR_TABS, VCR_USER_STUDY_STATUSES, VCR_VALUE_SOURCES, capabilityTitle, roleAllows } from "@evimed/domain";
+  VCR_JOB_METHODS, VCR_MEMBER_ROLES, VCR_RETIRED_MEMBER_ROLE_LABELS_ZH, VCR_REVIEW_KINDS, VCR_STEPS, VCR_TABS, VCR_USER_STUDY_STATUSES, VCR_VALUE_SOURCES, capabilityTitle, roleAllows } from "@evimed/domain";
 
 import { createReadStream } from "node:fs";
 
@@ -131,7 +132,6 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   "vcr_model_exists",
   "vcr_member_role_invalid",
   "vcr_recruitment_retired",
-  "vcr_referral_not_found",
   "vcr_forbidden",
   "vcr_unavailable",
   "vcr_data_plane_not_configured",
@@ -186,6 +186,7 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "POST /studies/:id/method-configurations": ["run"],
   "GET /studies/:id/jobs/:job/result": ["read"],
   "GET /studies/:id/longitudinal": ["read"],
+  "GET /studies/:id/followup-history": ["read_patient_level"],
   "POST /studies/:id/longitudinal/histories": ["run"],
   "POST /studies/:id/longitudinal/predictions": ["run"],
   "POST /studies/:id/longitudinal/benchmarks": ["run"],
@@ -1333,6 +1334,7 @@ export function createVcrRoutes(dependencies) {
         const prefix = `/api/vcr/studies/${encodeURIComponent(study.id)}`;
         const { supersededBy: _supersededBy, ...historicalResult } = result;
         return reply({ jobId: parts[3], result: service.forModel(historicalResult),
+          computationBasis:vcrAnalyticComputationBasis(result,job),
           execution: { method: job.method, methodVersion: job.methodVersion, seed: job.seed, scenarioHash: job.scenarioHash, sourceModel: job.checkpoint?.sourceModel ? { id: job.checkpoint.sourceModel.id, version: job.checkpoint.sourceModel.version } : null },
           records: available ? { ...described, available: true, state: "available", csvUrl: `${prefix}/records/${encodeURIComponent(result.id)}.csv`,
             rowsUrl: `${prefix}/${result.kind === "population" ? "population" : "patients"}/rows?result=${encodeURIComponent(result.id)}` }
@@ -1547,6 +1549,21 @@ export function createVcrRoutes(dependencies) {
       return reply(filed, filed.filed ? 201 : 200);
     }
 
+    // Human-only preserved observations. No write/resume route exists.
+    if (section === "followup-history" && parts.length === 3 && method === "GET") {
+      await authorize(id, "read_patient_level");
+      const query = Object.fromEntries(url.searchParams);
+      if (query.format === "csv") await authorize(id, "export");
+      const history = await service.followupHistory(user, id, query);
+      if (query.format === "csv") {
+        res.writeHead(200, { "Content-Type": "text/csv; charset=utf-8", "Cache-Control": "private, no-store",
+          "X-Content-Type-Options": "nosniff", "Content-Disposition": 'attachment; filename="historical-observations.csv"' });
+        res.end(history.csv);
+        return true;
+      }
+      return reply(history);
+    }
+
     // --- export -----------------------------------------------------------------------
     if (section === "export") {
       if (parts.length === 3 && method === "POST") {
@@ -1596,7 +1613,7 @@ export function createVcrRoutes(dependencies) {
       if (parts.length === 4 && method === "DELETE") {
         await bodyOf(req, maxJsonBytes, []);
         const role = url.searchParams.get("role");
-        if (role != null && !VCR_MEMBER_ROLES.includes(role)) {
+        if (role != null && !VCR_MEMBER_ROLES.includes(role) && !Object.hasOwn(VCR_RETIRED_MEMBER_ROLE_LABELS_ZH, role)) {
           throw new HttpError(400, "vcr_member_role_invalid", `role must be one of: ${VCR_MEMBER_ROLES.join(", ")}.`);
         }
         const { study } = await authorize(id, "manage_members");
@@ -1647,7 +1664,7 @@ export function createVcrRoutes(dependencies) {
 
     if (["referrals", "sites", "followup"].includes(section)) {
       await authorize(id, "read");
-      throw new HttpError(410, "vcr_recruitment_retired", "招募与随访运营已停用；匹配评估仍可使用。");
+      throw new HttpError(410, "vcr_recruitment_retired", "该运营流程已停用；患者匹配仍可使用，历史观察可在“依据”中只读查看或导出。");
     }
 
     throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");

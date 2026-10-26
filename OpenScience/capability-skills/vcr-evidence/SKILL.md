@@ -11,64 +11,9 @@ Find and preserve the closest appropriate scientific evidence before asking for
 statistical inputs. The user supplies the scientific question and available data;
 the AI retrieves, structures and reconciles source parameters.
 
-## Current operating contract
+## Shared operating contract
 
-Work in the originating native conversation. Complete the user's requested task;
-do not start a seven-step programme or unrelated research after it. A full study
-package is an explicit request, not a prerequisite for a calculation or matching.
-Use the existing composer, tools, saved objects and result views. Do not send the
-user to a method catalogue, parameter form or study-creation form.
-
-The four task families are patient matching; population and individual patients;
-comparators; and trial-design simulation. A cohort is a collection (observed,
-selected or generated). A virtual patient is one generated member or a supported
-individual prediction. Neither name proves a digital twin or a counterfactual
-clinical outcome. Trial simulation compares designs under stated assumptions;
-it is not remote trial operations and does not prove a drug works.
-
-Use available context first. For a new research object, `vcr_write` with
-`{"what":"task_context"}` obtains the authenticated conversation's scope. Never
-invent session/project/study identifiers or create a second conversation. A narrow
-aggregate sample-size/power question can use `research_calculate` without a study.
-Read existing results before calculating again. Preserve exact object, model,
-source and result versions when comparing or changing a result.
-
-Numbers must come from preserved source literals or deterministic tools. Use
-`vcr_simulate` action `shape` to discover current fields, units and examples;
-examples are illustrative, never evidence or default patient data. Save the
-requested object, then explicitly enqueue its computation with its `subjectId`
-when applicable. Writing an object is not proof that its calculation completed.
-A short job may finish in the tool call; a long job returns to this same conversation
-through the durable completion path. Do independent work while it runs; do not
-busy-poll, use shell sleeps or claim a queued job succeeded. Existing budget limits
-still apply, without adding new approvals or model-certification gates.
-
-Highlight prerequisites per operation, not for the entire platform:
-- One-person matching needs an original case message or owned attachment, not a
-  pre-uploaded dataset or full PICO. Batch real-cohort/matching work needs authorized
-  patient data plus eligibility criteria.
-- Literature-driven synthetic populations and design simulation can start without
-  patient-level data. Retrieve and preserve parameter evidence first; do not start
-  by asking the user to fill a statistical parameter sheet.
-- Real external-control effect estimation needs comparable exposure, outcomes,
-  index time, covariates and follow-up. Pre-enrollment data, exit date/reason and
-  post-trial routine care do not reveal hidden trial treatment or outcomes. Never
-  carry exposure forward across that gap or turn missingness into no treatment.
-- Individual prediction needs an executable model within its endpoint, population,
-  units and horizon. Preserve partial results and state the specific missing input.
-
-No contact, referral, site CRM, recruitment funnel, coordinator assignment,
-recruitment materials or follow-up operations are part of this workflow. Retain
-scientific visit schedules, longitudinal observations, criterion feasibility
-counts, eligibility rechecks and abstract accrual/dropout design assumptions.
-Unknown eligibility is never exclusion, a negative finding or zero. A registry's
-recruitment status is dated research metadata, not available site capacity.
-
-Keep observed people, events, effective sample size, generated records and
-reconstructed pseudo-patients distinct. Source-bound numbers/quotations and
-numerical tests do not establish transportability, clinical validation or
-regulatory acceptance. Model-predicted comparators are descriptive benchmarks;
-they do not identify treatment effects or replace randomized controls.
+Read [../vcr-protocol/references/operating-contract.md](../vcr-protocol/references/operating-contract.md) before this workflow; reuse it when already loaded in this conversation. It defines task scope, data requirements, evidence and continuation boundaries.
 
 ## Registry and literature evidence
 
@@ -78,7 +23,7 @@ planned enrollment is not completed outcome evidence. Preserve source/fetch date
 and actual coverage. Do not re-enable CDE or ICTRP integrations or invent unavailable
 registry text. Similarity ranks leads; it does not establish comparability.
 
-For preserved articles/abstracts/tables use `vcr_write` what `evidence_item` with
+For preserved articles/abstracts/tables use `mcp__evimed__vcr_write` what `evidence_item` with
 `literatureSource: {sourceId,generation,textSha256}` rather than a registry source,
 plus `evidenceKind: "baseline"|"outcome"|"design"`, exact `quote` and
 `locator: {start,end,parts?}`. Parts can locate CI bounds, n, events and units in
@@ -291,3 +236,9 @@ For each horizon, report the requested heldout population, evaluated rows, missi
 Read both `records` and `related`; `relatedIds.evaluation` is the latest evaluation of a prediction. `filter.id` selects that exact record, whereas `filter.parentId` finds its evaluations. Never infer absence of validation from an empty page or an incompatible id/kind filter. A metric marked `availability: computed` is available even if its interval has zero width; `unavailableReason` applies only to null values. CRPS can be computed from predictive samples without an SD. Zero observed events with adequate follow-up allow Brier, but not AUROC/AP. A plan that was not frozen has unknown timing relative to outcome access; it is not proof of a late plan. Read current job status before saying an earlier queued job is still queued.
 
 Longitudinal records now expose stable `numberPath` references in `report_model.longitudinal.byId`. Read both records and related; a `prediction_set` groups independently usable endpoint ids from one external upload. Sensitivity/model/update comparisons use `compare_forecasts` with the named mode and common calendar targets. Keep these outputs separate from observed clinical facts; local data partitions and input masking do not establish the external model's training independence.
+
+## Independent trial units and derived inputs
+
+A document is not an independent study. For a literature item that may enter pooling, supply `trialIdentity: {registry, registryId}` or `{trialKey}` and its exact preserved span at `locator.parts.trialIdentity`. Different trials reported in one article keep distinct trial identities; registry and article reports of the same trial remain one unit. Missing identities and duplicates are reported, not counted as new participants or independent studies.
+
+Derived literature inputs use `locator.inputs` entries `{start, end, quote, value}` with exact UTF-16 spans and a complete literal number. A letter, arbitrary substring or clipped decimal cannot establish an input. These entries verify inputs only; their output is not a reported source value and cannot become a direct external-evidence assumption without actual calculation evidence. Compound units and symbol case retain their meaning.

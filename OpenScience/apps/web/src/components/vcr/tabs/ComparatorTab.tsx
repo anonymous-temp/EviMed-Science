@@ -1,3 +1,5 @@
+import { VCR_PREDICTION_LIMIT_LABELS_ZH } from "@evimed/domain";
+import { VcrVersionComparison } from "../VcrVersionComparison";
 import { useState, type ReactNode } from "react";
 import { ChevronLeft, CircleCheck, Info } from "lucide-react";
 import { VCR_COMPARATOR_ROUTE_LABELS_ZH } from "@evimed/domain";
@@ -158,11 +160,9 @@ function ComparatorView({ studyId, study, data }: { studyId: string; study: VcrS
 function UsedRoute({ data }: { data: ComparatorData }) {
   const frame = useStudyFrame();
   const prior = data.prior ?? [];
-  const displayedRoute = data.selection?.route || data.routes.find(route => route.selected)?.route || "未提供";
-  const displayedResults = data.selection?.resultId ? [data.selection.resultId] : [...new Set([data.rmst?.value, data.median, ...data.diagnostics.map(row => row.value), ...prior.map(row => row.value)]
-    .flatMap(value => value?.detail?.ref?.kind === "result" ? [value.detail.ref.id] : []))];
-  const selection = data.selection ? `，对照对象 ${data.selection.id} v${data.selection.version ?? "未提供"}${data.selection.resultVersion !== null ? `，结果版本 v${data.selection.resultVersion}` : ""}` : "";
-  const assessmentDraft = `${VCR_ASSESS_COMPARABILITY_DRAFT} 当前研究 ${frame?.studyId ?? "未提供"}，对照路线 ${displayedRoute}${selection}，已显示的结果 ${displayedResults.join("、") || "未提供标识"}。请限定于上述已保存结果与其证据，逐项解释差异和缺失条件；无法定位时先说明，不替换为更新的结果。`;
+  const [comparing, setComparing] = useState(false);
+  const assessmentDraft = `${VCR_ASSESS_COMPARABILITY_DRAFT} 请限定于当前保存的对照${data.selection?.version ? `（版本 ${data.selection.version}）` : ""}及其证据，逐项解释差异和缺失条件。`;
+  const selection = data.selection ? { kind: "comparator" as const, studyId: frame?.studyId, objectId: data.selection.id, version: data.selection.version ?? undefined, ...(data.selection.resultId ? { resultId: data.selection.resultId, resultVersion: data.selection.resultVersion ?? undefined } : {}) } : undefined;
   // The server's own sentence about where the estimate holds ends in a pointer to the band beside it; the band is the statement.
   const estimand = data.estimand && data.estimand.rows.length > 0 ? data.estimand : null;
 
@@ -220,6 +220,9 @@ function UsedRoute({ data }: { data: ComparatorData }) {
 
   return (
     <>
+      {frame && <Button variant="text" size="sm" onClick={() => setComparing(true)}>比较版本</Button>}
+      {comparing && frame && <VcrVersionComparison studyId={frame.studyId} kind="comparator" versions={data.versions ?? []} onClose={() => setComparing(false)} />}
+
       {data.predictionBenchmark && <PredictionBenchmark data={data.predictionBenchmark} />}
       {estimandRows.length > 0 && (
         <Section title="估计目标" toolbar={estimand?.source ? <SourceTag source={estimand.source} /> : undefined}>
@@ -231,7 +234,7 @@ function UsedRoute({ data }: { data: ComparatorData }) {
 
       {data.dimensions.length > 0 && (
         <Section title="可比性">
-          <DimensionBand dimensions={data.dimensions} onAssess={frame ? () => frame.openChat(assessmentDraft) : null} />
+          <DimensionBand dimensions={data.dimensions} onAssess={frame ? () => frame.openChat(assessmentDraft, selection) : null} />
         </Section>
       )}
 
@@ -264,10 +267,6 @@ function PredictionBenchmark({ data }: { data: NonNullable<ComparatorData["predi
   const endpoint = data.endpoint;
   const endpointType = ({ continuous: "连续结局", binary: "二分类结局", time_to_event: "时间结局" } as Record<string, string>)[endpoint?.type ?? ""] ?? endpoint?.type;
   const unit = ({ days: "天", weeks: "周", months: "月", years: "年" } as Record<string, string>)[endpoint?.timeUnit ?? ""] ?? endpoint?.timeUnit;
-  const limits: Record<string, string> = {
-    "Transportability and calibration in this target population have not been established.": "模型在目标人群中的可迁移性和校准尚未建立。",
-    "Predictions are not observed control outcomes or an independent increase in sample size.": "预测值不能视为已观察到的对照结局，也不增加独立样本量。",
-  };
   return <Section title="模型预测基准">
     <FactList rows={[
       ...(condition ? [{ label: "模型条件", value: condition }] : []),
@@ -277,7 +276,7 @@ function PredictionBenchmark({ data }: { data: NonNullable<ComparatorData["predi
       ...(data.relativeScore ? [{ label: "平均相对预后评分", value: <VcrNumber label="平均相对预后评分" value={data.relativeScore} /> }] : []),
       ...(!data.absoluteRiskAvailable ? [{ label: "绝对风险", value: "未提供适用的基线风险；只报告可支持的相对预测量。" }] : []),
       { label: "解释范围", value: "模型条件下的预测基准，不识别治疗效果。" },
-      ...data.limits.map(limit => ({ label: "局限", value: limits[limit] ?? limit })),
+      ...data.limits.map(limit => ({ label: "局限", value: <>{(VCR_PREDICTION_LIMIT_LABELS_ZH as Record<string, string>)[limit.code] ?? VCR_PREDICTION_LIMIT_LABELS_ZH.unknown}{limit.source && <Disclosure summary="查看来源说明"><span data-prose="">{limit.source}</span></Disclosure>}</> })),
     ]} />
   </Section>;
 }

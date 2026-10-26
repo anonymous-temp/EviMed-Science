@@ -1,3 +1,4 @@
+import type { VcrObjectSelection } from "@/lib/runtimeUiNavigation";
 import { createContext, useContext, useLayoutEffect, useRef } from "react";
 import type { ToolbarProps } from "@/components/ui/Toolbar";
 import type { VcrActivity } from "@/lib/vcrClient";
@@ -28,7 +29,7 @@ export interface StudyFrameApi {
    * Open the study's conversation, in this page. A `draft` waits in the composer and is never sent (plan §9.2: no form). Never
    * `/app/chat`: the conversation is a view of the study page, with the step bar still above it.
    */
-  openChat(draft?: string): void;
+  openChat(draft?: string, reference?: VcrObjectSelection): void;
   /** Open one of the page's own panels over the tab: the data intake, the budget, the change log, the export choice, the AI runs. */
   openPanel(panel: StudyPanelKey): void;
   /** `useVcrToolbar`'s door; a tab does not call it. */

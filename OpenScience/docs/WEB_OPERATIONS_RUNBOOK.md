@@ -2014,6 +2014,91 @@ retention follow existing policy; this feature makes no claim of instant erasure
 backup media or a provider. Do not treat these controls as HIPAA, GDPR or 21 CFR
 Part 11 certification.
 
+### Retiring legacy VCR recruitment tables (explicit offline operation)
+
+Startup preserves legacy `sites`, `referrals`, `referral_events` and historical
+recruiter/site memberships. No current route restores the contact workflow.
+Scientific `followup_episodes`, matching, research permissions and audit data stay.
+Until retirement, withdrawing even a referral-only subject marks its open legacy
+referrals `withdrawn`, without creating a contact or referral event.
+
+Use `scripts/ops/vcr-retire-recruitment.mjs` only as an operator. Configure `PGHOST`,
+`PGPORT`, `PGDATABASE`, `PGUSER` and the existing PostgreSQL credential source; never
+put a connection string or secret in arguments or logs. Configure the existing
+`OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE` to a private regular file (at least 16 characters,
+mode 0600, no symlink path). The tool shares `archive-crypto.mjs`'s existing scrypt /
+AES-256-GCM backup envelope. It never writes a plaintext archive. Use an absolute,
+non-symlink archive path in an operator-owned 0700 directory, outside backup rotation.
+Only counts, hashes, settings, fixed error codes and safe SQLSTATE are printed;
+never print or attach decrypted rows. Archive files and their `.meta.json` sidecars
+are mode 0600. Preserve the ciphertext SHA-256 independently of the archive.
+
+```sh
+node scripts/ops/vcr-retire-recruitment.mjs --archive /private/vcr-retirement/archive.enc
+```
+
+Capture normalizes UTC, `ISO, MDY` DateStyle and `postgres` IntervalStyle in its
+transaction and records those settings. Raw PostgreSQL JSON text retains numeric
+precision. It excludes withdrawn subjects and their referral notes, missing studies
+and erased accounts. When erasure removes a site authored by another account,
+its retained referrals keep their owner and events but their nullable `site_id`
+becomes null, matching that foreign key's ON DELETE SET NULL semantics. This
+transformation runs inside PostgreSQL, retaining exact numeric values. Historical
+`grantRoleCounts` are advisory observations of the live permissions database,
+refreshed on re-seal; their values are authenticated by the full archive digest but
+are excluded from the archived-row/schema equivalence proof. A later unrelated
+grant change therefore does not prevent re-retiring restored OA data. The capture
+commits before a separate disposable-schema readback recreates columns, defaults, keys, checks (including NOT VALID), foreign
+keys and indexes, avoiding a lock inversion with a user's first task. Encryption is
+verified by decrypting back; the sidecar records both ciphertext and plaintext
+hashes. A readback or write failure yields no usable retirement receipt.
+
+Before destructive retirement, stop **every** old app/worker writer and prevent its
+restart. Block new clients at the operational boundary; the command additionally
+refuses any other database client before and after mutation. Review the safe counts,
+the `.meta.json` `databaseIdentity`, and the independently retained ciphertext hash.
+`--sha256` below is that hash, and `--expected-database` is `databaseIdentity`.
+
+```sh
+node scripts/ops/vcr-retire-recruitment.mjs --retire /private/vcr-retirement/archive.enc \
+  --sha256 CIPHERTEXT_SHA256 --expected-database DATABASE_IDENTITY \
+  --workers-stopped --allow-drop-approved-tables --allow-delete-retired-members
+```
+
+Only the three named tables and retired membership rows are removed, in a locked
+READ COMMITTED comparison and RESTRICT transaction. An unapproved dependency,
+changed data or identity refuses and rolls back. An exact repeat reports
+`alreadyRetired: true`. Hash-only subject footprints allow consent withdrawal even
+when the subject's last live row was in a retired referral table; an account-erasure
+hash ledger prevents its archived role rows from returning. These are privacy
+markers, never contact permissions.
+
+**Before either readback or real restore**, re-seal against the current withdrawal /
+account-erasure state. This applies after any later withdrawal, project deletion or
+account deletion. A stale archive refuses with `vcr_retirement_forget_erased_required`.
+Re-seal writes a new immutable encrypted generation and returns its new hash and
+sidecar. Replace every retained archive copy and securely retire superseded copies
+under backup retention policy; the command cannot erase an offline/offsite copy.
+
+```sh
+node scripts/ops/vcr-retire-recruitment.mjs --forget-erased /private/vcr-retirement/archive.enc \
+  --sha256 CIPHERTEXT_SHA256 --output /private/vcr-retirement/resealed.enc
+node scripts/ops/vcr-retire-recruitment.mjs --restore-readback /private/vcr-retirement/resealed.enc \
+  --sha256 RESEALED_CIPHERTEXT_SHA256
+node scripts/ops/vcr-retire-recruitment.mjs --restore /private/vcr-retirement/resealed.enc \
+  --sha256 RESEALED_CIPHERTEXT_SHA256 --expected-database DATABASE_IDENTITY \
+  --workers-stopped --allow-restore-approved-tables
+```
+
+Real restore is explicit, offline, same cluster/database identity only, and
+transactional. It refuses existing legacy tables or retired member rows instead of
+merging them. It recreates the archived schema and retained rows; legacy membership
+checks are restored NOT VALID so historical rows survive while all subsequent
+writes still enforce the current active-role vocabulary. This does not re-enable
+CRM routes or allow new recruiter/site grants. Follow-up observations are untouched.
+An incompatible referenced research object refuses with a safe SQLSTATE. Never
+hand-edit an archive to bypass authentication, conflict, erasure or identity checks.
+
 What an evaluation rested on can change afterwards: a permission of its source, a
 reviewed text that now takes the place of a record, a record added for the person, a
 withdrawal. The facts, language judgments and assessments derived from it are marked
@@ -2103,3 +2188,14 @@ to the operator running the counter. The gate binds that port and fails if occup
 it never switches to a random port. Invalid configuration is rejected before paid provider
 compatibility calls. Only explicit release-gate projects may select this model destination;
 knowledge, memory and other auxiliary gateways retain their normal addresses.
+
+
+### Conversation computation completion and prompt admission
+
+The completion outbox and independent finish-hook consumers interleave accounts. `OPEN_SCIENCE_VCR_COMPLETION_INTERVAL_MS`, `BATCH` and `RECONCILE_BATCH` control cadence and batch size (the latter two share the `OPEN_SCIENCE_VCR_COMPLETION_` prefix). `LEASE_MS`, `RETRY_MS`, `RETRY_MAX_MS`, `MAX_ATTEMPTS`, `MAX_AGE_MS` and `RETENTION_MS` under that same prefix bound leases, exponential backoff, recovery and retained outbox payloads. `OPEN_SCIENCE_VCR_LOCAL_CONCURRENCY` bounds non-engine jobs. Defaults and all supported keys are listed in `deploy/web/.env.example` and passed by the base compose service.
+
+A failed result notification stays pending and reuses its notification identity. At budget exhaustion it is unavailable with the exact disclosure failure; it is never reported delivered. Old unresolved jobs are terminalized explicitly after downtime. Producer markers prevent a pruned outbox entry from being recreated. Observe `open_science_vcr_completions_total` and `open_science_vcr_jobs_total` for delivery and independent consumer outcomes.
+
+`OPEN_SCIENCE_RUNTIME_PROMPT_ADMISSION_TIMEOUT_MS` (default 30000, range 500–60000) bounds final session checks and the short prompt acceptance RPC. The database client is obtained before the local session queue; a live plugin transaction is borrowed, including with a one-connection pool. Native HTTP/mux inputs and managed continuations share the session advisory lock, while model generation and event streams remain outside it. `open_science_runtime_prompt_admission_active` and `open_science_runtime_prompt_admission_total` expose occupancy and outcomes.
+
+An authenticated stop records a monotonic set of existing run IDs in `evimed_product.prompt_stop_intents`, scoped to owner/project/session and deleted with the project. It suppresses subsequent automatic admission for those runs, survives restarts and cannot be overwritten by run-learning gauges. A future explicit human request is independent. This is stop intent; it does not claim that a kernel stop RPC succeeded.

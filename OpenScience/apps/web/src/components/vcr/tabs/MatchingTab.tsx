@@ -1,3 +1,4 @@
+import { useStudyFrame } from "../studyFrameContext";
 import { ClinicalTimeline, CriterionTable, useMatchingControls } from "../ClinicalMatchingDetails";
 import { VcrCorrectionCasesActions } from "../VcrCorrectionCasesActions";
 import { useState } from "react";
@@ -67,6 +68,7 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   // 给患者找试验: the trial of the patient's list the reader opened. It is the patient's, so it goes with them.
   const [trial, setTrial] = useState<string | null>(null);
   const [protocolVersionId, setProtocolVersionId] = useState<string | null>(null);
+  const frame = useStudyFrame();
   const { state, reload, last } = useVcrLoad(`${studyId}:matching:${view}:${direction}:${protocolVersionId ?? "latest"}`, () => {
     const askedFor = view === "matching" && candidate ? candidate : null;
     const askedTrial = view === "matching" && direction === "patient_to_trial" && askedFor && trial ? trial : null;
@@ -133,8 +135,13 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   const data = state.data;
   if (data.available === false) {
     return (
-      <div data-vcr-matching-unavailable="">
-        <EmptyState title={data.unavailable?.message ?? "患者匹配在本部署尚未接入。"} />
+      <div data-vcr-matching-unavailable="" className="flex flex-col gap-6">
+        {aside}
+        <EmptyState title="暂时无法进行患者匹配" action={<>
+          {data.unavailable?.code !== "vcr_matching_unavailable" && <Button variant="secondary" onClick={reload}>重试读取匹配结果</Button>}
+          {frame && <Button variant="secondary" onClick={() => frame.openPanel("intake")}>检查患者资料</Button>}
+          {frame && <Button variant="text" onClick={() => frame.openChat("请先评估患者匹配需要的资料和证据，并说明目前缺失的信息。", { kind: "step", studyId, objectId: "matching" })}>在对话中检查证据</Button>}
+        </>} />
       </div>
     );
   }
@@ -451,7 +458,6 @@ function CandidateRow({ candidate, current, onPick }: { candidate: VcrCandidate;
         <>
           {candidate.basis === "withdrawn" && <Tag>已撤回</Tag>}
           {candidate.basis === "updated" && <Tag>依据已更新</Tag>}
-          {candidate.site && <span className="shrink-0 text-caption text-text-3">{candidate.site}</span>}
         </>
       )}
       meta={(

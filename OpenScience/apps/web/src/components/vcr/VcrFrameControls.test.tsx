@@ -21,7 +21,7 @@ function mainView(sessionId: string) {
 function study(abilities: string[]): VcrStudy {
   return {
     id: "std_1", projectId: "p", name: "EV-201", question: null, tier: "T0", intendedUse: "exploratory", status: "active",
-    steps: {}, sessionId: "session-a", conversation: { sessionId: "session-a", exists: true }, activity: null, next: null, stepSummaries: {},
+    steps: {}, sessionId: "session-a", conversation: { sessionId: "session-a", exists: true }, activity: null, stepSummaries: {},
     definition: null, abilities, budget: null, jobs: [], ceiling: null,
     overview: { headline: null, metrics: [], counts: null, designs: [], attention: [], changes: [], reviews: [], deliverables: [] },
   };

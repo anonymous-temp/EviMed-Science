@@ -38,7 +38,7 @@ test("all literature population admissions require verified statistic bindings a
   const row = await studies.one("SELECT scenario,inputs,checkpoint FROM evimed_vcr.jobs WHERE id=$1", [admitted.job.id]);
   assert.equal(row.scenario.baselineBindings, undefined);
   assert.deepEqual(row.inputs.map(input => input.id), append.ids);
-  assert.equal(row.checkpoint.literatureBaseline.verification, "source_verified");
+  assert.equal(row.checkpoint.literatureBaseline.verification, "marginals_source_verified");
   assert.equal(row.checkpoint.literatureBaseline.bindings[0].value, 62);
   await assert.rejects(queue.enqueue({ ...request, scenario: numeric, internal: true }), { code: "vcr_job_scenario_invalid" });
   await assert.rejects(queue.enqueue({ ...request, userId: "other" }), { code: "vcr_job_scenario_invalid" });

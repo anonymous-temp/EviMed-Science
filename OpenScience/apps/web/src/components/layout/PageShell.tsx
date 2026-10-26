@@ -162,6 +162,8 @@ export interface PageShellProps<V extends string = string> {
   scope?: ScopeMenuProps;
   /** `document` is the reader's serif title. */
   titleVariant?: "page" | "document";
+  /** Useful task entry content, before the canonical list toolbar. */
+  introduction?: ReactNode;
   /** The module's program, on every tab. */
   steps?: StepRailProps;
   /** Work in progress, under the rail. */
@@ -196,6 +198,7 @@ export function PageShell<V extends string = string>({
   scope,
   titleVariant,
   steps,
+  introduction,
   activity,
   tabs,
   toolbar,
@@ -260,6 +263,7 @@ export function PageShell<V extends string = string>({
         titleVariant={titleVariant}
         documentTitle={documentTitle}
       />
+      {introduction && <div data-page-introduction="" className="mt-6">{introduction}</div>}
       {hasBand && (
         <div
           ref={band}

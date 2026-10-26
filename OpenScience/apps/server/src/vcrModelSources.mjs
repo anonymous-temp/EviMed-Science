@@ -4,6 +4,7 @@ import { validateScenario, canonicalScenarioJson, vcrTimeUnitOf } from "@evimed/
 import { HttpError } from "./security.mjs";
 import { projectSourceManifestRecord } from "./sourceService.mjs";
 import { literatureUnitIsInQuote } from "./vcrEvidenceSources.mjs";
+import { numericLiteralInSpan, numericLiteralSpans } from "./vcrNumericLiterals.mjs";
 const object = (/** @type {any} */ value) => value && typeof value === "object" && !Array.isArray(value) ? value : {};
 const digest = (/** @type {string} */ value) => createHash("sha256").update(value).digest("hex");
 export const VCR_LITERATURE_PROFILES = Object.freeze([
@@ -23,17 +24,13 @@ export const VCR_LITERATURE_PROFILES = Object.freeze([
 export function literatureNumericCandidates(text, sha) {
   /** @type {any[]} */ const rows = [];
   const prefix = text.slice(0, 1_000_000);
-  const pattern = /(?<![\w.])[-+−]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?!\w|\.\d)/g;
-  for (const match of prefix.matchAll(pattern)) {
-    const value = Number(match[0].replace("−", "-"));
-    if (!Number.isFinite(value)) continue;
-    const start = match.index;
-    const end = start + match[0].length;
+  for (const { value, raw, start, end } of numericLiteralSpans(prefix)) {
+    if (!numericLiteralInSpan(text, start, end, value)) continue;
     const unit = /^\s*(%|mmol\/L|mg\/dL|mg|kg|mmHg|days?|weeks?|months?|years?|天|周|月|年)(?=\s|[.,;:，。；）)]|$)/iu.exec(prefix.slice(end, end + 32))?.[1] ?? "";
     const quoteStart = Math.max(prefix.lastIndexOf("\n", start - 1) + 1, start - 100);
     const nextLine = prefix.indexOf("\n", end);
     const quoteEnd = Math.min(nextLine < 0 ? prefix.length : nextLine, end + 100);
-    rows.push({ id: digest(`${sha}:${start}:${end}:${match[0]}`).slice(0, 24), value, unit, literal: match[0],
+    rows.push({ id: digest(`${sha}:${start}:${end}:${raw}`).slice(0, 24), value, unit, literal: raw,
       start, end, quoteStart, quoteEnd, quote: prefix.slice(quoteStart, quoteEnd) });
     if (rows.length >= 1000) break;
   }
@@ -136,7 +133,7 @@ export function preparePublishedEquation(read, card, text, projectId) {
   if (["linear", "logistic"].includes(model.family)) paths.set("model.intercept", { target: model, key: "intercept", probability: false });
   if (model.residualSd != null) paths.set("model.residualSd", { target: model, key: "residualSd", probability: false });
   for (const [index, term] of terms.entries()) {
-    for (const key of ["coefficient", ...(term.center != null && term.center !== 0 ? ["center"] : []), ...(term.scale != null && term.scale !== 1 ? ["scale"] : [])]) {
+    for (const key of ["coefficient", ...(term.center != null && (term.center !== 0 || model.baseline?.reference === "centered" || !["identity", "indicator"].includes(term.transform)) ? ["center"] : []), ...(term.scale != null && term.scale !== 1 ? ["scale"] : [])]) {
       paths.set(`model.terms.${index}.${key}`, { target: term, key, probability: false });
     }
   }
@@ -156,11 +153,34 @@ export function preparePublishedEquation(read, card, text, projectId) {
       const declaredUnit = asked.field === "endpoint.horizon" ? endpoint.timeUnit : model.baseline?.timeUnit;
       if (!vcrTimeUnitOf(candidate.unit) || vcrTimeUnitOf(candidate.unit) !== vcrTimeUnitOf(declaredUnit)) missing.push(`Missing or mismatched preserved horizon unit: ${asked.field}.`);
     }
-    const conversion = field.probability && candidate.unit === "%" ? "percent_to_proportion" : "identity";
-    const value = conversion === "percent_to_proportion" ? candidate.value / 100 : candidate.value;
+    let conversion = field.probability && candidate.unit === "%" ? "percent_to_proportion" : "identity";
+    let value = conversion === "percent_to_proportion" ? candidate.value / 100 : candidate.value;
+    const coefficient = /^model\.terms\.(\d+)\.coefficient$/.exec(asked.field);
+    const center = /^model\.terms\.(\d+)\.center$/.exec(asked.field);
+    if (coefficient) {
+      const scale = asked.coefficientScale;
+      if (scale == null) missing.push(`Missing explicit coefficient scale: ${asked.field}.`);
+      if (scale != null && !["linear_predictor", "ratio"].includes(scale)) throw new HttpError(400, "vcr_model_invalid", "Declare a linear-predictor coefficient or a positive hazard/odds ratio.");
+      if (scale === "ratio") {
+        if (!["cox", "logistic"].includes(model.family) || !(value > 0)) missing.push(`A ratio coefficient requires a positive Cox hazard ratio or logistic odds ratio: ${asked.field}.`);
+        else { value = Math.log(value); conversion = "log_of_ratio"; }
+      }
+    }
+    if (center) {
+      const scale = asked.centerScale;
+      if (scale == null && !["identity", "indicator"].includes(terms[Number(center[1])]?.transform)) missing.push(`Missing explicit center scale: ${asked.field}.`);
+      if (scale != null && !["transformed", "source_raw"].includes(scale)) throw new HttpError(400, "vcr_model_invalid", "Declare the source center scale.");
+      if (scale === "source_raw") {
+        const transform = terms[Number(center[1])]?.transform;
+        if (transform === "log" && value > 0) { value = Math.log(value); conversion = "log_of_source_center"; }
+        else if (transform === "log1p" && value > -1) { value = Math.log1p(value); conversion = "log1p_of_source_center"; }
+        else if (transform === "square") { value *= value; conversion = "square_of_source_center"; }
+        else if (transform !== "identity") missing.push(`The raw reference cannot be transformed in its declared domain: ${asked.field}.`);
+      }
+    }
     field.target[field.key] = value;
     bound.add(asked.field);
-    bindings.push({ ...candidate, field: asked.field, candidateId: candidate.id, mappedValue: value, conversion,
+    bindings.push({ ...candidate, field: asked.field, candidateId: candidate.id, mappedValue: value, conversion, ...(coefficient ? { coefficientScale: asked.coefficientScale ?? null } : {}), ...(center ? { centerScale: asked.centerScale ?? null } : {}),
       sourceId: read.sourceId, generation: read.generation, textSha256: read.textSha256 });
   }
   for (const path of paths.keys()) if (!bound.has(path)) missing.push(`Missing preserved parameter binding: ${path}.`);

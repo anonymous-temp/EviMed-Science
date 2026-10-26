@@ -237,3 +237,16 @@ test("abilitiesOfRoles is the union of the domain's table and nothing else", () 
   const both = abilitiesOfRoles(["viewer", "recruiter"]);
   assert.deepEqual(both, [...new Set([...abilitiesOfRoles(["viewer"]), ...abilitiesOfRoles(["recruiter"])])].sort());
 });
+
+test('legacy roles can be read and individually revoked, mixed with viewer, but never granted',async()=>{
+ const {store,members}=scene();
+ for(const role of ['recruiter','site','viewer'])store.members.push({studyId:'std_1',userId:'legacy',role});
+ const shown=(await members.list({actor:'owner',studyId:'std_1'})).find(row=>row.userId==='legacy');
+ assert.deepEqual(shown.roleLabels,['旧版协调角色（已停用）','旧版中心角色（已停用）','只读查看者']);
+ for(const role of ['recruiter','site'])await assert.rejects(members.add({actor:'owner',studyId:'std_1',userId:'legacy',role}),{code:VCR_MEMBER_CODES.roleUnknown});
+ await members.remove({actor:'owner',studyId:'std_1',userId:'legacy',role:'site'});
+ assert.deepEqual(await store.rolesOf('std_1','legacy'),['recruiter','viewer']);
+ for(const role of await store.rolesOf('std_1','legacy'))await members.remove({actor:'owner',studyId:'std_1',userId:'legacy',role});
+ assert.deepEqual(await store.rolesOf('std_1','legacy'),[]);
+ assert.equal(store.auditRows.filter(row=>row.action==='member.remove').length,3);
+});

@@ -131,6 +131,7 @@ const episodeOf = (row) => (row ? {
   exitDate: row.exit_date ?? null,
   legacyExitDate: row.legacy_exit_date ?? null,
   createdAt: row.created_at,
+  trialWindows: row.trial_windows ?? [],
 } : null);
 
 /** Scientific matching and historical follow-up rows. One store, extended from the module's shared base. */
@@ -873,12 +874,18 @@ export class VcrMatchStore extends VcrStoreBase {
       ORDER BY created_at, id LIMIT 1`, [studyId, subjectKey]));
   }
 
-  /** @param {{ studyId: string, subjectKey?: string|null }} input */
-  async listFollowupEpisodes({ studyId, subjectKey = null }) {
+  /** Current human reads page preserved observations and omit withdrawn subjects at query time.
+   * @param {{ studyId: string, subjectKey?: string|null, limit?: number, offset?: number }} input */
+  async listFollowupEpisodes({ studyId, subjectKey = null, limit = 50, offset = 0 }) {
+    const boundedLimit = Math.min(101, Math.max(1, Math.floor(Number(limit) || 50)));
+    const boundedOffset = Math.max(0, Math.floor(Number(offset) || 0));
     const rows = await this.rows(
-      `SELECT * FROM ${VCR_SCHEMA}.followup_episodes
-        WHERE study_id = $1 AND ($2::text IS NULL OR subject_key = $2)
-        ORDER BY window_start NULLS LAST, created_at`, [studyId, subjectKey]);
+      `SELECT f.*, (SELECT jsonb_agg(jsonb_build_object('start', w.window_start, 'end', coalesce(nullif(w.exit_date,''),w.window_end::text)))
+          FROM ${VCR_SCHEMA}.followup_episodes w WHERE w.study_id=f.study_id AND w.subject_key=f.subject_key AND w.kind='study_specific') AS trial_windows
+       FROM ${VCR_SCHEMA}.followup_episodes f
+        WHERE f.study_id = $1 AND ($2::text IS NULL OR f.subject_key = $2)
+          AND NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals x WHERE x.study_id=f.study_id AND x.subject_key=f.subject_key)
+        ORDER BY f.window_start NULLS LAST, f.created_at, f.id LIMIT $3 OFFSET $4`, [studyId, subjectKey, boundedLimit, boundedOffset]);
     return rows.map(episodeOf);
   }
 }

@@ -42,8 +42,9 @@ function send(peer, data) {
  * headers are copied: the kernel receives only its own authority and cookie.
  *
  * @param {{ req: any, socket: any, head: Buffer, runtime: any, maxPayload: number,
- * heartbeat?: { intervalMs: number, timeoutMs: number },
+ * heartbeat?: { intervalMs: number, timeoutMs: number }, acceptanceTimeoutMs?: number,
  * admit?: (endpoint:string,operation:()=>Promise<void>,payload?:any) => Promise<void>,
+ * submit?: (endpoint:string,operation:(signal?:AbortSignal)=>Promise<void>,payload?:any) => Promise<void>,
  * observe?: (endpoint: string, payload?: any) => Promise<void>,
  * prepare?: (endpoint: string, payload?: any) => Promise<void>,
  * revalidate: () => Promise<void>, authorize: (endpoint: string, payload?:any) => Promise<void> }} options
@@ -52,9 +53,10 @@ function send(peer, data) {
  */
 export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload, revalidate, authorize,
   admit = async (_endpoint, operation) => operation(),
+  submit = async (_endpoint,operation)=>operation(),
   observe = async () => {},
   prepare = async () => {},
-  heartbeat = { intervalMs: 15_000, timeoutMs: 10_000 } }) {
+  heartbeat = { intervalMs: 15_000, timeoutMs: 10_000 },acceptanceTimeoutMs=30000 }) {
   const target = new URL("/api/remote.mux", runtime.url);
   target.protocol = target.protocol === "https:" ? "wss:" : "ws:";
   const headers = { host: runtime.authority || target.host, ...(runtime.cookie ? { cookie: runtime.cookie } : {}) };
@@ -203,17 +205,22 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
           // Target authorization is part of this operation, and a failure
           // must not silently forward an untargeted or stale prompt.
           await prepare(frame.endpoint, frame.payload);
+          await submit(frame.endpoint,async signal=>{
           // An observer that fails is the observer's to report; the prompt
           // is forwarded all the same.
           await Promise.resolve(observe(frame.endpoint, frame.payload)).catch(() => {});
+          signal?.throwIfAborted();
+          const aborted=()=>shutdown(1011,'runtime_prompt_acceptance_unknown');
+          signal?.addEventListener('abort',aborted,{once:true});
           const accepted = new Promise((resolve, reject) => { acknowledgements.set(frame.streamId, { resolve, reject }); });
-          const deadline = setTimeout(() => shutdown(1011, "runtime_prompt_acceptance_unknown"), 30000);
+          const deadline = setTimeout(() => shutdown(1011, "runtime_prompt_acceptance_unknown"), acceptanceTimeoutMs);
           try {
             const prepared = Buffer.from(JSON.stringify(frame));
             if (prepared.length > maxPayload) throw new HttpError(413, "runtime_ui_payload_limit", "The prepared native prompt is too large.");
             await send(upstream, prepared); await accepted;
           }
-          finally { clearTimeout(deadline); acknowledgements.delete(frame.streamId); }
+          finally { clearTimeout(deadline); acknowledgements.delete(frame.streamId);signal?.removeEventListener('abort',aborted); }
+          },frame.payload);
         }, frame.payload);
       } catch (error) {
         streams.delete(frame.streamId);
@@ -223,8 +230,15 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
       // A stop pressed in the kernel's own window is seen where it passes, before it goes upstream (review F4): who asked
       // is recorded first, so the run's own monitor reading the aborted turn cannot leave it unattributed. An observer
       // that fails never holds the stop back.
-      if (frame.type === "open" && frame.endpoint === "session/cancel") await Promise.resolve(observe(frame.endpoint, frame.payload)).catch(() => {});
-      await send(upstream, raw);
+      if (frame.type === "open" && frame.endpoint === "session/cancel") await submit(frame.endpoint,async signal=>{
+        await Promise.resolve(observe(frame.endpoint,frame.payload)).catch(()=>{});signal?.throwIfAborted();
+        const accepted=new Promise((resolve,reject)=>acknowledgements.set(frame.streamId,{resolve,reject}));
+        const aborted=()=>shutdown(1011,'runtime_prompt_acceptance_unknown');signal?.addEventListener('abort',aborted,{once:true});
+        const deadline=setTimeout(aborted,acceptanceTimeoutMs);
+        try{await send(upstream,raw);await accepted;}
+        finally{clearTimeout(deadline);signal?.removeEventListener('abort',aborted);acknowledgements.delete(frame.streamId);}
+      },frame.payload);
+      else await send(upstream, raw);
     }
     if (frame.type === "cancel") streams.delete(frame.streamId);
   }

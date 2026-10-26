@@ -351,12 +351,12 @@ export const VCR_TWIN_LABELS_ZH = Object.freeze({ digital_twin: '数字孪生', 
 /** What data the study has. Every module works at T0 (§3.2). */
 export const VCR_DATA_TIERS = frozen(['T0', 'T1', 'T2', 'T3'])
 export const VCR_DATA_TIER_LABELS_ZH = Object.freeze({
-  T0: 'T0 公开资料', T1: 'T1 基线与招募资料', T2: 'T2 完整治疗与纵向结局', T3: 'T3 随机试验个体数据',
+  T0: 'T0 公开资料', T1: 'T1 基线资料', T2: 'T2 完整治疗与纵向结局', T3: 'T3 随机试验个体数据',
 })
 
 /** What each tier above T0 lets a study do that the one below it does not (§3.2) — the words an offer to move up says. */
 export const VCR_DATA_TIER_UNLOCKS_ZH = Object.freeze({
-  T1: '用你的数据筛真实队列、做患者匹配与招募',
+  T1: '用已授权的患者资料筛选真实队列、逐条匹配',
   T2: '走真实外部对照，用真实结局分布做仿真',
 })
 
@@ -455,8 +455,8 @@ export const VCR_STEP_NEEDS = Object.freeze({
 /** The seven tabs of a study page, in order (§9.4). The design spec caps this at seven. */
 export const VCR_TABS = frozen(['overview', 'population', 'patients', 'comparator', 'trial', 'matching', 'data'])
 export const VCR_TAB_LABELS_ZH = Object.freeze({
-  overview: '总览', population: '人群', patients: '虚拟患者', comparator: '对照', trial: '试验',
-  matching: '匹配与招募', data: '定义与证据',
+  overview: '总览', population: '人群与患者', patients: '人群与患者', comparator: '对照', trial: '试验',
+  matching: '匹配', data: '依据',
 })
 
 /**
@@ -559,6 +559,8 @@ export const VCR_MEMBER_ROLE_LABELS_ZH = Object.freeze({
   lead: '研究负责人', clinical_reviewer: '临床复核', statistical_reviewer: '统计复核', data_manager: '数据管理',
   viewer: '只读查看者',
 })
+/** Read-only labels for legacy rows; these roles can be revoked, never granted. */
+export const VCR_RETIRED_MEMBER_ROLE_LABELS_ZH = Object.freeze({ recruiter: '旧版协调角色（已停用）', site: '旧版中心角色（已停用）' })
 /** What a role may do. Checked in code, per operation (platform principle 14). */
 export const VCR_ROLE_ABILITIES = Object.freeze({
   lead: frozen(['read', 'write', 'run', 'export', 'manage_members', 'manage_study', 'manage_data', 'review_any', 'read_patient_level']),

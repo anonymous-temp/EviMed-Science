@@ -1089,6 +1089,17 @@ function vcrSettings(overrides) {
     vcrStepsInStudySession: overrides.vcrStepsInStudySession ?? boolEnv("OPEN_SCIENCE_VCR_STEPS_IN_STUDY_SESSION", false),
     vcrPollMs: integer("vcrPollMs", "OPEN_SCIENCE_VCR_POLL_MS", 5_000, 1_000, 3_600_000),
     vcrLeaseMs: integer("vcrLeaseMs", "OPEN_SCIENCE_VCR_LEASE_MS", 900_000, 60_000, 86_400_000),
+    // Local, non-engine work and durable result delivery have separate bounded budgets.
+    vcrLocalConcurrency: integer("vcrLocalConcurrency", "OPEN_SCIENCE_VCR_LOCAL_CONCURRENCY", 2, 1, 4),
+    vcrCompletionIntervalMs: integer("vcrCompletionIntervalMs", "OPEN_SCIENCE_VCR_COMPLETION_INTERVAL_MS", 15_000, 1_000, 3_600_000),
+    vcrCompletionBatch: integer("vcrCompletionBatch", "OPEN_SCIENCE_VCR_COMPLETION_BATCH", 5, 1, 100),
+    vcrCompletionReconcileBatch: integer("vcrCompletionReconcileBatch", "OPEN_SCIENCE_VCR_COMPLETION_RECONCILE_BATCH", 50, 1, 1000),
+    vcrCompletionLeaseMs: integer("vcrCompletionLeaseMs", "OPEN_SCIENCE_VCR_COMPLETION_LEASE_MS", 300_000, 1_000, 3_600_000),
+    vcrCompletionRetryMs: integer("vcrCompletionRetryMs", "OPEN_SCIENCE_VCR_COMPLETION_RETRY_MS", 15_000, 1_000, 3_600_000),
+    vcrCompletionRetryMaxMs: integer("vcrCompletionRetryMaxMs", "OPEN_SCIENCE_VCR_COMPLETION_RETRY_MAX_MS", 900_000, 1_000, 86_400_000),
+    vcrCompletionMaxAttempts: integer("vcrCompletionMaxAttempts", "OPEN_SCIENCE_VCR_COMPLETION_MAX_ATTEMPTS", 12, 1, 100),
+    vcrCompletionMaxAgeMs: integer("vcrCompletionMaxAgeMs", "OPEN_SCIENCE_VCR_COMPLETION_MAX_AGE_MS", 86_400_000, 60_000, 604_800_000),
+    vcrCompletionRetentionMs: integer("vcrCompletionRetentionMs", "OPEN_SCIENCE_VCR_COMPLETION_RETENTION_MS", 604_800_000, 60_000, 31_536_000_000),
     // The deterministic engine. Unset = not composed; the steps that need it say so.
     vcrEngineUrl: engineUrl,
     vcrMethodValidationFile: String(overrides.vcrMethodValidationFile ?? process.env.OPEN_SCIENCE_VCR_METHOD_VALIDATION_FILE ?? '').trim(),
@@ -2172,6 +2183,12 @@ export function loadConfig(overrides = {}) {
     runtimeProxyConnectTimeoutMs: Number(
       overrides.runtimeProxyConnectTimeoutMs ?? process.env.OPEN_SCIENCE_RUNTIME_PROXY_CONNECT_TIMEOUT_MS ?? 30_000,
     ),
+    // Only source/actor checks and the bounded prompt acceptance RPC hold this same-session fence.
+    runtimePromptAdmissionTimeoutMs: (()=>{
+      const value=Number(overrides.runtimePromptAdmissionTimeoutMs ?? process.env.OPEN_SCIENCE_RUNTIME_PROMPT_ADMISSION_TIMEOUT_MS ?? 30000);
+      if(!Number.isSafeInteger(value) || value<500 || value>60000) throw new Error("OPEN_SCIENCE_RUNTIME_PROMPT_ADMISSION_TIMEOUT_MS must be a whole number from 500 to 60000.");
+      return value;
+    })(),
     runtimeProxyRequestTimeoutMs: Number(
       overrides.runtimeProxyRequestTimeoutMs ?? process.env.OPEN_SCIENCE_RUNTIME_PROXY_REQUEST_TIMEOUT_MS ?? 120_000,
     ),

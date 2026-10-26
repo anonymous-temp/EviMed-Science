@@ -179,7 +179,7 @@ describe("患者匹配 — what a rule says about a person", () => {
       [`GET ${MATCHING}`]: { view: "matching", available: false, unavailable: { code: "vcr_matching_unavailable", message: "患者匹配在本部署尚未接入；其余步骤照常。" }, funnel: [], candidates: [], selected: null, gaps: [], counts: null },
     });
     drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
-    expect(await screen.findByText("患者匹配在本部署尚未接入；其余步骤照常。")).toBeInTheDocument();
+    expect(await screen.findByText("暂时无法进行患者匹配")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "匹配患者" })).toBeNull();
     // Nothing to switch between while the recruiting side is not here: the band has no row.
     expect(screen.getByRole("group", { name: "匹配方向" })).toBeInTheDocument();

@@ -2323,7 +2323,7 @@ export class VcrDataPlane {
   /**
    * A subject's consent withdrawn (2026-10-10): the text of every document of theirs and of the projections of those is
    * overwritten and removed, what was read from them is deleted or redacted (a fact or judgment a frozen evaluation used keeps
-   * its id and its digest), the subject leaves every roster, their open referrals close, and the audit trail records hashes and
+   * its id and its digest), the subject leaves every roster, legacy referrals are marked withdrawn while present, and the audit trail records hashes and
    * counts. A frozen evaluation keeps its hashes and reads as withdrawn. Asked again it overwrites what a failed attempt left.
    * @param {{ studyId: string, subjectKey: string, actor: string, reason?: string }} entry
    */
@@ -2741,7 +2741,7 @@ export class VcrDataPlane {
     const key = await studyPseudonymKey(root, entry.studyId);
     const derived = deriveAnalysisShapes({ tables, entries, key, identifying, asOf: frozen.asOf, fileSource: snapshot.valueSource });
     // The way back from a pseudonym to a source id is a file in the plane, mode
-    // 0600 (the engine runs as another user), read only through `identityOf`.
+    // 0600 (the engine runs as another user), retained only for controlled erasure; no product re-identification reader exists.
     const identityFile = path.join(root, studyRelative(entry.studyId), "identity", `${snapshot.id}.csv`);
     await fs.mkdir(path.dirname(identityFile), { recursive: true, mode: 0o700 });
     // Replaced by rename, never truncated in place: the plane is archived while it
@@ -3513,36 +3513,48 @@ export class VcrDataPlane {
       withheld: resolved.withheld.map((item) => ({ ...(item.shape ? { shape: item.shape } : {}), reason: item.reason, fields: item.fields })) };
   }
 
-  /** One explicitly selected individual's cell, re-read from the exact snapshot under current source permissions.
-   * Counts and aggregate profiles keep their existing suppression; this read never releases a roster or identifier column.
-   * @param {{studyId:string,snapshotId:string,subjectKey:string,field:string,principal:string,purpose?:string|null,external?:boolean,cloudContext?:any}} entry
+  /** A request-local read of the selected subject's fields from one authorized immutable snapshot.
+   * The table is authorized, verified and parsed once; no rows or cached authorization escape the request.
+   * @param {{studyId:string,snapshotId:string,subjectKey:string,fields:string[],principal:string,purpose?:string|null,external?:boolean,cloudContext?:any}} entry
    */
-  async subjectTableEvidence(entry) {
+  async subjectTableEvidenceBatch(entry) {
     const snapshot = await this.#snapshot(entry.studyId, entry.snapshotId);
     const source = await this.store.sourceInStudy(entry.studyId, snapshot.sourceId);
     if (!source || source.status === "withdrawn") throw refuse(403, "vcr_source_withdrawn", "The source is unavailable.");
-    if ((await this.erasure?.matchStore?.withdrawnSubjects?.(entry.studyId) ?? new Set()).has(entry.subjectKey)) return null;
+    if ((await this.erasure?.matchStore?.withdrawnSubjects?.(entry.studyId) ?? new Set()).has(entry.subjectKey)) return {};
     const authorization = entry.external === false ? null : this.#cloudBasis(source);
     const table = await this.subjectTableForMatching(entry);
-    if (!table.available) return null;
-    const column = table.columns.find(item => item.name === entry.field);
-    const at = table.header.indexOf(entry.field);
+    if (!table.available) return {};
     const keyAt = table.header.indexOf("USUBJID");
-    if (!column || at < 0 || keyAt < 0 || entry.field === "USUBJID") return null;
-    const selected = table.rows.filter(row => row[keyAt] === entry.subjectKey);
-    if (selected.length !== 1) return null;
-    const raw = String(selected[0][at] ?? "").trim();
-    if (!raw) return null;
-    const value = ["integer", "number"].includes(String(column.type)) && Number.isFinite(Number(raw)) ? Number(raw) : raw;
+    const selected = keyAt < 0 ? [] : table.rows.filter(row => row[keyAt] === entry.subjectKey);
+    if (selected.length !== 1) return {};
     const original = (await this.store.listAnalysisTables({ studyId: entry.studyId, snapshotId: snapshot.id })).find(item => item.shape === "subject");
+    if (!original) return {};
     const sourceFileIds = snapshot.fileHashes.filter(file => file.role === "data").map(file => file.id);
-    await this.store.audit({ studyId: entry.studyId, userId: entry.principal, actor: entry.principal,
-      action: authorization ? "table.cloud_read" : "table.individual_read", object: snapshot.id,
-      detail: { field: entry.field, sourceHash: original.sha256, ...(authorization ? this.#basisDetail(authorization) : {}) } });
-    if (authorization && entry.cloudContext) for (const id of sourceFileIds) await this.store.recordCloudRead(entry.studyId, id, entry.cloudContext);
-    return { quote: `${entry.field} = ${raw}${column.unit ? ` ${column.unit}` : ""}`, value, unit: column.unit,
-      locator: { snapshotId: snapshot.id, field: entry.field, subjectKey: entry.subjectKey, sourceId: source.id, sourceFileIds,
-        sourceColumn: column.source, sourceHash: original.sha256, authorizedViewHash: table.sha256 }, valueSource: table.valueSource };
+    /** @type {Record<string, any>} */ const cells = {};
+    for (const field of [...new Set(entry.fields)].filter(wanted => wanted !== "USUBJID")) {
+      const column = table.columns.find(item => item.name === field);
+      const at = table.header.indexOf(field);
+      if (!column || at < 0) continue;
+      const raw = String(selected[0][at] ?? "").trim();
+      if (!raw) continue;
+      const value = ["integer", "number"].includes(String(column.type)) && Number.isFinite(Number(raw)) ? Number(raw) : raw;
+      cells[field] = { quote: `${field} = ${raw}${column.unit ? ` ${column.unit}` : ""}`, value, unit: column.unit,
+        locator: { snapshotId: snapshot.id, field, subjectKey: entry.subjectKey, sourceId: source.id, sourceFileIds,
+          sourceColumn: column.source, sourceHash: original.sha256, authorizedViewHash: table.sha256 }, valueSource: table.valueSource };
+    }
+    if (Object.keys(cells).length) {
+      await this.store.audit({ studyId: entry.studyId, userId: entry.principal, actor: entry.principal,
+        action: authorization ? "table.cloud_read" : "table.individual_read", object: snapshot.id,
+        detail: { fields: Object.keys(cells), sourceHash: original.sha256, ...(authorization ? this.#basisDetail(authorization) : {}) } });
+      if (authorization && entry.cloudContext) for (const id of sourceFileIds) await this.store.recordCloudRead(entry.studyId, id, entry.cloudContext);
+    }
+    return cells;
+  }
+
+  /** @param {{studyId:string,snapshotId:string,subjectKey:string,field:string,principal:string,purpose?:string|null,external?:boolean,cloudContext?:any}} entry */
+  async subjectTableEvidence(entry) {
+    return (await this.subjectTableEvidenceBatch({ ...entry, fields: [entry.field] }))[entry.field] ?? null;
   }
 
   /**
@@ -3555,24 +3567,6 @@ export class VcrDataPlane {
       .filter((file) => file.role === "document" && !file.erasedAt && (!entry.subjectKey || file.detail?.subjectKey === entry.subjectKey))
       .map((file) => ({ id: file.id, sourceId: file.sourceId, name: file.name, chars: file.detail?.chars ?? null,
         subjectKey: file.detail?.subjectKey ?? null, visibleAt: file.detail?.visibleAt ?? null }));
-  }
-
-  /**
-   * The source id behind a pseudonym — for the partner's own coordinator who has
-   * to find the person a referral is about. Needs `manage_data`, and is audited.
-   * @param {{ studyId: string, snapshotId: string, pseudonym: string, actor: string }} entry
-   */
-  async identityOf(entry) {
-    const root = this.root();
-    await this.#manager(entry.studyId, entry.actor);
-    const snapshot = await this.#snapshot(entry.studyId, entry.snapshotId);
-    const body = await fs.readFile(path.join(root, studyRelative(entry.studyId), "identity", `${snapshot.id}.csv`), "utf8").catch(() => null);
-    const found = body === null ? null : parseTable(body).rows.find((row) => row[0] === entry.pseudonym)?.[1] ?? null;
-    await this.store.audit({
-      studyId: entry.studyId, userId: snapshot.userId, actor: String(entry.actor), action: "identity.lookup",
-      object: `${snapshot.id}:${entry.pseudonym}`, outcome: found === null ? "denied" : "ok", reason: found === null ? "not_found" : "",
-    });
-    return found === null ? null : { pseudonym: entry.pseudonym, sourceSubjectId: found };
   }
 
   // -------------------------------------------------------------------------
@@ -3648,6 +3642,43 @@ export class VcrDataPlane {
       return [{ inputId: snapshotInputId(snapshot.id, table.shape), kind: "analysis_table", shape: table.shape,
         label: VCR_ANALYSIS_TABLE_LABELS_ZH[table.shape] ?? table.shape, columns: kept.map(column => column.name), columnLabels: Object.fromEntries(kept.filter(column => column.source).map(column => [column.name, column.source])) }];
     });
+  }
+
+  /** Available inputs are current authorized metadata, never a capsule, a parsed file or a study tier alone.
+   * @param {any} study @param {{id:string}} viewer */
+  async taskInputAvailability(study, viewer) {
+    const sources = await this.store.listSourcesForStudy(study.id);
+    const snapshots = await this.store.listSnapshots({ studyId: study.id, limit: 25 });
+    const tables = await this.store.listAnalysisTables({ studyId: study.id });
+    /** @type {Record<string, any[]>} */ const found = { matching: [], cohort: [], patient: [], comparator: [], trial: [] };
+    for (const snapshot of snapshots.slice(0, 24)) {
+      const source = sources.find(row => row.id === snapshot.sourceId);
+      if (!source || source.status === "withdrawn" || (source.allowedUses.length > 0 && !source.allowedUses.includes("vcr"))
+        || cloudState(source.cloudPermission, vcrCloudDestinations(this.config), this.now().toISOString(), deploymentCloudPermission(this.config)).state !== "allowed") continue;
+      const mapping = entriesOfRows(await this.store.listFieldMaps(snapshot.id), snapshotFreezeNotes(snapshot));
+      const identifiers = new Set(mapping.filter(entry => entry.identifier || entry.role === "subject_key").map(entry => entry.column));
+      const authorized = [];
+      for (const table of tables.filter(row => row.snapshotId === snapshot.id && VCR_REAL_PATIENT_SOURCES.includes(row.valueSource) && row.rowCount > 0)) {
+        const mapped = new Set(mapping.map(entry => entry.column));
+        if (analysisInputColumns(table).some(column => column.source && !identifiers.has(column.source) && !mapped.has(column.source))) continue;
+        const fields = [...new Set(analysisInputColumns(table).map(column => column.source).filter(field => field && mapped.has(field) && !identifiers.has(field)))];
+        if (!fields.length) continue;
+        const judged = await this.pageAccess.judge({ actor: viewer.id, studyId: study.id, snapshotId: snapshot.id,
+          ability: "read_patient_level", purpose: "vcr", fields });
+        if (judged.allowed && fields.every(field => judged.fields.allowed.includes(field))) authorized.push(table);
+      }
+      const support = vcrTierSupportedBy(authorized);
+      const ref = { studyId: study.id, snapshotId: snapshot.id, label: "已授权的患者资料", kind: "baseline" };
+      if (support.subjects > 0) {
+        found.matching.push(ref); found.cohort.push(ref);
+        if (authorized.some(table => table.shape === "longitudinal")) found.patient.push({ ...ref, label: "已授权的纵向资料", kind: "longitudinal" });
+        if (support.treatment && support.outcomes) {
+          const outcome = { ...ref, label: "已授权的治疗与结局资料", kind: "outcomes" };
+          found.comparator.push(outcome); found.trial.push(outcome);
+        }
+      }
+    }
+    return { ...found, partial: snapshots.length > 24 };
   }
 
   /**

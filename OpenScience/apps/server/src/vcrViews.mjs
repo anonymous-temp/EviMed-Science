@@ -1,3 +1,4 @@
+import { vcrAnalyticComputationBasis } from "./vcrScientificBasis.mjs";
 import { presentVcrReview } from "./vcrViewsKit.mjs";
 import { createHash } from "node:crypto";
 import { documentExportDigest } from "@evimed/domain";
@@ -40,7 +41,7 @@ import {
   VCR_MODEL_INTERFACE_LABELS_ZH, VCR_REGISTRY_ALLOCATION_LABELS_ZH, VCR_REGISTRY_MASKING_LABELS_ZH, VCR_REGISTRY_PHASE_LABELS_ZH, VCR_REVIEW_KIND_LABELS_ZH, VCR_ROLE_ABILITIES, VCR_STALE_REASON_LABELS_ZH,
   VCR_STEP_LABELS_ZH, VCR_STEPS, VCR_TWIN_LABELS_ZH, VCR_TWIN_EVIDENCE, VCR_VALUE_SOURCE_LABELS_ZH,
   VCR_TRIAL_DESIGN_LABELS_ZH,
-  allowanceWaitingSentence, intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin, vcrModelCardIssues, vcrModelInterfaceOf, vcrNext,
+  allowanceWaitingSentence, intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin, vcrModelCardIssues, vcrModelInterfaceOf,
 } from "@evimed/domain";
 
 import { VCR_ENGINE_RETRYABLE_CODES } from "./vcrEngineClient.mjs";
@@ -466,7 +467,7 @@ export function numberString(value, precision, mcse = null) {
  *   allResults?: readonly Record<string, any>[], exports?: readonly Record<string, any>[] }} input
  */
 export function presentSummary({ study, results, allResults, stale, jobs, scenarios, comparators, grid, decisions = [], exports = [], now }) {
-  const { designs } = presentDesigns({ study, scenarios, results, allResults, stale, executions: new Map(), grid, decisions, forecastResults: [], now });
+  const { designs } = presentDesigns({ study, scenarios, results, allResults, stale, executions: new Map(), grid, decisions, now });
   return {
     id: study.id,
     projectId: study.projectId,
@@ -632,9 +633,7 @@ export function presentStudy(bundle) {
     status: study.status,
     purpose: study.purpose ?? "programme",
     steps: study.purpose === "calculation" ? [] : publicSteps(study.steps),
-    // The step the study should do next, from the one function every sentence that names "next" reads (`vcrNext`), and one short
-    // finding per step with its one number (`vcrStepSummaries`): the step bar and the primary action are drawn from these.
-    next: study.purpose === "calculation" ? null : vcrNext({ steps: study.steps, described: Boolean(text(study.question) || bundle.definition) }),
+
     stepSummaries: study.purpose === "calculation" ? [] : vcrStepSummaries(bundle, designs),
     sessionId: null,
     abilities: abilitiesOf(roles ?? []),
@@ -1010,14 +1009,21 @@ export function presentDesigns(bundle) {
           kind: "trial_scenario", result: stage.result, execution: executionOfStage(name) ?? execution, staleMark, tab: "trial" });
       }
     }
+    // Accrual is a distinct result and quantity; it never substitutes for mean full-study duration.
+    const accrual = everyResult.filter(row => row.kind === "accrual_forecast" && row.subjectId === scenario.id)
+      .sort((a, b) => Number(b.version) - Number(a.version) || String(b.createdAt).localeCompare(String(a.createdAt)))[0];
+    const lastPatientIn = list(accrual?.measures).map(object).find(row => row.name === "last_patient_in_months");
+    if (lastPatientIn) measures.last_patient_in_months = measureValue(lastPatientIn, {
+      kind: "accrual_forecast", result: accrual, staleMark: markFor(stale, resultNode(accrual)), tab: "trial" });
     const cost = numeric(object(scenario.configuration).cost ?? object(object(scenario.configuration).cost).value);
     if (cost !== null && !measures.cost) {
       measures.cost = { value: cost, text: null, unit: "万元", source: "assumed", interval: null, mcse: null, review: null, precision: 0,
         reason: null, stale: false, detail: null };
     }
     const beaten = dominated.get(scenario.id) ?? null;
+    const computationBasis = beaten || !stages.analytic ? null : vcrAnalyticComputationBasis({ ...stages.analytic.result, measures: stages.analytic.measures, diagnostics: stages.analytic.diagnostics }, executionOfStage("analytic"));
     return {
-      id: scenario.id,
+      id: scenario.id, version: scenario.version, ...(result ? { resultId: result.id, resultVersion: result.version } : {}),
       code,
       name: designName(scenario, code),
       dominated: Boolean(beaten),
@@ -1028,6 +1034,7 @@ export function presentDesigns(bundle) {
       method: beaten ? null : designMethod(stages),
       replicates: beaten ? null : (executionOfStage("simulation")?.replicates ?? null),
       crossCheck: beaten ? null : crossCheckOf(stages),
+      ...(computationBasis ? { computationBasis } : {}),
       _scenario: scenario,
       _result: result,
       _stale: resultMark ?? designMark,
@@ -1461,7 +1468,7 @@ function packageSections({ cover, bundle, model }) {
   for (const result of allResultsOf(bundle)) {
     if (!["population", "patient_set", "comparator", "trial_scenario", "accrual_forecast"].includes(result.kind)) continue;
     // A superseded result of a design the study no longer has is history, not a finding.
-    const subject = subjectOf.get(result.id) ?? (result.kind === "accrual_forecast" ? `${scenarioIds.get(result.subjectId) ?? "招募"}的入组预测` : null);
+    const subject = subjectOf.get(result.id) ?? (result.kind === "accrual_forecast" ? `${scenarioIds.get(result.subjectId) ?? "设计假设"}的入组时间模拟` : null);
     if (!subject) continue;
     for (const entry of list(result.measures)) {
       const value = measureValue(entry, { kind: result.kind, result });
@@ -1475,6 +1482,11 @@ function packageSections({ cover, bundle, model }) {
     table: resultRows.length ? { columns: ["指标", "取值", "范围", "蒙特卡洛标准误"], rows: resultRows } : null,
     note: resultRows.length ? null : "还没有可写入研究包的结果。",
   });
+  const sizing = presentDesigns(bundle).designs.filter(design => design.computationBasis);
+  if (sizing.length) add({ id: "sample-size-basis", title: "样本量计算依据", table: {
+    columns: ["方案", "计算公式", "试验组 / 对照组 / 合计", "目标功效", "校验功效", "校验方法"],
+    rows: sizing.map(design => { const basis = design.computationBasis; return [design.name, basis.formula, `${basis.nTreatment} / ${basis.nControl} / ${basis.total}`, String(basis.targetPower), String(basis.powerAtAllocatedN), basis.powerCheckBasis]; }),
+  }, note: "正态和 Schoenfeld 样本量为近似计算；校验功效使用分组取整后的实际人数。" });
   const runs = [...bundle.executions.values()];
   if (runs.length) {
     add({

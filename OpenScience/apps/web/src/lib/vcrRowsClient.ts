@@ -90,7 +90,7 @@ export interface VcrPatientRecord {
   outcome: VcrRecordFact[];
   position: VcrRecordPosition | null;
   /** The patient under each assumption — only where the table holds one outcome for each; the engine writes one today, so null. */
-  trajectories: Array<{ arm: string; label: string; values: Record<string, number | null> }> | null;
+  trajectories: Array<{ arm: string; label: string; values: Record<string, number | null>; series?: Array<{ visit: number | null; time: number | null; y: number | null; status?: string | number | null }> }> | null;
 }
 
 const root = (studyId: string) => `/vcr/studies/${encodeURIComponent(studyId)}`;
@@ -181,6 +181,7 @@ export function readVcrPatientRecord(raw: unknown): VcrPatientRecord {
         arm: text(entry.arm) ?? "",
         label: text(entry.label) ?? "",
         values: Object.fromEntries(Object.entries(obj(entry.values)).map(([key, number]) => [key, finite(number)])),
+        ...(Array.isArray(entry.series) ? { series: arr(entry.series).map(row => ({ visit: finite(row.visit), time: finite(row.time), y: finite(row.y), status: cell(row.status) })) } : {}),
       }))
       : null,
   };

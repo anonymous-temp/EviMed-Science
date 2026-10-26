@@ -1,8 +1,24 @@
 {
+  "versions": [
+    {
+      "objectId": "cmp_1",
+      "version": 2,
+      "label": "对照版本 2",
+      "resultId": "res_13",
+      "resultVersion": 1
+    },
+    {
+      "objectId": "cmp_2",
+      "version": 1,
+      "label": "对照版本 1",
+      "resultId": "res_14",
+      "resultVersion": 1
+    }
+  ],
   "selection": {
     "id": "cmp_1",
     "version": 2,
-    "resultId": "res_8",
+    "resultId": "res_13",
     "resultVersion": 1,
     "route": "literature_control"
   },
@@ -180,7 +196,7 @@
         "quoteSource": null,
         "ref": {
           "kind": "result",
-          "id": "res_8",
+          "id": "res_13",
           "tab": "comparator"
         }
       }
@@ -220,7 +236,7 @@
       "quoteSource": null,
       "ref": {
         "kind": "result",
-        "id": "res_8",
+        "id": "res_13",
         "tab": "comparator"
       }
     }

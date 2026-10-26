@@ -5,6 +5,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 
 const MAGIC = "OPEN_SCIENCE_BACKUP_ENCRYPTED_V1";
 const scryptAsync = promisify(scrypt);
@@ -56,6 +57,30 @@ function passphrase() {
 
 async function deriveKey(secret, salt) {
   return scryptAsync(secret, salt, 32, { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+}
+
+// The retirement tools use the same authenticated envelope as streamed backups;
+// sensitive plaintext stays in memory instead of a temporary cleartext dump.
+export async function encryptArchiveBuffer(bytes) {
+  const salt = randomBytes(16);
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", await deriveKey(passphrase(), salt), iv);
+  const ciphertext = Buffer.concat([cipher.update(bytes), cipher.final()]);
+  const header = { version: 1, cipher: "aes-256-gcm", kdf: "scrypt", salt: salt.toString("base64"),
+    iv: iv.toString("base64"), tag: cipher.getAuthTag().toString("base64") };
+  return Buffer.concat([Buffer.from(`${MAGIC}\n${JSON.stringify(header)}\n`), ciphertext]);
+}
+
+export async function decryptArchiveBuffer(bytes) {
+  const first = bytes.indexOf(0x0a), second = bytes.indexOf(0x0a, first + 1);
+  if (first < 0 || second < 0 || second > 64 * 1024 || bytes.subarray(0, first).toString("utf8") !== MAGIC) {
+    throw new Error("Encrypted backup header is missing or invalid.");
+  }
+  const header = JSON.parse(bytes.subarray(first + 1, second).toString("utf8"));
+  if (header.version !== 1 || header.cipher !== "aes-256-gcm" || header.kdf !== "scrypt") throw new Error("Unsupported encrypted backup format.");
+  const decipher = createDecipheriv("aes-256-gcm", await deriveKey(passphrase(), decodeBase64(header.salt, "salt", 16)), decodeBase64(header.iv, "iv", 12));
+  decipher.setAuthTag(decodeBase64(header.tag, "tag", 16));
+  return Buffer.concat([decipher.update(bytes.subarray(second + 1)), decipher.final()]);
 }
 
 async function encrypt(input, output) {
@@ -141,13 +166,14 @@ async function decrypt(input, output) {
   }
 }
 
-const [, , mode, input, output] = process.argv;
-if (!["encrypt", "decrypt"].includes(mode) || !input || !output) usage();
-
-try {
-  if (mode === "encrypt") await encrypt(input, output);
-  else await decrypt(input, output);
-} catch (err) {
-  console.error(err instanceof Error ? err.message : String(err));
-  process.exit(1);
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  const [, , mode, input, output] = process.argv;
+  if (!["encrypt", "decrypt"].includes(mode) || !input || !output) usage();
+  try {
+    if (mode === "encrypt") await encrypt(input, output);
+    else await decrypt(input, output);
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  }
 }

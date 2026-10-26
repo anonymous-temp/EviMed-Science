@@ -1004,30 +1004,6 @@ export function labelClinicalPriority(priority) {
   };
 }
 
-/**
- * The five things kept apart (plan §7.1).
- *
- * They are five because they fail independently and are owned by different
- * people: a patient may be clinically eligible with a missing document, willing
- * with no slot at the site, or slotted and stuck at 「已转诊」 because nobody
- * called back. Merged into one 「匹配度」 they would produce a number that no
- * single action can move.
- * @param {{ summary: string, counts: any, willingness?: string, siteCapacity?: any, referralState?: string }} input
- */
-export function separateLedgers(input) {
-  return Object.freeze({
-    clinicalEligibility: String(input?.summary ?? "pending"),
-    evidenceSufficiency: {
-      unknown: Number(input?.counts?.unknown ?? 0),
-      pending: Number(input?.counts?.pending_recheck ?? 0),
-      sufficient: Number(input?.counts?.unknown ?? 0) === 0,
-    },
-    patientWillingness: String(input?.willingness ?? "unknown"),
-    siteCapacity: input?.siteCapacity ?? null,
-    businessProgress: String(input?.referralState ?? "candidate"),
-  });
-}
-
 // ---------------------------------------------------------------------------
 // One assessment
 // ---------------------------------------------------------------------------

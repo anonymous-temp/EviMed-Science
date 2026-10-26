@@ -1,12 +1,12 @@
 /** Ingest only authenticated user-origin material. Clinical interpretation stays
  * with the agent; original bytes, pseudonyms and source permission stay in the plane. */
 import { createHash } from 'node:crypto';
-import { canonicalJson } from '@evimed/domain';
+import { canonicalJson, sourceOriginOf } from '@evimed/domain';
 import { HttpError } from './security.mjs';
 const invalid = () => new HttpError(400,'vcr_patient_context_invalid','Select an original user message or an owned uploaded source.');
 const digest = text => createHash('sha256').update(text).digest('hex');
 export function createVcrPatientContext({ store, dataStore, dataPlane, documents, transcript, isHumanMessage, sources = null }) {
-  return async (study, input, origin) => {
+  const intake = async (study, input, origin) => {
     if (!dataPlane || !input || typeof input !== 'object' || Array.isArray(input)
       || Object.keys(input).some(key => !['messageSeq','sourceId'].includes(key))
       || input.messageSeq != null && !Number.isSafeInteger(input.messageSeq)
@@ -15,14 +15,15 @@ export function createVcrPatientContext({ store, dataStore, dataPlane, documents
     if (input.sourceId != null) {
       if (typeof input.sourceId !== 'string' || !sources) throw invalid();
       const source = await sources.get(origin.userId,input.sourceId);
-      if (source.userId !== origin.userId || source.projectId !== origin.projectId || source.payload?.connector?.type !== 'upload') throw invalid();
+      if (source.userId !== origin.userId || source.projectId !== origin.projectId || source.payload?.connector?.type !== 'upload'
+        || !source.payload?.paths?.length || source.payload.paths.some(path => sourceOriginOf({connectorType:source.payload.connector.type,path}) !== 'upload')) throw invalid();
       const capture = await sources.loadCapture(origin.userId,source);
       if (!capture?.input?.text) throw invalid();
       text = capture.input.text;
       provenance = { kind:'owned_upload',sourceId:source.id,generation:source.payload.generation,sha256:source.payload.analysis.textSha256 };
     } else {
-      const page = await transcript(origin);
-      if (page?.sessionId !== origin.rootSessionId || page.truncated) throw invalid();
+      const page = await transcript(origin, { maxPages:4, ...(input.messageSeq != null ? {beforeSeq:input.messageSeq+1} : {}) });
+      if (page?.sessionId !== origin.rootSessionId) throw invalid();
       const messages = page.messages.filter(message => message.role === 'user' && message.source === 'user'
         && (input.messageSeq == null || message.seq === input.messageSeq));
       const eligible = [];
@@ -51,4 +52,21 @@ export function createVcrPatientContext({ store, dataStore, dataPlane, documents
         basis:provenance.kind,valueSource:'extracted'};
     }));
   };
+  intake.candidates = async (origin, {beforeSeq=undefined,limit=20} = {}) => {
+    if(beforeSeq!=null && !Number.isSafeInteger(beforeSeq) || !Number.isSafeInteger(limit) || limit<1 || limit>20) throw invalid();
+    const page = await transcript(origin,{maxPages:4,...(beforeSeq == null ? {} : {beforeSeq})});
+    if (page?.sessionId !== origin.rootSessionId) throw invalid();
+    const candidates=[];
+    let limited=false;
+    for (const message of [...page.messages].reverse()) {
+      if (message.role !== 'user' || message.source !== 'user' || !Number.isSafeInteger(message.seq) || !await isHumanMessage(origin,message)) continue;
+      const text=message.parts.filter(part=>part.type==='text').map(part=>part.text).join('\n');
+      if (!text.trim()) continue;
+      candidates.push({messageSeq:message.seq,turn:message.turn ?? null,preview:[...text].slice(0,240).join(''),sha256:digest(text)});
+      if (candidates.length >= limit) {limited=true;break;}
+    }
+    const oldest=page.messages.reduce((minimum,message)=>Number.isSafeInteger(message.seq) ? Math.min(minimum,message.seq) : minimum,Infinity);
+    return {candidates,nextBeforeSeq:limited ? candidates.at(-1).messageSeq : page.exhausted === true || !Number.isFinite(oldest) ? null : oldest};
+  };
+  return intake;
 }

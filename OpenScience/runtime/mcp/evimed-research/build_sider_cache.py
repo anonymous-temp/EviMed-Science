@@ -32,7 +32,21 @@ MAX_DOWNLOAD_BYTES = 4 * 1024 * 1024
 MAX_EXPANDED_BYTES = 32 * 1024 * 1024
 
 
-def download(spec: dict[str, object]) -> bytes:
+def verified_payload(payload: bytes, spec: dict[str, object]) -> bytes:
+    digest = hashlib.sha256(payload).hexdigest()
+    if len(payload) != spec["bytes"] or digest != spec["sha256"]:
+        raise SystemExit(
+            "SIDER input changed: expected %s bytes / %s, received %s bytes / %s"
+            % (spec["bytes"], spec["sha256"], len(payload), digest)
+        )
+    return payload
+
+
+def download(spec: dict[str, object], cache: Path | None = None) -> bytes:
+    cached = cache / str(spec["sha256"]) if cache is not None else None
+    if cached is not None and cached.is_file():
+        with cached.open("rb") as handle:
+            return verified_payload(handle.read(MAX_DOWNLOAD_BYTES + 1), spec)
     request = urllib.request.Request(
         str(spec["url"]),
         headers={"user-agent": "EviMed-SIDER-cache-builder/1.0"},
@@ -50,18 +64,22 @@ def download(spec: dict[str, object]) -> bytes:
             if attempt == 2:
                 raise
         time.sleep(2 ** (attempt + 1))
-    digest = hashlib.sha256(payload).hexdigest()
-    if len(payload) != spec["bytes"] or digest != spec["sha256"]:
-        raise SystemExit(
-            "SIDER input changed: expected %s bytes / %s, received %s bytes / %s"
-            % (spec["bytes"], spec["sha256"], len(payload), digest)
-        )
+    verified_payload(payload, spec)
+    if cached is not None:
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=cached.parent, delete=False) as handle:
+            temporary = Path(handle.name)
+            handle.write(payload)
+        try:
+            temporary.replace(cached)
+        finally:
+            temporary.unlink(missing_ok=True)
     return payload
 
 
-def build(output: Path) -> None:
-    names_raw = download(SOURCES["drug_names.tsv"])
-    effects_compressed = download(SOURCES["meddra_all_se.tsv.gz"])
+def build(output: Path, cache: Path | None = None) -> None:
+    names_raw = download(SOURCES["drug_names.tsv"], cache)
+    effects_compressed = download(SOURCES["meddra_all_se.tsv.gz"], cache)
     with gzip.GzipFile(fileobj=io.BytesIO(effects_compressed), mode="rb") as handle:
         effects_raw = handle.read(MAX_EXPANDED_BYTES + 1)
     if len(effects_raw) > MAX_EXPANDED_BYTES:
@@ -168,9 +186,10 @@ def main() -> None:
         type=Path,
         default=Path(__file__).resolve().parent / "data" / "sider-4.1.sqlite",
     )
+    parser.add_argument("--source-cache", type=Path, help="Cache of pinned raw inputs; every read is reverified")
     arguments = parser.parse_args()
     output = arguments.output.resolve()
-    build(output)
+    build(output, arguments.source_cache)
     verify(output)
 
 

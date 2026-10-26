@@ -1,3 +1,5 @@
+import { vcrPredictionLimit } from "@evimed/domain";
+import type { VcrScientificComputationBasis } from "@/components/vcr/VcrScientificBasis";
 import { completeMethodCatalogue } from "./vcrMethodDisplay";
 /**
  * 「虚拟临床研究」 — the browser's side of `/api/vcr/*` (build contract 2026-09-28 §3.1).
@@ -89,6 +91,7 @@ export type VcrComparatorRoute =
 export type VcrExportKind =
   | "study_package" | "cde_communication_pack" | "simulation_report" | "validation_pack"
   | "model_analysis_plan" | "model_analysis_report";
+export type VcrStoredMemberRole = VcrMemberRole | "recruiter" | "site";
 export type VcrMemberRole =
   | "lead" | "clinical_reviewer" | "statistical_reviewer" | "data_manager" | "viewer";
 /** The four counts that appear wherever a sample size does (`VCR_COUNT_KEYS`). */
@@ -251,6 +254,8 @@ export interface VcrPartial {
 
 /** One row of the home list (`GET /api/vcr/studies`). */
 export interface VcrStudySummary {
+  originatingSessionId?: string | null;
+  draftText?: string | null;
   purpose?: "programme" | "calculation" | "task";
   id: string;
   projectId: string;
@@ -294,6 +299,7 @@ export interface VcrReviewNote {
 
 /** The home page's payload. */
 export interface VcrHome {
+  taskInputs?: Partial<Record<"matching" | "cohort" | "patient" | "comparator" | "trial", { status: "available" | "missing" | "unknown"; sources: Array<{ studyId: string; snapshotId: string; label: string; kind: string }>; reason?: string }>>;
   studies: VcrStudySummary[];
   reviews?: VcrReviewNote[];
   /** The projects of the account's drafts (studies nobody has described yet): not in the list, and the sidebar leaves them out. */
@@ -353,7 +359,11 @@ export interface VcrChange {
 
 /** A design on the trade-off scatter and in the grid. */
 export interface VcrDesign {
+  computationBasis?: VcrScientificComputationBasis | null;
   id: string;
+  version?: number;
+  resultId?: string;
+  resultVersion?: number;
   /** 「B」. */
   code: string;
   name: string;
@@ -505,16 +515,6 @@ export interface VcrActivity {
   last: { step: VcrStepKey | null; endedAt: string; outcome: "succeeded" | "failed" | "canceled" } | null;
 }
 
-/** The step the study offers next. `reason`: `start` (never done), `retry` (the last attempt was not finished), `refresh` (its inputs changed). */
-export interface VcrNext {
-  step: VcrStepKey;
-  /** The step's verb and object: 「生成虚拟患者」. */
-  label: string;
-  reason: "start" | "retry" | "refresh";
-  /** 「上次没有做完」, 「输入已变更，结果已过期」, or empty for `start`. */
-  reasonText: string;
-}
-
 export interface VcrStepSummary {
   note: string | null;
   stale: boolean;
@@ -547,7 +547,6 @@ export interface VcrStudy {
   /** What is going on right now, or null when nothing is: the page reads again while it is not null and stops when it is. */
   activity: VcrActivity | null;
   /** The step to offer as the primary action, computed once on the server (`vcrNext`); null when there is none to offer. */
-  next: VcrNext | null;
   /** One finding with one number per step (≤ 12 characters); a step with nothing to say is absent. */
   stepSummaries: Partial<Record<VcrStepKey, VcrStepSummary>>;
   /** What the definition says, as words; null until one has been written. */
@@ -674,11 +673,12 @@ export interface VcrQualityReport {
 }
 
 export interface VcrPopulationTab {
+  selection?: { objectId: string; version: number; resultId?: string; resultVersion?: number } | null;
   /** 「人群 v3（方案 v2）」. */
   version: string | null;
   /** 「真实队列」. */
   kind?: string | null;
-  versions: Array<{ id: string; label: string; stale?: boolean; counts?: VcrCounts | null; generationInput?: VcrQualityBasis | null }>;
+  versions: Array<{ id: string; version?: number; resultId?: string; resultVersion?: number; label: string; stale?: boolean; counts?: VcrCounts | null; generationInput?: VcrQualityBasis | null }>;
   definition: {
     timeZero?: string | null;
     evidenceWindow?: string | null;
@@ -857,6 +857,7 @@ export interface VcrCalibration {
 }
 
 export interface VcrPatientsTab {
+  selection?: { objectId: string; version: number; resultId?: string; resultVersion?: number } | null;
   model: VcrModelCard | null;
   assessments: VcrAssessments;
   /** The label the model's output has earned: never 「数字孪生」 by default. */
@@ -901,7 +902,7 @@ export interface VcrPatientsTab {
   counts: VcrCounts | null;
   stale: VcrStaleNote | null;
   partial: VcrPartial | null;
-  sets?: Array<{ id: string; label: string; stale?: boolean }>;
+  sets?: Array<{ id: string; version?: number; resultId?: string; resultVersion?: number; label: string; stale?: boolean }>;
 }
 
 /** One comparator route and its state. */
@@ -938,12 +939,13 @@ export interface VcrDimension {
 }
 
 export interface VcrComparatorTab {
+  versions?: Array<{ objectId: string; version: number; label: string; resultId?: string; resultVersion?: number }>;
   selection?: { id: string; version: number | null; resultId: string | null; resultVersion: number | null; route: string } | null;
   predictionBenchmark?: {
     sourceCondition: string | null;
     endpoint: { type: string; horizon: number | null; timeUnit: string | null } | null;
     mean: VcrValue | null; outcomeSd: VcrValue | null; relativeScore: VcrValue | null;
-    absoluteRiskAvailable: boolean; causalEffectIdentified: false; limits: string[];
+    absoluteRiskAvailable: boolean; causalEffectIdentified: false; limits: Array<{ code: string; source?: string }>;
   } | null;
   headline?: string | null;
   routes: VcrRoute[];
@@ -1022,6 +1024,7 @@ export interface VcrRegulatoryContact {
 }
 
 export interface VcrTrialTab {
+  accrualForecasts?: Array<{ id: string; version: number; scenarioId: string | null; scenarioVersion: number | null; design: string | null; name: string; lastPatientIn: VcrValue | null; targetEvents: VcrValue | null; probabilityByMonth: Array<{ month: number; probability: number }> }>;
   headline?: string | null;
   /** ADEMP, one line each. */
   ademp: Array<{ key: string; label: string; text: string }>;
@@ -1071,7 +1074,6 @@ export interface VcrCandidate {
   /** The subject's own key; also what `?candidate=` names. */
   id: string;
   summary: string;
-  site?: string | null;
   eligibility: VcrEligibility;
   /** The rules still open on this person: 「E3 未知」「E5 待复评 10月6日」. */
   open: Array<{ code: string; state: VcrCriterionState; note?: string | null }>;
@@ -1586,6 +1588,8 @@ function readDesign(raw: unknown): VcrDesign {
   const measures = obj(value.measures);
   return {
     id: text(value.id) ?? "",
+    computationBasis: value.computationBasis as VcrScientificComputationBasis | null,
+    version: finite(value.version) ?? undefined, resultId: text(value.resultId) ?? undefined, resultVersion: finite(value.resultVersion) ?? undefined,
     code: text(value.code) ?? "",
     name: text(value.name) ?? "",
     dominated: value.dominated === true,
@@ -1709,14 +1713,6 @@ export function readVcrActivity(raw: unknown): VcrActivity | null {
   };
 }
 
-function readNext(raw: unknown): VcrNext | null {
-  const value = obj(raw);
-  const step = stepKey(value.step);
-  const reason = text(value.reason);
-  if (!step || (reason !== "start" && reason !== "retry" && reason !== "refresh")) return null;
-  return { step, label: text(value.label) ?? "", reason, reasonText: text(value.reasonText) ?? "" };
-}
-
 function readStepSummaries(raw: unknown): VcrStudy["stepSummaries"] {
   const out: VcrStudy["stepSummaries"] = {};
   for (const [key, entry] of Object.entries(obj(raw))) {
@@ -1736,7 +1732,6 @@ export function readVcrStudy(raw: unknown): VcrStudy {
     conversation: { sessionId: text(conversation.sessionId) ?? text(value.sessionId), exists: conversation.exists === true,
       ...(conversation.submitted === true ? { submitted: true } : {}), ...(conversation.awaitingInput === true ? { awaitingInput: true } : {}) },
     activity: readVcrActivity(value.activity),
-    next: readNext(value.next),
     stepSummaries: readStepSummaries(value.stepSummaries),
     steps: readSteps(value.steps),
     abilities: strings(value.abilities),
@@ -1768,6 +1763,7 @@ export function readVcrHome(raw: unknown): VcrHome {
   const value = obj(raw);
   return {
     studies: arr(value.studies).map(readVcrSummary),
+    taskInputs: value.taskInputs as VcrHome["taskInputs"],
     ...(Array.isArray(value.reviews) ? { reviews: arr(value.reviews) as unknown as VcrReviewNote[] } : {}),
     draftProjectIds: strings(value.draftProjectIds),
   };
@@ -2005,7 +2001,7 @@ export function readVcrComparator(raw: unknown): VcrComparatorTab {
       mean: benchmark.mean ? readVcrValue(benchmark.mean) : null,
       outcomeSd: benchmark.outcomeSd ? readVcrValue(benchmark.outcomeSd) : null,
       relativeScore: benchmark.relativeScore ? readVcrValue(benchmark.relativeScore) : null,
-      absoluteRiskAvailable: benchmark.absoluteRiskAvailable === true, causalEffectIdentified: false, limits: strings(benchmark.limits),
+      absoluteRiskAvailable: benchmark.absoluteRiskAvailable === true, causalEffectIdentified: false, limits: (Array.isArray(benchmark.limits) ? benchmark.limits : []).map(row => typeof row === "string" ? vcrPredictionLimit(row) : { code: text(obj(row).code) ?? "unknown", ...(text(obj(row).source) ? { source: String(obj(row).source) } : {}) }),
     } : null,
     routes: arr(value.routes) as unknown as VcrRoute[],
     curves: readCurves(value.curves),
@@ -2036,6 +2032,7 @@ export function readVcrTrial(raw: unknown): VcrTrialTab {
   return {
     ...(value as unknown as VcrTrialTab),
     ademp: arr(value.ademp) as unknown as VcrTrialTab["ademp"],
+    accrualForecasts: arr(value.accrualForecasts).map(row => ({ id: text(row.id) ?? "", version: finite(row.version) ?? 1, scenarioId: text(row.scenarioId), scenarioVersion: finite(row.scenarioVersion), design: text(row.design), name: text(row.name) ?? "入组假设模拟", lastPatientIn: row.lastPatientIn ? readVcrValue(row.lastPatientIn) : null, targetEvents: row.targetEvents ? readVcrValue(row.targetEvents) : null, probabilityByMonth: arr(row.probabilityByMonth).filter(point => finite(point.month) !== null && Number(point.month) >= 0 && finite(point.probability) !== null && Number(point.probability) >= 0 && Number(point.probability) <= 1).map(point => ({ month: Number(point.month), probability: Number(point.probability) })) })),
     designs: arr(value.designs).map(readDesign),
     columns: arr(value.columns) as unknown as VcrTrialTab["columns"],
     grid: Object.keys(grid).length ? {
@@ -2637,7 +2634,7 @@ export interface VcrMember {
   userId: string;
   /** The study's owner, who is the lead by being the owner and is not a row that can be removed. */
   owner: boolean;
-  roles: VcrMemberRole[];
+  roles: VcrStoredMemberRole[];
   roleLabels: string[];
   /** The member's name — what the page shows. The account id is for the remove call, never for a reader. */
   name?: string | null;
@@ -2650,7 +2647,7 @@ export function readVcrMembers(raw: unknown): VcrMember[] {
     userId: text(item.userId) ?? "",
     name: text(item.name),
     owner: item.owner === true,
-    roles: strings(item.roles) as VcrMemberRole[],
+    roles: strings(item.roles) as VcrStoredMemberRole[],
     roleLabels: strings(item.roleLabels),
     invitedBy: text(item.invitedBy),
     createdAt: text(item.createdAt),
@@ -2671,7 +2668,7 @@ export function setVcrMembers(studyId: string, input: VcrMemberBody) {
  * person who is both the site and the clinical reviewer keeps the other one;
  * without `role` the route removes every role the account holds.
  */
-export function removeVcrMember(studyId: string, userId: string, role?: VcrMemberRole) {
+export function removeVcrMember(studyId: string, userId: string, role?: VcrStoredMemberRole) {
   return productRequest<unknown>(`${study(studyId)}/members/${id(userId)}${role ? `?role=${encodeURIComponent(role)}` : ""}`, "DELETE");
 }
 
@@ -3223,6 +3220,7 @@ export function saveVcrMethodConfiguration(studyId: string, input: { method: str
   return productRequest<VcrSavedMethodConfiguration>(`${study(studyId)}/method-configurations`, "POST", input);
 }
 export interface VcrMethodResult {
+  computationBasis?: VcrScientificComputationBasis | null;
   jobId: string;
   result: { id: string; kind: string; subjectId?: string | null; conclusion?: VcrConclusion; counts?: Partial<VcrCounts>; measures?: Array<{ name: string; label?: string; value: number | null; unit?: string; mcse?: number | null; interval?: VcrInterval | null; lower?: number | null; upper?: number | null; source?: VcrValueSource }>; diagnostics?: Record<string, unknown>; [key: string]: unknown } | null;
   execution?: { method: string; methodVersion?: string | null; seed?: number | null; scenarioHash?: string | null; sourceModel?: { id: string; version: string } | null };
@@ -3237,4 +3235,28 @@ export async function getVcrMethodResult(studyId: string, jobId: string): Promis
     if ([...Array.isArray(histogram.breaks) ? histogram.breaks : [], ...Array.isArray(histogram.counts) ? histogram.counts : []].some(value => finite(value) === null)) profile.histogram = null;
     return profile;
   }) } };
+}
+
+export interface VcrFollowupHistory {
+  available: true;
+  readOnly: true;
+  episodes: Array<{ id: string; subjectKey: string; kind: string; label: string; windowStart: string | null; windowEnd: string | null; state: "read_only"; exitDate: string | null; exitReason: string | null;
+    measurements: Array<{ field: string; label: string; value: string | number | boolean | null; unit: string | null; at: string | null }> }>;
+  page: { limit: number; offset: number; nextOffset: number | null };
+  notice: string;
+}
+/** Preserved observations are independently readable and never restart an operational workflow. */
+export function getVcrFollowupHistory(studyId: string, offset = 0, limit = 50) {
+  return productRequest<VcrFollowupHistory>(`${study(studyId)}/followup-history?${new URLSearchParams({ limit: String(limit), offset: String(offset) })}`);
+}
+/** Export only the current authorized page, with the same filters as its reader. */
+export async function downloadVcrFollowupHistory(studyId: string, offset: number, limit: number): Promise<void> {
+  const root = webApiBase.endsWith("/api") ? webApiBase : `${webApiBase}/api`;
+  const response = await fetchWithWebAuth(`${root}${study(studyId)}/followup-history?${new URLSearchParams({ format: "csv", limit: String(limit), offset: String(offset) })}`);
+  if (!response.ok) throw new WebApiError("Historical observations were unavailable.", { status: response.status });
+  const url = URL.createObjectURL(await response.blob());
+  try {
+    const link = document.createElement("a"); link.href = url; link.download = "historical-observations.csv";
+    document.body.appendChild(link); link.click(); link.remove();
+  } finally { URL.revokeObjectURL(url); }
 }

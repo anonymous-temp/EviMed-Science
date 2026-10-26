@@ -85,7 +85,7 @@ export const VCR_TABLES = Object.freeze([
   "knowledge_packs", "study_packs", "definitions", "definition_versions", "definition_uses",
   "models", "methods",
   "jobs", "conversation_completions", "executions", "results", "forecasts", "longitudinal_artifacts",
-  "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments", "matching_inputs", "document_projections", "cloud_reads", "subject_withdrawals", "derived_marks", "matching_candidates", "matching_producers",
+  "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments", "matching_inputs", "document_projections", "cloud_reads", "subject_withdrawals", "retired_recruitment_subjects", "retirement_erased_accounts", "derived_marks", "matching_candidates", "matching_producers",
   "candidate_trials", "candidate_trial_criteria", "candidate_trial_assessments", "candidate_trial_judgments",
   "followup_episodes",
   "dependencies", "stale_marks", "reviews", "decisions", "regulatory_contacts", "exports", "audit", "schedule_marks",
@@ -908,6 +908,12 @@ ALTER TABLE evimed_vcr.conversation_completions ADD COLUMN IF NOT EXISTS dispatc
 ALTER TABLE evimed_vcr.conversation_completions ALTER COLUMN study_id DROP NOT NULL;
 ALTER TABLE evimed_vcr.conversation_completions ALTER COLUMN job_id DROP NOT NULL;
 
+CREATE INDEX IF NOT EXISTS vcr_completion_pending_idx ON evimed_vcr.conversation_completions (run_after,user_id,created_at) WHERE state='pending';
+CREATE INDEX IF NOT EXISTS vcr_completion_retention_idx ON evimed_vcr.conversation_completions (updated_at) WHERE state<>'pending';
+CREATE INDEX IF NOT EXISTS vcr_completion_replay_idx ON evimed_vcr.conversation_completions ((payload->>'replayId'),(payload->>'resultId'));
+CREATE INDEX IF NOT EXISTS vcr_jobs_unrecorded_completion_idx ON evimed_vcr.jobs (finished_at,user_id) WHERE state IN ('succeeded','failed','canceled') AND checkpoint ? 'conversationOrigin' AND COALESCE(checkpoint->>'completionOutboxRecorded','false')<>'true';
+CREATE INDEX IF NOT EXISTS vcr_jobs_unapplied_hooks_idx ON evimed_vcr.jobs (finished_at,user_id) WHERE state IN ('succeeded','failed','canceled') AND COALESCE(checkpoint->>'completionHooksApplied','false')<>'true' AND COALESCE(checkpoint->>'completionHooksExhausted','false')<>'true';
+CREATE INDEX IF NOT EXISTS vcr_jobs_completion_idx ON evimed_vcr.jobs (finished_at,user_id) WHERE state IN ('succeeded','failed','canceled');
 CREATE INDEX IF NOT EXISTS vcr_jobs_study_idx ON evimed_vcr.jobs (study_id, created_at DESC);
 
 -- What a finished job actually ran: inputs, environment, seed, hashes.
@@ -931,6 +937,7 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.executions (
   finished_at    timestamptz,
   created_at     timestamptz NOT NULL DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS vcr_executions_job_idx ON evimed_vcr.executions (job_id);
 CREATE INDEX IF NOT EXISTS vcr_executions_study_idx ON evimed_vcr.executions (study_id, created_at DESC);
 
 -- A result is immutable and superseded, never updated (plan §3.4). The four
@@ -955,6 +962,7 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.results (
   superseded_by   text,
   created_at      timestamptz NOT NULL DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS vcr_results_execution_idx ON evimed_vcr.results (execution_id);
 CREATE INDEX IF NOT EXISTS vcr_results_study_idx ON evimed_vcr.results (study_id, kind, created_at DESC);
 
 -- A prediction registered before the outcome it predicts, with the timestamp

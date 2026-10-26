@@ -3,9 +3,9 @@ import { MemoryRouter, Route, Routes, Link } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { VcrMethodWorkbenchPage } from "./VcrMethodWorkbenchPage";
-const api = vi.hoisted(() => ({ getVcrJob: vi.fn(), getVcrMethodConfiguration: vi.fn(), getVcrMethodResult: vi.fn(), queueVcrJob: vi.fn(), createVcrStudy: vi.fn() }));
+const api = vi.hoisted(() => ({ getVcrStudy: vi.fn(), getVcrModels: vi.fn(), getVcrJob: vi.fn(), getVcrMethodConfiguration: vi.fn(), getVcrMethodResult: vi.fn(), queueVcrJob: vi.fn(), createVcrStudy: vi.fn() }));
 vi.mock("@/lib/vcrClient", async load => ({ ...await load<object>(), ...api }));
-beforeEach(() => { vi.clearAllMocks(); api.getVcrJob.mockImplementation(async (_s, id) => ({ id, kind: "evalue", state: "succeeded" })); api.getVcrMethodConfiguration.mockResolvedValue({ method: "comparator.evalue", scenario: { riskRatio: 4 }, seed: 9, inputRefs: [] }); api.getVcrMethodResult.mockResolvedValue({ result: null, records: { state: "unavailable" } }); });
+beforeEach(() => { vi.clearAllMocks(); api.getVcrStudy.mockResolvedValue({ purpose: "programme" }); api.getVcrModels.mockResolvedValue({ methods: [{ id: "comparator.evalue", name: "E-value 敏感性分析" }] }); api.getVcrJob.mockImplementation(async (_s, id) => ({ id, kind: "evalue", state: "succeeded" })); api.getVcrMethodConfiguration.mockResolvedValue({ method: "comparator.evalue", scenario: { riskRatio: 4 }, seed: 9, inputRefs: [] }); api.getVcrMethodResult.mockResolvedValue({ result: null, records: { state: "unavailable" } }); });
 afterEach(cleanup);
 function draw(path: string) { return render(<MemoryRouter initialEntries={[path]}><Link to="/app/capabilities/methods/evalue?study=b&job=job_b">Other history</Link><Routes><Route path="/app/capabilities/methods/:methodId" element={<VcrMethodWorkbenchPage />} /></Routes></MemoryRouter>); }
 it.each(["", "?study=a"])("retires the unaddressed calculator %s without creating work", async query => {
@@ -16,6 +16,11 @@ it("reads the exact historical job and its configuration without editable contro
   draw("/app/capabilities/methods/evalue?study=a&job=job_a");
   await waitFor(() => expect(api.getVcrMethodResult).toHaveBeenCalledWith("a", "job_a"));
   expect(api.getVcrMethodConfiguration).toHaveBeenCalledWith("a", "job_a");
+  expect(await screen.findByRole("heading", { name: "E-value 敏感性分析" })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "研究对话" })).toHaveAttribute("href", "/app/virtual-research/a/chat");
+  await userEvent.click(screen.getByText("本次运行配置"));
+  expect(screen.getByText("风险比值")).toBeInTheDocument();
+  expect(screen.queryByText("riskRatio")).toBeNull();
   expect(screen.queryByRole("button", { name: /运行|保存|复用/ })).toBeNull(); expect(screen.queryByRole("spinbutton")).toBeNull();
 });
 it("keeps an actual historical result while independently retrying its unavailable configuration", async () => {

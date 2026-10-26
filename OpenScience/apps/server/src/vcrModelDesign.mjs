@@ -1,6 +1,7 @@
 /** Deterministic adapters from saved scientific results to control-design parameters. */
 import { lineageNode } from '@evimed/domain';
 import { HttpError } from './security.mjs';
+import { vcrExecutionReceiptVerified } from './vcrEngineClient.mjs';
 /** @param {any} value @returns {Record<string,any>} */
 const object = value => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 /** @param {string} message @returns {never} */
@@ -70,7 +71,7 @@ export async function prepareVcrModelDesign({ store, study, subject, scenario, i
  */
 export async function readVcrModelDesignResult(store, studyId, resultId) {
   const result = await store.result(studyId, resultId);
-  const execution = result?.executionId ? await store.one('SELECT method,receipt FROM evimed_vcr.executions WHERE id=$1 AND study_id=$2', [result.executionId, studyId]) : null;
-  if (!['model.survival_fit', 'model.prognostic_apply'].includes(execution?.method) || object(execution?.receipt).signed !== true) fail('Select a verified saved scientific model result from this study.');
+  const execution = result?.executionId ? await store.one('SELECT method,receipt,output_hash FROM evimed_vcr.executions WHERE id=$1 AND study_id=$2', [result.executionId, studyId]) : null;
+  if (!['model.survival_fit', 'model.prognostic_apply'].includes(execution?.method) || !vcrExecutionReceiptVerified(execution)) fail('Select a verified saved scientific model result from this study.');
   return result;
 }

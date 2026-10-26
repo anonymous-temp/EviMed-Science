@@ -29,6 +29,7 @@
  * @module vcrRecords
  */
 
+import { vcrExecutionReceiptVerified } from "./vcrEngineClient.mjs";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import fs from "node:fs/promises";
@@ -164,8 +165,8 @@ export function createVcrRecords({ store, config = {} }) {
     if (seen.has(resultId) || seen.size >= 16) return false;
     const branch = new Set(seen); branch.add(resultId);
     const result = await store.result(study.id, resultId);
-    const execution = result?.executionId ? await store.one(`SELECT method,inputs,receipt FROM ${VCR_SCHEMA}.executions WHERE id=$1 AND study_id=$2`, [result.executionId, study.id]) : null;
-    if (!execution || object(execution.receipt).signed !== true || !["population.scenario", "population.literature", "patients.continuous", "patients.binary", "patients.time_to_event", "patients.longitudinal", "model.prognostic_apply"].includes(execution.method)) return false;
+    const execution = result?.executionId ? await store.one(`SELECT method,inputs,receipt,output_hash FROM ${VCR_SCHEMA}.executions WHERE id=$1 AND study_id=$2`, [result.executionId, study.id]) : null;
+    if (!execution || !vcrExecutionReceiptVerified(execution) || !["population.scenario", "population.literature", "patients.continuous", "patients.binary", "patients.time_to_event", "patients.longitudinal", "model.prognostic_apply"].includes(execution.method)) return false;
     if (execution.method === "model.prognostic_apply" && !list(execution.inputs).some(input => ["snapshot_file", "analysis_table"].includes(input.kind))) return false;
     for (const input of list(execution.inputs).map(object)) {
       if (input.kind === "snapshot") return false;

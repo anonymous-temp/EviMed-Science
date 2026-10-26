@@ -2,7 +2,7 @@ import { type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { CircleDashed, History, MessageSquare, TriangleAlert, UsersRound } from "lucide-react";
 import { VCR_STEP_NEEDS } from "@evimed/domain";
-import { cancelVcrStudy, runVcrStep, type VcrActivity, type VcrPartial, type VcrStaleNote, type VcrStepKey, type VcrStudy } from "@/lib/vcrClient";
+import { cancelVcrStudy, type VcrActivity, type VcrPartial, type VcrStaleNote, type VcrStepKey, type VcrStudy } from "@/lib/vcrClient";
 import { vcrChatPath } from "@/lib/studyLocation";
 import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -13,7 +13,7 @@ import { StepState, type StepInput } from "@/components/ui/StepState";
 import { stepAllowanceWait } from "@/lib/allowanceWait";
 import { AllowanceTopUp } from "@/components/runs/AllowanceTopUp";
 import { useStudyFrame } from "./studyFrameContext";
-import { useVcrRun } from "./useVcrRun";
+import { resumeVcrStep } from "./vcrConversationActions";
 import { leadJob, runDetailLine, stepAction, stepName } from "./vcrActivity";
 import { staleSentence, stepLabel, VCR_NO_DEFINITION, VCR_STEP_GIVES, VCR_STEP_NOUNS } from "./vcrText";
 import { VCR_STEP_TABS, vcrTabPath } from "./vcrTabs";
@@ -128,10 +128,9 @@ function activityOfStep(activity: VcrActivity | null | undefined, step: VcrStepK
  * not run; **where it waits** when it is in line; **what is being done, for how long, and 停止** while it runs; and the way to the
  * allowance when that is what it waits for. A step that failed with nothing to show is `VcrStepFailed`'s.
  *
- * The button starts the step and **takes nobody anywhere**: the page's strip says what happens next, and this tab is the step's
- * state, so it is a recipe, then a run, then — when the page has read the study again — the result.
+ * The action drafts a request in the existing conversation. Nothing runs until the researcher sends it.
  */
-export function VcrStepPending({ studyId, study, step, hint, start, blocked }: {
+export function VcrStepPending({ studyId, study, step, hint, blocked }: {
   studyId: string;
   study: VcrStudy;
   step: VcrStepKey;
@@ -139,11 +138,8 @@ export function VcrStepPending({ studyId, study, step, hint, start, blocked }: {
   hint?: string;
   /** Why the step cannot start on this deployment (the evidence library is not connected): said in the button's place, which is not drawn. */
   blocked?: string | null;
-  /** Where the step can be started directly (an evaluation of protocol versions that already exist), this is the one button instead. */
-  start?: VcrStepStart;
 }) {
   const frame = useStudyFrame();
-  const busy = false;
   const state = study.steps[step];
   const mayRun = study.abilities.includes("run");
   const activity = study.activity ?? frame?.activity ?? null;
@@ -209,31 +205,20 @@ export function VcrStepPending({ studyId, study, step, hint, start, blocked }: {
   }
   const cards = study.stepSummaries.evidence?.note;
   if (cards && step !== "evidence" && step !== "definition") uses.push({ label: cards, to: vcrTabPath(studyId, "data") });
-  const startHere = blocked ? undefined : start ? start.onStart : mayRun && frame ? () => frame.openChat(`请根据当前研究（${studyId}）已有资料完成${stepName(step)}，先说明还缺哪些输入，再调用适用工具。`) : undefined;
+  const startHere = blocked ? undefined : mayRun && frame ? () => frame.openChat(`请根据已有资料完成${stepName(step)}，先说明还缺哪些输入，再调用适用工具。`, { kind: "step", studyId, objectId: step }) : undefined;
   return (
     <div data-vcr-step-empty={step} className="flex flex-col items-center gap-4">
       <StepState
         phase="empty"
-        step={start?.label ?? action}
+        step={action}
         noun={VCR_STEP_NOUNS[step]}
         uses={uses}
         gives={hint ?? VCR_STEP_GIVES[step]}
         onStart={startHere}
-        starting={start ? start.busy : busy}
         reason={startHere ? undefined : blocked || "需要有运行权限的成员来开始这一步。"}
       />
-      {start?.note}
     </div>
   );
-}
-
-/** A step started directly rather than by the programme: the button's name, whether it is working, and what it said last. */
-export interface VcrStepStart {
-  label: string;
-  busy: boolean;
-  onStart: () => void;
-  /** What came of the last press, under the button. */
-  note?: ReactNode;
 }
 
 /**
@@ -268,7 +253,7 @@ export function VcrStepFailed({ studyId, study, step, partial }: {
   step: VcrStepKey;
   partial?: VcrPartial | null;
 }) {
-  const { run, busy } = useVcrRun(study);
+  const frame = useStudyFrame();
   const note = study.steps[step]?.note;
   const Heading = `h${useBlockHeadingLevel()}` as "h2" | "h3" | "h4";
   return (
@@ -282,8 +267,8 @@ export function VcrStepFailed({ studyId, study, step, partial }: {
       {partial && <PartialResultNote sentence={partial.sentence} className="mt-3" />}
       {study.abilities.includes("run") && (
         <div className="mt-3">
-          <Button variant="secondary" loading={busy} onClick={() => run(() => runVcrStep(studyId, step), "这一步无法继续，请稍后重试。")}>
-            接着做
+          <Button variant="secondary" onClick={() => resumeVcrStep(frame, studyId, step)}>
+            在对话中继续
           </Button>
         </div>
       )}
@@ -403,12 +388,12 @@ export function PartialResultNote({ sentence, resume, className }: {
 
 /** 「续算」: the step asked for again — the failed marks are cleared and the computation goes on from its checkpoint; the page stays and the strip says so. */
 function ResumeStep({ studyId, study, step }: { studyId: string; study: VcrStudy; step: VcrStepKey }) {
-  const { run, busy } = useVcrRun(study);
+  const frame = useStudyFrame();
   const status = study.steps[step]?.status;
   // A step already running or queued is going on by itself, and a reader who may not run steps is not offered a button that is refused.
   if (!study.abilities.includes("run") || status === "running" || status === "queued") return null;
   return (
-    <Button size="sm" variant="text" loading={busy} onClick={() => run(() => runVcrStep(studyId, step), "这一步无法继续，请稍后重试。")}>续算</Button>
+    <Button size="sm" variant="text" onClick={() => resumeVcrStep(frame, studyId, step)}>在对话中继续</Button>
   );
 }
 

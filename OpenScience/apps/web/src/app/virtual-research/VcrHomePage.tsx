@@ -1,3 +1,4 @@
+import { VcrLegacyDraftRecovery } from "@/components/vcr/VcrLegacyDraftRecovery";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
 import { Plus, UsersRound, ScanSearch, GitCompareArrows, FlaskConical } from "lucide-react";
@@ -9,8 +10,9 @@ import {
   type VcrHome,
   type VcrStudySummary,
 } from "@/lib/vcrClient";
-import { useAskAbout } from "@/components/memory/useAskAbout";
+import { useGeneralResearchDraft } from "@/components/vcr/useGeneralResearchDraft";
 import { VCR_TASKS } from "@/components/vcr/frameVcrOptions";
+import { vcrChatPath } from "@/lib/studyLocation";
 import { vcrCalculationPath } from "@/lib/vcrMethodLocation";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
@@ -18,22 +20,24 @@ import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
 import { List } from "@/components/ui/ListRow";
 import { Note } from "@/components/ui/Note";
-import { Tag } from "@/components/ui/Tag";
+import { VcrTaskRequirements } from "@/components/vcr/VcrTaskRequirements";
 import { Disclosure } from "@/components/ui/Disclosure";
 import type { ToolbarFilter, ToolbarProps } from "@/components/ui/Toolbar";
 import { VcrListSkeleton, VcrOffPage } from "@/components/vcr/VcrStates";
 import { ToolbarSlotContext } from "@/components/vcr/studyFrameContext";
 import { VcrDefinitionsPanel } from "@/components/vcr/VcrKnowledge";
+import { VcrModelsPanel } from "@/components/vcr/VcrModelsPanel";
 import { VcrPrecedentsPanel } from "@/components/vcr/VcrPrecedentsPanel";
 import { tierLabel } from "@/components/vcr/vcrText";
 import { vcrTabPath } from "@/components/vcr/vcrTabs";
 
-type HomeTab = "studies" | "precedents" | "definitions";
+type HomeTab = "studies" | "precedents" | "definitions" | "models";
 
 const TABS: ReadonlyArray<{ value: HomeTab; label: string }> = Object.freeze([
   { value: "studies", label: "研究" },
   { value: "precedents", label: "参考试验" },
   { value: "definitions", label: "人群定义" },
+  { value: "models", label: "模型与参数" },
 ]);
 
 type Listing =
@@ -68,7 +72,7 @@ export function studyStateOf(study: Pick<VcrStudySummary, "steps" | "attention">
  */
 export function VcrHomePage() {
   const feature = useVcrFeature();
-  const ask = useAskAbout();
+  const ask = useGeneralResearchDraft();
   const [params] = useSearchParams();
   const tab = (TABS.find((item) => item.value === params.get("tab"))?.value ?? "studies") as HomeTab;
   const [listing, setListing] = useState<Listing>({ kind: "loading" });
@@ -147,6 +151,21 @@ export function VcrHomePage() {
   return (
     <HomeFrame
       actions={tab === "studies" ? newStudy : undefined}
+      introduction={tab === "studies" ? <section aria-label="开始研究任务" className="mb-8">
+        <List label="研究任务" divided>
+          {VCR_TASKS.map((task, index) => {
+            const Icon = [ScanSearch, UsersRound, GitCompareArrows, FlaskConical][index];
+            return <li key={task.id} className="grid grid-cols-[auto_1fr] items-start gap-x-3 gap-y-2 px-2 py-4 md:grid-cols-[auto_10rem_1fr]">
+              <Icon size={20} aria-hidden="true" className="mt-2 text-text-3" />
+              <Button variant="text" aria-label={task.label} aria-describedby={`vcr-input-${task.id}`} onClick={() => ask(task.draft)} className="h-auto justify-start px-0 py-1 text-body font-semibold">{task.label}</Button>
+              <span className="col-start-2 flex min-w-0 flex-col gap-2 md:col-start-3">
+                <span className="text-ui text-text">{task.summary}</span>
+                <VcrTaskRequirements task={task} inputs={ready?.taskInputs} onInspect={() => ask(`请先检查这项${task.label}任务已有资料的授权、最低字段与缺失信息，并帮助我添加资料。`)} />
+              </span>
+            </li>;
+          })}
+        </List>
+      </section> : undefined}
       toolbar={{
         ...(tab !== "studies" ? { label: TABS.find(item => item.value === tab)?.label ?? "研究" } : {}),
         ...(onStudies ? {
@@ -157,23 +176,9 @@ export function VcrHomePage() {
         } : {}),
       }}
     >
-      {tab === "studies" && !needle && state === "all" && <section aria-label="开始研究任务" className="mb-8">
-        <List label="研究任务" divided>
-          {VCR_TASKS.map((task, index) => {
-            const Icon = [ScanSearch, UsersRound, GitCompareArrows, FlaskConical][index];
-            return <li key={task.id} className="grid grid-cols-[auto_1fr] items-start gap-x-3 gap-y-2 px-2 py-4 md:grid-cols-[auto_10rem_1fr]">
-              <Icon size={20} aria-hidden="true" className="mt-2 text-text-3" />
-              <Button variant="text" aria-label={task.label} aria-describedby={`vcr-input-${task.id}`} onClick={() => ask(task.draft)} className="h-auto justify-start px-0 py-1 text-body font-semibold">{task.label}</Button>
-              <span className="col-start-2 flex min-w-0 flex-col gap-2 md:col-start-3">
-                <span className="text-ui text-text">{task.summary}</span>
-                <span id={`vcr-input-${task.id}`} data-vcr-data-requirement={task.id} className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-caption text-text-2"><Tag>{task.inputLabel}</Tag><span className="max-w-measure">{task.requirement}</span></span>
-              </span>
-            </li>;
-          })}
-        </List>
-      </section>}
       {tab === "precedents" ? <VcrPrecedentsPanel />
           : tab === "definitions" ? <VcrDefinitionsPanel />
+          : tab === "models" ? <VcrModelsPanel />
             : feature === "loading" || listing.kind === "loading" ? <VcrListSkeleton />
               : listing.kind === "error" ? <LoadError message={listing.message} onRetry={() => setReloads((value) => value + 1)} />
                 : studies.length === 0
@@ -195,6 +200,7 @@ export function VcrHomePage() {
                         {shown.map((study) => <StudyRow key={study.id} study={study} />)}
                       </List>
                     )}
+      {tab === "studies" && feature === "on" && <VcrLegacyDraftRecovery />}
       {tab === "studies" && history.length > 0 && <div className="mt-6"><Disclosure summary={`历史独立计算 · ${history.length}`}><List label="历史独立计算" divided>{history.map(study => <StudyRow key={study.id} study={study} />)}</List></Disclosure></div>}
     </HomeFrame>
   );
@@ -206,11 +212,15 @@ export function VcrHomePage() {
  * drawing a second one under it. A component of its own, so that a panel handing the toolbar over re-renders the toolbar and never the
  * panel — the study page's frame does the same.
  */
-function HomeFrame({ actions, toolbar, children }: { actions: ReactNode; toolbar: ToolbarProps; children: ReactNode }) {
+function HomeFrame({ actions, introduction, toolbar, children }: { actions: ReactNode; introduction?: ReactNode; toolbar: ToolbarProps; children: ReactNode }) {
   const [panel, setPanel] = useState<ToolbarProps | null | undefined>(undefined);
+  const [params, setParams] = useSearchParams();
+  const selected = TABS.find(item => item.value === params.get("tab"))?.value ?? "studies";
+  const merged = panel ? { ...toolbar, ...panel } : toolbar;
+  const controls: ToolbarProps = { ...merged, filters: [{ kind: "select", label: "查看", value: selected, pinned: true, options: TABS.map(item => ({ value: item.value, label: item.label })), onChange: next => setParams(previous => { const updated = new URLSearchParams(previous); if (next === "studies") updated.delete("tab"); else if (next) updated.set("tab", next); return updated; }) }, ...(merged.filters ?? [])] };
   return (
     <ToolbarSlotContext.Provider value={setPanel}>
-      <PageShell title="虚拟临床研究" width="wide" actions={actions} back={toolbar.label ? <Link to="/app/virtual-research" className="rounded text-ui text-link">回到研究列表</Link> : undefined} toolbar={panel ? { ...toolbar, ...panel } : toolbar}>
+      <PageShell title="虚拟临床研究" width="wide" actions={actions} introduction={introduction} back={toolbar.label ? <Link to="/app/virtual-research" className="rounded text-ui text-link">回到研究列表</Link> : undefined} toolbar={controls}>
         {children}
       </PageShell>
     </ToolbarSlotContext.Provider>
@@ -241,6 +251,7 @@ function StudyRow({ study }: { study: VcrStudySummary }) {
         {study.question && <p className="mt-1 text-caption text-text-2">{study.question}</p>}
         {study.conclusion?.text && <p data-vcr-latest="" className="mt-2.5 text-ui text-text">{study.conclusion.text}</p>}
       </div>
+      {study.originatingSessionId && <div className="relative z-sticky"><Link to={vcrChatPath(study.id)} className="rounded text-ui text-link hover:underline">{study.draftText ? "继续未发送的研究问题" : "原研究对话"}</Link></div>}
       {line && (
         // Above the stretched title, so its link stays a link.
         <div data-vcr-need="" className="relative z-sticky">

@@ -1,7 +1,7 @@
 # Capability contract; conversation-native VCR reset, 2026-10-26.
 # Module workflows are explicit specialists; ordinary conversation can load their skills and call shared tools.
 id: vcr-analysis
-version: 1.4.0
+version: 1.5.0
 title: Virtual Clinical Research Analysis
 category: Study Design
 description: |
@@ -101,7 +101,7 @@ starterPrompts:
 display:
   title: "人群、对照与试验仿真"
   category: "虚拟临床研究"
-  description: "按数据档位构建人群与对照，配置试验方案并交给引擎仿真，每个数都带蒙特卡洛误差。"
+  description: 按当前问题建立队列或虚拟患者，评估对照与试验设计，保留模型范围和不确定性。
   listed: false
   starterPrompts:
   - "PFS 预计 HR 0.70、对照中位 6 个月、两年入组，要多少例？"

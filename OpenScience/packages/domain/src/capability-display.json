@@ -566,7 +566,7 @@
     "vcr-analysis": {
       "title": "人群、对照与试验仿真",
       "category": "虚拟临床研究",
-      "description": "按数据档位构建人群与对照，配置试验方案并交给引擎仿真，每个数都带蒙特卡洛误差。",
+      "description": "按当前问题建立队列或虚拟患者，评估对照与试验设计，保留模型范围和不确定性。",
       "listed": false,
       "starterPrompts": [
         "PFS 预计 HR 0.70、对照中位 6 个月、两年入组，要多少例？",
@@ -595,7 +595,7 @@
     "vcr-evidence": {
       "title": "证据参数化",
       "category": "虚拟临床研究",
-      "description": "按 PICO 找同类试验，逐项抽数并核对原文，交引擎合并，写成带预测区间的假设卡。",
+      "description": "检索并保存登记与文献证据，核对原文数值、单位和独立试验身份。",
       "listed": false,
       "starterPrompts": [
         "把这项研究要用的参数从证据里做出来：先例、抽取、合并、假设卡。",
@@ -627,7 +627,7 @@
     "vcr-matching": {
       "title": "患者匹配",
       "category": "虚拟临床研究",
-      "description": "双向核对患者资料与试验条件，保留逐条证据、未知项和复评需要。",
+      "description": "把病例或患者队列与试验条件逐条核对，保留原文依据、未知项与排除原因。",
       "listed": false,
       "starterPrompts": [
         "把这份方案的入排条件结构化，然后对知识库里的 20 份病历跑一遍预筛。",
@@ -657,7 +657,7 @@
     "vcr-package": {
       "title": "研究包与沟通资料",
       "category": "虚拟临床研究",
-      "description": "把研究的定义、假设、结果与执行记录写成可检查、可复现的研究包，数字由结果渲染。",
+      "description": "将已保存的证据和计算整理为所需研究文件，保留版本、来源与尚未解决的缺口。",
       "listed": false,
       "starterPrompts": [
         "把这项研究整理成一份可以交出去的研究包。",
@@ -687,7 +687,7 @@
     "vcr-protocol": {
       "title": "研究分析师",
       "category": "虚拟临床研究",
-      "description": "在对话里完成研究定义、合成人群、样本量和方案模拟。",
+      "description": "从当前研究问题出发，用对话组织所需资料、证据与设计，不要求先填写完整研究表。",
       "listed": false,
       "starterPrompts": [
         "帮我估算这个研究需要多少例：HR 0.7，单侧 α 0.025，功效 90%。",

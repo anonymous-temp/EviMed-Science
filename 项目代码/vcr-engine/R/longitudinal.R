@@ -223,7 +223,9 @@ vcr_job_generate_patients_longitudinal <- function(job, output_dir = NULL, ...) 
   if (!is.null(pop)) {
     if (n1 + n0 != n) vcr_abort("scenario_value_invalid", "scenario.design", "For a stored population the arm sizes add up to the number of members.")
     # the generated table has columns of its own; a population variable of the same name would be read as one of them
-    if (any(names(pop) %in% c("patientId", "arm", "visit", "time", "y", "source", "modelTier"))) {
+    reserved <- c("patientId", "arm", "visit", "time", "y", "source", "modelTier")
+    if (!identical(job[["methodVersion"]], "1.0.0")) reserved <- c(reserved, "y0", "y1")
+    if (any(names(pop) %in% reserved)) {
       vcr_abort("scenario_value_invalid", "inputs", "A population column is named like a column of the generated table (patientId, arm, visit, time, y, source, modelTier); rename it in the population.")
     }
     z <- as.integer(rank(stats::runif(n), ties.method = "first") <= n1)
@@ -248,7 +250,12 @@ vcr_job_generate_patients_longitudinal <- function(job, output_dir = NULL, ...) 
   vis <- rep(seq_len(J), each = n)
   mask <- as.vector(sim$observed)
   long <- data.frame(patientId = ids[who], arm = sim$arm[who], visit = vis, time = visits[vis], y = as.vector(sim$y), stringsAsFactors = FALSE)
-  if (!is.null(pop)) long <- cbind(long[, 1:2, drop = FALSE], pop[who, , drop = FALSE], long[, 3:5, drop = FALSE])
+  if (!identical(job[["methodVersion"]], "1.0.0")) {
+    # Materialize the two already drawn outcomes only at retained visits; no new randomness.
+    long$y0 <- as.vector(ifelse(matrix(sim$arm == 0L, nrow = n, ncol = J), sim$y, sim$y_other))
+    long$y1 <- as.vector(ifelse(matrix(sim$arm == 1L, nrow = n, ncol = J), sim$y, sim$y_other))
+  }
+  if (!is.null(pop)) long <- cbind(long[, 1:2, drop = FALSE], pop[who, , drop = FALSE], long[, setdiff(names(long), c("patientId", "arm")), drop = FALSE])
   long <- long[mask, , drop = FALSE]
   long <- long[order(match(long$patientId, ids), long$visit), , drop = FALSE]
   rownames(long) <- NULL

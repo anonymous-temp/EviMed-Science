@@ -63,7 +63,7 @@ async function equationFixture(extra = "") {
   const card = { literatureSource: read, executionProfile: "model.prognostic_apply",
     equation: { sourceCondition: "standard_care", endpoint: { type: "binary", horizon: 999, timeUnit: "months" },
       model: { family: "logistic", intercept: 999, terms: [{ column: "age", coefficient: 999, transform: "identity", unit: "years", center: 0, scale: 1 }] } },
-    parameterBindings: [{ field: "model.intercept", candidateId: candidate(-3) }, { field: "model.terms.0.coefficient", candidateId: candidate(0.02) }, { field: "endpoint.horizon", candidateId: candidate(12) }],
+    parameterBindings: [{ field: "model.intercept", candidateId: candidate(-3) }, { field: "model.terms.0.coefficient", coefficientScale: "linear_predictor", candidateId: candidate(0.02) }, { field: "endpoint.horizon", candidateId: candidate(12) }],
     semanticBindings: ["endpoint", "population", "sourceCondition", "model.terms.0"].map(field => ({ field, quote: text, start: 0, end: text.length })) };
   return { ...f, read, card, text };
 }
@@ -132,4 +132,50 @@ test('source time-unit literals remain stable when an adopted equation is prepar
   const f=await equationFixture();f.card.equation.model.terms[0].unit='year';
   const adopted=await f.port.prepare(f.user,f.study,f.card);assert.equal(adopted.registrationState,'source_bound_equation');assert.equal(adopted.equation.model.terms[0].unit,'year');
   const again=await f.port.prepare(f.user,f.study,adopted);assert.equal(again.registrationState,'source_bound_equation');assert.equal(again.executionSpec.scenarioHash,adopted.executionSpec.scenarioHash);
+});
+
+test('centered Cox requires every numeric reference including zero and accepts a source-bound standardized zero',async()=>{
+  const f=await equationFixture(' Cox baseline survival 0.8 at 12 months, centered at mean age 50 years; standardized age reference 0.');
+  const by=value=>f.read.parameters.find(row=>row.value===value).id;
+  f.card.equation.endpoint.type='time_to_event';const model=f.card.equation.model;model.family='cox';delete model.intercept;model.baseline={reference:'centered',survival:.8,horizon:12,timeUnit:'months'};
+  f.card.parameterBindings=f.card.parameterBindings.filter(row=>row.field!=='model.intercept');
+  f.card.parameterBindings.push({field:'model.baseline.survival',candidateId:by(.8)},{field:'model.baseline.horizon',candidateId:by(12)});
+  f.card.semanticBindings.push({field:'model.baseline.reference',quote:f.text,start:0,end:f.text.length});
+  assert.equal((await f.port.prepare(f.user,f.study,f.card)).executionSpec,null);
+  f.card.parameterBindings.push({field:'model.terms.0.center',candidateId:by(50)});
+  const centered=await f.port.prepare(f.user,f.study,f.card);assert.equal(centered.equation.model.terms[0].center,50);assert.ok(centered.executionSpec);
+  f.card.parameterBindings.at(-1).candidateId=by(0);assert.ok((await f.port.prepare(f.user,f.study,f.card)).executionSpec);
+});
+test('ratio coefficients convert once and transformed centers use explicit source scales',async()=>{
+  const f=await equationFixture(' Odds ratio 2; centered log age reference 50 years.');
+  const by=value=>f.read.parameters.find(row=>row.value===value).id;
+  f.card.parameterBindings.find(row=>row.field.endsWith('coefficient')).candidateId=by(2);
+  f.card.parameterBindings.find(row=>row.field.endsWith('coefficient')).coefficientScale='ratio';
+  Object.assign(f.card.equation.model.terms[0],{transform:'log',center:50});
+  f.card.parameterBindings.push({field:'model.terms.0.center',candidateId:by(50),centerScale:'source_raw'});
+  const adopted=await f.port.prepare(f.user,f.study,f.card);assert.ok(adopted.executionSpec);
+  assert.equal(adopted.equation.model.terms[0].coefficient,Math.log(2));assert.equal(adopted.equation.model.terms[0].center,Math.log(50));
+  assert.equal(adopted.parameterBindings.find(row=>row.field.endsWith('coefficient')).conversion,'log_of_ratio');
+  const again=await f.port.prepare(f.user,f.study,adopted);assert.equal(again.executionSpec.scenarioHash,adopted.executionSpec.scenarioHash);
+  const invalid=structuredClone(f.card);invalid.equation.model.family='linear';assert.equal((await f.port.prepare(f.user,f.study,invalid)).executionSpec,null);
+  invalid.equation.model.family='logistic';invalid.parameterBindings.find(row=>row.field.endsWith('coefficient')).coefficientScale='invented';await assert.rejects(f.port.prepare(f.user,f.study,invalid),{code:'vcr_model_invalid'});
+});
+
+test('source coefficients without an explicit scale stay incomplete even when a ratio is quoted',async()=>{
+ const f=await equationFixture(' Odds ratio 2.');
+ delete f.card.parameterBindings.find(row=>row.field.endsWith('coefficient')).coefficientScale;
+ const card=await f.port.prepare(f.user,f.study,f.card);assert.equal(card.executionSpec,null);assert.ok(card.specificationMissing.some(line=>line.includes('coefficient scale')));
+});
+
+test('positive Cox HR is logged once; nonpositive ratios and untyped transformed centers stay incomplete',async()=>{
+ const f=await equationFixture(' Cox hazard ratio 1.05; baseline survival 0.8 at 12 months; reference age 50 years; invalid ratio 0.');
+ const by=value=>f.read.parameters.find(row=>row.value===value).id;
+ const model=f.card.equation.model;model.family='cox';delete model.intercept;model.baseline={reference:'centered',survival:.8,horizon:12,timeUnit:'months'};f.card.equation.endpoint.type='time_to_event';
+ f.card.parameterBindings=f.card.parameterBindings.filter(row=>row.field!=='model.intercept');
+ const coefficient=f.card.parameterBindings.find(row=>row.field.endsWith('coefficient'));coefficient.candidateId=by(1.05);coefficient.coefficientScale='ratio';
+ f.card.parameterBindings.push({field:'model.terms.0.center',candidateId:by(50)},{field:'model.baseline.survival',candidateId:by(.8)},{field:'model.baseline.horizon',candidateId:by(12)});
+ f.card.semanticBindings.push({field:'model.baseline.reference',quote:f.text,start:0,end:f.text.length});
+ const card=await f.port.prepare(f.user,f.study,f.card);assert.ok(card.executionSpec);assert.equal(card.equation.model.terms[0].coefficient,Math.log(1.05));
+ coefficient.candidateId=by(0);assert.equal((await f.port.prepare(f.user,f.study,f.card)).executionSpec,null);
+ coefficient.candidateId=by(1.05);model.terms[0].transform='log';assert.equal((await f.port.prepare(f.user,f.study,f.card)).executionSpec,null);
 });

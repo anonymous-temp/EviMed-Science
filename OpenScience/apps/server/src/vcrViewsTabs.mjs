@@ -1,3 +1,4 @@
+import { vcrPredictionLimit } from "@evimed/domain";
 import { vcrPopulationGenerationInput } from "./vcrSubjects.mjs";
 import { presentVcrReview } from "./vcrViewsKit.mjs";
 /**
@@ -36,7 +37,7 @@ import {
   VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_POPULATION_KIND_LABELS_ZH, VCR_ROUTE_MIN_TIER,
   VCR_SMD_FLOOR, VCR_ASSUMPTION_SOURCE_KIND_LABELS_ZH, VCR_TWIN_LABELS_ZH, VCR_VALUE_SOURCES, VCR_ESTIMAND_LABELS_ZH,
   VCR_ENDPOINT_TYPE_LABELS_ZH, VCR_PERFORMANCE_MEASURE_LABELS_ZH, VCR_REVIEW_KIND_LABELS_ZH, parseLineageNode,
-  VCR_ANALYSIS_TABLE_LABELS_ZH, VCR_MEMBER_ROLE_LABELS_ZH, VCR_MISSING_REASONS, VCR_MISSING_REASON_LABELS_ZH,
+  VCR_ANALYSIS_TABLE_LABELS_ZH, VCR_MEMBER_ROLE_LABELS_ZH, VCR_RETIRED_MEMBER_ROLE_LABELS_ZH, VCR_MISSING_REASONS, VCR_MISSING_REASON_LABELS_ZH,
   VCR_QUALITY_CATEGORY_LABELS_ZH, VCR_TIME_KINDS, VCR_TIME_KIND_LABELS_ZH, VCR_VALUE_SOURCE_LABELS_ZH,
   VCR_PROGNOSTIC_QUALIFICATION, VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH, VCR_ROBUSTNESS_STAGES, VCR_ROBUSTNESS_STAGE_LABELS_ZH,
   VCR_MODEL_RISK_RULE_LABELS_ZH, VCR_RATING_LABELS_ZH, knownErrorCodeMessage, vcrAssessmentIssues, vcrAssessmentRows,
@@ -256,7 +257,7 @@ export function presentPopulationTab(bundle) {
     version: `人群 v${current.version}${protocol ? `（方案 v${protocol.version}）` : ""}`,
     kind: (/** @type {Record<string, string>} */ (VCR_POPULATION_KIND_LABELS_ZH))[current.kind] ?? current.kind,
     versions: populations.map((/** @type {any} */ population) => ({
-      id: population.id,
+      id: population.id, version: population.version, ...(population.resultId ? { resultId: population.resultId, resultVersion: resultById(bundle, population.resultId)?.version } : {}),
       generationInput: vcrPopulationGenerationInput(population, resultById(bundle, population.resultId), executionOf(bundle, resultById(bundle, population.resultId))),
       label: `人群 v${population.version}`,
       stale: Boolean(markFor(stale, vcrObjectNode("population", population))),
@@ -358,6 +359,7 @@ export function presentPopulationTab(bundle) {
   const total = numeric(first?.remaining) ?? numeric(current?.counts?.realPatients);
   return {
     version: view.version,
+    selection: current ? { objectId: current.id, version: current.version, ...(result ? { resultId: result.id, resultVersion: result.version } : {}) } : null,
     kind: view.kind,
     // What the study called this population: 「按方案条件查覆盖」 for the one made from the protocol's own criteria.
     name: current ? text(current.name) : null,
@@ -501,6 +503,7 @@ export function presentPatientsTab(bundle) {
   const described = table ? generatedProfileRows(table.profile) : null;
   return {
     model,
+    selection: current ? { objectId: current.id, version: current.version, ...(result ? { resultId: result.id, resultVersion: result.version } : {}) } : null,
     records: table ? { result: table.result, rows: table.rows, arms: list(table.calibration?.arms) } : null,
     profile: described ?? [],
     profileKind: described ? "generated" : null,
@@ -545,7 +548,7 @@ export function presentPatientsTab(bundle) {
     counts: current ? countsView(result?.counts && Object.keys(result.counts).length ? result.counts : current.counts, { tier: study.dataTier, scope: current.name || null }) : null,
     stale: staleNote(marks),
     partial: partialOf(bundle, ["patient_set"], "这次生成"),
-    sets: patientSets.map((/** @type {any} */ set) => ({ id: set.id, label: `虚拟患者集 v${set.version}`, stale: Boolean(markFor(stale, vcrObjectNode("patient_set", set))) })),
+    sets: patientSets.map((/** @type {any} */ set) => ({ id: set.id, version: set.version, ...(set.resultId ? { resultId: set.resultId, resultVersion: resultById(bundle, set.resultId)?.version } : {}), label: `虚拟患者集 v${set.version}`, stale: Boolean(markFor(stale, vcrObjectNode("patient_set", set))) })),
   };
 }
 
@@ -705,6 +708,7 @@ export function presentComparatorTab(bundle) {
   // another method's effect estimate must not relabel that comparison.
   const sensitivityOnly = execution?.method === "comparator.evalue";
   return {
+    versions: comparators.map(row => ({ objectId: row.id, version: row.version, label: row.name || `对照版本 ${row.version}`, ...(row.resultId ? { resultId: row.resultId, resultVersion: resultById(bundle, row.resultId)?.version } : {}) })),
     selection: shown ? { id: shown.id, version: shown.version, resultId: result?.id ?? null, resultVersion: result?.version ?? null, route: shown.route } : null,
     predictionBenchmark: shown?.route === "model_comparator" && execution?.method === "model.prognostic_apply" ? {
       sourceCondition: diagnostics.sourceCondition ?? null, endpoint: diagnostics.endpoint ?? null,
@@ -712,7 +716,7 @@ export function presentComparatorTab(bundle) {
       outcomeSd: measureOf("predicted_outcome_sd") ? value(measureOf("predicted_outcome_sd")) : null,
       relativeScore: measureOf("mean_relative_score") ? value(measureOf("mean_relative_score")) : null,
       absoluteRiskAvailable: diagnostics.absoluteRiskAvailable === true, causalEffectIdentified: false,
-      limits: list(diagnostics.limits).map(String),
+      limits: list(diagnostics.limits).map(vcrPredictionLimit),
     } : null,
     headline: shown && conclusion && conclusion !== "not_estimable"
       ? sensitivityOnly
@@ -873,7 +877,7 @@ export function presentTrialTab(bundle) {
   const decision = decisions[0] ?? null;
   const columnSpec = [
     ["required_events", "所需事件数", "例"], ["sample_size", "样本量", "例"], ["expected_events", "期望事件数", null], ["power", "功效", "%"], ["assurance", "成功把握", "%"],
-    ["type_one_error", "I 类错误", "%"], ["expected_sample_size", "期望样本量", "例"], ["duration_months", "平均研究时长", "月"], ["cost", "成本", "万元"],
+    ["type_one_error", "I 类错误", "%"], ["expected_sample_size", "期望样本量", "例"], ["duration_months", "平均研究时长", "月"], ["last_patient_in_months", "末例入组（入组假设模拟）", "月"], ["cost", "成本", "万元"],
   ];
   const columns = columnSpec
     .filter(([key]) => live.some((design) => design.measures[/** @type {string} */ (key)]))
@@ -912,9 +916,27 @@ export function presentTrialTab(bundle) {
     return { ...design, record: row?._result ? recordOf(row) : null };
   });
   const forecastRows = forecasts.map((forecast) => forecastView(forecast, now));
-  const milestones = designRows.filter((row) => !row.dominated && row.measures.duration_months).map((row) => ({
-    design: row.code, name: row.name, items: [{ key: "trial_duration", label: "平均研究时长", value: row.measures.duration_months }],
-  }));
+  const milestones = designRows.filter(row => !row.dominated).map(row => ({
+    design: row.code, name: row.name, items: [
+      ...(row.measures.duration_months ? [{ key: "trial_duration", label: "平均研究时长", value: row.measures.duration_months }] : []),
+      ...(row.measures.last_patient_in_months ? [{ key: "last_patient_in", label: "末例入组（入组假设模拟）", value: row.measures.last_patient_in_months }] : []),
+    ],
+  })).filter(row => row.items.length);
+  const accrualForecasts = allResultsOf(bundle).filter(row => row.kind === "accrual_forecast").map(result => {
+    const scenario = scenarios.find(row => row.id === result.subjectId);
+    const design = designs.find(row => row.id === scenario?.id);
+    const read = bundle.accrualReads?.get(result.id);
+    const value = name => {
+      const raw = list(result.measures).map(object).find(row => row.name === name);
+      return raw ? measureValue(raw, { kind: "accrual_forecast", result, tab: "trial", staleMark: markFor(bundle.stale, resultNode(result)) }) : null;
+    };
+    const probabilityByMonth = list(read?.probabilityByMonth ?? object(result.diagnostics).probabilityByMonth).map(object)
+      .filter(row => numeric(row.month) !== null && Number(row.month) >= 0 && numeric(row.probability) !== null && Number(row.probability) >= 0 && Number(row.probability) <= 1)
+      .map(row => ({ month: Number(row.month), probability: Number(row.probability) }));
+    return { id: result.id, version: result.version, scenarioId: scenario?.id ?? null, scenarioVersion: scenario?.version ?? null,
+      design: design?.code ?? null, name: design?.name ?? "入组假设模拟", lastPatientIn: value("last_patient_in_months"),
+      targetEvents: value("target_events_months"), probabilityByMonth };
+  });
   const goal = text(decision?.question) ?? text(object(grid?.comparisonGoal).text) ?? null;
   return {
     headline: trialHeadline(designs),
@@ -936,6 +958,7 @@ export function presentTrialTab(bundle) {
       options: designs.map((design) => ({ id: design.id, label: design.code, name: design.name, disabled: design.dominated })),
     } : null,
     forecasts: forecastRows,
+    accrualForecasts,
     milestones,
     // The protocol's visit schedule (「访视日程」) and the study's regulatory contacts (「监管沟通记录」): records, not results.
     schedule: reportSchedule(bundle.schedule),
@@ -1654,7 +1677,7 @@ export function presentIntake(bundle) {
       grants: list(source.grants).map((raw2) => {
         const grant = object(raw2);
         const grantee = String(grant.grantee ?? "");
-        const role = grantee.startsWith("role:") ? (/** @type {Record<string, string>} */ (VCR_MEMBER_ROLE_LABELS_ZH))[grantee.slice(5)] : null;
+        const role = grantee.startsWith("role:") ? (/** @type {Record<string, string>} */ ({ ...VCR_MEMBER_ROLE_LABELS_ZH, ...VCR_RETIRED_MEMBER_ROLE_LABELS_ZH }))[grantee.slice(5)] : null;
         return {
           // A role and the whole study are words; an account is its name, or the neutral label once the account is gone — never its id.
           id: String(grant.id), grantee, granteeLabel: role ? `角色：${role}` : grantee.startsWith("study:") ? "本研究的所有成员" : personName(bundle.people, grantee) ?? "",

@@ -536,12 +536,12 @@ test("虚拟临床研究's options come in rebuilt from a closed shape, and a ch
   shellSends(f, { type: 'evimed.runtime-ui.vcr', seq: 1, sessionId: 'session-a', controls: true, canSetUse: true,
     start: 'trial', startOptions: [{ id: 'auto', label: '自动' }, { id: 'trial', label: '试验' }, { id: '../x', label: 'no' }, { id: 'cohort' }, { id: 'patients', label: '' }],
     intendedUse: 'exploratory', useOptions: [{ id: 'exploratory', label: '探索' }, { id: 'design_support', label: '研究设计支持' }, { id: 'Bad Id', label: 'x' }],
-    starters: [{ label: '估算样本量', draft: '帮我估算样本量：'.repeat(60) }, { label: '', draft: 'x' }, { label: 'y', draft: '' }], extra: 'dropped' });
+    starters: [{ label: '估算样本量', draft: '帮我估算样本量：'.repeat(60), requirement: '文献参数可开始', minimumFields: '终点、效应与变异度', inputLabel: '可先用文献' }, { label: '', draft: 'x' }, { label: 'y', draft: '' }], extra: 'dropped' });
   assert.deepEqual(delivered[0], {
     sessionId: 'session-a', controls: true, canSetUse: true, start: 'trial',
     startOptions: [{ id: 'auto', label: '自动' }, { id: 'trial', label: '试验' }],
     intendedUse: 'exploratory', useOptions: [{ id: 'exploratory', label: '探索' }, { id: 'design_support', label: '研究设计支持' }],
-    starters: [{ label: '估算样本量', draft: '帮我估算样本量：'.repeat(60).slice(0, 400) }],
+    starters: [{ label: '估算样本量', draft: '帮我估算样本量：'.repeat(60).slice(0, 400), requirement: '文献参数可开始', minimumFields: '终点、效应与变异度', inputLabel: '可先用文献' }],
   });
   // A value that is not among the choices on offer is not carried.
   shellSends(f, { type: 'evimed.runtime-ui.vcr', seq: 2, sessionId: 'session-a', controls: true, start: 'anything',
@@ -706,4 +706,19 @@ test('malformed or altered revision references cannot reuse a navigation acknowl
   f.navigate({ intent: { kind: 'create', sessionId: 'session-new', draft: 'x', resultRevision: { referenceId: `rr_${'a'.repeat(64)}` } } }); await settle();
   f.navigate({ seq: 2, intent: { kind: 'create', sessionId: 'session-new', draft: 'x', resultRevision: { referenceId: `rr_${'b'.repeat(64)}` } } }); await settle();
   assert.equal(staged.length, 1); f.ctx.dispose();
+});
+
+test('legacy draft restoration never overwrites existing or unreadable native draft state', async () => {
+  for (const draft of ['Existing unsent work', undefined, '']) {
+    const f = fixture();
+    f.ctx.conversation.input.for = () => ({ state: { getSnapshot: () => ({ draft }) }, setDraft: (/** @type {string} */ text) => f.calls.push(['restored', text]) });
+    apply(f.ctx, {}, f.target); await settle();
+    f.navigate({ intent: { kind: 'open', sessionId: 'session-a', draft: '  Original legacy question\n', restoreDraft: true } });
+    await settle();
+    const ack = f.sent.find(row => row.message.type === 'evimed.runtime-ui.ack').message;
+    assert.equal(ack.ok, true);
+    assert.equal(ack.draftRestored, draft === '');
+    assert.deepEqual(f.calls.filter(row => row[0] === 'restored'), draft === '' ? [['restored', '  Original legacy question\n']] : []);
+    f.ctx.dispose();
+  }
 });

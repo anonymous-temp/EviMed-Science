@@ -1069,7 +1069,7 @@ test("a partial walk (OPEN_SCIENCE_WALK_ONLY) reads the views it names at both w
 });
 
 test("partial VCR discovery omits unrelated coverage gaps while the full fixture walk still requires them", async () => {
-  const env = { FAKE_EMPTY_LISTS: "1", OPEN_SCIENCE_WALK_PROFILE: "fixture" };
+  const env = { FAKE_EMPTY_LISTS: "1", ...WALK_FIXTURE_ACCOUNT };
   const partial = await walk({ ...env, OPEN_SCIENCE_WALK_ONLY: "virtual-research" }, { axe: true });
   assert.equal(partial.code, 0, partial.stdout + partial.stderr);
   assert.ok(!partial.report.findings.some(entry => entry.rule === "not-walked"));

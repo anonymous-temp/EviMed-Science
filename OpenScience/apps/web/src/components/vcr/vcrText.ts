@@ -21,6 +21,7 @@
  *    rule, kept here so both sides of a page agree.
  */
 import {
+  VCR_RETIRED_MEMBER_ROLE_LABELS_ZH,
   VCR_CONCLUSION_LABELS_ZH,
   VCR_COUNT_LABELS_ZH,
   VCR_CRITERION_STATE_LABELS_ZH,
@@ -47,7 +48,7 @@ import type {
   VcrInterval,
   VcrJobState,
   VcrJobWait,
-  VcrMemberRole,
+  VcrStoredMemberRole,
   VcrModelRisk,
   VcrModelTier,
   VcrReviewKind,
@@ -72,7 +73,7 @@ export const jobStateLabel = table<VcrJobState>(VCR_JOB_STATE_LABELS_ZH);
 export const jobWaitLabel = table<VcrJobWait>(VCR_JOB_WAIT_LABELS_ZH);
 export const criterionStateLabel = table<VcrCriterionState>(VCR_CRITERION_STATE_LABELS_ZH);
 export const eligibilityLabel = table<VcrEligibility>(VCR_ELIGIBILITY_SUMMARY_LABELS_ZH);
-export const memberRoleLabel = table<VcrMemberRole>(VCR_MEMBER_ROLE_LABELS_ZH);
+export const memberRoleLabel = table<VcrStoredMemberRole>({ ...VCR_MEMBER_ROLE_LABELS_ZH, ...VCR_RETIRED_MEMBER_ROLE_LABELS_ZH });
 export const modelTierLabel = table<VcrModelTier>(VCR_MODEL_TIER_LABELS_ZH);
 export const modelRiskLabel = table<VcrModelRisk>(VCR_MODEL_RISK_LABELS_ZH);
 

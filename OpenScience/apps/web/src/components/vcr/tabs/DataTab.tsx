@@ -1,3 +1,4 @@
+import { VcrFollowupHistory } from "../VcrFollowupHistory";
 import { VcrReferenceWorkspace } from "../VcrReferenceSearch";
 import { VcrRegistryCoverage } from "../VcrRegistryCoverage";
 import { useRef, useState } from "react";
@@ -114,6 +115,7 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
       onChanged={() => onStudyChanged?.()}
     />
   );
+  const history = study.abilities.includes("read_patient_level") ? <VcrFollowupHistory studyId={studyId} canExport={study.abilities.includes("export")} /> : null;
   const cards = data.assumptions.length > 0;
   const keyCards = data.assumptions.filter((assumption) => matches(assumption, "key")).length;
   // The filter only means something while some cards are key and some are not.
@@ -137,6 +139,7 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
   if (!cards && data.precedents.length === 0) {
     return (
       <div className="flex flex-col gap-6">
+        {history}
         {defined ? <DefinitionCard study={study} /> : null}
         {defined ? pack : null}
         <VcrReferenceWorkspace studyId={studyId} onApplied={() => { reload(); onStudyChanged?.(); }} />
@@ -169,6 +172,7 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
   return (
     <div className="flex flex-col gap-6">
       {headline.length > 0 && <Headline parts={headline} />}
+      {history}
       <DefinitionCard study={study} />
       {pack}
       <VcrReferenceWorkspace studyId={studyId} onApplied={() => { reload(); onStudyChanged?.(); }} />

@@ -1012,6 +1012,8 @@ export const RUN_VERDICT_ERROR_CODES = Object.freeze([
   'runtime_monitor_timeout',
   'runtime_monitor_failed',
   'runtime_prompt_rejected',
+  'runtime_prompt_admission_busy',
+  'runtime_prompt_admission_invalid',
   'runtime_prompt_lost',
   // Manufactured by `sanitizeErrorCode` for a code that is not a well-formed
   // identifier. The system invents it for itself, so it has to be able to
@@ -1411,7 +1413,6 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   'vcr_model_invalid',
   'vcr_member_role_invalid',
   'vcr_recruitment_retired',
-  'vcr_referral_not_found',
   'vcr_forbidden',
   'vcr_unavailable',
   'vcr_action_invalid',
@@ -1511,7 +1512,7 @@ export const VCR_WRITE_ISSUE_CODES = Object.freeze([
  * this list (`vcrErrorCodesRegistered.test.mjs`).
  */
 export const VCR_MODULE_ERROR_CODES = Object.freeze([
-  'vcr_completion_origin_invalid', 'vcr_completion_origin_unavailable', 'vcr_completion_unavailable', 'vcr_invocation_unavailable', 'vcr_job_advance_failed', 'vcr_model_version_changed', 'vcr_patient_context_invalid',
+  'vcr_task_context_deleted', 'vcr_completion_canceled', 'vcr_completion_disclosed', 'vcr_completion_notice_failed', 'vcr_completion_observed', 'vcr_completion_exhausted', 'vcr_finish_hooks_exhausted', 'vcr_completion_origin_invalid', 'vcr_completion_origin_unavailable', 'vcr_completion_unavailable', 'vcr_invocation_unavailable', 'vcr_job_advance_failed', 'vcr_model_version_changed', 'vcr_patient_context_invalid', 'vcr_object_reference_invalid',
   'vcr_backup_status_unavailable', 'vcr_backup_unhealthy', 'vcr_backup_references_missing', 'vcr_subject_table_unreadable',
   'registry_reported_not_site_confirmed',
   'vcr_clinical_fact_invalid',
@@ -1553,7 +1554,7 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   // evidence and matching
   'vcr_asof_invalid', 'vcr_assessment_not_found', 'vcr_criteria_missing', 'vcr_pool_endpoint_key_required',
   'vcr_precedent_not_in_study', 'vcr_protocol_version_not_found',
-  'vcr_assessment_save_failed', 'vcr_evaluation_failed', 'vcr_recheck_failed', 'vcr_referral_create_failed',
+  'vcr_assessment_save_failed', 'vcr_evaluation_failed', 'vcr_recheck_failed',
   // jobs, derived tables and the orchestrator's step notes
   'vcr_derived_table_missing', 'vcr_derived_table_unsupported', 'vcr_engine_table_invalid', 'vcr_job_attempts_exhausted',
   'vcr_object_unknown', 'vcr_scenario_endpoint_missing', 'vcr_scenario_grid_empty', 'vcr_scenario_unknown_fields',
@@ -1585,23 +1586,6 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   // the engine channel and its jobs
   'vcr_engine_job_remove_failed',
   'vcr_engine_result_mismatch',
-  // the referral ledger and its contact stop
-  'vcr_referral_state_unknown',
-  'vcr_referral_transition_invalid',
-  'vcr_referral_transition_refused',
-  'vcr_referral_role_forbidden',
-  'vcr_referrals_contact_needs_approval',
-  'vcr_contact_not_approved',
-  'vcr_contact_role_forbidden',
-  'vcr_contact_approval_not_per_person',
-  'vcr_screen_failure_needs_criterion',
-  'vcr_enrollment_needs_date',
-  'vcr_exit_field_not_derivable',
-  'vcr_exit_date_rewritten',
-  'vcr_exit_reason_rewritten',
-  'vcr_followup_kind_unknown',
-  'vcr_restricted_field_not_marked',
-  'vcr_site_not_found',
   'vcr_model_exists',
   // the module's own health
   'vcr_migration_failed',
@@ -2178,9 +2162,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_export_kind_invalid: '没有这种导出；可选研究包、CDE 沟通交流资料包、模拟报告、系统验证文档包。',
   vcr_export_not_found: '找不到这次导出，可能已被清理；重新导出即可。',
   vcr_model_invalid: '模型卡填得不完整：要有名字、版本和层级。',
-  vcr_member_role_invalid: '成员角色只能选研究负责人、临床复核、统计复核、数据管理、招募协调员、中心或只读查看者。',
-  vcr_recruitment_retired: '招募与随访运营已停用；匹配评估仍可使用。',
-  vcr_referral_not_found: '找不到这条转诊记录。',
+  vcr_member_role_invalid: '可添加角色为研究负责人、临床复核、统计复核、数据管理或只读查看者；旧版角色只支持移除。',
+  vcr_recruitment_retired: '该运营流程已停用；患者匹配仍可使用，历史观察可在“依据”中只读查看或导出。',
   vcr_pack_not_found: '找不到这份知识包，或它不属于你的账号；刷新知识包列表后重选。',
   vcr_pack_invalid: '这份知识包不符合规定的结构，没有保存；按提示的字段修改后再写。',
   vcr_definition_not_found: '人群定义库里没有这条定义或这个版本，或它不属于你的账号；刷新定义库后重选。',
@@ -2221,7 +2204,15 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_completion_unavailable: '结果续接服务暂不可用；计算结果仍保留在研究中。',
   vcr_invocation_unavailable: '这次工具调用没有可核对的当前对话来源，请从原对话重新发起。',
   vcr_job_advance_failed: '计算已结束，但结果关联尚未完成，系统会重试；不要重复提交计算。',
+  vcr_object_reference_invalid: '选定的研究对象或版本已不可用，请重新打开结果后选择。',
   vcr_model_version_changed: '所选模型版本已变化，请读取确切版本后重新配置；已有结果保留。',
+  vcr_task_context_deleted: '这段对话的研究资料已删除，请新开对话继续研究。',
+  vcr_completion_canceled: '已按你的停止请求结束自动续接，计算结果仍可查看。',
+  vcr_completion_disclosed: '计算结果已保存，可在原对话中查看。',
+  vcr_completion_notice_failed: '结果通知暂未送达，请稍后查看原对话。',
+  vcr_completion_observed: '计算结果已在原对话读取。',
+  vcr_completion_exhausted: '计算结果已保存，请在原对话中查看。',
+  vcr_finish_hooks_exhausted: '计算结果已保存，部分后续整理未能完成。',
   vcr_patient_context_invalid: '请选择当前对话中的原始用户消息或本项目的已上传资料，不能把改写内容作为患者原始记录。',
   vcr_evidence_unverified: '这条证据没能对上它引用的登记记录或文献原文，没有保存；重新核对原文位置后再写。',
   vcr_evidence_source_is_card: '证据条目的出处写成了证据卡的页面，没有保存；卡只是线索，去读它列出的原始来源，再按原文写这一条。',
@@ -2265,7 +2256,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_data_plane_not_configured: '本部署没有配置数据平面；T0（公开资料）的步骤照常。',
   vcr_data_plane_unconfigured: '本部署未接入数据平面；T0（公开资料）的全部步骤照常。',
   vcr_evidence_unavailable: '证据模块在本部署里还没有接入。',
-  vcr_matching_unavailable: '匹配与招募在本部署里还没有开放。',
+  vcr_matching_unavailable: '暂时无法进行患者匹配；请先保留患者资料与方案，恢复后重试。',
   vcr_access_unavailable: '数据访问的权限检查这次没能完成，已按不允许处理；稍后再试。',
   // Members and access to data.
   vcr_member_role_unknown: '这个角色不在研究成员的角色里；换一个再加。',
@@ -2291,23 +2282,6 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_data_plane_location_outside: '数据平面的存放目录不在允许的位置。',
   vcr_data_plane_location_runtime_readable: '数据平面目录不能放在运行时读得到的位置；请改到运行时看不到的目录。',
   vcr_snapshot_profile_failed: '这个数据快照的概况没能生成；快照本身没有受影响，可以重试。',
-  // The referral ledger and its contact stop.
-  vcr_referral_state_unknown: '转诊状态不在允许的范围内。',
-  vcr_referral_transition_invalid: '转诊状态不能这样变化；按顺序一步步推进。',
-  vcr_referral_transition_refused: '这次转诊状态变更被拒绝，原因见提示。',
-  vcr_referral_role_forbidden: '你的角色不能做这一步转诊操作。',
-  vcr_referrals_contact_needs_approval: '联系状态必须有具名的确认人才能保存。',
-  vcr_contact_not_approved: '联系患者之前要由协调员逐人确认，这一位还没有确认。',
-  vcr_contact_role_forbidden: '你的角色在这个研究里不能联系患者。',
-  vcr_contact_approval_not_per_person: '联系确认必须逐人进行，不接受批量确认。',
-  vcr_screen_failure_needs_criterion: '筛选失败要写明不满足的是哪一条入排标准。',
-  vcr_enrollment_needs_date: '入组要写明入组日期。',
-  vcr_exit_field_not_derivable: '试验期间的这个字段不可见，也不能从出组记录推出；出组日期与原因照原样保留。',
-  vcr_exit_date_rewritten: '出组日期已经记录，不能改写；需要更正请新增一条说明。',
-  vcr_exit_reason_rewritten: '出组原因已经记录，不能改写；需要更正请新增一条说明。',
-  vcr_followup_kind_unknown: '随访类型只能是常规诊疗观察、研究专属随访或出组后观察。',
-  vcr_restricted_field_not_marked: '试验期间受限的字段要标明缺失原因，不能留空。',
-  vcr_site_not_found: '找不到这个中心。',
   vcr_model_exists: '这个名字和版本的模型已经存在；换一个名字或版本。',
   // The module's own health (an operator reads these).
   vcr_migration_failed: '虚拟临床研究的数据表升级失败，模块已停用；请联系管理员。',
@@ -2370,7 +2344,6 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_assessment_save_failed: '匹配评估没有保存成功，下一轮会重试。',
   vcr_evaluation_failed: '匹配判定在这位受试者上出错，其余照常。',
   vcr_recheck_failed: '到期复评没有完成，下一轮会重试。',
-  vcr_referral_create_failed: '转诊记录没有生成成功，下一轮会重试。',
   vcr_derived_table_missing: '这项计算需要的派生数据表不存在。',
   vcr_derived_table_unsupported: '这种派生数据表不能作为这项计算的输入。',
   vcr_engine_table_invalid: '统计引擎返回的数据表与它的记录对不上，已拒绝。',
@@ -2530,6 +2503,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   // is refused before the turn is accepted, but this file cannot promise what
   // the gateway did or did not charge, and a sentence that promises it would be
   // one more thing the product says without guaranteeing.
+  runtime_prompt_admission_busy: '该对话正在接收输入，请稍后重试。',
+  runtime_prompt_admission_invalid: '本部署的对话接入配置不可用，请联系管理员。',
   runtime_prompt_rejected: '运行时拒绝了这次提问，任务没有开始。稍后重试；反复出现请联系管理员。',
   runtime_prompt_lost:
     '这次提问没有送达运行时：等了很久，运行时的记录里始终没有它，任务从未开始。'

@@ -100,8 +100,14 @@
     "numeric": null,
     "uncertainty": null
   },
+  "selection": {
+    "objectId": "pts_1",
+    "version": 1,
+    "resultId": "res_12",
+    "resultVersion": 1
+  },
   "records": {
-    "result": "res_7",
+    "result": "res_12",
     "rows": 2000,
     "arms": [
       {
@@ -723,7 +729,7 @@
               "quoteSource": null,
               "ref": {
                 "kind": "result",
-                "id": "res_7",
+                "id": "res_12",
                 "tab": "patients"
               }
             }
@@ -776,7 +782,7 @@
               "quoteSource": null,
               "ref": {
                 "kind": "result",
-                "id": "res_7",
+                "id": "res_12",
                 "tab": "patients"
               }
             }
@@ -859,6 +865,9 @@
   "sets": [
     {
       "id": "pts_1",
+      "version": 1,
+      "resultId": "res_12",
+      "resultVersion": 1,
       "label": "虚拟患者集 v1",
       "stale": false
     }

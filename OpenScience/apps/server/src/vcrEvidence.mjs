@@ -103,6 +103,8 @@ import { REGISTRY_NOT_FOUND, REGISTRY_UNAVAILABLE, REGISTRY_UNAVAILABLE_PARAMETE
 import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
 import { candidateTrialFromRecord } from "./vcrPatientTrials.mjs";
 import { verifyLiteratureBaseline } from "./vcrEvidenceSources.mjs";
+import { bindEvidenceTrialIdentity, independentTrialItems } from "./vcrTrialIdentity.mjs";
+import { numericLiteralInSpan } from "./vcrNumericLiterals.mjs";
 
 /** The two-sided 95% normal quantile every interval here is read with. */
 export const Z_95 = 1.959963984540054;
@@ -325,7 +327,7 @@ export function verifyExtraction({ extraction, sourceText = "", checkedAt = "" }
   // preserved text, not that its own answer is. This is the same distinction
   // the clinical gate draws between a `direct` claim and a `derived` one.
   const derived = ["calculated", "imputed", "predicted"].includes(String(extraction?.valueSource ?? ""));
-  const inputs = [...(extraction?.locator?.inputs ?? [])].map(String).filter(Boolean);
+  const inputs = Array.isArray(extraction?.locator?.inputs) ? extraction.locator.inputs : [];
   /** @type {string[]} */
   const unanchored = [];
   /** @type {string} */
@@ -334,8 +336,13 @@ export function verifyExtraction({ extraction, sourceText = "", checkedAt = "" }
   else if (!String(sourceText ?? "").trim()) state = "source_unavailable";
   else if (!quoteIsPresent(sourceText, quote)) state = "quote_not_found";
   else if (derived) {
-    const missing = inputs.filter((path) => extraction?.locator?.kind === "literature_text"
-      ? !quoteIsPresent(sourceText, path) : !pathIsInSource(sourceText, path));
+    const missing = inputs.filter((input) => {
+      if (extraction?.locator?.kind !== "literature_text") return !pathIsInSource(sourceText, String(input));
+      return !input || typeof input !== "object" || !Number.isSafeInteger(input.start) || !Number.isSafeInteger(input.end)
+        || input.start < 0 || input.end <= input.start || sourceText.slice(input.start, input.end) !== input.quote
+        || typeof input.value !== "number" || !Number.isFinite(input.value)
+        || !numericLiteralInSpan(sourceText, input.start, input.end, input.value);
+    });
     state = !inputs.length ? "derived_inputs_missing" : missing.length ? "derived_input_not_found" : "verified";
   } else {
     if (value !== null && !numberIsInQuote(quote, value, { unit: extraction?.unit })) unanchored.push("value");
@@ -520,6 +527,11 @@ export function poolEligibility({ items, endpointKey = "", armRole = "", require
     if (requireHistoricalBaseline && baseline !== true) reasons.push(baseline === false ? "estimated_not_actual" : "baseline_standing_unknown");
     verdicts.push({ item, eligible: reasons.length === 0, reasons });
   }
+  const independent = independentTrialItems(verdicts.filter(verdict => verdict.eligible).map(verdict => verdict.item));
+  for (const excluded of independent.excluded) {
+    const verdict = verdicts.find(entry => entry.item === excluded.item);
+    if (verdict) { verdict.eligible = false; verdict.reasons.push(excluded.reason); }
+  }
   return {
     eligible: verdicts.filter((verdict) => verdict.eligible).map((verdict) => verdict.item),
     refused: verdicts.filter((verdict) => !verdict.eligible),
@@ -693,7 +705,9 @@ export function poolJob({ studyId, parameter, endpointKey = "", armRole = "", ca
   // A time is pooled in one unit — months, the platform's — whatever the studies state theirs in: 12 months, 52 weeks and 1 year are
   // one median, not the estimates 12, 52 and 1 (D1).
   const timeUnit = kind === "time" ? { unit: VCR_DEFAULT_TIME_UNIT, converted: 0, assumed: 0 } : null;
-  for (const item of items ?? []) {
+  const independent = independentTrialItems(items);
+  excluded.push(...independent.excluded.map(entry => ({ id: String(entry.item.id), reason: entry.reason })));
+  for (const item of independent.selected) {
     const id = String(item?.id ?? "");
     let candidate = item;
     if (timeUnit) {
@@ -1485,6 +1499,9 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
       const derived = ["calculated", "imputed", "predicted"].includes(String(item.valueSource ?? ""));
       const sourceText = literature?.text ?? String(precedent?.record_text ?? "");
       const sourceHash = literature?.locator.sourceHash ?? precedent?.record_hash ?? null;
+      let trialIdentity;
+      try { trialIdentity = bindEvidenceTrialIdentity({ asked: item.trialIdentity, registry: registryName, registryId, literature }); }
+      catch { return { status: "refused", code: "vcr_evidence_unverified", message: "Name the trial in an exact preserved trialIdentity span before pooling literature." }; }
       const checkedAt = now().toISOString();
       const timepoint = item.timepoint;
       const checkedTarget = timepoint && typeof timepoint === 'object' ? verifyExtraction({
@@ -1512,7 +1529,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
           historicalBaseline: !derived && item.enrollmentKind !== "estimated" && item.historicalBaseline === true,
           applicability: { line: item.line, biomarker: item.biomarker, endpointKey: String(item.endpointKey ?? "") },
           // `candidateFrom` and `source` are the run's own statements, kept beside the verdict and read by nothing that decides it.
-          detail: { outcome: item.outcome ?? null, note: item.note ?? null,
+          detail: { outcome: item.outcome ?? null, note: item.note ?? null, trialIdentity,
             evidenceKind: ["baseline", "outcome", "design"].includes(item.evidenceKind) ? item.evidenceKind : "outcome",
             sourceStanding: literature ? (derived ? "article_derived" : "article_reported")
               : (derived ? "registry_derived" : item.enrollmentKind === "estimated" ? "registry_planned" : "registry_reported"),

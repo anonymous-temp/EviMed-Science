@@ -115,11 +115,18 @@ vcr_map_streams <- function(streams, fn, cores = 1L, indices = NULL) {
 
 # Paired scenarios reuse a member's random draws; replicate r takes an independent L'Ecuyer stream.
 vcr_patient_randomization <- function(job) {
-  set.seed(job[["seed"]], kind = VCR_RNG_KIND)
+  seed <- job[["seed"]]
+  key <- job[["scenario"]][["pairing"]][["key"]]
+  legacy <- identical(job[["methodVersion"]], "1.0.0")
+  # A declared correspondence key participates even when the caller supplies a seed.
+  # Seven hex digits stay exactly representable as an R integer; no-key/legacy replay is unchanged.
+  effective_seed <- if (!legacy && !is.null(key)) strtoi(substr(vcr_sha256(paste("patient-pairing-v1", seed, key, sep = ":")), 1L, 7L), base = 16L) else seed
+  set.seed(effective_seed, kind = VCR_RNG_KIND)
   replicate <- as.integer(job[["scenario"]][["pairing"]][["replicate"]] %||% 1L)
   if (replicate > 1L) for (i in seq_len(replicate - 1L)) assign(".Random.seed", parallel::nextRNGStream(get(".Random.seed", envir = .GlobalEnv)), envir = .GlobalEnv)
   list(policy = if (is.null(job[["scenario"]][["pairing"]])) "scenario_seed" else "common_random_numbers_by_member",
-    pairingKey = job[["scenario"]][["pairing"]][["key"]], replicate = replicate, seed = job[["seed"]],
+    pairingKey = job[["scenario"]][["pairing"]][["key"]], replicate = replicate, seed = seed, effectiveSeed = effective_seed,
+    seedDerivation = if (!legacy && !is.null(key)) "sha256(patient-pairing-v1:seed:key)[1:7]" else "declared_seed",
     replicateStreams = "L'Ecuyer-CMRG nextRNGStream", causalIndividualEffectIdentified = FALSE)
 }
 

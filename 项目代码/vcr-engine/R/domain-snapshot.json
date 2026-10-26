@@ -5,7 +5,8 @@
       "version": "1.0.0",
       "endpoints": [],
       "crossChecks": [
-        "survival::survreg",
+        "independent base-R likelihood optimization",
+        "flexsurv distribution and delta-method output oracle",
         "closed-form censored exponential likelihood"
       ],
       "modelTier": "literature"

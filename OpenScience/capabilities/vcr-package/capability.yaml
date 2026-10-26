@@ -1,7 +1,7 @@
 # Capability contract; conversation-native VCR reset, 2026-10-26.
 # Module workflows are explicit specialists; ordinary conversation can load their skills and call shared tools.
 id: vcr-package
-version: 1.1.2
+version: 1.2.0
 title: Virtual Clinical Research Package
 category: Study Design
 description: |
@@ -69,7 +69,7 @@ starterPrompts:
 display:
   title: "研究包与沟通资料"
   category: "虚拟临床研究"
-  description: "把研究的定义、假设、结果与执行记录写成可检查、可复现的研究包，数字由结果渲染。"
+  description: 将已保存的证据和计算整理为所需研究文件，保留版本、来源与尚未解决的缺口。
   listed: false
   starterPrompts:
   - "把这项研究整理成一份可以交出去的研究包。"

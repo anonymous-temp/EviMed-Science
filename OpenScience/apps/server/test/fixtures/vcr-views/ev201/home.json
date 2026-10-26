@@ -84,7 +84,8 @@
       "conclusion": null,
       "attention": [],
       "updatedAt": "今天 09:18",
-      "createdAt": "2026-09-27T01:14:00.000Z"
+      "createdAt": "2026-09-27T01:14:00.000Z",
+      "originatingSessionId": null
     },
     {
       "id": "std_1",
@@ -205,9 +206,32 @@
         }
       ],
       "updatedAt": "今天 09:09",
-      "createdAt": "2026-09-27T01:07:00.000Z"
+      "createdAt": "2026-09-27T01:07:00.000Z",
+      "originatingSessionId": null
     }
   ],
+  "taskInputs": {
+    "matching": {
+      "status": "unknown",
+      "sources": []
+    },
+    "cohort": {
+      "status": "unknown",
+      "sources": []
+    },
+    "patient": {
+      "status": "unknown",
+      "sources": []
+    },
+    "comparator": {
+      "status": "unknown",
+      "sources": []
+    },
+    "trial": {
+      "status": "unknown",
+      "sources": []
+    }
+  },
   "reviews": [
     {
       "id": "rvw_1",

@@ -2,7 +2,7 @@
 # Module workflows are explicit specialists; ordinary conversation can load their skills and call shared tools.
 id: vcr-evidence
 visibility: public
-version: 1.3.0
+version: 1.4.0
 title: Virtual Clinical Research — Evidence Parameterization
 category: Clinical Research
 description: |
@@ -89,7 +89,7 @@ starterPrompts:
 display:
   title: "证据参数化"
   category: "虚拟临床研究"
-  description: "按 PICO 找同类试验，逐项抽数并核对原文，交引擎合并，写成带预测区间的假设卡。"
+  description: 检索并保存登记与文献证据，核对原文数值、单位和独立试验身份。
   listed: false
   starterPrompts:
   - "把这项研究要用的参数从证据里做出来：先例、抽取、合并、假设卡。"

@@ -126,7 +126,7 @@ export interface VcrMemberBody {
   userId: string;
   role: VcrBodyRole;
   /** A `site` member names the site it belongs to; the route refuses the role without it. */
-  detail?: { siteId?: string; note?: string };
+  detail?: { note?: string };
 }
 
 export interface VcrModelBody {
@@ -255,7 +255,7 @@ export function exportBody(kind: string) {
 }
 
 export function memberBody(input: VcrMemberBody) {
-  const detail = input.detail ? said({ siteId: input.detail.siteId, note: input.detail.note }) : undefined;
+  const detail = input.detail ? said({ note: input.detail.note }) : undefined;
   return said({ userId: input.userId, role: input.role, detail: detail && Object.keys(detail).length > 0 ? detail : undefined });
 }
 

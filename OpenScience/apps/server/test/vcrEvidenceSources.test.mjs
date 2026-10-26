@@ -105,7 +105,7 @@ test("review revalidates preserved literature through the same owner, generation
 test("derived article settings identify verified inputs and do not claim reported or transported outcomes", async () => {
   const f = fixture();
   const result = await f.pipeline.addEvidenceItem({ userId: "u1", studyId: "s1", projectId: "p1", item: { ...f.item, value: 0.45, ciLow: null, ciHigh: null, sampleSize: null,
-    valueSource: "calculated", locator: { ...f.item.locator, inputs: [f.item.quote] } } });
+    valueSource: "calculated", locator: { ...f.item.locator, inputs: [{ start: f.item.locator.start, end: f.item.locator.end, quote: f.item.quote, value: 40 }] } } });
   assert.equal(result.state, "verified");
   assert.equal(f.saved[0].items[0].detail.sourceStanding, "article_derived");
   assert.equal(f.saved[0].items[0].detail.verificationScope, "quoted_inputs_only");

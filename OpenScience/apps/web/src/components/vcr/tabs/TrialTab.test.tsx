@@ -99,8 +99,8 @@ describe("试验 · the designs", () => {
     const { container } = draw();
     await trialDrawn();
     const simulated = [...container.querySelectorAll("tr[data-vcr-design] [data-vcr-measure][data-vcr-source='predicted']")];
-    // Prove the walk walked: A has four simulated measures, B and C five each (sample size and cost are set, not simulated).
-    expect(simulated).toHaveLength(14);
+    // Prove the walk walked: A has five predicted measures, B and C six each, including separate accrual LPI (sample size and cost are set).
+    expect(simulated).toHaveLength(17);
     for (const cell of simulated) expect(cell.querySelector("[data-vcr-mcse]")).not.toBeNull();
     const b = container.querySelector("tr[data-vcr-design='B'] [data-vcr-measure='assurance']") as HTMLElement;
     expect(b).toHaveTextContent("71.0");
@@ -147,11 +147,16 @@ describe("试验 · the designs", () => {
     expect(key.querySelector("[data-vcr-scatter-label='D']")).toHaveTextContent("被 B 占优");
   });
 
-  it("draws each design's mean study duration inside its Monte-Carlo interval", async () => {
+  it("draws mean study duration and last-patient-in as separate measures with their own intervals", async () => {
     const { container } = draw();
     const timeline = await found(container, "[data-vcr-milestones]");
-    expect([...timeline.querySelectorAll("[data-vcr-milestone]")].map((row) => row.getAttribute("data-vcr-milestone"))).toEqual(["A", "B", "C"]);
-    const b = timeline.querySelector("[data-vcr-milestone='B']") as HTMLElement;
+    expect([...timeline.querySelectorAll("[data-vcr-milestone]")].map((row) => row.getAttribute("data-vcr-milestone"))).toEqual(["A", "A", "B", "B", "C", "C"]);
+    const bRows = [...timeline.querySelectorAll("[data-vcr-milestone='B']")];
+    const b = bRows.find(row => row.textContent?.includes("平均研究时长")) as HTMLElement;
+    const accrual = bRows.find(row => row.textContent?.includes("末例入组")) as HTMLElement;
+    expect(accrual).toHaveTextContent("16.4");
+    expect(accrual).toHaveTextContent("80% 预测区间 13.90–19.30");
+    expect(accrual).not.toHaveTextContent("平均研究时长");
     expect(b).toHaveTextContent("平均研究时长");
     expect(b).toHaveTextContent("22.4");
     expect(b).toHaveTextContent("95% 蒙特卡洛区间 22.1–22.7");
@@ -180,14 +185,15 @@ describe("试验 · the designs", () => {
     const raw = fixture("ev201/trial.json");
     raw.partial = { sentence: "这次模拟算完了 18,000 / 20,000 次重复就到了计算时间上限，下面是已完成部分的结果。" };
     installVcrServer(network.productRequest, { [tab("trial")]: raw });
-    const { container } = draw();
+    const { container, spies } = draw();
     await trialDrawn();
     const notes = container.querySelectorAll("[data-vcr-partial]");
     expect(notes).toHaveLength(1);
     expect(notes[0]).toHaveTextContent("这次模拟算完了 18,000 / 20,000 次重复就到了计算时间上限，下面是已完成部分的结果。");
     expect(container.querySelector("[data-vcr-step-failed]")).toBeNull();
-    await userEvent.click(within(notes[0] as HTMLElement).getByRole("button", { name: "续算" }));
-    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/run`, "POST", { step: "trial" }));
+    await userEvent.click(within(notes[0] as HTMLElement).getByRole("button", { name: "在对话中继续" }));
+    expect(spies.openChat).toHaveBeenCalledWith(expect.any(String), { kind: "step", studyId: STUDY_ID, objectId: "trial" });
+    expect(network.productRequest.mock.calls.filter(([, method]) => method === "POST")).toEqual([]);
   });
 
   describe("the comparison", () => {
@@ -217,12 +223,14 @@ describe("试验 · the designs", () => {
     });
 
     it("puts the exact scenario and result into an unsent adjustment draft without a configuration form", async () => {
+      const payload = fixture("ev201/trial.json");
+      Object.assign(payload.designs.find((row: any) => row.code === "B"), { version: 2, resultId: "res_2", resultVersion: 1 });
+      installVcrServer(network.productRequest, { [tab("trial")]: payload });
       const { spies } = draw();
       await trialDrawn();
-      await userEvent.click(screen.getByRole("button", { name: "改设定：方案 B" }));
-      expect(spies.openChat).toHaveBeenCalledWith(expect.stringContaining("scn_2"));
-      expect(spies.openChat).toHaveBeenCalledWith(expect.stringContaining("res_2"));
-      expect(spies.openChat).toHaveBeenCalledWith(expect.stringContaining("建立新版本"));
+      await userEvent.click(screen.getByRole("button", { name: "在对话中调整：方案 B" }));
+      expect(spies.openChat).toHaveBeenCalledWith(expect.stringContaining("建立新版本"), { kind: "trial_scenario", studyId: STUDY_ID, objectId: "scn_2", version: 2, resultId: "res_2", resultVersion: 1 });
+      expect(spies.openChat.mock.calls[0][0]).not.toMatch(/scn_|res_/);
       expect(screen.queryByRole("dialog")).toBeNull();
       expect(network.productRequest.mock.calls.some(([, method]) => method === "POST")).toBe(false);
     });
@@ -272,7 +280,7 @@ describe("试验 · the run behind a row", () => {
     await trialDrawn();
     await userEvent.click(container.querySelector("tr[data-vcr-design='B']") as HTMLElement);
     const drawer = await screen.findByRole("dialog", { name: /方案 B/ });
-    expect(within(drawer).getByRole("button", { name: "改设定" })).toBeInTheDocument();
+    expect(within(drawer).getByRole("button", { name: "在对话中调整" })).toBeInTheDocument();
   });
 });
 
@@ -282,8 +290,8 @@ describe("试验 · what the band offers", () => {
     const table = await trialDrawn();
     const chips = within(band(container));
     expect(chips.getByRole("button", { name: "改选方案" })).toBeInTheDocument();
-    expect(chips.getByRole("button", { name: "加一个方案" })).toBeInTheDocument();
-    expect(chips.getByRole("button", { name: "改假设" })).toBeInTheDocument();
+    expect(chips.getByRole("button", { name: "在对话中添加方案" })).toBeInTheDocument();
+    expect(chips.getByRole("button", { name: "在对话中调整假设" })).toBeInTheDocument();
     expect(band(container).compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(chips.getByRole("button", { name: /^方案\s*4/ })).toBeInTheDocument();
   });
@@ -305,10 +313,10 @@ describe("试验 · what the band offers", () => {
   it("puts a draft in the study's conversation view for 加一个方案 and for 改假设 — and does not send it, and goes nowhere", async () => {
     const { container, spies } = draw();
     await trialDrawn();
-    await userEvent.click(within(band(container)).getByRole("button", { name: "加一个方案" }));
-    expect(spies.openChat).toHaveBeenLastCalledWith(expect.stringContaining(VCR_ADD_DESIGN_DRAFT));
-    await userEvent.click(within(band(container)).getByRole("button", { name: "改假设" }));
-    expect(spies.openChat).toHaveBeenLastCalledWith(expect.stringContaining(VCR_CHANGE_ASSUMPTION_DRAFT));
+    await userEvent.click(within(band(container)).getByRole("button", { name: "在对话中添加方案" }));
+    expect(spies.openChat).toHaveBeenLastCalledWith(expect.stringContaining(VCR_ADD_DESIGN_DRAFT), { kind: "step", studyId: STUDY_ID, objectId: "trial" });
+    await userEvent.click(within(band(container)).getByRole("button", { name: "在对话中调整假设" }));
+    expect(spies.openChat).toHaveBeenLastCalledWith(expect.stringContaining(VCR_CHANGE_ASSUMPTION_DRAFT), { kind: "step", studyId: STUDY_ID, objectId: "trial" });
     expect(network.productRequest.mock.calls.some(([path, method]) => method === "POST" && String(path).includes("/run"))).toBe(false);
   });
 
@@ -510,8 +518,8 @@ describe("试验 · designs nothing has computed", () => {
     expect(screen.queryByRole("button", { name: /选定方案|改选方案/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "登记预测" })).toBeNull();
     // What the conversation does stays: another design, another hypothesis.
-    expect(screen.getByRole("button", { name: "加一个方案" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "改假设" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "在对话中添加方案" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "在对话中调整假设" })).toBeInTheDocument();
   });
 
   it("says the computation is under way while it is, and offers nothing to start", async () => {
@@ -529,7 +537,7 @@ describe("试验 · designs nothing has computed", () => {
     const list = await found(container, "[data-vcr-not-computed]");
     expect(container.querySelectorAll("[data-vcr-step-failed]")).toHaveLength(1);
     expect(list.querySelector("[data-vcr-step-failed]")).toBeNull();
-    expect(screen.getAllByRole("button", { name: "接着做" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "在对话中继续" })).toHaveLength(1);
   });
 
   it("offers a reader who cannot write no band when there is nothing to conclude", async () => {
@@ -633,4 +641,20 @@ describe("试验 · before there are designs", () => {
     await found(container, "[data-vcr-step-waiting='trial']");
     expect(container.querySelector("[data-page-chrome]")).toBeNull();
   });
+});
+
+it("keeps mean study duration separate from the retained accrual estimate and its monthly curve", async () => {
+  const raw = fixture("ev201/trial.json");
+  const design = raw.designs.find((row: any) => row.code === "B");
+  const accrual = { ...design.measures.duration_months, value: 16.4, mcse: null, interval: { kind: "prediction", low: 11.7, high: 19.6 }, source: "predicted" };
+  design.measures.last_patient_in_months = accrual;
+  raw.accrualForecasts = [{ id: "res_accrual", version: 2, scenarioId: design.id, scenarioVersion: 1, design: "B", name: design.name, lastPatientIn: accrual, targetEvents: null, probabilityByMonth: [{ month: 0, probability: 0 }, { month: 12, probability: 0.3 }, { month: 20, probability: 0.9 }] }];
+  installVcrServer(network.productRequest, { [tab("trial")]: raw });
+  const { container } = draw(); await trialDrawn();
+  const row = container.querySelector('tr[data-vcr-design="B"]')!;
+  expect(row.querySelector('[data-vcr-measure="duration_months"]')).toHaveTextContent("22.4");
+  expect(row.querySelector('[data-vcr-measure="last_patient_in_months"]')).toHaveTextContent("16.4");
+  const table = screen.getByRole("table", { name: "保留的入组时间预测" });
+  expect(table).toHaveTextContent("16.4"); expect(table).not.toHaveTextContent("22.4");
+  expect(screen.getByText("截至该月完成入组的概率")).toBeInTheDocument();
 });

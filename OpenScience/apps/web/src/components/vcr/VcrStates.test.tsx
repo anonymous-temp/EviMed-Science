@@ -121,8 +121,9 @@ describe("a computation that stopped part-way", () => {
     const study = ev201();
     study.steps.trial = { status: "done", requested: true } as never;
     draw(<PartialResultNote sentence={sentence} resume={{ studyId: STUDY_ID, study, step: "trial" }} />);
-    await userEvent.click(screen.getByRole("button", { name: "续算" }));
-    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/run`, "POST", { step: "trial" }));
+    await userEvent.click(screen.getByRole("button", { name: "在对话中继续" }));
+    expect(frame.openChat).toHaveBeenCalledWith(expect.any(String), { kind: "step", studyId: STUDY_ID, objectId: "trial" });
+    expect(network.productRequest).not.toHaveBeenCalled();
   });
 
   it("offers it to nobody who may not run a step, and not while the step is already going on", () => {
@@ -130,12 +131,12 @@ describe("a computation that stopped part-way", () => {
     reader.abilities = ["read"];
     reader.steps.trial = { status: "done", requested: true } as never;
     const { unmount } = draw(<PartialResultNote sentence={sentence} resume={{ studyId: STUDY_ID, study: reader, step: "trial" }} />);
-    expect(screen.queryByRole("button", { name: "续算" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "在对话中继续" })).not.toBeInTheDocument();
     unmount();
     const running = ev201();
     running.steps.trial = { status: "running", requested: true } as never;
     draw(<PartialResultNote sentence={sentence} resume={{ studyId: STUDY_ID, study: running, step: "trial" }} />);
-    expect(screen.queryByRole("button", { name: "续算" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "在对话中继续" })).not.toBeInTheDocument();
   });
 });
 
@@ -288,8 +289,8 @@ describe("a step with nothing yet", () => {
     installVcrServer(network.productRequest);
     draw(<VcrStepPending studyId={STUDY_ID} study={evWithStep("evidence", { status: "none", requested: false })} step="evidence" />);
     await userEvent.click(screen.getByRole("button", { name: "找证据、整理假设卡" }));
-    expect(frame.openChat).toHaveBeenCalledWith(expect.stringContaining(`当前研究（${STUDY_ID}）`));
-    expect(frame.openChat).toHaveBeenCalledWith(expect.stringContaining("先说明还缺哪些输入"));
+    expect(frame.openChat).toHaveBeenCalledWith(expect.stringContaining("先说明还缺哪些输入"), { kind: "step", studyId: STUDY_ID, objectId: "evidence" });
+    expect(frame.openChat.mock.calls[0][0]).not.toContain(STUDY_ID);
     expect(network.productRequest).not.toHaveBeenCalled();
     expect(store.select).not.toHaveBeenCalled();
   });
@@ -330,8 +331,9 @@ describe("a step that did not finish", () => {
     expect(screen.getByText("这一步未完成")).toBeInTheDocument();
     expect(screen.getByText(/这一次运行只完成了一部分/)).toBeInTheDocument();
     expect(screen.getByText(/算完了 1,200 \/ 2,000 次重复就停下了/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "接着做" }));
-    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/run`, "POST", { step: "patients" }));
+    await userEvent.click(screen.getByRole("button", { name: "在对话中继续" }));
+    expect(frame.openChat).toHaveBeenCalledWith(expect.any(String), { kind: "step", studyId: STUDY_ID, objectId: "patients" });
+    expect(network.productRequest).not.toHaveBeenCalled();
   });
 
   it("offers no way to continue to a reader who cannot run a step", () => {
@@ -339,7 +341,7 @@ describe("a step that did not finish", () => {
     study.abilities = ["read"];
     draw(<VcrStepFailed studyId={STUDY_ID} study={study} step="patients" />);
     expect(screen.getByText("这一步未完成")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "接着做" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "在对话中继续" })).not.toBeInTheDocument();
   });
 
   it("is what a step with nothing to show says when it failed, instead of the empty offer", () => {

@@ -9,11 +9,16 @@ const invalid = () => new HttpError(400, "vcr_evidence_unverified", "The quotati
 /** Literal unit spellings, including explicit English time-unit plurals, do not perform a clinical conversion.
  * @param {string} quote @param {string} unit */
 export function literatureUnitIsInQuote(quote, unit) {
-  const normalized = unit.normalize("NFKC").trim().toLowerCase();
+  const unitSpacing = (/** @type {string} */ text) => text.normalize("NFKC").replace(/\s*([/⁄·*^])\s*/gu, "$1");
+  const normalized = unitSpacing(unit).trim();
   // A number such as "1" is not evidence of a unit, and a dimensionless label still needs its own source wording.
-  if (["", "1", "unknown", "unspecified", "not reported", "na", "n/a"].includes(normalized)) return false;
-  const alternatives = [normalized, ...(["year", "month", "week", "day"].includes(normalized) ? [`${normalized}s`] : [])];
-  return alternatives.filter(Boolean).some(value => new RegExp(`(?<![\\p{L}])${value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}])`, "iu").test(quote.normalize("NFKC")));
+  if (["", "1", "unknown", "unspecified", "not reported", "na", "n/a"].includes(normalized.toLowerCase())) return false;
+  const words = new Set(["year", "month", "week", "day", "hour", "minute", "second", "proportion", "ratio", "count", "unitless", "dimensionless", "patient", "participant", "person", "people"]);
+  const lower = normalized.toLowerCase();
+  const word = words.has(lower) || lower.endsWith("s") && words.has(lower.slice(0, -1));
+  const alternatives = [normalized, ...(words.has(lower) && !["unitless", "dimensionless", "people"].includes(lower) ? [`${normalized}s`] : [])];
+  const left = String.raw`[\p{L}/⁄·*^²³−_-]`, right = String.raw`[\p{L}\p{N}/⁄·*^²³−_-]`;
+  return alternatives.filter(Boolean).some(value => new RegExp(`(?<!${left})${value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?!${right})`, word ? "iu" : "u").test(unitSpacing(quote)));
 }
 /** @param {string} text @param {any} span @param {string} quote */
 function exactSpan(text, span, quote) {
@@ -39,13 +44,17 @@ export function createVcrEvidenceSources({ sources }) {
         || asked?.textSha256 !== sourceHash) throw new HttpError(409, "source_changed", "Read the current preserved source before extracting evidence.");
       const span = exactSpan(text, locator, quote);
       const parts = {};
-      for (const field of ["ciLow", "ciHigh", "sampleSize", "events", "unit"]) {
+      for (const field of ["ciLow", "ciHigh", "sampleSize", "events", "unit", "trialIdentity"]) {
         const part = locator?.parts?.[field];
         if (part) parts[field] = exactSpan(text, part, String(part.quote ?? ""));
       }
+      const inputs = Array.isArray(locator?.inputs) ? locator.inputs.map(input => {
+        if (!input || typeof input !== "object" || typeof input.value !== "number" || !Number.isFinite(input.value)) throw invalid();
+        return { ...exactSpan(text, input, String(input.quote ?? "")), value: input.value };
+      }) : [];
       return { text, sourceRef: `source:${source.id}:g${source.payload.generation}:${sourceHash}`,
         locator: { kind: "literature_text", sourceId: source.id, generation: source.payload.generation, sourceHash, textSha256: sourceHash,
-          ...span, offsetUnit: "utf16", parts, inputs: Array.isArray(locator?.inputs) ? locator.inputs.map(String) : [],
+          ...span, offsetUnit: "utf16", parts, inputs,
           unitVerification: literatureUnitIsInQuote(quote, unit) || parts.unit && literatureUnitIsInQuote(parts.unit.quote, unit)
             ? { status: "verified", basis: parts.unit ? "companion_span_or_quotation" : "quotation" } : { status: "unknown", reason: "unit_not_in_quotation" },
           materialLocation: locateQuoteInText({ text, quote, matches: quoteIsPresent }) } };
@@ -54,13 +63,14 @@ export function createVcrEvidenceSources({ sources }) {
 }
 
 /** Resolve only explicitly mapped baseline statistics. Quotation verification establishes source values, not transportability.
- * @param {{store:any,userId:string,studyId:string,baselineTable:any[],bindings:any[]}} input */
-export async function verifyLiteratureBaseline({ store, userId, studyId, baselineTable, bindings }) {
+ * @param {{store:any,userId:string,studyId:string,baselineTable:any[],bindings:any[],correlationSource?:string}} input */
+export async function verifyLiteratureBaseline({ store, userId, studyId, baselineTable, bindings, correlationSource }) {
   const rows = Array.isArray(baselineTable) ? baselineTable : [];
   const asked = Array.isArray(bindings) ? bindings : [];
   const ids = [...new Set(asked.map(binding => String(binding?.evidenceId ?? "")).filter(Boolean))];
   const evidence = new Map((await store.verifiedItemsById({ userId, studyId, ids })).map(row => [String(row.id), row]));
   /** @type {any[]} */ const issues = [], resolved = [];
+  if (correlationSource === "cited") issues.push({ code: "correlation_source_unverified" });
   const units = new Map();
   /** @type {Set<any>} */ const used = new Set();
   for (const row of rows) {

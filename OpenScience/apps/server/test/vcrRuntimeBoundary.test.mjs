@@ -117,6 +117,14 @@ test("every `what` a run may read leaves through the boundary: no head count bel
   assert.deepEqual(seen, [...VCR_READ_WHATS], "the walk read every `what`");
 });
 
+test("a study-only patient-context read cannot fall through to a registry record without native invocation proof", async () => {
+  let registryReads = 0;
+  const read = await service({ evidence: { async registryRecord() { registryReads++; return { record: { patient: "unrelated" } }; } } })
+    .runtimeRead(study, "patient_context", { registryId: "NCT02296125" });
+  assert.deepEqual(read, { candidates: [], nextBeforeSeq: null });
+  assert.equal(registryReads, 0);
+});
+
 test("the model analysis block a run reads for a model document passes the same boundary: a small people-count in a tabulated result is hidden", async () => {
   const read = await service().runtimeRead(study, "report_model", { kind: "model_analysis_report" });
   const tabulated = read.model.modelAnalysis.results;

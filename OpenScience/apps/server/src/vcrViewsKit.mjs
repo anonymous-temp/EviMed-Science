@@ -1,3 +1,4 @@
+import { vcrAnalyticComputationBasis } from "./vcrScientificBasis.mjs";
 /**
  * The vocabulary of a 「虚拟临床研究」 page, spoken once: how a stored measure
  * becomes the `VcrValue` the browser prints, how counts, times and stale marks
@@ -573,6 +574,13 @@ function runDetail({ label, measure, result, execution, mcse, tab }) {
   if (execution?.replicates != null) fields.push({ label: "重复次数", value: Number(execution.replicates).toLocaleString("en-US") });
   if (mcse !== null) fields.push({ label: "蒙特卡洛标准误", value: String(roundTo(mcse, 6)) });
   if (execution?.cpuSeconds != null) fields.push({ label: "计算用时", value: cpuText(Number(execution.cpuSeconds)) });
+  const basis = vcrAnalyticComputationBasis(result, execution);
+  if (basis) {
+    fields.push({ label: "样本量依据", value: basis.basis === "normal_approximation" ? "正态近似" : "Schoenfeld 事件数与事件概率近似" },
+      { label: "试验组 / 对照组 / 合计", value: `${basis.nTreatment} / ${basis.nControl} / ${basis.total}` },
+      { label: "目标功效 / 校验功效", value: `${basis.targetPower} / ${basis.powerAtAllocatedN}` },
+      { label: "功效校验方法", value: basis.powerCheckBasis === "pooled_two_sample_t" ? "合并方差双样本 t 检验" : basis.powerCheckBasis === "logrank_martingale_integral" ? "logrank 鞅积分" : "两比例正态近似" });
+  }
   if (measure?.simulated !== true && !fields.length) return null;
   return {
     kind: "run",

@@ -49,6 +49,7 @@ import { workspaceLayout } from './workspaceLayout.mjs'
  * @type {readonly { tag: string, role: 'injected' | 'user-wrapper', emitters: readonly string[], legacy?: string, upstream?: string }[]}
  */
 export const PLATFORM_CONTEXT_TAGS = Object.freeze([
+  { tag: 'evimed-vcr-selection', role: 'injected', emitters: ['apps/server/src/vcrConversationReference.mjs'] },
   { tag: 'evimed-evolution', role: 'injected', emitters: ['apps/server/src/evolutionRuns.mjs'] },
   // The capability handbooks of an account and the platform's on probation, deleted with their arm on 2026-10-25: nothing writes either tag now, and the
   // transcripts of the last ninety days still carry them as machine text.

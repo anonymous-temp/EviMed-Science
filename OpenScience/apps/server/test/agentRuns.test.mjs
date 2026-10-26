@@ -9055,3 +9055,51 @@ test("a steer typed into a running turn keeps its words unless they carry a cred
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('the final continuation guard runs under the same project lock before any reservation or prompt',async()=>{
+ const root=await mkdtemp(path.join(tmpdir(),'os-continuation-guard-'));const project={id:'guard',userId:'owner',rootDir:root,workspaceDir:path.join(root,'workspace'),metaDir:path.join(root,'.openscience')};
+ const session={sessionId:'original',mode:'open-domain',agentId:null,agentVersion:null,runtimeAgent:null};
+ await mkdir(project.workspaceDir,{recursive:true});await mkdir(project.metaDir,{recursive:true});
+ const store=new AgentRunStore({get:async()=>session},{model:'deepseek/deepseek-v4-flash',readSessionHistory:async()=>[],monitorIntervalMs:60000});
+ let sent=0,guarded=0,concurrent=false,pending;
+ try{
+  await assert.rejects(store.dispatch(project,{sessionId:'original',dispatchId:'continuation',automated:true},async()=>{sent++;return{accepted:true};},{beforeReserve:async({runs})=>{
+   guarded++;assert.deepEqual(runs,[]);
+   const {withProjectStorageMutation}=await import('../src/security.mjs');pending=withProjectStorageMutation(project,async()=>{concurrent=true;});
+   await new Promise(resolve=>setImmediate(resolve));assert.equal(concurrent,false,'a second project mutation remains excluded until the guard finishes');
+   throw new HttpError(409,'vcr_completion_observed','The original result was read.');
+  }}),{code:'vcr_completion_observed'});
+  await pending;assert.equal(concurrent,true);assert.equal(guarded,1);assert.equal(sent,0);assert.deepEqual(await store.list(project),[]);
+ }finally{await store.closeProject(project);await rm(root,{recursive:true,force:true});}
+});
+
+test('a later native human turn that settles after reservation is read from the real ledger before an old completion can send',async()=>{
+ const {VcrConversationCompletions}=await import('../src/vcrConversationCompletions.mjs');const root=await mkdtemp(path.join(tmpdir(),'os-late-human-'));
+ const project={id:'latehuman',userId:'owner',rootDir:root,workspaceDir:path.join(root,'workspace'),metaDir:path.join(root,'.openscience')};const session={sessionId:'root',mode:'open-domain',agentId:null,agentVersion:null,runtimeAgent:null};
+ await mkdir(project.workspaceDir,{recursive:true});await mkdir(project.metaDir,{recursive:true});const now=Date.now();let clock=now-20000,paid=0,notices=0;
+ const ledger=new AgentRunStore({get:async()=>session},{model:'deepseek/deepseek-v4-flash',readSessionHistory:async()=>[],monitorIntervalMs:60000,now:()=>new Date(clock)});ledger.scheduleMonitor=()=>{};
+ try{
+  const original=(await ledger.reserveRun(project,session,{baselineCursor:null})).run;clock=now-10000;await ledger.finishInternal(project,original.id,{status:'succeeded',artifacts:[]});
+  const row={id:'completion',job_id:'job',user_id:'owner',project_id:project.id,root_session_id:'root',state:'pending',dispatch_id:'late_human_completion',fingerprint:'a'.repeat(64),attempts:1,created_at:new Date(now).toISOString(),payload:{state:'succeeded',runId:original.id,completedAt:new Date(now-5000).toISOString()}};
+  const completion=new VcrConversationCompletions({store:{rows:async()=>row.state==='pending'?[row]:[],query:async(_sql,values)=>{row.state=values[1];}},readRuns:()=>ledger.list(project),readAcknowledgment:async()=>({observed:false}),resolve:async()=>({user:{id:'owner'},project,session}),inbox:async()=>({running:false,queued:0}),notify:async()=>{notices++;},
+   dispatch:async(_u,_p,_sid,id,_text,options)=>ledger.dispatch(project,{sessionId:'root',dispatchId:id,automated:true},async()=>{
+    clock=now-2000;const human=(await ledger.reserveRun(project,session,{baselineCursor:null,nativeTurn:{startSeq:200,userSeq:201},kernelRequestIds:['req_later_human']})).run;clock=now-1000;await ledger.finishInternal(project,human.id,{status:'succeeded',artifacts:[]});
+    try{await options.beforePrompt();}catch(error){error.definitivelyRejected=true;throw error;}paid++;return{accepted:true};
+   },{beforeReserve:options.beforeReserve})});
+  await completion.deliver();assert.equal(paid,0);assert.equal(notices,1);assert.equal(row.state,'delivered');
+  assert.ok((await ledger.list(project)).some(run=>run.nativeTurn?.startSeq===200 && run.status==='succeeded'));
+ }finally{await ledger.closeProject(project);await rm(root,{recursive:true,force:true});}
+});
+
+test('durable stop intent invalidates existing work across restart and leaves a future human request independent',async()=>{
+ const root=await mkdtemp(path.join(tmpdir(),'os-durable-stop-'));const project={id:'stops',userId:'owner',rootDir:root,workspaceDir:path.join(root,'workspace'),metaDir:path.join(root,'.openscience')};const session={sessionId:'root',mode:'open-domain',agentId:null,agentVersion:null,runtimeAgent:null};
+ await mkdir(project.workspaceDir,{recursive:true});await mkdir(project.metaDir,{recursive:true});const create=()=>new AgentRunStore({get:async()=>session},{model:'deepseek/deepseek-v4-flash',readSessionHistory:async()=>[],monitorIntervalMs:60000});const first=create(),restarted=create();
+ try{
+  const original=(await first.reserveRun(project,session,{baselineCursor:null})).run;await first.finishInternal(project,original.id,{status:'succeeded',artifacts:[]});
+  assert.equal(await first.noteStopRequest(project,{sessionId:'root'}),null,'intent does not claim an idle kernel turn canceled');assert.equal(first.stopRequests.size,0);
+  assert.equal(await restarted.promptStopRequested(project,'root',original.id),true);
+  await restarted.recordLearning(project,original.id,{repairRounds:{content:0,structural:0}});assert.equal(await restarted.promptStopRequested(project,'root',original.id),true,'a learning gauge cannot overwrite intent');
+  const human=(await restarted.reserveRun(project,session,{baselineCursor:null,nativeTurn:{startSeq:300,userSeq:301},kernelRequestIds:['req_new_human']})).run;
+  assert.equal(await restarted.promptStopRequested(project,'root',human.id),false);assert.equal(await restarted.promptStopRequested(project,'other',original.id),false);
+ }finally{await first.closeProject(project);await restarted.closeProject(project);await rm(root,{recursive:true,force:true});}
+});

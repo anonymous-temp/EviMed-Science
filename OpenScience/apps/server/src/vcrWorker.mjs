@@ -260,7 +260,7 @@ export class VcrWorker {
  */
 export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = null, frontierEvents = null, knowledge = null, drafts = null, completions = null }) {
   const jobLoop = lane => jobs ? async () => {
-    const claimed = await jobs.claim({ limit: lane === "local" ? 4 : Math.max(1,Number(jobs.maxConcurrent ?? 1)), lane });
+    const claimed = await jobs.claim({ limit: lane === "local" ? Number(jobs.config?.vcrLocalConcurrency ?? 2) : Math.max(1,Number(jobs.maxConcurrent ?? 1)), lane });
     const methods = Object.keys(jobs.localExecutors ?? {});
     const running = await store.rows("SELECT id,method,kind FROM evimed_vcr.jobs WHERE state='running' AND lease_owner=$1 LIMIT 20",[jobs.owner]);
     const selected = [...claimed,...running.filter(row => !claimed.some(job => job.id===String(row.id)) && methods.includes(row.method)===(lane==="local"))];

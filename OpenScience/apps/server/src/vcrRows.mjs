@@ -479,7 +479,7 @@ export function patientRecord(table, patientId, options = {}) {
     const value = cellOf(column, row);
     const text = word(column.key, value);
     const entry = { key: column.key, label: COLUMN_WORDS[column.key]?.label ?? null, value, ...(text ? { text } : {}) };
-    if (visit && ["visit", "time", "y", "status"].includes(column.key)) continue;
+    if (visit && ["visit", "time", "y", "y0", "y1", "status"].includes(column.key)) continue;
     (OUTCOME_COLUMNS.has(column.key) || (options.prediction && ["prediction", "score", "reason"].includes(column.key)) ? outcome : baseline).push(entry);
   }
   const get = (/** @type {string} */ key) => {
@@ -513,7 +513,7 @@ export function patientRecord(table, patientId, options = {}) {
         armMean: values.length ? values.reduce((sum, entry) => sum + entry, 0) / values.length : null, armSize: values.length };
   }
   // Both assumptions' trajectories, only where the engine left both outcomes in the table: `y0`/`y1`, `time0`/`time1`.
-  /** @type {Array<{ arm: string, label: string, values: Record<string, string | number | null> }> | null} */
+  /** @type {Array<{ arm: string, label: string, values: Record<string, string | number | null>, series?: Array<Record<string, string | number | null>> }> | null} */
   let trajectories = null;
   const pairs = ["y", "time", "status"].map((base) => {
     const names = [[`${base}0`, `${base}1`], [`${base}_0`, `${base}_1`]].find(([zero, one]) => table.columns.some((c) => c.key === zero) && table.columns.some((c) => c.key === one));
@@ -522,6 +522,14 @@ export function patientRecord(table, patientId, options = {}) {
   if (pairs.length) {
     trajectories = ["0", "1"].map((which) => ({
       arm: which, label: COLUMN_WORDS.arm.values?.[which] ?? which,
+      ...(visit ? { series: observations.map(observation => ({
+        visit: cellOf(visit, observation), time: observationTimeColumn ? cellOf(observationTimeColumn, observation) : null,
+        ...Object.fromEntries(pairs.map(pair => {
+          const selected = /** @type {NonNullable<typeof pair>} */ (pair);
+          const column = table.columns.find(candidate => candidate.key === (which === "0" ? selected.zero : selected.one));
+          return [selected.base, column ? cellOf(column, observation) : null];
+        })),
+      })) } : {}),
       values: Object.fromEntries(pairs.map((pair) => [/** @type {NonNullable<typeof pair>} */ (pair).base, get(which === "0" ? /** @type {NonNullable<typeof pair>} */ (pair).zero : /** @type {NonNullable<typeof pair>} */ (pair).one)])),
     }));
   }

@@ -361,3 +361,24 @@ test("predictions on a verified generated cohort can be inspected without treati
   assert.equal((await module.modelRead(study, "res_prediction")).available, false);
   await assert.rejects(module.record(study, "res_prediction", "vp_target"), { code: "vcr_records_not_synthetic" });
 });
+
+test('a longitudinal paired patient preserves both full observed series without inventing visits',()=>{
+ const keys=['patientId','arm','visit','time','y','y0','y1'];
+ const table={columns:keys.map((key,index)=>({key,index,kind:key==='patientId'?'text':'number'})),rows:[['p','1','2','4','7','5','7'],['p','1','1','0','3','3','3']]};
+ const record=patientRecord(table,'p');assert.equal(record.observationCount,2);
+ assert.deepEqual(record.trajectories.map(arm=>arm.series),[[{visit:1,time:0,y:3},{visit:2,time:4,y:5}],[{visit:1,time:0,y:3},{visit:2,time:4,y:7}]]);
+});
+
+test('verified keyless independent generation remains readable while hashes and uploaded ancestry cannot grant access',async()=>{
+ const {module,executions,results}=records();const hash='d'.repeat(64);
+ executions.ex_vp.receipt={signed:false,hashVerified:true,outputHash:hash};executions.ex_vp.output_hash=hash;
+ assert.equal((await module.modelRead(study,'res_vp',{limit:1})).available,true);
+ const parent=results.res_pop.tables[0];executions.ex_vp.inputs=[{kind:'snapshot_file',id:'res_pop:population',valueSource:'synthetic',hash:parent.sha256,location:parent.location}];
+ executions.ex_pop.receipt={signed:false,hashVerified:true,outputHash:hash};executions.ex_pop.output_hash=hash;
+ assert.equal((await module.modelRead(study,'res_vp',{limit:1})).available,true);
+ for(const receipt of [{signed:false,outputHash:hash},{signed:false,hashVerified:true,outputHash:'e'.repeat(64)},{signed:true,outputHash:'e'.repeat(64)},{signed:true,ok:false}]){
+  executions.ex_vp.receipt=receipt;assert.equal((await module.modelRead(study,'res_vp')).available,false);
+ }
+ executions.ex_vp.receipt={signed:false,hashVerified:true,outputHash:hash};executions.ex_vp.inputs=[{kind:'snapshot',id:'uploaded',valueSource:'synthetic'}];
+ assert.equal((await module.modelRead(study,'res_vp')).available,false);
+});

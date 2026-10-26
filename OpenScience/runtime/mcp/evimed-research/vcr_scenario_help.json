@@ -96,7 +96,7 @@
       "endpoints": ["continuous","binary","time_to_event"],
       "notes": [
         "Apply only an immutable source-bound typed equation. Missing predictors, category mappings or units stay unknown; never fill them with zero. Observed predictor units come from the selected frozen field map, while synthetic units are explicit scenario declarations. Source horizon units stay bound to the literal publication.",
-        "A Cox equation without baseline survival yields relative scores only. Baseline centering, horizon and units must match the publication.",
+        "Equation coefficients are linear-predictor beta. Source bindings explicitly declare coefficientScale=linear_predictor or ratio; positive Cox HR/logistic OR are converted once by log_of_ratio. Apply transform first, then subtract center and divide by scale, both on the transformed predictor scale. For a nonidentity transform, center bindings explicitly declare centerScale=transformed or source_raw; source_raw is converted with the same transform. A Cox equation without baseline survival yields relative scores only. Every centered baseline reference, including zero, needs its preserved numeric binding; standardized zero references remain valid. Baseline centering, horizon and units must match the publication.",
         "Predicted control outcomes are descriptive benchmarks. They do not identify treatment effects, replace observed controls or increase effective sample size."
       ],
       "rows": [

@@ -97,7 +97,7 @@ const SIMULATE_RELEASES = Object.freeze([Object.freeze({
  * itself, and `intendedUseCeilingFor` reads it.
  */
 export const VCR_ENGINE_METHODS = Object.freeze({
-  'model.survival_fit': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['survival::survreg', 'closed-form censored exponential likelihood']), modelTier: 'literature' },
+  'model.survival_fit': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['independent base-R likelihood optimization', 'flexsurv distribution and delta-method output oracle', 'closed-form censored exponential likelihood']), modelTier: 'literature' },
   'model.prognostic_apply': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['closed-form published equation evaluation']), modelTier: 'literature' },
   'profile.snapshot': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['profile_dataset.py']), modelTier: null },
   'cohort.build': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen([]), modelTier: null },

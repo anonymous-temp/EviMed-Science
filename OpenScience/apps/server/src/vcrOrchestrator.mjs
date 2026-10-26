@@ -1478,7 +1478,11 @@ export function vcrBuildStages(item, context) {
     if (baseConfig.modelResultId) {
       if (!context.modelResult || context.modelResult.id !== baseConfig.modelResultId || context.modelResult.version !== baseConfig.modelResultVersion || baseConfig.modelParameterQuantile !== "all") return { ok: false, refused: { code: "vcr_model_not_applicable", message: "模型参数网格须指定已保存结果的确切版本与 all 分位情景。" } };
       try {
-        const variants = ["p10", "p50", "p90"].map(quantile => vcrModelDesignBinding(context.modelResult, { ...baseConfig, endpoint: { ...object(baseConfig.endpoint), type } }, quantile));
+        const declared = truths.length ? truths : [{}];
+        const variants = declared.flatMap((truth, truthIndex) => ["p10", "p50", "p90"].map(quantile => {
+          const variant = vcrModelDesignBinding(context.modelResult, { ...baseConfig, endpoint: { ...object(baseConfig.endpoint), type }, truth: { ...object(baseConfig.truth), ...truth } }, quantile);
+          return { ...variant, provenance: { ...variant.provenance, truthIndex, truthLabel: list(row.truthScenarios)[truthIndex]?.label ?? list(row.truthScenarios)[truthIndex]?.name ?? null } };
+        }));
         truths = variants.map(variant => variant.scenario.truth);
         baseConfig = variants[0].scenario;
         modelDesign = { ...variants[0].provenance, quantile: "all", scenarios: variants.map(variant => variant.provenance) };
@@ -1690,8 +1694,8 @@ export class VcrOrchestrator {
     if (typeof this.jobs.addFinishHook === "function") {
       this.durableJobFinishes = true;
       this.jobs.addFinishHook(async (/** @type {any} */ outcome) => {
-        if (outcome?.job) await this.onJobFinished({job:outcome.job,result:outcome.result ?? null});
-      });
+        if (outcome?.job) await this.onJobFinished({...outcome,job:outcome.job,result:outcome.result ?? null});
+      },'orchestrator');
     }
     this.leaseSeconds = Math.max(60, Math.round(Number(config.vcrLeaseMs ?? 900_000) / 1000));
     /** @type {Map<string, Promise<unknown>>} one advance per study at a time, in this process */

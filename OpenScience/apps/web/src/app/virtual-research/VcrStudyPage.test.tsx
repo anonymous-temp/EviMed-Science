@@ -141,7 +141,7 @@ describe("the study page's header", () => {
     draw();
     await heading();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /对话/ }));
+    await userEvent.click(screen.getByRole("button", { name: "研究对话" }));
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/virtual-research/std_1/chat"));
     // Not the chat surface, and no switch of project for it: the shell was in the study's project already.
     expect(screen.getByTestId("location")).not.toHaveTextContent("/app/chat");

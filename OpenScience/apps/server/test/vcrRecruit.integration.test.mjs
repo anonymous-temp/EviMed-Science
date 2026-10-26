@@ -1,7 +1,5 @@
-// The matching and referral tables against a real PostgreSQL: an assessment and
-// its judgments land together or not at all, the contact gate holds on the
-// locked row, a screen failure is tied to a criterion by a foreign key, and
-// deleting a study takes its ledger with it.
+// Scientific matching rows and retained read-only historical observations against real PostgreSQL.
+// Assessments and criteria remain atomic; fresh schemas expose no operational recruitment writers.
 //
 // Its own database (test/helpers/geoTestDatabase.mjs creates one beside the
 // configured test database): this suite counts across the schema, which no
@@ -44,7 +42,7 @@ before(async () => {
   await store.ready();
   await database.query(
     `INSERT INTO ${VCR_SCHEMA}.studies (id, user_id, project_id, name) VALUES ($1, $2, $3, $4)`,
-    [STUDY, USER, `prj-${run}`, "匹配与招募集成测试"]);
+    [STUDY, USER, `prj-${run}`, "患者匹配存储集成测试"]);
   await database.query(
     `INSERT INTO ${VCR_SCHEMA}.protocol_versions (id, study_id, user_id, version, title) VALUES ($1, $2, $3, 1, $4)`,
     [PROTOCOL, STUDY, USER, "v1"]);

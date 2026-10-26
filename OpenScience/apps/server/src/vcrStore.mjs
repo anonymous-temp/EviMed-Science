@@ -425,18 +425,22 @@ export class VcrStore extends VcrStoreBase {
 
   /** The authenticated root conversation has its own idempotent task context.
    * No project name or session binding is changed. */
-  async taskContext({ userId, projectId, rootSessionId }) {
+  async taskContext({ userId, projectId, rootSessionId }, { create = true } = {}) {
     if (![userId, projectId, rootSessionId].every(value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,160}$/.test(value))) {
       throw new TypeError('Invalid conversation research scope.');
     }
+    const existing = await this.one(`SELECT * FROM ${VCR_SCHEMA}.studies WHERE user_id=$1 AND project_id=$2 AND scope='conversation' AND conversation_session_id=$3`,[userId,projectId,rootSessionId]);
+    if (existing?.deleted_at) throw new HttpError(410,'vcr_task_context_deleted','This conversation research context was deleted.');
+    if (existing) return vcrStudyFromRow(existing);
+    if (!create) return null;
     return this.transaction(async client => {
       const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.studies
         (id,user_id,project_id,name,purpose,scope,conversation_session_id)
-        VALUES ($1,$2,$3,'Conversation research','task','conversation',$4)
+        VALUES ($1,$2,$3,'对话研究','task','conversation',$4)
         ON CONFLICT (user_id,project_id,conversation_session_id) WHERE scope='conversation'
-        DO UPDATE SET updated_at=now() WHERE studies.deleted_at IS NULL RETURNING *`,
+        DO UPDATE SET conversation_session_id=EXCLUDED.conversation_session_id WHERE studies.deleted_at IS NULL RETURNING *`,
       [vcrId('study'),userId,projectId,rootSessionId])).rows[0];
-      if (!row) throw new Error('Conversation research was deleted.');
+      if (!row) throw new HttpError(410,'vcr_task_context_deleted','This conversation research context was deleted.');
       await client.query(`INSERT INTO ${VCR_SCHEMA}.members (study_id,user_id,role,invited_by)
         VALUES ($1,$2,'lead',$2) ON CONFLICT DO NOTHING`,[row.id,userId]);
       return vcrStudyFromRow(row);
@@ -544,7 +548,7 @@ export class VcrStore extends VcrStoreBase {
   async listStudies(userId) {
     // A draft (a study nobody has spoken to yet) is not a study of the list: see `draftStudies`.
     const rows = await this.rows(`SELECT s.* FROM ${VCR_SCHEMA}.studies s
-      WHERE s.deleted_at IS NULL AND s.status <> 'draft'
+      WHERE s.deleted_at IS NULL AND s.status <> 'draft' AND s.scope='project'
         AND (s.user_id = $1 OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.members m
           WHERE m.study_id = s.id AND m.user_id = $1 AND m.role = ANY($2::text[])))
       ORDER BY s.updated_at DESC LIMIT 500`, [String(userId), [...VCR_READING_ROLES]]);
@@ -559,7 +563,7 @@ export class VcrStore extends VcrStoreBase {
    */
   async draftStudies(userId) {
     const rows = await this.rows(`SELECT * FROM ${VCR_SCHEMA}.studies
-      WHERE user_id = $1 AND status = 'draft' AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 200`, [String(userId)]);
+      WHERE user_id = $1 AND status = 'draft' AND scope='project' AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 200`, [String(userId)]);
     return rows.map(vcrStudyFromRow);
   }
 

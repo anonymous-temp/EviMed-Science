@@ -1540,3 +1540,27 @@ test("design duration reads simulation duration_months and stays absent when unc
  bundle.results[0].measures=bundle.results[0].measures.filter(row=>row.name!=="duration_months");
  assert.equal('duration_months' in presentDesigns(bundle).designs.find(row=>row.id==="a").measures,false);
 });
+
+
+test("trial preserves independent LPI accrual forecasts beside mean duration, including historical rows",()=>{
+ const bundle={...emptyBundle(),...designsBundle({grid:null})};
+ bundle.results[0].measures.push({...measure("duration_months",24),unit:"months"});
+ const accrual={id:"acc1",version:1,kind:"accrual_forecast",subjectId:"a",subjectKind:"trial_scenario",createdAt:"2026-09-01",measures:[{name:"last_patient_in_months",value:11.7,source:"simulated",unit:"months",interval:{kind:"prediction",low:9,high:16,level:0.8}}],diagnostics:{probabilityByMonth:[{month:12,probability:0.7}]}};
+ bundle.allResults=[...bundle.results,accrual]; bundle.forecasts=[];bundle.schedule=null;
+ const tab=presentTrialTab(bundle);
+ const row=tab.designs.find(row=>row.id==="a");
+ assert.equal(row.measures.duration_months.value,24);assert.equal(row.measures.last_patient_in_months.value,11.7);
+ assert.equal(row.measures.last_patient_in_months.interval.kind,"prediction");
+ assert.equal(tab.accrualForecasts[0].lastPatientIn.value,11.7);
+ assert.deepEqual(tab.accrualForecasts[0].probabilityByMonth,[{month:12,probability:0.7}]);
+ assert.ok(tab.columns.find(row=>row.key==="last_patient_in_months"));
+ bundle.results[0].measures=bundle.results[0].measures.filter(row=>row.name!=="duration_months");
+ assert.equal('duration_months' in presentTrialTab(bundle).designs.find(row=>row.id==="a").measures,false);
+});
+
+
+test('an unsent saved question is restored byte-for-byte into its owned native draft',()=>{
+ const bundle=emptyBundle();const draft="  My exact question\n\nKeep this indentation.  ";
+ bundle.study={...bundle.study,status:'draft',question:draft};
+ assert.equal(presentStudy(bundle).question,draft);
+});

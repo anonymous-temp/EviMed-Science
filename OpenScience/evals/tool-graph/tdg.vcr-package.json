@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-package",
-  "version": "sha256:acd809450df2f26ce54379e1776e74a199adccad921050483f8a9512e31fd8df",
+  "version": "sha256:63d96ba9d124b606e15968cdab179e38327141e19c9a09c2f632bd4f0583578c",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 27,
@@ -837,7 +837,7 @@
     {
       "name": "mcp__evimed__vcr_read",
       "source": "mcp",
-      "description": "Read the current conversation's research objects and evidence. what=study gives task context; subject_document reads original patient material through existing permission and quote checks. matching filter.kind=contract returns write syntax; filter.subjectKey plus filter.id reads one criterion without repeated schemas. matching and candidate_trials retain criterion evidence and unknowns; filter.subjectKey selects a platform pseudonym. No invented eligibility or clinical validity. Use the virtual clinical research skill for details.",
+      "description": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists authenticated human-message references (filter beforeSeq/limit); use messageSeq to preserve an earlier case. subject_document reads permitted original material. trial_registry_record reads one registry (filter registryId). matching filter.kind=contract gives write syntax; candidate_trials reads patient trial matches.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -856,6 +856,7 @@
               "precedents",
               "matching",
               "subject_document",
+              "followup_history",
               "model_source",
               "generated_records",
               "results",
@@ -864,6 +865,7 @@
               "models",
               "jobs",
               "trial_registry_record",
+              "patient_context",
               "pack",
               "library",
               "model_assessments",
@@ -874,86 +876,7 @@
             ]
           },
           "filter": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 160,
-                "pattern": "^[A-Za-z0-9_.:@-]+$"
-              },
-              "parentId": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 160,
-                "pattern": "^[A-Za-z0-9_.:@-]+$"
-              },
-              "kind": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 160,
-                "pattern": "^[A-Za-z0-9_.:@-]+$"
-              },
-              "registryId": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 160,
-                "pattern": "^[A-Za-z0-9_.:@-]+$"
-              },
-              "registry": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 160,
-                "pattern": "^[A-Za-z0-9_.:@-]+$"
-              },
-              "snapshotId": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 160,
-                "pattern": "^[A-Za-z0-9_.:@-]+$"
-              },
-              "sourceId": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 160,
-                "pattern": "^[A-Za-z0-9_.:@-]+$"
-              },
-              "subjectKey": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 160,
-                "pattern": "^[A-Za-z0-9_.:@-]+$"
-              },
-              "documentId": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 160,
-                "pattern": "^[A-Za-z0-9_.:@-]+$"
-              },
-              "protocolVersionId": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 160,
-                "pattern": "^[A-Za-z0-9_.:@-]+$"
-              },
-              "query": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 200
-              },
-              "limit": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 50,
-                "default": 20
-              },
-              "offset": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 1048576
-              }
-            },
-            "additionalProperties": false
+            "type": "object"
           }
         },
         "required": [
@@ -967,9 +890,7 @@
         "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
         "fields": []
       },
-      "typeTags": [
-        "source_id"
-      ],
+      "typeTags": [],
       "requiredTypeTags": [],
       "outputTypeTags": [],
       "stateEffect": "none"
@@ -977,7 +898,7 @@
     {
       "name": "mcp__evimed__vcr_write",
       "source": "mcp",
-      "description": "Save research objects in this conversation. what=task_context opens an independent task context; patient_context data={messageSeq?} preserves an authenticated human message, or data={sourceId} an owned uploaded original. It accepts no patient prose from the model. Preserve sourced quotes and use the returned subjectKey/documentId for facts and trial matching. candidate_trial stores registry-linked eligibility. Other objects use their structured contract; computed results are never writable. For numerical configuration use vcr_simulate action shape with design_analytic, design_simulation, generate_patients, generate_patients_continuous, generate_patients_binary or generate_population.",
+      "description": "Save a research object; candidate_trial stores registry-linked eligibility. Never write calculated results. patient_context data={messageSeq} preserves a listed original human case, or {sourceId} an owned human upload; no model-written prose. task_context opens an independent hidden task. Use the VCR workflow skill for object contracts and vcr_simulate action=shape for numerical inputs.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1018,8 +939,6 @@
           },
           "items": {
             "type": "array",
-            "minItems": 1,
-            "maxItems": 200,
             "items": {
               "type": "object"
             }

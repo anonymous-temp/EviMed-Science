@@ -132,13 +132,18 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         if (disposed) return;
         // Retains the session for the main view, which is what makes its
         // scope (and so its composer) exist for the draft below.
-        target.__EVIMED_RESULT_REVISION__?.clear();
+        target.__EVIMED_RESULT_REVISION__?.clear(); target.__EVIMED_VCR_SELECTION__?.clear();
         ctx.uiWorkspace.openSession(sessionId);
+        let draftRestored;
         if (intent.draft !== undefined || (Array.isArray(intent.references) && intent.references.length)) {
           const scope = ctx.sessions.scope(sessionId);
           if (!scope) throw new Error('Native session scope unavailable');
           const input = ctx.conversation.input.for(scope);
-          if (intent.draft !== undefined) input.setDraft(intent.draft);
+          if (intent.draft !== undefined) {
+            const currentDraft = intent.restoreDraft === true ? input.state?.getSnapshot?.()?.draft : null;
+            draftRestored = intent.restoreDraft !== true || (typeof currentDraft === 'string' && !currentDraft.trim());
+            if (draftRestored) input.setDraft(intent.draft);
+          }
           for (const reference of Array.isArray(intent.references) ? intent.references : []) {
             // Lexical publishes draft revisions asynchronously. Each insertion must observe the preceding edit.
             await new Promise(resolve => (target.setTimeout ?? globalThis.setTimeout)(resolve, 0));
@@ -147,13 +152,17 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
             const span = input.actions?.captureInsertion?.();
             if (!span || !input.insertReference(kit.knowledgeChip(reference), span)) throw new Error('Native reference chip refused');
           }
+          if (intent.vcrReference) {
+            if (!target.__EVIMED_VCR_SELECTION__) throw new Error('Research reference transport unavailable');
+            target.__EVIMED_VCR_SELECTION__.stage({ sessionId, reference: intent.vcrReference, draft: intent.draft });
+          }
           if (intent.resultRevision) {
             if (!target.__EVIMED_RESULT_REVISION__) throw new Error('Result revision transport unavailable');
             target.__EVIMED_RESULT_REVISION__.stage({ sessionId, referenceId: intent.resultRevision.referenceId, draft: intent.draft });
           }
         }
         activated = true; selectedSession = sessionId; previousSession = sessionId;
-        request.ack = { requestId, ok: true, sessionId };
+        request.ack = { requestId, ok: true, sessionId, ...(intent.restoreDraft === true ? { draftRestored: draftRestored === true } : {}) };
       } catch { request.ack = { requestId, ok: false, error: 'NAVIGATION_FAILED' }; }
       request.queued = false;
       post('ack', request.ack); sessionChanged();
@@ -195,7 +204,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     const snapshot = ctx.sessions.list.getSnapshot();
     const sessionId = mainViewSession(snapshot, previousSession ?? null);
     if (sessionId === previousSession) return;
-    target.__EVIMED_RESULT_REVISION__?.clear();
+    target.__EVIMED_RESULT_REVISION__?.clear(); target.__EVIMED_VCR_SELECTION__?.clear();
     previousSession = sessionId;
     selectedSession = sessionId;
     const lineage = sessionId === null ? {} : lineageOf(snapshot, sessionId);
@@ -389,7 +398,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         offered,
         starters: (Array.isArray(data.starters) ? data.starters : []).slice(0, 8)
           .filter((/** @type {any} */ starter) => starter && typeof starter.label === 'string' && starter.label && typeof starter.draft === 'string' && starter.draft)
-          .map((/** @type {any} */ starter) => ({ label: text(starter.label, 24), draft: text(starter.draft, 400) })),
+          .map((/** @type {any} */ starter) => ({ label: text(starter.label, 24), draft: text(starter.draft, 400), ...(typeof starter.requirement === 'string' && starter.requirement ? { requirement: text(starter.requirement, 500) } : {}), ...(typeof starter.minimumFields === 'string' && starter.minimumFields ? { minimumFields: text(starter.minimumFields, 800) } : {}), ...(typeof starter.inputLabel === 'string' && starter.inputLabel ? { inputLabel: text(starter.inputLabel, 80) } : {}) })),
       };
     },
     /**
@@ -420,7 +429,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         useOptions,
         starters: (Array.isArray(data.starters) ? data.starters : []).slice(0, 8)
           .filter((/** @type {any} */ starter) => starter && typeof starter.label === 'string' && starter.label && typeof starter.draft === 'string' && starter.draft)
-          .map((/** @type {any} */ starter) => ({ label: text(starter.label, 24), draft: text(starter.draft, 400) })),
+          .map((/** @type {any} */ starter) => ({ label: text(starter.label, 24), draft: text(starter.draft, 400), ...(typeof starter.requirement === 'string' && starter.requirement ? { requirement: text(starter.requirement, 500) } : {}), ...(typeof starter.minimumFields === 'string' && starter.minimumFields ? { minimumFields: text(starter.minimumFields, 800) } : {}), ...(typeof starter.inputLabel === 'string' && starter.inputLabel ? { inputLabel: text(starter.inputLabel, 80) } : {}) })),
       };
     },
     /** @param {any} data */
@@ -480,10 +489,12 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
           || !/^src_[A-Za-z0-9_-]{1,120}$/.test(reference.id) || typeof reference.title !== 'string')) return;
       intent.references = intent.references.map((/** @type {any} */ reference) => ({ id: reference.id, title: reference.title.slice(0, 300) }));
     }
+    if (intent.restoreDraft !== undefined && typeof intent.restoreDraft !== 'boolean') return;
+    if (intent.vcrReference && (typeof intent.vcrReference !== 'object' || JSON.stringify(intent.vcrReference).length > 4096 || typeof intent.draft !== 'string' || !intent.draft)) return;
     if (intent.resultRevision && (typeof intent.resultRevision.referenceId !== 'string'
       || !/^rr_[a-f0-9]{64}$/.test(intent.resultRevision.referenceId) || typeof intent.draft !== 'string' || !intent.draft)) return;
     incoming = data.seq;
-    const signature = JSON.stringify([intent.kind, intent.sessionId, intent.draft ?? null, intent.resultRevision?.referenceId ?? null, (intent.references ?? []).map((/** @type {{ id: string }} */ reference) => reference.id)]);
+    const signature = JSON.stringify([intent.kind, intent.sessionId, intent.draft ?? null, intent.restoreDraft === true, intent.vcrReference ?? null, intent.resultRevision?.referenceId ?? null, (intent.references ?? []).map((/** @type {{ id: string }} */ reference) => reference.id)]);
     const existing = requests.get(data.requestId);
     if (existing) {
       if (existing.signature !== signature) return;
@@ -709,7 +720,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     searches.clear();
     pendingNavigation = undefined;
     if (target.__EVIMED_SHELL__) delete target.__EVIMED_SHELL__;
-    requests.clear(); target.__EVIMED_RESULT_REVISION__?.clear(); target.__DSH_TRANSPORT__?.dispose?.();
+    requests.clear(); target.__EVIMED_RESULT_REVISION__?.clear(); target.__EVIMED_VCR_SELECTION__?.clear(); target.__DSH_TRANSPORT__?.dispose?.();
   }, 'evimed.runtime-ui.bridge');
 }
 

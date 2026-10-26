@@ -270,7 +270,7 @@ describe("人群 · a generated population", () => {
     await found(container, "[data-headline]");
     expect(container.querySelector("[data-headline]")).toHaveTextContent("人群 v1 · 情景人群 · 1,000 条生成记录");
     expect(screen.queryByRole("table", { name: "每个变量设定的分布和生成的结果" })).toBeNull();
-    expect(screen.queryByText(/重新生成/)).toBeInTheDocument();
+    expect(screen.queryByText(/在对话中生成新版本/)).toBeInTheDocument();
     expect(screen.queryByText(/还没有画像/)).toBeNull();
   });
 
@@ -284,8 +284,8 @@ describe("人群 · a generated population", () => {
     serve();
     const { container } = draw(readOnly());
     await within(await found(container, "[data-page-chrome]")).findByRole("button", { name: "下载记录" });
-    expect(within(band(container)).queryByRole("button", { name: "重新生成" })).toBeNull();
-    expect(within(band(container)).queryByRole("button", { name: "改设定" })).toBeNull();
+    expect(within(band(container)).queryByRole("button", { name: "在对话中生成新版本" })).toBeNull();
+    expect(within(band(container)).queryByRole("button", { name: "在对话中调整" })).toBeNull();
   });
 });
 
@@ -297,7 +297,7 @@ describe("人群 · before there is one", () => {
     const { container, spies } = draw(withStep("population", { status: "none", requested: false }));
     const recipe = await found(container, "[data-vcr-step-empty='population']");
     await userEvent.click(within(recipe).getByRole("button", { name: "构建人群" }));
-    expect(spies.openChat).toHaveBeenCalledWith(expect.stringContaining(STUDY_ID));
+    expect(spies.openChat).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ studyId: STUDY_ID }));
     expect(network.productRequest.mock.calls.filter(([, method]) => method === "POST")).toEqual([]);
   });
 
@@ -310,12 +310,13 @@ describe("人群 · before there is one", () => {
 });
 
 it("adjusts a cohort in its existing conversation with the result identity and no immediate write", async () => {
-  const payload = generatedPopulation();
+  const payload = { ...generatedPopulation(), selection: { objectId: "pop_saved", version: 3, resultId: "res_9", resultVersion: 2 } };
   installVcrServer(network.productRequest, { [tab("population")]: payload });
   const view = renderTab(<PopulationTab studyId={STUDY_ID} study={ev201()} />);
-  await userEvent.click(await screen.findByRole("button", { name: "改设定" }));
-  expect(view.spies.openChat).toHaveBeenCalledWith(expect.stringContaining(STUDY_ID));
-  expect(view.spies.openChat.mock.calls[0][0]).toContain(payload.records!.result);
+  await userEvent.click(await screen.findByRole("button", { name: "在对话中调整" }));
+  expect(view.spies.openChat).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ studyId: STUDY_ID }));
+  expect(view.spies.openChat.mock.calls[0][1]).toMatchObject({ objectId: "pop_saved", version: 3, resultId: "res_9", resultVersion: 2 });
+  expect(view.spies.openChat.mock.calls[0][0]).not.toMatch(/std_|res_/);
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(network.productRequest.mock.calls.filter(([, method]) => method === "POST")).toEqual([]);
 });

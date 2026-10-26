@@ -206,7 +206,7 @@ class VcrToolDefinitionTests(unittest.TestCase):
         # A description rides every request of the run; the per-method shapes are served on demand from the generated help.
         description = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_simulate"]["description"]
         self.assertLess(len(description), 1700, "the shapes live in the shape action, not here")
-        for fragment in ("action shape", "never guess a key", "refused by the field's path", "kind:'snapshot'", "vcr-analysis skill"):
+        for fragment in ("action=shape", "do not guess keys", "outlive this turn", "modelVersion"):
             self.assertIn(fragment, description)
         for typed in ("accrual?", "dropoutAnnual", "design_simulation {", "truth{", "[time_to_event]", "isNull", "dropoutRate"):
             self.assertNotIn(typed, description, "a hand-typed shape is what drifted")
@@ -217,10 +217,8 @@ class VcrToolDefinitionTests(unittest.TestCase):
 
     def test_write_points_at_the_shape_action_and_names_real_kinds(self):
         description = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_write"]["description"]
-        self.assertIn("action shape", description)
-        for kind in ("design_analytic", "design_simulation", "generate_patients", "generate_patients_continuous", "generate_patients_binary", "generate_population"):
-            self.assertIn(kind, description)
-            self.assertIn(kind, vcr_platform.JOB_KINDS)
+        self.assertIn("action=shape", description)
+        self.assertIn("workflow skill", description)
         for name, kinds in vcr_platform.OBJECT_SHAPES.items():
             self.assertTrue(set(kinds) <= set(vcr_platform.JOB_KINDS), "%s: %s" % (name, sorted(set(kinds) - set(vcr_platform.JOB_KINDS))))
 
@@ -314,8 +312,8 @@ class VcrToolDefinitionTests(unittest.TestCase):
     def test_read_says_what_matching_returns(self):
         description = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_read"]["description"]
         self.assertIn("matching", description)
-        self.assertIn("subjectKey", description)
-        self.assertIn("pseudonym", description)
+        self.assertIn("patient_context", description)
+        self.assertIn("messageSeq", description)
 
     def test_evidence_pool_names_a_parameter_and_never_takes_numbers(self):
         properties = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["evidence_pool"]["inputSchema"]["properties"]

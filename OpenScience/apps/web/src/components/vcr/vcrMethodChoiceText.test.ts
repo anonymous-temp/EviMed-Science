@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { VCR_JOB_METHODS, VCR_SCENARIO_EXAMPLES, VCR_SCENARIO_SCHEMAS, VCR_ROW_RULE_OPS, VCR_ROW_RULE_COMPARATORS, VCR_LONGITUDINAL_METHODS } from "@evimed/domain";
 import { methodChoiceLabel, methodExampleLabel, ruleChoiceLabel } from "./vcrMethodChoiceText";
-import type { Schema } from "./VcrScenarioEditor";
+import type { Schema } from "./vcrScenarioFieldLabels";
 type Choice = { path: string; values: string[] };
 function choices(node: Schema, path = ""): Choice[] {
   const rows: Choice[] = [];

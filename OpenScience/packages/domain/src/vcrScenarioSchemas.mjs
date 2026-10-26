@@ -416,6 +416,8 @@ const SINGLE_ARM_DESIGN = is('design.kind', 'single_arm')
  * Per method: the object the engine's `scenario` must be. Read by
  * `validateScenario` here and by `vcr_validate_job` in R from the snapshot.
  */
+// Coefficients are canonical linear-predictor beta, never HR/OR. Transform x first;
+// center and positive scale are expressed on that transformed predictor scale.
 const PROGNOSTIC_TERM = object({
   column: req(COLUMN), coefficient: req(number()), unit: req(string({ maxLength: 80 })),
   transform: req(string({ values: ['identity', 'log', 'log1p', 'square', 'indicator'] })),

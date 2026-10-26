@@ -1,7 +1,7 @@
 # Capability contract; conversation-native VCR reset, 2026-10-26.
 # Module workflows are explicit specialists; ordinary conversation can load their skills and call shared tools.
 id: vcr-matching
-version: 1.2.0
+version: 1.3.0
 title: Virtual Clinical Research — Patient Matching
 category: Clinical Research
 description: |
@@ -72,7 +72,7 @@ starterPrompts:
 display:
   title: "患者匹配"
   category: "虚拟临床研究"
-  description: "双向核对患者资料与试验条件，保留逐条证据、未知项和复评需要。"
+  description: 把病例或患者队列与试验条件逐条核对，保留原文依据、未知项与排除原因。
   listed: false
   starterPrompts:
   - "把这份方案的入排条件结构化，然后对知识库里的 20 份病历跑一遍预筛。"

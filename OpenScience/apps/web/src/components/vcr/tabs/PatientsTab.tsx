@@ -1,3 +1,4 @@
+import { VcrVersionComparison } from "../VcrVersionComparison";
 import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { ChevronRight, CircleCheck, CircleDashed, Download } from "lucide-react";
@@ -162,7 +163,8 @@ function PatientsView({ studyId, study, data, switcher, reload, onStudyChanged }
       .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "记录暂时无法下载，请稍后重试。" })))
       .finally(() => setDownloading(false));
   };
-  const ask = (request: string) => frame?.openChat(`${request}。当前研究 ${studyId}，患者结果 ${records?.result ?? "尚无"}，模型 ${data.model?.id ?? "尚未指定"}。请读取当前版本、说明适用范围并保留原结果。`);
+  const [comparing, setComparing] = useState(false);
+  const ask = (request: string) => frame?.openChat(`${request}。请读取当前显示的个体患者版本，说明适用范围并保留原结果。`, data.selection ? { kind: "patient_set", studyId, ...data.selection } : { kind: "step", studyId, objectId: "patients" });
 
   // --- the band's one row ------------------------------------------------------------------------------------------------
   const filters: ToolbarFilter[] = [];
@@ -193,13 +195,14 @@ function PatientsView({ studyId, study, data, switcher, reload, onStudyChanged }
     }
   }
   const actions: VcrToolbarAction[] = [];
+  if (frame && data.sets?.length) actions.push({ key: "compare", label: "比较版本", quiet: true, onSelect: () => setComparing(true) });
   if (data.model || assessed) {
     actions.push({ key: "model", label: data.model ? `模型：${shortName(data.model.name)}` : "模型评估", icon: ChevronRight, quiet: true, onSelect: () => setModelOpen(true) });
   }
   if (!nothing) {
     if (records) actions.push({ key: "download", label: "下载 CSV", icon: Download, loading: downloading, onSelect: download });
-    if (mayRun && !working) actions.push({ key: "regenerate", label: "重新生成", onSelect: () => ask("生成一个可配对比较的虚拟患者版本") });
-    if (mayWrite) actions.push({ key: "settings", label: "改设定", quiet: true, onSelect: () => ask("调整虚拟患者设定") });
+    if (mayRun && !working) actions.push({ key: "regenerate", label: "在对话中生成新版本", onSelect: () => ask("生成一个可配对比较的虚拟患者版本") });
+    if (mayWrite) actions.push({ key: "settings", label: "在对话中调整", quiet: true, onSelect: () => ask("调整虚拟患者设定") });
   }
   const any = Object.keys(columns).length > 0 || arm !== null;
   useVcrToolbar(filters.length > 0 || actions.length > 0
@@ -213,6 +216,7 @@ function PatientsView({ studyId, study, data, switcher, reload, onStudyChanged }
 
   const drawers = (
     <>
+      {comparing && <VcrVersionComparison studyId={studyId} kind="patient_set" versions={(data.sets ?? []).flatMap(row => row.version ? [{ ...row, objectId: row.id, version: row.version }] : [])} onClose={() => setComparing(false)} />}
       {modelOpen && (
         <ModelRecordDrawer
           studyId={studyId}

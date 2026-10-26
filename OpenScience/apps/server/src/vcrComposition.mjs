@@ -98,7 +98,7 @@ import { createVcrRecords } from "./vcrRecords.mjs";
 import { VcrStore } from "./vcrStore.mjs";
 import { createChictrAdapter, createTrialRegistryClient } from "./trialRegistryClient.mjs";
 import { createVcrImporter } from "./vcrImport.mjs";
-import { parseProbabilityByMonth, readAccrualForecast } from "./vcrRecruit.mjs";
+import { parseProbabilityByMonth, readAccrualForecast } from "./vcrAccrual.mjs";
 import { matchingCandidates } from "./vcrMatchingCandidates.mjs";
 import {
   VCR_MATCHING_VOCABULARY_VERSION, matchingInputDigest, assessSubject, eligibilityCounts, frozenAsOf, languageKeysOf, requiresLanguageJudgment,
@@ -115,6 +115,11 @@ import { MATCHING_SNAPSHOT_PREFIX, freezeMatchingInputs, hydrateMatchingInputs, 
  */
 export function vcrDataPlaneSeam({ dataPlane, access }) {
   return {
+    /** @param {any} study @param {{id:string}} user */
+    async taskInputs(study, user) {
+      await access.require({ studyId: study.id, actor: user.id, ability: "read", purpose: "page" });
+      return dataPlane.taskInputAvailability(study, user);
+    },
     /** @param {any} study @param {{ id: string }} user */
     async tab(study, user) {
       const decision = await access.judge({
@@ -435,12 +440,16 @@ export function vcrDocumentsSeam({ dataPlane }) {
       const result = [];
       for (const entry of entries) {
         const source = entry.source ?? entry.locator ?? entry;
-        if (source.snapshotId && source.field && dataPlane?.subjectTableEvidence) {
-          const key = `${source.snapshotId}:${source.field}`;
-          if (!decisions.has(key)) decisions.set(key, await dataPlane.subjectTableEvidence({ studyId: study.id, snapshotId: source.snapshotId,
-            field: source.field, subjectKey, principal: viewer?.id ?? study.userId, purpose: VCR_JOB_PURPOSE,
-            external: !viewer, cloudContext: viewer ? null : study.cloudContext }).catch(() => null));
-          const cell = decisions.get(key);
+        if (source.snapshotId && source.field && dataPlane?.subjectTableEvidenceBatch) {
+          const key = `snapshot:${source.snapshotId}`;
+          if (!decisions.has(key)) {
+            const fields = [...new Set(entries.map(item => item.source ?? item.locator ?? item)
+              .filter(item => item.snapshotId === source.snapshotId && item.field).map(item => String(item.field)))];
+            decisions.set(key, await dataPlane.subjectTableEvidenceBatch({ studyId: study.id, snapshotId: source.snapshotId,
+              fields, subjectKey, principal: viewer?.id ?? study.userId, purpose: VCR_JOB_PURPOSE,
+              external: !viewer, cloudContext: viewer ? null : study.cloudContext }).catch(() => ({})));
+          }
+          const cell = decisions.get(key)?.[source.field];
           if (cell && (!source.sourceHash || source.sourceHash === cell.locator.sourceHash)) result.push({ ...entry, ...cell, quoteKind: "snapshot_cell" });
           continue;
         }
@@ -1071,7 +1080,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     clinicalContext: async (study,criteria) => clinicalTerminologyContext((await knowledge.studyPack(study))?.pack,criteria),
   });
   // Persist scientific assessments after the job commits, without recruitment side effects.
-  jobs.addFinishHook((done) => matching.onJobFinished(done));
+  jobs.addFinishHook((done) => matching.onJobFinished(done),'matching');
   const dataPlaneSeam = dataPlane ? vcrDataPlaneSeam({ dataPlane, dataStore, access }) : null;
 
   const patientTrials = createPatientTrials({ candidateStore, matchStore, documents, subjectTable, config, report });
@@ -1237,6 +1246,7 @@ export async function vcrMetricsSnapshot(vcr) {
     matchingProducers,
     service: vcr.service?.counters ?? {},
     jobs: vcr.jobs?.status?.() ?? null,
+    completions:vcr.completions?.status?.() ?? null,
     orchestrator: vcr.orchestrator?.status?.() ?? null,
     worker: vcr.worker?.status?.() ?? null,
     engine: vcr.engineStatus ?? null,
@@ -1302,6 +1312,8 @@ export function vcrMetricFamilies(enabled, snapshot) {
     add("jobs_total", "What the job queue did since this process started.", "counter",
       Object.entries(snapshot.jobs.counters).map(([outcome, value]) => ({ labels: { outcome }, value: Number(value) })));
   }
+  if (snapshot.completions) add("completions_total", "Durable calculation result delivery outcomes since process start.", "counter",
+    Object.entries(snapshot.completions).map(([outcome,value])=>({labels:{outcome},value:Number(value)})));
   if (snapshot.orchestrator?.counters) {
     add("orchestrator_total", "What the orchestrator did since this process started.", "counter",
       Object.entries(snapshot.orchestrator.counters).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));

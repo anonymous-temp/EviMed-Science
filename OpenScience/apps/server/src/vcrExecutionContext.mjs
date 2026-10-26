@@ -8,15 +8,15 @@ const object = value => value && typeof value === 'object' && !Array.isArray(val
 function projected(tool, operation, actual, body) {
   if (tool === 'trial_registry_record' && operation === 'read') return { what: 'trial_registry_record', filter: {
     registryId: actual.registryId?.trim(), ...(actual.registry?.trim() ? { registry: actual.registry.trim() } : {}) } };
-  if (tool === 'curve_digitize' && operation === 'digitize') return actual;
+  if (tool === 'curve_digitize' && operation === 'digitize') return Object.fromEntries(Object.entries(actual).filter(([,value]) => value != null));
   if (tool === 'evidence_pool' && operation === 'simulate') return (actual.action ?? 'start') === 'start'
-    ? {action:'start',kind:'pool_evidence',subjectId:actual.parameter.trim().slice(0,120),scenario:{parameter:actual.parameter.trim(),endpointKey:actual.endpointKey,
+    ? {action:'start',kind:'pool_evidence',subjectId:[...actual.parameter.trim()].slice(0,120).join(''),scenario:{parameter:actual.parameter.trim(),endpointKey:actual.endpointKey,
       ...(actual.calibres != null ? {calibres:actual.calibres} : {}),...(actual.method != null ? {method:actual.method} : {})}}
     : {action:actual.action,jobId:actual.jobId};
   if (tool !== `vcr_${operation}`) throw unavailable();
   const keys = operation === 'read' ? ['what', 'filter'] : operation === 'write' ? ['what', 'data', 'items']
     : (actual.action ?? 'start') === 'start' ? ['action', 'kind', 'scenario', 'inputs', 'seed', 'replicates', 'cpuSecondsLimit', 'subjectId', 'reconstructionResultId', 'selection', 'modelId', 'modelVersion'] : ['action', 'jobId'];
-  const result = Object.fromEntries(keys.filter(key => actual[key] != null).map(key => [key, actual[key]]));
+  const result = Object.fromEntries(keys.filter(key => operation === 'write' ? Object.hasOwn(actual,key) : actual[key] != null).map(key => [key, actual[key]]));
   if (operation === 'simulate') result.action ??= 'start';
   if (operation === 'read' && object(result.filter) && !Object.keys(result.filter).length && !body.filter) delete result.filter;
   return result;
@@ -28,7 +28,7 @@ export async function verifyVcrInvocation({ header, project, runtimeManager, res
   if (context?.v !== 1 || typeof context.sessionId !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(context.sessionId)
     || typeof context.callId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_:.-]{0,199}$/.test(context.callId)) throw unavailable();
   const owned = resolveSession(project, context.sessionId);
-  const transcript = await runtimeManager.sessionTranscript(project, context.sessionId, { wake: false,
+  const transcript = await runtimeManager.sessionTranscript(project, context.sessionId, { wake: false, currentTurn: true,
     ...(owned?.child ? { parentSessionId: owned.parentSessionId } : {}) });
   const turn = transcript?.turns?.at(-1);
   const calls = (transcript?.messages ?? []).flatMap(message => (message.parts ?? []).map(part => ({ message, part })))

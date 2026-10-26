@@ -14,7 +14,7 @@
  * - **The database commits first.** A crash between the commit and the overwrite leaves bytes on disk that no read will serve
  *   (the rows say they are erased) and that the same request, made again, overwrites: the operations are idempotent.
  * - **A withdrawn subject is no candidate.** `subject_withdrawals` takes the subject out of every roster (`candidateSubjects`),
- *   out of a continued batch, and closes their open referrals as 「退出」; nobody is contacted who withdrew.
+ *   out of a continued batch, and marks legacy open referrals withdrawn while those tables still exist. No contact workflow runs.
  * - **Marks are labels.** `markBasisChanged` writes `derived_marks` for the facts, language judgments and assessments that were
  *   derived from a document, a projection or a permission that changed. It reads the derivation from the data (a fact's source,
  *   a judgment's evidence, the facts a frozen input names), blocks nothing and re-runs nothing.
@@ -288,6 +288,12 @@ export class VcrErasureStore extends VcrStoreBase {
       const erased = await this.#erase(client, { studyId, userId, actor, fileIds: files.map((/** @type {any} */ row) => String(row.id)), subjectKey, cause: "withdrawn", reason });
       await client.query(`INSERT INTO ${VCR_SCHEMA}.subject_withdrawals (study_id, subject_key, withdrawn_by, detail)
         VALUES ($1,$2,$3,$4::jsonb) ON CONFLICT (study_id, subject_key) DO NOTHING`, [studyId, subjectKey, actor, JSON.stringify({ reason })]);
+      // Parse this statement only if the offline OA retirement has not removed the table. This is a terminal privacy
+      // update, with no transition helper, contact event, referral creation or other operational side effect.
+      if ((await client.query(`SELECT to_regclass('${VCR_SCHEMA}.referrals') AS relation`)).rows[0]?.relation) {
+        await client.query(`UPDATE ${VCR_SCHEMA}.referrals SET state='withdrawn', updated_at=now()
+          WHERE study_id=$1 AND subject_key=$2 AND state NOT IN ('withdrawn','screen_failed')`, [studyId, subjectKey]);
+      }
       await this.audit({ client, studyId, userId, actor, action: "subject.withdraw", object: subjectKey,
         detail: { ...erased.counts, reason } });
       return { subjectKey, ...erased, counts: erased.counts };
@@ -295,7 +301,7 @@ export class VcrErasureStore extends VcrStoreBase {
   }
 
   /**
-   * Whether the study holds this subject at all: a document, a fact, an assessment or a candidate row. A subject
+   * Whether the study holds this subject: a document, fact, assessment, candidate, retained historical observation, legacy referral or retired hash footprint. A subject
    * the study has never heard of is not withdrawn (and not made up).
    * @param {any} client @param {string} studyId @param {string} subjectKey @param {number} documents
    */
@@ -306,8 +312,14 @@ export class VcrErasureStore extends VcrStoreBase {
         OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.matching_assessments WHERE study_id=$1 AND subject_key=$2)
         OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.language_judgments WHERE study_id=$1 AND subject_key=$2)
         OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.matching_candidates WHERE study_id=$1 AND subject_key=$2)
+        OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.followup_episodes WHERE study_id=$1 AND subject_key=$2)
         OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals WHERE study_id=$1 AND subject_key=$2)) AS held`, [studyId, subjectKey])).rows[0];
-    return row?.held === true;
+    if (row?.held === true) return true;
+    if ((await client.query(`SELECT to_regclass('${VCR_SCHEMA}.referrals') AS relation`)).rows[0]?.relation) {
+      if ((await client.query(`SELECT 1 FROM ${VCR_SCHEMA}.referrals WHERE study_id=$1 AND subject_key=$2 LIMIT 1`, [studyId, subjectKey])).rowCount) return true;
+    }
+    return Boolean((await client.query(`SELECT 1 FROM ${VCR_SCHEMA}.retired_recruitment_subjects
+      WHERE study_id=$1 AND subject_hash=$2`, [studyId, sha256(subjectKey)])).rowCount);
   }
 
   /**

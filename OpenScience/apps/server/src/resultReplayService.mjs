@@ -358,6 +358,25 @@ export class ResultReplayService {
     return { project, row };
   }
 
+  /** A verified pending native status call observed this exact terminal generation.
+   * @param {string} userId @param {string} projectId @param {string} id @param {any} origin @param {any} answer */
+  async observeTerminal(userId,projectId,id,origin,answer) {
+    for(let attempt=0;attempt<3;attempt++) {
+      const {project,row}=await this.owned(userId,projectId,id);
+      const producer=row.payload.initial?.producer;
+      const state=(await this.jobs.get(project.userId,row.payload.jobId))?.status ?? row.payload.state;
+      const resultKey=row.payload.outputVersionId ?? 'none';
+      if(!producer || producer.runId!==origin.runId || (producer.parentSessionId ?? producer.sessionId)!==origin.rootSessionId
+        || !['succeeded','failed','canceled'].includes(state) || state!==answer.state || resultKey!==(answer.outputVersionId ?? 'none')) return false;
+      try {
+        await this.documents.put(project.userId,'result-replay',id,{...row.payload,terminalObservation:{runId:origin.runId,rootSessionId:origin.rootSessionId,callId:origin.callId,state,resultKey}},
+          {projectId:project.id,expectedRevision:row.revision,telemetry:true});
+        return true;
+      } catch(error) {if(error?.code!=='product_revision_conflict' || attempt===2) throw error;}
+    }
+    return false;
+  }
+
   async status(userId, projectId, id) {
     const { project, row } = await this.owned(userId, projectId, id);
     const job = await this.jobs.get(project.userId, row.payload.jobId);

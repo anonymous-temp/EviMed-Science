@@ -42,7 +42,7 @@ test("a withdrawn patient has no runtime candidate assessment, evidence or work 
 });
 test("selected source-bound table evidence is reconstructed under its current grant, source permission and snapshot", async () => {
   const reads = [];
-  const documents = vcrDocumentsSeam({ dataPlane: { async subjectTableEvidence(input) { reads.push(input); return { quote: "ecog = 1", value: 1, unit: null, locator: { snapshotId: "ss1", field: "ecog", subjectKey: "P1", sourceHash: "h1" } }; } } });
+  const documents = vcrDocumentsSeam({ dataPlane: { async subjectTableEvidenceBatch(input) { reads.push(input); return { ecog: { quote: "ecog = 1", value: 1, unit: null, locator: { snapshotId: "ss1", field: "ecog", subjectKey: "P1", sourceHash: "h1" } } }; } } });
   const original = { quote: "ecog（数据表列 ecog）", variable: "ecog", locator: { snapshotId: "ss1", field: "ecog" }, quoteKind: "snapshot_cell" };
   const result = await documents.runtimeEvidence(STUDY, [original], "P1");
   assert.equal(result[0].quote, "ecog = 1");
@@ -74,4 +74,17 @@ test("the reverse matching gateway attributes patient evidence to the exact nati
   await handler(req, response);
   assert.equal(response.status, 200);
   assert.deepEqual(read, [{ runId: "r1", sessionId: "native1" }]);
+});
+
+
+test("table evidence batches all fields of each snapshot once per viewer request", async () => {
+ const calls=[];
+ const documents=vcrDocumentsSeam({dataPlane:{async subjectTableEvidenceBatch(input){ calls.push(input); return Object.fromEntries(input.fields.map(field=>[field,{quote:`${field} = 1`,value:1,locator:{sourceHash:"h1",field}}])); }}});
+ const entries=["age","ecog","age"].map(field=>({locator:{snapshotId:"snp1",field,sourceHash:"h1"}}));
+ assert.equal((await documents.viewEvidence(STUDY,entries,"P1",{id:"viewer"})).length,3);
+ assert.equal(calls.length,1); assert.deepEqual(calls[0].fields,["age","ecog"]);
+ assert.equal(calls[0].principal,"viewer"); assert.equal(calls[0].external,false);
+ await documents.viewEvidence(STUDY,entries,"P1",{id:"other"});
+ assert.equal(calls.length,2,"no cross-viewer or cross-request cache");
+ assert.equal(calls[1].principal,"other");
 });

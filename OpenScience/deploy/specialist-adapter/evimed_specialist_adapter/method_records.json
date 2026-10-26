@@ -693,11 +693,11 @@
    ],
    "references": [
     {
-     "id": "owned_engine_contract",
+     "id": "single_arm_independent_operating_characteristics",
      "kind": "other-implementation",
-     "source": "Existing VCR engine method and scenario validation; aggregate replay preserves its exact source and environment identities.",
-     "tolerance": "The method-specific engine cross-check tolerance; no new clinical validation is claimed.",
-     "test": "OpenScience/apps/server/test/resultVcrReplayAggregate.test.mjs"
+     "source": "Independent joint-binomial operating-characteristic sums (N31b); exact one-sample t/z and declared survival approximation (N48).",
+     "tolerance": "Binary operating characteristics within 3 Monte Carlo SE; continuous/survival tolerances stated per N48 case.",
+     "test": "项目代码/vcr-engine/tests/numeric/N31_single_arm.R"
     }
    ]
   },
@@ -752,11 +752,11 @@
    ],
    "references": [
     {
-     "id": "owned_engine_contract",
+     "id": "independent_prior_integration",
      "kind": "other-implementation",
-     "source": "Existing VCR engine method and scenario validation; aggregate replay preserves its exact source and environment identities.",
-     "tolerance": "The method-specific engine cross-check tolerance; no new clinical validation is claimed.",
-     "test": "OpenScience/apps/server/test/resultVcrReplayAggregate.test.mjs"
+     "source": "Independent base-R numerical integration of normal-prior power (N19b); group-sequential integral and simulation checks (N47).",
+     "tolerance": "N19b integral difference below 1e-8; sequential boundary and Monte Carlo checks use N47 tolerances.",
+     "test": "项目代码/vcr-engine/tests/numeric/N18_N21_borrowing.R"
     }
    ]
   },
@@ -811,11 +811,11 @@
    ],
    "references": [
     {
-     "id": "owned_engine_contract",
+     "id": "independent_gamma_poisson_construction",
      "kind": "other-implementation",
-     "source": "Existing VCR engine method and scenario validation; aggregate replay preserves its exact source and environment identities.",
-     "tolerance": "The method-specific engine cross-check tolerance; no new clinical validation is claimed.",
-     "test": "OpenScience/apps/server/test/resultVcrReplayAggregate.test.mjs"
+     "source": "Closed beta-prime reference and independent gamma/Poisson event-time constructions (N27a/b/c/f).",
+     "tolerance": "Published median within 0.01 months; independent simulation comparisons within 3 to 3.5 Monte Carlo SE.",
+     "test": "项目代码/vcr-engine/tests/numeric/N27_accrual_pool.R"
     }
    ]
   },
@@ -870,11 +870,11 @@
    ],
    "references": [
     {
-     "id": "owned_engine_contract",
+     "id": "independent_quadrature_and_rbext",
      "kind": "other-implementation",
-     "source": "Existing VCR engine method and scenario validation; aggregate replay preserves its exact source and environment identities.",
-     "tolerance": "The method-specific engine cross-check tolerance; no new clinical validation is claimed.",
-     "test": "OpenScience/apps/server/test/resultVcrReplayAggregate.test.mjs"
+     "source": "RBesT MAP mean/ELIR and independent joint quadrature (N21b/c).",
+     "tolerance": "MAP mean absolute error below 1e-4; ELIR below 1e-3; quadrature edge cases use N21c stated limits.",
+     "test": "项目代码/vcr-engine/tests/numeric/N18_N21_borrowing.R"
     }
    ]
   }

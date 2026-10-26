@@ -17,6 +17,9 @@ import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { VCR_ACCESS_CODES, VcrAccess } from "../src/vcrAccess.mjs";
 import { VCR_DATA_PLANE_CODES, VcrDataPlane, parseTable, pseudonymOf, sha256OfBytes, snapshotView, studyPseudonymKey, tableView } from "../src/vcrDataPlane.mjs";
 import { VcrDataStore } from "../src/vcrDataStore.mjs";
+import { VcrStore } from "../src/vcrStore.mjs";
+import { VcrMatchStore } from "../src/vcrMatchStore.mjs";
+import { VcrService } from "../src/vcrService.mjs";
 import { VcrMembers } from "../src/vcrMembers.mjs";
 import { vcrMatchingExecutor, vcrMatchingSeam, vcrSubjectTableSeam } from "../src/vcrComposition.mjs";
 import { vcrId } from "../src/vcrStoreBase.mjs";
@@ -660,4 +663,49 @@ test("selected table-cell evidence is source-bound, grant-aware and recorded as 
   await assert.rejects(cloud.subjectTableEvidence(request), { code: "vcr_cloud_processing_not_authorized" });
   const local = await cloud.subjectTableEvidence({ ...request, external: false, cloudContext: null });
   assert.equal(local.value, cell.value, "page access uses the actual viewer's grant and never claims cloud permission");
+});
+
+test('selected table evidence authorizes and parses a snapshot once per request, audits all fields once, and rechecks withdrawal',options,async()=>{
+ const studyId=await seedStudy();const {snapshot}=await seedSnapshot(studyId);
+ const cloud=new VcrDataPlane({store,access,config:{vcrDataPlaneDir:dataPlaneDir,deepseekBaseUrl:'https://api.example.org',vcrProviderAgreements:true}});
+ const table=await plane.subjectTableForMatching({studyId,principal:OWNER,purpose:'vcr'});
+ const subjectKey=table.rows[0][table.header.indexOf('USUBJID')];
+ let reads=0;
+ const read=cloud.subjectTableForMatching.bind(cloud);cloud.subjectTableForMatching=async entry=>{reads++;return read(entry);};
+ const request={studyId,snapshotId:snapshot.id,subjectKey,fields:['age','sex','age','USUBJID'],principal:OWNER,purpose:'vcr',external:false};
+ const cells=await cloud.subjectTableEvidenceBatch(request);
+ assert.equal(reads,1);assert.deepEqual(Object.keys(cells).sort(),['age','sex']);
+ const audits=await q("SELECT detail FROM evimed_vcr.audit WHERE study_id=$1 AND action='table.individual_read'",[studyId]);
+ assert.equal(audits.length,1);assert.deepEqual(audits[0].detail.fields.sort(),['age','sex']);
+ assert.equal(JSON.stringify(audits).includes('quote'),false);
+ await assert.rejects(cloud.subjectTableEvidenceBatch({...request,principal:'outside'}));
+ cloud.erasure={matchStore:{async withdrawnSubjects(){return new Set([subjectKey]);}}};
+ const before=reads;assert.deepEqual(await cloud.subjectTableEvidenceBatch(request),{});assert.equal(reads,before,'withdrawal is checked before table parsing');
+});
+
+
+test('historical observation reader pages real legacy rows, enforces current human roles, exports only that page and hides withdrawal/trial fields',options,async()=>{
+ const studyId=await seedStudy();const mainStore=new VcrStore({database});const matchStore=new VcrMatchStore({database});
+ const service=new VcrService({store:mainStore,config:{},access,matchStore});
+ for(const [suffix,kind,start,end,observations,exitDate] of [
+  ['a','study_specific','2026-01-01','2026-01-03',[{variable:'ecog',value:2},{variable:'treatment',value:'hidden'}],'2026-01-03'],
+  ['b','post_exit','2026-02-01',null,[{variable:'outcome',value:'hidden',at:'2026-01-03T10:00:00Z'},{variable:'treatment',value:'post care',at:'2026-02-02'}],null],
+  ['c','routine_care','2026-03-01',null,[{variable:'ecog',value:1}],null],
+ ])await q(`INSERT INTO evimed_vcr.followup_episodes(id,study_id,user_id,subject_key,kind,window_start,window_end,observations,exit_date,exit_reason)
+  VALUES($1,$2,$3,'P1',$4,$5,$6,$7::jsonb,$8,'Verbatim exit reason')`,[`${studyId}_${suffix}`,studyId,OWNER,kind,start,end,JSON.stringify(observations),exitDate]);
+ const page1=await service.followupHistory({id:OWNER},studyId,{limit:'1'});
+ assert.equal(page1.episodes.length,1);assert.equal(page1.page.nextOffset,1);
+ assert.deepEqual(page1.episodes[0].measurements.map(row=>row.field),['ecog']);
+ assert.equal(page1.episodes[0].exitReason,'Verbatim exit reason');
+ const page2=await service.followupHistory({id:OWNER},studyId,{limit:'1',offset:'1',format:'csv'});
+ assert.deepEqual(page2.episodes[0].measurements.map(row=>row.value),['post care']);
+ assert.match(page2.csv,/post care/);assert.doesNotMatch(page2.csv,/hidden|ecog/);
+ await members.add({actor:OWNER,studyId,userId:'history-manager',role:'data_manager'});
+ assert.equal((await service.followupHistory({id:'history-manager'},studyId)).episodes.length,3);
+ await assert.rejects(service.followupHistory({id:'history-manager'},studyId,{format:'csv'}),{status:403});
+ await members.add({actor:OWNER,studyId,userId:'history-viewer',role:'viewer'});
+ await assert.rejects(service.followupHistory({id:'history-viewer'},studyId),{status:403});
+ await assert.rejects(service.followupHistory({id:'outside'},studyId),{status:404});
+ await q("INSERT INTO evimed_vcr.subject_withdrawals(study_id,subject_key,withdrawn_by) VALUES($1,'P1',$2)",[studyId,OWNER]);
+ assert.equal((await service.followupHistory({id:OWNER},studyId)).episodes.length,0);
 });

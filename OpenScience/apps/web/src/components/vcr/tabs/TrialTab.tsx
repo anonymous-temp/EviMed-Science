@@ -1,3 +1,6 @@
+import { VcrAccrualForecasts } from "../VcrAccrualForecasts";
+import { VcrScientificBasis } from "../VcrScientificBasis";
+import { VcrVersionComparison } from "../VcrVersionComparison";
 import { useRef, useState } from "react";
 import { CircleCheck, TriangleAlert } from "lucide-react";
 import { getVcrTrial, recordVcrDecision, type VcrDesign, type VcrStudy, type VcrTrialTab as TrialData } from "@/lib/vcrClient";
@@ -55,8 +58,7 @@ export const VCR_CHANGE_ASSUMPTION_DRAFT = "我想改一下试验的假设：";
 
 /** Saved scenario and result identities, taken from the view rather than inferred from its letter. */
 function designContext(design: VcrDesign): string {
-  const results = [...new Set(Object.values(design.measures).map(value => value.detail?.ref).filter(ref => ref?.kind === "result").map(ref => ref!.id))];
-  return `${design.id} (${design.code} ${design.name})${results.length ? `，结果 ${results.join("、")}` : ""}`;
+  return `${design.code} ${design.name}${design.version ? `（版本 ${design.version}）` : ""}`;
 }
 
 type TrialView = "designs" | "schedule" | "regulatory";
@@ -106,7 +108,7 @@ function TrialView({ studyId, study, data, reload }: { studyId: string; study: V
   const failed = study.steps.trial?.status === "failed";
   const canWrite = study.abilities.includes("write");
   // The protocol's visit schedule and the regulatory log are records of the study, not results of this step: a study that has either is not empty.
-  const hasDesigns = data.designs.length > 0 || data.ademp.length > 0 || data.forecasts.length > 0 || data.milestones.length > 0;
+  const hasDesigns = data.designs.length > 0 || data.ademp.length > 0 || data.forecasts.length > 0 || data.milestones.length > 0 || Boolean(data.accrualForecasts?.length);
   const nothing = !hasDesigns && !data.schedule && data.regulatory.length === 0;
   const noneRan = !data.designs.some(designRan);
   const decided = Boolean(data.decision?.chosen);
@@ -122,16 +124,18 @@ function TrialView({ studyId, study, data, reload }: { studyId: string; study: V
   const shown: TrialView = views.some((entry) => entry.value === view) ? view : views[0]?.value ?? "designs";
 
   // 「加一个方案」 and 「改假设」 say it in the conversation: the draft waits in the composer, and the reader sends it.
-  const draft = (text: string) => () => frame?.openChat(`${text} 当前研究 ${studyId}，当前方案版本：${data.designs.map(designContext).join("；") || "尚无"}。先读取上述版本，并保留原计算结果。`);
-  const editDesign = (design: VcrDesign) => frame?.openChat(`调整试验方案 ${designContext(design)}，研究 ${studyId}。先读取该版本及其证据参数，建立新版本并比较把握度、周期和假设变化。`);
+  const [comparing, setComparing] = useState(false);
+  const draft = (text: string) => () => frame?.openChat(`${text} 请先检查当前研究的已保存方案，保留原计算结果。`, { kind: "step", studyId, objectId: "trial" });
+  const editDesign = (design: VcrDesign) => frame?.openChat(`调整试验方案“${designContext(design)}”。先读取该版本及其证据参数，建立新版本并比较把握度、周期和假设变化。`, design.version ? { kind: "trial_scenario", studyId, objectId: design.id, version: design.version, ...(design.resultId ? { resultId: design.resultId, resultVersion: design.resultVersion } : {}) } : { kind: "step", studyId, objectId: "trial" });
 
   const actions: VcrToolbarAction[] = [];
+  if (frame && data.designs.length && !noneRan) actions.push({ key: "compare", label: "比较版本", quiet: true, onSelect: () => setComparing(true) });
   if (shown === "designs" && !nothing) {
     if (canWrite) {
       if (!noneRan && decided) actions.push({ key: "choose", label: "改选方案", onSelect: () => setChoosing(true) });
       if (frame) {
-        actions.push({ key: "add", label: "加一个方案", quiet: !noneRan, onSelect: draft(VCR_ADD_DESIGN_DRAFT) });
-        actions.push({ key: "change", label: "改假设", quiet: true, onSelect: draft(VCR_CHANGE_ASSUMPTION_DRAFT) });
+        actions.push({ key: "add", label: "在对话中添加方案", quiet: !noneRan, onSelect: draft(VCR_ADD_DESIGN_DRAFT) });
+        actions.push({ key: "change", label: "在对话中调整假设", quiet: true, onSelect: draft(VCR_CHANGE_ASSUMPTION_DRAFT) });
       }
     }
     if ((!noneRan && canFile) || hasForecasts) actions.push({ key: "register", label: "登记预测", onSelect: () => setRegistering(true) });
@@ -169,6 +173,7 @@ function TrialView({ studyId, study, data, reload }: { studyId: string; study: V
 
   return (
     <div className="flex flex-col gap-6">
+      {comparing && <VcrVersionComparison studyId={studyId} kind="trial_scenario" versions={data.designs.flatMap(row => row.version ? [{ objectId: row.id, version: row.version, label: designContext(row), resultId: row.resultId, resultVersion: row.resultVersion }] : [])} onClose={() => setComparing(false)} />}
       {failed
         ? <VcrStepFailed studyId={studyId} study={study} step="trial" partial={data.partial} />
         : data.partial && <PartialResultNote sentence={data.partial.sentence} resume={{ studyId, study, step: "trial" }} />}
@@ -362,6 +367,7 @@ function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, 
       )}
 
       {cells.length > 0 && <ChartGrid rows={pairRows(cells)} />}
+      {data.accrualForecasts?.length ? <VcrAccrualForecasts forecasts={data.accrualForecasts} /> : null}
     </div>
   );
 }
@@ -481,7 +487,7 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
       header: <span className="sr-only">操作</span>,
       align: "right" as const,
       cell: (design: VcrDesign) => (
-        <Button size="sm" variant="text" data-vcr-edit={design.code} onClick={() => onEdit(design)} aria-label={`改设定：方案 ${design.code}`}>改设定</Button>
+        <Button size="sm" variant="text" data-vcr-edit={design.code} onClick={() => onEdit(design)} aria-label={`在对话中调整：方案 ${design.code}`}>在对话中调整</Button>
       ),
     }] : []),
   ];
@@ -521,8 +527,9 @@ function DesignRecordDrawer({ design, onClose, onEdit }: { design: VcrDesign; on
   return (
     <Drawer title={`方案 ${design.code} · ${design.name}`} onClose={onClose} widthClassName="max-w-md">
       <div data-vcr-design-record={design.code} className="flex flex-col gap-4">
+        {design.computationBasis && <VcrScientificBasis basis={design.computationBasis} />}
         {rows.length > 0 && <FactList rows={rows} />}
-        {onEdit && <div><Button variant="secondary" size="sm" onClick={onEdit}>改设定</Button></div>}
+        {onEdit && <div><Button variant="secondary" size="sm" onClick={onEdit}>在对话中调整</Button></div>}
       </div>
     </Drawer>
   );
