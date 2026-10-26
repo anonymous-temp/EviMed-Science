@@ -34,7 +34,8 @@ Two readings of a title that a list page garbles (2026-10-26, c5-sources). A lis
 江苏省药品监督管理局's Hanweb lists write ``· 省药品监督检验研究院…`` — is not part of the title: a leading bullet from the closed
 set ``LIST_MARKERS`` is removed. A title the page cut for its layout (a visible text that ends with ``…`` or ``...``) is read in
 full from the ``title`` attribute of the node it was read from, of the link around it or of the item, when that attribute
-begins with the visible text; an attribute that does not (a tooltip about something else) is ignored, and a title selector
+begins with the visible text (a list marker in front of either is left out of the comparison, as it is left out of the title); an
+attribute that does not (a tooltip about something else) is ignored, and a title selector
 that already names an attribute (``a@title``) is read as it says.
 
 A page whose selectors match nothing returns no entries and the note ``html_list_no_items``; the
@@ -120,12 +121,19 @@ def _squeezed(text: str) -> str:
     return re.sub(r"\s+", "", clean_markup(text))
 
 
+def _unmarked(text: str) -> str:
+    """``text`` without the list marker in front of it (the title is read that way in the end, so it is compared that way)."""
+    return _LEADING_MARKER.sub("", text.lstrip())
+
+
 def _full_title(visible: str, node: Node, selectors: dict) -> str:
     """The title attribute of the title node, the link around it or the link node, or the item, when the page cut the visible
     title (``…`` / ``...``) and that attribute begins with what is visible; else the visible text."""
     if not visible or not _CUT_TITLE.search(visible):
         return visible
-    prefix = _squeezed(_strip_ellipsis(visible))
+    prefix = _squeezed(_unmarked(_strip_ellipsis(visible)))
+    if not prefix:
+        return visible
     target = _target(node, selectors.get("title"))
     holders: list[Node] = []
     ancestor = target
@@ -141,7 +149,8 @@ def _full_title(visible: str, node: Node, selectors: dict) -> str:
         holders.append(node)
     for holder in holders:
         full = holder.attributes.get("title")
-        if full and len(_squeezed(full)) > len(prefix) and _squeezed(full).startswith(prefix):
+        whole = _squeezed(_unmarked(full)) if full else ""
+        if len(whole) > len(prefix) and whole.startswith(prefix):
             return full.strip()
     return visible
 

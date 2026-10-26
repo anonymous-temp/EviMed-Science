@@ -105,6 +105,18 @@ def test_the_title_attribute_is_used_only_when_it_continues_the_visible_text():
     assert cut("省药监局关于开展药品抽检的通") == ["省药监局关于开展药品抽检的通…"], "an attribute that adds nothing changes nothing"
 
 
+def test_a_cut_title_with_a_bullet_in_front_matches_its_title_attribute_without_the_bullet():
+    selectors = {"item": "li", "title": "a", "link": "a@href", "date": "i"}
+    row = lambda visible, attribute: (  # noqa: E731
+        f'<ul><li><a href="/a/1" title="{attribute}">{visible}</a><i>2026-10-20</i></li></ul>')
+    full = "省药监局关于开展药品抽检的通告（2026年第12号）"
+    assert titles_of(row("· 省药监局关于开展药品抽检的通…", full), selectors) == [full], "the bullet is not part of what the attribute continues"
+    assert titles_of(row("·省药监局关于开展药品抽检的通...", full), selectors) == [full]
+    assert titles_of(row("· 省药监局关于开展药品抽检的通…", f"· {full}"), selectors) == [full], "an attribute that carries the bullet too"
+    assert titles_of(row("· 省药监局关于开展药品抽检的通…", "点击查看详情"), selectors) == ["省药监局关于开展药品抽检的通…"]
+    assert titles_of(row("· …", full), selectors) == [], "nothing is left of the visible text to continue: no attribute is taken for it"
+
+
 def test_the_attribute_is_looked_for_on_the_node_the_title_was_read_from_and_around_it():
     on_link = ('<ul><li><h3><a href="/a/1" title="Full title of the first article">Full title of the fi...</a></h3><i>2026-10-20</i></li></ul>')
     on_wrapper = ('<ul><li><a href="/a/2" title="Full title of the second article"><h3>Full title of the sec...</h3></a><i>2026-10-20</i></li></ul>')
