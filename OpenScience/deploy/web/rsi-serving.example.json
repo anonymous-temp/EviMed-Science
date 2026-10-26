@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "transport": {
+    "role": "production",
+    "region": "cn-beijing",
+    "endpoint": "https://oss-cn-beijing.aliyuncs.com",
+    "incidentBucket": "",
+    "bundleBucket": "",
+    "identityRefs": {
+      "production": "",
+      "lab": ""
+    }
+  },
+  "trustedKeyRefs": [],
+  "evaluatorRegistryRef": "",
+  "extractionDailyCny": 5,
+  "agreementRef": ""
+}

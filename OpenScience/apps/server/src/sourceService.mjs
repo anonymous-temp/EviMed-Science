@@ -572,8 +572,8 @@ export class SourceService {
    * to do leaves the registration exactly as it is.
    * @param {any} documents @param {any} jobs
    * `afterRemove` is told once a document is recorded as going, so what rests on it can be labelled.
-   * @param {{extractorVersion?:string,now?:()=>Date,afterReplace?:((event:{userId:string,projectId:string,logicalPath?:string,familyId?:string,sourceRetired?:boolean,replaced:{sourceId:string,sha256:string,version:number},by:{sourceId:string,version:number,at:string}})=>Promise<any>)|null,afterRemove?:((event:{userId:string,projectId:string,sourceId:string,source:any})=>Promise<any>)|null,report?:(code:string)=>void,evolutionSignals?:any,judgeService?:any,prepareRegistration?:((userId:string,input:any)=>Promise<any>)|null}} options */
-  constructor(documents, jobs, { extractorVersion = "evimed-analysis-1.0.0", now = () => new Date(), afterReplace = null, afterRemove = null, report = () => {}, evolutionSignals = null, judgeService = null, prepareRegistration = null } = {}) {
+   * @param {{extractorVersion?:string,now?:()=>Date,beforeRemove?:((event:any)=>Promise<any>)|null,beforeReplace?:((event:any)=>Promise<any>)|null,afterReplace?:((event:{userId:string,projectId:string,logicalPath?:string,familyId?:string,sourceRetired?:boolean,replaced:{sourceId:string,sha256:string,version:number},by:{sourceId:string,version:number,at:string}})=>Promise<any>)|null,afterRemove?:((event:{userId:string,projectId:string,sourceId:string,source:any})=>Promise<any>)|null,report?:(code:string)=>void,evolutionSignals?:any,judgeService?:any,prepareRegistration?:((userId:string,input:any)=>Promise<any>)|null}} options */
+  constructor(documents, jobs, { extractorVersion = "evimed-analysis-1.0.0", now = () => new Date(), afterReplace = null, afterRemove = null, beforeRemove = null, beforeReplace = null, report = () => {}, evolutionSignals = null, judgeService = null, prepareRegistration = null } = {}) {
     if (!documents || !jobs) throw new TypeError("SourceService requires product documents and jobs.");
     this.judgeService = judgeService;
     this.documents = documents;
@@ -582,6 +582,8 @@ export class SourceService {
     this.now = now;
     this.afterReplace = afterReplace;
     this.afterRemove = afterRemove;
+    this.beforeRemove = beforeRemove;
+    this.beforeReplace = beforeReplace;
     this.prepareRegistration = prepareRegistration;
     this.report = report;
     this.evolutionSignals = evolutionSignals;
@@ -696,6 +698,7 @@ export class SourceService {
         const previousBindings = sourcePublicationBindings(previous);
         const nextBindings = { ...previousBindings, [familyId]: { ...previousBindings[familyId], current: false } };
         const current = previous.payload.publication?.legacyAmbiguous === true || Object.values(nextBindings).some(binding => binding.current);
+        await this.beforeReplace?.({ userId, projectId });
         const previousPayload = { ...previous.payload, publication: { ...previous.payload.publication, current, bindings: nextBindings },
           ...(!current ? { generation: (Number(previous.payload.generation) || 1) + 1, ...retiredSourceRun(previous.payload) } : {}),
           updatedAt: this.now().toISOString() };
@@ -1936,6 +1939,8 @@ export class SourceService {
    * @param {string} userId @param {string} sourceId @param {{expectedRevision:number,accountCreatedAt?:string}} input
    */
   async remove(userId, sourceId, input) {
+    const source = await this.documents.get(userId, "source", sourceId);
+    if (source) await this.beforeRemove?.({ userId, projectId: source.projectId });
     const removed = await this.#remove(userId, sourceId, input);
     if (this.afterRemove && removed?.projectId) {
       try { await this.afterRemove({ userId, projectId: removed.projectId, sourceId, source: removed }); }

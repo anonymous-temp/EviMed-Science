@@ -31,6 +31,7 @@ export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidat
   "frontier-daily", "frontier-rebuild", "frontier-weekly", "frontier-monthly", "frontier-notify", "document-export", "study-review", "result-replay",
   // One finished run joined to the capability, skill and tool versions it used and to the result versions it
   // produced (`availabilityCollector.mjs`), and the sweep that finds runs the finish hook missed.
+  "rsi-incident-export", "rsi-bundle-poll",
   "availability-collect", ...EVOLUTION_JOB_KINDS, ...EXTENSION_JOB_KINDS,
   // The evidence programme's one decision a day (`evidenceProgramme.mjs`): the topic selector's run, leased like every other job.
   "evidence-programme",
@@ -402,6 +403,16 @@ BEGIN
   END IF;
 END $geo_review_job_kind$;
 INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-05-evolution-job-kinds-v1') ON CONFLICT DO NOTHING;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='evimed_product.jobs'::regclass
+    AND conname='product_jobs_kind_check' AND position('rsi-incident-export' in pg_get_constraintdef(oid)) > 0
+    AND position('rsi-bundle-poll' in pg_get_constraintdef(oid)) > 0) THEN
+    ALTER TABLE evimed_product.jobs DROP CONSTRAINT IF EXISTS product_jobs_kind_check;
+    ALTER TABLE evimed_product.jobs ADD CONSTRAINT product_jobs_kind_check CHECK (kind IN (${PRODUCT_JOB_KINDS.map(kind => `'${kind}'`).join(",")}));
+  END IF;
+END $$;
+INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-26-rsi-online-job-kinds-v1') ON CONFLICT DO NOTHING;
+
 -- What finished operations say about a capability version, a tool, a skill or an extension on THIS
 -- deployment (the availability projection's evidence). One row per subject and exact version, folded
 -- by the collector in the same transaction that completes the job for one run. Deployment-wide by
