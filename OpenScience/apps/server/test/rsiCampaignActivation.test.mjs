@@ -22,3 +22,5 @@ test('shadow pins cannot turn a shadow execution into serving publication',()=>{
  assert.equal(rsiCampaignSelection(row,{runPin:'next'}).revision,'base')
  assert.equal(rsiCampaignSelection(row,{runPin:'next'}).arm,'control')
 })
+
+test('activation intent never serves candidate before inspected active receipt',()=>{assert.equal(rsiCampaignSelection({...row,mode:'global',state:'staged'},{runPin:'next'}).revision,'base')})
