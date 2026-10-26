@@ -4022,11 +4022,15 @@
  },
  "pl-urpl-aktualnosci": {
   "enabled": true,
-  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 4 in the last 30 days), newest 2026-10-20, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). URPL moved to gov.pl; www.urpl.gov.pl is behind Incapsula (bot wall, 842-byte challenge page). gov.pl is plain HTTP, 10 items per page (?page=2&size=10 for more). gov.pl/web/urpl/aktualnosci redirects to aktualnosci1."
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 4 in the last 30 days), newest 2026-10-20, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). URPL moved to gov.pl; www.urpl.gov.pl is behind Incapsula (bot wall, 842-byte challenge page). gov.pl is plain HTTP, 10 items per page (?page=2&size=10 for more). gov.pl/web/urpl/aktualnosci redirects to aktualnosci1.",
+  "egress": "relay",
+  "_why_egress_20261026": "Beijing probe 2026-10-26 (python -m knowledge_plugin.probe in the production plugin container): direct answered 403, a robots timeout or a challenge; through the Tokyo node it read the list (HTTP 200 with entries)."
  },
  "pl-urpl-komunikaty-produkty-lecznicze": {
   "enabled": true,
-  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 1 in the last 30 days), newest 2026-10-08, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). 'Komunikaty dot. produktow leczniczych' = Polish DHPC / safety communications (Ocrevus, Litfulo, desogestrel). Quiet (1 in last 30 days, newest 2026-10-08)."
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 1 in the last 30 days), newest 2026-10-08, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). 'Komunikaty dot. produktow leczniczych' = Polish DHPC / safety communications (Ocrevus, Litfulo, desogestrel). Quiet (1 in last 30 days, newest 2026-10-08).",
+  "egress": "relay",
+  "_why_egress_20261026": "Beijing probe 2026-10-26 (python -m knowledge_plugin.probe in the production plugin container): direct answered 403, a robots timeout or a challenge; through the Tokyo node it read the list (HTTP 200 with entries)."
  },
  "pt-infarmed-noticias": {
   "enabled": true,
@@ -4038,7 +4042,9 @@
  },
  "sk-sukl-aktuality": {
   "enabled": true,
-  "_why_enabled_20261026": "c5-sources: read 65 items (65 dated, 10 in the last 30 days), newest 2026-10-22, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Official feed 'Aktuality (vsetky novinky)' from https://www.sukl.sk/o-nas/databazy-a-servis/rss-1; days=365 look-back, redirects to /slovenska-verzia/rss?days=365. ~65 distinct items, 17 duplicated rows (same item under several categories) are folded by the adapter."
+  "_why_enabled_20261026": "c5-sources: read 65 items (65 dated, 10 in the last 30 days), newest 2026-10-22, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Official feed 'Aktuality (vsetky novinky)' from https://www.sukl.sk/o-nas/databazy-a-servis/rss-1; days=365 look-back, redirects to /slovenska-verzia/rss?days=365. ~65 distinct items, 17 duplicated rows (same item under several categories) are folded by the adapter.",
+  "egress": "relay",
+  "_why_egress_20261026": "Beijing probe 2026-10-26 (python -m knowledge_plugin.probe in the production plugin container): direct answered 403, a robots timeout or a challenge; through the Tokyo node it read the list (HTTP 200 with entries)."
  },
  "uni-ki-news": {
   "enabled": true,
@@ -4046,11 +4052,15 @@
  },
  "uni-washu-medicine-news": {
   "enabled": true,
-  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 10 in the last 30 days), newest 2026-10-21, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). WordPress site feed; every item link is under /news/. 10 items. The old host medicine.wustl.edu redirects to medicine.washu.edu. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 10 in the last 30 days), newest 2026-10-21, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). WordPress site feed; every item link is under /news/. 10 items. The old host medicine.wustl.edu redirects to medicine.washu.edu. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200.",
+  "egress": "browser",
+  "_why_egress_20261026": "Beijing probe 2026-10-26: 403 or a challenge directly and through the Tokyo node; the headless browser exit read it (HTTP 200 with entries)."
  },
  "uni-cambridge-clinical-medicine-news": {
   "enabled": true,
-  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 3 in the last 30 days), newest 2026-10-15, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Cambridge news-feed generator filtered by affiliation 'School of Clinical Medicine' (tid 107); the feed carries the 10 newest matching stories (about one a week), mostly /research/news, a few /stories. Campus-wide generator without a filter would be a firehose; this filter is medicine-only. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 3 in the last 30 days), newest 2026-10-15, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Cambridge news-feed generator filtered by affiliation 'School of Clinical Medicine' (tid 107); the feed carries the 10 newest matching stories (about one a week), mostly /research/news, a few /stories. Campus-wide generator without a filter would be a firehose; this filter is medicine-only. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200.",
+  "egress": "browser",
+  "_why_egress_20261026": "Beijing probe 2026-10-26: 403 or a challenge directly and through the Tokyo node; the headless browser exit read it (HTTP 200 with entries)."
  },
  "uni-harvard-gazette-health": {
   "enabled": true,
@@ -4058,17 +4068,23 @@
   "_why_cadence_20261026": "the Gazette's health section is about two items a week and its feed document ~880 KB (items carry full content): four reads a day, not twelve"
  },
  "uni-vumc-news": {
-  "enabled": true,
+  "enabled": false,
   "_why_enabled_20261026": "c5-sources: read 20 items (20 dated, 20 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). VUMC Reporter / Vanderbilt Health News (WordPress). 20 items, daily. Mixes research and clinical news with some staff-life items ('Pets of the Day'). Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200.",
-  "_why_untrimmed_20261026": "The plugin has no content filter and the research's suggested trim ('Pets of the Day' and other staff-life items among 20 daily items) was not applied on purpose: the platform's screen drops what is not news, and the research and clinical items of the same feed are the reason the row is on."
+  "_why_untrimmed_20261026": "The plugin has no content filter and the research's suggested trim ('Pets of the Day' and other staff-life items among 20 daily items) was not applied on purpose: the platform's screen drops what is not news, and the research and clinical items of the same feed are the reason the row is on.",
+  "disabled_reason": "probe_beijing_unreachable",
+  "_why_off_20261026": "Beijing probe 2026-10-26: robots.txt could not be read from Beijing directly, through the Tokyo node or through the headless browser (treated as denied)."
  },
  "uni-weill-cornell-news": {
   "enabled": true,
-  "_why_enabled_20261026": "c5-sources: read 15 items (15 dated, 12 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Drupal news feed (/news/rss; /news/feed is the same list with longer bodies). 15 items. Do not use /rss.xml: it is the site's section index, not the news. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+  "_why_enabled_20261026": "c5-sources: read 15 items (15 dated, 12 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Drupal news feed (/news/rss; /news/feed is the same list with longer bodies). 15 items. Do not use /rss.xml: it is the site's section index, not the news. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200.",
+  "egress": "browser",
+  "_why_egress_20261026": "Beijing probe 2026-10-26: 403 or a challenge directly and through the Tokyo node; the headless browser exit read it (HTTP 200 with entries)."
  },
  "uni-unc-health-news": {
   "enabled": true,
-  "_why_enabled_20261026": "c5-sources: read 12 items (12 dated, 12 in the last 30 days), newest 2026-10-22, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). WordPress newsroom feed, 12 items, medicine-only (school of medicine research plus UNC Health clinical news). Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+  "_why_enabled_20261026": "c5-sources: read 12 items (12 dated, 12 in the last 30 days), newest 2026-10-22, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). WordPress newsroom feed, 12 items, medicine-only (school of medicine research plus UNC Health clinical news). Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200.",
+  "egress": "browser",
+  "_why_egress_20261026": "Beijing probe 2026-10-26: 403 or a challenge directly and through the Tokyo node; the headless browser exit read it (HTTP 200 with entries)."
  },
  "uni-ucdavis-health-news": {
   "enabled": true,
@@ -4089,11 +4105,15 @@
  },
  "uni-nyu-langone-research": {
   "enabled": true,
-  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 9 in the last 30 days), newest 2026-10-20, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Research category of the NYU Langone newsroom (the /news landing mixes in 'Media Contacts' and has stale dates; /news/press-releases is the corporate-heavy alternative). Drupal list, 10 items per page, dates like 'October 20, 2026'. No RSS exists. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 9 in the last 30 days), newest 2026-10-20, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Research category of the NYU Langone newsroom (the /news landing mixes in 'Media Contacts' and has stale dates; /news/press-releases is the corporate-heavy alternative). Drupal list, 10 items per page, dates like 'October 20, 2026'. No RSS exists. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200.",
+  "egress": "relay",
+  "_why_egress_20261026": "Beijing probe 2026-10-26 (python -m knowledge_plugin.probe in the production plugin container): direct answered 403, a robots timeout or a challenge; through the Tokyo node it read the list (HTTP 200 with entries)."
  },
  "uni-imperial-medicine-news": {
   "enabled": true,
-  "_why_enabled_20261026": "c5-sources: read 12 items (12 dated, 12 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Faculty of Medicine all-news page: 12 cards per page, server-rendered, 'DD Month YYYY' dates. Page is ~860 KB. Imperial publishes JSON feeds (/news/articles/feeds/medicine/medicine/articles.json) but no RSS; the plugin's json-api families do not cover that shape, so the HTML list is used. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+  "_why_enabled_20261026": "c5-sources: read 12 items (12 dated, 12 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Faculty of Medicine all-news page: 12 cards per page, server-rendered, 'DD Month YYYY' dates. Page is ~860 KB. Imperial publishes JSON feeds (/news/articles/feeds/medicine/medicine/articles.json) but no RSS; the plugin's json-api families do not cover that shape, so the HTML list is used. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200.",
+  "egress": "relay",
+  "_why_egress_20261026": "Beijing probe 2026-10-26 (python -m knowledge_plugin.probe in the production plugin container): direct answered 403, a robots timeout or a challenge; through the Tokyo node it read the list (HTTP 200 with entries)."
  },
  "uni-mdanderson-research-newsroom": {
   "enabled": true,
@@ -4121,19 +4141,25 @@
  },
  "uni-njmu-research": {
   "enabled": true,
-  "_why_enabled_20261026": "c5-sources: read 14 items (14 dated, 3 in the last 30 days), newest 2026-10-22, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). WebPlus research-dynamics column; full title in the title attribute (the visible text is cut with ...). Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+  "_why_enabled_20261026": "c5-sources: read 14 items (14 dated, 3 in the last 30 days), newest 2026-10-22, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). WebPlus research-dynamics column; full title in the title attribute (the visible text is cut with ...). Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200.",
+  "egress": "browser",
+  "_why_egress_20261026": "Beijing probe 2026-10-26: 403 or a challenge directly and through the Tokyo node; the headless browser exit read it (HTTP 200 with entries)."
  },
  "uni-hrbmu-research": {
   "enabled": true,
   "_why_enabled_20261026": "c5-sources: read 20 items (20 dated, 1 in the last 30 days), newest 2026-10-19, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Research column, 20 per page, date '2026.10.19' inside the link. Slow cadence (about every 2-4 weeks). Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
  },
  "uni-gzhmu-research": {
-  "enabled": true,
-  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 5 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). News-site academic/research column: papers plus academic lectures. Date is '<b>26</b><span>2026-10</span>' read as '%d %Y-%m'. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+  "enabled": false,
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 5 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). News-site academic/research column: papers plus academic lectures. Date is '<b>26</b><span>2026-10</span>' read as '%d %Y-%m'. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200.",
+  "disabled_reason": "probe_beijing_unreachable",
+  "_why_off_20261026": "Beijing probe 2026-10-26: HTTP 483 from Beijing directly, through the Tokyo node and through the headless browser."
  },
  "medcity-news": {
   "enabled": true,
-  "_why_enabled_20261026": "c5-sources: read 30 items (30 dated, 30 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Full-content WordPress RSS, 30 items/poll, deals/funding/digital-health business. Honest-UA fetch OK."
+  "_why_enabled_20261026": "c5-sources: read 30 items (30 dated, 30 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Full-content WordPress RSS, 30 items/poll, deals/funding/digital-health business. Honest-UA fetch OK.",
+  "egress": "relay",
+  "_why_egress_20261026": "Beijing probe 2026-10-26 (python -m knowledge_plugin.probe in the production plugin container): direct answered 403, a robots timeout or a challenge; through the Tokyo node it read the list (HTTP 200 with entries)."
  },
  "medtech-dive": {
   "enabled": true,
@@ -4149,11 +4175,15 @@
  },
  "drug-discovery-trends": {
   "enabled": true,
-  "_why_enabled_20261026": "c5-sources: read 25 items (25 dated, 6 in the last 30 days), newest 2026-10-19, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). WordPress feed, 25 items but slow cadence (about 6 in 30 days, newest 7 days old); deal/partnership headlines (e.g. Roche-Hansoh ADC deal)."
+  "_why_enabled_20261026": "c5-sources: read 25 items (25 dated, 6 in the last 30 days), newest 2026-10-19, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). WordPress feed, 25 items but slow cadence (about 6 in 30 days, newest 7 days old); deal/partnership headlines (e.g. Roche-Hansoh ADC deal).",
+  "egress": "relay",
+  "_why_egress_20261026": "Beijing probe 2026-10-26 (python -m knowledge_plugin.probe in the production plugin container): direct answered 403, a robots timeout or a challenge; through the Tokyo node it read the list (HTTP 200 with entries)."
  },
  "pharmaceutical-business-review": {
   "enabled": true,
-  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 10 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). GlobalData trade site; the feed works with plain and honest UA from here (its sister sites pharmaceutical-technology.com / clinicaltrialsarena.com / medicaldevice-network.com answer 403 to non-browser clients, so do not copy this row to them). 10 items/poll."
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 10 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). GlobalData trade site; the feed works with plain and honest UA from here (its sister sites pharmaceutical-technology.com / clinicaltrialsarena.com / medicaldevice-network.com answer 403 to non-browser clients, so do not copy this row to them). 10 items/poll.",
+  "egress": "browser",
+  "_why_egress_20261026": "Beijing probe 2026-10-26: 403 or a challenge directly and through the Tokyo node; the headless browser exit read it (HTTP 200 with entries)."
  },
  "pedaily-medical-health": {
   "enabled": true,

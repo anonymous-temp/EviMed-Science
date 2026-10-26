@@ -1263,5 +1263,717 @@
    "id": "mayo-clinic-news",
    "reason": "probe_cloudflare"
   }
- ]
+ ],
+ "beijingProbe": {
+  "at": "2026-10-26",
+  "how": "python -m knowledge_plugin.probe in a container of the production plugin image sharing its network and secrets, with this tree's code and registry; nothing written",
+  "results": {
+   "cn-sh-mpa-dt": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 20
+    }
+   ],
+   "cn-sh-mpa-yp": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 20
+    }
+   ],
+   "cn-bj-mpa-dt": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 15
+    }
+   ],
+   "cn-bj-mpa-gg": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 30
+    }
+   ],
+   "cn-js-mpa-gsgg": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 30
+    }
+   ],
+   "cn-js-mpa-dt": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 30
+    }
+   ],
+   "cn-zj-mpa-tzgg": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 10
+    }
+   ],
+   "cn-zj-mpa-dt": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 8
+    }
+   ],
+   "cn-sc-mpa-gsgg": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 18
+    }
+   ],
+   "cn-sc-mpa-dt": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 20
+    }
+   ],
+   "cn-ha-mpa-ggtg": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 19
+    }
+   ],
+   "cn-cq-mpa-gggs": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 20
+    }
+   ],
+   "cn-sn-mpa-dt": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 20
+    }
+   ],
+   "cn-sn-mpa-rcjg": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 21
+    }
+   ],
+   "cn-fj-mpa-gstg": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 30
+    }
+   ],
+   "cn-hb-mpa-tzgg": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 6
+    }
+   ],
+   "cn-ah-mpa-gsgg": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 15
+    }
+   ],
+   "cn-yn-mpa-tztg": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 20
+    }
+   ],
+   "cn-xj-mpa-tzgg": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 19
+    }
+   ],
+   "cn-gd-mpa-dt": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 20
+    }
+   ],
+   "cn-hn-mpa-tzgg": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 10
+    }
+   ],
+   "at-basg-whatsnew": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 49
+    }
+   ],
+   "ch-swissmedic-mitteilungen": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 30
+    }
+   ],
+   "cz-sukl-aktuality": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 10
+    }
+   ],
+   "cz-sukl-stahovani-pozastaveni": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 10
+    }
+   ],
+   "de-bfarm-pressemitteilungen": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 10
+    }
+   ],
+   "de-pei-sicherheitsinformationen": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 17
+    }
+   ],
+   "es-aemps-notas-medicamentos": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 40
+    }
+   ],
+   "fr-ansm-actualites": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 14
+    }
+   ],
+   "fr-ansm-informations-securite": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 20
+    }
+   ],
+   "gr-eof-farmaka": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 10
+    }
+   ],
+   "lv-zva-jaunumi": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 9
+    }
+   ],
+   "no-dmp-nyheter": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 6
+    }
+   ],
+   "pl-urpl-aktualnosci": [
+    {
+     "exit": "direct",
+     "outcome": "robots-denied",
+     "status": null,
+     "entries": null
+    },
+    {
+     "exit": "relay",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 10
+    }
+   ],
+   "pl-urpl-komunikaty-produkty-lecznicze": [
+    {
+     "exit": "direct",
+     "outcome": "robots-denied",
+     "status": null,
+     "entries": null
+    },
+    {
+     "exit": "relay",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 10
+    }
+   ],
+   "pt-infarmed-noticias": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 20
+    }
+   ],
+   "se-lakemedelsverket-pressmeddelanden": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 25
+    }
+   ],
+   "sk-sukl-aktuality": [
+    {
+     "exit": "direct",
+     "outcome": "blocked",
+     "status": 403,
+     "entries": null
+    },
+    {
+     "exit": "relay",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 66
+    }
+   ],
+   "uni-ki-news": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 25
+    }
+   ],
+   "uni-washu-medicine-news": [
+    {
+     "exit": "direct",
+     "outcome": "blocked",
+     "status": 403,
+     "entries": null
+    },
+    {
+     "exit": "relay",
+     "outcome": "blocked",
+     "status": 403,
+     "entries": null
+    },
+    {
+     "exit": "browser",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 10
+    }
+   ],
+   "uni-cambridge-clinical-medicine-news": [
+    {
+     "exit": "direct",
+     "outcome": "blocked",
+     "status": 403,
+     "entries": null
+    },
+    {
+     "exit": "relay",
+     "outcome": "blocked",
+     "status": 403,
+     "entries": null
+    },
+    {
+     "exit": "browser",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 10
+    }
+   ],
+   "uni-harvard-gazette-health": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 50
+    }
+   ],
+   "uni-vumc-news": [
+    {
+     "exit": "direct",
+     "outcome": "robots-denied",
+     "status": null,
+     "entries": null
+    },
+    {
+     "exit": "relay",
+     "outcome": "blocked",
+     "status": 403,
+     "entries": null
+    },
+    {
+     "exit": "browser",
+     "outcome": "robots-denied",
+     "status": null,
+     "entries": null
+    }
+   ],
+   "uni-weill-cornell-news": [
+    {
+     "exit": "direct",
+     "outcome": "blocked",
+     "status": 403,
+     "entries": null
+    },
+    {
+     "exit": "relay",
+     "outcome": "blocked",
+     "status": 403,
+     "entries": null
+    },
+    {
+     "exit": "browser",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 15
+    }
+   ],
+   "uni-unc-health-news": [
+    {
+     "exit": "direct",
+     "outcome": "blocked",
+     "status": 403,
+     "entries": null
+    },
+    {
+     "exit": "relay",
+     "outcome": "blocked",
+     "status": 403,
+     "entries": null
+    },
+    {
+     "exit": "browser",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 12
+    }
+   ],
+   "uni-ucdavis-health-news": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 30
+    }
+   ],
+   "uni-cu-anschutz-news": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 10
+    }
+   ],
+   "uni-lshtm-news": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 10
+    }
+   ],
+   "uni-columbia-mailman-news": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 10
+    }
+   ],
+   "uni-nyu-langone-research": [
+    {
+     "exit": "direct",
+     "outcome": "robots-denied",
+     "status": null,
+     "entries": null
+    },
+    {
+     "exit": "relay",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 10
+    }
+   ],
+   "uni-imperial-medicine-news": [
+    {
+     "exit": "direct",
+     "outcome": "robots-denied",
+     "status": null,
+     "entries": null
+    },
+    {
+     "exit": "relay",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 12
+    }
+   ],
+   "uni-mdanderson-research-newsroom": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 30
+    }
+   ],
+   "uni-ucla-health-releases": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 10
+    }
+   ],
+   "uni-cuhk-medicine-press": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 6
+    }
+   ],
+   "uni-shsmu-research": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 20
+    }
+   ],
+   "uni-fudan-shmc-research": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 14
+    }
+   ],
+   "uni-ccmu-research": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 10
+    }
+   ],
+   "uni-njmu-research": [
+    {
+     "exit": "direct",
+     "outcome": "challenge",
+     "status": 200,
+     "entries": null
+    },
+    {
+     "exit": "relay",
+     "outcome": "challenge",
+     "status": 200,
+     "entries": null
+    },
+    {
+     "exit": "browser",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 14
+    }
+   ],
+   "uni-hrbmu-research": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 20
+    }
+   ],
+   "uni-gzhmu-research": [
+    {
+     "exit": "direct",
+     "outcome": "http-error",
+     "status": 483,
+     "entries": null
+    },
+    {
+     "exit": "relay",
+     "outcome": "http-error",
+     "status": 483,
+     "entries": null
+    },
+    {
+     "exit": "browser",
+     "outcome": "http-error",
+     "status": 483,
+     "entries": null
+    }
+   ],
+   "medcity-news": [
+    {
+     "exit": "direct",
+     "outcome": "challenge",
+     "status": 403,
+     "entries": null
+    },
+    {
+     "exit": "relay",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 30
+    }
+   ],
+   "medtech-dive": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 10
+    }
+   ],
+   "hit-consultant": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 15
+    }
+   ],
+   "korea-biomedical-review": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 50
+    }
+   ],
+   "drug-discovery-trends": [
+    {
+     "exit": "direct",
+     "outcome": "challenge",
+     "status": 403,
+     "entries": null
+    },
+    {
+     "exit": "relay",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 25
+    }
+   ],
+   "pharmaceutical-business-review": [
+    {
+     "exit": "direct",
+     "outcome": "blocked",
+     "status": 403,
+     "entries": null
+    },
+    {
+     "exit": "relay",
+     "outcome": "blocked",
+     "status": 403,
+     "entries": null
+    },
+    {
+     "exit": "browser",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 10
+    }
+   ],
+   "pedaily-medical-health": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 20
+    }
+   ],
+   "pharnexcloud-sx": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 20
+    }
+   ],
+   "pharnexcloud-zcsp": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 20
+    }
+   ],
+   "pharnexcloud-trz": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 20
+    }
+   ],
+   "uni-tsinghua-med-research": [
+    {
+     "exit": "direct",
+     "outcome": "ok",
+     "status": 200,
+     "entries": 10
+    }
+   ]
+  }
+ }
 }

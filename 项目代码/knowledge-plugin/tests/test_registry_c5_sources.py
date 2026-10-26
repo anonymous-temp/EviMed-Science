@@ -17,6 +17,15 @@ ROOT = Path(__file__).resolve().parent.parent
 REGISTRY = ROOT / "registry"
 WHY = "_why_enabled_20261026"
 AT = date(2026, 10, 26)
+# The Beijing probe of 2026-10-26 (python -m knowledge_plugin.probe inside the production plugin container), the row's own exit
+# first: 56 read directly, these through another exit, and two on none.
+BEIJING_EXIT = {
+    **{sid: "relay" for sid in ("pl-urpl-aktualnosci", "pl-urpl-komunikaty-produkty-lecznicze", "sk-sukl-aktuality",
+                                "uni-nyu-langone-research", "uni-imperial-medicine-news", "medcity-news", "drug-discovery-trends")},
+    **{sid: "browser" for sid in ("uni-washu-medicine-news", "uni-cambridge-clinical-medicine-news", "uni-weill-cornell-news",
+                                  "uni-unc-health-news", "uni-njmu-research", "pharmaceutical-business-review")},
+}
+BEIJING_OFF = {"uni-vumc-news", "uni-gzhmu-research"}
 
 
 def read(name):
@@ -52,9 +61,16 @@ def test_every_row_of_the_batch_is_on_with_its_reason_and_was_read_by_the_rule_i
     for entry in record["rows"]:
         sid = entry["id"]
         row = rows[sid]
+        if sid in BEIJING_OFF:
+            # the Beijing probe of 2026-10-26 read it on no exit: off, with the reason, never counted as reachable
+            assert row["enabled"] is False and row["disabled_reason"] == "probe_beijing_unreachable" and overrides[sid]["_why_off_20261026"], sid
+            continue
         assert row["enabled"] is True and row["disabled_reason"] is None, sid
         assert overrides[sid]["enabled"] is True and "robots.txt allows it" in overrides[sid][WHY], sid
-        assert row["launch_tier"] == "P2" and row["egress"] == "direct" and row["access"] in ("html-list", "rss"), sid
+        # the exit is the one the Beijing probe read it through: direct, else the Tokyo node, else the headless browser
+        assert row["egress"] == BEIJING_EXIT.get(sid, "direct"), sid
+        assert row["egress"] == "direct" or overrides[sid]["_why_egress_20261026"].startswith("Beijing probe 2026-10-26"), sid
+        assert row["launch_tier"] == "P2" and row["access"] in ("html-list", "rss"), sid
         assert urlsplit(row["config"]["url"]).hostname in row["config"]["allowed_hosts"], sid
         # the rule of the research: >= 5 items, >= 90 % dated, the newest within 30 days, robots.txt allows it, honest identity reads it
         assert entry["entries"] >= 5 and entry["dated"] >= 0.9 * entry["entries"], sid
