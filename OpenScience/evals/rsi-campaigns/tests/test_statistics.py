@@ -10,7 +10,7 @@ SPEC.loader.exec_module(MODULE)
 
 def fixture(claim='efficiency', mode='paired-t', n=40):
     groups = [{'id': str(i), 'family': 'office', 'failure_slice': i < n // 2} for i in range(n)]
-    registration = {'version': 1, 'paid_cost_budget': 1000, 'consumer_id': 'test-consumer', 'corpus_digest': 'test-corpus', 'mode': mode, 'groups': groups, 'G_target': n,
+    registration = {'procedure': dict(MODULE.PROCEDURE), 'version': 1, 'paid_cost_budget': 1000, 'consumer_id': 'test-consumer', 'corpus_digest': 'test-corpus', 'mode': mode, 'groups': groups, 'G_target': n,
                     'claims': {claim: 0.05}, 'expires_at': '2030-01-01T00:00:00+00:00',
                     'cost_identity': 'all paid attempts including failures and evaluator',
                     'families': {'office': {'margin': 0.03, 'repeats': 1 if mode == 'deterministic' else 3,
@@ -46,7 +46,9 @@ class DecisionTests(unittest.TestCase):
             if row['arm'] == 'candidate':
                 row['quality'] += .15 + (int(row['group']) % 5) * .002
                 row['cost'] = 1.01 + (int(row['group']) % 5) * .001
-        self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'qualified')
+        result = MODULE.evaluate(reg, rows, receipt)
+        self.assertEqual(result['decision'], 'qualified')
+        self.assertEqual(result['quantities']['targeted-repair']['test_alpha'], .025)
 
     def test_equal_quality_same_cost_and_833_percent_fail(self):
         reg, rows, receipt = fixture(mode='deterministic')

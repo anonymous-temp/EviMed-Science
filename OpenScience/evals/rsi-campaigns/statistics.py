@@ -15,6 +15,8 @@ from datetime import datetime
 import numpy as np
 from scipy.stats import t
 
+PROCEDURE = {'id': 'rsi-paired-source-v2', 'test_alpha_fraction': .5, 'minimum_slice_groups': 30}
+
 
 def registration_digest(registration):
     """Digest the exact registration using sorted, compact, finite JSON."""
@@ -33,7 +35,7 @@ def _interval(values, alpha, deterministic):
     mean = float(np.mean(values))
     if deterministic:
         return {'mean': mean, 'lower': mean, 'upper': mean, 'n_groups': len(values)}
-    if len(values) < 30:
+    if len(values) < PROCEDURE['minimum_slice_groups']:
         raise ValueError('sparse population: paired-t requires at least 30 independent groups')
     sd = float(np.std(values, ddof=1))
     if sd <= 1e-12:
@@ -50,7 +52,7 @@ def _interval(values, alpha, deterministic):
 def evaluate(registration, observations, receipt):
     """Return a JSON-safe verdict; invalid/incomplete evidence is inconclusive.
 
-    V1 admits one family. paid_cost_budget bounds all paid arm totals (<=1000).
+    V1 admits one family. paid_cost_budget bounds the combined paid arm total (<=1000).
     Deterministic qualification is a trusted parent-signer receipt bound to the
     consumer and corpus; caller-supplied externally_verified is not authority.
     Receipt: registration_digest, confirmation_exposed=False, look=1,
@@ -69,6 +71,8 @@ def evaluate(registration, observations, receipt):
             raise ValueError('registration, receipt and measurement rows must be objects')
         if not isinstance(registration.get('families'), dict) or len(registration['families']) != 1:
             raise ValueError('v1 supports exactly one task family per registration')
+        if registration.get('procedure') != PROCEDURE:
+            raise ValueError('registration must pin the supported half-alpha procedure and fixed slice minimum')
         budget = registration.get('paid_cost_budget')
         if not _number(budget) or not 0 < budget <= 1000:
             raise ValueError('registered paid cost budget must be in (0, 1000]')
@@ -80,7 +84,7 @@ def evaluate(registration, observations, receipt):
                     result['cost_totals'][row['arm']] = None
                 elif result['cost_totals'][row['arm']] is not None:
                     result['cost_totals'][row['arm']] += row['cost']
-        if any(v is not None and (not math.isfinite(v) or v > budget) for v in result['cost_totals'].values()):
+        if any(v is not None and not math.isfinite(v) for v in result['cost_totals'].values()) or sum(v for v in result['cost_totals'].values() if v is not None) > budget:
             result['cost_totals'] = {k: v if v is not None and math.isfinite(v) else None for k, v in result['cost_totals'].items()}
             raise ValueError('paid totals exceed registered budget')
         digest = registration_digest(registration)
@@ -170,11 +174,12 @@ def evaluate(registration, observations, receipt):
 def numeric_decision(quality, margins, slices, costs, claims, deterministic=False):
     """Shared numerical core; every component uses its allocated claim alpha."""
     outcomes, quantities = [], {}
-    for claim, alpha in claims.items():
+    for claim, allocated_alpha in claims.items():
+        alpha = allocated_alpha * PROCEDURE['test_alpha_fraction']
         ni = _interval(np.array(quality) + margins, alpha, deterministic)
         bound = .9 if claim == 'efficiency' else 1.1
         cost = _interval([candidate - bound * baseline for baseline, candidate in costs], alpha, deterministic)
-        item = {'quality_noninferiority': ni, 'cost_contrast': cost, 'cost_factor': bound}
+        item = {'allocated_alpha': allocated_alpha, 'test_alpha': alpha, 'quality_noninferiority': ni, 'cost_contrast': cost, 'cost_factor': bound}
         passed = ni['lower'] > 0 and cost['upper'] <= 0
         if claim == 'targeted-repair':
             repair = _interval([q for q, selected in zip(quality, slices) if selected], alpha, deterministic)
