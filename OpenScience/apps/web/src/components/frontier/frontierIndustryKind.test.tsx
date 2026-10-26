@@ -1,5 +1,6 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
+import { Toolbar } from "@/components/ui/Toolbar";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FRONTIER_INDUSTRY_KIND_OPTIONS, listFrontierItems, parseFrontierItem } from "@/lib/frontierClient";
 import { FrontierCard } from "./FrontierCard";
@@ -70,27 +71,42 @@ describe("the list asks for one kind", () => {
 });
 
 describe("the filter", () => {
-  it("reads a kind from the address, and nothing else", () => {
-    for (const kind of ["deal", "financing", "people", "operations", "pipeline", "other"]) expect(readIndustryKind(kind)).toBe(kind);
-    for (const value of [null, "", "merger", "融资与上市", "industry", "Deal", "deal,people"]) expect(readIndustryKind(value)).toBe("");
+  it("reads a kind from the address, and nothing else — 「其他」 is not a choice, so a link naming it asks for nothing", () => {
+    for (const kind of ["deal", "financing", "people", "operations", "pipeline"]) expect(readIndustryKind(kind)).toBe(kind);
+    for (const value of [null, "", "other", "merger", "融资与上市", "industry", "Deal", "deal,people"]) expect(readIndustryKind(value)).toBe("");
     expect(NO_FILTERS.industryKind).toBe("");
   });
 
-  it("is one more choice of 「筛选」, beside 栏目: all, then the six kinds, and a choice is applied at once", () => {
+  it("is one more choice of 「筛选」, beside 栏目: all, then the five kinds worth asking for, and a choice is applied at once", () => {
     const onChange = vi.fn();
     const filters = feedFilters({ value: { ...NO_FILTERS, byTime: false }, showWindow: true, searching: false, onChange,
       hotTags: { loading: false, tags: [] } });
     const labels = filters.map((filter) => filter.label);
     expect(labels.indexOf("行业动态")).toBe(labels.indexOf("栏目") + 1);
     const group = filters.find((filter) => filter.label === "行业动态");
-    expect(group).toMatchObject({ kind: "chips", folded: true, value: "", neutral: "" });
+    expect(group).toMatchObject({ kind: "chips", folded: true, value: "", neutral: "", tokenPrefix: "行业动态" });
     if (!group || group.kind !== "chips") throw new Error("the kinds are a choice");
-    expect(group.options.map((option) => option.label)).toEqual(["全部", "交易与授权", "融资与上市", "人事与组织", "公司经营", "研发管线", "其他"]);
+    expect(group.options.map((option) => option.label)).toEqual(["全部", "交易与授权", "融资与上市", "人事与组织", "公司经营", "研发管线"]);
     (group.onChange as (value: string) => void)("people");
     expect(onChange).toHaveBeenLastCalledWith({ industryKind: "people" });
     (group.onChange as (value: string) => void)("merger");
     expect(onChange).toHaveBeenLastCalledWith({ industryKind: "" });
     (group.onChange as (value: string) => void)("");
+    expect(onChange).toHaveBeenLastCalledWith({ industryKind: "" });
+  });
+});
+
+describe("the kind on the row", () => {
+  afterEach(cleanup);
+
+  it("is said as 「行业动态 · 融资与上市」, so a kind is read for what it is of, and a press lets go of it", () => {
+    const onChange = vi.fn();
+    const views = { label: "动态视图", items: [{ value: "a", label: "精选" }, { value: "b", label: "关注" }], value: "a", onChange: () => {}, panelId: "feed" };
+    const filters = feedFilters({ value: { ...NO_FILTERS, byTime: false, industryKind: "financing" }, showWindow: false, searching: false, onChange, hotTags: { loading: false, tags: [] } });
+    render(<Toolbar oneRow views={views} filters={filters} />);
+    const token = screen.getByRole("button", { name: "移除筛选：行业动态 · 融资与上市" });
+    expect(token).toHaveTextContent("行业动态 · 融资与上市");
+    token.click();
     expect(onChange).toHaveBeenLastCalledWith({ industryKind: "" });
   });
 });

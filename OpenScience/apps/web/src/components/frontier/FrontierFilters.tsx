@@ -36,9 +36,14 @@ const CHANNEL_LABELS: Record<FrontierChannelFilter, string> = { literature: "文
 const CHANNEL_OPTIONS: readonly FilterOption[] = Object.freeze([{ value: "", label: "全部" }, ...FRONTIER_CHANNEL_FILTERS.map((channel) => ({ value: channel, label: CHANNEL_LABELS[channel] }))]);
 const EVIDENCE_OPTIONS: readonly FilterOption[] = Object.freeze([{ value: "", label: "全部" }, ...FRONTIER_EVIDENCE_TYPES.map((type) => ({ value: type.key, label: type.label }))]);
 const EVIDENCE_KEYS: ReadonlySet<string> = new Set(FRONTIER_EVIDENCE_TYPES.map((type) => type.key));
-/** The kinds of 行业动态 (c5-biz 2026-10-26), one more choice of the panel: choosing one narrows to 行业动态 of that kind. */
-const INDUSTRY_KIND_OPTIONS: readonly FilterOption[] = Object.freeze([{ value: "", label: "全部" }, ...FRONTIER_INDUSTRY_KIND_OPTIONS.map((kind) => ({ value: kind.key, label: kind.label }))]);
-const INDUSTRY_KIND_KEYS: ReadonlySet<string> = new Set(FRONTIER_INDUSTRY_KIND_OPTIONS.map((kind) => kind.key));
+/**
+ * The kinds of 行业动态 (c5-biz 2026-10-26), one more choice of the panel: choosing one narrows to 行业动态 of that kind. 「其他」 is
+ * a kind an item has and the list says nothing of (its card shows no kind), so it is not one to ask for: it would be the rest of
+ * the genre with a name that says nothing, and the genre itself (栏目) already is that.
+ */
+const FILTER_INDUSTRY_KINDS = Object.freeze(FRONTIER_INDUSTRY_KIND_OPTIONS.filter((kind) => kind.key !== "other"));
+const INDUSTRY_KIND_OPTIONS: readonly FilterOption[] = Object.freeze([{ value: "", label: "全部" }, ...FILTER_INDUSTRY_KINDS.map((kind) => ({ value: kind.key, label: kind.label }))]);
+const INDUSTRY_KIND_KEYS: ReadonlySet<string> = new Set(FILTER_INDUSTRY_KINDS.map((kind) => kind.key));
 /** A tag's slug as an address carries it (the server's form: lower-case letters, digits and dashes); anything else names no tag. */
 const TAG_SLUG = /^[a-z0-9][a-z0-9-]{1,79}$/;
 
@@ -70,7 +75,7 @@ export function readEvidence(value: string | null): string {
   return value && EVIDENCE_KEYS.has(value) ? value : "";
 }
 
-/** The kind of 行业动态 a link names (`?kind=`), or none. */
+/** The kind of 行业动态 a link names (`?kind=`), or none; 「其他」 is not one a link can ask for (`FILTER_INDUSTRY_KINDS`). */
 export function readIndustryKind(value: string | null): FrontierIndustryKind | "" {
   return value && INDUSTRY_KIND_KEYS.has(value) ? value as FrontierIndustryKind : "";
 }
@@ -141,7 +146,8 @@ export interface ChosenTag {
  * by (NN/g: the general first):
  *
  *  - 栏目, one choice that applies at once, and — beside it — 行业动态, the kinds of business news (交易与授权, 融资与上市, 人事与组织,
- *    公司经营, 研发管线, 其他; c5-biz), one choice that applies at once and narrows to 行业动态 of that kind;
+ *    公司经营, 研发管线; c5-biz), one choice that applies at once and narrows to 行业动态 of that kind, said on the row as
+ *    「行业动态 · 融资与上市」;
  *  - 专科, the thirty grouped as the domain groups them, several at once, each chosen one with its 「关注」 / 「已关注」
  *    (`specialtyFollow`); once one is chosen their 热门标签 (one at once, which sets the tag — the page's own token, so the group is
  *    quiet);
@@ -183,7 +189,7 @@ export function feedFilters({ value, showWindow, searching, onChange, hotTags, s
   };
   return [
     { kind: "chips", label: "栏目", folded: true, options: LANE_OPTIONS, value: value.lane, neutral: "", onChange: (lane) => onChange({ lane }) },
-    { kind: "chips", label: "行业动态", folded: true, options: INDUSTRY_KIND_OPTIONS, value: value.industryKind, neutral: "",
+    { kind: "chips", label: "行业动态", tokenPrefix: "行业动态", folded: true, options: INDUSTRY_KIND_OPTIONS, value: value.industryKind, neutral: "",
       onChange: (industryKind: string) => onChange({ industryKind: readIndustryKind(industryKind) }) },
     specialty,
     { kind: "chips", label: "来源", folded: true, options: CHANNEL_OPTIONS, value: value.channel, neutral: "", onChange: (channel: string) => onChange({ channel: readChannel(channel) }) },

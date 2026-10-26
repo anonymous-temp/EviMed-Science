@@ -420,12 +420,12 @@ describe("the control row", () => {
     await screen.findByText("今天的一条 RCT");
     const panel = await openFilters();
     const kinds = within(within(panel).getByRole("group", { name: "行业动态" }));
-    expect(kinds.getAllByRole("button").map((chip) => chip.textContent)).toEqual(["全部", "交易与授权", "融资与上市", "人事与组织", "公司经营", "研发管线", "其他"]);
+    expect(kinds.getAllByRole("button").map((chip) => chip.textContent)).toEqual(["全部", "交易与授权", "融资与上市", "人事与组织", "公司经营", "研发管线"]);
     await userEvent.click(kinds.getByRole("button", { name: "融资与上市" }));
     await waitFor(() => expect(lastFeedQuery()).toMatchObject({ industryKind: "financing" }));
     expect(location()).toContain("kind=financing");
     await userEvent.keyboard("{Escape}");
-    await userEvent.click(within(controlRow()).getByRole("button", { name: "移除筛选：融资与上市" }));
+    await userEvent.click(within(controlRow()).getByRole("button", { name: "移除筛选：行业动态 · 融资与上市" }));
     await waitFor(() => expect(lastFeedQuery()).toMatchObject({ industryKind: null }));
     expect(location()).toBe("/app/frontier?view=all");
   });
