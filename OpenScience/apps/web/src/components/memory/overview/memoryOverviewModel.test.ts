@@ -223,6 +223,14 @@ describe("收到的", () => {
     const long = receivedCard(many(11, (index) => pack(`p${index}`, `2026-09-${String(10 + index).padStart(2, "0")}T00:00:00Z`)));
     expect([long.count, long.rows.length, long.more]).toEqual([11, 8, 3]);
   });
+
+  it("puts the platform's own starter packs after the ones a person took in, however new they are", () => {
+    const defaults = many(5, (index) => ({ ...pack(`official-${index}`, "2026-10-25T00:00:00Z"), official: { packId: `p${index}` } }));
+    const card = receivedCard([...defaults, pack("mine-old", "2026-08-01T00:00:00Z"), pack("mine-new", "2026-09-01T00:00:00Z")]);
+    expect(card.rows.slice(0, 2).map((row) => row.id)).toEqual(["mine-new", "mine-old"]);
+    expect([card.count, card.rows.length, card.more]).toEqual([7, 7, 0]);
+    expect(receivedCard(defaults).shape).toBe("rows");
+  });
 });
 
 describe("what a capsule would hand over, in the three words of its card", () => {

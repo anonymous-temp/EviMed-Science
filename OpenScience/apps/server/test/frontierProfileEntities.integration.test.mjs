@@ -11,7 +11,7 @@ import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { FRONTIER_PROFILE_ENTITY_PHRASES, FrontierProfiles, frontierReasonText, frontierRecurringEntityKeys } from "../src/frontierProfiles.mjs";
 import { FRONTIER_PROJECT_ID } from "../src/internalProjects.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
-import { ResearchMemoryStore } from "../src/researchMemory.mjs";
+import { MemorySettingsStore } from "../src/memorySettings.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 import { insertSource } from "./helpers/frontierFixtures.mjs";
 import { insertComposedItem, testEmbedder, vectorAt } from "./helpers/frontierComposeFixtures.mjs";
@@ -43,7 +43,7 @@ before(async () => {
   for (const [userId, id] of [["reader", "kb"], ["reader", "paused"], ["reader", FRONTIER_PROJECT_ID], ["other", "kb"]]) {
     await database.query("INSERT INTO evimed_control.projects(user_id, id, name, quota_bytes) VALUES ($1, $2, $2, 1000000)", [userId, id]);
   }
-  memory = new ResearchMemoryStore({}, { database });
+  memory = new MemorySettingsStore({}, { database });
   // The shared vocabulary over a glossary scripted into a database double: the real tagger and the real labels.
   vocabulary = createEntityVocabulary({ database: { async query() { return { rows: GLOSSARY }; } }, enabled: true });
   zones = new EvidenceZoneService({ database, entityKeysFor: vocabulary.entityKeysFor });
@@ -83,7 +83,7 @@ async function document(userId, projectId, id, { title, summary, status = "compl
 }
 function profiles({ entityVocabulary = vocabulary, embed = async (text) => ({ 司美格鲁肽: vectorAt(1), 二甲双胍: vectorAt(0, 2), 心力衰竭: vectorAt(0.6, 3) })[text] ?? vectorAt(0, 9) } = {}) {
   const editor = { available: true, extractProfile: async (input) => { editorCalls.push(input); return { specialties: [], dropped: [], error: null, phrases: [] }; } };
-  return new FrontierProfiles({ database, researchMemory: memory, editor, embedder: { ...testEmbedder, embedQuery: embed }, config: CONFIG,
+  return new FrontierProfiles({ database, memorySettings: memory, editor, embedder: { ...testEmbedder, embedQuery: embed }, config: CONFIG,
     budget: async () => ({ state: "ok" }), now: () => NOW, entityVocabulary });
 }
 const stored = async (userId) => (await database.query("SELECT phrases, for_you FROM evimed_frontier.user_profiles WHERE user_id = $1", [userId])).rows[0];
@@ -165,7 +165,7 @@ test("without the vocabulary the two signals are not read, and a reader who has 
   await followedZone("reader", "糖尿病用药", ["司美格鲁肽与心力衰竭"]);
   const outcome = await profiles({ entityVocabulary: null }).refreshUser("reader");
   assert.deepEqual(outcome, { state: "off", reason: "no-signal" });
-  const off = new FrontierProfiles({ database, researchMemory: memory, editor: { available: true, extractProfile: async () => ({ phrases: [], specialties: [] }) },
+  const off = new FrontierProfiles({ database, memorySettings: memory, editor: { available: true, extractProfile: async () => ({ phrases: [], specialties: [] }) },
     embedder: { ...testEmbedder, embedQuery: async () => vectorAt(1) }, config: CONFIG, now: () => NOW, entityVocabulary: { enabled: false, keysForText: async () => [], describe: async () => [] } });
   assert.deepEqual(await off.refreshUser("reader"), { state: "off", reason: "no-signal" }, "a vocabulary that is off reads nothing");
 });
@@ -176,7 +176,7 @@ test("every phrase is stored with the entity keys the shared vocabulary found in
   const editor = { available: true, extractProfile: async () => ({ specialties: [], dropped: [], error: null, phrases: [
     { text: "阿哌沙班用于房颤", source: "question", kind: "question" }, { text: "怎么写好一篇综述", source: "question", kind: "question" },
   ] }) };
-  const runner = (entityVocabulary) => new FrontierProfiles({ database, researchMemory: memory, editor, embedder: { ...testEmbedder, embedQuery: async () => vectorAt(1) }, config: CONFIG,
+  const runner = (entityVocabulary) => new FrontierProfiles({ database, memorySettings: memory, editor, embedder: { ...testEmbedder, embedQuery: async () => vectorAt(1) }, config: CONFIG,
     budget: async () => ({ state: "ok" }), now: () => NOW, entityVocabulary, conversations: async () => asked });
   await runner(vocabulary).refreshUser("reader");
   const keys = Object.fromEntries((await stored("reader")).phrases.map((phrase) => [phrase.text, phrase.entityKeys]));

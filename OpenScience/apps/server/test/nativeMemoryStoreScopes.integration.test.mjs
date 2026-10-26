@@ -15,6 +15,7 @@ import { OpenVikingClient } from '../src/openVikingClient.mjs';
 import { loadConfig } from '../src/config.mjs';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 import { startOpenVikingStub } from './helpers/openVikingStub.mjs';
+import { OPENVIKING_PROJECT_MEMORY_TYPES } from '../src/openVikingLayout.mjs';
 
 const options = { skip: !process.env.OPEN_SCIENCE_TEST_POSTGRES_URL && 'Disposable PostgreSQL required' };
 async function fixture(t) {
@@ -272,8 +273,8 @@ test('pause and resume cover registered historical namespaces without restoring 
   await f.store.setLearning(user, true);
   for (const context of [f.a, f.b]) {
     const settings = await context.sessions.settings(user);
-    assert.equal(settings.learning, true); assert.equal(settings.memoryTypes.length, 6);
-    assert.equal(settings.memoryTypes.includes('profile'), false);
+    assert.equal(settings.learning, true); assert.deepEqual(settings.memoryTypes, [...OPENVIKING_PROJECT_MEMORY_TYPES].sort());
+    for (const personal of ['profile', 'preferences', 'observations']) assert.equal(settings.memoryTypes.includes(personal), false, personal);
   }
 });
 

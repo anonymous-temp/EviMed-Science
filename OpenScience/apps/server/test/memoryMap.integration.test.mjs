@@ -3,14 +3,19 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
+import { OpenVikingClient } from "../src/openVikingClient.mjs";
+import { OpenVikingSessions } from "../src/openVikingSessions.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 import { MemoryTopics } from "../src/memoryTopics.mjs";
+import { startOpenVikingStub } from "./helpers/openVikingStub.mjs";
 
 /**
- * 「记忆地图」 against a real database: the document the views are drawn from, read through the real routes, for an account whose
- * memories have what the map is for — a source that was withdrawn, two statements that disagree, a belief that changed twice — and
- * for a second account whose memories none of it may reach. Then the topics: grouped by a model (stood in for here), edited by
- * the researcher, bounded by the day, and gone with a reset.
+ * 「记忆地图」 against a real database and the memory engine's store (its wire doubled by the in-process OpenViking stub): the document the
+ * views are drawn from, read through the real routes, for an account whose memory files have what the map is for — a source that was
+ * withdrawn, a belief that changed — and for a second account whose memories none of it may reach. Then the topics: grouped by a model
+ * (stood in for here), edited by the researcher, bounded by the day, and gone with a reset. (Until 2026-10-25 the memories were the
+ * platform's own records, with disagreements between them and replacements of one by another; a memory file has neither, and those
+ * cases went with that engine.)
  */
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -30,9 +35,12 @@ async function signIn(base, username, password) {
 
 async function fixture(t) {
   const dataDir = await mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", "evimed-memory-map-"));
+  const stub = await startOpenVikingStub(t);
+  const sessions = new OpenVikingSessions(new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: "evimed" }), { timeoutMs: 2_000, fastTimeoutMs: 1_000 });
   const app = createWebApiApp({
     dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local",
     bootstrapUser: "", bootstrapPassword: "", stateStore: "postgres", requireSharedStateStore: true, databaseUrl,
+    memoryEngineEnabled: true, openVikingSessions: sessions,
   });
   const password = "test-only-memory-password";
   const make = async (label) => {
@@ -48,10 +56,13 @@ async function fixture(t) {
     await app.close();
     await rm(dataDir, { recursive: true, force: true });
   });
+  /** A memory file of an account, written into the engine the way the engine would have. */
+  const seedFor = (user) => (rel, text, extra) => stub.seedMemory(sessions.engineUser(user.id), rel, text, extra);
   return {
     app, base, user: mine.user, other: theirs.user,
     headers: await signIn(base, mine.username, password),
     otherHeaders: await signIn(base, theirs.username, password),
+    seed: seedFor(mine.user), seedOther: seedFor(theirs.user),
   };
 }
 
@@ -59,101 +70,78 @@ const get = async (base, headers, route) => {
   const response = await fetch(`${base}${route}`, { headers });
   return { status: response.status, body: await response.json() };
 };
-const fact = (overrides = {}) => ({
-  scope: "project", scopeId: "default", kind: "project_fact", key: "project.population", value: "adults with heart failure", summary: "adults with heart failure",
-  origin: "inferred", status: "active", confidence: 0.6, importance: 0.7, sensitive: false, ...overrides,
-});
-const proof = { sourceType: "conversation_message", sourceRef: "sessions/ses_1/messages/1", quote: "stated in the conversation", weight: 1 };
 const SOURCE = `src_${"b".repeat(32)}`;
+const DOI = "10.1056/nejmoa2034577";
+/** The page's record of a memory file, by the file. */
+const recordOf = async (base, headers, uri) => (await get(base, headers, "/api/memory/records")).body.data.find((entry) => entry.uri === uri);
 
-async function seed(memory, userId) {
-  const plain = await memory.upsertRecord(userId, fact({ key: "project.setting", value: "outpatient clinics", summary: "outpatient clinics" }), proof);
-  const cited = await memory.upsertRecord(userId, fact({ key: "project.effect", value: "the drug halves admissions", summary: "the drug halves admissions" }), proof,
-    { sourceLinks: [{ type: "doi", id: "10.1056/nejmoa2034577" }, { type: "knowledge_source", id: SOURCE }] });
-  await memory.markSourceLinks(userId, { type: "doi", id: "10.1056/nejmoa2034577" }, { state: "retracted", reason: "retraction notice" });
-  const a = await memory.upsertRecord(userId, fact({ key: "project.dose.a", value: "dose is 20 mg", summary: "dose is 20 mg" }), proof);
-  const b = await memory.upsertRecord(userId, fact({ key: "project.dose.b", value: "dose is 15 mg", summary: "dose is 15 mg" }), proof);
-  await memory.markConflict(userId, a.id, b.id, { reason: "the doses disagree" });
-  const v1 = await memory.upsertRecord(userId, fact({ kind: "decision", key: "project.design", value: "open-label", summary: "open-label" }), proof);
-  const v2 = await memory.supersede(userId, v1.id, fact({ kind: "decision", key: "project.design.v2", value: "double-blind", summary: "double-blind" }), proof, { reason: "protocol changed" });
-  const v3 = await memory.supersede(userId, v2.id ?? v2.record?.id, fact({ kind: "decision", key: "project.design.v3", value: "double-blind, placebo-controlled", summary: "double-blind, placebo-controlled" }), proof, { reason: "protocol changed" });
-  const habit = await memory.upsertRecord(userId, { ...fact({ scope: "user", scopeId: "", kind: "behavior", key: "habit.answers", value: "short answers first", summary: "short answers first" }) }, proof);
-  const secret = await memory.upsertRecord(userId, fact({ key: "project.secret", value: "never draw this", summary: "never draw this", sensitive: true }), proof);
-  const forgotten = await memory.upsertRecord(userId, fact({ key: "project.forgotten", value: "forgotten", summary: "forgotten" }), proof);
-  await memory.upsertRecord(userId, { ...forgotten, status: "archived" }, null, { expectedVersion: forgotten.version, reason: "forgotten by the user" });
-  const summary = await memory.upsertRecord(userId, fact({ scope: "session", scopeId: "ses_1", kind: "run_summary", key: "run.session.ses_1", value: JSON.stringify({ sessionId: "ses_1" }), summary: "a conversation" }), proof);
-  await memory.noteRecordUsage(userId, [cited.id, cited.id, habit.id]);
-  return { plain, cited, a, b, v1, v2: v2.record ?? v2, v3: v3.record ?? v3, habit, secret, summary };
-}
-
-test("the map reads an account's memories, what they rest on and how they changed, and never what must not be drawn", options, async (t) => {
-  const { app, base, headers, user, otherHeaders, other } = await fixture(t);
-  const memory = app.researchMemory;
-  const made = await seed(memory, user.id);
-  await memory.upsertRecord(other.id, fact({ key: "project.theirs", value: "their private memory", summary: "their private memory" }), proof);
+test("the map reads an account's memory files, what they rest on and how they changed, and never what must not be drawn", options, async (t) => {
+  const { app, base, headers, user, otherHeaders, seed, seedOther } = await fixture(t);
+  const overlay = app.nativeMemory.overlay;
+  const plain = seed("project_facts/setting.md", "outpatient clinics", { type: "project_facts", tags: ["project=default"] });
+  const cited = seed("project_facts/effect.md", "the drug halves admissions", { type: "project_facts", tags: ["project=default"] });
+  await overlay.setSources(user.id, cited, [{ type: "doi", id: DOI }, { type: "knowledge_source", id: SOURCE }]);
+  await overlay.markSource(user.id, cited, { type: "doi", id: DOI }, "retracted");
+  const habit = seed("preferences/answers.md", "short answers first", { type: "preferences" });
+  const secret = seed("project_facts/secret.md", "never draw this", { type: "project_facts", tags: ["project=default"] });
+  await overlay.upsertFile({ userId: user.id, uri: secret, memoryType: "project_facts", sensitive: true, body: "never draw this" });
+  seedOther("project_facts/theirs.md", "their private memory", { type: "project_facts" });
+  // A page edit is a change the map's growth strip shows.
+  const edited = await recordOf(base, headers, plain);
+  assert.equal((await fetch(`${base}/api/memory/records/${encodeURIComponent(edited.id)}`, { method: "PATCH", headers,
+    body: JSON.stringify({ value: "outpatient and inpatient clinics", expectedVersion: edited.version }) })).status, 200);
 
   const { status, body } = await get(base, headers, "/api/memory/map?include=summary,facets,nodes,edges,buckets,lanes,events");
   assert.equal(status, 200);
   const map = body.data;
-  const ids = map.nodes.map((node) => node.id);
-  for (const absent of [made.secret.id, made.summary.id]) assert.ok(!ids.includes(`memory:${absent}`), "a sensitive memory and a run summary are not marks");
+  const idOf = async (uri) => (await recordOf(base, headers, uri))?.id;
+  assert.ok(!map.nodes.some((node) => node.label === "never draw this"), "a sensitive memory is not a mark");
   assert.ok(!JSON.stringify(map).includes("never draw this"));
   assert.ok(!JSON.stringify(map).includes("their private memory"), "another account's memory is not reachable");
-  assert.ok(!JSON.stringify(map).match(/forgotten"/u), "a forgotten memory is not drawn");
   assert.doesNotMatch(JSON.stringify(map), /inferred|provenance|origin|基于推断/u);
 
   const node = (id) => map.nodes.find((entry) => entry.id === `memory:${id}`);
-  assert.deepEqual([node(made.cited.id).state, node(made.cited.id).reason], ["check", "source-retracted"], "the retracted source is why it needs a look");
-  assert.deepEqual([node(made.a.id).state, node(made.a.id).reason], ["check", "conflict"]);
-  assert.deepEqual([node(made.b.id).state, node(made.b.id).reason], ["check", "conflict"]);
-  assert.equal(node(made.plain.id).state, "current");
-  assert.equal(node(made.v1.id).state, "replaced");
-  assert.equal(node(made.v3.id).state, "current");
-  assert.ok(node(made.habit.id).weight > node(made.plain.id).weight, "what has been handed to a conversation weighs more");
-  assert.deepEqual(node(made.cited.id).open, { kind: "record", id: made.cited.id });
-  assert.equal(map.summary.needsLook, 3);
-  assert.equal(map.summary.memories, 6, "in force: the two earlier versions of the design are history");
+  const citedId = await idOf(cited);
+  const plainId = await idOf(plain);
+  const habitId = await idOf(habit);
+  assert.deepEqual([node(citedId).state, node(citedId).reason], ["check", "source-retracted"], "the retracted source is why it needs a look");
+  assert.equal(node(plainId).state, "current");
+  assert.deepEqual(node(citedId).open, { kind: "record", id: citedId });
+  assert.equal(map.summary.needsLook, 1);
+  assert.equal(map.summary.memories, 3, "the three files that may be drawn");
 
   const edge = (from, to, type) => map.edges.find((entry) => entry.from === from && entry.to === to && entry.type === type);
-  assert.equal(edge(`memory:${made.cited.id}`, "reference:doi:10.1056/nejmoa2034577", "rests-on")?.state, "retracted");
-  assert.equal(edge(`memory:${made.cited.id}`, `document:${SOURCE}`, "rests-on")?.state, "current");
-  assert.ok(edge(`memory:${made.v2.id}`, `memory:${made.v1.id}`, "replaces") && edge(`memory:${made.v3.id}`, `memory:${made.v2.id}`, "replaces"));
-  assert.ok(map.edges.some((entry) => entry.type === "conflicts" && [`memory:${made.a.id}`, `memory:${made.b.id}`].includes(entry.from)));
-  assert.ok(edge(`memory:${made.habit.id}`, "you:account", "belongs-to"));
-  assert.ok(edge(`memory:${made.plain.id}`, "project:default", "belongs-to"));
+  assert.equal(edge(`memory:${citedId}`, `reference:doi:${DOI}`, "rests-on")?.state, "retracted");
+  assert.equal(edge(`memory:${citedId}`, `document:${SOURCE}`, "rests-on")?.state, "current");
+  assert.ok(edge(`memory:${habitId}`, "you:account", "belongs-to"));
+  assert.ok(edge(`memory:${plainId}`, "project:default", "belongs-to"));
   assert.equal(map.nodes.find((entry) => entry.id === `document:${SOURCE}`).label, "一份资料", "a document the knowledge base does not have keeps a plain name");
-
-  assert.equal(map.lanes.length, 1);
-  assert.deepEqual(map.lanes[0].segments.map((segment) => [segment.recordId, segment.state]), [[made.v1.id, "replaced"], [made.v2.id, "replaced"], [made.v3.id, "current"]]);
-  assert.ok(map.events.length > 0 && map.events.every((event) => /^memory:/u.test(event.ref) && event.lane));
+  assert.deepEqual(map.lanes ?? [], [], "a memory file has no earlier versions of itself to lay out as a lineage");
+  assert.ok(map.events.some((event) => event.ref === `memory:${plainId}` && event.change === "updated") && map.events.every((event) => /^memory:/u.test(event.ref) && event.lane));
   assert.ok(map.buckets.series.length >= 1 && map.buckets.series[0].memory > 0);
-  const aspects = map.facets.dimensions.find((dimension) => dimension.id === "memory");
-  assert.equal(aspects.axes.find((axis) => axis.id === "aspect:habit").count, 1);
-  assert.equal(aspects.axes.find((axis) => axis.id === "aspect:decision").count, 1);
   assert.deepEqual(map.missing, [], "nothing this deployment has failed to read");
-  assert.equal(map.status.topics, "empty", "too few memories to group, and nothing grouped before");
 
   // Another account sees its own map and none of this.
   const theirs = (await get(base, otherHeaders, "/api/memory/map")).body.data;
-  assert.deepEqual(theirs.nodes.filter((entry) => entry.type === "memory").map((entry) => entry.label), ["their private memory"]);
+  assert.deepEqual(theirs.nodes.filter((entry) => entry.type === "memory").map((entry) => entry.label), ["theirs"], "its own file, named by its topic, and nothing of the first account's");
 
   // A project: its own, or a 404 before anything is read.
   const narrowed = (await get(base, headers, "/api/memory/map?projectId=default")).body.data;
-  assert.ok(!narrowed.nodes.some((entry) => entry.id === `memory:${made.habit.id}`), "the account's own habits are not the project's");
-  assert.ok(narrowed.nodes.some((entry) => entry.id === `memory:${made.plain.id}`));
+  assert.ok(!narrowed.nodes.some((entry) => entry.id === `memory:${habitId}`), "the account's own habits are not the project's");
+  assert.ok(narrowed.nodes.some((entry) => entry.id === `memory:${plainId}`));
   assert.equal((await get(base, headers, "/api/memory/map?projectId=not-mine")).status, 404);
   assert.equal((await get(base, headers, "/api/memory/map?projectId=evimed-frontier")).status, 404);
   assert.equal((await get(base, headers, "/api/memory/map?focus=nonsense")).status, 400);
-  const around = (await get(base, headers, `/api/memory/map?focus=${encodeURIComponent(`memory:${made.v2.id}`)}&depth=1`)).body.data;
-  assert.deepEqual(around.nodes.map((entry) => entry.id).sort(), [`memory:${made.v1.id}`, `memory:${made.v2.id}`, `memory:${made.v3.id}`, "project:default"].sort());
+  const around = (await get(base, headers, `/api/memory/map?focus=${encodeURIComponent(`memory:${citedId}`)}&depth=1`)).body.data;
+  assert.ok(around.nodes.some((entry) => entry.id === `memory:${citedId}`) && around.nodes.some((entry) => entry.id === `reference:doi:${DOI}`));
+  assert.ok(!around.nodes.some((entry) => entry.id === `memory:${habitId}`));
   const unauth = await fetch(`${base}/api/memory/map`);
   assert.equal(unauth.status, 401);
 });
 
 test("the notes of the account's own capsule are marks of the map and the overview's read answers what it counts, through the real routes", options, async (t) => {
-  const { app, base, headers, user, otherHeaders } = await fixture(t);
-  const memory = app.researchMemory;
-  await memory.upsertRecord(user.id, { ...fact({ scope: "user", scopeId: "", kind: "preference", key: "style.length", value: "short answers first", summary: "short answers first" }) }, proof);
+  const { app, base, headers, user, otherHeaders, seed } = await fixture(t);
+  const style = seed("preferences/style.md", "short answers first", { type: "preferences" });
   const capsule = await app.capsuleService.ownCapsule(user.id, { create: true });
   const note = await app.capsuleService.addEntry(user.id, capsule.id, { factKind: "writing_style", layer: "profile", content: "Cite page numbers." });
   const gone = await app.capsuleService.addEntry(user.id, capsule.id, { factKind: "preference", layer: "profile", content: "A note forgotten." });
@@ -164,11 +152,12 @@ test("the notes of the account's own capsule are marks of the map and the overvi
   const { status, body } = await get(base, headers, "/api/memory/map?include=summary,facets,nodes,buckets,events");
   assert.equal(status, 200);
   const map = body.data;
-  assert.equal(map.engine, "postgres", "the page knows which kind of account this is");
+  assert.equal("engine" in map, false, "one engine: the document says nothing of which");
   assert.equal(map.edges, undefined);
   assert.equal(map.lanes, undefined);
   const marks = map.nodes.filter((entry) => entry.type === "memory");
-  assert.deepEqual(marks.map((entry) => entry.id).sort(), [`memory:entry:${note.id}`, `memory:entry:${projectNote.id}`, `memory:${(await memory.mapRecords(user.id)).find((record) => record.key === "style.length").id}`].sort(),
+  const styleId = (await recordOf(base, headers, style)).id;
+  assert.deepEqual(marks.map((entry) => entry.id).sort(), [`memory:entry:${note.id}`, `memory:entry:${projectNote.id}`, `memory:${styleId}`].sort(),
     "a note is a mark of the memory kind; the one the researcher forgot is not drawn");
   const noteMark = marks.find((entry) => entry.id === `memory:entry:${note.id}`);
   assert.deepEqual(noteMark.open, { kind: "entry", id: note.id });
@@ -189,35 +178,18 @@ test("the notes of the account's own capsule are marks of the map and the overvi
   assert.equal((await fetch(`${base}/api/memory/learned`, { headers })).status, 404);
 });
 
-test("a memory's links are read from the records that own them, and another account's record is a 404", options, async (t) => {
-  const { app, base, headers, user, other, otherHeaders } = await fixture(t);
-  const memory = app.researchMemory;
-  const made = await seed(memory, user.id);
-  const theirs = await memory.upsertRecord(other.id, fact({ key: "project.theirs", value: "theirs", summary: "theirs" }), proof);
-
-  const cited = (await get(base, headers, `/api/memory/records/${made.cited.id}/links`)).body.data;
-  assert.deepEqual(cited.rests.map((rest) => [rest.type, rest.state]).sort(), [["doi", "retracted"], ["knowledge_source", "current"]]);
-  const middle = (await get(base, headers, `/api/memory/records/${made.v2.id}/links`)).body.data;
-  assert.deepEqual(middle.replaced.map((entry) => entry.id), [made.v1.id]);
-  assert.equal(middle.replacedBy.id, made.v3.id);
-  const side = (await get(base, headers, `/api/memory/records/${made.a.id}/links`)).body.data;
-  assert.deepEqual(side.conflicts.map((entry) => entry.id), [made.b.id]);
-  assert.equal((await get(base, headers, `/api/memory/records/${theirs.id}/links`)).status, 404);
-  assert.equal((await get(base, otherHeaders, `/api/memory/records/${made.cited.id}/links`)).status, 404);
-  assert.equal((await get(base, headers, `/api/memory/records/${made.secret.id}/links`)).status, 404);
-  // The ordinary record routes still answer: the links path is registered before them without taking their ids.
-  assert.equal((await get(base, headers, `/api/memory/records/${made.cited.id}/sources`)).status, 200);
-});
+/** The account's memories as the map draws them, for a topics service that is handed them directly. */
+const memoryRows = (count, prefix = "memory") => Array.from({ length: count }, (_, index) => ({
+  id: `nm_${String(index).padStart(24, "0")}`, scope: "user", scopeId: "", kind: "preference", status: "active", sensitive: false,
+  summary: `${prefix} ${index}`, value: `${prefix} ${index}`, updatedAt: "2026-10-10T00:00:00Z", createdAt: "2026-10-10T00:00:00Z", version: 1,
+}));
 
 test("topics: grouped by one call when the memories changed, edited without a call, bounded by the day, and gone with a reset", options, async (t) => {
   const { app, user, other } = await fixture(t);
-  const memory = app.researchMemory;
+  const memory = app.memorySettings;
   const config = { memoryTopicsEnabled: true, memoryTopicsDailyRuns: 2, memoryTopicsMinMemories: 6, deepseekProviderEnabled: true, deepseekApiKey: "test-key", memoryExtractionModel: "deepseek-v4-flash" };
-  const ids = [];
-  for (let index = 0; index < 8; index += 1) {
-    const written = await memory.upsertRecord(user.id, fact({ scope: "user", scopeId: "", kind: "preference", key: `habit.k${index}`, value: `memory ${index}`, summary: `memory ${index}` }), proof);
-    ids.push(written.id);
-  }
+  /** The account's memories, which the test changes under the topics. */
+  const held = memoryRows(8);
   const calls = [];
   const callModel = async (_deps, call) => {
     calls.push(call);
@@ -232,15 +204,15 @@ test("topics: grouped by one call when the memories changed, edited without a ca
     ] }) } }] };
   };
   let clock = new Date("2026-10-12T08:00:00Z");
-  const topics = new MemoryTopics(config, memory, { callModel, now: () => clock });
-  const records = () => memory.mapRecords(user.id, {});
+  const topics = new MemoryTopics(config, memory, { callModel, now: () => clock, accountRecords: async (userId) => (userId === user.id ? held : []) });
+  const records = () => held;
 
-  assert.deepEqual((await topics.read(user.id, await records())).status, "stale", "never grouped, and there is enough to group");
+  assert.deepEqual((await topics.read(user.id, records())).status, "stale", "never grouped, and there is enough to group");
   assert.equal(calls.length, 0, "reading never calls the model");
   const first = await topics.refresh(user.id, { projectId: "default" });
   assert.deepEqual([first.status, first.made], ["ready", true]);
   assert.equal(calls.length, 1);
-  const read = await topics.read(user.id, await records());
+  const read = await topics.read(user.id, records());
   assert.deepEqual(read.topics.map((topic) => [topic.label, topic.weight]).sort(), [["第一组", 4], ["第二组", 4]], "an invented member and an invented topic are dropped by code");
   assert.deepEqual((await topics.refresh(user.id, { projectId: "default" })).made, false);
   assert.equal(calls.length, 1, "the memories did not change, so nothing is asked");
@@ -253,28 +225,28 @@ test("topics: grouped by one call when the memories changed, edited without a ca
   assert.equal(await topics.rename(user.id, "topic:ffffffffff", "x"), false, "a topic that does not exist");
   assert.equal(await topics.merge(user.id, one.id, one.id), false);
   assert.equal(await topics.rename(user.id, "not-a-topic", "x"), false);
-  const edited = (await topics.read(user.id, await records())).topics;
+  const edited = (await topics.read(user.id, records())).topics;
   assert.deepEqual(edited.map((topic) => [topic.label, topic.weight]).sort(), [["我的习惯", 4], ["第二组", 3]].sort());
   assert.equal(calls.length, 1);
 
-  const added = await memory.upsertRecord(user.id, fact({ scope: "user", scopeId: "", kind: "preference", key: "habit.new", value: "memory new", summary: "memory new" }), proof);
-  assert.equal((await topics.read(user.id, await records())).status, "stale", "a new memory is a reason to group again");
+  const added = memoryRows(1, "memory new")[0];
+  held.push({ ...added, id: `nm_${"a".repeat(24)}` });
+  assert.equal((await topics.read(user.id, records())).status, "stale", "a new memory is a reason to group again");
   clock = new Date("2026-10-12T09:00:00Z");
   const regrouped = await topics.refresh(user.id, { projectId: "default" });
   assert.equal(regrouped.made, true);
   assert.equal(calls.length, 2);
   const told = JSON.parse(calls[1].body.messages[1].content);
   assert.deepEqual(told.existing.find((entry) => entry.fixed), { id: one.id, label: "我的习惯", fixed: true }, "the model is told which name is the researcher's");
-  const after = (await topics.read(user.id, await records())).topics;
+  const after = (await topics.read(user.id, records())).topics;
   assert.equal(after.find((topic) => topic.id === one.id)?.label, "我的习惯", "the rename survives the regrouping");
-  assert.ok(after.some((topic) => topic.members.includes(added.id)) || after.length >= 1);
 
   // A dismissed topic is told to the model by name and does not come back.
   assert.equal(await topics.dismiss(user.id, one.id), true);
-  assert.ok(!(await topics.read(user.id, await records())).topics.some((topic) => topic.id === one.id));
+  assert.ok(!(await topics.read(user.id, records())).topics.some((topic) => topic.id === one.id));
 
   // The day's bound: two groupings, the third is refused until the next day, and a refusal is `bounded`, not an error.
-  await memory.upsertRecord(user.id, fact({ scope: "user", scopeId: "", kind: "preference", key: "habit.newer", value: "memory newer", summary: "memory newer" }), proof);
+  held.push({ ...added, id: `nm_${"b".repeat(24)}`, summary: "memory newer", value: "memory newer" });
   const third = await topics.refresh(user.id, { projectId: "default" });
   assert.deepEqual([third.status, third.made, third.bounded], ["stale", false, true]);
   assert.equal(calls.length, 2);
@@ -282,25 +254,27 @@ test("topics: grouped by one call when the memories changed, edited without a ca
   assert.equal((await topics.refresh(user.id, { projectId: "default" })).made, true, "the next day, the bound is the day's again");
 
   // A model that fails costs a try, keeps the last grouping, and is not an error.
-  const failing = new MemoryTopics({ ...config, memoryTopicsDailyRuns: 5 }, memory, { callModel: async () => { throw new Error("upstream down"); }, now: () => clock });
-  await memory.upsertRecord(user.id, fact({ scope: "user", scopeId: "", kind: "preference", key: "habit.latest", value: "memory latest", summary: "memory latest" }), proof);
+  const failing = new MemoryTopics({ ...config, memoryTopicsDailyRuns: 5 }, memory, { callModel: async () => { throw new Error("upstream down"); }, now: () => clock,
+    accountRecords: async () => held });
+  held.push({ ...added, id: `nm_${"c".repeat(24)}`, summary: "memory latest", value: "memory latest" });
   const kept = await failing.refresh(user.id, { projectId: "default" });
   assert.deepEqual([kept.status, kept.made], ["stale", false]);
-  assert.ok((await failing.read(user.id, await records())).topics.length > 0, "the last grouping is still served");
+  assert.ok((await failing.read(user.id, records())).topics.length > 0, "the last grouping is still served");
 
   // Another account has none of this, and a reset takes the grouping with the memories.
-  assert.deepEqual((await topics.read(other.id, await memory.mapRecords(other.id, {}))).topics, []);
+  assert.deepEqual((await topics.read(other.id, [])).topics, []);
   await memory.purgeUserMemory(user.id);
   const gone = await app.store.database.query("SELECT count(*)::int AS n FROM evimed_memory.topic_sets WHERE user_id=$1", [user.id]);
   assert.equal(gone.rows[0].n, 0);
 });
 
 test("the topics routes: the researcher's word over HTTP, refused for what is not theirs", options, async (t) => {
-  const { app, base, headers, user, other, otherHeaders } = await fixture(t);
-  const memory = app.researchMemory;
+  const { app, base, headers, user, otherHeaders, seed } = await fixture(t);
+  const memory = app.memorySettings;
   // The app's own topics are switched on and have no model here, so the grouping is written as the model would have, directly.
-  for (let index = 0; index < 14; index += 1) await memory.upsertRecord(user.id, fact({ scope: "user", scopeId: "", kind: "preference", key: `habit.h${index}`, value: `memory ${index}`, summary: `memory ${index}` }), proof);
-  const records = await memory.mapRecords(user.id, {});
+  const uris = Array.from({ length: 14 }, (_, index) => seed(`preferences/h${index}.md`, `memory ${index}`, { type: "preferences" }));
+  const listing = (await get(base, headers, "/api/memory/records")).body.data;
+  const records = uris.map((uri) => listing.find((entry) => entry.uri === uri));
   const mine = records.slice(0, 5).map((record) => record.id);
   await memory.database.query(`INSERT INTO evimed_memory.topic_sets (user_id, topics, memory_mark) VALUES ($1, $2::jsonb, 'old')`,
     [user.id, JSON.stringify([{ id: "topic:aaaaaaaaaa", label: "一组", members: mine }, { id: "topic:bbbbbbbbbb", label: "二组", members: records.slice(5, 9).map((record) => record.id) }])]);
@@ -325,21 +299,22 @@ test("the topics routes: the researcher's word over HTTP, refused for what is no
   assert.equal((await refreshed.json()).data.made, false);
   const map = (await get(base, headers, "/api/memory/map?include=facets")).body.data;
   assert.deepEqual(map.facets.topics, [], "the dismissed topics are not on the map either");
-  void other;
 });
 
 test("a line the researcher calls wrong stays out of their map until they take it back, and is nobody else's business", options, async (t) => {
-  const { app, base, headers, user, otherHeaders, other } = await fixture(t);
-  const memory = app.researchMemory;
-  const made = await seed(memory, user.id);
-  await memory.upsertRecord(other.id, fact({ key: "project.theirs", value: "their private memory", summary: "their private memory" }), proof,
-    { sourceLinks: [{ type: "doi", id: "10.1056/nejmoa2034577" }] });
+  const { app, base, headers, user, otherHeaders, other, seed, seedOther } = await fixture(t);
+  const overlay = app.nativeMemory.overlay;
+  const cited = seed("project_facts/effect.md", "the drug halves admissions", { type: "project_facts", tags: ["project=default"] });
+  await overlay.setSources(user.id, cited, [{ type: "doi", id: DOI }]);
+  const theirs = seedOther("project_facts/theirs.md", "their private memory", { type: "project_facts" });
+  await overlay.setSources(other.id, theirs, [{ type: "doi", id: DOI }]);
+  const citedId = (await recordOf(base, headers, cited)).id;
   const read = async (headersOf = headers) => (await get(base, headersOf, "/api/memory/map?include=nodes,edges")).body.data;
   const put = async (id, hidden, headersOf = headers) => {
     const response = await fetch(`${base}/api/memory/map/edges/${id}`, { method: "PUT", headers: headersOf, body: JSON.stringify({ hidden }) });
     return { status: response.status, body: await response.json() };
   };
-  const rests = (map) => map.edges.find((entry) => entry.type === "rests-on" && entry.from === `memory:${made.cited.id}` && entry.to === "reference:doi:10.1056/nejmoa2034577");
+  const rests = (map) => map.edges.find((entry) => entry.type === "rests-on" && entry.from === `memory:${citedId}` && entry.to === `reference:doi:${DOI}`);
 
   const before = await read();
   const line = rests(before);
@@ -347,12 +322,12 @@ test("a line the researcher calls wrong stays out of their map until they take i
   assert.equal((await put(line.id, true)).status, 200);
   const after = await read();
   assert.equal(rests(after), undefined, "the line is hidden");
-  assert.ok(after.nodes.some((node) => node.id === `memory:${made.cited.id}`), "the memory itself is still drawn");
-  assert.ok(!after.nodes.some((node) => node.id === "reference:doi:10.1056/nejmoa2034577"), "and so is no longer a mark of the paper nothing rests on");
+  assert.ok(after.nodes.some((node) => node.id === `memory:${citedId}`), "the memory itself is still drawn");
+  assert.ok(!after.nodes.some((node) => node.id === `reference:doi:${DOI}`), "and so is no longer a mark of the paper nothing rests on");
   // Said twice is said once; another account sees its own line, with the same id, untouched.
   assert.equal((await put(line.id, true)).status, 200);
-  const theirs = await read(otherHeaders);
-  const theirLine = theirs.edges.find((entry) => entry.type === "rests-on");
+  const theirMap = await read(otherHeaders);
+  const theirLine = theirMap.edges.find((entry) => entry.type === "rests-on");
   assert.ok(theirLine, "another account's line to the same paper is drawn");
   assert.equal(theirLine.id === line.id, false, "a line is a memory's: the same paper under another account's memory is another line");
   // Taken back, the line is drawn again.

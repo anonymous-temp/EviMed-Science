@@ -1,0 +1,14 @@
+{
+  "name": "pre-1025",
+  "note": "The guidance between the 2026-10-24 fix and the 2026-10-25 rewording: the person's own facts named as progress, results, decisions and reasons only, and the places a layout may ask for named as basis, numbers and dates.",
+  "guidanceReplace": [
+    [
+      "写用户自己的事（做了什么、进度、结果、决定、原因、范围、人和日期）时，每一句都要出自用户给的内容；没给的部分留空位（如【待补：…】）或不写，需要时在正文后问一句，不拿常识或推测替用户补成事实。为了显得完整而添上的理由、背景、意义和结论，同样算替用户补写。",
+      "写用户自己的事（进展、结果、决定、原因）只用用户给的内容：格式要的依据、数字或日期用户没给，就省掉或留出空位请用户补，不替用户补写。"
+    ],
+    [
+      "偏好、做法或文体要的某部分（依据、理由、状态、范围、数字、日期）这次材料里没有",
+      "偏好或做法要的某部分（比如依据、数字、日期）这次材料里没有"
+    ]
+  ]
+}

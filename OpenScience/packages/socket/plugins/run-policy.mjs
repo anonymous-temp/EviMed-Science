@@ -1000,7 +1000,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   const childToolFilter = (manifest, contractKind) => {
     const tools = delegationToolFilter(manifest, { allowBash: true, contractKind })
       // The capsule row can be switched off (EVIMED_CAPSULE_ENABLED=0), and so can its memory half
-      // (EVIMED_CAPSULE_MEMORY_ENABLED=0, and every account on the native memory engine, whose one memory entrance is the
+      // (EVIMED_CAPSULE_MEMORY_ENABLED=0, and every deployment with the memory engine, whose one memory entrance is the
       // OpenViking plugin's): off, no recall tool is registered — naming it would fail the delegation. The row publishes
       // `evimedCapsuleMemory` exactly when it registered the tool, so its absence is the sign.
       .filter((tool) => tool !== SOCKET_TOOL_NAMES.capsuleRecall || ctx.get(CAPSULE_MEMORY_SERVICE) !== undefined)

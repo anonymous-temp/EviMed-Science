@@ -571,7 +571,7 @@
     },
     "platform-learned": {
       "listed": false,
-      "reason": "Handbooks the platform learned from the account's work; they have their own home, the 做法 of the memory page."
+      "reason": "What the platform itself built and tested (循证进化's tools and methods): the platform's, not the account's own, whose home is the 做法 of the memory page."
     }
   }
 }

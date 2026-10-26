@@ -97,7 +97,7 @@ function consolidation(options) {
 }
 
 test("the action vocabulary is closed and an unknown one is refused before any model call", async () => {
-  assert.deepEqual([...CONSOLIDATE_ACTIONS], ["sleep", "integrate", "optimize"], "there is no evaluate action: no paired evaluation of a method is run");
+  assert.deepEqual([...CONSOLIDATE_ACTIONS], ["sleep", "integrate", "replay"], "there is no evaluate action (no paired evaluation of a method is run; replay reads a rewrite against the runs the person accepted) and no optimize action (it applied a capability handbook, deleted 2026-10-25)");
   const { instance, dispatched } = consolidation({ learning: fakeLearning([]) });
   await assert.rejects(
     () => instance.run({ job: { payload: { action: "improvise" } } }),
@@ -291,10 +291,11 @@ test("integrate looks at a bounded neighbourhood, never the whole library", asyn
   assert.ok(dispatched[0].input.methods.length <= 8);
 });
 
-test("optimize without its consumer fails explicitly instead of pretending to complete", async () => {
-  const { instance } = consolidation({ learning: fakeLearning([]) });
-  await assert.rejects(instance.optimize({ job: { payload: { action: "optimize", capabilityId: "meta-analysis" } } }),
-    { code: "handbook_loop_unavailable" });
+test("an optimize job from before the handbook arm was deleted is refused by name, before any model call", async () => {
+  const { instance, dispatched } = consolidation({ learning: fakeLearning([]) });
+  await assert.rejects(() => instance.run({ job: { payload: { action: "optimize", capabilityId: "meta-analysis" } } }), (error) => error.code === "consolidate_action_invalid");
+  assert.deepEqual(dispatched, []);
+  assert.equal("optimize" in instance, false);
 });
 
 test("a library too small to compare does nothing and spends nothing", async () => {

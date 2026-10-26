@@ -57,6 +57,8 @@
  */
 
 import { DISPLAY_TIME_ZONE, FRONTIER_LANES, FRONTIER_LANE_LABELS_ZH, frontierSourceDisplayName } from "@evimed/domain";
+import { FRONTIER_SOURCE_STREAM_COLUMNS } from "./frontierSourceColumns.mjs";
+import { followNoticeLines } from "./frontierFollowQuery.mjs";
 import { FrontierJobRearm } from "./frontierJobRearm.mjs";
 import { bumpFrontierVersion, FRONTIER_META_KEYS, migrateFrontier } from "./frontierPersistence.mjs";
 import { migrateNotifications } from "./notificationPersistence.mjs";
@@ -345,15 +347,21 @@ export function frontierReadingMinutes(texts) {
 /**
  * The inbox item a day's issue is pushed as (plan 2026-09-23 C §1.13): the
  * title with the day and the selected count, the lead's title as the body,
- * and — the one count kept — how many safety alerts the issue holds. Nothing
- * about the reader: the same text reaches a Feishu group chat.
- * @param {{ day: string, lead: { title?: string | null } | null, sections: Array<{ lane: string, itemIds: string[] }>, safety: string[] }} issue
+ * and — the one count kept — how many safety alerts the issue holds. No
+ * personal reason. One exception (c3-watch 2026-10-25): a line per typed follow
+ * with news since the reader last looked (`follows`, `followNoticeLines`) — the
+ * words the reader typed themselves, and a count; none when nothing is new.
+ * Where it goes: the reader's own inbox, and a Feishu push, which the adapter
+ * addresses to the account owner's own chat with the bot (`open_id`, never a
+ * group; the other channel adapters are stubs), so a reader's words reach nobody else.
+ * @param {{ day: string, lead: { title?: string | null } | null, sections: Array<{ lane: string, itemIds: string[] }>, safety: string[], follows?: string[] }} issue
  */
-export function frontierDailyNotice({ day, lead, sections, safety }) {
+export function frontierDailyNotice({ day, lead, sections, safety, follows = [] }) {
   const selected = (lead ? 1 : 0) + sections.reduce((sum, section) => sum + section.itemIds.length, 0);
   const body = [
     lead?.title ? String(lead.title).slice(0, 120) : null,
     safety.length ? `安全警示 ${safety.length} 条` : null,
+    ...follows,
   ].filter(Boolean).join("\n");
   const [, month, date] = day.split("-").map(Number);
   return {
@@ -383,13 +391,13 @@ export class FrontierDaily {
   /**
    * @param {{ database: any, jobs?: any, notifications?: any, editor?: any, events?: any, config?: Record<string, any>,
    *           owner?: () => ({ userId: string, projectId: string } | null), budget?: (() => Promise<{ state: string }>) | null,
-   *           now?: () => Date, workerId?: string, dimension?: number }} options
-   *   `jobs` a `ProductJobs`, `notifications` a `NotificationService`, `editor` a
+   *           now?: () => Date, workerId?: string, dimension?: number, watch?: any }} options
+   *   `watch` a `FrontierFollowWatch` (the typed follows' lines of the push); `jobs` a `ProductJobs`, `notifications` a `NotificationService`, `editor` a
    *   `FrontierEditor` (the AI minute), `events` a `FrontierEvents` (the hot
    *   list the lead is chosen by), `owner` the operator's internal project.
    */
   constructor({ database, jobs = null, notifications = null, editor = null, events = null, config = {}, owner = () => null,
-    budget = null, now = () => new Date(), workerId = "frontier-daily", dimension = 1024 }) {
+    budget = null, now = () => new Date(), workerId = "frontier-daily", dimension = 1024, watch = null }) {
     if (!database) throw new TypeError("The frontier daily needs the product database.");
     this.database = database;
     this.jobs = jobs;
@@ -399,13 +407,14 @@ export class FrontierDaily {
     this.config = config ?? {};
     this.owner = owner;
     this.budgetReader = budget;
+    this.watch = watch;
     this.now = now;
     this.workerId = String(workerId).slice(0, 120);
     this.timeZone = String(this.config.frontierTimeZone || this.config.frontierTimezone || "Asia/Shanghai");
     this.dailyTime = clockMinutes(this.config.frontierDailyTime) == null ? "07:30" : String(this.config.frontierDailyTime).trim();
     this.dimension = Number(this.config.kbEmbeddingDimension) || dimension;
     /** Observable counters (principle 15). */
-    this.counters = { issues: 0, empty: 0, failures: 0, rearmed: 0, aiMinutes: 0, aiMinuteDropped: 0, pushed: 0, pushFailures: 0 };
+    this.counters = { issues: 0, empty: 0, failures: 0, rearmed: 0, aiMinutes: 0, aiMinuteDropped: 0, pushed: 0, pushFailures: 0, followLines: 0, followLineFailures: 0 };
     // A day's job that used its attempts is put back once an hour for the rest of that day (D-02), not every minute.
     this.rearm = new FrontierJobRearm({ jobs, kind: JOB_KIND, limit: 3, withinMs: DAY });
     /** @type {{ day: string | null, missing: boolean, lastIssueDay: string | null, lastGeneratedAt: string | null, lastError: string | null }} */
@@ -510,7 +519,7 @@ export class FrontierDaily {
     // 「（openFDA 药品召回（enforcement）API）」 to every recall.
     /** @type {FrontierDailyRow[]} */
     const rows = ((await this.database.query(`SELECT i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.lane, i.selected, i.selected_rule, i.safety_alert,
-        i.score_total, i.visible_at, i.canonical_url, i.event_id, s.id AS source_id, s.name AS source_name, s.owner_entity AS source_owner,
+        i.score_total, i.visible_at, i.canonical_url, i.event_id, s.id AS source_id, s.name AS source_name, s.owner_entity AS source_owner, ${FRONTIER_SOURCE_STREAM_COLUMNS},
         e.public_id AS event_public_id, e.title_zh AS event_title, e.report_count AS event_reports, e.digest_zh AS event_digest,
         e.first_at AS event_first_at
       FROM evimed_frontier.items i
@@ -519,7 +528,7 @@ export class FrontierDaily {
       WHERE i.state = 'published' AND s.enabled AND i.visible_at >= $1::timestamptz AND i.visible_at < $2::timestamptz
         AND i.verification IN ('passed', 'repaired') AND i.summary_zh IS NOT NULL AND (i.selected OR i.safety_alert OR i.lane = 'ai')
       ORDER BY i.visible_at DESC, i.id DESC LIMIT 500`, [window.start, window.end])).rows ?? [])
-      .map((/** @type {any} */ row) => ({ ...row, source_name: frontierSourceDisplayName({ id: row.source_id, name: row.source_name, ownerEntity: row.source_owner }) }));
+      .map((/** @type {any} */ row) => ({ ...row, source_name: frontierSourceDisplayName({ id: row.source_id, name: row.source_name, ownerEntity: row.source_owner, access: row.source_access, journal: row.item_journal }) }));
     /** @type {string[]} */
     let hotEventIds = [];
     try {
@@ -628,18 +637,39 @@ export class FrontierDaily {
         AND ($4::text[] IS NULL OR up.user_id = ANY($4::text[]))
       ORDER BY up.user_id LIMIT $5`, [day, clock, new Date(now.getTime() - FRONTIER_PUSH_ACTIVE_MS), audience, FRONTIER_PUSH_BATCH])).rows ?? [];
     if (!readers.length) return { pushed: 0 };
-    const notice = frontierDailyNotice({ day, lead: issue.lead ?? null, sections: Array.isArray(issue.sections) ? issue.sections : [],
-      safety: Array.isArray(issue.safety) ? issue.safety : [] });
+    const issueNotice = { day, lead: issue.lead ?? null, sections: Array.isArray(issue.sections) ? issue.sections : [],
+      safety: Array.isArray(issue.safety) ? issue.safety : [] };
+    const notice = frontierDailyNotice(issueNotice);
     let pushed = 0;
     for (const reader of readers) {
+      /** The matches this reader's notice names, taken before it is made and given back if it cannot be. @type {string[]} */
+      let claimed = [];
+      // Whether the notice itself was made: a failure after it (the push day's record) must not give its matches back, or the
+      // next attempt would name them again in a body the inbox refuses as a different one (c3 review).
+      let created = false;
       try {
-        await this.notifications.create(reader.user_id, notice, { now });
+        // A line per typed follow with news (c3-watch): the matches are marked as told when taken, so an item is named at most once.
+        // A reader whose lines cannot be read gets the notice without them.
+        let lines = /** @type {string[]} */ ([]);
+        if (this.watch) {
+          try {
+            const taken = await this.watch.claimNotice(reader.user_id);
+            claimed = taken.claimed;
+            lines = followNoticeLines(taken.news);
+            this.counters.followLines += lines.length;
+          } catch {
+            this.counters.followLineFailures += 1;
+          }
+        }
+        await this.notifications.create(reader.user_id, lines.length ? frontierDailyNotice({ ...issueNotice, follows: lines }) : notice, { now });
+        created = true;
         await this.database.query(`INSERT INTO evimed_frontier.user_prefs (user_id, last_push_day) VALUES ($1, $2::date)
           ON CONFLICT (user_id) DO UPDATE SET last_push_day = EXCLUDED.last_push_day`, [reader.user_id, day]);
         pushed += 1;
       } catch (error) {
         // One reader's inbox refusing is that reader's; the next scan tries
         // again (the key makes a second attempt the same item).
+        if (claimed.length && !created) await this.watch?.releaseNotice(claimed).catch(() => undefined);
         this.counters.pushFailures += 1;
         this.state.lastError = codeOf(error);
       }

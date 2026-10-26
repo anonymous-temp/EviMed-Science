@@ -207,6 +207,20 @@ Creative-Commons page, as `body_text` with `## ` section titles and `text_kind` 
 12 hours for 14 days; a feed's teaser or a page's standfirst answers at once and is replaced (the entry delivered again)
 when an index gives the abstract.
 
+**Top journals' research papers** (c3-primary, 2026-10-25; `text_policy.py`): an entry of a journal of authority 4 or 5 that
+PubMed has not typed as an editorial, a letter, news and the like is asked for **21 days**, not 14, on a decaying schedule —
+hourly for the first 12 hours, every 3 hours to the second day, every 8 hours to the end of the week, daily after — and
+its PubMed and Europe PMC lookups are `priority="high"` requests, which may spend the fifth of those hosts' daily caps
+(`HostRule.reserved`) every other request is refused; the text worker also claims these entries first. A PubMed record that
+is final (`MEDLINE` / `PubMed-not-MEDLINE`) with no abstract ends the extension (note `pubmed_record_complete`). The hourly
+maintenance reopens, once, the entries the 14-day rule gave up on that are still inside the 21 days
+(`store.reopen_top_journal_texts`). A feed item counts as text when its last words are reference numbers ("…temporality.5,6")
+or a closing heading in capitals (`feeds.without_tail`). A failed ask (a 5xx, a timeout, the plugin's own budget, a 200 that
+could not be read) is repeated within the hour and is never an answer; another 4xx is the host's answer
+(`Attempt.transient`). Measured on 2026-10-25 on 484 held top-journal items: PubMed gave an abstract for 8, Europe PMC 5,
+Crossref none, OpenAlex 23 of 200 characters or more (a day after the plugin's first try, for NEJM's trials), the publisher
+feeds 9.
+
 `python tools/text_probe.py <doi-file>` runs the chain on DOIs (`doi` or `doi|source_id` a line) and prints which step
 answered each, writing nothing; `python tools/measure_abstract_feeds.py` measures the configured feeds (text share, median
 length, matchability). `python -m knowledge_plugin retext --kinds journal [--apply]` reads the journal entries the

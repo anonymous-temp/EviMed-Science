@@ -8,6 +8,7 @@ import { fetchMemoryProfile } from "@/lib/apiClient";
 import { fetchMyCapsule } from "@/lib/memoryClient";
 import { useProjectLabels } from "@/lib/projectNames";
 import { ForgottenDrawer } from "./ForgottenDrawer";
+import { ImportDialog } from "./ImportDialog";
 import { MemoryControls } from "./MemoryControls";
 import { RememberDialog } from "./RememberDialog";
 
@@ -31,8 +32,8 @@ function ForgottenHost({ onClose, onChanged }: { onClose: () => void; onChanged:
   );
 }
 
-/** The drawers the header's actions open: sharing and importing (on the tab named), the forgotten list, and the one-line 「记住这一条」. */
-export type HeaderDrawer = { kind: "share"; tab: ShareTab } | { kind: "forgotten" } | { kind: "remember" };
+/** The drawers the header's actions open: sharing and importing (on the tab named), the forgotten list, the one-line 「记住这一条」 and 「从其他 AI 导入」. */
+export type HeaderDrawer = { kind: "share"; tab: ShareTab } | { kind: "forgotten" } | { kind: "remember" } | { kind: "import" };
 
 /**
  * The capsule's header actions on a page that is not the memory lists — the overview and the map (T0.7): the 记忆 switch, the one 「⋯」
@@ -43,9 +44,7 @@ export type HeaderDrawer = { kind: "share"; tab: ShareTab } | { kind: "forgotten
  * `onChanged` is what the page does when a switch, a reset, an import or a restore changed what it draws: it reads again. A page whose own
  * card opens one of the drawers (the overview's 收到的: 「导入一个胶囊」) holds which is open (`drawer`, `onDrawer`); the others leave it to this.
  */
-export function MemoryHeaderActions({ native, projectId, onChanged, drawer: held, onDrawer }: {
-  /** Whether the account's memory is the engine's own: only then can the person add a memory by hand. */
-  native: boolean;
+export function MemoryHeaderActions({ projectId, onChanged, drawer: held, onDrawer }: {
   /** The project 「本项目不使用记忆」 acts on, and where 「记住这一条」 files a memory; see `MemoryControls`. */
   projectId?: string | null;
   onChanged: () => void;
@@ -63,9 +62,11 @@ export function MemoryHeaderActions({ native, projectId, onChanged, drawer: held
         onSettingsChanged={onChanged}
         onShare={() => setDrawer({ kind: "share", tab: "export" })}
         onForgotten={() => setDrawer({ kind: "forgotten" })}
-        onRemember={native ? () => setDrawer({ kind: "remember" }) : undefined}
+        onRemember={() => setDrawer({ kind: "remember" })}
+        onImport={() => setDrawer({ kind: "import" })}
       />
       {drawer?.kind === "remember" && <RememberDialog projectId={projectId ?? null} onClose={() => setDrawer(null)} onAsked={onChanged} />}
+      {drawer?.kind === "import" && <ImportDialog onClose={() => setDrawer(null)} onSaved={onChanged} />}
       {drawer?.kind === "share" && <ShareDrawer initialTab={drawer.tab} onClose={() => setDrawer(null)} onImported={onChanged} />}
       {drawer?.kind === "forgotten" && <ForgottenHost onClose={() => setDrawer(null)} onChanged={onChanged} />}
     </>

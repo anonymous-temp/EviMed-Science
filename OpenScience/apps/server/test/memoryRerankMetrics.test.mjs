@@ -26,7 +26,7 @@ test("the composed reranker's successes and failures are counters on the operato
   const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, operatorMetricsToken: "rerank-metrics-token", memoryRerank });
   try {
     const address = await app.listen(0, "127.0.0.1");
-    assert.equal(app.memorySubstrate.rerank, memoryRerank, "the scrape reads the reranker recall actually uses");
+    assert.equal(app.memoryIndexProvider.rerank, memoryRerank, "the scrape reads the reranker recall actually uses");
     await memoryRerank.order("房颤抗凝", ["a", "b"]);
     await memoryRerank.order("房颤抗凝", ["a", "b"]);
     const response = await fetch(`http://127.0.0.1:${address.port}/api/ops/metrics`, { headers: { Authorization: "Bearer rerank-metrics-token" } });

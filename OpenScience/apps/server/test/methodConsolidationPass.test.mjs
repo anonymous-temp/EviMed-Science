@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { METHOD_SKILL_SCHEMA, renderMethodSkill } from "@evimed/domain";
+import { METHOD_SIMILARITY_PAIR_FLOOR, METHOD_SIMILARITY_TOP_K, METHOD_SKILL_SCHEMA, renderMethodSkill } from "@evimed/domain";
 
 import { LearningService, learnedMethodId } from "../src/learningService.mjs";
 import { DECIDE_VERSION, MethodConsolidation, groupKey, resolveAssignments } from "../src/methodConsolidation.mjs";
@@ -49,9 +49,9 @@ function embedder(options = {}) {
 
 /**
  * A ledger and a consolidation over it. `decide(input)` and `build(input)` answer the two model steps by what they were asked.
- * @param {{decide?: (input: any) => any, build?: (input: any) => any, similarity?: any, audit?: any, unusedAfterLoads?: number, now?: () => Date}} [options]
+ * @param {{decide?: (input: any) => any, build?: (input: any) => any, similarity?: any, audit?: any, unusedAfterLoads?: number, now?: () => Date, jobs?: any, replay?: any}} [options]
  */
-function harness({ decide = () => ({ assignments: [] }), build = () => ({ revisions: [] }), similarity = undefined, audit = null, unusedAfterLoads = undefined, now = () => NOW } = {}) {
+function harness({ decide = () => ({ assignments: [] }), build = () => ({ revisions: [] }), similarity = undefined, audit = null, unusedAfterLoads = undefined, now = () => NOW, jobs = null, replay = null } = {}) {
   const documents = productDocumentsDouble();
   const learning = new LearningService({ documents, now });
   /** @type {any[]} */
@@ -72,7 +72,7 @@ function harness({ decide = () => ({ assignments: [] }), build = () => ({ revisi
       const input = inputs.get(identity.dispatchId);
       return { status: "succeeded", output: input.action === "build" ? build(input) : decide(input) };
     },
-    similarity: sim, audit,
+    similarity: sim, audit, jobs, replay,
     onNoop: (reason, count) => noops.push([reason, count ?? 1]),
     onRelation: (type, count) => relations.push([type, count ?? 1]),
     onRetirement: (code) => stops.push(code),
@@ -147,7 +147,8 @@ test("a pass over a library nothing groups says so instead of succeeding quietly
   await h.make("plots-b-one", "axis-b");
   const result = await h.sleep();
   assert.deepEqual([result.noGroups, result.groups, result.groupsFormed], [true, 0, 0]);
-  assert.ok(result.shortlist.topScore !== null && result.shortlist.topScore < 0.8, "and how close the closest two were, which is what the floor is read against");
+  assert.ok(result.shortlist.topScore !== null && result.shortlist.topScore < METHOD_SIMILARITY_PAIR_FLOOR, "and how close the closest two were, which is what the floor is read against");
+  assert.ok(result.shortlist.p50 !== null && result.shortlist.p90 !== null && result.shortlist.p50 <= result.shortlist.p90, "with the distribution of the neighbour cosines beside it");
   assert.ok(result.noop.includes("no_groups"));
   assert.deepEqual(h.dispatched, []);
   assert.deepEqual(h.noops, [["no_groups", 1]]);
@@ -158,6 +159,33 @@ test("a pass over a library nothing groups says so instead of succeeding quietly
   assert.ok(single.noop.includes("too_few_methods"));
   const empty = await harness().sleep();
   assert.deepEqual([empty.noMethods, empty.noop], [true, ["no_methods"]]);
+});
+
+test("two methods about related work at the cosine production showed (0.70) form a group and are read: the floor is no longer above everything", async () => {
+  // A text names its own vector as `vec(x,y,z)`: the reference, one at cosine 0.70 to it, and one orthogonal to both.
+  const embed = async (/** @type {string[]} */ texts) => texts.map((text) => (/vec\(([^)]*)\)/.exec(text)?.[1] ?? "1,0,0").split(",").map(Number));
+  const h = harness({ similarity: createMethodSimilarity({ embed }),
+    decide: (input) => ({ assignments: [{ ASSIGNMENT: "A1", SKILLS: idsOf(input), RELATION_TYPE: "shared_part", REASON: "They share a step." }] }) });
+  await h.make("reference-work", "vec(1,0,0)");
+  await h.make("related-work", "vec(0.7,0.714143,0)");
+  await h.make("elsewhere", "vec(0,0,1)");
+  const result = await h.sleep();
+  assert.equal(result.shortlist.mode, "embedding");
+  assert.equal(result.shortlist.pairs, 1, "only the pair above the candidate floor");
+  assert.ok(Math.abs(result.shortlist.topScore - 0.7) < 1e-3, "the closest pair is on record");
+  assert.deepEqual([result.groupsFormed, result.groups], [1, 1]);
+  assert.equal(h.decides().length, 1, "and DECIDE read it");
+  assert.deepEqual(idsOf(h.decides()[0].input), [learnedMethodId("reference-work"), learnedMethodId("related-work")]);
+  assert.ok(result.shortlist.p50 !== null && result.shortlist.p90 >= result.shortlist.p50, "and the neighbour cosines, the kept pair and the ones the floor refused, are summarised");
+});
+
+test("an incremental pass reads a changed method with at most METHOD_SIMILARITY_TOP_K neighbours", async () => {
+  const h = harness();
+  const subject = await h.make("subject-a-zero", "axis-a");
+  for (let index = 1; index <= 8; index += 1) await h.make(`subject-a-${index}`, "axis-a");
+  const result = await h.integrate(subject.id);
+  assert.equal(result.neighbours, METHOD_SIMILARITY_TOP_K);
+  assert.deepEqual(idsOf(h.decides()[0].input).length, METHOD_SIMILARITY_TOP_K + 1);
 });
 
 test("a merge nobody has proven blocks only the build of its own group: the others are decided, related and built, and the merge expires", async () => {
@@ -369,6 +397,101 @@ test("a merge that drops a quotation its sources store is not created, and the r
   assert.deepEqual(merged.payload.provenance.evidence, [{ runId: "run_1", seqRange: [1, 3], quote }], "the run and span travel with the quotation");
   assert.deepEqual(merged.payload.provenance.feedbackEventIds.sort(), ["fb_1", "fb_2"]);
   assert.deepEqual(merged.payload.provenance.mergedFrom.map((/** @type {any} */ source) => source.methodId).sort(), [learnedMethodId("span-a-one"), learnedMethodId("span-a-two")]);
+});
+
+test("a merge, and a method factored out of others, rest on the projects their sources were learnt in: deleting them all stops it, restorably", async () => {
+  /** @type {{ type: string }} */
+  const plan = { type: "merge" };
+  const h = harness({
+    decide: (input) => ({ assignments: [{ ASSIGNMENT: "A1", SKILLS: idsOf(input), RELATION_TYPE: plan.type, REASON: "One method, written twice." }] }),
+    build: (input) => ({ revisions: [
+      { assignment: "A1", methodId: learnedMethodId("merged-a"), name: "merged-a", operation: "create", baseDigest: null, skill: renderMethodSkill(frontmatter("merged-a", "axis-a"), sections("- Never widen a claim twice.")) },
+      ...(plan.type === "merge" ? input.methods.map((/** @type {any} */ method) => ({ assignment: "A1", methodId: method.id, name: method.name, operation: "retire", baseDigest: method.digest, supersededBy: learnedMethodId("merged-a") })) : []),
+    ] }),
+  });
+  await h.make("span-a-one", "axis-a", { projectId: "p_one" });
+  await h.make("span-a-two", "axis-a", { projectId: "p_two" });
+  assert.equal((await h.sleep("job_1")).builds, 1);
+  const merged = await h.learning.getMethod("u1", learnedMethodId("merged-a"));
+  assert.deepEqual(merged.payload.provenance.sourceProjectIds, ["p_one", "p_two"], "the union of its originals' projects, not the project the pass ran in (p1)");
+  assert.equal(merged.payload.provenance.sourceProjectId, "p_one");
+
+  // The first project goes: the merge still rests on the other, and says so.
+  await h.learning.retireProjectMethods("u1", "p_one");
+  const afterFirst = await h.learning.getMethod("u1", merged.id);
+  assert.notEqual(afterFirst.payload.status, "retired");
+  assert.deepEqual(afterFirst.payload.provenance.sourceProjectIds, ["p_two"]);
+  assert.equal(afterFirst.payload.provenance.sourceProjectId, "p_two", "found by the project that is left");
+  // The last one goes: nothing it rests on is left, and it is stopped as an original would be.
+  const final = await h.learning.retireProjectMethods("u1", "p_two");
+  assert.ok(final.retired.includes(merged.id));
+  const stopped = await h.learning.getMethod("u1", merged.id);
+  assert.equal(stopped.payload.status, "retired");
+  assert.equal(stopped.payload.statusReason, "它只是从已删除的项目里学到的，已停用。");
+  // One click restores it, with the reason it was stopped for gone.
+  const restored = await h.learning.rollback("u1", merged.id, { expectedRevision: stopped.revision, targetRevision: stopped.revision });
+  assert.equal(restored.payload.status, "approved");
+});
+
+test("a merge the pass builds is queued for replay against the runs the person accepted; a reuse reference or a factored-out part is not", async () => {
+  /** @type {any[]} */ const queued = [];
+  const jobs = { enqueue: async (_userId, kind, payload, options) => { queued.push({ kind, payload, options }); return { id: `job_${queued.length}` }; } };
+  const h = harness({
+    jobs,
+    decide: (input) => ({ assignments: [{ ASSIGNMENT: "A1", SKILLS: idsOf(input), RELATION_TYPE: "merge", REASON: "One method, written twice." }] }),
+    build: () => ({ revisions: [{ assignment: "A1", methodId: learnedMethodId("merged-a"), name: "merged-a", operation: "create", baseDigest: null, skill: renderMethodSkill(frontmatter("merged-a", "axis-a"), sections("- Never widen a claim twice.")) }] }),
+  });
+  await h.make("span-a-one", "axis-a");
+  await h.make("span-a-two", "axis-a");
+  await h.sleep("job_merge");
+  const merged = await h.learning.getMethod("u1", learnedMethodId("merged-a"));
+  const replays = queued.filter((entry) => entry.payload.action === "replay");
+  assert.equal(replays.length, 1);
+  assert.deepEqual(replays[0].payload, { action: "replay", methodId: merged.id, digest: merged.payload.contentDigest }, "no earlier body to name for a method just built");
+  assert.equal(replays[0].options.idempotencyKey, `consolidate:replay:${merged.id}:${merged.payload.contentDigest}`, "keyed on the body, so each change is replayed once");
+  assert.equal(replays[0].options.projectId, "evimed-learning", "filed under the learning project, where the loop's own work runs");
+  assert.equal(replays[0].kind, "consolidate");
+
+  // A factored-out shared part is a new method that rewrites nothing the person had.
+  const other = harness({ jobs, decide: (input) => ({ assignments: [{ ASSIGNMENT: "A1", SKILLS: idsOf(input), RELATION_TYPE: "shared_part", REASON: "They share a step." }] }),
+    build: () => ({ revisions: [{ assignment: "A1", methodId: learnedMethodId("shared-step"), name: "shared-step", operation: "create", baseDigest: null, skill: renderMethodSkill(frontmatter("shared-step", "axis-a"), sections("- Never skip the shared step.")) }] }) });
+  await other.make("span-a-one", "axis-a");
+  await other.make("span-a-two", "axis-a");
+  const before = queued.length;
+  assert.equal((await other.sleep("job_shared")).builds, 1);
+  assert.equal(queued.slice(before).filter((entry) => entry.payload.action === "replay").length, 0);
+});
+
+test("a queue that refuses the replay never costs the merge, and a replay job is routed to the replay or ends saying it was not run", async () => {
+  const h = harness({
+    jobs: { enqueue: async () => { throw new Error("queue down"); } },
+    decide: (input) => ({ assignments: [{ ASSIGNMENT: "A1", SKILLS: idsOf(input), RELATION_TYPE: "merge", REASON: "One method, written twice." }] }),
+    build: () => ({ revisions: [{ assignment: "A1", methodId: learnedMethodId("merged-a"), name: "merged-a", operation: "create", baseDigest: null, skill: renderMethodSkill(frontmatter("merged-a", "axis-a"), sections("- Never widen a claim twice.")) }] }),
+  });
+  await h.make("span-a-one", "axis-a");
+  await h.make("span-a-two", "axis-a");
+  assert.equal((await h.sleep()).builds, 1, "the merge was made");
+
+  const job = { id: "job_r", userId: "u1", projectId: "evimed-learning", payload: { action: "replay", methodId: "method:learned:x", digest: "sha256:x" } };
+  assert.deepEqual(await h.consolidation.run({ job }), { action: "replay", skipped: "replay_unavailable" });
+  /** @type {any[]} */ const ran = [];
+  const routed = harness({ replay: { run: async (request) => { ran.push(request.job.payload); return { action: "replay", outcome: "clean" }; } } });
+  assert.deepEqual(await routed.consolidation.run({ job }), { action: "replay", outcome: "clean" });
+  assert.deepEqual(ran, [job.payload]);
+});
+
+test("a method factored out of two others (shared_part) names both their projects too", async () => {
+  const h = harness({
+    decide: (input) => ({ assignments: [{ ASSIGNMENT: "A1", SKILLS: idsOf(input), RELATION_TYPE: "shared_part", REASON: "They share a step." }] }),
+    build: () => ({ revisions: [{ assignment: "A1", methodId: learnedMethodId("shared-step"), name: "shared-step", operation: "create", baseDigest: null,
+      skill: renderMethodSkill(frontmatter("shared-step", "axis-a"), sections("- Never skip the shared step.")) }] }),
+  });
+  await h.make("span-a-one", "axis-a", { projectId: "p_one" });
+  await h.make("span-a-two", "axis-a", { projectId: "p_two" });
+  assert.equal((await h.sleep()).builds, 1);
+  const shared = await h.learning.getMethod("u1", learnedMethodId("shared-step"));
+  assert.deepEqual(shared.payload.provenance.sourceProjectIds, ["p_one", "p_two"]);
+  assert.ok(!shared.payload.provenance.mergedFrom, "only a merge carries the evidence trail of its sources");
 });
 
 test("a build writes against the revision the pass's own bookkeeping left, not the one it listed with", async () => {

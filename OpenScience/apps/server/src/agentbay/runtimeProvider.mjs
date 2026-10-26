@@ -538,8 +538,8 @@ export class AgentBayRuntimeProvider {
       platformSkillGeneration,
       platformSkillsRuntimeDir: platformSkillGeneration ? `/opt/evimed/platform-skill-generations/${platformSkillGeneration.reference.generationHash}/skills` : "",
       gateways: publicRuntimeGatewayUrls(this.config),
-      // The account's memory engine, as the address a session outside this host reaches the memory gateway at: the public
-      // prefix's when the account is on the native engine, empty otherwise (`RuntimeManager.memoryGatewayUrlFor`).
+      // The memory engine, as the address a session outside this host reaches the memory gateway at: the public prefix's when
+      // the deployment has one, empty otherwise (`RuntimeManager.memoryGatewayUrlFor`).
       memoryGatewayUrl: memoryGatewayUrl ? String(publicRuntimeGatewayUrls(this.config)?.memory ?? "") : "",
       // The same public verifier the bootstrap profile and actual cloud kernel environment read.
       attendancePublicKey: this.config.modelGatewaySigningSecret ? runContextAuthorityPublicKey(this.config.modelGatewaySigningSecret) : "",
@@ -628,7 +628,7 @@ export class AgentBayRuntimeProvider {
     const gateways = plan.gateways;
     return {
       OPEN_SCIENCE_RUNTIME_AUTHORITY: RUNTIME_AUTHORITY,
-      // The same name the Docker launch passes: present, and empty for an account on the legacy memory engine.
+      // The same name the Docker launch passes: present, and empty when this deployment has no memory engine.
       [MEMORY_GATEWAY_URL_ENV]: String(plan.memoryGatewayUrl ?? ""),
       ...runtimeEnvironment({
         presetSkillsDir: "/opt/evimed/socket/presets/evimed-universal/skills",

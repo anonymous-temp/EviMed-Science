@@ -41,6 +41,12 @@ description: |
     touch: "这个仓库里测试文件一律不要动", "报告第一页放摘要"). A work order inside a named project
     that states such a convention updates the card even when the rest of the conversation is
     one task.
+  A rule the user gives for "this project" or for the named work ("这个项目的所有文字交付物一律用英文写",
+  "all the deliverables of this project are in English", "报告一律放摘要在第一页") is a line under 约束
+  of that project's card — also when it comes with a request for something small ("先帮我写一句话的
+  项目简介"), and also when no card exists yet: it is what the user stated about the project, and the
+  card is written for it. It is not a preference of the user's and not a working fact: the next
+  conversation of this project is handed the card, and nothing else of the project.
   When, and only when, the user describes a clinical or epidemiological study, the section
   研究要素 may list the elements they stated, each on its own line and only those stated:
   人群 / 干预或暴露 / 对照 / 结局 / 设计. When the user compares one treatment or exposure with

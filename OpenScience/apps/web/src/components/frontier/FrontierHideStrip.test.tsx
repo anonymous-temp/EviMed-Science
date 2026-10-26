@@ -137,3 +137,12 @@ describe("the reader's reasons", () => {
     expect(onChoose).not.toHaveBeenCalled();
   });
 });
+
+describe("the line a hidden card of a stream source leaves", () => {
+  it("does not offer to stop the source by the journal's name, which would mute the whole stream", () => {
+    strip({ item: { ...item, source: { ...item.source, id: "pubmed-cardiology", name: "The Lancet Oncology", followable: false } } });
+    const buttons = within(screen.getByRole("group", { name: "不感兴趣" })).getAllByRole("button").map((button) => button.textContent);
+    expect(buttons).not.toContain("不想看“The Lancet Oncology”");
+    expect(buttons).toHaveLength(FRONTIER_HIDE_REASONS.length);
+  });
+});

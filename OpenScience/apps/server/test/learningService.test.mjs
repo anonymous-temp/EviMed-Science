@@ -12,7 +12,7 @@ import test from "node:test";
 import { METHOD_SKILL_SCHEMA, methodContentDigest, renderMethodSkill } from "@evimed/domain";
 
 import {
-  HANDBOOK_CANDIDATE_RECORD_TYPE, LearningService, effectiveStatusReason, learnedMethodId, methodRecordFrom, methodStepsOf,
+  LearningService, effectiveStatusReason, learnedMethodId, methodRecordFrom, methodStepsOf,
 } from "../src/learningService.mjs";
 import { productDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";
 
@@ -603,36 +603,31 @@ test("the steps in the researcher's language are kept beside the method and show
   assert.equal(amended.payload.bodyVersion, 2);
 });
 
-test("a lesson the platform's reviewer taught is kept for the handbook, never as the researcher's method", async () => {
-  // Both methods production learnt in September came from the reviewer's
-  // findings alone and read as 「我的做法」 (audit 2026-09-26, L-G3).
-  const { documents, learning } = realisticService();
-  const kept = await learning.recordHandbookCandidate("u1", { frontmatter: frontmatter(), body: BODY,
-    provenance: { origin: "inferred", runId: "run_1", signal: "reviewer" }, capabilityId: "meta-analysis" });
-  assert.equal(kept.payload.recordType, HANDBOOK_CANDIDATE_RECORD_TYPE);
-  assert.equal(kept.payload.status, "candidate");
-  assert.equal(kept.payload.provenance.derivedFrom, "reviewer");
-  assert.equal(kept.payload.capabilityId, "meta-analysis");
-  assert.deepEqual((await learning.listMethods("u1")).items, [], "not in the researcher's list");
-  assert.deepEqual(await learning.approvedMethods("u1"), [], "never mounted");
-  // Once the handbook loop has applied it the active handbook is its one copy: the candidate is still no row of 「我的做法」, whatever
-  // its disposition (the list reads the learned-method record type and nothing else), so the 做法 list shows each lesson once.
-  await documents.put("u1", "method", kept.id, { ...kept.payload, dispositions: { [kept.payload.contentDigest]: { disposition: "applied", at: "2026-09-27T00:00:00.000Z" } } }, { expectedRevision: kept.revision });
-  assert.deepEqual((await learning.listMethods("u1")).items, [], "an applied candidate is not listed either");
-  assert.deepEqual((await learning.listMethods("u1", { status: "approved" })).items, []);
-  const refreshed = await documents.get("u1", "method", kept.id);
-  // The same lesson again replaces it rather than piling up.
-  const again = await learning.recordHandbookCandidate("u1", { frontmatter: frontmatter(), body: `${BODY}\n\nRefined.`,
-    provenance: { origin: "inferred", runId: "run_2" }, capabilityId: "meta-analysis" });
-  assert.equal(again.id, kept.id);
-  assert.equal(again.revision, refreshed.revision + 1);
+test("a write that may have put a method in force tells the composition root which method it was; the receiver reads the method and decides", async () => {
+  // The promotion of a person's general method to the pack of everyone's (`officialPromotion.mjs`) is told, never asked: it reads the method itself.
+  const { learning } = realisticService();
+  /** @type {string[][]} */ const told = [];
+  learning.onTookEffect = (userId, methodId) => { told.push([userId, methodId]); };
+  const approved = await create(learning, { frontmatter: frontmatter({ name: "approved-method" }) });
+  assert.deepEqual(told, [["u1", approved.id]]);
+  const amended = await learning.amendMethod("u1", approved.id, { expectedRevision: approved.revision, frontmatter: frontmatter({ name: "approved-method" }), body: `${BODY}\n\nRefined.` });
+  assert.deepEqual(told.at(-1), ["u1", approved.id], "an amendment is a new text that took effect");
+  // A stop is told too, with the method's own record carrying the status: what the receiver may promote is only an approved method.
+  const stopped = await learning.retire("u1", approved.id, { expectedRevision: amended.revision, reason: "by hand" });
+  assert.equal(stopped.payload.status, "retired");
+  assert.deepEqual(told.at(-1), ["u1", approved.id]);
+  // A telling that fails is the composition root's own: the write stands.
+  learning.onTookEffect = () => { throw new Error("promotion down"); };
+  const third = await create(learning, { frontmatter: frontmatter({ name: "third-method" }) });
+  assert.equal(third.payload.status, "approved");
+  learning.onTookEffect = async () => { throw new Error("promotion down, later"); };
+  assert.equal((await create(learning, { frontmatter: frontmatter({ name: "fourth-method" }) })).payload.status, "approved");
 });
 
 test("each earlier version of a method can be read, and the runs that taught each body are named newest first", async () => {
   // 「以前的版本 … 查看」: a version is its sentence, its steps in the researcher's language and, with none, its text.
   const { METHOD_SKILL_SCHEMA } = await import("@evimed/domain");
-  const { fixture } = await import("./helpers/handbookFixture.mjs");
-  const f = fixture();
+  const f = realisticService();
   const base = { frontmatter: { name: "citation-alignment", description: "Align citations.", whenToUse: "When a report needs a reference list.",
     metadata: { role: "functional", applies_when: "A report with references.", not_when: "No citations.", derived_from: "run:run_1", evimed_schema: METHOD_SKILL_SCHEMA } },
   body: "## Purpose\nAlign every citation marker with exactly one reference.\n## When to Use\nWhen a report needs references.\n## Inputs\nThe report.\n## Workflow\n1. Match markers.\n## Verification\n- Every marker has one entry.\n## Constraints\n- Do not invent entries.\n## Output\nA reference list.",

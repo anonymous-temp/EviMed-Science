@@ -22,9 +22,32 @@ const versions = JSON.parse(await readFile(new URL("../../../deps-version.json",
 const pin = { version: versions.openviking.version, skills: versions.openviking.skills };
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
+/**
+ * The two types added on 2026-10-25 (`observations`, `recent_work`) are not in a recording made on 2026-10-23 and 2026-10-13: the lab it
+ * ran on mounted eight templates. Their template routes answer as the recorded `corrections` route does (a type the deployment adds:
+ * 400 "not editable", or 404 on the server that mounts no directory), and the recorded user's settings read back the ten. That is an
+ * authored extension of a recording, said here and nowhere else; it goes when `record.mjs engine` is run again on a lab with the ten templates.
+ * @param {any} recording
+ */
+function extendedByTheNewTypes(recording) {
+  const added = OPENVIKING_MEMORY_TYPES.slice(8);
+  const exchanges = [];
+  for (const exchange of recording.exchanges) {
+    exchanges.push(exchange);
+    if (exchange.path?.endsWith("/memory-templates/corrections")) {
+      for (const type of added) exchanges.push({ ...exchange, path: exchange.path.replace(/corrections$/, type), response: JSON.parse(JSON.stringify(exchange.response ?? null).replaceAll("corrections", type)) });
+    }
+    const policy = exchange.response?.result?.memory_policy;
+    if (/\/settings$/.test(exchange.path ?? "") && Array.isArray(policy?.memory_types) && policy.memory_types.length === 8) {
+      policy.memory_types = [...OPENVIKING_MEMORY_TYPES].sort();
+    }
+  }
+  return { ...recording, exchanges };
+}
+
 /** The recorded exchanges as a fetch: the next recorded answer per (method, path, query), the last one repeating. */
 async function replay(name, { transform = (exchange) => exchange } = {}) {
-  const recording = JSON.parse(await readFile(new URL(`${name}.json`, fixtures), "utf8"));
+  const recording = extendedByTheNewTypes(JSON.parse(await readFile(new URL(`${name}.json`, fixtures), "utf8")));
   /** @type {Map<string, any[]>} */
   const queues = new Map();
   const keyOf = (method, path, query) => `${method} ${path.replace(/\/tasks\/cmp_[0-9a-f]+/, "/tasks/<probe>")} ${JSON.stringify(Object.entries(query).sort())}`;
@@ -125,7 +148,9 @@ async function readyWithoutTemplates() {
   return replay("engine-check-ready", {
     transform: (exchange) => {
       const type = /\/memory-templates\/([^/]+)$/.exec(exchange.path)?.[1];
-      return type && answers.has(type) ? { ...answers.get(type), path: exchange.path } : exchange;
+      // A type added after the recording answers as the recorded `corrections` route does (see `extendedByTheNewTypes`).
+      const answer = type ? answers.get(type) ?? (OPENVIKING_MEMORY_TYPES.indexOf(type) >= 8 ? answers.get("corrections") : undefined) : undefined;
+      return answer ? { ...answer, path: exchange.path } : exchange;
     },
   });
 }
@@ -137,7 +162,7 @@ test("a template directory that is not mounted is named, and only native memory 
   const { engine, lines } = engineFor(fetchImpl);
   const status = await engine.check();
   assert.equal(status.facts.memoryTemplates.code, "openviking_memory_templates_missing");
-  assert.deepEqual(status.facts.memoryTemplates.missing, ["corrections", "project_context", "decisions", "follow_ups", "project_facts"]);
+  assert.deepEqual(status.facts.memoryTemplates.missing, ["corrections", "project_context", "decisions", "follow_ups", "project_facts", "observations", "recent_work"]);
   assert.deepEqual(verdictOf(status), { version: "ok", modelKey: "ok", memoryTemplates: "openviking_memory_templates_missing", skills: "ok", compileIdentity: "ok" });
   assert.deepEqual(status.degraded, ["nativeMemory"]);
   assert.deepEqual(engine.ready("nativeMemory"), { ok: false, code: "openviking_memory_templates_missing", fact: "memoryTemplates" });

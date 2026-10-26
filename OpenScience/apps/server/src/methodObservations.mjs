@@ -44,7 +44,7 @@
 import { METHOD_RELEVANT_MOUNT_REASONS } from "@evimed/domain";
 import { toSkillName } from "@evimed/harness-port";
 
-import { learnedMethodDirectoryName } from "./learnedMethodMount.mjs";
+import { learnedMethodDirectoryName, officialMethodDirectoryName } from "./learnedMethodMount.mjs";
 import { runHistory } from "./agentRuns.mjs";
 
 /** Scope learning reads to the actual native input, without changing preserved history.
@@ -74,10 +74,10 @@ export function methodObservationSessionsForRun({ run, projection, sessions }) {
   });
 }
 
-/** A mounted learned method's own file, as the `read` tool is handed it:
+/** A mounted learned (`_lm…`) or official (`_om…`) method's own file, as the `read` tool is handed it:
  *  absolute (`/runtime/capsule-methods/_lm…/SKILL.md`) or relative to the
  *  methods directory. */
-const MOUNTED_METHOD_FILE = /(?:^|\/)(_lm[0-9a-f]{32})\/SKILL\.md$/;
+const MOUNTED_METHOD_FILE = /(?:^|\/)(_(?:lm|om)[0-9a-f]{32})\/SKILL\.md$/;
 
 /**
  * The shell programs that print a file's text, a closed vocabulary. A command
@@ -86,15 +86,15 @@ const MOUNTED_METHOD_FILE = /(?:^|\/)(_lm[0-9a-f]{32})\/SKILL\.md$/;
  * costs a method one observation of its harm test; over-counting charges it
  * with a run it never shaped, which is the worse error.
  */
-const READING_PROGRAMS = new Set([
+export const READING_PROGRAMS = new Set([
   "cat", "head", "tail", "sed", "awk", "less", "more", "nl", "grep", "egrep", "rg", "cut", "tac", "bat", "python", "python3", "node",
 ]);
 
 /** A path under one method's directory, wherever it is named in a command: the directory and what follows it. */
-const METHOD_PATH_IN_COMMAND = /(?:^|[\s/'"=(])(_lm[0-9a-f]{32})\/([^\s'";|&)<>]*)/g;
+const METHOD_PATH_IN_COMMAND = /(?:^|[\s/'"=(])(_(?:lm|om)[0-9a-f]{32})\/([^\s'";|&)<>]*)/g;
 
 /** A method directory named as a place to be: `cd /runtime/capsule-methods/_lm…` or `cd _lm…/`. */
-const METHOD_DIRECTORY_TARGET = /(?:^|\/)(_lm[0-9a-f]{32})\/*$/;
+const METHOD_DIRECTORY_TARGET = /(?:^|\/)(_(?:lm|om)[0-9a-f]{32})\/*$/;
 
 /**
  * Whether a file name, as a shell would expand it inside a method directory, is that method's own file: `SKILL.md` itself, or a
@@ -128,7 +128,7 @@ function namesSkillFile(tail) {
  */
 export function methodFilesReadByCommand(command) {
   const text = String(command ?? "");
-  if (!text.includes("_lm")) return [];
+  if (!text.includes("_lm") && !text.includes("_om")) return [];
   /** @type {Set<string>} */
   const read = new Set();
   /** @type {string | null} */
@@ -170,7 +170,15 @@ export function methodFilesReadByCommand(command) {
  */
 function usedIn(invoked, method) {
   return invoked.has(toSkillName(method.name, "capsule"))
-    || (Boolean(method.id) && invoked.has(`file:${learnedMethodDirectoryName(String(method.id))}`));
+    || (Boolean(method.id) && invoked.has(`file:${mountedDirectoryOf(String(method.id))}`));
+}
+
+/**
+ * Where a method is mounted: the platform's official methods (`official:<pack>:<method>`) under `_om…`, a learned method under `_lm…`.
+ * @param {string} methodId @returns {string}
+ */
+function mountedDirectoryOf(methodId) {
+  return methodId.startsWith("official:") ? officialMethodDirectoryName(methodId) : learnedMethodDirectoryName(methodId);
 }
 
 /**
@@ -500,68 +508,4 @@ export function runMethodObservations(input) {
     carriedBy: (input.methods ?? []).filter((method) => carried.has(method.name)).map((method) => ({ id: method.id, reason: reasons.get(method.name) ?? null })),
     answered,
   };
-}
-
-/** Closed actual tool error envelopes, never a refusal written as prose. @param {any} part */
-export function handbookMissingComputation(part) {
-  if(part?.type!=='tool' || !['completed','failed','error'].includes(part.status))return false;
-  const output=part.output??part.result;
-  let structured=output;
-  if(typeof output==='string'){try{structured=JSON.parse(output);}catch{return false;}}
-  if(Array.isArray(structured?.content)){
-    const text=structured.content.find(item=>item.type==='text')?.text;
-    try{structured=JSON.parse(text);}catch{return false;}
-  }
-  const code=part.error?.code??part.errorCode??structured?.error?.code??structured?.result?.error?.code;
-  return ['method_missing','tool_not_found','command_not_found','extension_tool_not_found'].includes(code);
-}
-/** Record attached context, explicit reads and associated delivery outcomes separately. None establishes causal improvement.
- * `observeGaps` (the evolution module is on) additionally notes a read of a mounted handbook that met a missing tool or
- * method, as the closed code `method-missing`; without it an observation is exactly what it was before that module.
- * @param {{learning:any,userId:string,projectId?:string,run:any,projection:any,sessions?:readonly any[],observeGaps?:boolean}} input */
-export async function recordHandbookRunObservations({ learning, userId, projectId, run, projection, sessions = [], observeGaps = false }) {
-  if (!run.id) return;
-  // Attachment is preserved independently; a timestamp alone cannot prove
-  // that this native request or its assigned child actually read the context.
-  const observedSessions = methodObservationSessionsForRun({ run, projection, sessions });
-  const started = Date.parse(String(run.startedAt ?? ""));
-  const finished = Date.parse(String(run.finishedAt ?? ""));
-  const inThisRun = (message) => typeof message?.time === "number" && Number.isFinite(message.time)
-    && Number.isFinite(started) && Number.isFinite(finished) && message.time >= started && message.time <= finished;
-  for (const mounted of run.capabilityHandbooks ?? []) {
-    if (mounted.ownerId !== userId || mounted.capabilityId !== run.effectiveAgentId) continue;
-    const items = (projection?.plan?.items ?? []).filter((item) => item.capability === mounted.capabilityId);
-    const sessionIds = new Set([run.sessionId, ...(projection?.subagents ?? [])
-      .filter((child) => items.some((item) => item.id === child.deliverableId)).map((child) => child.childSessionId)].filter(Boolean));
-    const used = observedSessions.filter((session) => sessionIds.has(session.sessionId)).some((session) =>
-      (session.transcript?.messages ?? []).filter(inThisRun).some((message) => (message.parts ?? []).some((part) => {
-        if (part?.type !== "tool" || part?.status !== "completed") return false;
-        if (["read", "grep"].includes(part.tool)) {
-          const target = String(part.input?.path ?? part.input?.file_path ?? part.input?.filePath ?? "");
-          return target === mounted.path || target.endsWith(`/${mounted.path}`);
-        }
-        if (part.tool !== "bash") return false;
-        return String(part.input?.command ?? part.input?.cmd ?? "").split(/&&|\|\||[;|\n]/).some((segment) => {
-          const words = segment.trim().split(/\s+/);
-          return READING_PROGRAMS.has(words[0]?.split("/").pop() ?? "") && words.some((word) => word.replaceAll(/["']/g, "") === mounted.path);
-        });
-      })));
-    const outcomes = items.filter((item) => deliverableOutcome(item)).map((item) => ({ deliverableId: item.id, outcome: deliverableOutcome(item) }));
-    const observation = { runId: run.id, projectId: projectId ?? run.projectId ?? null, at: new Date().toISOString(),
-      contentDigest: mounted.contentDigest, attached: true, used, outcomes,
-      ...(observeGaps && used && observedSessions.some(session => (session.transcript?.messages??[]).filter(inThisRun).some(message => (message.parts??[]).some(part => handbookMissingComputation(part)))) ? { gapCodes: ['method-missing'] } : {}) };
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      const row = await learning.documents.get(userId, "method", mounted.id);
-      if (row?.payload?.recordType !== "capability-handbook" || row.payload.capabilityId !== mounted.capabilityId
-        || row.payload.contentDigest !== mounted.contentDigest || row.payload.observations?.some((entry) => entry.runId === run.id)) break;
-      try {
-        await learning.documents.put(userId, "method", row.id, { ...row.payload,
-          observations: [...(row.payload.observations ?? []), observation].slice(-100),
-        }, { expectedRevision: row.revision, telemetry: true });
-        break;
-      } catch (error) {
-        if (error?.code !== "product_revision_conflict" || attempt === 4) throw error;
-      }
-    }
-  }
 }

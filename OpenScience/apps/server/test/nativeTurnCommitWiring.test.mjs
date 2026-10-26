@@ -13,25 +13,19 @@ import { createWebApiApp } from "../src/server.mjs";
 const SESSION = "ses_turn_commit";
 
 /**
- * @param {{ engine: "native" | "legacy", automated?: boolean }} options
- * @returns {Promise<{ armed: boolean, asked: string[] }>}
+ * @param {{ automated?: boolean }} options
+ * @returns {Promise<{ armed: boolean }>}
  */
-async function finishOneRun({ engine, automated = false }) {
+async function finishOneRun({ automated = false } = {}) {
   const dataDir = await mkdtemp(path.join(tmpdir(), "os-turn-commit-"));
-  /** @type {string[]} */
-  const asked = [];
-  const researchMemory = {
+  const memorySettings = {
     configured: true,
-    async status() { return { configured: true, connected: true, code: null, structured: true }; },
+    async status() { return { configured: true, connected: true, code: null }; },
     async settings() { return { learningPaused: false, recallPaused: false, pausedProjects: [] }; },
-    async memoryEngine(/** @type {string} */ userId) { asked.push(userId); return engine; },
-    async relevant() { return []; },
-    async residentRecords() { return []; },
-    async lookupCounts() { return { user: 0, project: 0, session: 0 }; },
   };
   const app = createWebApiApp({
-    dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false, memoryExtractionEnabled: false,
-    researchMemory, ovNativeMemoryEnabled: true, nativeMemoryTurnCommitDebounceMs: 600_000,
+    dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false,
+    memorySettings, memoryEngineEnabled: true, nativeMemoryTurnCommitDebounceMs: 600_000,
     openVikingSessions: { configured: true, async readSession() { throw Object.assign(new Error("no session"), { code: "memory_index_not_found" }); } },
   });
   try {
@@ -44,14 +38,15 @@ async function finishOneRun({ engine, automated = false }) {
     app.agentRuns.onRunFinished = async (/** @type {any[]} */ ...args) => { try { return await original(...args); } finally { finished(); } };
     assert.equal((await fetch(`${base}/api/research-sessions/${SESSION}`, { method: "PUT", headers, body: JSON.stringify({ mode: "open-domain" }) })).status, 200);
     const dispatched = await fetch(`${base}/api/agent-runs/dispatch`, {
-      method: "POST", headers, body: JSON.stringify({ sessionId: SESSION, dispatchId: `dispatch_${engine}_${automated}`, text: "我是心内科的主治医生。", ...(automated ? { automated: true } : {}) }),
+      method: "POST", headers, body: JSON.stringify({ sessionId: SESSION, dispatchId: `dispatch_${automated}`, text: "我是心内科的主治医生。", ...(automated ? { automated: true } : {}) }),
     });
     assert.equal(dispatched.status, 202, await dispatched.clone().text());
     await done;
     // The hook arms the commit without waiting for it; its one settings read is a few turns of the event loop.
     for (const started = Date.now(); !app.nativeTurnCommit.armed.size && Date.now() - started < 1_000;) await new Promise((resolve) => setTimeout(resolve, 20));
-    const armed = asked.some((userId) => app.nativeTurnCommit.isArmed(userId, SESSION));
-    return { armed, asked };
+    // Armed entries are keyed by account, memory namespace and conversation (`NativeTurnCommit.#arm`); the entry names its conversation.
+    const armed = [...app.nativeTurnCommit.armed.values()].some((entry) => entry.sessionId === SESSION);
+    return { armed };
   } finally {
     app.nativeTurnCommit.close();
     await app.close();
@@ -59,17 +54,14 @@ async function finishOneRun({ engine, automated = false }) {
   }
 }
 
-test("a finished attended run of a native account arms the commit of its conversation", async () => {
-  const { armed, asked } = await finishOneRun({ engine: "native" });
-  assert.ok(asked.length > 0, "the committer asked which engine the account is on");
+test("a finished attended run arms the commit of its conversation", async () => {
+  const { armed } = await finishOneRun();
   assert.equal(armed, true);
 });
 
-test("a legacy account's run arms nothing, and neither does a run the platform started", async () => {
+test("a run the platform started arms nothing", async () => {
   resetNativeMemoryMetrics();
-  assert.equal((await finishOneRun({ engine: "legacy" })).armed, false);
-  assert.equal(nativeMemoryCounters().turnCommits.platform_started, 0);
-  const automated = await finishOneRun({ engine: "native", automated: true });
+  const automated = await finishOneRun({ automated: true });
   assert.equal(automated.armed, false);
   assert.equal(nativeMemoryCounters().turnCommits.platform_started, 1, "turned away as a turn the platform started");
 });

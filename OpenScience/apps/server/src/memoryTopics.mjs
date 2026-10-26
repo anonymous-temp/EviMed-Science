@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { callModelForControlPlane } from "./modelGateway.mjs";
-import { migrateResearchMemory } from "./researchMemoryPersistence.mjs";
+import { migrateMemorySettings } from "./memorySettingsPersistence.mjs";
 
 /**
  * 「主题」: what an account's memories are about, in the account's own words — the map's third view.
@@ -244,15 +244,15 @@ const TOPIC_ID = /^topic:[a-f0-9]{10}$/u;
 export class MemoryTopics {
   /**
    * @param {any} config
-   * @param {any} memoryStore `ResearchMemoryStore`: `database` and `mapRecords`
+   * @param {any} memoryStore `MemorySettingsStore`: its `database`, where the topic sets are kept
    * @param {{ usageLedger?: any, fetchImpl?: typeof fetch, callModel?: typeof callModelForControlPlane, now?: () => Date,
    *   audit?: (event: string, error: unknown) => unknown, accountRecords?: ((userId: string) => Promise<any[]>) | null }} [options]
-   *   `accountRecords`: the account's memories as the map draws them, from whichever engine holds them (the store's own rows by default)
+   *   `accountRecords`: the account's memories as the map draws them (the engine's files; none without an engine)
    */
   constructor(config, memoryStore, { usageLedger = null, fetchImpl = globalThis.fetch, callModel = callModelForControlPlane, now = () => new Date(), audit = () => {}, accountRecords = null } = {}) {
     this.config = config;
     this.memoryStore = memoryStore;
-    this.accountRecords = accountRecords ?? ((/** @type {string} */ userId) => memoryStore.mapRecords(userId, { projectId: null, limit: 2000 }));
+    this.accountRecords = accountRecords ?? (() => Promise.resolve([]));
     this.usageLedger = usageLedger;
     this.fetchImpl = fetchImpl;
     this.callModel = callModel;
@@ -276,7 +276,7 @@ export class MemoryTopics {
 
   /** @param {string} text @param {any[]} values */
   async #query(text, values) {
-    await migrateResearchMemory(this.memoryStore.database);
+    await migrateMemorySettings(this.memoryStore.database);
     return this.memoryStore.database.query(text, values);
   }
 

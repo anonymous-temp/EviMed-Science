@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
-import { migrateResearchMemory } from "./researchMemoryPersistence.mjs";
+import { migrateMemorySettings } from "./memorySettingsPersistence.mjs";
 import {
   NATIVE_COMMIT_ORIGINS, NATIVE_REVISION_ACTORS, NATIVE_REVISION_CHANGES, NATIVE_TEXT_LIMIT, migrateNativeMemory,
 } from "./nativeMemoryPersistence.mjs";
+import { platformSessionOf } from "./openVikingSessions.mjs";
 import { HttpError } from "./security.mjs";
 import { OPENVIKING_MEMORY_TYPES, userRootUri } from './openVikingLayout.mjs';
 
@@ -49,6 +50,14 @@ export function normalisedStatement(line) {
  */
 export function lineFingerprint(line) {
   return createHash("sha256").update(normalisedStatement(line)).digest("hex");
+}
+
+/** The platform's own label line in a memory file (a source that changed), which is never a statement (`nativeMemoryStore.SOURCE_LABEL_PREFIX`). */
+const LABEL_LINE = /^>\s*来源变更：/;
+
+/** @param {any} row */
+function tombstoneRow(row) {
+  return { archiveUri: String(row.archive_uri), engineSession: String(row.engine_session), taskId: row.task_id ?? null, resetAt: instant(row.reset_at), state: String(row.state) };
 }
 
 const bounded = (/** @type {unknown} */ value, /** @type {number} */ limit) => (value == null ? null : String(value).slice(0, limit));
@@ -106,6 +115,7 @@ function publicFile(row) {
   return {
     uri: String(row.uri), memoryType: String(row.memory_type), projectId: row.project_id ?? null, sensitive: row.sensitive === true,
     contentHash: row.content_hash ?? null, body: row.body ?? null, labels: Array.isArray(row.labels) ? row.labels : [],
+    lastRecalledAt: instant(row.last_recalled_at), recallCount: Number(row.recall_count) || 0,
     createdAt: instant(row.created_at), updatedAt: instant(row.updated_at),
   };
 }
@@ -121,7 +131,7 @@ export class NativeMemoryOverlay {
   /** @param {string} text @param {any[]} [values] */
   async #query(text, values = []) {
     if (!this.database) throw new HttpError(503, "memory_unconfigured", "The research memory store is not configured.");
-    await migrateResearchMemory(this.database);
+    await migrateMemorySettings(this.database);
     await migrateNativeMemory(this.database);
     return this.database.query(text, values);
   }
@@ -180,13 +190,14 @@ export class NativeMemoryOverlay {
     return result.rows.map(admissionRow);
   }
 
-  /** Recheck the current owner, engine, project and immutable candidate revision before extraction or a retry.
+  /** Recheck the current owner, project and immutable candidate revision before extraction or a retry.
    * @param {string} userId @param {any} admission */
   async admissionAuthority(userId, admission) {
-    const policy = await this.#query(`SELECT s.engine,s.learning_paused,s.paused_projects FROM evimed_memory.settings s
-      JOIN evimed_control.users u ON u.id=s.user_id WHERE s.user_id=$1`, [owner(userId)]);
+    // The settings row is optional (an account that never changed a switch has none), the account is not.
+    const policy = await this.#query(`SELECT s.learning_paused,s.paused_projects FROM evimed_control.users u
+      LEFT JOIN evimed_memory.settings s ON s.user_id=u.id WHERE u.id=$1`, [owner(userId)]);
     const settings = policy.rows[0];
-    if (!settings || settings.engine !== "native") return { allowed: false, state: "cancelled", reason: "memory_engine_changed" };
+    if (!settings) return { allowed: false, state: "cancelled", reason: "account_unavailable" };
     if (settings.learning_paused || (admission.projectId && (settings.paused_projects ?? []).includes(admission.projectId))) {
       return { allowed: false, state: "suspended", reason: "learning_paused" };
     }
@@ -194,20 +205,12 @@ export class NativeMemoryOverlay {
       const project = await this.#query("SELECT 1 FROM evimed_control.projects WHERE user_id=$1 AND id=$2", [userId, admission.projectId]);
       if (!project.rows.length) return { allowed: false, state: "cancelled", reason: "project_unavailable" };
     }
-    if (String(admission.candidateId).startsWith("record:")) {
-      const found = await this.#query("SELECT version,status,scope,scope_id FROM evimed_memory.records WHERE user_id=$1 AND id=$2", [userId, admission.candidateId.slice(7)]);
-      const candidate = found.rows[0];
-      if (!candidate || candidate.version !== admission.revision || candidate.status !== "pending"
-        || (candidate.scope === "project" ? candidate.scope_id : null) !== admission.projectId) {
-        return { allowed: false, state: "cancelled", reason: "candidate_changed" };
-      }
-    } else {
-      const found = await this.#query("SELECT revision,project_id,payload FROM evimed_product.documents WHERE user_id=$1 AND kind='fact' AND id=$2 AND deleted_at IS NULL", [userId, admission.candidateId]);
-      const candidate = found.rows[0];
-      if (!candidate || candidate.revision !== admission.revision || candidate.payload?.status !== "candidate"
-        || candidate.payload?.transfer || candidate.project_id !== admission.projectId) {
-        return { allowed: false, state: "cancelled", reason: "candidate_changed" };
-      }
+    // A candidate is a note of the capsule that an outside agent proposed; it is admitted only as the revision that was read.
+    const found = await this.#query("SELECT revision,project_id,payload FROM evimed_product.documents WHERE user_id=$1 AND kind='fact' AND id=$2 AND deleted_at IS NULL", [userId, admission.candidateId]);
+    const candidate = found.rows[0];
+    if (!candidate || candidate.revision !== admission.revision || candidate.payload?.status !== "candidate"
+      || candidate.payload?.transfer || candidate.project_id !== admission.projectId) {
+      return { allowed: false, state: "cancelled", reason: "candidate_changed" };
     }
     return { allowed: true, state: null, reason: null };
   }
@@ -229,7 +232,35 @@ export class NativeMemoryOverlay {
   async account(userId) {
     const result = await this.#query("SELECT * FROM evimed_memory.native_accounts WHERE user_id=$1", [owner(userId)]);
     const row = result.rows[0];
-    return { registeredAt: instant(row?.registered_at), scannedAt: instant(row?.scanned_at), migratedAt: instant(row?.migrated_at) };
+    return { registeredAt: instant(row?.registered_at), scannedAt: instant(row?.scanned_at) };
+  }
+
+  /**
+   * The accounts the memory plane knows: every account with a row in one of the overlay's per-account tables — registered with the
+   * engine by the gateway, the page or this worker, a conversation noted, a commit or an admission recorded. The worker's pass is over
+   * these; an account none of them has ever touched has nothing in the engine to scan, to settle or to erase.
+   * @param {{ limit?: number }} [options] @returns {Promise<string[]>}
+   */
+  async accounts({ limit = 100_000 } = {}) {
+    const result = await this.#query(`SELECT user_id FROM (
+        SELECT user_id FROM evimed_memory.native_accounts UNION SELECT user_id FROM evimed_memory.native_commits
+        UNION SELECT user_id FROM evimed_memory.native_sessions UNION SELECT user_id FROM evimed_memory.native_admissions
+      ) known ORDER BY user_id LIMIT $1`, [Math.max(1, Math.min(1_000_000, Math.trunc(Number(limit)) || 100_000))]);
+    return result.rows.map((/** @type {any} */ row) => String(row.user_id));
+  }
+
+  /**
+   * Whether the memory plane has ever touched this account (`accounts`): whether the engine can hold anything of it that a deletion
+   * owes it. An account that never used memory is erased without asking the engine, so that a deletion does not depend on a service
+   * the account never used.
+   * @param {string} userId @returns {Promise<boolean>}
+   */
+  async touched(userId) {
+    const result = await this.#query(`SELECT (EXISTS (SELECT 1 FROM evimed_memory.native_accounts WHERE user_id=$1)
+        OR EXISTS (SELECT 1 FROM evimed_memory.native_commits WHERE user_id=$1)
+        OR EXISTS (SELECT 1 FROM evimed_memory.native_sessions WHERE user_id=$1)
+        OR EXISTS (SELECT 1 FROM evimed_memory.native_admissions WHERE user_id=$1)) AS held`, [owner(userId)]);
+    return result.rows[0]?.held === true;
   }
 
   // ---------------------------------------------------------- consolidation
@@ -281,7 +312,7 @@ export class NativeMemoryOverlay {
       WHERE user_id=$1`, [owner(userId), succeeded === true, fingerprint, at.toISOString()]);
   }
 
-  /** @param {string} userId @param {"registered_at" | "scanned_at" | "migrated_at"} column */
+  /** @param {string} userId @param {"registered_at" | "scanned_at"} column */
   async #stamp(userId, column) {
     await this.#query(`INSERT INTO evimed_memory.native_accounts (user_id, ${column}) VALUES ($1, clock_timestamp())
       ON CONFLICT (user_id) DO UPDATE SET ${column}=clock_timestamp(), updated_at=date_trunc('second', clock_timestamp())`, [owner(userId)]);
@@ -290,8 +321,6 @@ export class NativeMemoryOverlay {
   noteRegistered(userId) { return this.#stamp(userId, "registered_at"); }
   /** @param {string} userId */
   noteScanned(userId) { return this.#stamp(userId, "scanned_at"); }
-  /** @param {string} userId */
-  noteMigrated(userId) { return this.#stamp(userId, "migrated_at"); }
 
   /** The account was erased from the engine: whatever it is next is a new registration. @param {string} userId */
   async forgetAccount(userId) {
@@ -590,6 +619,190 @@ export class NativeMemoryOverlay {
   async removeFile(userId, uri) {
     await this.#query("DELETE FROM evimed_memory.native_files WHERE user_id=$1 AND uri=$2", [owner(userId), String(uri)]);
     await this.#query("DELETE FROM evimed_memory.native_sources WHERE user_id=$1 AND uri=$2", [owner(userId), String(uri)]);
+    await this.#query("DELETE FROM evimed_memory.native_line_origins WHERE user_id=$1 AND uri=$2", [owner(userId), String(uri)]);
+  }
+
+  /** The account's observation files (`observations/…`): notes kept to see whether a choice comes back, never listed as memories. @param {string} userId */
+  async observationFiles(userId) {
+    const result = await this.#query("SELECT * FROM evimed_memory.native_files WHERE user_id=$1 AND memory_type='observations' ORDER BY updated_at", [owner(userId)]);
+    return result.rows.map(publicFile);
+  }
+
+  /**
+   * Which platform conversation an engine session's writes came from: the session of the plugin (`dsh-<conversation>`), or, for a
+   * replay of a failed extraction (a new session holding the messages of the old one), the conversation of the commit it replays, however
+   * many replays deep. Null for anything that is no conversation (the page's own sessions, an outside agent's candidate).
+   * @param {string} userId @param {string | null} engineSession @param {string | null} [archiveUri] the archive the write came from
+   * @returns {Promise<string | null>}
+   */
+  async conversationOf(userId, engineSession, archiveUri = null) {
+    let session = engineSession ? String(engineSession) : null;
+    let archive = archiveUri ? String(archiveUri) : null;
+    for (let depth = 0; session && depth < 12; depth += 1) {
+      const conversation = platformSessionOf(session);
+      if (conversation) return conversation;
+      if (!session.startsWith("evimed-replay-") || !archive) return null;
+      const parent = await this.#query("SELECT engine_session, archive_uri FROM evimed_memory.native_commits WHERE user_id=$1 AND replayed_as=$2 LIMIT 1", [owner(userId), archive]);
+      if (!parent.rows[0]) return null;
+      session = String(parent.rows[0].engine_session);
+      archive = String(parent.rows[0].archive_uri);
+    }
+    return null;
+  }
+
+  // ------------------------------------------------------------ line origins
+
+  /**
+   * Keep the per-line origin index of one file in step with its text: a line that is no longer in `after` loses its row, and — when an
+   * `origin` is given — each line `after` has and `before` did not is recorded as brought by it (the first row of a line stays: the
+   * line's source is the first commit that brought it). With no `origin` (the person's own edit, a restore, a platform check) lines only leave.
+   * @param {string} userId @param {string} uri
+   * @param {{ after: string, before?: string, origin?: { revisionId?: string | number | null, engineSession?: string | null, archiveUri?: string | null, projectId?: string | null, at?: string | null } | null }} change
+   */
+  async syncOrigins(userId, uri, { after, before = "", origin = null }) {
+    const prints = (/** @type {string} */ text) => [...new Set(memoryLines(String(text ?? "").split("\n").filter((line) => !LABEL_LINE.test(line.trim())).join("\n")).map(lineFingerprint))];
+    const present = prints(after);
+    await this.#query("DELETE FROM evimed_memory.native_line_origins WHERE user_id=$1 AND uri=$2 AND NOT (fingerprint = ANY($3::text[]))", [owner(userId), String(uri), present]);
+    if (!origin) return;
+    const had = new Set(prints(before));
+    const brought = present.filter((print) => !had.has(print));
+    if (!brought.length) return;
+    await this.#query(`INSERT INTO evimed_memory.native_line_origins (user_id, uri, fingerprint, revision_id, engine_session, archive_uri, project_id, added_at)
+      SELECT $1, $2, print, $4::bigint, $5, $6, $7, COALESCE($8::timestamptz, clock_timestamp()) FROM unnest($3::text[]) AS brought(print)
+      ON CONFLICT (user_id, uri, fingerprint) DO NOTHING`,
+    [owner(userId), String(uri), brought, origin.revisionId == null ? null : String(origin.revisionId), origin.engineSession ?? null, origin.archiveUri ?? null, origin.projectId ?? null, origin.at ?? null]);
+  }
+
+  /**
+   * The origins of the lines of these files, by file and line fingerprint.
+   * @param {string} userId @param {readonly string[]} uris
+   * @returns {Promise<Map<string, Map<string, { revisionId: string | null, engineSession: string | null, archiveUri: string | null, projectId: string | null, addedAt: string | null }>>>}
+   */
+  async originsOf(userId, uris) {
+    /** @type {Map<string, Map<string, any>>} */
+    const byUri = new Map();
+    if (!uris.length) return byUri;
+    const result = await this.#query("SELECT * FROM evimed_memory.native_line_origins WHERE user_id=$1 AND uri = ANY($2::text[])", [owner(userId), [...uris]]);
+    for (const row of result.rows) {
+      const lines = byUri.get(String(row.uri)) ?? new Map();
+      lines.set(String(row.fingerprint), { revisionId: row.revision_id == null ? null : String(row.revision_id), engineSession: row.engine_session ?? null,
+        archiveUri: row.archive_uri ?? null, projectId: row.project_id ?? null, addedAt: instant(row.added_at) });
+      byUri.set(String(row.uri), lines);
+    }
+    return byUri;
+  }
+
+  /** Whether the account's older revisions were read into the origin index, and the mark that they were. @param {string} userId */
+  async originsIndexed(userId) {
+    const result = await this.#query("SELECT origins_indexed_at FROM evimed_memory.native_accounts WHERE user_id=$1", [owner(userId)]);
+    return Boolean(result.rows[0]?.origins_indexed_at);
+  }
+
+  /** @param {string} userId */
+  async noteOriginsIndexed(userId) {
+    await this.#query(`INSERT INTO evimed_memory.native_accounts (user_id, origins_indexed_at) VALUES ($1, clock_timestamp())
+      ON CONFLICT (user_id) DO UPDATE SET origins_indexed_at=clock_timestamp()`, [owner(userId)]);
+  }
+
+  /** Every revision of one account, oldest first, for the one-time read into the origin index. @param {string} userId @param {{ afterId?: string, limit?: number }} [options] */
+  async revisionsForIndex(userId, { afterId = "0", limit = 500 } = {}) {
+    const result = await this.#query("SELECT * FROM evimed_memory.native_revisions WHERE user_id=$1 AND id > $2::bigint AND undone_at IS NULL ORDER BY id LIMIT $3",
+      [owner(userId), /^\d{1,18}$/.test(String(afterId)) ? String(afterId) : "0", Math.max(1, Math.min(2_000, limit))]);
+    return result.rows.map(publicRevision);
+  }
+
+  // ------------------------------------------------------------ last recalled
+
+  /**
+   * A memory search or read through the gateway returned these files: their `last_recalled_at` moves to now and `recall_count` by one.
+   * A file the overlay holds no row of is not made one here. For a later decision about retention (owner decision 6 of 2026-10-25 leaves
+   * the period unset): nothing reads it for behaviour.
+   * @param {string} userId @param {readonly string[]} uris @returns {Promise<number>} files noted
+   */
+  async noteRecalled(userId, uris) {
+    const unique = [...new Set(uris.map(String))].slice(0, 50);
+    if (!unique.length) return 0;
+    const result = await this.#query(`UPDATE evimed_memory.native_files SET last_recalled_at=clock_timestamp(), recall_count=recall_count+1
+      WHERE user_id=$1 AND uri = ANY($2::text[])`, [owner(userId), unique]);
+    return result.rowCount ?? 0;
+  }
+
+  // -------------------------------------------------------- reset tombstones
+
+  /**
+   * A reset found these commits not finished: whatever the engine writes from them after the reset is taken out again, however late.
+   * @param {string} userId @param {readonly { archiveUri: string, engineSession: string, taskId?: string | null }[]} commits @param {Date} resetAt
+   */
+  async tombstoneCommits(userId, commits, resetAt) {
+    for (const commit of commits.slice(0, 500)) {
+      await this.#query(`INSERT INTO evimed_memory.native_reset_tombstones (user_id, archive_uri, engine_session, task_id, reset_at) VALUES ($1, $2, $3, $4, $5::timestamptz)
+        ON CONFLICT (user_id, archive_uri) DO NOTHING`, [owner(userId), String(commit.archiveUri).slice(0, 600), String(commit.engineSession), commit.taskId ?? null, resetAt.toISOString()]);
+    }
+  }
+
+  /** @param {string} userId @returns {Promise<{ archiveUri: string, engineSession: string, taskId: string | null, resetAt: string | null, state: string }[]>} */
+  async openTombstones(userId) {
+    const result = await this.#query("SELECT * FROM evimed_memory.native_reset_tombstones WHERE user_id=$1 AND state='open' ORDER BY created_at LIMIT 200", [owner(userId)]);
+    return result.rows.map(tombstoneRow);
+  }
+
+  /** The tombstone of one archive, in any state, or null. @param {string} userId @param {string} archiveUri */
+  async tombstone(userId, archiveUri) {
+    const result = await this.#query("SELECT * FROM evimed_memory.native_reset_tombstones WHERE user_id=$1 AND archive_uri=$2", [owner(userId), String(archiveUri)]);
+    return result.rows[0] ? tombstoneRow(result.rows[0]) : null;
+  }
+
+  /** @param {string} userId @param {string} archiveUri @param {"swept" | "unknown"} state @param {number} [removed] */
+  async closeTombstone(userId, archiveUri, state, removed = 0) {
+    await this.#query("UPDATE evimed_memory.native_reset_tombstones SET state=$3, removed=$4, updated_at=clock_timestamp() WHERE user_id=$1 AND archive_uri=$2",
+      [owner(userId), String(archiveUri), state, Math.max(0, Math.trunc(removed))]);
+  }
+
+  /** The accounts with a tombstone still open: the worker visits them even when nothing else of them is known. @returns {Promise<string[]>} */
+  async accountsWithOpenTombstones() {
+    const result = await this.#query("SELECT DISTINCT user_id FROM evimed_memory.native_reset_tombstones WHERE state='open' LIMIT 1000");
+    return result.rows.map((/** @type {any} */ row) => String(row.user_id));
+  }
+
+  // ----------------------------------------------------------------- imports
+
+  /**
+   * What the page's import split out of a pasted text, held for the person to review. `statements` are `{ id, text, tier, offered, ticked }`.
+   * @param {string} userId @param {{ id: string, statements: any[], leftOut: number, ttlMs?: number }} offer
+   */
+  async createImport(userId, { id, statements, leftOut, ttlMs = 3_600_000 }) {
+    await this.#query(`INSERT INTO evimed_memory.native_imports (id, user_id, statements, left_out, expires_at)
+      VALUES ($1, $2, $3::jsonb, $4, clock_timestamp() + ($5::int * interval '1 millisecond'))`, [id, owner(userId), JSON.stringify(statements), Math.max(0, leftOut), Math.max(60_000, Math.trunc(ttlMs))]);
+  }
+
+  /** @param {string} userId @param {string} id @returns {Promise<{ id: string, statements: any[], leftOut: number, state: string, saved: number, createdAt: string | null, expired: boolean } | null>} */
+  async importOffer(userId, id) {
+    const result = await this.#query("SELECT *, (expires_at < clock_timestamp()) AS expired FROM evimed_memory.native_imports WHERE user_id=$1 AND id=$2", [owner(userId), String(id)]);
+    const row = result.rows[0];
+    return row ? { id: String(row.id), statements: Array.isArray(row.statements) ? row.statements : [], leftOut: Number(row.left_out) || 0, state: String(row.state), saved: Number(row.saved) || 0,
+      createdAt: instant(row.created_at), expired: row.expired === true } : null;
+  }
+
+  /**
+   * Take the offer for saving, once: the statements are dropped from the row and it reads `saved`. A second caller gets nothing.
+   * @param {string} userId @param {string} id @param {number} saved @returns {Promise<boolean>}
+   */
+  async markImportSaved(userId, id, saved) {
+    const result = await this.#query(`UPDATE evimed_memory.native_imports SET state='saved', saved=$3, statements='[]'::jsonb
+      WHERE user_id=$1 AND id=$2 AND state='offered' AND expires_at >= clock_timestamp()`, [owner(userId), String(id), Math.max(0, Math.trunc(saved))]);
+    return (result.rowCount ?? 0) === 1;
+  }
+
+  /** How many offers the account made since `since`: the import's own rate limit. @param {string} userId @param {Date} since */
+  async importsSince(userId, since) {
+    const result = await this.#query("SELECT count(*)::int AS n FROM evimed_memory.native_imports WHERE user_id=$1 AND created_at >= $2::timestamptz", [owner(userId), since.toISOString()]);
+    return Number(result.rows[0]?.n) || 0;
+  }
+
+  /** Offers past their hour are deleted, saved ones after a day (what was saved is the engine's now). @returns {Promise<number>} */
+  async deleteExpiredImports() {
+    const result = await this.#query("DELETE FROM evimed_memory.native_imports WHERE expires_at < clock_timestamp() - interval '1 day' OR (state='offered' AND expires_at < clock_timestamp())");
+    return result.rowCount ?? 0;
   }
 
   /** Complete bounded sensitive-file set. Overflow refuses recall rather than silently dropping exclusions. @param {string} userId */
@@ -769,6 +982,9 @@ export class NativeMemoryOverlay {
     await this.#query("DELETE FROM evimed_memory.native_sessions WHERE user_id=$1", [id]);
     await this.#query("DELETE FROM evimed_memory.native_sources WHERE user_id=$1", [id]);
     await this.#query("DELETE FROM evimed_memory.native_rejections WHERE user_id=$1", [id]);
+    await this.#query("DELETE FROM evimed_memory.native_line_origins WHERE user_id=$1", [id]);
+    await this.#query("DELETE FROM evimed_memory.native_imports WHERE user_id=$1", [id]);
+    // The tombstones stay: they are what a reset leaves behind on purpose, for the extraction it could not wait for.
     return { files: files.rowCount ?? 0, revisions: revisions.rowCount ?? 0, commits: commits.rowCount ?? 0 };
   }
 
@@ -786,6 +1002,7 @@ export class NativeMemoryOverlay {
       const revisions = await client.query("DELETE FROM evimed_memory.native_revisions WHERE user_id=$1 AND uri LIKE $2 || '/%'", values);
       const commits = await client.query("DELETE FROM evimed_memory.native_commits WHERE user_id=$1 AND archive_uri LIKE $2 || '/sessions/%'", values);
       await client.query("DELETE FROM evimed_memory.native_sources WHERE user_id=$1 AND uri LIKE $2 || '/%'", values);
+      await client.query("DELETE FROM evimed_memory.native_line_origins WHERE user_id=$1 AND uri LIKE $2 || '/%'", values);
       await client.query("DELETE FROM evimed_memory.native_rejections WHERE user_id=$1 AND (uri LIKE $2 || '/%' OR memory_type LIKE $3 || ':%')", [id, root, root.split('/').at(-1)]);
       return { files: files.rowCount ?? 0, revisions: revisions.rowCount ?? 0, commits: commits.rowCount ?? 0 };
     });
@@ -804,6 +1021,7 @@ export class NativeMemoryOverlay {
       if (uris.length) {
         await client.query("DELETE FROM evimed_memory.native_sources WHERE user_id=$1 AND uri = ANY($2::text[])", [id, uris]);
         await client.query("DELETE FROM evimed_memory.native_revisions WHERE user_id=$1 AND uri = ANY($2::text[])", [id, uris]);
+        await client.query("DELETE FROM evimed_memory.native_line_origins WHERE user_id=$1 AND uri = ANY($2::text[])", [id, uris]);
       }
       await client.query("DELETE FROM evimed_memory.native_revisions WHERE user_id=$1 AND project_id=$2 AND uri LIKE $3 || '/memories/%'", values);
       // The external-memory admissions of the project's notes (2026-10-23): personal-engine rows, labelled with the project only.

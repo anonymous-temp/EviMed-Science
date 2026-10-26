@@ -17,7 +17,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { searchTokens } from "./memoryRecallPolicy.mjs";
+import { searchTokens } from "./searchTokens.mjs";
 
 export const KB_INDEX_METHOD = "captured-content-v1";
 

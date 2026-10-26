@@ -21,7 +21,7 @@ import { createHash, createHmac } from "node:crypto";
  * @module openVikingLayout
  */
 
-/** `memory.custom_templates_dir`: the eight memory types' templates, mounted read-only. */
+/** `memory.custom_templates_dir`: the ten memory types' templates, mounted read-only. */
 export const OPENVIKING_MEMORY_TEMPLATES_DIR = "/app/memory-templates";
 
 /**
@@ -34,9 +34,14 @@ export const OPENVIKING_MEMORY_TEMPLATES_DIR = "/app/memory-templates";
  */
 export const OPENVIKING_MEMORY_TYPES = Object.freeze([
   "profile", "preferences", "entities", "corrections", "project_context", "decisions", "follow_ups", "project_facts",
+  // 2026-10-25 (owner decision 6): `observations` is a choice the person made in a request and never called a rule, kept until a second
+  // conversation shows it (`nativeMemoryObservations.mjs`) — never a fact, never read back; `recent_work` is what a project was last
+  // worked on, at task level, three lines at most (the project card's 「最近在做」).
+  "observations", "recent_work",
 ]);
-/** Shared project extraction never writes a person's profile or preferences. */
-export const OPENVIKING_PROJECT_MEMORY_TYPES = Object.freeze(OPENVIKING_MEMORY_TYPES.filter(type => !['profile', 'preferences'].includes(type)));
+/** Shared project extraction never writes a person's profile or preferences, nor `observations` — a person's own choice noted until a
+ *  second conversation of theirs promotes it to a preference, which a shared project's namespace does not keep. */
+export const OPENVIKING_PROJECT_MEMORY_TYPES = Object.freeze(OPENVIKING_MEMORY_TYPES.filter(type => !['profile', 'preferences', 'observations'].includes(type)));
 
 /** Where the account-shared skills are installed; a compile names one as `<root>/<name>`. */
 export const OPENVIKING_SKILLS_ROOT = "viking://agent/skills";

@@ -1,7 +1,7 @@
 /**
  * Features the platform used to have and no longer does, each named by the literal strings a lesson uses for it.
  *
- * Hidden knowledge: a learned method or a capability handbook is text the model is told to follow, and it was learnt from a
+ * Hidden knowledge: a learned method (and, until 2026-10-25, a capability handbook) is text the model is told to follow, and it was learnt from a
  * run, so it carries whatever the run's platform was doing at the time. The 2026-09-17 ruling deleted six files a clinical
  * evidence package used to keep about itself and the checks that read them, and 2026-10-10 deleted the paired evaluation of
  * a method; handbooks and methods learnt before those days kept telling runs to write the files, to stay within a count of
@@ -64,7 +64,7 @@ export function retiredFeaturesIn(text) {
 }
 
 /**
- * Every text of a learned method or handbook a reader of it (the model) is given: the frontmatter's name, description,
+ * Every text of a learned method a reader of it (the model) is given: the frontmatter's name, description,
  * routing hint and metadata, the body, the attached files, and the line a researcher reads (`display`). One function so the
  * write-time refusal and the sweep read the same thing.
  * @param {{ frontmatter?: any, body?: unknown, files?: Record<string, unknown> | null, display?: any } | null | undefined} method
@@ -81,7 +81,7 @@ export function methodTextOf(method) {
 }
 
 /**
- * The retired features a learned method or handbook names, anywhere a reader of it would meet them.
+ * The retired features a learned method names, anywhere a reader of it would meet them.
  * @param {Parameters<typeof methodTextOf>[0]} method
  * @returns {{ feature: string, since: string, term: string }[]}
  */

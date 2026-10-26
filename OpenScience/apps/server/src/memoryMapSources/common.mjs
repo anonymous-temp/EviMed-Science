@@ -144,7 +144,7 @@ export function requestMemo() {
  * @property {string[]} [missing] the parts of this source that could not be read while the rest could
  *
  * One source of the map. `name` is what `missing` says when the source could not be read; `applies` lets a source stand aside
- * (an account on the native engine has no PostgreSQL records; one that has no database has no documents), and a source that stands
+ * (a deployment without the memory engine has no memory files; one that has no database has no documents), and a source that stands
  * aside is not missing — it was never asked. `read` returns its contribution or throws; a throw costs that source's part of the
  * map and nothing else (principle 19).
  *
@@ -155,7 +155,6 @@ export function requestMemo() {
  * @property {{ from: string | null, to: string, unit: "day" | "week" | "month" }} range
  * @property {string} timeZone
  * @property {Date} now
- * @property {"postgres" | "native"} engine which store holds this account's memories
  * @property {string | null} focus
  * @property {<T>(key: string, read: () => Promise<T>) => Promise<T>} memo
  *

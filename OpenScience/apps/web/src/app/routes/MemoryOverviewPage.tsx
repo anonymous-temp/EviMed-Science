@@ -74,7 +74,6 @@ function Overview() {
   const reloadAll = useCallback(() => { map.reload(); received.reload(); learned.reload(); handover.reload(); }, [map, received, learned, handover]);
 
   const doc: OverviewDoc | null = map.data;
-  const native = doc?.engine === "native";
 
   /** The state of a card the map's document answers for: not yet read, not readable (a source failed), or read. */
   const stateOf = (part: ReadPart): CardState => (!doc ? (map.failed ? "error" : "loading") : readable(doc, part) ? "content" : "error");
@@ -125,7 +124,7 @@ function Overview() {
   return (
     <MemoryFrame
       tab="overview" map documentTitle="记忆胶囊总览" toolbar={null}
-      actions={<MemoryHeaderActions native={native} onChanged={reloadAll} drawer={header} onDrawer={setHeader} />}
+      actions={<MemoryHeaderActions onChanged={reloadAll} drawer={header} onDrawer={setHeader} />}
       headline={headline ? { parts: headline, id: "memory-overview-headline" } : undefined}
     >
       <div className="space-y-6">
@@ -143,7 +142,7 @@ function Overview() {
             />
           ) }],
           [
-            { key: "you", node: <AboutYouCardView state={stateOf("memories")} card={you} native={native} errorMessage={failure} onRetry={map.reload} onOpen={open} onRemember={() => setHeader({ kind: "remember" })} onChat={toChat} /> },
+            { key: "you", node: <AboutYouCardView state={stateOf("memories")} card={you} errorMessage={failure} onRetry={map.reload} onOpen={open} onRemember={() => setHeader({ kind: "remember" })} onImportFromAssistant={() => setHeader({ kind: "import" })} /> },
             { key: "projects", node: <ProjectsCardView state={stateOf("projects")} card={projects} errorMessage={failure} onRetry={map.reload} onChat={toChat} /> },
           ],
           [

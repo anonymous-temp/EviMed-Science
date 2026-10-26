@@ -114,15 +114,47 @@ export const FRONTIER_EVENT_DIGEST_INSTRUCTIONS = [
  */
 
 /** @param {unknown} value @param {number} max */
-function clip(value, max) {
+export function clip(value, max) {
   const text = String(value ?? "").replace(/\s+/g, " ").trim();
   return [...text].length > max ? `${[...text].slice(0, max).join("")}…` : text;
 }
 
 /** The day a report was published in the feed's zone, or 「未知」. @param {unknown} value @param {string} timeZone */
-function day(value, timeZone) {
+export function day(value, timeZone) {
   const time = value instanceof Date ? value.getTime() : Date.parse(String(value ?? ""));
   return Number.isFinite(time) ? agendaLocalDate(timeZone, new Date(time)) : "未知";
+}
+
+/**
+ * The words and character pairs two texts are compared by when there is no vector (AIHOT `lexicalSimilarity`, which compares
+ * character pairs only — enough for Chinese text, but any two English sentences share most of their letter pairs): a run of
+ * Chinese characters gives its character pairs, a run of Latin letters or digits gives itself as one word, lower-cased.
+ * @param {unknown} text @returns {Set<string>}
+ */
+export function frontierTextTokens(text) {
+  const tokens = new Set();
+  for (const run of String(text ?? "").toLowerCase().match(/[\u3400-\u9fff\uf900-\ufaff]+|[a-z0-9]+/g) ?? []) {
+    if (/^[a-z0-9]+$/.test(run)) {
+      if (run.length >= 2) tokens.add(run);
+      continue;
+    }
+    const characters = [...run];
+    if (characters.length === 1) tokens.add(run);
+    for (let index = 0; index + 1 < characters.length; index += 1) tokens.add(characters[index] + characters[index + 1]);
+  }
+  return tokens;
+}
+
+/**
+ * How much of the shorter of two token sets the other holds (0–1; AIHOT's overlap over the smaller set).
+ * @param {Set<string>} left @param {Set<string>} right
+ */
+export function frontierTextOverlap(left, right) {
+  if (!left.size || !right.size) return 0;
+  const [small, large] = left.size <= right.size ? [left, right] : [right, left];
+  let shared = 0;
+  for (const token of small) if (large.has(token)) shared += 1;
+  return shared / small.size;
 }
 
 /**

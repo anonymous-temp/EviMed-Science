@@ -719,3 +719,13 @@ class WholeRecord(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReportItemsTests(unittest.TestCase):
+    def test_a_closing_note_after_unmarked_items_is_not_an_item(self):
+        # Production, 2026-10-25 (capsule-longitudinal S1): three unmarked items and a question to the person after them.
+        reply = "本周周报如下：\n\n完成敏感性分析\n\n与统计师讨论缺失值处理\n\n下周投会议摘要\n\n如果想把方案写进第二条，把方案告诉我就加上。"
+        self.assertEqual(checks._report_items(reply), ["完成敏感性分析", "与统计师讨论缺失值处理", "下周投会议摘要"])
+
+    def test_items_that_end_in_full_stops_keep_every_line(self):
+        self.assertEqual(len(checks._report_items("周报\n做完了A。\n讨论了B。\n下周C。\n四是D。")), 4)

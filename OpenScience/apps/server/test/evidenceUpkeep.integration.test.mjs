@@ -1007,18 +1007,13 @@ test("a changed source reaches the result impact path and the memory labels from
     const cited = index % 2 ? `https://doi.org/${doi.toUpperCase()}` : doi;
     await documents.put(id, "result-version", "rv_1", { recordType: "result-version", versionId: "rv_1", inputs: [{ kind: "source", id: index === 21 ? "10.1000/another.work" : cited }] }, { expectedRevision: 0, projectId: "p1" });
   }
-  await db.query("CREATE SCHEMA IF NOT EXISTS evimed_memory");
-  await db.query("CREATE TABLE IF NOT EXISTS evimed_memory.record_sources(user_id text, record_id text, source_type text, source_id text)");
-  const rememberer = `up_mem_${counter}`;
-  await db.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,$1,'development')", [rememberer]);
-  await db.query("INSERT INTO evimed_memory.record_sources(user_id,record_id,source_type,source_id) VALUES($1,'m1','doi',$2)", [rememberer, doi]);
   await sourceChanges.record(doi, { kind: "retraction", noticeIdentifier: "10.1000/downstream.notice" }, { assertedBy: "crossref" });
-  // 21 accounts name the work (22 minus the one that cites another) and one holds a memory of it: 22 to ask, 20 a tick.
+  // 21 accounts name the work (22 minus the one that cites another): 21 to ask, 20 a tick.
   assert.equal(await upkeep.downstreamTick(), 20);
   assert.equal(impacts.length, 20);
   const position = (await rows("SELECT cursor::int AS cursor,payload FROM evimed_frontier.evidence_upkeep_state WHERE name='downstream'"))[0];
   assert.deepEqual(position.payload, { offset: 20 }, "the page is not left behind until every account of it was asked");
-  assert.equal(await upkeep.downstreamTick(), 2);
+  assert.equal(await upkeep.downstreamTick(), 1);
   const finished = (await rows("SELECT cursor::int AS cursor,payload FROM evimed_frontier.evidence_upkeep_state WHERE name='downstream'"))[0];
   assert.deepEqual(finished.payload, {});
   assert.ok(finished.cursor > position.cursor, "now the position moved past the page");
@@ -1027,8 +1022,7 @@ test("a changed source reaches the result impact path and the memory labels from
   assert.ok(!asked.has(accounts[21]), "the account that cites another work was not");
   assert.deepEqual(new Set(impacts.map((call) => call[1])), new Set(["p1"]));
   assert.ok(impacts.every((call) => call[3] > 0 && call[2] === 0), "each is given the position of the feed it is to read from, and a bounded page");
-  assert.deepEqual(labels.filter((call) => call[0] === rememberer), [[rememberer, "-", 0]], "an account with only a memory of it is asked for the labels, with no project");
-  assert.ok(labels.length >= 22, "the memory labels are driven for the accounts with results too");
+  assert.ok(labels.length >= 21, "the memory labels are driven for the accounts with results too");
   const again = impacts.length;
   assert.equal(await upkeep.downstreamTick(), 0);
   assert.equal(impacts.length, again, "nothing new on the feed, nothing asked");

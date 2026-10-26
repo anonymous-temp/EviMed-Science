@@ -33,7 +33,7 @@ test("through the server: new bytes for a held file label what read the old docu
     const first = await app.sourceService.register(user.id, manifest());
     const documents = app.sourceService.documents;
 
-    // A result that read the first version's exact bytes, a memory that names its id, and one that names a document nobody changes.
+    // A result that read the first version's exact bytes (the memory files that name a document are the engine's, labelled by `NativeMemoryWorker.labelSource` and tested with it; this fixture composes no engine).
     const versionId = `rv_${hex("7")}`;
     await documents.put(user.id, "result-version", versionId, { recordType: "result-version", versionId, artifactId: `ra_${hex("6")}`, projectId: project.id,
       path: "analysis/trial-summary.md", digest: hex("5"), size: 10, mimeType: "text/markdown", capturedAt: "2026-10-04T00:00:00.000Z",
@@ -49,18 +49,12 @@ test("through the server: new bytes for a held file label what read the old docu
       const id = `rv_${hex(suffix)}`;
       await documents.put(user.id, "result-version", id, { ...originalResult.payload, versionId: id, inputs: [input] }, { expectedRevision: 0, projectId: project.id });
     }
-    const record = (key, links) => app.researchMemory.upsertRecord(user.id, { scope: "project", scopeId: project.id, kind: "project_fact", key,
-      value: `${key} finding`, summary: key, origin: "explicit", status: "active", confidence: 1, importance: 0.7, sensitive: false }, null, { sourceLinks: links });
-    const resting = await record("project.trial", [{ type: "knowledge_source", id: first.source.id }]);
-    const independent = await record("project.other", [{ type: "knowledge_source", id: `src_${hex("d", 32)}` }]);
     const impacts = async () => (await documents.list(user.id, "result-impact", { projectId: project.id })).items;
-    const stateOf = async record_ => (await app.researchMemory.sourceLinks(user.id, record_.id))[0].state;
 
     // The same bytes again, and a different file, change nothing a result or a memory rests on.
     await app.sourceService.register(user.id, manifest({ path: "knowledge-base/trial-copy.txt" }));
     await app.sourceService.register(user.id, manifest({ path: "knowledge-base/another.txt", sha256: sha("another file") }));
     assert.deepEqual(await impacts(), []);
-    assert.equal(await stateOf(resting), "current");
 
     const second = await app.sourceService.register(user.id, manifest({ sha256: sha("trial v2"), size: 12 }));
     assert.equal(second.duplicate, false);
@@ -95,10 +89,7 @@ test("through the server: new bytes for a held file label what read the old docu
     assert.equal(found[0].payload.sourceStatus.updates[0].kind, "replaced");
     assert.equal(found[0].payload.recomputed, false, "nothing was rerun");
     assert.equal(found[0].payload.continuation.status, "awaiting_user", "no agenda produced it, so the researcher chooses");
-    assert.deepEqual(found[0].payload.affected.memories.items, []);
-    assert.equal(await stateOf(resting), "current");
-    assert.equal(await stateOf(independent), "current");
-    assert.equal((await app.researchMemory.getRecord(user.id, resting.id)).version, resting.version, "labelling moved no version of the memory");
+    assert.equal(found[0].payload.affected.memories.status, "none", "no memory engine is composed here: there are no memory files to name the document");
 
     const notices = (await app.notificationService.list(user.id, { projectId: project.id })).items;
     assert.equal(notices.length, 1);

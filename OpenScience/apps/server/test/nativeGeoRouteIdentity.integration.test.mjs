@@ -8,7 +8,7 @@ import test from 'node:test';
 import WebSocket, { WebSocketServer } from 'ws';
 import { nativeInputText } from '@evimed/harness-port';
 import { createWebApiApp } from '../src/server.mjs';
-import { NativeHandbookContext } from '../src/nativeHandbookContext.mjs';
+import { NativeInputRoute } from '../src/nativeInputRoute.mjs';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? '';
@@ -103,13 +103,13 @@ async function fixture(t, wire, { scoped = false } = {}) {
     ws.send(JSON.stringify({ type: 'open', streamId: `request-${++stream}`, endpoint: 'session/prompt', payload: { args: { request } } }));
     const [raw] = await reply, value = JSON.parse(raw.toString());
     const closed = once(ws, 'close'); ws.close(); await closed; clients.delete(ws);
-    return { status: value.type === 'item' ? 200 : value.error?.code === 'handbook_request_invalid' ? 400 : 503, body: JSON.stringify(value) };
+    return { status: value.type === 'item' ? 200 : value.error?.code === 'native_route_request_invalid' ? 400 : 503, body: JSON.stringify(value) };
   };
   const planContexts = app.geo.service.planContexts;
   const stage = requestKey => planContexts.stage(user, id, { requestKey, sessionId, mode: 'strategy' });
   const prompt = (requestId, selected = null, mode = 'queue') => ({ requestId, sessionId, mode, content: [{ type: 'text', text: '/geo-strategy Preserve this selected input.' }], ...(selected ? { geoPlanContext: { referenceId: selected.referenceId } } : {}) });
   const state = async selected => (await planContexts.documents.get(user.id, 'geo-plan-context', selected.referenceId)).payload.state;
-  const reader = new NativeHandbookContext({ route: async () => ({}), select: async () => null, budget: () => 0, allowed: async () => false });
+  const reader = new NativeInputRoute({ route: async () => ({}) });
   return { app, user, project, sessionId, forwarded, planContexts, stage, prompt, send, state, reader };
 }
 
@@ -119,7 +119,7 @@ for (const wire of ['http', 'mux']) test(`native ${wire} selected identity bound
   for (const [index, requestId] of invalidIds.entries()) {
     const selected = await f.stage(`invalid-${index}`), count = f.forwarded.length;
     const refused = await f.send(f.prompt(requestId, selected));
-    assert.equal(refused.status, 400, refused.body); assert.match(refused.body, /handbook_request_invalid/);
+    assert.equal(refused.status, 400, refused.body); assert.match(refused.body, /native_route_request_invalid/);
     assert.equal(f.forwarded.length, count, 'unsupported selected identities never reach the kernel');
     assert.equal(await f.state(selected), 'staged', 'identity validation precedes durable binding');
     assert.equal((await f.send(f.prompt(requestId))).status, 200, 'ordinary unsupported identities retain existing advisory forwarding');
@@ -136,10 +136,10 @@ for (const wire of ['http', 'mux']) test(`native ${wire} selected identity bound
 
 for (const wire of ['http', 'mux']) test(`native ${wire} selected requests cannot silently lose their route snapshot or verified lookup`, options, async t => {
   const f = await fixture(t, wire);
-  const originalPrepare = NativeHandbookContext.prototype.prepare;
+  const originalPrepare = NativeInputRoute.prototype.prepare;
   const missing = await f.stage('missing-snapshot'), count = f.forwarded.length;
   let snapshot = null;
-  NativeHandbookContext.prototype.prepare = async function (project, request) {
+  NativeInputRoute.prototype.prepare = async function (project, request) {
     return request?.requestId === 'missing-snapshot' ? snapshot : originalPrepare.call(this, project, request);
   };
   try {
@@ -150,7 +150,7 @@ for (const wire of ['http', 'mux']) test(`native ${wire} selected requests canno
       assert.equal(f.forwarded.length, count); assert.equal(await f.state(missing), 'bound', 'the failed snapshot still owns exactly this retriable input');
       assert.equal(await f.app.pluginService.hasPendingPrompts(f.project), false, 'a definitive snapshot refusal releases prompt admission');
     }
-  } finally { NativeHandbookContext.prototype.prepare = originalPrepare; }
+  } finally { NativeInputRoute.prototype.prepare = originalPrepare; }
   assert.equal((await f.send(f.prompt('missing-snapshot', missing))).status, 200, 'the same exact request can retry after a definitive pre-forward failure');
   const originalLookup = f.planContexts.routingInputForRequest;
   for (const result of ['missing', 'foreign']) {
@@ -196,7 +196,7 @@ for (const wire of ['http', 'mux']) test(`native ${wire} page frame of a one-per
   // The identity bound is the same: an unsupported selected identity is refused before binding and never forwarded.
   const invalid = await f.stage('page-invalid'), count = f.forwarded.length;
   const refused = await f.send(f.prompt('bad\nrequest', invalid));
-  assert.equal(refused.status, 400, refused.body); assert.match(refused.body, /handbook_request_invalid/);
+  assert.equal(refused.status, 400, refused.body); assert.match(refused.body, /native_route_request_invalid/);
   assert.equal(await f.state(invalid), 'staged'); assert.equal(f.forwarded.length, count);
   assert.equal(await f.app.pluginService.hasPendingPrompts(f.project), false, 'a refusal releases the admission');
   // The frame is the conversation's: a prompt naming another session is refused and never forwarded.

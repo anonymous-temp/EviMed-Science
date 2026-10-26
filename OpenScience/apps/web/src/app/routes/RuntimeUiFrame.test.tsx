@@ -1454,6 +1454,15 @@ describe("the run behind the task, in the frame", () => {
     expect(JSON.parse(screen.getByTestId("state").textContent!)).toMatchObject({ forkedFrom: "session-a", conversationProjectId: "default" });
   });
 
+  it("opens the event or the item a conversation came from when its chip is pressed, and nothing that is not a public id", async () => {
+    const { frame } = await openTask();
+    emit(frame, { type: "evimed.runtime-ui.open-item", seq: 3, itemId: "../../account" });
+    emit(frame, { type: "evimed.runtime-ui.open-item", seq: 4, itemId: "K7Q2M9X4T1B8" });
+    expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-a");
+    emit(frame, { type: "evimed.runtime-ui.open-item", seq: 5, itemId: "k7q2m9x4t1b8" });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/frontier/items/k7q2m9x4t1b8"));
+  });
+
   it("opens a file the frame names in the shell's reader, and nothing it could spell as an escape", async () => {
     const { frame } = await openTask();
     emit(frame, { type: "evimed.runtime-ui.open-artifact", seq: 3, runId: "run-1", path: "../../etc/passwd" });

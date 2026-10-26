@@ -1,14 +1,12 @@
-// A project subscribed to an evidence zone recalls its published cards as index-only reference context, and a memory that names a card
-// or a frontier item hears when the zone or the feed takes it back (evidence-flywheel F18 and F19, 2026-10-05), against PostgreSQL.
+// A project subscribed to an evidence zone recalls its published cards as index-only reference context, and recalls no card
+// the zone has taken back (evidence-flywheel F18, 2026-10-05), against PostgreSQL.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
-import { EvidenceZoneSubscriptions, createEvidenceLinkStates, forgetEvidenceCardColumns } from "../src/evidenceZoneSubscription.mjs";
-import { KnowledgeChangeService } from "../src/knowledgeChange.mjs";
+import { EvidenceZoneSubscriptions, forgetEvidenceCardColumns } from "../src/evidenceZoneSubscription.mjs";
 import { migrateEvidenceZones } from "../src/evidenceZonePersistence.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
-import { ResearchMemoryStore } from "../src/researchMemory.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) { const parsed = new URL(url); assert.ok(["127.0.0.1", "localhost", "::1"].includes(parsed.hostname)); assert.match(parsed.pathname, /evimed_test/); }
@@ -19,7 +17,7 @@ const owner = `zs_owner_${tag}`;
 const reader = `zs_reader_${tag}`;
 const stranger = `zs_stranger_${tag}`;
 const QUOTE = "达比加群酯在非瓣膜性房颤中降低卒中风险";
-/** @type {any} */ let database; /** @type {any} */ let documents; /** @type {any} */ let subscriptions; /** @type {any} */ let memory;
+/** @type {any} */ let database; /** @type {any} */ let documents; /** @type {any} */ let subscriptions;
 const zones = []; let published; let draft; let card;
 
 before(async () => {
@@ -30,7 +28,6 @@ before(async () => {
   for (const project of ["p1", "p2"]) await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,$2,'Subscribed',1048576)", [reader, project]);
   documents = new ProductDocuments(database);
   subscriptions = new EvidenceZoneSubscriptions({ database, documents, enabled: true, maxPerProject: 2, maxItems: 3 });
-  memory = new ResearchMemoryStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database });
   published = `ez_${hex32()}`; draft = `ez_${hex32()}`; card = `ec_${hex32()}`;
   await database.query("INSERT INTO evimed_frontier.evidence_zones(id,user_id,title,state) VALUES($1,$2,'房颤抗凝','published'),($3,$2,'未发布的专区','draft')", [published, owner, draft]);
   await database.query(`INSERT INTO evimed_frontier.evidence_cards(id,zone_id,user_id,title,subtype,summary,sources,state,content,claims,producer)
@@ -110,33 +107,17 @@ test("with the switch off nothing is read and subscribing is the module's own no
   assert.deepEqual(await off.recall(reader, "p1", "房颤抗凝治疗达比加群酯的证据"), []);
 });
 
-test("a card the zone withdraws leaves the recall, and labels the memory that names it; a frontier item taken back does the same", options, async () => {
+test("a card the zone withdraws leaves the recall", options, async () => {
   await subscriptions.subscribe(reader, "p1", published).catch(() => null);
-  const fact = (key, links) => memory.upsertRecord(reader, { scope: "user", scopeId: null, kind: "preference", key, value: `${key} 的内容`, summary: key,
-    origin: "explicit", status: "active", confidence: 1, importance: 0.7, sensitive: false }, null, { sourceLinks: links });
-  const item = "w4k8s2n6v1qa";
-  const itemStates = new Map();
-  const knowledge = new KnowledgeChangeService({ memory, evidence: { cardStates: createEvidenceLinkStates(database).cardStates, itemStates: async (ids) => new Map(ids.filter((id) => itemStates.has(id)).map((id) => [id, itemStates.get(id)])) } });
-  const resting = await fact("preference.rests_on_card", [{ type: "evidence_card", id: card }]);
-  const onItem = await fact("preference.rests_on_item", [{ type: "frontier_item", id: item }]);
-  const independent = await fact("preference.independent", [{ type: "frontier_item", id: "n7m2x9c4b1ze" }]);
-  const states = async (record) => (await memory.sourceLinks(reader, record.id)).map((link) => [link.type, link.state, link.stateReason]);
-  assert.deepEqual(await knowledge.sweepEvidenceLinks({ ownerId: reader }), { checked: 3, labelled: 0 }, "a current card and an item with no row say nothing");
-  assert.deepEqual(await states(resting), [["evidence_card", "current", ""]]);
-
   // The column belongs to the zone's upkeep and may not exist on this database: it was read as `current` until now.
   await database.query("ALTER TABLE evimed_frontier.evidence_cards ADD COLUMN IF NOT EXISTS withdrawn jsonb");
   forgetEvidenceCardColumns(database);
-  await database.query("UPDATE evimed_frontier.evidence_cards SET withdrawn='{\"reason\":\"撤回\"}'::jsonb WHERE id=$1", [card]);
-  itemStates.set(item, { state: "published", flags: ["retracted"] });
-  assert.deepEqual(await subscriptions.recall(reader, "p1", "房颤抗凝治疗达比加群酯的证据"), [], "a withdrawn card is no longer recalled");
-  const swept = await knowledge.sweepEvidenceLinks({ ownerId: reader });
-  assert.equal(swept.labelled, 2);
-  assert.deepEqual(await states(resting), [["evidence_card", "retracted", "card_withdrawn"]], "the label a retracted DOI gives");
-  assert.deepEqual(await states(onItem), [["frontier_item", "retracted", "item_retracted"]]);
-  assert.deepEqual(await states(independent), [["frontier_item", "current", ""]], "found by the recorded link and by nothing else");
-  assert.equal((await knowledge.sweepEvidenceLinks({ ownerId: reader })).labelled, 0, "idempotent");
-  // A superseded card is a change, never a retraction; a card of another account's memory is not touched by this account's sweep.
-  await database.query("UPDATE evimed_frontier.evidence_cards SET withdrawn=NULL WHERE id=$1", [card]);
-  assert.equal((await knowledge.sweepEvidenceLinks({ ownerId: stranger })).labelled, 0);
+  try {
+    await database.query("UPDATE evimed_frontier.evidence_cards SET withdrawn='{\"reason\":\"撤回\"}'::jsonb WHERE id=$1", [card]);
+    assert.deepEqual(await subscriptions.recall(reader, "p1", "房颤抗凝治疗达比加群酯的证据"), [], "a withdrawn card is no longer recalled");
+  } finally {
+    await database.query("UPDATE evimed_frontier.evidence_cards SET withdrawn=NULL WHERE id=$1", [card]);
+  }
+  // (Until 2026-10-25 a memory record that named the card, or a frontier item taken back, was labelled by an hourly sweep over the records
+  // the legacy engine kept; a memory file cannot name a card, and the sweep went with that engine.)
 });

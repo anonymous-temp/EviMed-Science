@@ -42,7 +42,7 @@ test("the distillation scenarios are well formed and cover what the capability i
   const scenarios = incident.scenarios.distillation;
   assert.equal(new Set(scenarios.map((/** @type {any} */ item) => item.name)).size, scenarios.length);
   for (const item of scenarios) {
-    assert.ok(["repair_accepted", "correction", "delivered", "routine"].includes(item.trigger), item.name);
+    assert.ok(["repair_accepted", "correction", "routine"].includes(item.trigger), item.name);
     assert.ok(["researcher", "reviewer", "run"].includes(item.signal), item.name);
     assert.ok(item.lesson.length > 40, item.name);
     assert.ok(item.expect && typeof item.expect === "object", item.name);

@@ -42,21 +42,36 @@ export function rememberMemory(text: string, projectId?: string | null) {
   return productRequest<{ pending: WebPendingMemory }>("/memory/remember", "POST", { text, ...(projectId ? { projectId } : {}) });
 }
 
+/** One statement the import read out of the pasted text, for the person to keep or leave. */
+export interface MemoryImportStatement {
+  id: string;
+  text: string;
+  /** `on_request`: private (health, money, a child) — kept only when the person asks in so many words, so it is offered unticked. */
+  sensitivity: "ordinary" | "on_request";
+  ticked: boolean;
+}
+
+/** What the import made of the pasted text. `leftOut` counts the lines that are never kept (a secret, an identity number, someone else's details). */
+export interface MemoryImportOffer {
+  id: string;
+  statements: MemoryImportStatement[];
+  leftOut: number;
+}
+
+/** 「从其他 AI 导入」, step one: the pasted text (8,000 characters at most) is read into statements the person can review. */
+export function offerMemoryImport(text: string) {
+  return productRequest<MemoryImportOffer>("/memory/import", "POST", { text });
+}
+
+/** Step two: save the statements the person kept (`ids`; absent, the ones the offer ticked). */
+export function saveMemoryImport(id: string, ids: readonly string[]) {
+  return productRequest<{ saved: number }>(`/memory/import/${encodeURIComponent(id)}/confirm`, "POST", { ids: [...ids] });
+}
+
 /** Undo the last change to one memory; undoing its creation removes it. */
 export function undoMemoryRecord(id: string, expectedVersion: number) {
   return productRequest<{ undone: "restored" | "removed"; record: WebStructuredMemory | null; restored: WebStructuredMemory[] }>(
     `/memory/records/${encodeURIComponent(id)}/undo`, "POST", { expectedVersion },
-  );
-}
-
-/**
- * 「以这条为准」: two memories disagree and the researcher says which one holds.
- * The other is replaced by it, never deleted, and its undo puts the
- * disagreement back.
- */
-export function settleMemoryConflict(keepId: string, otherId: string) {
-  return productRequest<{ kept: WebStructuredMemory; superseded: WebStructuredMemory }>(
-    "/memory/conflicts/resolve", "POST", { keepId, otherId },
   );
 }
 
@@ -196,6 +211,8 @@ export interface ReceivedCapsule {
   sharedFrom?: { label: string; authorName: string | null; channel: string | null } | null;
   /** Taken down by its author or the operator: out of force everywhere, and never put back. */
   takenDown?: { by: "author" | "operator"; at: string; reason: string | null } | null;
+  /** One of the platform's own starter packs (「EviMed 证据中心」): on every account's shelf, switched on until the person switches it off. */
+  official?: { packId: string } | null;
 }
 
 export function fetchReceivedCapsules() {

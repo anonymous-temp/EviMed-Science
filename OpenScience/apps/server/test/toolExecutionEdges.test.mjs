@@ -216,37 +216,59 @@ test("the shape is the one the real normalizer produces, not the one this file a
     [["search", "fetch", ["doi:10.1001/abc"]]]);
 });
 
-/* ------------------------------------------------------------- golden traces */
+/* ------------------------------------------------------------- tool traces */
 
-test("the golden trace is the run's own call sequence, with results reduced to digests", async () => {
-  const { goldenTraces } = await import("../src/toolExecutionEdges.mjs");
-  const traces = goldenTraces({
+test("the tool trace is the run's own call sequence: the calls that completed, in the order they completed, with their turn and nothing of their data", async () => {
+  const { toolTraces } = await import("../src/toolExecutionEdges.mjs");
+  const traces = toolTraces({
     runId: "run_1",
     sessions: [session("adr-analysis", [
       call("search", { query: "aspirin" }, { hits: [{ doi: "10.1001/abc" }], total: 1 }),
+      call("flaky", { x: 1 }, "boom", { status: "failed", error: "boom" }),
       call("fetch", { doi: "10.1001/abc" }, "plain text, not JSON"),
     ])],
   });
   assert.equal(traces.length, 1);
   assert.equal(traces[0].capability, "adr-analysis");
   assert.equal(traces[0].runId, "run_1");
-  assert.deepEqual(traces[0].steps.map((step) => [step.tool, step.turn]), [["search", 0], ["fetch", 1]]);
-  assert.deepEqual(traces[0].steps[0].args, { query: "aspirin" });
-  // Digests, never the result text: a trace is committed to a corpus and tool
-  // results carry retrieved source material.
-  for (const step of traces[0].steps) {
-    assert.match(step.returnDigest, /^sha256:[a-f0-9]{64}$/);
-    assert.ok(!JSON.stringify(step).includes("10.1001/abc") || step.tool === "fetch");
-  }
-  assert.deepEqual(traces[0].steps[0].outputKeys, ["hits", "total"], "the shape a replay can be checked against");
-  assert.deepEqual(traces[0].steps[1].outputKeys, [], "a non-JSON result has no keys, and claiming some would be a lie");
+  assert.deepEqual(traces[0].steps, [{ turn: 0, tool: "search" }, { turn: 2, tool: "fetch" }], "a call that failed is not a step of the work");
+  assert.ok(!JSON.stringify(traces).includes("aspirin") && !JSON.stringify(traces).includes("10.1001"), "the arguments and results of a call are the person's data and are not kept");
 });
 
-test("a trace names its capability or is not written, and the same run twice digests the same", async () => {
-  const { goldenTraces } = await import("../src/toolExecutionEdges.mjs");
-  assert.deepEqual(goldenTraces({ runId: "run_1", sessions: [{ sessionId: "root", transcript: { messages: [] } }] }), []);
-  assert.deepEqual(goldenTraces({ runId: "", sessions: [] }), []);
-  const once = goldenTraces({ runId: "r", sessions: [session("c", [call("a", { x: 1 }, { y: 2 })])] });
-  const twice = goldenTraces({ runId: "r", sessions: [session("c", [call("a", { x: 1 }, { y: 2 })])] });
-  assert.deepEqual(once, twice, "a corpus artefact that changes between two reads of one run is not evidence");
+test("a session with no capability has a trace too, a session with no completed call has none, and the same run twice gives the same trace", async () => {
+  const { toolTraces } = await import("../src/toolExecutionEdges.mjs");
+  const root = { sessionId: "root", transcript: { messages: [{ role: "tool", turn: 0, parts: [call("web_search", {}, "ok")] }] } };
+  assert.deepEqual(toolTraces({ runId: "run_1", sessions: [root] }).map((trace) => [trace.capability, trace.sessionId, trace.steps.length]), [[null, "root", 1]]);
+  assert.deepEqual(toolTraces({ runId: "run_1", sessions: [{ sessionId: "root", transcript: { messages: [] } }] }), []);
+  assert.deepEqual(toolTraces({ runId: "", sessions: [root] }), []);
+  const once = toolTraces({ runId: "r", sessions: [session("c", [call("a", { x: 1 }, { y: 2 })])] });
+  const twice = toolTraces({ runId: "r", sessions: [session("c", [call("a", { x: 1 }, { y: 2 })])] });
+  assert.deepEqual(once, twice);
+});
+
+test("a stored trace is read back for its run, and a missing, foreign, old-schema or corrupt file is no trace rather than an error", async () => {
+  const { persistToolTraces, readToolTraces, tracePath, TOOL_TRACE_SCHEMA } = await import("../src/toolExecutionEdges.mjs");
+  const { mkdtemp, mkdir, rm, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const nodePath = await import("node:path");
+  const rootDir = await mkdtemp(nodePath.join(tmpdir(), "tool-trace-"));
+  try {
+    const project = { id: "p1", rootDir, metaDir: nodePath.join(rootDir, ".openscience") };
+    await mkdir(project.metaDir, { recursive: true });
+    assert.deepEqual(await readToolTraces(project, "run_1"), [], "no file");
+    const written = await persistToolTraces({ project, run: { id: "run_1" }, sessions: [session("adr-analysis", [call("search", {}, "ok"), call("fetch", {}, "ok")])] });
+    assert.equal(written.steps, 2);
+    const read = await readToolTraces(project, "run_1");
+    assert.deepEqual(read.map((trace) => [trace.capability, trace.steps.map((step) => step.tool)]), [["adr-analysis", ["search", "fetch"]]]);
+    assert.deepEqual(await readToolTraces(project, "run_2"), [], "another run's trace is not this one's");
+    await writeFile(tracePath(project, "run_1"), JSON.stringify({ schemaVersion: "tool-trace/1", runId: "run_1", traces: [{ capability: "c", steps: [{ tool: "a", args: {} }] }] }));
+    assert.deepEqual(await readToolTraces(project, "run_1"), [], "the arguments-and-digests schema that was written until 2026-10-25 is not read");
+    await writeFile(tracePath(project, "run_1"), JSON.stringify({ schemaVersion: TOOL_TRACE_SCHEMA, runId: "other", traces: [] }));
+    assert.deepEqual(await readToolTraces(project, "run_1"), [], "a file that names another run");
+    await writeFile(tracePath(project, "run_1"), "{ not json");
+    assert.deepEqual(await readToolTraces(project, "run_1"), []);
+    assert.deepEqual(await readToolTraces({ id: "p0" }, "run_1"), [], "a project with no storage is no trace");
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
 });

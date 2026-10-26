@@ -106,6 +106,9 @@ async function assertWorkspacePath(method, payload, workspaceRoot, project) {
 
 const WORKSPACE_PATH_METHODS = new Set(RUNTIME_UI_WORKSPACE_PATH_METHODS);
 
+/** The file-panel calls that are a person opening one file (`observeFileOpen`). */
+const FILE_OPEN_METHODS = new Set(["workspaceFiles/read", "workspaceFiles/readAll", "workspaceFiles/readBytes", "officeToPdf/render"]);
+
 /** Serve native Markdown media through the same descriptor-bound file boundary as the artifact reader.
  * @param {any} req @param {any} res @param {URL} url @param {any} project
  * @param {string} workspaceRoot @param {number} maxBytes @param {() => Promise<any>} revalidate
@@ -275,11 +278,12 @@ function assertNativeModelSelection(config, payload) {
  *   resolveDelegatedFrame?:((user:any,delegation:any,options?:{recheck?:any})=>Promise<{project:any,principal:any}>)|null,
  *   createDelegatedPolicy?:((identity:any)=>Promise<any>)|null,
  *   agentRuns?: { recordSteeredInput: (project: any, sessionId: string, requestId: string, text?: string) => Promise<any>, noteStopRequest?: (project: any, target: { sessionId?: string | null, runId?: string | null }) => Promise<string | null> } | null,
+ *   noteFileRead?: ((project: any, opened: { path: string }) => Promise<unknown>) | null,
  *   audit?: (event: string, detail: Record<string, any>) => Promise<void> }} deps
  * @returns {{ server: import('node:http').Server, releaseFrame: (frameId: string, userId: string) => Promise<number>, refreshFrameBinding: (renewed: any) => number, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
  */
 export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, balanceGate = null, authorizePrompt = null, preparePrompt = null, recordPromptActor = null, recordPromptAttendance = null, bindResultRevision = null, bindGeoPlan = null, prepareGeoPlan = null, prepareSelections = null, authorizeMutation = null,
-  agentRuns = null, managedBrowser = null, authorizeOpenSession = null, recordUploadAttempt = null, resolveDelegatedFrame = null, createDelegatedPolicy = null, audit = async () => {} }) {
+  agentRuns = null, managedBrowser = null, authorizeOpenSession = null, recordUploadAttempt = null, noteFileRead = null, resolveDelegatedFrame = null, createDelegatedPolicy = null, audit = async () => {} }) {
   /** The person's signed attendance receipt, written before the prompt is forwarded and never a reason to refuse it (review F5):
    * a missing receipt makes the turn read as unattended at worst. The writer counts its own failures
    * (`open_science_attendance_receipt_write_failures_total`). @param {any} user @param {any} project @param {any} request */
@@ -290,6 +294,25 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
   function pruneDelegatedPolicies() {
     for (const [id, value] of delegatedPolicies) if (value.expiresAt <= Date.now()) { value.policy.dispose(); delegatedPolicies.delete(id); }
   }
+  /**
+   * The researcher opening a file in the kernel's own file panel is a use of the run that delivered it (`LearningEvidence.noteFileUse`): the
+   * panel reads it with `workspaceFiles/read`, `readAll` or `readBytes`, or renders an Office file (`officeToPdf/render`). A read of an asset a
+   * preview embeds (`readBytes` with a `baseFile`), a listing and a stat are not an opening. Called once the call has passed the path
+   * confinement and immediately before it is forwarded, on both transports. An observation, not a check: it never refuses, nothing waits
+   * for it, and a failure is the evidence ledger's.
+   * @param {any} project @param {string | null} method @param {any} payload the native `{ args: { path } }`
+   */
+  function observeFileOpen(project, method, payload) {
+    if (!noteFileRead || !method || !FILE_OPEN_METHODS.has(method)) return;
+    const args = payload?.args;
+    if (typeof args?.path !== "string" || !args.path || (method === "workspaceFiles/readBytes" && args.options?.baseFile !== undefined)) return;
+    try {
+      const root = runtimeManager.runtimeWorkspaceRoot(project);
+      const relative = args.path.startsWith("/") ? path.posix.relative(root, args.path) : args.path;
+      void Promise.resolve(noteFileRead(project, { path: relative })).catch(() => {});
+    } catch { /* an observation never decides */ }
+  }
+
   /**
    * A message the researcher sends into a turn that is running is counted on
    * the run it steers, so the learning loop's correction trigger has an in-run
@@ -349,7 +372,8 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       }).catch(() => {});
     }
   }
-  /** Freeze the owned route and optional supplements before forwarding the native request. */
+  /** Freeze the route (and the methods) of an input before forwarding the native request, never changing it. A failure refuses nothing,
+   * except a selected GEO request whose route could not be preserved (`definitivelyRejected`). */
   async function prepareNativeContext(project, payload) {
     if (!preparePrompt) return;
     try {
@@ -357,8 +381,8 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       if (prepared?.supplementFailure) await audit("handbook.native.prepare", { userId: project.userId, projectId: project.id, code: prepared.supplementFailure }).catch(() => {});
     }
     catch (error) {
-      await audit("handbook.native.prepare", { userId: project.userId, projectId: project.id,
-        code: typeof error?.code === "string" ? error.code : "handbook_context_unavailable" }).catch(() => {});
+      await audit("native.route.prepare", { userId: project.userId, projectId: project.id,
+        code: typeof error?.code === "string" ? error.code : "native_route_unavailable" }).catch(() => {});
       if (error?.definitivelyRejected) throw error;
     }
   }
@@ -773,6 +797,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       try { fileBody = JSON.parse(raw.toString("utf8")); } catch { /* refused below */ }
       try {
         await assertWorkspacePath(method, fileBody?.payload, runtimeManager.runtimeWorkspaceRoot(project), project);
+        observeFileOpen(project, method, fileBody?.payload);
       } catch {
         // The same JSON refusal the deny list gives, not the notice page a
         // thrown error becomes: the caller is the kernel's own file panel,
@@ -961,6 +986,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
           if (scopedCarrier) await scopedCarrier.authorize(endpoint, payload, context);
           await authorizeMethod(config, project, endpoint, false, usageLedger, runtimeManager, balanceGate, payload);
           await assertWorkspacePath(endpoint, payload, runtimeManager.runtimeWorkspaceRoot(project), project);
+          observeFileOpen(project, endpoint, payload);
           if (endpoint === "session/selectModel") {
             assertNativeModelSelection(config, payload);
             await authorizePromptSession(project, payload);

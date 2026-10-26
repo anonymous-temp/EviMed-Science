@@ -1,5 +1,5 @@
-// 「与你相关」 against a real PostgreSQL and a real memory store (build spec D.4;
-// rebuilt 2026-09-24): a profile from the reader's memory of every provenance,
+// 「与你相关」 against a real PostgreSQL and the memory engine's files (build spec D.4; rebuilt
+// 2026-09-24, read from the engine's files since 2026-10-25): a profile from the reader's memory lines,
 // their recent questions and the items they starred or opened; every item of
 // the window ranked by phrase vectors, no phrase picking more than two; what
 // they hid pushing its near-duplicates out; each memory reason re-checked
@@ -7,12 +7,15 @@
 // basis without vectors; and a profile due at the next round once its inputs
 // change.
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { after, before, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { FRONTIER_RANKING, FrontierProfiles, encodeVector } from "../src/frontierProfiles.mjs";
-import { ResearchMemoryStore } from "../src/researchMemory.mjs";
+import { MemorySettingsStore } from "../src/memorySettings.mjs";
+import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
+import { NativeMemoryOverlay } from "../src/nativeMemoryOverlay.mjs";
+import { migrateNativeMemory } from "../src/nativeMemoryPersistence.mjs";
 import { insertSource } from "./helpers/frontierFixtures.mjs";
 import { insertComposedItem, resetFrontier, testEmbedder, vectorAt } from "./helpers/frontierComposeFixtures.mjs";
 
@@ -28,29 +31,64 @@ const suffix = randomUUID().slice(0, 8);
 const users = { reader: `reader_${suffix}`, paused: `paused_${suffix}`, empty: `empty_${suffix}`, fresh: `fresh_${suffix}` };
 const NOW = new Date("2026-09-22T04:00:00Z");
 const hoursAgo = (hours) => new Date(NOW.getTime() - hours * 3_600_000).toISOString();
-const CONFIG = { deepseekProviderEnabled: true, deepseekApiKey: "test-only-key", frontierAudience: "all", kbEmbeddingDimension: 1024 };
+// The fixture's scores (50-99) are drawn for a selection line of 82, the default until c3-select moved it to 64; the line is pinned here so the
+// pool of items "of 精选 quality" is the one the assertions count.
+const CONFIG = { deepseekProviderEnabled: true, deepseekApiKey: "test-only-key", frontierAudience: "all", kbEmbeddingDimension: 1024, frontierSelectThreshold: 82 };
 let database;
 let memory;
+let overlay;
 const memories = {};
 
-const evidence = (quote) => ({ sourceType: "conversation_message", sourceRef: "sessions/ses_1/messages/m1", quote, observedAt: NOW.toISOString(), weight: 1 });
+/**
+ * The memory engine's side, in memory: the files of each reader, and what the store would answer for them. A change is made the way the
+ * engine's store makes one — the file, and the overlay's record of it (its file row and a revision), which is what the profile's memory
+ * mark reads. The mark moving under the real store's operations is held in frontierProfileMark.integration.test.mjs.
+ */
+const held = new Map();
+const nativeMemory = {
+  configured: true,
+  failing: false,
+  async files(/** @type {string} */ userId) {
+    if (nativeMemory.failing) throw Object.assign(new Error("the engine is down"), { code: "memory_engine_unavailable" });
+    return structuredClone(held.get(userId) ?? []);
+  },
+};
+const lineId = (uri, text) => `native:${uri}#${createHash("sha256").update(text).digest("hex").slice(0, 12)}`;
+/** Write (or replace) one memory file of a reader, with one line of text; returns the profile's name for the line. */
+async function writeFile(userId, rel, type, text, { projectId = null } = {}) {
+  const uri = `viking://user/${userId}/memories/${rel}`;
+  const files = held.get(userId) ?? [];
+  const at = files.findIndex((file) => file.uri === uri);
+  const body = `- ${text}`;
+  const file = { uri, type, body, hash: createHash("sha256").update(body).digest("hex"), sensitive: false, projectId, modTime: NOW.toISOString() };
+  if (at >= 0) files[at] = file; else files.push(file);
+  held.set(userId, files);
+  await overlay.upsertFile({ userId, uri, memoryType: type, body, ...(projectId ? { projectId } : {}) });
+  await overlay.addRevision({ userId, uri, memoryType: type, change: at >= 0 ? "updated" : "added", actor: "engine", reason: "", before: null, after: body });
+  return { id: lineId(uri, text), uri, text };
+}
+/** Take a file out of a reader's memory, as a forget does: the file is gone and the overlay says so. */
+async function dropFile(userId, uri) {
+  const type = held.get(userId).find((file) => file.uri === uri).type;
+  held.set(userId, held.get(userId).filter((file) => file.uri !== uri));
+  await overlay.removeFile(userId, uri);
+  await overlay.addRevision({ userId, uri, memoryType: type, change: "deleted", actor: "user", reason: "forgotten", before: "x", after: null });
+}
 
 before(async () => {
   if (!databaseUrl) return;
   database = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 6, databaseConnectionTimeoutMs: 2_000 });
   await migrateFrontier(database, { dimension: 1024 });
   for (const id of Object.values(users)) await database.query("INSERT INTO evimed_control.users(id, name, auth_type) VALUES ($1, $1, 'development')", [id]);
-  memory = new ResearchMemoryStore({}, { database });
-  memories.project = await memory.upsertRecord(users.reader, { scope: "user", kind: "project_fact", key: "project.sglt2",
-    value: "正在做 SGLT2 抑制剂与心衰住院的 Meta 分析", summary: "正在做 SGLT2 抑制剂与心衰住院的 Meta 分析",
-    origin: "explicit", status: "active", confidence: 1, importance: 0.9 }, evidence("我在做 SGLT2 心衰的 Meta 分析"));
-  memories.profile = await memory.upsertRecord(users.reader, { scope: "user", kind: "profile", key: "profile.department",
-    value: "心内科主治医师", summary: "心内科主治医师", origin: "explicit", status: "active", confidence: 1, importance: 0.8 }, evidence("我是心内科的"));
-  memories.inferred = await memory.upsertRecord(users.reader, { scope: "user", kind: "preference", key: "preference.oncology",
-    value: "可能关注肿瘤免疫", summary: "可能关注肿瘤免疫", origin: "inferred", status: "active", confidence: 0.4, importance: 0.3 },
-  { sourceType: "assistant_message", sourceRef: "sessions/ses_1/messages/m2", quote: "肿瘤", observedAt: NOW.toISOString(), weight: 0.5 });
-  await memory.upsertRecord(users.paused, { scope: "user", kind: "profile", key: "profile.department", value: "肿瘤科", summary: "肿瘤科",
-    origin: "explicit", status: "active", confidence: 1, importance: 0.8 }, evidence("我是肿瘤科的"));
+  // The memory schema is the settings store's (the server migrates it first); a database of its own has none yet.
+  await migrateMemorySettings(database);
+  await migrateNativeMemory(database);
+  memory = new MemorySettingsStore({}, { database });
+  overlay = new NativeMemoryOverlay({ database });
+  memories.project = await writeFile(users.reader, "projects/sglt2.md", "project_context", "正在做 SGLT2 抑制剂与心衰住院的 Meta 分析");
+  memories.profile = await writeFile(users.reader, "profile.md", "profile", "心内科主治医师");
+  memories.inferred = await writeFile(users.reader, "preferences/oncology.md", "preferences", "可能关注肿瘤免疫");
+  await writeFile(users.paused, "profile.md", "profile", "肿瘤科");
   await memory.updateSettings(users.paused, { recallPaused: true });
 });
 
@@ -91,7 +129,7 @@ const PHRASES = [
 ];
 
 function profiles({ embedder = { ...testEmbedder, embedQuery: async (text) => PHRASES.find((phrase) => phrase.text === text)?.vector ?? vectorAt(0, 9) },
-  researchMemory = memory, budget = async () => ({ state: "ok" }), now = () => NOW, phrases = PHRASES } = {}) {
+  memorySettings = memory, budget = async () => ({ state: "ok" }), now = () => NOW, phrases = PHRASES } = {}) {
   const calls = [];
   const editor = {
     available: true,
@@ -103,7 +141,7 @@ function profiles({ embedder = { ...testEmbedder, embedQuery: async (text) => PH
     },
   };
   // The exploration draw takes the first of its pool, so a test knows which item it is.
-  return { calls, profiles: new FrontierProfiles({ database, researchMemory, editor, embedder, config: CONFIG, budget, now, random: () => 0,
+  return { calls, profiles: new FrontierProfiles({ database, memorySettings, nativeMemory, editor, embedder, config: CONFIG, budget, now, random: () => 0,
     conversations: async (userId) => RUNS[userId] ?? [] }) };
 }
 
@@ -153,7 +191,7 @@ test("a profile from memory of every provenance, the reader's questions and what
   assert.deepEqual(await reader.refreshUser(users.reader), { state: "available", phrases: 3 });
   assert.equal(calls.length, 1, "one model call for the whole profile");
   assert.deepEqual(calls[0].memories.map((entry) => entry.id).sort(), [memories.profile.id, memories.project.id, memories.inferred.id].sort(),
-    "an inferred memory feeds the ranking too");
+    "every line of the three files feeds the ranking");
   assert.deepEqual(calls[0].questions.map((entry) => entry.text), ["替尔泊肽对射血分数保留心衰的住院结局有什么证据？"],
     "a deleted conversation, an internal project's and one older than 30 days are not read");
   assert.deepEqual(calls[0].items, [{ text: "非奈利酮用于射血分数保留心衰", starred: true }, { text: "房颤消融术后抗凝时长", starred: false }],
@@ -163,7 +201,7 @@ test("a profile from memory of every provenance, the reader's questions and what
   assert.deepEqual(stored.phrases.map((phrase) => [phrase.source, phrase.memoryId === "" ? "" : "memory"]),
     [["memory", "memory"], ["memory", "memory"], ["question", ""]], "each phrase keeps where it came from");
   assert.equal(typeof stored.phrases[0].vector, "string", "the phrase vectors are kept with the profile for the reranks");
-  assert.match(stored.memory_mark, /^3:\d+:/, "the memory it was read from, as a mark");
+  assert.match(stored.memory_mark, /^3:[\d.]+:\d+$/, "the memory it was read from, as a mark: three files, the latest change, the newest revision");
 
   const answer = await reader.forYou({ id: users.reader }, hydrate);
   assert.equal(answer.state, "available");
@@ -213,15 +251,13 @@ test("a reason whose memory is gone takes its item with it at once; a question's
   await database.query("INSERT INTO evimed_frontier.user_follows (user_id, kind, key, label, muted) VALUES ($1, 'source', 'muted', 'Muted', true)", [users.reader]);
   const { profiles: reader } = profiles();
   await reader.refreshUser(users.reader);
-  const doomed = await memory.upsertRecord(users.reader, { scope: "user", kind: "profile", key: "profile.department", value: "心内科主治医师",
-    summary: "心内科主治医师", origin: "explicit", status: "archived", confidence: 1, importance: 0.8 }, null, { expectedVersion: memories.profile.version });
-  assert.equal(doomed.status, "archived");
+  // The reader forgets the profile file: its line, and the two items that rested on it, leave at once, with no refresh in between.
+  await dropFile(users.reader, memories.profile.uri);
   const answer = await reader.forYou({ id: users.reader }, hydrate);
   assert.deepEqual(answer.items.map((entry) => entry.item.title), ["Tirzepatide HFpEF", "SGLT2 in HF", "Oncology", "Far"]);
   assert.equal(reader.counters.reasonsDropped, 2);
   // Put it back for the tests after this one.
-  memories.profile = await memory.upsertRecord(users.reader, { scope: "user", kind: "profile", key: "profile.department", value: "心内科主治医师",
-    summary: "心内科主治医师", origin: "explicit", status: "active", confidence: 1, importance: 0.8 }, null, { expectedVersion: doomed.version });
+  memories.profile = await writeFile(users.reader, "profile.md", "profile", "心内科主治医师");
   // Recall paused after the ranking was cached: the block is off at once, not at the next refresh.
   await memory.updateSettings(users.reader, { recallPaused: true });
   try {
@@ -231,7 +267,7 @@ test("a reason whose memory is gone takes its item with it at once; a question's
   }
 });
 
-test("off for a reader who paused recall; nothing yet for one with nothing to read; a star is enough; unavailable while the memory store fails", options, async () => {
+test("off for a reader who paused recall; nothing yet for one with nothing to read; a star is enough; unavailable while the memory engine fails", options, async () => {
   const items = await seedItems();
   const { calls, profiles: reader } = profiles();
   assert.deepEqual(await reader.refreshUser(users.paused), { state: "off", reason: "recall-paused" });
@@ -249,18 +285,18 @@ test("off for a reader who paused recall; nothing yet for one with nothing to re
   assert.equal(calls.length, 1);
   assert.deepEqual([calls[0].memories, calls[0].questions, calls[0].items],
     [[], [], [{ text: "非奈利酮用于射血分数保留心衰", starred: true }]]);
-  const broken = profiles({ researchMemory: { configured: true, settings: async () => ({ recallPaused: false, pausedProjects: [] }),
-    listAllRecords: async () => { throw Object.assign(new Error("down"), { code: "memory_unavailable" }); } } }).profiles;
-  await assert.rejects(broken.refreshUser(users.reader), { code: "memory_unavailable" });
+  nativeMemory.failing = true;
+  const broken = profiles().profiles;
+  await assert.rejects(broken.refreshUser(users.reader), { code: "memory_engine_unavailable" });
   assert.equal(broken.state(), "unavailable");
   // What does not come from memory is still served while the store is down: the editor's and the exploration entry.
   const degraded = await broken.forYou({ id: users.reader }, hydrate);
   assert.deepEqual([degraded.state, degraded.items.map((entry) => entry.slot)], ["available", ["explore"]]);
+  nativeMemory.failing = false;
   // A store that cannot say whether the reader paused recall answers nothing it cannot stand behind.
-  const silent = profiles({ researchMemory: { configured: true, settings: async () => { throw Object.assign(new Error("down"), { code: "memory_unavailable" }); },
-    listAllRecords: async () => [] } }).profiles;
+  const silent = profiles({ memorySettings: { configured: true, settings: async () => { throw Object.assign(new Error("down"), { code: "memory_unavailable" }); } } }).profiles;
   assert.deepEqual(await silent.forYou({ id: users.reader }, hydrate), { state: "unavailable", basis: null, items: [] });
-  const modelless = new FrontierProfiles({ database, researchMemory: memory, config: { frontierAudience: "all" } });
+  const modelless = new FrontierProfiles({ database, memorySettings: memory, config: { frontierAudience: "all" } });
   assert.equal(modelless.state(), "off");
   assert.deepEqual(await modelless.forYou({ id: users.reader }, hydrate), { state: "off", basis: null, items: [] });
 });
@@ -326,8 +362,7 @@ test("the round: missing and day-old profiles, and — at the next round, not th
   assert.ok(afterStar.calls[0].items.some((item) => item.text === "Clinic" && item.starred), "the star is read");
 
   // A new memory, written by any writer: marked by the round itself.
-  await memory.upsertRecord(users.reader, { scope: "user", kind: "project_fact", key: "project.af", value: "在做房颤消融的队列研究",
-    summary: "在做房颤消融的队列研究", origin: "inferred", status: "active", confidence: 0.6, importance: 0.5 }, evidence("房颤消融"));
+  await writeFile(users.reader, "projects/af.md", "project_context", "在做房颤消融的队列研究");
   minute += 5;
   const afterMemory = profiles({ now: clock });
   assert.equal((await afterMemory.profiles.refreshDue()).refreshed, 1, "a memory change makes the profile due");
@@ -406,7 +441,7 @@ test("a reader the model knows nothing of is ranked from what they stated: onboa
   const slug = `sglt2-${suffix}`;
   await tagItems(slug, "SGLT2 抑制剂", [items.tagged.id]);
   const { FrontierTagStore } = await import("../src/frontierTags.mjs");
-  const reader = new FrontierProfiles({ database, researchMemory: memory, editor: { available: true, extractProfile: async () => ({ phrases: [], specialties: [], error: null }) },
+  const reader = new FrontierProfiles({ database, memorySettings: memory, editor: { available: true, extractProfile: async () => ({ phrases: [], specialties: [], error: null }) },
     embedder: { configured: false, modelKey: "none@1024" }, config: CONFIG, now: () => NOW, random: () => 0, tags: new FrontierTagStore({ database, now: () => NOW }) });
   const before = await reader.forYou({ id: users.fresh }, hydrate);
   assert.equal(before.onboarding, true, "nothing known and nothing answered: the card is shown");
@@ -430,7 +465,7 @@ test("a reader the model knows nothing of is ranked from what they stated: onboa
   const prefs = await reader.prefs(users.fresh);
   assert.deepEqual([prefs.role, prefs.specialties, prefs.interests, prefs.interestTags], ["pharmacist", ["cardiology"], [slug], [{ slug, name: "SGLT2 抑制剂" }]]);
   // Changed an hour later from 管理关注: the answer moves, its first time stays (a changed answer is not a second onboarding).
-  const later = new FrontierProfiles({ database, researchMemory: memory, config: CONFIG, now: () => new Date(NOW.getTime() + 3_600_000), tags: reader.tags });
+  const later = new FrontierProfiles({ database, memorySettings: memory, config: CONFIG, now: () => new Date(NOW.getTime() + 3_600_000), tags: reader.tags });
   const changed = await later.savePrefs(users.fresh, { specialties: ["cardiology", "oncology"], done: true });
   assert.deepEqual([changed.specialties, changed.onboardedAt], [["cardiology", "oncology"], prefs.onboardedAt]);
   // Skipping is an answer too, for a reader who has not given one.
@@ -442,7 +477,7 @@ test("what the reader reads leans their block: papers read to the end come befor
   const recent = { visibleAt: hoursAgo(3), timelineAt: hoursAgo(3), specialties: ["cardiology"], selected: true, scoreTotal: 88 };
   const news = await insertComposedItem(database, { ...recent, sourceId: "stat", sourceType: "media", title: "Cardiology news" });
   const paper = await insertComposedItem(database, { ...recent, sourceId: "nejm", title: "Cardiology trial" });
-  const reader = new FrontierProfiles({ database, researchMemory: memory, embedder: { configured: false, modelKey: "none@1024" }, config: CONFIG,
+  const reader = new FrontierProfiles({ database, memorySettings: memory, embedder: { configured: false, modelKey: "none@1024" }, config: CONFIG,
     now: () => NOW, random: () => 0, ranking: { ...FRONTIER_RANKING, explore: { ...FRONTIER_RANKING.explore, slots: 0 } } });
   await reader.savePrefs(users.fresh, { specialties: ["cardiology"], done: true });
   const neutral = await reader.forYou({ id: users.fresh }, hydrate);
@@ -477,7 +512,7 @@ test("what the reader said was not their specialty lowers it for them for ninety
   await insertComposedItem(database, { ...recent, title: "Oncology B", specialties: ["oncology"], scoreTotal: 86 });
   await insertComposedItem(database, { ...recent, title: "Cardiology A", specialties: ["cardiology"], scoreTotal: 80 });
   assert.ok(oncology);
-  const reader = new FrontierProfiles({ database, researchMemory: memory, embedder: { configured: false, modelKey: "none@1024" }, config: CONFIG,
+  const reader = new FrontierProfiles({ database, memorySettings: memory, embedder: { configured: false, modelKey: "none@1024" }, config: CONFIG,
     now: () => NOW, random: () => 0, ranking: { ...FRONTIER_RANKING, explore: { ...FRONTIER_RANKING.explore, slots: 0 } } });
   const order = async (userId = users.fresh) => {
     await database.query("UPDATE evimed_frontier.user_profiles SET for_you_at = NULL WHERE user_id = $1", [userId]);
@@ -513,7 +548,7 @@ test("「看过了」 keeps an item out and counts against no genre; any other h
   const recent = { visibleAt: hoursAgo(3), timelineAt: hoursAgo(3), selected: true, specialties: ["cardiology"] };
   await insertComposedItem(database, { ...recent, sourceId: "stat", sourceType: "media", title: "Cardiology news", scoreTotal: 88 });
   await insertComposedItem(database, { ...recent, sourceId: "nejm", title: "Cardiology trial", scoreTotal: 76 });
-  const reader = new FrontierProfiles({ database, researchMemory: memory, embedder: { configured: false, modelKey: "none@1024" }, config: CONFIG,
+  const reader = new FrontierProfiles({ database, memorySettings: memory, embedder: { configured: false, modelKey: "none@1024" }, config: CONFIG,
     now: () => NOW, random: () => 0, ranking: { ...FRONTIER_RANKING, explore: { ...FRONTIER_RANKING.explore, slots: 0 } } });
   await reader.savePrefs(users.fresh, { specialties: ["cardiology"], done: true });
   // Their last week: four news items seen, then hidden — with the reason in both records the way the page writes it.

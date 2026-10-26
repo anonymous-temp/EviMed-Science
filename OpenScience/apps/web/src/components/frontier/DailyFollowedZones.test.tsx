@@ -42,3 +42,23 @@ describe("「你关注的专区」 in the daily and the weekly", () => {
     expect(screen.getByRole("region", { name: "你关注的专区" })).toBeInTheDocument();
   });
 });
+
+describe("「你关注的」 in the daily (the things the reader typed to follow)", () => {
+  it("lists the typed follows with news, each a link to its feed with the number of new items, 99 or more as 「99+」", () => {
+    show(issue({ followedQueries: [{ id: "21", label: "GLP-1 和胰腺炎", newItems: 3 }, { id: "22", label: "司美格鲁肽", newItems: 99 }] }));
+    const section = screen.getByRole("region", { name: "你关注的" });
+    const rows = within(within(section).getByRole("list", { name: "有新动态的关注" })).getAllByRole("listitem");
+    expect(rows).toHaveLength(2);
+    expect(within(rows[0]).getByRole("link", { name: "GLP-1 和胰腺炎" })).toHaveAttribute("href", "/app/frontier?view=following&follow=21");
+    expect(rows[0]).toHaveTextContent("3 条新动态");
+    expect(rows[1]).toHaveTextContent("99+ 条新动态");
+  });
+
+  it("is absent when nothing typed has news, and from a server that does not send it", () => {
+    const { unmount } = show(issue({ followedQueries: [] }));
+    expect(screen.queryByRole("region", { name: "你关注的" })).not.toBeInTheDocument();
+    unmount();
+    show(issue());
+    expect(screen.queryByRole("region", { name: "你关注的" })).not.toBeInTheDocument();
+  });
+});

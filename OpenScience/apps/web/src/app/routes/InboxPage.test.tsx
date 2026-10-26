@@ -566,7 +566,7 @@ it("opens a share where it lives: a delivery on its own page, a withdrawal or ta
     items: [
       notice("delivery", "李主任 向你分享了一套工作方式", "delivery/dlv_abc123"),
       notice("withdrawn", "李主任撤回了发给你的一份分享", "withdrawn/dlv_abc123"),
-      notice("takedown", "「李主任的工作方式」已被作者下架并停用", "takedown/cap_1"),
+      notice("takedown", "作者撤回了「李主任的工作方式」，已停用", "takedown/cap_1"),
       notice("climb", "一条想跳出去的通知", "delivery/../../admin"),
     ],
     nextCursor: null,
@@ -574,7 +574,7 @@ it("opens a share where it lives: a delivery on its own page, a withdrawal or ta
   open();
   expect(await screen.findByRole("link", { name: "李主任 向你分享了一套工作方式" })).toHaveAttribute("href", "/app/memory/delivered/dlv_abc123");
   expect(screen.getByRole("link", { name: "李主任撤回了发给你的一份分享" })).toHaveAttribute("href", "/app/memory");
-  expect(screen.getByRole("link", { name: "「李主任的工作方式」已被作者下架并停用" })).toHaveAttribute("href", "/app/memory");
+  expect(screen.getByRole("link", { name: "作者撤回了「李主任的工作方式」，已停用" })).toHaveAttribute("href", "/app/memory");
   expect(screen.getByRole("link", { name: "一条想跳出去的通知" })).toHaveAttribute("href", "/app/memory");
   await userEvent.click(screen.getByRole("link", { name: "李主任 向你分享了一套工作方式" }));
   expect(screen.getByTestId("where")).toHaveTextContent("/app/memory/delivered/dlv_abc123");

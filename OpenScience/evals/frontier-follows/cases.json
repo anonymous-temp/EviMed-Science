@@ -1,0 +1,993 @@
+{
+ "version": 1,
+ "note": "Ten typed follows read by deepseek-flash (temperature 0, thinking off) on 2026-10-25 and matched by frontierFollowMatches against the controller's three production samples of 2026-10-18..25 (11,844 published items: scored-7d, track-items-30d, study-items) in a throwaway database. Each match was labelled by hand from its title: yes = the item is about what was typed, partly = it is near it or names it in passing, no = it is not about it. concepts[] says how each concept of the follow was satisfied: key (an entity key), title (a name in the title) or text (a name only in the summary, entities or tags). The labels are one reader's; the model's reading varies a little between runs, so `answer` is the reading that was labelled. Recall was not measured, except by spot checks named in the hand-off.",
+ "cases": [
+  {
+   "typed": "司美格鲁肽",
+   "answer": {
+    "kind": "drug",
+    "concepts": [
+     {
+      "type": "drug",
+      "zh": [
+       "司美格鲁肽",
+       "索马鲁肽"
+      ],
+      "en": [
+       "semaglutide",
+       "Ozempic",
+       "Wegovy",
+       "Rybelsus"
+      ]
+     }
+    ]
+   },
+   "matches": [
+    {
+     "title": "口服司美格鲁肽2年真实世界数据更新：疗效持续，用药可依",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "每周一针，规范为先：「依柯胰岛素司美格鲁肽注射液」临床用药要点解析",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "司美格鲁肽与NAION关联或源于报告偏倚而非毒性",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "指南推荐｜欧洲多学会指导意见：瑞美替罗与司美格鲁肽在MASH靶向治疗中的应用策略",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "GLP-1受体激动剂减重试验中恶心测量方法的不足",
+     "concepts": [
+      "key"
+     ],
+     "label": "partly"
+    },
+    {
+     "title": "司美格鲁肽对1型糖尿病合并超重或肥胖成人身体成分的影响（2/3期试验）",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "司美格鲁肽之后，诺和诺德靠什么继续赢？",
+     "concepts": [
+      "key"
+     ],
+     "label": "partly"
+    },
+    {
+     "title": "司美格鲁肽经瘦素通路抑制可卡因奖赏",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "口服司美格鲁肽早期处方增长快于注射剂型",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "SOUL心血管结局研究写入说明书，口服司美格鲁肽循证体系完成关键升级",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "美国大型试验将检验司美格鲁肽能否减少涉刑事司法系统",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "潘琦教授：体重管理相关肌骨保护研究进展「京医论坛2026」",
+     "concepts": [
+      "key"
+     ],
+     "label": "partly"
+    },
+    {
+     "title": "司美格鲁肽与替度格鲁肽减轻小鼠免疫性肠损伤",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "Linafexor联合低剂量司美格鲁肽改善肥胖合并MASH患者减重",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "FLOW试验：司美格鲁肽安全性随CKD严重程度的变化",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "2026年10月21日药品批准证明文件送达信息",
+     "concepts": [
+      "text"
+     ],
+     "label": "no"
+    },
+    {
+     "title": "减重近20%！再生元、默沙东相继下注，翰森还能突破什么？",
+     "concepts": [
+      "key"
+     ],
+     "label": "partly"
+    },
+    {
+     "title": "司美格鲁肽与替尔泊肽相关肺吸入不良事件的药物警戒比较",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "司美格鲁肽起始后REM睡眠期心率升幅最大",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "美国试验将检验司美格鲁肽能否减少犯罪",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "美国真实世界司美格鲁肽高剂量起始与早期停药相关",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "诺和诺德诺和盈获批 末端配送可48小时宽温储存",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "司美格鲁肽与替尔泊肽用于膝骨关节炎合并肥胖患者的成本效果",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "司美格鲁肽与替尔泊肽用于膝骨关节炎合并肥胖患者的成本效果",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "司美格鲁肽与替尔泊肽用于膝骨关节炎合并肥胖患者的成本效果",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "司美格鲁肽与癌症关联的VigiBase药物警戒分析",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "替尔泊肽、司美格鲁肽与利拉鲁肽治疗无糖尿病肥胖患者的成本效果分析",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "美国食品药品监督管理局就国家优先审评券试点项目公开征求意见",
+     "concepts": [
+      "key"
+     ],
+     "label": "no"
+    },
+    {
+     "title": "礼来口服GLP-1获EMA支持，与诺和诺德角逐减重...",
+     "concepts": [
+      "text"
+     ],
+     "label": "partly"
+    },
+    {
+     "title": "最新资讯 | 减重版司美格鲁肽获批 48 小时「常温配送」！医生该告诉患者什么？",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    }
+   ],
+   "precision": {
+    "matches": 30,
+    "yes": 23,
+    "partly": 5,
+    "strict": 0.77,
+    "lenient": 0.93
+   }
+  },
+  {
+   "typed": "GLP-1 和胰腺炎",
+   "answer": {
+    "kind": "topic",
+    "concepts": [
+     {
+      "type": "drug",
+      "zh": [
+       "GLP-1受体激动剂",
+       "胰高血糖素样肽-1受体激动剂",
+       "司美格鲁肽",
+       "利拉鲁肽",
+       "度拉糖肽",
+       "艾塞那肽"
+      ],
+      "en": [
+       "GLP-1RA",
+       "GLP-1 receptor agonists",
+       "GLP-1 RAs",
+       "semaglutide",
+       "liraglutide",
+       "dulaglutide",
+       "exenatide"
+      ]
+     },
+     {
+      "type": "disease",
+      "zh": [
+       "胰腺炎",
+       "急性胰腺炎"
+      ],
+      "en": [
+       "pancreatitis",
+       "acute pancreatitis"
+      ]
+     }
+    ]
+   },
+   "matches": [
+    {
+     "title": "控脂有方，大咖谈脂——先降TG，再启GLP-1RA：高甘油三酯血症患者胰腺炎风险的循证防范",
+     "concepts": [
+      "key",
+      "title"
+     ],
+     "label": "yes"
+    }
+   ],
+   "precision": {
+    "matches": 1,
+    "yes": 1,
+    "partly": 0,
+    "strict": 1.0,
+    "lenient": 1.0
+   }
+  },
+  {
+   "typed": "DESTINY-PanTumor02",
+   "answer": {
+    "kind": "trial",
+    "concepts": [
+     {
+      "type": "trial",
+      "zh": [],
+      "en": [
+       "DESTINY-PanTumor02"
+      ]
+     }
+    ]
+   },
+   "matches": [
+    {
+     "title": "NMPA批准T-DXd用于既往经治HER2 IHC 3+泛实体瘤：DPT03中国人群数据支持本土循证选择",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "【2026年CSCO学术年会】David Tan教授：关注铂耐药卵巢癌，探索分层治疗新策略",
+     "concepts": [
+      "key"
+     ],
+     "label": "partly"
+    },
+    {
+     "title": "不限具体癌种！德曲妥珠单抗中国再获批，HER2 ADC拓展泛肿瘤治疗",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "张艳桥教授：T-DXd泛实体瘤适应症获批，推动肿瘤精准诊疗迈向新阶段",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "优赫得®新适应症在中国获批成为首个且唯一*用于既往经治HER2阳性转移性实体瘤患者的泛瘤种HER2靶向抗体偶联药物",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "共悦-HER2 IHC 3+ 泛实体瘤适应症国内获批，拓展多瘤种治疗选择",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "【4276】吴小华教授：T‑DXd HER2 IHC 3+泛实体瘤适应症国内获批，开启妇科肿瘤精准治疗新篇章",
+     "concepts": [
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "泛实体瘤HER2检测共识：从“标准统一”走向“结果同质”",
+     "concepts": [
+      "key"
+     ],
+     "label": "partly"
+    }
+   ],
+   "precision": {
+    "matches": 8,
+    "yes": 6,
+    "partly": 2,
+    "strict": 0.75,
+    "lenient": 1.0
+   }
+  },
+  {
+   "typed": "房颤抗凝",
+   "answer": {
+    "kind": "topic",
+    "concepts": [
+     {
+      "type": "disease",
+      "zh": [
+       "房颤",
+       "心房颤动"
+      ],
+      "en": [
+       "atrial fibrillation",
+       "AF",
+       "AFib"
+      ]
+     },
+     {
+      "type": "topic",
+      "zh": [
+       "抗凝",
+       "抗凝治疗",
+       "口服抗凝"
+      ],
+      "en": [
+       "anticoagulation",
+       "anticoagulant therapy",
+       "oral anticoagulation",
+       "OAC"
+      ]
+     }
+    ]
+   },
+   "matches": [
+    {
+     "title": "英国基层房颤合并活动性癌症患者口服抗凝药处方趋势",
+     "concepts": [
+      "key",
+      "title"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "房颤合并既往颅内出血：抗凝策略与竞争风险",
+     "concepts": [
+      "key",
+      "title"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "详解低体重房颤患者抗凝策略：规范剂量调整，平衡双高风险",
+     "concepts": [
+      "key",
+      "title"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "GW-ICC/AHS.26 | 从 Virchow 三联征到 XIa 因子：血栓机制重塑精准抗栓治疗",
+     "concepts": [
+      "key",
+      "text"
+     ],
+     "label": "partly"
+    },
+    {
+     "title": "美国ICH合并房颤患者抗凝与左心耳封堵的实际应用模式",
+     "concepts": [
+      "key",
+      "title"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "脑出血后房颤患者使用抗凝药与卒中及死亡风险降低相关",
+     "concepts": [
+      "key",
+      "title"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "新型抗凝药或降低房颤合并脑出血史患者的卒中风险",
+     "concepts": [
+      "key",
+      "title"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "GW-ICC 2026 深度对谈丨聚焦左心耳封堵人群选择、4D-ICE 技术应用与病例撰写投稿要点",
+     "concepts": [
+      "key",
+      "text"
+     ],
+     "label": "partly"
+    }
+   ],
+   "precision": {
+    "matches": 8,
+    "yes": 6,
+    "partly": 2,
+    "strict": 0.75,
+    "lenient": 1.0
+   }
+  },
+  {
+   "typed": "心衰 SGLT2 抑制剂",
+   "answer": {
+    "kind": "topic",
+    "concepts": [
+     {
+      "type": "disease",
+      "zh": [
+       "心力衰竭",
+       "心衰",
+       "充血性心力衰竭",
+       "慢性心力衰竭"
+      ],
+      "en": [
+       "heart failure",
+       "HF",
+       "congestive heart failure",
+       "CHF",
+       "chronic heart failure"
+      ]
+     },
+     {
+      "type": "drug",
+      "zh": [
+       "SGLT2抑制剂",
+       "钠-葡萄糖协同转运蛋白2抑制剂",
+       "达格列净",
+       "恩格列净"
+      ],
+      "en": [
+       "SGLT2i",
+       "SGLT2 inhibitors",
+       "dapagliflozin",
+       "empagliflozin"
+      ]
+     }
+    ]
+   },
+   "matches": [
+    {
+     "title": "SGLT2抑制剂在HFrEF中试验疗效与真实世界效果的差异",
+     "concepts": [
+      "key",
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "2026 ASN | 聚焦心肾全程管理：蛋白尿与心衰双重挑战下的治疗新策略",
+     "concepts": [
+      "key",
+      "key"
+     ],
+     "label": "partly"
+    },
+    {
+     "title": "高龄不限制SGLT2抑制剂在慢性肾脏病中的获益",
+     "concepts": [
+      "key",
+      "key"
+     ],
+     "label": "no"
+    },
+    {
+     "title": "《KDIGO 2027 CKD评估与管理临床实践指南：药物管理重点更新》征求意见稿出炉！",
+     "concepts": [
+      "key",
+      "key"
+     ],
+     "label": "no"
+    },
+    {
+     "title": "《KDIGO 2027 CKD评估与管理临床实践指南：药物管理重点更新》征求意见稿出炉！一文梳理用药热点",
+     "concepts": [
+      "key",
+      "key"
+     ],
+     "label": "no"
+    },
+    {
+     "title": "美国批准首款葡萄糖-酮体双监测设备，聚焦1型糖尿病酮症酸中毒预防",
+     "concepts": [
+      "key",
+      "key"
+     ],
+     "label": "no"
+    }
+   ],
+   "precision": {
+    "matches": 6,
+    "yes": 1,
+    "partly": 1,
+    "strict": 0.17,
+    "lenient": 0.33
+   }
+  },
+  {
+   "typed": "阿尔茨海默病 抗淀粉样蛋白抗体",
+   "answer": {
+    "kind": "topic",
+    "concepts": [
+     {
+      "type": "disease",
+      "zh": [
+       "阿尔茨海默病",
+       "阿尔茨海默症"
+      ],
+      "en": [
+       "AD",
+       "Alzheimer's disease",
+       "Alzheimer disease"
+      ]
+     },
+     {
+      "type": "drug",
+      "zh": [
+       "抗淀粉样蛋白抗体",
+       "抗β淀粉样蛋白单克隆抗体",
+       "抗Aβ抗体",
+       "仑卡奈单抗",
+       "多奈单抗",
+       "阿杜那单抗"
+      ],
+      "en": [
+       "anti-amyloid antibodies",
+       "anti-amyloid monoclonal antibodies",
+       "anti-Aβ antibodies",
+       "lecanemab",
+       "donanemab",
+       "aducanumab"
+      ]
+     }
+    ]
+   },
+   "matches": [
+    {
+     "title": "阿尔茨海默病患者福音！卫材中国仑卡奈单抗皮下全自动注射笔在博鳌乐城开具首张处方",
+     "concepts": [
+      "key",
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "阿尔茨海默病新药上市：一支“笔”的 “三级跳”：卫材中国仑卡奈单抗皮下全自动注射笔在博鳌乐城开具首张处方",
+     "concepts": [
+      "key",
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "阿尔茨海默病新药一针自动给药！仑卡奈单抗皮下全自动注射笔在博鳌乐城实现首方突破",
+     "concepts": [
+      "key",
+      "key"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "抗Aβ单克隆抗体类序贯治疗经验性方案解读",
+     "concepts": [
+      "key",
+      "key"
+     ],
+     "label": "yes"
+    }
+   ],
+   "precision": {
+    "matches": 4,
+    "yes": 4,
+    "partly": 0,
+    "strict": 1.0,
+    "lenient": 1.0
+   }
+  },
+  {
+   "typed": "EGFR 突变肺癌的靶向治疗",
+   "answer": {
+    "kind": "topic",
+    "concepts": [
+     {
+      "type": "disease",
+      "zh": [
+       "EGFR突变肺癌",
+       "EGFR突变非小细胞肺癌",
+       "EGFR突变NSCLC",
+       "EGFR阳性肺癌"
+      ],
+      "en": [
+       "EGFR-mutant lung cancer",
+       "EGFR-mutant NSCLC",
+       "EGFR-mutated non-small cell lung cancer",
+       "EGFR-positive lung cancer"
+      ]
+     },
+     {
+      "type": "topic",
+      "zh": [
+       "靶向治疗",
+       "EGFR靶向治疗",
+       "EGFR酪氨酸激酶抑制剂"
+      ],
+      "en": [
+       "EGFR-TKI",
+       "targeted therapy",
+       "EGFR-targeted therapy",
+       "EGFR tyrosine kinase inhibitors"
+      ]
+     }
+    ]
+   },
+   "matches": [
+    {
+     "title": "九线治疗绝处逢生！EGFR-TKI 耐药后检出 HER2 IHC 2+，德曲妥珠单抗治疗 PFS 超 8 个月",
+     "concepts": [
+      "key",
+      "title"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "OptiTROP-Lung04 最终总生存结果在 2026 ESMO 公布",
+     "concepts": [
+      "text",
+      "text"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "付振明教授|双抗ADC治疗新时代：伦康依隆妥单抗为多线经治EGFR-TKI耐药患者带来长生存新启示，OS超11年",
+     "concepts": [
+      "key",
+      "title"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "披荆斩棘 行稳致远丨最终OS即将刷新，解码芦康沙妥珠单抗治疗EGFR-TKI耐药生存进阶之路",
+     "concepts": [
+      "key",
+      "title"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "李醒亚教授|双抗ADC治疗新时代：伦康依隆妥单抗治疗EGFR-TKI耐药患者2周期PR，持续用药26个月+",
+     "concepts": [
+      "key",
+      "title"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "三代EGFR-TKI耐药后换用二代TKI的回顾性配对分析",
+     "concepts": [
+      "key",
+      "title"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "黄章洲教授：立足循证，聚焦长生存，国产三代EGFR-TKI一线治疗证据再进阶",
+     "concepts": [
+      "key",
+      "title"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "寻「佳」境：循证证据的递进与治疗前移——以 EGFR-TKI 耐药证据为基石，芦康沙妥珠单抗重塑驱动基因阴性 NSCLC 全人群一线 SOC 新格局",
+     "concepts": [
+      "key",
+      "title"
+     ],
+     "label": "partly"
+    },
+    {
+     "title": "EGFR-TKI 各代不良反应差异的药物警戒与机制分析",
+     "concepts": [
+      "key",
+      "title"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "EGFR与HER2突变NSCLC靶向治疗的发展与方向",
+     "concepts": [
+      "key",
+      "title"
+     ],
+     "label": "yes"
+    }
+   ],
+   "precision": {
+    "matches": 10,
+    "yes": 9,
+    "partly": 1,
+    "strict": 0.9,
+    "lenient": 1.0
+   }
+  },
+  {
+   "typed": "RSV 疫苗",
+   "answer": {
+    "kind": "topic",
+    "concepts": [
+     {
+      "type": "disease",
+      "zh": [
+       "呼吸道合胞病毒",
+       "呼吸道合胞病毒感染",
+       "RSV感染"
+      ],
+      "en": [
+       "RSV",
+       "respiratory syncytial virus",
+       "RSV infection"
+      ]
+     },
+     {
+      "type": "drug",
+      "zh": [
+       "RSV疫苗",
+       "呼吸道合胞病毒疫苗"
+      ],
+      "en": [
+       "RSV vaccine",
+       "respiratory syncytial virus vaccine",
+       "RSV vaccines"
+      ]
+     }
+    ]
+   },
+   "matches": [
+    {
+     "title": "美国CDC分析：RSV住院成人近1成院内或出院30天内死亡",
+     "concepts": [
+      "key",
+      "text"
+     ],
+     "label": "partly"
+    },
+    {
+     "title": "UKHSA：RSV疫苗可保护新生儿与老年人等高危人群",
+     "concepts": [
+      "title",
+      "title"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "保护效果73.6%，接种率仅27.1%｜柳叶刀子刊发表母体RSV疫苗真实世界证据",
+     "concepts": [
+      "title",
+      "title"
+     ],
+     "label": "yes"
+    },
+    {
+     "title": "mRNA-1345 RSV疫苗在意大利老年人中的成本效果分析",
+     "concepts": [
+      "title",
+      "title"
+     ],
+     "label": "yes"
+    }
+   ],
+   "precision": {
+    "matches": 4,
+    "yes": 3,
+    "partly": 1,
+    "strict": 0.75,
+    "lenient": 1.0
+   }
+  },
+  {
+   "typed": "PD-1 抑制剂的免疫相关不良反应",
+   "answer": {
+    "kind": "topic",
+    "concepts": [
+     {
+      "type": "drug",
+      "zh": [
+       "PD-1抑制剂",
+       "PD-1抗体",
+       "抗PD-1单抗",
+       "纳武利尤单抗",
+       "帕博利珠单抗"
+      ],
+      "en": [
+       "PD-1 inhibitors",
+       "PD-1 blockade",
+       "anti-PD-1 antibodies",
+       "PD-1 monoclonal antibodies",
+       "nivolumab",
+       "pembrolizumab"
+      ]
+     },
+     {
+      "type": "topic",
+      "zh": [
+       "免疫相关不良反应",
+       "免疫相关不良事件"
+      ],
+      "en": [
+       "irAE",
+       "irAEs",
+       "immune-related adverse events",
+       "immune-related toxicity"
+      ]
+     }
+    ]
+   },
+   "matches": [
+    {
+     "title": "又一国产 PD-1/VEGF 三抗首次公布临床数据｜ESMO 2026",
+     "concepts": [
+      "text",
+      "text"
+     ],
+     "label": "no"
+    },
+    {
+     "title": "伊匹木单抗联合纳武利尤单抗治疗食管癌中严重irAEs的预后影响",
+     "concepts": [
+      "key",
+      "title"
+     ],
+     "label": "yes"
+    }
+   ],
+   "precision": {
+    "matches": 2,
+    "yes": 1,
+    "partly": 0,
+    "strict": 0.5,
+    "lenient": 0.5
+   }
+  },
+  {
+   "typed": "肥胖患者减重药物会影响心血管结局吗",
+   "answer": {
+    "kind": "question",
+    "concepts": [
+     {
+      "type": "disease",
+      "zh": [
+       "肥胖",
+       "肥胖症"
+      ],
+      "en": [
+       "obesity"
+      ]
+     },
+     {
+      "type": "drug",
+      "zh": [
+       "减重药物",
+       "减肥药",
+       "司美格鲁肽",
+       "利拉鲁肽",
+       "替尔泊肽"
+      ],
+      "en": [
+       "weight-loss drugs",
+       "weight loss medications",
+       "anti-obesity medications",
+       "semaglutide",
+       "liraglutide",
+       "tirzepatide"
+      ]
+     },
+     {
+      "type": "topic",
+      "zh": [
+       "心血管结局",
+       "心血管事件",
+       "心血管风险"
+      ],
+      "en": [
+       "cardiovascular outcomes",
+       "cardiovascular events",
+       "cardiovascular risk"
+      ]
+     }
+    ]
+   },
+   "matches": [],
+   "precision": {
+    "matches": 0,
+    "yes": 0,
+    "partly": 0,
+    "strict": null,
+    "lenient": null
+   }
+  }
+ ],
+ "totals": {
+  "matches": 73,
+  "yes": 54,
+  "partly": 12,
+  "strict": 0.74,
+  "lenient": 0.9
+ }
+}

@@ -303,7 +303,6 @@ export {
   MEMORY_PROMOTION_MIN_OCCURRENCES,
   MEMORY_PROMOTION_MIN_RUNS,
   MAX_ACTIVE_LEARNED_METHODS,
-  HANDBOOK_TEXT_LIMITS,
   METHOD_HARM_TEST,
   METHOD_MOUNT,
   METHOD_SCIENTIFIC_HARM_TEST,
@@ -475,8 +474,9 @@ export {
   transcriptMessageText,
 } from './src/trajectoryDigest.mjs'
 
-// learningEvidence — one reaction of the researcher to a run, as the feedback ledger keeps it (steer, follow-up, result-corrected, silent)
+// learningEvidence — one reaction of the researcher to a run, as the feedback ledger keeps it (steer, follow-up, result-corrected, silent, used)
 export {
+  LEARNING_ACCEPT_VERDICTS,
   LEARNING_CORRECTION_VERDICTS,
   LEARNING_EVIDENCE_KINDS,
   LEARNING_EVIDENCE_LIMITS,
@@ -484,8 +484,12 @@ export {
   LEARNING_EVIDENCE_TRIGGER,
   LEARNING_EVIDENCE_VERDICTS,
   LEARNING_FOLLOW_UP_WINDOW_MS,
+  LEARNING_RULE_VERDICTS,
+  LEARNING_STEER_VERDICTS,
   cleanLearningEvidence,
   isLearningCorrection,
+  isLearningKept,
+  learningRunOutcome,
 } from './src/learningEvidence.mjs'
 
 // skillSupply — a skill package's source, licence, version, scripts, references, dependencies and operations as one
@@ -835,8 +839,6 @@ export {
   formatDependsOn,
   isMethodDigest,
   learnedMethodCardEntry,
-  handbookText,
-  handbookTextFits,
   methodBodySections,
   methodContentDigest,
   mountedMethodDigest,
@@ -889,6 +891,7 @@ export {
   isUnprovenMerge,
   bodyPreservation,
   storedEvidenceQuotes,
+  METHOD_EVIDENCE_QUOTE_LENGTH,
   restartCarried,
   methodLevel,
   methodStrength,
@@ -1318,6 +1321,9 @@ export {
   FRONTIER_PLATFORM_LABELS_ZH,
   FRONTIER_PREPRINT_AUTHORITY_FACTOR,
   FRONTIER_PREPRINT_LANE_SOURCE_TYPES,
+  FRONTIER_FOLLOW_KINDS,
+  FRONTIER_FOLLOW_QUERY_KINDS,
+  FRONTIER_FOLLOW_LABEL_MAX,
   FRONTIER_SCORE_MAXIMA,
   FRONTIER_SELECTED_RULES,
   FRONTIER_SOURCE_LANES,
@@ -1439,6 +1445,38 @@ export {
   frontierLeadPlaces,
   frontierLeadQueryKey,
 } from './src/frontierLeadWatch.mjs'
+// frontierTrack — c3-track 2026-10-25: 追踪, the approvals, guideline updates and congresses of 前沿动态 as views of their own: the
+// approval kinds and the regulators code knows by their source's owner, the limits of the tracker extraction and its version, and
+// the congress calendar's clock (on, coming or just over, in the feed's zone) with the window its items are found in.
+export {
+  FRONTIER_AGENCIES,
+  FRONTIER_AGENCY_ALIASES,
+  FRONTIER_AGENCY_REGIONS,
+  FRONTIER_APPROVAL_AGENCY_KEYS,
+  FRONTIER_APPROVAL_KIND_LABELS_ZH,
+  FRONTIER_APPROVAL_KINDS,
+  FRONTIER_CONGRESS_ITEM_DAYS,
+  FRONTIER_CONGRESS_RECENT_DAYS,
+  FRONTIER_CONGRESS_UPCOMING_DAYS,
+  FRONTIER_TRACK_APPROVAL_DAYS,
+  FRONTIER_TRACK_LIMITS,
+  FRONTIER_TRACK_PAGE,
+  FRONTIER_TRACK_VERSION,
+  frontierAgencyByKey,
+  frontierAgencyOfOwner,
+  frontierCongressById,
+  frontierCongressCode,
+  frontierCongressItemWindow,
+  frontierCongressRecapDays,
+  frontierCongressStatus,
+  frontierCongressSummary,
+  frontierDayIn,
+  frontierDaysBetween,
+  frontierQuoteNamesAgency,
+  frontierShiftDay,
+} from './src/frontierTrack.mjs'
+/** @typedef {import('./src/frontierTrack.mjs').FrontierApprovalKind} FrontierApprovalKind */
+/** @typedef {import('./src/frontierLeadWatch.mjs').FrontierCongress} FrontierCongress */
 // frontierTopics — 20 exports: hot-event topics of 前沿动态 (owner 2026-10-25): the fields a hot event comes from and their
 // labels, the hot lists it is first seen on, a topic's states, its items' roles and origins, the evidence programme's states
 // for it, the limits it lives within, and the outside-event trigger's pure decisions (a candidate, a surge, the title key,
@@ -1488,11 +1526,29 @@ export {
   projectCardKey,
   projectCardSlotOfKey,
 } from './src/projectCard.mjs'
-// frontierSourceNames — 2 exports: what a reader calls a source — the
+// frontierSelection — 12 exports: what makes an item fit for 精选 in the parts code decides: the ceilings a fixed fact puts on the
+// model's scores (`frontier-selection.json`), the republishers that take no floor place, and the rare practice-changing label's
+// limits and admission (c3-select, 2026-10-25).
+export {
+  FRONTIER_PRACTICE_ELIGIBLE,
+  FRONTIER_PRACTICE_LIMITS,
+  FRONTIER_REPUBLISHERS,
+  FRONTIER_SCORE_TIERS,
+  frontierFloorEligible,
+  frontierPracticeAdmissible,
+  frontierPracticeAdmit,
+  frontierPracticeCap,
+  frontierPracticeReason,
+  frontierRepublisher,
+  frontierScoreCeilings,
+  frontierScoreTier,
+} from './src/frontierSelection.mjs'
+// frontierSourceNames — 3 exports: what a reader calls a source — the
 // institution, by the registry's owner entity, never the feed or interface the
 // plugin reads it through (the table is `frontier-source-names.json`).
 export {
   FRONTIER_SOURCE_DISPLAY_NAMES,
+  frontierIsStreamSource,
   frontierSourceDisplayName,
 } from './src/frontierSourceNames.mjs'
 // geoVocabulary — 84 exports: 「循证 GEO」's closed vocabularies (pools, engines,

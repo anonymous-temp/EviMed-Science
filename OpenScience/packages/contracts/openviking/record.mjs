@@ -17,6 +17,7 @@ import path from "node:path";
 
 import { OpenVikingClient, memoryUri, userMemoryRoot } from "../../../apps/server/src/openVikingClient.mjs";
 import { OpenVikingEngine } from "../../../apps/server/src/openVikingEngine.mjs";
+import { OPENVIKING_MEMORY_TYPES } from "../../../apps/server/src/openVikingLayout.mjs";
 
 const OUT = path.resolve(process.argv[2] ?? "");
 const WANT = new Set(process.argv.slice(3).length ? process.argv.slice(3) : ["top", "engine", "memory", "knowledge"]);
@@ -374,7 +375,7 @@ async function recordMemory() {
   }
   await record("admin-user-settings-resume", { user: USER, method: "PATCH", route: `${admin}/${USER}/settings`, body: { memory_policy: { self: { enabled: true } } }, note: "Resume." });
   await record("admin-user-settings-patch-with-types", { user: USER, method: "PATCH", route: `${admin}/${USER}/settings`,
-    body: { memory_policy: { self: { enabled: true }, memory_types: ["profile", "preferences", "entities", "corrections", "project_context", "decisions", "follow_ups", "project_facts"] } },
+    body: { memory_policy: { self: { enabled: true }, memory_types: [...OPENVIKING_MEMORY_TYPES] } },
     note: "A settings PATCH that carries the type allowlist. A PATCH without memory_types leaves the user with every registered type (see admin-user-settings-pause.json): the deployment default no longer applies to that user." });
   await record("admin-users-list", { method: "GET", route: `${admin}?limit=3`, note: "The account's register (trimmed by the limit parameter if the server honours it)." });
   await raw(GONE, "POST", "/api/v1/content/write", { uri: `viking://user/${GONE}/memories/preferences/self/示例.md`, content: "- 示例偏好。", mode: "create", wait: true });

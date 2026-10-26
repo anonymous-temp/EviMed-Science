@@ -12,6 +12,7 @@ import { muteSourceOf } from "@/components/frontier/frontierHide";
 import {
   ReaderAbstract,
   ReaderActions,
+  ReaderAsk,
   ReaderBar,
   ReaderBrief,
   ReaderByline,
@@ -131,7 +132,7 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
       });
     } catch (error) { toast.error(frontierErrorMessage(error)); }
   };
-  const { more, reports, research } = useItemActions(item, { reader: true, onHide: () => setReasons((value) => value + 1) });
+  const { more, reports, research, ask } = useItemActions(item, { reader: true, onHide: () => setReasons((value) => value + 1) });
   // An original title beside a translated one, for an article; a post's 「title」 is its own first words.
   const originalTitle = !isSocialItem(item) && item.titleZh && item.titleRaw !== item.titleZh ? item.titleRaw : null;
   // A text of three sections or more has its contents: in the right column, or folded above the text on a narrow screen.
@@ -157,6 +158,7 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
             <ReaderActions {...actions} />
             {chooser("absolute right-0 top-10")}
           </div>
+          <ReaderAsk questions={item.ask ?? []} onAsk={ask} layout="rail" />
           <ReaderNotes item={item} outline={outline.length > 0 ? <ReaderOutline entries={outline} layout="inline" onReveal={() => setTextOpen(true)} /> : undefined} />
         </div>
       ) : undefined}
@@ -178,6 +180,7 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
         {item.quoted && <ReaderQuote quoted={item.quoted} platform={item.platform} language={language} className="mt-6" />}
         <ReaderSource item={item} reports={reports} className="mt-8" />
         <ReaderFollowups item={item} className="mt-10" />
+        {!wide && <ReaderAsk questions={item.ask ?? []} onAsk={ask} layout="article" className="mt-10" />}
         {!wide && <div className="mt-10"><ReaderNotes item={item} /></div>}
       </article>
       {!wide && <ReaderBar {...actions} />}

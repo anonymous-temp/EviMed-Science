@@ -2,23 +2,22 @@ import type { WebStructuredMemory } from "@/lib/apiClient";
 import { memoryExcerpt, readableMemory } from "@/lib/memoryText";
 
 /**
- * Memories an account's memory keeps as files (the second engine, 2026-10-13), read the way the page reads every memory.
+ * Memories the engine keeps as files, read the way the page reads every memory.
  *
- * They come in the same shape as the others, so the page lists, searches, edits and forgets them with the same code; what
- * differs is only what one memory *is*. A line of the profile document is a sentence, exactly like a structured memory. Any other
+ * Every memory is one of two shapes. A line of the profile document is a sentence, exactly like a structured memory. Any other
  * file is a topic with several statements under it — 回答结构: 先结论后依据 · 表格不超过五列 — so its row names the topic and
  * says the statements under it, and its drawer shows the whole text and edits the whole text. The file's name and address are
  * never shown (owner ruling 2026-10-10: no back-office labels); the topic is the name read in words.
  */
 
 /** A memory kept as a file: a topic with statements under it. */
-export function isFileMemory(record: Pick<WebStructuredMemory, "engine" | "document">): boolean {
-  return record.engine === "native" && !record.document;
+export function isFileMemory(record: Pick<WebStructuredMemory, "document">): boolean {
+  return !record.document;
 }
 
 /** A line of the profile document: one sentence about the person, whose document the drawer also shows. */
-export function isProfileLine(record: Pick<WebStructuredMemory, "engine" | "document">): boolean {
-  return record.engine === "native" && Boolean(record.document);
+export function isProfileLine(record: Pick<WebStructuredMemory, "document">): boolean {
+  return Boolean(record.document);
 }
 
 /** What a file is about, in words: the engine names a file after its topic (`meta_analysis_method`), which reads as `meta analysis method`. */

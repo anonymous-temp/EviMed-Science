@@ -4,7 +4,7 @@ import { productId } from "./productPersistence.mjs";
 import { migrateCapsuleShare } from "./capsuleShareLinks.mjs";
 import { reachableAccounts } from "./capsuleRecipients.mjs";
 import { senderDisplayName } from "./capsuleShareLabel.mjs";
-import { recordShareDeclined, recordShareRefused, recordShared, recordTakedown } from "./capsuleShareMetrics.mjs";
+import { recordShareDeclined, recordShareOpened, recordShareRefused, recordShared, recordTakedown } from "./capsuleShareMetrics.mjs";
 
 /**
  * Handing a capsule to other accounts of this deployment, in the app (evidence-flywheel plan §7, F17a, 2026-10-05): a delivery to
@@ -25,7 +25,11 @@ import { recordShareDeclined, recordShareRefused, recordShared, recordTakedown }
  *   their own notices, each saying in one sentence what happened and why. A notice that cannot be written never fails the
  *   delivery it announces: the page still has the delivery.
  * - **A take-down is a revocation that reaches the copies.** The author's revoke stops further imports and says so; a take-down
- *   (the author's of one snapshot, or the operator's of everything an author shared) also disables every recipient's copy.
+ *   (the author's of one snapshot, or the operator's of everything an author shared) also disables every recipient's copy: out of
+ *   the account's list at once (so the runtimes that are up drop its methods before their next turn, and a conversation that begins
+ *   after mounts none of it), marked on the copy, which the recipient's shelf reads as withdrawn by its author or taken down by the
+ *   platform. The web's one 「撤回」 does both, so what the author calls withdrawing is what the recipient reads. A file already
+ *   exported is out of reach only where it was imported here; one taken to another deployment is theirs.
  *
  * @module capsuleSharing
  */
@@ -215,7 +219,7 @@ export class CapsuleSharing {
     if (["withdrawn", "taken_down", "declined"].includes(row.state)) return { delivery: view(), preview: null };
     if (row.state === "delivered") {
       const opened = (await this.database.query("UPDATE evimed_share.deliveries SET state='opened', opened_at=clock_timestamp() WHERE id=$1 AND state='delivered' RETURNING *", [row.id])).rows[0];
-      if (opened) row = { ...opened, sender_name: row.sender_name, signed_as: row.signed_as };
+      if (opened) { row = { ...opened, sender_name: row.sender_name, signed_as: row.signed_as }; recordShareOpened("delivery"); }
     }
     let preview = null;
     try {
@@ -365,11 +369,14 @@ export class CapsuleSharing {
     await migrateCapsuleShare(this.database);
     const result = await this.transfers.takeDown({ authorId, snapshotId, by, reason });
     await this.links.revokeForSnapshots(authorId, result.snapshots);
-    const why = clip(reason, 120) || (by === "operator" ? "平台发现其中的内容不适合继续分享" : "作者不再分享它");
-    const who = by === "operator" ? "平台" : "作者";
+    // The sender's own word for it is 撤回 and the recipient is told the same word; what the platform does is 下架 and says who did it.
+    const said = clip(reason, 120);
+    const why = said || (by === "operator" ? "平台发现其中的内容不适合继续分享" : "");
+    const aside = why ? `：${why}` : "";
     for (const copy of result.copies) {
-      await this.#notify(copy.userId, `takedown/${copy.capsuleId}`, `share-takedown:${copy.capsuleId}`,
-        clip(`「${copy.title}」已被${who}下架并停用`, 150), `${clip(`「${copy.title}」已被${who}下架并停用：${why}。`, 400)}你自己的记忆和对话没有受影响。`);
+      const title = by === "operator" ? `「${copy.title}」已被平台下架并停用` : `作者撤回了「${copy.title}」，已停用`;
+      const body = by === "operator" ? `「${copy.title}」已被平台下架并停用${aside}。` : `作者撤回了「${copy.title}」，这份做法已停用${aside}。`;
+      await this.#notify(copy.userId, `takedown/${copy.capsuleId}`, `share-takedown:${copy.capsuleId}`, clip(title, 150), `${clip(body, 400)}你自己的记忆和对话没有受影响。`);
     }
     const open = result.snapshots.length
       ? (await this.database.query(`UPDATE evimed_share.deliveries SET state='taken_down', closed_at=clock_timestamp()
@@ -377,7 +384,8 @@ export class CapsuleSharing {
       : [];
     for (const row of open) {
       await this.#notify(row.recipient_id, `takedown/${row.id}`, `share-takedown:${row.id}`,
-        clip(`一份分享已被${who}下架`, 150), `${clip(`发给你的一份分享已被${who}下架：${why}。`, 400)}它不能再收下。`);
+        clip(by === "operator" ? "一份分享已被平台下架" : "作者撤回了一份分享", 150),
+        `${clip(by === "operator" ? `发给你的一份分享已被平台下架${aside}。` : `作者撤回了发给你的一份分享${aside}。`, 400)}它不能再收下。`);
     }
     recordTakedown(by, result.copies.length);
     return { snapshots: result.snapshots.length, copies: result.copies.length, withdrawn: open.length };

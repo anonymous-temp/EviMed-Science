@@ -1,0 +1,3764 @@
+{
+ "model": "deepseek-flash",
+ "ranAt": "2026-10-25T13:26:02.409Z",
+ "usage": {
+  "calls": 42,
+  "cacheHit": 37120,
+  "cacheMiss": 113326,
+  "output": 20674,
+  "cny": 0.3935288
+ },
+ "failures": 0,
+ "runs": [
+  {
+   "repeat": 1,
+   "events": 869,
+   "anchors": 696,
+   "candidates": 169,
+   "judged": 169,
+   "same": 13,
+   "related": 28,
+   "different": 128,
+   "unjudged": 0,
+   "confirmedSame": 12,
+   "plan": {
+    "groups": 8,
+    "vetoed": 0,
+    "capped": 0,
+    "links": 22
+   },
+   "merges": [
+    [
+     {
+      "id": "9eef2f837b7ff9a2",
+      "title": "GCS 13-15分创伤性脑损伤患者血浆GFAP与UCH-L1识别颅内病变的临床界值"
+     },
+     {
+      "id": "5d4e9cd6703e3fea",
+      "title": "血液生物标志物检测提高隐匿性脑损伤检出率"
+     }
+    ],
+    [
+     {
+      "id": "fd66c355f7f3492d",
+      "title": "CLDN18.2-ADC 胃癌 3 期研究达到 PFS 与 OS 双主要终点"
+     },
+     {
+      "id": "9a967f03a22d1d25",
+      "title": "武田公布CLDN18.2胃癌数据并筹备提交上市申请"
+     }
+    ],
+    [
+     {
+      "id": "cacb65779fae710e",
+      "title": "AI方法辅助医生完成真实临床检查流程"
+     },
+     {
+      "id": "bc2bcf04a2dbd27f",
+      "title": "语言模型序贯诊断准确率高于全科医生"
+     }
+    ],
+    [
+     {
+      "id": "3193cd6a14e4edb9",
+      "title": "多智能体协同重构医疗AI！清华AIR孵化：医生AI分身“坐诊”医院"
+     },
+     {
+      "id": "f352468fdb43a17a",
+      "title": "Tairex发布多智能体AI系统，用于临床协作与决策支持"
+     }
+    ],
+    [
+     {
+      "id": "9ad4b8ba63d3dcfb",
+      "title": "同卵双胞胎宫内肿瘤传播的胚胎起源"
+     },
+     {
+      "id": "342d8984a59d04ed",
+      "title": "DNA测序揭示罕见癌症如何在出生前于双胞胎间传播"
+     }
+    ],
+    [
+     {
+      "id": "30ed869f2b91ed62",
+      "title": "ESMO 2026：再鼎与Ideaya公布DLL3靶向ADC数据"
+     },
+     {
+      "id": "dc7b315ae085627e",
+      "title": "再鼎医药公布zoci联合阿替利珠单抗一线治疗ES-SCLC的1b期数据，全球3期拟于2026年底启动"
+     }
+    ],
+    [
+     {
+      "id": "602460b803b87763",
+      "title": "本迪布焦型埃博拉疫情在刚果（金）持续，肯尼亚、尼日利亚报告输入病例"
+     },
+     {
+      "id": "d3e317cfaa1f8f92",
+      "title": "尼日利亚报告首例本迪布焦型埃博拉病例，肯尼亚和刚果（金）疫情数字继续上升"
+     },
+     {
+      "id": "e02d890c66cc8cb1",
+      "title": "肯尼亚、尼日利亚各现首例邦迪布焦型埃博拉输入病例"
+     }
+    ],
+    [
+     {
+      "id": "05eb5848072c9e74",
+      "title": "ESMO 解除 INTerpath-001 黑色素瘤辅助治疗试验摘要 embargo"
+     },
+     {
+      "id": "577290b29aefc879",
+      "title": "Moderna与默克癌症疫苗数据泄露"
+     },
+     {
+      "id": "166b613bd0f5b4a1",
+      "title": "个体化mRNA疫苗联合帕博利珠单抗降低黑色素瘤术后复发风险42%"
+     }
+    ]
+   ],
+   "rows": [
+    {
+     "a": "30ed869f2b91ed62",
+     "b": "dc7b315ae085627e",
+     "titleA": "ESMO 2026：再鼎与Ideaya公布DLL3靶向ADC数据",
+     "titleB": "再鼎医药公布zoci联合阿替利珠单抗一线治疗ES-SCLC的1b期数据，全球3期拟于2026年底启动",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "dllevate"
+      ],
+      "drugs": [
+       "zocilurtatug pelitecan",
+       "atezolizumab",
+       "carboplatin"
+      ],
+      "cosine": null,
+      "overlap": 0.556
+     },
+     "relation": "SAME",
+     "reason": "两事件均报道同一项zoci联合atezolizumab一线治疗ES-SCLC的1b期（DLLEVATE）数据，ORR 81.8%一致，且共享同一篇报道",
+     "second": "SAME",
+     "secondReason": "两事件均报道同一项zoci（ZL-1310-001/dllevate）1b期研究在ESMO 2026上的同一次数据发布，B额外提及3期启动计划，属同一发生的不同侧重。",
+     "confirmed": true
+    },
+    {
+     "a": "79f4e24ae24829cf",
+     "b": "a58fbf0df34e864c",
+     "titleA": "Tango联合疗法在晚期胰腺癌中报告82%肿瘤缓解率",
+     "titleB": "daraxonrasib 在晚期胰腺癌各 RAS 突变亚组中均改善生存",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "rasolute 302"
+      ],
+      "drugs": [
+       "daraxonrasib"
+      ],
+      "cosine": null,
+      "overlap": 0.462
+     },
+     "relation": "DIFFERENT",
+     "reason": "A是Tango联合疗法的1/2期试验数据，B是daraxonrasib单药RASolute 302的亚组分析，属不同试验",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "0cbc060bc95077b3",
+     "b": "79f4e24ae24829cf",
+     "titleA": "EMA建议批准Rasonque用于转移性胰腺癌",
+     "titleB": "Tango联合疗法在晚期胰腺癌中报告82%肿瘤缓解率",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "rasolute 302"
+      ],
+      "drugs": [
+       "rasonque",
+       "daraxonrasib"
+      ],
+      "cosine": null,
+      "overlap": 0.444
+     },
+     "relation": "DIFFERENT",
+     "reason": "A是监管机构对daraxonrasib的批准建议，B是Tango联合疗法的临床试验数据，为不同事件",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "90c8edd510d3f460",
+     "b": "e1dbe946aad4dfb0",
+     "titleA": "默克集团以13亿美元收购Silence Therapeutics及其siRNA管线",
+     "titleB": "AbbVie 在疼痛性皮肤病 3 期试验中取得阳性结果",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "intrepid"
+      ],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.111
+     },
+     "relation": "DIFFERENT",
+     "reason": "一为并购交易，一为药物3期试验结果，完全不同的事件",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "b4b7e21b631b18a6",
+     "b": "90c8edd510d3f460",
+     "titleA": "Rusfertide III期试验达主要终点",
+     "titleB": "默克集团以13亿美元收购Silence Therapeutics及其siRNA管线",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "verify"
+      ],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.111
+     },
+     "relation": "DIFFERENT",
+     "reason": "一为rusfertide的III期临床试验，一为默克收购Silence的交易，无直接关联",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "106a4c7a7f1f3d05",
+     "b": "ecf7df48b53fdf4f",
+     "titleA": "默沙东将在ESMO 2026公布3项关键3期肿瘤试验结果",
+     "titleB": "中国创新药最贵的答辩，就在这五天",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "trofuse-005"
+      ],
+      "drugs": [
+       "sacituzumab tirumotecan"
+      ],
+      "cosine": null,
+      "overlap": 0.214
+     },
+     "relation": "DIFFERENT",
+     "reason": "A是默沙东公司管线结果的发布预告，B是对中国创新药在ESMO整体表现的综述，非同一发生",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "577290b29aefc879",
+     "b": "166b613bd0f5b4a1",
+     "titleA": "Moderna与默克癌症疫苗数据泄露",
+     "titleB": "个体化mRNA疫苗联合帕博利珠单抗降低黑色素瘤术后复发风险42%",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "keynote-942",
+       "interpath-001"
+      ],
+      "drugs": [
+       "intismeran",
+       "intismeran autogene"
+      ],
+      "cosine": null,
+      "overlap": 0.8
+     },
+     "relation": "SAME",
+     "reason": "两事件均围绕同一项INTerpath-001 III期试验的同一次ESMO 2026结果发布，且共享多篇相同报道（如STAT详细数据确认、ESMO26数据泄露等）。",
+     "second": "SAME",
+     "secondReason": "两事件均指向同一次发生：ESMO 2026上INTerpath-001试验结果的首次公布（含数据泄露与股价反应），仅报道侧重不同。",
+     "confirmed": true
+    },
+    {
+     "a": "05eb5848072c9e74",
+     "b": "577290b29aefc879",
+     "titleA": "ESMO 解除 INTerpath-001 黑色素瘤辅助治疗试验摘要 embargo",
+     "titleB": "Moderna与默克癌症疫苗数据泄露",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "interpath-001"
+      ],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.909
+     },
+     "relation": "SAME",
+     "reason": "A的embargo解除/数据泄露正是B所报道的同一次INTerpath-001数据泄露事件，两事件共享同一批报道。",
+     "second": "SAME",
+     "secondReason": "两事件均围绕同一次发生：INTerpath-001 III期数据在ESMO 2026提前泄露并被解禁，A侧重embargo解除与数据确认，B侧重泄露引发的市场反应，属同一事件的不同侧面",
+     "confirmed": true
+    },
+    {
+     "a": "106a4c7a7f1f3d05",
+     "b": "577290b29aefc879",
+     "titleA": "默沙东将在ESMO 2026公布3项关键3期肿瘤试验结果",
+     "titleB": "Moderna与默克癌症疫苗数据泄露",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "interpath-001"
+      ],
+      "drugs": [
+       "intismeran autogene"
+      ],
+      "cosine": null,
+      "overlap": 0.364
+     },
+     "relation": "RELATED",
+     "reason": "A是ESMO 2026公布计划的预告，B是其中INTerpath-001结果的实际发布，属同一研究从预告到结果公布的后续关系。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "3c40172c89971616",
+     "b": "b46c9309f1ff7667",
+     "titleA": "共悦 · 李烦繁教授：让“临床治愈”更近一步——T-DXd+P方案改写HER2阳性晚期乳腺癌一线治疗格局",
+     "titleB": "anbenitamab联合方案改善HER2阳性晚期乳腺癌PFS",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "cleopatra",
+       "destiny-breast09"
+      ],
+      "drugs": [
+       "trastuzumab",
+       "pertuzumab",
+       "docetaxel"
+      ],
+      "cosine": null,
+      "overlap": 0.643
+     },
+     "relation": "DIFFERENT",
+     "reason": "A讨论的是T-DXd联合方案的DESTINY-Breast09研究，B是国产HER2双抗anbenitamab的HEALER试验，为不同药物、不同试验。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "aab4dfe6c2a1d7da",
+     "b": "14f147ce3465e278",
+     "titleA": "NK受体拮抗剂改善绝经女性睡眠障碍",
+     "titleB": "绝经潮热药elinzanetant睡前服用未致日间困倦",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "oasis i",
+       "oasis ii"
+      ],
+      "drugs": [
+       "elinzanetant"
+      ],
+      "cosine": null,
+      "overlap": 0.125
+     },
+     "relation": "DIFFERENT",
+     "reason": "A是NK受体拮抗剂改善睡眠的荟萃分析，B是elinzanetant睡前服药日间嗜睡的具体分析，为不同研究/分析。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "4a79f6843f8fde02",
+     "b": "98fd90838ae8b06d",
+     "titleA": "Atacicept 3期试验最终分析减缓IgA肾病eGFR下降",
+     "titleB": "IgA肾病新药暴发，北大医院张宏同天2篇NEJM",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "origin 3"
+      ],
+      "drugs": [
+       "atacicept"
+      ],
+      "cosine": null,
+      "overlap": 0.2
+     },
+     "relation": "RELATED",
+     "reason": "B是涵盖A（ORIGIN 3）在内的同日多篇NEJM IgA肾病研究的综合报道，属同一批发表中的关联报道而非同一次发生。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "c565d55d62a2756b",
+     "b": "98fd90838ae8b06d",
+     "titleA": "Sibeprenlimab 3期试验最终分析：稳定IgA肾病eGFR斜率",
+     "titleB": "IgA肾病新药暴发，北大医院张宏同天2篇NEJM",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "visionary"
+      ],
+      "drugs": [
+       "sibeprenlimab",
+       "atacicept"
+      ],
+      "cosine": null,
+      "overlap": 0.2
+     },
+     "relation": "RELATED",
+     "reason": "B 是同日多项IgA肾病试验（含VISIONARY）的汇总报道，与A的VISIONARY最终分析有直接关联但非同一篇报道。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "0cbc060bc95077b3",
+     "b": "a58fbf0df34e864c",
+     "titleA": "EMA建议批准Rasonque用于转移性胰腺癌",
+     "titleB": "daraxonrasib 在晚期胰腺癌各 RAS 突变亚组中均改善生存",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "rasolute 302"
+      ],
+      "drugs": [
+       "daraxonrasib"
+      ],
+      "cosine": null,
+      "overlap": 0.571
+     },
+     "relation": "RELATED",
+     "reason": "同一药物同一试验，但A是监管审批意见、B是ESMO亚组分析数据，属同一研究的后续不同发布。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "fa9cb46ba8effe54",
+     "b": "b4a919e78d8c3423",
+     "titleA": "2026 ESMO前瞻：DeLLphi-305将交出怎样的OS答卷？谁是小肺最佳预言家？",
+     "titleB": "tarlatamab联合度伐利尤单抗延长广泛期小细胞肺癌生存",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "dellphi-305",
+       "dellphi-303"
+      ],
+      "drugs": [
+       "塔拉妥单抗"
+      ],
+      "cosine": null,
+      "overlap": 0.192
+     },
+     "relation": "RELATED",
+     "reason": "A是会议前的预告，B是同一DeLLphi-305试验结果的正式公布，属后续。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "05eb5848072c9e74",
+     "b": "166b613bd0f5b4a1",
+     "titleA": "ESMO 解除 INTerpath-001 黑色素瘤辅助治疗试验摘要 embargo",
+     "titleB": "个体化mRNA疫苗联合帕博利珠单抗降低黑色素瘤术后复发风险42%",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "interpath-001"
+      ],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 1
+     },
+     "relation": "SAME",
+     "reason": "两者均指INTerpath-001同一次结果发布，A侧重embargo解除/泄露，B侧重数据内容。",
+     "second": "SAME",
+     "secondReason": "两事件均指向同一次发生：ESMO 2026上INTerpath-001试验结果的公布（embargo解除与数据披露），A侧重embargo解除与数据泄露，B侧重结果内容与市场反应。",
+     "confirmed": true
+    },
+    {
+     "a": "106a4c7a7f1f3d05",
+     "b": "166b613bd0f5b4a1",
+     "titleA": "默沙东将在ESMO 2026公布3项关键3期肿瘤试验结果",
+     "titleB": "个体化mRNA疫苗联合帕博利珠单抗降低黑色素瘤术后复发风险42%",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "interpath-001"
+      ],
+      "drugs": [
+       "intismeran autogene",
+       "keytruda"
+      ],
+      "cosine": null,
+      "overlap": 0.4
+     },
+     "relation": "RELATED",
+     "reason": "A是默沙东会前预告，B是其中INTerpath-001试验结果的正式公布，属预告与后续。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "9eef2f837b7ff9a2",
+     "b": "5d4e9cd6703e3fea",
+     "titleA": "GCS 13-15分创伤性脑损伤患者血浆GFAP与UCH-L1识别颅内病变的临床界值",
+     "titleB": "血液生物标志物检测提高隐匿性脑损伤检出率",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "track-tbi"
+      ],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.5
+     },
+     "relation": "SAME",
+     "reason": "两者均报道同一TRACK-TBI研究的血浆生物标志物界值结果，仅表述侧重不同。",
+     "second": "SAME",
+     "secondReason": "",
+     "confirmed": true
+    },
+    {
+     "a": "f1e802d64febfac4",
+     "b": "aae9b73f3bc6a0c6",
+     "titleA": "MILD-MT：大血管闭塞轻型卒中血管内治疗90天预后更优",
+     "titleB": "LATE-MT：卒中后24至72小时取栓功能结局更优但出血与死亡更多",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "mild-mt",
+       "late-mt"
+      ],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.579
+     },
+     "relation": "RELATED",
+     "reason": "两项不同的试验（MILD-MT与LATE-MT），但同一篇报道同时介绍了这两项同日发表的研究，属直接关联。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "fd66c355f7f3492d",
+     "b": "9a967f03a22d1d25",
+     "titleA": "CLDN18.2-ADC 胃癌 3 期研究达到 PFS 与 OS 双主要终点",
+     "titleB": "武田公布CLDN18.2胃癌数据并筹备提交上市申请",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "g-hope-001"
+      ],
+      "drugs": [
+       "arcotatug tavatecan"
+      ],
+      "cosine": null,
+      "overlap": 0.357
+     },
+     "relation": "SAME",
+     "reason": "两事件均指同一项G-HOPE-001 III期研究在ESMO 2026的同一结果发布，B只是侧重上市申请筹备。",
+     "second": "SAME",
+     "secondReason": "",
+     "confirmed": true
+    },
+    {
+     "a": "106a4c7a7f1f3d05",
+     "b": "d40eeac171feb06a",
+     "titleA": "默沙东将在ESMO 2026公布3项关键3期肿瘤试验结果",
+     "titleB": "LITESPARK-011 最终预设分析：贝组替凡联合仑伐替尼对比卡博替尼",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "litespark-011"
+      ],
+      "drugs": [
+       "belzutifan",
+       "lenvatinib"
+      ],
+      "cosine": null,
+      "overlap": 0.143
+     },
+     "relation": "RELATED",
+     "reason": "A是默沙东预告将在ESMO公布包括LITESPARK-011在内的多项试验，B是该试验结果的实际发布，属预告与后续。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "d2bf95b130cda65c",
+     "b": "4fa7e3fa0f1d4753",
+     "titleA": "卡瑞利珠单抗诱导联合放化疗治疗局限期小细胞肺癌的随机II期试验",
+     "titleB": "研究揭示对抗小细胞肺癌的新免疫通路",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "impower133",
+       "caspian"
+      ],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.357
+     },
+     "relation": "DIFFERENT",
+     "reason": "一项是卡瑞利珠单抗的临床II期试验，另一项是基础免疫通路研究，仅同属小细胞肺癌领域。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "cacb65779fae710e",
+     "b": "bc2bcf04a2dbd27f",
+     "titleA": "AI方法辅助医生完成真实临床检查流程",
+     "titleB": "语言模型序贯诊断准确率高于全科医生",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "sdbench"
+      ],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.3
+     },
+     "relation": "SAME",
+     "reason": "两事件均指同一篇Science论文（SD Bench/序贯诊断），只是报道侧重不同。",
+     "second": "SAME",
+     "secondReason": "两事件均指同一项发表于《Science》的序贯诊断语言模型研究（sdbench），A侧重AI辅助问诊流程，B侧重准确率对比，属同一研究的不同报道角度。",
+     "confirmed": true
+    },
+    {
+     "a": "62f37e6d1f8a8e76",
+     "b": "b4fe9f6897b7c922",
+     "titleA": "FDA加速批准dostarlimab用于局部晚期直肠癌",
+     "titleB": "AZUR-1：多塔利单抗单药治疗局部晚期直肠癌完全缓解率76%",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "azur-1"
+      ],
+      "drugs": [
+       "多塔利单抗"
+      ],
+      "cosine": null,
+      "overlap": 0.643
+     },
+     "relation": "RELATED",
+     "reason": "AZUR-1数据是支持该加速批准的关键试验结果，批准与试验数据发布为直接关联的两件事。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "106a4c7a7f1f3d05",
+     "b": "05eb5848072c9e74",
+     "titleA": "默沙东将在ESMO 2026公布3项关键3期肿瘤试验结果",
+     "titleB": "ESMO 解除 INTerpath-001 黑色素瘤辅助治疗试验摘要 embargo",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "interpath-001"
+      ],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.5
+     },
+     "relation": "RELATED",
+     "reason": "A是ESMO大会前的整体预告，B是其中INTerpath-001试验摘要解禁与数据发布，属同一会议同一试验的后续进展而非同一次发生。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "106a4c7a7f1f3d05",
+     "b": "c5cc6f5e9914fb89",
+     "titleA": "默沙东将在ESMO 2026公布3项关键3期肿瘤试验结果",
+     "titleB": "芦康沙妥珠单抗联合免疫延长PD-L1阴性NSCLC无进展生存",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "optitrop-lung06"
+      ],
+      "drugs": [
+       "sacituzumab tirumotecan"
+      ],
+      "cosine": null,
+      "overlap": 0.273
+     },
+     "relation": "RELATED",
+     "reason": "A为会前预告，B为其中OptiTROP-Lung06试验在ESMO上的正式数据发布，是预告的后续。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "3c40172c89971616",
+     "b": "0b6cdbc7c92f90d0",
+     "titleA": "共悦 · 李烦繁教授：让“临床治愈”更近一步——T-DXd+P方案改写HER2阳性晚期乳腺癌一线治疗格局",
+     "titleB": "王树森教授：中位PFS达16.4个月！TQB2102治疗HER2低表达乳腺癌Ⅲ期结果出炉｜2026 ESMO",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "daisy"
+      ],
+      "drugs": [
+       "pertuzumab",
+       "trastuzumab"
+      ],
+      "cosine": null,
+      "overlap": 0.308
+     },
+     "relation": "DIFFERENT",
+     "reason": "A讨论T-DXd联合帕妥珠单抗的DESTINY-Breast09研究，B是TQB2102的APEX-Breast01研究，药物与试验均不同。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "ecf7df48b53fdf4f",
+     "b": "91f1e525bc8d8c05",
+     "titleA": "中国创新药最贵的答辩，就在这五天",
+     "titleB": "依沃西单抗又一适应症拟纳入优先审评",
+     "score": 0.95,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [
+       "harmoni-gi1"
+      ],
+      "drugs": [
+       "ivonescimab"
+      ],
+      "cosine": null,
+      "overlap": 0
+     },
+     "relation": "DIFFERENT",
+     "reason": "A是ESMO中国创新药整体表现的综述，B是依沃西单抗具体的监管优先审评事项，非同一发生。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "9ad4b8ba63d3dcfb",
+     "b": "342d8984a59d04ed",
+     "titleA": "同卵双胞胎宫内肿瘤传播的胚胎起源",
+     "titleB": "DNA测序揭示罕见癌症如何在出生前于双胞胎间传播",
+     "score": 0.9,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 1
+     },
+     "relation": "SAME",
+     "reason": "两者均报道同一项关于双胞胎出生前癌症传播的Nature研究及同一病例，属同一论文的不同转述。",
+     "second": "SAME",
+     "secondReason": "",
+     "confirmed": true
+    },
+    {
+     "a": "3193cd6a14e4edb9",
+     "b": "f352468fdb43a17a",
+     "titleA": "多智能体协同重构医疗AI！清华AIR孵化：医生AI分身“坐诊”医院",
+     "titleB": "Tairex发布多智能体AI系统，用于临床协作与决策支持",
+     "score": 0.9,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 1
+     },
+     "relation": "SAME",
+     "reason": "两者均指Tairex（紫荆智康）发布同一多智能体医疗AI系统，A含中文报道、B为同一新闻稿的多语版本。",
+     "second": "SAME",
+     "secondReason": "",
+     "confirmed": true
+    },
+    {
+     "a": "f19f01ff0d3d158b",
+     "b": "e816554dfb281b30",
+     "titleA": "Povetacicept 3期期中分析：IgA肾病蛋白尿降52%",
+     "titleB": "Ravulizumab治疗IgA肾病3期试验中期结果",
+     "score": 0.81,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.9
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项不同药物、不同试验名（RAINIER AIS-D08 与 I CAN）的独立研究，只是同属 IgA 肾病领域。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "4a79f6843f8fde02",
+     "b": "c565d55d62a2756b",
+     "titleA": "Atacicept 3期试验最终分析减缓IgA肾病eGFR下降",
+     "titleB": "Sibeprenlimab 3期试验最终分析：稳定IgA肾病eGFR斜率",
+     "score": 0.7875,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "atacicept"
+      ],
+      "cosine": null,
+      "overlap": 0.875
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项不同药物、不同试验（ORIGIN 3 与 VISIONARY）的独立研究；虽有报道同时提及两者，但事件主体各自独立。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "65692e8cabe8d92a",
+     "b": "d6f42998164b544d",
+     "titleA": "香港9岁男童侵袭性肺炎球菌感染死亡",
+     "titleB": "香港12岁女童甲型H1流感死亡，未接种疫苗",
+     "score": 0.7578947368421053,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.842
+     },
+     "relation": "DIFFERENT",
+     "reason": "两起不同病原体、不同患者的独立死亡病例通报。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "31f8c658864c779d",
+     "b": "577290b29aefc879",
+     "titleA": "Moderna与默克癌症疫苗数据即将公布",
+     "titleB": "Moderna与默克癌症疫苗数据泄露",
+     "score": 0.7363636363636364,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.818
+     },
+     "relation": "RELATED",
+     "reason": "A 是对即将公布数据的预告，B 是同一疫苗数据随后泄露并正式公布，属同一事件的后续进展。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "99df797295e4e721",
+     "b": "895a76940c31322c",
+     "titleA": "撒哈拉以南非洲新生儿窒息病因与危险因素系统评价方案",
+     "titleB": "口腔衰弱危险因素的系统评价与Meta分析",
+     "score": 0.7363636363636364,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.818
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项主题完全不同的系统评价/Meta 分析，无任何共同发生。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "3edac0e2e296c894",
+     "b": "b104562be40d82f9",
+     "titleA": "CMS向密西西比州农村医疗拨款3200万美元",
+     "titleB": "CMS向得州28家农村医疗机构拨款800万美元",
+     "score": 0.7312500000000001,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.813
+     },
+     "relation": "DIFFERENT",
+     "reason": "同一拨款计划下针对不同州、不同金额的两次独立公告。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "045ece4856d2f395",
+     "b": "cded80393b924c30",
+     "titleA": "全能样干细胞体外构建小鼠胚胎模型",
+     "titleB": "化学诱导全能干细胞构建小鼠胚胎发育模型",
+     "score": 0.7200000000000001,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.8
+     },
+     "relation": "SAME",
+     "reason": "两事件均为同一项化学诱导全能干细胞构建小鼠胚胎模型的研究及其Nature论文，报道内容与来源高度重合。",
+     "second": "DIFFERENT",
+     "secondReason": "A是代谢重编程全能样干细胞来源的类囊胚研究，B是化学诱导全能干细胞构建小鼠胚胎模型，两项研究的技术路线与模型体系不同，属各自独立的研究。",
+     "confirmed": false
+    },
+    {
+     "a": "06a245773fed1324",
+     "b": "1d2a7ac47ba21bd7",
+     "titleA": "仑卡奈单抗真实世界安全性与疗效的系统评价与Meta分析",
+     "titleB": "氟喹诺酮类治疗布鲁氏菌病的疗效与安全性：系统评价与Meta分析",
+     "score": 0.7071428571428572,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.786
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项系统评价针对不同药物和不同疾病，是各自独立的研究。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "25ed3de5aba0685a",
+     "b": "fa4e835d0f10d1b6",
+     "titleA": "口服米诺地尔缓释制剂VDPHL01后期试验达主要终点",
+     "titleB": "Upacicalcet 两项 3 期试验达主要终点",
+     "score": 0.7000000000000001,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.778
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同药物、不同适应症、不同试验（VDPHL01 vs PATH-1/PATH-2）的两项独立研究。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "b4b7e21b631b18a6",
+     "b": "25ed3de5aba0685a",
+     "titleA": "Rusfertide III期试验达主要终点",
+     "titleB": "口服米诺地尔缓释制剂VDPHL01后期试验达主要终点",
+     "score": 0.7000000000000001,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.778
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同药物、不同疾病、不同试验的两项独立研究。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "d70f59449841c85b",
+     "b": "11637ca6ca335e6a",
+     "titleA": "成人注意缺陷多动障碍",
+     "titleB": "ADHD与全因及特定原因死亡风险升高相关",
+     "score": 0.7000000000000001,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.778
+     },
+     "relation": "DIFFERENT",
+     "reason": "前者是临床综述，后者是死亡率Meta分析，为两篇不同的文章。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "98f3dfca71eb5298",
+     "b": "fa4e835d0f10d1b6",
+     "titleA": "口服icotrokinra治疗溃疡性结肠炎2b期试验达主要终点",
+     "titleB": "Upacicalcet 两项 3 期试验达主要终点",
+     "score": 0.7000000000000001,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.778
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同药物、不同适应症、不同试验的两项独立研究。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "b4b7e21b631b18a6",
+     "b": "fa4e835d0f10d1b6",
+     "titleA": "Rusfertide III期试验达主要终点",
+     "titleB": "Upacicalcet 两项 3 期试验达主要终点",
+     "score": 0.7000000000000001,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.778
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同药物、不同疾病、不同试验（VERIFY vs PATH-1/PATH-2），仅同属3期试验。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "b4b7e21b631b18a6",
+     "b": "98f3dfca71eb5298",
+     "titleA": "Rusfertide III期试验达主要终点",
+     "titleB": "口服icotrokinra治疗溃疡性结肠炎2b期试验达主要终点",
+     "score": 0.7000000000000001,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.778
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同药物、不同适应症、不同试验。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "d70f59449841c85b",
+     "b": "42eae0036f2c7b72",
+     "titleA": "成人注意缺陷多动障碍",
+     "titleB": "注意缺陷多动障碍药物或改善围绝经期脑雾",
+     "score": 0.7000000000000001,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.778
+     },
+     "relation": "DIFFERENT",
+     "reason": "一篇是成人ADHD诊疗综述，另一篇是关于ADHD药物用于更年期脑雾的独立报道，并非同一次发生。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "c565d55d62a2756b",
+     "b": "f19f01ff0d3d158b",
+     "titleA": "Sibeprenlimab 3期试验最终分析：稳定IgA肾病eGFR斜率",
+     "titleB": "Povetacicept 3期期中分析：IgA肾病蛋白尿降52%",
+     "score": 0.675,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.75
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同药物、不同注册试验（VISIONARY vs RAINIER AIS-D08）的独立结果。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "c565d55d62a2756b",
+     "b": "e816554dfb281b30",
+     "titleA": "Sibeprenlimab 3期试验最终分析：稳定IgA肾病eGFR斜率",
+     "titleB": "Ravulizumab治疗IgA肾病3期试验中期结果",
+     "score": 0.675,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.75
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同药物、不同试验（VISIONARY vs I CAN）的独立结果。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "03b4fabf39b7b03d",
+     "b": "a02e336a11b2b915",
+     "titleA": "FDA批准首款乙肝反义寡核苷酸药物Hibsago",
+     "titleB": "国际研究支持美国食品药品监督管理局批准多替拉韦用于新生儿HIV治疗",
+     "score": 0.675,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.75
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同药物、不同适应症的独立监管决定与研究。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "16185fadc1a5e49c",
+     "b": "03b4fabf39b7b03d",
+     "titleA": "美国食品药品监督管理局批准瑞米布替尼片剂补充申请",
+     "titleB": "FDA批准首款乙肝反义寡核苷酸药物Hibsago",
+     "score": 0.675,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.75
+     },
+     "relation": "DIFFERENT",
+     "reason": "两种不同药物、不同适应症、不同申请的不同监管决定。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "3edac0e2e296c894",
+     "b": "e310a7541773f7ea",
+     "titleA": "CMS向密西西比州农村医疗拨款3200万美元",
+     "titleB": "CMS向阿拉斯加农村医疗投入近2.49亿美元",
+     "score": 0.675,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.75
+     },
+     "relation": "DIFFERENT",
+     "reason": "同一项目下对不同州的两笔独立拨款。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "a814d9541131f157",
+     "b": "39e59c822accd5f6",
+     "titleA": "云南新增清水河、猴桥药材进口口岸",
+     "titleB": "钦州港口岸获批药材进口边境口岸",
+     "score": 0.6685714285714286,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.743
+     },
+     "relation": "DIFFERENT",
+     "reason": "两份不同公告号、不同口岸的独立公告。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "602460b803b87763",
+     "b": "d3e317cfaa1f8f92",
+     "titleA": "本迪布焦型埃博拉疫情在刚果（金）持续，肯尼亚、尼日利亚报告输入病例",
+     "titleB": "尼日利亚报告首例本迪布焦型埃博拉病例，肯尼亚和刚果（金）疫情数字继续上升",
+     "score": 0.6576923076923077,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.731
+     },
+     "relation": "SAME",
+     "reason": "均为同一轮2026年本迪布焦型埃博拉多国疫情的同一通报内容（尼日利亚首例、肯尼亚和刚果（金）病例上升）。",
+     "second": "SAME",
+     "secondReason": "两篇报道均指向同一轮多国本迪布焦型埃博拉疫情通报，B 是对同一疫情进展的媒体转述。",
+     "confirmed": true
+    },
+    {
+     "a": "31f8c658864c779d",
+     "b": "05eb5848072c9e74",
+     "titleA": "Moderna与默克癌症疫苗数据即将公布",
+     "titleB": "ESMO 解除 INTerpath-001 黑色素瘤辅助治疗试验摘要 embargo",
+     "score": 0.6545454545454545,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.727
+     },
+     "relation": "RELATED",
+     "reason": "前者是对同一试验数据发布的预告，后者是随后数据正式解禁公布，属同一事件的后续进展。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "0cbc060bc95077b3",
+     "b": "2fbed99d2724c3dc",
+     "titleA": "EMA建议批准Rasonque用于转移性胰腺癌",
+     "titleB": "Cejemly（舒格利单抗）欧洲公共评估报告第8版修订",
+     "score": 0.6545454545454545,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.727
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同药物、不同适应症的两项独立EMA审评事项。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "0cbc060bc95077b3",
+     "b": "be44d580b829913c",
+     "titleA": "EMA建议批准Rasonque用于转移性胰腺癌",
+     "titleB": "Kostaive（zapomeran）欧洲公共评估报告更新至第6版",
+     "score": 0.6545454545454545,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.727
+     },
+     "relation": "DIFFERENT",
+     "reason": "一个是daraxonrasib的胰腺癌上市许可建议，另一个是zapomeran新冠疫苗的EPAR修订，药物与事项均不同。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "ab547d921cb04434",
+     "b": "3d20b1d9e334a5ea",
+     "titleA": "Osivax流感疫苗2b期失败后转向联合方案",
+     "titleB": "Sitryx公布SYX-5219的1b期数据",
+     "score": 0.6545454545454545,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.727
+     },
+     "relation": "DIFFERENT",
+     "reason": "分属不同公司、不同药物、不同试验（OVX836 2b期 vs SYX-5219 1b期）。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "be44d580b829913c",
+     "b": "2fbed99d2724c3dc",
+     "titleA": "Kostaive（zapomeran）欧洲公共评估报告更新至第6版",
+     "titleB": "Cejemly（舒格利单抗）欧洲公共评估报告第8版修订",
+     "score": 0.65,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.722
+     },
+     "relation": "DIFFERENT",
+     "reason": "同一天同一格式的两份EPAR，但药物与适应症不同，是各自独立的监管文件。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "602460b803b87763",
+     "b": "bb93d9abcfaddcaa",
+     "titleA": "本迪布焦型埃博拉疫情在刚果（金）持续，肯尼亚、尼日利亚报告输入病例",
+     "titleB": "欧洲疾控中心评估本迪布焦型埃博拉输入肯尼亚和尼日利亚的风险",
+     "score": 0.6428571428571429,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.714
+     },
+     "relation": "RELATED",
+     "reason": "B是针对A所述同一疫情输入病例的专门风险评估，属同一疫情的后续进展而非同一次通报。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "f6d07690cee8cc80",
+     "b": "a32dcd8a9856a35d",
+     "titleA": "膀胱癌围手术期纳武利尤单抗Ⅲ期试验最终结果发表",
+     "titleB": "VOLGA 3期试验：围手术期免疫联合方案改善肌层浸润性膀胱癌生存",
+     "score": 0.6375000000000001,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.708
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项不同的Ⅲ期试验（ENERGIZE vs VOLGA），药物与方案不同，各自独立报告。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "fc75ff7608248e7b",
+     "b": "354b10a2cb2ee5fa",
+     "titleA": "拉米夫定300mg片剂将停产：ViiV计划2027年停止分销",
+     "titleB": "二甲双胍缓释片500mg将停产：Mylan公司商业决策",
+     "score": 0.63,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.7
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同公司、不同药物的两份独立停产通报。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "4a79f6843f8fde02",
+     "b": "f19f01ff0d3d158b",
+     "titleA": "Atacicept 3期试验最终分析减缓IgA肾病eGFR下降",
+     "titleB": "Povetacicept 3期期中分析：IgA肾病蛋白尿降52%",
+     "score": 0.61875,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.688
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项不同药物、不同试验（ORIGIN 3 vs RAINIER AIS-D08）的独立研究，仅同为 IgA 肾病 3 期试验。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "4a79f6843f8fde02",
+     "b": "e816554dfb281b30",
+     "titleA": "Atacicept 3期试验最终分析减缓IgA肾病eGFR下降",
+     "titleB": "Ravulizumab治疗IgA肾病3期试验中期结果",
+     "score": 0.61875,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.688
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同药物、不同试验（ORIGIN 3 vs I CAN）的两项独立研究。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "03b4fabf39b7b03d",
+     "b": "1bb7593844aee588",
+     "titleA": "FDA批准首款乙肝反义寡核苷酸药物Hibsago",
+     "titleB": "FDA列出肿瘤与血液肿瘤加速审批的支持治疗及剂型变更",
+     "score": 0.61875,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.688
+     },
+     "relation": "DIFFERENT",
+     "reason": "一个是乙肝新药获批，一个是肿瘤药加速审批清单更新，属不同监管事项。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "602460b803b87763",
+     "b": "655b6ef080f40701",
+     "titleA": "本迪布焦型埃博拉疫情在刚果（金）持续，肯尼亚、尼日利亚报告输入病例",
+     "titleB": "肯尼亚本迪布焦型埃博拉9例确诊1例死亡",
+     "score": 0.61875,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.688
+     },
+     "relation": "RELATED",
+     "reason": "B 是同一肯尼亚埃博拉疫情在 A 通报之后的新进展（新增死亡），属同一持续疫情的不同时间通报。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "e02d890c66cc8cb1",
+     "b": "d3e317cfaa1f8f92",
+     "titleA": "肯尼亚、尼日利亚各现首例邦迪布焦型埃博拉输入病例",
+     "titleB": "尼日利亚报告首例本迪布焦型埃博拉病例，肯尼亚和刚果（金）疫情数字继续上升",
+     "score": 0.61875,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.688
+     },
+     "relation": "SAME",
+     "reason": "两事件均报道尼日利亚首例本迪布焦型埃博拉病例这一同一次通报，B 为该事件的单篇报道。",
+     "second": "SAME",
+     "secondReason": "两事件均报道尼日利亚首例邦迪布焦型埃博拉病例这一同一次通报，B 另含肯尼亚和刚果（金）数字更新，属同一事件的不同报道。",
+     "confirmed": true
+    },
+    {
+     "a": "e310a7541773f7ea",
+     "b": "b104562be40d82f9",
+     "titleA": "CMS向阿拉斯加农村医疗投入近2.49亿美元",
+     "titleB": "CMS向得州28家农村医疗机构拨款800万美元",
+     "score": 0.61875,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.688
+     },
+     "relation": "DIFFERENT",
+     "reason": "同一计划下针对不同州、不同项目的两笔独立拨款公告。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "af879b27fbe794d6",
+     "b": "e5add0f1b4e3cb04",
+     "titleA": "科研 | 希思科-肿瘤创新科研项目（2026年度）第四期——消化道肿瘤等实体瘤方向",
+     "titleB": "科研 | 希思科-肿瘤创新科研项目（2026年度）第六期公告——妇科肿瘤方向",
+     "score": 0.6157894736842106,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "cdk4/6抑制剂",
+       "pd-l1抑制剂"
+      ],
+      "cosine": null,
+      "overlap": 0.684
+     },
+     "relation": "DIFFERENT",
+     "reason": "同一系列科研项目但期次和方向不同（第四期消化道实体瘤 vs 第六期妇科肿瘤），是两次独立公告。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "a560a6c090274fbc",
+     "b": "7b0219f5c18c0ece",
+     "titleA": "欧盟批准帕博利珠单抗联合维恩妥尤单抗围手术期治疗肌层浸润性膀胱癌",
+     "titleB": "KEYNOTE-866围术期帕博利珠单抗治疗膀胱癌研究发布",
+     "score": 0.6107142857142858,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.679
+     },
+     "relation": "DIFFERENT",
+     "reason": "一个是监管批准（KEYNOTE-B15/EV-304），一个是另一项试验KEYNOTE-866的阴性结果，试验名与内容均不同。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "f40ff434f29b6bc1",
+     "b": "dc7b315ae085627e",
+     "titleA": "RAPTOR 试验暂停：广泛期小细胞肺癌放疗联合阿替利珠单抗",
+     "titleB": "再鼎医药公布zoci联合阿替利珠单抗一线治疗ES-SCLC的1b期数据，全球3期拟于2026年底启动",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "atezolizumab"
+      ],
+      "cosine": null,
+      "overlap": 0.333
+     },
+     "relation": "DIFFERENT",
+     "reason": "同一药物和疾病，但分别是RAPTOR试验暂停与再鼎zoci联合方案的1b期数据发布，是不同研究。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "19a662458ef063c9",
+     "b": "79f4e24ae24829cf",
+     "titleA": "daraxonrasib首批使用者家属讲述延长的数月时光",
+     "titleB": "Tango联合疗法在晚期胰腺癌中报告82%肿瘤缓解率",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "daraxonrasib"
+      ],
+      "cosine": null,
+      "overlap": 0.4
+     },
+     "relation": "DIFFERENT",
+     "reason": "前者是患者故事特写，后者是Tango联合疗法的临床试验数据发布，虽涉及同一药物但为不同事件。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "9ff0c5b4faa1d21a",
+     "b": "fd66c355f7f3492d",
+     "titleA": "信达首次公布双抗 ADC 临床数据｜ESMO 2026",
+     "titleB": "CLDN18.2-ADC 胃癌 3 期研究达到 PFS 与 OS 双主要终点",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "irinotecan"
+      ],
+      "cosine": null,
+      "overlap": 0.444
+     },
+     "relation": "DIFFERENT",
+     "reason": "同一公司在同一会议发布的两项不同药物、不同试验（IBI3001 1期 vs G-HOPE-001 3期）的研究。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "1859eddb57466ea8",
+     "b": "6f7036cbac7947f6",
+     "titleA": "Arrowhead脑靶向RNA药物在早期研究中降低阿尔茨海默病tau蛋白",
+     "titleB": "美国抗淀粉样蛋白药物用药差异研究",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "donanemab",
+       "lecanemab"
+      ],
+      "cosine": null,
+      "overlap": 0.353
+     },
+     "relation": "DIFFERENT",
+     "reason": "前者是ARO-MAPT的早期临床结果，后者是抗淀粉样蛋白药物用药差异的流行病学研究，为不同研究。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "2f6b8192b4ed99b4",
+     "b": "6f0ce4bf8c814f11",
+     "titleA": "FDA批准satralizumab居家皮下注射治疗甲状腺眼病",
+     "titleB": "FDA批准RYZUMVI滴眼液补充申请（疗效）",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.667
+     },
+     "relation": "DIFFERENT",
+     "reason": "两种不同药物、不同适应症、不同申请人的独立监管批准",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "555e88cbaae6cc02",
+     "b": "577290b29aefc879",
+     "titleA": "BioNTech HPV16 mRNA疫苗头颈癌试验未达无进展生存期终点",
+     "titleB": "Moderna与默克癌症疫苗数据泄露",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "bnt113"
+      ],
+      "cosine": null,
+      "overlap": 0.3
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同公司、不同疫苗、不同瘤种和不同试验的独立结果",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "beccefa62cdfe896",
+     "b": "b46c9309f1ff7667",
+     "titleA": "卡瑞利珠单抗联合多西他赛卡铂新辅助治疗II-III期三阴性乳腺癌",
+     "titleB": "anbenitamab联合方案改善HER2阳性晚期乳腺癌PFS",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "docetaxel"
+      ],
+      "cosine": null,
+      "overlap": 0.304
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同药物、不同人群（三阴性 vs HER2阳性）、不同试验的独立研究",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "ae5cf6ddea6cd0c2",
+     "b": "b46c9309f1ff7667",
+     "titleA": "瑞康曲妥珠单抗改善ERBB2低表达晚期乳腺癌PFS",
+     "titleB": "anbenitamab联合方案改善HER2阳性晚期乳腺癌PFS",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "trastuzumab"
+      ],
+      "cosine": null,
+      "overlap": 0.429
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同药物、不同适应症人群和不同试验的独立研究",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "b46c9309f1ff7667",
+     "b": "0b6cdbc7c92f90d0",
+     "titleA": "anbenitamab联合方案改善HER2阳性晚期乳腺癌PFS",
+     "titleB": "王树森教授：中位PFS达16.4个月！TQB2102治疗HER2低表达乳腺癌Ⅲ期结果出炉｜2026 ESMO",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "trastuzumab",
+       "pertuzumab"
+      ],
+      "cosine": null,
+      "overlap": 0.462
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同药物、不同试验（HEALER vs APEX-Breast01）和不同人群的独立研究",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "7616cd3c3d82e4cd",
+     "b": "b46c9309f1ff7667",
+     "titleA": "Ziihera联合方案一线治疗HER2阳性胃食管腺癌3年生存数据公布",
+     "titleB": "anbenitamab联合方案改善HER2阳性晚期乳腺癌PFS",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "trastuzumab"
+      ],
+      "cosine": null,
+      "overlap": 0.429
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同药物、不同瘤种（胃食管癌 vs 乳腺癌）和不同试验的独立研究",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "d2bf95b130cda65c",
+     "b": "30ed869f2b91ed62",
+     "titleA": "卡瑞利珠单抗诱导联合放化疗治疗局限期小细胞肺癌的随机II期试验",
+     "titleB": "ESMO 2026：再鼎与Ideaya公布DLL3靶向ADC数据",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "atezolizumab",
+       "carboplatin"
+      ],
+      "cosine": null,
+      "overlap": 0.3
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项不同的研究（LS-SCLC的卡瑞利珠单抗II期试验 vs 广泛期SCLC的DLL3 ADC Ib期试验），仅疾病相同",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "f40ff434f29b6bc1",
+     "b": "30ed869f2b91ed62",
+     "titleA": "RAPTOR 试验暂停：广泛期小细胞肺癌放疗联合阿替利珠单抗",
+     "titleB": "ESMO 2026：再鼎与Ideaya公布DLL3靶向ADC数据",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "atezolizumab"
+      ],
+      "cosine": null,
+      "overlap": 0.381
+     },
+     "relation": "DIFFERENT",
+     "reason": "一个是试验暂停登记，一个是另一项ADC试验的数据发布，仅共享药物和疾病",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "19a662458ef063c9",
+     "b": "a58fbf0df34e864c",
+     "titleA": "daraxonrasib首批使用者家属讲述延长的数月时光",
+     "titleB": "daraxonrasib 在晚期胰腺癌各 RAS 突变亚组中均改善生存",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "daraxonrasib"
+      ],
+      "cosine": null,
+      "overlap": 0.4
+     },
+     "relation": "RELATED",
+     "reason": "患者故事源于同一药物的临床试验，但报道的是不同发生（患者经历 vs 亚组分析数据发布）",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "56a926f8bcd3a5f3",
+     "b": "18e714cc75b8b7e7",
+     "titleA": "ESMO 2026：Incyte公布CDK2抑制剂联合Avastin卵巢癌数据",
+     "titleB": "Lilly公布FRα靶向ADC在铂敏感卵巢癌的1期数据",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "bevacizumab"
+      ],
+      "cosine": null,
+      "overlap": 0.444
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同公司、不同药物、不同人群的两项独立研究，仅同一会议和疾病",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "2f6b8192b4ed99b4",
+     "b": "2094bf3c7b73c927",
+     "titleA": "FDA批准satralizumab居家皮下注射治疗甲状腺眼病",
+     "titleB": "FDA批准ZILBRYSQ补充申请 新增疗效适应症",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.667
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同药物、不同适应症的两个独立监管决定",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "d2bf95b130cda65c",
+     "b": "beccefa62cdfe896",
+     "titleA": "卡瑞利珠单抗诱导联合放化疗治疗局限期小细胞肺癌的随机II期试验",
+     "titleB": "卡瑞利珠单抗联合多西他赛卡铂新辅助治疗II-III期三阴性乳腺癌",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "camrelizumab",
+       "carboplatin"
+      ],
+      "cosine": null,
+      "overlap": 0.316
+     },
+     "relation": "DIFFERENT",
+     "reason": "同一药物的两项不同试验（不同癌种、不同方案、不同注册号）",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "30ed869f2b91ed62",
+     "b": "b4a919e78d8c3423",
+     "titleA": "ESMO 2026：再鼎与Ideaya公布DLL3靶向ADC数据",
+     "titleB": "tarlatamab联合度伐利尤单抗延长广泛期小细胞肺癌生存",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "carboplatin"
+      ],
+      "cosine": null,
+      "overlap": 0.44
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项不同公司、不同药物、不同试验（zoci Ib期 vs DeLLphi-305 III期）的独立报告，仅同属ESMO会议的小细胞肺癌领域。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "b4a919e78d8c3423",
+     "b": "a32dcd8a9856a35d",
+     "titleA": "tarlatamab联合度伐利尤单抗延长广泛期小细胞肺癌生存",
+     "titleB": "VOLGA 3期试验：围手术期免疫联合方案改善肌层浸润性膀胱癌生存",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "imfinzi"
+      ],
+      "cosine": null,
+      "overlap": 0.476
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同试验（DeLLphi-305 vs VOLGA）、不同瘤种（小细胞肺癌 vs 膀胱癌）的两项独立研究。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "4fa7e3fa0f1d4753",
+     "b": "b4a919e78d8c3423",
+     "titleA": "研究揭示对抗小细胞肺癌的新免疫通路",
+     "titleB": "tarlatamab联合度伐利尤单抗延长广泛期小细胞肺癌生存",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "tarlatamab"
+      ],
+      "cosine": null,
+      "overlap": 0.385
+     },
+     "relation": "DIFFERENT",
+     "reason": "一项基础实验室发现与一项III期临床试验结果，无直接关联，仅同属小细胞肺癌领域。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "3fb79b41a8a7b196",
+     "b": "b4a919e78d8c3423",
+     "titleA": "GSK公布Ris-Rez治疗广泛期小细胞肺癌首个全球数据",
+     "titleB": "tarlatamab联合度伐利尤单抗延长广泛期小细胞肺癌生存",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "tarlatamab"
+      ],
+      "cosine": null,
+      "overlap": 0.533
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同公司、不同药物、不同试验（GSK Ib期 vs DeLLphi-305 III期）的独立报告。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "d2bf95b130cda65c",
+     "b": "b4a919e78d8c3423",
+     "titleA": "卡瑞利珠单抗诱导联合放化疗治疗局限期小细胞肺癌的随机II期试验",
+     "titleB": "tarlatamab联合度伐利尤单抗延长广泛期小细胞肺癌生存",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "etoposide",
+       "carboplatin"
+      ],
+      "cosine": null,
+      "overlap": 0.35
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同药物、不同分期（局限期 vs 广泛期）、不同试验的独立研究。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "71a913b9cacd4e0f",
+     "b": "9af8b71f13f3a849",
+     "titleA": "高危局限性胰腺癌围手术期化疗联合SBRT减少局部复发",
+     "titleB": "IROCAS：高危III期结肠癌强化辅助化疗未获益",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "irinotecan",
+       "oxaliplatin"
+      ],
+      "cosine": null,
+      "overlap": 0.375
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同瘤种（胰腺癌 vs 结肠癌）、不同试验（MASTERPLAN vs IROCAS）的两项独立研究。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "ae5cf6ddea6cd0c2",
+     "b": "384cf3806b8be6d1",
+     "titleA": "瑞康曲妥珠单抗改善ERBB2低表达晚期乳腺癌PFS",
+     "titleB": "Presenting at #ESMO2026—Izalontamab brengitecan for HR+/HER2– breast cancer in China (PANKU-Breast01): a randomised, phase 3 trial https://…",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "eribulin"
+      ],
+      "cosine": null,
+      "overlap": 0.5
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项不同的III期试验（HORIZON-Breast06 vs PANKU-Breast01）、不同药物、不同人群，仅同在ESMO 2026报告。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "ae5cf6ddea6cd0c2",
+     "b": "0b6cdbc7c92f90d0",
+     "titleA": "瑞康曲妥珠单抗改善ERBB2低表达晚期乳腺癌PFS",
+     "titleB": "王树森教授：中位PFS达16.4个月！TQB2102治疗HER2低表达乳腺癌Ⅲ期结果出炉｜2026 ESMO",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "trastuzumab"
+      ],
+      "cosine": null,
+      "overlap": 0.5
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项不同药物、不同试验（HORIZON-Breast06 vs APEX-Breast01）的独立研究，仅疾病人群和会议相同。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "39cce139cfa60fbb",
+     "b": "c7ae2de6c4537fa9",
+     "titleA": "刚果（金）启动Tumaini疫苗试验并完成首批接种",
+     "titleB": "刚果（金）：埃博拉疫情蔓延，防疫人员面临压力",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "ervebo"
+      ],
+      "cosine": null,
+      "overlap": 0.357
+     },
+     "relation": "RELATED",
+     "reason": "B是同一埃博拉疫情的最新进展报道，与A的疫苗试验属同一疫情不同时间的通报，非同一次发生。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "a560a6c090274fbc",
+     "b": "a32dcd8a9856a35d",
+     "titleA": "欧盟批准帕博利珠单抗联合维恩妥尤单抗围手术期治疗肌层浸润性膀胱癌",
+     "titleB": "VOLGA 3期试验：围手术期免疫联合方案改善肌层浸润性膀胱癌生存",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "enfortumab vedotin"
+      ],
+      "cosine": null,
+      "overlap": 0.6
+     },
+     "relation": "DIFFERENT",
+     "reason": "一个是监管批准决定，一个是另一项III期试验（VOLGA）的结果发布，药物组合与试验均不同。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "555e88cbaae6cc02",
+     "b": "166b613bd0f5b4a1",
+     "titleA": "BioNTech HPV16 mRNA疫苗头颈癌试验未达无进展生存期终点",
+     "titleB": "个体化mRNA疫苗联合帕博利珠单抗降低黑色素瘤术后复发风险42%",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "keytruda"
+      ],
+      "cosine": null,
+      "overlap": 0.3
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同公司、不同疫苗、不同瘤种与不同试验的独立结果，仅同属mRNA癌症疫苗。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "389d04cf24a709d6",
+     "b": "a4b758784679f22d",
+     "titleA": "tegorubart联合胰岛细胞移植试验扩展至1型糖尿病合并肾病患者",
+     "titleB": "2期BESTOW试验：tegoprubart在首次肾移植中肾功能保护优于他克莫司",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "tacrolimus",
+       "tegoprubart"
+      ],
+      "cosine": null,
+      "overlap": 0.333
+     },
+     "relation": "DIFFERENT",
+     "reason": "同一药物的两项不同试验（胰岛移植扩展试验 vs BESTOW肾移植试验），适应症与试验均不同。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "e3a0e92ab9b86fde",
+     "b": "656ea8c146911211",
+     "titleA": "NATALEE 6年随访：辅助瑞波西利总生存结果",
+     "titleB": "TALENT试验：德曲妥珠单抗在HR阳性HER2低表达早期乳腺癌pCR率低",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "anastrozole"
+      ],
+      "cosine": null,
+      "overlap": 0.5
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项不同的试验（NATALEE 与 TALENT）、不同药物和不同终点，只是同在 ESMO 2026 报告。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "fa4e835d0f10d1b6",
+     "b": "9a967f03a22d1d25",
+     "titleA": "Upacicalcet 两项 3 期试验达主要终点",
+     "titleB": "武田公布CLDN18.2胃癌数据并筹备提交上市申请",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.667
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同药物、不同疾病、不同试验和不同会议的两项独立研究。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "b4b7e21b631b18a6",
+     "b": "9a967f03a22d1d25",
+     "titleA": "Rusfertide III期试验达主要终点",
+     "titleB": "武田公布CLDN18.2胃癌数据并筹备提交上市申请",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.667
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同药物、不同疾病、不同试验，无直接关联。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "56a926f8bcd3a5f3",
+     "b": "d147fac283d5363a",
+     "titleA": "ESMO 2026：Incyte公布CDK2抑制剂联合Avastin卵巢癌数据",
+     "titleB": "Temab-A联合贝伐珠单抗随机1期研究亮相ESMO",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "bevacizumab"
+      ],
+      "cosine": null,
+      "overlap": 0.429
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项不同的 1 期研究，药物、瘤种和试验均不同，仅共用贝伐珠单抗和同一会议。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "70ead10426566960",
+     "b": "d147fac283d5363a",
+     "titleA": "ABT评分模型预测TACE联合贝伐珠单抗与信迪利单抗治疗uHCC预后",
+     "titleB": "Temab-A联合贝伐珠单抗随机1期研究亮相ESMO",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "bevacizumab"
+      ],
+      "cosine": null,
+      "overlap": 0.429
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同瘤种、不同干预和不同研究类型，仅共用贝伐珠单抗。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "db1a0e4473d540d4",
+     "b": "8362f13cced54155",
+     "titleA": "NICHE-2：dMMR结肠癌新辅助免疫治疗随访无复发",
+     "titleB": "CheckMate 8HW 公布最终总生存分析",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "ipilimumab"
+      ],
+      "cosine": null,
+      "overlap": 0.333
+     },
+     "relation": "DIFFERENT",
+     "reason": "NICHE-2 与 CheckMate 8HW 是不同试验，人群（早期 vs 转移性）和设计不同，仅药物相同。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "5f3b11ff96c4d4da",
+     "b": "8362f13cced54155",
+     "titleA": "伊匹木单抗联合纳武利尤单抗治疗食管癌中严重免疫相关不良事件的预后影响",
+     "titleB": "CheckMate 8HW 公布最终总生存分析",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "ipilimumab"
+      ],
+      "cosine": null,
+      "overlap": 0.5
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项不同的研究：一项是食管癌中严重irAEs的预后分析，另一项是CheckMate 8HW结直肠癌试验，癌种、研究设计和终点均不同。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "70ead10426566960",
+     "b": "56a926f8bcd3a5f3",
+     "titleA": "ABT评分模型预测TACE联合贝伐珠单抗与信迪利单抗治疗uHCC预后",
+     "titleB": "ESMO 2026：Incyte公布CDK2抑制剂联合Avastin卵巢癌数据",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "bevacizumab"
+      ],
+      "cosine": null,
+      "overlap": 0.3
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项不同的研究：癌种（肝癌 vs 卵巢癌）、药物组合和研究均不同，仅共用贝伐珠单抗。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "7c517b6e1ca9c534",
+     "b": "060135464705a99f",
+     "titleA": "FourLight-1研究公布主要分析",
+     "titleB": "postMONARCH 试验报告阿贝西利联合方案最终总生存分析",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "fulvestrant"
+      ],
+      "cosine": null,
+      "overlap": 0.389
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项不同的试验（FourLight-1 vs postMONARCH），药物和研究设计不同。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "31662d5086d78bcb",
+     "b": "fa4e835d0f10d1b6",
+     "titleA": "mKRAS疫苗辅助治疗胰腺癌2期试验未达主要终点",
+     "titleB": "Upacicalcet 两项 3 期试验达主要终点",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.667
+     },
+     "relation": "DIFFERENT",
+     "reason": "完全不同的药物、疾病和试验。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "b4b7e21b631b18a6",
+     "b": "31662d5086d78bcb",
+     "titleA": "Rusfertide III期试验达主要终点",
+     "titleB": "mKRAS疫苗辅助治疗胰腺癌2期试验未达主要终点",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.667
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同的药物、疾病和试验。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "98f3dfca71eb5298",
+     "b": "09405a1f0b423fe6",
+     "titleA": "口服icotrokinra治疗溃疡性结肠炎2b期试验达主要终点",
+     "titleB": "Omvoh（mirikizumab-mrkz）在儿童溃疡性结肠炎3期研究中达到临床缓解主要终点",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "mirikizumab"
+      ],
+      "cosine": null,
+      "overlap": 0.471
+     },
+     "relation": "DIFFERENT",
+     "reason": "两种不同药物在不同人群（成人 vs 儿童）中的不同试验，仅共用疾病。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "3c3ce030b562d7ac",
+     "b": "01743bfb50fe5b79",
+     "titleA": "长效HIV注射疗法在非洲依从性困难成人中不劣于口服方案",
+     "titleB": "西班牙队列：长效卡替拉韦联合利匹韦林注射方案依从性达70.4%",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "cabotegravir",
+       "rilpivirine"
+      ],
+      "cosine": null,
+      "overlap": 0.5
+     },
+     "relation": "DIFFERENT",
+     "reason": "A是非洲多国3b期随机试验的疗效结果，B是西班牙真实世界队列的依从性观察，试验名与设计均不同。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "2734b833cd0ffb5b",
+     "b": "49df24432edf68ce",
+     "titleA": "EGPA维持治疗：利妥昔单抗未优于硫唑嘌呤",
+     "titleB": "多发性硬化抗CD20治疗后炎症性肠病风险增加",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "rituximab"
+      ],
+      "cosine": null,
+      "overlap": 0.333
+     },
+     "relation": "DIFFERENT",
+     "reason": "A是EGPA维持治疗的随机对照试验，B是MS抗CD20治疗的IBD风险队列研究，疾病、设计与结局均不同。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "0cbc060bc95077b3",
+     "b": "19a662458ef063c9",
+     "titleA": "EMA建议批准Rasonque用于转移性胰腺癌",
+     "titleB": "daraxonrasib首批使用者家属讲述延长的数月时光",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "daraxonrasib"
+      ],
+      "cosine": null,
+      "overlap": 0.444
+     },
+     "relation": "RELATED",
+     "reason": "B是A获批药物daraxonrasib的患者用药故事与可及性后续报道，属同一药物的后续报道而非同一次发生。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "602460b803b87763",
+     "b": "e02d890c66cc8cb1",
+     "titleA": "本迪布焦型埃博拉疫情在刚果（金）持续，肯尼亚、尼日利亚报告输入病例",
+     "titleB": "肯尼亚、尼日利亚各现首例邦迪布焦型埃博拉输入病例",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.667
+     },
+     "relation": "SAME",
+     "reason": "两者均报道同一轮刚果（金）起源的本迪布焦型埃博拉疫情中尼日利亚、肯尼亚的输入病例通报。",
+     "second": "SAME",
+     "secondReason": "两者均围绕同一起2026年刚果（金）本迪布焦型埃博拉多国疫情通报，A为WHO/ECDC官方通报，B为媒体对同一疫情中尼日利亚、肯尼亚输入病例的报道。",
+     "confirmed": true
+    },
+    {
+     "a": "d41019215c5fedf7",
+     "b": "9a6d4c30f74521b8",
+     "titleA": "专家主张将卡痛叶归类为阿片类药物",
+     "titleB": "观点：阿片类药物过量死亡大幅下降，原因仍不明确",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "fentanyl"
+      ],
+      "cosine": null,
+      "overlap": 0.333
+     },
+     "relation": "DIFFERENT",
+     "reason": "A是关于卡痛叶分类的学术观点，B是关于阿片过量死亡趋势原因的评论，主题与论点均不同。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "9a3d9715bb9c10a6",
+     "b": "d40eeac171feb06a",
+     "titleA": "LITESPARK-012：贝组替凡一线三联未优于标准方案",
+     "titleB": "LITESPARK-011 最终预设分析：贝组替凡联合仑伐替尼对比卡博替尼",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "lenvatinib",
+       "belzutifan"
+      ],
+      "cosine": null,
+      "overlap": 0.56
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项为不同注册号的独立3期试验（LITESPARK-012与LITESPARK-011），人群与对照不同。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "106a4c7a7f1f3d05",
+     "b": "9a3d9715bb9c10a6",
+     "titleA": "默沙东将在ESMO 2026公布3项关键3期肿瘤试验结果",
+     "titleB": "LITESPARK-012：贝组替凡一线三联未优于标准方案",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "keytruda",
+       "lenvatinib",
+       "belzutifan"
+      ],
+      "cosine": null,
+      "overlap": 0.375
+     },
+     "relation": "RELATED",
+     "reason": "A是默沙东ESMO 2026整体发布，B是其中LITESPARK-012这一项试验的具体结果，属同一会议发布中的一项，但A的报道涵盖多项试验，B聚焦单项，二者为包含/后续关系而非同一次发生。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "9a3d9715bb9c10a6",
+     "b": "b41ebfffd6f32bda",
+     "titleA": "LITESPARK-012：贝组替凡一线三联未优于标准方案",
+     "titleB": "仑伐替尼联合帕博利珠单抗与紫杉醇治疗复发性妇科肿瘤的II期试验结果登记",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "lenvatinib"
+      ],
+      "cosine": null,
+      "overlap": 0.345
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项完全不同的研究：LITESPARK-012为肾细胞癌3期试验，B为复发性妇科肿瘤II期试验登记，仅共用药物。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "bc2913b7aac2c84e",
+     "b": "036972fb29143a2a",
+     "titleA": "FDA警示Green Lumber含未标注药物成分",
+     "titleB": "Ultimate Forza男性补充剂因含未标示药物被召回",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "tadalafil"
+      ],
+      "cosine": null,
+      "overlap": 0.455
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同产品、不同监管行动（Green Lumber公告 vs Ultimate Forza召回），仅同为含未标注成分的补充剂。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "ac2845c9f90d247a",
+     "b": "16fff195f654b16d",
+     "titleA": "福莫特罗/氟替卡松3期哮喘试验未入组即终止",
+     "titleB": "布地奈德/格隆溴铵/福莫特罗起始治疗降低COPD医疗资源使用与碳排放",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "formoterol",
+       "budesonide"
+      ],
+      "cosine": null,
+      "overlap": 0.318
+     },
+     "relation": "DIFFERENT",
+     "reason": "一项是终止的哮喘3期试验，另一项是COPD真实世界研究，研究、人群、目的均不同。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "fd66c355f7f3492d",
+     "b": "0b6cdbc7c92f90d0",
+     "titleA": "CLDN18.2-ADC 胃癌 3 期研究达到 PFS 与 OS 双主要终点",
+     "titleB": "王树森教授：中位PFS达16.4个月！TQB2102治疗HER2低表达乳腺癌Ⅲ期结果出炉｜2026 ESMO",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "paclitaxel"
+      ],
+      "cosine": null,
+      "overlap": 0.333
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项不同的ADC、不同瘤种、不同试验（G-HOPE-001 vs APEX-Breast01），仅同场ESMO会议。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "fd66c355f7f3492d",
+     "b": "2c4c65349e0e0d13",
+     "titleA": "CLDN18.2-ADC 胃癌 3 期研究达到 PFS 与 OS 双主要终点",
+     "titleB": "Tovecimig联合紫杉醇二线治疗胆道癌改善ORR与PFS",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "paclitaxel"
+      ],
+      "cosine": null,
+      "overlap": 0.385
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项不同的药物、不同瘤种、不同试验（G-HOPE-001 vs COMPANION-002），仅同场ESMO会议。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "4fd5b0bb71fcf27f",
+     "b": "981d6a5fb260b01f",
+     "titleA": "社论：电子烟与呼吸及血管损害相关，高尼古丁产品易致青少年成瘾",
+     "titleB": "学者通讯讨论尼古丁替代治疗与含尼古丁消费品的心血管风险区分",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "nicotine"
+      ],
+      "cosine": null,
+      "overlap": 0.333
+     },
+     "relation": "DIFFERENT",
+     "reason": "两篇是不同期刊、不同作者、不同主题的独立评论文章，仅同涉尼古丁话题。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "4fa7e3fa0f1d4753",
+     "b": "3fb79b41a8a7b196",
+     "titleA": "研究揭示对抗小细胞肺癌的新免疫通路",
+     "titleB": "GSK公布Ris-Rez治疗广泛期小细胞肺癌首个全球数据",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "tarlatamab"
+      ],
+      "cosine": null,
+      "overlap": 0.417
+     },
+     "relation": "DIFFERENT",
+     "reason": "一项是基础免疫学研究，另一项是 GSK 的 ADC 临床试验数据发布，研究主体与内容均不同。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "3c3ce030b562d7ac",
+     "b": "a02e336a11b2b915",
+     "titleA": "长效HIV注射疗法在非洲依从性困难成人中不劣于口服方案",
+     "titleB": "国际研究支持美国食品药品监督管理局批准多替拉韦用于新生儿HIV治疗",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "dolutegravir"
+      ],
+      "cosine": null,
+      "overlap": 0.364
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项是不同试验（长效注射方案 vs 新生儿多替拉韦剂量）、不同人群的独立研究。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "37aa985cf7310e3e",
+     "b": "a02e336a11b2b915",
+     "titleA": "多拉韦林三联方案治疗HIV不劣于多替拉韦方案",
+     "titleB": "国际研究支持美国食品药品监督管理局批准多替拉韦用于新生儿HIV治疗",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "dolutegravir"
+      ],
+      "cosine": null,
+      "overlap": 0.375
+     },
+     "relation": "DIFFERENT",
+     "reason": "一项是成人初治方案的头对头比较，另一项是新生儿给药方案研究，属不同试验。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "a8cf67ccf6ef9781",
+     "b": "45977a82715cb3b9",
+     "titleA": "调查显示GLP-1受体激动剂起始后近半数饮酒者饮酒减少",
+     "titleB": "进食障碍患者使用GLP-1受体激动剂的相关问题",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "glp-1受体激动剂"
+      ],
+      "cosine": null,
+      "overlap": 0.375
+     },
+     "relation": "DIFFERENT",
+     "reason": "同一期刊的两篇不同文章，主题分别为饮酒变化与进食障碍用药问题。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "3dd342c7a09e89ca",
+     "b": "b4fe9f6897b7c922",
+     "titleA": "ESMO：dostarlimab 观察等待策略在部分局部胃食管腺癌中获良好缓解",
+     "titleB": "AZUR-1：多塔利单抗单药治疗局部晚期直肠癌完全缓解率76%",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "多塔利单抗"
+      ],
+      "cosine": null,
+      "overlap": 0.467
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项是不同试验（GONO DEWI vs AZUR-1）、不同瘤种（胃食管腺癌 vs 直肠癌）的独立报告。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "a8cf67ccf6ef9781",
+     "b": "cae890e0ab1b79f8",
+     "titleA": "调查显示GLP-1受体激动剂起始后近半数饮酒者饮酒减少",
+     "titleB": "复方GLP-1减重处方快速增加且多为自费",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "glp-1受体激动剂"
+      ],
+      "cosine": null,
+      "overlap": 0.313
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项不同的研究：前者关注GLP-1起始后饮酒变化，后者关注复方GLP-1减重处方配发模式，研究问题与数据来源均不同。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "782ad8a5fee34e80",
+     "b": "f4cfd6d3fb6692a6",
+     "titleA": "头孢吡肟-齐德巴坦对比头孢他啶-阿维巴坦联合或不联合多粘菌素治疗医院获得性或呼吸机相关性肺炎的3期试验",
+     "titleB": "耐碳青霉烯肺炎克雷伯菌碳青霉烯酶表型与基因型及头孢他啶-阿维巴坦、多粘菌素敏感性",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "头孢他啶-阿维巴坦",
+       "colistin"
+      ],
+      "cosine": null,
+      "overlap": 0.313
+     },
+     "relation": "DIFFERENT",
+     "reason": "前者是临床试验注册，后者是细菌耐药表型/基因型实验室研究，属不同研究。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "106a4c7a7f1f3d05",
+     "b": "555e88cbaae6cc02",
+     "titleA": "默沙东将在ESMO 2026公布3项关键3期肿瘤试验结果",
+     "titleB": "BioNTech HPV16 mRNA疫苗头颈癌试验未达无进展生存期终点",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "keytruda"
+      ],
+      "cosine": null,
+      "overlap": 0.364
+     },
+     "relation": "DIFFERENT",
+     "reason": "前者是默沙东多项3期试验的会议发布计划，后者是BioNTech另一项疫苗试验的失败结果，为不同公司不同研究。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "82f527392b36a824",
+     "b": "62f032c66d957f4b",
+     "titleA": "美国大型试验将检验司美格鲁肽对社会结局的影响",
+     "titleB": "AI分析Reddit帖识别非获批瑞他鲁肽不良反应",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "semaglutide"
+      ],
+      "cosine": null,
+      "overlap": 0.417
+     },
+     "relation": "DIFFERENT",
+     "reason": "前者是司美格鲁肽的社会结局试验，后者是瑞他鲁肽的社交媒体不良反应分析，为不同药物不同研究。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "c5cc6f5e9914fb89",
+     "b": "dc7b315ae085627e",
+     "titleA": "芦康沙妥珠单抗联合免疫延长PD-L1阴性NSCLC无进展生存",
+     "titleB": "再鼎医药公布zoci联合阿替利珠单抗一线治疗ES-SCLC的1b期数据，全球3期拟于2026年底启动",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "carboplatin"
+      ],
+      "cosine": null,
+      "overlap": 0.391
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项不同的药物与试验（OptiTROP-Lung06 vs ZL-1310-001/DLLEVATE），癌种与阶段均不同。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "30ed869f2b91ed62",
+     "b": "c5cc6f5e9914fb89",
+     "titleA": "ESMO 2026：再鼎与Ideaya公布DLL3靶向ADC数据",
+     "titleB": "芦康沙妥珠单抗联合免疫延长PD-L1阴性NSCLC无进展生存",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "carboplatin"
+      ],
+      "cosine": null,
+      "overlap": 0.4
+     },
+     "relation": "DIFFERENT",
+     "reason": "同一会议上的两项不同报告：前者为再鼎DLL3 ADC的小细胞肺癌1b期数据，后者为芦康沙妥珠单抗的NSCLC 3期结果。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "beccefa62cdfe896",
+     "b": "c5cc6f5e9914fb89",
+     "titleA": "卡瑞利珠单抗联合多西他赛卡铂新辅助治疗II-III期三阴性乳腺癌",
+     "titleB": "芦康沙妥珠单抗联合免疫延长PD-L1阴性NSCLC无进展生存",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "carboplatin"
+      ],
+      "cosine": null,
+      "overlap": 0.304
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项完全不同的研究：不同药物、不同癌种、不同试验（乳腺癌新辅助 vs NSCLC一线），仅同属肿瘤领域。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "c5cc6f5e9914fb89",
+     "b": "484da39d84dce141",
+     "titleA": "芦康沙妥珠单抗联合免疫延长PD-L1阴性NSCLC无进展生存",
+     "titleB": "olomorasib联合化疗免疫一线治疗KRAS G12C突变NSCLC数据更新",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "pemetrexed"
+      ],
+      "cosine": null,
+      "overlap": 0.412
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项不同的ESMO 2026报告：不同药物（sac-TMT vs olomorasib）、不同试验、不同人群（PD-L1阴性非鳞NSCLC vs KRAS G12C突变NSCLC）。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "c8565c980b5488aa",
+     "b": "c5cc6f5e9914fb89",
+     "titleA": "KEYNOTE-B49最终分析：帕博利珠单抗乳腺癌PFS降26%",
+     "titleB": "芦康沙妥珠单抗联合免疫延长PD-L1阴性NSCLC无进展生存",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "sacituzumab tirumotecan"
+      ],
+      "cosine": null,
+      "overlap": 0.364
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项不同的III期研究（KEYNOTE-B49乳腺癌 vs OptiTROP-Lung06 NSCLC），仅同用帕博利珠单抗且同在ESMO 2026。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "d2567dde97d493e7",
+     "b": "0b6cdbc7c92f90d0",
+     "titleA": "登上Nature Medicine！突破PD-L1表达限制，客观缓解率达80%！王晓稼教授深度解读：中国方案为三阴乳腺癌一线治疗带来新希望",
+     "titleB": "王树森教授：中位PFS达16.4个月！TQB2102治疗HER2低表达乳腺癌Ⅲ期结果出炉｜2026 ESMO",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "paclitaxel"
+      ],
+      "cosine": null,
+      "overlap": 0.308
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同药物、不同靶点人群（三阴性乳腺癌 vs HER2低表达乳腺癌）、不同研究的不同发生。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "7616cd3c3d82e4cd",
+     "b": "0b6cdbc7c92f90d0",
+     "titleA": "Ziihera联合方案一线治疗HER2阳性胃食管腺癌3年生存数据公布",
+     "titleB": "王树森教授：中位PFS达16.4个月！TQB2102治疗HER2低表达乳腺癌Ⅲ期结果出炉｜2026 ESMO",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "trastuzumab"
+      ],
+      "cosine": null,
+      "overlap": 0.308
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同药物、不同癌种（胃食管腺癌 vs 乳腺癌）、不同试验，仅同为HER2靶向药物。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "1859eddb57466ea8",
+     "b": "0bb1a30777b42c54",
+     "titleA": "Arrowhead脑靶向RNA药物在早期研究中降低阿尔茨海默病tau蛋白",
+     "titleB": "阿尔茨海默病新药一针自动给药！仑卡奈单抗皮下全自动注射笔在博鳌乐城实现首方突破",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "lecanemab"
+      ],
+      "cosine": null,
+      "overlap": 0.381
+     },
+     "relation": "DIFFERENT",
+     "reason": "两件不同的事：一项在研RNAi药物的早期tau数据 vs 另一药物（lecanemab）给药装置的处方落地，仅同属阿尔茨海默病领域。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "acb947b83d7b1ebc",
+     "b": "7616cd3c3d82e4cd",
+     "titleA": "维迪西妥单抗联合替雷利珠单抗治疗高危膀胱癌",
+     "titleB": "Ziihera联合方案一线治疗HER2阳性胃食管腺癌3年生存数据公布",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "tislelizumab"
+      ],
+      "cosine": null,
+      "overlap": 0.368
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项不同的试验（TRUCE-04 vs HERIZON-GEA-01）、不同瘤种和药物组合，仅共享替雷利珠单抗。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "3c40172c89971616",
+     "b": "7616cd3c3d82e4cd",
+     "titleA": "共悦 · 李烦繁教授：让“临床治愈”更近一步——T-DXd+P方案改写HER2阳性晚期乳腺癌一线治疗格局",
+     "titleB": "Ziihera联合方案一线治疗HER2阳性胃食管腺癌3年生存数据公布",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "trastuzumab"
+      ],
+      "cosine": null,
+      "overlap": 0.333
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同研究（DESTINY-Breast09 vs HERIZON-GEA-01）、不同药物和瘤种，仅同属HER2靶向话题。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "2094bf3c7b73c927",
+     "b": "b993a685c8809f36",
+     "titleA": "FDA批准ZILBRYSQ补充申请 新增疗效适应症",
+     "titleB": "巴托利单抗皮下注射剂在中国获批治疗gMG",
+     "score": 0.6,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [
+       "rozanolixizumab"
+      ],
+      "cosine": null,
+      "overlap": 0.45
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同药物、不同监管机构（FDA vs NMPA）的两个独立批准决定。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "d3e317cfaa1f8f92",
+     "b": "655b6ef080f40701",
+     "titleA": "尼日利亚报告首例本迪布焦型埃博拉病例，肯尼亚和刚果（金）疫情数字继续上升",
+     "titleB": "肯尼亚本迪布焦型埃博拉9例确诊1例死亡",
+     "score": 0.5785714285714286,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.643
+     },
+     "relation": "RELATED",
+     "reason": "A为多国疫情综合通报，B为肯尼亚同一疫情后续的具体病例与死亡通报，属同一疫情不同时间的新进展。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "bb93d9abcfaddcaa",
+     "b": "655b6ef080f40701",
+     "titleA": "欧洲疾控中心评估本迪布焦型埃博拉输入肯尼亚和尼日利亚的风险",
+     "titleB": "肯尼亚本迪布焦型埃博拉9例确诊1例死亡",
+     "score": 0.5785714285714286,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.643
+     },
+     "relation": "RELATED",
+     "reason": "ECDC风险评估是针对肯尼亚等地埃博拉疫情的应对性评估文件，与肯尼亚疫情通报直接相关但非同一次发生。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "31f8c658864c779d",
+     "b": "166b613bd0f5b4a1",
+     "titleA": "Moderna与默克癌症疫苗数据即将公布",
+     "titleB": "个体化mRNA疫苗联合帕博利珠单抗降低黑色素瘤术后复发风险42%",
+     "score": 0.5785714285714286,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.643
+     },
+     "relation": "RELATED",
+     "reason": "A是同一INTerpath-001研究数据公布前的预告，B是随后正式公布的结果，属同一研究的预告与发布。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "e5a45f234046f275",
+     "b": "1d2a7ac47ba21bd7",
+     "titleA": "阿加曲班联合抗血小板治疗缺血性卒中：系统评价与Meta分析",
+     "titleB": "氟喹诺酮类治疗布鲁氏菌病的疗效与安全性：系统评价与Meta分析",
+     "score": 0.5785714285714286,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.643
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项不同的系统评价，疾病、药物和主题均不同。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "0c9d86d350b40e87",
+     "b": "895a76940c31322c",
+     "titleA": "sdLDL-C最高组心血管事件风险升高",
+     "titleB": "口腔衰弱危险因素的系统评价与Meta分析",
+     "score": 0.5727272727272728,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.636
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项不同的系统评价，主题和结局均不同。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "57e9d88926794db3",
+     "b": "895a76940c31322c",
+     "titleA": "机器人辅助步态训练改善卒中后平衡与步速：低确定性证据",
+     "titleB": "口腔衰弱危险因素的系统评价与Meta分析",
+     "score": 0.5727272727272728,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.636
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项不同的系统评价，干预措施和疾病均不同。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "855ab21f69e05fd3",
+     "b": "895a76940c31322c",
+     "titleA": "靶向系统治疗结节性痒疹的疗效与安全性：系统评价与网状Meta分析",
+     "titleB": "口腔衰弱危险因素的系统评价与Meta分析",
+     "score": 0.5727272727272728,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.636
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项不同的系统评价，疾病和主题均不同。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "e02d890c66cc8cb1",
+     "b": "41823bccbc5dbcec",
+     "titleA": "肯尼亚、尼日利亚各现首例邦迪布焦型埃博拉输入病例",
+     "titleB": "非洲疾控中心召开非洲卫生部长会议应对埃博拉疫情跨三区扩散",
+     "score": 0.5727272727272728,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.636
+     },
+     "relation": "RELATED",
+     "reason": "两者均涉及同一轮埃博拉疫情，但A报道的是尼日利亚首例病例和疫情扩散，B报道的是非洲疾控中心为此召开的部长会议，属于同一疫情的不同事件。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "01eac1e0679b02e9",
+     "b": "4ddfeb9b31b58a32",
+     "titleA": "HBI-8000联合纳武利尤单抗使晚期黑色素瘤疾病进展风险降低27%",
+     "titleB": "relatlimab联合纳武利尤单抗5年生存获益持续",
+     "score": 0.5727272727272728,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.636
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项不同的III期试验（HBI-8000-303与RELATIVITY-047），药物组合和报告内容均不同。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "3d20b1d9e334a5ea",
+     "b": "dc7b315ae085627e",
+     "titleA": "Sitryx公布SYX-5219的1b期数据",
+     "titleB": "再鼎医药公布zoci联合阿替利珠单抗一线治疗ES-SCLC的1b期数据，全球3期拟于2026年底启动",
+     "score": 0.5625,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.625
+     },
+     "relation": "DIFFERENT",
+     "reason": "两家不同公司针对不同药物和适应症开展的不同1b期试验，仅同为1b期数据。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "03b4fabf39b7b03d",
+     "b": "4c71a7205358439d",
+     "titleA": "FDA批准首款乙肝反义寡核苷酸药物Hibsago",
+     "titleB": "Biohaven罕见病药Vyglxia获FDA重新受理审评",
+     "score": 0.5625,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.625
+     },
+     "relation": "DIFFERENT",
+     "reason": "两个不同的监管决定，涉及不同药物和不同公司。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "e02d890c66cc8cb1",
+     "b": "bb93d9abcfaddcaa",
+     "titleA": "肯尼亚、尼日利亚各现首例邦迪布焦型埃博拉输入病例",
+     "titleB": "欧洲疾控中心评估本迪布焦型埃博拉输入肯尼亚和尼日利亚的风险",
+     "score": 0.5571428571428572,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.619
+     },
+     "relation": "RELATED",
+     "reason": "ECDC的威胁评估是对同一批埃博拉输入病例的后续回应，而非同一次发生。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "8c42751716b896b1",
+     "b": "7f6d93eba8b32ba7",
+     "titleA": "睾酮治疗或增加绝经后女性心血管疾病风险",
+     "titleB": "饮茶与心血管疾病风险降低相关",
+     "score": 0.5538461538461539,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.615
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项独立研究，暴露因素不同，仅共同关注心血管疾病结局。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "fca851e75080c506",
+     "b": "7ad34a62b13ddf09",
+     "titleA": "美国财政部新规预计将收紧对中国生物技术交易的审查",
+     "titleB": "直播讨论：美财政部拟议规则是否会扼杀中国生物技术交易",
+     "score": 0.55,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.611
+     },
+     "relation": "RELATED",
+     "reason": "直播讨论是对拟议规则这一消息的评论/回应，而非同一次发生。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "6f0ce4bf8c814f11",
+     "b": "c0b57f299e0d30c1",
+     "titleA": "FDA批准RYZUMVI滴眼液补充申请（疗效）",
+     "titleB": "FDA批准首个儿童2型糖尿病每周1次胰岛素",
+     "score": 0.54,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.6
+     },
+     "relation": "DIFFERENT",
+     "reason": "两个不同的FDA批准，涉及不同药物和不同适应症。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "2094bf3c7b73c927",
+     "b": "6f0ce4bf8c814f11",
+     "titleA": "FDA批准ZILBRYSQ补充申请 新增疗效适应症",
+     "titleB": "FDA批准RYZUMVI滴眼液补充申请（疗效）",
+     "score": 0.54,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.6
+     },
+     "relation": "DIFFERENT",
+     "reason": "两种不同药物、不同适应症、不同补充申请（NDA216834 SUPPL-15 与 NDA217064 SUPPL-5），各自独立。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "84f9d23cd05c6106",
+     "b": "5ab680de4febcb06",
+     "titleA": "罗氏与翰森制药达成4亿美元首付、150亿美元合作",
+     "titleB": "罗氏与Zymeworks达成DLL3靶向项目授权合作",
+     "score": 0.54,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.6
+     },
+     "relation": "DIFFERENT",
+     "reason": "交易对手方、资产和金额均不同，是两笔独立的授权交易。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "b7746f2949b86e33",
+     "b": "01e2a34a38a44c49",
+     "titleA": "医保钱包2.0上线，个人账户跨省共济全国落地",
+     "titleB": "医保钱包2.0上线：职工个账可跨省共济近亲属",
+     "score": 0.54,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.6
+     },
+     "relation": "RELATED",
+     "reason": "B是同一政策落地后的官方解读问答，属后续说明而非另一次发生。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "b7746f2949b86e33",
+     "b": "8da0376b220b34ea",
+     "titleA": "医保钱包2.0上线，个人账户跨省共济全国落地",
+     "titleB": "医保钱包升级2.0版并全国上线",
+     "score": 0.54,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.6
+     },
+     "relation": "RELATED",
+     "reason": "B是同一医保钱包政策推进中的后续进展通报，非同一篇发布。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "7cace10d995d6257",
+     "b": "895a76940c31322c",
+     "titleA": "甘油三酯-葡萄糖指数与子痫前期风险的系统评价与Meta分析",
+     "titleB": "口腔衰弱危险因素的系统评价与Meta分析",
+     "score": 0.54,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.6
+     },
+     "relation": "DIFFERENT",
+     "reason": "两篇不同主题、不同期刊的独立Meta分析。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "060135464705a99f",
+     "b": "8362f13cced54155",
+     "titleA": "postMONARCH 试验报告阿贝西利联合方案最终总生存分析",
+     "titleB": "CheckMate 8HW 公布最终总生存分析",
+     "score": 0.54,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.6
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项不同试验、不同药物和瘤种，仅同在ESMO 2026发布。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "0c9d86d350b40e87",
+     "b": "7cace10d995d6257",
+     "titleA": "sdLDL-C最高组心血管事件风险升高",
+     "titleB": "甘油三酯-葡萄糖指数与子痫前期风险的系统评价与Meta分析",
+     "score": 0.54,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.6
+     },
+     "relation": "DIFFERENT",
+     "reason": "两项不同的Meta分析，暴露因素（sdLDL-C vs TyG指数）和结局（心血管事件 vs 子痫前期）均不同。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "99df797295e4e721",
+     "b": "7cace10d995d6257",
+     "titleA": "撒哈拉以南非洲新生儿窒息病因与危险因素系统评价方案",
+     "titleB": "甘油三酯-葡萄糖指数与子痫前期风险的系统评价与Meta分析",
+     "score": 0.54,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.6
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同主题、不同研究（研究方案 vs 完成的Meta分析），无直接关联。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "e1dbe946aad4dfb0",
+     "b": "fd66c355f7f3492d",
+     "titleA": "AbbVie 在疼痛性皮肤病 3 期试验中取得阳性结果",
+     "titleB": "CLDN18.2-ADC 胃癌 3 期研究达到 PFS 与 OS 双主要终点",
+     "score": 0.54,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.6
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同药物、不同适应症、不同试验（INTREPID vs G-HOPE-001）的两项独立研究。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "b6dc51efba8969ee",
+     "b": "e554c61642c491cd",
+     "titleA": "美国政府投入4100万美元开展预防阿尔茨海默病的临床试验",
+     "titleB": "FDA启动NAIN计划并首推阿尔茨海默病预防加速器",
+     "score": 0.54,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.6
+     },
+     "relation": "RELATED",
+     "reason": "两项不同的政府举措（ARPA-H资助 vs FDA监管计划），但均针对阿尔茨海默病预防且时间相近，属有直接关联的独立行动。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "8386b3d5617ea239",
+     "b": "354b10a2cb2ee5fa",
+     "titleA": "亮丙瑞林醋酸酯注射液将停产：Amneal 公司",
+     "titleB": "二甲双胍缓释片500mg将停产：Mylan公司商业决策",
+     "score": 0.54,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.6
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同公司、不同药物的两份独立停产通报。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "263ef8eb718c47b3",
+     "b": "3d20b1d9e334a5ea",
+     "titleA": "Merz完成XEOMIN两项3期偏头痛预防试验入组",
+     "titleB": "Sitryx公布SYX-5219的1b期数据",
+     "score": 0.54,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.6
+     },
+     "relation": "DIFFERENT",
+     "reason": "不同公司、不同药物、不同试验阶段的两项独立进展。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    },
+    {
+     "a": "6f0ce4bf8c814f11",
+     "b": "b993a685c8809f36",
+     "titleA": "FDA批准RYZUMVI滴眼液补充申请（疗效）",
+     "titleB": "巴托利单抗皮下注射剂在中国获批治疗gMG",
+     "score": 0.54,
+     "signals": {
+      "registry": [],
+      "works": [],
+      "trials": [],
+      "drugs": [],
+      "cosine": null,
+      "overlap": 0.6
+     },
+     "relation": "DIFFERENT",
+     "reason": "一个是美国FDA对老视滴眼液RYZUMVI的适应症扩展决定，另一个是中国NMPA对巴托利单抗治疗gMG的上市批准，药物、适应症、监管机构均不同。",
+     "second": null,
+     "secondReason": null,
+     "confirmed": false
+    }
+   ]
+  }
+ ]
+}

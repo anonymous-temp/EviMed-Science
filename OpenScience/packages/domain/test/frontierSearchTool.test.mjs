@@ -36,15 +36,17 @@ test("a feed lookup narrates as 查前沿动态 with its question, or the filter
   // A result is narrated without its call's arguments; inventing a subject
   // there would describe a search that never ran.
   assert.equal(narrate({}, { text: "ok\n{}" }).text, "查前沿动态");
+  // One item read by its id is a reading, with no count.
+  assert.deepEqual(narrate({ id: "k7q2m9x4t1b8" }, { data: { items: [1] } }), { text: "读取前沿动态中的这条消息", known: true });
   assert.equal(narrate({ q: "x".repeat(60) }).text, `查前沿动态：「${"x".repeat(40)}…」`);
 });
 
 test("every way the feed can fail has a verdict: its absence never fails a run, a malformed call is the run's to fix", () => {
   const recoverable = ["frontier_disabled", "frontier_search_unconfigured", "frontier_search_unavailable", "frontier_search_timeout",
     "frontier_search_rate_limited", "frontier_search_upstream_error", "frontier_search_response_invalid",
-    "frontier_search_response_too_large", "frontier_search_gateway_token_missing", "frontier_search_gateway_token_invalid"];
+    "frontier_search_response_too_large", "frontier_search_gateway_token_missing", "frontier_search_gateway_token_invalid", "frontier_search_item_not_found"];
   const terminal = ["frontier_search_query_invalid", "frontier_search_lane_invalid", "frontier_search_specialty_invalid",
-    "frontier_search_window_invalid", "frontier_search_mode_invalid", "frontier_search_limit_invalid",
+    "frontier_search_window_invalid", "frontier_search_mode_invalid", "frontier_search_limit_invalid", "frontier_search_id_invalid",
     "frontier_search_request_invalid", "frontier_search_request_too_large"];
   for (const code of recoverable) assert.equal(classifyEvidenceSourceError(code), "recoverable", code);
   for (const code of terminal) assert.equal(classifyEvidenceSourceError(code), "terminal", code);

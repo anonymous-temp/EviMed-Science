@@ -38,8 +38,8 @@ async function fixture(t, { type = 'entities', after = 'A scoped project fact. d
   const personal = (await contexts.all(owner.id))[0], overlay = new NativeMemoryOverlay({ database: accounts.database });
   await overlay.migrate(); await overlay.noteSession(owner.id, 'dsh-root', 'ordinary');
   const reports = [];
-  const researchMemory = { configured: true, memoryEngine: async () => 'native', accountsOnEngine: async () => [{ userId: owner.id }], settings: async () => ({ learningPaused: false, pausedProjects: [] }) };
-  const worker = new NativeMemoryWorker({ config: { ovNativeMemoryEnabled: true }, researchMemory, sessions, overlay, memoryContexts: contexts, report: value => reports.push(value) });
+  const memorySettings = { configured: true, settings: async () => ({ learningPaused: false, pausedProjects: [] }) };
+  const worker = new NativeMemoryWorker({ config: { memoryEngineEnabled: true }, memorySettings, sessions, overlay, memoryContexts: contexts, report: value => reports.push(value) });
   const archive = async (context, text = 'A user statement unrelated to the extracted line.') => {
     if (context.kind === 'geo-project') await contexts.configure(context); else await sessions.register(owner.id);
     await context.sessions.createSession(owner.id, 'dsh-root');
@@ -149,7 +149,7 @@ test('an extraction completing after reset cleans only its own validated namespa
   const f = await fixture(t), user = f.owner.id;
   const archive = await f.archive(f.a);
   f.stub.files.set(`${archive}/messages.jsonl`, JSON.stringify({ role: 'user', content: 'Old statement', created_at: '2026-01-01T00:00:00Z' }));
-  f.worker.researchMemory.resetInstant = async () => '2026-01-02T00:00:00Z';
+  f.worker.memorySettings.resetInstant = async () => '2026-01-02T00:00:00Z';
   const personal = f.stub.seedMemory(f.personal.namespaceId, 'entities/fact.md', 'Personal fact');
   const b = f.stub.seedMemory(f.b.namespaceId, 'entities/fact.md', 'B fact');
   await f.worker.scanArchives(user);
@@ -241,14 +241,16 @@ test('unchanged source states retain their original date and revisions while gen
   const f = await fixture(t), source = { type: 'doi', id: '10.1000/example' }, uri = f.file(f.a);
   await f.archive(f.a); await f.worker.scanArchives(f.owner.id); await f.worker.processCommits({ userId: f.owner.id });
   f.worker.now = () => new Date('2026-10-24T00:00:00Z');
-  assert.equal(await f.worker.labelSource(f.owner.id, source, 'retracted'), 1);
+  // A genuine transition is one the knowledge rule lets a link make (`linkStatesLeftFor`: a correction never lowers a retraction, so the
+  // order here is a correction, then a retraction).
+  assert.equal(await f.worker.labelSource(f.owner.id, source, 'changed'), 1);
   const body = await f.a.sessions.read(f.owner.id, uri), revisions = await f.overlay.revisionsOf(f.owner.id, uri);
   f.worker.now = () => new Date('2026-10-25T00:00:00Z');
-  assert.equal(await f.worker.labelSource(f.owner.id, source, 'retracted'), 0);
+  assert.equal(await f.worker.labelSource(f.owner.id, source, 'changed'), 0);
   assert.equal(await f.a.sessions.read(f.owner.id, uri), body);
   assert.equal((await f.overlay.revisionsOf(f.owner.id, uri)).length, revisions.length);
-  assert.equal(await f.worker.labelSource(f.owner.id, source, 'changed'), 1);
-  assert.match(await f.a.sessions.read(f.owner.id, uri), /已更正（2026-10-25）/);
+  assert.equal(await f.worker.labelSource(f.owner.id, source, 'retracted'), 1);
+  assert.match(await f.a.sessions.read(f.owner.id, uri), /已撤稿（2026-10-25）/);
 });
 
 test('source label identity is exact even when a DOI is a prefix of another DOI', options, async t => {
@@ -257,7 +259,8 @@ test('source label identity is exact even when a DOI is a prefix of another DOI'
   const longer = { type: 'doi', id: '10.1000/example-long' }, source = { type: 'doi', id: '10.1000/example' };
   await f.worker.labelSource(f.owner.id, longer, 'expired');
   const before = await f.a.sessions.read(f.owner.id, f.file(f.a));
-  await f.worker.labelSource(f.owner.id, source, 'retracted');
+  // A label a clean check may lift is one for a document that came back to the library (`linkStatesLeftFor`: never a retraction).
+  await f.worker.labelSource(f.owner.id, source, 'removed');
   assert.ok((await f.a.sessions.read(f.owner.id, f.file(f.a))).includes(before.split('\n').at(-1)));
   await f.worker.labelSource(f.owner.id, source, 'current');
   assert.equal(await f.a.sessions.read(f.owner.id, f.file(f.a)), before);
@@ -268,7 +271,8 @@ for (const state of ['retracted', 'current']) for (const boundary of ['replace',
     const f = await fixture(t), source = { type: 'doi', id: '10.1000/example' }, uri = f.file(f.a);
     await f.archive(f.a); await f.worker.scanArchives(f.owner.id); await f.worker.processCommits({ userId: f.owner.id });
     f.worker.now = () => new Date('2026-10-24T00:00:00Z');
-    if (state === 'current') await f.worker.labelSource(f.owner.id, source, 'retracted');
+    // What a clean check may lift is a document that came back to the library, never a retraction (`linkStatesLeftFor`).
+    if (state === 'current') await f.worker.labelSource(f.owner.id, source, 'removed');
     const previous = await f.overlay.file(f.owner.id, uri);
     await f.overlay.upsertFile({ userId: f.owner.id, uri, memoryType: 'entities', sensitive: true });
     const target = boundary === 'replace' ? f.a.sessions.rootClient : f.overlay;
@@ -287,7 +291,7 @@ for (const state of ['retracted', 'current']) for (const boundary of ['replace',
     };
     await assert.rejects(f.worker.labelSource(f.owner.id, source, state), /Injected source interruption/);
     assert.equal(injected, true);
-    if (boundary !== 'markSource' || timing === 'before') assert.equal((await f.overlay.sources(f.owner.id, [uri]))[0].state, state === 'current' ? 'retracted' : 'current');
+    if (boundary !== 'markSource' || timing === 'before') assert.equal((await f.overlay.sources(f.owner.id, [uri]))[0].state, state === 'current' ? 'removed' : 'current');
     target[method] = original;
     f.worker.now = () => new Date('2026-10-25T00:00:00Z');
     await f.worker.labelSource(f.owner.id, source, state);

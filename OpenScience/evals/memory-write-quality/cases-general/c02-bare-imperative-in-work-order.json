@@ -4,10 +4,6 @@
   "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C02); every name, number and identifier is invented",
   "expected": "Nothing is written: 「让测试通过，不要改测试」 is the condition of one task, and the bare 「好」 states nothing.",
   "decidable": true,
-  "arms": [
-    "native",
-    "legacy"
-  ],
   "replay": {
     "synthetic": true,
     "projectId": "default",

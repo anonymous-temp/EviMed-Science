@@ -6,7 +6,7 @@ import {GeoContextProvenance} from '../src/geoContextProvenance.mjs';
 import {ContextItemAuthorization,contextPolicyIdentity} from '../src/geoContextItems.mjs';
 import {createNativeInputFixture} from './helpers/geoNativeInputFixture.mjs';
 import {normalizeTranscript} from '../src/dshRuntimeAdapter.mjs';
-import {BODY,frontmatter} from './helpers/handbookFixture.mjs';
+import {BODY,frontmatter} from './helpers/methodSkillFixture.mjs';
 import {LearningService,learnedMethodId} from '../src/learningService.mjs';
 import {MethodConsolidation} from '../src/methodConsolidation.mjs';
 const sha=s=>createHash('sha256').update(s).digest('hex');
@@ -168,18 +168,6 @@ test('a source revised after dispatch cannot be replaced by its new body when th
  };
  await assert.rejects(()=>f.distill.execute(f.request),{code:'geo_learning_input_stale'});
  assert.equal((await f.documents.list('owner','method')).items.length,1);
-});
-
-test('reviewer handbook candidates inherit every related input independently of declared dependencies',localOnly,async t=>{
- const f=await distillerFixture(t,'reviewer-related');f.request.job.payload.trigger='repair_accepted';f.ready();
- const result=await f.distill.execute(f.request);
- assert.equal(result.operation,'handbook');
- const candidate=await f.documents.get('owner','method',result.methodId),proof=await f.p.proofFor('owner','method',candidate);
- assert.ok(proof.parents.some(parent=>parent.id===f.related.id));
- assert.deepEqual(new Set(proof.sources.map(s=>s.runId)),new Set([f.run.id,'reviewer-related-b-source']));
- assert.equal(await f.p.authorize(f.policy,'method',candidate),true);
- await f.documents.put('owner','method',f.related.id,{...f.related.payload,status:'retired'},{expectedRevision:f.related.revision});
- assert.equal(await f.p.authorize(f.policy,'method',candidate),false);
 });
 
 test('consumed-parent closures survive safe self-prior changes and reject a parent changed during the final closure comparison',localOnly,async t=>{

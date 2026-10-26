@@ -47,7 +47,7 @@ async function fixture(t, { capsuleSearch = null, gatewayTimeoutMs = 4000 } = {}
     noteSession: async (...args) => { noted.push(args); }, recordCommit: async row => { commits.push(row); }, commit: async (_owner, uri) => commits.find(row => row.archiveUri === uri) ?? null };
   const journal = new GeoNativeMemoryRemember({ contexts, overlay });
   const admission = { admit: async () => ({ native: true, learn: true, recall: true, learnReason: null, recallReason: null, sessionId: null }) };
-  const handler = createMemoryGatewayHandler({ config: { ovNativeMemoryEnabled: true, memoryEnabled: true, memoryGatewayTimeoutMs:gatewayTimeoutMs }, sessions, admission, overlay,
+  const handler = createMemoryGatewayHandler({ config: { memoryEngineEnabled: true, memoryEnabled: true, memoryGatewayTimeoutMs:gatewayTimeoutMs }, sessions, admission, overlay,
     runtimeManager: { assertActiveEviMedWorkloadToken: async token => {
       if (![a.id, b.id, ordinary.id, solo.id].includes(token)) throw new Error('Unknown workload');
       return { userId: owner.id, projectId: token };

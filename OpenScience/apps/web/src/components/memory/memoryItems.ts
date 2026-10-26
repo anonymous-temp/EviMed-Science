@@ -1,8 +1,5 @@
 import { FolderOpen, Radar, UsersRound } from "lucide-react";
 import type { WebStructuredMemory } from "@/lib/apiClient";
-import { formatDay } from "@/lib/format";
-import { capabilityTitle } from "@/lib/researchAgentUi";
-import type { WebHandbook } from "@/lib/handbooksClient";
 import { entryGroup, recordGroup, recordProjectId, selfSection, type MemoryGroup, type SelfSection } from "@/lib/memoryGroups";
 import type { OwnCapsuleEntry } from "@/lib/memoryClient";
 import { memoryExcerpt } from "@/lib/memoryText";
@@ -13,22 +10,20 @@ import { fileSummary, fileTopic, isFileMemory } from "./memoryNative";
 
 /**
  * What the memory page lists, as one shape per kind of row. Two stores hold a
- * fact (the structured memories and the notes of the researcher's own capsule)
- * and two hold a practice (a learned method and a capability handbook); the page
- * reads each as one list, so each pair is one type here and the rest of the page
- * never asks which store a row came from until it has to write to it.
+ * fact (the structured memories and the notes of the researcher's own capsule);
+ * the page reads them as one list, so the pair is one type here and the rest of
+ * the page never asks which store a row came from until it has to write to it.
+ * A practice is a learned method.
  */
 
 /** A fact: one sentence about the researcher or a project, from either store. */
 export type FactItem =
   | { kind: "record"; key: string; group: MemoryGroup; section: SelfSection; projectId: string | null; at: string; text: string;
-    record: WebStructuredMemory; /** The facts this one replaced: its 「曾经如此」. */ formerly: WebStructuredMemory[] }
+    record: WebStructuredMemory }
   | { kind: "entry"; key: string; group: MemoryGroup; section: SelfSection; projectId: string | null; at: string; text: string; entry: OwnCapsuleEntry };
 
-/** A practice the platform learned: for every study, or for one research tool. */
-export type PracticeItem =
-  | { kind: "method"; key: string; at: string; title: string; summary: string; tool: null; method: WebMethod }
-  | { kind: "handbook"; key: string; at: string; title: string; summary: string; tool: string; handbook: WebHandbook };
+/** A practice the platform learned, for every study. */
+export type PracticeItem = { kind: "method"; key: string; at: string; title: string; summary: string; method: WebMethod };
 
 /** What a row in the hub is, for the one drawer that opens at a time. */
 export type OpenItem = FactItem | PracticeItem;
@@ -46,11 +41,8 @@ function newestFirst<T extends { at: string; key: string }>(rows: T[]): T[] {
  * The facts a list shows: memories in force and the notes in force, newest
  * first.
  *
- * A fact another replaced is shown under what replaced it (「曾经如此」,
- * 2026-09-26 audit M-11), never as a memory in force; one whose replacement is
- * not on the page keeps its own row, marked as what it was. A run summary names
- * a conversation and is not a memory. A forgotten fact is under 已忘记的内容, not
- * in the list, searched or not.
+ * A run summary names a conversation and is not a memory. A forgotten fact is
+ * under 已忘记的内容, not in the list, searched or not.
  */
 export function factItems(
   records: readonly WebStructuredMemory[],
@@ -59,20 +51,13 @@ export function factItems(
 ): FactItem[] {
   const text = query.trim();
   const shown = records.filter((record) => record.kind !== "run_summary");
-  const present = new Set(shown.map((record) => record.id));
-  const replaced = new Map<string, WebStructuredMemory[]>();
-  for (const record of shown) {
-    if (record.status !== "superseded" || !record.supersededBy || !present.has(record.supersededBy)) continue;
-    replaced.set(record.supersededBy, [...(replaced.get(record.supersededBy) ?? []), record]);
-  }
-  const underReplacement = new Set([...replaced.values()].flat().map((record) => record.id));
   const items: FactItem[] = [
     ...shown
-      .filter((record) => record.status !== "archived" && !underReplacement.has(record.id))
+      .filter((record) => record.status !== "archived")
       .map((record): FactItem => ({
         kind: "record", key: `record:${record.id}`, group: recordGroup(record), section: selfSection(record.kind), projectId: recordProjectId(record),
         at: record.updatedAt ?? record.createdAt ?? "", text: isFileMemory(record) ? fileTopic(record) : memoryExcerpt(record.summary || record.value),
-        record, formerly: replaced.get(record.id) ?? [],
+        record,
       })),
     ...entries
       .filter((entry) => entry.payload.status !== "retired" && (!text || matches(entry.payload.content, text)))
@@ -84,24 +69,16 @@ export function factItems(
   return newestFirst(items);
 }
 
-/** The practices a list shows: learned methods for every study, then handbooks for one tool each. */
+/** The practices a list shows: the learned methods in force, newest first. */
 export function practiceItems(
   methods: readonly WebMethod[],
-  handbooks: readonly WebHandbook[],
   { query = "" }: { query?: string } = {},
-): { methods: PracticeItem[]; handbooks: PracticeItem[] } {
+): PracticeItem[] {
   const text = query.trim();
-  const found = (item: PracticeItem) => !text || matches(`${item.title} ${item.summary} ${item.tool ?? ""}`, text);
-  return {
-    methods: newestFirst(methods.filter((method) => method.status === "approved").map((method): PracticeItem => ({
-      kind: "method", key: `method:${method.id}`, at: method.bodyUpdatedAt ?? method.updatedAt ?? "", title: methodTitle(method),
-      summary: method.summary || (method.description ? memoryExcerpt(method.description, 120) : ""), tool: null, method,
-    })).filter(found)),
-    handbooks: newestFirst(handbooks.filter((handbook) => handbook.status === "active").map((handbook): PracticeItem => ({
-      kind: "handbook", key: `handbook:${handbook.id}`, at: handbook.appliedAt ?? handbook.updatedAt ?? "", title: handbook.title,
-      summary: handbook.summary ?? "", tool: (handbook.capabilityId ? capabilityTitle(handbook.capabilityId) : null) ?? "科研工具", handbook,
-    })).filter(found)),
-  };
+  return newestFirst(methods.filter((method) => method.status === "approved").map((method): PracticeItem => ({
+    kind: "method", key: `method:${method.id}`, at: method.bodyUpdatedAt ?? method.updatedAt ?? "", title: methodTitle(method),
+    summary: method.summary || (method.description ? memoryExcerpt(method.description, 120) : ""), method,
+  })).filter((item) => !text || matches(`${item.title} ${item.summary}`, text)));
 }
 
 /** Where a project in the dropdown belongs: the researcher's own, a 虚拟临床研究 study, or a 循证 GEO project. */
@@ -175,22 +152,6 @@ export function factsOfProject(facts: readonly FactItem[], projectId: string | n
   return facts.filter((fact) => fact.group === "project" && (projectId === OTHER_PROJECT
     ? fact.projectId === null || !known.has(fact.projectId)
     : fact.projectId === projectId));
-}
-
-/** When a replaced fact held, as a compact range (「3月2日～9月1日」); empty when neither end is known. */
-export function heldFrom(record: Pick<WebStructuredMemory, "createdAt" | "invalidSince">): string {
-  const from = formatDay(record.createdAt);
-  const to = formatDay(record.invalidSince ?? null);
-  return from || to ? `（${from}～${to}）` : "";
-}
-
-/**
- * The sentence a fact's row says. A fact something else replaced, shown on its
- * own because what replaced it is not on the page, says what it was
- * (「曾经如此」) and never reads as a memory in force.
- */
-export function factRowTitle(item: FactItem): string {
-  return item.kind === "record" && item.record.status === "superseded" ? `曾经如此：${item.text}${heldFrom(item.record)}` : item.text;
 }
 
 /** The quiet line under a row: what a file memory says under its topic. A sentence needs none. */

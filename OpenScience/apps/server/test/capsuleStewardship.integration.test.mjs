@@ -19,7 +19,8 @@ import { CapsuleService } from "../src/capsuleService.mjs";
 import { CapsuleTransferService } from "../src/capsuleTransferService.mjs";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
-import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
+import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
+import { makeCapsule } from "./helpers/capsuleFixtures.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) { const parsed = new URL(url); assert.ok(["127.0.0.1", "localhost"].includes(parsed.hostname)); assert.match(parsed.pathname, /evimed_test/); }
@@ -35,7 +36,7 @@ before(async () => {
   if (!url) return;
   directory = await mkdtemp("/tmp/evimed-stewardship-");
   database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 4, databaseConnectionTimeoutMs: 2000 });
-  await migrateResearchMemory(database);
+  await migrateMemorySettings(database);
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Steward owner','development'),($2,'Steward other','development'),($3,'Steward sharer','development')", [owner, other, sharer]);
   documents = new ProductDocuments(database);
   capsules = new CapsuleService(documents);
@@ -49,7 +50,7 @@ after(async () => {
 
 /** @param {string} user */
 async function source(user = owner) {
-  const capsule = await capsules.create(user, { title: "Stewardship source" });
+  const capsule = await makeCapsule(capsules, user, { title: "Stewardship source" });
   await capsules.addEntry(user, capsule.id, { factKind: "method_preference", layer: "methods", content: `Preserve reproducible analysis steps ${randomUUID()}.` });
   return capsule;
 }
@@ -159,8 +160,8 @@ test("an account keeps a bounded number of live snapshots, a revoke takes the ci
   const third = await bounded.export(sharer, capsule.id, { recipients: [owner] });
   assert.ok(third.archive, "the revoke made room");
 
-  // Deleting the capsule revokes what is left of it, and its files go with them.
-  assert.deepEqual((await bounded.revokeAllForCapsule(sharer, capsule.id)).sort(), [second.snapshot.id, third.snapshot.id].sort());
+  // Revoking what is left takes its files off the disk with it.
+  for (const made of [second, third]) await bounded.revoke(sharer, capsule.id, made.snapshot.id, made.snapshot.revision);
   assert.deepEqual((await snapshotFiles()).filter((name) => name.startsWith(capsuleAccountHash(sharer))), []);
   assert.ok((metric("open_science_capsule_snapshot_files_total", "event", "discarded") ?? 0) >= 3);
   assert.equal(capsuleShareMetricFamilies().find((family) => family.name === "open_science_capsule_share_refused_total")?.series.find((series) => series.labels?.reason === "snapshot_limit")?.value, 1);

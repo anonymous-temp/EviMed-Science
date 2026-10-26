@@ -1,0 +1,62 @@
+{"a":"fd66c355f7f3492d","b":"9a967f03a22d1d25","label":"same","kind":"known-split","why":"One TAK-921 / G-HOPE-001 readout: the single-report event is the company announcement the larger event already covers."}
+{"a":"166b613bd0f5b4a1","b":"577290b29aefc879","label":"same","kind":"split","why":"Both hold the INTerpath-001 ESMO readout (42% lower recurrence) and the same headline report; the leak is the same release."}
+{"a":"05eb5848072c9e74","b":"577290b29aefc879","label":"same","kind":"split","why":"The embargo lift and the leak carry the same detailed-data report of INTerpath-001."}
+{"a":"05eb5848072c9e74","b":"166b613bd0f5b4a1","label":"same","kind":"split","why":"Same detailed-data report of INTerpath-001 in both events, 70 minutes apart."}
+{"a":"30ed869f2b91ed62","b":"dc7b315ae085627e","label":"same","kind":"split","why":"Zai Lab / Ideaya DLL3 ADC zoci + atezolizumab 1b data at ESMO, announced once."}
+{"a":"3193cd6a14e4edb9","b":"f352468fdb43a17a","label":"same","kind":"split","why":"Tairex multi-agent clinical system: the same release is a report in both."}
+{"a":"9ad4b8ba63d3dcfb","b":"342d8984a59d04ed","label":"same","kind":"split","why":"The twin in-utero tumour transmission paper and the same press report, in both events."}
+{"a":"e02d890c66cc8cb1","b":"d3e317cfaa1f8f92","label":"same","kind":"split","why":"Nigeria's first Bundibugyo Ebola case: the lone report is one more report of what the larger event holds."}
+{"a":"23252a0df22f4337","b":"c7ae2de6c4537fa9","label":"same","kind":"known-split","why":"DRC Ebola resurgence, same outlet and minute; the titles differ in angle only (judgement: no body text in the sample)."}
+{"a":"aae9b73f3bc6a0c6","b":"f1e802d64febfac4","label":"related","kind":"known-split","why":"LATE-MT and MILD-MT are two independent trials published together; the joint reports cover both (strict reading: not one occurrence)."}
+{"a":"31f8c658864c779d","b":"577290b29aefc879","label":"related","kind":"development","why":"The announcement that the INTerpath-001 data are coming, then the data itself."}
+{"a":"31f8c658864c779d","b":"05eb5848072c9e74","label":"related","kind":"development","why":"Preview of the INTerpath-001 presentation, then the embargo lift."}
+{"a":"62f37e6d1f8a8e76","b":"b4fe9f6897b7c922","label":"related","kind":"development","why":"FDA accelerated approval of dostarlimab in rectal cancer and the AZUR-1 results it rests on."}
+{"a":"fa9cb46ba8effe54","b":"b4a919e78d8c3423","label":"related","kind":"development","why":"DeLLphi-305 preview and the readout."}
+{"a":"4a79f6843f8fde02","b":"98fd90838ae8b06d","label":"related","kind":"joint-report","why":"Atacicept ORIGIN 3 and a Chinese report that covers it together with the sibeprenlimab paper."}
+{"a":"c565d55d62a2756b","b":"98fd90838ae8b06d","label":"related","kind":"joint-report","why":"Sibeprenlimab VISIONARY and the same joint report."}
+{"a":"fca851e75080c506","b":"51efcedb9a23f6b2","label":"related","kind":"development","why":"Reports that the Treasury would propose a rule, then the proposed rule."}
+{"a":"602460b803b87763","b":"bb93d9abcfaddcaa","label":"related","kind":"development","why":"Outbreak situation report and ECDC's threat assessment of the imported cases."}
+{"a":"602460b803b87763","b":"655b6ef080f40701","label":"related","kind":"development","why":"Outbreak situation report and the later Kenyan death."}
+{"a":"602460b803b87763","b":"e02d890c66cc8cb1","label":"related","kind":"development","why":"WHO situation report and news on the Kenyan and Nigerian imports of the same outbreak (judgement)."}
+{"a":"106a4c7a7f1f3d05","b":"05eb5848072c9e74","label":"related","kind":"joint-report","why":"A preview of three Merck ESMO trials and the INTerpath-001 readout it names."}
+{"a":"0cbc060bc95077b3","b":"a58fbf0df34e864c","label":"related","kind":"development","why":"EMA's recommendation on daraxonrasib and a later RASolute 302 subgroup analysis."}
+{"a":"e816554dfb281b30","b":"f19f01ff0d3d158b","label":"different","kind":"hard-negative","why":"Two IgA nephropathy drugs, two interim analyses."}
+{"a":"4a79f6843f8fde02","b":"c565d55d62a2756b","label":"different","kind":"hard-negative","why":"Atacicept and sibeprenlimab final analyses, same day, same disease."}
+{"a":"4a79f6843f8fde02","b":"e816554dfb281b30","label":"different","kind":"hard-negative","why":"Atacicept final analysis and ravulizumab interim analysis."}
+{"a":"65692e8cabe8d92a","b":"d6f42998164b544d","label":"different","kind":"hard-negative","why":"Two child deaths investigated by the same Hong Kong centre: a series."}
+{"a":"3edac0e2e296c894","b":"b104562be40d82f9","label":"different","kind":"hard-negative","why":"CMS rural grants to Mississippi and to Texas: a series."}
+{"a":"e310a7541773f7ea","b":"b104562be40d82f9","label":"different","kind":"hard-negative","why":"CMS rural grants to Alaska and to Texas."}
+{"a":"03b4fabf39b7b03d","b":"16185fadc1a5e49c","label":"different","kind":"hard-negative","why":"Two FDA approvals (bepirovirsen, remibrutinib)."}
+{"a":"0cbc060bc95077b3","b":"be44d580b829913c","label":"different","kind":"hard-negative","why":"Two EMA items: an approval recommendation and a vaccine EPAR update."}
+{"a":"be44d580b829913c","b":"2fbed99d2724c3dc","label":"different","kind":"hard-negative","why":"Two EPAR updates of different products."}
+{"a":"f6d07690cee8cc80","b":"a32dcd8a9856a35d","label":"different","kind":"hard-negative","why":"ENERGIZE and VOLGA: two perioperative bladder cancer trials."}
+{"a":"a560a6c090274fbc","b":"7b0219f5c18c0ece","label":"different","kind":"hard-negative","why":"EU approval of enfortumab + pembrolizumab and the KEYNOTE-866 trial: one drug, different trials."}
+{"a":"3dd342c7a09e89ca","b":"b4fe9f6897b7c922","label":"different","kind":"hard-negative","why":"Dostarlimab in gastroesophageal and in rectal cancer: one drug, two trials."}
+{"a":"aab4dfe6c2a1d7da","b":"14f147ce3465e278","label":"different","kind":"hard-negative","why":"Two elinzanetant analyses (sleep relief, daytime sleepiness): one programme, two papers (judgement)."}
+{"a":"7c517b6e1ca9c534","b":"060135464705a99f","label":"different","kind":"hard-negative","why":"FourLight-1 and postMONARCH: two ESMO HR+ breast cancer trials."}
+{"a":"555e88cbaae6cc02","b":"577290b29aefc879","label":"different","kind":"hard-negative","why":"BioNTech's HPV16 vaccine trial and the Moderna / Merck melanoma vaccine."}
+{"a":"b4b7e21b631b18a6","b":"fa4e835d0f10d1b6","label":"different","kind":"series","why":"Two phase 3 successes, different drugs."}
+{"a":"b4b7e21b631b18a6","b":"25ed3de5aba0685a","label":"different","kind":"series","why":"Rusfertide and oral minoxidil."}
+{"a":"98f3dfca71eb5298","b":"09405a1f0b423fe6","label":"different","kind":"hard-negative","why":"Two ulcerative colitis drugs."}
+{"a":"3fb79b41a8a7b196","b":"b4a919e78d8c3423","label":"different","kind":"hard-negative","why":"GSK ris-rez and tarlatamab, both extensive-stage SCLC."}
+{"a":"4fa7e3fa0f1d4753","b":"b4a919e78d8c3423","label":"different","kind":"hard-negative","why":"A bench study of SCLC immunity and a phase 3 result."}
+{"a":"39e59c822accd5f6","b":"a814d9541131f157","label":"different","kind":"series","why":"Two NMPA / customs notices for different border ports."}
+{"a":"fc75ff7608248e7b","b":"354b10a2cb2ee5fa","label":"different","kind":"series","why":"Two discontinuation notices for different drugs."}
+{"a":"af879b27fbe794d6","b":"e5add0f1b4e3cb04","label":"different","kind":"series","why":"Two calls of one project series."}
+{"a":"99df797295e4e721","b":"895a76940c31322c","label":"different","kind":"series","why":"Two systematic review protocols."}
+{"a":"06a245773fed1324","b":"1d2a7ac47ba21bd7","label":"different","kind":"series","why":"Two systematic reviews of different drugs."}
+{"a":"d70f59449841c85b","b":"42eae0036f2c7b72","label":"different","kind":"hard-negative","why":"An ADHD review and an ADHD-drug menopause study."}
+{"a":"d70f59449841c85b","b":"11637ca6ca335e6a","label":"different","kind":"hard-negative","why":"An ADHD review and an ADHD mortality meta-analysis."}
+{"a":"3c40172c89971616","b":"b46c9309f1ff7667","label":"different","kind":"hard-negative","why":"A talk on T-DXd + pertuzumab and an anbenitamab phase 3 paper: both HER2+ breast."}
+{"a":"3c40172c89971616","b":"0b6cdbc7c92f90d0","label":"different","kind":"hard-negative","why":"T-DXd + pertuzumab and TQB2102 in HER2-low."}
+{"a":"7616cd3c3d82e4cd","b":"0b6cdbc7c92f90d0","label":"different","kind":"hard-negative","why":"HER2+ gastroesophageal and HER2-low breast trials."}
+{"a":"79f4e24ae24829cf","b":"0cbc060bc95077b3","label":"different","kind":"hard-negative","why":"Tango's combination data and EMA's daraxonrasib recommendation, both pancreatic RAS."}
+{"a":"90c8edd510d3f460","b":"e1dbe946aad4dfb0","label":"different","kind":"series","why":"Merck acquires Silence; AbbVie lutikizumab trial."}
+{"a":"a58fbf0df34e864c","b":"79f4e24ae24829cf","label":"different","kind":"hard-negative","why":"RASolute 302 subgroups and Tango's combination."}
+{"a":"036972fb29143a2a","b":"bc2913b7aac2c84e","label":"different","kind":"hard-negative","why":"Two FDA recalls of tainted supplements: a series."}
+{"a":"c5cc6f5e9914fb89","b":"484da39d84dce141","label":"different","kind":"hard-negative","why":"Two first-line NSCLC trials, different drugs."}
+{"a":"e3a0e92ab9b86fde","b":"656ea8c146911211","label":"different","kind":"hard-negative","why":"NATALEE and TALENT: two early breast cancer trials."}
+{"a":"56a926f8bcd3a5f3","b":"d147fac283d5363a","label":"different","kind":"hard-negative","why":"Two bevacizumab combinations in different cancers."}
+{"a":"fb279d0439b3d800","b":"aa170b0558e84da4","label":"different","kind":"series","why":"A consensus and a weight-loss study."}
+{"a":"ecf7df48b53fdf4f","b":"91f1e525bc8d8c05","label":"different","kind":"hard-negative","why":"A roundup of Chinese drugs at ESMO and a priority-review notice for one of them."}
+{"a":"8362f13cced54155","b":"5f3b11ff96c4d4da","label":"different","kind":"hard-negative","why":"CheckMate 8HW and an irAE study of ipilimumab + nivolumab in oesophageal cancer."}

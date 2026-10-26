@@ -501,5 +501,145 @@ export async function selectLearnedMethods(learning, scope) {
   Object.defineProperty(selected, "mode", { value: mode, enumerable: false });
   Object.defineProperty(selected, "topScore", { value: topScore, enumerable: false });
   Object.defineProperty(selected, "kept", { value: kept, enumerable: false });
+  // The person's own methods that were candidates for this run, selected or not: what an official method of the same scope is read against.
+  Object.defineProperty(selected, "candidates", { value: candidates.map((entry) => entry.source), enumerable: false });
   return /** @type {any} */ (selected);
+}
+
+// ------------------------------------------------------------------------------------------------------ the platform's tier
+
+/**
+ * How many official methods one run is offered at most: the platform's defaults are the lowest tier of what a run is given, and a base tier
+ * that fills the room is the tax on every conversation that principle 16 forbids. Three cards, the ones nearest to what was asked.
+ */
+export const OFFICIAL_METHOD_MOUNT = Object.freeze({ nearest: 3 });
+
+/**
+ * How close an official method must be to one of the person's own, by the cosine of their texts' embeddings (`methodSimilarity.pairs`), for
+ * the two to be read as about the same thing — and the person's wins. 0.70 and no lower: the one distribution there is of this library, the
+ * closest pair of a production library read off the hourly pass on 2026-10-25 (`METHOD_SIMILARITY_PAIR_FLOOR`), was 0.70, and those two
+ * methods were related, not the same; the 0.50 candidate floor is a floor for "worth reading together". Being too eager takes a default away
+ * from a person whose own method is only near it; being too lax mounts two cards the second of which says "where they differ, the person's
+ * own comes first" — so the threshold errs high. Provisional like the numbers it stands beside: every method left out records its score
+ * (`leftOut[].score`), so the number is moved by what it shows.
+ *
+ * With no embedder (the lexical fallback of `methodSimilarity`) the nearness is not decided at all: shared words say two texts use the same
+ * vocabulary and not that they say the same thing, and a withheld method needs a better reason than that. Both stay candidates, the person's
+ * listed first, and the receipt says the delta was `lexical`.
+ */
+export const OFFICIAL_PERSONAL_DELTA_COSINE = 0.7;
+
+/** What a mounted official method is called on disk: `_om` and a digest of its identity, which `_lm` (learned) and the entry ids (a capsule's own) never are. @param {string} methodKey */
+export function officialMethodDirectoryName(methodKey) {
+  return `_om${sha256(String(methodKey ?? "")).slice(0, 32)}`;
+}
+
+/**
+ * The file an official method is mounted as: its own frontmatter (`name`, `description`, `whenToUse`) and its body, the same shape a learned
+ * method's is, so the digest the mount, the receipt and the counters agree on (`mountedMethodDigest`) is computed the one way.
+ * @param {{ name: string, description: string, whenToUse: string, body: string }} method
+ * @returns {{ document: string, digest: string }}
+ */
+export function officialMethodDocument(method) {
+  const payload = { frontmatter: { name: method.name, description: method.description, whenToUse: method.whenToUse }, body: method.body };
+  return { document: renderLearnedMethod(payload), digest: mountedMethodDigest(payload, sha256) };
+}
+
+/**
+ * The official methods a run is offered — the platform's tier, below everything of the person's own.
+ *
+ *  1. Of the methods of this run's scope (a capability's id, or `conversation`: the same vocabulary a learned method declares) the nearest
+ *     `OFFICIAL_METHOD_MOUNT.nearest` to the first message of the conversation (`query`). Without a question there is nothing to rank by,
+ *     and a base tier with no reason to be in front of a run is not in it. A runtime that is not for research (`family`: a GEO run, the
+ *     platform's own projects) is offered none.
+ *  2. Against the person's own methods that were candidates for the run (`personal`: what they wrote and what was learnt, whichever of them
+ *     the mount carried): an official method about the same thing as one of them (`OFFICIAL_PERSONAL_DELTA_COSINE`) is left out of this run, and
+ *     the receipt says which one and how near. Nothing is left out on a guess: with no embedder the delta is not decided.
+ *
+ * What is chosen is spent against what the person's own methods left of the byte budget, by the card each costs; whatever does not fit is
+ * counted as left out like any other (`onLeftOut`). `keep` names what a running runtime was already given, as for the learned half: those
+ * still in force stay readable on disk (`kept`).
+ *
+ * The array carries non-enumerable facts for the caller: `leftOut`, the methods the delta kept out with their reason, and `kept`.
+ *
+ * @param {readonly import('./officialPacks.mjs').OfficialMethod[]} methods the account's official methods (`OfficialPacks.methodsFor`)
+ * @param {{ scopeId?: string | null, family?: "geo" | "research" | null, query?: string | null, similarity?: { nearest: Function, pairs: Function } | null,
+ *   personal?: readonly any[], maxCount?: number, maxBytes?: number, cardDirectory?: string | null, keep?: Iterable<string> | null,
+ *   onLeftOut?: ((methodKey: string) => void) | null }} scope
+ * @returns {Promise<any[] & { leftOut: { id: string, name: string, reason: "personal_method", twin: { id: string, name: string }, score: number }[], deltaMode: "embedding" | "lexical" | null, kept: any[] }>}
+ */
+export async function selectOfficialMethods(methods, scope) {
+  const mounted = (/** @type {any} */ method) => {
+    const { document, digest } = officialMethodDocument(method);
+    const directoryName = officialMethodDirectoryName(method.key);
+    const bytes = Buffer.byteLength(document, "utf8");
+    const promptBytes = scope.cardDirectory
+      ? learnedMethodCardBytes({ frontmatter: { name: method.name, description: method.description, whenToUse: method.whenToUse } }, directoryName, scope.cardDirectory) : bytes;
+    return { id: method.key, name: method.name, digest, directoryName, document, files: {}, bytes, promptBytes, reason: "similarity", official: true,
+      packId: method.packId, methodId: method.methodId, sha: method.sha, entryId: method.entryId };
+  };
+  /** @type {any} */
+  const result = [];
+  Object.defineProperty(result, "leftOut", { value: [], enumerable: false });
+  Object.defineProperty(result, "deltaMode", { value: null, enumerable: false, writable: true });
+  const wanted = new Set(scope.keep ?? []);
+  const kept = (methods ?? []).map(mounted).filter((method) => wanted.has(method.directoryName));
+  Object.defineProperty(result, "kept", { value: kept, enumerable: false, writable: true });
+  const maxCount = Number.isSafeInteger(scope.maxCount) ? Number(scope.maxCount) : OFFICIAL_METHOD_MOUNT.nearest;
+  const maxBytes = Number.isSafeInteger(scope.maxBytes) ? Number(scope.maxBytes) : Number.POSITIVE_INFINITY;
+  const query = String(scope.query ?? "").trim();
+  if (!methods?.length || maxCount <= 0 || scope.family === null || scope.family === "geo" || !query || !scope.similarity) return result;
+
+  const runScope = scope.scopeId == null ? CONVERSATION_SCOPE : scope.scopeId;
+  const docs = methods.filter((method) => method.scope.includes(runScope)).map((method) => ({ id: method.key,
+    payload: { frontmatter: { name: method.name, description: method.description, whenToUse: method.whenToUse }, contentDigest: `sha256:${method.sha}` }, method }));
+  if (!docs.length) return result;
+  /** @type {any[]} */
+  let near;
+  try { near = await scope.similarity.nearest(query, docs, { limit: Math.min(maxCount, OFFICIAL_METHOD_MOUNT.nearest) }); } catch { return result; }
+  const hits = near.map((hit) => hit.method).filter(Boolean);
+  if (!hits.length) return result;
+
+  // The person's own methods that say the same thing win.
+  /** @type {Map<string, { twin: { id: string, name: string }, score: number }>} */
+  const covered = new Map();
+  const personal = [...(scope.personal ?? [])];
+  if (personal.length) {
+    try {
+      const everything = [...hits, ...personal];
+      const pairs = await scope.similarity.pairs(everything, { topK: everything.length, floor: OFFICIAL_PERSONAL_DELTA_COSINE });
+      result.deltaMode = pairs.mode === "embedding" ? "embedding" : "lexical";
+      if (pairs.mode === "embedding") {
+        const own = new Map(personal.map((document) => [String(document.id), document]));
+        for (const pair of pairs) {
+          const [official, other] = hits.some((hit) => hit.id === pair.a) ? [pair.a, pair.b] : [pair.b, pair.a];
+          if (!hits.some((hit) => hit.id === official) || !own.has(other)) continue;
+          const held = covered.get(official);
+          if (!held || pair.score > held.score) {
+            const document = own.get(other);
+            covered.set(official, { twin: { id: String(other), name: String(document?.payload?.frontmatter?.name ?? document?.name ?? other) }, score: pair.score });
+          }
+        }
+      }
+    } catch {
+      // A nearness that cannot be read leaves both in: nothing is withheld on a failure.
+      result.deltaMode = "lexical";
+    }
+  }
+  let spent = 0;
+  for (const hit of hits) {
+    const twin = covered.get(hit.id);
+    if (twin) {
+      result.leftOut.push({ id: hit.id, name: hit.method.name, reason: "personal_method", twin: twin.twin, score: Math.round(twin.score * 1e4) / 1e4 });
+      continue;
+    }
+    if (result.length >= maxCount) break;
+    const entry = mounted(hit.method);
+    if (spent + entry.promptBytes > maxBytes) { scope.onLeftOut?.(entry.id); continue; }
+    spent += entry.promptBytes;
+    result.push(entry);
+  }
+  const selectedNames = new Set(result.map((method) => method.directoryName));
+  Object.defineProperty(result, "kept", { value: kept.filter((method) => !selectedNames.has(method.directoryName)), enumerable: false, writable: true });
+  return result;
 }

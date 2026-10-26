@@ -2,7 +2,7 @@ import path from "node:path";
 import { sourceOriginOf, workspaceLayout } from "@evimed/domain";
 import { KB_INDEX_METHOD, chunkDocument, embeddingInputReceipt, embeddingText, estimateTokens, passageQuery, trigramTerms, tsqueryLiteral, tsvectorLiteral } from "./kbChunker.mjs";
 import { migrateKnowledgeBaseIndex } from "./kbPersistence.mjs";
-import { searchTokens } from "./memoryRecallPolicy.mjs";
+import { searchTokens } from "./searchTokens.mjs";
 import { HttpError } from "./security.mjs";
 import { SOURCE_READABLE_SQL, sourceParserRevision, sourceReadable } from "./sourceService.mjs";
 

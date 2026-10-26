@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS ${SCHEMA}.user_connector_credentials (
   updated_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY (user_id, connector)
 );
--- What the upstream said when the value was saved (credentialCheck.mjs): one of
+-- What the upstream said when the value was saved (connectorCredentialCheck.mjs): one of
 -- verified / rejected / unreachable / unchecked, null before any check ran.
 ALTER TABLE ${SCHEMA}.user_connector_credentials
   ADD COLUMN IF NOT EXISTS check_state text CHECK (check_state IN ('verified', 'rejected', 'unreachable', 'unchecked'));

@@ -30,7 +30,7 @@ after(async () => {
 });
 
 const ID = "geo_xinermei";
-const USER = "cdss-access";
+const USER = "researcher";
 /** @param {string} sql @param {unknown[]} [values] */
 const q = async (sql, values = []) => (await database.query(sql, values)).rows;
 

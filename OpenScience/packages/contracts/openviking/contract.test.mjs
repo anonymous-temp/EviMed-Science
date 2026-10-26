@@ -270,10 +270,15 @@ test("the two recorded sets are whole, name the pinned image and carry no creden
 });
 
 test("the recorded engine is the one the layout and the pin describe", async () => {
-  // A registered user's settings read back the eight types of the mounted template directory — the allowlist of
-  // `server.user_config_defaults`, in the order the server sorts them.
+  // A registered user's settings read back the types of the mounted template directory — the allowlist of
+  // `server.user_config_defaults`, in the order the server sorts them. The recording was made with the eight types the pin shipped
+  // with; `observations` and `recent_work` (2026-10-25) are added to the layout and to the directory, and a re-recording lists ten.
   const settings = await readJson("./fixtures/memory/admin-user-settings-get.json");
-  assert.deepEqual(settings.response.result.memory_policy.memory_types, [...OPENVIKING_MEMORY_TYPES].sort());
+  const recorded = settings.response.result.memory_policy.memory_types;
+  const eight = ["profile", "preferences", "entities", "corrections", "project_context", "decisions", "follow_ups", "project_facts"];
+  assert.ok(recorded.length === 8 || recorded.length === OPENVIKING_MEMORY_TYPES.length, "the recording lists the eight types or the layout's whole list");
+  assert.deepEqual(recorded, [...(recorded.length === 8 ? eight : OPENVIKING_MEMORY_TYPES)].sort());
+  assert.deepEqual(OPENVIKING_MEMORY_TYPES.slice(0, 8), eight, "the first eight types are the recorded ones, in the layout's order");
   // The admin routes do not know a trusted user until it is registered, and say so with a 404 the client names.
   assert.equal((await readJson("./fixtures/memory/admin-user-settings-get-unregistered.json")).status, 404);
   assert.equal((await readJson("./fixtures/memory/admin-user-register-again.json")).response.error.code, "ALREADY_EXISTS");

@@ -1,4 +1,5 @@
 import { FRONTIER_LANES, FRONTIER_LANE_LABELS_ZH, frontierSourceDisplayName } from "@evimed/domain";
+import { FRONTIER_SOURCE_STREAM_COLUMNS } from "./frontierSourceColumns.mjs";
 import { clockMinutes, zonedClock, zonedInstant } from "./frontierDaily.mjs";
 import { isChineseProse, trimToWholeSentences } from "./frontierEditor.mjs";
 import { frontierEventRole } from "./frontierEvents.mjs";
@@ -208,7 +209,7 @@ export class FrontierMonthly {
    */
   async compose(month) {
     const window = frontierMonthWindow(month, this.timeZone);
-    const rows = (await this.database.query(`SELECT i.*, s.name AS source_name, s.owner_entity AS source_owner, s.source_type AS current_source_type,
+    const rows = (await this.database.query(`SELECT i.*, s.name AS source_name, s.owner_entity AS source_owner, ${FRONTIER_SOURCE_STREAM_COLUMNS}, s.source_type AS current_source_type,
         coalesce(e.merged_into, i.event_id) AS event_id
       FROM evimed_frontier.items i
       JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
@@ -216,7 +217,7 @@ export class FrontierMonthly {
       WHERE i.id = ANY(ARRAY(SELECT DISTINCT unnest(d.item_ids) FROM evimed_frontier.dailies d WHERE d.day >= $1::date AND d.day <= $2::date))
         AND i.state = 'published' AND s.enabled AND i.verification IN ('passed', 'repaired') AND length(btrim(coalesce(i.summary_zh, ''))) > 0
       ORDER BY i.score_total DESC NULLS LAST, i.visible_at DESC, i.id DESC LIMIT 2000`, [window.first, window.last])).rows.map((/** @type {any} */ row) => ({
-      ...row, source_name: frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name, ownerEntity: row.source_owner }),
+      ...row, source_name: frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name, ownerEntity: row.source_owner, access: row.source_access, journal: row.item_journal }),
       primary: frontierEventRole({ sourceType: row.current_source_type, evidenceType: row.evidence_type }) === "primary" }));
     const issue = frontierMonthlyIssue(rows);
     if (!issue) return null;

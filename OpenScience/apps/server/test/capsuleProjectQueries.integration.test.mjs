@@ -8,6 +8,7 @@ import { ProductDocuments } from "../src/productStore.mjs";
 import { CapsuleService } from "../src/capsuleService.mjs";
 import { loadConfig } from "../src/config.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
+import { makeCapsule } from "./helpers/capsuleFixtures.mjs";
 
 const options = { skip: !process.env.OPEN_SCIENCE_TEST_POSTGRES_URL && "Disposable PostgreSQL required" };
 async function fixture(t) {
@@ -23,7 +24,8 @@ async function fixture(t) {
   await accounts.defaultProject(await accounts.userById("other"));
   await accounts.createProject(owner, "other-project", "Other project");
   const documents = new ProductDocuments(accounts.database), service = new CapsuleService(documents);
-  const capsule = await service.create(owner.id, { title: "Scoped fixtures" });
+  // A hand-made source capsule (main's `makeCapsule`: `CapsuleService.create` left the service with no production caller).
+  const capsule = await makeCapsule(service, owner.id, { title: "Scoped fixtures" });
   const ids = { project: [], other: [], account: [] };
   for (const [name, projectId, count] of [["project", "default", 2], ["other", "other-project", 15], ["account", null, 15]]) {
     for (let n = 0; n < count; n += 1) {
@@ -69,7 +71,7 @@ test("capsule entry project and metadata projection are applied inside the paged
   assert.equal(account.items.length, 15); assert.ok(account.items.every(row => row.projectId === null));
   assert.equal((await service.entries(owner.id, capsule.id, { limit: 100 })).items.length, 32);
   await assert.rejects(service.entries("other", capsule.id, { projectId: "default", fields }), { code: "capsule_not_found" });
-  const different = await service.create(owner.id, { title: "Another capsule" });
+  const different = await makeCapsule(service, owner.id, { title: "Another capsule" });
   await documents.put(owner.id, "fact", "other-capsule", { capsuleId: different.id, content: "Shared query", status: "approved" }, { expectedRevision: 0, projectId: "default" });
   assert.equal((await service.entries(owner.id, capsule.id, { projectId: "default", limit: 100 })).items.length, 2);
 });

@@ -1,5 +1,4 @@
 import {MODULE_RUNTIME_TASKS} from './moduleEvolutionRuntimeSession.mjs';
-import {MODULE_MEMORY_SNAPSHOT_TASKS} from './moduleEvolutionMemorySnapshot.mjs';
 import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {createModuleEvolutionCurator} from './moduleEvolutionCurator.mjs';
@@ -30,7 +29,6 @@ export function createModuleEvolutionPreparation({service,taskPool,policies,prov
     cases=await readGeoCalibrationCases();
    }
    if(!cases&&input.moduleId==='runtime')cases=MODULE_RUNTIME_TASKS;
-   if(!cases&&input.moduleId==='memory')cases=MODULE_MEMORY_SNAPSHOT_TASKS;
    if(!cases&&input.moduleId==='sources')cases=[
     {id:'quoted-csv-cell',format:'csv',sourceText:'dose,unit\n"5",mg',expectedCells:[{address:'2:1',text:'5'},{address:'2:2',text:'mg'}]},
     {id:'csv-escaped-label',format:'csv',sourceText:'label,n\n"a, b",120',expectedCells:[{address:'2:1',text:'a, b'},{address:'2:2',text:'120'}]},
@@ -48,11 +46,11 @@ export function createModuleEvolutionPreparation({service,taskPool,policies,prov
    let knownCorrect=0;
    for(const item of cases){
     const correct=measured.units?.find(unit=>unit.id===item.id)?.score===1;
-    const generated=['sources','evidence','memory','runtime'].includes(input.moduleId);
+    const generated=['sources','evidence','runtime'].includes(input.moduleId);
     let truthVerified=false;
     if(input.moduleId==='runtime'&&correct){const reference=MODULE_RUNTIME_TASKS.find(task=>task.id===item.id);truthVerified=reference && hash(reference)===hash(item) && reference.turns.every(turn=>turn.expectedText!==`${turn.expectedText}-wrong`);}
     if(generated && correct && input.moduleId!=='runtime'){
-      const wrong=input.moduleId==='memory'?{...item,expected:['record:deliberately-incorrect-reference']}:input.moduleId==='sources'?{...item,expectedCells:[{address:'1:1',text:'deliberately-wrong-absolute-reference'}]}:{...item,expectedStatuses:['deliberately-wrong-status']};
+      const wrong=input.moduleId==='sources'?{...item,expectedCells:[{address:'1:1',text:'deliberately-wrong-absolute-reference'}]}:{...item,expectedStatuses:['deliberately-wrong-status']};
       const control=await runner({...input,candidate:baseline,arm:'baseline',pool:'development',batch:[wrong],userId:await service.owner(),projectId:EVOLUTION_PROJECT_ID});
       truthVerified=control.units?.[0]?.score===0;
     }

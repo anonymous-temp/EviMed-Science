@@ -78,18 +78,16 @@ test("only a 「循证 GEO」 capability may declare a GEO tool; clinical eviden
 });
 
 // Exact metadata/identity seams. Listing a consumer permits only these modules
-// and named bindings, never the business readers beside them.
+// and named bindings, never the business readers beside them. (The handbook arm's
+// consumers left with it on 2026-10-25; the learning ledger now takes its scope only
+// from the injected provenance and imports no GEO seam.)
 const CONTEXT_IMPORTS = {
   "agentRuns.mjs": { geoNativeInputs: ["mergeInputAttribution"] },
-  "capabilityHandbooks.mjs": { geoContextItems: ["CONTEXT_ITEM_FIELDS", "sameContextPolicy"] },
   "capsuleMethods.mjs": { geoContextItems: ["CONTEXT_ITEM_FIELDS", "contextPolicyIdentity"] },
   "capsuleService.mjs": { geoContextItems: ["CONTEXT_ITEM_FIELDS"] },
-  "handbookConsolidation.mjs": { geoContextProvenance: ["scopedMethodName"] },
   "learnedMethodMount.mjs": { geoContextItems: ["CONTEXT_ITEM_FIELDS", "contextPolicyIdentity"] },
-  "learningService.mjs": { geoContextProvenance: ["scopedMethodName"] },
   "learningTriggers.mjs": { geoContextItems: ["contextPolicyIdentity"] },
   "methodDistillationRuns.mjs": { geoContextItems: ["contextPolicyIdentity"], geoContextProvenance: ["scopedMethodName"] },
-  "nativeHandbookContext.mjs": { geoContextItems: ["sameContextPolicy"] },
   "residentProfile.mjs": { geoContextItems: ["contextPolicyIdentity", "sameContextPolicy"] },
   "runtimeContextGeneration.mjs": { geoContextItems: ["contextPolicyIdentity"] },
 };

@@ -16,16 +16,11 @@ const resetMemory = vi.fn();
 const fetchMyCapsule = vi.fn();
 const fetchProjectOverview = vi.fn();
 const archiveMemoryRecord = vi.fn();
-const settleMemoryConflict = vi.fn();
 const restoreCapsuleEntry = vi.fn();
 const listAllMethods = vi.fn();
 const methodVersions = vi.fn();
 const methodSources = vi.fn();
 const rollbackMethod = vi.fn();
-const listAllHandbooks = vi.fn();
-const handbookDetail = vi.fn();
-const handbookVersions = vi.fn();
-const rollbackHandbook = vi.fn();
 const geo = vi.hoisted(() => ({ feature: "off" as "on" | "off", projects: [] as { projectId: string }[] }));
 const vcr = vi.hoisted(() => ({ feature: "off" as "on" | "off", studies: [] as { projectId: string }[] }));
 const map = vi.hoisted(() => ({ feature: "off" as "on" | "off" | "loading" }));
@@ -49,7 +44,6 @@ vi.mock("@/lib/memoryClient", async () => {
     ensureMyCapsule: () => Promise.resolve(null),
     fetchMyCapsule: (...args: unknown[]) => fetchMyCapsule(...args),
     archiveMemoryRecord: (...args: unknown[]) => archiveMemoryRecord(...args),
-    settleMemoryConflict: (...args: unknown[]) => settleMemoryConflict(...args),
     restoreCapsuleEntry: (...args: unknown[]) => restoreCapsuleEntry(...args),
     fetchProjectOverview: (...args: unknown[]) => fetchProjectOverview(...args),
   };
@@ -62,16 +56,6 @@ vi.mock("@/lib/methodsClient", async () => {
     methodVersions: (...args: unknown[]) => methodVersions(...args),
     methodSources: (...args: unknown[]) => methodSources(...args),
     rollbackMethod: (...args: unknown[]) => rollbackMethod(...args),
-  };
-});
-vi.mock("@/lib/handbooksClient", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/handbooksClient")>("@/lib/handbooksClient");
-  return {
-    ...actual,
-    listAllHandbooks: (...args: unknown[]) => listAllHandbooks(...args),
-    handbookDetail: (...args: unknown[]) => handbookDetail(...args),
-    handbookVersions: (...args: unknown[]) => handbookVersions(...args),
-    rollbackHandbook: (...args: unknown[]) => rollbackHandbook(...args),
   };
 });
 // Which projects belong to a module is the sidebar's own source of truth: the two module readers.
@@ -99,7 +83,7 @@ const record = (patch: Partial<WebStructuredMemory> = {}): WebStructuredMemory =
   provenance: { basis: "stated", observations: 3, runs: 1, conversations: 2 },
   evidence: [{ sourceType: "conversation_message", sourceRef: "sessions/ses_9/messages/u1", quote: "我是临床药师",
     observedAt: "2026-09-12T02:00:00Z", weight: 1, fingerprint: "f1" }],
-  revisions: [],
+  revisions: [], document: { id: "nm_profile" },
   ...patch,
 });
 
@@ -111,12 +95,6 @@ const method = {
   promotion: { status: "approved", reasons: [], missing: [] }, body: "## Purpose\nRun the last guards before the bytes are frozen.", steps: "1. 先复制一份。\n2. 再逐项检查。",
   scope: { applicability: "报告交付前", counterexamples: [], current: true },
   statusChangedAt: "2026-09-22T02:00:00Z", bodyUpdatedAt: "2026-09-22T02:00:00Z", trajectories: 3, createdAt: "2026-09-21T06:00:00Z", updatedAt: "2026-09-22T06:00:00Z",
-};
-
-const handbook = {
-  id: "method:capability-handbook:meta-analysis:citations", revision: 5, capabilityId: "meta-analysis", status: "active",
-  title: "每一句结论落回来源", summary: "写结论时同时写出它出自哪篇、哪一句。", whenToUse: "写综述结论时", appliedAt: "2026-09-23T02:00:00Z",
-  source: { projectId: "prj_1", sessionId: "ses_9" }, createdAt: "2026-09-20T02:00:00Z", updatedAt: "2026-09-23T02:00:00Z",
 };
 
 const entry = (patch: Record<string, unknown> = {}) => ({
@@ -181,14 +159,11 @@ describe("记忆胶囊", () => {
     listAllMethods.mockImplementation(async (status?: string) => (status === "retired"
       ? [{ ...method, id: "method:learned:old", title: "已停用的做法", status: "retired", revision: 4 }]
       : [method, { ...method, id: "method:learned:waiting", title: "刚改过还没生效的做法", status: "candidate" }]));
-    listAllHandbooks.mockImplementation(async (status: string) => (status === "retired" ? [{ ...handbook, id: "method:capability-handbook:geo-content:old", title: "已停用的经验", status: "retired", revision: 7 }] : [handbook]));
     methodVersions.mockResolvedValue({ items: [
       { version: 2, revision: 2, at: "2026-09-22T06:00:00Z", title: null, current: true },
       { version: 1, revision: 1, at: "2026-09-21T06:00:00Z", title: null, current: false, summary: "最初的一句话。", steps: "1. 最初的步骤。" },
     ] });
     methodSources.mockResolvedValue({ items: [{ projectId: "prj_1", sessionId: "ses_5", title: "儿童疳证中医药新证据", at: "2026-09-22T08:00:00Z" }] });
-    handbookDetail.mockResolvedValue({ ...handbook, body: "model body", steps: "1. 对应每个引用。", sources: [] });
-    handbookVersions.mockResolvedValue({ items: [{ version: 1, revision: 5, at: "2026-09-23T02:00:00Z", title: null, current: true }] });
     searchMemories.mockResolvedValue({ items: [], query: "", semantic: 0, conversations: {}, usage: {} });
     // Most tests are about the memories; the overview above them has tests of its own and is unreadable by default.
     fetchProjectOverview.mockRejectedValue(new Error("not read"));
@@ -208,13 +183,13 @@ describe("记忆胶囊", () => {
     }
   });
 
-  it("keeps sharing, forgotten content, this project and the reset in the header's 「⋯」, in that order — the map is a tab, not a menu item", async () => {
+  it("keeps sharing, the import from another assistant, forgotten content, this project and the reset in the header's 「⋯」, in that order — the map is a tab, not a menu item", async () => {
     const user = userEvent.setup();
     open();
     await screen.findByRole("switch", { name: "记忆" });
     await user.click(screen.getByRole("button", { name: "记忆设置" }));
     const menu = await screen.findByRole("menu", { name: "记忆设置" });
-    expect([...menu.querySelectorAll("[role^=menuitem]")].map((item) => item.textContent)).toEqual(["分享与导入", "已忘记的内容", "本项目不使用记忆", "重置记忆"]);
+    expect([...menu.querySelectorAll("[role^=menuitem]")].map((item) => item.textContent)).toEqual(["分享与导入", "从其他 AI 导入", "已忘记的内容", "本项目不使用记忆", "重置记忆"]);
     const project = within(menu).getByRole("menuitemcheckbox", { name: "本项目不使用记忆" });
     expect(project).toHaveAttribute("aria-checked", "false");
     await user.click(project);
@@ -273,14 +248,14 @@ describe("记忆胶囊", () => {
 
   it("asks before the reset deletes anything, and says exactly what it clears and what it leaves", async () => {
     const user = userEvent.setup();
-    resetMemory.mockResolvedValue({ structured: 3, methods: 2, handbooks: 1, entries: 4 });
+    resetMemory.mockResolvedValue({ structured: 3, methods: 2, entries: 4 });
     open();
     await screen.findByRole("switch", { name: "记忆" });
     await user.click(screen.getByRole("button", { name: "记忆设置" }));
     await user.click(await screen.findByRole("menuitem", { name: "重置记忆" }));
     const dialog = await screen.findByRole("alertdialog", { name: "重置记忆？" });
     // Every kind the page shows, and none of what it does not.
-    expect(dialog).toHaveTextContent("将永久清空你的全部记忆、已学到的做法和经验，以及你自己胶囊里的记录，不可撤销。");
+    expect(dialog).toHaveTextContent("将永久清空你的全部记忆、已学到的做法，以及你自己胶囊里的记录，不可撤销。");
     expect(dialog).toHaveTextContent("对话、报告、知识库和别人分享给你的胶囊不受影响。");
     expect(resetMemory).not.toHaveBeenCalled();
     await user.click(within(dialog).getByRole("button", { name: "清空" }));
@@ -301,7 +276,7 @@ describe("记忆胶囊", () => {
     await screen.findByRole("button", { name: /药学背景/ });
     const tabs = screen.getByRole("tablist", { name: "记忆" });
     // 成长 is not a tab: what happened each week is the map's 「时间」 view.
-    expect(within(tabs).getAllByRole("tab").map((item) => item.textContent)).toEqual(["关于你4", "项目1", "做法2"]);
+    expect(within(tabs).getAllByRole("tab").map((item) => item.textContent)).toEqual(["关于你4", "项目1", "做法1"]);
     const search = screen.getByRole("searchbox", { name: "搜索记忆" });
     const band = document.querySelector("[data-page-chrome]")!;
     expect(band).toContainElement(tabs);
@@ -506,18 +481,13 @@ describe("记忆胶囊", () => {
     expect(within(menu).getByRole("menuitemradio", { name: "波立维" })).not.toBeDisabled();
   });
 
-  it("做法 is learned methods in force and handbooks, in two groups; a method still waiting is not shown", async () => {
+  it("做法 is the learned methods in force; a method still waiting is not shown", async () => {
     const user = userEvent.setup();
     open();
     await user.click(await screen.findByRole("tab", { name: /^做法/ }));
-    expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["所有研究都会用", "用在某个科研工具里"]);
+    expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["所有研究都会用"]);
     const every = within(screen.getByRole("list", { name: "所有研究都会用的做法" }));
     expect(every.getAllByRole("listitem").map((item) => item.textContent)).toEqual(["提交前给成品做最后把关先留改动前的副本，再逐项确认每道检查真的能报错。"]);
-    // A handbook names the research tool it is for, by the title the researcher knows.
-    const tools = within(screen.getByRole("list", { name: "用在某个科研工具里的做法" }));
-    expect(tools.getAllByRole("listitem")[0]).toHaveTextContent("每一句结论落回来源");
-    expect(tools.getAllByRole("listitem")[0]).toHaveTextContent("写结论时同时写出它出自哪篇、哪一句。");
-    expect(tools.getAllByRole("listitem")[0].textContent).not.toMatch(/meta-analysis/);
     expect(screen.queryByText("刚改过还没生效的做法")).toBeNull();
     // Nothing is typed here: no form, no 新建.
     expect(screen.queryByRole("button", { name: /新建|写一个|添加/ })).toBeNull();
@@ -546,21 +516,6 @@ describe("记忆胶囊", () => {
     rollbackMethod.mockResolvedValue({});
     await user.click(within(drawer).getByRole("button", { name: "回到上一版" }));
     await waitFor(() => expect(rollbackMethod).toHaveBeenCalledWith(expect.objectContaining({ id: method.id, revision: 2 }), 1));
-  });
-
-  it("opens a handbook in a drawer the same way, naming its research tool, without a state that never moves", async () => {
-    const user = userEvent.setup();
-    open("?tab=methods");
-    await user.click(await screen.findByRole("button", { name: /每一句结论落回来源/ }));
-    const drawer = await screen.findByRole("dialog", { name: "每一句结论落回来源" });
-    expect(within(drawer).getByText(/^用在.+ · 第 \d+ 版/)).toBeInTheDocument();
-    expect(drawer.textContent).not.toMatch(/从你的对话中学到|你定下的/);
-    expect(await within(drawer).findByText("1. 对应每个引用。")).toBeInTheDocument();
-    expect(within(drawer).getByText("写综述结论时")).toBeInTheDocument();
-    // One version: nothing to go back to, and nothing earlier to read.
-    expect(within(drawer).queryByRole("button", { name: "回到上一版" })).toBeNull();
-    expect(within(drawer).queryByText("以前的版本")).toBeNull();
-    expect(within(drawer.closest("body")!).queryByText(/效果待观察|对照评估/)).toBeNull();
   });
 
   // R19 (plan §3 S10): the page held to the framework's assertions, on each of its tabs.
@@ -652,8 +607,9 @@ describe("记忆胶囊", () => {
     expect(screen.queryByRole("button", { name: /药学背景/ })).toBeNull();
   });
 
-  it("searches the methods and handbooks on their own tab, over what is loaded", async () => {
+  it("searches the methods on their own tab, over what is loaded", async () => {
     const user = userEvent.setup();
+    listAllMethods.mockResolvedValue([method, { ...method, id: "method:learned:citations", title: "每一句结论落回来源", summary: "写结论时同时写出它出自哪篇、哪一句。" }]);
     open("?tab=methods");
     await screen.findByRole("button", { name: /提交前给成品做最后把关/ });
     await user.type(screen.getByRole("searchbox", { name: "搜索记忆" }), "落回来源");
@@ -664,80 +620,18 @@ describe("记忆胶囊", () => {
     expect(await screen.findByText("没有找到")).toBeInTheDocument();
   });
 
-  // 2026-09-26 audit (M-11): a superseded record was listed as a current one.
-  it("shows a replaced fact as 「曾经如此」 under what replaced it, never as a memory in force", async () => {
-    const user = userEvent.setup();
-    fetchMemoryProfile.mockResolvedValue({
-      records: [
-        record({ id: "rec_new", kind: "preference", key: "preference.designs", value: "接受高质量队列研究。", summary: "接受高质量队列研究。", createdAt: "2026-09-01T00:00:00Z" }),
-        record({ id: "rec_old", kind: "preference", key: "preference.rct_only", value: "只看 RCT。", summary: "只看 RCT。",
-          status: "superseded", supersededBy: "rec_new", createdAt: "2026-03-02T00:00:00Z", invalidSince: "2026-09-01T00:00:00Z" }),
-        record({ id: "rec_orphan", kind: "preference", key: "preference.language", value: "回答用英文。", summary: "回答用英文。",
-          status: "superseded", supersededBy: "rec_deleted", createdAt: "2026-02-01T00:00:00Z", invalidSince: "2026-04-01T00:00:00Z" }),
-      ],
-      groups: {}, activeCount: 1, pendingCount: 0, conversations: {}, usage: {},
-    });
-    open();
-    await user.click(await screen.findByRole("button", { name: /接受高质量队列研究/ }));
-    const drawer = await screen.findByRole("dialog", { name: "偏好" });
-    expect(within(drawer).getByText(/曾经如此：只看 RCT。（3月2日～9月1日）/)).toBeInTheDocument();
-    await user.click(within(drawer).getByRole("button", { name: "关闭" }));
-    // One whose replacement is not on the page keeps a row, marked as what it was.
-    expect(screen.getByText(/曾经如此：回答用英文。（2月1日～4月1日）/)).toBeInTheDocument();
-    expect(screen.queryByText("只看 RCT。")).toBeNull();
-  });
-
-  // F1: a disagreement is on both memories and settled by the researcher.
-  it("settles a disagreement for the researcher from the drawer, then reads the page again", async () => {
-    const user = userEvent.setup();
-    const conflict = (id: string, text: string): WebStructuredMemory["relations"] => ({
-      validity: { from: null, until: null }, caveats: ["conflict"], sources: [],
-      conflicts: [{ id, status: "active", scope: "user", scopeId: "", origin: "explicit", sensitive: false, text, createdAt: null }],
-    });
-    fetchMemoryProfile.mockResolvedValue({
-      records: [
-        record({ id: "rec_a", kind: "preference", key: "preference.a", value: "证据先用表格。", summary: "证据先用表格。", relations: conflict("rec_b", "证据先用列表。") }),
-        record({ id: "rec_b", kind: "preference", key: "preference.b", value: "证据先用列表。", summary: "证据先用列表。", relations: conflict("rec_a", "证据先用表格。") }),
-      ],
-      groups: {}, activeCount: 2, pendingCount: 0, conversations: {}, usage: {},
-    });
-    settleMemoryConflict.mockResolvedValue({ kept: { id: "rec_b" }, superseded: { id: "rec_a", version: 4 } });
-    open();
-    await user.click(await screen.findByRole("button", { name: "证据先用列表。" }));
-    const drawer = await screen.findByRole("dialog", { name: "偏好" });
-    expect(within(drawer).getByText("有冲突")).toBeInTheDocument();
-    await user.click(within(drawer).getAllByRole("button", { name: /^以这条为准/ })[0]);
-    await waitFor(() => expect(settleMemoryConflict).toHaveBeenCalledWith("rec_b", "rec_a"));
-    await waitFor(() => expect(fetchMemoryProfile.mock.calls.length).toBeGreaterThan(1));
-  });
-
-  it("shows a memory that waits for confirmation in plain words in the drawer, confirmable, with no safety hold named", async () => {
-    const user = userEvent.setup();
-    fetchMemoryProfile.mockResolvedValue({
-      records: [record({ id: "rec_pending", kind: "profile", summary: "长期服用华法林。", value: "长期服用华法林。", status: "pending" })],
-      groups: {}, activeCount: 0, pendingCount: 1, conversations: {}, usage: {},
-    });
-    open();
-    await user.click(await screen.findByRole("button", { name: /长期服用华法林/ }));
-    const drawer = await screen.findByRole("dialog", { name: "背景" });
-    expect(within(drawer).getByText("待确认")).toBeInTheDocument();
-    expect(drawer.textContent).not.toMatch(/用药安全/);
-    expect(within(drawer).getByRole("button", { name: "确认" })).toBeInTheDocument();
-  });
-
   it("lists what was forgotten of every kind under 已忘记的内容, each with 恢复 that works for its kind", async () => {
     const user = userEvent.setup();
     restoreCapsuleEntry.mockResolvedValue({});
     rollbackMethod.mockResolvedValue({});
-    rollbackHandbook.mockResolvedValue({});
     open();
     await screen.findByRole("button", { name: /药学背景/ });
     expect(screen.queryByText("已忘记的一条")).toBeNull();
     await user.click(screen.getByRole("button", { name: "记忆设置" }));
     await user.click(await screen.findByRole("menuitem", { name: "已忘记的内容" }));
     const drawer = await screen.findByRole("dialog", { name: "已忘记的内容" });
-    // A memory, a note of the researcher's own capsule, a method and a handbook: the four kinds the page shows.
-    for (const text of ["已忘记的一条", "旧写作习惯", "已停用的做法", "已停用的经验"]) expect(await within(drawer).findByText(text)).toBeInTheDocument();
+    // A memory, a note of the researcher's own capsule and a method: the three kinds the page shows.
+    for (const text of ["已忘记的一条", "旧写作习惯", "已停用的做法"]) expect(await within(drawer).findByText(text)).toBeInTheDocument();
     // A row is not opened: the drawer is already the second layer, and the one thing to do is bring it back.
     expect(within(drawer).queryByRole("link")).toBeNull();
     const restore = (text: string) => within(within(drawer).getByText(text).closest("li")!).getByRole("button", { name: "恢复" });
@@ -745,8 +639,6 @@ describe("记忆胶囊", () => {
     await waitFor(() => expect(restoreCapsuleEntry).toHaveBeenCalledWith("cap_1", expect.objectContaining({ id: "entry_old" })));
     await user.click(restore("已停用的做法"));
     await waitFor(() => expect(rollbackMethod).toHaveBeenCalledWith(expect.objectContaining({ id: "method:learned:old" }), 3));
-    await user.click(restore("已停用的经验"));
-    await waitFor(() => expect(rollbackHandbook).toHaveBeenCalledWith(expect.objectContaining({ id: "method:capability-handbook:geo-content:old" }), 6));
   });
 
   it("says so, with a retry, when the stopped methods cannot be read — and never that nothing was forgotten", async () => {
@@ -754,14 +646,13 @@ describe("记忆胶囊", () => {
     fetchMemoryProfile.mockResolvedValue({ records: [], groups: {}, activeCount: 0, pendingCount: 0, conversations: {}, usage: {} });
     fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [], forgotten: [] });
     listAllMethods.mockImplementation(async (status?: string) => { if (status === "retired") throw new Error("down"); return []; });
-    // Nothing anywhere, so the page opens on the first tab and says it is empty (a handbook would have taken it to 做法).
-    listAllHandbooks.mockResolvedValue([]);
+    // Nothing anywhere, so the page opens on the first tab and says it is empty.
     open();
     await screen.findByText("还没有关于你的记忆");
     await user.click(screen.getByRole("button", { name: "记忆设置" }));
     await user.click(await screen.findByRole("menuitem", { name: "已忘记的内容" }));
     const drawer = await screen.findByRole("dialog", { name: "已忘记的内容" });
-    expect(await within(drawer).findByRole("alert")).toHaveTextContent("暂时读不到已停用的做法和经验。");
+    expect(await within(drawer).findByRole("alert")).toHaveTextContent("暂时读不到已停用的做法。");
     expect(within(drawer).queryByText("没有已忘记的内容")).toBeNull();
   });
 
@@ -779,7 +670,6 @@ describe("记忆胶囊", () => {
     fetchMemoryProfile.mockResolvedValue({ records: [], groups: {}, activeCount: 0, pendingCount: 0, conversations: {}, usage: {} });
     fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [], forgotten: [] });
     listAllMethods.mockResolvedValue([]);
-    listAllHandbooks.mockResolvedValue([]);
     open();
     await screen.findByText("还没有关于你的记忆");
     expect(within(screen.getByRole("tablist", { name: "记忆" })).getAllByRole("tab").map((item) => item.textContent)).toEqual(["关于你", "项目", "做法"]);
@@ -789,7 +679,6 @@ describe("记忆胶囊", () => {
     fetchMemoryProfile.mockResolvedValue({ records: [], groups: {}, activeCount: 0, pendingCount: 0, conversations: {}, usage: {} });
     fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [], forgotten: [] });
     listAllMethods.mockResolvedValue([]);
-    listAllHandbooks.mockResolvedValue([]);
     const user = userEvent.setup();
     open();
     expect(await screen.findByText("还没有关于你的记忆")).toBeInTheDocument();
@@ -824,7 +713,6 @@ describe("记忆胶囊", () => {
     fetchMemoryProfile.mockRejectedValue(new Error("down"));
     fetchMyCapsule.mockRejectedValue(new Error("down"));
     listAllMethods.mockRejectedValue(new Error("down"));
-    listAllHandbooks.mockRejectedValue(new Error("down"));
     open();
     expect(await screen.findByRole("alert")).toHaveTextContent("没有读到全部记忆。");
     expect(screen.queryByText("还没有关于你的记忆")).toBeNull();

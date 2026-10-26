@@ -30,7 +30,6 @@ import { SOURCE_KINDS } from "@evimed/domain";
 import { sourceDisplayOf } from "../sourceDisplay.mjs";
 import { bucketsOf } from "./activity.mjs";
 import { excerpt, instant, nodeId } from "./common.mjs";
-import { drawnLinks } from "./records.mjs";
 
 /** How many projects' documents one read lists. */
 export const MAP_DOCUMENT_PROJECTS = 8;
@@ -79,10 +78,10 @@ export function documentKindCounts(listed, items) {
 }
 
 /**
- * @param {{ sources: any, researchMemory?: any }} dependencies `sources`: the knowledge base's `SourceService` (`list`, `get`)
+ * @param {{ sources: any, namedSources?: ((userId: string) => Promise<{ type: string, id: string }[]>) | null }} dependencies `sources`: the knowledge base's `SourceService` (`list`, `get`)
  * @returns {import("./common.mjs").MapSource}
  */
-export function createDocumentsSource({ sources, researchMemory = null }) {
+export function createDocumentsSource({ sources, namedSources = null }) {
   return {
     name: "documents",
     applies: () => Boolean(sources) && typeof sources.list === "function",
@@ -122,11 +121,11 @@ export function createDocumentsSource({ sources, researchMemory = null }) {
       const edges = nodes.filter((node) => node.projectId).map((node) => ({ from: node.id, to: nodeId("project", /** @type {string} */ (node.projectId)), type: "belongs-to" }));
 
       // The documents the memories name that are not on a listed page: looked up one by one, a few.
-      if (researchMemory && typeof sources.get === "function") {
+      if (namedSources && typeof sources.get === "function") {
         try {
-          const links = await drawnLinks(request, researchMemory);
+          const links = await request.memo("named-sources", () => namedSources(request.user.id));
           const listed = new Set(nodes.map((node) => node.id));
-          const named = [...new Set(links.sources.filter((/** @type {any} */ link) => link.type === "knowledge_source").map((/** @type {any} */ link) => String(link.id)))]
+          const named = [...new Set(links.filter((/** @type {any} */ link) => link.type === "knowledge_source").map((/** @type {any} */ link) => String(link.id)))]
             .filter((id) => !listed.has(nodeId("document", id))).slice(0, MAP_DOCUMENT_LOOKUPS);
           const found = await Promise.allSettled(named.map((id) => sources.get(request.user.id, id)));
           for (const result of found) {

@@ -20,7 +20,7 @@ test('a second poll inside the interval repeats nothing, and the first pass is w
  const {poll,advance}=harness();
  const first=await poll();
  for(const expected of ['reconcile','tools','list:maintenance-review','preferences','enqueue:release-replay:release-1:'+'a'.repeat(40),'enqueue:daily-digest:2026-10-06','enqueue:daily-scout:2026-10-06',
-  'event:handbook-scan:2026-10-06','event:source-facts:2026-10-06','event:prospective-targets:2026-10-06','event:lead-sources:2026-10-06','enqueue:monthly-v2:2026-10','list:evaluation',
+  'event:source-facts:2026-10-06','event:prospective-targets:2026-10-06','event:lead-sources:2026-10-06','enqueue:monthly-v2:2026-10','list:evaluation',
   'enqueue:platform-plan:2026-10-05:2026-10-06','enqueue:self-research:2026-10-05','enqueue:meta-loop:2026-10','enqueue:heldout-audit:2026-09','compact'])assert.ok(first.includes(expected),`the first pass lacks ${expected}`);
  advance(15_000);
  assert.deepEqual(await poll(),[],'the next poll, fifteen seconds on');
@@ -33,7 +33,7 @@ test('the frequent blocks come back each minute and the daily ones with the day'
  assert.deepEqual(minute,['reconcile','tools','list:maintenance-review','preferences','list:mission'],'only what must notice a change quickly; the digest was queued for today');
  advance(24*3600_000);
  const day=await poll();
- for(const expected of ['enqueue:daily-digest:2026-10-07','enqueue:daily-scout:2026-10-07','event:handbook-scan:2026-10-07','event:lead-sources:2026-10-07','enqueue:platform-plan:2026-10-05:2026-10-07','compact'])assert.ok(day.includes(expected),`the next day lacks ${expected}`);
+ for(const expected of ['enqueue:daily-digest:2026-10-07','enqueue:daily-scout:2026-10-07','event:lead-sources:2026-10-07','enqueue:platform-plan:2026-10-05:2026-10-07','compact'])assert.ok(day.includes(expected),`the next day lacks ${expected}`);
  assert.ok(!minute.includes('compact'),'the fold is a daily block: it is not among those that come back each minute');
  assert.ok(day.includes('enqueue:monthly-v2:2026-10'),'the monthly block is refreshed with the day');
  set('2026-10-31T10:00:00Z');await poll();

@@ -7,7 +7,7 @@ import path from "node:path";
 
 import { OpenVikingClient } from "../../src/openVikingClient.mjs";
 import { OpenVikingSessions } from "../../src/openVikingSessions.mjs";
-import { migrateResearchMemory } from "../../src/researchMemoryPersistence.mjs";
+import { migrateMemorySettings } from "../../src/memorySettingsPersistence.mjs";
 import { createWebApiApp } from "../../src/server.mjs";
 import { startOpenVikingStub } from "./openVikingStub.mjs";
 
@@ -30,9 +30,9 @@ export function nativeAppIntegration() {
     const dataDir = await mkdtemp(path.join("/tmp", "evimed-native-app-"));
     const app = createWebApiApp({
       dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local", bootstrapUser: "", bootstrapPassword: "",
-      stateStore: "postgres", requireSharedStateStore: true, databaseUrl, ovNativeMemoryEnabled: true, openVikingSessions,
+      stateStore: "postgres", requireSharedStateStore: true, databaseUrl, memoryEngineEnabled: true, openVikingSessions,
     });
-    await migrateResearchMemory(app.store.database);
+    await migrateMemorySettings(app.store.database);
     const username = `native${randomUUID().replaceAll("-", "").slice(0, 10)}`;
     const user = await app.store.createUser(username, PASSWORD, "Native fixture");
     const address = await app.listen(0, "127.0.0.1");

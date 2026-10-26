@@ -21,22 +21,21 @@
  *   reader's own rows are read, and a paused or internal project's documents stay out as its memories do. A phrase
  *   from a zone says 「因为你关注的专区涉及」 and one from the library 「因为你的知识库里有」; neither is ever a
  *   fact written anywhere, only the heading of a group of news items.
- * - **What the reader shows interest in, three ways.** Their memory of every
- *   provenance — stated, confirmed, edited, inferred, from a tool or from the
- *   assistant — that is active and not sensitive (at most 40, by importance);
- *   the questions of their own conversations of the last 30 days (at most 30,
- *   newest first, `frontierProfileQuestions`); and the feed items they starred
- *   or opened in the last 60 days (at most 30, stars first). Left out: run
- *   summaries; memories and questions of a project the reader paused and of
- *   the platform's internal projects; deleted conversations and work a
- *   machine started. Everything is left out when the reader paused recall —
- *   for them the block is off. An inferred memory feeds a ranking and nothing
- *   else: it is at most the heading of a group of news items, never written
- *   anywhere as a fact (principle 18).
- * - **Every phrase keeps where it came from** — `memory` with the memory's
- *   id, `question`, or `frontier-item`. A memory the reader deleted or archived
- *   since the ranking was cached takes its items with it at once, without a
- *   new ranking; the other two are read again at the next profile.
+ * - **What the reader shows interest in, three ways.** Their memory — the lines of the memory files that say who they are, how they
+ *   like to work, the entities they work with and what their projects are (profile, preferences, entities and project context: the
+ *   engine's own files, read through the store the memory page uses, `NativeMemoryStore.files`), each line one candidate, newest file
+ *   first, at most 40 (`frontierProfileMemories`: the lines are cut deterministically, front matter, headings and the platform's own
+ *   label lines left out, nothing is ranked by an importance the files do not have); the questions of their own conversations of the
+ *   last 30 days (at most 30, newest first, `frontierProfileQuestions`); and the feed items they starred or opened in the last 60 days
+ *   (at most 30, stars first). Left out: corrections and follow-ups, what the overlay marks sensitive; memories and questions of a
+ *   project the reader paused and of the platform's internal projects; deleted conversations and work a machine started. Everything
+ *   is left out when the reader paused recall — for them the block is off. A line feeds a ranking and nothing else: it is at most
+ *   the heading of a group of news items, never written anywhere as a fact (principle 18). A deployment without the memory engine has
+ *   no memory to read, and the other signals go on. (Until 2026-10-25 this read the legacy engine's PostgreSQL records, which no
+ *   native account had.)
+ * - **Every phrase keeps where it came from** — `memory` with the line's id (`native:<file uri>#<12 hex of the line's hash>`, which
+ *   names the file and the line), `question`, or `frontier-item`. A line the reader deleted — the file removed, the line taken out of it,
+ *   a project paused since — takes its items with it at once, without a new ranking; the other two are read again at the next profile.
  * - **What the reader hid pushes back.** An item marked 「不感兴趣」 keeps out
  *   every candidate of its event and, where there are vectors, every candidate
  *   whose cosine to it is at least `FRONTIER_FOR_YOU_HIDDEN_COSINE`. Items the
@@ -75,13 +74,14 @@
  *   or a day old, and as soon as what it was read from changes: a star or an
  *   unstar, a researcher's new or deleted question (`noteConversation`), a
  *   change to their memory (its count, versions and latest change, kept as
- *   `memory_mark`), and — for a reader who has nothing yet — an item opened or
+ *   `memory_mark`: the count and newest change of their memory files and the newest revision the overlay holds, which every extraction, page
+ *   edit, forget and restore moves), and — for a reader who has nothing yet — an item opened or
  *   the block opened. A hide changes nothing the model reads and only drops
  *   the cached ranking. Readers who opened the block since their profile was
  *   computed go first. Each round computes at most five profiles, one model
  *   call each, and none while the day's budget is past its threshold.
- * - **States, honestly.** `off`: this deployment has no memory store or no
- *   model to read it with — the block is absent — or this reader paused recall
+ * - **States, honestly.** `off`: this deployment has no account store or no
+ *   model to read with — the block is absent — or this reader paused recall
  *   (`paused: true`). `unavailable`: the memory store failed when it was last
  *   read — the page says 「暂时不可用」 and the rest goes on (§10.5.3). Nothing
  *   to show yet is `available` with no items. Never a guessed hit.
@@ -107,8 +107,12 @@ import { FRONTIER_GENRE_COLUMNS, frontierItemGenre } from "./frontierInteraction
 import { migrateFrontier } from "./frontierPersistence.mjs";
 import { frontierSelectThreshold } from "./frontierPipeline.mjs";
 import { HttpError } from "./security.mjs";
+import { createHash } from "node:crypto";
 import { isInternalProject } from "./internalProjects.mjs";
 import { tsqueryLiteral } from "./kbChunker.mjs";
+import { migrateMemorySettings } from "./memorySettingsPersistence.mjs";
+import { SOURCE_LABEL_PREFIX } from "./nativeMemoryStore.mjs";
+import { migrateNativeMemory } from "./nativeMemoryPersistence.mjs";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -169,30 +173,78 @@ const VISIT_INTERVAL_MS = 10 * MINUTE;
 /** Conversation changes remembered as already noted, so a run's every state change is not a write. */
 const NOTED_LIMIT = 5_000;
 /**
- * What a reader's memory was when a profile read it: how many records, the sum
- * of their versions (every write moves one) and the latest change. Any
- * insert, update, archive or delete moves it; comparing it needs no clock.
+ * What a reader's memory was when a profile read it: how many memory files the overlay knows, the latest change of one, and the newest
+ * revision the overlay holds. Every extraction, page edit, forget and restore of a file adds a revision (and a hard delete moves the
+ * count), so any change of what the reader's memory says moves it; comparing it needs no clock and no read of the engine. The notes of the
+ * `observations` type are not what the memory says (no reader of it sees one) and do not move it. `$1` is the account (a column or a parameter).
  */
-const MEMORY_MARK = "count(*)::text || ':' || coalesce(sum(r.version), 0)::text || ':' || coalesce(extract(epoch FROM max(r.updated_at))::text, '')";
+const memoryMarkOf = (/** @type {string} */ user) => `(SELECT count(*)::text || ':' || coalesce(extract(epoch FROM max(f.updated_at))::text, '')
+    FROM evimed_memory.native_files f WHERE f.user_id = ${user} AND f.memory_type <> 'observations')
+  || ':' || (SELECT coalesce(max(v.id), 0)::text FROM evimed_memory.native_revisions v WHERE v.user_id = ${user} AND v.memory_type <> 'observations')`;
+
+/**
+ * The mark of one reader's memory now (`memoryMarkOf`): what a profile stores beside itself when it reads the memory, and what the round
+ * compares to know the memory has changed since.
+ * @param {{ query: (sql: string, values: unknown[]) => Promise<{ rows?: any[] }> }} database @param {string} userId @returns {Promise<string>}
+ */
+export async function frontierMemoryMark(database, userId) {
+  const row = (await database.query(`SELECT ${memoryMarkOf("$1")} AS mark`, [userId])).rows?.[0];
+  return String(row?.mark ?? "");
+}
+
+/** The memory files a profile is read from: who the reader is, how they work, what they work with and what their projects are. */
+export const FRONTIER_MEMORY_FILE_TYPES = Object.freeze(["profile", "preferences", "entities", "project_context"]);
+/** What the model is told a line is, by the file it is in (the same word the memory page files it under). */
+const FRONTIER_MEMORY_KIND_OF_TYPE = Object.freeze({ profile: "profile", preferences: "preference", entities: "project_fact", project_context: "project_fact" });
+/** At most this many lines of one profile's memory are read. */
+export const FRONTIER_MEMORY_LINES = 40;
 
 // ───────────────────────── pure decisions (unit-tested) ─────────────────────────
 
 /**
- * The memories a profile may be built from, as the model is shown them, in
- * the order given (the store's: by importance). Every provenance counts; run
- * summaries, sensitive and inactive records, and records of a paused or
- * internal project do not.
- * @param {any[]} records `researchMemory.listAllRecords` rows
+ * The lines of the memory files a profile is built from, as the model is shown them: each a candidate phrase with the id
+ * `native:<file uri>#<12 hex of the sha256 of the line>`, newest file first and the file's own order within it, at most
+ * `FRONTIER_MEMORY_LINES`. Pure and deterministic: the lines are what a reader of the file sees (the front matter, the engine's
+ * `MEMORY_FIELDS` comment, headings and the platform's label lines are not statements; a bullet mark and a trailing
+ * `(as of YYYY-MM-DD)` are the file's dress, not the line), and nothing is ranked by an importance a file does not have.
+ * Left out: files of another type than `FRONTIER_MEMORY_FILE_TYPES`, files the overlay marks sensitive, files of a paused or an
+ * internal project.
+ * @param {readonly { uri: string, type: string, body: string, sensitive?: boolean, projectId?: string | null, modTime?: string | null }[]} files
+ *   `NativeMemoryStore.files` rows
  * @param {{ pausedProjects?: string[] }} [settings]
  * @returns {Array<{ id: string, kind: string, text: string }>}
  */
-export function frontierProfileMemories(records, { pausedProjects = [] } = {}) {
+export function frontierProfileMemories(files, { pausedProjects = [] } = {}) {
   const paused = new Set(pausedProjects.map(String));
-  return (Array.isArray(records) ? records : [])
-    .filter((record) => record?.status === "active" && record?.kind !== "run_summary" && record?.sensitive !== true
-      && (record?.scope === "user" || (record?.scope === "project" && !paused.has(String(record.scopeId)) && !isInternalProject(record.scopeId))))
-    .map((record) => ({ id: String(record.id), kind: String(record.kind), text: String(record.summary || record.value || "").replace(/\s+/g, " ").trim() }))
-    .filter((memory) => memory.text);
+  const readable = (Array.isArray(files) ? files : [])
+    .filter((file) => file && FRONTIER_MEMORY_FILE_TYPES.includes(file.type) && file.sensitive !== true
+      && (!file.projectId || (!paused.has(String(file.projectId)) && !isInternalProject(file.projectId))))
+    .map((file) => ({ file, at: Date.parse(String(file.modTime ?? "")) }))
+    .sort((left, right) => (Number.isFinite(right.at) ? right.at : 0) - (Number.isFinite(left.at) ? left.at : 0) || String(left.file.uri).localeCompare(String(right.file.uri)));
+  /** @type {Array<{ id: string, kind: string, text: string }>} */
+  const lines = [];
+  for (const { file } of readable) {
+    for (const text of frontierMemoryLines(file.body)) {
+      lines.push({ id: `native:${file.uri}#${createHash("sha256").update(text).digest("hex").slice(0, 12)}`,
+        kind: /** @type {Record<string, string>} */ (FRONTIER_MEMORY_KIND_OF_TYPE)[file.type] ?? "profile", text });
+      if (lines.length >= FRONTIER_MEMORY_LINES) return lines;
+    }
+  }
+  return lines;
+}
+
+/**
+ * The statements of one memory file's body, one string each. Deterministic and language-free: the front matter and the engine's
+ * `MEMORY_FIELDS` comment are cut, blank lines, headings and the platform's own source labels are not statements, a bullet or number
+ * mark and a trailing `(as of …)` are removed, and a line of fewer than four characters says nothing.
+ * @param {unknown} body @returns {string[]}
+ */
+export function frontierMemoryLines(body) {
+  const text = String(body ?? "").replace(/\r\n/g, "\n").replace(/^---\n[\s\S]*?\n---\n?/, "").replace(/<!--[\s\S]*?-->/g, "");
+  return text.split("\n").map((line) => line.trim())
+    .filter((line) => line && !/^#{1,6}\s/.test(line) && !line.startsWith(SOURCE_LABEL_PREFIX.trim()))
+    .map((line) => line.replace(/^(?:[-*+]|\d+[.)])\s+/, "").replace(/\s*[(（]as of \d{4}-\d{2}-\d{2}[)）]\s*$/i, "").replace(/\s+/g, " ").trim())
+    .filter((line) => line.length >= 4);
 }
 
 /**
@@ -512,7 +564,8 @@ function codeOf(error) {
 
 export class FrontierProfiles {
   /**
-   * @param {{ database: any, researchMemory?: any, editor?: any, embedder?: any, config?: Record<string, any>,
+   * @param {{ database: any, memorySettings?: any, nativeMemory?: { configured?: boolean, files: (userId: string) => Promise<any[]> } | null,
+   *           editor?: any, embedder?: any, config?: Record<string, any>,
    *           budget?: (() => Promise<{ state: string }>) | null, now?: () => Date, dimension?: number,
    *           conversations?: ((userId: string) => Promise<Array<{ projectId: string, run: Record<string, any> }>>) | null,
    *           entityVocabulary?: { enabled?: boolean, keysForText: (input: { texts: string[] }) => Promise<string[]>,
@@ -520,7 +573,8 @@ export class FrontierProfiles {
    *             describe: (keys: string[]) => Promise<Array<{ key: string, label: string }>> } | null,
    *           tags?: { filter: (slug: string) => Promise<{ ids: Iterable<number | string>, tag: { slug: string, name: string } } | null> } | null,
    *           random?: () => number, ranking?: typeof FRONTIER_RANKING }} options
-   *   `researchMemory` the account memory store (`listAllRecords`, `settings`),
+   *   `memorySettings` the account's switches (`settings`), `nativeMemory` the memory engine's store (`files`; absent or not configured,
+   *   there is no memory to read and the other signals go on),
    *   `editor` a `FrontierEditor` (`extractProfile`), `embedder` the feed's,
    *   `conversations` a reader's own runs across their projects (the run ledger's
    *   `researcherRuns`, composed in `server.mjs`); without it no question is read,
@@ -528,12 +582,13 @@ export class FrontierProfiles {
    *   the library are not read, `tags` the tag tree (`FrontierTagStore`; without it an interest tag is not matched),
    *   `random` the exploration draw's source of [0, 1), `ranking` the constants (`FRONTIER_RANKING`; a test narrows them).
    */
-  constructor({ database, researchMemory = null, editor = null, embedder = null, config = {}, budget = null,
+  constructor({ database, memorySettings = null, nativeMemory = null, editor = null, embedder = null, config = {}, budget = null,
     now = () => new Date(), dimension = 1024, conversations = null, entityVocabulary = null, tags = null, random = Math.random, ranking = FRONTIER_RANKING }) {
     if (!database) throw new TypeError("The frontier profiles need the product database.");
     this.database = database;
     this.subscriptions = new FrontierSubscriptions({ database });
-    this.researchMemory = researchMemory;
+    this.memorySettings = memorySettings;
+    this.nativeMemory = nativeMemory;
     this.editor = editor;
     this.embedder = embedder;
     this.config = config ?? {};
@@ -563,11 +618,26 @@ export class FrontierProfiles {
     this.lastError = null;
   }
 
-  async ready() { return migrateFrontier(this.database, { dimension: this.dimension }); }
+  async ready() {
+    // The mark of a reader's memory is read from the overlay's tables (`memoryMarkOf`); they exist before the first read of it.
+    await migrateMemorySettings(this.database);
+    await migrateNativeMemory(this.database);
+    return migrateFrontier(this.database, { dimension: this.dimension });
+  }
 
-  /** Whether this deployment can personalize at all: a memory store to read and a model to read it with. */
+  /**
+   * The memory files a profile is read from (`frontierProfileMemories`): the engine's, through the store the memory page uses, whose
+   * read is shared and cached by what the engine says changed. None when this deployment has no memory engine.
+   * @param {string} userId @returns {Promise<any[]>}
+   */
+  async #memoryFiles(userId) {
+    if (!this.nativeMemory?.configured) return [];
+    return this.nativeMemory.files(userId);
+  }
+
+  /** Whether this deployment can personalize at all: the account's switches to honour and a model to read with. */
   get composed() {
-    return Boolean(this.researchMemory?.configured) && this.config.deepseekProviderEnabled === true && Boolean(this.config.deepseekApiKey);
+    return Boolean(this.memorySettings?.configured) && this.config.deepseekProviderEnabled === true && Boolean(this.config.deepseekApiKey);
   }
 
   /** `available`, `unavailable` (the memory store failed lately) or `off` — what `/status` says. */
@@ -585,7 +655,7 @@ export class FrontierProfiles {
 
   /** @param {string} userId @returns {Promise<{ recallPaused: boolean, pausedProjects: string[] }>} */
   async #settings(userId) {
-    const settings = typeof this.researchMemory?.settings === "function" ? await this.researchMemory.settings(userId) : null;
+    const settings = typeof this.memorySettings?.settings === "function" ? await this.memorySettings.settings(userId) : null;
     return { recallPaused: settings?.recallPaused === true, pausedProjects: (settings?.pausedProjects ?? []).map(String) };
   }
 
@@ -657,8 +727,8 @@ export class FrontierProfiles {
 
   /**
    * Mark the profiles of active readers whose memory changed since it was
-   * read: any writer — the extractor after a conversation, the memory page, an
-   * import, a delete — moves the mark, so none of them has to call here. A
+   * read: any writer — the engine's extraction after a conversation, the memory page, an
+   * undo, a delete — moves the mark (`memoryMarkOf`), so none of them has to call here. A
    * memory store that cannot be read marks nothing and the round goes on.
    * @param {Date} active
    */
@@ -667,7 +737,7 @@ export class FrontierProfiles {
       const result = await this.database.query(`UPDATE evimed_frontier.user_profiles pr SET inputs_version = pr.inputs_version + 1
         FROM evimed_frontier.user_prefs up
         WHERE up.user_id = pr.user_id AND up.last_seen_at >= $1::timestamptz AND pr.inputs_version <= pr.computed_inputs_version
-          AND pr.memory_mark IS DISTINCT FROM (SELECT ${MEMORY_MARK} FROM evimed_memory.records r WHERE r.user_id = pr.user_id)`, [active]);
+          AND pr.memory_mark IS DISTINCT FROM (${memoryMarkOf("pr.user_id")})`, [active]);
       this.counters.staleMarks += Number(result?.rowCount ?? 0);
     } catch (error) {
       this.counters.staleMarkFailures += 1;
@@ -879,10 +949,7 @@ export class FrontierProfiles {
   }
 
   /** @param {string} userId @returns {Promise<string>} */
-  async #memoryMark(userId) {
-    const row = (await this.database.query(`SELECT ${MEMORY_MARK} AS mark FROM evimed_memory.records r WHERE r.user_id = $1`, [userId])).rows?.[0];
-    return String(row?.mark ?? "");
-  }
+  async #memoryMark(userId) { return frontierMemoryMark(this.database, userId); }
 
   /**
    * Read, extract, embed and store one reader's profile, then rank for them.
@@ -899,12 +966,12 @@ export class FrontierProfiles {
     const version = Number((await this.database.query(`SELECT inputs_version FROM evimed_frontier.user_profiles WHERE user_id = $1`,
       [userId])).rows?.[0]?.inputs_version ?? 0);
     let settings;
-    let records;
+    let files;
     let mark;
     try {
       settings = await this.#settings(userId);
       mark = await this.#memoryMark(userId);
-      records = settings.recallPaused ? [] : await this.researchMemory.listAllRecords(userId);
+      files = settings.recallPaused ? [] : await this.#memoryFiles(userId);
       this.memoryFailedAt = null;
     } catch (error) {
       this.memoryFailedAt = now.getTime();
@@ -916,7 +983,7 @@ export class FrontierProfiles {
       this.counters.paused += 1;
       return { state: "off", reason: "recall-paused" };
     }
-    const memories = frontierProfileMemories(records, { pausedProjects: settings.pausedProjects });
+    const memories = frontierProfileMemories(files, { pausedProjects: settings.pausedProjects });
     const questions = await this.#questions(userId, settings.pausedProjects, now);
     const items = await this.#itemSignals(userId, now);
     const entities = await this.#entityPhrases(userId, settings.pausedProjects);
@@ -1332,12 +1399,11 @@ export class FrontierProfiles {
     let alive = new Set();
     if (remembered.length) {
       try {
-        // A memory of a project paused since is no reason any more.
-        const rows = (await this.database.query(`SELECT id FROM evimed_memory.records WHERE user_id = $1 AND id = ANY($2::text[]) AND status = 'active'
-            AND (scope <> 'project' OR NOT (scope_id = ANY($3::text[])))`, [user.id, remembered, settings.pausedProjects])).rows ?? [];
-        alive = new Set(rows.map((row) => String(row.id)));
+        // A line the reader deleted, took out of its file, or whose project they paused since is no reason any more: the lines the
+        // files hold now are the ones that count (`frontierProfileMemories`, the same cut a profile is made from).
+        alive = new Set(frontierProfileMemories(await this.#memoryFiles(user.id), { pausedProjects: settings.pausedProjects }).map((memory) => memory.id));
       } catch {
-        // The memory store cannot say whether a reason still stands: no reason
+        // The memory engine cannot say whether a reason still stands: no reason
         // is shown rather than one that may no longer be true.
         this.memoryFailedAt = this.now().getTime();
         return { state: "unavailable", basis: null, items: [] };

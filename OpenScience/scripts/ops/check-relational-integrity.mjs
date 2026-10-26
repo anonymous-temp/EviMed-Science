@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { ControlPlaneDatabase } from "../../apps/server/src/controlPlaneDatabase.mjs";
 import { migrateNotifications } from "../../apps/server/src/notificationPersistence.mjs";
 import { migrateProductStore } from "../../apps/server/src/productPersistence.mjs";
-import { migrateResearchMemory } from "../../apps/server/src/researchMemoryPersistence.mjs";
+import { migrateMemorySettings } from "../../apps/server/src/memorySettingsPersistence.mjs";
 import { migrateUsageLedger } from "../../apps/server/src/usagePersistence.mjs";
 import { relationalIntegrity } from "../../apps/server/src/relationalIntegrity.mjs";
 
@@ -30,7 +30,7 @@ async function main() {
     await migrateProductStore(database);
     await migrateNotifications(database);
     await migrateUsageLedger(database);
-    await migrateResearchMemory(database);
+    await migrateMemorySettings(database);
     const status = await relationalIntegrity(database, { validate });
     if (!status.ok) {
       process.stdout.write(`${JSON.stringify(status)}\n`);

@@ -9,7 +9,7 @@ const executable = process.env.OPEN_SCIENCE_MANAGED_BROWSER_TEST_CHROME;
 const base = process.env.OPEN_SCIENCE_WALK_BASE_URL;
 const passwordFile = process.env.OPEN_SCIENCE_WALK_PASSWORD_FILE;
 const username = process.env.OPEN_SCIENCE_WALK_USER;
-const skip = !(executable && base && passwordFile && username) && "An explicit browser and authenticated fixture/deployment account are required";
+const skip = !(executable && base && passwordFile && username) && "An explicit browser and the authenticated account of a local fixture control plane are required (a production walk signs in as nobody)";
 const out = process.env.OPEN_SCIENCE_READER_TEST_OUT ?? "/tmp/evimed-frontier-reader-test";
 
 for (const [size, viewport] of [["desktop", { width: 1512, height: 945 }], ["phone", { width: 390, height: 844 }]]) {

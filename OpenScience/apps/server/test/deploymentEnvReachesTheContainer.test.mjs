@@ -106,8 +106,7 @@ const operatorLevers = {
   OPEN_SCIENCE_LEARNING_RUN_LIMIT_CNY: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_WEEKLY_LIMIT_CNY: ["open-science-web"],
-  // The two levers of 2026-10-12: repaired deliveries (the gate's bookkeeping) and the unused-method stop. Unset, the code's 0 and 20 hold.
-  OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE: ["open-science-web"],
+  // The unused-method stop (2026-10-12). Unset, the code's 20 holds.
   OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS: ["open-science-web"],
   // The thinking budget was a literal `high` in the gateway until 2026-09-09,
   // so the lever is new and this is what makes it real.
@@ -129,14 +128,12 @@ const operatorLevers = {
   OPEN_SCIENCE_OPENVIKING_MODEL_DAILY_BUDGET_CNY: ["open-science-web"],
   OPEN_SCIENCE_OPENVIKING_ENGINE_CHECK_MS: ["open-science-web"],
   OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED: ["open-science-web"],
-  OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED: ["open-science-web"],
   // Read by config.mjs and passed by no compose file until 2026-09-16: turning
   // memory off, opening the agent memory API, or excluding an evaluation's
   // projects from extraction all did nothing from .env. The last one reached
   // production only through a private override's environment map.
   OPEN_SCIENCE_MEMORY_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED: ["open-science-web"],
-  OPEN_SCIENCE_MEMORY_EXTRACTION_EXCLUDED_PROJECT_PREFIXES: ["open-science-web"],
   // The standing profile a conversation is handed up front and the recall tool's answer size (review M6, 2026-10-10): limits on what
   // reaches the model, which an operator tunes and which must not fall back to the default unseen.
   OPEN_SCIENCE_MEMORY_PROFILE_MAX_RECORDS: ["open-science-web"],
@@ -157,6 +154,8 @@ const operatorLevers = {
   // The judge of a reworded repeat of a removed line (2026-10-23): a model call a commit at most, bounded per account per day.
   OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_DAILY_CALLS: ["open-science-web"],
+  // The page's import of what another assistant remembered (2026-10-25): the offers an account may ask for in an hour.
+  OPEN_SCIENCE_MEMORY_IMPORT_OFFERS_PER_HOUR: ["open-science-web"],
   // The turn committer (2026-10-14): when the control plane commits a conversation to the engine, and how many commits and waiting
   // conversations it holds. Each commit that finds something pending is one extraction call on the platform's budget.
   OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_ENABLED: ["open-science-web"],
@@ -177,10 +176,8 @@ const operatorLevers = {
   // controller, which writes it into every runtime, never saw it. The gateway
   // body limit reaches the controller because the request-size guard is a
   // share of it.
-  OPEN_SCIENCE_RUNTIME_COMPACTION_POLICY: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_RUNTIME_COMPACTION_THRESHOLD_RATIO: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_RUNTIME_COMPACTION_RETAIN_RATIO: ["open-science-web", "open-science-runtime-controller"],
-  OPEN_SCIENCE_RUNTIME_COMPACTION_RETAIN_TOKENS: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_RUNTIME_COMPACTION_MAX_TOKENS: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_RUNTIME_COMPACTION_MAX_REQUEST_BYTES: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES: ["open-science-web", "open-science-runtime-controller"],
@@ -227,7 +224,6 @@ const operatorLevers = {
   // mem stream (2026-09-20): with no confirmation step, how long an unrepeated
   // inference stays in force is the lever that bounds what automatic memory
   // keeps.
-  OPEN_SCIENCE_MEMORY_INFERRED_TTL_DAYS: ["open-science-web"],
   // rt (2026-09-20): the sign-in warm start's off switch. It starts a runtime
   // per sign-in, which is exactly why a deployment must be able to stop it.
   OPEN_SCIENCE_RUNTIME_WARM_ON_SIGN_IN: ["open-science-web"],
@@ -338,16 +334,17 @@ const operatorLevers = {
   OPEN_SCIENCE_EVOLUTION_SOURCE_REQUEST_LAPSE_DAYS: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY: ["open-science-web"],
-  OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED: ["open-science-web"],
-  OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY: ["open-science-web"],
-  // The probation share (2026-10-10): a lever that never arrived would leave the default tenth in force, or none, whatever the operator set.
-  OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PROBATION_SHARE: ["open-science-web"],
+  // The promotion of a person's general method to the pack of everyone's (2026-10-25): a lever that never arrived would leave the default on, and three a day, whatever the operator set.
+  OPEN_SCIENCE_OFFICIAL_PROMOTION_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_OFFICIAL_PROMOTION_PER_DAY: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY: ["open-science-web"],
   // Sharing memory inside the platform (evidence-flywheel F17-F19, 2026-10-05): a lever that does not arrive leaves share links
   // living and used by the defaults while the operator believes they shortened them, or a new author's pack counted as
   // corroborated by a threshold the operator never set, or by accounts of any age and use.
   OPEN_SCIENCE_CAPSULE_SHARE_ENABLED: ["open-science-web"],
+  // The platform's official starter packs: a lever that does not arrive publishes and mounts them whatever the operator set.
+  OPEN_SCIENCE_OFFICIAL_PACKS_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_CAPSULE_SHARE_LINK_TTL_DAYS: ["open-science-web"],
   OPEN_SCIENCE_CAPSULE_SHARE_LINK_MAX_USES: ["open-science-web"],
   OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNTS: ["open-science-web"],

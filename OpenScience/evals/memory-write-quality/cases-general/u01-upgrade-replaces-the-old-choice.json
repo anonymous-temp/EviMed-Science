@@ -4,10 +4,6 @@
   "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, upgrade); every name, number and identifier is invented",
   "expected": "A later choice replaces the earlier one: the citation style is AMA afterwards and no line still says Vancouver.",
   "decidable": true,
-  "arms": [
-    "native",
-    "legacy"
-  ],
   "replay": {
     "synthetic": true,
     "projectId": "default",

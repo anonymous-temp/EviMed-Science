@@ -281,6 +281,21 @@ test("a compile is submitted with an idempotency key and no args, polled, and ca
   });
 });
 
+test("the one retry of a compile asks for a full run, as `args.mode` and nothing else, and every other submission carries no args", async () => {
+  const submitted = readdress(await fixture("compile-submit"));
+  await withEngine(() => ({ status: 202, body: submitted }), async ({ resources, seen }) => {
+    const roots = resources.roots(USER, PROJECT);
+    const key = compileIdempotencyKey({ projectId: PROJECT, tree: "wiki", round: 3, attempt: 1 });
+    await resources.submitCompile(USER, { from: [roots.sources], to: roots.wiki, skill: "llm-wiki", idempotencyKey: key, mode: "full" });
+    assert.deepEqual(seen[0].body, { from: [roots.sources], to: roots.wiki, skill: "viking://agent/skills/llm-wiki", args: { mode: "full" } });
+    // Anything but the one value is not sent: a caller cannot slip another argument in through `mode`.
+    await resources.submitCompile(USER, { from: [roots.sources], to: roots.wiki, skill: "llm-wiki", idempotencyKey: key, mode: /** @type {any} */ ("incremental") });
+    await resources.submitCompile(USER, { from: [roots.sources], to: roots.wiki, skill: "llm-wiki", idempotencyKey: key });
+    assert.equal("args" in seen[1].body, false);
+    assert.equal("args" in seen[2].body, false);
+  });
+});
+
 test("a compile that completed with a failed job is read as partial, and a root outside the acting user's own resources is never submitted", async () => {
   const completed = readdress(await fixture("tasks-get-completed"));
   const partial = structuredClone(completed);

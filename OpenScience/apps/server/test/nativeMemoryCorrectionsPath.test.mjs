@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { CORRECTIONS_UNDER_PREFERENCES, MEMORY_SEGMENT_OF_TYPE, nativeMemoryFile } from "../src/openVikingSessions.mjs";
-import { LEGACY_KIND_OF_TYPE, NativeMemoryStore } from "../src/nativeMemoryStore.mjs";
+import { PAGE_KIND_OF_TYPE, NativeMemoryStore } from "../src/nativeMemoryStore.mjs";
 
 const ROOT = "viking://user/u1/memories";
 
@@ -21,7 +21,7 @@ test("a file under preferences/corrections/ is a correction; the preferences bes
   // The reset still removes both places: preferences/ takes its corrections with it, and corrections/ is its own segment.
   assert.equal(MEMORY_SEGMENT_OF_TYPE.preferences, "preferences");
   assert.equal(MEMORY_SEGMENT_OF_TYPE.corrections, "corrections");
-  assert.equal(LEGACY_KIND_OF_TYPE.corrections, "correction");
+  assert.equal(PAGE_KIND_OF_TYPE.corrections, "correction");
 });
 
 test("the store reads both places as corrections: the page's kind, the type, and the preference list without them", async () => {

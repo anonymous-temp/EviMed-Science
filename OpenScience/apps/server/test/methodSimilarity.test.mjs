@@ -3,7 +3,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { candidatePairs, createMethodSimilarity, methodText, methodTokens } from "../src/methodSimilarity.mjs";
+import { METHOD_SIMILARITY_PAIR_FLOOR, METHOD_SIMILARITY_TOP_K } from "@evimed/domain";
+
+import { candidatePairs, createMethodSimilarity, methodText, methodTokens, quantileOf } from "../src/methodSimilarity.mjs";
 
 /** @param {string} id @param {string} description @param {any} [extra] */
 const method = (id, description, extra = {}) => ({
@@ -51,7 +53,7 @@ test("the pairs of a library are each method's nearest neighbours above the floo
   const pairs = await similarity.pairs(library());
   assert.deepEqual(pairs.map((pair) => `${pair.a}>${pair.b}`).sort(), ["m1>m2", "m3>m4"], "m5 is alone on its axis, so it pairs with nobody");
   assert.ok(pairs[0].score >= pairs[1].score, "best first");
-  assert.ok(pairs.every((pair) => pair.score >= 0.8 && pair.overlap === pair.score));
+  assert.ok(pairs.every((pair) => pair.score >= METHOD_SIMILARITY_PAIR_FLOOR && pair.overlap === pair.score));
   assert.equal(/** @type {any} */ (pairs).mode, "embedding");
   assert.deepEqual(JSON.parse(JSON.stringify(pairs)), pairs.map((pair) => ({ ...pair })), "the mode is not an enumerable key: a plain comparison and a serialisation do not see it");
   assert.deepEqual(Object.keys(pairs), pairs.map((_, index) => String(index)));
@@ -69,6 +71,51 @@ test("the floor and the per-method bound are the caller's", async () => {
   const seen = new Set(bounded.map((pair) => [pair.a, pair.b].join(">")));
   assert.equal(seen.size, bounded.length, "a pair two methods both named is one pair");
   assert.deepEqual(await similarity.pairs([library()[0]]), [], "one method has no pair");
+});
+
+/** A text names its own vector as `vec(x,y,z)`, so the geometry of a pair is exact. */
+function vectorEmbedder() {
+  return async (/** @type {string[]} */ texts) => texts.map((text) => (/vec\(([^)]*)\)/.exec(text)?.[1] ?? "1,0,0").split(",").map(Number));
+}
+
+test("the candidate floor lets a pair at the cosine production showed through, and keeps out a pair that is not near at all", async () => {
+  assert.ok(METHOD_SIMILARITY_PAIR_FLOOR < 0.7, "the closest pair of a production library was at 0.70 against a floor of 0.80, and no group ever formed");
+  const similarity = createMethodSimilarity({ embed: vectorEmbedder() });
+  const reference = method("m1", "Reference text. vec(1,0)");
+  const near = await similarity.pairs([reference, method("m2", "Related text. vec(0.7,0.714143)")]);
+  assert.deepEqual(near.map((pair) => `${pair.a}>${pair.b}`), ["m1>m2"]);
+  assert.ok(Math.abs(near[0].score - 0.7) < 1e-6);
+  const far = await similarity.pairs([reference, method("m2", "Unrelated text. vec(0.3,0.953939)")]);
+  assert.deepEqual(far, [], "0.30 is below the candidate floor");
+  assert.ok(Math.abs(/** @type {any} */ (far).topScore - 0.3) < 1e-6, "but it is on record as the highest cosine seen");
+});
+
+test("every method keeps at most METHOD_SIMILARITY_TOP_K neighbours, and the distribution of the neighbour cosines is told, floor or not", async () => {
+  assert.equal(METHOD_SIMILARITY_TOP_K, 5);
+  const similarity = createMethodSimilarity({ embed: stubEmbedder().embed });
+  const crowd = Array.from({ length: 14 }, (_, index) => method(`n${String(index).padStart(2, "0")}`, `Same axis. axis-d ${index}`));
+  const pairs = await similarity.pairs(crowd);
+  /** @type {Map<string, number>} */
+  const degree = new Map();
+  for (const pair of pairs) for (const id of [pair.a, pair.b]) degree.set(id, (degree.get(id) ?? 0) + 1);
+  assert.ok(pairs.length < 14 * 13 / 2, "not every pair of fourteen methods");
+  assert.ok(pairs.length <= 14 * METHOD_SIMILARITY_TOP_K, "at most five neighbours each, a pair two methods both named counted once");
+  const distribution = /** @type {any} */ (pairs).distribution;
+  assert.ok(distribution && distribution.n >= 14 * METHOD_SIMILARITY_TOP_K / 2 && distribution.n <= 14 * METHOD_SIMILARITY_TOP_K, "the distribution is over the neighbour pairs");
+  assert.ok(distribution.p50 <= distribution.p90 && distribution.p90 <= /** @type {any} */ (pairs).topScore + 1e-9);
+  // What the floor kept out is in it: a library of two unrelated methods has no pair and a distribution all the same.
+  const alone = await similarity.pairs([method("a1", "One. axis-a x"), method("b1", "Other. axis-b y")]);
+  assert.deepEqual(alone, []);
+  assert.deepEqual(/** @type {any} */ (alone).distribution.n, 1);
+  assert.ok(/** @type {any} */ (alone).distribution.p50 < METHOD_SIMILARITY_PAIR_FLOOR);
+});
+
+test("the quantiles are nearest rank, rounded to four places, and an empty list is zero", () => {
+  assert.equal(quantileOf([], 0.5), 0);
+  assert.equal(quantileOf([0.1], 0.9), 0.1);
+  assert.equal(quantileOf([0.1, 0.2, 0.3, 0.4], 0.5), 0.2);
+  assert.equal(quantileOf([0.1, 0.2, 0.3, 0.4], 0.9), 0.4);
+  assert.equal(quantileOf([0.123456, 0.9], 0.5), 0.1235);
 });
 
 test("a vector is kept per method and digest: a second look embeds nothing, an amended body or a new line embeds that method only", async () => {

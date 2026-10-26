@@ -46,8 +46,8 @@ function event(overrides: Partial<FrontierEvent> = {}): FrontierEvent {
 
 function Probe() {
   const location = useLocation();
-  const intent = (location.state as { runtimeUiIntent?: { draft?: string } } | null)?.runtimeUiIntent;
-  return <div data-testid="location">{location.pathname}{location.search}{intent?.draft ? `|${intent.draft}` : ""}</div>;
+  const intent = (location.state as { runtimeUiIntent?: { draft?: string; originReference?: { kind: string; id: string } } } | null)?.runtimeUiIntent;
+  return <div data-testid="location" data-origin={intent?.originReference ? `${intent.originReference.kind}:${intent.originReference.id}` : undefined}>{location.pathname}{location.search}{intent?.draft ? `|${intent.draft}` : ""}</div>;
 }
 
 function renderEvent(id = "ev1", search = "") {
@@ -156,6 +156,34 @@ describe("an event", () => {
     expect(location).toHaveTextContent(/^\/app\/chat\|请围绕这个事件做一次深入研究/);
     expect(location).toHaveTextContent("一手来源：");
     expect(location).toHaveTextContent("自然-生物医学工程：不饱和磷脂脂质体原文（https://www.nature.com/x）");
+  });
+
+  it("offers the questions of the first-hand report under 就此提问: a question opens the conversation with that report as its origin", async () => {
+    const ID = "a1b2c3d4e5f60718";
+    const base = event();
+    client.fetchFrontierEvent.mockResolvedValue(event({
+      items: [{ ...base.items[0], id: ID }, base.items[1]],
+      ask: { itemId: ID, title: "不饱和磷脂脂质体原文", questions: ["脂质体的包封率是怎么测的？", "这在人体里也成立吗？"] },
+    }));
+    renderEvent();
+    const block = await screen.findByRole("region", { name: "就此提问" });
+    expect(within(block).getAllByRole("button").map((button) => button.textContent)).toEqual(["脂质体的包封率是怎么测的？", "这在人体里也成立吗？", "自己提问…"]);
+    await userEvent.click(within(block).getByRole("button", { name: "这在人体里也成立吗？" }));
+    const location = screen.getByTestId("location");
+    expect(location).toHaveTextContent(/^\/app\/chat\|这在人体里也成立吗？/);
+    expect(location).toHaveTextContent("“不饱和磷脂脂质体原文”（自然-生物医学工程 · ");
+    expect(location).toHaveTextContent(`frontier:${ID}`);
+    expect(location).toHaveTextContent("原文：https://www.nature.com/x");
+    expect(location).toHaveAttribute("data-origin", `frontier-item:${ID}`);
+    expect(pendingFrontierEvents().filter((entry) => entry.type === "ask").map((entry) => [entry.item, entry.surface, entry.detail])).toEqual([[ID, "event", "suggested"]]);
+  });
+
+  it("has no 就此提问 where the event's first-hand report has no questions, and keeps its own 深入研究", async () => {
+    renderEvent();
+    await screen.findByRole("button", { name: "深入研究" });
+    expect(screen.queryByRole("region", { name: "就此提问" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "深入研究" }));
+    expect(screen.getByTestId("location")).toHaveAttribute("data-origin", expect.stringMatching(/^frontier-event:ev1$/));
   });
 
   it("moves its own address to the surviving event when the old id was merged", async () => {

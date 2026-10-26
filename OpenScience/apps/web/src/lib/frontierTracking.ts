@@ -574,7 +574,7 @@ export function useFrontierReadTracking(itemId: string | null | undefined, { lan
  * An action on an item, wherever it was taken: on the reading page open now it carries that view; from a list it carries the
  * list, slot and position the item was served at on `surface` — or, not given, on the surface it was last served on.
  */
-export function trackFrontierItemAction(type: "star" | "unstar" | "hide" | "unhide" | "share" | "research" | "save" | "open-original", itemId: string,
+export function trackFrontierItemAction(type: "star" | "unstar" | "hide" | "unhide" | "share" | "research" | "ask" | "save" | "open-original", itemId: string,
   { surface, detail }: { surface?: FrontierTrackSurface; detail?: string } = {}): void {
   if (reader?.item === itemId) {
     trackFrontier({ type, surface: "reader", item: itemId, view: reader.view, ...(detail ? { detail } : {}) });

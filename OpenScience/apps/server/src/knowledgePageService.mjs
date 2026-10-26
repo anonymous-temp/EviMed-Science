@@ -78,6 +78,21 @@ export function asksAgainForIndexOnly({ tree, status, typed, retried }) {
   return tree === "wiki" && status === "completed" && !retried && Number(typed) <= 1;
 }
 
+/**
+ * What a retry of a compile must ask of the engine so that it is not a no-op. From v0.5.2 a compile is incremental by default: the same
+ * instruction over the same sources writes nothing, which would make the one retry of a wiki that came out as its index alone a free
+ * repeat of the failure. `args.mode: "full"` is the argument that does what v0.5.1.1's compile always did, and it is sent only to an
+ * engine that is v0.5.2 or later: an engine before it may refuse any `args` (a non-empty one fails the task at submission on v0.5.0).
+ * @param {{ engineVersion?: string | null }} engine the version `/health` named, as the engine check read it
+ * @returns {"full" | null}
+ */
+export function compileRetryMode({ engineVersion = null } = {}) {
+  const parts = /^v?(\d+)\.(\d+)\.(\d+)/.exec(String(engineVersion ?? ""));
+  if (!parts) return null;
+  const [major, minor, patch] = [Number(parts[1]), Number(parts[2]), Number(parts[3])];
+  return major > 0 || minor > 5 || (minor === 5 && patch >= 2) ? "full" : null;
+}
+
 const LAYOUT_INSTRUCTION = "Write every file directly under the target directory — index.md, the type directories and relations.jsonl at its top level — and never create a subdirectory named after the target.";
 const LANGUAGE_NAMES = new Map([["zh", "Simplified Chinese"], ["zh-cn", "Simplified Chinese"], ["zh-hans", "Simplified Chinese"], ["zh-tw", "Traditional Chinese"],
   ["zh-hk", "Traditional Chinese"], ["zh-hant", "Traditional Chinese"], ["en", "English"], ["ja", "Japanese"], ["ko", "Korean"], ["fr", "French"], ["de", "German"],
@@ -823,8 +838,10 @@ export class KnowledgePageService {
   /**
    * Submit one tree's compile. Returns the task.
    * @param {any} user @param {any} project @param {"wiki" | "kg"} tree @param {any} state @param {number} attempt
+   * @param {{ retry?: boolean }} [how] `retry`: the one more compile of a wiki that came out as its index alone, which asks the engine for a full run
+   *   where the engine reads that (`compileRetryMode`)
    */
-  async #submit(user, project, tree, state, attempt) {
+  async #submit(user, project, tree, state, attempt, { retry = false } = {}) {
     const roots = this.resources.roots(user.id, project.id);
     const from = tree === "wiki" ? [roots.sources] : [roots.sources];
     // The account's library is a compile source beside the project's own documents, when it holds any.
@@ -834,7 +851,8 @@ export class KnowledgePageService {
     }
     const key = compileIdempotencyKey({ projectId: project.id, tree, round: state.round, attempt });
     const task = await this.resources.submitCompile(user.id, { from, to: roots[tree], skill: tree === "wiki" ? "llm-wiki" : "knowledge-graph",
-      instruction: await this.#instruction(user.id, project.id, tree, state), idempotencyKey: key });
+      instruction: await this.#instruction(user.id, project.id, tree, state), idempotencyKey: key,
+      mode: retry ? compileRetryMode({ engineVersion: this.engine?.status?.()?.facts?.version?.version ?? null }) : null });
     this.counters.compiles += 1;
     return { taskId: task.taskId, key, submittedAt: this.now().toISOString(), status: task.status, stage: task.stage };
   }
@@ -938,7 +956,7 @@ export class KnowledgePageService {
       // for a wiki that is a round that did not happen. It is asked once more, never twice; the second answer stands whatever it is.
       if (asksAgainForIndexOnly({ tree, status: outcome.status, typed: mirrored.typed, retried: Boolean(held.retried) })
         && (await this.#readableSources(userId, projectId)).length >= this.config.knowledgePagesMinSources) {
-        const again = await this.#submit(user, project, "wiki", state, (Number(held.attempt) || 0) + 1);
+        const again = await this.#submit(user, project, "wiki", state, (Number(held.attempt) || 0) + 1, { retry: true });
         this.counters.indexOnlyRetries += 1;
         await this.#updateState(userId, projectId, (value) => {
           if (!value.run) return null;

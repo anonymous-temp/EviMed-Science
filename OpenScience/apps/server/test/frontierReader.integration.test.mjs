@@ -7,7 +7,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { Readable } from "node:stream";
 import { after, before, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
-import { FRONTIER_EDITOR_VERSION } from "../src/frontierEditor.mjs";
+import { FRONTIER_EDITOR_VERSION, FRONTIER_SCORE_VERSION } from "../src/frontierEditor.mjs";
 import { FrontierGlossary } from "../src/frontierGlossary.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { FrontierPipeline } from "../src/frontierPipeline.mjs";
@@ -608,8 +608,10 @@ test("fr-events' verdict holds in the later selections: the genre mix's floor pa
     summaryZh: "摘要。", timelineAt: "2026-10-22T02:30:00Z" });
   const trigger = await insertItem(database, { title: "Published this round", state: "scored", timelineAt: "2026-10-22T03:00:00Z" });
   await set(report.id, { score_total: 90, editor_version: FRONTIER_EDITOR_VERSION });
-  await set(beside.id, { score_total: 78, editor_version: FRONTIER_EDITOR_VERSION, same_event_item_id: report.id });
-  await set(other.id, { score_total: 65, editor_version: FRONTIER_EDITOR_VERSION });
+  // Scored on the current scale (the mix weighs no other, c3 review).
+  const scored = { scoreVersion: FRONTIER_SCORE_VERSION };
+  await set(beside.id, { score_total: 78, editor_version: FRONTIER_EDITOR_VERSION, same_event_item_id: report.id, editor_diagnostics: scored });
+  await set(other.id, { score_total: 65, editor_version: FRONTIER_EDITOR_VERSION, editor_diagnostics: scored });
   // (A text to read: an item with none is not published, 2026-10-22.)
   await set(trigger.id, { score_total: 20, editor_version: FRONTIER_EDITOR_VERSION }, { abstract_raw: "An abstract of the trigger." });
   const pipeline = pipelineFor(translatingEditor());

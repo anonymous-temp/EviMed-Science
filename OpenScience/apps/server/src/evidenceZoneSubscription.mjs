@@ -90,55 +90,6 @@ async function evidenceCardColumns(database) {
 /** The test hook: a column added after the first read. */
 export function forgetEvidenceCardColumns(/** @type {any} */ database) { columnCache.delete(database); }
 
-/**
- * What a card says about itself that a memory resting on it should hear: withdrawn, superseded, or resting on a source that was
- * retracted or corrected. `null` is nothing to say. @param {{ state?: string, currency?: string, withdrawn?: boolean } | undefined} found
- * @returns {{ state: "retracted" | "changed", reason: string } | null}
- */
-export function cardFinding(found) {
-  if (!found) return null;
-  if (found.withdrawn) return { state: "retracted", reason: "card_withdrawn" };
-  if (found.currency === "superseded") return { state: "changed", reason: "card_superseded" };
-  if (found.currency === "source_changed") return { state: "changed", reason: "card_source_changed" };
-  return null;
-}
-
-/**
- * What a frontier item says about itself: withdrawn or retracted, corrected or under an expression of concern.
- * @param {{ state?: string, flags?: string[] } | undefined} found @returns {{ state: "retracted" | "changed", reason: string } | null}
- */
-export function itemFinding(found) {
-  if (!found) return null;
-  if (found.state === "withdrawn" || (found.flags ?? []).includes("retracted")) return { state: "retracted", reason: "item_retracted" };
-  if ((found.flags ?? []).some((flag) => flag === "corrected" || flag === "expression-of-concern")) return { state: "changed", reason: "item_corrected" };
-  return null;
-}
-
-/**
- * The state of evidence cards and frontier items by id, read from the evidence tables, for the labelling of memories that name them
- * (`KnowledgeChangeService.sweepEvidenceLinks`). An id with no row is absent from the map: a deleted card says nothing.
- * @param {any} database
- */
-export function createEvidenceLinkStates(database) {
-  return {
-    /** @param {readonly string[]} ids @returns {Promise<Map<string, { state: string, currency: string, withdrawn: boolean }>>} */
-    async cardStates(ids) {
-      if (!ids.length) return new Map();
-      const columns = await evidenceCardColumns(database);
-      const currency = columns.has("currency") ? "currency" : "'current'";
-      const withdrawn = columns.has("withdrawn") ? "(withdrawn IS NOT NULL)" : "false";
-      const rows = (await database.query(`SELECT id,state,${currency} AS currency,${withdrawn} AS withdrawn FROM evimed_frontier.evidence_cards WHERE id=ANY($1::text[])`, [[...ids]])).rows;
-      return new Map(rows.map((/** @type {any} */ row) => [String(row.id), { state: String(row.state), currency: String(row.currency), withdrawn: Boolean(row.withdrawn) }]));
-    },
-    /** @param {readonly string[]} ids @returns {Promise<Map<string, { state: string, flags: string[] }>>} */
-    async itemStates(ids) {
-      if (!ids.length) return new Map();
-      const rows = (await database.query("SELECT public_id,state,flags FROM evimed_frontier.items WHERE public_id=ANY($1::text[])", [[...ids]])).rows;
-      return new Map(rows.map((/** @type {any} */ row) => [String(row.public_id), { state: String(row.state), flags: Array.isArray(row.flags) ? row.flags : [] }]));
-    },
-  };
-}
-
 export class EvidenceZoneSubscriptions {
   /**
    * @param {{ database: any, documents: import('./productStore.mjs').ProductDocuments, enabled?: boolean, maxPerProject?: number, maxItems?: number, judgeService?: any }} options

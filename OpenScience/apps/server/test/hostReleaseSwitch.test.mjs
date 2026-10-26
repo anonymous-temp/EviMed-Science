@@ -163,7 +163,7 @@ process.exit(2);
 `;
 
 /** A host with one built release, a live stack and a docker that is a script. */
-async function host({ restartDoesNotHelp = false, imageDigestMatches = true, walkExit = undefined, ready = undefined, managedBrowser = false, releaseId = `evimed-${NEW}-1` } = {}) {
+async function host({ restartDoesNotHelp = false, imageDigestMatches = true, walkExit = undefined, walkEnv = undefined, ready = undefined, managedBrowser = false, releaseId = `evimed-${NEW}-1` } = {}) {
   const root = await mkdtemp(path.join(await realpath(tmpdir()), "release-switch-"));
   const rel = path.join(root, "releases", NEW, "OpenScience");
   const web = path.join(rel, "deploy/web");
@@ -231,13 +231,8 @@ async function host({ restartDoesNotHelp = false, imageDigestMatches = true, wal
   await chmod(path.join(bin, "sleep"), 0o755);
   await writeFile(path.join(root, "docker-state.json"), JSON.stringify(state));
   if (walkExit !== undefined) {
-    await writeFile(path.join(root, "shared/secrets/walk-password"), "x\n");
-    await writeFile(path.join(root, "shared/ui-walk.env"), [
-      "OPEN_SCIENCE_WALK_BASE_URL=https://evimed.example.org",
-      "OPEN_SCIENCE_WALK_USER=cdss-access",
-      `OPEN_SCIENCE_WALK_PASSWORD_HOST_FILE=${root}/shared/secrets/walk-password`,
-      "",
-    ].join("\n"));
+    // The file as it is kept since 2026-10-25: the address and the switches, and no account or password (the walk makes its own).
+    await writeFile(path.join(root, "shared/ui-walk.env"), (walkEnv ?? ["OPEN_SCIENCE_WALK_BASE_URL=https://evimed.example.org", "OPEN_SCIENCE_WALK_CHAT=1"]).concat("").join("\n"));
   }
   return { root, rel };
 }
@@ -398,11 +393,32 @@ test("the live pages are walked after the switch, and a failed walk says the rel
       const walk = calls.split("\n").find((line) => line.startsWith("run ") && line.includes("--entrypoint sh"));
       assert.ok(walk, "the walk ran in a container");
       assert.match(walk, /open-science-runtime:x-1cf308956b6e/, "in the release's own runtime image");
-      assert.match(walk, /-v \S+\/shared\/secrets\/walk-password:\/run\/walk\/password:ro/, "with the password as a read-only file, not a value");
+      assert.doesNotMatch(walk, /walk\/password|WALK_PASSWORD_HOST_FILE/, "the walk is given no password: it registers an account of its own");
       assert.match(walk, /-e OPEN_SCIENCE_WALK_ONLY= /, "always the whole walk: a partial walk named in ui-walk.env is emptied");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  }
+});
+
+test("the walk is mounted with every file it imports, and an old ui-walk.env cannot decide whom it signs in as", { skip }, async () => {
+  // The walk is the one file the container is given; each relative import it makes (the throwaway-account helper) is mounted beside it,
+  // or the first release after an import is added would end 「UI WALK COULD NOT RUN」 for a missing module.
+  const imports = [...(await readFile(path.join(repoRoot, "scripts/ops/ui-walk.mjs"), "utf8")).matchAll(/^import [^;]*? from "\.\/([\w-]+\.mjs)";$/gm)].map((match) => match[1]);
+  assert.ok(imports.includes("throwaway-account.mjs"), "the walk imports the helper that registers and deletes its account");
+  // The file an operator wrote before 2026-10-25 still names the owner's account and a password file; neither reaches the walk.
+  const { root } = await host({ walkExit: 0, walkEnv: ["OPEN_SCIENCE_WALK_BASE_URL=https://evimed.example.org", "OPEN_SCIENCE_WALK_USER=an-old-account", "OPEN_SCIENCE_WALK_PASSWORD_HOST_FILE=/nowhere/password"] });
+  try {
+    const result = await runSwitch(root, ["--no-prune"]);
+    assert.equal(result.code, 0, result.stdout + result.stderr);
+    const walk = (await readFile(path.join(root, "docker.log"), "utf8")).split("\n").find((line) => line.startsWith("run ") && line.includes("--entrypoint sh"));
+    for (const file of ["ui-walk.mjs", ...imports]) {
+      assert.match(walk, new RegExp(`-v \\S+/current/OpenScience/scripts/ops/${file.replace(".", "\\.")}:/walk/${file.replace(".", "\\.")}:ro`), `${file} is mounted into /walk`);
+    }
+    assert.match(walk, /-e OPEN_SCIENCE_WALK_USER= -e OPEN_SCIENCE_WALK_PASSWORD_FILE= /, "the settings that name an account are emptied, so the production walk registers its own");
+    assert.ok(walk.indexOf("--env-file") < walk.indexOf("-e OPEN_SCIENCE_WALK_USER="), "after the file, which they override");
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });
 

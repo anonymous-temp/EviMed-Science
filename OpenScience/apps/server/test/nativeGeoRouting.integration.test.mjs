@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { createWebApiApp } from '../src/server.mjs';
-import { NativeHandbookContext } from '../src/nativeHandbookContext.mjs';
+import { NativeInputRoute } from '../src/nativeInputRoute.mjs';
 import { normalizeTranscript } from '../src/dshRuntimeAdapter.mjs';
 import { nativeInputText } from '@evimed/harness-port';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
@@ -67,8 +67,8 @@ for (const learning of ['disabled','paused','enabled']) test(`native GEO selecti
   const prefix=new URL(frameEnvelope.data.frameUrl).pathname;
   const cookie=`${loginCookie}; ${String(frameResponse.headers.get('set-cookie')).split(';')[0]}`;
   const ui=`http://127.0.0.1:${app.runtimeUi.address().port}`;
-  const reader=new NativeHandbookContext({route:async()=>{throw new Error('Read frozen routes only');},select:async()=>null,budget:()=>0,allowed:async()=>false});
-  if(learning==='paused') await app.researchMemory.updateSettings(user.id,{learningPaused:true,recallPaused:true});
+  const reader=new NativeInputRoute({route:async()=>{throw new Error('Read frozen routes only');}});
+  if(learning==='paused') await app.memorySettings.updateSettings(user.id,{learningPaused:true,recallPaused:true});
   const stage=async(requestKey)=>app.geo.service.planContexts.stage(user,id,{requestKey,sessionId,mode:'strategy'});
   // The selection is bound inside the prompt's admission transaction, which commits just after the prompt is forwarded; the
   // response can reach this test first under load. Wait for the bound row (what the runtime's first read, a model turn later, sees).
@@ -162,7 +162,7 @@ for (const learning of ['disabled','paused','enabled']) test(`native GEO selecti
   assert.equal(adopted.find(run=>run.kernelRequestIds.includes('classifier-failure')).effectiveAgentId,'open-domain-answer','a failed classifier snapshot also wins over the stable binding');
   assert.equal(classified.length,classifiedBeforeAdoption,'adoption reuses the immutable route without asking a second classifier');
   const routeRead=await reader.read(project,{sessionId,inputs:[{requestId:'strategy',textDigest:hash(nativeInputText(wire.content))}]});
-  assert.equal(routeRead.routes[0].route.effectiveAgentId,'geo-strategy');assert.deepEqual(routeRead.contexts,[]);
+  assert.equal(routeRead.routes[0].route.effectiveAgentId,'geo-strategy');assert.deepEqual(Object.keys(routeRead),['routes'],'a route and no supplement');
   // Remove the synthetic runtime from shutdown: it owns no process or socket.
   manager.runtimes.delete(manager.key(project));
 });

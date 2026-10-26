@@ -290,13 +290,16 @@ function boundedInteger(value, fallback, min, max, name) {
  *   thousand short commits) and 0 reads as no cap, like every spend limit here;
  *   the budget exists for the runaway — a compile resubmitted in a loop, an
  *   auto-commit storm — not for an ordinary day.
- * - **The two switches default to whether the engine is this deployment's
- *   index.** `OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED` (resources, Compile, the wiki
- *   and the graph) and `OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED` (sessions, native
- *   extraction, the memory plugin) each gate the behaviour its own module
- *   implements; unset, each is on exactly when an OpenViking URL and its key
- *   are configured and no other index provider is named. Set true without the
+ * - **One switch, and one fact.** `OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED` (resources,
+ *   Compile, the wiki and the graph) defaults to whether the engine is this
+ *   deployment's index: on exactly when an OpenViking URL and its key are
+ *   configured and no other index provider is named. Set true without the
  *   engine it stays a statement nobody can honour, and readiness says so.
+ *   Memory has no switch of its own any more: an account's memory is the
+ *   engine's (the legacy engine that kept it in PostgreSQL was deleted on
+ *   2026-10-25), so `memoryEngineEnabled` is a fact derived here, not a lever —
+ *   an OpenViking URL and its key are configured — and a deployment without
+ *   them has memory off, reported as a status, never a fallback.
  *
  * @param {Record<string, any>} overrides
  * @param {{ value: string, source: string, error: string | null }} modelSecret
@@ -320,8 +323,9 @@ function openVikingEngineSettings(overrides, modelSecret, rootSecret) {
   }
   const provider = String(overrides.memoryIndexProvider ?? process.env.OPEN_SCIENCE_MEMORY_INDEX_PROVIDER ?? "").trim();
   const url = String(overrides.openVikingUrl ?? process.env.OPEN_SCIENCE_OPENVIKING_URL ?? "").trim();
-  // The rule `memorySubstrate.memoryIndexSelection` applies, restated because that module reads a finished config.
-  const engineSelected = Boolean(url) && Boolean(rootSecret.value) && !rootSecret.error && (provider === "" || provider === "openviking");
+  const engineConfigured = Boolean(url) && Boolean(rootSecret.value) && !rootSecret.error;
+  // The rule `memoryIndexProvider.memoryIndexSelection` applies, restated because that module reads a finished config.
+  const engineSelected = engineConfigured && (provider === "" || provider === "openviking");
   return {
     openVikingModelKey: modelSecret.value,
     openVikingModelKeySource: modelSecret.source,
@@ -341,7 +345,9 @@ function openVikingEngineSettings(overrides, modelSecret, rootSecret) {
     openVikingBackupStateFile: String(overrides.openVikingBackupStateFile ?? process.env.OPEN_SCIENCE_OPENVIKING_BACKUP_STATE_FILE ?? "").trim(),
     openVikingBackupMaxAgeSeconds: backupMaxAgeSeconds,
     ovKnowledgeEnabled: overrides.ovKnowledgeEnabled ?? boolEnv("OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED", engineSelected),
-    ovNativeMemoryEnabled: overrides.ovNativeMemoryEnabled ?? boolEnv("OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED", engineSelected),
+    // Derived, not an operator lever (see above): whether the memory engine is configured here. A pinned `builtin` index provider
+    // chooses how the capsule's facts are ranked and has no say over where an account's memory lives.
+    memoryEngineEnabled: overrides.memoryEngineEnabled ?? engineConfigured,
   };
 }
 
@@ -427,8 +433,7 @@ function frontierSettings(overrides) {
     // model calls to, and — to show anything — the plugin.
     frontierEnabled: overrides.frontierEnabled ?? boolEnv("OPEN_SCIENCE_FRONTIER_ENABLED", false),
     frontierAudience: audience,
-    // Accounts that see the module under `operators` without being operators:
-    // the acceptance account verifies the dry run without operator rights.
+    // Accounts that see the module under `operators` without being operators: a person who verifies the dry run without operator rights.
     frontierPreviewUsers: overrides.frontierPreviewUsers ?? listEnv("OPEN_SCIENCE_FRONTIER_PREVIEW_USERS"),
     frontierPollMs: integer("frontierPollMs", "OPEN_SCIENCE_FRONTIER_POLL_MS", 5_000, 1_000, 3_600_000),
     frontierLeaseMs: integer("frontierLeaseMs", "OPEN_SCIENCE_FRONTIER_LEASE_MS", 600_000, 60_000, 86_400_000),
@@ -444,26 +449,42 @@ function frontierSettings(overrides) {
     frontierProcessConcurrency: integer("frontierProcessConcurrency", "OPEN_SCIENCE_FRONTIER_PROCESS_CONCURRENCY", 2, 1, 8),
     frontierOffpeak: overrides.frontierOffpeak ?? boolEnv("OPEN_SCIENCE_FRONTIER_OFFPEAK", false),
     // FRONTIER_SELECT_THRESHOLD_DEFAULT (frontierPipeline.mjs, where its calibration is written).
-    frontierSelectThreshold: integer("frontierSelectThreshold", "OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD", 82, 0, 100),
+    frontierSelectThreshold: integer("frontierSelectThreshold", "OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD", 64, 0, 100),
     // The preprint lane (owner ruling 2026-10-10, review B D-08): preprint servers cannot reach the line by arithmetic, so each day
     // the best of them are selected anyway, up to this many (0 = no lane), at or above this total — two places inside the genre mix's
     // research group since ct-mix (2026-10-24); a company newsroom's release takes the industry group's floor instead.
     // FRONTIER_PREPRINT_LANE_PER_DAY_DEFAULT and FRONTIER_PREPRINT_LANE_MIN_SCORE_DEFAULT (frontierPipeline.mjs, with the reasoning).
     frontierPreprintLanePerDay: integer("frontierPreprintLanePerDay", "OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_PER_DAY", 2, 0, 10),
-    frontierPreprintLaneMinScore: integer("frontierPreprintLaneMinScore", "OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_MIN_SCORE", 60, 0, 100),
+    frontierPreprintLaneMinScore: integer("frontierPreprintLaneMinScore", "OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_MIN_SCORE", 50, 0, 100),
     // The most safety pushes one reader receives in a day (owner ruling 2026-10-10: a Class I recall and a boxed-warning alert now go to
     // every reader with the push on). FRONTIER_SAFETY_PUSH_DAILY_CAP_DEFAULT (frontierNotifications.mjs, with the reasoning).
     frontierSafetyPushDailyCap: integer("frontierSafetyPushDailyCap", "OPEN_SCIENCE_FRONTIER_SAFETY_PUSH_DAILY_CAP", 3, 1, 50),
+    // The cosine, in hundredths, an item's embedding must reach against a typed follow's words for the embedding leg to match it
+    // (c3-watch 2026-10-25; only a follow with no key takes the leg). FRONTIER_FOLLOW_MIN_COSINE_DEFAULT (frontierFollowMatches.mjs).
+    frontierFollowMinCosinePercent: integer("frontierFollowMinCosinePercent", "OPEN_SCIENCE_FRONTIER_FOLLOW_MIN_COSINE_PERCENT", 55, 30, 95),
     // Lead triggers (ct-mix 2026-10-24, frontierLeads.mjs): the feed searches the open web through the platform's gateway for
     // what it is missing and hands the pages to the knowledge plugin. On with the module (it needs a web-search engine and
     // the plugin); a day's searches are capped here (FRONTIER_LEADS_DAILY_QUERIES_DEFAULT), each booked under purpose
     // `frontier` and held to the module's daily budget; 0 makes none.
     frontierLeadsEnabled: overrides.frontierLeadsEnabled ?? boolEnv("OPEN_SCIENCE_FRONTIER_LEADS_ENABLED", true),
+    // c3-primary 2026-10-25: a top journal's research paper with no text is read through the published reports of it
+    // (frontierPrimaryReports.mjs), and its dropped entries are asked of the plugin again for twenty-one days.
+    frontierPrimaryReportsEnabled: overrides.frontierPrimaryReportsEnabled ?? boolEnv("OPEN_SCIENCE_FRONTIER_PRIMARY_REPORTS_ENABLED", true),
     frontierLeadsDailyQueries: integer("frontierLeadsDailyQueries", "OPEN_SCIENCE_FRONTIER_LEADS_DAILY_QUERIES", 120, 0, 1000),
     // c2-leads 2026-10-25 (frontierTopics.mjs): the outside-event trigger — the public hot lists the knowledge plugin reads, a
     // grouping call and a topic call on deepseek-flash under purpose `frontier` and the module's budget, topics with their
     // searches (0.15 of the leads' day) and overview. On with the leads; false makes no topic (the stop rule is in the module).
     frontierOutsideEventEnabled: overrides.frontierOutsideEventEnabled ?? boolEnv("OPEN_SCIENCE_FRONTIER_OUTSIDE_EVENT_ENABLED", true),
+    // c3-faith 2026-10-25 (frontierStudyFacts.mjs, frontierFaith.mjs): the study facts of paper, preprint, trial and conference items
+    // (one flash call each, every field anchored to a quotation code found) and the check of a written 导读 or 要点 against them
+    // (a second call, one repair by the writer, the sentence that still mismatches removed; a card summary is trimmed, never rewritten).
+    // Both under purpose `frontier` and the module's budget. The check needs the facts; false on the first makes neither, false on the
+    // second keeps the facts only.
+    frontierStudyFactsEnabled: overrides.frontierStudyFactsEnabled ?? boolEnv("OPEN_SCIENCE_FRONTIER_STUDY_FACTS_ENABLED", true),
+    frontierFaithEnabled: overrides.frontierFaithEnabled ?? boolEnv("OPEN_SCIENCE_FRONTIER_FAITH_ENABLED", true),
+    // The re-clustering sweep (c3-cluster 2026-10-25, frontierRecluster.mjs): pairs of events it asks the model about in one run
+    // (every ten minutes, only while the day's budget is ok, deepseek-flash under purpose `frontier`); 0 makes none.
+    frontierReclusterMaxPairs: integer("frontierReclusterMaxPairs", "OPEN_SCIENCE_FRONTIER_RECLUSTER_MAX_PAIRS", 40, 0, 400),
     // Events one reader's page may report a minute (frontierInteractions.mjs FRONTIER_EVENTS_PER_MINUTE_DEFAULT, with the reasoning):
     // a resource limit on the events route, past which the page keeps its queue and tries again.
     frontierEventsPerMinute: integer("frontierEventsPerMinute", "OPEN_SCIENCE_FRONTIER_EVENTS_PER_MINUTE", 300, 10, 10_000),
@@ -650,20 +671,8 @@ function countSetting(overrides, key, name, fallback) {
 }
 
 /**
- * A share from 0 to 1 (a sample of runs, `runSampling.mjs`), from an override or the environment. Unset or empty is the default; a value outside the
- * range stops the process at start with the variable's name, as the module settings do, because a share nobody chose would decide how much is learned.
- * @param {Record<string, any>} overrides @param {string} key @param {string} name @param {number} fallback
- */
-function shareSetting(overrides, key, name, fallback) {
-  const raw = overrides[key] !== undefined ? overrides[key] : process.env[name];
-  const value = raw == null || raw === "" ? fallback : Number(raw);
-  if (!Number.isFinite(value) || value < 0 || value > 1) throw new Error(`${name} must be a number from 0 to 1, got ${JSON.stringify(raw)}.`);
-  return value;
-}
-
-/**
  * What the evidence flywheel's learning loop and its figures switch on (evidence-flywheel plan §5.2, §5.5, §11, 2026-10-06), each off by default
- * and each doing nothing at all while off — no table read, no timer, and a route that answers 404 by the module's own "not enabled" code.
+ * (the official promotion, on since 2026-10-25, is the one that is on) and each doing nothing at all while off — no table read, no timer, and a route that answers 404 by the module's own "not enabled" code.
  *
  * - `OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED` (off): the operator's `GET /api/ops/evidence-flywheel` and the `open_science_evidence_flywheel_*`
  *   families. It reads existing tables only; it is a switch because a scrape that verifies cards is database work an operator chooses to ask for.
@@ -677,18 +686,18 @@ function shareSetting(overrides, key, name, fallback) {
  * - `OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED` (off): the platform's own modules (the evidence programme, 循证 GEO, 虚拟临床研究) hand 循证进化 what they could
  *   not do as research leads; needs the evolution module on. `OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY` (5, at most 50) bounds the new leads of these
  *   sources taken in a day, because each lead is a scouting run on the module's own budget.
- * - `OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED` (off): a lesson an account's handbook learned that holds no project fact may go to the platform's skill supply as a
- *   text-only entry, after an independent re-check; needs the evolution module and the learning loop on. `OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY` (3, at most 30)
- *   bounds the candidates re-checked and activated in a day, each a model call of the evolution module's own budget.
- *   `OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PROBATION_SHARE` (0.1, from 0 to 1) is the share of eligible runs a handbook entry on probation is served to, by a hash of
- *   the run id, so that the harm test can observe it; an entry that is never served can never leave probation (review L-6, owner decision 7).
+ * - `OPEN_SCIENCE_OFFICIAL_PROMOTION_ENABLED` (on): a method the learning loop wrote for a person that holds no personal or project fact may join the platform's
+ *   pack 「大家的做法」 (`officialPromotion.mjs`), after the code's field checks, a generality judge, a harm judge, the author rule and an independent re-check by a
+ *   model of another family. It needs the learning loop on and a review provider that is not DeepSeek: with none, nothing is considered and nothing is spent.
+ *   `OPEN_SCIENCE_OFFICIAL_PROMOTION_PER_DAY` (3, at most 30) bounds the methods re-checked and activated in a day, each a model call of the platform's own.
+ *   (This replaced the platform handbook path, `OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_*`, whose one producer was a repaired delivery read at share 0; 2026-10-25.)
  *
  * @param {Record<string, any>} overrides
  */
 function evidenceFlywheelSettings(overrides) {
-  const handbooksRaw = overrides.learningPlatformHandbooksPerDay !== undefined ? overrides.learningPlatformHandbooksPerDay : process.env.OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY;
-  const handbooksPerDay = handbooksRaw == null || handbooksRaw === "" ? 3 : Number(handbooksRaw);
-  if (!Number.isSafeInteger(handbooksPerDay) || handbooksPerDay < 1 || handbooksPerDay > 30) throw new Error(`OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY must be a whole number from 1 to 30, got ${JSON.stringify(handbooksRaw)}.`);
+  const promotionRaw = overrides.officialPromotionPerDay !== undefined ? overrides.officialPromotionPerDay : process.env.OPEN_SCIENCE_OFFICIAL_PROMOTION_PER_DAY;
+  const promotionPerDay = promotionRaw == null || promotionRaw === "" ? 3 : Number(promotionRaw);
+  if (!Number.isSafeInteger(promotionPerDay) || promotionPerDay < 1 || promotionPerDay > 30) throw new Error(`OPEN_SCIENCE_OFFICIAL_PROMOTION_PER_DAY must be a whole number from 1 to 30, got ${JSON.stringify(promotionRaw)}.`);
   const perDayRaw = overrides.evolutionModuleLeadsPerDay !== undefined ? overrides.evolutionModuleLeadsPerDay : process.env.OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY;
   const moduleLeadsPerDay = perDayRaw == null || perDayRaw === "" ? 5 : Number(perDayRaw);
   if (!Number.isSafeInteger(moduleLeadsPerDay) || moduleLeadsPerDay < 1 || moduleLeadsPerDay > 50) throw new Error(`OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY must be a whole number from 1 to 50, got ${JSON.stringify(perDayRaw)}.`);
@@ -706,9 +715,8 @@ function evidenceFlywheelSettings(overrides) {
     learningEvidenceOutcomesBatch: outcomesBatch,
     evolutionModuleLeadsEnabled: overrides.evolutionModuleLeadsEnabled ?? boolEnv("OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED", false),
     evolutionModuleLeadsPerDay: moduleLeadsPerDay,
-    learningPlatformHandbooksEnabled: overrides.learningPlatformHandbooksEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED", false),
-    learningPlatformHandbooksPerDay: handbooksPerDay,
-    learningPlatformHandbooksProbationShare: shareSetting(overrides, "learningPlatformHandbooksProbationShare", "OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PROBATION_SHARE", 0.1),
+    officialPromotionEnabled: overrides.officialPromotionEnabled ?? boolEnv("OPEN_SCIENCE_OFFICIAL_PROMOTION_ENABLED", true),
+    officialPromotionPerDay: promotionPerDay,
   };
 }
 
@@ -771,6 +779,10 @@ function memorySharingSettings(overrides, frontierEnabled) {
     capsuleKdfMaxWaiting: integer("capsuleKdfMaxWaiting", "OPEN_SCIENCE_CAPSULE_KDF_MAX_WAITING", 6, 0, 100),
     capsuleKdfMaxWaitMs: integer("capsuleKdfMaxWaitMs", "OPEN_SCIENCE_CAPSULE_KDF_MAX_WAIT_MS", 10_000, 100, 60_000),
     capsuleMaxLiveSnapshots: integer("capsuleMaxLiveSnapshots", "OPEN_SCIENCE_CAPSULE_MAX_LIVE_SNAPSHOTS", 300, 1, 5000),
+    // The platform's official starter packs from 「EviMed 证据中心」 (`officialPacks.mjs`, owner decision 2026-10-25): published once at start, held by every
+    // ordinary account on its shelf, the lowest tier of the methods a run is offered. Off, none is published, copied or mounted (copies an account
+    // already holds stay on its shelf and are mounted by nothing).
+    officialPacksEnabled: overrides.officialPacksEnabled ?? boolEnv("OPEN_SCIENCE_OFFICIAL_PACKS_ENABLED", true),
     evidenceZoneSubscriptionEnabled: frontierEnabled && (overrides.evidenceZoneSubscriptionEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED", false)),
     evidenceZoneSubscriptionMaxPerProject: integer("evidenceZoneSubscriptionMaxPerProject", "OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_PER_PROJECT", 5, 1, 20),
     evidenceZoneSubscriptionMaxItems: integer("evidenceZoneSubscriptionMaxItems", "OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_ITEMS", 6, 1, 30),
@@ -1542,8 +1554,8 @@ export function loadConfig(overrides = {}) {
     ["OPEN_SCIENCE_MEMOS_ACCESS_TOKEN_FILE", "research memory needs no credential of its own; remove this variable"],
     ["OPEN_SCIENCE_MEMOS_REQUEST_TIMEOUT_MS", "research memory is an in-process store; remove this variable"],
     ["OPEN_SCIENCE_REQUIRE_MEMOS", "research memory exists exactly when the control-plane database does; remove this variable"],
-    ["OPEN_SCIENCE_MEMOS_CONTEXT_LIMIT", "set OPEN_SCIENCE_MEMORY_CONTEXT_LIMIT instead"],
-    ["OPEN_SCIENCE_MEMOS_CONTEXT_MAX_CHARS", "set OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS instead"],
+    ["OPEN_SCIENCE_MEMOS_CONTEXT_LIMIT", "the memory context budget is gone with the legacy memory engine; remove this variable"],
+    ["OPEN_SCIENCE_MEMOS_CONTEXT_MAX_CHARS", "the memory context budget is gone with the legacy memory engine; remove this variable"],
     ["OPEN_SCIENCE_MEMOS_ENGINE_URL", "the recall index is OpenViking; set OPEN_SCIENCE_OPENVIKING_URL instead"],
     ["OPEN_SCIENCE_REQUIRE_MEMORY_INDEX", "set OPEN_SCIENCE_MEMORY_INDEX_STRICT instead"],
     // The MinerU container read its input from a shared staging directory
@@ -2726,17 +2738,8 @@ export function loadConfig(overrides = {}) {
       process.env.OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_MAX_AGE_MS ??
       24 * 60 * 60 * 1000,
     ),
-    // How much of a recall reaches the prompt: how many memories, and how many
-    // characters they may spend between them. The budget is product policy, so
-    // it is the same number whichever component ranked the candidates.
-    memoryContextLimit: Number(
-      overrides.memoryContextLimit ?? process.env.OPEN_SCIENCE_MEMORY_CONTEXT_LIMIT ?? 8,
-    ),
-    memoryContextMaxChars: Number(
-      overrides.memoryContextMaxChars ?? process.env.OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS ?? 20_000,
-    ),
-    // The standing profile a conversation is handed up front (review M6, 2026-10-10): the most entries it carries, research
-    // records and capsule entries together, inside the 1,500 tokens the block is held to. What is always present is paid for on
+    // The standing profile a conversation is handed up front (review M6, 2026-10-10): the most entries it carries, capsule entries,
+    // inside the 1,500 tokens the block is held to. What is always present is paid for on
     // every request and takes attention from the question, so it is capped; the rest is the recall tool's, and the line beside
     // the profile says how many there are.
     memoryProfileMaxRecords: Number(
@@ -2786,6 +2789,10 @@ export function loadConfig(overrides = {}) {
     // of — unreachable, not the one answer shape, or the account's day spent — is kept. The day's calls per account are the bound
     // (`open_science_native_memory_rejection_judge_total`); off, only a verbatim repeat and a line that contains a removed one are met.
     nativeMemoryRejectionJudgeEnabled: overrides.nativeMemoryRejectionJudgeEnabled ?? boolEnv("OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_ENABLED", true),
+    // The page's import of what another assistant remembered (`nativeMemoryImport.mjs`): one Flash call splits the pasted text, the person
+    // reviews the list, the engine writes what they keep. The offers an account may ask for in an hour are the bound on that call
+    // (`open_science_native_memory_imports_total{outcome="rate_limited"}`); 0 refuses every import.
+    memoryImportOffersPerHour: boundedInteger(overrides.memoryImportOffersPerHour ?? process.env.OPEN_SCIENCE_MEMORY_IMPORT_OFFERS_PER_HOUR, 5, 0, 1_000, "OPEN_SCIENCE_MEMORY_IMPORT_OFFERS_PER_HOUR"),
     nativeMemoryRejectionJudgeDailyCalls: boundedInteger(overrides.nativeMemoryRejectionJudgeDailyCalls ?? process.env.OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_DAILY_CALLS, 40, 0, 10_000, "OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_DAILY_CALLS"),
     // The turn committer (`nativeTurnCommit.mjs`): the plugin commits a conversation only at a token threshold no ordinary
     // conversation reaches and when its session is disposed (hours away while the runtime lives), so the control plane
@@ -2816,20 +2823,21 @@ export function loadConfig(overrides = {}) {
     memorySearchMinScore: Number(
       overrides.memorySearchMinScore ?? process.env.OPEN_SCIENCE_MEMORY_SEARCH_MIN_SCORE ?? 0.75,
     ),
-    // Which component decides *which* memories a question sees. `builtin` is
-    // the term matcher inside the research-memory store and needs nothing
+    // Which component decides *which* of the capsule's facts a question sees.
+    // `builtin` is the term matcher inside the capsule store and needs nothing
     // deployed; `openviking` delegates the ranking to a context database. The
-    // record itself stays authoritative in the control-plane database either
-    // way, so this switch changes recall quality and nothing else. Unset, the
+    // fact itself stays authoritative in the control-plane database either
+    // way, so this switch changes recall quality and nothing else (an account's
+    // own memory files are the engine's and are not ranked by this). Unset, the
     // index is selected exactly when it is configured (an OpenViking URL and
-    // its key) — `memorySubstrate.memoryIndexSelection` decides, and readiness
+    // its key) — `memoryIndexProvider.memoryIndexSelection` decides, and readiness
     // says which way and why.
     memoryIndexProvider: String(
       overrides.memoryIndexProvider ?? process.env.OPEN_SCIENCE_MEMORY_INDEX_PROVIDER ?? "",
     ).trim(),
     // Report-only by default (development principle 4: a new check ships as a
-    // notice before it may block). Set this and a recall whose index is down
-    // fails instead of falling back to the term matcher.
+    // notice before it may block). Set this and a capsule recall whose index is
+    // down fails instead of falling back to the term matcher.
     memoryIndexStrict: overrides.memoryIndexStrict ?? boolEnv("OPEN_SCIENCE_MEMORY_INDEX_STRICT", false),
     openVikingUrl: String(overrides.openVikingUrl ?? process.env.OPEN_SCIENCE_OPENVIKING_URL ?? "").replace(/\/+$/, ""),
     openVikingApiKey: openVikingSecret.value,
@@ -3147,13 +3155,6 @@ export function loadConfig(overrides = {}) {
     // opening any). The card costs prompt room in every research run, and the harm test cannot see a method nobody opens. Restoring a
     // stopped method starts its count again. Zero never stops one for this. Stated beside the rule it feeds: `METHOD_UNUSED_RETIRE_LOADS`.
     learningUnusedRetireLoads: countSetting(overrides, "learningUnusedRetireLoads", "OPEN_SCIENCE_LEARNING_UNUSED_RETIRE_LOADS", METHOD_UNUSED_RETIRE_LOADS),
-    // The share of repaired deliveries that queue a distillation. Zero by default (owner ruling of 2026-10-12: the loop is to learn the
-    // researcher's research methods from their corrections and edits, not how to pass the delivery gate). Since 2026-09-17 a verdict of the
-    // gate withholds nothing, so what a run repaired inside its turn is the platform's own bookkeeping, and 21 of the 28 lessons the loop
-    // had read by 2026-10-12 were of that kind, filed as account handbooks that 14 of 17 platform candidates then failed on length.
-    // Chosen by a hash of the run id (`runSampling.mjs`); 1 restores every repaired delivery. (The share of clean deliveries that queued a lesson, a third, was removed
-    // on 2026-10-23: what it read is the settled run and the routine over three of them, `learningEvidence.mjs`.)
-    learningRepairDistillShare: shareSetting(overrides, "learningRepairDistillShare", "OPEN_SCIENCE_LEARNING_REPAIR_DISTILL_SAMPLE_SHARE", 0),
     // Who sees the operations page.
     //
     // An id list, empty by default, no new role and no approval flow. It gates one surface — the
@@ -3166,21 +3167,9 @@ export function loadConfig(overrides = {}) {
     operatorUsers: String(overrides.operatorUsers
       ?? process.env.OPEN_SCIENCE_OPERATOR_USERS ?? "")
       .split(",").map((value) => value.trim()).filter(Boolean),
-    // The one account besides the operators that may hold the platform's self-measurement projects
-    // (`acceptance-*`, `audit-*`, `eval-method-*`): the deployment's acceptance account, the one the smoke
-    // and the capability battery sign in as. Empty — the default — means there is none. A project is
-    // internal (not charged, outside the project ceiling and the runtime slots) only when its name says
-    // so AND its owner is one of these accounts: a name a client chose is never a waiver
-    // (`isInternalProjectOf`). The account is an id, as `operatorUsers` are.
-    acceptanceUsername: String(overrides.acceptanceUsername ?? process.env.OPEN_SCIENCE_ACCEPTANCE_USERNAME ?? "").trim(),
     mountedMethodPromptBytes: mountedMethodPromptBytes(overrides),
     transcriptRetentionDays: Number(overrides.transcriptRetentionDays
       ?? process.env.OPEN_SCIENCE_TRANSCRIPT_RETENTION_DAYS ?? 90),
-    // `basic` is the kernel's own engine; `structured` is ours, which preserves
-    // the run's durable handles across a compaction. It stays `basic` until the
-    // context-fidelity report has a real distribution to argue from (§6.5).
-    runtimeCompactionPolicy: String(overrides.runtimeCompactionPolicy
-      ?? process.env.OPEN_SCIENCE_RUNTIME_COMPACTION_POLICY ?? "basic"),
     // The context window the kernel is told it has.
     //
     // It was the literal 1,000,000 while a run's own budget was 400,000, and
@@ -3250,48 +3239,15 @@ export function loadConfig(overrides = {}) {
     // conversation. Off until a deployment is fused with the shell.
     researchHandoffEnabled:
       overrides.researchHandoffEnabled ?? boolEnv("OPEN_SCIENCE_RESEARCH_HANDOFF_ENABLED", false),
-    memoryExtractionEnabled:
-      overrides.memoryExtractionEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_EXTRACTION_ENABLED", true),
-    // Projects extraction never writes for, by id prefix. Empty by default.
-    //
-    // A paired evaluation manipulates the very records extraction upserts, so
-    // it has to run with extraction off — and until now the only way to do that
-    // was the deployment-wide switch above, flipped by hand before the batch
-    // and flipped back after it. Twice in two days that was a container
-    // recreate in the middle of a live deployment, and the failure mode when
-    // somebody forgets the second flip is a memory page that stays empty
-    // forever and looks exactly like "nothing worth remembering happened".
-    //
-    // A prefix rather than an exact id because an eval allocates one project
-    // per batch (`eval-memory-ablation-v3`, then v4); the operator registers
-    // `eval-` once.
-    memoryExtractionExcludedProjectPrefixes: String(overrides.memoryExtractionExcludedProjectPrefixes
-      ?? process.env.OPEN_SCIENCE_MEMORY_EXTRACTION_EXCLUDED_PROJECT_PREFIXES ?? "")
-      .split(",").map((value) => value.trim()).filter(Boolean),
-    // Extraction runs after the reply is already delivered, so a generous budget
-    // costs the user nothing. The measured request takes 40-46s against
-    // deepseek-v4-pro, so the old 30s ceiling aborted every single one.
+    // The model calls the memory side makes on the researcher's behalf (the topic grouping, the rejection judge): they run after the
+    // reply is already delivered, so a generous budget costs the user nothing. The legacy engine's extraction, which these keys
+    // were named for, was deleted on 2026-10-25; the names stay because deployments set them.
     memoryExtractionTimeoutMs: Number(
       overrides.memoryExtractionTimeoutMs ?? process.env.OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS ?? 120_000,
     ),
-    // Structured extraction rather than reasoning, so the flash tier fits: it
-    // measures ~22s against the pro model's ~38s on the same prompt.
+    // Structured judgement rather than reasoning, so the flash tier fits.
     memoryExtractionModel: String(
       overrides.memoryExtractionModel ?? process.env.OPEN_SCIENCE_MEMORY_EXTRACTION_MODEL ?? defaultDeepSeekModel,
-    ),
-    // How long a per-run episodic memory stays recallable. The profile
-    // extracted from those runs has no expiry.
-    memoryRunSummaryTtlDays: Number(
-      overrides.memoryRunSummaryTtlDays ?? process.env.OPEN_SCIENCE_MEMORY_RUN_SUMMARY_TTL_DAYS ?? 90,
-    ),
-    // mem stream (2026-09-20): how long an inferred memory lives after it was
-    // last observed. With no confirmation step (owner ruling 2026-09-19) an
-    // inference takes effect at once, so what keeps "one stressful week" from
-    // hardening into the profile is that a pattern not seen again fades; each
-    // re-observation extends it, and a statement the researcher made does not
-    // fade at all. 0 = never.
-    memoryInferredTtlDays: Number(
-      overrides.memoryInferredTtlDays ?? process.env.OPEN_SCIENCE_MEMORY_INFERRED_TTL_DAYS ?? 90,
     ),
     allowRuntimeHostNetwork:
       overrides.allowRuntimeHostNetwork ?? boolEnv("OPEN_SCIENCE_ALLOW_RUNTIME_HOST_NETWORK", false),

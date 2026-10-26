@@ -893,53 +893,6 @@ Three rules the switch holds, each from an incident (2026-09-14 to 09-17):
   newest two, whatever `current` names, and anything a container still mounts
   or was created from. A release directory is never removed by hand.
 
-### Research memory cutover
-
-A deployment upgrading from the release that ran the separate memory service
-holds its notes and structured records in the `public` schema of the same
-PostgreSQL, and the new schema `evimed_memory` starts empty. Nothing fails when
-this step is skipped, which is the reason it is written down: readiness passes,
-the memory page loads, recall returns nothing, and the only symptom is a
-research assistant that has forgotten every researcher it ever had. Carry the
-memory over as part of the release, not after someone notices.
-
-Run all three inside the API container. The database and the index publish no
-ports and answer only to their Compose network aliases, and the host has
-neither; the container has both, plus the two secret files these scripts read.
-
-```bash
-cutover() { docker compose --env-file deploy/web/.env -f deploy/web/docker-compose.yml \
-  exec -T open-science-web node "$@"; }
-
-# 1. Read-only rehearsal. It reports counts only — never memory content, a
-#    note, a quote, a key or a connection string.
-cutover scripts/ops/migrate-research-memory.mjs --source same --dry-run
-# 2. The import, and the removal of the retired copy, in one run. One run
-#    rather than two: a second import would re-insert anything a researcher
-#    deleted between them, and resurrecting a deleted memory is worse than
-#    carrying none. It imports first and empties the retired tables only if
-#    nothing was left behind.
-cutover scripts/ops/migrate-research-memory.mjs --source same --purge-source
-# 3. Publish the carried records to the recall index. Only this backfill needs
-#    running by hand; from here every write publishes itself.
-cutover scripts/ops/rebuild-memory-index.mjs --all
-```
-
-`unmapped` and `quarantined` must both be zero for step 2 to empty anything,
-and it refuses while either is not — repair them from the rehearsal's report
-and run step 2 again. `unmapped` counts memories whose owner could not be
-resolved to an account — they are left exactly where they are, because a memory
-handed to the wrong account is worse than a memory not carried over — and
-`quarantined` counts rows the new schema refused, each with a reason. Both are
-read and repaired with the deployment's own database tooling before the cutover
-is called done.
-
-Emptying the retired tables is what makes account deletion honest again. The retired tables key
-ownership by that service's own user ids and reference nothing in
-`evimed_control`, so until they are emptied every memory exists twice and only
-one of the two copies is reachable by "forget this memory" or by the cascade
-that deletes an account.
-
 The exported release values and `deploy/web/.env` must be identical. In a
 release pipeline, derive both from one immutable release context rather than
 maintaining two independent copies. `pnpm release:manifest` refuses placeholder
@@ -1255,7 +1208,7 @@ What the deployment adds to the service (`deploy/web/docker-compose.yml`, `deplo
   `poll_interval_ms: 5000` would make it 5 s; it has not been probed). A compile that names another user's root is refused by the
   engine (403); one that names the account-shared `viking://resources/…` or `viking://agent/…` roots is not, so
   `OpenVikingResources.submitCompile` refuses every root outside the acting user's own resources.
-- **The memory templates.** `deploy/web/openviking/memory-templates/` — eight types, the platform's keep / never-keep policy
+- **The memory templates.** `deploy/web/openviking/memory-templates/` — ten types, the platform's keep / never-keep policy
   written in the engine's template language — is bind-mounted read-only at `/app/memory-templates`. A missing mount is silent
   upstream (the server falls back to its built-in types), which is why the control plane checks it.
 - **The model path.** The engine's `vlm` is this deployment's own model gateway (`http://open-science-web:8787/internal/model/v1`),
@@ -1277,19 +1230,19 @@ What the deployment adds to the service (`deploy/web/docker-compose.yml`, `deplo
 | `OPEN_SCIENCE_KNOWLEDGE_GRAPH_ENABLED` | `true` | Whether the `knowledge-graph` compile follows the wiki's; off compiles the wiki only. |
 | `OPEN_SCIENCE_KNOWLEDGE_SOURCE_SYNC_RECONCILE_MS` | `900000` | How often every project's readable documents are compared with the engine's copies and repaired. One changed document is pushed at once by its own job; this is the net under that. |
 | `OPEN_SCIENCE_DOCUMENT_MEMORY_ENABLED` | `false` | Whether each readable document's summary and key claims are written into the memory capsule's `sources` layer. Off since 2026-10-13; off stops new writes only. |
-| `OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED` | on when the engine is the deployment's index | Sessions, native extraction, the memory plugin behind the memory gateway. |
 | `OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_ENABLED` | `true` | The control plane commits a native account's engine session a few seconds after an attended turn (`nativeTurnCommit.mjs`), through the memory gateway's own commit path. The plugin commits only at 20000 pending tokens or when its session is disposed, so without this a short conversation reaches extraction when the engine's idle commit fires (15 to 20 minutes of silence) or the runtime is released. Automated, scheduled, LoopX and sub-agent turns never start one. A commit that finds something pending is one extraction call under `memory-extraction`. |
 | `OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_DEBOUNCE_MS`, `_SETTLE_MS`, `_ATTEMPTS` | `8000`, `2000`, `4` | The quiet before the commit (the plugin's writes of the turn are asynchronous; a person who writes again within it makes one commit of two turns), then up to `_ATTEMPTS` reads of the engine's session `_SETTLE_MS` apart until two agree; nothing pending after all of them is "nothing pending". |
 | `OPEN_SCIENCE_NATIVE_MEMORY_TURN_COMMIT_CONCURRENCY`, `_MAX_SCHEDULED` | `2`, `1000` | Commits in flight at once, and conversations waiting for their quiet; a conversation over the bound is not scheduled and is counted `dropped` (the engine's idle commit still takes it). Counted in `open_science_native_memory_turn_commits_total{outcome}`. |
 | `OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_ENABLED`, `OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_INTERVAL_DAYS` | `true`, `7` | The native 重读旧记忆: the engine's own `compile --skill memory` over an account's memories root, at most once per interval and only after the account's files changed, recorded as overlay revisions of actor `engine` (undoable). On since the lab probe of 2026-10-24; each run is model calls of the engine's, booked as `memory-extraction` on the engine's daily budget (`docs/WEB_OPERATIONS_RUNBOOK.md`, "Memory, the capsule and the learning loop"). |
 | `OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_ENABLED`, `OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_DAILY_CALLS` | `true`, `40` | Whether one Flash call per commit judges if a line the engine wrote again says what the person had removed, in other words, and how many such judgements an account may have per UTC day. Off, only a line that contains a removed one is refused; the removed line's normalised words stay on its rejection row either way. |
+| `OPEN_SCIENCE_MEMORY_IMPORT_OFFERS_PER_HOUR` | `5` | 「从其他 AI 导入」 on the memory page (`nativeMemoryImport.mjs`): the person pastes what another assistant remembered (8,000 characters), one Flash call (`memory-extraction`, thinking off, charged to the account) splits it into first-person statements and names each one's sensitivity tier by `MEMORY_NEVER_KEPT_TEXT`, code drops what carries a credential or cannot be traced to a line of the text, the person reviews the list, and the engine writes what they keep under its own templates. The offers an account may ask for in an hour bound the call (0 refuses every import); counted in `open_science_native_memory_imports_total{outcome}`. |
 | `OPEN_SCIENCE_MEMORY_RESIDENT_CARD_TIMEOUT_MS` | `1500` | How long the opening block waits for the project's card (100–30000); past it the conversation starts without the card and the read counts `timeout`. |
 | `OPEN_SCIENCE_CAPSULE_SHARE_ENABLED` | `true` (the API-only overlay: `false`) | Sharing a capsule between accounts: deliveries, share links and sealed files, and the 待收下的分享 shelf. The method pack and the plain file export are not behind it. A private override that pins it `false` wins. |
 | `OPEN_SCIENCE_OPENVIKING_BACKUP_STATE_FILE` | `/run/openviking-backup-status/state.json` (set by the backup overlay) | The host's receipt of the engine volume's last capture ("The OpenViking volume", below). Unset, nothing is reported. |
 | `OPEN_SCIENCE_OPENVIKING_BACKUP_MAX_AGE_SECONDS` | `90000` | How old the last verified capture may be before `checks.backup.openviking` says `openviking_backup_stale` (a notice). |
 
 `/api/ready` reports the engine under `checks.memoryIndex.engine`: `facts.version` (the answering server is the pin),
-`facts.modelKey`, `facts.memoryTemplates` (the template directory is loaded and a user's settings read back the eight types),
+`facts.modelKey`, `facts.memoryTemplates` (the template directory is loaded and a user's settings read back the ten types),
 `facts.skills` (`llm-wiki` and `knowledge-graph` are installed with the pinned bytes; a missing one is installed at start) and
 `facts.compileIdentity` (`GET /api/v1/compile/capabilities` says Compile is configured, and one real submission whose source is an
 empty directory ends, about 30 s later, with "Compile sources contain no files": the bot ran the task as the caller, and no model was

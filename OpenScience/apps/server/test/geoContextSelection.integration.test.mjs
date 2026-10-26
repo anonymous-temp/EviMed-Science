@@ -11,11 +11,9 @@ import { CapsuleService } from '../src/capsuleService.mjs';
 import { LearningService } from '../src/learningService.mjs';
 import { selectLearnedMethods, learnedMethodDirectoryName } from '../src/learnedMethodMount.mjs';
 import { selectCapsuleMethods, materializeCapsuleMethods } from '../src/capsuleMethods.mjs';
-import { prepareCapabilityHandbooks, handbookContextFor } from '../src/capabilityHandbooks.mjs';
-import { NativeHandbookContext } from '../src/nativeHandbookContext.mjs';
-import { createOwnedHandbookSelector } from '../src/ownedResearchContext.mjs';
 import { createNativeInputFixture } from './helpers/geoNativeInputFixture.mjs';
-import { BODY, frontmatter, registry } from './helpers/handbookFixture.mjs';
+import { makePack } from './helpers/capsuleFixtures.mjs';
+import { BODY, frontmatter } from './helpers/methodSkillFixture.mjs';
 const options={skip:!process.env.OPEN_SCIENCE_TEST_POSTGRES_URL && 'Disposable PostgreSQL required',timeout:60000};
 const sha256=value=>createHash('sha256').update(value).digest('hex');
 const hash=value=>sha256(canonicalJson(value));
@@ -70,9 +68,9 @@ test('actual-PG capsule shortlist searches only proved ids before body reads; or
   const f=await fixture(t), good=await f.fact('allowed'), unproved=await f.fact('unproved'), foreign=await f.fact('foreign',{},'other');
   await f.documents.remove('owner','geo-plan-context',`proof-${unproved.id}`,1);
   await f.fact('global',{},null);
-  const pack=await f.capsules.create('owner',{title:'Received pack'});
-  await f.documents.put('owner','capsule',pack.id,{...pack.payload,imported:true,share:{authorId:'external',snapshotHash:'snapshot'}},{expectedRevision:pack.revision});
-  await f.capsules.activate('owner',pack.id,{mode:'guest'});
+  // A received pack as an import leaves it (main's `makePack`: `CapsuleService.create` left the service), then put in force as a guest.
+  const pack=await makePack(f.capsules,'owner',{title:'Received pack',share:{authorId:'external',snapshotHash:'snapshot'}});
+  await f.capsules.activate('owner',pack.id);
   await f.fact('imported-global',{capsuleId:pack.id,origin:'imported',provenance:[{type:'import',id:'external'}]},null);
   await f.fact('contradictory',{projectId:'other'});
   const originalGet=f.documents.get.bind(f.documents), originalSearch=f.documents.search.bind(f.documents);
@@ -131,37 +129,6 @@ test('paginated learned selection authorizes before similarity, excludes depende
   await assert.rejects(fs.access(foreignDirectory),{code:'ENOENT'});
 });
 
-test('private handbook is authorized before validation and attachments; frozen read/ack recheck current policy and revision',options,async t=>{
-  const f=await fixture(t),candidate=await f.method('candidate',{recordType:'handbook-candidate',status:'candidate'});
-  const payload={recordType:'capability-handbook',capabilityId:'geo-content',status:'active',frontmatter,body:BODY,files:{'notes/source.txt':'Allowed attachment'},dependencies:[],version:1,
-    source:{projectId:f.project.id,runId:f.run.id,candidateId:candidate.id,candidateDigest:candidate.payload.contentDigest}};
-  payload.contentDigest=methodContentDigest(payload,sha256);
-  const applied=await f.documents.put('owner','method','handbook',payload,{expectedRevision:0});await f.certify(applied);
-  await f.documents.put('owner','method','foreign-handbook',{...payload,source:{...payload.source,projectId:'other'}},{expectedRevision:0});
-  let validations=0;const learning={documents:f.documents,validateHandbook:async(_user,p,opts)=>{validations++;assert.equal(opts.resolveDigest({name:'unknown',digest:'unknown'}),false);return methodContentDigest(p,sha256);}};
-  const config={maxFileBytes:1000000,maxProjectBytes:10000000,maxWorkspaceScanEntries:1000,mountedMethodPromptBytes:8192};
-  const selection=await prepareCapabilityHandbooks({learning,registry,project:f.project,capabilityId:'geo-content',config,contextPolicy:f.policy,contextItems:f.items});
-  assert.equal(validations,1);assert.equal(selection.items.length,1);
-  assert.equal(await fs.readFile(path.join(f.project.workspaceDir,selection.items[0].files[0]),'utf8'),'Allowed attachment');
-  assert.equal(handbookContextFor(selection,f.project,'geo-content',{...f.policy,revision:2}).context,'');
-  let current=f.policy;
-  const native=new NativeHandbookContext({route:async()=>({effectiveAgentId:'geo-content'}),select:async()=>handbookContextFor(selection,f.project,'geo-content',current),budget:()=>8192,
-    contextPolicies:{forProject:async()=>current},contextItems:f.items});
-  const input={requestId:'frozen',sessionId:'root',content:[{type:'text',text:'please write'}]};
-  const envelope=await native.prepare(f.project,input);
-  const readInput={sessionId:'root',inputs:[{requestId:'frozen',textDigest:envelope.textDigest}]};
-  assert.equal((await native.read(f.project,readInput)).contexts.length,1);
-  current={...f.policy,revision:2};
-  assert.equal((await native.prepare(f.project,input)).context,'');
-  assert.equal((await native.read(f.project,readInput)).contexts.length,0);
-  assert.equal((await native.read(f.project,readInput)).routes.length,1);
-  assert.deepEqual((await native.acknowledge(f.project,{sessionId:'root',receipts:[{requestId:'frozen',digest:envelope.digest}]})).attached,[]);
-  current=f.policy;await f.documents.put('owner','method',applied.id,{...applied.payload,status:'retired'},{expectedRevision:applied.revision});
-  assert.equal((await native.read(f.project,readInput)).contexts.length,0);
-  assert.deepEqual((await native.acknowledge(f.project,{sessionId:'root',receipts:[{requestId:'frozen',digest:envelope.digest}]})).attached,[]);
-});
-
-
 test('capsule revocation and canonical changes between metadata/search/return discard the earlier text',options,async t=>{
   const f=await fixture(t), good=await f.fact('raced');
   const search=f.documents.search.bind(f.documents);
@@ -187,20 +154,14 @@ test('exact authorized dependencies are admitted and source changes during ranki
   assert.equal(result.length,0);assert.equal(await f.items.method(f.policy,dependent),false);
 });
 
-for(const pathKind of ['capsule-search','capsule-mount','learned-mount','handbook'])test(`shared ${pathKind} never hydrates a replacement revision after metadata authorization`,options,async t=>{
-  const f=await fixture(t);let target;
-  if(pathKind==='handbook'){
-    const candidate=await f.method('race-candidate',{recordType:'handbook-candidate',status:'candidate'});
-    const payload={recordType:'capability-handbook',capabilityId:'geo-content',status:'active',frontmatter,body:BODY,files:{},dependencies:[],version:1,
-      source:{projectId:f.project.id,runId:f.run.id,candidateId:candidate.id,candidateDigest:candidate.payload.contentDigest}};
-    payload.contentDigest=methodContentDigest(payload,sha256);
-    target=await f.documents.put('owner','method','race-handbook',payload,{expectedRevision:0});await f.certify(target);
-  }else target=pathKind==='learned-mount'?await f.method('race-method'):await f.fact('race-fact');
+for(const pathKind of ['capsule-search','capsule-mount','learned-mount'])test(`shared ${pathKind} never hydrates a replacement revision after metadata authorization`,options,async t=>{
+  const f=await fixture(t);
+  const target=pathKind==='learned-mount'?await f.method('race-method'):await f.fact('race-fact');
   let changed=false;const hydrated=[];
   const replace=async()=>{
     if(changed)return;changed=true;
     const payload=target.kind==='fact'?{...target.payload,content:'denominator foreign replacement',provenance:[{type:'run',id:'foreign-run',projectId:'other'}]}:
-      {...target.payload,body:'Foreign replacement body',provenance:{sourceProjectId:'other',runId:'foreign-run'},...(pathKind==='handbook'?{source:{...target.payload.source,projectId:'other'}}:{})};
+      {...target.payload,body:'Foreign replacement body',provenance:{sourceProjectId:'other',runId:'foreign-run'}};
     await f.documents.put('owner',target.kind,target.id,payload,{expectedRevision:target.revision});
   };
   const get=f.documents.get.bind(f.documents),search=f.documents.search.bind(f.documents);
@@ -212,26 +173,8 @@ for(const pathKind of ['capsule-search','capsule-mount','learned-mount','handboo
   if(pathKind==='capsule-search')assert.deepEqual((await f.capsules.recall('owner',{query:'denominator',projectId:f.project.id,projectOnly:true,authorizeEntry:(a,e)=>f.items.capsule(f.policy,a,e)})).items,[]);
   if(pathKind==='capsule-mount')assert.deepEqual(await selectCapsuleMethods(f.capsules,{userId:'owner',projectId:f.project.id,contextPolicy:f.policy,contextItems:f.items}),[]);
   if(pathKind==='learned-mount')assert.equal((await selectLearnedMethods(new LearningService({documents:f.documents}),{userId:'owner',projectId:f.project.id,contextPolicy:f.policy,contextItems:f.items,maxCount:10,maxBytes:100000})).length,0);
-  if(pathKind==='handbook')assert.equal((await prepareCapabilityHandbooks({learning:{documents:f.documents,validateHandbook:async()=>assert.fail('Replacement must not reach validation')},registry,project:f.project,capabilityId:'geo-content',config:{maxFileBytes:1000000,maxProjectBytes:10000000,maxWorkspaceScanEntries:1000,mountedMethodPromptBytes:8192},contextPolicy:f.policy,contextItems:f.items})).items.length,0);
   assert.equal(changed,true,'Race occurred immediately before full SQL hydration');
   assert.deepEqual(hydrated,[],'No replacement body was returned by the underlying SQL read');
-});
-
-test('final optional handbook proof failure omits the supplement and retains a bounded failure audit',options,async t=>{
- const f=await fixture(t),candidate=await f.method('optional-candidate',{recordType:'handbook-candidate',status:'candidate'});
- const payload={recordType:'capability-handbook',capabilityId:'geo-content',status:'active',frontmatter,body:BODY,files:{},dependencies:[],version:1,
-  source:{projectId:f.project.id,runId:f.run.id,candidateId:candidate.id,candidateDigest:candidate.payload.contentDigest}};
- payload.contentDigest=methodContentDigest(payload,sha256);
- const source=await f.documents.put('owner','method','optional-handbook',payload,{expectedRevision:0});await f.certify(source);
- let calls=0;const audits=[];
- const selector=createOwnedHandbookSelector({learning:{documents:f.documents,validateHandbook:async()=>payload.contentDigest},registry,
-  config:{learningEnabled:true,maxFileBytes:1e6,maxProjectBytes:1e7,maxWorkspaceScanEntries:100,mountedMethodPromptBytes:8192},
-  runtimeManager:{key:()=> 'key',runtimes:new Map([['key',{mountedMethodPromptBytes:0}]])},paused:async()=>({}),audit:async(...args)=>audits.push(args),
-  contextPolicies:{forProject:async()=>f.policy},contextItems:{handbook:async(...args)=>{if(++calls===5)throw new Error('Private source proof service unavailable');return f.items.handbook(...args);}}});
- const result=await selector(f.project,{sessionId:'root',agentId:'geo-content'},{},{id:'run',effectiveAgentId:'geo-content'});
- assert.equal(calls,5);assert.equal(result.context,'');assert.equal(result.selection,null);
- assert.equal(audits.length,1);assert.deepEqual(audits[0].slice(0,2),['handbook.context','failed']);
- assert.equal(audits[0][2].code,'handbook_context_unavailable');assert.ok(!JSON.stringify(audits).includes('Private source proof'));
 });
 
 test('a cached ancestor cannot authorize a transitive method retired during the same PostgreSQL traversal',options,async t=>{

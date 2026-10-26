@@ -51,7 +51,7 @@ model and the evidence rules around it.
 | Capability | Here | Who owns what |
 |---|---|---|
 | `find` over `memories/evimed/` | **used**, unchanged since 2026-09-11 | the derived recall index of the records PostgreSQL owns (research memory, capsule facts); every hit is hydrated from PostgreSQL and re-checked there; rebuildable with `pnpm rebuild:memory-index --all` |
-| session memory extraction | **on** (`memory.extraction_enabled`), with this deployment's templates (`deploy/web/openviking/memory-templates`, eight types, the keep / never-keep policy written in the engine's template language) and the type allowlist in `server.user_config_defaults` | the engine writes `memories/<type>/…`; the sessions and the memory gateway are the control plane's (`openVikingSessions.mjs`, `memoryGateway.mjs`), and the official plugin reaches them through the loopback bridge row `evimed-memory-bridge` |
+| session memory extraction | **on** (`memory.extraction_enabled`), with this deployment's templates (`deploy/web/openviking/memory-templates`, ten types, the keep / never-keep policy written in the engine's template language) and the type allowlist in `server.user_config_defaults` | the engine writes `memories/<type>/…`; the sessions and the memory gateway are the control plane's (`openVikingSessions.mjs`, `memoryGateway.mjs`), and the official plugin reaches them through the loopback bridge row `evimed-memory-bridge` |
 | Resources, Compile with the official `llm-wiki` and `knowledge-graph` skills | **on**, the built-in VikingBot as Compile's runtime, command execution off | every readable document is pushed as a resource under its own user and project prefix (`openVikingResources.mjs`, `openVikingSourceSync.mjs`), and upstream's Compile writes the project's wiki and graph as it ships; the control plane decides when (`knowledgePageService.mjs`), mirrors the result into its own ledger by content hash, keeps a person's edits (written back as a checked `batch-write` operation, below), and lays the verbatim-quote check on afterwards as a ✓ / ⚠ label. The Compile agent's model calls go through the model gateway. The self-built compiler this replaced was never switched on and was deleted on 2026-10-13 |
 | VLM (extraction, summaries, Compile rounds) | **on, through this deployment's model gateway** (`/internal/model/v1`) with a service bearer, thinking off; the provider key never enters the engine's container | reserved, settled and reported in `evimed_usage.model_requests` under `memory-extraction` and `knowledge`, booked to the platform account's internal project `evimed-openviking`, held by `OPEN_SCIENCE_OPENVIKING_MODEL_DAILY_BUDGET_CNY` (`openVikingModelCaller.mjs`) |
 | rerank | **in the control plane** (`memoryRerank.mjs`) | `/search/find` never reranks |
@@ -87,7 +87,7 @@ arms a timer for the conversation; after the quiet (`OPEN_SCIENCE_NATIVE_MEMORY_
 engine session until two reads agree and something is pending (the plugin's writes are asynchronous), then commits through
 `commitSession` of the memory gateway — the function the HTTP commit route uses — so the admission rule, the hourly bound
 and the ledger row are the plugin's own commit's. Two turns inside the quiet are one commit; a turn the platform started (an
-automated run, a scheduled task, a LoopX continuation) starts none; a legacy account is not touched; an engine that does not
+automated run, a scheduled task, a LoopX continuation) starts none; an engine that does not
 answer is a counted failure and the messages stay pending for the next commit, the plugin's disposal commit or the idle
 commit. The plugin's threshold stays at 20000 and is not lowered: a token count would still leave a one-line statement
 waiting, and a second trigger would make two paths race for the same messages. The plugin's disposal commit that follows a
@@ -128,7 +128,7 @@ a conversation.
 |---|---|---|
 | `version` | `/health` names the pinned release | both |
 | `modelKey` | the gateway's service key is loaded | both |
-| `memoryTemplates` | the template route answers 400 `not editable` for the types this deployment adds (404 when the directory is not loaded), and a registered user's settings read back exactly the eight types | native memory |
+| `memoryTemplates` | the template route answers 400 `not editable` for the types this deployment adds (404 when the directory is not loaded), and a registered user's settings read back exactly the ten types | native memory |
 | `skills` | `content/download` of each `SKILL.md` matches the installed sha256; a missing one is installed from the pinned bytes, a different one is reported and left alone | knowledge |
 | `compileIdentity` | `GET /compile/capabilities` says Compile is configured, and one real submission whose source is an empty directory ends, about 30 s later, with `Compile sources contain no files`: the bot ran the task as the caller, nothing is written and no model is called | knowledge |
 
@@ -179,6 +179,45 @@ Measured on the lab of 2026-10-23 unless a line says it is read from upstream's 
 - `fs/mkdir` on a directory that exists is a 409; `content/write` takes no `timeout` field (an unknown field is refused).
 - A v0.5.1.1 volume is not readable by v0.5.0, nor a v0.5.0 volume by v0.4.x: the way back is a restore of an older copy, never a
   downgrade in place. The task store has no migration code, so the switch is made with no task in flight.
+
+## Ten memory types, and v0.5.2 readiness (2026-10-25; the pin stays v0.5.1.1)
+
+**Two types more, and an account's stored allowlist.** `observations` (a choice made in a request and never called a rule, kept as a note the
+control plane counts across conversations and never reads back) and `recent_work` (what a project was last worked on, three lines) join the eight:
+`OPENVIKING_MEMORY_TYPES` is ten, the rendered `ov.conf` lists ten under `server.user_config_defaults.memory_policy.memory_types` (the controller re-renders
+it at release), the compose init names ten template files, the engine check expects ten. The recorded fixtures are of the eight and are not re-recorded
+here: `contract.test.mjs` holds the recording to the first eight of the layout's list and `openVikingEngine.test.mjs` extends the recorded template routes
+for the two new names (said there; `record.mjs engine` on a lab with the ten templates replaces the extension). **Whether `user_config_defaults` reaches an
+existing account** is read from the recorded wire and not from the engine's source (not on the box): a freshly registered user reads back the default
+(`admin-user-settings-get.json`), and a settings PATCH stores the policy — a PATCH that leaves `memory_types` out stores *every* registered type
+(`admin-user-settings-pause.json`), and ours restates the list every time (`OpenVikingSessions.setLearning`). So an account that was PATCHed before the two types
+existed holds the old eight and would never extract them. `NativeMemoryWorker.#syncPolicy` reads each account's list once in six hours and rewrites it to the
+deployment's (restating the person's own learning switch); an account that was never PATCHed already has the default and is left alone. Lab probe, on
+`evimed-ovlab-1025` v0.5.1.1 with the ten templates mounted: register user A, `PATCH …/settings` with the old eight, mount nothing else, `GET …/settings` (expect
+eight), run the worker pass (or `PATCH` with `memoryPolicy(true)`), `GET` again (expect ten); register user B and `GET` at once (expect ten with no PATCH).
+
+**Privacy configuration (v0.5.2, read from source and docs, not measured).** The server replaces credential-shaped spans in session messages with
+`{{ov_privacy:session:<target>:<field>}}` placeholders before they are stored and before extraction, keeps the real values in
+`viking://user/<id>/privacy/session/<target>/`, and a session's deletion **retains** them. `OpenVikingSessions.deleteSession` is therefore followed by
+`DELETE /api/v1/privacy-configs/session/<target>` (target: the session id when it is an engine identifier, else `_<sha256(id)[:24]>`, `privacySessionTarget`); 404 is
+the answer of v0.5.1.1 and of a session with none and is fine, any other failure is counted (`open_science_native_memory_privacy_config_deletes_total`) and never fails
+the deletion. The account's own deletion takes the whole user root, privacy tree included (not verified). `{{ov_privacy:…}}` and `{{ov_redacted:…}}` are machine text
+(`carriesPlatformContext`): the gateway drops a message that carries one and the checks after a write take out a line that does. The three privacy tools the engine's MCP
+now advertises (`privacy_tree`, `privacy_resolve`, `privacy_upsert`: the second answers with plaintext credentials) are refused by name by the gateway's five-tool
+allowlist (`memoryGatewayNextRound.test.mjs`). Lab probe on v0.5.2 (`:19331`): create a session as a user, add a message holding `password: Xk9mP2vLq8wZr4Nt`,
+`GET …/privacy-configs/session/<id>` (expect the value), `DELETE /sessions/<id>`, `GET` the privacy config (expect it still there), our `DELETE` (expect 200), `GET` (404);
+repeat with a 150-character session id to see the `_<hash>` target the engine uses. A `raw` read of a file that holds a placeholder differs from the stored bytes
+(`content/read?raw=true` restores them): `NativeMemoryStore` hashes what it reads, so a file that quotes one is the edge to look at in the probe.
+
+**A failed extraction by its own reason.** v0.5.2 fails an extraction whose output ran out of room as `budget_exhausted` and does not retry it (`vlm.max_tokens`
+is 16384 in the rendered conf); `nativeMemoryWorker` classifies a failed commit's own error text and counts it (`open_science_native_memory_extraction_failures_total{reason}`:
+`budget_exhausted`, `quota`, `other`). It changes nothing else: a failed commit is replayed as before.
+
+**The compile retry.** From v0.5.2 a compile is incremental by default, and the same instruction over unchanged sources writes nothing, so the one retry of a wiki that
+came out as its index alone (`asksAgainForIndexOnly`) would repeat the failure for free. It now asks `args: { mode: "full" }` when the engine's version (the engine check's `version` fact) is v0.5.2
+or later (`compileRetryMode`), and sends no `args` on any other engine (a non-empty `args` fails the task at submission on v0.5.0). Lab probe on v0.5.2: submit a compile of three
+short documents, wait for `completed`, resubmit the same body with a fresh idempotency key and no `args` (expect an immediate no-op completion), then with `args: {"mode": "full"}`
+(expect a run that writes pages); check that the bundled VikingBot takes `args` with `mode` alone.
 
 ## The fixtures
 

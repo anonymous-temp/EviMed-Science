@@ -50,20 +50,19 @@ function clock() {
   };
 }
 
-const memoryDouble = ({ engine = "native", settings = {} } = {}) => ({
+const memoryDouble = ({ settings = {} } = {}) => ({
   configured: true,
-  memoryEngine: async () => engine,
   settings: async () => ({ learningPaused: false, recallPaused: false, pausedProjects: [], ...settings }),
   sessionState: async () => ({ trialCapsuleId: null }),
 });
 
-const baseConfig = { ovNativeMemoryEnabled: true, memoryEnabled: true, nativeMemoryTurnCommitDebounceMs: 8_000, nativeMemoryTurnCommitSettleMs: 2_000, nativeMemoryTurnCommitAttempts: 4 };
+const baseConfig = { memoryEngineEnabled: true, memoryEnabled: true, nativeMemoryTurnCommitDebounceMs: 8_000, nativeMemoryTurnCommitSettleMs: 2_000, nativeMemoryTurnCommitAttempts: 4 };
 
 /**
  * A committer over doubles. `states` is what reading the engine's session answers, one entry per read (the last repeats);
  * `runs` is the conversation's runs as the ledger folds them.
  */
-function doubles({ states = [{ pending_tokens: 100, message_count: 2 }], engine = "native", config = {}, runs = [], admit = null, commit = null, settings = {}, memoryContexts = null } = {}) {
+function doubles({ states = [{ pending_tokens: 100, message_count: 2 }], config = {}, runs = [], admit = null, commit = null, settings = {}, memoryContexts = null } = {}) {
   resetNativeMemoryMetrics();
   const time = clock();
   const reads = [];
@@ -78,12 +77,12 @@ function doubles({ states = [{ pending_tokens: 100, message_count: 2 }], engine 
       return { status: "ok", result: state };
     },
   };
-  const admission = admit ?? createMemoryAdmission({ config: baseConfig, researchMemory: memoryDouble({ engine, settings }), conversations: {
+  const admission = admit ?? createMemoryAdmission({ config: baseConfig, memorySettings: memoryDouble({ settings }), conversations: {
     running: async () => runs.filter((run) => run.status === "running"),
     runsOf: async (_project, id) => runs.filter((run) => run.sessionId === id),
   } });
   const committer = new NativeTurnCommit({
-    config: { ...baseConfig, ...config }, researchMemory: memoryDouble({ engine, settings }), sessions, admission, memoryContexts,
+    config: { ...baseConfig, ...config }, memorySettings: memoryDouble({ settings }), sessions, admission, memoryContexts,
     conversations: { runsOf: async (_project, id) => runs.filter((run) => run.sessionId === id) },
     commit: commit ?? (async (request) => { commits.push(request); return { commit: "accepted" }; }),
     setTimer: time.setTimer, clearTimer: time.clearTimer, wait: time.wait,
@@ -120,7 +119,7 @@ test('equal native session ids in two project namespaces have independent timers
 
 test('the reset fence retains each scoped timer turn date before any namespace session is read', async () => {
   const scoped = projectContexts(), f = doubles({ memoryContexts: scoped.contexts });
-  f.committer.researchMemory.resetInstant = async () => '2026-10-24T00:00:00Z';
+  f.committer.memorySettings.resetInstant = async () => '2026-10-24T00:00:00Z';
   await f.committer.noteRunFinished(project('p1'), finished({ finishedAt: '2026-10-23T23:00:00Z' }));
   await f.committer.noteRunFinished(project('p2'), finished({ finishedAt: '2026-10-24T01:00:00Z' }));
   f.time.fire(); await f.committer.idle();
@@ -176,7 +175,7 @@ test("a short exchange of a native account is committed after the quiet, far bel
   assert.equal(counters().committed, 1);
 });
 
-test("a turn the platform started, and a legacy account, arm nothing and ask the engine nothing", async () => {
+test("a turn the platform started arms nothing and asks the engine nothing", async () => {
   const automated = doubles();
   for (const run of [{ automated: true }, { effectiveRouteReason: "autopilot:agenda-1" }, { routeReason: "autopilot:digest" }, { effectiveRouteReason: "loopx-continuation" }, { effectiveRouteReason: "adopted:runtime-ui:loopx-continuation" }]) {
     await automated.committer.noteRunFinished(project(), finished(run));
@@ -186,12 +185,6 @@ test("a turn the platform started, and a legacy account, arm nothing and ask the
   automated.time.fire();
   await automated.committer.idle();
   assert.deepEqual([automated.reads.length, automated.commits.length], [0, 0]);
-
-  const legacy = doubles({ engine: "legacy" });
-  await legacy.committer.noteRunFinished(project(), finished());
-  assert.equal(legacy.time.armed, 0);
-  assert.deepEqual(Object.values(counters()).reduce((sum, value) => sum + value, 0), 0, "a legacy account is not even counted");
-  assert.deepEqual([legacy.reads.length, legacy.commits.length], [0, 0]);
 
   // The platform's own projects, a run with no conversation, and a switched-off committer.
   const others = doubles();
@@ -353,12 +346,12 @@ async function gatewayFixture(t, { settings = {}, config = {}, runs = [] } = {})
   const stub = await startOpenVikingStub(t);
   const client = new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: "evimed" });
   const sessions = new OpenVikingSessions(client, { timeoutMs: 4_000, fastTimeoutMs: 1_300 });
-  const researchMemory = memoryDouble({ settings });
+  const memorySettings = memoryDouble({ settings });
   const conversations = {
     running: async () => runs.filter((run) => run.status === "running"),
     runsOf: async (_project, id) => runs.filter((run) => run.sessionId === id),
   };
-  const admission = createMemoryAdmission({ config: baseConfig, researchMemory, conversations });
+  const admission = createMemoryAdmission({ config: baseConfig, memorySettings, conversations });
   /** @type {any[]} */
   const ledger = [];
   const overlay = { configured: true, account: async () => ({ registeredAt: new Date().toISOString() }), noteSession: async () => {}, recordCommit: async (row) => { ledger.push(row); return { inserted: true }; } };
@@ -375,7 +368,7 @@ async function gatewayFixture(t, { settings = {}, config = {}, runs = [] } = {})
   const base = `http://127.0.0.1:${/** @type {any} */ (server.address()).port}${MEMORY_GATEWAY_PATH}`;
   const time = clock();
   const committer = new NativeTurnCommit({
-    config: { ...baseConfig, ...config }, researchMemory, sessions, admission, conversations: { runsOf: conversations.runsOf },
+    config: { ...baseConfig, ...config }, memorySettings, sessions, admission, conversations: { runsOf: conversations.runsOf },
     commit: handler.commitSession, setTimer: time.setTimer, clearTimer: time.clearTimer, wait: time.wait,
   });
   const say = (role, text) => fetch(`${base}/api/v1/sessions/${ENGINE_SESSION}/messages`, {

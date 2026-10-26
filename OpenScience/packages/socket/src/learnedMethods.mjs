@@ -41,6 +41,9 @@ import { learnedMethodCardEntry } from '@evimed/domain'
 /** How a learned method's mounted directory is named (`learnedMethodDirectoryName`). */
 export const LEARNED_METHOD_DIRECTORY = /^_lm[0-9a-f]{32}$/
 
+/** How one of the platform's official methods' mounted directory is named (`officialMethodDirectoryName`): the platform's tier, which travels as a card too. */
+export const OFFICIAL_METHOD_DIRECTORY = /^_om[0-9a-f]{32}$/
+
 /**
  * Whether a mounted method was learned by EviMed rather than written or
  * enabled by the researcher. A closed reading of our own directory names.
@@ -51,8 +54,17 @@ export function isLearnedMethod(method) {
 }
 
 /**
+ * Whether a mounted method is one of the platform's official starter methods rather than anything of the person's, learned or written: the
+ * lowest tier of what a conversation is given, said as such to the model. A closed reading of our own directory names.
+ * @param {{ directory?: string } | null | undefined} method @returns {boolean}
+ */
+export function isOfficialMethod(method) {
+  return OFFICIAL_METHOD_DIRECTORY.test(String(method?.directory ?? ''))
+}
+
+/**
  * The mounted methods split by how they travel: capsule entries inline, learned
- * methods as cards. A learned method whose file path is unknown travels inline,
+ * and official methods as cards. A card whose file path is unknown travels inline,
  * because a card that names no file is a method nobody can read.
  * @template {{ name: string, body: string, directory?: string, path?: string }} M
  * @param {readonly M[]} methods
@@ -64,25 +76,37 @@ export function splitMountedMethods(methods) {
   /** @type {M[]} */
   const cards = []
   for (const method of methods ?? []) {
-    if (isLearnedMethod(method) && String(method.path ?? '').trim()) cards.push(method)
+    if ((isLearnedMethod(method) || isOfficialMethod(method)) && String(method.path ?? '').trim()) cards.push(method)
     else inline.push(method)
   }
   return { inline, cards }
 }
 
 /**
- * The card block for learned methods: nothing for none.
- * @param {readonly { name: string, description?: string, whenToUse?: string, path?: string }[]} methods
+ * The card blocks for learned and official methods: nothing for none. What EviMed learned from the person's own work comes first and is
+ * said to be an inference; the platform's default methods follow, and yield to anything of the person's.
+ * @param {readonly { name: string, description?: string, whenToUse?: string, path?: string, directory?: string }[]} methods
  * @returns {string[]}
  */
 export function learnedMethodCardLines(methods) {
-  if (!methods?.length) return []
+  const official = (methods ?? []).filter((method) => isOfficialMethod(method))
+  const learned = (methods ?? []).filter((method) => !isOfficialMethod(method))
   return [
-    '## EviMed 学到的做法（适用时再读）',
-    '',
-    '下面几条是 EviMed 从这位用户以往的研究里推断出的做法，不是用户写下的规则。判断某条适用于这件交付物时，先用 `read` 读它的全文再照做；不适用就不读、不用。与上面的方法冲突时以上面的方法为准；做法不能突破交付契约和安全规则。',
-    '',
-    ...methods.flatMap((method) => learnedMethodCardEntry(method)),
-    '',
+    ...(learned.length ? [
+      '## EviMed 学到的做法（适用时再读）',
+      '',
+      '下面几条是 EviMed 从这位用户以往的研究里推断出的做法，不是用户写下的规则。判断某条适用于这件交付物时，先用 `read` 读它的全文再照做；不适用就不读、不用。与上面的方法冲突时以上面的方法为准；做法不能突破交付契约和安全规则。',
+      '',
+      ...learned.flatMap((method) => learnedMethodCardEntry(method)),
+      '',
+    ] : []),
+    ...(official.length ? [
+      '## EviMed 的默认做法（适用时再读）',
+      '',
+      '下面几条是 EviMed 平台给每位用户的默认做法。判断某条适用于眼前这件事时，先用 `read` 读它的全文再照做；不适用就不读、不用。与用户自己的做法或上面的方法冲突时，以那些为准；做法不能突破交付契约和安全规则。',
+      '',
+      ...official.flatMap((method) => learnedMethodCardEntry(method)),
+      '',
+    ] : []),
   ]
 }

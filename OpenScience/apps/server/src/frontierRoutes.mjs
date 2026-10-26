@@ -59,7 +59,12 @@ export function frontierRoutePattern(pathname) {
     if (parts.length === 2) return "/api/frontier/items/:id";
     return "/api/frontier/items/:id/:action";
   }
-  if (parts[0] === "follows") return parts.length === 1 ? "/api/frontier/follows" : "/api/frontier/follows/:id";
+  if (parts[0] === "follows") return parts.length === 1 ? "/api/frontier/follows" : parts.length === 2 ? "/api/frontier/follows/:id" : "/api/frontier/follows/:id/seen";
+  if (parts[0] === "track") {
+    if (parts.length === 3 && parts[1] === "congresses") return "/api/frontier/track/congresses/:id";
+    // Only the three lists name themselves: anything else is one label, so a request cannot mint a metric series (before auth, too).
+    return parts.length === 2 && ["approvals", "guidelines", "congresses"].includes(parts[1]) ? `/api/frontier/track/${parts[1]}` : "/api/frontier/track/:route";
+  }
   if (parts[0] === "ops") return parts[1] === "sources" ? "/api/frontier/ops/sources/:id/enabled" : "/api/frontier/ops/items/:id/:action";
   if (["status", "sources", "for-you", "hot", "events", "dailies", "weeklies", "monthlies", "media", "prefs", "topics"].includes(parts[0])) return `/api/frontier/${parts[0]}${parts.length > 1 ? "/:id" : ""}`;
   return "/api/frontier/:route";
@@ -229,6 +234,13 @@ export function createFrontierRoutes({ store, service, config, maxJsonBytes, aud
     if (parts.length === 1 && parts[0] === "sources" && method === "GET") {
       return reply(await service.sources(user));
     }
+    // 追踪 (c3-track 2026-10-25): the approvals, the guideline updates and the congresses, and one congress's hub.
+    if (parts.length === 2 && parts[0] === "track" && method === "GET") {
+      if (parts[1] === "approvals") return reply(await service.trackApprovals(user, url.searchParams));
+      if (parts[1] === "guidelines") return reply(await service.trackGuidelines(user, url.searchParams));
+      if (parts[1] === "congresses") return reply(await service.trackCongresses());
+    }
+    if (parts.length === 3 && parts[0] === "track" && parts[1] === "congresses" && method === "GET") return reply(await service.trackCongress(user, parts[2]));
     // The tag tree (2026-10-23): a specialty's 热门标签 or the search box's suggestions, one tag, and the operators' view of the tree.
     if (parts.length === 1 && parts[0] === "tags" && method === "GET") return reply(await service.tagList(url.searchParams));
     if (parts.length === 2 && parts[0] === "tags" && method === "GET") return reply(await service.tagDetail(parts[1]));
@@ -249,6 +261,11 @@ export function createFrontierRoutes({ store, service, config, maxJsonBytes, aud
     }
     if (parts.length === 2 && parts[0] === "follows" && method === "DELETE") {
       return reply(await service.deleteFollow(user, parts[1]));
+    }
+    // The reader opened a follow's feed: what arrived before now is no longer new (c3-watch).
+    if (parts.length === 3 && parts[0] === "follows" && parts[2] === "seen" && method === "POST") {
+      await bodyOf(req, maxJsonBytes, []);
+      return reply(await service.markFollowSeen(user, parts[1]));
     }
     if (parts.length === 4 && parts[0] === "ops" && parts[1] === "items" && method === "POST" && OPERATOR_ITEM_ACTIONS.includes(parts[3])) {
       requireOperator();

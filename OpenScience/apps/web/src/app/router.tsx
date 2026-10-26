@@ -41,6 +41,7 @@ const RunFilePage = lazy(() => import("./routes/RunFilePage").then((m) => ({ def
 const FrontierPage = lazy(() => import("./routes/FrontierPage").then((m) => ({ default: m.FrontierPage })));
 const FrontierEventPage = lazy(() => import("./routes/FrontierEventPage").then((m) => ({ default: m.FrontierEventPage })));
 const FrontierTopicPage = lazy(() => import("./routes/FrontierTopicPage").then((m) => ({ default: m.FrontierTopicPage })));
+const FrontierCongressPage = lazy(() => import("./routes/FrontierCongressPage").then((m) => ({ default: m.FrontierCongressPage })));
 const VcrHomePage = lazy(() => import("./virtual-research/VcrHomePage").then((m) => ({ default: m.VcrHomePage })));
 const VcrStudyPage = lazy(() => import("./virtual-research/VcrStudyPage").then((m) => ({ default: m.VcrStudyPage })));
 const EvidenceZonesPage = lazy(() => import("./routes/EvidenceZonesPage").then((m) => ({ default: m.EvidenceZonesPage })));
@@ -96,6 +97,7 @@ export const routes: RouteObject[] = [
         { path: "frontier/items/:itemId", element: <FrontierArticlePage /> },
         { path: "frontier/events/:eventId", element: <FrontierEventPage /> },
         { path: "frontier/topics/:topicId", element: <FrontierTopicPage /> },
+        { path: "frontier/congress/:congressId", element: <FrontierCongressPage /> },
         // 「虚拟临床研究」: the module's home, and one study's seven tabs (总览
         // when none is named). A study package is read at `?package=<id>` on
         // the study's own address rather than at a route of its own — it is a

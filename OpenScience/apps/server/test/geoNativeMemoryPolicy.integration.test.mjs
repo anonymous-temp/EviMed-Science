@@ -12,7 +12,7 @@ import { GeoSharedContext } from '../src/geoSharedContext.mjs';
 import { GeoNativeMemoryContext } from '../src/geoNativeMemoryContext.mjs';
 import { NativeMemoryOverlay } from '../src/nativeMemoryOverlay.mjs';
 import { NativeMemoryStore } from '../src/nativeMemoryStore.mjs';
-import { ResearchMemoryStore } from '../src/researchMemory.mjs';
+import { MemorySettingsStore } from '../src/memorySettings.mjs';
 import { OpenVikingSessions } from '../src/openVikingSessions.mjs';
 import { OpenVikingClient } from '../src/openVikingClient.mjs';
 import { createMemoryRoutes } from '../src/memoryRoutes.mjs';
@@ -38,29 +38,29 @@ async function fixture(t) {
   const stub = await startOpenVikingStub(t);
   const sessions = new OpenVikingSessions(new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: 'evimed' }));
   const documents = new ProductDocuments(accounts.database), policies = new GeoSharedContext({ database: accounts.database, documents });
-  const researchMemory = new ResearchMemoryStore({ ...config, ovNativeMemoryEnabled: true }, { database: accounts.database });
-  await researchMemory.setMemoryEngine(owner.id, 'native');
+  // One memory engine (2026-10-25): the account's switches are the memory settings store's, and every account's memory is the engine's.
+  const memorySettings = new MemorySettingsStore(config, { database: accounts.database });
   const contexts = new GeoNativeMemoryContext({ database: accounts.database, documents, policies, sessions,
-    settingsForOwner: userId => researchMemory.settings(userId) });
+    settingsForOwner: userId => memorySettings.settings(userId) });
   const a = await contexts.forProject({ userId: owner.id, id: 'default' }), b = await contexts.forProject({ userId: owner.id, id: 'other' });
   const overlay = new NativeMemoryOverlay({ database: accounts.database }); await overlay.migrate();
   const nativeMemory = new NativeMemoryStore({ sessions, overlay, memoryContexts: contexts });
-  return { owner, accounts, config, contexts, a, b, stub, sessions, researchMemory, nativeMemory };
+  return { owner, accounts, config, contexts, a, b, stub, sessions, memorySettings, nativeMemory };
 }
 
 test('persisted account and project pause govern initialization and override stale resume or pause arguments', options, async t => {
   const f = await fixture(t), user = f.owner.id;
-  await f.researchMemory.updateSettings(user, { learningPaused: true });
+  await f.memorySettings.updateSettings(user, { learningPaused: true });
   assert.equal((await f.contexts.configure(f.a)).learning, false, 'a new namespace must not start learning while paused');
   assert.equal((await f.contexts.configure(f.a, { learning: true })).learning, false, 'a delayed resume cannot override current state');
-  await f.researchMemory.updateSettings(user, { learningPaused: false, pausedProjects: [f.a.projectId] });
+  await f.memorySettings.updateSettings(user, { learningPaused: false, pausedProjects: [f.a.projectId] });
   await f.nativeMemory.setLearning(user, true);
   assert.equal((await f.a.sessions.settings(user)).learning, false);
   assert.equal((await f.b.sessions.settings(user)).learning, true);
-  await f.researchMemory.updateSettings(user, { pausedProjects: [] });
+  await f.memorySettings.updateSettings(user, { pausedProjects: [] });
   assert.equal((await f.contexts.configure(f.a, { learning: false })).learning, true, 'persisted resume wins over a delayed pause');
   assert.equal((await f.a.sessions.settings(user)).memoryTypes.includes('profile'), false);
-  await f.researchMemory.updateSettings(user, { learningPaused: true });
+  await f.memorySettings.updateSettings(user, { learningPaused: true });
   const before = f.stub.requests.length;
   f.contexts.settingsForOwner = async () => { throw new Error('Settings unavailable'); };
   await assert.rejects(f.contexts.configure(f.b), /Settings unavailable/);
@@ -74,7 +74,7 @@ test('changing only pausedProjects immediately reconciles every registered names
   const f = await fixture(t), user = f.owner.id;
   await f.nativeMemory.setLearning(user, true);
   const audits = [];
-  const routes = createMemoryRoutes({ config: { ...f.config, memoryEnabled: true, ovNativeMemoryEnabled: true }, researchMemory: f.researchMemory,
+  const routes = createMemoryRoutes({ config: { ...f.config, memoryEnabled: true, memoryEngineEnabled: true }, memorySettings: f.memorySettings,
     nativeMemory: f.nativeMemory, store: f.accounts, context: async () => ({ user: f.owner, project: { id: 'default' } }),
     audit: async (...args) => { audits.push(args); }, recordFeedback: async () => {}, decodeRouteComponent: decodeURIComponent });
   const server = createServer((req, res) => { routes(req, res).catch(error => sendJson(res, error.status ?? 500, { error: error.code ?? error.message })); });
@@ -85,7 +85,7 @@ test('changing only pausedProjects immediately reconciles every registered names
     const response = await fetch(`${base}/api/memory/settings`, { method: 'PUT', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ pausedProjects: paused ? [f.a.projectId] : [] }) });
     assert.equal(response.status, 200); const body = await response.json();
-    assert.equal(body.data.engine, 'native');
+    assert.equal('engine' in body.data, false, 'one engine: the settings name none');
     assert.equal((await f.a.sessions.settings(user)).learning, !paused, JSON.stringify({ body, audits }));
     assert.equal((await f.b.sessions.settings(user)).learning, true);
     assert.equal((await f.sessions.settings(user)).learning, true);

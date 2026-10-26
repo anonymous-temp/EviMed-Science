@@ -39,8 +39,8 @@ def id_query(source: str, record_id: str) -> str:
 
 
 async def _search(fetcher: Any, endpoints: Endpoints, query: str, page_size: int, trace: Trace,
-                  step: str) -> list[dict] | None:
-    attempt = await get(fetcher, search_url(endpoints, query, page_size))
+                  step: str, priority: str = "normal") -> list[dict] | None:
+    attempt = await get(fetcher, search_url(endpoints, query, page_size), priority=priority)
     if attempt.result is None:
         trace.record(attempt, step)
         return None
@@ -55,13 +55,13 @@ async def _search(fetcher: Any, endpoints: Endpoints, query: str, page_size: int
     return found
 
 
-async def by_dois(fetcher: Any, endpoints: Endpoints, dois: list[str], trace: Trace) -> dict[str, dict]:
+async def by_dois(fetcher: Any, endpoints: Endpoints, dois: list[str], trace: Trace, priority: str = "normal") -> dict[str, dict]:
     """Core results keyed by lower-cased DOI, for the DOIs Europe PMC knows."""
     found: dict[str, dict] = {}
     wanted = sorted({d.lower() for d in dois if d})
     for start in range(0, len(wanted), DOIS_PER_QUERY):
         batch = wanted[start:start + DOIS_PER_QUERY]
-        results = await _search(fetcher, endpoints, doi_query(batch), 25, trace, "europepmc_doi")
+        results = await _search(fetcher, endpoints, doi_query(batch), 25, trace, "europepmc_doi", priority)
         for result in results or []:
             doi = normalize_doi(result.get("doi"))
             if doi in batch and doi not in found:

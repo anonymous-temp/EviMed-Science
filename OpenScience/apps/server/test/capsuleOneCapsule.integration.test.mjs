@@ -16,7 +16,7 @@ import { MemoryIndexWithdrawals } from "../src/memoryIndexWithdrawals.mjs";
 import { MemoryIndexing } from "../src/memoryIndexing.mjs";
 import { capsuleFactUri } from "../src/openVikingClient.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
-import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
+import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) {
@@ -37,7 +37,7 @@ before(async () => {
   if (!url) return;
   directory = await mkdtemp("/tmp/evimed-one-capsule-");
   database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 6, databaseConnectionTimeoutMs: 5_000 });
-  await migrateResearchMemory(database);
+  await migrateMemorySettings(database);
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,$3,'development'),($2,$4,'development')", [USER, BYSTANDER, `Owner ${tag}`, `Other ${tag}`]);
   for (const owner of [USER, BYSTANDER]) {
     for (const id of ["default", ...PROJECTS]) {
@@ -89,10 +89,10 @@ test("ten notes capsules become ten project-labelled entries of one capsule, the
   assert.ok(total.accounts >= 2 && total.failed === 0, JSON.stringify(total));
 
   // One capsule: the account's, and no notes capsule is left in force.
-  const own = (await capsules.list(USER, { limit: 100 })).items.filter((item) => item.payload.imported !== true);
+  const own = (await capsules.documents.list(USER, "capsule", { limit: 100 })).items.filter((item) => item.payload.imported !== true);
   assert.deepEqual(own.map((item) => item.id), [(await capsules.ownCapsule(USER)).id], "one capsule of the person's own");
   assert.equal(own[0].id.startsWith("account-capsule:"), true);
-  assert.equal((await capsules.list(USER, { limit: 100, deleted: true })).items.filter((item) => String(item.id).startsWith("runtime-notes:")).length, 10, "the ten emptied capsules are in the trash");
+  assert.equal((await capsules.documents.list(USER, "capsule", { limit: 100, deleted: true })).items.filter((item) => String(item.id).startsWith("runtime-notes:")).length, 10, "the ten emptied capsules are in the trash");
 
   // Ten entries of it, each with its project, its id, its text and the revision that moved it.
   const mine = await capsules.mine(USER);
@@ -166,7 +166,7 @@ test("a project's deletion takes its notes with it, from the capsule and from th
 });
 
 test("the person's export leaves the assistant's notes out, however many project notes the one capsule now holds, and takes one the person confirmed", options, async () => {
-  await migrateResearchMemory(database);
+  await migrateMemorySettings(database);
   const transfers = new CapsuleTransferService({ documents, capsules, identities: new CapsuleIdentityStore(directory), dataDir: directory, memoryEngine: async () => "legacy" });
   const own = await capsules.ownCapsule(USER);
   const before = await transfers.exportPreview(USER, own.id, { scopes: ["workstyle", "+profile", "+knowledge"] });

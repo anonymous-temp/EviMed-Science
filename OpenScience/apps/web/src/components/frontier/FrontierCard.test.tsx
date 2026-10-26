@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,8 +15,8 @@ vi.mock("@/lib/frontierClient", async (importOriginal) => ({
 
 function Probe() {
   const location = useLocation();
-  const intent = (location.state as { runtimeUiIntent?: { kind: string; draft?: string } } | null)?.runtimeUiIntent;
-  return <div data-testid="probe">{location.pathname}{location.search}|{intent?.kind}|{intent?.draft}</div>;
+  const intent = (location.state as { runtimeUiIntent?: { kind: string; draft?: string; originReference?: { kind: string; id: string } } } | null)?.runtimeUiIntent;
+  return <div data-testid="probe">{location.pathname}{location.search}|{intent?.kind}|{intent?.draft}{intent?.originReference ? `|origin:${intent.originReference.kind}:${intent.originReference.id}` : ""}</div>;
 }
 
 function renderCard(item = frontierItem(), props: Partial<Parameters<typeof FrontierCard>[0]> = {}) {
@@ -107,6 +107,26 @@ describe("a card", () => {
     expect(row).not.toBeNull();
     expect(within(row as HTMLElement).getByRole("button", { name: "收藏" })).toBeInTheDocument();
     expect(within(row as HTMLElement).getByRole("button", { name: "更多操作" })).toBeInTheDocument();
+  });
+
+  it("carries 「可能改变实践」 only when the server sent it, as content with its reason on hover, never as a control or an alarm", async () => {
+    renderCard(scored());
+    expect(screen.queryByText("可能改变实践")).not.toBeInTheDocument();
+    cleanup();
+    renderCard(scored({ practice: { reason: "国内首个获批，改变一线用药选择。" } }));
+    const label = screen.getByText("可能改变实践");
+    expect(label).toHaveAttribute("data-tag", "");
+    expect(label).toHaveClass("bg-accent-soft", "text-accent");
+    expect(label.closest("a,button")).toBeNull();
+    // In the title row, not the meta row: on a phone the meta row has room for the source's name and the score and no more.
+    expect(label.closest("[data-row-title]")).not.toBeNull();
+    expect(label).toHaveClass("z-sticky");
+    await userEvent.hover(label);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("国内首个获批，改变一线用药选择。");
+    // A label with no reason is not shown: the parse drops it.
+    cleanup();
+    renderCard(scored({ practice: { reason: "  " } }));
+    expect(screen.queryByText("可能改变实践")).not.toBeInTheDocument();
   });
 
   it("draws no footer line when there is nothing for it", () => {
@@ -237,14 +257,17 @@ describe("its actions", () => {
   });
 
   it("has 深入研究 first in 「⋯」: a new conversation with the draft in the composer at once, and nothing sent", async () => {
-    renderCard();
+    const item = frontierItem();
+    renderCard(item);
     await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
     const entries = await screen.findAllByRole("menuitem");
     expect(entries[0]).toHaveTextContent("深入研究");
     await userEvent.click(entries[0]);
     const probe = await screen.findByTestId("probe");
     expect(probe.textContent?.startsWith("/app/chat|create|这项研究可靠吗？")).toBe(true);
+    expect(probe).toHaveTextContent(`frontier:${item.id}`);
     expect(probe).toHaveTextContent("原文：https://www.nejm.org/doi/full/10.1056/example");
+    expect(probe).toHaveTextContent(`origin:frontier-item:${item.id}`);
   });
 
   it("keeps 存入知识库, 复制为 Markdown and 不感兴趣 in 「⋯」", async () => {
@@ -368,5 +391,17 @@ describe("a social post's card", () => {
   it("draws no picture where there is none, or where it cannot be served", () => {
     renderCard(frontierItem());
     expect(document.querySelector("article img")).toBeNull();
+  });
+});
+
+describe("a card of a stream source shown by its journal", () => {
+  it("offers no 关注 or 屏蔽 of the source, which would act on the whole stream", async () => {
+    const item = frontierItem({ source: { id: "pubmed-cardiology", name: "The Lancet Oncology", homepage: null, platformProduced: false, followable: false } });
+    renderCard(item);
+    await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    const entries = (await screen.findAllByRole("menuitem")).map((entry) => entry.textContent);
+    expect(entries).toContain("不感兴趣");
+    expect(entries).not.toContain("关注 The Lancet Oncology");
+    expect(entries).not.toContain("屏蔽 The Lancet Oncology");
   });
 });

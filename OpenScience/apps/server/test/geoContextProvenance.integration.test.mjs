@@ -6,7 +6,7 @@ import { GeoContextProvenance } from '../src/geoContextProvenance.mjs';
 import { ContextItemAuthorization, contextPolicyIdentity } from '../src/geoContextItems.mjs';
 import { createNativeInputFixture } from './helpers/geoNativeInputFixture.mjs';
 import { normalizeTranscript } from '../src/dshRuntimeAdapter.mjs';
-import { BODY, frontmatter } from './helpers/handbookFixture.mjs';
+import { BODY, frontmatter } from './helpers/methodSkillFixture.mjs';
 const skillText=()=>['---',...Object.entries(frontmatter).flatMap(([key,value])=>typeof value==='object'?[`${key}:`,...Object.entries(value).map(([field,item])=>`  ${field}: ${JSON.stringify(item)}`)]:[`${key}: ${JSON.stringify(value)}`]),'---',BODY].join('\n');
 const options={skip:!process.env.OPEN_SCIENCE_TEST_POSTGRES_URL,timeout:60000};
 const sha256=value=>createHash('sha256').update(value).digest('hex');
@@ -149,25 +149,6 @@ test('integrate and hourly sleep partition protected methods before related rank
   assert.ok(inputs.every(input=>input.methods.every(method=>method.id.startsWith('shared-'))||input.methods.every(method=>method.id==='ordinary')));
 });
 
-test('private applied handbook freezes candidate source and dependencies without cross-project same-name replacement',options,async t=>{
-  const f=await fixture(t),{HandbookConsolidation,capabilityHandbookId}=await import('../src/handbookConsolidation.mjs');
-  const {LearningService}=await import(process.env.N12_LEARNING_MODULE ?? '../src/learningService.mjs'),{registry}=await import('./helpers/handbookFixture.mjs');
-  f.run.effectiveAgentId='geo-content';f.run.status='succeeded';
-  const candidate=await f.create('handbook-candidate',null,{recordType:'handbook-candidate',status:'candidate',capabilityId:'geo-content',candidateRevision:1,
-    provenance:{runId:f.run.id,sourceProjectId:f.project.id,sourceProjectIds:[f.project.id],derivedFrom:'reviewer'}});
-  const foreignId=capabilityHandbookId('geo-content','handbook-candidate');
-  const foreign=await f.documents.put('owner','method',foreignId,{recordType:'capability-handbook',status:'active',body:'Foreign handbook',source:{projectId:'other'}},{expectedRevision:0});
-  const jobs={finishWithLease:async(_owner,_id,_lease,result,operation)=>f.documents.database.transaction(client=>f.documents.database.withTransactionClient(client,async()=>{await operation(client);return {result};}))};
-  const learning=new LearningService({documents:f.documents,jobs,contextProvenance:f.provenance});
-  let publications=0;
-  const handbooks=new HandbookConsolidation({learning,jobs,registry,contextProvenance:f.provenance,resolveSourceRun:f.provenance.resolveSourceRun,onApplied:()=>publications++});
-  const result=await handbooks.run({job:{id:'handbook-job',userId:'owner',leaseToken:'lease',payload:{candidateId:candidate.id,candidateDigest:candidate.payload.contentDigest}}});
-  assert.equal(result.disposition,'applied');assert.notEqual(result.handbookId,foreignId);assert.equal(publications,0);
-  assert.equal((await f.documents.get('owner','method',foreignId)).revision,foreign.revision);
-  const applied=await f.documents.get('owner','method',result.handbookId);
-  assert.equal(await f.items.handbook(f.policy,applied),true);
-});
-
 test('merge retirement needs structured producer receipt and later withdrawal invalidates descendant',options,async t=>{
   const f=await fixture(t),first=await f.create('merge-first'),second=await f.create('merge-second');
   const merged=await f.create('merged',null,{provenance:{runId:f.run.id,sourceProjectId:f.project.id,sourceProjectIds:[f.project.id],consolidatedBy:'consolidate:merge-job',
@@ -201,12 +182,18 @@ test('real feedback SQL scopes clean peers before the 200-row family limit',opti
   await f.accounts.createProject(f.users.owner,'other','Other');
   const feedback=new FeedbackEvents({database:f.db}),scope='geo-content',shape=[{format:'docx',structure:'report'}];
   const base=Date.parse('2026-10-25T00:00:00Z');
-  for(let i=0;i<205;i++)await feedback.recordLearningEvidence('owner',{runId:`peer-${i}`,projectId:i<2?f.project.id:'other',key:'settled',
-    detail:{evidence:'silent',scope,sessionId:'root',at:new Date(base+i*1000).toISOString(),shape}});
+  // A clean peer is one the person kept (main, 2026-10-25: silence is unknown, not approval): settled with its shape, and its file used.
+  for(let i=0;i<205;i++){
+    await feedback.recordLearningEvidence('owner',{runId:`peer-${i}`,projectId:i<2?f.project.id:'other',key:'settled',
+      detail:{evidence:'silent',scope,sessionId:'root',at:new Date(base+i*1000).toISOString(),shape}});
+    await feedback.recordLearningEvidence('owner',{runId:`peer-${i}`,projectId:i<2?f.project.id:'other',key:'used',
+      detail:{evidence:'used',scope,sessionId:'root',at:new Date(base+i*1000+500).toISOString()}});
+  }
   const window={scope,from:new Date(base-1000),to:new Date(base+1000000)};
   assert.equal((await feedback.cleanSettledRuns('owner',window)).length,200);
   assert.deepEqual((await feedback.cleanSettledRuns('owner',{...window,projectId:f.project.id})).map(row=>row.runId),['peer-0','peer-1']);
   Object.assign(f.run,{status:'succeeded',effectiveAgentId:scope,finishedAt:new Date(base+300000).toISOString(),outputFiles:['report.docx']});
+  await feedback.recordLearningEvidence('owner',{runId:f.run.id,projectId:f.project.id,key:'used',detail:{evidence:'used',scope,sessionId:'root',at:new Date(base+350000).toISOString()}});
   let queued=0;
   const evidence=new LearningEvidence({feedback,contextProvenance:f.provenance,resolveProject:async()=>f.project,agentRuns:{list:async()=>[f.run]},jobs:{},readShapes:async()=>({'report.docx':shape[0]}),
     now:()=>new Date(base+400000),triggers:{refusalFor:async()=>null,resetInstantOf:async()=>null,guestInfluenced:async()=>false,queue:async()=>{queued++;return true;}}});

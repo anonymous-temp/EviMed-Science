@@ -1,5 +1,4 @@
 import {MODULE_RUNTIME_TASKS} from './moduleEvolutionRuntimeSession.mjs';
-import {MODULE_MEMORY_SNAPSHOT_TASKS,recallEvolutionPublicSnapshot} from './moduleEvolutionMemorySnapshot.mjs';
 import {createHash} from 'node:crypto';
 import {deriveDelimitedStructure, deriveMarkdownStructure} from '@evimed/domain';
 import {claimVerification} from './clinicalEvidenceQuality.mjs';
@@ -7,10 +6,10 @@ import {claimVerification} from './clinicalEvidenceQuality.mjs';
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const variants = items => items.flatMap(item=>[{...item,groupId:item.id},...(item.equivalentVariant ? [{...item,...item.equivalentVariant,id:`${item.id}:equivalent`,sourceHash:item.sourceHash,groupId:item.id,equivalentVariant:null}] : [])]);
 
-/** Absolute checks call the existing source/claim implementations. Live recall and DSH require real executors.
+/** Absolute checks call the existing source/claim implementations. Live DSH requires a real executor.
  * These wrappers neither import generated code nor read tenant stores.
- * @param {{sourceExecute?:any, recallSnapshot?:any, runtimeSession?:any}} [dependencies] */
-export function createModuleEvolutionOfflineEvaluators({sourceExecute,recallSnapshot=recallEvolutionPublicSnapshot,runtimeSession}={}) {
+ * @param {{sourceExecute?:any, runtimeSession?:any}} [dependencies] */
+export function createModuleEvolutionOfflineEvaluators({sourceExecute,runtimeSession}={}) {
   /** @type {Record<string, any>} */
   const runners = {
     sources: async input => {
@@ -40,20 +39,6 @@ export function createModuleEvolutionOfflineEvaluators({sourceExecute,recallSnap
       }
       return {pool:input.pool,units,evaluatorVersion:'claim-verification-absolute-v1',evidenceTier:'exact',deterministicChecksPassed:units.every(unit=>unit.score===1),costCny:0,contextBytes:units.reduce((n,u)=>n+u.contextBytes,0)};
     },
-  };
-  if(recallSnapshot) runners.memory=async input=>{
-    const units=[];
-    for(const item of variants(input.batch ?? MODULE_MEMORY_SNAPSHOT_TASKS)) {
-      const run=async()=>{
-        const result=await recallSnapshot({...input,item,scope:'public-frozen-snapshot'});
-        const ids=new Set((result.records ?? []).map(record=>record.id));
-        const expected=item.expected ?? [];
-        const found=expected.filter(id=>ids.has(id)).length;
-        return {id:item.id,groupId:item.groupId ?? item.id,score:expected.length && [...ids].every(id=>expected.includes(id)) ? found/expected.length : 0,sourceHash:item.sourceHash ?? hash(item.snapshot),executionInputHash:hash({snapshot:item.snapshot,query:item.query,asOf:item.asOf}),slices:{recall:found,denominator:expected.length},snapshotHash:result.snapshotHash,contextBytes:result.contextBytes ?? null};
-      };
-      units.push(await (input.checkpointUnit ? input.checkpointUnit(item.id,run) : run()));
-    }
-    return {pool:input.pool,units,evaluatorVersion:'memory-fixed-snapshot-v1',evidenceTier:'exact',deterministicChecksPassed:units.every(unit=>unit.snapshotHash),contextBytes:null};
   };
   if(runtimeSession) runners.runtime=async input=>{
     const units=[];

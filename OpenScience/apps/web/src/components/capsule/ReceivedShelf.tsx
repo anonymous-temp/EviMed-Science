@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { declineDelivery, importDelivery, listPendingDeliveries, openDelivery, type PendingDelivery } from "@/lib/capsuleShareClient";
 import { useCapsuleShareFeature } from "@/lib/capsuleShareFeature";
-import { CAPSULE_ENTRY_TYPES, fromSender } from "@/lib/capsuleText";
+import { CAPSULE_ENTRY_TYPES, fromSender, providedBy } from "@/lib/capsuleText";
 import {
   announceMemoryChanged, disableCapsule, enableReceivedCapsule, fetchReceivedCapsules, startCapsuleTrial, type ReceivedCapsule,
 } from "@/lib/memoryClient";
@@ -169,45 +169,56 @@ function ReceivedPacks() {
   if (failed && data === null) return <LoadError message="暂时读不到收到的胶囊。" onRetry={reload} />;
   // Nothing received, or not read yet: silent. 导入 is right above.
   if (data === null || data.length === 0) return null;
+  const defaults = data.filter((pack) => pack.official);
+  const received = data.filter((pack) => !pack.official);
+  /** One pack's row: the platform's own say who provides them, someone's share says who sent it. */
+  const row = (pack: ReceivedCapsule) => (
+    <ListRow
+      key={pack.id}
+      title={pack.title}
+      meta={(
+        <>
+          {/* Who sent it and what it says it holds, from the card its
+              sender signed; the counts when a pack carries no card. */}
+          {pack.takenDown && <p className="text-danger-strong">
+            {pack.takenDown.by === "operator" ? "已被平台下架并停用" : "作者已撤回，这份已停用"}{pack.takenDown.reason ? `：${pack.takenDown.reason}` : ""}
+          </p>}
+          <p>{[
+            pack.card?.author ? (pack.official ? providedBy(pack.card.author) : fromSender(pack.card.author)) : null,
+            pack.card?.summary || contents(pack),
+          ].filter(Boolean).join(" · ")}</p>
+          {pack.upgradedAt && pack.card?.changelog && <p>{formatDay(pack.upgradedAt)}更新：{pack.card.changelog}</p>}
+          {pack.methods.length > 0 && <p className="truncate">{pack.methods.join("、")}</p>}
+        </>
+      )}
+      trailing={(
+        <Switch
+          label={`启用“${pack.title}”`}
+          checked={pack.enabled}
+          disabled={busy !== null || Boolean(pack.takenDown)}
+          onChange={(next) => void (next ? enable(pack) : disable(pack))}
+        />
+      )}
+      menu={pack.takenDown ? undefined : <Menu label="更多" items={[
+        { label: "试用一次", disabled: busy !== null, onSelect: () => void trial(pack) },
+      ]} />}
+    />
+  );
   return (
-    <section aria-labelledby="received-capsules">
-      <h3 id="received-capsules" className="text-ui font-semibold text-text">收到的胶囊</h3>
-      <List label="收到的胶囊" className="mt-2">
-        {data.map((pack) => {
-          return (
-            <ListRow
-              key={pack.id}
-              title={pack.title}
-              meta={(
-                <>
-                  {/* Who sent it and what it says it holds, from the card its
-                      sender signed; the counts when a pack carries no card. */}
-                  {pack.takenDown && <p className="text-danger-strong">
-                    {pack.takenDown.by === "operator" ? "已被平台下架并停用" : "已被作者下架并停用"}{pack.takenDown.reason ? `：${pack.takenDown.reason}` : ""}
-                  </p>}
-                  <p>{[
-                    pack.card?.author ? fromSender(pack.card.author) : null,
-                    pack.card?.summary || contents(pack),
-                  ].filter(Boolean).join(" · ")}</p>
-                  {pack.upgradedAt && pack.card?.changelog && <p>{formatDay(pack.upgradedAt)}更新：{pack.card.changelog}</p>}
-                  {pack.methods.length > 0 && <p className="truncate">{pack.methods.join("、")}</p>}
-                </>
-              )}
-              trailing={(
-                <Switch
-                  label={`启用“${pack.title}”`}
-                  checked={pack.enabled}
-                  disabled={busy !== null || Boolean(pack.takenDown)}
-                  onChange={(next) => void (next ? enable(pack) : disable(pack))}
-                />
-              )}
-              menu={pack.takenDown ? undefined : <Menu label="更多" items={[
-                { label: "试用一次", disabled: busy !== null, onSelect: () => void trial(pack) },
-              ]} />}
-            />
-          );
-        })}
-      </List>
-    </section>
+    <>
+      {/* What the platform gives every account, already on and switched off with one click; the person's own comes before them in a run. */}
+      {defaults.length > 0 && (
+        <section aria-labelledby="official-capsules">
+          <h3 id="official-capsules" className="text-ui font-semibold text-text">EviMed 的默认做法</h3>
+          <List label="EviMed 的默认做法" className="mt-2">{defaults.map(row)}</List>
+        </section>
+      )}
+      {received.length > 0 && (
+        <section aria-labelledby="received-capsules">
+          <h3 id="received-capsules" className="text-ui font-semibold text-text">收到的胶囊</h3>
+          <List label="收到的胶囊" className="mt-2">{received.map(row)}</List>
+        </section>
+      )}
+    </>
   );
 }

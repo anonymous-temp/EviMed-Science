@@ -26,6 +26,10 @@ import { recordRejectionJudge, recordRejectionLines } from "./nativeMemoryMetric
  * Budgeted: one call per commit, at most `maxCandidates` lines in it, and `dailyCalls` of them per account per UTC day (a counter here:
  * a restart gives the account its day again, which is the bound's own tolerance). Charged to the account as memory extraction.
  *
+ * The same judge answers a second question since 2026-10-25 (`nativeMemoryForgetEverywhere.mjs`): when the person forgets a line, which of the lines
+ * the platform already holds say the same thing. The candidates are then lines written earlier, not just now, and the instruction says
+ * either; nothing else about the call changes (one call, at most `MAX_CANDIDATES` lines, the account's day).
+ *
  * Deletable when the engine's extraction takes a "never keep" list of its own (it has none in v0.5.1.1) — then the list and this go.
  *
  * @module nativeMemoryRejections
@@ -99,7 +103,7 @@ export function nearRemoved(written, removed) {
 
 const INSTRUCTIONS = [
   "A research platform keeps short notes about one person. The person asked it to forget some of them (`removed`).",
-  "`candidates` are lines the platform has just written. For each candidate that says the same thing as one of its own `options` — the same fact, preference or instruction in other words, or the removed one with something added that does not change it — say which.",
+  "`candidates` are lines the platform holds, written just now or earlier. For each candidate that says the same thing as one of its own `options` — the same fact, preference or instruction in other words, or the removed one with something added that does not change it — say which.",
   "A candidate that is only about the same subject, or says something more specific that the removed line did not, is not the same.",
   "`said` is what the person themselves wrote in the conversation the lines came from. A candidate the person said in those words themselves (not the platform's wording of something else) is `stated`: the person chose it again, whatever they removed before.",
   "Return JSON only: {\"same\":[{\"candidate\":<index>,\"removed\":<index>}],\"stated\":[<candidate index>]}. List only the pairs that are the same; use only the indexes given.",

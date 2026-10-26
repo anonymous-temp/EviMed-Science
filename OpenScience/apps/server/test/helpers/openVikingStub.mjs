@@ -15,7 +15,7 @@ const ok = (result, extra = {}) => ({ status: "ok", result, error: null, telemet
 const fail = (code, message) => ({ status: "error", result: null, error: { code, message }, telemetry: null, profile: null });
 
 const BUILT_IN_TYPES = ["cases", "entities", "events", "experiences", "identity", "preferences", "profile", "soul", "trajectories"];
-export const STUB_MEMORY_TYPES = ["corrections", "decisions", "entities", "follow_ups", "preferences", "profile", "project_context", "project_facts"];
+export const STUB_MEMORY_TYPES = ["corrections", "decisions", "entities", "follow_ups", "observations", "preferences", "profile", "project_context", "project_facts", "recent_work"];
 
 export class OpenVikingStub {
   /**
@@ -49,6 +49,10 @@ export class OpenVikingStub {
     this.users = new Map();
     /** @type {Set<string>} users being deleted */
     this.deleting = new Set();
+    /** @type {Set<string>} `${user}/${target}` privacy configurations a v0.5.2 engine keeps beside a session; an engine without any answers 404 to the delete, as v0.5.1.1 does */
+    this.privacyConfigs = new Set();
+    /** What `/health` says the engine is. */
+    this.version = "v0.5.1.1";
     /** @type {any[]} every request, in order */
     this.requests = [];
     this.taskSeq = 0;
@@ -108,7 +112,7 @@ export class OpenVikingStub {
       res.writeHead(status, { "content-type": contentType });
       res.end(typeof json === "string" ? json : JSON.stringify(json));
     };
-    if (url.pathname === "/health") return send(200, { status: "ok", healthy: true, version: "v0.5.1.1", auth_mode: "trusted", user_id: user || null });
+    if (url.pathname === "/health") return send(200, { status: "ok", healthy: true, version: this.version, auth_mode: "trusted", user_id: user || null });
     if (req.headers["x-api-key"] !== this.apiKey) return send(401, fail("UNAUTHENTICATED", "Invalid API key"));
     if (this.failWith) return send(this.failWith, fail("UNAVAILABLE", "stub: down"));
     const admin = /^\/api\/v1\/admin\/accounts\/([^/]+)\/users(?:\/([^/]+)(\/settings)?)?$/.exec(url.pathname);
@@ -120,6 +124,12 @@ export class OpenVikingStub {
     const own = `viking://user/${user}`;
     const within = (uri) => uri === own || uri.startsWith(`${own}/`) || uri === "viking://user" || uri.startsWith("viking://resources") || uri.startsWith("viking://agent");
 
+    const privacy = /^\/api\/v1\/privacy-configs\/session\/([^/]+)$/.exec(path);
+    if (privacy && req.method === "DELETE") {
+      const key = `${user}/${decodeURIComponent(privacy[1])}`;
+      if (!this.privacyConfigs.delete(key)) return send(404, fail("NOT_FOUND", "Privacy config not found"));
+      return send(200, ok({ deleted: true }));
+    }
     if (path === "/api/v1/sessions" && req.method === "POST") {
       const id = String(body?.session_id ?? `auto-${this.sessions.size + 1}`);
       if (this.#session(user, id)) return send(409, fail("ALREADY_EXISTS", `Session already exists: ${id}`));
@@ -285,9 +295,11 @@ export class OpenVikingStub {
     const taskId = `00000000-0000-4000-8000-${String(++this.taskSeq).padStart(12, "0")}`;
     const paused = this.users.get(user)?.learning === false;
     const outcome = paused ? {} : this.extract({ user, session: id, messages, files: this.files });
-    if (outcome === "fail") {
-      this.files.set(`${archive}/.failed.json`, JSON.stringify({ stage: "memory_extraction", error: "Error code: 429 - stub", failed_at: new Date().toISOString() }));
-      this.tasks.set(taskId, { user, public: { task_id: taskId, task_type: "session_commit", status: "failed", resource_id: id, result: null, error: "Error code: 429 - stub" } });
+    if (outcome === "fail" || typeof outcome?.fail === "string") {
+      // `{ fail: "<the engine's own error text>" }` names why (v0.5.2: `budget_exhausted`); a bare "fail" is the 429 of a rate-limited minute.
+      const error = typeof outcome?.fail === "string" ? outcome.fail : "Error code: 429 - stub";
+      this.files.set(`${archive}/.failed.json`, JSON.stringify({ stage: "memory_extraction", error, failed_at: new Date().toISOString() }));
+      this.tasks.set(taskId, { user, public: { task_id: taskId, task_type: "session_commit", status: "failed", resource_id: id, result: null, error } });
     } else {
       const operations = { adds: outcome.adds ?? [], updates: outcome.updates ?? [], deletes: outcome.deletes ?? [] };
       for (const add of operations.adds) { this.files.set(add.uri, add.after); this.tags.set(add.uri, [`memory_type=${add.memory_type}`]); }

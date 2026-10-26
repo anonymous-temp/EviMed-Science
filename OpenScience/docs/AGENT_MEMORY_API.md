@@ -5,8 +5,7 @@ conclusions — can be read and added to by an agent running somewhere else: a
 local DSH or Claude profile, a script, another product. Two ways in, one set of
 rules: an HTTP API, and an MCP adapter that speaks that API for agents that only
 speak MCP. Neither holds memory of its own; both reach the same memory the
-workbench's memory page shows, on whichever engine keeps the account's memory
-(see "Which engine" below).
+workbench's memory page shows: OpenViking's memory engine (see "The engine" below).
 
 
 This page is the operator's and the integrator's reference. There is no
@@ -77,10 +76,10 @@ per key per minute (`429 agent_memory_rate_limited` beyond that).
 |---|---|---|
 | `GET /openapi.json` | none | The machine-readable description (no key needed, still behind the enable switch). |
 | `GET /` | any | What this key can do: its scopes, its project, the rate limit, the endpoints. An integrator's first call. |
-| `POST /recall` `{ "query", "projectId"?, "limit"? (1–50), "factKinds"?, "since"?, "asOf"?, "scope"?, "capsuleIds"? (1–8), "methods"? }` | `memory.read` | Searches the account's memory and returns hits with their source. A record is the version that held at `asOf` (now when omitted) in the project asked; where it is uncertain the item says so — `uncertain: true`, `caveats` (`conflict`, `source_retracted`, `source_expired`, `source_changed`, `not_yet_valid`, `insufficient_evidence`), the other statement in `conflictsWith`, the lapsed sources in `staleSources` — and is still returned: a caveat is a label, never a reason to withhold. `scope` is `all`, `capsule`, `conversation` or `agenda`. `capsuleIds` reads the named capsules instead of the ones in force (a subject may name its institution's). Also returns `methods` — the account's own learned methods first, then the capsules' work-style methods, within the same budget a run mounts (32 methods, 32 KiB); `methods` is `all`, `own`, `capsules` or `none`. |
-| `POST /note` `{ "factKind", "content", "projectId"? }` | `memory.write` | Adds one note. It arrives as an **inferred, unconfirmed candidate** whatever the caller says, and takes effect only when the account owner confirms it: on their memory page, where it is listed with 待确认 and the choice 确认 or 不要, or through the dashboard's note operations. Notes are the capsule store's, the same on both engines. |
-| `GET /records?scope=&kind=&status=&scopeId=&query=&pageSize=` | `memory.read` | Lists structured records, filtered (comma-separated values; `pageSize` up to 200, default 50). **Active records only** unless `status` asks for others: a pending record is a proposal nobody has agreed to. |
-| `POST /episodes` `{ "projectId", "sessionId"?, "messages": [{ "role": "user"\|"assistant", "text" }] }` | `memory.write` | Hands over a conversation (1–200 turns) for the platform's own extractor to read. Every candidate must quote the conversation exactly, and **every record it writes is `pending`** until the account owner confirms it (`activated` is always 0). It may add evidence to a memory already in force; a candidate that would change or replace one is refused. |
+| `POST /recall` `{ "query", "projectId"?, "limit"? (1–50), "factKinds"?, "since"?, "scope"?, "capsuleIds"? (1–8), "methods"? }` | `memory.read` | Searches the account's memory and returns hits with their source: the engine's memory files (the account's own and the project's asked for, never a sensitive one) and the capsule's facts, each item saying which. A caveat on a hit is a label, never a reason to withhold it. `scope` is `all`, `capsule`, `conversation` or `agenda`. `capsuleIds` reads the named capsules instead of the ones in force (a subject may name its institution's). Also returns `methods` — the account's own learned methods first, then the capsules' work-style methods, within the same budget a run mounts (32 methods, 32 KiB); `methods` is `all`, `own`, `capsules` or `none`. |
+| `POST /note` `{ "factKind", "content", "projectId"? }` | `memory.write` | Adds one note. It arrives as an **inferred, unconfirmed candidate** whatever the caller says, and takes effect only when the account owner confirms it: on their memory page, where it is listed with 待确认 and the choice 确认 or 不要, or through the dashboard's note operations. Notes are the capsule store's. |
+| `GET /records?scope=&kind=&status=&scopeId=&query=&pageSize=` | `memory.read` | Lists the engine's memory files as records, filtered (comma-separated values; `pageSize` up to 200, default 50). Every one is in force (a file is written by the person or by the engine's extraction and takes effect at once), so a `status` that excludes `active` finds none: a proposal is a staged note, never a record. |
+| `POST /episodes` `{ "projectId", "sessionId"?, "messages": [{ "role": "user"\|"assistant", "text" }] }` | `memory.write` | Hands over a conversation (1–200 turns). It is **staged as a pending candidate note** (`202`, `state: "pending_confirmation"`, `extracted: 0`, `activated: 0`, `candidateId`, `confirm.path`) and nothing is extracted or written until the account owner confirms it at `POST /notes/{id}/confirm`; a memory already in force is never changed by an episode. |
 
 ### The dashboard
 
@@ -91,11 +90,11 @@ come from that person's own clicks; it is never a default.
 
 | Call | Scope | What it does |
 |---|---|---|
-| `GET /dashboard` | `memory.read` | The switches; what is in force, each with `source` (`self` 本人设置, `observed` 从改方学习, `learned`, `inferred`, `research`, `capsule` 来自胶囊), `basis` (依据次数: observations, runs, conversations), `usage` (使用情况), the last quotes and versions, and `wasTrue` (「曾经如此」); `pending` — what waits for the person: records held for them and notes an outside agent proposed; `forgotten`; `habits` (learned methods, `isNew` for 14 days); `recentChanges` (最近变化, 30 days) with the act that takes each back. |
+| `GET /dashboard` | `memory.read` | The switches; what is in force, each with `source` (`self` 本人设置, `observed` 从改方学习, `learned`, `inferred`, `research`, `capsule` 来自胶囊), `basis` (依据次数: observations, runs, conversations), `usage` (使用情况), the last quotes and versions, and `wasTrue` (「曾经如此」); `pending` — what waits for the person: the notes and episodes an outside agent proposed (the engine's own files wait for nothing); `forgotten`; `habits` (learned methods, `isNew` for 14 days); `recentChanges` (最近变化, 30 days) with the act that takes each back. |
 | `PUT /settings` `{ "learningPaused"?, "recallPaused"? }` | `memory.manage` | The switches (功能开关). |
-| `POST /records/{id}/confirm` `{ "expectedVersion" }` | `memory.manage` | A proposal becomes the person's own statement. |
-| `PATCH /records/{id}` `{ "expectedVersion", "summary"?, "value"? }` | `memory.manage` | The person's edit. |
-| `POST /records/{id}/forget` · `/restore` · `/undo` `{ "expectedVersion" }` | `memory.manage` | Forget (restorable, and remembered so the extractor does not write it back), restore, or undo the last change. |
+| `POST /records/{id}/confirm` `{ "expectedVersion" }` | `memory.manage` | Answers `409 memory_not_pending`: a memory file is in force when it is written. A staged episode or note is confirmed at `/notes/{id}/confirm`. |
+| `PATCH /records/{id}` `{ "expectedVersion", "value" }` | `memory.manage` | The person's edit: the file's text is replaced. A summary edit without `value` is refused with `400 memory_engine_unsupported`. |
+| `POST /records/{id}/forget` · `/restore` · `/undo` `{ "expectedVersion" }` | `memory.manage` | Forget (the file leaves the engine; its text is kept only for the undo, and the learning loop is told not to write it back), or undo the last change. `restore` is the undo (`400 memory_engine_unsupported`: use `undo`). |
 | `GET /methods/{id}` | `memory.read` | One habit and its versions — text changes only, earlier texts marked `wasTrue`. |
 | `POST /methods/{id}/retire` · `/restore` `{ "expectedRevision" }`, `/rollback` `{ "expectedRevision", "targetRevision" }` | `memory.manage` | Stop a habit, take the stop back (the last version in force), or go back to a named version. |
 | `POST /notes/{id}/confirm` · `/reject` `{ "expectedRevision" }` | `memory.manage` | A proposed note, confirmed or rejected. |
@@ -134,41 +133,22 @@ switches are on the memory page (「记忆开关」). A deployment that has turn
 recall off altogether (`OPEN_SCIENCE_MEMORY_RECALL_ENABLED=false`) answers every
 `recall` with `{ "items": [], "mode": "disabled" }`.
 
-## Which engine
+## The engine
 
-An account's memory is on one of two engines, and the API follows the account's:
+An account's memory is the engine's own files, the ones the workbench's memory page shows (until 2026-10-25 an account could
+instead be on the platform's own PostgreSQL records; that engine was deleted and the API serves the one engine only).
+`/recall` reads them (the account's own and the project's, never a sensitive one), `/records` and `/dashboard` list them, a forget
+removes the file from the engine and keeps its text only for the undo (the forget's answer carries the `version` an undo names), an
+edit replaces its text, and `PUT /settings` pauses the engine's own learning too. `/episodes` stages a pending candidate without
+extracting or activating memory. Explicit confirmation admits that exact revision through the durable native session; retries
+reconcile uncertain appends without duplicating them. Only captured original user turns reach extraction. Candidate notes remain
+separate from active files. Native usage counts and recall at a past time (`asOf`, removed on 2026-10-25) are unavailable.
+A deployment that cannot reach the engine answers `503 memory_engine_unavailable`.
 
-- **`legacy`: the platform's own records.** Everything above applies as
-  written: an episode is extracted and held for the owner, records are
-  `pending` until confirmed, `restore` brings a forgotten record back.
-- **`native`: OpenViking's memory engine.** Memory is the engine's own files,
-  the ones the workbench's memory page shows. `/recall` reads them (the account's
-  own and the project's, never a sensitive one), `/records` and `/dashboard`
-  list them, a forget removes the file from the engine and keeps its text only
-  for the undo (the forget's answer carries the `version` an undo names), an edit
-  replaces its text, and `PUT /settings` pauses the engine's own learning too.
-  Native `/episodes` stages a pending candidate without extracting or activating memory.
-  Explicit confirmation admits that exact revision through the durable native session;
-  retries reconcile uncertain appends without duplicating them. Only captured original
-  user turns reach extraction. Candidate notes remain separate from active native files.
-  A summary edit without `value` and native `restore` are refused with
-  `400 memory_engine_unsupported` (use undo); confirming an already active native
-  file answers `409 memory_not_pending`. Native usage counts and `asOf` remain unavailable.
-  A deployment that cannot reach the engine for a native account answers `503
-  memory_engine_unavailable`, never the other engine's rows.
-
-Every answer that reads or acts on an account's memory names its engine: an
-`engine` field in an object body (`/recall`, `/dashboard`, `/settings`,
-`/episodes`) and an `X-Memory-Engine` header on all of them. Notes, observations
-and methods are the capsule store's and the learning ledger's, and are the same on
-both.
-
-Which engine a new account gets is the deployment's default: native whenever
-OpenViking is the index. The API-only shape (`deploy/web/docker-compose.api-only.yml`)
-pins the default to `legacy`, because the CDSS integration is built on episodes,
-pending records and the confirm step; set `OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED=true`
-in its `.env` to give new accounts the native engine (accounts that exist keep
-theirs; `scripts/ops/memory-engine.mjs` moves one).
+Notes, observations and methods are the capsule store's and the learning ledger's. The API-only shape
+(`deploy/web/docker-compose.api-only.yml`) runs on the same engine as every other shape: it composes the same OpenViking service,
+and a CDSS integration that was built on pending records and the confirm step now confirms a staged episode or note with
+`POST /notes/{id}/confirm` and reads what the engine wrote through `/records`.
 
 ## Lineage cards as capsules
 
@@ -201,7 +181,7 @@ password is read from a file, never from the command line.
 posting episodes stay HTTP calls: they are integration actions, and a tool per
 verb is a catalogue the model pays for on every first turn.
 
-`memory_recall` takes `query`, `factKinds`, `since`, `asOf`, `limit`, and the two
+`memory_recall` takes `query`, `factKinds`, `since`, `limit`, and the two
 that serve a clinical integration: `capsuleIds` (1–8, read these capsules instead
 of the ones in force: one school at a time) and `methods` (`all`, `own`,
 `capsules` or `none`). The fact kinds are the API's own fourteen. Both tools take an
@@ -244,14 +224,12 @@ the shape is the common `command` / `args` / `env` form):
 Keep the key file readable by you alone (`chmod 600`), and give the key
 `memory.read` alone unless the agent should be able to leave notes.
 
-## Native account compatibility
+## Candidates and admission
 
-The URL, key scopes, project binding and `X-Subject` rules stay unchanged. Personal recall follows the account engine through the shared recall port. Capsule and method selection retain their existing authorization and scope. Historical personal-memory recall (`asOf`) is unsupported on native accounts and returns `400 memory_as_of_unsupported`; current memory is never labelled as historical. Native edits change `value`; forgetting uses the native rejection ledger, and restoration uses the existing undo action. Unsupported native operations return `memory_engine_unsupported`.
+The URL, key scopes, project binding and `X-Subject` rules are unchanged. Personal recall reads the engine through the shared recall port. Capsule and method selection retain their existing authorization and scope. Native edits change `value`; forgetting uses the rejection ledger, and restoration uses the undo action. Unsupported operations return `memory_engine_unsupported`.
 
-For a native account, `POST /episodes` stores the submitted turns in the existing candidate-note ledger. It returns `202`, `state: "pending_confirmation"`, `extracted: 0`, `activated: 0`, `candidateId`, and `confirm: { path, expectedRevision }`. It opens no extracting engine session at this stage. The full role-labelled transcript stays only in that candidate as evidence. Confirmation sends only original user statements through the existing captured-message privacy filter; assistant statements, including assistant-authored role labels or quoted instructions, are never promoted into user facts. If no admissible user content remains, confirmation returns `admission.state: "skipped"` and `reason: "no_user_content"` without touching an extracting session. Confirm at the returned `/api/agent-memory/v1/notes/{id}/confirm` path with `expectedRevision`. Pending structured-record candidates use the existing `/records/{id}/confirm` and `expectedVersion` route. There is no episode-confirm endpoint.
+`POST /episodes` stores the submitted turns in the candidate-note ledger. It returns `202`, `state: "pending_confirmation"`, `extracted: 0`, `activated: 0`, `candidateId`, and `confirm: { path, expectedRevision }`. It opens no extracting engine session at this stage. The full role-labelled transcript stays only in that candidate as evidence. Confirmation sends only original user statements through the captured-message privacy filter; assistant statements, including assistant-authored role labels or quoted instructions, are never promoted into user facts. If no admissible user content remains, confirmation returns `admission.state: "skipped"` and `reason: "no_user_content"` without touching an extracting session. Confirm at the returned `/api/agent-memory/v1/notes/{id}/confirm` path with `expectedRevision`. There is no episode-confirm endpoint.
 
-A native confirmation returns `admission` alongside the candidate. Its immutable candidate ID and revision identify one durable admission. `queued` and `submitting` describe submission work; `pending` means the engine accepted the commit but settlement is outstanding; `completed` means the native worker read the resulting changes. `suspended` means current learning policy prevents a retry; `cancelled` means the candidate revision, account engine or project is no longer authorized. Every new engine write and replay rechecks that authority, so rejecting or editing a candidate prevents its older admission from silently learning later. `failed` retains the candidate and an error, while `uncertain` means a timed-out side effect is being inspected and must not be treated as success. The receipt includes `taskId` and `archiveUri` when known and `recordIds` after settlement; one conversation may produce several records. Repeating the same confirmation returns or recovers that admission, without appending the batch twice. Confirmed native candidates remain inactive in the legacy store.
+A confirmation returns `admission` alongside the candidate. Its immutable candidate ID and revision identify one durable admission. `queued` and `submitting` describe submission work; `pending` means the engine accepted the commit but settlement is outstanding; `completed` means the native worker read the resulting changes. `suspended` means current learning policy prevents a retry; `cancelled` means the candidate revision, the account or the project is no longer authorized. Every new engine write and replay rechecks that authority, so rejecting or editing a candidate prevents its older admission from silently learning later. `failed` retains the candidate and an error, while `uncertain` means a timed-out side effect is being inspected and must not be treated as success. The receipt includes `taskId` and `archiveUri` when known and `recordIds` after settlement; one conversation may produce several records. Repeating the same confirmation returns or recovers that admission, without appending the batch twice.
 
-Native capsule snapshots record each selected file's hash, version and capture time. Export re-reads the selected engine bytes after the database snapshot and before publication; a concurrent change returns `409 capsule_native_snapshot_changed` so the caller can retry. This is an optimistic consistency check across two stores. Revoking a hosted share prevents future hosted downloads; it does not remotely erase bytes or independent copies already exported.
-
-Native episodes stage a pending candidate without extraction or activation; explicit confirmation starts the durable native admission flow. Native record reads, edits, forgetting and undo use the authoritative engine.
+Capsule snapshots record each selected file's hash, version and capture time. Export re-reads the selected engine bytes after the database snapshot and before publication; a concurrent change returns `409 capsule_native_snapshot_changed` so the caller can retry. This is an optimistic consistency check across two stores. Revoking a hosted share prevents future hosted downloads; it does not remotely erase bytes or independent copies already exported.

@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { HttpError } from "./security.mjs";
 import { productId } from "./productPersistence.mjs";
-import { recordShareRefused } from "./capsuleShareMetrics.mjs";
+import { recordShareOpened, recordShareRefused } from "./capsuleShareMetrics.mjs";
 
 /**
  * Share links and deliveries of a memory capsule inside the platform (evidence-flywheel plan §7, F17a and F17b, 2026-10-05).
@@ -161,18 +161,6 @@ export class CapsuleShareLinks {
     return linkView(row, this.now());
   }
 
-  /**
-   * Every link of a capsule ends when the capsule is deleted (2026-10-10 review C-5: a deleted capsule's links kept
-   * serving until revoked by hand or expired). @param {string} ownerId @param {string} capsuleId
-   */
-  async revokeForCapsule(ownerId, capsuleId) {
-    await migrateCapsuleShare(this.database);
-    const result = await this.database.query(
-      "UPDATE evimed_share.links SET revoked_at=clock_timestamp() WHERE owner_id=$1 AND capsule_id=$2 AND revoked_at IS NULL",
-      [productId(ownerId, "user"), String(capsuleId)]);
-    return result.rowCount ?? 0;
-  }
-
   /** Every link of a snapshot ends with it. @param {string} ownerId @param {readonly string[]} snapshotIds */
   async revokeForSnapshots(ownerId, snapshotIds) {
     if (!snapshotIds.length) return 0;
@@ -192,7 +180,7 @@ export class CapsuleShareLinks {
   async redeem(userId, token) {
     await migrateCapsuleShare(this.database);
     if (typeof token !== "string" || !TOKEN_FORMAT.test(token)) throw new HttpError(404, "capsule_share_not_found", "The share is unavailable.");
-    return this.database.transaction(async (/** @type {any} */ client) => {
+    const redeemed = await this.database.transaction(async (/** @type {any} */ client) => {
       const found = (await client.query("SELECT * FROM evimed_share.links WHERE token_hash=$1 FOR UPDATE", [shareTokenHash(token)])).rows[0];
       if (!found) throw new HttpError(404, "capsule_share_not_found", "The share is unavailable.");
       const refuse = (/** @type {string} */ reason, /** @type {number} */ status, /** @type {string} */ code) => {
@@ -213,6 +201,9 @@ export class CapsuleShareLinks {
       }
       return { link: { ...linkView(found, this.now()), ownerId: found.owner_id }, secret: found.archive_secret, firstUse };
     });
+    // Counted once the use is committed, and only the first look of an account: the funnel's `opened`.
+    if (redeemed.firstUse) recordShareOpened("link");
+    return redeemed;
   }
 
   /** A redeemer imported the pack. @param {string} userId @param {string} linkId */

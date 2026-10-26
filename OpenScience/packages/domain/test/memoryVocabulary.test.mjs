@@ -163,6 +163,60 @@ test("a long run of the key alphabet is a secret by its shape and not by its len
   assert.deepEqual(identifierShapesIn("password: a94a8fe5ccb19ba61c4c0873d391e987982fbbd3"), ["credential"]);
 });
 
+/** A seeded generator, so the share of random runs caught is the same on every machine. @param {number} seed */
+function seeded(seed) {
+  let state = seed >>> 0
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0
+    return state / 2 ** 32
+  }
+}
+
+test("an all-lower-case secret of forty letters or more is caught by how it alternates, and words, compounds and names are not (2026-10-25)", () => {
+  // Random letters: caught, in a sentence or alone, upper case as well. Almost all of them: the check has no dictionary, so a run that
+  // happens to alternate like a word passes, and the share is what the rule's header says (94 % at forty letters, 98 % at sixty-four).
+  const random = seeded(20261025)
+  const letters = (/** @type {number} */ length, /** @type {string} */ alphabet) => Array.from({ length }, () => alphabet[Math.floor(random() * alphabet.length)]).join('')
+  const lower = 'abcdefghijklmnopqrstuvwxyz'
+  for (const [length, least] of [[40, 0.9], [48, 0.92], [64, 0.95]]) {
+    const runs = Array.from({ length: 400 }, () => letters(length, lower))
+    const caught = runs.filter((run) => identifierShapesIn(`备份令牌 ${run} 这一串`).includes('credential')).length / runs.length
+    assert.ok(caught >= least, `${length} letters: ${caught} of random lower-case runs caught, at least ${least} expected`)
+  }
+  const upper = Array.from({ length: 200 }, () => letters(48, lower.toUpperCase()))
+  assert.ok(upper.filter((run) => identifierShapesIn(run).includes('credential')).length / upper.length >= 0.9, 'single-case upper-case runs are held to the same rule')
+  const secret = Array.from({ length: 20 }, () => letters(64, lower)).find((run) => identifierShapesIn(run).includes('credential'))
+  assert.ok(secret, 'a random run of sixty-four letters is found among twenty')
+  assert.equal(maskIdentifiers(`令牌 ${secret} 结束`), '令牌 [已省略] 结束', 'and it is blanked where it stands')
+  // Ordinary long words and run-together words are not secrets: a German compound (the lowest alternation of the words one would
+  // write), chemical names, a pinyin sentence and runs of English words.
+  for (const word of [
+    'donaudampfschifffahrtsgesellschaftskapitaen',
+    'pneumonoultramicroscopicsilicovolcanoconiosis',
+    'tetrahydrocannabinolcarboxylicacidglucuronide',
+    'hydroxychloroquinesulfatecomparedwithplaceboinrheumatoidarthritis',
+    'wodeyanjiuxiangmushiguanyuxinxueguanjibingdeduozhongxinduizhaoshiyan',
+    'thequickbrownfoxjumpsoverthelazydognearthequietriverbank',
+    'evolutionexecutionmaxconcurrencyandmanagedbrowsermaxcontexts',
+  ]) {
+    assert.deepEqual(identifierShapesIn(`我们的命名是 ${word} 这样`), [], word)
+    assert.equal(maskIdentifiers(word), word, word)
+  }
+  // Under forty letters nothing changes, whatever they look like; and a commit stays one.
+  assert.deepEqual(identifierShapesIn(letters(39, lower)), [])
+  assert.deepEqual(identifierShapesIn('a94a8fe5ccb19ba61c4c0873d391e987982fbbd3'), [])
+})
+
+test("an OpenViking privacy placeholder is the engine's machinery: a message or a memory line carrying one is machine text (v0.5.2)", () => {
+  for (const text of ['密码是 {{ov_privacy:session:dsh-abc123:password}}', 'key {{ ov_privacy : session:x:token }}', '{{ov_redacted:email}}', '- 用户的邮箱是 {{ov_privacy:session:s1:email}}']) {
+    assert.equal(carriesPlatformContext(text), true, text)
+    assert.ok(!stripPlatformTags(text).includes('ov_'), `${text} is stripped`)
+  }
+  // Double braces of a template language the person writes about are not the engine's.
+  assert.equal(carriesPlatformContext('模板里写 {{ user.name }} 和 {{ order_id }}'), false)
+  assert.equal(carriesPlatformContext('{{ov_other:thing}}'), false)
+})
+
 test("the kernel's own reminder envelope is machine text like the platform's, so the door in front of the engine drops it", () => {
   const entry = PLATFORM_CONTEXT_TAGS.find((item) => item.tag === "system-reminder");
   assert.ok(entry && entry.role === "injected" && entry.upstream && entry.emitters.length === 0, "named, injected, upstream");

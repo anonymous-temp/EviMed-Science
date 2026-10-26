@@ -4,10 +4,6 @@
   "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C01); every name, number and identifier is invented",
   "expected": "The reshaping the person asked for after a first draft is kept as a rule about the weekly report (about 200 characters, three points); neither the numbers nor a rule about every answer.",
   "decidable": true,
-  "arms": [
-    "native",
-    "legacy"
-  ],
   "judge": "Is the kept rule scoped to the weekly report (a form rule about 周报: about 200 characters, three points), and not a rule about all answers? The two numbers must appear nowhere.",
   "replay": {
     "synthetic": true,

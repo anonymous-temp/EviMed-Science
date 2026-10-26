@@ -69,7 +69,7 @@ export function createEvolutionTransfer({service,missions,taskPool,adapters={},t
   const uniquelyCovers=id=>independentlySupported.some(family=>family.payload.candidateId===id&&new Set(independentlySupported.filter(other=>other.payload.moduleId===family.payload.moduleId&&hash(other.payload.taskFamily??null)===hash(family.payload.taskFamily??null)).map(other=>other.payload.candidateId)).size===1);
   for(const row of archive){
    const candidate=row.payload.candidate,mechanisms=candidate?.proposal?.mechanisms??[];
-   if(!mechanisms.length||row.payload.uniqueCoverage===true||uniquelyCovers(candidate?.id??row.id)||candidate?.toolKind==='handbook'||candidate?.personalMethod===true)continue;
+   if(!mechanisms.length||row.payload.uniqueCoverage===true||uniquelyCovers(candidate?.id??row.id)||candidate?.personalMethod===true)continue;
    const relevant=verdicts.filter(verdict=>(verdict.payload.archiveId??verdict.payload.candidateId)===row.id||verdict.payload.parentId===row.id).sort((a,b)=>String(a.payload.at).localeCompare(String(b.payload.at)));
    for(const mechanism of mechanisms){
     const observations=relevant.filter(verdict=>verdict.payload.mechanismContributions?.[mechanism]!=null);

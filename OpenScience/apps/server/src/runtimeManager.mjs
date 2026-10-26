@@ -31,7 +31,6 @@ import { rebaseRuntimeUiDocument } from "./runtimeUiDocument.mjs";
 import { browserSessionCookie, generateBrowserSessionSecret } from "./dshBrowserAuth.mjs";
 import { renderCredentialsFile, renderProfilePatch, runtimeEnvironment } from "./dshProfilePatch.mjs";
 import { PLUGIN_ID, pluginEntry } from "./pluginService.mjs";
-import { recordRuntimeEngineSwitch, recordRuntimeWithoutGateway } from "./nativeMemoryMetrics.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import { RuntimeControllerClient } from "./runtimeControllerClient.mjs";
 import { canonicalJson } from "@evimed/domain";
@@ -2088,17 +2087,17 @@ export function memoryGatewayEndpointUrl(config) {
 }
 
 /**
- * Empty when this deployment has no native memory engine to reach: the lever is off, there is no product database to keep
- * the account's engine in, or no workload token to know a caller by. Whether one account's runtime is given the address is
- * the account's own engine (`RuntimeManager.memoryGatewayUrlFor`).
+ * Empty when this deployment has no memory engine to reach: OpenViking is not configured, memory is switched off, there is no
+ * product database to keep the account's overlay in, or no workload token to know a caller by. Every account's runtime is given
+ * the address when it is not empty (`RuntimeManager.memoryGatewayUrlFor`); there is no second engine to choose between.
  * @param {any} config @returns {string}
  */
 export function memoryGatewayProviderUrl(config) {
-  if (config.ovNativeMemoryEnabled !== true || config.memoryEnabled === false || config.stateStore !== "postgres" || !config.evimedWorkloadSigningSecret) return "";
+  if (config.memoryEngineEnabled !== true || config.memoryEnabled === false || config.stateStore !== "postgres" || !config.evimedWorkloadSigningSecret) return "";
   return memoryGatewayEndpointUrl(config);
 }
 
-/** The name a runtime reads the memory gateway's base under; present and empty for an account on the legacy engine. */
+/** The name a runtime reads the memory gateway's base under; present and empty when this deployment has no memory engine. */
 export const MEMORY_GATEWAY_URL_ENV = "EVIMED_MEMORY_GATEWAY_URL";
 
 /** Only trusted configuration selects the internal origin, never a tool argument. @param {any} config */
@@ -2128,16 +2127,15 @@ export function revisionGatewayProviderUrl(config) {
  * process's environment by the same function the container-side rows use.
  *
  * One derivation for the launch plan and for readiness, so the value an
- * operator reads back is the value a runtime is started with. The policy comes
- * from config (which may be overridden in tests); the gateway's body limit
- * does too, because the byte guard is a share of it and a limit the gateway
- * enforces but the guard never heard of is the 413 the guard exists to avoid.
+ * operator reads back is the value a runtime is started with. The gateway's
+ * body limit comes from config (which may be overridden in tests), because the
+ * byte guard is a share of it and a limit the gateway enforces but the guard
+ * never heard of is the 413 the guard exists to avoid.
  * @param {Record<string, any>} config @param {Record<string, string | undefined>} [env]
  */
 export function runtimeCompactionSettings(config, env = process.env) {
   return compactionConfigFromEnv({
     ...env,
-    OPEN_SCIENCE_RUNTIME_COMPACTION_POLICY: String(config.runtimeCompactionPolicy ?? "basic"),
     ...(Number(config.modelGatewayMaxBodyBytes) > 0
       ? { OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES: String(Math.floor(Number(config.modelGatewayMaxBodyBytes))) }
       : {}),
@@ -2830,10 +2828,10 @@ export function buildRuntimeLaunchPlan(config, project, port, {
         // accepts nothing, while looking perfectly healthy.
         "--env",
         `OPEN_SCIENCE_RUNTIME_AUTHORITY=${RUNTIME_AUTHORITY}`,
-        // Which engine keeps this account's memory, as the one thing the runtime needs to act on it: the memory gateway's
-        // base for an account on the native engine (the memory plugin's bridge forwards there, and the platform's own
-        // recall and note tools stand aside), empty for one on the legacy path. Always sent, so "legacy" is a value the
-        // runtime reads rather than a name it failed to find.
+        // Whether this deployment keeps the account's memory in an engine, as the one thing the runtime needs to act on it: the
+        // memory gateway's base (the memory plugin's bridge forwards there, and the platform's own recall and note tools stand
+        // aside), empty when there is no engine. Always sent, so "no engine" is a value the runtime reads rather than a name it
+        // failed to find.
         "--env",
         `${MEMORY_GATEWAY_URL_ENV}=${memoryGatewayUrl}`,
         ...(sharedPaths ? ["--env", `OPENVIKING_PENDING_DIR=${sharedPaths.pendingDirectory}`] : []),
@@ -3600,16 +3598,13 @@ export class RuntimeManager {
     /** @type {any} */ this.contextDocuments = null;
     this.contextSharedProjects = new Set();
     this.contextRefreshes = new Map();
-    /** Which engine keeps an account's memory (`ResearchMemoryStore.memoryEngine`); assigned by the composition root.
-     *  @type {((userId: string) => Promise<"legacy" | "native">) | null} */
-    this.memoryEngineOf = null;
     /** Whether a control-plane project is a 「循证 GEO」 project (`GeoStore.projectByControlProject`): decides whether its runtime
      *  mounts the GEO method pack; assigned by the composition root, null where the module is off.
      *  @type {((userId: string, projectId: string) => Promise<boolean>) | null} */
     this.geoProjectOf = null;
     /** @type {any} the learning ledger, assigned by the composition root beside `capsuleService` */
     this.learningService = null;
-    /** How close a method is to a question (`methodSimilarity.mjs`), which the mount ranks the library by; assigned by the composition root. @type {{ nearest: Function } | null} */
+    /** How close a method is to a question (`methodSimilarity.mjs`), which the mount ranks the library by; assigned by the composition root. @type {{ nearest: Function, pairs: Function } | null} */
     this.methodSimilarity = null;
     /** @type {any} the learning loop's counters (`learningMetrics.mjs`), assigned beside `learningService` */
     this.learningMetrics = null;
@@ -3634,7 +3629,9 @@ export class RuntimeManager {
      * What the control plane gave each conversation when its first prompt arrived (`refreshCapsuleMethods`): the learned methods, by
      * id, name, mounted digest and why. The run ledger's receipt for a conversation that planned and delegated nothing, which leaves no
      * run-state file the control plane can scope to its turn. Bounded: only a conversation still being prompted needs one.
-     * @type {Map<string, { learned: {id: string, name: string, digest: string, reason: string}[] }>}
+     * The platform's official methods it was offered, and the ones the person's own methods kept out of its mount, ride beside them (`official`,
+     * `officialLeftOut`: the receipt of the tier, `selectOfficialMethods`).
+     * @type {Map<string, { learned: {id: string, name: string, digest: string, reason: string}[], official: {id: string, name: string, digest: string}[], officialLeftOut: any[] }>}
      */
     this.sessionMethods = new Map();
     /** Launches that went ahead although the deployment disagrees with its
@@ -3799,15 +3796,12 @@ export class RuntimeManager {
   }
 
   /**
-   * The memory gateway's base for this project's runtime, or empty: the deployment has the native engine and the account
-   * that owns the project is on it.
-   * @param {any} project @returns {Promise<string>}
+   * The memory gateway's base for this project's runtime, or empty when the deployment has no memory engine to reach. An account's
+   * memory is the engine's own: there is no account that is not on it, so the answer is the deployment's (`memoryGatewayProviderUrl`).
+   * @param {any} _project @returns {Promise<string>}
    */
-  async memoryGatewayUrlFor(project) {
-    const base = memoryGatewayProviderUrl(this.config);
-    if (!base || typeof this.memoryEngineOf !== "function") return "";
-    try { return await this.memoryEngineOf(String(project.userId)) === "native" ? base : ""; }
-    catch { return ""; }
+  async memoryGatewayUrlFor(_project) {
+    return memoryGatewayProviderUrl(this.config);
   }
 
   /**
@@ -3822,105 +3816,6 @@ export class RuntimeManager {
     if (!geoAudienceAllows(this.config, { id: String(project.userId ?? "") })) return false;
     try { return (await this.geoProjectOf(String(project.userId), String(project.id))) === true; }
     catch { return false; }
-  }
-
-  /**
-   * The memory gateway address a runtime of this project should have been launched with now, or null when that cannot be
-   * said: `memoryGatewayUrlFor` answers "" for an account whose engine could not be read, which is the right thing for a
-   * launch (a conversation never waits on memory) and the wrong thing for replacing a runtime that was launched right.
-   * @param {any} project @returns {Promise<string | null>}
-   */
-  async #wantedMemoryGatewayUrl(project) {
-    const base = memoryGatewayProviderUrl(this.config);
-    if (!base || typeof this.memoryEngineOf !== "function") return "";
-    try { return await this.memoryEngineOf(String(project.userId)) === "native" ? base : ""; }
-    catch { return null; }
-  }
-
-  /**
-   * Whether this project's live runtime was launched without the memory gateway's address although its account is on the
-   * native engine now: its conversations have no memory plugin. Synchronous and cheap (it reads the launch record, not the
-   * account's setting), so the end of every turn can ask; the dispatch and the pass that follows a switch ask the account.
-   * @param {any} project @returns {boolean}
-   */
-  launchedWithoutMemoryGateway(project) {
-    const runtime = this.runtimes.get(this.key(project));
-    return Boolean(runtime && runtime.kind === RUNTIME_KERNEL_NAME && memoryGatewayProviderUrl(this.config) && !String(runtime.memoryGatewayUrl ?? ""));
-  }
-
-  /**
-   * An account's engine changed (the account moved to the native engine or back): every runtime of it that was launched for
-   * the other engine is marked, so that the next dispatch replaces it (`adoptMemoryEngine`), and an idle one is let go at once.
-   * A runtime mid-turn, or held open by a tab, keeps what it was launched with until the next boundary between two runs; the
-   * turn is never stopped for it, and the gateway withholds from a runtime that is not on the account's engine meanwhile
-   * (`memoryAdmission.mjs`). Called by the native worker's pass, every minute, for every account.
-   * @param {string | null} [userId] one account, or every account when absent
-   * @returns {Promise<string[]>} the projects released
-   */
-  async releaseMemoryEngineRuntimes(userId = null) {
-    /** @type {string[]} */
-    const released = [];
-    for (const runtime of [...this.runtimes.values()]) {
-      const project = runtime?.project;
-      if (!project || runtime.kind !== RUNTIME_KERNEL_NAME || (userId !== null && String(project.userId) !== String(userId))) continue;
-      try {
-        const wanted = await this.#wantedMemoryGatewayUrl(project);
-        if (wanted === null) continue;
-        if (wanted === String(runtime.memoryGatewayUrl ?? "")) { delete runtime.memoryEngineStale; continue; }
-        if (!runtime.memoryEngineStale) { runtime.memoryEngineStale = true; recordRuntimeEngineSwitch("marked"); }
-        if (await this.idleVerdict(project) !== "idle") continue;
-        if (await this.stopIdleRuntime(project, { event: "memory_engine_changed" })) { released.push(String(project.id)); recordRuntimeEngineSwitch("released"); }
-      } catch { /* a runtime that cannot be asked about is left to its idle timer */ }
-    }
-    return released;
-  }
-
-  /**
-   * The boundary where a runtime launched for the other memory engine than its account is on is replaced: a dispatch, before
-   * its run is reserved. A runtime held open by a tab is never idle by `releaseMemoryEngineRuntimes`'s rule, and its account
-   * would otherwise be learned from by nobody and remembered for by nobody (the memory plugin is wired by an environment
-   * variable at launch) until the tab was closed. Between two runs it is safe to replace it, the same boundary and the same
-   * fence as a new platform skill generation (`setPlatformSkillScope`): nothing in the kernel is mid-turn, no run in the
-   * ledger is working, no plugin prompt is queued, and the exclusive plugin lock is taken. Anything else leaves the runtime
-   * as it is and says so — a running turn is never killed for memory.
-   * @param {any} project @returns {Promise<{ adopted: boolean, pending?: boolean }>}
-   */
-  async adoptMemoryEngine(project) {
-    const key = this.key(project);
-    const runtime = this.runtimes.get(key);
-    if (!runtime || runtime.kind !== RUNTIME_KERNEL_NAME) return { adopted: false };
-    const wanted = await this.#wantedMemoryGatewayUrl(project);
-    if (wanted === null) return { adopted: false };
-    const launched = String(runtime.memoryGatewayUrl ?? "");
-    if (wanted === launched) { delete runtime.memoryEngineStale; return { adopted: false }; }
-    if (!runtime.memoryEngineStale) { runtime.memoryEngineStale = true; recordRuntimeEngineSwitch("marked"); }
-    if (wanted && !launched) recordRuntimeWithoutGateway("dispatch");
-    const deferred = () => { recordRuntimeEngineSwitch("deferred"); return { adopted: false, pending: true }; };
-    const refresh = async () => {
-      if (this.runtimes.get(key) !== runtime) return { adopted: false };
-      if (this.starts.has(key) || this.runtimeStops.has(key) || this.boundedRuntimeScope(project) || await this.idleVerdict(project) !== "idle") return deferred();
-      if (this.pluginService && await this.pluginService.hasPendingPrompts(project)) return deferred();
-      const guard = async () => this.runtimes.get(key) === runtime && await this.idleVerdict(project) === "idle"
-        && (!this.pluginService || !await this.pluginService.hasPendingPrompts(project));
-      let replaced = false;
-      await this.startAdmitted(project, { replaceRuntime: async () => {
-        replaced = await this.stopIdleRuntime(project, { event: "memory_engine_changed", evenIfConnected: true, guard });
-        return replaced;
-      } });
-      if (!replaced) return deferred();
-      recordRuntimeEngineSwitch("adopted");
-      return { adopted: true };
-    };
-    // The plugin service's exclusive lock, as `setPlatformSkillScope` takes it: a plugin apply or a generation swap in
-    // progress is not raced, and the same project is not replaced twice at once.
-    if (!this.pluginService) return refresh();
-    const operation = () => this.pluginService.database.transaction(async (/** @type {any} */ client) => {
-      const locked = await client.query("SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS acquired", [`plugin-project:${project.userId}:${project.id}`]);
-      if (!locked.rows[0]?.acquired) return deferred();
-      await this.pluginService.scope(project.userId, project, client);
-      return refresh();
-    });
-    return typeof this.pluginService.database.withoutTransactionClient === "function" ? this.pluginService.database.withoutTransactionClient(operation) : operation();
   }
 
   /**
@@ -4153,7 +4048,8 @@ export class RuntimeManager {
    * @returns {Promise<{ directory: string, count: number, bytes: number, promptBytes: number, leftOut: number,
    *   learned: {id: string, name: string, digest: string, reason: string}[], learnedBytes: number, version: string,
    *   rank: { mode: string | null, topScore: number | null },
-   *   capsule: {id: string, directoryName: string, capsuleId: string, factKind: string, content: string}[] }>}
+   *   capsule: {id: string, directoryName: string, capsuleId: string, factKind: string, content: string}[],
+   *   official?: {id: string, name: string, digest: string, directoryName: string}[], officialLeftOut?: any[] }>}
    */
   async syncCapsuleMethods(project, { query = null, scopeId = undefined, launch = true, keep = null } = {}) {
     const policy = await this.contextPolicyFor(project);
@@ -4256,10 +4152,11 @@ export class RuntimeManager {
         if (query !== null || scopeId !== undefined) runtime.methodMountFor = { query, scopeId };
         const mounted = await this.syncCapsuleMethods(project, { ...wanted, launch: false, keep: served });
         for (const method of mounted.learned ?? []) served.add(learnedMethodDirectoryName(method.id));
+        for (const method of mounted.official ?? []) served.add(method.directoryName);
         if (sessionId) {
           const given = `${key}\u0000${sessionId}`;
           this.sessionMethods.delete(given);
-          this.sessionMethods.set(given, { learned: mounted.learned ?? [] });
+          this.sessionMethods.set(given, { learned: mounted.learned ?? [], official: mounted.official ?? [], officialLeftOut: mounted.officialLeftOut ?? [] });
           while (this.sessionMethods.size > 2048) this.sessionMethods.delete(/** @type {string} */ (this.sessionMethods.keys().next().value));
         }
         runtime.capsuleMethodsMounted = mounted.count;
@@ -4294,6 +4191,17 @@ export class RuntimeManager {
    */
   methodsGivenTo(project, sessionId) {
     return this.sessionMethods.get(`${this.key(project)}\u0000${sessionId}`)?.learned ?? [];
+  }
+
+  /**
+   * The platform's official methods the control plane offered one conversation when its first prompt arrived, and what the person's own
+   * methods kept out (`leftOut`, each with the method it yielded to): the tier's receipt for a conversation that left none of its own.
+   * @param {Record<string, any>} project @param {string} sessionId
+   * @returns {{ offered: {id: string, name: string, digest: string}[], leftOut: any[] }}
+   */
+  officialGivenTo(project, sessionId) {
+    const held = this.sessionMethods.get(`${this.key(project)}\u0000${sessionId}`);
+    return { offered: held?.official ?? [], leftOut: held?.officialLeftOut ?? [] };
   }
 
   activateModelGatewayRuntime(project, runtime) {
@@ -5062,9 +4970,7 @@ export class RuntimeManager {
     // The provider's own preparation: a container's plan, directories and
     // orphan cleanup, or a cloud session with the project's files carried in.
     const platformSkillGeneration = this.platformSkillOverrides.has(key)?this.platformSkillOverrides.get(key):(await this.selectPlatformSkills(project,this.platformSkillScopes.get(key))).generation;
-    // Which engine keeps the account's memory, read once per launch: a runtime is the account's, and an account is on one
-    // engine. An engine that cannot be read launches the runtime on the legacy path — the gateway withholds from an
-    // account it finds on the other engine, so the worst of a wrong guess is a conversation without memory, never two.
+    // The memory gateway's address, read once per launch: empty when the deployment has no memory engine.
     const memoryGatewayUrl = await this.memoryGatewayUrlFor(project);
     // And whether the project is a 「循证 GEO」 one: the method pack is mounted for it alone (`geoSkillsFor`).
     const geoSkills = await this.geoSkillsFor(project);
@@ -5219,7 +5125,7 @@ export class RuntimeManager {
       builtinPlugins: { annotation: this.config.runtimeAnnotationEnabled !== false && !(personalSkillGeneration?.platformSkills?.disabledPlugins ?? []).includes('annotation'),
         mermaid: this.config.runtimeMermaidEnabled !== false && !(personalSkillGeneration?.platformSkills?.disabledPlugins ?? []).includes('mermaid') },
       extensionGeneration,
-      // The memory engine this runtime was launched for, as the address it was given (`releaseMemoryEngineRuntimes`).
+      // The memory gateway address this runtime was launched with (empty when the deployment has no memory engine).
       memoryGatewayUrl: String(plan.memoryGatewayUrl ?? ""),
       // Whether it was launched with the GEO method pack mounted.
       geoSkills: plan.geoSkills === true,

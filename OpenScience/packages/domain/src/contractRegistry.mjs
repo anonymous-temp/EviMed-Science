@@ -27,8 +27,8 @@ import { EMPTY_SNAPSHOT_MESSAGE, EVIDENCE_SNAPSHOT_FILE, INVALID_SNAPSHOT_MESSAG
 import { statConsistencyFindings } from './statConsistency.mjs'
 import { workspaceLayout } from './workspaceLayout.mjs'
 import { validateSourceUnderstanding, SOURCE_UNDERSTANDING_FILE, SOURCE_UNDERSTANDING_INPUT_FILE } from './sourceUnderstanding.mjs'
-import { HANDBOOK_TEXT_LIMITS, SKILL_AUTHORING_LIMITS } from './constants.mjs'
-import { METHOD_DISPLAY_LIMITS, METHOD_OPERATIONS, cleanMethodDisplay, handbookText, handbookTextFits, isMethodDigest, parseSkillFrontmatter, validateMethodSkill } from './methodSkill.mjs'
+import { SKILL_AUTHORING_LIMITS } from './constants.mjs'
+import { METHOD_DISPLAY_LIMITS, METHOD_OPERATIONS, cleanMethodDisplay, isMethodDigest, parseSkillFrontmatter, validateMethodSkill } from './methodSkill.mjs'
 import { METHOD_RELATION_TYPES } from './methodGraph.mjs'
 
 const NATIVE_DATA_CONTRACTS = new Set(['statistical-analysis-package', 'dataset-scoping-package', 'gene-expression-analysis-package'])
@@ -1124,7 +1124,7 @@ const METHOD_SKILL_FILE = 'SKILL.md'
 const METHOD_CANDIDATE_FILE = 'method-candidate.json'
 const METHOD_RELATIONS_FILE = 'method-relations.json'
 /** The kinds of evidence a lesson can rest on (`lessonSignal` in the control plane), as `distillation-input.json` names them. */
-const METHOD_CANDIDATE_SIGNALS = Object.freeze(['researcher', 'reviewer', 'run'])
+const METHOD_CANDIDATE_SIGNALS = Object.freeze(['researcher', 'run'])
 
 /**
  * What a consolidation run was asked to do.
@@ -1202,9 +1202,8 @@ function checkMethodCandidate(value) {
   if (!METHOD_OPERATIONS.includes(operation)) {
     errors.push(`operation ${JSON.stringify(value.operation ?? null)} must be one of ${METHOD_OPERATIONS.join(', ')}.`)
   }
-  // The kind of evidence the lesson rests on, copied from `distillation-input.json`'s `signal`. Optional and only read for one thing: a lesson
-  // filed as an account handbook (`reviewer`) has a text limit the run is held to here (`validateMethodCandidatePackage`). The control plane
-  // never takes the kind from this field: it reads its own record of the lesson, so a mislabel costs the run the check and nothing else.
+  // The kind of evidence the lesson rests on, copied from `distillation-input.json`'s `signal`. Optional, and nothing reads it for a decision: the
+  // control plane takes the kind from its own record of the lesson, never from this field.
   if (value.signal != null && !METHOD_CANDIDATE_SIGNALS.includes(String(value.signal))) {
     errors.push(`signal, when given, is the input's own: one of ${METHOD_CANDIDATE_SIGNALS.join(', ')}.`)
   }
@@ -1474,31 +1473,9 @@ function validateMethodCandidatePackage(input) {
       ? /** @type {Record<string, string>} */ (candidate.files)
       : undefined
     issues.push(...methodSkillIssues(skill, METHOD_SKILL_FILE, attached ? { files: attached } : {}))
-    issues.push(...handbookLengthIssues(skill, candidate))
   }
   const required = issues.filter((entry) => entry.severity === 'required')
   return { ok: !required.length, contractKind: input.contractKind, issues, metrics: {}, errorCode: required.length ? 'deliverable_rejected' : null }
-}
-
-/**
- * A lesson filed as an account handbook may be at most `HANDBOOK_TEXT_LIMITS.max` characters (name, description and body together), the number the
- * platform's handbooks are judged by. Told to the run and returned to it as an issue to repair in place: the account handbooks the loop wrote
- * before this averaged 9.5 KB, and 14 of 17 candidates made from them were refused on length after the run that could have shortened them was over.
- * Only a lesson the run says is the reviewer's (`signal`, the input's own word) is held to it; a method for the researcher's own way of working has
- * no such limit here.
- * @param {string} skill the SKILL.md text @param {unknown} candidate the parsed method-candidate.json
- * @returns {GateIssue[]}
- */
-function handbookLengthIssues(skill, candidate) {
-  if (!isRecord(candidate) || candidate.signal !== 'reviewer' || candidate.operation === 'no_change') return []
-  const parsed = parseSkillFrontmatter(skill)
-  const measured = handbookText(parsed.frontmatter, parsed.body)
-  if (handbookTextFits(measured)) return []
-  const over = measured.length - HANDBOOK_TEXT_LIMITS.max
-  return [issue('deliverable_rejected',
-    `${METHOD_SKILL_FILE}: this lesson is filed as an account handbook, whose text (name, description and body together) is at most ${HANDBOOK_TEXT_LIMITS.max} characters; `
-    + `it is ${measured.length}, ${over} too many. Shorten it in place: keep the steps that carry the lesson, cut the worked examples and anything specific to this one package, `
-    + 'and put nothing in a file to get around it.', { path: METHOD_SKILL_FILE, check: 'method-skill-rules' })]
 }
 
 /**

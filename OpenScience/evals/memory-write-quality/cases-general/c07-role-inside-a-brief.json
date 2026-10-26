@@ -4,10 +4,6 @@
   "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C07); every name, number and identifier is invented",
   "expected": "What the person's company does is kept as background (a glucose-meter company, sales material for channel partners); the six pages and the price decision belong to this one request.",
   "decidable": true,
-  "arms": [
-    "native",
-    "legacy"
-  ],
   "replay": {
     "synthetic": true,
     "projectId": "default",

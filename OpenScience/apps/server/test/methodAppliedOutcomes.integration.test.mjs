@@ -59,7 +59,7 @@ test("the reactions the evidence writer filed are what the counters read, once e
       metadata: { role: "functional", applies_when: "Needed.", not_when: "Not needed.", derived_from: "run:run_0", evimed_schema: METHOD_SKILL_SCHEMA } },
   });
   const opened = mountedMethodDigest(method.payload, sha256);
-  const runs = ["run_corrected", "run_silent", "run_accepted", "run_unreacted"].map((id) => ({ id, status: "succeeded", methodsInvoked: [{ name: "grade-first", digest: opened }] }));
+  const runs = ["run_corrected", "run_silent", "run_accepted", "run_used", "run_unreacted"].map((id) => ({ id, status: "succeeded", methodsInvoked: [{ name: "grade-first", digest: opened }] }));
   const at = (/** @type {number} */ minutes) => new Date(Date.UTC(2026, 9, 23, 11, minutes)).toISOString();
   const record = (/** @type {string} */ runId, /** @type {Record<string, any>} */ detail, key = "k") =>
     feedback.recordLearningEvidence(owner, { runId, key, projectId: PROJECT, detail: { at: at(0), scope: "conversation", sessionId: "ses_1", ...detail } });
@@ -67,6 +67,7 @@ test("the reactions the evidence writer filed are what the counters read, once e
   await record("run_corrected", { evidence: "follow-up", verdict: "correction", rule: "每节只写三行", quote: "不对，每节只要三行", concerns: [{ id: method.id, digest: method.payload.contentDigest }], at: at(5) }, "req_1");
   await record("run_silent", { evidence: "silent", at: at(10) }, "settled");
   await record("run_accepted", { evidence: "follow-up", verdict: "accept", at: at(12) }, "req_2");
+  await record("run_used", { evidence: "used", at: at(13) }, "used");
   // A reaction of another account to a run of the same id is never read here.
   await feedback.recordLearningEvidence(stranger, { runId: "run_unreacted", key: "x", projectId: null, detail: { evidence: "steer", quote: "再短一点", at: at(1), scope: "conversation", sessionId: "ses_9" } });
 
@@ -76,10 +77,11 @@ test("the reactions the evidence writer filed are what the counters read, once e
     runsOf: async () => runs,
   });
   const result = await settle.settleUser(owner);
-  assert.deepEqual(result, { runs: 3, corrected: 1, clean: 2, unattributed: 0, stale: 0, failed: 0 });
+  // The run nobody reacted to but settled in silence is unknown: neither clean nor corrected.
+  assert.deepEqual(result, { runs: 4, corrected: 1, clean: 2, unattributed: 0, stale: 0, failed: 0 });
   const counts = (await learning.getMethod(owner, method.id)).payload.learning.counts;
-  assert.deepEqual([counts.appliedCorrected, counts.appliedClean], [1, 2]);
+  assert.deepEqual([counts.appliedCorrected, counts.appliedClean], [1, 2], "the acceptance and the file taken");
   // The same window again counts nothing twice, and the stranger's account settles nothing of the owner's runs.
-  assert.deepEqual(await settle.settleUser(owner), { runs: 3, corrected: 0, clean: 0, unattributed: 0, stale: 0, failed: 0 });
+  assert.deepEqual(await settle.settleUser(owner), { runs: 4, corrected: 0, clean: 0, unattributed: 0, stale: 0, failed: 0 });
   assert.deepEqual(await settle.settleUser(stranger), { runs: 0, corrected: 0, clean: 0, unattributed: 0, stale: 0, failed: 0 });
 });

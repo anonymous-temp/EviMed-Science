@@ -30,15 +30,15 @@
  * The lines one conversation's own state adds to its context. Best effort: a
  * state that cannot be read adds nothing rather than failing the turn.
  *
- * @param {{ researchMemory: any, capsules?: any }} services
+ * @param {{ memorySettings: any, capsules?: any }} services
  * @param {string} userId @param {string} projectId @param {string} sessionId
  * @returns {Promise<string[]>}
  */
-export async function sessionDispatchNotes({ researchMemory, capsules = null }, userId, projectId, sessionId) {
-  if (!researchMemory?.configured) return [];
+export async function sessionDispatchNotes({ memorySettings, capsules = null }, userId, projectId, sessionId) {
+  if (!memorySettings?.configured) return [];
   let state;
   try {
-    state = await researchMemory.sessionState(userId, projectId, sessionId);
+    state = await memorySettings.sessionState(userId, projectId, sessionId);
   } catch {
     return [];
   }
