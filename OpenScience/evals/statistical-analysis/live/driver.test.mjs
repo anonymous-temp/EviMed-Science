@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { driveTurns } from './driver.mjs';
+import { driveTurns, analysisEvidence } from './driver.mjs';
 
 test('natural turns preserve session, upload additions at the right turn and capture before continuing', async () => {
   const events = [];
@@ -34,11 +34,42 @@ test('incomplete capture or failed execution stops follow-ups', async () => {
   }
 });
 
-test('timeout cancels the actual run and does not start another turn', async () => {
+test('timeout waits for cancellation to settle before capturing and does not start another turn', async () => {
   const routes = [];
+  let captures = 0;
   await driveTurns({ sessionId: 's', turns: [{ text: 'one' }, { text: 'two' }], timeoutMs: 0,
-    api: async (method, route) => { routes.push(route); return { id: 'r', status: 'running' }; },
-    upload: async () => {}, capture: async () => ({ complete: true }),
+    api: async (method, route) => { routes.push(route); return route === '/api/agent-runs' ? [{ id: 'r', status: 'canceled' }] : { id: 'r', status: 'running' }; },
+    pause: async () => {}, upload: async () => {}, capture: async (run) => { captures += 1; assert.equal(run.status, 'canceled'); return { complete: true }; },
   });
-  assert.deepEqual(routes, ['/api/agent-runs/dispatch', '/api/agent-runs/r/cancel']);
+  assert.deepEqual(routes, ['/api/agent-runs/dispatch', '/api/agent-runs/r/cancel', '/api/agent-runs']);
+  assert.equal(captures, 1);
+});
+
+test('unsettled cancellation retains run identity for cleanup and refuses mutable capture', async () => {
+  let captured = false;
+  const records = await driveTurns({ sessionId: 's', turns: [{ text: 'one' }], timeoutMs: 0, cancelTimeoutMs: 0,
+    api: async () => ({ id: 'still-live', status: 'running' }), upload: async () => {},
+    capture: async () => { captured = true; return { complete: true }; },
+  });
+  assert.equal(captured, false);
+  assert.equal(records[0].run.id, 'still-live');
+  assert.equal(records[0].artifacts.complete, false);
+});
+
+test('successful prose or a wrong route is not analysis execution evidence', () => {
+  const run = { status: 'succeeded', effectiveAgentId: 'statistical-analysis' };
+  const input = { path: 'data/cohort.csv', sha256: 'data' };
+  assert.equal(analysisEvidence({ run, artifacts: { manifest: [input], tools: [] } }, [], 'analysis').complete, false);
+  const artifacts = { manifest: [input, { path: 'analysis.py', sha256: 'code' }, { path: 'analysis-results.json', sha256: 'values' }, { path: 'statistical-report.md', sha256: 'report' }], tools: [{ name: 'bash', status: 'completed', error: false }] };
+  assert.equal(analysisEvidence({ run, artifacts }, [], 'analysis').complete, true);
+  assert.equal(analysisEvidence({ run: { ...run, effectiveAgentId: 'open-domain-answer' }, artifacts }, [], 'analysis').complete, false);
+  assert.equal(analysisEvidence({ run, artifacts: { ...artifacts, tools: [] } }, [], 'analysis').complete, false);
+});
+
+test('reuse evidence requires an earlier executed result and unchanged numerical files', () => {
+  const manifest = [{ path: 'analysis-results.json', sha256: 'values' }, { path: 'statistical-report.md', sha256: 'report' }, { path: 'analysis.py', sha256: 'code' }];
+  const record = { run: { effectiveAgentId: 'statistical-analysis' }, artifacts: { manifest, tools: [] } };
+  assert.equal(analysisEvidence(record, manifest, 'reuse').complete, true);
+  assert.equal(analysisEvidence(record, [], 'reuse').complete, false);
+  assert.equal(analysisEvidence({ ...record, artifacts: { manifest: [{ path: 'analysis-results.json', sha256: 'changed' }], tools: [] } }, manifest, 'reuse').complete, false);
 });
