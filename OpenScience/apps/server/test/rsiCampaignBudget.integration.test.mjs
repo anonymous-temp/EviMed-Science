@@ -61,5 +61,17 @@ test('existing holds lose spending authority after overrun or tightened limits; 
   await ledger.beginSpend({campaignId:'a',stageKey:'first'});await ledger.settle({campaignId:'a',stageKey:'first',actualCny:1100,outcome:'failed'});
   assert.equal((await ledger.beginSpend({campaignId:'b',stageKey:'hold'})).reason,'campaign_month_budget_exceeded');
   assert.equal((await ledger.reserve({campaignId:'b',stageKey:'hold',amountCny:200})).authorized,false);
+  const november=new RsiCampaignBudget({database,configuration,now:()=> '2026-11-01T01:00:00Z'});
+  await november.reserve({campaignId:'c',stageKey:'first',amountCny:800});await november.reserve({campaignId:'c',stageKey:'hold',amountCny:200});
+  await november.beginSpend({campaignId:'c',stageKey:'first'});await november.settle({campaignId:'c',stageKey:'first',actualCny:1100,outcome:'failed'});
+  assert.equal((await november.beginSpend({campaignId:'c',stageKey:'hold'})).reason,'campaign_budget_exceeded');
+  const december=new RsiCampaignBudget({database,configuration,now:()=> '2026-12-01T01:00:00Z'});
+  await december.reserve({campaignId:'d',stageKey:'hold',amountCny:800});
+  await december.reserve({campaignId:'d',stageKey:'lower',amountCny:50,limits:{campaignCny:900,monthCny:1000}});
+  assert.equal((await december.reserve({campaignId:'d',stageKey:'raise',amountCny:100,limits:{campaignCny:1000,monthCny:1000}})).reason,'campaign_budget_exceeded');
+  const tightened=structuredClone(configuration);tightened.budget.campaignCny=500;
+  const tighter=new RsiCampaignBudget({database,configuration:tightened,now:()=> '2026-12-01T01:00:00Z'});
+  assert.equal((await tighter.beginSpend({campaignId:'d',stageKey:'hold'})).reason,'campaign_budget_exceeded');
+
  }finally{await database.query('DELETE FROM evimed_control.users WHERE id=$1',[owner]);await database.close();}
 });

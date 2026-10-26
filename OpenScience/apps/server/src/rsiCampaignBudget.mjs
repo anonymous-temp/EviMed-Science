@@ -8,7 +8,9 @@ import { HttpError } from './security.mjs';
 /** @param {unknown} value */
 function identity(value) { if (typeof value !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/.test(value)) throw new HttpError(400, 'campaign_budget_identity_invalid', 'Invalid budget identity.'); return value; }
 /** @param {unknown} value */
-function cost(value) { if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || !Number.isSafeInteger(Math.ceil(value * 1e8))) throw new HttpError(400, 'campaign_budget_unknown', 'A finite nonnegative cost is required.'); return value; }
+function cost(value) { if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || !Number.isSafeInteger(Math.round(value * 1e8))) throw new HttpError(400, 'campaign_budget_unknown', 'A finite nonnegative cost is required.'); return value; }
+/** @param {number} value */
+function currencyPrecision(value) { if (Math.abs(value * 1e8 - Math.round(value * 1e8)) > Math.max(1e-7, value * 1e8 * Number.EPSILON * 2)) throw new HttpError(400, 'campaign_budget_unknown', 'Spending limits and reservations require 1e-8 CNY precision.'); }
 /** @param {string} campaignId @param {string} stageKey */
 const recordId = (campaignId, stageKey) => `rsi-budget:${createHash('sha256').update(JSON.stringify([campaignId, stageKey])).digest('hex')}`;
 
@@ -38,16 +40,17 @@ export class RsiCampaignBudget {
   /** Reserve an upper bound for one provider request, including its failed outcome. Retries need distinct stage keys.
    * @param {{campaignId:string,stageKey:string,amountCny:number,limits?:{campaignCny:number,monthCny:number}}} input */
   async reserve({ campaignId, stageKey, amountCny, limits = this.configuration.budget }) {
-    identity(campaignId); identity(stageKey); cost(amountCny);
+    identity(campaignId); identity(stageKey); cost(amountCny); currencyPrecision(amountCny);
+    for (const key of ['campaignCny','monthCny']) { cost(limits?.[key]); currencyPrecision(limits[key]); if (limits[key] <= 0) throw new HttpError(400, 'campaign_budget_unknown', 'Limits must be positive.'); }
     if (amountCny <= 0) throw new HttpError(400, 'campaign_budget_unknown', 'Reservation must be positive.');
     const effective = { campaignCny: Math.min(limits.campaignCny, this.configuration.budget.campaignCny), monthCny: Math.min(limits.monthCny, this.configuration.budget.monthCny) };
     return this.transaction(async client => {
       const id = recordId(campaignId, stageKey), existing = await this.read(client, id);
       if (existing) {
-        if (existing.payload.reservedCny !== amountCny || existing.payload.requestedLimits.campaignCny !== effective.campaignCny || existing.payload.requestedLimits.monthCny !== effective.monthCny) throw new HttpError(409, 'campaign_budget_idempotency_conflict', 'Reservation identity has a different amount or limit.');
-        return this.authority(existing.payload);
+        if (existing.payload.reservedCny !== amountCny || existing.payload.requestedLimits.campaignCny !== limits.campaignCny || existing.payload.requestedLimits.monthCny !== limits.monthCny) throw new HttpError(409, 'campaign_budget_idempotency_conflict', 'Reservation identity has a different amount or limit.');
+        return this.authority(client, existing.payload);
       }
-      const requestedLimits = {...effective};
+      const requestedLimits = {...limits};
       const admittedAt = this.now(), month = rsiCampaignMonth(admittedAt);
       const result = await client.query("SELECT payload FROM evimed_product.documents WHERE user_id=$1 AND kind='knowledge' AND payload->>'recordType'='rsi-budget-reservation'", [this.owner]);
       const totals = {campaignActualCny:0,campaignReservedCny:0,monthActualCny:0,monthReservedCny:0,requestCny:amountCny};
@@ -60,18 +63,35 @@ export class RsiCampaignBudget {
       if (!admission.admitted) return { authorized:false, reason:admission.reason };
       const payload = {recordType:'rsi-budget-reservation',campaignId,stageKey,reservedCny:amountCny,actualCny:null,state:'reserved',outcome:null,admittedAt,month,requestedLimits,limits:effective};
       await this.write(client, id, payload, 0);
-      return this.authority(payload);
+      return this.authority(client, payload);
     });
   }
-  /** @param {any} row */
-  authority(row) { const current = rsiCampaignMonth(this.now()) === row.month; return {...row, authorized: row.state === 'reserved' && current, reason: !current ? 'campaign_budget_month_expired' : row.state !== 'reserved' ? 'campaign_budget_already_dispatched' : null}; }
+  /** Revalidate a hold against all current liabilities under the same account lock. Own hold becomes the request once.
+   * @param {any} client @param {any} row */
+  async authority(client, row) {
+    const current = rsiCampaignMonth(this.now()) === row.month;
+    if (!current || row.state !== 'reserved') return {...row, authorized:false, reason:!current ? 'campaign_budget_month_expired' : 'campaign_budget_already_dispatched'};
+    const limits = {campaignCny:Math.min(row.limits.campaignCny,this.configuration.budget.campaignCny),monthCny:Math.min(row.limits.monthCny,this.configuration.budget.monthCny)};
+    const totals = {campaignActualCny:0,campaignReservedCny:0,monthActualCny:0,monthReservedCny:0,requestCny:row.reservedCny};
+    const result = await client.query("SELECT payload FROM evimed_product.documents WHERE user_id=$1 AND kind='knowledge' AND payload->>'recordType'='rsi-budget-reservation'",[this.owner]);
+    for (const {payload: other} of result.rows) {
+      if (other.campaignId === row.campaignId) limits.campaignCny = Math.min(limits.campaignCny,other.limits.campaignCny);
+      if (other.month === row.month) limits.monthCny = Math.min(limits.monthCny,other.limits.monthCny);
+      if (other.campaignId === row.campaignId && other.stageKey === row.stageKey) continue;
+      const actual=other.actualCny ?? 0, reserved=other.state === 'settled' ? 0 : other.reservedCny;
+      if (other.campaignId === row.campaignId) { totals.campaignActualCny += actual; totals.campaignReservedCny += reserved; }
+      if (other.month === row.month) { totals.monthActualCny += actual; totals.monthReservedCny += reserved; }
+    }
+    const admission = rsiBudgetAdmission(totals,limits);
+    return {...row,authorized:admission.admitted,reason:admission.reason};
+  }
   /** Atomically consume fresh spending authority immediately before a provider step. @param {{campaignId:string,stageKey:string}} input */
   async beginSpend({campaignId,stageKey}) {
     identity(campaignId); identity(stageKey);
     return this.transaction(async client => {
       const id = recordId(campaignId,stageKey), row = await this.read(client,id);
       if (!row) return {authorized:false,reason:'campaign_budget_reservation_missing'};
-      const authority = this.authority(row.payload);
+      const authority = await this.authority(client, row.payload);
       if (!authority.authorized) return authority;
       await this.write(client,id,{...row.payload,state:'in-flight',dispatchedAt:this.now()},row.revision);
       return {...authority,state:'in-flight'};
@@ -88,11 +108,11 @@ export class RsiCampaignBudget {
       if (!row) throw new HttpError(409,'campaign_budget_reservation_missing','Reserve before spending.');
       if (row.payload.state === 'settled') {
         if (row.payload.actualCny !== actualCny || row.payload.outcome !== outcome) throw new HttpError(409,'campaign_budget_settlement_conflict','Settlement already recorded.');
-        return this.authority(row.payload);
+        return this.authority(client, row.payload);
       }
       const payload={...row.payload,actualCny,outcome,state:outcome==='unknown'?'uncertain':'settled',settledAt:this.now()};
       await this.write(client,id,payload,row.revision);
-      return this.authority(payload);
+      return this.authority(client, payload);
     });
   }
 }
