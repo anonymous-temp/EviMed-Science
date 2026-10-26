@@ -57,6 +57,26 @@ describe("host dirty navigation", () => {
   });
 });
 
+// Review R1 P2-6: a save that hangs made the dialog undismissable (取消 disabled, Escape and the backdrop dead), which trapped every
+// route change, browser Back included, until the request settled. Only leaving has to wait for the save.
+it("lets the reader cancel a route change while a save is still pending, and makes only leaving wait", async () => {
+  function Saving() { useUnsavedGuard(true, () => undefined, true); return <UnsavedRouteGuard />; }
+  const router = createMemoryRouter([{ path: "/edit", element: <Saving /> }, { path: "/next", element: <h1>Next</h1> }], { initialEntries: ["/edit"] });
+  render(<RouterProvider router={router} />);
+  await act(() => router.navigate("/next"));
+  const dialog = await screen.findByRole("alertdialog");
+  expect(screen.getByRole("button", { name: "放弃修改并离开" })).toHaveAttribute("aria-busy", "true");
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  expect(dialog).not.toBeInTheDocument();
+  expect(router.state.location.pathname).toBe("/edit");
+  await act(() => router.navigate("/next"));
+  const second = await screen.findByRole("alertdialog");
+  expect(screen.getByRole("button", { name: "取消" })).toBeEnabled();
+  fireEvent.click(second.parentElement!);
+  expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+});
+
 it("mounts route confirmation outside an inert dialog host and preserves its draft on Cancel", async () => {
   function DialogEditor() {
     useUnsavedGuard(true, () => undefined);

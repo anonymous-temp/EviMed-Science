@@ -130,3 +130,21 @@ describe("ConfirmDialog", () => {
     expect(p.onCancel).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("cancellable while busy", () => {
+  it("locks 取消, Escape and the backdrop while the confirmed action runs, unless the caller says the dialog must stay leavable", async () => {
+    const onCancel = vi.fn();
+    const { rerender } = render(<ConfirmDialog title="删除？" confirmLabel="删除" busy onConfirm={() => {}} onCancel={onCancel} />);
+    expect(screen.getByRole("button", { name: "取消" })).toBeDisabled();
+    await userEvent.keyboard("{Escape}");
+    fireEvent.click(screen.getByRole("alertdialog").parentElement!);
+    expect(onCancel).not.toHaveBeenCalled();
+    rerender(<ConfirmDialog title="删除？" confirmLabel="删除" busy cancellable onConfirm={() => {}} onCancel={onCancel} />);
+    expect(screen.getByRole("button", { name: "取消" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "删除" })).toHaveAttribute("aria-busy", "true");
+    await userEvent.keyboard("{Escape}");
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("alertdialog").parentElement!);
+    expect(onCancel).toHaveBeenCalledTimes(2);
+  });
+});

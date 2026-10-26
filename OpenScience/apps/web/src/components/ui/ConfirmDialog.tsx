@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
  * Component: ConfirmDialog; owner: H; rules: DS21, DESIGN.md component adoption.
  * Anatomy: title, subject/count, consequence, recovery and two actions.
  * Variants: danger or primary with legacy body compatibility.
- * States: busy locks confirmation and dismissal.
+ * States: busy locks confirmation and, unless `cancellable`, dismissal.
  * Hit area: shared control-height buttons.
  * Keyboard: initial Cancel; Enter activates only focused button; modal Tab cycle.
  * Long content: bounded panel wraps explanatory content.
@@ -27,6 +27,7 @@ export function ConfirmDialog({
   onCancel,
   tone = "danger",
   busy = false,
+  cancellable,
 }: {
   title: string;
   body?: string;
@@ -47,6 +48,12 @@ export function ConfirmDialog({
   tone?: "danger" | "primary";
   /** The confirmed action is running: the confirming button guards activation while busy and the dialog stays open until the caller closes it. */
   busy?: boolean;
+  /**
+   * Whether 取消, Escape and the backdrop still dismiss the dialog. By default they do not while `busy` (the confirmed action is
+   * running and its dialog is the only place that says so). The route guard sets it: its busy is a save that may hang, and a dialog
+   * that cannot be left would trap navigation until the request settles.
+   */
+  cancellable?: boolean;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -56,8 +63,8 @@ export function ConfirmDialog({
   // parent re-render neither re-focuses nor re-arms the key listener.
   const cancel = useRef(onCancel);
   cancel.current = onCancel;
-  const working = useRef(busy);
-  working.current = busy;
+  const working = useRef(busy && cancellable !== true);
+  working.current = busy && cancellable !== true;
 
   useEffect(() => {
     const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -83,7 +90,7 @@ export function ConfirmDialog({
     <div
       className="fixed inset-0 z-modal flex items-center justify-center bg-scrim p-4"
       onClick={(e) => {
-        if (e.target === e.currentTarget && !busy) onCancel();
+        if (e.target === e.currentTarget && !working.current) onCancel();
       }}
       role="presentation"
     >
@@ -105,7 +112,7 @@ export function ConfirmDialog({
           {recovery && <span className="block">{recovery}</span>}
         </p>
         <div className="mt-6 flex justify-end gap-2">
-          <Button ref={cancelRef} variant="secondary" disabled={busy} onClick={onCancel}>
+          <Button ref={cancelRef} variant="secondary" disabled={busy && cancellable !== true} onClick={onCancel}>
             取消
           </Button>
           <Button variant={tone === "danger" ? "danger" : "primary"} loading={busy} onClick={busy ? undefined : onConfirm}>

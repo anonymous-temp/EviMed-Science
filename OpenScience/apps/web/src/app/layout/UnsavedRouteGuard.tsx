@@ -11,7 +11,7 @@ function DataRouteGuard() {
     if (state === "local-confirm" && blocker.state === "blocked") blocker.reset();
   }, [state, blocker]);
   if (state === "local-confirm" || blocker.state !== "blocked") return null;
-  return createPortal(<ConfirmDialog title="离开并放弃未保存的修改？" body="此页面中的修改尚未保存。" confirmLabel="放弃修改并离开" busy={state === "busy"}
+  return createPortal(<ConfirmDialog title="离开并放弃未保存的修改？" body="此页面中的修改尚未保存。" confirmLabel="放弃修改并离开" busy={state === "busy"} cancellable
     onCancel={() => blocker.reset()} onConfirm={() => blocker.proceed()} />, document.body);
 }
 
