@@ -47,6 +47,9 @@ export class RsiCampaignImporter {
     const m=verified.manifest, envelopeDigest=rsiDigest(envelope),policy=await this.activationPolicy(m)
     const defaultMode=RSI_CAMPAIGN_SURFACES[/** @type {keyof typeof RSI_CAMPAIGN_SURFACES} */(m.surface)].activation
     if(!policy || !['shadow','cohort','global'].includes(policy.mode) || defaultMode==='shadow' && policy.mode==='cohort' || policy.mode==='global' && policy.allowGlobal!==true || policy.mode==='cohort' && !(policy.cohortPercent>0 && policy.cohortPercent<=100)) return {state:'rejected',issues:['campaign_activation_policy_unqualified']}
+    const steps=policy.cohortSteps
+    if(steps!==undefined && (!Array.isArray(steps) || steps.length<1 || steps.length>10 || steps[0]!==policy.cohortPercent || steps.some((value,index)=>!Number.isFinite(value) || value<=0 || value>100 || index>0 && value<=steps[index-1])))return {state:'rejected',issues:['campaign_activation_policy_unqualified']}
+    if(policy.afterShadow!==undefined && (policy.mode!=='shadow' || policy.afterShadow!=='global'))return {state:'rejected',issues:['campaign_activation_policy_unqualified']}
     const staged=await this.transaction(async client=>{
       const existing=await this.read(client,m.id)
       if(existing){if(existing.payload.envelopeDigest!==envelopeDigest)conflict('campaign_bundle_identity_conflict');return existing.payload}
@@ -54,7 +57,7 @@ export class RsiCampaignImporter {
       if(rsiCompatibilityIssues(m.target,current).length) conflict('campaign_target_changed')
       const siblings=await client.query("SELECT payload FROM evimed_product.documents WHERE user_id=$1 AND kind='knowledge' AND payload->>'recordType'='rsi-campaign-import' AND deleted_at IS NULL",[this.owner])
       if(siblings.rows.some(({payload})=>payload.campaignId===m.campaignId || payload.surface===m.surface && !['stopped','rolled-back','rejected'].includes(payload.state))) conflict('campaign_replay_or_surface_busy')
-      return this.write(client,{recordType:'rsi-campaign-import',id:m.id,campaignId:m.campaignId,envelopeDigest,bundleDigest:verified.bundleDigest,candidateDigest:m.verdict.candidateDigest,qualificationDigest:m.verdict.qualificationDigest,evidenceReferences:Object.fromEntries(['registrationDigest','datasetDigest','measurementDigest','consumerDigest','evaluatorDigest','procedureDigest','corpusDigest'].map(name=>[name,m.verdict[name]])),surface:m.surface,kind:m.kind,target:m.target,expiresAt:m.expiresAt,previousRevision:m.target.baselineRevision,operationId:`rsi-${rsiDigest([this.owner,m.id,verified.bundleDigest])}`,phase:policy.mode==='shadow'?'stage':'activate',mode:policy.mode,cohortPercent:policy.cohortPercent??0,policy:{minExecutions:policy.minExecutions??null,minDays:policy.minDays??null,maxErrors:policy.maxErrors??null,allowExpansion:policy.allowExpansion===true},state:'staged',observations:{candidateExecutions:0,controlExecutions:0,errors:0,days:[],witnessIds:[]},stagedAt:this.now()},0)
+      return this.write(client,{recordType:'rsi-campaign-import',id:m.id,campaignId:m.campaignId,envelopeDigest,bundleDigest:verified.bundleDigest,candidateDigest:m.verdict.candidateDigest,qualificationDigest:m.verdict.qualificationDigest,evidenceReferences:Object.fromEntries(['registrationDigest','datasetDigest','measurementDigest','consumerDigest','evaluatorDigest','procedureDigest','corpusDigest'].map(name=>[name,m.verdict[name]])),surface:m.surface,kind:m.kind,target:m.target,expiresAt:m.expiresAt,previousRevision:m.target.baselineRevision,operationId:`rsi-${rsiDigest([this.owner,m.id,verified.bundleDigest])}`,phase:policy.mode==='shadow'?'stage':'activate',mode:policy.mode,cohortPercent:policy.cohortPercent??0,policy:{minExecutions:policy.minExecutions??null,minDays:policy.minDays??null,maxErrors:policy.maxErrors??null,allowExpansion:policy.allowExpansion===true,afterShadow:policy.afterShadow??null,cohortSteps:steps??null},stageIndex:0,stageHistory:[],state:'staged',observations:{candidateExecutions:0,controlExecutions:0,errors:0,days:[],witnessIds:[]},stagedAt:this.now()},0)
     })
     if(staged.state!=='staged')return staged
     return this.resume(m.id,verified.files)
@@ -117,6 +120,8 @@ export class RsiCampaignImporter {
       if(this.expired(row) || !this.compatible(row,current))return this.stop(client,stored,'campaign_target_changed')
       const witness=await this.verifyObservation(proof,row,{transactionClient:client})
       if(!witness || witness.operationId!==row.operationId || witness.candidateDigest!==row.candidateDigest || !['candidate','control','shadow'].includes(witness.arm) || witness.revision!==(witness.arm==='control'?row.previousRevision:row.revision) || typeof witness.id!=='string' || !/^[a-zA-Z0-9_.:-]{1,160}$/.test(witness.id) || !/^\d{4}-\d{2}-\d{2}$/.test(witness.day) || !['ok','error','critical'].includes(witness.outcome))conflict('campaign_consumer_witness_invalid')
+      if(witness.outcome!=='critical' && witness.arm!=='control' && (row.mode==='shadow'?witness.arm!=='shadow':witness.arm!=='candidate'))conflict('campaign_consumer_witness_invalid')
+      if(witness.outcome==='critical' ? !Number.isSafeInteger(witness.stageIndex??0) || (witness.stageIndex??0)<0 || (witness.stageIndex??0)>(row.stageIndex??0) : (witness.stageIndex??0)!==(row.stageIndex??0))conflict('campaign_consumer_witness_stage_changed')
       if(witness.consumerDigest!==undefined && witness.consumerDigest!==row.evidenceReferences.consumerDigest)conflict('campaign_consumer_witness_invalid')
       if(witness.outcome==='critical' && !['corrupt-bytes','unauthorized-behavior','incompatible-generation','deterministic-regression'].includes(witness.criticalCode))conflict('campaign_consumer_witness_invalid')
       const o=structuredClone(row.observations)
@@ -132,9 +137,23 @@ export class RsiCampaignImporter {
       if(fuse.state==='stop') {
         // Stop selection durably before attempting the external rollback; a failure remains stopped.
         next={...next,state:'stopped',stoppedAt:this.now(),rollbackOperationId:`${row.operationId}-rollback`}
-      }else if(candidate && fuse.state==='sufficient' && row.policy.allowExpansion && row.mode==='cohort')next={...next,cohortPercent:100,state:'broadly-active'}
+      }else if(candidate && fuse.state==='sufficient' && row.policy.allowExpansion) {
+        // These are registered exposure thresholds, not evidence of a statistical benefit.
+        const target=await this.currentTarget(row.surface,client)
+        if(!this.isBound() || this.expired(row) || !this.compatible(row,target))return this.stop(client,stored,'campaign_target_changed')
+        const history=[...(row.stageHistory??[]),{stageIndex:row.stageIndex??0,mode:row.mode,cohortPercent:row.cohortPercent,candidateExecutions:o.candidateExecutions,controlExecutions:o.controlExecutions,errors:o.errors,days:o.days,completedAt:this.now()}]
+        const fresh={candidateExecutions:0,controlExecutions:0,errors:0,days:[],witnessIds:o.witnessIds}
+        if(row.mode==='shadow' && row.policy.afterShadow==='global') {
+          // Commit activation intent before the external effect; resume reuses operation identity.
+          next={...next,mode:'global',phase:'activate',state:'staged',stageIndex:(row.stageIndex??0)+1,stageHistory:history,observations:fresh,activationRequestedAt:this.now()}
+        }else if(row.mode==='cohort' && Array.isArray(row.policy.cohortSteps)) {
+          const index=row.policy.cohortSteps.indexOf(row.cohortPercent),percent=row.policy.cohortSteps[index+1]
+          if(index>=0 && percent!==undefined)next={...next,cohortPercent:percent,state:'exposed',stageIndex:(row.stageIndex??0)+1,stageHistory:history,observations:fresh}
+          else if(row.cohortPercent===100)next={...next,state:'broadly-active'}
+        }else if(row.mode==='global')next={...next,state:'broadly-active'}
+      }
       return this.write(client,next,stored.revision)
-    }).then(async row=>row.state==='stopped'?this.rollback(id):row)
+    }).then(async row=>row.state==='stopped'?this.rollback(id):row.state==='staged' && row.phase==='activate'?this.resume(id):row)
   }
   /** Exact prior compatible generation only; customer outputs and history are untouched. @param {string} id */
   async rollback(id) {

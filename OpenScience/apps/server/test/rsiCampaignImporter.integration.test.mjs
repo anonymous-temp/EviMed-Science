@@ -132,7 +132,7 @@ function progressionAdapters(f,policy){
  return {activations:()=>activations,crash:()=>{crash=true},importer:new RsiCampaignImporter(f.options)}
 }
 /** @param {any} row @param {number} n @param {any} [extra] */
-const execution=(row,n,extra={})=>({trusted:true,id:`exec-${n}`,operationId:row.operationId,candidateDigest:row.candidateDigest,revision:row.revision,consumerDigest:hash,arm:row.mode==='shadow'?'shadow':'candidate',day:n%2?'2026-10-25':'2026-10-26',outcome:'ok',...extra})
+const execution=(row,n,extra={})=>({trusted:true,stageIndex:row.stageIndex??0,id:`exec-${n}`,operationId:row.operationId,candidateDigest:row.candidateDigest,revision:row.revision,consumerDigest:hash,arm:row.mode==='shadow'?'shadow':'candidate',day:n%2?'2026-10-25':'2026-10-26',outcome:'ok',...extra})
 test('registered shadow executions activate once after sufficient days, then global consumer regression rolls back',skip,()=>withDatabase(async(database,owner)=>{
  const f=await fixture(database,owner),p=progressionAdapters(f,{mode:'shadow',afterShadow:'global',allowExpansion:true,minExecutions:200,minDays:2,maxErrors:0})
  let row=await p.importer.importBundle(f.envelope)
@@ -140,8 +140,9 @@ test('registered shadow executions activate once after sufficient days, then glo
  assert.equal(p.activations(),0);assert.equal((await p.importer.select(f.target.surface)).revision,'base')
  row=await p.importer.observe('bundle',execution(row,200));assert.equal(row.mode,'global');assert.equal(row.phase,'activate');assert.equal(p.activations(),1)
  assert.equal((await p.importer.select(f.target.surface)).revision,'candidate')
+ await assert.rejects(p.importer.observe('bundle',execution(row,201,{stageIndex:0})),{code:'campaign_consumer_witness_stage_changed'})
  row=await p.importer.observe('bundle',execution(row,201));assert.equal(row.state,'consumer-observed')
- row=await p.importer.observe('bundle',execution(row,202,{outcome:'critical',criticalCode:'deterministic-regression'}));assert.equal(row.state,'rolled-back');assert.equal(f.target.baselineRevision,'base')
+ row=await p.importer.observe('bundle',execution(row,202,{stageIndex:0,arm:'shadow',outcome:'critical',criticalCode:'deterministic-regression'}));assert.equal(row.state,'rolled-back');assert.equal(f.target.baselineRevision,'base')
 }))
 test('shadow activation transition survives a crash and refuses newer baseline',skip,async()=>{
  for(const newer of [false,true])await withDatabase(async(database,owner)=>{
@@ -161,5 +162,7 @@ test('cohort expansion follows registered steps with fresh observations for each
  row=await p.importer.observe('bundle',execution(row,2*step-1));assert.equal(row.cohortPercent,[10,25,50][step-1])
  row=await p.importer.observe('bundle',execution(row,2*step));assert.equal(row.cohortPercent,[25,50,100][step-1]);assert.equal(row.observations.candidateExecutions,0)
  }
- assert.equal(row.state,'broadly-active');assert.equal(p.activations(),1)
+ assert.equal(row.state,'exposed')
+ row=await p.importer.observe('bundle',execution(row,7));assert.equal(row.state,'consumer-observed')
+ row=await p.importer.observe('bundle',execution(row,8));assert.equal(row.state,'broadly-active');assert.equal(p.activations(),1)
 }))
