@@ -1,0 +1,30 @@
+{
+  "passed": true,
+  "scope": "threshold continuation preserves data, fitted pipeline and predictions",
+  "files": [
+    {
+      "path": "deliverables/statistical-analysis-package/fitted-model.joblib",
+      "sha256": "06691deb45df2aea8538b9623d430712c48d50603e1e8950a4a69a6eb32ed1e6",
+      "sha256Unchanged": true,
+      "mtimeUnchanged": true
+    },
+    {
+      "path": "deliverables/statistical-analysis-package/fitted-state.json",
+      "sha256": "b955e543fb1a2d52e6bec407c9ecd02b9601e620e35ce23b605ba0780d99375d",
+      "sha256Unchanged": true,
+      "mtimeUnchanged": true
+    },
+    {
+      "path": "deliverables/statistical-analysis-package/predictions.csv",
+      "sha256": "f268e889335908395d94011d126052f6adf3767e7799f5d147454e2060972f79",
+      "sha256Unchanged": true,
+      "mtimeUnchanged": true
+    },
+    {
+      "path": "data/breast-cancer.csv",
+      "sha256": "30c0edd07dac8c886b9ad11627caed4eb92d91756aaeddd23921bdafc2582971",
+      "sha256Unchanged": true,
+      "mtimeUnchanged": true
+    }
+  ]
+}

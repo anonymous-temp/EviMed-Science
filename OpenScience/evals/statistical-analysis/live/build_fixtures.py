@@ -53,5 +53,6 @@ Unnamed: 0 is a serialized row index, not a predictor. One record per tumor; thi
 The features are measurements computed from digitized FNA images; this is exploratory public-data reanalysis, not clinical deployment validation.
 ''')
 manifest = {'synthetic': ['cohort.csv', 'supplement.csv', 'coding-correction.csv'], 'public': ['breast-cancer.csv']}
+manifest['derived'] = sorted(file.name for file in OUT.glob('prior-*') if file.is_file())
 manifest['sha256'] = {file.name: hashlib.sha256(file.read_bytes()).hexdigest() for file in sorted(OUT.iterdir()) if file.is_file()}
 (HERE / 'fixture-sources.json').write_text(json.dumps(manifest, indent=2) + '\n')

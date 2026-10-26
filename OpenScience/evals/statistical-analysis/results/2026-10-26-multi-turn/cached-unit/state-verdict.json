@@ -1,0 +1,254 @@
+{
+  "passed": true,
+  "scope": "independent supplied-archive and continuation-state verification",
+  "archiveSha256": "75fcb77e34ab72215b9df09df61542ef0760964d5fe8ea29d35dbbf24b42fe94",
+  "archiveFiles": [
+    {
+      "turn": 0,
+      "path": "data/cohort.csv",
+      "expectedSha256": "2318b4fc60b2c8c1cd0c78ec1e44600fbe5880240da208132585ca1d98fda90d",
+      "actualSha256": "2318b4fc60b2c8c1cd0c78ec1e44600fbe5880240da208132585ca1d98fda90d"
+    },
+    {
+      "turn": 1,
+      "path": "data/cohort.csv",
+      "expectedSha256": "2318b4fc60b2c8c1cd0c78ec1e44600fbe5880240da208132585ca1d98fda90d",
+      "actualSha256": "2318b4fc60b2c8c1cd0c78ec1e44600fbe5880240da208132585ca1d98fda90d"
+    },
+    {
+      "turn": 0,
+      "path": "data/dictionary.md",
+      "expectedSha256": "2698d1824e5361f47f287e628302a6d03cea2a027531658b376532e5d156367c",
+      "actualSha256": "2698d1824e5361f47f287e628302a6d03cea2a027531658b376532e5d156367c"
+    },
+    {
+      "turn": 1,
+      "path": "data/dictionary.md",
+      "expectedSha256": "2698d1824e5361f47f287e628302a6d03cea2a027531658b376532e5d156367c",
+      "actualSha256": "2698d1824e5361f47f287e628302a6d03cea2a027531658b376532e5d156367c"
+    },
+    {
+      "turn": 0,
+      "path": "deliverables/statistical-analysis-report/analysis-results.json",
+      "expectedSha256": "b7a6255e602895a8fe6a40c7bdf4946ac3415561c3ba47f378ab757b6c22fada",
+      "actualSha256": "b7a6255e602895a8fe6a40c7bdf4946ac3415561c3ba47f378ab757b6c22fada"
+    },
+    {
+      "turn": 1,
+      "path": "deliverables/statistical-analysis-report/analysis-results.json",
+      "expectedSha256": "b7a6255e602895a8fe6a40c7bdf4946ac3415561c3ba47f378ab757b6c22fada",
+      "actualSha256": "b7a6255e602895a8fe6a40c7bdf4946ac3415561c3ba47f378ab757b6c22fada"
+    },
+    {
+      "turn": 0,
+      "path": "deliverables/statistical-analysis-report/analysis-run.json",
+      "expectedSha256": "0bf06824bcf767af0b9a1bafa18289d563066bdfbcc0ef30fd8470c03af07729",
+      "actualSha256": "0bf06824bcf767af0b9a1bafa18289d563066bdfbcc0ef30fd8470c03af07729"
+    },
+    {
+      "turn": 1,
+      "path": "deliverables/statistical-analysis-report/analysis-run.json",
+      "expectedSha256": "0bf06824bcf767af0b9a1bafa18289d563066bdfbcc0ef30fd8470c03af07729",
+      "actualSha256": "0bf06824bcf767af0b9a1bafa18289d563066bdfbcc0ef30fd8470c03af07729"
+    },
+    {
+      "turn": 0,
+      "path": "deliverables/statistical-analysis-report/analysis-session.json",
+      "expectedSha256": "02ec9c2a35b36d29c32842688f78faa37c34bfcad8f7f5d871fc637a3c162e57",
+      "actualSha256": "02ec9c2a35b36d29c32842688f78faa37c34bfcad8f7f5d871fc637a3c162e57"
+    },
+    {
+      "turn": 1,
+      "path": "deliverables/statistical-analysis-report/analysis-session.json",
+      "expectedSha256": "02ec9c2a35b36d29c32842688f78faa37c34bfcad8f7f5d871fc637a3c162e57",
+      "actualSha256": "02ec9c2a35b36d29c32842688f78faa37c34bfcad8f7f5d871fc637a3c162e57"
+    },
+    {
+      "turn": 0,
+      "path": "deliverables/statistical-analysis-report/analysis-state.json",
+      "expectedSha256": "032c4a8898ef270250fdda6adf312b2cf86fe15a9a88b42e347b98c3db042b1b",
+      "actualSha256": "032c4a8898ef270250fdda6adf312b2cf86fe15a9a88b42e347b98c3db042b1b"
+    },
+    {
+      "turn": 1,
+      "path": "deliverables/statistical-analysis-report/analysis-state.json",
+      "expectedSha256": "032c4a8898ef270250fdda6adf312b2cf86fe15a9a88b42e347b98c3db042b1b",
+      "actualSha256": "032c4a8898ef270250fdda6adf312b2cf86fe15a9a88b42e347b98c3db042b1b"
+    },
+    {
+      "turn": 0,
+      "path": "deliverables/statistical-analysis-report/analysis.py",
+      "expectedSha256": "fc148011d580a09853a5223b7f2fb628947c7a8d7ebd6744c721cef5a9540c14",
+      "actualSha256": "fc148011d580a09853a5223b7f2fb628947c7a8d7ebd6744c721cef5a9540c14"
+    },
+    {
+      "turn": 1,
+      "path": "deliverables/statistical-analysis-report/analysis.py",
+      "expectedSha256": "fc148011d580a09853a5223b7f2fb628947c7a8d7ebd6744c721cef5a9540c14",
+      "actualSha256": "fc148011d580a09853a5223b7f2fb628947c7a8d7ebd6744c721cef5a9540c14"
+    },
+    {
+      "turn": 0,
+      "path": "deliverables/statistical-analysis-report/crosscheck-r.json",
+      "expectedSha256": "a57512f53c8c457ff3d7d12f3f228fa386873e27d7811f34a134c65de4625ebe",
+      "actualSha256": "a57512f53c8c457ff3d7d12f3f228fa386873e27d7811f34a134c65de4625ebe"
+    },
+    {
+      "turn": 1,
+      "path": "deliverables/statistical-analysis-report/crosscheck-r.json",
+      "expectedSha256": "a57512f53c8c457ff3d7d12f3f228fa386873e27d7811f34a134c65de4625ebe",
+      "actualSha256": "a57512f53c8c457ff3d7d12f3f228fa386873e27d7811f34a134c65de4625ebe"
+    },
+    {
+      "turn": 0,
+      "path": "deliverables/statistical-analysis-report/crosscheck.R",
+      "expectedSha256": "62c28016427c4fad70933051a012636664ba6e52b7502fffb028dd301f76d9b5",
+      "actualSha256": "62c28016427c4fad70933051a012636664ba6e52b7502fffb028dd301f76d9b5"
+    },
+    {
+      "turn": 1,
+      "path": "deliverables/statistical-analysis-report/crosscheck.R",
+      "expectedSha256": "62c28016427c4fad70933051a012636664ba6e52b7502fffb028dd301f76d9b5",
+      "actualSha256": "62c28016427c4fad70933051a012636664ba6e52b7502fffb028dd301f76d9b5"
+    },
+    {
+      "turn": 0,
+      "path": "deliverables/statistical-analysis-report/fig-marker-by-group.png",
+      "expectedSha256": "63ff4b5ccdc46d1911642928437d0d9cf93e60f422ab55e827c4eab430a71fcc",
+      "actualSha256": "63ff4b5ccdc46d1911642928437d0d9cf93e60f422ab55e827c4eab430a71fcc"
+    },
+    {
+      "turn": 1,
+      "path": "deliverables/statistical-analysis-report/fig-marker-by-group.png",
+      "expectedSha256": "63ff4b5ccdc46d1911642928437d0d9cf93e60f422ab55e827c4eab430a71fcc",
+      "actualSha256": "63ff4b5ccdc46d1911642928437d0d9cf93e60f422ab55e827c4eab430a71fcc"
+    },
+    {
+      "turn": 0,
+      "path": "deliverables/statistical-analysis-report/run_all.py",
+      "expectedSha256": "261c7d44923f465982a7755273028cf26dfca617e2be1d1ae42cb2c81a147ea3",
+      "actualSha256": "261c7d44923f465982a7755273028cf26dfca617e2be1d1ae42cb2c81a147ea3"
+    },
+    {
+      "turn": 1,
+      "path": "deliverables/statistical-analysis-report/run_all.py",
+      "expectedSha256": "261c7d44923f465982a7755273028cf26dfca617e2be1d1ae42cb2c81a147ea3",
+      "actualSha256": "261c7d44923f465982a7755273028cf26dfca617e2be1d1ae42cb2c81a147ea3"
+    },
+    {
+      "turn": 0,
+      "path": "deliverables/statistical-analysis-report/statistical-report.md",
+      "expectedSha256": "b6bb9fc70e35f236a6d870de76751e5d5d08bc64841e4fc9d47b2606388ed57c",
+      "actualSha256": "b6bb9fc70e35f236a6d870de76751e5d5d08bc64841e4fc9d47b2606388ed57c"
+    },
+    {
+      "turn": 1,
+      "path": "deliverables/statistical-analysis-report/statistical-report.md",
+      "expectedSha256": "b6bb9fc70e35f236a6d870de76751e5d5d08bc64841e4fc9d47b2606388ed57c",
+      "actualSha256": "b6bb9fc70e35f236a6d870de76751e5d5d08bc64841e4fc9d47b2606388ed57c"
+    },
+    {
+      "turn": 0,
+      "path": "deliverables/statistical-analysis-report/table-difference-estimates.csv",
+      "expectedSha256": "efa232eb026d4995a00adf40c1753f43e5db150b31b4d7a81f45a6d7eab83f08",
+      "actualSha256": "efa232eb026d4995a00adf40c1753f43e5db150b31b4d7a81f45a6d7eab83f08"
+    },
+    {
+      "turn": 1,
+      "path": "deliverables/statistical-analysis-report/table-difference-estimates.csv",
+      "expectedSha256": "efa232eb026d4995a00adf40c1753f43e5db150b31b4d7a81f45a6d7eab83f08",
+      "actualSha256": "efa232eb026d4995a00adf40c1753f43e5db150b31b4d7a81f45a6d7eab83f08"
+    },
+    {
+      "turn": 0,
+      "path": "deliverables/statistical-analysis-report/table-group-summary.csv",
+      "expectedSha256": "1cd520b54d0bfb825ca4b0647f280182e6562a1d2f52eaab5c8a52ace98c99d7",
+      "actualSha256": "1cd520b54d0bfb825ca4b0647f280182e6562a1d2f52eaab5c8a52ace98c99d7"
+    },
+    {
+      "turn": 1,
+      "path": "deliverables/statistical-analysis-report/table-group-summary.csv",
+      "expectedSha256": "1cd520b54d0bfb825ca4b0647f280182e6562a1d2f52eaab5c8a52ace98c99d7",
+      "actualSha256": "1cd520b54d0bfb825ca4b0647f280182e6562a1d2f52eaab5c8a52ace98c99d7"
+    },
+    {
+      "turn": 0,
+      "path": "deliverables/statistical-analysis-report/verify_numbers.py",
+      "expectedSha256": "0666f361897152eb21ffce239eb110d16a138694a290360c3d6598faec3e741e",
+      "actualSha256": "0666f361897152eb21ffce239eb110d16a138694a290360c3d6598faec3e741e"
+    },
+    {
+      "turn": 1,
+      "path": "deliverables/statistical-analysis-report/verify_numbers.py",
+      "expectedSha256": "0666f361897152eb21ffce239eb110d16a138694a290360c3d6598faec3e741e",
+      "actualSha256": "0666f361897152eb21ffce239eb110d16a138694a290360c3d6598faec3e741e"
+    }
+  ],
+  "criticalNumericalState": [
+    {
+      "path": "data/cohort.csv",
+      "sha256Unchanged": true,
+      "mtimeUnchanged": true
+    },
+    {
+      "path": "data/dictionary.md",
+      "sha256Unchanged": true,
+      "mtimeUnchanged": true
+    },
+    {
+      "path": "deliverables/statistical-analysis-report/analysis-results.json",
+      "sha256Unchanged": true,
+      "mtimeUnchanged": true
+    },
+    {
+      "path": "deliverables/statistical-analysis-report/analysis.py",
+      "sha256Unchanged": true,
+      "mtimeUnchanged": true
+    },
+    {
+      "path": "deliverables/statistical-analysis-report/analysis-run.json",
+      "sha256Unchanged": true,
+      "mtimeUnchanged": true
+    },
+    {
+      "path": "deliverables/statistical-analysis-report/crosscheck-r.json",
+      "sha256Unchanged": true,
+      "mtimeUnchanged": true
+    }
+  ],
+  "continuationCode": [
+    {
+      "path": "convert_units.py",
+      "sha256": "eba11faf05d6c813907c539be63e879afdf4cccfa7f3b6b70e5d04ead96b2f81",
+      "imports": [
+        "__future__",
+        "csv",
+        "hashlib",
+        "json",
+        "sys",
+        "pathlib"
+      ]
+    },
+    {
+      "path": "verify_units.py",
+      "sha256": "0157d2e083e82f0acf5b92e6110086211ec71a6922cf40c27432f31ad66ddaac",
+      "imports": [
+        "__future__",
+        "csv",
+        "hashlib",
+        "json",
+        "sys",
+        "pathlib"
+      ]
+    }
+  ],
+  "transcriptReview": {
+    "reviewed": true,
+    "turns": [
+      0,
+      1
+    ],
+    "originalAnalysisOrRunAllExecuted": false,
+    "basis": "Tool commands were extraction, reading, hashing, convert_units.py and verify_units.py. The two new scripts use cached JSON/CSV and decimal scaling; no estimator, original analysis pipeline or fitting stage is invoked. This is a scoped code/transcript review, not a general shell non-execution detector."
+  }
+}

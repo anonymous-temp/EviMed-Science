@@ -1,0 +1,108 @@
+{
+  "scope": "Separate reassessment; raw run.json records in the archive are unchanged. Resume is pending until the separate state-verdict. Correct values alone do not prove selective recomputation.",
+  "driverSha256": "f3df759dbd66ac2257453c0a59656907bd161b962d467fcc5907268a7ffc8b85",
+  "checks": [
+    {
+      "case": "continuity",
+      "turn": 0,
+      "complete": true,
+      "structuralComplete": true,
+      "reasons": [],
+      "mode": "analysis",
+      "numericalVerification": "requires-independent-judge"
+    },
+    {
+      "case": "continuity",
+      "turn": 1,
+      "complete": true,
+      "structuralComplete": true,
+      "reasons": [],
+      "mode": "update",
+      "numericalVerification": "requires-independent-judge"
+    },
+    {
+      "case": "continuity",
+      "turn": 2,
+      "complete": true,
+      "structuralComplete": true,
+      "reasons": [],
+      "mode": "update",
+      "numericalVerification": "requires-independent-judge"
+    },
+    {
+      "case": "continuity",
+      "turn": 3,
+      "complete": true,
+      "structuralComplete": true,
+      "reasons": [],
+      "mode": "reuse",
+      "numericalVerification": "requires-independent-judge"
+    },
+    {
+      "case": "correction",
+      "turn": 0,
+      "complete": true,
+      "structuralComplete": true,
+      "reasons": [],
+      "mode": "analysis",
+      "numericalVerification": "requires-independent-judge"
+    },
+    {
+      "case": "correction",
+      "turn": 1,
+      "complete": true,
+      "structuralComplete": true,
+      "reasons": [],
+      "mode": "update",
+      "numericalVerification": "requires-independent-judge"
+    },
+    {
+      "case": "prediction",
+      "turn": 0,
+      "complete": true,
+      "structuralComplete": true,
+      "reasons": [],
+      "mode": "analysis",
+      "numericalVerification": "requires-independent-judge"
+    },
+    {
+      "case": "prediction",
+      "turn": 1,
+      "complete": true,
+      "structuralComplete": true,
+      "reasons": [],
+      "mode": "update",
+      "numericalVerification": "requires-independent-judge"
+    },
+    {
+      "case": "reconciliation",
+      "turn": 0,
+      "complete": true,
+      "structuralComplete": true,
+      "reasons": [],
+      "mode": "audit",
+      "numericalVerification": "requires-independent-judge"
+    },
+    {
+      "case": "cached-unit",
+      "turn": 0,
+      "complete": false,
+      "structuralComplete": true,
+      "reasons": [
+        "resume_requires_independent_verification"
+      ],
+      "mode": "resume",
+      "reuseVerification": "requires-independent-judge",
+      "numericalVerification": "requires-independent-judge"
+    },
+    {
+      "case": "cached-unit",
+      "turn": 1,
+      "complete": true,
+      "structuralComplete": true,
+      "reasons": [],
+      "mode": "update",
+      "numericalVerification": "requires-independent-judge"
+    }
+  ]
+}

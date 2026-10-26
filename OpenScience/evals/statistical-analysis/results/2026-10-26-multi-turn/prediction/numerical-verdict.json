@@ -1,0 +1,179 @@
+{
+  "scope": "explicitly_bound_numerical_values_only",
+  "passed": true,
+  "checks": [
+    {
+      "turn": 0,
+      "passed": true,
+      "missingReferences": [],
+      "findings": [
+        {
+          "reference": "n",
+          "actual": 171,
+          "expected": 171,
+          "passed": true,
+          "tolerance": 0
+        },
+        {
+          "reference": "events",
+          "actual": 64,
+          "expected": 64,
+          "passed": true,
+          "tolerance": 0
+        },
+        {
+          "reference": "auc",
+          "actual": 0.9933,
+          "expected": 0.9932827102803738,
+          "passed": true,
+          "tolerance": 5e-05
+        },
+        {
+          "reference": "averagePrecision",
+          "actual": 0.9919,
+          "expected": 0.9919386386717008,
+          "passed": true,
+          "tolerance": 5e-05
+        },
+        {
+          "reference": "brier",
+          "actual": 0.0216,
+          "expected": 0.021578370897409358,
+          "passed": true,
+          "tolerance": 5e-05
+        }
+      ]
+    },
+    {
+      "turn": 1,
+      "passed": true,
+      "missingReferences": [],
+      "findings": [
+        {
+          "reference": "n",
+          "actual": 171,
+          "expected": 171,
+          "passed": true,
+          "tolerance": 0
+        },
+        {
+          "reference": "events",
+          "actual": 64,
+          "expected": 64,
+          "passed": true,
+          "tolerance": 0
+        },
+        {
+          "reference": "tp",
+          "actual": 62,
+          "expected": 62,
+          "passed": true,
+          "tolerance": 0
+        },
+        {
+          "reference": "fn",
+          "actual": 2,
+          "expected": 2,
+          "passed": true,
+          "tolerance": 0
+        },
+        {
+          "reference": "fp",
+          "actual": 6,
+          "expected": 6,
+          "passed": true,
+          "tolerance": 0
+        },
+        {
+          "reference": "tn",
+          "actual": 101,
+          "expected": 101,
+          "passed": true,
+          "tolerance": 0
+        },
+        {
+          "reference": "sensitivity",
+          "actual": 0.9688,
+          "expected": 0.96875,
+          "passed": true,
+          "tolerance": 5e-05
+        },
+        {
+          "reference": "specificity",
+          "actual": 0.9439,
+          "expected": 0.9439252336448598,
+          "passed": true,
+          "tolerance": 5e-05
+        },
+        {
+          "reference": "ppv",
+          "actual": 0.9118,
+          "expected": 0.9117647058823529,
+          "passed": true,
+          "tolerance": 5e-05
+        }
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "role": "bindings",
+      "path": "/private/tmp/esa/candidate/prediction-1793022976140/independent-bindings.json",
+      "sha256": "d86b5f785e81a4301a65e4d0693379c47848b56da5f81fd5b30e4fe35adb5803",
+      "bytes": 4365
+    },
+    {
+      "role": "judge",
+      "path": "/Users/wangzeyuan/.codex/worktrees/research-tools-data-analysis-20261026/EviMedScience/OpenScience/evals/statistical-analysis/live/judge.py",
+      "sha256": "12648930769065382a9dc07e3b9b68e2a7ac73ff9ad34fa2a7baeb550046739b",
+      "bytes": 9692
+    },
+    {
+      "role": "fixture-manifest",
+      "path": "/Users/wangzeyuan/.codex/worktrees/research-tools-data-analysis-20261026/EviMedScience/OpenScience/evals/statistical-analysis/live/fixture-sources.json",
+      "sha256": "5120794224a067edd8deb630e911416f653b005556257389f8aa0317cb6424a5",
+      "bytes": 1244
+    },
+    {
+      "role": "results",
+      "path": "/private/tmp/esa/candidate/prediction-1793022976140/turn-0/workspace/deliverables/statistical-analysis-package/analysis-results.json",
+      "sha256": "b24289ab0134a516c94f51ac817e58ec7a89d634647b17ecc8ff61d60016fe98",
+      "bytes": 29228
+    },
+    {
+      "role": "predictions",
+      "path": "/private/tmp/esa/candidate/prediction-1793022976140/turn-0/workspace/deliverables/statistical-analysis-package/predictions.csv",
+      "sha256": "f268e889335908395d94011d126052f6adf3767e7799f5d147454e2060972f79",
+      "bytes": 31322
+    },
+    {
+      "role": "fixture",
+      "path": "/Users/wangzeyuan/.codex/worktrees/research-tools-data-analysis-20261026/EviMedScience/OpenScience/evals/statistical-analysis/live/fixtures/breast-cancer.csv",
+      "sha256": "30c0edd07dac8c886b9ad11627caed4eb92d91756aaeddd23921bdafc2582971",
+      "bytes": 123562
+    },
+    {
+      "role": "results",
+      "path": "/private/tmp/esa/candidate/prediction-1793022976140/turn-1/workspace/deliverables/statistical-analysis-package/operating-point-0.3.json",
+      "sha256": "47291f2f9f678b16b6b59848d9b9c0f4bf46af0618787d37b1950f5faaae6dbb",
+      "bytes": 1468
+    },
+    {
+      "role": "predictions",
+      "path": "/private/tmp/esa/candidate/prediction-1793022976140/turn-1/workspace/deliverables/statistical-analysis-package/predictions.csv",
+      "sha256": "f268e889335908395d94011d126052f6adf3767e7799f5d147454e2060972f79",
+      "bytes": 31322
+    },
+    {
+      "role": "fixture",
+      "path": "/Users/wangzeyuan/.codex/worktrees/research-tools-data-analysis-20261026/EviMedScience/OpenScience/evals/statistical-analysis/live/fixtures/breast-cancer.csv",
+      "sha256": "30c0edd07dac8c886b9ad11627caed4eb92d91756aaeddd23921bdafc2582971",
+      "bytes": 123562
+    }
+  ],
+  "versions": {
+    "numpy": "2.2.6",
+    "scipy": "1.15.3",
+    "scikit-learn": "1.6.1"
+  }
+}

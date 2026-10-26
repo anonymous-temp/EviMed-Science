@@ -1,0 +1,132 @@
+{
+  "scope": "explicitly_bound_numerical_values_only",
+  "passed": true,
+  "checks": [
+    {
+      "turn": 0,
+      "passed": true,
+      "missingReferences": [],
+      "findings": [
+        {
+          "reference": "nA",
+          "actual": 40,
+          "expected": 40,
+          "passed": true,
+          "tolerance": 5.1e-07
+        },
+        {
+          "reference": "nB",
+          "actual": 40,
+          "expected": 40,
+          "passed": true,
+          "tolerance": 5.1e-07
+        },
+        {
+          "reference": "difference",
+          "actual": 2.959988,
+          "expected": 2.9599876249999983,
+          "passed": true,
+          "tolerance": 5.1e-07
+        },
+        {
+          "reference": "low",
+          "actual": 2.31531,
+          "expected": 2.315310398856515,
+          "passed": true,
+          "tolerance": 5.1e-07
+        },
+        {
+          "reference": "high",
+          "actual": 3.604665,
+          "expected": 3.6046648511434816,
+          "passed": true,
+          "tolerance": 5.1e-07
+        },
+        {
+          "reference": "p",
+          "actual": 5.764e-14,
+          "expected": 5.764068905526884e-14,
+          "passed": true,
+          "tolerance": 5e-18
+        }
+      ]
+    },
+    {
+      "turn": 1,
+      "passed": true,
+      "missingReferences": [],
+      "findings": [
+        {
+          "reference": "difference",
+          "actual": 0.295999,
+          "expected": 0.29599876249999985,
+          "passed": true,
+          "tolerance": 5.500001e-07
+        },
+        {
+          "reference": "low",
+          "actual": 0.231531,
+          "expected": 0.23153103988565152,
+          "passed": true,
+          "tolerance": 5.500001e-07
+        },
+        {
+          "reference": "high",
+          "actual": 0.360467,
+          "expected": 0.3604664851143482,
+          "passed": true,
+          "tolerance": 5.500001e-07
+        }
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "role": "bindings",
+      "path": "/private/tmp/esa/final/cached-unit-1793025711310/independent-bindings.json",
+      "sha256": "9a31ecc42f3117c0dab0db858fe020eff8f7e76cf73f763e87b573e255bba1f8",
+      "bytes": 3331
+    },
+    {
+      "role": "judge",
+      "path": "/Users/wangzeyuan/.codex/worktrees/research-tools-data-analysis-20261026/EviMedScience/OpenScience/evals/statistical-analysis/live/judge.py",
+      "sha256": "12648930769065382a9dc07e3b9b68e2a7ac73ff9ad34fa2a7baeb550046739b",
+      "bytes": 9692
+    },
+    {
+      "role": "fixture-manifest",
+      "path": "/Users/wangzeyuan/.codex/worktrees/research-tools-data-analysis-20261026/EviMedScience/OpenScience/evals/statistical-analysis/live/fixture-sources.json",
+      "sha256": "5120794224a067edd8deb630e911416f653b005556257389f8aa0317cb6424a5",
+      "bytes": 1244
+    },
+    {
+      "role": "results",
+      "path": "/private/tmp/esa/final/cached-unit-1793025711310/turn-0/workspace/deliverables/statistical-analysis-report/analysis-results.json",
+      "sha256": "b7a6255e602895a8fe6a40c7bdf4946ac3415561c3ba47f378ab757b6c22fada",
+      "bytes": 9540
+    },
+    {
+      "role": "fixture",
+      "path": "/Users/wangzeyuan/.codex/worktrees/research-tools-data-analysis-20261026/EviMedScience/OpenScience/evals/statistical-analysis/live/fixtures/cohort.csv",
+      "sha256": "2318b4fc60b2c8c1cd0c78ec1e44600fbe5880240da208132585ca1d98fda90d",
+      "bytes": 1685
+    },
+    {
+      "role": "results",
+      "path": "/private/tmp/esa/final/cached-unit-1793025711310/turn-1/workspace/deliverables/statistical-analysis-report/unit-conversion.json",
+      "sha256": "c23bd66c8af17ff527a9a1c3b1f40d27981bb302cffb1045dc49a9d4b41b6d74",
+      "bytes": 4899
+    },
+    {
+      "role": "fixture",
+      "path": "/Users/wangzeyuan/.codex/worktrees/research-tools-data-analysis-20261026/EviMedScience/OpenScience/evals/statistical-analysis/live/fixtures/cohort.csv",
+      "sha256": "2318b4fc60b2c8c1cd0c78ec1e44600fbe5880240da208132585ca1d98fda90d",
+      "bytes": 1685
+    }
+  ],
+  "versions": {
+    "numpy": "2.2.6",
+    "scipy": "1.15.3",
+    "scikit-learn": "1.6.1"
+  }
+}

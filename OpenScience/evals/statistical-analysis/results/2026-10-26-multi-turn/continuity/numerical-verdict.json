@@ -1,0 +1,371 @@
+{
+  "scope": "explicitly_bound_numerical_values_only",
+  "passed": true,
+  "checks": [
+    {
+      "turn": 0,
+      "passed": true,
+      "missingReferences": [],
+      "findings": [
+        {
+          "reference": "nA",
+          "actual": 40,
+          "expected": 40,
+          "passed": true,
+          "tolerance": 0
+        },
+        {
+          "reference": "nB",
+          "actual": 40,
+          "expected": 40,
+          "passed": true,
+          "tolerance": 0
+        },
+        {
+          "reference": "difference",
+          "actual": 2.959988,
+          "expected": 2.9599876249999983,
+          "passed": true,
+          "tolerance": 5.1e-07
+        },
+        {
+          "reference": "low",
+          "actual": 2.31531,
+          "expected": 2.315310398856515,
+          "passed": true,
+          "tolerance": 5.1e-07
+        },
+        {
+          "reference": "high",
+          "actual": 3.604665,
+          "expected": 3.6046648511434816,
+          "passed": true,
+          "tolerance": 5.1e-07
+        },
+        {
+          "reference": "p",
+          "actual": 5.764e-14,
+          "expected": 5.764068905526884e-14,
+          "passed": true,
+          "tolerance": 5e-18
+        },
+        {
+          "reference": "rawRows",
+          "actual": 80,
+          "expected": 80,
+          "passed": true,
+          "tolerance": 0
+        },
+        {
+          "reference": "duplicates",
+          "actual": 0,
+          "expected": 0,
+          "passed": true,
+          "tolerance": 0
+        },
+        {
+          "reference": "missing",
+          "actual": 0,
+          "expected": 0,
+          "passed": true,
+          "tolerance": 0
+        }
+      ]
+    },
+    {
+      "turn": 1,
+      "passed": true,
+      "missingReferences": [],
+      "findings": [
+        {
+          "reference": "nA",
+          "actual": 40,
+          "expected": 40,
+          "passed": true,
+          "tolerance": 0
+        },
+        {
+          "reference": "nB",
+          "actual": 40,
+          "expected": 40,
+          "passed": true,
+          "tolerance": 0
+        },
+        {
+          "reference": "difference",
+          "actual": 0.2959988,
+          "expected": 0.29599876249999985,
+          "passed": true,
+          "tolerance": 5.1e-08
+        },
+        {
+          "reference": "low",
+          "actual": 0.231531,
+          "expected": 0.23153103988565152,
+          "passed": true,
+          "tolerance": 5.1e-08
+        },
+        {
+          "reference": "high",
+          "actual": 0.3604665,
+          "expected": 0.3604664851143482,
+          "passed": true,
+          "tolerance": 5.1e-08
+        },
+        {
+          "reference": "p",
+          "actual": 5.764e-14,
+          "expected": 5.764068905526884e-14,
+          "passed": true,
+          "tolerance": 5e-18
+        },
+        {
+          "reference": "rawRows",
+          "actual": 80,
+          "expected": 80,
+          "passed": true,
+          "tolerance": 0
+        },
+        {
+          "reference": "duplicates",
+          "actual": 0,
+          "expected": 0,
+          "passed": true,
+          "tolerance": 0
+        },
+        {
+          "reference": "missing",
+          "actual": 0,
+          "expected": 0,
+          "passed": true,
+          "tolerance": 0
+        }
+      ]
+    },
+    {
+      "turn": 2,
+      "passed": true,
+      "missingReferences": [],
+      "findings": [
+        {
+          "reference": "nA",
+          "actual": 49,
+          "expected": 49,
+          "passed": true,
+          "tolerance": 0
+        },
+        {
+          "reference": "nB",
+          "actual": 49,
+          "expected": 49,
+          "passed": true,
+          "tolerance": 0
+        },
+        {
+          "reference": "difference",
+          "actual": 0.3035626,
+          "expected": 0.30356255918367325,
+          "passed": true,
+          "tolerance": 5.1e-08
+        },
+        {
+          "reference": "low",
+          "actual": 0.2458963,
+          "expected": 0.24589628790712173,
+          "passed": true,
+          "tolerance": 5.1e-08
+        },
+        {
+          "reference": "high",
+          "actual": 0.3612288,
+          "expected": 0.3612288304602247,
+          "passed": true,
+          "tolerance": 5.1e-08
+        },
+        {
+          "reference": "p",
+          "actual": 1.623e-17,
+          "expected": 1.6226108566847743e-17,
+          "passed": true,
+          "tolerance": 5e-21
+        },
+        {
+          "reference": "rawRows",
+          "actual": 101,
+          "expected": 101,
+          "passed": true,
+          "tolerance": 0
+        },
+        {
+          "reference": "duplicates",
+          "actual": 1,
+          "expected": 1,
+          "passed": true,
+          "tolerance": 0
+        },
+        {
+          "reference": "missing",
+          "actual": 2,
+          "expected": 2,
+          "passed": true,
+          "tolerance": 0
+        }
+      ]
+    },
+    {
+      "turn": 3,
+      "passed": true,
+      "missingReferences": [],
+      "findings": [
+        {
+          "reference": "nA",
+          "actual": 49,
+          "expected": 49,
+          "passed": true,
+          "tolerance": 0
+        },
+        {
+          "reference": "nB",
+          "actual": 49,
+          "expected": 49,
+          "passed": true,
+          "tolerance": 0
+        },
+        {
+          "reference": "difference",
+          "actual": 0.3035626,
+          "expected": 0.30356255918367325,
+          "passed": true,
+          "tolerance": 5.1e-08
+        },
+        {
+          "reference": "low",
+          "actual": 0.2458963,
+          "expected": 0.24589628790712173,
+          "passed": true,
+          "tolerance": 5.1e-08
+        },
+        {
+          "reference": "high",
+          "actual": 0.3612288,
+          "expected": 0.3612288304602247,
+          "passed": true,
+          "tolerance": 5.1e-08
+        },
+        {
+          "reference": "p",
+          "actual": 1.623e-17,
+          "expected": 1.6226108566847743e-17,
+          "passed": true,
+          "tolerance": 5e-21
+        },
+        {
+          "reference": "rawRows",
+          "actual": 101,
+          "expected": 101,
+          "passed": true,
+          "tolerance": 0
+        },
+        {
+          "reference": "duplicates",
+          "actual": 1,
+          "expected": 1,
+          "passed": true,
+          "tolerance": 0
+        },
+        {
+          "reference": "missing",
+          "actual": 2,
+          "expected": 2,
+          "passed": true,
+          "tolerance": 0
+        }
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "role": "bindings",
+      "path": "/private/tmp/esa/candidate/continuity-1793022976134/independent-bindings.json",
+      "sha256": "70c6ba132868e5cc344d0962647007beb3e47f0f155bcd37e81ffedc50c180bb",
+      "bytes": 10128
+    },
+    {
+      "role": "judge",
+      "path": "/Users/wangzeyuan/.codex/worktrees/research-tools-data-analysis-20261026/EviMedScience/OpenScience/evals/statistical-analysis/live/judge.py",
+      "sha256": "12648930769065382a9dc07e3b9b68e2a7ac73ff9ad34fa2a7baeb550046739b",
+      "bytes": 9692
+    },
+    {
+      "role": "fixture-manifest",
+      "path": "/Users/wangzeyuan/.codex/worktrees/research-tools-data-analysis-20261026/EviMedScience/OpenScience/evals/statistical-analysis/live/fixture-sources.json",
+      "sha256": "5120794224a067edd8deb630e911416f653b005556257389f8aa0317cb6424a5",
+      "bytes": 1244
+    },
+    {
+      "role": "results",
+      "path": "/private/tmp/esa/candidate/continuity-1793022976134/turn-0/workspace/deliverables/statistical-analysis-report/analysis-results.json",
+      "sha256": "b7a6255e602895a8fe6a40c7bdf4946ac3415561c3ba47f378ab757b6c22fada",
+      "bytes": 9540
+    },
+    {
+      "role": "fixture",
+      "path": "/Users/wangzeyuan/.codex/worktrees/research-tools-data-analysis-20261026/EviMedScience/OpenScience/evals/statistical-analysis/live/fixtures/cohort.csv",
+      "sha256": "2318b4fc60b2c8c1cd0c78ec1e44600fbe5880240da208132585ca1d98fda90d",
+      "bytes": 1685
+    },
+    {
+      "role": "results",
+      "path": "/private/tmp/esa/candidate/continuity-1793022976134/turn-1/workspace/deliverables/statistical-analysis-report/analysis-results-cm.json",
+      "sha256": "9ca21c0430290fe563c29af2308c52f4141328fd1a83218336fae6ac3e6402d9",
+      "bytes": 11679
+    },
+    {
+      "role": "fixture",
+      "path": "/Users/wangzeyuan/.codex/worktrees/research-tools-data-analysis-20261026/EviMedScience/OpenScience/evals/statistical-analysis/live/fixtures/cohort.csv",
+      "sha256": "2318b4fc60b2c8c1cd0c78ec1e44600fbe5880240da208132585ca1d98fda90d",
+      "bytes": 1685
+    },
+    {
+      "role": "results",
+      "path": "/private/tmp/esa/candidate/continuity-1793022976134/turn-2/workspace/deliverables/statistical-analysis-report/analysis-results-cm.json",
+      "sha256": "b2cfc3833acbf7a171082b68de057b9ba770c03b8bcd5557428a7b0f61629182",
+      "bytes": 11872
+    },
+    {
+      "role": "fixture",
+      "path": "/Users/wangzeyuan/.codex/worktrees/research-tools-data-analysis-20261026/EviMedScience/OpenScience/evals/statistical-analysis/live/fixtures/cohort.csv",
+      "sha256": "2318b4fc60b2c8c1cd0c78ec1e44600fbe5880240da208132585ca1d98fda90d",
+      "bytes": 1685
+    },
+    {
+      "role": "fixture",
+      "path": "/Users/wangzeyuan/.codex/worktrees/research-tools-data-analysis-20261026/EviMedScience/OpenScience/evals/statistical-analysis/live/fixtures/supplement.csv",
+      "sha256": "8aa7cd5358a8e3c6c57f8875bcdff6d5c2b79e93e2ea9db917f213b2c20866ae",
+      "bytes": 455
+    },
+    {
+      "role": "results",
+      "path": "/private/tmp/esa/candidate/continuity-1793022976134/turn-3/workspace/deliverables/statistical-analysis-report/analysis-results-cm.json",
+      "sha256": "b2cfc3833acbf7a171082b68de057b9ba770c03b8bcd5557428a7b0f61629182",
+      "bytes": 11872
+    },
+    {
+      "role": "fixture",
+      "path": "/Users/wangzeyuan/.codex/worktrees/research-tools-data-analysis-20261026/EviMedScience/OpenScience/evals/statistical-analysis/live/fixtures/cohort.csv",
+      "sha256": "2318b4fc60b2c8c1cd0c78ec1e44600fbe5880240da208132585ca1d98fda90d",
+      "bytes": 1685
+    },
+    {
+      "role": "fixture",
+      "path": "/Users/wangzeyuan/.codex/worktrees/research-tools-data-analysis-20261026/EviMedScience/OpenScience/evals/statistical-analysis/live/fixtures/supplement.csv",
+      "sha256": "8aa7cd5358a8e3c6c57f8875bcdff6d5c2b79e93e2ea9db917f213b2c20866ae",
+      "bytes": 455
+    }
+  ],
+  "versions": {
+    "numpy": "2.2.6",
+    "scipy": "1.15.3",
+    "scikit-learn": "1.6.1"
+  }
+}

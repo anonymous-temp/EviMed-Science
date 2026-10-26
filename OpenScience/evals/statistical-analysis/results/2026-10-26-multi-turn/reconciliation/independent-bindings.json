@@ -1,0 +1,101 @@
+{
+  "turns": [
+    {
+      "index": 0,
+      "referenceKind": "prediction",
+      "results": "deliverables/statistical-review/verification-results.json",
+      "predictions": "data/prior-predictions.csv",
+      "predictionOptions": {
+        "id_column": "record_id",
+        "source_id_column": "",
+        "probability_column": "p_malignant",
+        "split_column": "split"
+      },
+      "required": [
+        "n",
+        "events",
+        "prevalence",
+        "auc",
+        "brier",
+        "ppv",
+        "sensitivity",
+        "specificity"
+      ],
+      "bindings": [
+        {
+          "reference": "n",
+          "source": [
+            "heldOut",
+            "n"
+          ],
+          "absoluteTolerance": 1e-12,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "events",
+          "source": [
+            "heldOut",
+            "malignant"
+          ],
+          "absoluteTolerance": 1e-12,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "prevalence",
+          "source": [
+            "heldOut",
+            "prevalence"
+          ],
+          "absoluteTolerance": 1e-12,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "auc",
+          "source": [
+            "auroc"
+          ],
+          "absoluteTolerance": 5e-05,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "brier",
+          "source": [
+            "brier"
+          ],
+          "absoluteTolerance": 5e-05,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "ppv",
+          "source": [
+            "operatingPoints",
+            "0.5",
+            "positivePredictiveValue"
+          ],
+          "absoluteTolerance": 1e-12,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "sensitivity",
+          "source": [
+            "operatingPoints",
+            "0.5",
+            "sensitivity"
+          ],
+          "absoluteTolerance": 1e-12,
+          "relativeTolerance": 0
+        },
+        {
+          "reference": "specificity",
+          "source": [
+            "operatingPoints",
+            "0.5",
+            "specificity"
+          ],
+          "absoluteTolerance": 1e-12,
+          "relativeTolerance": 0
+        }
+      ]
+    }
+  ]
+}

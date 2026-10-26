@@ -1,0 +1,216 @@
+{
+  "turns": [
+    {
+      "index": 0,
+      "referenceKind": "comparison",
+      "referenceOptions": {
+        "corrected": false
+      },
+      "results": "deliverables/marker-group-comparison-report/analysis-results.json",
+      "required": [
+        "nA",
+        "nB",
+        "difference",
+        "low",
+        "high",
+        "p",
+        "t",
+        "df"
+      ],
+      "bindings": [
+        {
+          "reference": "nA",
+          "source": [
+            "analyses",
+            0,
+            "n",
+            "A"
+          ],
+          "absoluteTolerance": 1e-10,
+          "relativeTolerance": 1e-09
+        },
+        {
+          "reference": "nB",
+          "source": [
+            "analyses",
+            0,
+            "n",
+            "B"
+          ],
+          "absoluteTolerance": 1e-10,
+          "relativeTolerance": 1e-09
+        },
+        {
+          "reference": "difference",
+          "source": [
+            "analyses",
+            0,
+            "estimate"
+          ],
+          "absoluteTolerance": 1e-10,
+          "relativeTolerance": 1e-09
+        },
+        {
+          "reference": "low",
+          "source": [
+            "analyses",
+            0,
+            "interval",
+            "lower"
+          ],
+          "absoluteTolerance": 1e-10,
+          "relativeTolerance": 1e-09
+        },
+        {
+          "reference": "high",
+          "source": [
+            "analyses",
+            0,
+            "interval",
+            "upper"
+          ],
+          "absoluteTolerance": 1e-10,
+          "relativeTolerance": 1e-09
+        },
+        {
+          "reference": "p",
+          "source": [
+            "analyses",
+            0,
+            "pValue"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 1e-09
+        },
+        {
+          "reference": "t",
+          "source": [
+            "analyses",
+            0,
+            "values",
+            "t"
+          ],
+          "absoluteTolerance": 1e-10,
+          "relativeTolerance": 1e-09
+        },
+        {
+          "reference": "df",
+          "source": [
+            "analyses",
+            0,
+            "values",
+            "df"
+          ],
+          "absoluteTolerance": 1e-10,
+          "relativeTolerance": 1e-09
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "referenceKind": "comparison",
+      "referenceOptions": {
+        "corrected": true
+      },
+      "results": "deliverables/marker-group-comparison-report/analysis-results.json",
+      "required": [
+        "nA",
+        "nB",
+        "difference",
+        "low",
+        "high",
+        "p",
+        "t",
+        "df"
+      ],
+      "bindings": [
+        {
+          "reference": "nA",
+          "source": [
+            "analyses",
+            0,
+            "n",
+            "A"
+          ],
+          "absoluteTolerance": 1e-10,
+          "relativeTolerance": 1e-09
+        },
+        {
+          "reference": "nB",
+          "source": [
+            "analyses",
+            0,
+            "n",
+            "B"
+          ],
+          "absoluteTolerance": 1e-10,
+          "relativeTolerance": 1e-09
+        },
+        {
+          "reference": "difference",
+          "source": [
+            "analyses",
+            0,
+            "estimate"
+          ],
+          "absoluteTolerance": 1e-10,
+          "relativeTolerance": 1e-09
+        },
+        {
+          "reference": "low",
+          "source": [
+            "analyses",
+            0,
+            "interval",
+            "lower"
+          ],
+          "absoluteTolerance": 1e-10,
+          "relativeTolerance": 1e-09
+        },
+        {
+          "reference": "high",
+          "source": [
+            "analyses",
+            0,
+            "interval",
+            "upper"
+          ],
+          "absoluteTolerance": 1e-10,
+          "relativeTolerance": 1e-09
+        },
+        {
+          "reference": "p",
+          "source": [
+            "analyses",
+            0,
+            "pValue"
+          ],
+          "absoluteTolerance": 0,
+          "relativeTolerance": 1e-09
+        },
+        {
+          "reference": "t",
+          "source": [
+            "analyses",
+            0,
+            "values",
+            "t"
+          ],
+          "absoluteTolerance": 1e-10,
+          "relativeTolerance": 1e-09
+        },
+        {
+          "reference": "df",
+          "source": [
+            "analyses",
+            0,
+            "values",
+            "df"
+          ],
+          "absoluteTolerance": 1e-10,
+          "relativeTolerance": 1e-09
+        }
+      ]
+    }
+  ]
+}
