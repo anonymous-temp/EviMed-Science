@@ -95,7 +95,7 @@ import {
   isFrontierMastheadTitle,
   isPeak,
 } from "@evimed/domain";
-import { FRONTIER_REASON_VERSION, FRONTIER_RETAG_BATCH, FRONTIER_SCORE_VERSION } from "./frontierEditor.mjs";
+import { FRONTIER_REASON_VERSION, FRONTIER_RETAG_BATCH, FRONTIER_SCORE_VERSION, FRONTIER_TITLE_VERSION } from "./frontierEditor.mjs";
 import { FRONTIER_EDITOR_VERSION, frontierEditorDiagnostics, sha256, FRONTIER_SCREEN_BATCH, FRONTIER_SCREEN_EXCERPT_CHARS, buildModelInput, frontierParagraphs,
   isChineseProse, isChineseTitle } from "./frontierEditor.mjs";
 import { isDiscoveryOnlySource } from "./evolutionDiscoverySources.mjs";
@@ -2301,12 +2301,14 @@ export class FrontierPipeline {
         safetyAlert, fields.verification, fields.editorVersion,
         fields.editorModel, context.now, fields.tags, genre.genre, genre.basis, Boolean(output), FRONTIER_REASON_VERSION,
         practiceReason !== undefined, practiceReason ?? null]);
-      if (output && ceiled) {
+      if (output && (ceiled || fields.titleZh)) {
         // Which scoring wrote the parts, and what lowered one, are kept with the model's raw numbers, for the operator and for fitting a
-        // ceiling; neither is served.
+        // ceiling; neither is served. The title rule that wrote the title is kept the same way (c4-title: `titleVersion`, what
+        // `frontier-rewrite --steps title` reads), whenever the edit wrote a title.
         await client.query(`UPDATE evimed_frontier.items SET editor_diagnostics = CASE WHEN editor_diagnostics->>'schemaVersion' = '1'
             THEN editor_diagnostics || $2::jsonb ELSE editor_diagnostics END WHERE id = $1`,
-        [item.id, JSON.stringify({ scoreVersion: FRONTIER_SCORE_VERSION, ...(ceiled.reasons.length ? { capped: ceiled.reasons } : {}) })]);
+        [item.id, JSON.stringify({ ...(ceiled ? { scoreVersion: FRONTIER_SCORE_VERSION, ...(ceiled.reasons.length ? { capped: ceiled.reasons } : {}) } : {}),
+          ...(fields.titleZh ? { titleVersion: FRONTIER_TITLE_VERSION } : {}) })]);
       }
       if (output) {
         await client.query("UPDATE evimed_frontier.item_texts SET model_input = $2, model_input_sha256 = $3 WHERE item_id = $1",

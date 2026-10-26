@@ -7,8 +7,8 @@
  *   node scripts/ops/frontier-rewrite.mjs                   report: what each step would do, by genre, and what asking would cost
  *   node scripts/ops/frontier-rewrite.mjs --apply           do it, within the module's day budget
  *   options: --days N (1–30, default 30), --since ISO (instead of --days: where a stopped run resumes),
- *            --steps genre,score,lead,brief,reason,facts,faith (default genre,lead,brief,reason,facts,faith; `score` only by name, and
- *            first of the steps it shares a run with), --min-old-total N (score: skip items under this old total, default 50),
+ *            --steps genre,title,score,lead,brief,reason,facts,faith (default genre,title,lead,brief,reason,facts,faith; `score` only by
+ *            name, and first of the steps it shares a run with), --min-old-total N (score: skip items under this old total, default 50),
  *            --concurrency N (1–8, default 4), --limit N
  *
  * The steps:
@@ -16,6 +16,13 @@
  *   it (a journal's paper, a registry's trial, a safety feed's notice …); where code fell back on the channel alone
  *   (`FRONTIER_REWRITE_UNSURE`: news, commentary, industry, policy) the model names it, `FRONTIER_GENRE_BATCH` items to a call, and
  *   `frontierGenreDecision` stores the answer. No call is needed for most items.
+ * - `title` (c4-title, 2026-10-26): a published item whose title an older rule wrote (`editor_diagnostics.titleVersion` is not
+ *   `FRONTIER_TITLE_VERSION`) and that has a Chinese title is asked for its title again (`FrontierEditor#writeTitle`: no prefix label,
+ *   no site or media name, no hook, at most 40 characters, from the source's own facts and numbers). A Chinese source's own title that
+ *   already follows the rule stays the source's; an answer a check refused (a mark of `【】|｜丨!！?？`, a number the source does not
+ *   state, a link) keeps the title there was. The version is written whatever the answer was, so the item is not asked again; a call
+ *   that failed writes nothing. The write is a compare-and-set on the title read when the step began (an item the pipeline re-edited
+ *   meanwhile is skipped and counted `raced`), with the search words, an `item_changes` row, and one content-version bump per 50 items.
  * - `score` (c3-select, 2026-10-25): a published, verified item whose parts an older scoring wrote (`editor_diagnostics.scoreVersion`
  *   is not `FRONTIER_SCORE_VERSION`) and whose old total reached `--min-old-total` is scored again from its source text by the
  *   standalone score call (`FrontierEditor#scoreItem`: about ¥0.0012 an item, the rubric and the 「可能改变实践」 proposal of the edit),
@@ -63,20 +70,22 @@ import { FRONTIER_GENRE_BATCH, FRONTIER_REASON_VERSION } from "../../apps/server
 import { FRONTIER_LEAD_VERSION, frontierWriteLead } from "../../apps/server/src/frontierLead.mjs";
 import { FRONTIER_SOURCE_STREAM_COLUMNS } from "../../apps/server/src/frontierSourceColumns.mjs";
 import { bumpFrontierVersion } from "../../apps/server/src/frontierPersistence.mjs";
-import { FRONTIER_SCORE_VERSION, isChineseTitle } from "../../apps/server/src/frontierEditor.mjs";
+import { FRONTIER_SCORE_VERSION, FRONTIER_TITLE_VERSION, isChineseTitle } from "../../apps/server/src/frontierEditor.mjs";
 import { FRONTIER_READER_MARGIN, frontierDayWindow, frontierFinalScore, frontierLexemeText, frontierPracticeCandidates, frontierReaderText }
   from "../../apps/server/src/frontierPipeline.mjs";
 import { tsvectorLiteral } from "../../apps/server/src/kbChunker.mjs";
 
 const DAY_MS = 24 * 3_600_000;
 const REWRITE_LOCK = "evimed-frontier-rewrite";
-export const FRONTIER_REWRITE_STEPS = Object.freeze(["genre", "score", "lead", "brief", "reason", "facts", "faith"]);
+/** Items the title step writes between two content-version bumps. */
+const TITLE_BATCH = 50;
+export const FRONTIER_REWRITE_STEPS = Object.freeze(["genre", "title", "score", "lead", "brief", "reason", "facts", "faith"]);
 /**
- * What a run does without `--steps`: the four writing steps and the two c3-faith steps that check what they wrote. `score` is asked
+ * What a run does without `--steps`: the five writing steps (genre, title, lead, brief, reason) and the two c3-faith steps that check what they wrote. `score` is asked
  * for by name - it is the one step that moves which items are selected and reader-worthy, so a run that rewrites prose never re-scores
  * by accident (c3-select S9).
  */
-export const FRONTIER_REWRITE_DEFAULT_STEPS = Object.freeze(["genre", "lead", "brief", "reason", "facts", "faith"]);
+export const FRONTIER_REWRITE_DEFAULT_STEPS = Object.freeze(["genre", "title", "lead", "brief", "reason", "facts", "faith"]);
 /** Items under this old total are not asked about by `score`: 54% of a week sits under 50 on the old scale and none of them reaches a floor. */
 export const FRONTIER_REWRITE_SCORE_MIN_OLD_TOTAL = 50;
 /** Genres code reached from the channel alone: the model names these (the rest are code's answer, from what the fields say). */
@@ -88,6 +97,8 @@ export const FRONTIER_REWRITE_UNSURE = Object.freeze(["news", "commentary", "ind
  */
 export const REWRITE_CALL_TOKENS = Object.freeze({
   genre: { cached: 900, prompt: 1_400, output: 150 },
+  // c4-title's live check (2026-10-26), replaced below by the measured figure.
+  title: { cached: 1_300, prompt: 800, output: 40 },
   lead: { cached: 1_000, prompt: 2_600, output: 260 },
   brief: { cached: 1_000, prompt: 2_800, output: 520 },
   reason: { cached: 700, prompt: 1_900, output: 120 },
@@ -160,7 +171,7 @@ export async function frontierRewrite({ database, editor = null, budget = null, 
   const worthy = threshold - FRONTIER_READER_MARGIN;
   /** @type {Record<string, any>} */
   const summary = { applied: apply, since: since.toISOString(), until: until.toISOString(), steps, versions: { lead: FRONTIER_LEAD_VERSION,
-    brief: FRONTIER_BRIEF_VERSION, reason: FRONTIER_REASON_VERSION, facts: FRONTIER_STUDY_FACTS_VERSION, faith: FRONTIER_FAITH_VERSION },
+    brief: FRONTIER_BRIEF_VERSION, reason: FRONTIER_REASON_VERSION, title: FRONTIER_TITLE_VERSION, facts: FRONTIER_STUDY_FACTS_VERSION, faith: FRONTIER_FAITH_VERSION },
     stopped: null, resumeFrom: null, failed: 0 };
   /** @type {Record<string, number>} */
   const calls = {};
@@ -217,6 +228,51 @@ export async function frontierRewrite({ database, editor = null, budget = null, 
           if (decided.basis === "model") summary.genre.model += 1;
         }
       });
+    }
+  }
+
+  if (steps.includes("title")) {
+    // Every published item with a Chinese title that the current title rule has not written; an item with none yet waits for its edit.
+    const rows = (await database.query(`SELECT ${ITEM_FIELDS}, i.entities, i.tags
+      FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
+      WHERE i.state = 'published' AND i.visible_at >= $1 AND i.visible_at < $2 AND i.title_zh IS NOT NULL
+        AND i.editor_diagnostics->>'titleVersion' IS DISTINCT FROM $4
+      ORDER BY i.visible_at, i.id LIMIT $3`, [since, until, limit, FRONTIER_TITLE_VERSION])).rows;
+    const chinese = rows.filter((row) => isChineseTitle(row.title_raw)).length;
+    summary.title = { items: rows.length, byLanguage: { zh: chinese, other: rows.length - chinese }, titleVersion: FRONTIER_TITLE_VERSION, written: 0, kept: 0, refused: 0, raced: 0 };
+    calls.title = rows.length;
+    if (apply) {
+      // One content-version bump per batch of items, so a long run shows its titles as it goes and does not bump once an item.
+      for (let at = 0; at < rows.length; at += TITLE_BATCH) {
+        let changed = 0;
+        await each(rows.slice(at, at + TITLE_BATCH), async (row) => {
+          const texts = await textsOf(row);
+          const reader = frontierReaderText(texts);
+          // A failed call throws (counted failed, the version not written, asked again next run); a refusal is an answer of null.
+          const answer = await editor.writeTitle({ sourceName: sourceName(row), titleRaw: row.title_raw, isChinese: isChineseTitle(row.title_raw), genre: genreOf(row),
+            summaryZh: row.summary_zh, text: reader?.text ?? null, titleZh: row.title_zh });
+          const next = answer?.titleZh ?? null;
+          const result = await database.transaction(async (/** @type {any} */ client) => {
+            // Nothing written over a title the pipeline wrote while this one was asked: the answer is to the title it read.
+            const current = (await client.query("SELECT title_zh, state FROM evimed_frontier.items WHERE id = $1 FOR UPDATE", [row.id])).rows[0];
+            if (!current || current.state !== "published" || current.title_zh !== row.title_zh) return null;
+            const moved = next !== null && next !== current.title_zh;
+            await client.query(`UPDATE evimed_frontier.items SET editor_diagnostics = coalesce(editor_diagnostics, '{}'::jsonb) || jsonb_build_object('titleVersion', $2::text) WHERE id = $1`,
+              [row.id, FRONTIER_TITLE_VERSION]);
+            if (moved) {
+              await client.query("UPDATE evimed_frontier.items SET title_zh = $2, lexemes = $3::tsvector WHERE id = $1",
+                [row.id, next, tsvectorLiteral(frontierLexemeText({ ...row, title_zh: next }))]);
+              await client.query("INSERT INTO evimed_frontier.item_changes (item_id, op, reason) VALUES ($1, 'upsert', 'title')", [row.id]);
+            }
+            return { moved };
+          });
+          if (!result) { summary.title.raced += 1; return; }
+          if (result.moved) { summary.title.written += 1; changed += 1; }
+          else if (answer) summary.title.kept += 1;
+          else summary.title.refused += 1;
+        });
+        if (changed) await database.transaction((/** @type {any} */ client) => bumpFrontierVersion(client));
+      }
     }
   }
 

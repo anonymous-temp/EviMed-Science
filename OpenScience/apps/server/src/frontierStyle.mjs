@@ -48,8 +48,13 @@ export const FRONTIER_LEAD_MOVES = Object.freeze({
  */
 export const FRONTIER_SENTENCE_RULE = "一句只讲一件事，一般不超过 60 个字，不用一串逗号把设计、人群、结果和安全性塞进同一句；一句里最多放两三个数字（一个效应值连同它的置信区间算一个结果）；不写「A、B、C 分别为 x、y、z」这样的并列，每组的结果和它自己的数字写在一起。";
 
-/** What every title obeys, after its genre's formula (the measured rules above, and the policy filter). */
-export const FRONTIER_TITLE_RULE = "写明主体（机构、监管部门、公司、学会，或药物、方案、试验名）和结果或决定；不用问句和感叹号，不用「重磅」「刚刚」「突发」「首个」「揭秘」「竟」这类词，不加【】丨｜这类栏目标签，不带网站或栏目名后缀。";
+/**
+ * What every title obeys, after its genre's formula (the measured rules above, and the policy filter). c4-title (2026-10-26): no
+ * prefix label (a journal, congress or column name before a bar or bracket: 2,273 Chinese titles of a week had 531 with a separator
+ * or a suffix and 618 with a ！ or ？), no site or media name, at most 40 characters. Said once; `frontierEditor.mjs` shows it to the
+ * edit and to the standalone title call, and `FRONTIER_TITLE_VERSION` hashes it.
+ */
+export const FRONTIER_TITLE_RULE = "写明主体（机构、监管部门、公司、学会，或药物、方案、试验名）和结果或决定，不超过 40 个字，原标题太长就只留主体和结果；不用问句和感叹号，不用「重磅」「刚刚」「突发」「首个」「揭秘」「竟」这类词；开头不加期刊、会议或栏目名加竖线、方括号的前缀（「Cell |」「ASN 2026｜」「【临床研究】」），期刊或会议是新闻的一部分时写进句子里（「研究发表于《细胞》」）；不带网站或媒体名，也不用【】|｜丨。";
 
 /**
  * @typedef {{ title: string, lead: string, ref: string, source: string, thin?: boolean }} FrontierStyleExemplar
