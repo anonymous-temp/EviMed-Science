@@ -29,10 +29,10 @@ test('development rejects bad candidate but freezes one preregistered winner bef
 import {frontierConsumerIdentity} from '../frontier_selection.mjs';
 test('actual finite-corpus observations reach fixed statistics with trusted cost receipts',async()=>{
  const f=fixture();f.statisticsPython=process.env.RSI_TEST_PYTHON;f.statisticsModulePath=new URL('../../../../.evimed-local/toolchains/rsi-python',import.meta.url).pathname;const corpus=f.inputs.sources.confirmation;
- const registration={procedure:{id:'rsi-paired-source-v3',digest_codec:'rfc8785-sha256-v1',test_alpha_fraction:.5,minimum_slice_groups:30},version:1,paid_cost_budget:1000,consumer_id:(await frontierConsumerIdentity()).implementationSha256,corpus_digest:digest(corpus),mode:'deterministic',groups:[{id:'g',family:'frontier',failure_slice:true,rowIds:['synthetic-confirm'],sourceRoot:'synthetic-synthetic-confirm'}],G_target:1,claims:{efficiency:.05},expires_at:'2026-10-27T00:00:00+00:00',cost_identity:'owner-metered-total-normalized-cny',families:{frontier:{margin:.03,repeats:1,score_type:'bounded-continuous',pilot_rationale:'Benign finite synthetic fixture only',forms:{original:1}}}};
+ const registration={procedure:{id:'rsi-paired-source-v4',digest_codec:'rfc8785-sha256-v1',test_alpha_fraction:.5,minimum_slice_groups:30},version:1,paid_cost_budget:1000,consumer_id:(await frontierConsumerIdentity()).implementationSha256,corpus_digest:digest(corpus),mode:'deterministic',groups:[{id:'g',family:'frontier',failure_slice:true,rowIds:['synthetic-confirm'],sourceRoot:'synthetic-synthetic-confirm'}],G_target:1,claims:{efficiency:.05},expires_at:'2026-10-27T00:00:00+00:00',cost_identity:'owner-metered-total-normalized-cny',families:{frontier:{margin:.03,repeats:1,score_type:'bounded-continuous',pilot_rationale:'Benign finite synthetic fixture only',forms:{original:1}}}};
  f.inputs.registration.statistics=registration;f.manifest.registration.digest=digest(f.inputs.registration);
  f.attestEvaluation=async request=>({...request,costProvenance:{type:'measured-normalized-cny',receiptId:'local-test-measurement',complete:true},costs:['baseline','candidate'].map(arm=>({group:'g',arm,form:'original',repeat:0,cost:arm==='baseline'?1:.7})),receipt:{deterministic_qualification:{type:'trusted-deterministic-finite-corpus',qualification_id:'local-test-only',externally_verified:true,consumer_id:registration.consumer_id,corpus_digest:registration.corpus_digest}}});
- const result=await runCampaign(f);assert.equal(result.qualification,'qualified',JSON.stringify(result.checkpoint.evaluation));assert.equal(result.checkpoint.evaluation.scope,'synthetic-finite-corpus-only');assert.equal(result.checkpoint.evaluatorReceipt.frozenPolicyDigest,result.checkpoint.frozenPolicyDigest);
+ const result=await runCampaign(f);assert.equal(result.qualification,'qualified',JSON.stringify(result.checkpoint.evaluation));assert.equal(result.checkpoint.evaluation.scope,'synthetic-finite-corpus-only');assert.equal(result.checkpoint.evaluation.evidenceScope,'finite-corpus-diagnostic');assert.equal(result.releaseEligible,false);assert.equal(result.purpose,'lifecycle-diagnostic');assert.equal(result.checkpoint.evaluatorReceipt.frozenPolicyDigest,result.checkpoint.frozenPolicyDigest);
 });
 test('exposed or overlapping real confirmation roots refuse before consumer',async()=>{for(const exposed of [false,true]){const f=fixture();f.manifest.data.classification='public';f.manifest.data.sources[1].exposure=exposed?'exposed':'sealed';f.inputs.registration.sourceRoots={development:['synthetic-synthetic-dev','same'],confirmation:['synthetic-synthetic-confirm','same']};f.manifest.registration.digest=digest(f.inputs.registration);assert.equal((await runCampaign(f)).reason,'campaign_confirmation_not_independent');}});
 test('malformed input returns actionable unqualified outcome',async()=>{const f=fixture();f.inputs=null;assert.equal((await runCampaign(f)).reason,'campaign_inputs_missing');});
@@ -49,4 +49,25 @@ test('owner public-key profile verifies signed bound evaluator receipts and reje
  const envelope={payload,signature:sign(null,Buffer.from(canonicalRsiJson(payload)),privateKey).toString('base64')};
  const profile={publicKeyPath:join(dir,'public.pem'),receiptPath:join(dir,'receipt.json'),publicKeySha256:createHash('sha256').update(publicKey.export({format:'der',type:'spki'})).digest('hex')};
  try {await writeFile(profile.publicKeyPath,publicKey.export({format:'pem',type:'spki'}));await writeFile(profile.receiptPath,JSON.stringify(envelope));const attest=await signedEvaluatorReceipt(profile,()=> '2026-10-26T00:00:00Z');assert.equal((await attest(request)).scope,'synthetic-lifecycle-only');await assert.rejects(attest({...request,binding:'changed'}));envelope.payload.corpusDigest='tampered';await writeFile(profile.receiptPath,JSON.stringify(envelope));await assert.rejects(signedEvaluatorReceipt(profile,()=> '2026-10-26T00:00:00Z'));}finally{await rm(dir,{recursive:true,force:true});}
+});
+test('incident withdrawals fence all dataset consumers and resumed stages',async()=>{
+ for(const withdrawAt of [1,2,3]) {
+  const f=fixture();f.manifest.data.classification='authorized-incident';
+  f.manifest.data.authorization={id:'authorization-test',incidentId:'incident-test',incidentDigest:'a'.repeat(64),sourceRunId:'source-run',sourceRevision:'source-rev',purpose:'platform-quality',minimized:true};
+  f.manifest.data.sources[1].exposure='sealed';
+  f.inputs.registration.sourceRoots={development:['synthetic-synthetic-dev'],confirmation:['synthetic-synthetic-confirm']};
+  f.manifest.registration.digest=digest(f.inputs.registration);
+  let calls=0;f.incidentTransport={assertIncidentCurrent:async authorization=>{assert.deepEqual(authorization,f.manifest.data.authorization);if(++calls>=withdrawAt)throw new Error('tenant secret must not leak');}};
+  const result=await runCampaign(f);assert.equal(result.reason,'campaign_incident_not_current');
+  if(withdrawAt<3)assert.equal(f.state()?.stages?.development,undefined);else assert.equal(f.state().stages.confirmation,undefined);
+ }
+});
+test('paired source inference requires a bound trusted deterministic consumer qualification',async()=>{
+ for(const mutation of ['not-deterministic','finite-qualification','missing-qualification','wrong-consumer']) {
+  const f=fixture();const corpus=f.inputs.sources.confirmation;
+  const registration={mode:'paired-t',deterministicConsumer:mutation!=='not-deterministic',consumer_id:(await frontierConsumerIdentity()).implementationSha256,corpus_digest:digest(corpus)};
+  f.inputs.registration.statistics=registration;f.manifest.registration.digest=digest(f.inputs.registration);
+  f.attestEvaluation=async request=>({...request,costProvenance:{type:'measured-normalized-cny',receiptId:'test-only',complete:true},costs:[],receipt:{...(mutation==='missing-qualification'?{}:{deterministic_qualification:{type:mutation==='finite-qualification'?'trusted-deterministic-finite-corpus':'trusted-deterministic-consumer',qualification_id:'test-only',externally_verified:true,consumer_id:mutation==='wrong-consumer'?'changed':registration.consumer_id,corpus_digest:registration.corpus_digest}})}});
+  const result=await runCampaign(f);assert.equal(result.qualification,'not-qualified');assert.equal(result.reason,'campaign_statistical_consumer_not_qualified');assert.equal(result.releaseEligible,false);
+ }
 });

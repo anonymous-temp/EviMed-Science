@@ -52,11 +52,17 @@ function validateInputs(manifest, inputs) {
 }
 /** Closed consumer registry: no executable paths, prompts, dynamic module imports or arbitrary callbacks in inputs. */
 const consumers = Object.freeze({'frontier-selection':(pool, registration)=>sweepFrontierThresholds(pool,{baselineThreshold:registration.baselineThreshold,thresholds:registration.thresholds,labels:pool.labels ?? []})});
-export async function runCampaign({manifest,inputs,configuration,store,attestLab,now=()=>new Date().toISOString(),signal,attestEvaluation,statisticsPython,statisticsModulePath}) {
+export async function runCampaign({manifest,inputs,configuration,store,attestLab,now=()=>new Date().toISOString(),signal,attestEvaluation,statisticsPython,statisticsModulePath,incidentTransport}) {
  const preflight = await labPreflight(configuration,attestLab);
  if (preflight.status !== 'ready') return preflight;
  const issues = rsiCampaignIssues(manifest);
  if (issues.length) return stop(issues[0]);
+ const incidentCurrent=async()=>{
+  if(manifest.data.classification!=='authorized-incident')return true;
+  if(!incidentTransport?.assertIncidentCurrent)return false;
+  try{await incidentTransport.assertIncidentCurrent(manifest.data.authorization);return true;}catch{return false;}
+ };
+ if(!await incidentCurrent())return stop('campaign_incident_not_current');
  let invalid;try{invalid=validateInputs(manifest,inputs);}catch{return stop('campaign_inputs_invalid');}if(invalid)return stop(invalid);
  if (!Object.hasOwn(consumers,manifest.surface)) return stop('campaign_consumer_not_qualified');
  let binding;try{binding=digest({manifest,inputs});}catch{return stop('campaign_inputs_invalid');}
@@ -65,6 +71,7 @@ export async function runCampaign({manifest,inputs,configuration,store,attestLab
   if(state && state.binding !== binding) return stop('campaign_checkpoint_input_changed');
   state ??= {recordType:'rsi-campaign-checkpoint',campaignId:manifest.id,binding,automated:true,stages:{},createdAt:now(),month:rsiCampaignMonth(now())};
   for(const stage of campaignPlan(manifest).stages) {
+   if(!await incidentCurrent())return stop('campaign_incident_not_current');
    if(signal?.aborted) return stop('campaign_cancelled');
    if(Date.parse(now()) >= Date.parse(manifest.deadline)) return stop('campaign_deadline_expired');
    if(rsiCampaignMonth(now()) !== state.month) return stop('campaign_budget_month_expired');
@@ -74,6 +81,7 @@ export async function runCampaign({manifest,inputs,configuration,store,attestLab
    const source = manifest.data.sources.find(row=>row.role===stage);
    if(!source) return stop('campaign_source_role_missing');
    if(stage==='confirmation' && source.exposure!=='sealed' && manifest.data.classification!=='synthetic') return stop('campaign_confirmation_exposed');
+   if(stage==='confirmation')state.confirmationOpenedAt=now();
    state.stages[stage]={id:`${manifest.id}:${stage}`,status:'running',paid:false}; await checkpoint.write(state);
    try {
     const thresholds=stage==='confirmation' ? [state.frozenPolicy?.threshold] : inputs.registration.thresholds;
@@ -94,12 +102,13 @@ export async function runCampaign({manifest,inputs,configuration,store,attestLab
   if(state.evaluation && (digest(state.evaluation)!==state.evaluationDigest || digest(state.evaluatorReceipt)!==state.evaluatorReceiptDigest))return stop('campaign_evaluator_checkpoint_tampered');
   if(state.evaluation?.expiresAt && Date.parse(now())>=Date.parse(state.evaluation.expiresAt))return stop('campaign_evaluator_receipt_expired');
   if(!state.evaluation) {
+   if(!await incidentCurrent())return stop('campaign_incident_not_current');
    state.evaluation=await evaluateCampaignEvidence({manifest,inputs,state,binding,attestEvaluation,now,statisticsPython,statisticsModulePath});
-   state.evaluatorReceipt={campaignId:manifest.id,binding,frozenPolicyDigest:state.frozenPolicyDigest,registrationDigest:manifest.registration.digest,target:manifest.target,sourceDigests:manifest.data.sources,decision:state.evaluation.decision,evaluationDigest:digest(state.evaluation),scope:manifest.data.classification==='synthetic'?'synthetic-finite-corpus':'registered-confirmation-corpus',automated:true};
+   state.evaluatorReceipt={campaignId:manifest.id,binding,frozenPolicyDigest:state.frozenPolicyDigest,registrationDigest:manifest.registration.digest,target:manifest.target,sourceDigests:manifest.data.sources,decision:state.evaluation.decision,evaluationDigest:digest(state.evaluation),scope:state.evaluation.evidenceScope??'undetermined',automated:true};
    state.evaluationDigest=digest(state.evaluation);state.evaluatorReceiptDigest=digest(state.evaluatorReceipt);
    await checkpoint.write(state);
   }
-  return {status:'completed',qualification:state.evaluation.decision,reason:state.evaluation.reason ?? null,binding,checkpoint:state,reportDigest:digest(state)};
+  return {status:'completed',purpose:state.evaluation.evidenceScope==='finite-corpus-diagnostic'?'lifecycle-diagnostic':'offline-evaluation',releaseEligible:false,qualification:state.evaluation.decision,reason:state.evaluation.reason ?? null,binding,checkpoint:state,reportDigest:digest(state)};
  });
 }
 /** Fixed evaluator bridge. A failed process/invalid result is unknown, never a zero measurement. */
@@ -132,7 +141,10 @@ async function evaluateCampaignEvidence({manifest,inputs,state,binding,attestEva
  const request={binding,frozenPolicyDigest:state.frozenPolicyDigest,corpusDigest:digest(pool),registrationDigest:digest(registration)};
  let authority;try{authority=await attestEvaluation(request);}catch{return unavailable('campaign_evaluator_authority_unavailable');}
  if(!authority || Object.entries(request).some(([key,value])=>authority[key]!==value) || authority.costProvenance?.type!=='measured-normalized-cny' || !authority.costProvenance?.receiptId || authority.costProvenance?.complete!==true || !Array.isArray(authority.costs))return unavailable('campaign_cost_provenance_unverified');
- if(registration.mode!=='deterministic')return unavailable('campaign_statistical_consumer_not_qualified');
+ if(registration.mode!=='deterministic' && !(registration.mode==='paired-t' && registration.deterministicConsumer===true))return unavailable('campaign_statistical_consumer_not_qualified');
+ const qualification=authority.receipt?.deterministic_qualification;
+ const qualificationType=registration.mode==='deterministic'?'trusted-deterministic-finite-corpus':'trusted-deterministic-consumer';
+ if(!qualification||qualification.type!==qualificationType||qualification.externally_verified!==true||!qualification.qualification_id||qualification.consumer_id!==registration.consumer_id||qualification.corpus_digest!==registration.corpus_digest)return unavailable('campaign_statistical_consumer_not_qualified');
  if(!Array.isArray(registration.groups) || !registration.groups.length || !registration.families)return unavailable('campaign_source_group_registration_missing');
  const labels=new Map((pool.labels ?? []).map(row=>[String(row.id),row.label?.worth]));
  const allIds=new Set((pool.rows ?? []).map(row=>String(row.id))), seen=new Set(), roots=new Set(), observations=[];
@@ -151,8 +163,9 @@ async function evaluateCampaignEvidence({manifest,inputs,state,binding,attestEva
  }
  if(seen.size!==allIds.size || authority.costs.length!==observations.length)return unavailable('campaign_corpus_or_cost_coverage_incomplete');
  const receipt={...authority.receipt,registration_digest:'bound-by-runner',confirmation_exposed:false,look:1,complete_costs:true,cost_identity:registration.cost_identity,expired_budget:false,now:now().replace(/Z$/, '+00:00')};
- const evaluated=await evaluateStatistics({registration,observations,receipt},{pythonExecutable:statisticsPython,modulePath:statisticsModulePath});
- return {...evaluated,...(authority.expiresAt?{expiresAt:authority.expiresAt}:{}),observationDigest:digest(observations),costProvenance:authority.costProvenance,authorityReceiptDigest:digest(authority),scope:manifest.data.classification==='synthetic'?'synthetic-finite-corpus-only':'registered-finite-confirmation-corpus'};
+ const statisticsInput={registration,observations,receipt};
+ const evaluated=await evaluateStatistics(statisticsInput,{pythonExecutable:statisticsPython,modulePath:statisticsModulePath});
+ return {...evaluated,statisticsInput,...(authority.expiresAt?{expiresAt:authority.expiresAt}:{}),observationDigest:digest(observations),costProvenance:authority.costProvenance,authorityReceiptDigest:digest(authority),scope:registration.mode==='paired-t'?'registered-population-task-family':manifest.data.classification==='synthetic'?'synthetic-finite-corpus-only':'registered-finite-confirmation-corpus'};
 }
 /** The launcher reads this owner-controlled public trust profile. Signing keys are never accepted. */
 export async function signedEvaluatorReceipt(profile, now=()=>new Date().toISOString()) {
