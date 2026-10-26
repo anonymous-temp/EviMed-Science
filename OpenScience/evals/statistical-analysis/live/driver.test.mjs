@@ -102,3 +102,12 @@ test('explicitly resuming a supplied executed package needs artifacts, not a new
   assert.equal(analysisEvidence(record, [], 'resume').complete, true);
   assert.equal(analysisEvidence({ ...record, artifacts: { manifest: [], tools: [] } }, [], 'resume').complete, false);
 });
+
+test('a numerical report audit may use the conversation route but still requires executed findings', () => {
+  const record = { run: { effectiveAgentId: 'open-domain-answer' }, artifacts: {
+    manifest: [{ path: 'verification-results.json', sha256: 'checked' }, { path: 'statistical-report.md', sha256: 'corrected' }, { path: 'analysis.py', sha256: 'audit-code' }],
+    tools: [{ name: 'bash', status: 'completed', error: false }],
+  } };
+  assert.equal(analysisEvidence(record, [], 'audit').complete, true);
+  assert.equal(analysisEvidence({ ...record, artifacts: { ...record.artifacts, tools: [] } }, [], 'audit').complete, false);
+});
