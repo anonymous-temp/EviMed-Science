@@ -6,7 +6,7 @@ import { Disclosure } from "@/components/ui/Disclosure";
 import { Drawer } from "@/components/ui/Drawer";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Menu } from "@/components/ui/Menu";
-import { ApplyControl } from "./ApplyControl";
+import { Switch } from "@/components/ui/Switch";
 import { Toolbar } from "@/components/ui/Toolbar";
 import { Tag } from "@/components/ui/Tag";
 import { FilesSkeleton } from "@/components/cards/Skeletons";
@@ -107,12 +107,12 @@ export function PersonalSkillDrawer({ skillId, projectId, onClose, onChanged, on
                 <p role="status" className="text-ui text-text-2">{skillActivationText(!!currentSelection, selection?.activation)}</p>
                 <div className="flex flex-col gap-3">
                   {selection?.activation?.phase !== "not-applicable" && <div className="flex items-center justify-between gap-3">
-                    <ApplyControl showLabel label={`在“${projectName ?? "当前项目"}”里使用`} checked={!!currentSelection} disabled={busy || !selection}
+                    <Switch showLabel label={`在“${projectName ?? "当前项目"}”里使用`} checked={!!currentSelection} disabled={busy || !selection}
                       onChange={checked => void act(() => saveProjectSkills(projectId, selection!.revision, select(selection!.payload.skills, checked)))} />
                     {stale && <Button size="sm" variant="text" disabled={busy || !selection} onClick={() => void act(() => saveProjectSkills(projectId, selection!.revision, select(selection!.payload.skills, true)))}>更新到最新内容</Button>}
                   </div>}
                   <div className="flex items-center justify-between gap-3">
-                    <ApplyControl showLabel label="新项目默认使用" checked={!!defaultSelection} disabled={busy || !defaults}
+                    <Switch showLabel label="新项目默认使用" checked={!!defaultSelection} disabled={busy || !defaults}
                       onChange={checked => void act(() => savePersonalSkillDefaults(defaults!.revision, select(defaults!.payload.skills, checked)))} />
                     {staleDefault && <Button size="sm" variant="text" disabled={busy || !defaults} onClick={() => void act(() => savePersonalSkillDefaults(defaults!.revision, select(defaults!.payload.skills, true)))}>更新到最新内容</Button>}
                   </div>

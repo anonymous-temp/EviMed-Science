@@ -4,7 +4,7 @@ import { Disclosure } from "@/components/ui/Disclosure";
 import { Drawer } from "@/components/ui/Drawer";
 import { Input } from "@/components/ui/Input";
 import { List, ListRow } from "@/components/ui/ListRow";
-import { ApplyControl } from "./ApplyControl";
+import { Switch } from "@/components/ui/Switch";
 import { formatClock, formatDay } from "@/lib/format";
 import type { WebPluginConfiguration } from "@/lib/apiClient";
 import type { Inventory, InventoryItem } from "@/lib/extensionsClient";
@@ -64,7 +64,7 @@ export function CitationDrawer({ item, citation, projectName, groupTitle, onClos
       <div className="flex flex-col gap-6">
         <div className="flex items-center gap-3"><Tag>插件</Tag><RepositoryLink href={skillRepositoryUrl(item.repository)} title={item.title} /></div>
         <div className="flex items-center justify-between gap-3 rounded-card bg-surface-1 p-4">
-          <ApplyControl showLabel label={`在“${projectName ?? "当前项目"}”里使用`} checked={desired?.enabled ?? false} disabled={busy || !desired} onChange={enabled => void save({ enabled })} />
+          <Switch showLabel label={`在“${projectName ?? "当前项目"}”里使用`} checked={desired?.enabled ?? false} disabled={busy || !desired} onChange={enabled => void save({ enabled })} />
         </div>
         {plugin && !waiting && !failed && <p role="status" className="text-ui text-text-2">{plugin.effective?.enabled ? "当前已启用" : "当前未启用"}</p>}
         {waiting && <p role="status" className="text-ui text-text-2">保存后在下次对话生效</p>}

@@ -37,17 +37,21 @@ it("opens on the skill's text and where it is used, in two tabs rather than ten 
   expect(within(drawer).getByText("核对检索式")).toBeInTheDocument();
   expect(within(drawer).getByText("Use sources.")).toBeInTheDocument();
   expect(within(drawer).getByRole("link", { name: "资料/表.csv" })).toBeInTheDocument();
-  expect(within(drawer).getByRole("button", { name: /应用.*在“我的研究”里使用/ })).toHaveAccessibleName(/应用启用/);
-  expect(within(drawer).getByRole("button", { name: /应用.*新项目默认使用/ })).toHaveAccessibleName(/应用启用/);
+  expect(within(drawer).getByRole("switch", { name: /在“我的研究”里使用/ })).not.toBeChecked();
+  expect(within(drawer).getByRole("switch", { name: /新项目默认使用/ })).not.toBeChecked();
+  // Each switch says, in the words beside it, what it switches; its state is a state, not a verb on a button.
+  expect(within(drawer).getByText("在“我的研究”里使用")).toBeVisible();
+  expect(within(drawer).getByText("新项目默认使用")).toBeVisible();
+  expect(within(drawer).queryByText(/应用启用|应用停用/)).not.toBeInTheDocument();
   expect(drawer.textContent).not.toMatch(/版本 \d|当前项目选用版本|包摘要/);
 });
 
 it("the switches select the skill for this project and for new ones, at its current state", async () => {
   show();
   const drawer = await screen.findByRole("dialog", { name: "检索方案" });
-  await userEvent.click(within(drawer).getByRole("button", { name: /应用.*在“我的研究”里使用/ }));
+  await userEvent.click(within(drawer).getByRole("switch", { name: /在“我的研究”里使用/ }));
   await waitFor(() => expect(skills.saveProjectSkills).toHaveBeenCalledWith("project-1", 6, [{ skillId: "skill:one", revision: 2 }]));
-  await userEvent.click(within(drawer).getByRole("button", { name: /应用.*新项目默认使用/ }));
+  await userEvent.click(within(drawer).getByRole("switch", { name: /新项目默认使用/ }));
   await waitFor(() => expect(skills.savePersonalSkillDefaults).toHaveBeenCalledWith(5, [{ skillId: "skill:one", revision: 2 }]));
 });
 
