@@ -116,7 +116,7 @@ class DecisionTests(unittest.TestCase):
             __import__('json').dumps(result, allow_nan=False)
 
     def test_registered_half_alpha_and_fixed_slice_protocol(self):
-        reg, rows, receipt = fixture('targeted-repair', n=80)
+        reg, rows, receipt = fixture(mode='deterministic')
         reg['procedure'] = {'id': 'rsi-paired-source-v2', 'test_alpha_fraction': .9, 'minimum_slice_groups': 30}
         receipt['registration_digest'] = MODULE.registration_digest(reg)
         self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
