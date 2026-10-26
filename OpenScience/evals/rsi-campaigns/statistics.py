@@ -6,6 +6,8 @@ unknown outcomes are never scored zero. Costs include every paid attempt. The
 paired-t scope is approximate, independent source groups with continuous bounded
 scores, >=30 groups per tested population and no influential group. Deterministic
 mode makes exact claims only about the registered finite corpus, never a population.
+A trusted deterministic consumer permits r1 in paired-t mode, while retaining
+between-source-group sampling uncertainty; finite-corpus mode is diagnostic only.
 """
 import hashlib
 import math
@@ -15,7 +17,7 @@ import rfc8785
 import numpy as np
 from scipy.stats import t
 
-PROCEDURE = {'id': 'rsi-paired-source-v3', 'digest_codec': 'rfc8785-sha256-v1', 'test_alpha_fraction': .5, 'minimum_slice_groups': 30}
+PROCEDURE = {'id': 'rsi-paired-source-v4', 'digest_codec': 'rfc8785-sha256-v1', 'test_alpha_fraction': .5, 'minimum_slice_groups': 30}
 
 
 def registration_digest(registration):
@@ -65,6 +67,7 @@ def evaluate(registration, observations, receipt):
     Claims map efficiency/targeted-repair to separately allocated alpha, sum<=.05.
     """
     result = {'decision': 'inconclusive', 'reasons': [], 'quantities': {},
+              'evidenceScope': 'undetermined', 'globalPolicyEligible': False,
               'registration_digest': None, 'cost_totals': {'baseline': 0.0, 'candidate': 0.0},
               'scope': 'Registered finite corpus only' if isinstance(registration, dict) and registration.get('mode') == 'deterministic'
               else 'Approximate paired-t; independent source groups, continuous scores, no sequential looks',
@@ -100,15 +103,19 @@ def evaluate(registration, observations, receipt):
             raise ValueError('complete cost identity not attested')
         if not registration['cost_identity']:
             raise ValueError('missing cost identity')
-        if receipt['expired_budget'] is not False or datetime.fromisoformat(receipt['now']) >= datetime.fromisoformat(registration['expires_at']):
+        if receipt['expired_budget'] is not False or datetime.fromisoformat(receipt['now'].replace('Z', '+00:00')) >= datetime.fromisoformat(registration['expires_at'].replace('Z', '+00:00')):
             raise ValueError('budget/date expiry before fixed horizon')
         mode = registration['mode']
         if mode not in ('deterministic', 'paired-t'):
             raise ValueError('unsupported statistical mode')
         deterministic = mode == 'deterministic'
-        if deterministic:
+        deterministic_consumer = registration.get('deterministicConsumer', False)
+        if not isinstance(deterministic_consumer, bool):
+            raise ValueError('deterministicConsumer must be a registered boolean')
+        result['evidenceScope'] = 'finite-corpus-diagnostic' if deterministic else 'population-task-family'
+        if deterministic or deterministic_consumer:
             qualification = receipt.get('deterministic_qualification', {})
-            if not isinstance(qualification, dict) or qualification.get('type') != 'trusted-deterministic-finite-corpus' or qualification.get('consumer_id') != registration.get('consumer_id') or qualification.get('corpus_digest') != registration.get('corpus_digest') or not qualification.get('qualification_id') or qualification.get('externally_verified') is not True:
+            if not isinstance(qualification, dict) or qualification.get('type') != ('trusted-deterministic-finite-corpus' if deterministic else 'trusted-deterministic-consumer') or qualification.get('consumer_id') != registration.get('consumer_id') or qualification.get('corpus_digest') != registration.get('corpus_digest') or not qualification.get('qualification_id') or qualification.get('externally_verified') is not True:
                 raise ValueError('trusted externally verified deterministic consumer/corpus qualification required')
         claims = registration['claims']
         if not isinstance(claims, dict) or (len(claims) > 1 and registration.get('claim_policy') != 'preallocated-all-claims-IUT'):
@@ -129,7 +136,7 @@ def evaluate(registration, observations, receipt):
             if not _number(family['margin']) or not 0 < family['margin'] < 1 or not family['pilot_rationale']:
                 raise ValueError('family margin requires pilot rationale')
             repeats = family['repeats']
-            if type(repeats) is not int or repeats < (1 if deterministic else 3) or repeats > 100:
+            if type(repeats) is not int or repeats < (1 if deterministic or deterministic_consumer else 3) or repeats > 100:
                 raise ValueError('invalid family repetition contract')
             forms = family['forms']
             if not isinstance(forms, dict):
@@ -173,6 +180,7 @@ def evaluate(registration, observations, receipt):
             costs.append(tuple(sum(weight * sum(indexed[(group['id'], arm, form, repeat)]['cost'] for repeat in range(family['repeats'])) / family['repeats'] for form, weight in family['forms'].items()) for arm in ('baseline', 'candidate')))
         verdict, quantities = numeric_decision(quality, margins, slices, costs, claims, deterministic)
         result['decision'] = verdict
+        result['globalPolicyEligible'] = verdict == 'qualified' and not deterministic
         result['quantities'] = quantities
     except (KeyError, TypeError, ValueError, OverflowError) as error:
         result['reasons'].append(str(error))

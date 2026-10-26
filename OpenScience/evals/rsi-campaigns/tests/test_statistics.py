@@ -157,6 +157,7 @@ class DecisionTests(unittest.TestCase):
         rows = [row for row in rows if row['repeat'] == 0]
         receipt['deterministic_qualification']['type'] = 'trusted-deterministic-consumer'
         receipt['registration_digest'] = MODULE.registration_digest(reg)
+        self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
         for row in rows:
             if row['arm'] == 'candidate':
                 row['quality'] += .1 + int(row['group']) * .001
