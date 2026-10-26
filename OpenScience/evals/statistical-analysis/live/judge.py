@@ -25,6 +25,16 @@ def comparison_reference(fixtures, *, supplement=False, corrected=False, scale=1
         with (Path(fixtures) / name).open() as file:
             return list(csv.DictReader(file))
     rows = read('coding-correction.csv' if corrected else 'cohort.csv')
+    if corrected:
+        original = read('cohort.csv')
+        by_id = {row['patient_id']: row for row in original}
+        if len(rows) != len(by_id) or {row['patient_id'] for row in rows} != set(by_id):
+            raise ValueError('Correction must be a group-only change to the same patients.')
+        for row in rows:
+            before = by_id[row['patient_id']]
+            if (row['group'] != {'A': 'B', 'B': 'A'}[before['group']]
+                    or {k: v for k, v in row.items() if k != 'group'} != {k: v for k, v in before.items() if k != 'group'}):
+                raise ValueError('Correction must be group-only; measurement or other data changed.')
     if supplement:
         for item in read('supplement.csv'):
             item['marker_mm'] = float(item.pop('marker_cm')) * 10 if item['marker_cm'] else ''
@@ -151,6 +161,8 @@ def main():
         elif kind == 'comparison':
             options = turn.get('referenceOptions', {})
             fixture('coding-correction.csv' if options.get('corrected') else 'cohort.csv')
+            if options.get('corrected'):
+                fixture('cohort.csv')
             if options.get('supplement'):
                 fixture('supplement.csv')
             reference = comparison_reference(fixtures, **options)
