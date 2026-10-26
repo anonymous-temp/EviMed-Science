@@ -70,10 +70,22 @@ export const CARD_MAX_TAGS = 3;
  * The eyebrow tag of a card: what the item is — its genre (「行业动态」「政策法规」「会议报道」, ct-write 2026-10-24) — and for a paper its
  * design (「RCT」), which says more than 「研究论文」. None for a safety alert, which says 「安全警示」 first already.
  */
-export function cardEyebrow(item: Pick<FrontierItem, "evidenceType" | "evidenceTypeLabel" | "safetyAlert" | "flags" | "laneLabel" | "genre" | "genreLabel">): string | null {
+export function cardEyebrow(item: Pick<FrontierItem, "evidenceType" | "evidenceTypeLabel" | "safetyAlert" | "flags" | "laneLabel" | "genre" | "genreLabel">
+  & Partial<Pick<FrontierItem, "industryKind" | "industryKindLabel">>): string | null {
   if (item.safetyAlert) return null;
   if (item.genre === "paper") return evidenceTag(item) ?? item.genreLabel;
+  // 行业动态 says what kind of business news it is beside the genre (「行业动态 · 融资与上市」, c5-biz 2026-10-26).
+  const kind = industryKindTag(item);
+  if (item.genre === "industry" && item.genreLabel && kind) return `${item.genreLabel} · ${kind}`;
   return item.genreLabel || evidenceTag(item) || item.laneLabel || null;
+}
+
+/**
+ * The kind of 行业动态 an item shows beside its genre (c5-biz 2026-10-26: 交易与授权, 融资与上市, 人事与组织, 公司经营, 研发管线), or none:
+ * an item the model has not named has no kind, and 「其他」 says nothing the genre has not said, so it is filtered by and never drawn.
+ */
+export function industryKindTag(item: Partial<Pick<FrontierItem, "industryKind" | "industryKindLabel">>): string | null {
+  return item.industryKind && item.industryKind !== "other" ? item.industryKindLabel || null : null;
 }
 
 /** 「AI 评分」: one name everywhere — the card's pill, the reader's 推荐理由, a screen reader. */

@@ -43,6 +43,8 @@ import {
   FRONTIER_GENRE_LABELS_ZH,
   FRONTIER_GENRES,
   FRONTIER_HIDE_REASONS,
+  FRONTIER_INDUSTRY_KIND_LABELS_ZH,
+  FRONTIER_INDUSTRY_KINDS,
   FRONTIER_ITEM_FLAG_LABELS_ZH,
   FRONTIER_LANE_LABELS_ZH,
   FRONTIER_LANES as LANE_KEYS,
@@ -92,6 +94,15 @@ export const FRONTIER_SPECIALTY_GROUPS: ReadonlyArray<{ key: string; label: stri
 /** The evidence types a reader filters by (「证据类型」), strongest forms first. */
 export const FRONTIER_EVIDENCE_TYPES: readonly FrontierLabelled[] = Object.freeze(
   EVIDENCE_TYPE_KEYS.map((key) => ({ key, label: FRONTIER_EVIDENCE_TYPE_LABELS_ZH[key] })),
+);
+
+/**
+ * The kinds of 行业动态 a reader filters by (c5-biz 2026-10-26: 交易与授权, 融资与上市, 人事与组织, 公司经营, 研发管线, 其他) -
+ * `@evimed/domain`'s closed list, the one the server labels every item with and checks the filter against.
+ */
+export type FrontierIndustryKind = typeof FRONTIER_INDUSTRY_KINDS[number];
+export const FRONTIER_INDUSTRY_KIND_OPTIONS: ReadonlyArray<{ key: FrontierIndustryKind; label: string }> = Object.freeze(
+  FRONTIER_INDUSTRY_KINDS.map((key) => ({ key, label: FRONTIER_INDUSTRY_KIND_LABELS_ZH[key] })),
 );
 
 /**
@@ -199,6 +210,13 @@ export interface FrontierItem {
   genre: FrontierGenre;
   /** The genre in the reader's words (「研究论文」). */
   genreLabel: string;
+  /**
+   * What a piece of 行业动态 is about (c5-biz 2026-10-26: 交易与授权, 融资与上市, 人事与组织, 公司经营, 研发管线, 其他): only an item
+   * whose genre is `industry` has one, and one the model has not named has none.
+   */
+  industryKind: FrontierIndustryKind | null;
+  /** The kind in the reader's words (「融资与上市」). */
+  industryKindLabel: string | null;
   /** What the card leads with: the Chinese title, else the original. */
   title: string;
   titleRaw: string;
@@ -431,6 +449,8 @@ export interface FrontierItemsQuery {
   tag?: string | null;
   /** One evidence type (`FRONTIER_EVIDENCE_TYPES`). */
   evidence?: string | null;
+  /** One kind of 行业动态 (`FRONTIER_INDUSTRY_KIND_OPTIONS`); it implies the genre. */
+  industryKind?: FrontierIndustryKind | null;
   /** Only what this reader has not opened. */
   unread?: boolean;
   window?: FrontierWindow | null;
@@ -1031,10 +1051,14 @@ export function parseFrontierItem(value: unknown): FrontierItem | null {
   const flags = labelled(raw.flags, FLAG_LABELS);
   const genre = orNull(raw.genre, FRONTIER_GENRES) ?? frontierGenreFallback({ platform: text(raw.platform), channel: text(raw.channel),
     sourceType: text(raw.sourceType), evidenceType: text(raw.evidenceType), flags: flags.map((flag) => flag.key), safetyAlert: raw.safetyAlert === true, lane });
+  // A kind belongs to 行业动态: on any other genre, or outside the closed list, it is none.
+  const industryKind = genre === "industry" ? orNull(raw.industryKind, FRONTIER_INDUSTRY_KINDS) : null;
   return {
     id,
     genre,
     genreLabel: text(raw.genreLabel) ?? FRONTIER_GENRE_LABELS_ZH[genre],
+    industryKind,
+    industryKindLabel: industryKind ? text(raw.industryKindLabel) ?? FRONTIER_INDUSTRY_KIND_LABELS_ZH[industryKind] : null,
     title: text(raw.title) ?? titleZh ?? titleRaw,
     titleRaw,
     titleZh,
@@ -1552,6 +1576,7 @@ function itemsQueryString(query: FrontierItemsQuery): string {
   if (query.specialties?.length) params.set("specialty", query.specialties.join(","));
   if (query.tag) params.set("tag", query.tag);
   if (query.evidence) params.set("evidence", query.evidence);
+  if (query.industryKind) params.set("industryKind", query.industryKind);
   if (query.unread) params.set("unread", "1");
   if (query.follow) params.set("follow", query.follow);
   if (query.window) params.set("window", query.window);

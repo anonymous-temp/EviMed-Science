@@ -415,6 +415,21 @@ describe("the control row", () => {
     expect(location()).toBe("/app/frontier?view=all");
   });
 
+  it("narrows 行业动态 by kind from 「筛选」 (c5-biz): one choice, in the address, a token on the row that lets go of it", async () => {
+    renderPage("/app/frontier?view=all");
+    await screen.findByText("今天的一条 RCT");
+    const panel = await openFilters();
+    const kinds = within(within(panel).getByRole("group", { name: "行业动态" }));
+    expect(kinds.getAllByRole("button").map((chip) => chip.textContent)).toEqual(["全部", "交易与授权", "融资与上市", "人事与组织", "公司经营", "研发管线", "其他"]);
+    await userEvent.click(kinds.getByRole("button", { name: "融资与上市" }));
+    await waitFor(() => expect(lastFeedQuery()).toMatchObject({ industryKind: "financing" }));
+    expect(location()).toContain("kind=financing");
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(within(controlRow()).getByRole("button", { name: "移除筛选：融资与上市" }));
+    await waitFor(() => expect(lastFeedQuery()).toMatchObject({ industryKind: null }));
+    expect(location()).toBe("/app/frontier?view=all");
+  });
+
   it("offers the time range in 全部 only", async () => {
     renderPage();
     await screen.findByText("今天的一条 RCT");
@@ -448,6 +463,8 @@ describe("the control row", () => {
   it.each([
     ["/app/frontier?view=all&channel=literature&evidence=rct&unread=1", { channel: "literature", evidence: "rct", unread: true }],
     ["/app/frontier?view=all&channel=podcast&evidence=anecdote", { channel: null, evidence: null }],
+    ["/app/frontier?view=all&kind=people&lane=pipeline", { industryKind: "people", lane: "pipeline" }],
+    ["/app/frontier?view=all&kind=merger", { industryKind: null }],
     ["/app/frontier?lane=pipeline&specialty=oncology&starred=1", { lane: "pipeline", specialties: ["oncology"], starred: true }],
     ["/app/frontier?specialty=oncology,cardiology", { specialties: ["oncology", "cardiology"] }],
     // A retired specialty reads as its successor, or as nothing.

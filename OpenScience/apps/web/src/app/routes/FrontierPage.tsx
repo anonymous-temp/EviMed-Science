@@ -41,7 +41,7 @@ import { DailyIssue, dailyControls, useFrontierDaily } from "@/components/fronti
 import { FeedList, FEED_PAGE_SIZE, type Listing } from "@/components/frontier/FrontierFeed";
 import { FrontierCard } from "@/components/frontier/FrontierCard";
 import { useFrontierHide } from "@/components/frontier/useFrontierHide";
-import { NO_FILTERS, readChannel, readEvidence, readSpecialties, readTag, specialtyLabel, type FrontierFilterValue } from "@/components/frontier/FrontierFilters";
+import { NO_FILTERS, readChannel, readEvidence, readIndustryKind, readSpecialties, readTag, specialtyLabel, type FrontierFilterValue } from "@/components/frontier/FrontierFilters";
 import { rememberTagName, useFollowSet, useHotTags, useTagFollow, useTagName, useTagSuggestions } from "@/components/frontier/useFrontierTags";
 import { HotBoard, HotCard, isHotWindow, type HotState } from "@/components/frontier/FrontierHot";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
@@ -62,7 +62,7 @@ const STATUS_POLL_MS = 120_000;
 
 /** The control of the list each filter is, as a `filter-change` names it — never what it was set to (frontierTracking). */
 const FILTER_CONTROLS: Record<keyof FrontierFilterValue, string> = { channel: "channel", lane: "lane", specialties: "specialty", tag: "tag", evidence: "evidence",
-  starred: "starred", unread: "unread", window: "window", byTime: "sort" };
+  industryKind: "kind", starred: "starred", unread: "unread", window: "window", byTime: "sort" };
 
 /** The views whose list the feed's filters narrow: a tag chosen anywhere else opens 全部 with it. */
 const FEED_VIEWS: ReadonlySet<PageView> = new Set(["selected", "all", "following"]);
@@ -99,7 +99,7 @@ function readDay(value: string | null): string | null {
  * Hidden knowledge:
  *
  *  - Everything that describes the reader's position lives in the URL
- *    (`?view=&q=&lane=&specialty=a,b&tag=&channel=&evidence=&window=&starred=1&unread=1&sort=&day=&scope=`), so a
+ *    (`?view=&q=&lane=&kind=&specialty=a,b&tag=&channel=&evidence=&window=&starred=1&unread=1&sort=&day=&scope=`), so a
  *    notification's link (`?view=daily&day=…`), Back and a shared address all
  *    land on the same screen. `window` is the 全部 view's time range there and
  *    the 热榜's ranking (`week`, `month`) here; a view change clears it. An older
@@ -176,6 +176,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const specialties = useMemo(() => readSpecialties(specialtyParam), [specialtyParam]);
   const tag = readTag(params.get("tag"));
   const evidence = readEvidence(params.get("evidence"));
+  const industryKind = readIndustryKind(params.get("kind"));
   const starred = params.get("starred") === "1";
   const unread = params.get("unread") === "1";
   const windowFilter = view === "all" ? readWindow(params.get("window")) : "";
@@ -192,7 +193,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   // 「没有结果」 means a filter or a narrowed follow excluded everything; the whole of the follows is not a filter.
   // A typed follow that has matched nothing (yet) is not a filter that excluded everything: it says what it is waiting for (c3-watch).
   const typedFollow = choice?.kind === "follow" ? following.topics.find((entry) => entry.id === choice.id && entry.kind === "query") : undefined;
-  const filtered = Boolean(channel || lane || specialties.length || tag || evidence || starred || unread || windowFilter || (choice?.kind === "follow" && !typedFollow));
+  const filtered = Boolean(channel || lane || specialties.length || tag || evidence || industryKind || starred || unread || windowFilter || (choice?.kind === "follow" && !typedFollow));
   /** Where the list on screen is, as its events name it (frontierTracking): the feed, a search or the follows. */
   const listSurface: FrontierTrackSurface = q ? "search" : view === "following" ? "follows" : "feed";
   /** Where a card's star or hide is taken: 与我相关 or the list. */
@@ -206,12 +207,13 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     specialties,
     tag: tag || null,
     evidence: evidence || null,
+    industryKind: industryKind || null,
     window: windowFilter || null,
     q: q || null,
     starred,
     unread,
     ...(byTime ? { sort: "time" as const } : {}),
-  }), [view, follow, channel, lane, specialties, tag, evidence, windowFilter, q, starred, unread, byTime]);
+  }), [view, follow, channel, lane, specialties, tag, evidence, industryKind, windowFilter, q, starred, unread, byTime]);
   const key = JSON.stringify(query);
 
   /* ------------------------------------------------------------- status */
@@ -606,7 +608,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   }, [requestParam, requestable, setAsking, setParams]);
 
   const setFilters = (change: Partial<FrontierFilterValue>) => {
-    const current: FrontierFilterValue = { channel, lane, specialties, tag, evidence, starred, unread, window: windowFilter, byTime };
+    const current: FrontierFilterValue = { channel, lane, specialties, tag, evidence, industryKind, starred, unread, window: windowFilter, byTime };
     for (const [name, value] of Object.entries(change) as Array<[keyof FrontierFilterValue, unknown]>) {
       if (value !== undefined && JSON.stringify(value) !== JSON.stringify(current[name]) && FILTER_CONTROLS[name]) trackFrontierFilter(FILTER_CONTROLS[name], listSurface);
     }
@@ -621,6 +623,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     if (change.specialties !== undefined) assign("specialty", change.specialties.join(","));
     assign("tag", change.tag);
     assign("evidence", change.evidence);
+    assign("kind", change.industryKind);
     assign("starred", change.starred);
     assign("unread", change.unread);
     assign("window", change.window);
@@ -838,7 +841,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const toolbar = frontierToolbar({
     view,
     onView: setView,
-    filters: { channel, lane, specialties, tag, evidence, starred, unread, window: windowFilter, byTime },
+    filters: { channel, lane, specialties, tag, evidence, industryKind, starred, unread, window: windowFilter, byTime },
     onFilters: setFilters,
     showWindow: view === "all",
     searching: Boolean(q),
