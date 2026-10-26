@@ -33,7 +33,7 @@ export function authenticateEvaluation(envelope, profile, now) {
  }catch{fail('campaign_evaluator_authority_untrusted');}
 }
 export async function finalizeCampaign({completed,manifest,inputs,files,evidenceEnvelope,profile,currentTarget,root,closurePaths,bundleId,expiresAt,now=new Date().toISOString(),publisher,evaluator,incidentTransport,purpose='production',statisticsPython='python3',closureSettings={},closurePins={},closureRegistry,statisticsModulePath,loadSigners}) {
- const incident=async()=>{if(manifest.data.classification==='authorized-incident'){if(!incidentTransport)fail('campaign_incident_authority_unavailable');await incidentTransport.assertIncidentCurrent(manifest.data.authorization.id);}};
+ const incident=async()=>{if(manifest.data.classification==='authorized-incident'){if(!incidentTransport)fail('campaign_incident_authority_unavailable');await incidentTransport.assertIncidentCurrent(manifest.data.authorization);}};
  await incident();
  if(rsiCampaignIssues(manifest).length||completed.status!=='completed'||rsiCompatibilityIssues(manifest.target,currentTarget).length)fail('campaign_finalization_input_invalid');
  const state=completed.checkpoint,binding=rsiDigest({manifest,inputs});
@@ -46,6 +46,7 @@ export async function finalizeCampaign({completed,manifest,inputs,files,evidence
  const dev=sourceRows.find(s=>s.role==='development'),confirmation=sourceRows.find(s=>s.role==='confirmation');
  if(!dev||!confirmation||dev.id===confirmation.id||confirmation.exposure!=='sealed'||dev.digest===confirmation.digest)fail('campaign_confirmation_not_independent');
  const evidence=authenticateEvaluation(evidenceEnvelope,profile,now);
+ if(evidence.confirmationOpenedAt!==state.confirmationOpenedAt)fail('campaign_confirmation_time_changed');
  const candidateDigest=rsiDigest([...files].sort((a,b)=>a.path.localeCompare(b.path,'en')));
  const closure=await computeRsiDependencyClosure({rootDir:root,surface:manifest.surface,settings:closureSettings,pins:closurePins,...(closureRegistry?{registry:closureRegistry}:{})});
  const consumerDigest=closure.dependencyDigest;
@@ -58,6 +59,7 @@ export async function finalizeCampaign({completed,manifest,inputs,files,evidence
  const consumerProof=evidence.consumerProof;
  if(!consumerProof||consumerProof.executed!==true||consumerProof.consumerDigest!==consumerDigest||consumerProof.candidateDigest!==candidateDigest||consumerProof.baselineRevision!==currentTarget.baselineRevision||consumerProof.corpusDigest!==confirmation.digest||consumerProof.resultDigest!==state.stages.confirmation.resultDigest)fail('campaign_consumer_proof_untrusted');
  const q=evidence.qualification, statistics=evidence.statistics;
+ if(!state.evaluation?.statisticsInput || rsiDigest(statistics)!==rsiDigest(state.evaluation.statisticsInput) || rsiDigest(statistics.observations)!==state.evaluation.observationDigest)fail('campaign_measured_evidence_changed');
  const groupProof=evidence.sourceGroupProof;
  if(!Array.isArray(groupProof)||groupProof.length!==statistics?.registration?.groups?.length||new Set(groupProof.map(g=>g.sourceRoot)).size!==groupProof.length||new Set(groupProof.map(g=>g.id)).size!==groupProof.length||groupProof.some(g=>g.exposure!=='sealed'||!roots[confirmation.id].includes(g.sourceRoot)||!statistics.registration.groups.some(row=>row.id===g.id)))fail('campaign_source_group_proof_invalid');
  if(!q||q.status!=='qualified'||!profile.qualificationDigests?.includes(rsiDigest(q))||!q.claims?.includes(manifest.claim)||q.consumerDigest!==consumerDigest||q.procedureDigest!==rsiDigest(statistics.registration.procedure)||!profile.procedureDigests?.includes(q.procedureDigest)||(!Number.isFinite(Date.parse(q.expiresAt))||Date.parse(q.expiresAt)<=Date.parse(now)))fail('campaign_procedure_not_qualified');

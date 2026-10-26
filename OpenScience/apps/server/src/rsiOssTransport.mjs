@@ -40,9 +40,18 @@ export async function createRsiOssTransport(config, options = {}) {
     if (bytes.length > limit || bytes.length !== metadata.size || sha(bytes) !== metadata.digest) throw new Error('rsi_oss_object_changed');
     return { bytes, digest: metadata.digest };
   }
-  async function assertIncidentCurrent(streamId) {
+  async function assertIncidentCurrent(authority) {
     requireRole('lab');
+    const streamId = typeof authority === 'string' ? authority : authority?.incidentId;
     if (await head('incidentBucket', incidentKey(streamId, 2))) throw new Error('rsi_oss_incident_withdrawn');
+    const value = await read('incidentBucket', incidentKey(streamId, 1), 65536);
+    if (!value) throw new Error('rsi_oss_incident_missing');
+    const body = JSON.parse(value.bytes.toString('utf8'));
+    if (body.incidentId !== streamId || body.generation !== 1 || typeof authority !== 'string' && (
+      value.digest !== authority.incidentDigest || body.authorizationId !== authority.id ||
+      body.sourceRunId !== authority.sourceRunId || body.sourceRevision !== authority.sourceRevision)) throw new Error('rsi_oss_incident_binding_changed');
+    if (await head('incidentBucket', incidentKey(streamId, 2))) throw new Error('rsi_oss_incident_withdrawn');
+    return value;
   }
   async function list(channel, prefix, cursor) {
     if (cursor !== undefined && (typeof cursor !== 'string' || cursor.length > 2048 || [...cursor].some(character => character.charCodeAt(0) < 32))) throw new Error('rsi_oss_cursor_invalid');
@@ -64,7 +73,7 @@ export async function createRsiOssTransport(config, options = {}) {
     },
     async headObject(input) { requireRole('production'); if (![1, 2].includes(input.generation)) throw new Error('rsi_oss_generation_invalid'); return head('incidentBucket', incidentKey(input.streamId, input.generation)); },
     assertIncidentCurrent,
-    async readIncident(streamId) { await assertIncidentCurrent(streamId); const value = await read('incidentBucket', incidentKey(streamId, 1), 65536); await assertIncidentCurrent(streamId); return value; },
+    async readIncident(streamId) { return assertIncidentCurrent(streamId); },
     async listIncidents(cursor) { requireRole('lab'); return list('incidentBucket', 'rsi/v1/incidents/', cursor); },
     async exportBundle(envelope) { requireRole('lab'); const bytes = Buffer.from(JSON.stringify(envelope)); if (bytes.length > MAX_BUNDLE) throw new Error('rsi_oss_bundle_unbounded'); const digest = sha(bytes); await immutable('bundleBucket', bundleKey(digest), bytes, digest); return { digest }; },
     async readBundle(digest) { requireRole('production'); const value = await read('bundleBucket', bundleKey(digest), MAX_BUNDLE); if (value && value.digest !== digest) throw new Error('rsi_oss_object_changed'); return value; },

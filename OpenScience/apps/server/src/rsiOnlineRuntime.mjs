@@ -1,5 +1,5 @@
 import { PLATFORM_PUBLISHER_USER_ID } from '@evimed/domain';
-import { ensureEvidenceProject, isInternalProject } from './internalProjects.mjs';
+import { ensureEvidenceProject, isInternalProject, EVIDENCE_PROJECT_ID } from './internalProjects.mjs';
 import { readVerifiedRunTranscript } from './runTranscripts.mjs';
 import { preservedConversationHistory } from './conversationHistory.mjs';
 import { createRsiIncidentExports } from './rsiIncidentExports.mjs';
@@ -10,12 +10,24 @@ import { callModelForControlPlane } from './modelGateway.mjs';
 import { createRsiDeploymentAuthority, createRsiTrustRegistry } from './rsiDeploymentAuthority.mjs';
 import { RsiCampaignImporter } from './rsiCampaignImporter.mjs';
 
+/** Only a recorded incident is an extraction candidate; a normal completed conversation is not.
+ * @param {any} run */
+export function rsiIncidentRunEligible(run) {
+  if (!run || run.automated === true) return false;
+  return run.status === 'failed' || (run.qualityNotices ?? []).some(notice =>
+    ['run_tool_failed', 'run_tool_unavailable'].includes(notice?.code)) ||
+    String(run.effectiveRouteReason ?? '').includes(':classifier:');
+}
+
 /** Canonical source reader: project authorization, exact retained bytes, root prose, one run.
  * The authority port resolves a deployment-owned agreement; it never accepts a request's boolean.
  * @param {any} dependencies */
 export function createRsiAuthorizedTranscriptReader({ store, agentRuns, agreementId, authority, assertModelAccess, readTranscript = readVerifiedRunTranscript }) {
   return async binding => {
-    if (!agreementId || binding.authorizationId !== agreementId || !authority) return null;
+    if (!authority || !binding.authorizationId) return null;
+    let activeAgreement;
+    try { activeAgreement = authority.currentAgreementId ? await authority.currentAgreementId() : agreementId; } catch { return null; }
+    if (!activeAgreement || binding.authorizationId !== activeAgreement) return null;
     const user = await store.userById(binding.userId);
     if (!user) return null;
     let project;
@@ -23,14 +35,14 @@ export function createRsiAuthorizedTranscriptReader({ store, agentRuns, agreemen
     if (isInternalProject(project.id)) return null;
     const run = (await agentRuns.list(project)).find(row => row.id === binding.sourceRunId);
     if (!run || run.transcript?.sha256 !== binding.sourceRevision) return null;
-    if (!await authority.authorizeIncident({ agreementId, user, project, run })) return null;
+    try { if (!await authority.authorizeIncident({ agreementId: activeAgreement, user, project, run })) return null; } catch { return null; }
     let verified;
     try { verified = await readTranscript(project, run, binding.sourceRevision); } catch { return null; }
     const history = await preservedConversationHistory(project, run.sessionId, [run], async () => verified, { runId: run.id });
     const messages = history.messages.slice(-12).map(message => ({ id: `${run.id}:${message.seq}`, role: message.role, text: message.text }));
     if (!messages.length || JSON.stringify(messages).length > 32000) return null;
     // This separate privacy assertion uses the SOURCE identity even though the publisher pays.
-    if (assertModelAccess) await assertModelAccess({ userId: user.id, projectId: project.id, runId: run.id, sessionId: run.sessionId }, { messages });
+    try { if (assertModelAccess) await assertModelAccess({ userId: user.id, projectId: project.id, runId: run.id, sessionId: run.sessionId }, { messages }); } catch { return null; }
     return { ...binding, authorized: true, valid: true, messages };
   };
 }
@@ -38,19 +50,23 @@ export function createRsiAuthorizedTranscriptReader({ store, agentRuns, agreemen
 /** Offline experiment code is deliberately absent. No cloud client/model/import is initialized
  * without complete bindings and an independently configured authority/trust adapter.
  * @param {any} dependencies */
-export async function createRsiOnlineRuntime({ config, store, documents, jobs, database, agentRuns, assertModelAccess, usageLedger, servingAdapters, authority = null, trust = null, transportFactory = createRsiOssTransport, model = callModelForControlPlane, report = () => {} }) {
-  const binding = await ensureEvidenceProject(store);
+export async function createRsiOnlineRuntime({ config, store, documents, jobs, database, agentRuns, assertModelAccess, usageLedger, servingAdapters, canRun = async () => true, authority = null, trust = null, transportFactory = createRsiOssTransport, model = callModelForControlPlane, report = () => {} }) {
+  // Withdrawal remains addressable without provisioning an otherwise disabled module.
+  const binding = { userId: PLATFORM_PUBLISHER_USER_ID, projectId: EVIDENCE_PROJECT_ID };
   const loaded = await loadRsiOnlineConfiguration(config.rsiOnlineConfigFile);
   const online = loaded.configuration;
+  let publisherReady = false;
   if (online && servingAdapters) {
     try {
+      await ensureEvidenceProject(store);
+      publisherReady = true;
       authority ??= await createRsiDeploymentAuthority(online);
       trust ??= await createRsiTrustRegistry(online, servingAdapters);
     } catch { report('rsi_deployment_binding_unavailable'); }
   }
   const agreementId = authority?.agreementId;
   let transport = null;
-  const configured = () => Boolean(online && authority?.isBound?.(online) === true && trust?.isBound?.(online) === true && transport?.available === true && servingAdapters);
+  const configured = () => Boolean(publisherReady && online && authority?.isBound?.(online) === true && trust?.isBound?.(online) === true && transport?.available === true && servingAdapters);
   if (online && authority?.isBound?.(online) === true && trust?.isBound?.(online) === true && servingAdapters) {
     try { transport = await transportFactory(online.transport); } catch { report('rsi_online_transport_unavailable'); }
   }
@@ -92,7 +108,7 @@ export async function createRsiOnlineRuntime({ config, store, documents, jobs, d
     await jobs.enqueue(binding.userId, 'rsi-bundle-poll', { cursor: page.cursor ?? undefined }, { projectId: binding.projectId, idempotencyKey: `rsi-poll:${Date.now()}`, runAfter: new Date(Date.now() + 60000) });
     return { processed: results.length };
   }
-  const worker = createRsiOnlineWorker({ jobs, owner: binding.userId, configured, incidents, pollBundles, report });
+  const worker = createRsiOnlineWorker({ jobs, owner: binding.userId, configured, incidents, pollBundles, canRun, report });
   if (configured()) await jobs.enqueue(binding.userId, 'rsi-bundle-poll', {}, { projectId: binding.projectId, idempotencyKey: 'rsi-bundle-poll:bootstrap' });
   return { worker, importer, configured, configurationIssues: loaded.issues,
     invalidateSource: input => incidents.invalidateSource(input),
@@ -102,8 +118,9 @@ export async function createRsiOnlineRuntime({ config, store, documents, jobs, d
       if (!user) return null;
       const authorized = await store.requireProject(user, project.id);
       const run = (await agentRuns.list(authorized)).find(row => row.id === runId);
-      if (!run?.transcript?.sha256) return null;
-      if (!await authority.authorizeIncident({ agreementId: agreementId, user, project: authorized, run })) return null;
-      return incidents.offer({ userId: user.id, projectId: authorized.id, sourceRunId: run.id, sourceRevision: run.transcript.sha256, authorizationId: agreementId });
+      if (!run?.transcript?.sha256 || !rsiIncidentRunEligible(run)) return null;
+      const activeAgreement = authority.currentAgreementId ? await authority.currentAgreementId() : agreementId;
+      if (!await authority.authorizeIncident({ agreementId: activeAgreement, user, project: authorized, run })) return null;
+      return incidents.offer({ userId: user.id, projectId: authorized.id, sourceRunId: run.id, sourceRevision: run.transcript.sha256, authorizationId: activeAgreement });
     } };
 }

@@ -14,6 +14,7 @@ import { loadConfig } from '../src/config.mjs';
 import { createRsiTrustRegistry } from '../src/rsiDeploymentAuthority.mjs';
 import { RsiCampaignImporter } from '../src/rsiCampaignImporter.mjs';
 import { canonicalRsiJson, rsiDigest, signRsiCampaignBundle } from '../src/rsiCampaignBundle.mjs';
+import { quarantineRetiredEvolutionJobs } from '../src/evolutionRetiredJobs.mjs';
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? '';
 if (url) { const parsed = new URL(url); assert.ok(['localhost','127.0.0.1','::1'].includes(parsed.hostname)); assert.match(parsed.pathname, /^\/evimed_test[a-z0-9_]*$/); }
 const options = { skip: !url && 'Disposable localhost PostgreSQL required' };
@@ -27,6 +28,22 @@ async function fixture(operation) {
     await operation({ database, owner, foreign, jobs: new ProductJobs(database), documents: new ProductDocuments(database) });
   } finally { await database.query('DELETE FROM evimed_control.users WHERE id=ANY($1::text[])', [[owner,foreign]]); await database.close(); }
 }
+test('cutover retains experimental identities and skips live leases, serving work and other owners', options, () => fixture(async ({ database, owner, foreign, jobs }) => {
+  const queued = await jobs.enqueue(owner, 'evolution-meta', { paidRunId: 'retained-run' }, { idempotencyKey: 'retired-queued' });
+  const expired = await jobs.enqueue(owner, 'evolution-evaluate', { action: 'scorer-audit' }, { idempotencyKey: 'retired-expired' });
+  const live = await jobs.enqueue(owner, 'evolution-build', {}, { idempotencyKey: 'retired-live' });
+  const serving = await jobs.enqueue(owner, 'evolution-event', { eventId: 'sensor' }, { idempotencyKey: 'serving' });
+  const other = await jobs.enqueue(foreign, 'evolution-meta', {}, { idempotencyKey: 'other-owner' });
+  await database.query("UPDATE evimed_product.jobs SET status='running',attempts=1,lease_token='lease',lease_expires_at=clock_timestamp()+CASE WHEN id=$1 THEN interval '-1 minute' ELSE interval '1 hour' END WHERE id=ANY($2::text[])", [expired.id, [expired.id, live.id]]);
+  const kept = await database.query('SELECT * FROM evimed_product.jobs WHERE id=ANY($1::text[]) ORDER BY id', [[live.id, serving.id, other.id]]);
+  assert.equal(await quarantineRetiredEvolutionJobs(database, owner), 2);
+  assert.equal(await quarantineRetiredEvolutionJobs(database, owner), 0);
+  const retired = await database.query('SELECT * FROM evimed_product.jobs WHERE id=ANY($1::text[]) ORDER BY id', [[queued.id, expired.id]]);
+  assert.ok(retired.rows.every(row => row.status === 'canceled' && row.error.code === 'evolution_offline_only'));
+  assert.equal(retired.rows.find(row => row.id === queued.id).payload.paidRunId, 'retained-run');
+  assert.equal(retired.rows.find(row => row.id === expired.id).attempts, 1);
+  assert.deepEqual((await database.query('SELECT * FROM evimed_product.jobs WHERE id=ANY($1::text[]) ORDER BY id', [[live.id, serving.id, other.id]])).rows, kept.rows);
+}));
 test('owner-filtered claim skips foreign head and leaves foreign expired/exhausted rows unchanged', options, () => fixture(async ({ database, owner, foreign, jobs }) => {
   const head = await jobs.enqueue(foreign, 'rsi-incident-export', { id: 'foreign' }, { idempotencyKey: 'foreign-head', runAfter: new Date(0) });
   const expired = await jobs.enqueue(foreign, 'rsi-bundle-poll', {}, { idempotencyKey: 'foreign-expired', maxAttempts: 1 });

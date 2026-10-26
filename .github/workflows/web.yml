@@ -108,6 +108,9 @@ jobs:
       # nobody names is collected by nothing. `deploy.test.mjs` fails if a
       # `test_*.py` lands there without a script, and the `ci:web` step list
       # test fails if a script lands without a step here.
+      - name: Install isolated RSI numerical dependencies
+        run: python3 -m pip install --target ../.evimed-local/toolchains/rsi-python -r evals/rsi-campaigns/requirements.txt
+
       - name: Test the capability audit suites
         run: |
           pnpm test:acceptance-ledger
@@ -121,6 +124,7 @@ jobs:
           pnpm test:memory-policy
           pnpm test:memory-evals
           pnpm test:knowledge-product
+          pnpm test:rsi
           pnpm test:phi-masking
 
       # The host scripts under `scripts/ops/` (the Postgres backup, the recovery

@@ -2,7 +2,7 @@
 import { readFile } from 'node:fs/promises';
 import { campaignPlan, runCampaign, labPreflight, productCampaignStore, signedEvaluatorReceipt } from './campaign_runner.mjs';
 import { rsiLabConfigurationIssues } from '../../apps/server/src/rsiLabConfiguration.mjs';
-const [command, manifestPath, inputsPath, configPath, evaluatorProfilePath] = process.argv.slice(2);
+const [command, manifestPath, inputsPath, configPath, evaluatorProfilePath, incidentTransportProfilePath] = process.argv.slice(2);
 const json = async path => JSON.parse(await readFile(path,'utf8'));
 if (!['plan','preflight','run','resume','report'].includes(command)) throw new Error('Usage: run.mjs plan|preflight|run|resume|report manifest.json inputs.json [lab-config.json]');
 const manifest = await json(manifestPath);
@@ -30,10 +30,19 @@ else {
     if(!['publicKeyPath','receiptPath'].every(key=>typeof profile[key]==='string' && profile[key].startsWith('/run/rsi-lab/') && !profile[key].split('/').includes('..')))throw new Error('campaign_evaluator_profile_outside_owner_mount');
     attestEvaluation=await signedEvaluatorReceipt(profile);
    }
+   let incidentTransport;
+   if (manifest.data.classification === 'authorized-incident' && ['run', 'resume'].includes(command)) {
+    if (!incidentTransportProfilePath?.startsWith('/run/rsi-lab/') || incidentTransportProfilePath.split('/').includes('..')) throw new Error('campaign_incident_authority_unavailable');
+    const {readRsiDeploymentRecord} = await import('../../apps/server/src/rsiDeploymentAuthority.mjs');
+    const {createRsiOssTransport} = await import('../../apps/server/src/rsiOssTransport.mjs');
+    const transportConfig = await readRsiDeploymentRecord(incidentTransportProfilePath);
+    if (transportConfig.role !== 'lab') throw new Error('campaign_incident_authority_unavailable');
+    incidentTransport = await createRsiOssTransport(transportConfig);
+   }
    let result;
    if(command==='preflight') result=await labPreflight(configuration,attestLab);
    else if(command==='report') {const ready=await labPreflight(configuration,attestLab);result=ready.status==='ready'?await store.withCampaign(manifest.id,async cp=>cp.read()):ready;}
-   else result=await runCampaign({manifest,inputs:await json(inputsPath),configuration,store,attestLab,attestEvaluation,statisticsModulePath:'/opt/evimed/rsi-python'});
+   else result=await runCampaign({manifest,inputs:await json(inputsPath),configuration,store,attestLab,attestEvaluation,incidentTransport,statisticsModulePath:'/opt/evimed/rsi-python'});
    console.log(JSON.stringify(result,null,2));
    if(result?.status!=='completed' && result?.status!=='ready' && command!=='report')process.exitCode=2;
   } finally {await database.close();}

@@ -20,7 +20,20 @@ async function fixture(run) {
   try { await run({ prod: await createRsiOssTransport({ ...config, role: 'production' }, { sdkFactory: SDK }), lab: await createRsiOssTransport({ ...config, role: 'lab' }, { sdkFactory: SDK }), objects, calls, faults }); }
   finally { await rm(dir, { recursive: true, force: true }); }
 }
-function pending(kind = 'incident') { const generation = kind === 'incident' ? 1 : 2; const body = { incidentId: 'incident-123', generation }; const serializedBody = JSON.stringify(body); return { kind, generation, body, serializedBody, digest: sha(serializedBody), streamId: body.incidentId, idempotencyKey: `${body.incidentId}:${kind}` }; }
+function pending(kind = 'incident') { const generation = kind === 'incident' ? 1 : 2; const body = { incidentId: 'incident-123', generation, authorizationId: 'agreement-1', sourceRunId: 'run-1', sourceRevision: 'revision-1' }; const serializedBody = JSON.stringify(body); return { kind, generation, body, serializedBody, digest: sha(serializedBody), streamId: body.incidentId, idempotencyKey: `${body.incidentId}:${kind}` }; }
+test('withdrawal fence requires the exact existing incident object and source authority', () => fixture(async ({ prod, lab }) => {
+  const row = pending();
+  const authority = { incidentId: row.streamId, incidentDigest: row.digest, id: row.body.authorizationId, sourceRunId: row.body.sourceRunId, sourceRevision: row.body.sourceRevision };
+  await assert.rejects(lab.assertIncidentCurrent(authority), /missing/);
+  await prod.putObject(row);
+  assert.equal((await lab.assertIncidentCurrent(authority)).digest, row.digest);
+  for (const changed of [{ id: 'other-agreement' }, { incidentDigest: '0'.repeat(64) }, { sourceRunId: 'other-run' }, { sourceRevision: 'other-revision' }]) {
+    await assert.rejects(lab.assertIncidentCurrent({ ...authority, ...changed }), /binding_changed/);
+  }
+  await assert.rejects(lab.assertIncidentCurrent({ ...authority, incidentId: 'agreement-1' }), /missing/);
+  await prod.putObject(pending('withdrawal'));
+  await assert.rejects(lab.assertIncidentCurrent(authority), /withdrawn/);
+}));
 test('directional roles reject before SDK invocation', () => fixture(async ({ prod, lab, calls }) => {
   await assert.rejects(lab.putObject(pending()), /role_forbidden/); await assert.rejects(prod.readIncident('incident-123'), /role_forbidden/); await assert.rejects(prod.exportBundle({}), /role_forbidden/); await assert.rejects(lab.readBundle('0'.repeat(64)), /role_forbidden/); assert.equal(calls.length, 0);
 }));

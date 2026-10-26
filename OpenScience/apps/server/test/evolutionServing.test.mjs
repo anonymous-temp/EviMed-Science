@@ -9,7 +9,7 @@ function fixture(){
  const f=evolutionServiceFixture();let next=null;
  const jobs={...f.service.jobs,claim:async kinds=>{assert.deepEqual(kinds,['evolution-event','evolution-decision']);const job=next;next=null;return job;},renew:async()=>true,finish:async()=>({status:'complete'}),fail:async()=>({status:'deferred'})};
  const user={id:'operator'};
- const facade=createEvolutionServing({config:{evolutionEnabled:true,operatorUsers:['operator'],dataDir:'/unused'},documents:f.documents,jobs,database:{query:async()=>({rows:[]})},store:{userById:async()=>user,projectFor:async()=>({id:'evolution'}),ensureSessionUser:async()=>({user}),assertCsrf:async()=>{},requireProject:async()=>({id:'p',userId:user.id})},registry:Promise.resolve({list:()=>[]}),runtimeManager:{},controller:{},agentRuns:{list:async()=>[]},notifications:f.service.notifications,autopilot:{wakeForEvolution:async()=>({woken:true})}});
+ const facade=createEvolutionServing({config:{evolutionEnabled:true,operatorUsers:['operator'],dataDir:'/unused'},documents:f.documents,jobs,database:{query:async()=>({rows:[]}),transaction:async fn=>fn({query:async()=>({rows:[]})})},store:{userById:async()=>user,projectFor:async()=>({id:'evolution'}),ensureSessionUser:async()=>({user}),assertCsrf:async()=>{},requireProject:async()=>({id:'p',userId:user.id})},registry:Promise.resolve({list:()=>[]}),runtimeManager:{},controller:{},agentRuns:{list:async()=>[]},notifications:f.service.notifications,autopilot:{wakeForEvolution:async()=>({woken:true})}});
  return {...f,facade,queue(job){next=job;}};
 }
 test('actual serving composition constructs no experimental engine and processes account feedback',async()=>{

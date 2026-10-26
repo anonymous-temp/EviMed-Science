@@ -50,17 +50,17 @@ test("a code outside the source's closed list, the wrong gap code and a source t
   ]) assert.throws(() => moduleLeadPayload(input), { code: "evolution_lead_invalid", status: 400 }, JSON.stringify(input));
 });
 
-test("tenant recurrence retains closed codes, counts accounts and queues only at five", async()=>{
+test("tenant recurrence retains closed codes and queues from one authorized account", async()=>{
  const f=fixture();
  const input={track:'M',source:'communication',gapCode:'method-missing',code:COMMUNICATION_CODE,entityKeys:['drug:private'],method:'private narrative',papers:['private'],userId:'alice',projectId:'p1',sourceEventId:'e1'};
  const first=await f.service.addLead(input);
- assert.equal(first.payload.status,'accumulating');assert.deepEqual(first.payload.entityKeys,[]);
+ assert.equal(first.payload.status,'queued');assert.deepEqual(first.payload.entityKeys,[]);
  assert.equal(JSON.stringify(first.payload).includes('private'),false);
  await f.service.addLead(input);
  for(const userId of ['bob','carl'])await f.service.addLead({...input,userId,sourceEventId:`${userId}:e1`});
- let current=await f.service.get(first.id);assert.equal(current.payload.distinctAccounts,3);assert.equal(current.payload.occurrences,3);assert.equal(f.jobs.length,0);
+ let current=await f.service.get(first.id);assert.equal(current.payload.distinctAccounts,3);assert.equal(current.payload.occurrences,3);assert.equal(f.jobs.length,3);
  for(const userId of ['dana','eli'])await f.service.addLead({...input,userId,sourceEventId:`${userId}:e1`});
- current=await f.service.get(first.id);assert.equal(current.payload.distinctAccounts,5);assert.equal(current.payload.status,'queued');assert.equal(f.jobs.length,1);
+ current=await f.service.get(first.id);assert.equal(current.payload.distinctAccounts,5);assert.equal(current.payload.status,'queued');assert.equal(f.jobs.length,5);
  await assert.rejects(f.service.addLead({...input,code:'private patient narrative'}),{code:'evolution_lead_invalid'});
 });
 

@@ -665,6 +665,19 @@
       },
       "command": "node evals/follow-up-judge/run.mjs --key-file <path> [--embed-key-file <path>] [--no-examples] [--instructions-file <txt>]",
       "note": "Not a capability: the calibration set of the follow-up judge (apps/server/src/learningEvidence.mjs): labelled next-messages in Chinese and English over correction, preference, rejection, accept, none and adopt, read by the module's own readFollowUp (nearest examples, FollowUpJudge, a second reading of every adopt, followUpVerdictFrom). Split once in split.json: the train part is the judge's example bank (packages/domain/src/follow-up-examples.json), the held-out part is what is scored. Reports per-class precision and recall, the confusion matrix, quotation validity and the precision of adopt on its own, because adopt makes a method out of one conversation. Fifteen cases are marked ambiguous with the labeller's reason for the controller to review."
+    },
+    {
+      "id": "rsi-campaigns",
+      "evalHarness": "evals/rsi-campaigns",
+      "caseCount": 0,
+      "command": "pnpm test:rsi",
+      "note": "Offline platform experiment lifecycle, preregistered paired source-group statistics, real frontierMixSelect consumer, signed finalization and incident withdrawal. Local synthetic tests and mathematical calibration are component evidence only; no Alibaba resource, production candidate, fresh confirmation or cloud acceptance run is recorded. Historical 248-row gold is exposed and cannot certify an unseen confirmation.",
+      "realDelivery": {
+        "status": "not-run",
+        "evidence": null,
+        "at": null,
+        "surface": null
+      }
     }
   ]
 }

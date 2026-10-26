@@ -1,19 +1,19 @@
 # Evidence-first RSI: native online learning and offline platform campaigns
 
-**Status: Final design baseline, version 2.0.**
+**Status: Final design baseline, version 2.1.**
 
 Date: 2026-10-26, Asia/Shanghai. This version supersedes the earlier Harness2-first draft at this path. The path is retained for existing links. Final design is not an implementation, integration-test or deployment receipt.
 
 The owner selected the architecture by **who a change affects**: single-account learning stays native and online; experiments that change the platform move together to a dedicated Alibaba Cloud environment; production retains sensors, controlled activation and regression protection. Policies, skills and isolated tools may activate automatically after machine validation. Repository code, templates and plugin changes use the existing tests and release process. No new routine human-approval step is introduced.
 
-The owner also selected: non-inferiority plus cost reduction as the initial optimization objective; an explicit, paid opt-in for any future task-time adaptation; Harness2 as a bounded offline research arm; monthly campaigns plus incident-class, model/kernel-pin and capability-change triggers. The named production search-pause operation was separately authorized.
+The owner also selected: separately preregistered efficiency and targeted-repair objectives; an explicit, paid opt-in for any future task-time adaptation; Harness2 as a bounded offline research arm; monthly campaigns plus incident-class, model/kernel-pin and capability-change triggers. The named production search-pause operation was separately authorized.
 
 ## 1. Final decisions
 
-1. **Move the entire platform experiment core offline**, including existing EviMed experiments, not only Harness2. Proposal, scouting, self-research, tool construction, smoke tests, confirmation, selection, meta-policy trials and engine-review preparation belong to one offline campaign system.
+1. **Move the entire platform experiment core offline**, including existing EviMed experiments, not only Harness2. Proposal, scouting, self-research, tool construction, smoke tests, confirmation, selection, engine-review preparation belong to one offline campaign system.
 2. **Keep individual learning and ordinary product operations online.** Native memory extraction/merge/recall, personal-method learning, capsules, existing sharing and official-pack mounting retain their current semantics and effective times.
 3. **Keep the existing shared-practices admission chain online as an explicit exception.** Its private inputs exist only in production. Preserve its five-stage checks and current unavailable/skipped semantics; add periodic regression of admitted public method content offline. Do not move source-account facts or its private corroboration evidence to the lab.
-4. **Keep production thin for platform evolution:** closed-code sensors and an export projection; deterministic bundle admission and version activation; consumer-version observations and regression fuses. No production candidate search or experimental confirmation worker remains after cutover.
+4. **Keep production thin for platform evolution:** operational sensors and an authorized incident projection; deterministic bundle admission and version activation; consumer-version observations and regression fuses. No production candidate search or experimental confirmation worker remains after cutover.
 5. **Do not preselect Harness2 or GEPA.** First make the offline measurement and supply path trustworthy. Choose a generator for the actual mutable surface only after a bounded comparison. Harness2 is a task-adaptation method, not a ready-made cross-task release selector.
 6. **Do not train model weights or install a second production kernel.** DSH stays the execution kernel, LoopX the long-task continuation driver, OpenViking the native memory engine, and EviMed the online identity, billing and publication authority.
 7. **Do not turn experiment rejection into a user-delivery veto.** Existing usable files, research, account methods and historical results remain available under their existing verification and retention rules.
@@ -47,9 +47,9 @@ The following exact claims are qualified:
 | Capsules, sharing, personal packs and official starter-pack mounting | Online | Preserve existing ownership, trust, undo and mounting semantics |
 | Shared practices contributed from account methods | Online admission plus offline periodic regression | Preserve the existing five-stage chain; no raw contributor evidence export |
 | Knowledge-page compilation, frontier ingestion/editing, evidence maintenance, retraction/invalidation, recommendation serving | Online product operations | Executing an existing policy is not an experiment changing that policy |
-| Scouting, self-research, proposals, build, smoke, confirmation, selection, campaign judgments, meta trials, engine-PR preparation | Offline campaign environment | Public/synthetic inputs; separate capacity and experimental cost ledger |
+| Scouting, self-research, proposals, build, smoke, confirmation, selection, campaign judgments and engine-PR preparation | Offline campaign environment | Public/synthetic inputs; separate capacity and experimental cost ledger |
 | Changes to memory templates, never-kept rules, follow-up judge examples, distillation prompts, persona/guidance, capability skills and curated official-pack source | Offline evaluation plus tested release | Their effect is platform-wide even though the unchanged mechanisms run online |
-| Closed-code observations, incidents, lineage and VCR missing-method events | Online sensors | Export only the approved aggregate/public projection |
+| Closed-code observations, incidents, lineage and VCR missing-method events | Online sensors | Export approved public/synthetic or minimum authorized incident projections |
 | Bundle admission, policy/skill/tool activation, consumer witness, regression fuse and rollback | Online thin layer | Deterministic trusted-artifact checks and bounded serving observations |
 
 The shared-practices path is deliberately distinguished from changing the mechanism that produces it. Existing admissible user-contributed method content may still enter that pack online. Changing its promotion rules, model prompts, privacy checks, default pack source or executable behavior is platform engineering and remains offline plus release. This migration neither silently adds probation to that existing path nor bypasses its gates.
@@ -76,12 +76,12 @@ flowchart LR
       E --> J[Independent held-out evaluation]
       J --> P[Qualified signer and release bundle]
     end
-    S -->|approved aggregate or public projection| Q
+    S -->|approved source-bound incident or public projection| Q
     P --> I
     F -->|closed regression class and version identity| Q
 ```
 
-Online native learning remains an active system, not part of the thin platform-experiment layer. It can use its existing authorized models and tenant data in production. The offline lab has no tenant database credentials, no production volume mounts, no production workload-token signing secret, and no user transcripts, patient records, source files or embeddings.
+Online native learning remains an active system, not part of the thin platform-experiment layer. It can use its existing authorized models and tenant data in production. The offline lab has no tenant database credentials, no production volume mounts, no production workload-token signing secret, and no direct access to user transcripts, patient records, source files or embeddings. The owner-authorized incident export below is the explicit bounded exception; it does not grant a lab database or runtime connection.
 
 The offline runner uses the same frozen release tree, DSH image, socket composition, capability/tool versions and actual consumer implementations as the target serving environment. Temporary lab accounts and synthetic workspaces are created in the lab's isolated control-plane instance. They do not occupy production runtime slots or use production account wallets.
 
@@ -91,19 +91,11 @@ The offline controller may reuse the product ledger and runtime orchestration im
 
 Retain signals from actual operational outcomes: source omissions, classifier/runtime failures, GEO misconceptions with their existing private assessment/outbox, planner fallback, verified corrections, source withdrawal and VCR missing-method events. Add the missing VCR producer to the existing adapter; do not create an unrelated client API.
 
-The online private record retains its account/project authority and any detailed evidence required by the product. The offline export contains only:
+The online private record retains account/project authority. The owner withdrew the previous five-account-only export rule. A single observed incident is eligible: the production-side approved model may read the affected retained conversation and derive the minimum diagnostic, reproduction, expected behavior and actual behavior, with exact source anchors. Normal successful conversations are not export candidates. Source project rights, clinical egress rights, retained transcript digest and the deployment agreement are checked before extraction and before export. No new per-incident human approval is introduced.
 
-- a closed incident/operation code and module;
-- public capability/tool/policy revision identities;
-- aggregate counts with the existing privacy/account-floor rules;
-- public source identifiers and snapshots whose access and redistribution status permit export;
-- a public/synthetic reproduction request without private values.
+The deployment-owned outbox binds authorization ID, source run/revision and actual incident stream ID. Its immutable OSS object digest is required in every incident-derived campaign manifest. Deletion, replacement, transcript pruning or authorization withdrawal publishes a generation-2 tombstone that dominates any delayed generation-1 upload. The lab requires the actual generation-1 bytes and exact source/authorization/digest binding and rechecks withdrawal before consumption and signing; absence is never permission. Quotes remain authorized data, not public data. Credentials, unrelated histories and raw workspace/clinical datasets are excluded.
 
-No stable tenant identity is exported merely to support grouping. No free-text log, prompt, private assessment, memory, feedback quote, dataset schema with private names, embedding or raw stack payload is smuggled through a generic metadata field. Replacing an account name with a hash does not make a transcript public.
-
-Sensor creation and export scheduling use the existing durable outbox/idempotency pattern. Failed export does not block user work. Each exported item has a schema/version, origin, count window, source-change state and deduplication identity. The offline campaign can request more public resources, but cannot pull the hidden private source behind a sensor record.
-
-The strongest initial improvement opportunities are those reproducible on a public or generated analogue. A gap that needs patient/private input stays unresolved as a platform experiment until an authorized non-private reference exists; it does not justify exporting that input to a new provider.
+Closed operational codes/counts and public or synthetic reproductions remain useful inputs, without a mandatory five-account floor. The existing five-stage shared-practices promotion chain is a different mechanism and is retained. The lab cannot request or retrieve arbitrary underlying private records. Production writes only the incident OSS channel; the lab reads it. The lab writes only the bundle channel; production polls it. Separate identities and buckets enforce that direction; application checks do not substitute for live IAM/network verification.
 
 ## 6. Alibaba campaign environment
 
@@ -116,7 +108,7 @@ The lab has its own accounts, jobs, artifacts and currency budget ledger. Runtim
 Solver/consumer parity and improver choice are separate:
 
 - The execution/evaluation arm uses the target production solver/provider/runtime identities.
-- Claude or another approved lab improver may be used only on public/synthetic lab material. Its identity, permissions and costs are recorded. Changing improver is an experimental factor, not evidence of benefit from the optimizer alone.
+- Initial improvers are DeepSeek Flash and Qwen 3.8 Max. Claude is not configured in this baseline. Its identity, permissions and costs are recorded. Changing improver is an experimental factor, not evidence of benefit from the optimizer alone.
 - Provider credentials are lab-owned gateway credentials. No production key is copied into the lab, candidate tree or generated script. Do not install an unnecessary credential-bearing upstream proxy extra.
 
 ### Campaign cadence
@@ -125,7 +117,7 @@ Run one scheduled monthly campaign, proposed operational schedule: the first day
 
 Coalesce duplicate triggers by incident class plus target fingerprint. Allow one active campaign for that identity and record pending triggers. An urgent deterministic regression is handled by the online fuse immediately; it need not wait for the monthly campaign. The lab can run autonomously within its authorized budget without a new approval per candidate.
 
-Monthly scheduling is not a license for monthly self-modification of the experiment policy. Until enough comparable decisions exist, priority/budget/stop-policy optimization remains disabled. Reports, resource maintenance and incident triage still run.
+Monthly scheduling does not modify the experiment policy. Remove the legacy meta-policy optimization entry from serving; do not introduce a dormant meta engine or a twenty-decisions readiness loop. Reports, resource maintenance and incident triage remain ordinary operations.
 
 ## 7. One offline campaign, multiple appropriate generators
 
@@ -170,7 +162,7 @@ Moving code does not repair it. The following requirements are acceptance condit
 - **F2:** reconcile campaign/mission and execution state. Every nonterminal record has runnable work, a named wait event/deadline or a concrete retry time. Terminal failure releases allocation; it does not leave an invisible ready task occupying a weekly slot.
 - **F3:** execute the component actually changed. Screening changes run screening; threshold changes run real selection; editing changes run editing.
 - **F4:** bind cached evidence to input/source, baseline, candidate, consumer/evaluator, fixture and model/runtime versions. Separate completed negative evidence from interruption or temporary unavailability.
-- **F5:** keep speculative meta-policy optimization off initially. Historical prefix replay cannot certify a new branch; any later policy experiment needs fresh measured outcomes and its own qualification.
+- **F5:** retire the meta-policy execution path. Historical prefix replay cannot certify a branch. A future meta experiment requires a separately designed and qualified implementation.
 - **F6:** add the VCR missing-method producer online as a sensor, respecting the originally reserved integration boundary and patient-data exclusion.
 - **F7:** GEO supplements are evaluated through the actual production brief assembly, capability and DSH execution. The one-off model proxy is not a promotion evaluator.
 - **F8:** score genuine frontier abstention/refusal behavior where the component supports it. Do not force an abstention case whose score is hard-coded to zero in both arms. Applicability is specified per endpoint.
@@ -198,13 +190,13 @@ The initial objective is non-inferiority plus cost reduction, **not a relaxed co
 
 For example, 30 groups with an average 1.3 forms/group and three first answers in each arm require 234 solver executions before grading. A full DSH session and a single control-plane model call have different cost and duration distributions. No universal CNY/unit assumption is used.
 
-Campaign admission uses measured or explicitly estimated stage costs, complete stage counts, remaining lab budget and maximum date. Include data preparation, proposer, probes, composition, selector, reflection, evaluator, retries and cloud compute. Preserve failure costs. The original production CNY100/day, CNY10/run and reserved shares are dated configuration evidence, not the lab's automatically authorized allowance. A lab campaign needs its own finite approved budget before execution.
+Campaign admission uses measured or explicitly estimated stage costs, complete stage counts, remaining lab budget and maximum date. Include data preparation, proposer, probes, composition, selector, reflection, evaluator, retries and cloud compute. Preserve failure costs. The original production CNY100/day, CNY10/run and reserved shares are dated configuration evidence, not the lab's automatically authorized allowance. The owner fixed the ceilings at CNY 1,000 per campaign and CNY 30,000 per Asia/Shanghai calendar month. Reserve before spend, retain unknown outcomes, settle retries and failures, and check outstanding reservations at both reserve and dispatch. Resource bindings remain empty by owner choice.
 
 Scouting has an absolute campaign ceiling and a declared stop condition. Unused experiment funds do not automatically enlarge that ceiling. Prefer evaluating already actionable opportunities. The observed 95.9% scouting share does not itself prove a cap breach: the existing `budgetRoom` already constrains the scout share, and very low spending elsewhere can produce that proportion below the cap.
 
 ## 10. Fixed-horizon statistical contract
 
-The first qualified decision procedure is `paired-group-t-fixed-v1`, a **calibrated approximate procedure within a declared task/evaluator scope**, not a distribution-free guarantee. A0 does not simultaneously introduce group-sequential or anytime-valid promotion tests.
+The implemented decision procedure is `rsi-paired-source-v4` (RFC8785 SHA256 registration identity), a **calibrated approximate procedure within a declared task/evaluator scope**, not a distribution-free guarantee. A0 does not simultaneously introduce group-sequential or anytime-valid promotion tests.
 
 This procedure governs empirical quality/cost claims for stochastic policies. An isolated tool with an independently specified deterministic contract retains its absolute-reference, hidden-case, schema and execution checks; those establish only the tested/declared functional scope and are not relabeled as a statistical generalization guarantee. A new capability without a comparable incumbent cannot invent a zero-score baseline to pass NI. Its capability-admission claim and evidence must be separately typed and qualified under the existing tool pipeline.
 
@@ -212,9 +204,9 @@ This procedure governs empirical quality/cost claims for stochastic policies. An
 
 Before viewing candidate confirmation outcomes, freeze one task family, source-group definition, equal group weights, candidate/incumbent hashes, consumer/evaluator versions, serving inference settings, time window, repetitions, endpoint, critical slices, non-inferiority margin, cost threshold, target G, maximum cost/date and diagnostic rules.
 
-Use three baseline and three candidate independent first answers, interleaved in time. This is not best-of-three and no repetition receives scoring feedback. Average original/equivalent/repeat outcomes within the source group using registered weights. Initial automatic decisions are single-family, equal-group comparisons; cross-family summaries are descriptive until their weighted inference procedure is qualified.
+Register repeat count, bounded score type and margin per task family from acceptable loss, pilot variance and cost. Stochastic consumers require repeated independent first answers, interleaved in time; no repetition receives scoring feedback. An independently qualified deterministic consumer may execute once, while retaining sampling uncertainty across independent source groups. Finite-corpus exact replay is a diagnostic scope and cannot authorize a population policy. Average original/equivalent/repeat outcomes within the source group using registered weights. Initial automatic decisions are single-family, equal-group comparisons; cross-family summaries are descriptive until their weighted inference procedure is qualified.
 
-Default primary claim is quality non-inferiority plus at least 10% lower recurring serving cost. For calibrated nonclinical task-quality endpoints on a 0-1 scale, the initial maximum NI margin is 0.02; a family may tighten it. Clinical-critical dimensions have no cost-compensable allowance. A larger margin requires a new design decision before confirmation, not a reaction to low power.
+An efficiency claim requires overall quality non-inferiority plus at least 10% lower recurring serving cost. A targeted-repair claim requires superiority on its preregistered failure slice (lower confidence bound > 0), overall non-inferiority and candidate cost <= 1.1 times incumbent cost. Each claim receives its own error allocation before outcomes are seen. Family-specific margins are justified and frozen before confirmation; clinical-critical dimensions have no cost-compensable allowance. A margin is never widened after observing low power.
 
 ### Decision
 
@@ -233,13 +225,13 @@ Reach the fixed target once, then make one positive decision. Safety failures ma
 
 A historical champion used as an additional floor must be rerun on the same new groups and compatible environment. An old maximum score on a different pool is not a valid paired comparator.
 
-The all-required quality/cost/critical conditions have an intersection-union form. This does not remove multiplicity across candidates, optimizer arms, repeated looks or alternative `improved`/`cheaper` branches. Initially quality gain is reported descriptively unless that separate promotion claim was assigned its own error budget. Complexity reduction alone is not an escape from NI and cost evidence.
+The all-required quality/cost/critical conditions have an intersection-union form. This does not remove multiplicity across candidates, optimizer arms, repeated looks or alternative `improved`/`cheaper` branches. The targeted-repair promotion channel has its own registered error budget; other quality gains remain descriptive. Complexity reduction alone is not an escape from NI and cost evidence.
 
 ### Qualification and failure treatment
 
 Qualify the procedure before automatic promotion with numerical simulations and deterministic negative controls. Register 20,000 simulations per scenario, including NI boundary delta=-m, cost boundary E[e]=0, equal-cost/no-benefit cases, genuine equal-quality savings, severe cheap regressions, correlated variants/repeats, sparse errors, skewed costs and missingness. Report a binomial uncertainty bound; the one-sided 95% upper bound on false acceptance must be <=alpha_i for each declared null scenario. Validate on held-back calibration scenarios after tuning. This establishes empirical behavior for the specified scenarios only.
 
-For a superiority test, quality A/A is a null. For NI, equal quality is an alternative: a genuinely cheaper equal-quality candidate should be eligible when evidence is sufficient. Do not require all A/A candidates to have promotion probability <=alpha. Calibration must target the correct quality and cost boundaries.
+For a superiority test, quality A/A is a null. For NI, equal quality is an alternative: a genuinely cheaper equal-quality candidate should be eligible when evidence is sufficient. An exactly identical quality-and-cost A/A is a negative control for the joint efficiency rule, with acceptance near zero. Retain both controls; do not require genuinely cheaper A/A candidates to have promotion probability <=alpha. Calibration must target the correct quality and cost boundaries.
 
 A solver's genuine failure to deliver may be a scored outcome if the endpoint specifies it. Evaluator outage, source unavailability, transport failure or uncertain paid completion is not automatically zero. Reconcile the original execution without buying a new favorable answer. Informative or asymmetric missingness prevents automatic acceptance; never discard difficult rows after observing them.
 
@@ -256,7 +248,7 @@ The versioned bundle contains:
 - bundle/campaign ID, schema, producer identity, timestamp, validity period and replay identity;
 - target source/release and base policy/skill/tool generation;
 - execution fingerprint: provider and observed solver identity, model-gateway configuration/attestation, kernel and runtime image digest, socket/capability/tool pins and affected consumer implementation hashes;
-- separate improver and judge identities; a lab Claude improver is provenance, not the serving solver identity to compare;
+- separate improver and judge identities; an improver is provenance, not the serving solver identity to compare;
 - candidate class/scope, content-addressed manifest, file digests, callable/dependency contracts and rollback reference;
 - evaluator/statistical-procedure identities and qualification record, registered hypothesis, source-group/pool references, exposure labels, measurements/verdict and cost receipt;
 - all required critical checks and exact execution/consumer witnesses;
@@ -268,7 +260,7 @@ The importer performs only bounded deterministic work:
 
 1. Authenticate the publisher and verify signature, manifest/hash/size/path/schema constraints.
 2. Check expiry, replay protection, allowed candidate class and qualification/evaluator identity.
-3. Require exact match to the **current target execution fingerprint and baseline generation**. On mismatch, request offline revalidation and do not reinterpret old measurements.
+3. Require exact match to the **affected consumer dependency closure and baseline generation**. Hash the actual transitive code, declared data/configuration, solver/provider/kernel/socket/tool dependencies used by this surface. Full release and image identities remain provenance, not blanket compatibility keys. Unrelated CSS or another surface changing does not invalidate a campaign; unknown dynamic dependencies refuse. Revalidate after an affected dependency changes. The lab follows a frozen production release tree between campaigns, never changes it during confirmation.
 4. Check all required acceptance fields against the registered decision policy and verify referenced immutable evidence identities.
 5. Stage existing policy/skill/tool records, then activate with compare-and-swap/lease fencing against the still-current baseline.
 
@@ -303,7 +295,7 @@ A Harness2 reflection remains a lab artifact or a proposed public method candida
 Optional task-time adaptation is a separately qualified, explicit paid mode, not a default interceptor or hidden rewrite step. It does not run as part of the public/synthetic campaign lab:
 
 - The user explicitly enables it for the task/goal, with a visible upper cost bound and latency range, and can cancel it.
-- Private data stays in an authorized account-scoped runtime with currently approved providers; it never goes to the shared Alibaba lab or a lab Claude improver.
+- Personal learning remains account scoped. The minimum authorized incident export is the explicit exception in section 5; it preserves purpose/provider/source authority and revocation, and grants no direct private-data access to the lab.
 - The candidate pool includes the baseline. Deterministic artifact/source/quantity checks run before selection; newly invalid candidates cannot replace the baseline.
 - An LLM's preference between surviving outputs is not proof of true superiority. If selection fails, evidence conflicts or a required check is unknown, retain baseline/alternatives with accurate labels and no unqualified improvement claim.
 - The existing operator-only `evolutionRuns.dispatch` scope is not widened. Any later private-task adapter uses the user's existing authority, limits and isolated native execution path.
@@ -370,7 +362,7 @@ The temporary search-pause setting is retired with the old experiment worker. Ro
 
 If four weeks after the offline measurement milestone no valid reproducible decision can be produced, pause new scouting and diagnose supply/evaluation/recovery. That is a stop condition, not a promise that a good candidate must exist in four weeks. No decision does not justify weakening thresholds.
 
-Keep meta-policy experiments frozen until two consecutive monthly campaigns each yield at least 20 complete compatible independent decisions and the proposed meta comparison has a feasible, calibrated power/cost plan. This count is only a readiness floor, not statistical sufficiency. If that condition never arrives, fixed research policy plus observability remains a valid steady state.
+Meta-policy optimization is retired at cutover. There is no dormant engine and no monthly twenty-decision threshold. Any future implementation starts with a separately approved experimental design.
 
 Online deterministic regressions roll back promptly. Sparse or unqualified online rate evidence holds exposure rather than proving safety. The lab remains responsible for benefit evidence.
 
@@ -395,7 +387,7 @@ Publish separate views for online native learning and offline platform experimen
 
 Required measures include supply/day and sealed inventory; MDE/power and complete cost; valid decisions/week/module; error causes and waiting ages; actual generator and judge costs; activation exposure/consumer coverage; independent audit regressions; and online rollback detections with their observable scope. Paper, method, mission and version counts are throughput, not the optimization objective.
 
-The meta objective, when qualified, uses held-out task utility and cost with fixed task-family weighting, plus non-compensable critical conditions. It never rewards merely creating more revisions. Unknown measurements remain unknown.
+A future optimization objective must use held-out task utility and cost with fixed task-family weighting and non-compensable critical conditions. Creating more revisions is not a benefit metric. Unknown measurements remain unknown.
 
 ## 19. Review disposition
 
@@ -415,7 +407,7 @@ The meta objective, when qualified, uses held-out task utility and cost with fix
 | Fixed safety content in editable tree | Corrected; fixed content is outside the tree; no generated plugin/hooks, including probes |
 | GEO proxy / frontier abstention / score granularity | Accepted as F7/F8 and a measurement design correction for F9 |
 | Reflection entering personal learning | Removed; internal/lab self-reflection remains ineligible |
-| Low-throughput meta loop | Frozen until readiness floor and a feasible qualified experiment exist |
+| Low-throughput meta loop | Retired; no dormant optimization or automatic readiness counter |
 | Opt-in data/cost/latency | Explicit future mode, account-native providers/data, disclosed cap/latency and cancellation |
 | RRSI identical aggregate scores imply 2% floor | Corrected: inspected RRSI has a pooled bootstrap fallback and no EviMed 2% floor |
 | Paper has no Best-of-k at all | Corrected: Appendix C describes it; local matched-budget evidence is still required |
@@ -440,3 +432,14 @@ Primary technical sources:
 Local retained evidence is under `.evimed-local/audit/rsl-20261026/`, `rsi-harness-20261026/` and `rsi-harness-final-20261026/`. The supplied review is preserved privately with SHA-256 `be4d2454b9966a0fb708cb06bd24f38dbd1ec5c25c1bd589aafb265649ee833c`; the superseded design is retained there as dated evidence. No raw tenant content is needed for this specification.
 
 Finalization covers the architecture, boundaries, measurement contract, migration order and acceptance conditions. Apart from the separately authorized search-pause operation and its receipt, this work does not implement the lab, purchase compute, execute paid campaigns, install upstream packages, change personal learning or deploy new product code. Any completed operational action is reported from its own receipt, not inferred from this document.
+
+
+## 20. Implementation and evidence status (October 26, no deployment)
+
+The implementation branch is `codex/rsi-offline-campaigns`, based on `9614de895`. Production composes `createEvolutionServing`, not the experimental engine. Account learning and ordinary module workers retain their online ownership. Historical queued experimental jobs are quarantined by owner and job kind with their payload, attempts, result and cost references retained; a live lease is never stolen. Legacy source removal follows the measured deployment/window retirement gate in section 15, not a claim from local tests.
+
+Implemented components are under `apps/server/src/rsi*.mjs`, `packages/domain/src/rsiCampaign.mjs`, `evals/rsi-campaigns/` and `deploy/rsi-campaign/`. They include finite budget accounting, resource preflight, content-addressed signed bundles, independent evaluator receipts, live trust revocation, affected dependency closure, private incident outbox/withdrawal, directional OSS adapters, phased activation, real frontier selection witnesses and compatible rollback. The trusted finalizer reruns the registered statistics and binds its inputs to the actual runner checkpoint and confirmation opening time. KMS/OSS dependencies are installed in the lab image, with online public verification and production-only transport credentials.
+
+The first executable campaign surface is frontier selection. The runner invokes the production mapper and `frontierMixSelect`, freezes one development winner and confirms only it against the incumbent. A real synthetic runner-to-finalizer test and PostgreSQL importer-to-shadow-to-global-to-rollback test exercise that path. Mathematical qualification runs 20,000 simulations per scenario for each of two seeds; it does not qualify real task labels, the frontier population or an LLM evaluator. Historical 248-row gold remains exposed calibration material, with its unverifiable raw-rater kappa claim documented by the inventory.
+
+**Open qualification gates are explicit:** Alibaba host/network/IAM/KMS bindings, a fresh independently calibrated label supply, a real frontier campaign, paid DSH/control-plane consumer adapters and per-surface skill/tool activation qualification, and a full production night-window retirement observation. Unsupported surfaces refuse instead of importing an unmeasured implementation. Harness2/GEPA research admission remains downstream of those measurement/supply gates. These are not reported as deployed, empirically beneficial or operationally accepted by local tests. The owner requested code commit/push only; no deployment is included in this implementation handoff.

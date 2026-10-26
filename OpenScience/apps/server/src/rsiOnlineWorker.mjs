@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 /** The two online queues have one owner and one claimer; experiments never run here. @param {any} dependencies */
-export function createRsiOnlineWorker({ jobs, owner, configured, incidents, pollBundles, report = () => {}, pollMs = 15000, leaseMs = 120000 }) {
+export function createRsiOnlineWorker({ jobs, owner, configured, incidents, pollBundles, canRun = async () => true, report = () => {}, pollMs = 15000, leaseMs = 120000 }) {
   const workerId = `rsi-online-${randomUUID()}`;
   let timer = null, active = null, closed = false;
   const kinds = Object.freeze(['rsi-incident-export', 'rsi-bundle-poll']);
   async function perform() {
-    if (closed || !configured()) return null;
-    const job = await jobs.claim([...kinds], workerId, { leaseMs, ownerId: owner });
+    if (closed || !configured() || !await canRun()) return null;
+    const job = await jobs.claim([...kinds], workerId, { leaseMs, ownerId: owner, admission: canRun });
     if (!job) return null;
     let lost = false;
     const heartbeat = setInterval(() => { jobs.renew(job.userId, job.id, job.leaseToken, leaseMs).then(ok => { if (!ok) lost = true; }).catch(() => { lost = true; }); }, Math.max(1000, Math.floor(leaseMs / 4)));
@@ -23,5 +23,5 @@ export function createRsiOnlineWorker({ jobs, owner, configured, incidents, poll
   }
   const tick = () => { if (!active) active = perform().finally(() => { active = null; }); return active; };
   const stop = () => { if (timer) clearInterval(timer); timer = null; };
-  return { kinds, tick, stop, start() { if (!closed && !timer) timer = setInterval(() => { tick().catch(() => report('rsi_online_worker_failed')); }, pollMs); }, async close() { closed = true; stop(); await active; }, status: () => ({ configured: configured(), running: active !== null }) };
+  return { kinds, tick, stop, start() { if (!closed && !timer && configured()) timer = setInterval(() => { tick().catch(() => report('rsi_online_worker_failed')); }, pollMs); }, async close() { closed = true; stop(); await active; }, status: () => ({ configured: configured(), running: active !== null }) };
 }

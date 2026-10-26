@@ -136,7 +136,11 @@ export function sweepFrontierThresholds(pool, { baselineThreshold, thresholds, p
 function consumerIdentity() {
   const paths = ['../../apps/server/src/frontierPipeline.mjs', '../../apps/server/src/frontierEditor.mjs', '../../packages/domain/src/frontierMix.mjs', '../../packages/domain/src/frontierSelection.mjs', '../../packages/domain/src/frontier-selection.json', '../../packages/domain/src/frontierGenres.mjs', '../../packages/domain/src/frontierVocabulary.mjs'];
   const contents = paths.map((path) => readFileSync(new URL(path, import.meta.url)));
-  return { revision: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: new URL('../../', import.meta.url), encoding: 'utf8' }).trim(), implementationSha256: hash(Buffer.concat(contents)), components: paths.map((path, i) => ({ path, sha256: hash(contents[i]) })) };
+  // Container build contexts intentionally exclude .git. Compatibility is the
+  // measured dependency closure; unavailable commit metadata never invents a pin.
+  let revision = null;
+  try { revision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: new URL('../../', import.meta.url), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { /* Source hashes below remain authoritative. */ }
+  return { revision, implementationSha256: hash(Buffer.concat(contents)), components: paths.map((path, i) => ({ path, sha256: hash(contents[i]) })) };
 }
 
 export async function frontierConsumerIdentity() { return consumerIdentity(); }

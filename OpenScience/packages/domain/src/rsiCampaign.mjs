@@ -54,7 +54,8 @@ export function rsiCampaignIssues(value) {
       || !['development', 'confirmation', 'audit'].includes(source.role) || !['sealed', 'exposed', 'synthetic'].includes(source.exposure))) issues.push('campaign_sources_invalid')
   if (data?.classification === 'authorized-incident') {
     const authority = data.authorization
-    if (!keysWithin(authority, ['id', 'sourceRunId', 'sourceRevision', 'purpose', 'minimized']) || !identifier(authority.id) || !identifier(authority.sourceRunId)
+    if (!keysWithin(authority, ['id', 'incidentId', 'incidentDigest', 'sourceRunId', 'sourceRevision', 'purpose', 'minimized']) || !identifier(authority.id) || !identifier(authority.sourceRunId)
+      || !identifier(authority.incidentId) || !digest(authority.incidentDigest)
       || !identifier(authority.sourceRevision) || authority.purpose !== 'platform-quality' || authority.minimized !== true) issues.push('campaign_incident_authority_missing')
   } else if (data?.authorization !== undefined) issues.push('campaign_incident_authority_unexpected')
   return [...new Set(issues)]

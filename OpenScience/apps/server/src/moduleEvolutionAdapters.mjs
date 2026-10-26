@@ -1,8 +1,8 @@
 import { DEFAULT_MODULE_EVOLUTION_POLICIES } from "./defaultModuleEvolutionPolicies.mjs";
 import { validateModuleEvolutionPolicy } from "./moduleEvolutionPolicies.mjs";
 
-export const MODULE_EVOLUTION_IDS = Object.freeze(["tools", "frontier", "geo", "autopilot", "sources", "evidence", "memory", "runtime"]);
-export const MODULE_CONFIRMATION_MINIMUM = Object.freeze({ frontier: 30, geo: 30, autopilot: 20, runtime: 10 });
+import { MODULE_EVOLUTION_IDS, MODULE_CONFIRMATION_MINIMUM } from './moduleEvolutionConstants.mjs';
+export { MODULE_EVOLUTION_IDS, MODULE_CONFIRMATION_MINIMUM } from './moduleEvolutionConstants.mjs';
 
 /** The facts of a module proposal the platform holds are written here, never taken from the model: the revision a
  * rollback returns to, and — for a repair — whether the failure it answers is one the platform itself recorded. On

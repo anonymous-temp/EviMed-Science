@@ -9,7 +9,7 @@ const manifest = () => ({ schemaVersion: 1, id: 'campaign-20261026', surface: 'f
   models: { solver: { provider: 'deepseek', model: 'deepseek-flash' }, improver: { provider: 'deepseek', model: 'deepseek-flash' }, reviewer: { provider: 'dashscope', model: 'qwen3.8-max' } },
   target: { surface: 'frontier-selection', dependencyDigest: digest, baselineRevision: 'default:selection-v1' },
   registration: { digest, procedure: 'paired-group-t-fixed-v1', claim: 'targeted-repair' },
-  data: /** @type {{ classification: string, sources: { id: string, digest: string, role: string, exposure: string }[], authorization?: { id: string, sourceRunId: string, sourceRevision: string, purpose: string, minimized: boolean } }} */ ({ classification: 'public', sources: [{ id: 'sealed-pool', digest, role: 'confirmation', exposure: 'sealed' }] }) })
+  data: /** @type {{ classification: string, sources: { id: string, digest: string, role: string, exposure: string }[], authorization?: { id: string, incidentId: string, incidentDigest: string, sourceRunId: string, sourceRevision: string, purpose: string, minimized: boolean } }} */ ({ classification: 'public', sources: [{ id: 'sealed-pool', digest, role: 'confirmation', exposure: 'sealed' }] }) })
 
 test('campaign manifests preserve owner budgets and permit preregistered repair without requiring savings', () => {
   assert.deepEqual(RSI_CAMPAIGN_LIMITS, { campaignCny: 1000, monthCny: 30000 })
@@ -36,7 +36,7 @@ test('one authorized incident is eligible without a five-account gate, with expl
   const input = manifest()
   input.data.classification = 'authorized-incident'
   assert.ok(rsiCampaignIssues(input).includes('campaign_incident_authority_missing'))
-  input.data.authorization = { id: 'agreement-1', sourceRunId: 'run-1', sourceRevision: 'revision-1', purpose: 'platform-quality', minimized: true }
+  input.data.authorization = { id: 'agreement-1', incidentId: 'incident-1', incidentDigest: digest, sourceRunId: 'run-1', sourceRevision: 'revision-1', purpose: 'platform-quality', minimized: true }
   assert.deepEqual(rsiCampaignIssues(input), [])
 })
 

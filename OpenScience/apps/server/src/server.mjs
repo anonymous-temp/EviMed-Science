@@ -6318,6 +6318,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (servingAdapters) evolutionModulePolicies.evaluateFrontierSelection = servingAdapters.evaluateFrontierSelection;
       rsiOnline = await createRsiOnlineRuntime({ config, store, documents: productDocuments, jobs: productJobs, database: productDatabase,
         agentRuns, assertModelAccess: assertVcrCloudAccess, usageLedger, servingAdapters,
+        canRun: () => maintenanceService ? maintenanceService.claimingAllowed() : !productDatabase,
         report: code => process.stderr.write(`rsi: ${code}\n`) });
       return rsiOnline;
     })().catch(error => { rsiInitialization = null; throw error; });
@@ -6408,6 +6409,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           autopilotWorker?.status?.().running,
           learningWorker?.status?.().running,
           evolution?.worker.status().running,
+          rsiOnline?.worker.status().running,
           frontier?.worker.status().running,
           evidenceProgramme?.worker?.status().running,
           review?.worker.status().running,
@@ -8988,6 +8990,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
 
   const pauseRecurringWork = () => {
     recurringWorkStarted = false;
+    evolution?.worker.stop();
+    rsiOnline?.worker.stop();
     sourceSyncWorker?.pause();
     void Promise.resolve(managedBrowser.pause?.()).catch(() => {
       process.stderr.write("managed browser pause: cleanup remains unconfirmed\n");

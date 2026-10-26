@@ -195,7 +195,7 @@ test("the retention knob has a caller, and it runs whether or not the loop is sp
   // `TRANSCRIPT_RETENTION_DAYS` was configuration with no reader: a deployment
   // could set it and every project would still keep every conversation forever.
   assert.match(serverSource, /maintain: async \(\) => \{/);
-  assert.match(serverSource, /pruneRunTranscripts\(project, \{ retentionDays: config\.transcriptRetentionDays \}\)/);
+  assert.match(serverSource, /pruneRunTranscripts\(project, \{ retentionDays: config\.transcriptRetentionDays, beforeRemove: runId => invalidateRsiSource\(/);
   const worker = await readFile(new URL("../src/learningWorker.mjs", import.meta.url), "utf8");
   // On the reconcile timer, not inside `tick` — `tick` returns early when the
   // loop is disabled or outside its spending window, and deleting old files is

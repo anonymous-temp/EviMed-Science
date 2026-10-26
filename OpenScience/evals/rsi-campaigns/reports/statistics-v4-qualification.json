@@ -1,0 +1,228 @@
+{
+  "qualification_passed": true,
+  "development": {
+    "qualification_passed": true,
+    "procedure": {
+      "id": "rsi-paired-source-v4",
+      "digest_codec": "rfc8785-sha256-v1",
+      "test_alpha_fraction": 0.5,
+      "minimum_slice_groups": 30
+    },
+    "allocated_alpha": 0.05,
+    "test_alpha": 0.025,
+    "scenario_role": "registered mathematical qualification controls; no held-back confirmation evidence",
+    "seed": 20261026,
+    "groups": 80,
+    "batch": 256,
+    "scenarios": [
+      {
+        "scenario": "identical-quality-same-cost",
+        "claim": "efficiency",
+        "expected_positive": false,
+        "qualified": 0,
+        "simulations": 20000,
+        "rate": 0.0,
+        "binomial_95_upper": 0.00014977539622296283
+      },
+      {
+        "scenario": "equal-quality-cheap",
+        "claim": "efficiency",
+        "expected_positive": true,
+        "qualified": 19913,
+        "simulations": 20000,
+        "rate": 0.99565,
+        "binomial_95_upper": 0.9963864060159214
+      },
+      {
+        "scenario": "NI-boundary-efficiency",
+        "claim": "efficiency",
+        "expected_positive": false,
+        "qualified": 534,
+        "simulations": 20000,
+        "rate": 0.0267,
+        "binomial_95_upper": 0.028651710116497614
+      },
+      {
+        "scenario": "cost-boundary-efficiency",
+        "claim": "efficiency",
+        "expected_positive": false,
+        "qualified": 481,
+        "simulations": 20000,
+        "rate": 0.02405,
+        "binomial_95_upper": 0.02590901816185952
+      },
+      {
+        "scenario": "NI-boundary-repair",
+        "claim": "targeted-repair",
+        "expected_positive": false,
+        "qualified": 0,
+        "simulations": 20000,
+        "rate": 0.0,
+        "binomial_95_upper": 0.00014977539622296283
+      },
+      {
+        "scenario": "cost-boundary-repair",
+        "claim": "targeted-repair",
+        "expected_positive": false,
+        "qualified": 412,
+        "simulations": 20000,
+        "rate": 0.0206,
+        "binomial_95_upper": 0.02232967192231256
+      },
+      {
+        "scenario": "cheap-catastrophic-regression",
+        "claim": "efficiency",
+        "expected_positive": false,
+        "qualified": 0,
+        "simulations": 20000,
+        "rate": 0.0,
+        "binomial_95_upper": 0.00014977539622296283
+      },
+      {
+        "scenario": "meaningful-targeted-repair",
+        "claim": "targeted-repair",
+        "expected_positive": true,
+        "qualified": 17340,
+        "simulations": 20000,
+        "rate": 0.867,
+        "binomial_95_upper": 0.8709349590866565
+      },
+      {
+        "scenario": "bounded-correlated-forms-null",
+        "claim": "efficiency",
+        "expected_positive": false,
+        "qualified": 554,
+        "simulations": 20000,
+        "rate": 0.0277,
+        "binomial_95_upper": 0.029685383189601615
+      },
+      {
+        "scenario": "rare-failure-null",
+        "claim": "efficiency",
+        "expected_positive": false,
+        "qualified": 42,
+        "simulations": 20000,
+        "rate": 0.0021,
+        "binomial_95_upper": 0.0027153602235850363
+      }
+    ],
+    "scope": "Shared-core mathematical clipped Gaussian contrasts with exact wrapper equivalence controls only; not end-to-end or universal coverage qualification",
+    "dependencies": {
+      "numpy": "2.0.2",
+      "scipy": "1.13.1"
+    }
+  },
+  "held_back": {
+    "qualification_passed": true,
+    "procedure": {
+      "id": "rsi-paired-source-v4",
+      "digest_codec": "rfc8785-sha256-v1",
+      "test_alpha_fraction": 0.5,
+      "minimum_slice_groups": 30
+    },
+    "allocated_alpha": 0.05,
+    "test_alpha": 0.025,
+    "scenario_role": "registered mathematical qualification controls; no held-back confirmation evidence",
+    "seed": 20365755,
+    "groups": 80,
+    "batch": 256,
+    "scenarios": [
+      {
+        "scenario": "identical-quality-same-cost",
+        "claim": "efficiency",
+        "expected_positive": false,
+        "qualified": 0,
+        "simulations": 20000,
+        "rate": 0.0,
+        "binomial_95_upper": 0.00014977539622296283
+      },
+      {
+        "scenario": "equal-quality-cheap",
+        "claim": "efficiency",
+        "expected_positive": true,
+        "qualified": 19897,
+        "simulations": 20000,
+        "rate": 0.99485,
+        "binomial_95_upper": 0.9956536519205113
+      },
+      {
+        "scenario": "NI-boundary-efficiency",
+        "claim": "efficiency",
+        "expected_positive": false,
+        "qualified": 483,
+        "simulations": 20000,
+        "rate": 0.02415,
+        "binomial_95_upper": 0.026012613464174928
+      },
+      {
+        "scenario": "cost-boundary-efficiency",
+        "claim": "efficiency",
+        "expected_positive": false,
+        "qualified": 544,
+        "simulations": 20000,
+        "rate": 0.0272,
+        "binomial_95_upper": 0.029168630930319107
+      },
+      {
+        "scenario": "NI-boundary-repair",
+        "claim": "targeted-repair",
+        "expected_positive": false,
+        "qualified": 0,
+        "simulations": 20000,
+        "rate": 0.0,
+        "binomial_95_upper": 0.00014977539622296283
+      },
+      {
+        "scenario": "cost-boundary-repair",
+        "claim": "targeted-repair",
+        "expected_positive": false,
+        "qualified": 464,
+        "simulations": 20000,
+        "rate": 0.0232,
+        "binomial_95_upper": 0.025028127328123255
+      },
+      {
+        "scenario": "cheap-catastrophic-regression",
+        "claim": "efficiency",
+        "expected_positive": false,
+        "qualified": 0,
+        "simulations": 20000,
+        "rate": 0.0,
+        "binomial_95_upper": 0.00014977539622296283
+      },
+      {
+        "scenario": "meaningful-targeted-repair",
+        "claim": "targeted-repair",
+        "expected_positive": true,
+        "qualified": 17324,
+        "simulations": 20000,
+        "rate": 0.8662,
+        "binomial_95_upper": 0.8701450772200702
+      },
+      {
+        "scenario": "bounded-correlated-forms-null",
+        "claim": "efficiency",
+        "expected_positive": false,
+        "qualified": 458,
+        "simulations": 20000,
+        "rate": 0.0229,
+        "binomial_95_upper": 0.024717079661603716
+      },
+      {
+        "scenario": "rare-failure-null",
+        "claim": "efficiency",
+        "expected_positive": false,
+        "qualified": 40,
+        "simulations": 20000,
+        "rate": 0.002,
+        "binomial_95_upper": 0.002602682686899359
+      }
+    ],
+    "scope": "Shared-core mathematical clipped Gaussian contrasts with exact wrapper equivalence controls only; not end-to-end or universal coverage qualification",
+    "dependencies": {
+      "numpy": "2.0.2",
+      "scipy": "1.13.1"
+    }
+  },
+  "scope": "Prequalification method development on public mathematical fixtures; no real candidate confirmation"
+}

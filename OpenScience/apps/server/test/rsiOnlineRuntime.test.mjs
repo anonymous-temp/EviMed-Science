@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { createRsiAuthorizedTranscriptReader } from '../src/rsiOnlineRuntime.mjs';
+import { createRsiAuthorizedTranscriptReader, createRsiOnlineRuntime, rsiIncidentRunEligible } from '../src/rsiOnlineRuntime.mjs';
 import { createRsiOnlineWorker } from '../src/rsiOnlineWorker.mjs';
 import { rsiOnlineConfigurationIssues } from '../src/rsiOnlineConfiguration.mjs';
 import { PRODUCT_JOB_KINDS } from '../src/productPersistence.mjs';
@@ -35,13 +35,33 @@ test('only verified root prose is offered, with stable identities and source cli
   const result = await reader(source);
   assert.deepEqual(result.messages.map(row => row.id), ['run-1:2', 'run-1:3']);
   assert.deepEqual(calls[0].caller, { userId: 'researcher', projectId: 'research', runId: 'run-1', sessionId: 'session-1' });
-  await assert.rejects(fixture({ clinicalDenied: true }).reader(source), /clinical denied/);
+  assert.equal(await fixture({ clinicalDenied: true }).reader(source), null);
+});
+test('normal and automated conversations do not become incident exports', () => {
+  assert.equal(rsiIncidentRunEligible({ status: 'delivered' }), false);
+  assert.equal(rsiIncidentRunEligible({ status: 'failed', automated: true }), false);
+  assert.equal(rsiIncidentRunEligible({ status: 'failed' }), true);
+  assert.equal(rsiIncidentRunEligible({ status: 'delivered', qualityNotices: [{ code: 'run_tool_failed' }] }), true);
+});
+test('unbound runtime never requires a publisher account or provisions its project', async () => {
+  const runtime = await createRsiOnlineRuntime({ config: {}, store: { userById: () => assert.fail('publisher lookup') },
+    documents: {}, jobs: {}, database: {}, agentRuns: {}, servingAdapters: null });
+  assert.equal(runtime.configured(), false);
+  await runtime.worker.close();
 });
 test('unconfigured online worker never claims, extracts, imports or touches transport', async () => {
   const worker = createRsiOnlineWorker({ configured: () => false, jobs: { claim: () => assert.fail('claimed') }, incidents: { processPending: () => assert.fail('extracted') }, pollBundles: () => assert.fail('imported'), owner: 'publisher' });
   assert.equal(await worker.tick(), null);
   await worker.close();
   assert.ok(rsiOnlineConfigurationIssues(null).length);
+});
+test('maintenance admission is checked both before and inside the online queue claim', async () => {
+  let allowed = false, claimed = 0;
+  const worker = createRsiOnlineWorker({ configured: () => true, canRun: async () => allowed, owner: 'publisher',
+    jobs: { claim: async (_kinds, _id, options) => { claimed++; assert.equal(await options.admission({}), allowed); return null; } } });
+  await worker.tick(); assert.equal(claimed, 0);
+  allowed = true; await worker.tick(); assert.equal(claimed, 1);
+  await worker.close();
 });
 test('production server composes only serving evolution and declares dedicated online queues', async () => {
   const code = await readFile(new URL('../src/server.mjs', import.meta.url), 'utf8');

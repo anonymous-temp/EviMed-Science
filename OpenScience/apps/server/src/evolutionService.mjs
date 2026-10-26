@@ -74,6 +74,7 @@ export class EvolutionService {
   }
   /** @param {string} action @param {any} payload @param {string} key @param {Date} runAfter */
   async enqueue(action, payload, key, runAfter = this.now()) {
+    if (this.config.evolutionServingOnly === true && !['event','decision'].includes(action)) return evolutionDeferred('evolution_offline_only', 'Experimental work is retained for an offline campaign.');
     if (this.config.evolutionSearchPaused === true && !evolutionServingJob(`evolution-${action}`, payload)) return evolutionDeferred();
     return this.jobs.enqueue(await this.owner(), `evolution-${action}`, payload, { idempotencyKey: `evolution:${key}`, projectId: EVOLUTION_PROJECT_ID,
       maxAttempts: Math.max(1, Math.min(10, this.config.evolutionMaxJobAttempts ?? 3)), runAfter });
@@ -220,7 +221,11 @@ export class EvolutionService {
         if (!matched) continue;
         const queued = await this.enqueue('self-check', { userId: owner, projectId: wait.projectId, agendaId: wait.agendaId,
           waiterId: row.id, sourceEventId: event.id, toolId: matched.id, datasetId: event.datasetId }, `check:${row.id}:${event.id}:${matched.id}`);
-        if (queued?.status === 'deferred') throw new HttpError(409, queued.code, queued.reason);
+        if (queued?.status === 'deferred') {
+          if (this.config.evolutionServingOnly !== true) throw new HttpError(409, queued.code, queued.reason);
+          await this.save('waiter', row.id, { ...wait, selfCheckIntent: { status: 'deferred', reason: queued.code,
+            sourceEventId: event.id, toolId: matched.id, datasetId: event.datasetId, at: this.now().toISOString() } }, row, owner);
+        }
         continue;
       }
       const woke = await this.wakeWait(row, owner, wait, event);

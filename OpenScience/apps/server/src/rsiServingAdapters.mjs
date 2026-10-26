@@ -144,7 +144,7 @@ export function createRsiServingAdapters({ config, service, database, documents 
   async function readPolicy(moduleId, context = {}) {
     const surface = Object.keys(components).find(key => components[key][0] === moduleId && (moduleId !== 'frontier' || key === 'frontier-selection'))
     const baseline = await fenced(null, client => incumbent(moduleId, client))
-    if (!importer || !surface) return baseline
+    if (!importer || !surface || importer.hasCampaign && !await importer.hasCampaign(surface)) return baseline
     const selection = await importer.select(surface, context)
     // Null is an explicit refusal of an unsafe pointer. No legacy fallback may revive it.
     if (!selection.revision) return { revisionId: `default:${rsiDigest(defaults(moduleId))}`, policy: defaults(moduleId) }
@@ -159,28 +159,47 @@ export function createRsiServingAdapters({ config, service, database, documents 
    * @param {any} input @param {any} context */
   async function evaluateFrontierSelection(input, context = {}) {
     const frozen = structuredClone(input)
-    const result = frontierMixSelect(frozen)
-    if (!importer) return result
-    const selection = await importer.select('frontier-selection', context)
-    if (!selection.shadowRevision) return result
-    const revoked = await fenced(null, client => read(client, id(['revoked', 'frontier-selection', selection.shadowRevision])))
-    if (revoked) return result
-    const version = await fenced(null, client => read(client, selection.shadowRevision))
-    if (!version || version.payload.surface !== 'frontier-selection' || rsiDigest(version.payload.files) !== version.payload.candidateDigest) return result
-    const candidate = parseRsiPolicyCandidate('frontier-selection', version.payload.files)
-    const shadow = frontierMixSelect({ ...structuredClone(frozen), threshold: candidate.selectionThreshold })
+    if (!importer) return frontierMixSelect(frozen)
+    // Resolve once at actual execution, not again after the selector has already run.
+    const admitted = await readPolicy('frontier', context)
+    const selection = admitted.selection
+    const result = frontierMixSelect({ ...frozen, threshold: admitted.policy.selectionThreshold })
+    if (!selection?.operationId) return result
+    const candidateRevision = selection.shadowRevision ?? (selection.arm === 'candidate' ? selection.revision : null)
     const consumerTarget = await currentTarget('frontier-selection', null)
     if (!consumerTarget.qualified) return result
-    const witness = { id: `rsi-witness:${rsiDigest([selection.operationId, context.executionId, frozen])}`, operationId: selection.operationId,
-      candidateDigest: version.payload.candidateDigest, revision: selection.shadowRevision, arm: 'shadow', outcome: 'ok',
+    let version, candidateResult = result
+    if (candidateRevision) {
+      const revoked = await fenced(null, client => read(client, id(['revoked', 'frontier-selection', candidateRevision])))
+      if (revoked) return result
+      version = await fenced(null, client => read(client, candidateRevision))
+      if (!version || version.payload.surface !== 'frontier-selection' || rsiDigest(version.payload.files) !== version.payload.candidateDigest) refuse('campaign_installed_bytes_changed')
+      const candidate = parseRsiPolicyCandidate('frontier-selection', version.payload.files)
+      if (selection.shadowRevision) candidateResult = frontierMixSelect({ ...structuredClone(frozen), threshold: candidate.selectionThreshold })
+    }
+    // A control observation must still bind the candidate under observation. The
+    // importer supplies its immutable identity, never the model or the client.
+    const candidateDigest = version?.payload.candidateDigest ?? selection.candidateDigest
+    if (!candidateDigest) return result
+    const baseline = await fenced(null, client => incumbent('frontier', client))
+    const incumbentResult = frontierMixSelect({ ...structuredClone(frozen), threshold: baseline.policy.selectionThreshold })
+    const protectedIds = new Set(frozen.candidates.filter(row => row.safety).map(row => row.id))
+    const candidateIds = new Set(candidateResult.picks.map(row => row.id))
+    const regression = incumbentResult.picks.some(row => protectedIds.has(row.id) && !candidateIds.has(row.id))
+    const arm = selection.shadowRevision ? 'shadow' : selection.arm
+    const witness = { id: `rsi-witness:${rsiDigest([selection.operationId, selection.stageIndex ?? 0, context.executionId, frozen])}`, operationId: selection.operationId,
+      candidateDigest, revision: candidateRevision ?? selection.revision, arm, outcome: regression ? 'critical' : 'ok',
+      ...(regression ? { criticalCode: 'deterministic-regression' } : {}), stageIndex: selection.stageIndex ?? 0,
       day: new Date(context.now ?? Date.now()).toISOString().slice(0, 10), inputHash: rsiDigest(frozen),
+      consumerDigest: consumerTarget.dependencyDigest,
       consumerSourceDigest: rsiDigest(consumerTarget.entries.filter(entry => ['apps/server/src/frontierPipeline.mjs', 'packages/domain/src/frontierMix.mjs'].includes(entry.path))),
-      incumbentRevision: selection.revision, incumbentResultDigest: rsiDigest(result), candidateResultDigest: rsiDigest(shadow),
-      incumbentPicks: result.picks.length, candidatePicks: shadow.picks.length }
+      incumbentRevision: baseline.revisionId, incumbentResultDigest: rsiDigest(incumbentResult), candidateResultDigest: rsiDigest(candidateResult),
+      incumbentPicks: incumbentResult.picks.length, candidatePicks: candidateResult.picks.length }
     await fenced(null, async client => { if (!await read(client, witness.id)) await insert(client, witness.id, { ...witness, recordType: 'rsi-consumer-witness' }) })
     if (observationReporter) await observationReporter(witness)
-    return result
+    return regression ? incumbentResult : result
   }
+
   const unsupported = { async publish() { refuse('campaign_runtime_scope_unsupported') }, async inspect() { return null }, async rollback() { refuse('campaign_runtime_scope_unsupported') } }
   return { publicationOwnerId, currentTarget, evaluateFrontierSelection,
     /** @param {any} reporter */ setObservationReporter(reporter) { observationReporter = reporter },

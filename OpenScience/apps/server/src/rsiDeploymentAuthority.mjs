@@ -28,6 +28,7 @@ export async function createRsiDeploymentAuthority(online) {
   }
   const initial = await current();
   return { agreementId: initial.authorizationId, isBound: () => true,
+    async currentAgreementId() { return (await current()).authorizationId; },
     async authorizeIncident({ agreementId, user, project, run }) {
       const latest = await current();
       return latest.authorizationId === agreementId && user?.id === project?.userId && typeof run?.id === 'string';

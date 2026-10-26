@@ -212,4 +212,11 @@ export class RsiCampaignImporter {
     }
     return result.selection
   }
+  /** Cheap absence check preserves the native policy path when no bundle was ever admitted.
+   * This ignores configuration intentionally: an existing revoked journal must still reconcile.
+   * @param {string} surface */
+  async hasCampaign(surface) {
+    const result=await this.database.query("SELECT 1 FROM evimed_product.documents WHERE user_id=$1 AND kind='knowledge' AND payload->>'recordType'='rsi-campaign-import' AND payload->>'surface'=$2 AND deleted_at IS NULL LIMIT 1",[this.owner,surface])
+    return result.rows.length > 0
+  }
 }
