@@ -62,6 +62,19 @@ const openCreate = async () => {
 };
 const created = { ...mine, id: "skill:created", revision: 1 };
 
+it.each(["/app/extensions/discover", "/app/extensions/installed"])("添加技能 is the header's one primary action on %s, beside the title and not in the filter row", async path => {
+  open(path);
+  const add = await screen.findByRole("button", { name: "添加技能" });
+  // DESIGN.md 「页面结构」 rule 3: the release walk of evimed-b559d4b7ebd0-1 found it in the toolbar, 73 px down, under the header's row.
+  expect(add.closest("[data-page-header]")).not.toBeNull();
+  expect(add.closest("[data-toolbar]")).toBeNull();
+  expect(add).toHaveClass("bg-accent", "h-control");
+  expect(document.querySelectorAll("[data-page-header] .bg-accent")).toHaveLength(1);
+  await userEvent.click(add);
+  expect(screen.getByRole("menuitem", { name: "导入技能" })).toBeInTheDocument();
+  expect(screen.getByRole("menuitem", { name: "创建技能" })).toBeInTheDocument();
+});
+
 it("creating a skill saves it from the drawer, selects it for the current project and opens it at its own address", async () => {
   skills.createPersonalSkill.mockResolvedValue(created);
   skills.getPersonalSkill.mockResolvedValue(created);

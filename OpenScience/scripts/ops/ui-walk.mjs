@@ -3712,7 +3712,7 @@ export async function walkMemoryMap(page, base, route) {
 }
 
 /**
- * The new-skill drawer: opened from the toolbar's 「添加技能」 menu by 创建技能, it says what its fields
+ * The new-skill drawer: opened from the header's 「添加技能」 menu by 创建技能, it says what its fields
  * are for and offers to use the skill in this project, and 保存 with every field empty names what is missing in place. The save
  * button writes, so every request that is not a read is refused in the browser before it leaves, and the step fails if one was
  * tried. A control the step cannot find fails it: a walk that did not reach the drawer has not walked it.
