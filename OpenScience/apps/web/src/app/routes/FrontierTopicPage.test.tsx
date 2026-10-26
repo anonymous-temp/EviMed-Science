@@ -110,6 +110,18 @@ describe("a topic page", () => {
     expect(screen.getByRole("link", { name: "查看证据卡片" })).toHaveAttribute("href", "/app/frontier/zones/ez_hot/evidence/ec_1");
   });
 
+  it("says a topic with nothing gathered yet in one sentence, its way on a link underlined like the reader's in-text links", async () => {
+    client.fetchFrontierTopic.mockResolvedValue(page({ items: [], topic: topic({ overview: null, itemCount: 0 }) }));
+    renderTopic();
+    const link = await screen.findByRole("link", { name: "看全部动态" });
+    expect(link.parentElement).toHaveTextContent("暂无报道与研究。看全部动态");
+    expect(link).toHaveAttribute("href", "/app/frontier?view=all");
+    // Told from the words around it by more than its colour (WCAG 1.4.1): axe's link-in-text-block on the release walk of
+    // evimed-5ae53861dc26-1.
+    expect(link).toHaveClass("underline");
+    expect(link.className).not.toMatch(/(?:^|\s)hover:underline(?:\s|$)/);
+  });
+
   it("says a missing topic is gone, with the way to 热榜", async () => {
     client.fetchFrontierTopic.mockRejectedValue(new WebApiError("gone", { status: 404, code: "frontier_topic_not_found" }));
     renderTopic("zzzzzzzzzzzzzzzz");
