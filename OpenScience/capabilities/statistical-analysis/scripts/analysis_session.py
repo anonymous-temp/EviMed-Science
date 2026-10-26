@@ -4,7 +4,9 @@
 A schemaVersion 1 spec contains steps with id, script, interpreter (python/r),
 inputs, outputs, results (one JSON output), dependsOn and context. Context holds
 only the semantics relevant to that step: groups, units, transforms or model
-choices. Declare helper code and serialized model files as inputs; this helper
+choices. Root and step fields are closed; arbitrary semantics belong inside
+context so every accepted semantic change participates in reuse signatures.
+Declare helper code and serialized model files as inputs; this helper
 never unpickles them. A generated input must belong to an ancestor step. All
 outputs must be files and results must be among them. Optional args are passed
 verbatim to the native script. Scripts remain responsible for reading their
@@ -84,10 +86,17 @@ def load_spec(root, spec_value, state_value):
     document = read_json(spec_path)
     if not isinstance(document, dict) or document.get('schemaVersion') != 1 or not isinstance(document.get('steps'), list):
         raise ValueError('Spec must contain schemaVersion 1 and a steps array.')
+    unknown = set(document) - {'schemaVersion', 'steps'}
+    if unknown:
+        raise ValueError(f'Unknown spec fields: {", ".join(sorted(unknown))}. Put semantics in each step context.')
     steps = {}
     for raw in document['steps']:
         if not isinstance(raw, dict):
             raise ValueError('Each step must be an object.')
+        unknown = set(raw) - {'id', 'script', 'interpreter', 'inputs', 'outputs',
+                              'results', 'dependsOn', 'context', 'args'}
+        if unknown:
+            raise ValueError(f'Unknown step fields: {", ".join(sorted(unknown))}. Put semantics in context.')
         step_id = raw.get('id')
         if not isinstance(step_id, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,79}', step_id) or step_id in steps:
             raise ValueError('Step ids must be unique safe identifiers of at most 80 characters.')
