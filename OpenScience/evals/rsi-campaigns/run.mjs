@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import { readFile } from 'node:fs/promises';
-import { campaignPlan, runCampaign, labPreflight, productCampaignStore } from './campaign_runner.mjs';
+import { campaignPlan, runCampaign, labPreflight, productCampaignStore, signedEvaluatorReceipt } from './campaign_runner.mjs';
 import { rsiLabConfigurationIssues } from '../../apps/server/src/rsiLabConfiguration.mjs';
-const [command, manifestPath, inputsPath, configPath] = process.argv.slice(2);
+const [command, manifestPath, inputsPath, configPath, evaluatorProfilePath] = process.argv.slice(2);
 const json = async path => JSON.parse(await readFile(path,'utf8'));
 if (!['plan','preflight','run','resume','report'].includes(command)) throw new Error('Usage: run.mjs plan|preflight|run|resume|report manifest.json inputs.json [lab-config.json]');
 const manifest = await json(manifestPath);
@@ -23,10 +23,17 @@ else {
   };
   try {
    const store=productCampaignStore(database,configuration.authority.accountId);
+   let attestEvaluation;
+   if(evaluatorProfilePath) {
+    if(!evaluatorProfilePath.startsWith('/run/rsi-lab/'))throw new Error('campaign_evaluator_profile_outside_owner_mount');
+    const profile=await json(evaluatorProfilePath);
+    if(!['publicKeyPath','receiptPath'].every(key=>typeof profile[key]==='string' && profile[key].startsWith('/run/rsi-lab/') && !profile[key].split('/').includes('..')))throw new Error('campaign_evaluator_profile_outside_owner_mount');
+    attestEvaluation=await signedEvaluatorReceipt(profile);
+   }
    let result;
    if(command==='preflight') result=await labPreflight(configuration,attestLab);
    else if(command==='report') {const ready=await labPreflight(configuration,attestLab);result=ready.status==='ready'?await store.withCampaign(manifest.id,async cp=>cp.read()):ready;}
-   else result=await runCampaign({manifest,inputs:await json(inputsPath),configuration,store,attestLab});
+   else result=await runCampaign({manifest,inputs:await json(inputsPath),configuration,store,attestLab,attestEvaluation,statisticsModulePath:'/opt/evimed/rsi-python'});
    console.log(JSON.stringify(result,null,2));
    if(result?.status!=='completed' && result?.status!=='ready' && command!=='report')process.exitCode=2;
   } finally {await database.close();}
