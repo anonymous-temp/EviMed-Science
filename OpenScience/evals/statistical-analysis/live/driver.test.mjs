@@ -83,3 +83,13 @@ test('a natural follow-up may stay in conversation when prior analysis and actua
   assert.equal(analysisEvidence(record, before, 'update').complete, true);
   assert.equal(analysisEvidence(record, [], 'update').complete, false);
 });
+
+test('follow-up result filenames are open-ended, but new provenance backups are not new analyses', () => {
+  const before = [{ path: 'analysis-results.json', sha256: 'values' }, { path: 'statistical-report.md', sha256: 'old-report' }, { path: 'analysis.py', sha256: 'code' }];
+  const manifest = before.map((f) => f.path.endsWith('.md') ? { ...f, sha256: 'new-report' } : f);
+  const make = (file) => ({ run: { effectiveAgentId: 'open-domain-answer' }, artifacts: {
+    manifest: [...manifest, file], tools: [{ name: 'bash', status: 'completed', error: false }],
+  } });
+  assert.equal(analysisEvidence(make({ path: 'operating-point-0.3.json', sha256: 'threshold' }), before, 'update').complete, true);
+  assert.equal(analysisEvidence(make({ path: '.analysis-provenance/123-previous-results.json', sha256: 'backup' }), before, 'update').complete, false);
+});
