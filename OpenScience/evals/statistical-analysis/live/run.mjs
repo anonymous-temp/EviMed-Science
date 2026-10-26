@@ -7,7 +7,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { openThrowawayAccount, fetchTransport } from '../../../scripts/ops/throwaway-account.mjs';
 import { workspaceManifest, digestTranscript } from '../../general-tasks/runner/cell.mjs';
-import { driveTurns } from './driver.mjs';
+import { driveTurns, analysisEvidence } from './driver.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const args = Object.fromEntries(process.argv.slice(2).reduce((pairs, value, index, values) => {
@@ -30,12 +30,13 @@ const api = async (method, route, body) => {
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const result = await response.json();
-  if (!response.ok) throw new Error(`${method} ${route}: ${response.status} ${result.code ?? result.error?.code ?? 'request_failed'}`);
+  if (!response.ok) throw new Error(`${method} ${route}: ${response.status} ${result.code ?? result.error?.code ?? 'request_failed'}: ${result.message ?? result.error?.message ?? ''}`);
   if (route.endsWith('/dispatch')) currentRun = result.data?.id;
   return result.data;
 };
 const record = { schemaVersion: 1, case: spec.id, base, environment: 'local-host-kernel-real-control-plane', turns: [] };
 let failure;
+let registrationUncertain = false;
 try {
   account = await openThrowawayAccount({ base, prefix: 'analysis', send: fetchTransport(base), stop: async () => {
     if (currentRun) await api('POST', `/api/agent-runs/${currentRun}/cancel`, {});
@@ -86,22 +87,27 @@ try {
     await fs.writeFile(path.join(destination, 'reply.md'), digest.reply);
     return { complete: Boolean(lines) && failed.length === 0 && manifest.length < 2000, failed, manifest, ...digest };
   };
+  let before = [];
   await driveTurns({ api, sessionId, turns: spec.turns, upload, capture,
     timeoutMs: Number(args['timeout-ms'] ?? 900_000),
     onTurn: async (turn, turns) => {
+      turn.agentEvidence = analysisEvidence(turn, before, spec.turns[turn.index].evidence ?? 'analysis');
+      before = turn.artifacts.manifest ?? before;
       record.turns = turns;
       await fs.writeFile(path.join(out, 'run.json'), JSON.stringify(record, null, 2));
       console.log(`${spec.id} turn ${turn.index}: ${turn.run.status}, route=${turn.run.effectiveAgentId}, tools=${turn.run.observedToolCalls}, capture=${turn.artifacts.complete}`);
     },
   });
   record.executionComplete = record.turns.length === spec.turns.length && record.turns.every((t) => !t.timedOut && t.run.status === 'succeeded' && t.artifacts.complete);
+  record.agentEvidenceComplete = record.executionComplete && record.turns.every((t) => t.agentEvidence.complete);
 } catch (error) {
+  registrationUncertain = !account && Boolean(error?.account);
   failure = String(error?.message ?? error);
   record.error = failure;
 } finally {
-  record.cleanup = account ? await account.close() : { deleted: true, reason: 'not-created' };
+  record.cleanup = account ? await account.close() : { deleted: !registrationUncertain, reason: registrationUncertain ? 'registration-outcome-unknown' : 'not-created' };
   await fs.writeFile(path.join(out, 'run.json'), JSON.stringify(record, null, 2));
 }
 console.log(`Evidence: ${out}`);
 if (failure) console.error(failure);
-process.exitCode = record.executionComplete && record.cleanup.deleted ? 0 : 1;
+process.exitCode = record.agentEvidenceComplete && record.cleanup.deleted ? 0 : 1;
