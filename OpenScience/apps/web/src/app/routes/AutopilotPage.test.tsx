@@ -1105,6 +1105,34 @@ describe("scheduled tasks", () => {
       expect(within(dialog).getByLabelText("重复")).toHaveValue("weekly"); expect(mocks.createAgenda).not.toHaveBeenCalled();
       expect(within(dialog).getByLabelText("任务指令")).toHaveFocus();
     });
+    it("asks to discard an edit before a template replaces it, then makes the form again — the list is never locked", async () => {
+      render("/app/autopilot"); await userEvent.click(await screen.findByRole("button", { name: "新建" }));
+      const dialog = await screen.findByRole("dialog", { name: "新建任务" });
+      const pick = () => within(within(dialog).getByRole("region", { name: "从推荐开始" })).getByRole("button", { name: "指南更新周报" });
+      await userEvent.type(within(dialog).getByLabelText("任务指令"), "我自己写的草稿");
+      // The edit does not lock the list or print an instruction to go and cancel the dialog.
+      expect(pick()).toBeEnabled();
+      expect(within(dialog).queryByText(/请先保存或取消/)).not.toBeInTheDocument();
+      await userEvent.click(pick());
+      const confirm = await screen.findByRole("alertdialog", { name: "放弃未保存的修改？" });
+      // Declining leaves the edit exactly where it was, and the task dialog open.
+      await userEvent.click(within(confirm).getByRole("button", { name: "取消" }));
+      await waitFor(() => expect(screen.queryByRole("alertdialog", { name: "放弃未保存的修改？" })).not.toBeInTheDocument());
+      expect(within(dialog).getByLabelText("任务指令")).toHaveValue("我自己写的草稿");
+      await userEvent.click(pick());
+      await userEvent.click(within(await screen.findByRole("alertdialog", { name: "放弃未保存的修改？" })).getByRole("button", { name: "放弃修改" }));
+      await waitFor(() => expect((within(dialog).getByLabelText("任务指令") as HTMLTextAreaElement).value).toContain("指南"));
+      expect(within(dialog).getByLabelText("重复")).toHaveValue("weekly");
+      expect(screen.getByRole("dialog", { name: "新建任务" })).toBeInTheDocument();
+      expect(mocks.createAgenda).not.toHaveBeenCalled();
+      // The same template picked again after another edit starts the form over once more, after the same question.
+      await userEvent.type(within(dialog).getByLabelText("任务指令"), "又改了一点");
+      await userEvent.click(pick());
+      await userEvent.click(within(await screen.findByRole("alertdialog", { name: "放弃未保存的修改？" })).getByRole("button", { name: "放弃修改" }));
+      await waitFor(() => expect((within(dialog).getByLabelText("任务指令") as HTMLTextAreaElement).value).not.toContain("又改了一点"));
+      // Nothing is left asking once it has been answered.
+      expect(screen.queryByRole("alertdialog", { name: "放弃未保存的修改？" })).not.toBeInTheDocument();
+    });
     it("creates and enables a weekly task without altering its raw prompt, then opens it", async () => {
       render("/app/autopilot"); await userEvent.click(await screen.findByRole("button", { name: "新建" }));
       const form = await screen.findByRole("dialog", { name: "新建任务" });
