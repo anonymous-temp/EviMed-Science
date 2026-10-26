@@ -727,6 +727,27 @@ describe("知识库", () => {
       expect(mocks.toastSuccess).toHaveBeenCalledWith("已上传 2 个文件");
     });
 
+    it("opens the upload dialog empty each time, and says what happens to a file whose name is already there", async () => {
+      const file = new File(["x"], "guideline.pdf");
+      mocks.uploadFilesToWorkspace.mockResolvedValue(["knowledge-base/guideline.pdf"]);
+      renderPage();
+      const openUpload = async () => {
+        await userEvent.click(await screen.findByRole("button", { name: "添加" }));
+        await userEvent.click(await screen.findByRole("menuitem", { name: "上传文件" }));
+        return screen.findByRole("dialog", { name: "上传资料" });
+      };
+      let dialog = await openUpload();
+      expect(dialog).toHaveTextContent("同名文件会成为这份资料的新版本，旧版本仍可查看；内容相同的文件不会重复添加。");
+      expect(dialog).not.toHaveTextContent("服务器");
+      await userEvent.upload(within(dialog).getByLabelText(/选择资料文件/, { selector: "input" }), file);
+      await waitFor(() => expect(mocks.uploadFilesToWorkspace).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(dialog).toHaveTextContent("guideline.pdf"));
+      await userEvent.keyboard("{Escape}");
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "上传资料" })).not.toBeInTheDocument());
+      dialog = await openUpload();
+      expect(dialog).not.toHaveTextContent("guideline.pdf");
+    });
+
     it("adds to the project the tab is in from the shared scope, and shows it there", async () => {
       mocks.pickFiles.mockResolvedValue([new File(["x"], "a.pdf")]);
       mocks.uploadFilesToWorkspace.mockResolvedValue(["knowledge-base/a.pdf"]);

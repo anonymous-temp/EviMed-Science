@@ -549,7 +549,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
 
   const addMenu = (label = "添加") => (
     <Menu label="添加" items={[
-      { label: "上传文件", icon: FileUp, onSelect: () => { setUploadProject(addProjectId); setDialog("upload"); } },
+      { label: "上传文件", icon: FileUp, onSelect: () => { setUploadItems([]); setUploadProject(addProjectId); setDialog("upload"); } },
       { label: "添加网页链接", icon: Globe, onSelect: () => setDialog("link") },
       { label: "新建笔记", icon: StickyNote, onSelect: () => setDialog("note") },
       ...(driveOffered ? [{ label: "从网盘导入", icon: Cloud, onSelect: () => setConnecting(true) }] : []),
@@ -705,9 +705,10 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
             onImported={() => { added(); }} onFolderRegistered={() => setFolderRefresh((value) => value + 1)} />
         </Drawer>
       )}
-      {dialog === "upload" && <FormDialog title="上传资料" onClose={() => setDialog(null)} busy={uploading}>
+      {/* What a batch did is shown in the dialog that ran it, and goes with it: the next one opens empty. */}
+      {dialog === "upload" && <FormDialog title="上传资料" onClose={() => { setDialog(null); setUploadItems([]); }} busy={uploading}>
         <div className="flex flex-col gap-4"><Combobox clearable={false} label="保存到项目" value={uploadProject ?? addProjectId} options={scopeMenu.groups.flatMap(group => group.choices).filter(choice => projects.some(project => project.id === choice.id))} onChange={id => { if (id) setUploadProject(id); }} disabled={uploading} />
-        <FileDrop label="选择资料文件" hint={<>{KNOWLEDGE_BASE_UPLOAD_HINT}传输完成后，资料列表会分别显示读取和可搜索状态。同名文件按服务器规则处理。</>} accept={KNOWLEDGE_BASE_ACCEPT} disabled={uploading} onFiles={files => void uploadFiles(files)} items={uploadItems} />
+        <FileDrop label="选择资料文件" hint={<>{KNOWLEDGE_BASE_UPLOAD_HINT}传输完成后，资料列表会分别显示读取和可搜索状态。同名文件会成为这份资料的新版本，旧版本仍可查看；内容相同的文件不会重复添加。</>} accept={KNOWLEDGE_BASE_ACCEPT} disabled={uploading} onFiles={files => void uploadFiles(files)} items={uploadItems} />
         </div>
       </FormDialog>}
       {dialog === "link" && <AddLinkDialog projectId={addProjectId} onClose={() => setDialog(null)} onAdded={onLinkAdded} />}
