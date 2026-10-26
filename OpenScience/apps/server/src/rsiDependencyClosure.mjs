@@ -7,7 +7,12 @@ import { rsiDigest } from './rsiCampaignBundle.mjs'
 
 /** The registry is deployment code, never campaign input. Runtime surfaces remain unqualified until their complete kernel profile is registered. */
 export const RSI_DEPENDENCY_PROFILES = Object.freeze({
-  'frontier-selection': { roots: ['apps/server/src/frontierPipeline.mjs', 'packages/domain/src/frontierMix.mjs'], resources: ['apps/server/src/frontierTagSeed.json', 'apps/server/package.json', 'packages/domain/package.json', 'pnpm-lock.yaml'], requiredSettings: ['model', 'provider'], requiredPins: [] },
+  'frontier-selection': { roots: ['apps/server/src/frontierPipeline.mjs', 'packages/domain/src/frontierMix.mjs'], resources: ['apps/server/src/frontierTagSeed.json', 'apps/server/package.json', 'packages/domain/package.json', 'pnpm-lock.yaml'], requiredSettings: ['model', 'provider'], requiredPins: [], runtimeFileDependencies: {
+    // Only frontierTagSeed is deployment data; security's filesystem helpers operate on caller-owned workspace state, not executable/configuration inputs to selection.
+    // Source-bound declarations must be re-audited after either module changes.
+    'apps/server/src/frontierPersistence.mjs': { sourceDigest: 'c03f498ca6a01927879e9d2abc0bf9499126137b8d3317c6ba06177ece41ca4f', resources: ['apps/server/src/frontierTagSeed.json'] },
+    'apps/server/src/security.mjs': { sourceDigest: 'c433c369f8dd1d0d778fab7686498872808ca68b0dec78c3c0f6f25af15b97fb', resources: [] },
+  } },
 })
 /** Compute a source graph without importing or executing candidate code. Unknown dynamic edges fail closed.
  * @param {{rootDir:string,surface:string,registry?:any,settings?:any,pins?:any,provenance?:any}} input */
@@ -39,12 +44,23 @@ export async function computeRsiDependencyClosure({ rootDir, surface, registry =
       if (visited.has(relative)) continue
       visited.add(relative)
       const source = await read(relative)
+      if (relative.endsWith('.cjs')) throw new Error('campaign_closure_commonjs_unsupported')
       if (!/\.[cm]?js$/.test(relative)) continue
       const [imports] = parse(source)
       for (const edge of imports) {
         if (edge.d === -2) continue // import.meta is not a dependency edge.
         if (!edge.n) throw new Error('campaign_closure_dynamic_unresolved')
         const specifier = edge.n
+        if (['node:module', 'module', 'node:vm', 'vm'].includes(specifier)) throw new Error('campaign_closure_runtime_loader_unsupported')
+        if (['node:fs', 'node:fs/promises', 'fs', 'fs/promises'].includes(specifier)) {
+          const declaration = profile.runtimeFileDependencies?.[relative]
+          if (!declaration || declaration.sourceDigest !== files.get(relative) || !Array.isArray(declaration.resources)) throw new Error('campaign_closure_runtime_files_undeclared')
+          for (const resource of declaration.resources) {
+            if (typeof resource !== 'string' || /\.[cm]?js$/.test(resource)) throw new Error('campaign_closure_runtime_loader_unsupported')
+            await read(resource)
+          }
+          continue
+        }
         if (specifier.startsWith('node:')) continue
         if (specifier.startsWith('.')) { const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(relative), specifier)); queue.push(resolved); continue }
         let workspace = profile.workspacePackages?.[specifier]
@@ -92,6 +108,6 @@ export async function computeRsiDependencyClosure({ rootDir, surface, registry =
     }
     const entries = [...files].sort(([a], [b]) => a.localeCompare(b, 'en')).map(([file, sha256]) => ({ path: file, sha256 }))
     const dependencies = [...externals].sort(([a], [b]) => a.localeCompare(b, 'en'))
-    return { qualified: true, issues: [], surface, dependencyDigest: rsiDigest({ surface, entries, dependencies, settings, pins }), entries, dependencies, provenance }
+    return { qualified: true, issues: [], surface, dependencyDigest: rsiDigest({ surface, entries, dependencies, settings, pins, runtimeFileDependencies: profile.runtimeFileDependencies ?? {} }), entries, dependencies, provenance }
   } catch (error) { return { qualified: false, issues: [error instanceof Error && error.message.startsWith('campaign_') ? error.message : 'campaign_closure_file_unavailable'], surface, dependencyDigest: null, entries: [], dependencies: [], provenance } }
 }

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, writeFile, rm, mkdir, copyFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { createHash } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { computeRsiDependencyClosure } from '../src/rsiDependencyClosure.mjs'
 test('closure binds helpers and settings but ignores unrelated release files', async () => {
@@ -90,6 +91,22 @@ test('CommonJS loaders and undeclared file readers cannot hide dependencies', as
     await writeFile(path.join(rootDir, 'entry.mjs'), "import * as modules from 'node:module'; modules['create'+'Require'](import.meta.url)(variable)")
     assert.equal((await computeRsiDependencyClosure(input)).qualified, false)
     await writeFile(path.join(rootDir, 'entry.mjs'), "import { readFileSync as reader } from 'node:fs'; reader('./config.json')")
+    assert.equal((await computeRsiDependencyClosure(input)).qualified, false)
+  } finally { await rm(rootDir, { recursive: true, force: true }) }
+})
+
+test('source-bound runtime file declarations hash resources and reject unreviewed loader changes', async () => {
+  const rootDir = await mkdtemp(path.join(tmpdir(), 'rsi-declared-'))
+  try {
+    const source = "import {readFileSync as read} from 'node:fs'; export const value=JSON.parse(read(new URL('./config.json',import.meta.url),'utf8'))"
+    await writeFile(path.join(rootDir, 'entry.mjs'), source)
+    await writeFile(path.join(rootDir, 'config.json'), '{"value":1}')
+    const input = { rootDir, surface: 'test', registry: { test: { roots: ['entry.mjs'], runtimeFileDependencies: { 'entry.mjs': { sourceDigest: createHash('sha256').update(source).digest('hex'), resources: ['config.json'] } } } } }
+    const first = await computeRsiDependencyClosure(input)
+    assert.equal(first.qualified, true)
+    await writeFile(path.join(rootDir, 'config.json'), '{"value":2}')
+    assert.notEqual((await computeRsiDependencyClosure(input)).dependencyDigest, first.dependencyDigest)
+    await writeFile(path.join(rootDir, 'entry.mjs'), source + '\n// loader changed')
     assert.equal((await computeRsiDependencyClosure(input)).qualified, false)
   } finally { await rm(rootDir, { recursive: true, force: true }) }
 })
