@@ -166,8 +166,10 @@ export function ReaderByline({ item, className }: { item: FrontierItem; classNam
   const byline = !social && item.author && item.author.name !== item.source.name ? item.author.name : null;
   const handle = social ? item.author?.handle ?? null : null;
   const platform = item.platform ? PLATFORM_LABELS[item.platform] : null;
-  const at = item.publishedAt ?? item.timelineAt;
-  const when = item.publishedAt ? publishedLabel(item) : `收录于 ${dateClock(item.timelineAt)}`;
+  // The source's own date where it gave one; where it gave none, or the date is our own guess (`inferred`), when we took the item in.
+  const stated = publishedLabel(item);
+  const at = stated && item.publishedAt ? item.publishedAt : item.timelineAt;
+  const when = stated ?? `收录于 ${dateClock(item.timelineAt)}`;
   const since = sinceText(at);
   const evidence = bylineEvidence(item);
   // What the item is (ct-write 2026-10-24): its genre, except a safety alert's, which 「安全警示」 says already.
@@ -561,10 +563,12 @@ type AbstractState = { kind: "loading" } | { kind: "ready"; zh: string | null; o
  * everyone (plan §10.3.6) — beside the original. Where the Chinese cannot be written (the budget, a failed number check, a server
  * that does not offer it) the original stands alone under its own name; where there is no abstract at all there is no block.
  */
-export function ReaderAbstract({ item, language, onLanguage, className }: {
+export function ReaderAbstract({ item, language, onLanguage, onEmpty, className }: {
   item: FrontierItemDetail;
   language: ReaderLanguage;
   onLanguage: (language: ReaderLanguage) => void;
+  /** The server has no abstract after all, in either language: the page takes its switch away (its view would be empty). */
+  onEmpty?: () => void;
   className?: string;
 }) {
   const ask = !item.abstractZh && abstractOffered(item);
@@ -580,6 +584,8 @@ export function ReaderAbstract({ item, language, onLanguage, className }: {
     );
     return () => { active = false; };
   }, [ask, item.id, item.abstract, attempt]);
+  const empty = state.kind === "ready" && !state.zh && !state.original;
+  useEffect(() => { if (empty) onEmpty?.(); }, [empty, onEmpty]);
 
   if (state.kind === "loading") {
     return (

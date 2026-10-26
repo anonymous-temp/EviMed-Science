@@ -121,6 +121,17 @@ describe("a journal article", () => {
     expect(client.fetchFrontierAbstractZh).not.toHaveBeenCalled();
   });
 
+  it("takes the switch away and returns to the AI view when the server has no abstract after all", async () => {
+    wide();
+    // A DOI offers an abstract; the server then has none in either language (the shared abstract request answers nothing).
+    client.fetchFrontierItem.mockResolvedValue({ ...frontierItemDetail({ id: "item-1", doi: "10.1000/x", flags: [] }), abstract: null, abstractZh: null });
+    client.fetchFrontierAbstractZh.mockResolvedValue(null);
+    show("/app/frontier/items/item-1?view=text");
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent(/^\/app\/frontier\/items\/item-1$/));
+    expect(await screen.findByRole("heading", { name: "AI 导读" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^查看摘要$|^AI 解读$/ })).not.toBeInTheDocument();
+  });
+
   it("keeps what the card left out of a paper in the column's 出处: its facts and the free full text, and what the paper is in the byline", async () => {
     wide();
     client.fetchFrontierItem.mockResolvedValue(frontierItemDetail({ id: "item-1", sourceType: "preprint", evidenceType: "preprint", evidenceTypeLabel: "预印本",
