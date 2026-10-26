@@ -279,3 +279,30 @@ def test_cli_is_json_and_skill_copy_is_identical(tmp_path):
     failed = subprocess.run([sys.executable, str(source), str(request)], capture_output=True, text=True)
     assert failed.returncode == 2
     assert json.loads(failed.stdout)["status"] == "invalid"
+
+
+def test_exact_numeric_bindings_do_not_round_distinct_large_integer_counts_to_equal():
+    big = 2 ** 53 + 1
+    result = checks().compare_reported_numbers({"n": big}, [
+        {"source": ["n"], "reported": big - 1},
+        {"source": ["n"], "reported": float(big - 1)},
+    ])
+    assert [item["status"] for item in result["comparisons"]] == ["mismatch", "mismatch"]
+    assert all(item["absoluteDifference"] == 1 for item in result["comparisons"])
+
+
+def test_exact_uniform_bin_boundaries_are_left_inclusive():
+    data = rows()
+    data[2]["p"] = .58
+    result = audit(data, calibration_bins=100)
+    assert result["metrics"]["calibrationBins"][58]["count"] == 1
+    assert result["metrics"]["calibrationBins"][57]["count"] == 0
+
+
+def test_huge_invalid_probability_is_counted_without_overflow():
+    data = rows()
+    data[2]["p"] = 10 ** 500
+    result = audit(data)
+    assert result["counts"]["invalidProbabilityRows"] == 1
+    assert result["counts"]["validTestRows"] == 5
+    json.dumps(result, allow_nan=False)
