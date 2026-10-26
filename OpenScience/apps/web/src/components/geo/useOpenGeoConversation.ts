@@ -14,6 +14,12 @@ export interface GeoConversationTarget {
   geoId?: string;
   /** A conversation to open by name; none is the one the page holds (`GeoFrameApi.conversation`), else the project's own. */
   sessionId?: string | null;
+  /**
+   * The project's own conversation as the page last read it (`GeoProject.sessionId`). Opening it is the `primary` open, not an exact
+   * one: the server repairs a primary the kernel no longer lists (for the owner) and answers with the session that now stands, while
+   * an exact open of a missing session is only refused. An addressed conversation stays exact and is never swapped.
+   */
+  primarySessionId?: string | null;
   resultRevision?: { referenceId: string };
   geoPlanContext?: { referenceId: string };
   /** A versioned handling attempt resumes its own native session even while another is selected in the page URL. */
@@ -42,7 +48,9 @@ export function useOpenGeoConversation() {
       if (!geoId) throw new Error("GEO project unavailable");
       const sameProject = location.pathname.startsWith(`/app/geo/${encodeURIComponent(geoId)}/`) || location.pathname === `/app/geo/${encodeURIComponent(geoId)}`;
       const selectedSession = sameProject ? geoSessionIdFromChatPath(location.pathname) || new URLSearchParams(location.search).get("session") : null;
-      const exactSession = ((target.geoPlanContext || target.resultRevision || target.exactSession) ? target.sessionId || selectedSession : selectedSession || target.sessionId);
+      const named = ((target.geoPlanContext || target.resultRevision || target.exactSession) ? target.sessionId || selectedSession : selectedSession || target.sessionId);
+      const isPrimary = Boolean(named) && !target.exactSession && !target.geoPlanContext && !target.resultRevision && named === target.primarySessionId;
+      const exactSession = isPrimary ? null : named;
       const descriptor = await openGeoConversation(geoId, exactSession ? { kind: "session", sessionId: exactSession } : { kind: "primary" });
       if (!current()) return false;
       if (descriptor.projectId !== target.projectId || descriptor.scope.geoProjectId !== geoId || descriptor.sessionId !== descriptor.scope.sessionId

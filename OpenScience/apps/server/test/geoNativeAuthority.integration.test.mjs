@@ -165,6 +165,31 @@ test('a primary the kernel no longer has is replaced once, by its owner only', o
   assert.equal(pointer.revision, 2); assert.equal(pointer.payload.replaces, 'dead-root');
 });
 
+// OPEN-01: the page used to ask for the project's own conversation by name, which this branch only proves and never repairs. The web now
+// asks for it as the primary (`useOpenGeoConversation`); this holds both halves of the contract the page relies on.
+test('a conversation named exactly is never swapped for another, while the primary open repairs a lost primary and the session that stands opens by name', options, async t => {
+  const f = await setup(t, 4, { kernel: [] });
+  await f.authority.registerPrimary(f.geo, 'dead-root');
+  for (const user of [f.users.owner, f.users.editor]) {
+    await assert.rejects(f.authority.descriptor(user, f.geo.id, { kind: 'session', sessionId: 'dead-root' }), error => error.status === 404 && error.code === 'runtime_session_not_found');
+  }
+  assert.equal(f.calls.filter(([kind]) => kind === 'create').length, 0, 'an exact open never begins a conversation');
+  const identity = await f.authority.identity(f.users.owner, f.geo.id);
+  assert.equal(await f.authority.primary(identity), 'dead-root', 'and never moves the pointer');
+
+  const repaired = await f.authority.descriptor(f.users.owner, f.geo.id, { kind: 'primary' });
+  assert.equal(repaired.sessionId, 'server-created-session');
+  assert.deepEqual(repaired.scope, { kind: 'geo', geoProjectId: f.geo.id, sessionId: 'server-created-session' });
+  const pointer = await f.documents.get(f.users.owner.id, 'geo-plan-context', f.authority.primaryKey(identity));
+  assert.equal(pointer.payload.sessionId, 'server-created-session'); assert.equal(pointer.payload.replaces, 'dead-root');
+
+  assert.equal((await f.authority.descriptor(f.users.owner, f.geo.id, { kind: 'session', sessionId: 'server-created-session' })).sessionId, 'server-created-session');
+  assert.equal((await f.authority.descriptor(f.users.editor, f.geo.id, { kind: 'session', sessionId: 'server-created-session' })).sessionId, 'server-created-session');
+  await assert.rejects(f.authority.descriptor(f.users.owner, f.geo.id, { kind: 'session', sessionId: 'dead-root' }), error => error.code === 'runtime_session_not_found');
+  await assert.rejects(f.authority.descriptor(f.users.owner, f.geo.id, { kind: 'session', sessionId: 'a-foreign-chat' }), error => error.status === 404, 'a session the project never registered stays refused');
+  assert.equal(f.calls.filter(([kind]) => kind === 'create').length, 1);
+});
+
 test('a primary is replaced only when the kernel says it is absent, never on an unavailable inventory', options, async t => {
   const f = await setup(t, 4, { kernel: [] });
   await f.authority.registerPrimary(f.geo, 'shared-root');

@@ -69,7 +69,7 @@ describe("问 AI", () => {
     const state = JSON.parse(screen.getByTestId("state").textContent ?? "null") as { runtimeUiIntent?: { draft?: string; sessionId?: string } } | null;
     expect(state?.runtimeUiIntent).toMatchObject({ kind: "open", projectId: "prj_geo_1", draft: "请开始药品价值分析。", sessionId: "ses_geo_1", scope: descriptor().scope });
     expect(state?.runtimeUiIntent).not.toHaveProperty("send");
-    expect(client.open).toHaveBeenCalledWith("geo_1", { kind: "session", sessionId: "ses_geo_1" });
+    expect(client.open).toHaveBeenCalledWith("geo_1", { kind: "primary" });
     expect(store.select).not.toHaveBeenCalled();
     expect(useToastStore.getState().toasts).toEqual([]);
   });
@@ -80,7 +80,7 @@ describe("问 AI", () => {
     const button = screen.getByRole("button", { name: "开始药品价值分析" });
     await userEvent.click(button);
     await waitFor(() => expect(useToastStore.getState().toasts.map((toast) => toast.message)).toEqual(["对话暂时无法打开，请稍后重试。"]));
-    expect(client.open).toHaveBeenCalledWith("geo_1", { kind: "session", sessionId: "ses_geo_1" });
+    expect(client.open).toHaveBeenCalledWith("geo_1", { kind: "primary" });
     expect(store.select).not.toHaveBeenCalled();
     await waitFor(() => expect(button).toBeEnabled());
     expect(button).not.toHaveAttribute("aria-busy");

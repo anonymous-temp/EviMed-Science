@@ -49,6 +49,21 @@ test('a fixture restart restores the existing owned mock conversation identity w
   await assert.rejects(warmFixtureConversations({ ...app, runtimeManager: { ...app.runtimeManager, start: async () => ({ kind: 'kernel' }) } }, { id: 'walk-fixture' }), /cannot alter a real runtime/);
 });
 
+test('a fixture restart also restores the main conversation the control plane registered for a GEO project', async () => {
+  const project = { id: 'synthetic-project', userId: 'walk-fixture', workspaceDir: '/synthetic/workspace' }, created = [], queries = [];
+  const query = async (sql, params) => {
+    queries.push([sql, params]);
+    if (/evimed_geo\.projects/u.test(sql)) return { rows: [{ project_id: project.id, conversation_session_id: null }] };
+    assert.match(sql, /evimed_product\.documents/u); assert.match(sql, /kind='geo-plan-context'/u); assert.match(sql, /geo-native-primary/u);
+    return { rows: [{ project_id: project.id, session_id: 'web_mock_primary' }, { project_id: project.id, session_id: 'web_mock_primary' }, { project_id: 'another-project', session_id: 'web_mock_other' }, { project_id: project.id, session_id: null }] };
+  };
+  const app = { config: { runtimeMode: 'mock' }, agentRuns: { list: async () => [{ sessionId: 'web_mock_run' }] }, store: { database: { query }, requireProject: async () => project },
+    runtimeManager: { start: async () => ({ kind: 'mock' }), callKernel: async (_runtime, _project, method, payload) => { assert.equal(method, 'session/create'); created.push(payload.request.sessionId); } } };
+  assert.equal(await warmFixtureConversations(app, { id: 'walk-fixture' }), 2);
+  assert.deepEqual(created, ['web_mock_primary', 'web_mock_run'], 'the registered session once, never another project\'s, then the runs');
+  assert.ok(queries.every(([, params]) => params.length === 1 && params[0] === 'walk-fixture'), 'only the synthetic account is read');
+});
+
 test('a new mock process epoch cannot reuse the previous context generation proof', async () => {
   const { RuntimeManager } = await import('../../../apps/server/src/runtimeManager.mjs');
   const { contextPolicyIdentity } = await import('../../../apps/server/src/geoContextItems.mjs');

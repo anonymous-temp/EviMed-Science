@@ -199,6 +199,7 @@ function AnalysisPage({
           new URLSearchParams(location.search).get("session") ||
           current.sessionId ||
           project.sessionId,
+        current.sessionId || project.sessionId,
       );
       const context = await stageGeoPlanContext(geoId, {
         requestKey: crypto.randomUUID(),

@@ -42,7 +42,7 @@ export function PlanTab({ geoId, project, sourceId, sourceUrl, selectionRef }: {
     try {
       const current = await getGeoProject(geoId);
       const sessionId = await ensureGeoConversationSession(geoId, project.projectId,
-        geoSessionIdFromChatPath(location.pathname) || params.get("session") || current.sessionId || project.sessionId);
+        geoSessionIdFromChatPath(location.pathname) || params.get("session") || current.sessionId || project.sessionId, current.sessionId || project.sessionId);
       const signature = JSON.stringify([sessionId,plan.selection?.reference,plan.version,sourceId,sourceUrl,action?.key]);
       const key = retryKey?.signature === signature ? retryKey.key : crypto.randomUUID(); setRetryKey({signature,key});
       const context = await stageGeoPlanContext(geoId, { requestKey: key, sessionId, mode: action ? "content" : "strategy",

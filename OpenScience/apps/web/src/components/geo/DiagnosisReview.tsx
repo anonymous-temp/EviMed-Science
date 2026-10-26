@@ -150,7 +150,7 @@ export function DiagnosisReview({ geoId, data, project, actions, onAssessmentCha
       const current = await getGeoProject(geoId);
       const params = new URLSearchParams(location.search);
       const sessionId = await ensureGeoConversationSession(geoId, project.projectId,
-        geoSessionIdFromChatPath(location.pathname) || params.get("session") || current.sessionId || project.sessionId);
+        geoSessionIdFromChatPath(location.pathname) || params.get("session") || current.sessionId || project.sessionId, current.sessionId || project.sessionId);
       const selectionRef = project.selection?.reference ?? null;
       const focus = { sessionId, mode: "strategy" as const, ...(selectionRef ? { selectionRef } : {}),
         ...(linked.length ? { actionKeys: linked.map(item => item.key) } : {}) };

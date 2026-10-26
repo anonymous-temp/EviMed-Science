@@ -225,7 +225,7 @@ function Answer({
       return;
     }
     const draft = zh`${engineName(snapshot.engine)}对“${question}”的回答${date ? `（${date}）` : ""}，对我们意味着什么，接下来该做什么？`;
-    void open({ projectId: target.projectId, sessionId: target.sessionId }, draft).finally(() => setAsking(false));
+    void open({ projectId: target.projectId, primarySessionId: target.sessionId }, draft).finally(() => setAsking(false));
   };
   const groupMap = useMemo(() => questionGroupIndex(groups), [groups]);
   const opened = drawer.error ? everyClaim.find((claim) => claim.key === drawer.error) ?? null : null;

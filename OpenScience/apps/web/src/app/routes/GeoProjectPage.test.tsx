@@ -45,7 +45,12 @@ vi.mock("@/lib/geoClient", async (importOriginal) => ({
 }));
 
 vi.mock("@/lib/geoNativeClient",async original=>({...await original<typeof import("@/lib/geoNativeClient")>(),openGeoConversation:client.nativeOpen}));
-vi.mock("@/components/geo/useOpenGeoConversation", () => ({ useOpenGeoConversation: () => client.open }));
+// The header's own open runs the real hook in one test (the stub elsewhere records only the target the page names).
+const realOpen = vi.hoisted(() => ({ on: false }));
+vi.mock("@/components/geo/useOpenGeoConversation", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/components/geo/useOpenGeoConversation")>();
+  return { ...real, useOpenGeoConversation: () => { const open = real.useOpenGeoConversation(); return realOpen.on ? open : client.open; } };
+});
 
 const scroll = vi.hoisted(() => ({ scrollBlockToTop: vi.fn() }));
 vi.mock("@/components/geo/geoScroll", () => scroll);
@@ -145,6 +150,7 @@ const severeDiagnosis = diagnosisWith([
 
 beforeEach(() => {
   vi.clearAllMocks();
+  realOpen.on = false;
   client.nativeOpen.mockImplementation(async (geoId,target)=>({projectId:GEO_PROJECT.projectId,sessionId:target.sessionId,scope:{kind:"geo",geoProjectId:geoId,sessionId:target.sessionId}}));
   useProjectStore.setState({ currentId: GEO_PROJECT.projectId });
   client.useGeoFeature.mockReturnValue("on");
@@ -355,9 +361,9 @@ describe("a GEO project's page", () => {
     renderProject();
     await chooseStep(/^诊断 ·/);
     expect(await screen.findByTestId("accuracy-tab")).toBeInTheDocument();
-    expect(screen.getByTestId("landed")).toHaveTextContent("/accuracy?session=ses_geo_masi&step=diagnosis#geo-errors");
+    expect(screen.getByTestId("landed")).toHaveTextContent("/accuracy?step=diagnosis#geo-errors");
     await chooseStep(/^旅程 ·/);
-    expect(screen.getByTestId("landed")).toHaveTextContent("/questions?view=journey&session=ses_geo_masi&step=journey");
+    expect(screen.getByTestId("landed")).toHaveTextContent("/questions?view=journey&step=journey");
   });
 
   // The live walk: `scrollIntoView` also scrolls the app shell's clipped root and carried the sidebar and the band off the screen.
@@ -424,7 +430,7 @@ describe("a GEO project's page", () => {
     await waitFor(() => expect(buttons()).toContain("让 AI 补充结论"));
     // It asks in the project's conversation, with the brief waiting unsent.
     await userEvent.click(within(toolbar()).getByRole("button", { name: "让 AI 补充结论" }));
-    expect(client.open).toHaveBeenCalledWith({ geoId: "geo_masi", projectId: "p-masi", sessionId: "ses_geo_masi" }, expect.stringContaining("补充信尔美还没有覆盖的说明书内容"));
+    expect(client.open).toHaveBeenCalledWith({ geoId: "geo_masi", projectId: "p-masi", sessionId: "ses_geo_masi", primarySessionId: "ses_geo_masi" }, expect.stringContaining("补充信尔美还没有覆盖的说明书内容"));
 
     await chooseResult("信源");
     await waitFor(() => expect(buttons()).toEqual(["分析范围", "选目标档"]));
@@ -433,7 +439,8 @@ describe("a GEO project's page", () => {
     expect(planned.pathname).toBe("/app/geo/geo_masi/plan");
     expect(planned.hash).toBe("#geo-targets");
     expect(planned.searchParams.get("step")).toBe("sources");
-    expect(planned.searchParams.get("session")).toBe("ses_geo_masi");
+    // The project's own conversation is where every open begins; only an addressed one travels in the address.
+    expect(planned.searchParams.has("session")).toBe(false);
 
     // Measured views offer the range, without starting another sampling run.
     await chooseResult("准确与安全");
@@ -568,7 +575,7 @@ describe("a GEO project's page", () => {
     await waitFor(() => expect(screen.getByTestId("landed")).toHaveTextContent("/app/geo/geo_masi/accuracy"));
     expect(await screen.findByTestId("accuracy-tab")).toHaveTextContent("geo_masi:玛仕度肽注射液");
     await chooseResult("总览");
-    await waitFor(() => expect(screen.getByTestId("landed")).toHaveTextContent(/^\/app\/geo\/geo_masi\?session=ses_geo_masi$/));
+    await waitFor(() => expect(screen.getByTestId("landed")).toHaveTextContent(/^\/app\/geo\/geo_masi$/));
   });
 
   it("names the three measurement tabs 「AI 回答监测」 in the browser tab, and the others by the project", async () => {
@@ -621,7 +628,7 @@ describe("a GEO project's page", () => {
     client.exportGeo.mockResolvedValue({ accepted: true, runId: "run_1", step: null });
     renderProject();
     await userEvent.click(await screen.findByRole("button", { name: "对话" }));
-    await waitFor(() => expect(client.open).toHaveBeenCalledWith({ geoId: "geo_masi", projectId: "p-masi", sessionId: "ses_geo_masi" }));
+    await waitFor(() => expect(client.open).toHaveBeenCalledWith({ geoId: "geo_masi", projectId: "p-masi", sessionId: "ses_geo_masi", primarySessionId: "ses_geo_masi" }));
     client.open.mockClear();
 
     await userEvent.click(screen.getByRole("button", { name: "周报" }));
@@ -632,6 +639,35 @@ describe("a GEO project's page", () => {
     expect(screen.getByTestId("landed")).toHaveTextContent(/^\/app\/geo\/geo_masi$/);
     // The page read itself again, so a step that began shows on the rail.
     await waitFor(() => expect(client.getGeoProject.mock.calls.length).toBeGreaterThan(1));
+  });
+
+  // OPEN-01: the address used to carry the project's own conversation as `?session=`, which made 「对话」 ask for exactly that session, and a
+  // kernel that no longer listed it could only refuse. The project's own conversation is the primary open the server repairs.
+  it("“对话” asks for the project's own conversation as the primary, whatever address the page was reached by, and lands in the session that stands", async () => {
+    realOpen.on = true;
+    client.nativeOpen.mockResolvedValue({ projectId: "p-masi", sessionId: "ses_replacement", scope: { kind: "geo", geoProjectId: "geo_masi", sessionId: "ses_replacement" } });
+    renderProject("/app/geo/geo_masi/evidence?session=ses_geo_masi");
+    await userEvent.click(await screen.findByRole("button", { name: "对话" }));
+    await waitFor(() => expect(screen.getByTestId("landed")).toHaveTextContent(/^\/app\/geo\/geo_masi\/chat\/ses_replacement/));
+    // The header asked for the primary; the pane then proves the session that stands, by name.
+    expect(client.nativeOpen).toHaveBeenNthCalledWith(1, "geo_masi", { kind: "primary" });
+    expect(client.nativeOpen).not.toHaveBeenCalledWith("geo_masi", { kind: "session", sessionId: "ses_geo_masi" });
+  });
+
+  it("“对话” still asks by name for a conversation the address names", async () => {
+    realOpen.on = true;
+    renderProject("/app/geo/geo_masi/evidence?session=ses_second");
+    await userEvent.click(await screen.findByRole("button", { name: "对话" }));
+    await waitFor(() => expect(screen.getByTestId("landed")).toHaveTextContent(/^\/app\/geo\/geo_masi\/chat\/ses_second/));
+    expect(client.nativeOpen).toHaveBeenCalledWith("geo_masi", { kind: "session", sessionId: "ses_second" });
+  });
+
+  it("a result link written from the project's own conversation does not copy it into the address", async () => {
+    renderProject("/app/geo/geo_masi/evidence?session=ses_geo_masi");
+    await screen.findByTestId("evidence-tab");
+    await chooseResult("信源");
+    await waitFor(() => expect(screen.getByTestId("landed")).toHaveTextContent("/app/geo/geo_masi/"));
+    expect(screen.getByTestId("landed")).not.toHaveTextContent("session=");
   });
 
   it("an export that waits for the project's run slot says so, and a refusal says why", async () => {
@@ -648,7 +684,7 @@ describe("a GEO project's page", () => {
     client.getGeoProject.mockResolvedValue({ ...GEO_PROJECT, sessionId: null });
     renderProject();
     await userEvent.click(await screen.findByRole("button", { name: "对话" }));
-    await waitFor(() => expect(client.open).toHaveBeenCalledWith({ geoId: "geo_masi", projectId: "p-masi", sessionId: null }));
+    await waitFor(() => expect(client.open).toHaveBeenCalledWith({ geoId: "geo_masi", projectId: "p-masi", sessionId: null, primarySessionId: null }));
   });
 
   it("“⋯” holds the AI-run record: the steps the programme ran, read where the reader is — and the toast of a start leads to it", async () => {

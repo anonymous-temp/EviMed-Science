@@ -379,7 +379,9 @@ function GeoBand({
   /** The conversation the page holds (`GeoFrameApi.conversation`: never a step the programme ran); none yet opens a new one. */
   const params = new URLSearchParams(location.search);
   const heldSession = api.conversation;
-  const target = { geoId, projectId: project.projectId, sessionId: heldSession };
+  // The project's own conversation is opened as the primary (`primarySessionId`): the server swaps in a new one for its owner when the
+  // kernel has lost it. Only an addressed conversation is asked for by name.
+  const target = { geoId, projectId: project.projectId, sessionId: heldSession, primarySessionId: project.sessionId ?? null };
   // What the account may do here: the owner everything, a member what their roles allow. The server judges every operation all the
   // same; the page only does not offer what would be refused.
   const abilities = project.access?.abilities;
@@ -404,7 +406,7 @@ function GeoBand({
       return undefined;
     }
     let live = true;
-    void openConversation({ geoId, projectId: project.projectId, sessionId: heldSession })
+    void openConversation({ geoId, projectId: project.projectId, sessionId: heldSession, primarySessionId: project.sessionId ?? null })
       .then((opened) => { if (live && !opened) setConversationError("对话暂时无法打开，请稍后重试。"); });
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the search is carried along, never a reason to open again
@@ -460,7 +462,9 @@ function GeoBand({
     const kept = new URLSearchParams(params);
     const nextView = view ?? (next === tab && step === undefined ? params.get("view") ?? undefined : undefined);
     if (!nextView) kept.delete("view");
-    if (heldSession) kept.set("session", heldSession);
+    // Only an addressed conversation travels in the address: the project's own is where every open begins, and a copy of its id turned
+    // an open into a request for exactly that session, which a kernel that had lost it could only refuse.
+    if (heldSession && heldSession !== project.sessionId) kept.set("session", heldSession); else kept.delete("session");
     const nextStep = step ?? geoViewedStep(next, { view: nextView, section });
     if (nextStep) kept.set("step", nextStep); else kept.delete("step");
     return geoDestinationPath(geoId, { tab: next, view: nextView, section }, kept);

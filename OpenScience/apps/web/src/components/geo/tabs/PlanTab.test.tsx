@@ -44,7 +44,8 @@ function renderPlan(reload: () => void = () => undefined) {
 beforeEach(() => {
   for (const fn of Object.values(client)) fn.mockReset();
   open.mockReset().mockResolvedValue(true);
-  moduleSession.mockReset().mockImplementation(async(geoId,target)=>({projectId:project.projectId,sessionId:target.sessionId??"created-plan-session",scope:{kind:"geo",geoProjectId:geoId,sessionId:target.sessionId??"created-plan-session"}}));
+  // The module's open: a session by name, else the project's own primary (its kept session, or a new one when it has none).
+  moduleSession.mockReset().mockImplementation(async(geoId,target)=>{const sessionId=target.sessionId??(await client.getGeoProject(geoId)).sessionId??"created-plan-session";return {projectId:project.projectId,sessionId,scope:{kind:"geo",geoProjectId:geoId,sessionId}};});
   client.getGeoStrategy.mockResolvedValue(strategyFilled);
   client.getGeoProject.mockResolvedValue({...project,sessionId:"current-native-session"});
   client.stageGeoPlanContext.mockResolvedValue({referenceId:`gpc_${"a".repeat(64)}`,sessionId:"current-native-session",draft:"Selected plan draft"});

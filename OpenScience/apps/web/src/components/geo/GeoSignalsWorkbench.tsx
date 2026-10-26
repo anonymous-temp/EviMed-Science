@@ -146,7 +146,7 @@ function SignalDetail({ geoId, project, signalId, onBack }: { geoId: string; pro
       if (!current()) return;
       const exactSession = previous ? attempt?.sessionId : latestProject.sessionId;
       if (previous && !exactSession) throw new Error("The original signal conversation is unavailable.");
-      const sessionId = await ensureGeoConversationSession(geoId, project.projectId, exactSession);
+      const sessionId = await ensureGeoConversationSession(geoId, project.projectId, exactSession, previous ? null : latestProject.sessionId);
       if (!current()) return;
       const body = { mode: 'signal' as const, signalId, expectedSignalRevision: signal.revision, sessionId, intent, focusRefs: focus,
         ...(previous ? { previousContextRef: previous } : {}) };

@@ -122,12 +122,22 @@ export async function warmFixtureConversations(app, user, fixtureUser = FIXTURE_
   if (user.id !== fixtureUser) throw new Error("Fixture conversation restoration requires its exact synthetic account.");
   if (app.config.runtimeMode !== "mock") throw new Error("Fixture conversation restoration requires the mock runtime.");
   const rows = (await app.store.database.query("SELECT project_id,conversation_session_id FROM evimed_geo.projects WHERE user_id=$1 AND deleted_at IS NULL", [user.id])).rows;
+  // The module's own conversations: the control plane keeps the main one as a pointer document (`geo-native-primary`, with the session
+  // document it names), not in the project row, and proves it from that document alone. A restart empties the mock kernel's inventory
+  // and not the document, so without them the header's 「对话」 met a session the kernel had never heard of.
+  const registered = new Map();
+  for (const row of (await app.store.database.query(
+    "SELECT project_id,payload->>'sessionId' AS session_id FROM evimed_product.documents WHERE user_id=$1 AND kind='geo-plan-context' AND deleted_at IS NULL AND payload->>'recordType' IN ('geo-native-primary','geo-native-session')",
+    [user.id])).rows) {
+    if (typeof row.session_id !== "string" || !row.session_id) continue;
+    registered.set(row.project_id, [...(registered.get(row.project_id) ?? []), row.session_id]);
+  }
   let restored = 0;
   for (const row of rows) {
     const project = await app.store.requireProject(user, row.project_id);
     if (project.userId !== fixtureUser || project.id !== row.project_id) throw new Error("Fixture conversation project identity changed.");
     const runs = await app.agentRuns.list(project);
-    const sessions = [...new Set([row.conversation_session_id, ...runs.map(run => run.sessionId)].filter(value => typeof value === "string" && value))];
+    const sessions = [...new Set([row.conversation_session_id, ...(registered.get(row.project_id) ?? []), ...runs.map(run => run.sessionId)].filter(value => typeof value === "string" && value))];
     if (!sessions.length) continue;
     const runtime = await app.runtimeManager.start(project);
     if (runtime.kind !== "mock") throw new Error("Fixture restoration cannot alter a real runtime.");
