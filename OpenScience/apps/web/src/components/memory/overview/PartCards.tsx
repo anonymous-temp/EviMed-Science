@@ -92,7 +92,8 @@ function SingleProject({ row }: { row: ProjectRow }) {
       label: slot.label ?? (PROJECT_CARD_SLOT_LABELS_ZH as Record<string, string>)[slot.slot] ?? "其他", value: memoryExcerpt(slot.text, 120),
     })),
   ];
-  return <FactList rows={facts} />;
+  // Inside the card's frame: rows told apart by space, not by a second rule.
+  return <FactList rows={facts} ruled={false} />;
 }
 
 /**
