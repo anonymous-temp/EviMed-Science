@@ -501,7 +501,13 @@ describe("知识库", () => {
       mocks.getKnowledgeStatus.mockResolvedValue({ ...statusCompiled, state: "failed" });
       mocks.requestKnowledgeCompile.mockResolvedValue({ ...statusCompiled, state: "compiling", stage: { tree: "wiki", step: "wiki", task: null, status: "running", startedAt: "2026-10-13T12:00:00Z" } });
       renderPage();
-      await userEvent.click(await screen.findByRole("button", { name: /上次整理没有完成/u }));
+      const dot = await screen.findByRole("button", { name: /上次整理没有完成/u });
+      // The row's 28 px icon button at the interface's type size, not a hand-drawn circle of its own: one look for one job (the release
+      // walk of evimed-b559d4b7ebd0-1 counted the 24 px circle as a ninth kind of control on the graph tab).
+      expect(dot.closest("[data-page-header]")).not.toBeNull();
+      expect(dot).toHaveClass("h-sm", "w-7", "rounded", "text-ui");
+      expect(dot).not.toHaveClass("rounded-full");
+      await userEvent.click(dot);
       expect(await screen.findByText(/上次整理没有完成/u, { selector: "[role=menu] *" })).toBeInTheDocument();
       await userEvent.click(await screen.findByRole("menuitem", { name: "重新整理" }));
       await waitFor(() => expect(mocks.requestKnowledgeCompile).toHaveBeenCalledWith("default"));
