@@ -628,33 +628,22 @@ test("memory headline comparison reads all paged marks and restores the initial 
 });
 
 
-test("measured VCR semantic palette admits running information only at its real activity strip", { skip }, async () => {
-  const tokens = { '--text':'#24211e', '--text-2':'#494239', '--text-3':'#686157', '--accent-fg':'#ffffff', '--accent':'#a34427', '--warn-strong':'#7f4800', '--ok':'#1a6f44', '--info':'#18324d' };
-  for (const defect of ['', 'missing-running-state', 'arbitrary-information', 'ninth-color']) {
-    const colors = Object.keys(tokens).filter(role => role !== '--info').map(role => `<span style="color:var(${role})">${role}</span>`).join('');
-    await page.setContent(`<style>:root{${Object.entries(tokens).map(([key,value]) => `${key}:${value}`).join(';')}}body{color:var(--text)}</style><main><header data-page-header><h1>Study</h1></header>${colors}<div ${defect === 'arbitrary-information' ? '' : `data-activity="strip" data-activity-state="${defect === 'missing-running-state' ? 'queued' : 'running'}"`}><span style="color:var(--info)">Running task</span></div>${defect === 'ninth-color' ? '<span style="color:cyan">Extra</span>' : ''}</main>`);
-    const facts = await page.evaluate(measure, [[], []]);
-    assert.equal(facts.colorKinds, defect === 'ninth-color' ? 9 : 8);
-    const colorFailures = pageFindings('vcr-comparator', 'desktop', facts, []).failures.filter(entry => entry.includes('text colours'));
-    assert.equal(colorFailures.length, defect ? 1 : 0);
-  }
-});
 
 
 
-test("Inbox selection ownership excludes only its two unique kinds and rejects malformed or extra styles", { skip }, async () => {
+test("Inbox selection controls are owned by one named toolbar, and their kinds count against the page's eight", { skip }, async () => {
   for (const defect of ['', 'no-toolbar', 'unnamed-toolbar', 'missing-name-reference', 'duplicate-toolbar', 'duplicate-primary', 'wrong-scope', 'wrong-owner', 'different-checkbox-style', 'arbitrary-owned-button', 'extra-ordinary-kind', 'new-quiet-kind', 'outside-main']) {
     const scope = 'unread:research';
     const checkbox = (row = false) => `<input type="checkbox" aria-label="${row ? 'Select row' : 'Select loaded'}" data-selection-for="${defect === 'wrong-owner' && row ? 'another-toolbar' : 'selected'}" data-selection-scope="${defect === 'wrong-scope' && row ? 'all:another-project' : scope}" style="height:${defect === 'different-checkbox-style' && row ? 18 : 16}px;width:16px;font-size:12px">`;
     const action = '<button class="bg-accent" style="height:28px;font-size:14px;border:0;border-radius:8px;background:#a34427">Mark selected read</button>';
-    const ordinary = Array.from({length:defect === 'extra-ordinary-kind' ? 9 : 8}, (_, i) => `<button style="height:${40+i*3}px;font-size:13px;border:0;background:none;border-radius:0">Ordinary ${i}</button>`).join('');
+    const ordinary = Array.from({length:defect === 'extra-ordinary-kind' ? 7 : 6}, (_, i) => `<button style="height:${40+i*3}px;font-size:13px;border:0;background:none;border-radius:0">Ordinary ${i}</button>`).join('');
     const row = checkbox(true);
     await page.setContent(`<main><header data-page-header><h1>Inbox</h1></header>${ordinary}<div id="selected" ${defect === 'no-toolbar' ? '' : 'data-action-group="selection" role="toolbar"'} ${defect === 'unnamed-toolbar' ? '' : defect === 'missing-name-reference' ? 'aria-labelledby="missing-name"' : 'aria-label="Batch read"'} data-selection-scope="${scope}">${checkbox()}<button style="height:40px;font-size:${defect === 'new-quiet-kind' ? 15 : 13}px;border:0;background:none;border-radius:0">Clear selection</button>${action}${defect === 'duplicate-primary' ? action : ''}</div>${defect === 'duplicate-toolbar' ? '<div id="other" data-action-group="selection" role="toolbar" aria-label="Other selection">Other selection</div>' : ''}${defect === 'outside-main' ? '' : row}${defect === 'arbitrary-owned-button' ? '<button data-selection-for="selected">Unrelated action</button>' : ''}</main>${defect === 'outside-main' ? row : ''}`);
     const facts = await page.evaluate(measure, [[], []]);
     const failures = pageFindings('inbox', 'desktop', facts, []).failures.filter(entry => /kinds of control|selection controls/u.test(entry));
     assert.equal(failures.length > 0, Boolean(defect), defect || 'valid owned selection');
     if (!defect) {
-      assert.equal(facts.controlKinds, 10);
+      assert.equal(facts.controlKinds, 8);
       assert.equal(facts.selectionControls.valid, true);
       assert.equal(facts.selectionControls.exclusiveKinds.length, 2);
     }
@@ -670,20 +659,6 @@ test("a primary style reused outside the selection toolbar remains in the ordina
   assert.ok(!facts.selectionControls.exclusiveKinds.includes(facts.selectionControls.primaryKinds[0]));
 });
 
-test("GeoAnswer measures original prose separately from compact facts and rejects identical type on controls", { skip }, async () => {
-  for (const defect of ['', 'no-original-marker', 'control-outside', 'control-inside', 'seventh-pair', 'arbitrary-body-size']) {
-    await page.setContent(`<main><h1 style="font-size:24px;font-weight:600">Module</h1><h2 style="font-size:18px;font-weight:600">Question</h2><h3 style="font-size:14px;font-weight:600">Correction</h3><span style="font-size:14px;font-weight:400">Facts</span><span style="font-size:12px;font-weight:400">Metadata</span><article data-geo-answer="synthetic"><div data-prose><p ${defect === 'no-original-marker' ? '' : 'data-geo-answer-prose="original"'} style="font-size:${defect === 'arbitrary-body-size' ? 17 : 16}px;font-weight:400">Original answer${defect === 'control-inside' ? '<button style="font:inherit">Control</button>' : ''}</p></div></article>${defect === 'control-outside' ? '<button style="font-size:16px;font-weight:400">Control</button>' : ''}${defect === 'seventh-pair' ? '<span style="font-size:20px;font-weight:400">Extra</span>' : ''}</main>`);
-    const facts = await page.evaluate(measure, [[], []]);
-    const finding = pageFindings('geo-answer', 'desktop', facts, []).notices.filter(entry => entry.rule === 'type-pairs');
-    assert.equal(finding.length > 0, Boolean(defect), defect || 'six declared reader roles');
-    if (!defect) {
-      assert.equal(facts.sizeWeightPairs.length, 6);
-      assert.equal(facts.answerReading.originalNodes, 1);
-      assert.equal(facts.answerReading.misplacedBodyNodes, 0);
-      assert.ok(pageFindings('geo-plan', 'desktop', facts, []).notices.some(entry => entry.rule === 'type-pairs'));
-    }
-  }
-});
 
 
 test("module and route readiness wait through the empty first paint before delayed pending feedback mounts", { skip }, async () => {

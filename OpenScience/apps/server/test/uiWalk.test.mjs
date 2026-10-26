@@ -3107,36 +3107,11 @@ test("calculation history discovery requires its real purpose, successful job, c
   assert.equal(await discoverCalculationHistory({}, "https://walk.test", [studies[0]]), null);
 });
 
-
-test("an eighth VCR color is conditional on the exact semantic palette and a real running activity", () => {
-  const palette = ['text', 'text-2', 'text-3', 'on-accent', 'accent', 'warning', 'success', 'information'];
-  const workflowPalette = { palette, colors: palette, runningInformation: true };
-  const findings = (name, facts) => pageFindings(name, 'desktop', clean({ colorKinds: 8, workflowPalette, ...facts }), []).failures;
-  assert.deepEqual(findings('vcr-comparator', {}), []);
-  for (const facts of [{ workflowPalette: { ...workflowPalette, runningInformation: false } }, { workflowPalette: { ...workflowPalette, colors: [...palette.slice(0, 7), 'arbitrary'] } }, { colorKinds: 9 }]) {
-    assert.ok(findings('vcr-comparator', facts).some(entry => entry.includes('text colours')));
-  }
-  assert.ok(findings('files', {}).some(entry => entry.includes('text colours')));
-});
-
-
-test("Inbox counts only exclusive validated selection control kinds outside its ordinary eight", () => {
+test("Inbox selection controls get no budget allowance, and selection controls outside one named toolbar fail", () => {
   const selectionControls = { present: true, valid: true, checkboxKinds: ['native-checkbox'], primaryKinds: ['local-primary'], exclusiveKinds: ['native-checkbox', 'local-primary'] };
-  const verdict = overrides => pageFindings('inbox', 'desktop', clean({ controlKinds: 10, selectionControls, ...overrides }), []).failures;
+  const verdict = overrides => pageFindings('inbox', 'desktop', clean({ selectionControls, ...overrides }), []).failures;
   assert.deepEqual(verdict({}), []);
-  for (const overrides of [{ controlKinds: 11 }, { selectionControls: { ...selectionControls, valid: false } }, { selectionControls: { ...selectionControls, exclusiveKinds: ['native-checkbox'] } }, { selectionControls: null }]) {
-    assert.ok(verdict(overrides).length);
-  }
-  assert.ok(pageFindings('files', 'desktop', clean({ controlKinds: 11, selectionControls }), []).failures.length);
+  assert.ok(verdict({ controlKinds: 10 }).length, "the selection's kinds count against the page's eight like any other control");
+  assert.ok(verdict({ selectionControls: { ...selectionControls, valid: false } }).length);
 });
 
-test("GeoAnswer retains six exact reader roles only when every 16px node is original prose", () => {
-  const sizeWeightPairs = ['12px/400', '14px/400', '14px/600', '16px/400', '18px/600', '24px/600'];
-  const answerReading = { surface: true, originalNodes: 2, misplacedBodyNodes: 0 };
-  const types = (name, overrides) => pageFindings(name, 'desktop', clean({ sizeWeightPairs, answerReading, ...overrides }), []).notices.filter(entry => entry.rule === 'type-pairs');
-  assert.deepEqual(types('geo-answer', {}), []);
-  for (const overrides of [{ sizeWeightPairs: [...sizeWeightPairs, '20px/400'] }, { sizeWeightPairs: sizeWeightPairs.map(pair => pair === '16px/400' ? '17px/400' : pair) }, { answerReading: { ...answerReading, surface: false } }, { answerReading: { ...answerReading, originalNodes: 0 } }, { answerReading: { ...answerReading, misplacedBodyNodes: 1 } }]) {
-    assert.ok(types('geo-answer', overrides).length);
-  }
-  assert.ok(types('geo-plan', {}).length);
-});

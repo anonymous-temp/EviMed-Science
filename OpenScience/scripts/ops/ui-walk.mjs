@@ -971,17 +971,9 @@ export function pageFindings(name, viewportName, measured, httpErrors) {
   if (viewportName === "desktop") {
     const budget = { ...BUDGET, ...(BUDGET_BY_PAGE[key] ?? {}) };
     const selection = measured.selectionControls;
-    const selectionAllowance = key === "inbox" && selection?.valid === true && selection.present === true
-      && selection.checkboxKinds.length === 1 && selection.primaryKinds.length === 1 && selection.exclusiveKinds.length <= 2
-      && selection.exclusiveKinds.every(kind => [...selection.checkboxKinds, ...selection.primaryKinds].includes(kind))
-      ? new Set(selection.exclusiveKinds).size : 0;
     if (key === "inbox" && selection?.present && !selection.valid) failures.push(`${current}: the selection controls have no unique named toolbar, consistent scope, native checkbox kind or unique primary`);
-    if (measured.controlKinds - selectionAllowance > budget.controls) budgetFindings.push(`${current}: ${measured.controlKinds} kinds of control${selectionAllowance ? ` (${selectionAllowance} exclusive selection kinds)` : ""} (budget ${budget.controls})`);
-    const runningPalette = measured.workflowPalette;
-    const vcrRunningPalette = templateOf(name).view?.workflow === "objects" && measured.colorKinds === 8
-      && runningPalette?.runningInformation === true && runningPalette.palette.length === 8
-      && runningPalette.colors.length === 8 && runningPalette.colors.every(color => runningPalette.palette.includes(color));
-    if (measured.colorKinds > budget.colors && !vcrRunningPalette) budgetFindings.push(`${current}: ${measured.colorKinds} text colours (budget ${budget.colors})`);
+    if (measured.controlKinds > budget.controls) budgetFindings.push(`${current}: ${measured.controlKinds} kinds of control (budget ${budget.controls})`);
+    if (measured.colorKinds > budget.colors) budgetFindings.push(`${current}: ${measured.colorKinds} text colours (budget ${budget.colors})`);
     if (measured.borderKinds > budget.borders) budgetFindings.push(`${current}: ${measured.borderKinds} kinds of border (budget ${budget.borders})`);
     if (measured.pageLefts.length > 1) budgetFindings.push(`${current}: the page's blocks start on ${measured.pageLefts.length} left edges (${measured.pageLefts.join(", ")})`);
     for (const lefts of measured.rowTitleLefts) {
@@ -996,11 +988,7 @@ export function pageFindings(name, viewportName, measured, httpErrors) {
     // Four pairs a page; a data page (the `data` and `geo` budgets: metric figures, two levels of heading) five — the owner's ruling
     // of 2026-10-19, DESIGN.md §「The nine sizes」.
     const typeBudget = /** @type {any} */ (budget).typePairs ?? TYPE_PAIR_NOTICE;
-    const answerPairs = ["12px/400", "14px/400", "14px/600", "16px/400", "18px/600", "24px/600"];
-    const reading = measured.answerReading;
-    const geoAnswerReading = key === "geo-answer" && reading?.surface === true && reading.originalNodes > 0 && reading.misplacedBodyNodes === 0
-      && pairs.length === answerPairs.length && new Set(pairs).size === answerPairs.length && pairs.every(pair => answerPairs.includes(pair));
-    if (pairs.length > typeBudget && !geoAnswerReading) notices.push(finding("type-pairs", current, `${current}: ${pairs.length} font-size × weight pairs (rule ${typeBudget}): ${pairs.join(", ")}`, pairs.length));
+    if (pairs.length > typeBudget) notices.push(finding("type-pairs", current, `${current}: ${pairs.length} font-size × weight pairs (rule ${typeBudget}): ${pairs.join(", ")}`, pairs.length));
   }
   failures.push(...budgetFindings);
   return { failures, notices };
@@ -1871,6 +1859,11 @@ export function compositionFindings(name, viewportName, c) {
       // what the plan removed. 虚拟临床研究 keeps its pinned selector.
       if (view.workflow === "rail") {
         if (c.viewSelector.count !== 0) add("chrome", "the module's steps are its navigation: a second, project-level result selector (「查看：…」) stands beside them");
+        // A step's own analysis views are one contextual 「分析视图」 choice, and only on the steps that have siblings (geoContextViewLabels).
+        if (c.geoContext?.adopted) {
+          const wanted = geoContextViewLabels(c.geoContext.step).length ? 1 : 0;
+          if (c.geoContext.selectors !== wanted || (c.geoContext.requestedStep && c.geoContext.requestedStep !== c.geoContext.step)) add("chrome", "GEO must expose only the selected step’s contextual analysis choices");
+        }
       } else if (c.viewSelector.count !== 1) add("chrome", "the module must expose exactly one pinned result-view selector");
     }
     // 虚拟临床研究's tab row is its step bar (a dot of state on every tab but the overview, which is not a step).
@@ -3201,17 +3194,6 @@ export function measure([leakSources, backOfficeSources, retiredSources = [], op
   }
   const texty = all.filter((el) => [...el.childNodes].some((node) => node.nodeType === 3 && node.textContent.trim()));
   const colors = texty.map((el) => getComputedStyle(el).color);
-  const roleProbe = document.createElement("span");
-  roleProbe.style.display = "none";
-  document.body.append(roleProbe);
-  const palette = ["--text", "--text-2", "--text-3", "--accent-fg", "--accent", "--warn-strong", "--ok", "--info"].map(role => {
-    roleProbe.style.color = `var(${role})`;
-    return getComputedStyle(roleProbe).color;
-  });
-  roleProbe.remove();
-  const information = texty.filter(el => getComputedStyle(el).color === palette[7]);
-  const workflowPalette = { colors: [...new Set(colors)], palette: [...new Set(palette)],
-    runningInformation: information.length > 0 && information.every(el => Boolean(el.closest("[data-activity='strip'][data-activity-state='running']"))) };
   // Type pairs are counted in the page body, not the sidebar: the rule is
   // about what a page sets, and the chrome is the same on every page.
   const typeScope = document.querySelector("main") ?? document.body;
@@ -3219,13 +3201,6 @@ export function measure([leakSources, backOfficeSources, retiredSources = [], op
     const cs = getComputedStyle(el);
     return `${cs.fontSize}/${cs.fontWeight}`;
   }))].sort();
-  // DS04/DS19: this registered answer reader keeps its original response readable at 16px;
-  // compact facts and correction controls retain their own roles on the same surface.
-  const answerText = texty.filter(el => typeScope.contains(el) && getComputedStyle(el).fontSize === "16px" && getComputedStyle(el).fontWeight === "400");
-  const originalAnswerNode = el => Boolean(el.closest("[data-geo-answer] [data-prose] p[data-geo-answer-prose='original']"))
-    && !el.closest("button, a, input, select, summary, [role='button'], [role='tab']");
-  const answerReading = { surface: Boolean(document.querySelector("main [data-geo-answer]")),
-    originalNodes: answerText.filter(originalAnswerNode).length, misplacedBodyNodes: answerText.filter(el => !originalAnswerNode(el)).length };
   // A control's height, the first part of its look. A text control's height
   // is its number of lines, and a headline that wraps is the same control as
   // one that does not: an inline link by its display, and a text-only control
@@ -3376,10 +3351,8 @@ export function measure([leakSources, backOfficeSources, retiredSources = [], op
     selectionControls,
     controlLooks: Object.fromEntries(looks),
     colorKinds: kinds(colors),
-    workflowPalette,
     borderKinds: kinds(borders),
     sizeWeightPairs,
-    answerReading,
     pageLefts,
     rowTitleLefts,
     subtitle: header ? [...header.querySelectorAll("p")].filter(visible).map((el) => el.textContent.trim().slice(0, 60)) : [],

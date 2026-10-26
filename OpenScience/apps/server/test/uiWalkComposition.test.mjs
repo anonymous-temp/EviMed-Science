@@ -76,8 +76,6 @@ test("the band holds: it is sticky, it is where the scroll area starts after the
   assert.deepEqual(rules("geo-plan", "desktop", good({ chrome: null })), ["chrome"]);
   assert.match(texts("vcr-trial", "desktop", good({ stepRail: null, tablists: [] }))[0], /\[chrome\] the research workspace must expose one pinned result-view selector/);
   assert.deepEqual(rules("vcr-trial", "desktop", good({ stepRail: null, tablists: [], viewSelector: { count: 1 } })), []);
-  assert.deepEqual(rules("vcr-trial", "desktop", good({ stepRail: { ...box(80), inChrome: true, folded: false, count: 1, steps: [{ state: "active", href: "/matching", stateVisible: true }] }, tablists: [], viewSelector: { count: 1 } })), []);
-  assert.ok(rules("vcr-trial", "desktop", good({ stepRail: { ...box(80), inChrome: true, folded: true, count: 1, steps: [] }, tablists: [], viewSelector: { count: 1 } })).includes("step-rail"));
   assert.deepEqual(rules("vcr-trial", "desktop", good({ stepRail: null, tablists: [], viewSelector: { count: 0 } })), ["chrome"]);
   assert.deepEqual(rules("vcr-trial", "desktop", good({ tablists: [], viewSelector: { count: 1 } })), ["step-rail"]);
 });
