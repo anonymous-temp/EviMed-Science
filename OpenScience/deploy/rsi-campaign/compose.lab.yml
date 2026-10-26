@@ -1,0 +1,19 @@
+services:
+  campaign:
+    image: ${RSI_LAB_IMAGE:?owner must bind frozen campaign image digest}
+    user: '10001:10001'
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 256
+    mem_limit: 4g
+    environment:
+      RSI_LAB_DATABASE_URL: ${RSI_LAB_DATABASE_URL:?separate lab database required}
+      HOME: /srv/rsi-lab
+    volumes:
+      - lab-data:/srv/rsi-lab
+      - ./owner-inputs:/run/rsi-lab:ro
+    tmpfs: [/tmp:size=256m,noexec,nosuid]
+    command: [preflight, /run/rsi-lab/manifest.json, /run/rsi-lab/inputs.json, /run/rsi-lab/config.json]
+volumes:
+  lab-data:

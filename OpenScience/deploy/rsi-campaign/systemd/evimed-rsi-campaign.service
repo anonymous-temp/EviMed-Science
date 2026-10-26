@@ -1,0 +1,12 @@
+[Unit]
+Description=Owner configured offline campaign
+[Service]
+Type=oneshot
+User=rsi-lab
+WorkingDirectory=/srv/rsi-lab/release/OpenScience
+EnvironmentFile=/etc/rsi-lab/launcher.env
+ExecStart=/usr/bin/node evals/rsi-campaigns/run.mjs resume /run/rsi-lab/manifest.json /run/rsi-lab/inputs.json /run/rsi-lab/config.json
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/rsi-lab
