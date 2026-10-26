@@ -8,8 +8,8 @@ const url=process.env.OPEN_SCIENCE_TEST_POSTGRES_URL??''
 if(url){const u=new URL(url);assert.ok(['localhost','127.0.0.1','::1'].includes(u.hostname));assert.match(u.pathname,/evimed_test/)}
 const {publicKey,privateKey}=generateKeyPairSync('ed25519'),hash=rsiDigest('test')
 /** @param {any} database @param {string} owner */
-async function fixture(database,owner){
- const target={surface:'frontier-selection',dependencyDigest:hash,baselineRevision:'base'}
+async function fixture(database,owner,surface='frontier-selection'){
+ const target={surface,dependencyDigest:hash,baselineRevision:'base'}
  const qualification=Object.fromEntries(['registrationDigest','datasetDigest','measurementDigest','consumerDigest','evaluatorDigest','procedureDigest','qualificationDigest','corpusDigest'].map(k=>[k,hash]))
  const files=[{path:'policy.json',content:'{"limit":2}'}]
  const manifest={id:'bundle',campaignId:'campaign',surface:target.surface,kind:'policy',target,createdAt:'2026-10-26T00:00:00Z',expiresAt:'2026-10-27T00:00:00Z',verdict:{status:'qualified',scope:target.surface,...qualification,candidateDigest:rsiDigest(files)}}
@@ -124,3 +124,42 @@ test('own active baseline stays eligible until expiry or binding withdrawal, the
   assert.equal(rollbackCount,cause==='newer'?0:1)
  })
 })
+/** @param {any} f @param {any} policy */
+function progressionAdapters(f,policy){
+ const receipts=new Map();let activations=0,crash=false,thrown=false
+ f.options.activationPolicy=async()=>policy
+ f.options.adapters.policy={inspect:async({phase,transactionClient})=>{assert.ok(transactionClient);if(phase==='activate'&&receipts.has(phase)&&crash&&!thrown){thrown=true;throw Error('progression crash')}return receipts.get(phase)},publish:async input=>{assert.ok(input.transactionClient);receipts.set(input.phase,{installed:true,phase:input.phase,operationId:input.operationId,candidateDigest:rsiDigest(f.files),revision:'candidate'});if(input.phase==='activate'){activations++;f.target.baselineRevision='candidate'}},rollback:async input=>{assert.ok(input.transactionClient);f.target.baselineRevision=input.revision;return {...input,installed:true}}}
+ return {activations:()=>activations,crash:()=>{crash=true},importer:new RsiCampaignImporter(f.options)}
+}
+/** @param {any} row @param {number} n @param {any} [extra] */
+const execution=(row,n,extra={})=>({trusted:true,id:`exec-${n}`,operationId:row.operationId,candidateDigest:row.candidateDigest,revision:row.revision,consumerDigest:hash,arm:row.mode==='shadow'?'shadow':'candidate',day:n%2?'2026-10-25':'2026-10-26',outcome:'ok',...extra})
+test('registered shadow executions activate once after sufficient days, then global consumer regression rolls back',skip,()=>withDatabase(async(database,owner)=>{
+ const f=await fixture(database,owner),p=progressionAdapters(f,{mode:'shadow',afterShadow:'global',allowExpansion:true,minExecutions:200,minDays:2,maxErrors:0})
+ let row=await p.importer.importBundle(f.envelope)
+ for(let n=1;n<200;n++)row=await p.importer.observe('bundle',execution(row,n))
+ assert.equal(p.activations(),0);assert.equal((await p.importer.select(f.target.surface)).revision,'base')
+ row=await p.importer.observe('bundle',execution(row,200));assert.equal(row.mode,'global');assert.equal(row.phase,'activate');assert.equal(p.activations(),1)
+ assert.equal((await p.importer.select(f.target.surface)).revision,'candidate')
+ row=await p.importer.observe('bundle',execution(row,201));assert.equal(row.state,'consumer-observed')
+ row=await p.importer.observe('bundle',execution(row,202,{outcome:'critical',criticalCode:'deterministic-regression'}));assert.equal(row.state,'rolled-back');assert.equal(f.target.baselineRevision,'base')
+}))
+test('shadow activation transition survives a crash and refuses newer baseline',skip,async()=>{
+ for(const newer of [false,true])await withDatabase(async(database,owner)=>{
+ const f=await fixture(database,owner),p=progressionAdapters(f,{mode:'shadow',afterShadow:'global',allowExpansion:true,minExecutions:2,minDays:2,maxErrors:0})
+ let row=await p.importer.importBundle(f.envelope);row=await p.importer.observe('bundle',execution(row,1));p.crash()
+ await assert.rejects(p.importer.observe('bundle',execution(row,2)),/progression crash/)
+ if(newer)f.target.baselineRevision='newer-incumbent'
+ row=await new RsiCampaignImporter(f.options).resume('bundle')
+ assert.equal(row.state,newer?'stopped':'exposed');assert.equal(p.activations(),1)
+ assert.equal(f.target.baselineRevision,newer?'newer-incumbent':'candidate')
+ })
+})
+test('cohort expansion follows registered steps with fresh observations for each stage',skip,()=>withDatabase(async(database,owner)=>{
+ const f=await fixture(database,owner,'geo-supplements'),p=progressionAdapters(f,{mode:'cohort',cohortPercent:10,cohortSteps:[10,25,50,100],allowExpansion:true,minExecutions:2,minDays:2,maxErrors:0})
+ let row=await p.importer.importBundle(f.envelope)
+ for(let step=1;step<4;step++){
+ row=await p.importer.observe('bundle',execution(row,2*step-1));assert.equal(row.cohortPercent,[10,25,50][step-1])
+ row=await p.importer.observe('bundle',execution(row,2*step));assert.equal(row.cohortPercent,[25,50,100][step-1]);assert.equal(row.observations.candidateExecutions,0)
+ }
+ assert.equal(row.state,'broadly-active');assert.equal(p.activations(),1)
+}))
