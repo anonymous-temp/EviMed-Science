@@ -39,17 +39,24 @@ export async function driveTurns({ api, sessionId, turns, upload, capture, timeo
 }
 
 // Structural evidence only. Independent numerical/source checks are still required.
+// Numerical files have no prescribed basename. Receipts/state/checks and backups
+// are not numerical results even when their names contain the word "results".
+function resultFile(file) {
+  return file.path.endsWith('.json') && !/^(?:data\/|\.analysis-)/.test(file.path)
+    && !/(?:^|\/)[^/]*(?:-run|-state|-session|-receipt|-manifest|-audit|-bindings|-check)\.json$/.test(file.path);
+}
+
 export function analysisEvidence(record, before, mode) {
   const reasons = [];
   const manifest = record.artifacts.manifest ?? [];
   const previous = new Map(before.map((file) => [file.path, file.sha256]));
   const outputs = manifest.filter((file) => !file.path.startsWith('data/'));
-  const results = outputs.filter((file) => /(?:results|estimates|metrics|values).*\.json$/.test(file.path));
+  const results = outputs.filter(resultFile);
   const reports = outputs.filter((file) => /(?:report|报告).*\.(?:md|html|docx)$/.test(file.path));
   const code = outputs.filter((file) => /\.(?:py|R|r|ipynb)$/.test(file.path));
   const executed = (record.artifacts.tools ?? []).some((tool) => ['bash', 'python', 'r', 'notebook'].includes(tool.name)
     && ['completed', 'success'].includes(tool.status) && !tool.error);
-  const priorAnalysis = before.some((file) => /(?:results|estimates|metrics|values).*\.json$/.test(file.path) && !file.path.startsWith('data/'))
+  const priorAnalysis = before.some(resultFile)
     && before.some((file) => /(?:report|报告).*\.(?:md|html|docx)$/.test(file.path))
     && before.some((file) => /\.(?:py|R|r|ipynb)$/.test(file.path));
   const conversationContinuation = mode !== 'analysis' && priorAnalysis && record.run.effectiveAgentId === 'open-domain-answer';
