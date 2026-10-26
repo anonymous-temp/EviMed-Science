@@ -49,7 +49,11 @@ export function analysisEvidence(record, before, mode) {
   const code = outputs.filter((file) => /\.(?:py|R|r|ipynb)$/.test(file.path));
   const executed = (record.artifacts.tools ?? []).some((tool) => ['bash', 'python', 'r', 'notebook'].includes(tool.name)
     && ['completed', 'success'].includes(tool.status) && !tool.error);
-  if (record.run.effectiveAgentId !== 'statistical-analysis') reasons.push('unexpected_route');
+  const priorAnalysis = before.some((file) => /(?:results|estimates|metrics|values).*\.json$/.test(file.path) && !file.path.startsWith('data/'))
+    && before.some((file) => /(?:report|报告).*\.(?:md|html|docx)$/.test(file.path))
+    && before.some((file) => /\.(?:py|R|r|ipynb)$/.test(file.path));
+  const conversationContinuation = mode !== 'analysis' && priorAnalysis && record.run.effectiveAgentId === 'open-domain-answer';
+  if (record.run.effectiveAgentId !== 'statistical-analysis' && !conversationContinuation) reasons.push('unexpected_route');
   if (!results.length || !reports.length || !code.length) reasons.push('analysis_artifacts_missing');
   if (mode === 'reuse') {
     if (!results.length || results.some((file) => previous.get(file.path) !== file.sha256)) reasons.push('numerical_results_not_reused');
