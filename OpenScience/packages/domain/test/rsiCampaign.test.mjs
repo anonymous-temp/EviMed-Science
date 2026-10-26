@@ -67,6 +67,7 @@ test('reserve-before-spend uses finite money and accounts for outstanding reserv
   assert.equal(rsiBudgetAdmission({ ...input, requestCny: 50.01 }).admitted, false)
   assert.equal(rsiBudgetAdmission({ ...input, monthReservedCny: 51 }).reason, 'campaign_month_budget_exceeded')
   assert.equal(rsiBudgetAdmission({ ...input, campaignActualCny: 10, campaignReservedCny: 0 }, { campaignCny: 20, monthCny: 30000 }).admitted, false)
+  assert.equal(rsiBudgetAdmission({ campaignActualCny: 0, campaignReservedCny: 0, monthActualCny: 0, monthReservedCny: 0, requestCny: 1e-8 }, { campaignCny: 1e-10, monthCny: 30000 }).admitted, false)
   for (const value of [NaN, Infinity, -1, '0', null]) assert.equal(rsiBudgetAdmission({ ...input, campaignActualCny: value }).reason, 'campaign_budget_unknown')
 })
 
