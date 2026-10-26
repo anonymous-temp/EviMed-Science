@@ -32,6 +32,11 @@ test('publication adapters reuse the importer transaction instead of opening a n
    return original(input)
   }
  }
+ f.options.verifyObservation=async(proof,_row,options)=>{
+  assert.equal(typeof options?.transactionClient?.query,'function','consumer witness must share the owning transaction')
+  await options.transactionClient.query('SELECT 1')
+  return proof?.trusted?proof:null
+ }
  const importer=new RsiCampaignImporter(f.options),row=await importer.importBundle(f.envelope)
  await importer.observe('bundle',{trusted:true,id:'fenced-critical',operationId:row.operationId,candidateDigest:rsiDigest(f.files),arm:'shadow',revision:'candidate',day:'2026-10-26',outcome:'critical',criticalCode:'corrupt-bytes'})
  assert.deepEqual([...seen].sort(),['inspect','publish','rollback'])
