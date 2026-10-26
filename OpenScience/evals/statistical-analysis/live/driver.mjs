@@ -43,10 +43,11 @@ export async function driveTurns({ api, sessionId, turns, upload, capture, timeo
 // are not numerical results even when their names contain the word "results".
 function resultFile(file) {
   return file.path.endsWith('.json') && !/^(?:data\/|\.analysis-)/.test(file.path)
-    && !/(?:^|\/)[^/]*(?:-run|-state|-session|-receipt|-manifest|-audit|-bindings|-check)\.json$/.test(file.path);
+    && !/(?:^|\/)[^/]*(?:-run|-state|-session|-receipt|-manifest|-bindings)\.json$/.test(file.path);
 }
 
 export function analysisEvidence(record, before, mode) {
+  if (!['analysis', 'update', 'reuse', 'resume', 'audit'].includes(mode)) throw new Error('Unknown evidence mode.');
   const reasons = [];
   const manifest = record.artifacts.manifest ?? [];
   const previous = new Map(before.map((file) => [file.path, file.sha256]));
@@ -69,5 +70,9 @@ export function analysisEvidence(record, before, mode) {
     if (!results.some((file) => previous.get(file.path) !== file.sha256)) reasons.push('new_results_not_observed');
     if (!reports.some((file) => previous.get(file.path) !== file.sha256)) reasons.push('new_report_not_observed');
   }
-  return { complete: reasons.length === 0, reasons, mode, numericalVerification: 'requires-independent-judge' };
+  const structuralComplete = reasons.length === 0;
+  if (mode === 'resume') reasons.push('resume_requires_independent_verification');
+  return { complete: reasons.length === 0, structuralComplete, reasons, mode,
+    ...(mode === 'resume' ? { reuseVerification: 'requires-independent-judge' } : {}),
+    numericalVerification: 'requires-independent-judge' };
 }
