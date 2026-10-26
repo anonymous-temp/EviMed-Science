@@ -105,6 +105,11 @@ describe("scheduled tasks", () => {
       mocks.listAgendas.mockResolvedValue({ items: [] }); render("/app/autopilot");
       await screen.findByRole("button", { name: "行业要闻日报" });
       expect(document.querySelector("[data-task-main]")).toBeNull();
+      // The first-use block is the page's column, on the title's left edge: a narrower box centred under the title was a second left
+      // edge (release walk of evimed-b559d4b7ebd0-1); the empty state centres itself inside the column.
+      const block = screen.getByRole("region", { name: "任务示例" }).parentElement!;
+      expect(block).toContainElement(screen.getByText("还没有定时任务"));
+      expect(block.className).not.toMatch(/\b(?:mx-auto|max-w-\S+)/);
       expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
       await userEvent.click(screen.getByRole("button", { name: "行业要闻日报" }));
       expect(screen.getByLabelText("任务指令")).toHaveValue(RECOMMENDATIONS[0].prompt);

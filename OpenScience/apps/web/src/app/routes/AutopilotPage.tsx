@@ -401,13 +401,15 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
   });
 
   const closeEditor = () => setEditor(null);
-  // First use is one page with a create action and examples that only populate a draft.
+  // First use is one page with a create action and examples that only populate a draft. It is the page's column, on the title's left
+  // edge like every block of a page: a block of its own width centred under the title started 136 px right of it (release walk of
+  // evimed-b559d4b7ebd0-1, 「two left edges」); the empty state centres itself in the column, and the examples are the column's list.
   // Nothing is known of the project's tasks while they are being read, or when the first read failed: the list says so, and the
   // pane says nothing. A later read that fails leaves the tasks on screen, and the pane as it was.
   const known = agendas !== null && !(error && agendas.length === 0);
   const none = known && !agendas.some(agenda => !agenda.payload.archivedAt);
   const firstTask = agendas?.find(agenda => !agenda.payload.archivedAt) ?? null;
-  const firstRun = !available ? <EmptyState icon={CalendarClock} title="定时执行暂不可用" description="你仍可查看历史结果；恢复后可以新建与启用任务。" action={<Button variant="secondary" onClick={() => void load()}>重新检查</Button>} /> : <div className="mx-auto w-full max-w-read space-y-4 pb-8"><EmptyState icon={CalendarClock} title="还没有定时任务" description={FIRST_RUN_SENTENCE}
+  const firstRun = !available ? <EmptyState icon={CalendarClock} title="定时执行暂不可用" description="你仍可查看历史结果；恢复后可以新建与启用任务。" action={<Button variant="secondary" onClick={() => void load()}>重新检查</Button>} /> : <div className="w-full space-y-4 pb-8"><EmptyState icon={CalendarClock} title="还没有定时任务" description={FIRST_RUN_SENTENCE}
     action={<Button onClick={() => setEditor({})}>新建任务</Button>} className="min-h-0 flex-1" />
     <section aria-label="任务示例" className="space-y-2 px-2">
       <h2 className="text-ui font-semibold text-text">从示例开始</h2>
