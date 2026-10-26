@@ -138,7 +138,8 @@ export async function warmFixtureConversations(app, user, fixtureUser = FIXTURE_
     if (project.userId !== fixtureUser || project.id !== row.project_id) throw new Error("Fixture conversation project identity changed.");
     const runs = await app.agentRuns.list(project);
     const sessions = [...new Set([row.conversation_session_id, ...(registered.get(row.project_id) ?? []), ...runs.map(run => run.sessionId)].filter(value => typeof value === "string" && value))];
-    if (!sessions.length) continue;
+    // The runtime is up whether or not a session is registered yet: a project with none opens its main conversation through the server,
+    // which looks for the project's runtime in the manager's table, and the walk refuses the browser's own `start_runtime`.
     const runtime = await app.runtimeManager.start(project);
     if (runtime.kind !== "mock") throw new Error("Fixture restoration cannot alter a real runtime.");
     // The mock has no provider token. Give this one process epoch the named synthetic generation
