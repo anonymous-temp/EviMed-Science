@@ -1,0 +1,21 @@
+{
+  "exampleOnly": true,
+  "ready": false,
+  "resourceBindingsVerified": false,
+  "permissionsVerified": false,
+  "instructions": "Replace <bucket> with the specific bucket names. ListObjects takes the whole bucket as its Resource and is narrowed with oss:Prefix (OSS has no condition key for max-keys). Attach each policy only to its named identity. Turn bucket versioning off (x-oss-forbid-overwrite is ignored on a versioned bucket) or add a retention policy for immutability. These examples do not prove effective RAM permissions. Production and lab credentials must be separate private files. Never add inline credentials.",
+  "policies": {
+    "inputProducer": { "Version": "1", "Statement": [
+      { "Effect": "Allow", "Action": ["oss:PutObject", "oss:GetObject"], "Resource": ["acs:oss:*:*:<incident-bucket>/rsi/v1/incidents/*"] },
+      { "Effect": "Deny", "Action": ["oss:DeleteObject", "oss:DeleteObjectVersion"], "Resource": ["acs:oss:*:*:<incident-bucket>/*"] } ] },
+    "inputReader": { "Version": "1", "Statement": [
+      { "Effect": "Allow", "Action": ["oss:GetObject"], "Resource": ["acs:oss:*:*:<incident-bucket>/rsi/v1/incidents/*"] },
+      { "Effect": "Allow", "Action": ["oss:ListObjects"], "Resource": ["acs:oss:*:*:<incident-bucket>"], "Condition": { "StringLike": { "oss:Prefix": ["rsi/v1/incidents/*"] } } } ] },
+    "outputProducer": { "Version": "1", "Statement": [
+      { "Effect": "Allow", "Action": ["oss:PutObject", "oss:GetObject"], "Resource": ["acs:oss:*:*:<bundle-bucket>/rsi/v1/bundles/*"] },
+      { "Effect": "Deny", "Action": ["oss:DeleteObject", "oss:DeleteObjectVersion"], "Resource": ["acs:oss:*:*:<bundle-bucket>/*"] } ] },
+    "outputReader": { "Version": "1", "Statement": [
+      { "Effect": "Allow", "Action": ["oss:GetObject"], "Resource": ["acs:oss:*:*:<bundle-bucket>/rsi/v1/bundles/*"] },
+      { "Effect": "Allow", "Action": ["oss:ListObjects"], "Resource": ["acs:oss:*:*:<bundle-bucket>"], "Condition": { "StringLike": { "oss:Prefix": ["rsi/v1/bundles/*"] } } } ] }
+  }
+}

@@ -22,15 +22,15 @@ export function validateModuleEvolutionPolicy(moduleId, policy) {
 }
 
 /** The reader hydrates a product-ledger revision, never a module or a file path.
- * @param {{readPolicy?: (moduleId: string) => Promise<any>, validateRevision?: (moduleId: string, revisionId: string) => Promise<boolean>}} [dependencies] */
+ * @param {{readPolicy?: (moduleId: string, context?: any) => Promise<any>, validateRevision?: (moduleId: string, revisionId: string) => Promise<boolean>}} [dependencies] */
 export function createModuleEvolutionPolicies({ readPolicy = async () => null, validateRevision = async () => true } = {}) {
   return {
     revisionUsable: validateRevision,
-    /** @param {string} moduleId @param {Record<string, any>} defaults */
-    async resolve(moduleId, defaults) {
+    /** @param {string} moduleId @param {Record<string, any>} defaults @param {any} [context] */
+    async resolve(moduleId, defaults, context = {}) {
       const fallback = { revisionId: `default:${createHash("sha256").update(JSON.stringify(defaults)).digest("hex")}`, policy: structuredClone(defaults) };
       try {
-        const revision = await readPolicy(moduleId);
+        const revision = await readPolicy(moduleId, context);
         if (!revision || typeof revision.revisionId !== "string" || !revision.revisionId
           || !validateModuleEvolutionPolicy(moduleId, revision.policy)) return fallback;
         return { revisionId: revision.revisionId, policy: { ...structuredClone(defaults), ...structuredClone(revision.policy) } };

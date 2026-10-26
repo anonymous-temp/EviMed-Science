@@ -645,7 +645,7 @@ export async function readVerifiedRunTranscript(project, run, expectedSha256) {
  * Deliberately independent of the ledger's own 1,000-run cap: the ledger keeps
  * counters, which are small, and this keeps conversations, which are not.
  * @param {any} project
- * @param {{ retentionDays?: number, now?: Date }} [options]
+ * @param {{ retentionDays?: number, now?: Date, beforeRemove?: (runId:string)=>Promise<any> }} [options]
  * @returns {Promise<{ removed: string[] }>}
  */
 export async function pruneRunTranscripts(project, options = {}) {
@@ -667,6 +667,7 @@ export async function pruneRunTranscripts(project, options = {}) {
     try {
       const info = await stat(full);
       if (now.getTime() - info.mtimeMs <= retentionDays * 86_400_000) continue;
+      await options.beforeRemove?.(entry.slice(0, -6));
       await rm(full, { force: true });
       removed.push(entry);
     } catch {

@@ -1,0 +1,9 @@
+[Unit]
+Description=Push the month's public frontier snapshot to the offline RSI lab inbox (read-only export, write-only push)
+After=docker.service network-online.target
+Requires=docker.service
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/evimed-rsi/rsi-frontier-push.sh
+TimeoutStartSec=1h
+Nice=10

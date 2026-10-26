@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { canonicalJson, canonicalSourceIdentifier } from '@evimed/domain';
 import { evolutionRecordPin } from './evolutionRecordPins.mjs';
 import { EVOLUTION_PROJECT_ID } from './internalProjects.mjs';
-import { MODULE_CONFIRMATION_MINIMUM } from './moduleEvolutionAdapters.mjs';
+import { MODULE_CONFIRMATION_MINIMUM } from './moduleEvolutionConstants.mjs';
 
 const hash = value => createHash('sha256').update(canonicalJson(value)).digest('hex');
 const textHash = value => createHash('sha256').update(value).digest('hex');

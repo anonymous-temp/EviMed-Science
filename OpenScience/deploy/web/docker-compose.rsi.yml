@@ -1,0 +1,14 @@
+# Opt-in serving transport only. The owner binds this directory after provisioning;
+# it contains online.json, public trust records, agreement and production OSS identity.
+# No lab signing key or lab credential is mounted in production.
+services:
+  open-science-web:
+    environment:
+      OPEN_SCIENCE_RSI_ONLINE_CONFIG_FILE: /run/evimed-rsi/online.json
+    volumes:
+      - type: bind
+        source: ${OPEN_SCIENCE_RSI_CONFIG_HOST_DIR:?bind private RSI deployment records}
+        target: /run/evimed-rsi
+        read_only: true
+        bind:
+          create_host_path: false

@@ -10,6 +10,7 @@ import { ProductDocuments, ProductJobs } from "../src/productStore.mjs";
 import { NotificationService } from "../src/notificationService.mjs";
 import { EvolutionService } from "../src/evolutionService.mjs";
 import { EvolutionDecisions, evolutionExecutableOperation, renderEvolutionDigest } from "../src/evolutionDecisions.mjs";
+import { EvolutionMaintenance } from "../src/evolutionMaintenance.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
@@ -184,4 +185,31 @@ test("whatever a snapshot holds, the text of a digest fits the inbox and says wh
   assert.ok(body.length <= 8000);
   assert.match(body, /日报过长，另有 \d+ 行未显示/);
   assert.match(renderEvolutionDigest({ decisions: [], autonomous: [], resources: [], achievements: [], evaluationSummaries: [] }), /^今天平台进步了什么\n尚无已确认的新进展。[\s\S]*待你裁决\n暂无/);
+});
+
+test("a retirement's progress survives a failure after its pin changed: the decision's action no longer holds it in one transaction (review 2026-10-26)", options, async () => {
+  const service = new EvolutionService({ documents, jobs, notifications, ownerId: owner, now: () => clock, config: { evolutionSearchPaused: true, evolutionServingOnly: true } });
+  const pins = [];
+  let inboxDown = true;
+  const maintenance = new EvolutionMaintenance({ service, callbacks: { notifyAffected: async ({ toolId }) => {
+    pins.push(toolId);
+    if (inboxDown) { inboxDown = false; throw Object.assign(new Error("inbox down"), { code: "notification_unavailable" }); }
+  } } });
+  const decisions = new EvolutionDecisions({ service, notifications, now: () => clock, config: service.config,
+    callbacks: { execute: (action) => service.executeDecisionAction(action, () => maintenance.executeReview(action)) } });
+  const id = `durable-${randomUUID()}`;
+  await service.save("tool", id, { track: "M", status: "active", artifactDigest: "digest" });
+  const review = await service.save("maintenance-review", `review-${id}`, { kind: "sequential-harm", parentToolIds: [id], status: "pending" });
+  const card = await service.save("decision", `card-${id}`, { category: "tool-retire", subjectId: review.id, decisionClass: "C", status: "pending", history: [],
+    options: [{ id: "retire", label: "软退役", operation: "maintenance-retire" }, { id: "keep", label: "保留", operation: "keep" }], recommended: "retire", conservative: "retire" });
+  await assert.rejects(decisions.resolve(card.id, { expectedRevision: card.revision, option: "retire" }), { code: "notification_unavailable" });
+  assert.deepEqual(pins, [id], "the serving pin was retired on disk");
+  const halfway = await service.get(id);
+  assert.deepEqual([halfway.payload.status, halfway.payload.retirement?.state], ["retired", "pending"], "and the ledger kept that, for the retry or retirement-reconcile to finish");
+  const executing = await service.get(card.id);
+  assert.equal(executing.payload.status, "executing");
+  const settled = await decisions.resolve(card.id, { expectedRevision: executing.revision, option: "retire" });
+  assert.equal(settled.payload.status, "executed");
+  assert.equal((await service.get(id)).payload.retirement.state, "complete");
+  assert.deepEqual(pins, [id, id]);
 });

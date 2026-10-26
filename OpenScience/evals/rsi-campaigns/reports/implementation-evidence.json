@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-26",
+  "branch": "codex/rsi-offline-campaigns",
+  "baseRevision": "9614de895",
+  "deployment": {
+    "lab": "Alibaba evimed-test (i-2ze3rsk5p2bh4xisit81, cn-beijing): users rsi-lab/rsi-inbox, PostgreSQL container evimed-rsi-lab-postgres on rsi-lab-net, keys generated on the host, image built there, evimed-rsi-campaign.timer on the 1st 02:00 Asia/Shanghai",
+    "production": "host-level only: evimed-rsi-frontier-push.timer on the 1st 00:30 Asia/Shanghai (read-only export inside the web container, rrsync -wo push pinned to the production address); no application deployment, no import",
+    "cloudBindings": "OSS and KMS unbound by owner choice for the first trial (transport kind none, file signers); the only Alibaba key found (RAM user oss-bucket-put-object) is refused by RAM as a leakage risk and KMS is not activated"
+  },
+  "paidModelCalls": {
+    "provider": "dashscope",
+    "model": "qwen3.8-max",
+    "calls": 3972,
+    "costCny": 81.05,
+    "purpose": "jury calibration (248) and rehearsal labelling (3,724)"
+  },
+  "cloudAcceptance": "lab rehearsal ran every step on the lab host (2026-10-26, October windows, rehearsal weight 1): frozen 68, 11/12 confirmation days better, inconclusive below 25 groups, report signed",
+  "checks": [
+    {
+      "command": "OPEN_SCIENCE_TEST_POSTGRES_URL=<fresh localhost> node --test --test-concurrency=1 test/rsi*.test.mjs test/evolution*.test.mjs test/moduleEvolution*.test.mjs test/productJobAdmission.integration.test.mjs test/frontier*.test.mjs test/learningComposition.test.mjs test/serverComposition.test.mjs",
+      "pass": 1632,
+      "fail": 2,
+      "failures": "evolutionDevelopmentPackaging (fails on github/main: Dockerfile pin) and frontierPersistence table count (shared database; passes 7/7 on its own database)"
+    },
+    {
+      "command": "node --test --test-concurrency=1 evals/rsi-campaigns/tests/*.test.mjs",
+      "pass": 139,
+      "fail": 0
+    },
+    {
+      "command": "PYTHONPATH=<rsi-python> python3 -m pytest evals/rsi-campaigns/tests/test_statistics.py",
+      "pass": 19,
+      "fail": 0
+    },
+    {
+      "command": "evolution floor integration (evolution2Durability, evolutionSignalLifecycle, evolutionSignalFloors) on a fresh database",
+      "pass": 15,
+      "fail": 0
+    },
+    {
+      "command": "pnpm lint:server && pnpm typecheck:server && pnpm lint:domain && pnpm typecheck:domain",
+      "status": "passed"
+    },
+    {
+      "command": "python3 evals/rsi-campaigns/qualify_statistics.py --output reports/statistics-v5-qualification.json",
+      "status": "passed",
+      "report": "statistics-v5-qualification.json",
+      "scope": "mathematical declared controls, not real task-family qualification"
+    },
+    {
+      "command": "node evals/rsi-campaigns/frontier_labels.mjs calibrate (gold even half, 124 rows x 2 passes)",
+      "status": "qualified",
+      "pickKappa": 0.875,
+      "pickPrecision": 0.944,
+      "pickRecall": 0.85,
+      "abstention": 0.024
+    },
+    {
+      "command": "python3 evals/capability-audit/verify_acceptance_ledger.py",
+      "status": "consistent"
+    }
+  ],
+  "limitations": [
+    "The replay uses the lab tree's selector; production runs an older release (drift reported per run: frontierPipeline, frontierEditor, frontierMix).",
+    "October rows scored before the 2026-10-25 rescoring carry no score version and cannot be threshold-selected; replay fidelity against production's real picks was 0.20 for early October.",
+    "The safety guard (lost safety picks) cannot fire through a replay: safety items stay selected in every arm.",
+    "The registered pick weight (3) decides the endpoint; with weight 1 the October rehearsal preferred 68.",
+    "No bundle is imported into production in this phase; incident campaigns need the OSS channels."
+  ],
+  "reviewRound": {
+    "reviews": [
+      "statistics and runner",
+      "import and transport security",
+      "pause fencing and serving wiring",
+      "web fact check (Alibaba OSS/KMS/ECS, RFC 8785, systemd, DashScope)"
+    ],
+    "fixed": "All findings verified against the code and fixed; see the commits fix(rsi) 4b5e50b99, feat(rsi) af87666f6 and 8602ec1cd."
+  }
+}

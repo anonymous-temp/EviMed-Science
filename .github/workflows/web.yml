@@ -115,6 +115,9 @@ jobs:
       - name: Test domain, port, socket and upstream contracts
         run: CI=true pnpm test:packages
 
+      - name: Install isolated RSI numerical dependencies
+        run: python3 -m pip install --target ../.evimed-local/toolchains/rsi-python -r evals/rsi-campaigns/requirements.txt
+
       # Every test file under `evals/capability-audit/` is named here, because
       # `unittest discover` is given a literal filename per script and a file
       # nobody names is collected by nothing. `deploy.test.mjs` fails if a
@@ -134,6 +137,7 @@ jobs:
           pnpm test:memory-policy
           pnpm test:memory-evals
           pnpm test:knowledge-product
+          pnpm test:rsi
           pnpm test:phi-masking
 
       # The host scripts under `scripts/ops/` (the Postgres backup, the recovery

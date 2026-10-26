@@ -1,3 +1,4 @@
+import { assertEvolutionExperimentalPublication, evolutionDeferred } from './evolutionServingPolicy.mjs';
 import { methodHarmTest, EVOLUTION_TOOL_HARM_TEST, canonicalJson } from '@evimed/domain';
 import { setTimeout as delay } from 'node:timers/promises';
 import { HttpError } from './security.mjs';
@@ -321,7 +322,8 @@ export class EvolutionMaintenance {
     await this.callbacks.proposeReview?.({ category: 'tool-retire', subjectId: reviewId, materialVersion: tool.payload.artifactDigest ?? 1, directional: true,
       attemptedPaths: ['sequential-harm-test', 'distinct-account-evidence'], title: '复核被多位研究者纠正的科研工具',
       body: `${harm.runs} 位研究者首次使用该工具得到的结果中，有 ${harm.bad} 位作了纠正，高于平常的纠正水平。这是关联，不说明问题由工具造成。软退役后新研究不再使用它，历史结果和版本都保留，之后可以恢复。`,
-      options: [{ id: 'retire', label: '软退役并保留历史', operation: 'maintenance-retire' }, { id: 'keep', label: '保留现有工具', operation: 'keep' }], recommended: 'retire', conservative: 'keep' });
+      // The conservative option of a harm alarm is the protective one: a soft retirement the same decision reverses (`restoreReview`).
+      options: [{ id: 'retire', label: '软退役并保留历史', operation: 'maintenance-retire' }, { id: 'keep', label: '保留现有工具', operation: 'keep' }], recommended: 'retire', conservative: 'retire' });
     return this.retried(async () => {
       const current = await this.service.get(tool.id);
       if (current.payload.usage?.harm?.reviewId === reviewId) return current;
@@ -395,6 +397,7 @@ export class EvolutionMaintenance {
   }
   /** @param {string[]} ids @param {any} candidate */
   async merge(ids, candidate) {
+    assertEvolutionExperimentalPublication(this.service.config);
     const { parents, cases } = await this.verifyMerge(ids, candidate);
     const registered = await this.service.registerTool({ ...candidate, status: 'active', holdoutCases: cases, lineage: { ...candidate.lineage, parents: ids } });
     const merged = await this.service.save('tool', registered.id, { ...registered.payload, holdoutCases: cases,
@@ -455,11 +458,13 @@ export class EvolutionMaintenance {
   }
   /** Only a direction is approved here; actual merged publication still requires merge() replay. @param {any} action */
   async executeReview(action) {
+    if (this.service.config.evolutionSearchPaused === true && !['keep', 'retire'].includes(action.option)) return evolutionDeferred();
     const review = await this.service.get(action.subjectId);
     if (!review || review.payload.recordType !== 'evolution-maintenance-review') throw new HttpError(404, 'evolution_tool_missing', 'Maintenance review unavailable.');
     const ids = review.payload.parentToolIds;
     if(action.option==='keep') {
-      if(review.payload.kind==='sequential-harm') await this.recordHarmOverride(ids[0],action);
+      // An override silences the harm alarm for good, so only a person's explicit answer records one; a keep nobody chose leaves the verdict standing.
+      if(review.payload.kind==='sequential-harm' && action.source==='user') await this.recordHarmOverride(ids[0],action);
       return this.restoreReview(review,action);
     }
     if (action.option === 'repair') {
@@ -513,7 +518,7 @@ export class EvolutionMaintenance {
       const metrics = await this.callbacks.monthlyMetrics?.(metricsMonth, { previous: previous?.payload.metrics ?? null }) ?? {};
       metricsRecord = await this.service.save('monthly-metrics', metricsId, { month: metricsMonth, metrics, observedAt: this.service.now().toISOString() });
     }
-    if (input.metricsOnly) return metricsRecord;
+    if (input.metricsOnly || this.service.config.evolutionSearchPaused === true) return metricsRecord;
     const tools = await this.service.tools();
     for (const row of tools) if (row.payload.status === 'alias' && row.payload.aliasSince && this.service.now().getTime() - Date.parse(row.payload.aliasSince) >= 30 * 86400000) await this.retire(row, 'alias-quiet-period');
     const covered = new Map();

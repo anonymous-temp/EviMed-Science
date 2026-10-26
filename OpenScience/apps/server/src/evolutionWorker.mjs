@@ -1,3 +1,4 @@
+import { evolutionServingJob, evolutionDeferred } from './evolutionServingPolicy.mjs';
 import { withEvolutionUsage } from './evolutionUsage.mjs';
 import { randomUUID } from 'node:crypto';
 import { EVOLUTION_JOB_KINDS } from '@evimed/domain';
@@ -59,14 +60,15 @@ export class EvolutionWorker {
     if (this.closed || this.running || this.config.evolutionEnabled !== true || !await this.canRun()) return null;
     this.running = true;
     try {
-      const claim = async (/** @type {string[]} */ kinds, /** @type {boolean} */ heavy) => this.service.jobs.claim(kinds, this.workerId, { leaseMs: this.config.evolutionLeaseMs ?? 120000, admission: async (/** @type {any} */ client) => {
+      const claim = async (/** @type {string[]} */ kinds, /** @type {boolean} */ heavy) => this.service.jobs.claim(kinds, this.workerId, { leaseMs: this.config.evolutionLeaseMs ?? 120000, eligibility: this.config.evolutionSearchPaused === true ? "evolution-serving" : null, admission: async (/** @type {any} */ client) => {
         await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-evolution-admission'))");
         const live = await client.query("SELECT count(*)::integer AS count FROM evimed_product.jobs WHERE kind=ANY($1::text[]) AND status='running' AND lease_expires_at>clock_timestamp()", [this.lane === 'light' ? LIGHT_KINDS : EVOLUTION_JOB_KINDS.filter(kind => !LIGHT_KINDS.includes(kind))]);
         if (Number(live.rows[0]?.count ?? 0) >= (this.lane === 'light' ? this.config.evolutionLightConcurrency ?? 2 : this.config.evolutionMaxConcurrency ?? 1)) return false;
-        if (!heavy) return true;
+        if (!heavy || this.config.evolutionSearchPaused === true) return true;
         if (!this.callbacks.dailyCost || !this.callbacks.admitRuntime) return false;
         return true;
       }, candidateAdmission: heavy ? async (client, candidate) => {
+        if (this.config.evolutionSearchPaused === true) return evolutionServingJob(candidate.kind, candidate.payload);
         if (await this.callbacks.canResume?.(candidate)) return true;
         const cost = await this.callbacks.dailyCost(client);
         return cost < (this.config.evolutionDailyBudgetCny ?? 100) && this.callbacks.admitRuntime(client, { kinds, job: candidate });
@@ -91,17 +93,27 @@ export class EvolutionWorker {
       /** @type {any} */ let mission = null;
       const heartbeat = setInterval(() => { this.service.jobs.renew(job.userId, job.id, job.leaseToken, this.config.evolutionLeaseMs ?? 120000).then((/** @type {boolean} */ owned) => { if (!owned) { lost = true; this.interrupt(); } }).catch(() => { lost = true; this.interrupt(); }); }, Math.max(1000, Math.floor((this.config.evolutionLeaseMs ?? 120000) / 4)));
       try {
-        mission = await this.callbacks.ensureMission?.(job);
-        if (this.callbacks.ensureMission && !mission?.id && !['evolution-event','evolution-digest','evolution-plan'].includes(job.kind)) {
+        if (this.config.evolutionSearchPaused === true && (!evolutionServingJob(job.kind, job.payload) || job.kind === 'evolution-evaluate')) {
+          const result = await this.perform(job);
+          if (result?.status === 'deferred') return this.service.jobs.fail(job.userId, job.id, job.leaseToken, { code: result.code, message: result.reason }, { retry: true, refundAttempt: true, delayMs: 3600000 });
+          return this.service.jobs.finish(job.userId, job.id, job.leaseToken, result);
+        }
+        const servingOnly = this.config.evolutionSearchPaused === true && evolutionServingJob(job.kind, job.payload);
+        mission = servingOnly ? null : await this.callbacks.ensureMission?.(job);
+        if (!servingOnly && this.callbacks.ensureMission && !mission?.id && !['evolution-event','evolution-digest','evolution-plan'].includes(job.kind)) {
           return await this.service.jobs.fail(job.userId, job.id, job.leaseToken, {code:'usage_budget_exceeded',message:'The next mission waits for its budget allocation.'}, {retry:true,refundAttempt:true,delayMs:3600000});
         }
         const execute = () => this.perform(job);
         const result = mission?.id ? await withEvolutionUsage({missionId:mission.id,moduleId:mission.payload.moduleId},execute) : await execute();
         if (mission?.id) await this.callbacks.recordMission?.(mission,result);
         if(['waiting_budget'].includes(result?.payload?.status??result?.status)||['confirmation-budget','development-budget'].includes(result?.payload?.reason))return this.service.jobs.fail(job.userId,job.id,job.leaseToken,{code:'usage_budget_exceeded',message:'The mission retains checkpoints while its next funding tranche waits.'},{retry:true,refundAttempt:true,delayMs:3600000});
+        if (result?.status === 'deferred') return this.service.jobs.fail(job.userId, job.id, job.leaseToken, { code: result.code, message: result.reason }, { retry: true, refundAttempt: true, delayMs: 3600000 });
         if (lost) throw new Error('Evolution work lease lost.');
         return await this.service.jobs.finish(job.userId, job.id, job.leaseToken, result ?? {});
       } catch (error) {
+        if (error?.code === 'evolution_search_paused') return this.service.jobs.fail(job.userId, job.id, job.leaseToken,
+          { code: 'evolution_search_paused', message: 'The retained event or operation waits for evolution search to resume.' },
+          { retry: true, refundAttempt: true, delayMs: 3600000 });
         // A model refusal of a run's spend limit does not say which limit it was, and the two are not alike: the day's
         // allowance frees in time, so the job keeps its checkpoints and waits for the window; a run's own cap does not free,
         // the same case costs the same again, and retrying it from scratch (each time a fresh project, dispatch id and
@@ -206,8 +218,8 @@ export class EvolutionWorker {
     if (!paused) await this.every('scout', { ms: DAY, key: day }, () => this.service.enqueue('scout', { action: 'daily-scan', day }, `daily-scout:${day}`));
     await this.every('daily-events', { ms: DAY, key: day }, async () => {
       await this.service.ingestEvent({ id: `source-facts:${day}`, type: 'source-facts-scan', origin: 'tool-result' });
-      await this.service.ingestEvent({ id: `prospective-targets:${day}`, type: 'prospective-target-scan', origin: 'tool-result' });
-      if (this.service.callbacks?.scanLeadSources) await this.service.ingestEvent({ id: `lead-sources:${day}`, type: 'lead-source-scan', origin: 'platform-inference' });
+      if (!paused) await this.service.ingestEvent({ id: `prospective-targets:${day}`, type: 'prospective-target-scan', origin: 'tool-result' });
+      if (!paused && this.service.callbacks?.scanLeadSources) await this.service.ingestEvent({ id: `lead-sources:${day}`, type: 'lead-source-scan', origin: 'platform-inference' });
     });
     await this.every('monthly', { ms: DAY, key: month }, async () => {
       await this.service.enqueue('maintain', { month, metricsMonth: previousMonth }, `monthly-v2:${month}`);
@@ -221,7 +233,7 @@ export class EvolutionWorker {
         }
       }
     });
-    await this.every('weekly', { ms: DAY, key: day }, async () => {
+    if (!paused) await this.every('weekly', { ms: DAY, key: day }, async () => {
       if (local.getUTCDay() === 1) await this.service.enqueue('evaluate', { action: 'scorer-audit', day }, `weekly-scorer-audit:${day}`);
       if (local.getUTCDay() === 1) await this.service.enqueue('evaluate', { action: 'time-holdout', day }, `weekly-holdout:${day}`);
     });
@@ -236,7 +248,7 @@ export class EvolutionWorker {
       await this.every('resume', { ms: MINUTE }, () => this.resumePaused());
     }
     // Audit composition curates and seals the quarter only after independent tasks exist.
-    await this.every('audit', { ms: DAY, key: `${previousMonth}:${quarter}` }, () => this.service.enqueue('audit', {month:previousMonth,quarter}, `heldout-audit:${previousMonth}`));
+    if (!paused) await this.every('audit', { ms: DAY, key: `${previousMonth}:${quarter}` }, () => this.service.enqueue('audit', {month:previousMonth,quarter}, `heldout-audit:${previousMonth}`));
   }
   /** A job that will not be tried again ends the mission opened to carry its cost as failed (`recordJob`); one that will be leaves it open.
    * @param {any} mission @param {any} error */
@@ -276,18 +288,29 @@ export class EvolutionWorker {
   /** @param {any} job */
   async perform(job) {
     const p = job.payload;
-    if (job.kind === 'evolution-decision') return { decision: await this.decisions.expire(p.decisionId) };
+    const paused = this.config.evolutionSearchPaused === true;
+    if (paused && !evolutionServingJob(job.kind, p)) return evolutionDeferred();
+    if (paused && job.kind === 'evolution-evaluate') {
+      const active = (await this.service.tools()).filter(tool => tool.payload.status === 'active');
+      if (!active.length) return { status: 'complete', results: [], allPassed: null, reason: 'No active tools require serving replay.' };
+      return evolutionDeferred('evolution_release_replay_deferred', 'Legacy replay can invoke workflow smoke and independent model audits; a model-free immutable serving replay is not available.');
+    }
+    if (job.kind === 'evolution-decision') {
+      const decision = await this.decisions.expire(p.decisionId);
+      return decision?.status === 'deferred' ? decision : { decision };
+    }
     if (job.kind === 'evolution-digest') return { digest: await this.decisions.digest(p.day) };
     if (job.kind === 'evolution-maintain') {
       if (p.action === 'retirement-reconcile') {
         const tool = await this.service.get(p.toolId);
         return { retirement: tool ? await this.maintenance.retire(tool, tool.payload.retirement?.reason ?? 'retirement-recovery') : null };
       }
-      return { maintenance: await this.maintenance.monthly(p) };
+      return { maintenance: await this.maintenance.monthly(paused ? { ...p, metricsOnly: true } : p) };
     }
     if (job.kind === 'evolution-event') {
       const row = await this.service.get(p.eventId, p.eventOwnerId);
       if (!row || row.payload.status === 'processed') return {};
+      if (paused && !['researcher-feedback', 'runtime-gap', 'autopilot-gap', 'dataset-ready', 'tool-ready', 'source-facts-scan', 'evaluation-gap'].includes(row.payload.type)) return evolutionDeferred();
       await this.callbacks.onEvent?.(row.payload, this.service);
       await this.service.resolveWaiters(row.payload);
       await this.service.save('event', row.id, { ...row.payload, status: 'processed' }, row, p.eventOwnerId);

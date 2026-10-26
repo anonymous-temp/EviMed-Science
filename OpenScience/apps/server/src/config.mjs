@@ -3061,6 +3061,7 @@ export function loadConfig(overrides = {}) {
     // Literature-driven platform development (循证进化) has its own accounting. On by default since
     // 2026-10-07 (owner: 「循证进化默认打开」); it still needs PostgreSQL and the product ledger, and
     // `OPEN_SCIENCE_EVOLUTION_ENABLED=false` turns it off.
+    rsiOnlineConfigFile: overrides.rsiOnlineConfigFile ?? process.env.OPEN_SCIENCE_RSI_ONLINE_CONFIG_FILE ?? "",
     evolutionEnabled: overrides.evolutionEnabled ?? boolEnv("OPEN_SCIENCE_EVOLUTION_ENABLED", true),
     evolutionEvaluationNetwork: overrides.evolutionEvaluationNetwork ?? process.env.OPEN_SCIENCE_EVOLUTION_EVALUATION_NETWORK ?? '',
     // Defaults live in `evolutionConfiguration.mjs`'s schema, with the reasons and the bounds; the defaults written here must equal it (`evolutionConfiguration.test.mjs` holds them equal).

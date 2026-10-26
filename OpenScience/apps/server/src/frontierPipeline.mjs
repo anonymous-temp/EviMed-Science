@@ -1028,7 +1028,7 @@ export class FrontierPipeline {
       titleDuplicates: 0, notices: 0, laneFloor: 0, preprintLane: 0, selected: 0, capped: 0, releaseFailures: 0,
       // The day's mix (`#mix`): items it selected, by rule; and rounds whose 30-day genre percentiles could not be read (the
       // floor places then ask the absolute floor, as before).
-      mix: /** @type {Record<string, number>} */ ({}), mixGenreFloorFailures: 0, scoreCeilings: 0, practiceAdmitted: 0, supersededBySafety: 0,
+      mix: /** @type {Record<string, number>} */ ({}), mixGenreFloorFailures: 0, mixSelectionFallbacks: 0, scoreCeilings: 0, practiceAdmitted: 0, supersededBySafety: 0,
       editSkipped: { unavailable: 0, exhausted: 0, throttled: 0, peak: 0 },
       // Rows released to wait out a provider balance refusal, never charged an attempt.
       providerRefusedWaits: 0,
@@ -2495,33 +2495,21 @@ export class FrontierPipeline {
             events[key] = list;
           }
         }
-        const candidates = rows.map((/** @type {any} */ row) => {
-          const flags = Array.isArray(row.flags) ? row.flags : [];
-          const source = { source_type: row.source_source_type, authority: row.source_authority };
-          return {
-            id: String(row.id), genre: frontierMixGenre(row),
-            zh: String(row.lang ?? "").startsWith("zh") || isChineseTitle(row.title_raw),
-            // A score is weighed against the line only once the scoring of 2026-10-25 wrote it (`scoreVersion`): an older score sits on
-            // another scale, and selection is sticky, so a total of 64-81 from the old prompts would fill the day until the rescore
-            // (`frontier-rewrite.mjs --steps score`) reached it. Such an item waits for that, or for its next edit; a safety alert does not.
-            score: row.score_total == null || !row.score_version ? null : Number(row.score_total),
-            selected: row.selected === true, rule: row.selected_rule ?? null, safety: row.safety_alert === true,
-            sourceId: String(row.primary_source_id), sourceCap: frontierMixSourceCap(source),
-            eligible: ["passed", "repaired"].includes(row.verification) && !flags.includes("retracted")
-              && !frontierJournalWithoutAbstract({ source, flags })
-              && !frontierEvidenceFromPublicationTypes(row.publication_types, { modelType: row.evidence_type }).demote,
-            summarized: row.summarized === true, besideSelected: row.beside_selected === true,
-            // A republisher (frontier-selection.json) takes no place under the line.
-            floorEligible: frontierFloorEligible(row.primary_source_id),
-            // The research's own record (a journal's or a preprint server's item) fills a research place before a report of research.
-            primary: row.source_source_type === "journal" || row.source_source_type === "preprint",
-            addsValue: typeof row.adds_value === "boolean" ? row.adds_value : null,
-            eventId: row.event_id == null ? null : String(row.event_id),
-          };
-        });
+        const candidates = rows.map(frontierMixCandidate);
         // A congress in its window (the domain's calendar) lets the research group rise for conference reports.
-        const result = frontierMixSelect({ candidates, threshold: this.threshold, events, congressActive: frontierActiveCongresses(day).length > 0,
-          preprintPlaces: this.preprintLanePerDay, preprintMinScore: this.preprintLaneMinScore, genreFloors });
+        const selectionInput = { candidates, threshold: this.threshold, events, congressActive: frontierActiveCongresses(day).length > 0,
+          preprintPlaces: this.preprintLanePerDay, preprintMinScore: this.preprintLaneMinScore, genreFloors };
+        // The serving policy's selector is advice to the mix, like `policies.resolve`: when it fails, the day's mix is the pipeline's own
+        // selection at its configured threshold (the input's), counted, and never a failed round.
+        let result;
+        try {
+          result = this.policies.evaluateFrontierSelection
+            ? await this.policies.evaluateFrontierSelection(selectionInput, { executionId: `frontier-mix:${day}:${now.toISOString()}`, now })
+            : frontierMixSelect(selectionInput);
+        } catch {
+          this.counters.mixSelectionFallbacks += 1;
+          result = frontierMixSelect(selectionInput);
+        }
         for (const pick of result.picks) {
           const updated = await client.query(`UPDATE evimed_frontier.items SET selected = true, selected_rule = $2, selected_at = $3,
               updated_at = clock_timestamp() WHERE id = $1 AND state = 'published' AND NOT selected`, [pick.id, pick.rule, now]);
@@ -3737,4 +3725,32 @@ export class FrontierPipeline {
     this.lastEmbedError = null;
     return rows.length;
   }
+}
+
+/** Project the published SQL row into the production mix consumer.
+ * @param {any} row
+ */
+export function frontierMixCandidate(row) {
+  const flags = Array.isArray(row.flags) ? row.flags : [];
+  const source = { source_type: row.source_source_type, authority: row.source_authority };
+  return {
+    id: String(row.id), genre: frontierMixGenre(row),
+    zh: String(row.lang ?? "").startsWith("zh") || isChineseTitle(row.title_raw),
+    // A score is weighed against the line only once the scoring of 2026-10-25 wrote it (`scoreVersion`): an older score sits on
+    // another scale, and selection is sticky, so a total of 64-81 from the old prompts would fill the day until the rescore
+    // (`frontier-rewrite.mjs --steps score`) reached it. Such an item waits for that, or for its next edit; a safety alert does not.
+    score: row.score_total == null || !row.score_version ? null : Number(row.score_total),
+    selected: row.selected === true, rule: row.selected_rule ?? null, safety: row.safety_alert === true,
+    sourceId: String(row.primary_source_id), sourceCap: frontierMixSourceCap(source),
+    eligible: ["passed", "repaired"].includes(row.verification) && !flags.includes("retracted")
+      && !frontierJournalWithoutAbstract({ source, flags })
+      && !frontierEvidenceFromPublicationTypes(row.publication_types, { modelType: row.evidence_type }).demote,
+    summarized: row.summarized === true, besideSelected: row.beside_selected === true,
+    // A republisher (frontier-selection.json) takes no place under the line.
+    floorEligible: frontierFloorEligible(row.primary_source_id),
+    // The research's own record (a journal's or a preprint server's item) fills a research place before a report of research.
+    primary: row.source_source_type === "journal" || row.source_source_type === "preprint",
+    addsValue: typeof row.adds_value === "boolean" ? row.adds_value : null,
+    eventId: row.event_id == null ? null : String(row.event_id),
+  };
 }

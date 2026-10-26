@@ -8,6 +8,12 @@ export function createEvolutionRoutes({ store, service, decisions, worker, confi
     const { user } = await store.ensureSessionUser(req, res, { allowDevAuth: false });
     await store.assertCsrf(req, url.pathname);
     if (!service || config.evolutionEnabled !== true) throw new HttpError(404, 'evolution_disabled', 'Evolution is disabled.');
+    if (config.evolutionServingOnly === true && req.method !== 'GET') {
+      const servingMutation = url.pathname === '/api/evolution/opportunities/adopt'
+        || /^\/api\/evolution\/decisions\/[^/]+\/resolve$/.test(url.pathname);
+      if (!servingMutation) throw new HttpError(409, 'evolution_offline_only', 'Platform experiments run only in offline campaigns.');
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/evolution/project-tools') {
       const projectId = url.searchParams.get('projectId');
       await store.requireProject(user, projectId);
@@ -29,7 +35,7 @@ export function createEvolutionRoutes({ store, service, decisions, worker, confi
     // never rebuilds it and never writes a revision (it used to do both on every GET, for every signed-in account).
     if (req.method === 'GET' && url.pathname === '/api/evolution/capability-map') {
       const map = capabilityMap ? await capabilityMap() : null;
-      sendJson(res,200,{data:map ? {cells:map.cells.map(cell=>({id:cell.id,capabilityId:cell.capabilityId,version:cell.version,taskFamily:cell.taskFamily,status:cell.status,dependencies:cell.dependencies,demand:cell.demand,newThisMonth:cell.newThisMonth===true})),counts:map.counts,derivedAt:map.derivedAt} : null}); return true;
+      sendJson(res,200,{data:map ? {cells:(map.cells ?? []).map(cell=>({id:cell.id,capabilityId:cell.capabilityId,version:cell.version,taskFamily:cell.taskFamily,status:cell.status,dependencies:cell.dependencies,demand:cell.demand,newThisMonth:cell.newThisMonth===true})),counts:map.counts,derivedAt:map.derivedAt} : null}); return true;
     }
     if (!service || config.evolutionEnabled !== true) throw new HttpError(404, 'evolution_disabled', 'Evolution is disabled.');
     let parts;
