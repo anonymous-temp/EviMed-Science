@@ -147,7 +147,12 @@ def evaluate(registration, observations, receipt):
         if set(indexed) != expected:
             raise ValueError('missing measurements at fixed horizon')
         if result['cost_totals']['baseline'] <= 0:
-            raise ValueError('positive measured baseline cost required for relative cost claim')
+            known_free_repair = deterministic and set(claims) == {'targeted-repair'} and result['cost_totals']['candidate'] == 0
+            if not known_free_repair:
+                if deterministic and 'efficiency' in claims:
+                    result.update(decision='not-qualified', reasons=['zero baseline cost cannot establish relative savings'])
+                    return result
+                raise ValueError('positive baseline cost or trusted known-free finite-corpus repair required')
         if any(r['critical_violations'] for r in observations if r['arm'] == 'candidate'):
             result.update(decision='not-qualified', reasons=['candidate critical violation'])
             return result
