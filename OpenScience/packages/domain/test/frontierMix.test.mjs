@@ -454,3 +454,20 @@ test('the replay of a day with events holds one pick per event and leaves the re
   const ungrouped = frontierMixReplay(rows.map((entry) => ({ ...entry, event_id: null })), { threshold: 82 })[0]
   assert.deepEqual([ungrouped.after.groups.news, ungrouped.after.groups.industry], [6, 2], 'without the grouping the day takes them all')
 })
+
+test('the paper before reports of research: a journal\'s own item above the line fills a research place first, at the group\'s ceiling', () => {
+  // A day of 40 places: research's ceiling is 18. Twenty reports of research (公众号 and media) score 90, ten journal papers 70: the
+  // papers fill the ceiling first and eight reports take what is left; the reports' higher score does not put them ahead of the papers.
+  const reports = Array.from({ length: 20 }, () => item({ genre: 'paper', score: 90, zh: true, primary: false }))
+  const papers = Array.from({ length: 10 }, () => item({ genre: 'paper', score: 70, primary: true }))
+  const fillers = Array.from({ length: 30 }, () => item({ genre: 'news', score: 66 }))
+  const result = frontierMixSelect({ candidates: [...reports, ...papers, ...fillers], threshold: 64, ...OLD_SCALE, zhTarget: 0 })
+  const research = result.picks.filter((pick) => pick.group === 'research').map((pick) => pick.id)
+  assert.equal(research.length, result.plan.groups.research.ceiling)
+  for (const paper of papers) assert.ok(research.includes(paper.id), `${paper.id} (a journal's own item above the line) is in`)
+  assert.equal(research.filter((id) => reports.some((report) => report.id === id)).length, research.length - papers.length)
+  // A paper under the line is not lifted by being primary: the rule orders who fills places, it lowers no bar.
+  const under = item({ genre: 'paper', score: 50, primary: true, summarized: true })
+  const again = frontierMixSelect({ candidates: [under, ...reports], threshold: 64, ...OLD_SCALE, zhTarget: 0, genreFloors: { paper: 100 } })
+  assert.ok(!again.picks.some((pick) => pick.id === under.id && pick.rule === 'threshold'))
+})

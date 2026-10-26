@@ -41,6 +41,11 @@
  *   one among the candidates, else the best-ranked report. The one exception is the Chinese 解读 of a selected paper
  *   (the `beside-paper` verdict): it stands beside the paper, the paper being selected already or the event's pick of the
  *   round.
+ * - **The paper before reports of research** (owner, 2026-10-26: 「现在列表里很少有 pubmed 等这些学术论文了」). Above the line, a
+ *   journal's or a preprint server's own item (`primary`) takes a research place before a 公众号, media or X report of research
+ *   does. Replayed on round 3's scores at line 64, 2026-10-25 (a Sunday) gave 9 of its 30 research places to journals' own items
+ *   and 21 to reports while 13 journal items stood above the line; Friday 10-23 gave 25 of 27 to journals either way. Places
+ *   are still the group's ceiling: the rule decides who fills them, not how many there are.
  * - **Selection is sticky** (the pipeline's rule): what is already selected counts against its group, its source and
  *   the day, and is never taken back here.
  *
@@ -211,6 +216,7 @@ export function frontierMixMergeVerdict(candidate, members = []) {
  *   eligible: boolean,
  *   summarized: boolean,
  *   floorEligible?: boolean,
+ *   primary?: boolean,
  *   besideSelected?: boolean,
  *   addsValue?: boolean | null,
  *   eventId?: string | null,
@@ -220,7 +226,8 @@ export function frontierMixMergeVerdict(candidate, members = []) {
  * `besideSelected`: the event's one-selected-report rule named another report it adds nothing to (fr-events); `addsValue`:
  * that rule's verdict as given (`event_selection.addsValue`), null when none was asked.
  * `rule`: the `selected_rule` of an item already selected. `floorEligible`: false for a republisher (`frontierFloorEligible`), which
- * only the line can select.
+ * only the line can select. `primary`: the item is the research's own record — its source is a journal or a preprint server — and
+ * not a report of it.
  */
 
 /**
@@ -471,12 +478,16 @@ export function frontierMixSelect({ candidates, threshold, events = {}, congress
   const ranked = (list, chineseFirst) => [...list].sort((a, b) => (chineseFirst ? Number(b.zh) - Number(a.zh) : 0)
     || /** @type {number} */ (scoreOf(b)) - /** @type {number} */ (scoreOf(a)) || String(a.id).localeCompare(String(b.id)))
 
+  // Above the line, the research group's own papers come before the reports of research (module docstring), whatever their scores.
+  const primaryFirst = (/** @type {FrontierMixCandidate[]} */ list) => [...list].sort((a, b) => Number(b.primary === true) - Number(a.primary === true))
+
   // 1. Each group's floor, from above the line first, then from the band (`genre-floor`).
   for (const group of FRONTIER_MIX_GROUP_ORDER) {
     const spec = FRONTIER_MIX_GROUPS[group]
     if (floors[group] < 1) continue
     const mine = open.filter((c) => frontierMixGroup(c.genre) === group)
-    for (const c of ranked(mine.filter(aboveLine), spec.chineseFirst)) {
+    const above = ranked(mine.filter(aboveLine), spec.chineseFirst)
+    for (const c of group === 'research' ? primaryFirst(above) : above) {
       if (groupCount[group] >= floors[group] || total >= size) break
       if (!taken.has(c.id) && sourceRoom(c)) take(c, 'threshold', group)
     }
@@ -491,6 +502,13 @@ export function frontierMixSelect({ candidates, threshold, events = {}, congress
   for (const c of ranked(open.filter((x) => x.genre === 'preprint' && !aboveLine(x) && inBand(x, preprintMinScore)), false)) {
     if (preprints >= preprintPlaces || groupCount.research >= ceilings.research || total >= size) break
     if (!taken.has(c.id) && sourceRoom(c)) take(c, 'preprint-lane', 'research')
+  }
+
+  // 2b. The research group's own papers before the reports of research (module docstring): above the line, best first, to the group's
+  // ceiling. The Chinese margin of step 3 and the swap of step 4 still apply to the places left and to these picks.
+  for (const c of ranked(open.filter((x) => x.primary === true && frontierMixGroup(x.genre) === 'research' && aboveLine(x)), false)) {
+    if (groupCount.research >= ceilings.research || total >= size) break
+    if (!taken.has(c.id) && sourceRoom(c)) take(c, 'threshold', 'research')
   }
 
   // 3. The rest of the day, best first across groups, each group to its ceiling and news to the day's size. A Chinese
@@ -662,6 +680,7 @@ export function frontierMixReplay(rows, { threshold, timeZone = 'Asia/Shanghai',
         sourceId: String(row.source_id), sourceCap: frontierMixSourceCap({ source_type: row.source_type, authority: row.src_authority }),
         eligible: verified && !flags(row).includes('retracted') && !(row.source_type === 'journal' && flags(row).includes('no-abstract')),
         summarized: verified,
+        primary: row.source_type === 'journal' || row.source_type === 'preprint',
         besideSelected: row.same_event_item_id != null,
         addsValue: typeof row.adds_value === 'boolean' ? row.adds_value : null,
         eventId: row.event_id == null ? null : String(row.event_id),

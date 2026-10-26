@@ -937,7 +937,9 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       default:
         return (
           <>
-            <div className="space-y-4">
+            {/* A column with a gap, not space-y: the two wrappers are `contents`, and a margin on a box that draws nothing never shows (the strip
+              * sat on the hot card's edge). The gap falls between what they draw. */}
+            <div className="flex flex-col gap-4">
               <div data-frontier-list="safety" className="contents"><SafetyStrip alerts={safety} onRetry={() => setSafetyAttempt((value) => value + 1)} onOpened={opened} /></div>
               {!q && !filtered && <div data-frontier-list="hot" className="contents"><HotCard events={hot.current?.board?.events ?? []} onOpenAll={() => setView("hot")} /></div>}
             </div>
