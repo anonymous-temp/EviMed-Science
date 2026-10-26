@@ -69,9 +69,12 @@ def test_prediction_reference_uses_source_malignant_label_and_actual_returned_pr
     split = [{**row, 'split': 'test' if i < 2 else 'train'} for i, row in enumerate(returned)]
     heldout = prediction_reference(source, split, id_column='id', probability_column='p', split_column='split', test_label='test')
     assert heldout['n'] == 2 and heldout['brier'] == pytest.approx(.025)
+    for bad in [True, False, '0.3']:
+        with pytest.raises(ValueError):
+            prediction_reference(source, returned, id_column='id', probability_column='p', threshold=bad)
 
 
-def test_cli_prediction_uses_frozen_source_and_records_exact_bytes(tmp_path):
+def test_cli_prediction_uses_frozen_source_and_records_exact_bytes(tmp_path, monkeypatch):
     with (FIXTURES / 'breast-cancer.csv').open() as file:
         source = list(csv.DictReader(file))
     event = next(row for row in source if row['breast_cancer_yn'] == '0')
@@ -97,3 +100,21 @@ def test_cli_prediction_uses_frozen_source_and_records_exact_bytes(tmp_path):
     subprocess.run(command, check=True)
     after = json.loads(out.read_text())
     assert after['passed'] and before['inputs'] != after['inputs']
+    # The received bytes, not a later reopening of a mutable path, own the verdict.
+    import judge
+    original_read = Path.read_bytes
+    prediction_path = workspace / 'predictions.csv'
+    original_predictions = original_read(prediction_path)
+
+    def read_then_change(path):
+        payload = original_read(path)
+        if path == prediction_path:
+            path.write_text(f"row,p\n{event['']},0.1\n{nonevent['']},0.9\n")
+        return payload
+
+    monkeypatch.setattr(Path, 'read_bytes', read_then_change)
+    monkeypatch.setattr(sys, 'argv', command[1:])
+    assert judge.main() == 0
+    verified = json.loads(out.read_text())
+    import hashlib
+    assert next(item for item in verified['inputs'] if item['role'] == 'predictions')['sha256'] == hashlib.sha256(original_predictions).hexdigest()
