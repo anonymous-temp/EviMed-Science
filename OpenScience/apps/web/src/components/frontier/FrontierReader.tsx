@@ -15,7 +15,6 @@ import {
   type FrontierPlatform,
   type FrontierQuoted,
 } from "@/lib/frontierClient";
-import { dayKey } from "@/lib/inboxGroups";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { FactList } from "@/components/ui/FactList";
 import { filterChipClasses } from "@/components/ui/FilterChips";
@@ -49,6 +48,7 @@ import {
   shortUrl,
   sinceText,
   splitUrls,
+  statedDayKey,
 } from "./frontierText";
 
 /*
@@ -96,12 +96,18 @@ export function freeFullText(item: Pick<FrontierItem, "openAccess" | "url">): st
   return item.openAccess?.pdfUrl && item.openAccess.pdfUrl !== item.url ? item.openAccess.pdfUrl : null;
 }
 
-/** When it was published: the moment where the source gave one, the day where it gave only the day. */
+/**
+ * When it was published, as the source gave it: the moment (Beijing time) where it gave one, the day it stated where it gave only the
+ * day (the date it is stored at, in UTC), nothing where the date is our own guess (`inferred`).
+ */
 export function publishedLabel(item: Pick<FrontierItem, "publishedAt" | "datePrecision">): string | null {
   if (!item.publishedAt) return null;
-  if (item.datePrecision === "instant") return dateClock(item.publishedAt);
-  const key = dayKey(item.publishedAt);
-  return key ? shortDate(key) : null;
+  if (item.datePrecision === "instant") return dateClock(item.publishedAt) || null;
+  if (item.datePrecision === "day") {
+    const key = statedDayKey(item.publishedAt);
+    return key ? shortDate(key) : null;
+  }
+  return null;
 }
 
 /** A literature item that may have an abstract; the no-abstract flag says when it does not. */

@@ -22,8 +22,8 @@ import {
   SCORE_LABEL,
   SCORE_NOTE,
   cardEyebrow,
-  clock,
   isSocialItem,
+  itemClock,
   itemMarkdown,
   metaTime,
   researchQuestion,
@@ -169,7 +169,8 @@ export function FrontierCard({ item, grouped = false, markSelected = false, onSt
       {/* On a phone the clock joins the source line (as AIHOT's phone list has it): the column's 56 px go to the source's name. */}
       {grouped && (
         <div className="mt-3 hidden h-6 w-14 shrink-0 items-center justify-between pr-2 sm:flex">
-          <time dateTime={item.timelineAt} className="text-caption tabular-nums text-text-3">{clock(item.timelineAt)}</time>
+          {/* A day with no hour (the source gave only the date) has no clock; the column and the dot stay. */}
+          {itemClock(item) && <time dateTime={item.timelineAt} className="text-caption tabular-nums text-text-3">{itemClock(item)}</time>}
           <span aria-hidden="true" className={cn("h-1.5 w-1.5 shrink-0 rounded-full", item.selected ? "bg-accent" : "bg-border-control")} />
         </div>
       )}
@@ -188,7 +189,7 @@ export function FrontierCard({ item, grouped = false, markSelected = false, onSt
           <span className="min-w-0 truncate">
             <span>{who}</span>
             {when && <> · <time dateTime={item.timelineAt} className="tabular-nums">{when}</time></>}
-            {grouped && <span className="sm:hidden"> · <span className="tabular-nums">{clock(item.timelineAt)}</span></span>}
+            {grouped && itemClock(item) && <span className="sm:hidden"> · <span className="tabular-nums">{itemClock(item)}</span></span>}
           </span>
           {markSelected && item.selected && <span className="sr-only">精选</span>}
           {item.source.platformProduced && <Tag>EviMed 出品</Tag>}

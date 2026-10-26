@@ -1,5 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { SHORT_BODY_CHARS, insightParts, readerBodyPresentation, readerOutline, readerParagraphs, shownText } from "./FrontierReader";
+import { SHORT_BODY_CHARS, insightParts, publishedLabel, readerBodyPresentation, readerOutline, readerParagraphs, shownText } from "./FrontierReader";
+
+describe("when the reader says it was published", () => {
+  // The production case (item 36760, 2026-10-26): posted 2026-10-25 19:00 Beijing, which is 11:00Z.
+  it("names the source's own moment in Beijing time, whatever the browser's zone is", () => {
+    expect(publishedLabel({ publishedAt: "2026-10-25T11:00:00.000Z", datePrecision: "instant" })).toBe("10月25日 19:00");
+    expect(publishedLabel({ publishedAt: "2026-10-25T16:30:00.000Z", datePrecision: "instant" })).toBe("10月26日 00:30");
+  });
+
+  it("names only the stated day where the source gave no hour, from the date it is stored at", () => {
+    // Stored at 00:00Z of the stated date: that is 08:00 in Beijing and 16:00 the day before on the US west coast, and still the 25th.
+    expect(publishedLabel({ publishedAt: "2026-10-25T00:00:00.000Z", datePrecision: "day" })).toBe("10月25日 周日");
+    expect(publishedLabel({ publishedAt: "2026-10-26T00:00:00.000Z", datePrecision: "day" })).toBe("10月26日 周一");
+  });
+
+  it("says nothing where the date is our own guess or the source gave none", () => {
+    expect(publishedLabel({ publishedAt: "2026-10-25T11:00:00.000Z", datePrecision: "inferred" })).toBeNull();
+    expect(publishedLabel({ publishedAt: null, datePrecision: "instant" })).toBeNull();
+    expect(publishedLabel({ publishedAt: "not a time", datePrecision: "instant" })).toBeNull();
+    expect(publishedLabel({ publishedAt: "not a time", datePrecision: "day" })).toBeNull();
+  });
+});
 
 describe("the reader's paragraphs", () => {
   it("takes a full text's `## ` paragraphs as its section headings, in either language", () => {

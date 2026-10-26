@@ -325,13 +325,36 @@ test("F12c: what the editor proposed stays on an item when its labels are decide
   assert.deepEqual(frontierKeptModelFlags({ flags: null, source: media }), []);
 });
 
-test("timeline_at: the publication instant, or the source's date when that is more than 72 hours older", () => {
-  const now = new Date("2026-09-22T12:00:00Z");
-  assert.equal(frontierTimelineAt(now, null).toISOString(), now.toISOString());
-  assert.equal(frontierTimelineAt(now, "2026-09-20T12:00:00Z").toISOString(), now.toISOString(), "48 hours: today");
-  assert.equal(frontierTimelineAt(now, "2026-09-19T12:00:00Z").toISOString(), now.toISOString(), "exactly 72 hours: today");
-  assert.equal(frontierTimelineAt(now, "2026-09-15T00:00:00Z").toISOString(), "2026-09-15T00:00:00.000Z", "a week old: its own day");
-  assert.equal(frontierTimelineAt(now, "not a date").toISOString(), now.toISOString());
+test("timeline_at: an instant is the source's own time, never after our clock; a day is the arrival instant on that Beijing day and the end of it after", () => {
+  const iso = (/** @type {Date} */ date) => date.toISOString();
+  // instant: the source's moment (the production case: posted 19:00 Beijing, published by us at 05:59 the next morning).
+  assert.equal(iso(frontierTimelineAt(new Date("2026-10-25T21:59:00Z"), "2026-10-25T11:00:00Z", "instant")), "2026-10-25T11:00:00.000Z", "earlier than our clock: the source's");
+  assert.equal(iso(frontierTimelineAt(new Date("2026-10-25T11:00:00Z"), new Date("2026-10-25T11:00:00Z"), "instant")), "2026-10-25T11:00:00.000Z", "the same moment");
+  assert.equal(iso(frontierTimelineAt(new Date("2026-09-22T12:00:00Z"), "2026-09-15T00:00:00Z", "instant")), "2026-09-15T00:00:00.000Z", "a week old: its own time, as before");
+  assert.equal(iso(frontierTimelineAt(new Date("2026-09-22T12:00:00Z"), "2026-09-22T12:00:00.001Z", "instant")), "2026-09-22T12:00:00.000Z", "after our clock: not believed");
+  assert.equal(iso(frontierTimelineAt(new Date("2026-09-22T12:00:00Z"), "2026-10-01T00:00:00Z", "instant")), "2026-09-22T12:00:00.000Z", "a date days ahead: not believed");
+  // day: the stated day is the UTC date the source's date is stored at (UTC midnight); the zone is Beijing (UTC+8, no DST).
+  const day = (/** @type {string} */ visible, /** @type {string} */ stated) => iso(frontierTimelineAt(new Date(visible), stated, "day"));
+  assert.equal(day("2026-10-25T10:00:00Z", "2026-10-25T00:00:00Z"), "2026-10-25T10:00:00.000Z", "seen on its own Beijing day: the arrival instant");
+  assert.equal(day("2026-10-24T20:00:00Z", "2026-10-25T00:00:00Z"), "2026-10-24T20:00:00.000Z", "04:00 Beijing on the stated day: the arrival instant");
+  assert.equal(day("2026-10-25T15:59:59.999Z", "2026-10-25T00:00:00Z"), "2026-10-25T15:59:59.999Z", "the last millisecond of the day: the arrival instant");
+  assert.equal(day("2026-10-25T16:00:00Z", "2026-10-25T00:00:00Z"), "2026-10-25T15:59:59.999Z", "the next Beijing day's first moment: the end of the stated day");
+  assert.equal(day("2026-10-26T04:00:00Z", "2026-10-25T00:00:00Z"), "2026-10-25T15:59:59.999Z", "a day later: the end of its day (23:59:59.999 Beijing)");
+  assert.equal(day("2026-09-22T12:00:00Z", "2026-09-15T00:00:00Z"), "2026-09-15T15:59:59.999Z", "a week old: the end of its day");
+  assert.equal(day("2026-10-25T17:00:00Z", "2026-10-26T00:00:00Z"), "2026-10-25T17:00:00.000Z", "a stated day not yet over: the arrival instant");
+  assert.equal(day("2026-10-26T04:00:00Z", "2026-10-30T00:00:00Z"), "2026-10-26T04:00:00.000Z", "a day ahead of our clock: not believed");
+  assert.equal(day("2027-01-05T00:00:00Z", "2026-12-31T00:00:00Z"), "2026-12-31T15:59:59.999Z", "across a year end");
+  assert.equal(day("2026-03-05T00:00:00Z", "2024-02-29T00:00:00Z"), "2024-02-29T15:59:59.999Z", "a leap day");
+  // no usable date, or a date that is a guess: our own moment.
+  const now = new Date("2026-10-26T04:00:00Z");
+  assert.equal(frontierTimelineAt(now, "2026-10-01T00:00:00Z", "inferred"), now);
+  assert.equal(frontierTimelineAt(now, null, "instant"), now);
+  assert.equal(frontierTimelineAt(now, null, "day"), now);
+  assert.equal(frontierTimelineAt(now, "not a date", "instant"), now);
+  assert.equal(frontierTimelineAt(now, "not a date", "day"), now);
+  assert.equal(frontierTimelineAt(now, "2026-10-01T00:00:00Z"), now, "no precision stated: not believed");
+  assert.equal(frontierTimelineAt(now, "2026-10-01T00:00:00Z", null), now);
+  assert.equal(frontierTimelineAt(now, "2026-10-01T00:00:00Z", "week"), now);
 });
 
 test("selection: safety alerts always; verified items at the threshold while the source has room; never demoted or retracted", () => {

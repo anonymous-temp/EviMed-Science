@@ -42,9 +42,12 @@ import { FRONTIER_SOURCE_STREAM_COLUMNS } from "./frontierSourceColumns.mjs";
  *   needs screening waits for the budget (collect only). Safety feeds,
  *   regulators and authority-5 journals are edited at peak and past 80% of
  *   the budget (plan §10.3.6, §10.3.10).
- * - **`timeline_at` is decided once, at publication** (review #11): the
- *   publication instant, or the source's date when that is more than 72 hours
- *   older. An item that waited five days for its abstract still reaches today.
+ * - **`timeline_at` is decided once, at publication** (`frontierTimelineAt`; the
+ *   owner's ruling of 2026-10-26 replaced review #11's 72-hour rule): the
+ *   source's own time, never later than the moment we published it. An item
+ *   that waited five days for its abstract sits at the source's own day, not
+ *   today; a source that dates a day and no hour keeps our arrival instant on
+ *   its own day (Beijing time) and the end of its day after that.
  * - **Every reader-visible change moves `meta.content_version` in the same
  *   transaction** (review #14), and leaves an `item_changes` row for
  *   downstream copies.
@@ -100,7 +103,7 @@ import { FRONTIER_EDITOR_VERSION, frontierEditorDiagnostics, sha256, FRONTIER_SC
   isChineseProse, isChineseTitle } from "./frontierEditor.mjs";
 import { isDiscoveryOnlySource } from "./evolutionDiscoverySources.mjs";
 import { FrontierGlossary, FrontierGlossaryStore } from "./frontierGlossary.mjs";
-import { bumpFrontierVersion, migrateFrontier } from "./frontierPersistence.mjs";
+import { bumpFrontierVersion, FRONTIER_FEED_TIME_ZONE, migrateFrontier } from "./frontierPersistence.mjs";
 import { FrontierTagStore } from "./frontierTags.mjs";
 import { frontierFullTextParagraphs, frontierSettledParagraphs, frontierTidyBasis, frontierTidyVerdict, FRONTIER_TIDY_LIMITS } from "./frontierReaderTidy.mjs";
 import { FRONTIER_ASK_VERSION, frontierWriteAsk } from "./frontierAsk.mjs";
@@ -191,8 +194,6 @@ export function frontierProviderUnavailable(error) {
 export function frontierCallDeferred(code) {
   return frontierProviderUnavailable(code) || ["usage_budget_exceeded", "insufficient_quota", "frontier_editor_unavailable"].includes(String(code));
 }
-/** The 72-hour rule of `timeline_at` (plan §6.1). */
-export const FRONTIER_TIMELINE_WINDOW_MS = 72 * HOUR;
 /**
  * The lowest score a place under the selection line is given from (the genre mix's floors, the preprint lane, a Chinese
  * item under the line, a paper in its rewrite's place: `@evimed/domain` `FRONTIER_MIX_FLOOR_SCORE`). It was the lane
@@ -706,14 +707,31 @@ export function frontierItemFlags({ source, entry, item, text, modelFlags = [], 
 }
 
 /**
- * `timeline_at` at publication: the publication instant, or the source's
- * own date when that is more than 72 hours older (plan §6.1, review #11).
- * @param {Date} visibleAt @param {Date | string | null} publishedAt @returns {Date}
+ * `timeline_at` at publication: the source's own time (the list's axis, its day groups and its clock column; owner ruling of
+ * 2026-10-26, which replaced plan §6.1's "our publication instant unless the source is more than 72 hours older" — that rule
+ * showed an article its source posted at 19:00 under 05:59 the next morning). `precision` is the item's `date_precision`:
+ *
+ * - `instant`: the source's instant, unless it is after `visibleAt` — a date ahead of our clock is not believed.
+ * - `day`: the source stated a calendar day and no hour (stored at UTC midnight of that date, so the date is the UTC date of
+ *   `publishedAt`). An item we saw on that day in `FRONTIER_FEED_TIME_ZONE` keeps its arrival instant; an older one sits at the
+ *   last millisecond of its day there.
+ * - `inferred` (or no usable date): `visibleAt`.
+ *
+ * The backfill in `frontierPersistence.mjs` (`FRONTIER_TIMELINE_RULE`) writes the same rule in SQL; a test holds the two equal.
+ * @param {Date} visibleAt @param {Date | string | null} publishedAt @param {string | null | undefined} [precision] @returns {Date}
  */
-export function frontierTimelineAt(visibleAt, publishedAt) {
-  const published = publishedAt ? new Date(publishedAt).getTime() : NaN;
-  if (!Number.isFinite(published) || visibleAt.getTime() - published <= FRONTIER_TIMELINE_WINDOW_MS) return visibleAt;
-  return new Date(published);
+export function frontierTimelineAt(visibleAt, publishedAt, precision) {
+  const published = publishedAt ? new Date(publishedAt) : null;
+  const at = published ? published.getTime() : NaN;
+  if (!published || !Number.isFinite(at)) return visibleAt;
+  if (precision === "instant") return at <= visibleAt.getTime() ? published : visibleAt;
+  if (precision === "day") {
+    // Noon UTC of the stated date is that same date in Beijing (UTC+8), so the zone's window of it is the stated day's.
+    const noon = new Date(Date.UTC(published.getUTCFullYear(), published.getUTCMonth(), published.getUTCDate(), 12));
+    const lastMoment = new Date(frontierDayWindow(noon, FRONTIER_FEED_TIME_ZONE).end.getTime() - 1);
+    return lastMoment.getTime() < visibleAt.getTime() ? lastMoment : visibleAt;
+  }
+  return visibleAt;
 }
 
 /**
@@ -2348,7 +2366,7 @@ export class FrontierPipeline {
       const texts = (await client.query("SELECT publication_types FROM evimed_frontier.item_texts WHERE item_id = $1", [itemId])).rows[0];
       const linkFlags = await this.#linkFlags(client, item);
       const flags = orderedFlags([...new Set([...item.flags, ...linkFlags])]);
-      const timelineAt = frontierTimelineAt(now, item.published_at);
+      const timelineAt = frontierTimelineAt(now, item.published_at, item.date_precision);
       // Only a safety alert is selected as it is published; every other selection is the day's mix, at the end of the round.
       const decision = frontierSelectionDecision({
         safetyAlert: item.safety_alert, verification: item.verification, scoreTotal: item.score_total,
