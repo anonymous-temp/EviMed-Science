@@ -355,8 +355,8 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
    * A stop pressed in the kernel's own window (`session/cancel`) is the researcher's, and is noted on the run it
    * stops before it reaches the kernel (review F4): the monitor reading the aborted turn would otherwise write a
    * cancel nobody is named for, which is not charged. The durable intent also invalidates unsent automatic
-   * continuations. Its failure is audited and returned rather than acknowledging a stop whose intent was lost;
-   * only the kernel acknowledgement describes whether the running turn actually stopped.
+   * continuations. An observation, not a check: a stop is never held back because its intent could not be
+   * written (principle 19) — the failure is audited and the stop goes on to the kernel.
    * @param {any} project @param {any} payload the native `{ args: { request: { sessionId } } }`
    */
   async function recordStop(project, payload) {
@@ -372,7 +372,6 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         code: typeof error?.code === "string" ? error.code : "run_stop_observe_failed",
         detail: "runtime-ui",
       }).catch(() => {});
-      throw error;
     }
   }
   /** Freeze the route (and the methods) of an input before forwarding the native request, never changing it. A failure refuses nothing,

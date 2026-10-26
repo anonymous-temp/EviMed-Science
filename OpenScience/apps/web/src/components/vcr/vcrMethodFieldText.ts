@@ -47,14 +47,14 @@ export function methodFieldText(method: string, path: string, field: Field, root
   if (normalized === "costs.sites") { label = "计费中心数"; result.unit = "个中心"; }
   if (normalized === "phAlpha") { label = "比例风险假设检验水平 α"; result.unit = "比例"; }
   if (method === "accrual.poisson_gamma") {
-    if (normalized === "sites[].alpha") { label = "招募强度 Gamma 形状 α"; result.unit = "无量纲"; }
-    if (normalized === "sites[].beta") { label = "招募强度 Gamma 速率 β"; result.unit = "月"; result.hint = "使用形状／速率参数化：平均每中心招募率为 α／β。β 不是尺度参数。"; }
+    if (normalized === "sites[].alpha") { label = "入组强度 Gamma 形状 α"; result.unit = "无量纲"; }
+    if (normalized === "sites[].beta") { label = "入组强度 Gamma 速率 β"; result.unit = "月"; result.hint = "使用形状／速率参数化：平均每中心入组率为 α／β。β 不是尺度参数。"; }
     if (normalized === "screenFailure") label = "筛选失败率 Beta 先验";
     if (normalized === "screenFailure.alpha" || normalized === "screenFailure.beta") { label = `筛选失败率 Beta 先验形状 ${key === "alpha" ? "α" : "β"}`; result.unit = "无量纲"; }
     if (normalized === "target") { label = "累计目标入组人数"; result.unit = "人"; }
     if (normalized === "eventTarget") { label = "目标事件数"; result.unit = "个事件"; }
     if (normalized === "eventHazard") { label = "每位受试者事件危险率"; result.unit = "每月"; }
-    if (normalized === "byTimes[]") { label = "招募预测评估时间点"; result.unit = "月"; }
+    if (normalized === "byTimes[]") { label = "入组预测评估时间点"; result.unit = "月"; }
     if (normalized === "sites[].exposureTime") { label = "中心已开放时长"; result.unit = "月"; }
     if (normalized === "sites[].startTime") { label = "中心启用时间偏移"; result.unit = "月"; }
   }

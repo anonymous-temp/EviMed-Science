@@ -92,7 +92,7 @@ export function VcrMethodResultCharts({ result, method }: { result: NonNullable<
       { key: "conclusion", header: "估计结论", cell: cell => ({ estimable: "可估计", limited: "有限制地估计", not_estimable: "不可估计" })[String(cell.conclusion)] ?? "未声明" },
       { key: "refusal", header: "计算条件", cell: cell => { const refusal = text(cell.refusal); return refusal ? (VCR_NOT_ESTIMABLE_RULE_LABELS_ZH as Record<string, string>)[refusal] ?? knownErrorCodeMessage(refusal) ?? "此单元未满足方法计算条件，请核对设计和输入后重试。" : cell.replicatesCapped === true ? "重复计算受本次上限限制，已保留完成部分。" : "—"; } },
     ]} />{designs.some(row => row.measures.sample_size && row.measures.power) && <VcrTradeoffScatter designs={designs} xKey="sample_size" yKey="power" xLabel="样本量" yLabel="把握度" />}</Section>}
-    {milestones.length > 0 && <Section title="招募时间预测" level="sub"><VcrMilestoneTimeline milestones={milestones} axisLabel="月" /></Section>}
+    {milestones.length > 0 && <Section title="入组时间预测" level="sub"><VcrMilestoneTimeline milestones={milestones} axisLabel="月" /></Section>}
     {longitudinalSeries.length > 0 && <Section title="后续预测轨迹" level="sub"><VcrSeriesLegend series={longitudinalSeries} /><VcrTrajectoryChart series={longitudinalSeries} xLabel="距预测起点（天）" yLabel={longitudinal?.summary.endpoint?.unit} /></Section>}
     {longitudinal?.kind === "comparison" && <VcrForecastComparisonResult record={longitudinal} />}
     {longitudinal && ["evaluation", "trial_evaluation"].includes(longitudinal.kind) && <VcrForecastEvaluation record={longitudinal} />}
