@@ -111,13 +111,27 @@ class AnalysisSessionTests(unittest.TestCase):
         (self.root / receipt).unlink()
         self.assertFalse(self.flags()['other'])
 
+    def test_older_state_cannot_reuse_after_a_newer_receipt_attempt(self):
+        self.run_step('fit')
+        old_state = (self.root / 'state.json').read_bytes()
+        self.run_step('fit', '--force')
+        (self.root / 'state.json').write_bytes(old_state)
+        self.assertFalse(self.flags()['fit'])
+
     def test_dependency_output_change_invalidates_downstream_even_without_input_listing(self):
         self.steps[2]['inputs'] = []
         self.write_spec()
+        (self.root / 'fit.py').write_text("import uuid\nfrom pathlib import Path\nPath('fit.json').write_text('{\"value\":\"' + uuid.uuid4().hex + '\"}')\n")
         self.complete()
-        (self.root / 'fit.py').write_text("from pathlib import Path\nPath('fit.json').write_text('{\"value\":4}')\n")
-        self.run_step('fit')
+        before = self.state()['steps']['fit']['signature']
+        self.run_step('fit', '--force')
+        self.assertEqual(self.state()['steps']['fit']['signature'], before)
         self.assertFalse(self.flags()['report'])
+
+    def test_touching_identical_input_bytes_does_not_invalidate(self):
+        self.complete()
+        (self.root / 'data.csv').write_bytes((self.root / 'data.csv').read_bytes())
+        self.assertTrue(all(self.flags().values()))
 
     def test_corrupt_state_is_reported_and_retained(self):
         self.complete()
@@ -200,6 +214,44 @@ class AnalysisSessionTests(unittest.TestCase):
         self.assertEqual((self.root / 'data.csv').read_bytes(), original)
         self.assertTrue((self.root / 'state.json').exists())
         self.assertFalse(self.state()['steps']['fit']['reusable'])
+
+    def test_secondary_output_cannot_alias_a_sibling_script(self):
+        self.steps[0]['outputs'].append('plot.txt')
+        self.write_spec()
+        original = (self.root / 'other.py').read_bytes()
+        (self.root / 'fit.py').write_text("from pathlib import Path\nPath('fit.json').write_text('{}')\nPath('plot.txt').symlink_to('other.py')\n")
+        self.assertNotEqual(self.command('run', '--step', 'fit').returncode, 0)
+        self.assertEqual((self.root / 'other.py').read_bytes(), original)
+        self.assertFalse(self.state()['steps']['fit']['reusable'])
+
+    def test_reserved_output_cannot_escape_through_an_internal_symlink(self):
+        (self.root / 'ordinary').mkdir()
+        (self.root / '.analysis-provenance').symlink_to('ordinary', target_is_directory=True)
+        self.steps[0]['results'] = '.analysis-provenance/fit.json'
+        self.steps[0]['outputs'] = [self.steps[0]['results']]
+        self.write_spec()
+        self.assertNotEqual(self.command('run', '--step', 'fit').returncode, 0)
+        self.assertFalse((self.root / 'state.json').exists())
+
+    def test_malformed_step_state_is_invalid_without_traceback(self):
+        self.run_step('fit')
+        state = self.state()
+        state['steps']['fit']['outputs']['fit.json'] = {'sha256': 'anything'}
+        (self.root / 'state.json').write_text(json.dumps(state))
+        self.assertEqual(self.status()['state'], 'invalid')
+        self.assertFalse(any(self.flags().values()))
+
+    def test_state_modified_during_run_preserves_attempt_in_recovery_file(self):
+        self.run_step('fit')
+        (self.root / 'fit.py').write_text("from pathlib import Path\nPath('fit.json').write_text('{}')\nPath('state.json').write_text('{broken')\n")
+        result = self.command('run', '--step', 'fit')
+        self.assertNotEqual(result.returncode, 0)
+        summary = json.loads(result.stdout)
+        self.assertNotEqual(summary['state'], 'state.json')
+        recovered = json.loads((self.root / summary['state']).read_text())
+        self.assertEqual(len(recovered['history']), 2)
+        self.assertFalse(recovered['steps']['fit']['reusable'])
+        self.assertEqual((self.root / 'state.json').read_text(), '{broken')
 
     def test_versions_participate_in_signature(self):
         self.assertTrue(HELPER.is_file(), 'Continuity helper must exist')
