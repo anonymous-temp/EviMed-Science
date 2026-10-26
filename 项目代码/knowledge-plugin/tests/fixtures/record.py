@@ -439,6 +439,10 @@ ADAPTER_CASES: dict[str, dict] = {
     "html-list/nhsa-notices": {"source": "nhsa-notices", "budget": 1},
     "html-list/natcm-policy-interpretation": {"source": "natcm-policy-interpretation", "budget": 1},   # ct-src 2026-10-24
     "html-list/ndcpa-regulations": {"source": "ndcpa-regulations", "budget": 1},                       # ct-src 2026-10-24
+    # c5-sources 2026-10-26: the three pages the new title and date readings were made for (tests/adapters/test_html_list_c5.py)
+    "html-list/cn-js-mpa-dt": {"source": "cn-js-mpa-dt", "budget": 1},                                 # '· ' inside the link text
+    "html-list/cn-ha-mpa-ggtg": {"source": "cn-ha-mpa-ggtg", "budget": 1},                             # visible title cut with ..., full title attribute
+    "html-list/uni-tsinghua-med-research": {"source": "uni-tsinghua-med-research", "budget": 1},       # '十月 15, 2026'
     "html-list/nhsa-consultations": {"source": "nhsa-consultations", "budget": 1},
     "html-list/nhsa-policy-interpretation": {"source": "nhsa-policy-interpretation", "budget": 1},
     "html-list/gov-cn-policy": {"source": "gov-cn-policy", "budget": 1},

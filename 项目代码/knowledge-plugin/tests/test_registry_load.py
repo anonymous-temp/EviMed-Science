@@ -34,7 +34,8 @@ def test_the_committed_registry_is_a_fresh_deterministic_build():
 def test_every_row_validates(document):
     rows = load_registry(REGISTRY, {})
     # 722 before 2026-10-10; the single arXiv discovery query is replaced by the 28 ai-discovery rows (tests/adapters/test_ai_discovery.py)
-    assert len(rows) == len(document["sources"]) == 755        # ct-src 2026-10-24: six NMPA lists
+    # ct-src 2026-10-24: six NMPA lists (755); c5-sources 2026-10-26: 73 rows in, 36kr-medical out (827)
+    assert len(rows) == len(document["sources"]) == 827
     assert sum(r.enabled for r in rows) >= 256
 
 
@@ -56,6 +57,7 @@ def test_the_plan_decisions_hold(document):
                                if line.strip() and json.loads(line)["verdict"] == "feed-ok"}
     verified_on_production |= {row["id"] for row in json.loads((ROOT / "registry/research/source-expansion-2026-09-29.json").read_text())["rows"] if row.get("enabledAfterProbe") or (row["group"] == "p1" and row["outcome"] == "ok")}
     verified_on_production |= {row["id"] for row in json.loads((ROOT / "registry/research/source-expansion-2026-09-30.json").read_text())["rows"] if row["decision"] == "enabled"}
+    verified_on_production |= {row["id"] for row in json.loads((ROOT / "registry/research/source-expansion-2026-10-26.json").read_text())["rows"] if row["decision"] == "enabled"}
     assert "google-health-blog" in verified_on_production
     for s in sources:
         if s["enabled"]:
@@ -113,7 +115,12 @@ def test_the_plan_decisions_hold(document):
     assert recalls["safety_feed"] is False and recalls["lane"] == "mixed"
     # ct-src 2026-10-24: NMPA's device recall list is one more (every row of it is a recall notice)
     assert by_id["nmpa-device-recalls"]["safety_feed"] is True and by_id["nmpa-device-recalls"]["lane"] == "safety"
-    assert sum(1 for s in sources if s["safety_feed"]) == 21
+    # c5-sources 2026-10-26: four more official safety lists — SÚKL's recalls and suspensions, PEI's safety information, ANSM's safety
+    # information and URPL's DHPC communications
+    for sid in ("cz-sukl-stahovani-pozastaveni", "de-pei-sicherheitsinformationen", "fr-ansm-informations-securite",
+                "pl-urpl-komunikaty-produkty-lecznicze"):
+        assert by_id[sid]["safety_feed"] is True and by_id[sid]["lane"] == "safety", sid
+    assert sum(1 for s in sources if s["safety_feed"]) == 25
     assert by_id["evimed-chictr"]["config"]["url"].endswith("/ai-api/review/api/clinical-trial")   # v1: sponsor present
     for sid in ("natcm-notices", "most-tztg", "nmpa-gd-mirror", "csco-news", "gd-pharm-society-notifications", "cntcm-news",
                 "nhsa-policy-regulations", "cdr-adr-notices", "zhongguokexuebao", "chinacdc-notifiable-disease", "china-cdc-news"):

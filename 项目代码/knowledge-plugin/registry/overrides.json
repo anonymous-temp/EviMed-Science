@@ -3884,5 +3884,308 @@
    ]
   },
   "_why_allowed_hosts_20261025": "c2-gplug (review G6): every press-release link of the feed is a 477-byte page whose only content is <meta http-equiv=\"refresh\"> to www.info.gov.hk/gia/…, the Government Information Services copy; 67 of 67 entries were page_no_main_text. The page step follows one such refresh to a host this list names (enrich/page.py). Replay: tests/fixtures/enrich/page-hk-chp-refresh."
+ },
+ "cn-sh-mpa-dt": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 20 items (20 dated, 3 in the last 30 days), newest 2026-10-16, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Hanweb-style server-rendered ul.pageList; date 'YYYY.MM.DD' in small.listTime; ~20 items/page, cadence ~1-3/week; plain HTTP 200, robots 404 (none). | sample: 2026年长三角药品监管工作会议在沪召开"
+ },
+ "cn-sh-mpa-yp": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 20 items (20 dated, 3 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Drug column: bureau notices/通告 (质量抽检, 药物警戒办法, 名单). listTime is the publication/refresh date (an item URL dated 2023 can show 2026.10.26). | sample: 接受药品上市许可持有人、药品经营企业委托开展药品储存的企业名单"
+ },
+ "cn-bj-mpa-dt": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 15 items (15 dated, 8 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). easysite CMS server-rendered; use a@title (visible text is truncated with …). 15 items/page. | sample: 市药监局第三分局赴大兴区药品经营企业开展调研"
+ },
+ "cn-bj-mpa-gg": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 30 items (30 dated, 4 in the last 30 days), newest 2026-10-22, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). 公告 column (医疗器械注册批准公告, 化妆品备案, 生物医药研发用物品进口白名单); 30 items/page. | sample: 北京市药品监督管理局关于拟对“逆即NINERJUU脐带提取物面部精华露”等63个普通化妆品取消备案的公示"
+ },
+ "cn-js-mpa-gsgg": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 30 items (30 dated, 3 in the last 30 days), newest 2026-10-10, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). NOTE the drug regulator is da.jiangsu.gov.cn (scjgj.jiangsu.gov.cn is the market-regulation bureau). Hanweb page: list is a script-cdata block of <tr> rows; selectolax drops the orphan <tr>/<td> so the item is the a.bt_link node and the date is read from the article URL (/art/YYYY/M/D/); title text carries a leading bullet '· ' from <b>·</b> (cosmetic; strip in plugin if wanted). Col84622 redirects to col84627. | sa…"
+ },
+ "cn-js-mpa-dt": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 30 items (30 dated, 24 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Bureau's own news (检验院, GMP 培训, 实训班). Same script-cdata + date-from-URL technique and '· ' title bullet as cn-js-mpa-gsgg. | sample: · 省药品监督检验研究院连云港检验室首获LGC国际能力验证“满意”结果"
+ },
+ "cn-zj-mpa-tzgg": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 10 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Read from the server-rendered 通知公告 block of the HOME page (ul#open1); the column page col1228989285 itself is built client-side by the jpaas unit-build JSON API (HTML inside JSON, not readable by html-list). 10 items; robots.txt answers HTML (=none). | sample: 浙江省药品监督管理局所属事业单位2026年下半年集中公开招聘人员笔试结果及面试工作安排公告"
+ },
+ "cn-zj-mpa-dt": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 8 items (8 dated, 7 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Read from the server-rendered 省局动态 block of the home page (ul#outsj2, 8 items); full column col1228989351 is client-built (jpaas). | sample: 省检查中心在杭举办化妆品数字化生产实训暨“浙药先锋”助企服务"
+ },
+ "cn-sc-mpa-gsgg": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 18 items (18 dated, 18 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). All-category 公示公告 (drug/device/cosmetic licence cancellations, 通告, 公告); table rows tr:has(> td.listtddate5); a few rows link to other hosts and are dropped by allowed_hosts (html_list_dropped_host=2). | sample: 四川省药品监督管理局关于注销成都普利泰生物科技有限公司《中华人民共和国医疗器械注册证》的公告"
+ },
+ "cn-sc-mpa-dt": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 20 items (20 dated, 1 in the last 30 days), newest 2026-10-10, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Bureau work news; item selector must be tr:has(> td.listtddate5) (the left-menu table otherwise yields a junk row). | sample: 以赛促学强本领 以学促训守底线——2026年四川省药品生产检查员“以赛促学，以学促训”培训顺利举办"
+ },
+ "cn-ha-mpa-ggtg": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 19 items (19 dated, 11 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). All-category 公告通告 (药品/器械/化妆品); title read from a@title (the visible text is truncated with …; <br> inside the attribute is flattened to spaces by the plugin). | sample: 河南省药品监督管理局 关于拟取消未提交2025年度 2026年度报告 普通化妆品备案的补充公告"
+ },
+ "cn-cq-mpa-gggs": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 20 items (20 dated, 9 in the last 30 days), newest 2026-10-19, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). NOTE yjj.cq.gov.cn is Chongqing's emergency-management bureau; the drug regulator is yaojianju.cq.gov.cn. Mix of 公告/公示 (执业药师注销, 职称, recruitment). | sample: 重庆市属事业单位2026年第二季度公开招聘工作人员拟聘人员公示（市药监局）"
+ },
+ "cn-sn-mpa-dt": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 20 items (20 dated, 3 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Bureau news; plain ul.cm-news-list li > a + span (date text padded with whitespace, handled). | sample: 省药监局干部作风能力与素质教育提升培训班开班"
+ },
+ "cn-sn-mpa-rcjg": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 21 items (21 dated, 9 in the last 30 days), newest 2026-10-22, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). GMP符合性检查结果通告, 创新医疗器械审查公示, 炮制规范公示, 征求意见; the most medically relevant Shaanxi column. | sample: 关于陕西铎耀中药饮片有限公司药品生产企业药品GMP符合性检查结果的通告（2026年 第19号）"
+ },
+ "cn-fj-mpa-gstg": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 30 items (30 dated, 12 in the last 30 days), newest 2026-10-22, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Host is yjj.scjgj.fujian.gov.cn. Aggregate 公示通告 (通知公告 + 行政许可公告 + 监督检查): GMP符合性检查结果, 许可注销, 中药保护品种. Item container div.list_base_date_01 (several blocks). | sample: 关于2026年福建省药品监督管理局直属事业单位公开招聘高层次人才方案延长报名时间的公告"
+ },
+ "cn-hb-mpa-tzgg": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 6 items (6 dated, 6 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Read from the server-rendered 通知公告 block of the HOME page (6 items, selected by href containing /qtzdgkwj/); the column page itself loads its list by JS. Only 6 items per page. | sample: 省药品监督管理局 省科学技术厅 省卫生健康委员会 省医疗保障局 省中医药管理局关于印发《湖北省 “荆楚名方”遴选培育工作方案》的通知（鄂药监发〔2026〕37号）"
+ },
+ "cn-ah-mpa-gsgg": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 15 items (15 dated, 5 in the last 30 days), newest 2026-10-22, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). 药品经营许可证注销公告, 医疗器械首次注册产品公告, 中药饮片通告; 15 items/page (html_list_dropped_title=3 are empty-title decoration rows). | sample: 关于注销安徽鸿运涛涛大药房连锁有限公司药品经营许可证的公告"
+ },
+ "cn-yn-mpa-tztg": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 20 items (20 dated, 10 in the last 30 days), newest 2026-10-22, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). 药品GMP符合性检查结果通告, 中药材GAP延伸检查结果, 疫苗储存配送信息通告, 暂停经营通告; ~20 items/page, the most medically dense Yunnan column. | sample: 疫苗储存配送信息通告（2026年第26期）"
+ },
+ "cn-xj-mpa-tzgg": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 19 items (19 dated, 14 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Table rows; no title attribute so long titles are truncated with an ellipsis by the site; date is '(YYYY-MM-DD)' (date_regex). A few rows link to other hosts and are dropped. | sample: 关于再次公开征求《关于高标准推进中药材生产质量管理规范及产地趁鲜切制监督实施工作指南（..."
+ },
+ "cn-gd-mpa-dt": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 20 items (20 dated, 2 in the last 30 days), newest 2026-10-19, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Different column from the existing nmpa-gd-mirror row (that one is 通知公告; this is 省局动态). Same selectors as it (ul.infoList li). 1.1类中药创新药获批, 药品零售许可验收细则, 药械通 etc. | sample: 广东省1.1类中药创新药紫花温肺止嗽颗粒获批上市"
+ },
+ "cn-hn-mpa-tzgg": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 6 in the last 30 days), newest 2026-10-22, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). HTTP ONLY from this box: https://mpa.hunan.gov.cn fails the TLS handshake here (OpenSSL 'bad ecpoint' with the default key share; works with --curves secp256r1), plain http returns 200 with robots 404. Production (Beijing) may or may not hit the same TLS problem; keep the http URL. Table tbody#number, title attr, date in 4th cell, 10 items. | sample: 湖南省药品监督管理局关于注销一次性使用管型吻合器等16个医疗器械注册证书的公告"
+ },
+ "at-basg-whatsnew": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 49 items (49 dated, 45 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Official 'BASG Newsfeed' (TYPO3 whatsnew). Mixed: ~55% amtliche Nachrichten (Rueckrufe/recalls, DHPC, WNV blood-safety updates), plus Pharmakovigilanz outcome pages and some FAQ-page updates (5 FAQ rows on 2026-10-23 = noise). 51 items. Plain HTTP works."
+ },
+ "ch-swissmedic-mitteilungen": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 30 items (30 dated, 5 in the last 30 days), newest 2026-10-20, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). First-party replacement for the fetchrss.com proxy of 'New on the website' (swissmedic-new, disabled): official news list, English titles. NB: swissmedic.ch's own RSS page (/home/news/rss.html) publishes exactly the two fetchrss.com URLs, i.e. the proxy IS Swissmedic's official feed offer. AEM teaser markup, server-rendered first page of 30."
+ },
+ "cz-sukl-aktuality": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 10 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). WordPress site feed 'Nove clanky na webu' (CHMP/PRAC meeting highlights, seminars, price-list notices, recalls). 10 items, all within 30 days; mixed with price/reimbursement list notices."
+ },
+ "cz-sukl-stahovani-pozastaveni": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 4 in the last 30 days), newest 2026-10-19, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Category feed 'Stahovani a pozastaveni' (recalls / suspensions after quality defects), listed on https://sukl.gov.cz/rss-feed/."
+ },
+ "de-bfarm-pressemitteilungen": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 2 in the last 30 days), newest 2026-10-21, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Table list (date | title + 'Pressemitteilung Nr. 8/26'). Low cadence (8 press releases in 2026) but alive. bfarm.de has no robots.txt (404 = none). Links carry ?nn=933556 query (harmless)."
+ },
+ "de-pei-sicherheitsinformationen": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 17 items (17 dated, 3 in the last 30 days), newest 2026-10-15, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). PEI's own RSS (SiteGlobals/Functions/RSSFeed/RSSGenerator_Sicherheitsinformationen.xml) is DISALLOWED by pei.de robots.txt (Disallow: /SiteGlobals/), so the HTML list is used. robots has Crawl-delay: 30 (poll hourly is fine). Contains Rote-Hand-Briefe, Informationsbriefe and some Meldungen that also appear in de-pei-meldungen (same article, different ?nn= query, so no URL dedup)."
+ },
+ "dk-dkma-news": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 20 items (20 dated, 4 in the last 30 days), newest 2026-10-13, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Official RSS 'Latest website news' in English (advertised via <link rel=alternate>). The Danish-language feed (https://laegemiddelstyrelsen.dk/da/Feeds/rss-feed/) is a firehose of per-product supply-shortage notices (20 'forsyningsvanskelighed' rows in one day): not proposed. robots.txt is 404 (= none)."
+ },
+ "es-aemps-notas-medicamentos": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 40 items (40 dated, 9 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Notas informativas MUH: IPT (CHMP-opinion reports), ICM (quality defects/recalls), FV (pharmacovigilance), CHMP/EMA news. Table, 'Nota Informativa MUH (FV), 11/2026' in the summary cell. The site feed https://www.aemps.gob.es/feed/ is DISALLOWED by robots.txt (Disallow: /feed*/), and /informa/ detail pages answer 403 to plain requests (list pages are fine). Safety-only list (notas-de-seguridad/...) has 3 rows only (…"
+ },
+ "fr-ansm-actualites": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 14 items (14 dated, 9 in the last 30 days), newest 2026-10-22, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). HTML list (14 cards, 'PUBLIE LE dd/mm/yyyy'). ANSM's RSS (https://ansm.sante.fr/rss/actualites) is a same-day-only feed ('Actualites du jour', usually empty) so it is NOT usable; html-list instead."
+ },
+ "fr-ansm-informations-securite": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 20 items (20 dated, 19 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Safety information / recalls (rappels, DHPC-like 'Information aux utilisateurs'). On 2026-10-26 all 20 rows were medical devices / IVD (13 DM, 7 DMDIV); drug items (lettres aux professionnels, pharmacovigilance) appear less often. The ?produitsSante=medicaments query is ignored by the HTML list; the RSS version is same-day-only. Owner may prefer to drop if a drug-only stream is wanted."
+ },
+ "gr-eof-farmaka": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 7 in the last 30 days), newest 2026-10-22, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). WordPress category feed 'Farmaka' (announcements, price revisions, availability, recalls of medicines). The whole-site feed (/feed/) mixes foods, devices, biocides and budget execution notices and is NOT proposed. Items link to percent-encoded Greek slugs."
+ },
+ "lv-zva-jaunumi": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 9 items (9 dated, 2 in the last 30 days), newest 2026-10-08, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Drupal teaser list (9 items; dates 'dd.mm.yyyy.' with trailing dot handled by date_regex). Includes DHPC letters ('Vestule veselibas aprupes specialistam ...'), PRAC outcomes. Quiet (2 in the last 30 days)."
+ },
+ "no-dmp-nyheter": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 6 items (6 dated, 6 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Uses the news block of the home page (6 latest items with <time datetime>), because https://www.dmp.no/nyheter is client-rendered (list absent from the HTML). Only 6 items per poll: fine at ~1 item/2 days. Includes shortage/rationing notices (Rasjonering av Soluvit). legemiddelverket.no redirects to dmp.no. English home block is stale (28 days)."
+ },
+ "pl-urpl-aktualnosci": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 4 in the last 30 days), newest 2026-10-20, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). URPL moved to gov.pl; www.urpl.gov.pl is behind Incapsula (bot wall, 842-byte challenge page). gov.pl is plain HTTP, 10 items per page (?page=2&size=10 for more). gov.pl/web/urpl/aktualnosci redirects to aktualnosci1."
+ },
+ "pl-urpl-komunikaty-produkty-lecznicze": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 1 in the last 30 days), newest 2026-10-08, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). 'Komunikaty dot. produktow leczniczych' = Polish DHPC / safety communications (Ocrevus, Litfulo, desogestrel). Quiet (1 in last 30 days, newest 2026-10-08)."
+ },
+ "pt-infarmed-noticias": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 20 items (20 dated, 19 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Official Liferay feed 'Feed de noticias' listed on https://www.infarmed.pt/web/infarmed/rss (the long instance-parameter URL shortened to the working minimal form). Feed order is not strictly by date (the 2026-10-23 item is first, a 2026-08-19 row second); the adapter dates every item."
+ },
+ "se-lakemedelsverket-pressmeddelanden": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 25 items (25 dated, 7 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Läkemedelsverket's own press releases as published on its TT Nyhetsbyrån 'via' newsroom account (publisherId 3235477); titles equal the agency's news items (recalls, EMA opinions, campaigns). Links point to via.tt.se (not lakemedelsverket.se). The agency's own news list is an Angular app whose /api/newslist and /api/newslist/newsrss answer an empty list to any client outside the page (verified in a real browser too)…"
+ },
+ "sk-sukl-aktuality": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 65 items (65 dated, 10 in the last 30 days), newest 2026-10-22, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Official feed 'Aktuality (vsetky novinky)' from https://www.sukl.sk/o-nas/databazy-a-servis/rss-1; days=365 look-back, redirects to /slovenska-verzia/rss?days=365. ~65 distinct items, 17 duplicated rows (same item under several categories) are folded by the adapter."
+ },
+ "uni-ki-news": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 25 items (25 dated, 25 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). English edition of KI's press feed (sv twin: nyheter.ki.se/latest-news/rss.xml, pubDate in Swedish month names, would not parse). Titles arrive wrapped in an <a> tag; the plugin's feed adapter strips it. 25 items, includes weekly 'KI in the media' digest items. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+ },
+ "uni-washu-medicine-news": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 10 in the last 30 days), newest 2026-10-21, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). WordPress site feed; every item link is under /news/. 10 items. The old host medicine.wustl.edu redirects to medicine.washu.edu. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+ },
+ "uni-cambridge-clinical-medicine-news": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 3 in the last 30 days), newest 2026-10-15, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Cambridge news-feed generator filtered by affiliation 'School of Clinical Medicine' (tid 107); the feed carries the 10 newest matching stories (about one a week), mostly /research/news, a few /stories. Campus-wide generator without a filter would be a firehose; this filter is medicine-only. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+ },
+ "uni-harvard-gazette-health": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 50 items (50 dated, 6 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Health section of the university-wide Harvard Gazette (HMS, Chan School, affiliated hospitals research). Medicine-only section feed, 50 items but a slow section (about 2/week) and the feed document is ~880 KB because items carry full content. hms.harvard.edu/news itself is behind Imperva (HTTP 200 'Pardon Our Interruption' challenge page), so the HMS discovery directory row cannot read it; this Gazette section is th…",
+  "_why_cadence_20261026": "the Gazette's health section is about two items a week and its feed document ~880 KB (items carry full content): four reads a day, not twelve"
+ },
+ "uni-vumc-news": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 20 items (20 dated, 20 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). VUMC Reporter / Vanderbilt Health News (WordPress). 20 items, daily. Mixes research and clinical news with some staff-life items ('Pets of the Day'). Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+ },
+ "uni-weill-cornell-news": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 15 items (15 dated, 12 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Drupal news feed (/news/rss; /news/feed is the same list with longer bodies). 15 items. Do not use /rss.xml: it is the site's section index, not the news. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+ },
+ "uni-unc-health-news": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 12 items (12 dated, 12 in the last 30 days), newest 2026-10-22, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). WordPress newsroom feed, 12 items, medicine-only (school of medicine research plus UNC Health clinical news). Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+ },
+ "uni-ucdavis-health-news": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 30 items (30 dated, 27 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). 30 items (feed document ~200 KB). Medicine-only newsroom (research, clinical, faculty honours). Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+ },
+ "uni-cu-anschutz-news": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 10 in the last 30 days), newest 2026-10-22, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Medical campus newsroom, 10 items; mostly research releases. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+ },
+ "uni-lshtm-news": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 5 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). 10 items; public/global health research news. The HTML news page itself answered 403 to this box (bot protection) while the /feed endpoint is open; production egress should re-check the feed path once. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+ },
+ "uni-columbia-mailman-news": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 10 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). 10 items, public-health research and school news; a few administrative items (funding opportunity) are mixed in. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+ },
+ "uni-nyu-langone-research": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 9 in the last 30 days), newest 2026-10-20, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Research category of the NYU Langone newsroom (the /news landing mixes in 'Media Contacts' and has stale dates; /news/press-releases is the corporate-heavy alternative). Drupal list, 10 items per page, dates like 'October 20, 2026'. No RSS exists. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+ },
+ "uni-imperial-medicine-news": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 12 items (12 dated, 12 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Faculty of Medicine all-news page: 12 cards per page, server-rendered, 'DD Month YYYY' dates. Page is ~860 KB. Imperial publishes JSON feeds (/news/articles/feeds/medicine/medicine/articles.json) but no RSS; the plugin's json-api families do not cover that shape, so the HTML list is used. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+ },
+ "uni-mdanderson-research-newsroom": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 30 items (30 dated, 9 in the last 30 days), newest 2026-10-25, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Research Newsroom blog: two card shapes (large featured, small thumbnails) share div.blog-summary + h3.blog-title + p.author-date; first <a> is the article link in both. 30+ items, oncology research releases. Page is ~820 KB. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+ },
+ "uni-ucla-health-releases": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 8 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Landing page /news shows releases, consumer articles and patient stories; the :has(a[href^=/news/release/]) filter keeps only the research/clinical news releases (about 10 on the page). The /news/search?... archive is behind Cloudflare (403), so the landing page is the only open list. Selector is tied to the Drupal card markup. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTT…"
+ },
+ "uni-cuhk-medicine-press": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 6 items (6 dated, 6 in the last 30 days), newest 2026-10-14, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Faculty press releases (research findings, awards). The first screen carries 6 items and the rest load by infinite scroll (data-loadmore), so only the newest 6 are read; cadence is a few a month. ISO dates in the time@datetime attribute. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+ },
+ "uni-shsmu-research": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 20 items (20 dated, 5 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Research-news column (journal papers by SJTU School of Medicine and affiliated hospitals). Table rows, 20 per page; date is '(26-10-25)' two-digit year, read with date_regex + %y-%m-%d; the visible link text is truncated with ... but the title attribute has the full title. Sibling column 学院要闻 (xyyw.htm) is campus news linking to WeChat articles and was not taken. Probed with a browser UA and with an EviMedBot-style…"
+ },
+ "uni-fudan-shmc-research": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 14 items (14 dated, 6 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). WebPlus list; 14 live items per page (the markup also carries empty template <li> clones, hence li.news.i1:has(.news_title a)). Research-progress column, full titles in the title attribute. Sibling column 上医要闻 (news/syyw/list.htm) is campus news and was not taken. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+ },
+ "uni-ccmu-research": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 2 in the last 30 days), newest 2026-10-15, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Academic/research column (papers of the affiliated Tiantan, Xuanwu etc. hospitals). Date is split into '<span>10-15</span><em>2026</em>', read as '%m-%d %Y'. 10 items, about one every one to two weeks; links go to news.ccmu.edu.cn. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+ },
+ "uni-njmu-research": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 14 items (14 dated, 3 in the last 30 days), newest 2026-10-22, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). WebPlus research-dynamics column; full title in the title attribute (the visible text is cut with ...). Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+ },
+ "uni-hrbmu-research": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 20 items (20 dated, 1 in the last 30 days), newest 2026-10-19, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Research column, 20 per page, date '2026.10.19' inside the link. Slow cadence (about every 2-4 weeks). Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+ },
+ "uni-gzhmu-research": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 5 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). News-site academic/research column: papers plus academic lectures. Date is '<b>26</b><span>2026-10</span>' read as '%d %Y-%m'. Probed with a browser UA and with an EviMedBot-style UA from a non-mainland box: both HTTP 200."
+ },
+ "medcity-news": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 30 items (30 dated, 30 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Full-content WordPress RSS, 30 items/poll, deals/funding/digital-health business. Honest-UA fetch OK."
+ },
+ "pharmaphorum-news": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 10 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). rss.xml (NOT /feed, which is an HTML page). 10 items/poll; carries the monthly 'Changing faces' people-moves roundup, deals and financing. Listed in registry/discovery.json directories (discovery may already admit a feed)."
+ },
+ "medtech-dive": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 10 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Industry Dive feed, same format as the present BioPharma Dive/Healthcare Dive rows; 10 items/poll; some items are /spons/ sponsored posts. In registry/discovery.json directories."
+ },
+ "hit-consultant": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 15 items (15 dated, 15 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Digital-health funding/M&A trade blog; 15 items/poll, full text in feed. Trade blog, so authority 2."
+ },
+ "korea-biomedical-review": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 50 items (50 dated, 50 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). English-language Korean pharma/biotech trade news; 50 items/poll, newest today; links are articleView.html?idxno=N (stable). Covers licensing deals and executive moves in the Korean industry."
+ },
+ "drug-discovery-trends": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 25 items (25 dated, 6 in the last 30 days), newest 2026-10-19, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). WordPress feed, 25 items but slow cadence (about 6 in 30 days, newest 7 days old); deal/partnership headlines (e.g. Roche-Hansoh ADC deal)."
+ },
+ "pharmaceutical-business-review": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 10 in the last 30 days), newest 2026-10-23, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). GlobalData trade site; the feed works with plain and honest UA from here (its sister sites pharmaceutical-technology.com / clinicaltrialsarena.com / medicaldevice-network.com answer 403 to non-browser clients, so do not copy this row to them). 10 items/poll."
+ },
+ "pedaily-medical-health": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 20 items (20 dated, 20 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Server-rendered channel page: 20 items, each with 'YYYY-MM-DD HH:MM' in span.date, links on news.pedaily.cn. The financing-event headline stream for medical/health (A轮, 并购, 上市)."
+ },
+ "pharnexcloud-sx": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 20 items (20 dated, 17 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). 快讯流，含 BD/并购/出海交易与临床进展，约每日 3 条以上. robots.txt disallows only /zixun/shiye/ (which holds 人事变动/交易并购/医药投融资); /zixun/yuanchuang/ is allowed. Date comes from div.info via date_regex (day precision). The /zixun/shiye/rsbd (人事变动) and /jybg (交易并购) sections are robots-disallowed, so people-moves are NOT readable here."
+ },
+ "pharnexcloud-zcsp": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 20 items (20 dated, 20 in the last 30 days), newest 2026-10-26, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). NMPA 受理/获批/过评，含首仿与优先审评，每日多条. robots.txt disallows only /zixun/shiye/ (which holds 人事变动/交易并购/医药投融资); /zixun/yuanchuang/ is allowed. Date comes from div.info via date_regex (day precision). The /zixun/shiye/rsbd (人事变动) and /jybg (交易并购) sections are robots-disallowed, so people-moves are NOT readable here."
+ },
+ "pharnexcloud-trz": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 20 items (20 dated, 1 in the last 30 days), newest 2026-10-13, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). 原创投融资月报与融资事件，更新慢（约每月 1-2 条）. robots.txt disallows only /zixun/shiye/ (which holds 人事变动/交易并购/医药投融资); /zixun/yuanchuang/ is allowed. Date comes from div.info via date_regex (day precision). The /zixun/shiye/rsbd (人事变动) and /jybg (交易并购) sections are robots-disallowed, so people-moves are NOT readable here."
+ },
+ "uni-tsinghua-med-research": {
+  "enabled": true,
+  "_why_enabled_20261026": "c5-sources: read 10 items (10 dated, 10 in the last 30 days), newest 2026-10-15, robots.txt allows it, the same under the honest identity (registry/research/source-expansion-2026-10-26.json). Research-news column of the School of Medicine (papers of the school's groups). The date is a Chinese month name ('十月 15, 2026'), read by common.parse_date since 2026-10-26; cards carry a teaser (h4) cut by the page. 10 cards a page, released in batches (all ten dated 2026-10-15 when read), so the cadence is a batch every few weeks."
+ },
+ "hopkins-medicine-newsroom": {
+  "enabled": false,
+  "disabled_reason": "probe_cloudflare",
+  "_why": "re-read 2026-10-26: Cloudflare 'Attention Required' HTTP 403 for plain requests and for a headless Chromium alike (hub.jhu.edu topic feeds too); no selector helps, only another network path would"
+ },
+ "mayo-clinic-news": {
+  "enabled": false,
+  "disabled_reason": "probe_cloudflare",
+  "_why": "re-read 2026-10-26: https://newsnetwork.mayoclinic.org/feed/ answers HTTP 403 (a 387-byte body) from a plain client; the Tokyo relay never accepted it (relay_not_accepted until now). Off with the reason of the wall, not of the exit"
  }
 }

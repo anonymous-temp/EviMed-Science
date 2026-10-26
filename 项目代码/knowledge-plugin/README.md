@@ -294,6 +294,17 @@ Conference pages and inline changelogs may be monitored as one canonical documen
 body text; meeting dates remain context, never fabricated publication timestamps. CSS, scripts,
 templates and other nonvisible markup are excluded from extracted text.
 
+c5-sources (2026-10-26) added 73 verified rows (21 provincial drug regulators, 18 European national medicine regulators, 23
+university and medical-school newsrooms, 11 deals-and-financing media), recorded in
+`registry/research/source-expansion-2026-10-26.json` and each switched on by an `overrides.json` `enabled` that says why; the same
+change retired `36kr-medical` (its channel answers 404: the probe row is `egress: none`, so the build no longer loads it and the
+plugin retires the stored row) and left `hopkins-medicine-newsroom` and `mayo-clinic-news` off as `probe_cloudflare`. Three
+readings in the html-list adapter came with it: a list marker in front of the link text (`· `) is not part of the title; a title
+the page cut with `…` or `...` is read whole from the `title` attribute of the node, its link or its item when that attribute
+continues the visible text; and a date written with a Chinese month name (`十月 15, 2026`) is a date. Every row of the batch is
+`egress: direct`, which for the foreign sites is an assumption until `python -m knowledge_plugin.probe --egress direct --source <id>`
+has been run from the Beijing host; one that cannot be reached there is switched to `relay` by an override.
+
 FDA tables without detail URLs can set `link_to_source_page: true`, an actual `selectors.id`, and
 an `identity_prefix` such as `fda:novel-approvals`. This mode is restricted to FDA regulator pages.
 The real page URL remains the link, while a canonical-page/row digest uses the existing FDA event
