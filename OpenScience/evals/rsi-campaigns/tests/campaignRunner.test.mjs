@@ -108,6 +108,16 @@ test('the development and confirmation stages run once each and stop at the eval
   assert.deepEqual(store.corpora.get(result.request.corpusDigest), { recordType: 'rsi-opened-corpus', corpusDigest: result.request.corpusDigest, campaignId: ID, surface: 'synthetic:frontier-selection', openedAt: reservation.at });
 });
 
+test('a rehearsal of a public campaign reserves in the rehearsal ledger, never the quarter\'s real alpha', async () => {
+  const fixture = await registeredCampaignFixture({ classification: 'public' });
+  fixture.manifest.id = `rehearsal-${fixture.manifest.id}`;
+  const store = memoryCampaignStore();
+  const result = await runCampaign({ ...fixture, ...runnerEnvironment({ store }) });
+  assert.equal(result.status, 'awaiting-evaluation', JSON.stringify(result));
+  assert.deepEqual([...store.ledger.keys()], ['rehearsal:frontier-selection:2026-Q4']);
+  assert.equal(store.corpora.get(result.request.corpusDigest).surface, 'rehearsal:frontier-selection');
+});
+
 test('a real signed receipt and the real statistics give the verdict, which is a diagnostic, never a release', async () => {
   const fixture = await registeredCampaignFixture();
   const store = memoryCampaignStore(), now = tickingClock();

@@ -151,7 +151,8 @@ export async function runCampaign({manifest,inputs,configuration,store,attestLab
     if(!inputs.registration.statistics) return finish(stop('campaign_statistics_registration_missing'));
     const alpha=Object.values(inputs.registration.statistics?.claims ?? {}).reduce((a,b)=>a+(Number(b)||0),0);
     if(!checkpoint.reserveConfirmation) return stop('campaign_confirmation_ledger_unavailable');
-    const ledgerSurface=manifest.data.classification==='synthetic'?`synthetic:${manifest.surface}`:manifest.surface;
+    // Synthetic campaigns and rehearsals keep ledgers of their own: they must never spend a real quarter's alpha.
+    const ledgerSurface=manifest.data.classification==='synthetic'?`synthetic:${manifest.surface}`:manifest.id.startsWith('rehearsal-')?`rehearsal:${manifest.surface}`:manifest.surface;
     const reservation=await checkpoint.reserveConfirmation({surface:ledgerSurface,quarter:rsiCampaignQuarter(now()),campaignId:manifest.id,alpha,corpusDigest:source.digest,at:now()});
     if(!reservation?.authorized) return finish(stop(reservation?.reason ?? 'campaign_confirmation_ledger_unavailable'));
     state.confirmationOpenedAt ??= now();
