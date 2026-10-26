@@ -220,7 +220,7 @@ const WALK_TABLES = {
       {"view":"memory-map","route":"/app/memory/map","pattern":"/app/memory/map","family":"memory","template":"T4","budget":"data","shapes":3,"rows":true},
       {"view":"memory-shared-missing","route":"/app/memory/shared/impeccable-audit-missing","pattern":"/app/memory/shared/:token","family":"memory-record","template":"screen","rows":false},
       {"view":"autopilot","route":"/app/autopilot","pattern":"/app/autopilot/:taskId?","family":"autopilot","template":"T2","shapes":2,"rows":true},
-      {"view":"inbox","route":"/app/inbox","pattern":"/app/inbox","family":"inbox","template":"T1","shapes":2,"rows":true},
+      {"view":"inbox","route":"/app/inbox","pattern":"/app/inbox","family":"inbox","template":"T1","shapes":2,"rows":true,"budgetOverride":{"controls":9},"budgetNote":"controls: each message row carries its selection checkbox (design system v3.1, 2026-10-26: select messages and mark them read together; the batch actions are in the toolbar only while something is ticked) — a 16 px native checkbox, one look, the ninth beside the shell's, the tabs, the source and kind chips and the rows; 9 on the fixture walk of 2026-10-26 (int/1026-fix)"},
       {"view":"account","route":"/app/account","pattern":"/app/account","family":"settings","template":"T6","shapes":3,"rows":false,"rowsNote":"a settings page of rows with their own buttons (用户名, 密码 修改, 退出登录, 导出, 删除): no list whose row opens anything, in any account — the click could only ever report a coverage gap (r19-guards2, from the fixture walk)"},
       {"view":"account-appearance","route":"/app/account?tab=appearance","pattern":"/app/account","family":"settings","template":"T6","rows":false},
       {"view":"account-usage","route":"/app/account?tab=usage","pattern":"/app/account","family":"settings","template":"T6","rows":false},
@@ -1355,16 +1355,23 @@ export function measureComposition([options] = [{}]) {
     chrome = { ...box(chromeEl), position: getComputedStyle(chromeEl).position, sticky: stickyAbove(chromeEl), held: null };
     const scroller = scrollerOf(chromeEl);
     const room = scroller.scrollHeight - scroller.clientHeight;
-    if (hold && room >= 160) {
+    const scrollerTopPx = scroller === document.scrollingElement ? 0 : Math.round(scroller.getBoundingClientRect().top);
+    // A band under a page introduction (PageShell's `introduction`, task entry before the list's toolbar) holds once the page has
+    // moved past it: move far enough for that, and claim nothing where the page cannot move that far.
+    const reach = Math.round(chromeEl.getBoundingClientRect().top) - scrollerTopPx;
+    if (hold && room >= 160 && room >= reach) {
       const before = Math.round(chromeEl.getBoundingClientRect().top);
       const saved = scroller.scrollTop;
-      scroller.scrollTop = Math.min(room, 480);
+      scroller.scrollTop = Math.min(room, Math.max(480, reach + 160));
       const scrolled = Math.round(scroller.scrollTop - saved);
       const after = Math.round(chromeEl.getBoundingClientRect().top);
       scroller.scrollTop = saved;
-      chrome.held = { scrolled, before, after, scrollerTop: scroller === document.scrollingElement ? 0 : Math.round(scroller.getBoundingClientRect().top) };
+      chrome.held = { scrolled, before, after, scrollerTop: scrollerTopPx };
     }
   }
+
+  const introductionEl = live("[data-page-introduction]")[0] ?? null;
+  const introduction = introductionEl ? box(introductionEl) : null;
 
   // The module's rail: its steps (a phone folds them into one chip that says how many there are).
   const railEl = live("[data-step-rail]")[0] ?? null;
@@ -1397,7 +1404,8 @@ export function measureComposition([options] = [{}]) {
   const CONTENT = "canvas, [data-chart], [data-chart-grid], table, ul, ol";
   const blockOf = (/** @type {Element} */ el) => el.closest("section, article, [role='region'], [data-page-body], main") ?? document.body;
   const isContent = (/** @type {Element} */ el) => {
-    if (!visible(el) || el.closest("[role='dialog'], nav, aside, header, [data-toolbar], [data-page-chrome], [role='tablist'], [role='menu'], [role='listbox'], [data-outline], [data-note]")) return false;
+    // The page introduction is task entry above the list's toolbar, not what the toolbar controls.
+    if (!visible(el) || el.closest("[role='dialog'], nav, aside, header, [data-toolbar], [data-page-chrome], [data-page-introduction], [role='tablist'], [role='menu'], [role='listbox'], [data-outline], [data-note]")) return false;
     const r = el.getBoundingClientRect();
     if (el.matches("canvas, [data-chart], [data-chart-grid]")) return r.height >= 80;
     if (el.matches("table")) return el.querySelectorAll("tr").length >= 2;
@@ -1548,7 +1556,7 @@ export function measureComposition([options] = [{}]) {
   const notes = live("[data-note]").map((el) => ({ text: cut(el.textContent, 60), action: el.querySelector(PRESS) !== null, number: /\d/.test(el.textContent ?? "") }));
 
   const read = {
-    viewport: { width: window.innerWidth, height: window.innerHeight }, height, title, chrome, stepRail,
+    viewport: { width: window.innerWidth, height: window.innerHeight }, height, title, chrome, introduction, stepRail,
     workbenchActions: { workbenches: live("[data-vcr-method-workbench]").length, bars: live("[data-vcr-method-workbench] [data-vcr-run-actions]").length },
     geoContext: (() => {
       const header = live("[data-page-header] button");
@@ -1831,8 +1839,10 @@ export function compositionFindings(name, viewportName, c) {
     add("control-after-content", `“${group.control}” (at ${group.controlTop} px) stands after the ${group.content} it controls (at ${group.contentTop} px)`);
   }
   // A page's toolbar is above the fold of what it filters; a block's own (Section's `toolbar` slot) stands where its block does, further down a long page.
+  // What it filters starts under the page introduction when there is one (task entry, not filtered content): the fold is counted from there.
+  const filteredFrom = c.introduction?.bottom ?? 0;
   for (const toolbar of pageLevel(c.toolbars)) {
-    if (toolbar.top >= TOOLBAR_VIEWPORTS * c.viewport.height) add("toolbar-position", `the toolbar “${toolbar.label}” starts at ${toolbar.top} px, below ${Math.round(TOOLBAR_VIEWPORTS * c.viewport.height)} px (${TOOLBAR_VIEWPORTS} × the window)`, toolbar.top);
+    if (toolbar.top - filteredFrom >= TOOLBAR_VIEWPORTS * c.viewport.height) add("toolbar-position", `the toolbar “${toolbar.label}” starts at ${toolbar.top} px, below ${Math.round(filteredFrom + TOOLBAR_VIEWPORTS * c.viewport.height)} px (${filteredFrom ? "the introduction's end + " : ""}${TOOLBAR_VIEWPORTS} × the window)`, toolbar.top);
   }
 
   // One layer of each kind of switch on a page: one tab list, one view switch written as radios, one toolbar (a block's own is its block's).

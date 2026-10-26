@@ -47,6 +47,11 @@ test("a toolbar further down than the window's height and a fifth is below the f
   assert.deepEqual(rules("geo-sources", "desktop", low), ["toolbar-position"]);
   assert.match(texts("geo-sources", "desktop", low)[0], /the toolbar “筛选与操作” starts at 1200 px, below 1134 px \(1.2 × the window\)/);
   assert.deepEqual(rules("geo-sources", "desktop", good({ toolbars: [{ label: "筛选与操作", inChrome: true, inSection: false, ...box(1133, 28), controls: {} }] })), []);
+  // Under a page introduction (task entry above the list's toolbar) the fold is counted from the introduction's end: what the toolbar
+  // filters starts there. A toolbar far below the introduction is still below the fold.
+  const introduced = { introduction: { ...box(120, 600) } };
+  assert.deepEqual(rules("geo-sources", "desktop", good({ ...introduced, toolbars: [{ label: "筛选与操作", inChrome: true, inSection: false, ...box(1200, 28), controls: {} }] })), []);
+  assert.deepEqual(rules("geo-sources", "desktop", good({ ...introduced, toolbars: [{ label: "筛选与操作", inChrome: true, inSection: false, ...box(1900, 28), controls: {} }] })), ["toolbar-position"]);
   // A block's own toolbar stands where its block does: the evidence card's 筛选来源 is 1,331 px down a page of 2.4 windows, above its own list.
   assert.deepEqual(rules("geo-sources", "desktop", good({ toolbars: [{ label: "筛选来源", inChrome: false, inSection: true, ...box(1331, 28), controls: {} }, ...good().toolbars] })), []);
 });
