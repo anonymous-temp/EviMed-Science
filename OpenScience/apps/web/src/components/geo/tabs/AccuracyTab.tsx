@@ -125,6 +125,7 @@ function Accuracy({
   const unknown = readGeoCell(modes?.unknown);
   const refused = readGeoCell(modes?.refused);
 
+  const severeReading = safetyReading(diagnosis);
   const tiles = [
     {
       key: "accuracy",
@@ -141,8 +142,9 @@ function Accuracy({
     {
       key: "severe",
       label: "严重讲错",
-      reading: safetyReading(diagnosis),
-      value: safetyReading(diagnosis).kind === "measured" ? String(counts.severe) : "未测",
+      // The label already says 「严重讲错」: the unit beside the figure is 「条」, not the overview tile's 「条严重讲错」 repeated after it.
+      reading: severeReading.kind === "measured" ? { ...severeReading, unit: "条" } : severeReading,
+      value: severeReading.kind === "measured" ? String(counts.severe) : "未测",
       unit: "条" as string | undefined,
       placeholder: false,
       hint: undefined as string | undefined,

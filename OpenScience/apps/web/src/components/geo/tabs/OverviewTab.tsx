@@ -101,7 +101,9 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
           <StatTile
             key={tile.key}
             label={tile.label}
-            reading={tile.key === "safety" && diagnosis.state.kind === "loading" ? { kind: "loading" } : tile.key === "safety" && diagnosis.state.kind === "error" ? { kind: "failed", error: diagnosis.state.message, retry: diagnosis.reload } : tile.reading}
+            // A diagnosis that was not read is said once in the tile (the word) and once with its reason and 重试 below the band: a tile that
+            // carried the message and a retry of its own repeated both.
+            reading={tile.key === "safety" && diagnosis.state.kind === "loading" ? { kind: "loading" } : tile.key === "safety" && diagnosis.state.kind === "error" ? { kind: "unmeasured", reason: "读取失败" } : tile.reading}
             renderMeasured={() => tile.value}
             hint={tile.hint}
             lead={tile.lead}

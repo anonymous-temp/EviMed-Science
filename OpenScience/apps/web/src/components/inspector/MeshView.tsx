@@ -9,7 +9,7 @@ import { extOf } from "@/lib/artifacts";
 import { cn } from "@/lib/cn";
 import { parseFailureMessage } from "@/lib/errorText";
 import { formatNumber } from "@/lib/format";
-import { needsScientificFallback, scientificFallbackMaterial } from "./meshMaterial";
+import { meshHelpLine, needsScientificFallback, scientificFallbackMaterial } from "./meshMaterial";
 import { viewerKey } from "./viewerKeyboard";
 import { IconButton } from "@/components/ui/IconButton";
 
@@ -283,7 +283,7 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
       {...{ tabIndex: 0, role: "region", "aria-label": `${filename} 三维模型交互视图` }}
       onWheelCapture={(e) => { if (e.ctrlKey || e.metaKey) e.stopPropagation(); }}
       onKeyDown={(e) => { if (!viewerKey(e)) return; if (e.key === "0") resetView(); else if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "+", "=", "-"].includes(e.key)) keyboardRef.current?.(e.key, e.shiftKey); else return; e.preventDefault(); }}>
-      <p className="relative order-1 rounded bg-surface p-2 text-caption text-text">聚焦视图：方向键平移，Shift+方向键旋转，+ / - 缩放，0 重置。模型包含 {meta ? formatNumber(meta.tris) : "未知数量的"} 个三角面。</p>
+      <p className="relative order-1 rounded bg-surface p-2 text-caption text-text">{meshHelpLine(meta?.tris)}</p>
       <div className="relative order-2 flex flex-wrap gap-2 rounded bg-surface p-2 text-caption text-text">{[{ label: "左移", key: "ArrowLeft" }, { label: "右移", key: "ArrowRight" }, { label: "上移", key: "ArrowUp" }, { label: "下移", key: "ArrowDown" }, { label: "左转", key: "ArrowLeft", rotate: true }, { label: "右转", key: "ArrowRight", rotate: true }, { label: "放大", key: "+" }, { label: "缩小", key: "-" }].map((action) => <Button variant="secondary" size="md" key={action.label} type="button" onClick={() => keyboardRef.current?.(action.key, !!action.rotate)}>{action.label}</Button>)}</div>
       <div ref={mountRef} className="relative min-h-40 flex-1" aria-label={`${filename} 的三维模型预览`} />
 

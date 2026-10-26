@@ -86,6 +86,15 @@ it("keeps partially checked and unknown answers visible beside answer-level accu
   expect(screen.getByText(/事实准确率按可判定的回答计算/)).toBeVisible();
 });
 
+it("reads the severe tile as 「严重讲错 3 条」, the unit after its label and not the label's words again", async () => {
+  const diagnosis = diagnosisWith([]);
+  client.getGeoDiagnosis.mockResolvedValue({ ...diagnosis, round: { ...diagnosis.round, done: 12 }, errorCounts: { total: 3, open: 3, acting: 0, awaiting_remeasure: 0, closed: 0, severe: 3 } });
+  renderTab();
+  const tile = await screen.findByRole("group", { name: "严重讲错" });
+  expect(tile.querySelector("[data-stat-value]")).toHaveTextContent(/^3条$/);
+  expect(tile).not.toHaveTextContent("条严重讲错");
+});
+
 it("identifies historical accuracy instead of applying the new completeness promise to an old calculation", async () => {
   const project = geoProject();
   const accuracy = project.overview.metrics.find(item => item.key === "accuracy");

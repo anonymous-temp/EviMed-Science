@@ -926,6 +926,9 @@ describe("总览 while the AI answers cannot be measured", () => {
     const paused = status.closest("section")!;
     expect(paused).toHaveTextContent("AI 回答测量暂停中（10月20日起）");
     expect(paused).toHaveTextContent("测量服务暂时连不上，恢复后自动继续");
+    // The sentence carries its action: the trend says what the last round measured.
+    const trendLink = within(paused as HTMLElement).getByRole("link", { name: "查看监测走势" });
+    expect(trendLink.getAttribute("href")).toBe("/app/geo/geo_1/visibility#geo-trend");
     expect(list).not.toHaveTextContent("AI 回答测量暂停中");
     expect(list).toHaveTextContent("诊断没有做完");
     expect(list).toHaveTextContent("恢复后再接着做");
@@ -955,6 +958,12 @@ describe("总览 while the AI answers cannot be measured", () => {
     const contextFailure = message.closest<HTMLElement>('[role="note"]');
     expect(contextFailure).toBeVisible();
     expect(contextFailure).toHaveTextContent(/^用药安全和同类药排名没有读到：/);
+    // The tile says the word and nothing else: the reason and the one 重试 are the note's.
+    const tile = screen.getByRole("group", { name: "用药安全" });
+    expect(tile).toHaveTextContent("读取失败");
+    expect(within(tile).queryByRole("button", { name: /重试/ })).not.toBeInTheDocument();
+    expect(within(tile).queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /重试/ })).toHaveLength(1);
     client.getGeoDiagnosis.mockResolvedValue(severeOne());
     await userEvent.click(within(contextFailure!).getByRole("button", { name: /重试/ }));
     expect(await screen.findByText(/还有 1 条严重讲错待处理/)).toBeInTheDocument();
