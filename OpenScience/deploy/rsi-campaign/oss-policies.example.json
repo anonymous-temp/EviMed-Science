@@ -1,0 +1,13 @@
+{
+  "exampleOnly": true,
+  "ready": false,
+  "resourceBindingsVerified": false,
+  "permissionsVerified": false,
+  "instructions": "Replace empty Resource placeholders with the specific bucket/prefix ARN. Attach each policy only to its named identity. These examples do not prove effective RAM permissions. Production and lab credentials must be separate private files. Never add inline credentials.",
+  "policies": {
+    "inputProducer": { "Version": "1", "Statement": [{ "Effect": "Allow", "Action": ["oss:PutObject", "oss:GetObject"], "Resource": [] }] },
+    "inputReader": { "Version": "1", "Statement": [{ "Effect": "Allow", "Action": ["oss:GetObject"], "Resource": [] }, { "Effect": "Allow", "Action": ["oss:ListObjects"], "Resource": [], "Condition": { "StringLike": { "oss:Prefix": ["rsi/v1/incidents/*"] }, "NumericLessThanEquals": { "oss:MaxKeys": "100" } } }] },
+    "outputProducer": { "Version": "1", "Statement": [{ "Effect": "Allow", "Action": ["oss:PutObject", "oss:GetObject"], "Resource": [] }] },
+    "outputReader": { "Version": "1", "Statement": [{ "Effect": "Allow", "Action": ["oss:GetObject"], "Resource": [] }, { "Effect": "Allow", "Action": ["oss:ListObjects"], "Resource": [], "Condition": { "StringLike": { "oss:Prefix": ["rsi/v1/bundles/*"] }, "NumericLessThanEquals": { "oss:MaxKeys": "100" } } }] }
+  }
+}
