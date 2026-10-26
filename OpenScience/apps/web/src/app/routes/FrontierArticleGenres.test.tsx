@@ -48,6 +48,13 @@ describe("a paper", () => {
     expect(quote).toHaveTextContent("作者结论");
     expect(quote.querySelector("blockquote")).toHaveAttribute("lang", "en");
     expect(quote).toHaveTextContent("口服 PCSK9 抑制降低了主要心血管事件的风险。");
+    // 要点 and the authors' words are at the text's reading size at every width (16, 18 from 1280 px), as the text and the 解读 are: a 16 px
+    // 要点 under an 18 px text was a size pair of its own on a wide reader (release walk of evimed-5ae53861dc26-1).
+    const textSize = within(text).getByText(/^口服 PCSK9 抑制可降低/).closest("[data-prose]")!;
+    for (const words of [...brief.querySelectorAll("dd"), quote.querySelector("blockquote")!, quote.querySelector("p")!]) {
+      expect(words).toHaveClass("text-reading", "xl:text-reading-lg");
+    }
+    expect(textSize).toHaveClass("text-reading", "xl:text-reading-lg");
     // The abstract once, folded to its first paragraph under what was written about it.
     expect(within(text).getByText(/^口服 PCSK9 抑制可降低/)).toBeInTheDocument();
     expect(within(text).queryByText(/^在一项双盲试验中/)).not.toBeInTheDocument();

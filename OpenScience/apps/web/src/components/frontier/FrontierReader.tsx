@@ -227,10 +227,15 @@ export function ReaderLead({ text, className }: { text: string; className?: stri
 
 const articlePath = (id: string) => `/app/frontier/items/${encodeURIComponent(id)}`;
 
+/** The reading size of an article's words: 16 below 1280 px, 18 from there (DESIGN.md, the frontier reader). */
+const READING = "text-reading xl:text-reading-lg";
+
 /**
  * 「AI 要点」 (ct-write 2026-10-24): under the 导读, the item's facts as the fields its genre is read by — a paper's 研究问题, 设计与对象,
  * 主要结果, 安全性, 局限; a policy's 发文机关与文号, 核心内容, 适用对象, 时间节点; a deal's 事件, 交易与金额, 资产与阶段 — one label and its
- * sentence (or its few items) per row, the label in the block-label grey and the words at the reading size. The source's own words
+ * sentence (or its few items) per row, the label in the block-label grey and the words at the reading size — the text's, 16 below 1280 px
+ * and 18 from there (`READING`): a 16 px 要点 under an 18 px text was a size pair of its own on a wide reader (release walk of
+ * evimed-5ae53861dc26-1, seven pairs against six). The source's own words
  * (作者结论, 推荐意见, 警示原文 …) close it as a quotation, the original as written and its Chinese under it; a reading of another report
  * opens with 「解读的研究」, which is that report's article.
  */
@@ -248,7 +253,7 @@ export function ReaderBrief({ brief, item, className }: { brief: FrontierBrief; 
         {brief.about && (
           <div className="grid gap-x-4 gap-y-0.5 border-b border-faint py-2.5 first:pt-0 sm:grid-cols-[6rem_1fr]">
             <dt className="text-caption text-text-3 sm:pt-1">解读的研究</dt>
-            <dd className="min-w-0 break-words text-reading text-text">
+            <dd className={cn("min-w-0 break-words text-text", READING)}>
               <Link to={articlePath(brief.about.publicId)} state={state} className="rounded text-link hover:underline">《{brief.about.title}》</Link>
               {subject?.text && <p className="mt-1 text-text-2">{subject.text}</p>}
             </dd>
@@ -257,7 +262,7 @@ export function ReaderBrief({ brief, item, className }: { brief: FrontierBrief; 
         {points.map((point) => (
           <div key={point.key} className="grid gap-x-4 gap-y-0.5 border-b border-faint py-2.5 first:pt-0 last:border-b-0 sm:grid-cols-[6rem_1fr]">
             <dt className="text-caption text-text-3 sm:pt-1">{point.label}</dt>
-            <dd className="min-w-0 break-words text-reading text-text">
+            <dd className={cn("min-w-0 break-words text-text", READING)}>
               {point.text ?? (point.items.length === 1 ? point.items[0] : (
                 <ul className="list-disc space-y-1 pl-5">{point.items.map((entry, index) => <li key={index}>{entry}</li>)}</ul>
               ))}
@@ -268,8 +273,8 @@ export function ReaderBrief({ brief, item, className }: { brief: FrontierBrief; 
       {brief.quote && (
         <figure className="mt-4 max-w-measure-body border-l-2 border-border pl-4 xl:max-w-read">
           <figcaption className="text-caption text-text-3">{brief.quote.label}</figcaption>
-          <blockquote lang={quoteLang} className="mt-1 break-words text-reading text-text-2">{brief.quote.text}</blockquote>
-          {brief.quote.zh && <p className="mt-1 break-words text-reading text-text-2">{brief.quote.zh}</p>}
+          <blockquote lang={quoteLang} className={cn("mt-1 break-words text-text-2", READING)}>{brief.quote.text}</blockquote>
+          {brief.quote.zh && <p className={cn("mt-1 break-words text-text-2", READING)}>{brief.quote.zh}</p>}
         </figure>
       )}
     </Block>
