@@ -22,6 +22,9 @@ function show(path = '/questions', viewer = false) { return render(<MemoryRouter
 beforeEach(() => { sessionStorage.clear(); localStorage.clear(); identity.fetchWebMe.mockReset(); identity.fetchWebMe.mockResolvedValue({ user: { id: 'u1' }, tenant: { id: 't1' } }); Object.values(client).forEach(fn => fn.mockReset()); client.getGeoDiagnosisProgress.mockResolvedValue(progress()); client.startGeoDiagnosis.mockResolvedValue({ roundId: 'r1', setVersion: 3 }); client.recoverGeoDiagnosis.mockResolvedValue({ roundId: 'r2', setVersion: 3 }); });
 it('opens import on an empty set, preserves quoted CSV duplicates and saves only after preview', async () => {
   show();
+  // The step's actions are its block's, not the page's primary (the header's, DESIGN.md T3; the fixture walk of b559d4b7e).
+  expect(screen.getByRole('button', { name: '导入问句' })).not.toHaveClass('bg-accent');
+  expect(screen.getByRole('button', { name: '启动第 3 版诊断' })).not.toHaveClass('bg-accent');
   await userEvent.click(screen.getByRole('button', { name: '导入问句' }));
   const csv = new File(['ID,Question\n001,"  A, B\nC  "\n0,"  A, B\nC  "'], 'actual130.csv', { type: 'text/csv' });
   // jsdom File has no text/arrayBuffer; the fixture supplies original bytes.

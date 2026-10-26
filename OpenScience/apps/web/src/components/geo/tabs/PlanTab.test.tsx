@@ -320,7 +320,12 @@ it("stages a versioned action as an unsent draft in the current native conversat
   const action = {key:"fill_gap:g1:missing_evidence",kind:"fill_gap",group:{id:"g1",name:"Selected group"},need:{judgment:"Explain the finding"},what:{title:"Selected content"},sources:[],work:{mode:"new",outputs:["article.md"]}};
   client.getGeoStrategy.mockResolvedValue({...strategyFilled,version:7,implementation:{actions:[action]},freshness:{status:"unknown",reasons:["basis_unavailable"]}});
   renderPlan();
-  await userEvent.click(await screen.findByRole("button",{name:"用于内容"}));
+  const use = await screen.findByRole("button",{name:"用于内容"});
+  // A module tab's body holds no primary action (DESIGN.md T3: the page's is the header's): the plan's actions are its section's, and
+  // 刷新方案 is the text action of its sentence (the fixture walk of b559d4b7e found 53 primaries under the header's row on 方案).
+  for (const button of [use, screen.getByRole("button",{name:"调整方案"}), screen.getByRole("button",{name:"刷新方案"})]) expect(button).not.toHaveClass("bg-accent");
+  expect(screen.getByRole("button",{name:"刷新方案"}).closest("[data-note]")).not.toBeNull();
+  await userEvent.click(use);
   await waitFor(()=>expect(client.stageGeoPlanContext).toHaveBeenCalled());
   expect(client.stageGeoPlanContext.mock.calls[0][1]).toMatchObject({mode:"content",strategyVersion:7,sessionId:"current-native-session",groupIds:["g1"],actionKeys:[action.key]});
   expect(open).toHaveBeenCalledWith(expect.objectContaining({sessionId:"current-native-session",geoPlanContext:{referenceId:`gpc_${"a".repeat(64)}`}}),"Selected plan draft");

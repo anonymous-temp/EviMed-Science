@@ -53,12 +53,14 @@ export function PlanTab({ geoId, project, sourceId, sourceUrl, selectionRef }: {
   };
   return (
     <div id="implementation-plan" data-geo-tab="plan" className="flex flex-col gap-10">
-      <Section title="实施方案" toolbar={mayConverse ? <Button disabled={busy} onClick={() => void handoff()}>{plan.version == null ? "生成方案" : "调整方案"}</Button> : undefined}>
-        {error && <Note tone="warn" action={<Button size="sm" onClick={reload}>刷新方案</Button>}>{error}</Note>}
-        {plan.freshness?.status === "needs_update" && <Note tone="warn" action={<Button size="sm" onClick={reload}>刷新方案</Button>}>所选资料或目标已变化，当前方案保留原有依据，可在对话中更新。</Note>}
-        {plan.freshness?.status === "unknown" && <Note action={<Button size="sm" onClick={reload}>刷新方案</Button>}>部分依据暂时无法核实；金额与工作量未估时保留为空。</Note>}
+      {/* A module tab's body holds no primary action: the page's is the header's (DESIGN.md T3). The plan's actions are its section's —
+        * secondary, and 刷新方案 the text action of the sentence it ends (the fixture walk of b559d4b7e found them under the header's row). */}
+      <Section title="实施方案" toolbar={mayConverse ? <Button variant="secondary" disabled={busy} onClick={() => void handoff()}>{plan.version == null ? "生成方案" : "调整方案"}</Button> : undefined}>
+        {error && <Note tone="warn" action={<Button variant="text" size="sm" onClick={reload}>刷新方案</Button>}>{error}</Note>}
+        {plan.freshness?.status === "needs_update" && <Note tone="warn" action={<Button variant="text" size="sm" onClick={reload}>刷新方案</Button>}>所选资料或目标已变化，当前方案保留原有依据，可在对话中更新。</Note>}
+        {plan.freshness?.status === "unknown" && <Note action={<Button variant="text" size="sm" onClick={reload}>刷新方案</Button>}>部分依据暂时无法核实；金额与工作量未估时保留为空。</Note>}
         {plan.version != null && <p className="text-caption text-text-3">方案版本 {plan.version} · 目标为规划值</p>}
-        {plan.version == null && <Note action={<Button size="sm" onClick={reload}>刷新方案</Button>}>根据当前诊断范围制定内容、渠道和工作顺序；尚无引用信源也可以制定方案。</Note>}
+        {plan.version == null && <Note action={<Button variant="text" size="sm" onClick={reload}>刷新方案</Button>}>根据当前诊断范围制定内容、渠道和工作顺序；尚无引用信源也可以制定方案。</Note>}
         <Link to={destination(geoId, {tab:"actions",section:"budget"})} className="text-caption text-accent hover:underline">查看实际投放预算</Link>
         {plan.basis?.capturedAt && <FactList rows={[{label:plan.readingsKind === "submitted_input" ? "本次方案依据" : "方案依据日期",value:plan.basis.capturedAt.slice(0,10)}]} />}
         {plan.summary && <p className="max-w-measure text-ui">{plan.summary}</p>}
@@ -68,7 +70,7 @@ export function PlanTab({ geoId, project, sourceId, sourceUrl, selectionRef }: {
           {action.need.judgment && <p className="max-w-measure text-ui">{action.need.judgment}</p>}
           {action.sources.map(source => <p key={source.domain ?? source.channel} className="max-w-measure text-caption">{source.url || source.domain || source.name} · {source.url && plan.basis?.focus.url === source.url ? "所选引用页面" : "可选渠道"}{source.why ? ` · ${source.why}` : ""}</p>)}
 
-          {mayConverse && <Button disabled={busy || plan.version == null} onClick={() => void handoff(action)}>用于内容</Button>}
+          {mayConverse && <Button variant="secondary" disabled={busy || plan.version == null} onClick={() => void handoff(action)}>用于内容</Button>}
         </div>)}
       </Section>
       <GeoAnalysisWorkbench key={`frozen-plan:${plan.version??"none"}`} geoId={geoId} project={project} initialView="V26" initialDescriptor={{viewId:"V26",...(plan.version!=null?{strategyVersion:plan.version}:{})}} embedded/>
