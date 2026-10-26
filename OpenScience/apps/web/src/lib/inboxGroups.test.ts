@@ -1,4 +1,3 @@
-import { formatRelativeTime } from "./format";
 import { describe, expect, it } from "vitest";
 import type { InboxItem } from "@/lib/inboxClient";
 import { dayKey, dayLabel, groupInbox, inboxGroupTitle, inboxSourceOf, inboxWhen, orderInbox, severityOf } from "./inboxGroups";
@@ -19,27 +18,28 @@ describe("severityOf", () => {
 });
 
 describe("dayLabel", () => {
-  const now = new Date(2026, 8, 18, 15, 0).getTime();
+  // Instants carry their +08:00: the days are Beijing's whatever zone the machine runs in.
+  const now = Date.parse("2026-09-18T15:00:00+08:00");
   it("says 今天 and 昨天, then the date, with the year only when it differs", () => {
     expect(dayLabel(dayKey(now)!, now)).toBe("今天");
-    expect(dayLabel(dayKey(new Date(2026, 8, 17, 23, 59))!, now)).toBe("昨天");
+    expect(dayLabel(dayKey(new Date("2026-09-17T23:59:00+08:00"))!, now)).toBe("昨天");
     expect(dayLabel("2026-09-16", now)).toBe("9月16日");
     expect(dayLabel("2025-12-31", now)).toBe("2025年12月31日");
   });
 });
 
 describe("inboxWhen", () => {
-  const now = new Date(2026, 8, 18, 15, 0).getTime();
+  const now = Date.parse("2026-09-18T15:00:00+08:00");
   it("is the clock today and the day before that, never both", () => {
-    expect(inboxWhen(new Date(2026, 8, 18, 8, 0).toISOString(), now)).toBe("7 小时前");
-    expect(inboxWhen(new Date(2026, 8, 17, 20, 0).toISOString(), now)).toBe("19 小时前");
-    expect(inboxWhen(new Date(2026, 8, 12, 9, 0).toISOString(), now)).toBe(formatRelativeTime(new Date(2026, 8, 12, 9, 0), new Date(now)));
+    expect(inboxWhen(new Date("2026-09-18T08:00:00+08:00").toISOString(), now)).toBe("7 小时前");
+    expect(inboxWhen(new Date("2026-09-17T20:00:00+08:00").toISOString(), now)).toBe("19 小时前");
+    expect(inboxWhen(new Date("2026-09-12T09:00:00+08:00").toISOString(), now)).toBe("2026-09-12 09:00");
     expect(inboxWhen("not a date", now)).toBe("");
   });
 });
 
 describe("orderInbox", () => {
-  const todayAt = (h: number) => new Date(2026, 8, 18, h).toISOString();
+  const todayAt = (h: number) => new Date(`2026-09-18T${String(h).padStart(2, "0")}:00:00+08:00`).toISOString();
 
   it("pins only unread safety, newest first, and keeps everything else in the server's order", () => {
     const order = orderInbox([

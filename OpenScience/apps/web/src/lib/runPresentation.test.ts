@@ -1,7 +1,7 @@
 import { formatRelativeTime } from "./format";
 import { describe, expect, it } from "vitest";
 import type { WebAgentRun } from "@/lib/apiClient";
-import { compactTime, relativeTime, runDidNotDeliver, runMetaLine, runQuestion, runState, runTitle, undeliveredFiles, webRunOutcome } from "./runPresentation";
+import { columnTime, compactTime, relativeTime, runDidNotDeliver, runMetaLine, runQuestion, runState, runTitle, undeliveredFiles, webRunOutcome } from "./runPresentation";
 
 // The run ledger's presentation had no direct test (2026-09-16 review, D5):
 // every page that shows a run reads its title, its dot and its outcome here.
@@ -65,7 +65,25 @@ describe("the state a run is shown in", () => {
     const earlier = new Date(today.getFullYear(), 0, 2, 9, 0).getTime();
     if (now - earlier > 86_400_000) expect(relativeTime(earlier, now)).toBe(formatRelativeTime(earlier, new Date(now)));
     expect(relativeTime(new Date(2020, 8, 20, 9, 0).getTime(), now)).toBe(formatRelativeTime(new Date(2020, 8, 20, 9, 0), new Date(now)));
-    expect(compactTime(new Date(2020, 8, 20, 9, 0).getTime(), now)).toBe(formatRelativeTime(new Date(2020, 8, 20, 9, 0), new Date(now)));
+  });
+
+  // The sidebar's time cell is 96 px and the step table's 64 px: after a day they take the calendar day in Beijing time, not the
+  // 16-character stamp the long form writes.
+  it("gives a narrow column the day, in Beijing time, after the first day", () => {
+    const now = Date.parse("2026-09-30T10:00:00Z");
+    expect(compactTime(now - 30_000, now)).toBe("刚刚");
+    expect(compactTime(now - 5 * 60_000, now)).toBe("5 分钟");
+    expect(compactTime(now - 3 * 3_600_000, now)).toBe("3 小时");
+    expect(columnTime(now - 5 * 60_000, now)).toBe("5 分钟前");
+    expect(columnTime(now - 3 * 3_600_000, now)).toBe("3 小时前");
+    expect(compactTime(0, now)).toBe("");
+    for (const column of [compactTime, columnTime]) {
+      expect(column(Date.parse("2026-09-25T08:00:00Z"), now)).toBe("9月25日");
+      expect(column(Date.parse("2025-09-25T08:00:00Z"), now)).toBe("2025-09-25");
+      // 17:00 UTC is already the next day in Beijing.
+      expect(column(Date.parse("2026-09-25T17:00:00Z"), now)).toBe("9月26日");
+      expect(column(Date.parse("2026-09-25T08:00:00Z"), now)).not.toMatch(/\d{2}:\d{2}/);
+    }
   });
 });
 

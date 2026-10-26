@@ -2,7 +2,7 @@ import { resumeVcrStep } from "../vcrConversationActions";
 import { Link } from "react-router";
 import { VCR_STEPS, VCR_STEP_STATUS_LABELS_ZH } from "@evimed/domain";
 import { type VcrAttention, type VcrCountKey, type VcrStepKey, type VcrStudy, type VcrTabKey } from "@/lib/vcrClient";
-import { relativeTime } from "@/lib/runPresentation";
+import { columnTime } from "@/lib/runPresentation";
 import { AllowanceTopUp } from "@/components/runs/AllowanceTopUp";
 import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
@@ -99,7 +99,7 @@ function StepList({ study, studyId }: { study: VcrStudy; studyId: string }) {
                 <>
                   <span data-vcr-step-state={status} className="w-14 shrink-0 text-text-2">{(VCR_STEP_STATUS_LABELS_ZH as Record<string, string>)[status] ?? "未开始"}</span>
                   <span className="min-w-20 text-right tabular-nums text-text sm:min-w-28">{note ?? ""}</span>
-                  <span className="w-16 shrink-0 text-right tabular-nums max-sm:hidden">{Number.isFinite(moved) ? relativeTime(moved) : ""}</span>
+                  <span className="w-16 shrink-0 text-right tabular-nums max-sm:hidden">{Number.isFinite(moved) ? columnTime(moved) : ""}</span>
                 </>
               )}
             />

@@ -20,7 +20,8 @@ const MINUS = "−";
 const NBSP = " ";
 
 describe("formatDate (spec §14.3)", () => {
-  const day = new Date(2026, 8, 6, 14, 5);
+  // Beijing time whatever zone the machine runs in (AT45): the instants carry their +08:00.
+  const day = new Date("2026-09-06T14:05:00+08:00");
   it("writes prose, table and short forms, never 2026/9/6", () => {
     expect(formatDate(day, "prose")).toBe("2026年9月6日");
     expect(formatDate(day, "iso")).toBe("2026-09-06");
@@ -169,7 +170,7 @@ describe("humanSize", () => {
 
 describe("formatClock", () => {
   it("is hour and minute in one locale, and blank for a value that is not a time", () => {
-    expect(formatClock(new Date(2026, 0, 1, 14, 5).toISOString())).toBe("14:05");
+    expect(formatClock(new Date("2026-01-01T14:05:00+08:00").toISOString())).toBe("14:05");
     expect(formatClock(null)).toBe("");
     expect(formatClock("not a time")).toBe("");
   });
@@ -177,13 +178,13 @@ describe("formatClock", () => {
 
 describe("formatDateTime", () => {
   it("renders zh-CN date-time text", () => {
-    const text = formatDateTime(new Date(2026, 0, 5, 13, 7));
+    const text = formatDateTime(new Date("2026-01-05T13:07:00+08:00"));
     expect(text).toContain("2026");
     expect(text).toContain("13");
   });
 
   it("honours Intl field options", () => {
-    const text = formatDateTime(new Date(2026, 6, 5, 13, 7), {
+    const text = formatDateTime(new Date("2026-07-05T13:07:00+08:00"), {
       year: "numeric",
       month: "short",
       day: "numeric",
@@ -196,12 +197,12 @@ describe("formatDateTime", () => {
 });
 
 describe("formatDay", () => {
-  const now = new Date(2026, 8, 24, 10, 0);
+  const now = new Date("2026-09-24T10:00:00+08:00");
 
   // Appendix E #28: a list dates last year as 2025-12-31, not in prose form.
   it("dates a day as 9月22日 this year and 2025-12-31 before it", () => {
-    expect(formatDay(new Date(2026, 8, 22, 23, 30).toISOString(), now)).toBe("9月22日");
-    expect(formatDay(new Date(2025, 11, 31, 8, 0).toISOString(), now)).toBe("2025-12-31");
+    expect(formatDay(new Date("2026-09-22T23:30:00+08:00").toISOString(), now)).toBe("9月22日");
+    expect(formatDay(new Date("2025-12-31T08:00:00+08:00").toISOString(), now)).toBe("2025-12-31");
     expect(formatDay("2024-03-05", now)).toBe("2024-03-05");
   });
 

@@ -1,6 +1,6 @@
 import { errorCodeMessage, runOutcomeKind } from "@evimed/domain";
 import type { WebAgentRun, WebAgentRunStatus } from "@/lib/apiClient";
-import { formatRelativeTime } from "@/lib/format";
+import { formatDate, formatDay, formatRelativeTime } from "@/lib/format";
 import { capabilityTitle } from "@/lib/researchAgentUi";
 
 export const WEB_RUN_STATUS_LABEL: Record<WebAgentRunStatus, string> = {
@@ -117,9 +117,28 @@ export function relativeTime(ms: number, now = Date.now()): string {
   return ms ? formatRelativeTime(ms, new Date(now)) : "";
 }
 
-/** Compact lists retain the same time semantics as every other host surface. */
+/**
+ * The time of a narrow column, in Beijing time: the elapsed time under a day (`ago` adds the 「前」), then the calendar day —
+ * `9月25日` this year, `2025-09-25` before. A column of 64–96 px has no room for the long stamp `relativeTime` writes after a
+ * day; the exact instant belongs in the cell's tooltip (`formatDateTime`).
+ */
+function elapsedOrDay(ms: number, now: number, ago: "" | "前"): string {
+  if (!ms) return "";
+  const seconds = Math.max(0, Math.floor((now - ms) / 1000));
+  if (seconds < 60) return "刚刚";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} 分钟${ago}`;
+  if (seconds < 86_400) return `${Math.floor(seconds / 3600)} 小时${ago}`;
+  return formatDay(formatDate(ms, "iso"), new Date(now));
+}
+
+/** A one-line list's time column (the sidebar): 刚刚 / N 分钟 / N 小时, then the day. */
 export function compactTime(ms: number, now = Date.now()): string {
-  return relativeTime(ms, now);
+  return elapsedOrDay(ms, now, "");
+}
+
+/** A fixed-width time column (a table of steps): 刚刚 / N 分钟前 / N 小时前, then the day. */
+export function columnTime(ms: number, now = Date.now()): string {
+  return elapsedOrDay(ms, now, "前");
 }
 
 /**

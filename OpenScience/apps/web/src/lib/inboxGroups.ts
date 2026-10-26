@@ -54,14 +54,15 @@ export function dayKey(value: string | number | Date): string | null {
   return formatDate(value) || null;
 }
 
-/** 今天 / 昨天 / 9月16日 / 2025年9月16日. */
+/** 今天 / 昨天 / 9月16日 / 2025年9月16日, the days of the display zone (Beijing), whatever zone the browser is in. */
 export function dayLabel(key: string, now = Date.now()): string {
   const today = dayKey(now);
-  const yesterday = dayKey(new Date(now).setDate(new Date(now).getDate() - 1));
+  // Beijing keeps no daylight saving, so a day back is 24 hours back.
+  const yesterday = dayKey(now - 86_400_000);
   if (key === today) return "今天";
   if (key === yesterday) return "昨天";
   const [year, month, day] = key.split("-").map(Number);
-  return year === new Date(now).getFullYear() ? `${month}月${day}日` : `${year}年${month}月${day}日`;
+  return year === Number(today?.slice(0, 4)) ? `${month}月${day}日` : `${year}年${month}月${day}日`;
 }
 
 /** Clock in the shared display zone. */

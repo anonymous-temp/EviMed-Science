@@ -40,17 +40,12 @@ it("preserves calendar-only and partial source dates without adding a clock or c
   expect(screen.getByRole("table", { name: "保留的历史观察值" })).toHaveTextContent("2026-10-01T09:30");
   expect(document.body.textContent).not.toMatch(/00:00|2026\/9\/30/);
 });
-it("localizes explicit timestamp instants in the reader's actual timezone", async () => {
+it("writes explicit timestamp instants in Beijing time, whatever zone the reader is in", async () => {
   const data = page();
   Object.assign(data.episodes[0], { exitDate: "2026-10-01", windowStart: "2026-10-01T00:00:00Z", windowEnd: "2026-10-01T00:30:00+00:00" });
   api.getVcrFollowupHistory.mockResolvedValueOnce(data);
   render(<VcrFollowupHistory studyId="std_a" canExport={false} />);
   await userEvent.click(screen.getByText("历史观察记录（只读）"));
-  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const expected = ({
-    "Asia/Shanghai": "2026/10/1 08:00:00 至 2026/10/1 08:30:00",
-    "America/Los_Angeles": "2026/9/30 17:00:00 至 2026/9/30 17:30:00",
-  } as Record<string, string>)[zone] ?? `${new Date("2026-10-01T00:00:00Z").toLocaleString("zh-CN")} 至 ${new Date("2026-10-01T00:30:00Z").toLocaleString("zh-CN")}`;
-  expect(await screen.findByText(expected, { exact: true })).toBeInTheDocument();
+  expect(await screen.findByText("2026/10/1 08:00:00 至 2026/10/1 08:30:00", { exact: true })).toBeInTheDocument();
   expect(screen.getByText("2026-10-01", { exact: true })).toBeInTheDocument();
 });

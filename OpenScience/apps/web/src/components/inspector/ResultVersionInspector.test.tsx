@@ -64,9 +64,10 @@ describe("publishing a clinical result as an evidence card", () => {
 });
 // Static review 2026-10-10 §2.3: both version lists named a version by the browser's own 12-digit date and the first eight characters of its digest.
 describe("naming a version", () => {
-  const year = new Date().getFullYear();
-  const first: ResultVersion = { ...old, versionId: "rv_first", capturedAt: `${year}-03-04T08:05:00`, digest: "c".repeat(64) };
-  const second: ResultVersion = { ...old, versionId: "rv_second", capturedAt: `${year}-03-05T09:30:00`, digest: "d".repeat(64), findings: [] };
+  // Days and clocks are Beijing's (AT45): the instants carry +08:00, and the year is Beijing's, whatever zone the machine runs in.
+  const year = Number(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric" }).format(new Date()));
+  const first: ResultVersion = { ...old, versionId: "rv_first", capturedAt: `${year}-03-04T08:05:00+08:00`, digest: "c".repeat(64) };
+  const second: ResultVersion = { ...old, versionId: "rv_second", capturedAt: `${year}-03-05T09:30:00+08:00`, digest: "d".repeat(64), findings: [] };
   const labels = (name: string) => within(screen.getByRole("combobox", { name })).getAllByRole("option").map((option) => option.textContent);
   beforeEach(() => { api.get.mockImplementation(async (id: string) => (id === first.versionId ? first : second)); });
 
@@ -85,7 +86,7 @@ describe("naming a version", () => {
   });
 
   it("names a result of another file by that file, and numbers only this file's own versions", async () => {
-    const revised: ResultVersion = { ...second, versionId: "rv_revised", path: "artifacts/revised.md", supersedesVersionId: first.versionId, capturedAt: `${year}-03-06T10:00:00` };
+    const revised: ResultVersion = { ...second, versionId: "rv_revised", path: "artifacts/revised.md", supersedesVersionId: first.versionId, capturedAt: `${year}-03-06T10:00:00+08:00` };
     api.list.mockResolvedValue({ items: [second, first], nextCursor: null });
     api.related.mockResolvedValue({ items: [revised], nextCursor: null });
     mount(first.versionId); await screen.findByText("新结论");
