@@ -1549,7 +1549,7 @@ export class GeoOrchestrator {
     try {
       let policyContext = mark.detail?.policyContext;
       if (policyContext?.dispatchId !== mark.dispatch_id || policyContext?.capabilityId !== spec.capabilityId) {
-        const policy = await this.policies.resolve("geo", { supplements: [] });
+        const policy = await this.policies.resolve("geo", { supplements: [] }, { userId: project.userId, projectId: project.projectId, runId: mark.dispatch_id });
         policyContext = { dispatchId: mark.dispatch_id, capabilityId: spec.capabilityId, revisionId: policy.revisionId,
           supplements: policy.policy.supplements.filter((item) => item.capabilityId === spec.capabilityId).map((item) => item.text) };
         if (!await this.#update(project.id, spec.key, { detail: { policyContext,

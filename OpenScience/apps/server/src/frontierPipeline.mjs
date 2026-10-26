@@ -2493,8 +2493,11 @@ export class FrontierPipeline {
         }
         const candidates = rows.map(frontierMixCandidate);
         // A congress in its window (the domain's calendar) lets the research group rise for conference reports.
-        const result = frontierMixSelect({ candidates, threshold: this.threshold, events, congressActive: frontierActiveCongresses(day).length > 0,
-          preprintPlaces: this.preprintLanePerDay, preprintMinScore: this.preprintLaneMinScore, genreFloors });
+        const selectionInput = { candidates, threshold: this.threshold, events, congressActive: frontierActiveCongresses(day).length > 0,
+          preprintPlaces: this.preprintLanePerDay, preprintMinScore: this.preprintLaneMinScore, genreFloors };
+        const result = this.policies.evaluateFrontierSelection
+          ? await this.policies.evaluateFrontierSelection(selectionInput, { executionId: `frontier-mix:${day}:${now.toISOString()}`, now })
+          : frontierMixSelect(selectionInput);
         for (const pick of result.picks) {
           const updated = await client.query(`UPDATE evimed_frontier.items SET selected = true, selected_rule = $2, selected_at = $3,
               updated_at = clock_timestamp() WHERE id = $1 AND state = 'published' AND NOT selected`, [pick.id, pick.rule, now]);
