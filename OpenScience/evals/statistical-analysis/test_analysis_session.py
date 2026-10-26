@@ -192,6 +192,42 @@ class AnalysisSessionTests(unittest.TestCase):
                 self.assertNotEqual(self.command().returncode, 0)
                 self.steps = original
 
+    def test_unknown_step_fields_are_refused_before_execution_and_reuse(self):
+        self.run_step('fit')
+        state_before = (self.root / 'state.json').read_bytes()
+        for key, value in (('units', {'x': 'mg'}), ('modelState', {'family': 'gaussian'}),
+                           ('dependOn', ['other'])):
+            with self.subTest(key=key):
+                self.steps[0][key] = value
+                self.write_spec()
+                for command, extra in (('status', []), ('run', ['--step', 'fit', '--force'])):
+                    result = self.command(command, *extra)
+                    self.assertNotEqual(result.returncode, 0, result.stdout)
+                    self.assertIn('Unknown step fields', result.stderr)
+                self.assertEqual((self.root / 'state.json').read_bytes(), state_before)
+                del self.steps[0][key]
+
+    def test_unknown_document_fields_are_refused_before_execution(self):
+        for key, value in (('context', {'unit': 'mg'}), ('units', {'x': 'mg'}), ('schemaVerison', 1)):
+            with self.subTest(key=key):
+                document = {'schemaVersion': 1, 'steps': self.steps, key: value}
+                (self.root / 'session.json').write_text(json.dumps(document))
+                for command, extra in (('status', []), ('run', ['--step', 'fit'])):
+                    result = self.command(command, *extra)
+                    self.assertNotEqual(result.returncode, 0, result.stdout)
+                    self.assertIn('Unknown spec fields', result.stderr)
+                self.assertFalse((self.root / 'state.json').exists())
+
+    def test_arbitrary_nested_semantics_inside_context_remain_supported(self):
+        self.steps[0]['context'] = {'units': {'x': 'mg'}, 'modelState': {'family': 'gaussian'},
+                                   'customSemantics': ['baseline', {'transform': 'none'}]}
+        self.write_spec()
+        self.run_step('fit')
+        self.assertTrue(self.flags()['fit'])
+        self.steps[0]['context']['units']['x'] = 'g'
+        self.write_spec()
+        self.assertFalse(self.flags()['fit'])
+
     def test_rejects_reserved_aliases_source_overwrite_and_shared_outputs(self):
         for destination in ('data.csv', 'session.json', 'state.json', 'fit.py', '../escape.json',
                             '.analysis-provenance/forged.json', '.analysis-session-receipts/fit.json', 'other.json'):
