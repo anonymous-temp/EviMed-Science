@@ -57,3 +57,52 @@ test('paused decision expiry does not buy refresh/review and experimental user a
   assert.equal((await decisions.execute(row, 'build', 'user')).code, 'evolution_search_paused');
   assert.equal(called, 0);
 });
+
+test('empty release replay completes without asserting a passed certificate', async () => {
+  const f = paused();
+  const worker = new EvolutionWorker({ service: f.service, decisions: {}, maintenance: {}, config: f.service.config });
+  const result = await worker.perform({ kind: 'evolution-evaluate', payload: { action: 'release-replay' } });
+  assert.equal(result.status, 'complete'); assert.deepEqual(result.results, []); assert.equal(result.allPassed, null);
+});
+test('forced kind and canResume cannot override action-aware pause admission', async () => {
+  const f = paused(); f.service.config.evolutionEnabled = true;
+  let checked = false, resumed = false;
+  f.service.jobs.claim = async (_kinds, _worker, options) => {
+    assert.equal(options.eligibility, 'evolution-serving');
+    const accepted = await options.candidateAdmission({}, { kind: 'evolution-evaluate', payload: { action: 'time-holdout' } });
+    assert.equal(accepted, false); checked = true; return null;
+  };
+  const worker = new EvolutionWorker({ service: f.service, decisions: {}, maintenance: {}, config: f.service.config, lane: 'heavy', callbacks: { canResume: () => { resumed = true; return true; } } });
+  assert.equal(await worker.tick({ kinds: ['evolution-evaluate'] }), null);
+  assert.equal(checked, true); assert.equal(resumed, false);
+});
+test('pause does not execute a conservative decision before delivery or its due time', async () => {
+  const f = paused(); let called = false;
+  const decisions = new EvolutionDecisions({ service: f.service, config: f.service.config, now: f.service.now, callbacks: { execute: () => { called = true; } } });
+  const row = await f.service.save('decision', 'future', { status: 'pending', dueAt: '2026-11-01', deliveredAt: '2026-10-01', conservative: 'keep', options: [{ id: 'keep', operation: 'keep' }] });
+  assert.equal((await decisions.expire(row.id)).id, row.id); assert.equal(called, false);
+});
+test('queued experimental event is deferred without dispatching its consumer', async () => {
+  const f = paused(); let called = false;
+  await f.service.save('event', 'prospective', { type: 'prospective-target-result', status: 'queued' });
+  const worker = new EvolutionWorker({ service: f.service, decisions: {}, maintenance: {}, config: f.service.config, callbacks: { onEvent: () => { called = true; } } });
+  assert.equal((await worker.perform({ kind: 'evolution-event', payload: { eventId: 'prospective' } })).status, 'deferred');
+  assert.equal(called, false); assert.equal((await f.service.get('prospective')).payload.status, 'queued');
+});
+
+test('deferred decision stays a retryable worker result instead of successful completion', async () => {
+  const f = paused();
+  const worker = new EvolutionWorker({ service: f.service, decisions: { expire: async () => ({ status: 'deferred', code: 'evolution_search_paused' }) }, maintenance: {}, config: f.service.config });
+  assert.equal((await worker.perform({ kind: 'evolution-decision', payload: { decisionId: 'd' } })).status, 'deferred');
+});
+test('paused release replay admission requires no runtime or paid budget and bypasses no experimental action', async () => {
+  const f = paused(); f.service.config.evolutionEnabled = true;
+  f.service.jobs.claim = async (_kinds, _worker, options) => {
+    const client = { query: async () => ({ rows: [{ count: 0 }] }) };
+    assert.equal(await options.admission(client), true);
+    assert.equal(await options.candidateAdmission(client, { kind: 'evolution-evaluate', payload: { action: 'release-replay' } }), true);
+    return null;
+  };
+  const worker = new EvolutionWorker({ service: f.service, decisions: {}, maintenance: {}, config: f.service.config, lane: 'heavy' });
+  assert.equal(await worker.tick({ kinds: ['evolution-evaluate'] }), null);
+});

@@ -1,3 +1,4 @@
+import { assertEvolutionExperimentalPublication, evolutionDeferred } from './evolutionServingPolicy.mjs';
 import {createEvolutionResourceAcquisition} from './evolutionResourceAcquisition.mjs';
 import {createEvolutionRepairReproduction} from './evolutionRepairReproduction.mjs';
 import {createModuleEvolutionEngineValidation} from './moduleEvolutionEngineValidation.mjs';
@@ -302,6 +303,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
   const verification = createEvolutionVerification({ execute: (body, options) => controller.execVerify(body, options),
     prepareDependencies: (requests, options) => controller.prepareEvolutionDependencies({ requests }, options) });
   const build = async (payload, { signal, job } = { signal: undefined, job: undefined }) => {
+    if (config.evolutionSearchPaused === true) return evolutionDeferred();
     const dossier = await service.get(payload.dossierId);
     if (!dossier || dossier.payload.recordType !== "evolution-dossier") throw new HttpError(404, "evolution_dossier_missing", "The research card is unavailable.");
     if (dossier.payload.status === "published") return { toolId: dossier.payload.toolId, replay: true };
@@ -380,6 +382,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
             developmentProjectId: projectId, papers: card.papers, parents: card.parentToolIds ?? [] } };
       },
       publisher: { publish: async (candidate, { evaluation: verdict }) => {
+        assertEvolutionExperimentalPublication(config);
         if (card.parentToolIds?.length) await maintenance.verifyMerge(card.parentToolIds, candidate);
         const publication = await supply.publish(candidate, { card, evaluation: verdict, activate: false });
         await service.registerTool({ ...candidate, dossierId: dossier.id, methodId: card.methodId, modelReleasedAt:card.modelReleasedAt, modelReleaseEvidenceId:card.modelReleaseEvidenceId, files: undefined, name: candidate.name ?? card.goal, description: card.goal,
@@ -410,6 +413,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
           await service.save('mission',current.id,{...current.payload,verdictId,candidateHash,toolId:candidate.id,
             regressions:merged.filter(item=>item.regressed).length,regressionBasis:'independent-tool-confirmation-verdicts',regressionObservations:merged},current);
         });
+        assertEvolutionExperimentalPublication(config);
         await supply.activate({ id: publication.id, digest: publication.digest, revision: publication.revision });
         const staged = await service.get(candidate.id);
         if (staged.payload.status !== "active") await service.save("tool", candidate.id, { ...staged.payload, status: "active" }, staged);
@@ -492,6 +496,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
       return result;
     }, build,
     evaluate: async (payload, { signal, job }) => {
+      if (config.evolutionSearchPaused === true) return evolutionDeferred('evolution_release_replay_deferred', 'Legacy evaluation may invoke models and waits while search is paused.');
       if (payload.action === "scorer-audit") return scorerAudit.run({day:payload.day,signal});
       if (payload.action === "import-existing-methods") return persistExistingEngineEvaluation({ service, paperGold, methodId: payload.methodId, reportHash: payload.reportHash });
       if (payload.action === "prospective-score") return prospective.score({ registrationId: payload.registrationId, signal });

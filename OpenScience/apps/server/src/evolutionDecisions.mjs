@@ -1,3 +1,4 @@
+import { evolutionDeferred, evolutionServingDecision } from './evolutionServingPolicy.mjs';
 import { renderEvolutionProgress } from './evolutionProgress.mjs';
 import { EVOLUTION_EXECUTABLE_OPERATIONS, evolutionDecisionClass, evolutionAdaptiveClass } from '@evimed/domain';
 import { evolutionKey } from './evolutionService.mjs';
@@ -143,6 +144,12 @@ export class EvolutionDecisions {
    */
   async expire(id) {
     const row = await this.service.get(id);
+    if (row && this.config.evolutionSearchPaused === true) {
+      if (row.payload.status !== 'executing' && (row.payload.status !== 'pending' || !row.payload.deliveredAt || Date.parse(row.payload.dueAt) > this.now().getTime())) return row;
+      const option = row.payload.status === 'executing' ? row.payload.execution.option : row.payload.conservative;
+      if (option && evolutionServingDecision(evolutionExecutableOperation({ ...row.payload, option }))) return this.execute(row, option, row.payload.status === 'executing' ? row.payload.execution.source : 'conservative', row.payload.execution?.evidence);
+      return evolutionDeferred();
+    }
     if (row?.payload.status === 'executing') return this.execute(row, row.payload.execution.option, row.payload.execution.source, row.payload.execution.evidence);
     if (!row || row.payload.status !== 'pending' || !row.payload.deliveredAt || Date.parse(row.payload.dueAt) > this.now().getTime()) return row;
     if (row.payload.decisionClass === 'D') return this.execute(row, row.payload.alternative ?? row.payload.conservative, 'resource-alternative');
@@ -151,6 +158,7 @@ export class EvolutionDecisions {
     try {
       if (!this.callbacks.refresh || !this.callbacks.review) throw new HttpError(503, 'evolution_review_unavailable', 'Expiry requires fresh evidence and independent review.');
       refreshed = await this.callbacks.refresh(row.payload);
+      if (this.config.evolutionSearchPaused === true) return evolutionDeferred();
       reviewed = await this.callbacks.review({ decision: row.payload, refreshed });
       if (!reviewed || reviewed.independent !== true || reviewed.family === refreshed?.family) throw new HttpError(503, 'evolution_review_invalid', 'A cross-family review is required.');
     } catch (error) { return this.deferExpiry(row, error); }
@@ -173,11 +181,13 @@ export class EvolutionDecisions {
   }
   /** @param {any} row @param {string} option @param {string} source @param {any} evidence */
   async execute(row, option, source, evidence = {}) {
+    if (this.config.evolutionSearchPaused === true && !evolutionServingDecision(evolutionExecutableOperation({ ...row.payload, option }))) return evolutionDeferred();
     if (!row.payload.options.some((/** @type {any} */ item) => item.id === option)) throw new HttpError(400, 'evolution_option_invalid', 'Unknown decision option.');
     const actionId = row.payload.status === 'executing' ? row.payload.execution.actionId : `${row.id}:${row.revision}:${option}`;
     if (row.payload.status !== 'executing') row = await this.service.save('decision', row.id, { ...row.payload, status: 'executing', execution: { actionId, option, source, evidence } }, row);
     if (!this.callbacks.execute) throw new HttpError(503, 'evolution_execution_unavailable', 'Decision execution is unavailable.');
     const result = await this.callbacks.execute({ ...row.payload, id: row.id, option, source, actionId, evidence });
+    if (result?.status === 'deferred') return result;
     const previous = row.payload.selected ?? null;
     // A person's answer overrules the recommendation exactly when it is another option; their latest answer is the one that counts.
     const overridden = source === 'user' ? option !== row.payload.recommended : row.payload.overridden === true;
@@ -203,6 +213,7 @@ export class EvolutionDecisions {
     if (!row || row.payload.recordType !== 'evolution-decision') throw new HttpError(404, 'evolution_decision_missing', 'Decision not found.');
     if (input.expectedRevision !== row.revision) throw new HttpError(409, 'product_revision_conflict', 'Decision changed; reload before choosing.');
     let option = input.option ?? row.payload.recommended;
+    if (input.text && this.config.evolutionSearchPaused === true) return evolutionDeferred();
     if (input.text) {
       if (!this.callbacks.interpretOverride) throw new HttpError(503, 'evolution_override_unavailable', 'Text overrides need an interpretation callback.');
       option = await this.callbacks.interpretOverride(row.payload, input.text);

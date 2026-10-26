@@ -1,3 +1,4 @@
+import { evolutionServingJob, evolutionDeferred, assertEvolutionExperimentalPublication } from './evolutionServingPolicy.mjs';
 import { trustedEvolutionNativeName } from './evolutionToolRouting.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { canonicalJson, EVOLUTION_TRACKS, EVOLUTION_TOOL_STATES, EVOLUTION_DATA_LEVELS, EVOLUTION_GAP_CODES, EVOLUTION_LEAD_SOURCES, evolutionMethodFields, evolutionValidationLevel, evolutionToolVisible, evolutionDataMatch, validateEvolutionDataRequirements } from '@evimed/domain';
@@ -73,6 +74,7 @@ export class EvolutionService {
   }
   /** @param {string} action @param {any} payload @param {string} key @param {Date} runAfter */
   async enqueue(action, payload, key, runAfter = this.now()) {
+    if (this.config.evolutionSearchPaused === true && !evolutionServingJob(`evolution-${action}`, payload)) return evolutionDeferred();
     return this.jobs.enqueue(await this.owner(), `evolution-${action}`, payload, { idempotencyKey: `evolution:${key}`, projectId: EVOLUTION_PROJECT_ID,
       maxAttempts: Math.max(1, Math.min(10, this.config.evolutionMaxJobAttempts ?? 3)), runAfter });
   }
@@ -153,6 +155,7 @@ export class EvolutionService {
   async queueBuild(id) { const dossier = await this.get(id); if (!dossier) throw new HttpError(404, 'evolution_dossier_missing', 'Dossier not found.'); return this.enqueue('build', { dossierId: id }, `build:${id}:${dossier.revision}`); }
   /** @param {any} input */
   async registerTool(input) {
+    assertEvolutionExperimentalPublication(this.config);
     if (!input.id || !EVOLUTION_TRACKS.includes(input.track) || !EVOLUTION_TOOL_STATES.includes(input.status ?? 'active') || !EVOLUTION_DATA_LEVELS.includes(input.dataLevel ?? 'D0')) throw new HttpError(400, 'evolution_tool_invalid', 'Invalid tool identity or track.');
     if (input.dataRequirements && validateEvolutionDataRequirements(input.dataRequirements).length) throw new HttpError(400, 'evolution_requirements_invalid', 'Invalid data requirements.');
     const existing = await this.get(input.id);

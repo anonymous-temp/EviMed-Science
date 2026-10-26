@@ -1,3 +1,4 @@
+import { EVOLUTION_SERVING_KINDS, EVOLUTION_SERVING_EVALUATE_ACTION } from "./evolutionServingPolicy.mjs";
 import { randomUUID } from "node:crypto";
 import { HttpError } from "./security.mjs";
 import { maintenanceAllowsClaims } from "./maintenanceService.mjs";
@@ -102,9 +103,10 @@ export class ProductJobs {
   }
 
   /** Worker-only operation. Never expose cross-account claiming as a customer API.
-   * @param {string[]} kinds @param {string} workerId @param {{ leaseMs?: number, admission?: (client:any) => Promise<boolean>, candidateAdmission?: (client:any, candidate:any) => Promise<boolean> }} options */
-  async claim(kinds, workerId, { leaseMs = 60_000, admission = null, candidateAdmission = null } = {}) {
+   * @param {string[]} kinds @param {string} workerId @param {{ leaseMs?: number, admission?: (client:any) => Promise<boolean>, candidateAdmission?: (client:any, candidate:any) => Promise<boolean>, eligibility?: "evolution-serving" | null }} options */
+  async claim(kinds, workerId, { leaseMs = 60_000, admission = null, candidateAdmission = null, eligibility = null } = {}) {
     if (!Array.isArray(kinds) || !kinds.length || kinds.length > PRODUCT_JOB_KINDS.length) throw new HttpError(400, "product_kind_invalid", "A worker must declare supported job kinds.");
+    if (eligibility !== null && eligibility !== "evolution-serving") throw new HttpError(400, "product_job_eligibility_invalid", "Unknown job eligibility policy.");
     const allowed = kinds.map((kind) => productKind(kind, PRODUCT_JOB_KINDS));
     productInteger(leaseMs, 1000, 3_600_000);
     productId(workerId, "worker");
@@ -123,17 +125,19 @@ export class ProductJobs {
       if (candidateAdmission) await client.query('SAVEPOINT candidate_admission');
       const result = await client.query(`WITH queued AS MATERIALIZED (
         SELECT id,run_after AS due FROM evimed_product.jobs WHERE kind=ANY($1::text[]) AND attempts<max_attempts
+        AND ($5::text IS NULL OR kind=ANY($6::text[]) OR (kind='evolution-evaluate' AND payload->>'action'=$7::text))
         AND status='queued' AND run_after<=statement_timestamp()
         ORDER BY run_after,id FOR UPDATE SKIP LOCKED LIMIT 1
       ), expired AS MATERIALIZED (
         SELECT id,lease_expires_at AS due FROM evimed_product.jobs WHERE kind=ANY($1::text[]) AND attempts<max_attempts
+        AND ($5::text IS NULL OR kind=ANY($6::text[]) OR (kind='evolution-evaluate' AND payload->>'action'=$7::text))
         AND status='running' AND lease_expires_at<=statement_timestamp()
         ORDER BY lease_expires_at,id FOR UPDATE SKIP LOCKED LIMIT 1
       ), candidate AS (
         SELECT id FROM (SELECT * FROM queued UNION ALL SELECT * FROM expired) available ORDER BY due,id LIMIT 1
       ) UPDATE evimed_product.jobs j SET status='running',worker_id=$2,lease_token=$3,
         lease_expires_at=clock_timestamp()+($4::integer*interval '1 millisecond'),attempts=attempts+1,updated_at=clock_timestamp()
-        FROM candidate c WHERE j.id=c.id RETURNING j.*`, [allowed, workerId, randomUUID(), leaseMs]);
+        FROM candidate c WHERE j.id=c.id RETURNING j.*`, [allowed, workerId, randomUUID(), leaseMs, eligibility, [...EVOLUTION_SERVING_KINDS], EVOLUTION_SERVING_EVALUATE_ACTION]);
       const claimed = job(result.rows[0]);
       if (candidateAdmission) {
         const accepted = !claimed || await candidateAdmission(client, claimed);

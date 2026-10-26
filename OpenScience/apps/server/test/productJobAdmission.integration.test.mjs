@@ -37,6 +37,11 @@ test('paused evolution SQL eligibility skips experimental queue heads without co
     assert.equal(claimed.id, allowed.id);
     assert.equal((await jobs.get(owner, blocked.id)).attempts, 0);
     assert.equal((await jobs.get(owner, blocked.id)).status, 'queued');
+    await database.query("UPDATE evimed_product.jobs SET status='running',attempts=1,lease_expires_at=clock_timestamp()-interval '1 minute' WHERE id=$1", [blocked.id]);
+    const next = await jobs.enqueue(owner, 'evolution-evaluate', { action: 'release-replay', releaseId: 'next' }, { idempotencyKey: `${owner}:next` });
+    const resumed = await jobs.claim(['evolution-evaluate'], owner, { eligibility: 'evolution-serving', candidateAdmission: async (_client, job) => job.id === next.id });
+    assert.equal(resumed.id, next.id);
+    assert.equal((await jobs.get(owner, blocked.id)).attempts, 1, 'an expired experimental row is filtered before lease allocation too');
     await assert.rejects(jobs.claim(['evolution-build'], owner, { eligibility: 'anything' }), { code: 'product_job_eligibility_invalid' });
   } finally { await database.query('DELETE FROM evimed_control.users WHERE id=$1', [owner]); await database.close(); }
 });
