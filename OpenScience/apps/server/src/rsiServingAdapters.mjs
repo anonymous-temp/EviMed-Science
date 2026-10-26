@@ -7,7 +7,7 @@ import { rsiDigest } from './rsiCampaignBundle.mjs'
 import { computeRsiDependencyClosure } from './rsiDependencyClosure.mjs'
 import { validateModuleEvolutionPolicy } from './moduleEvolutionPolicies.mjs'
 import { frontierSelectThreshold } from './frontierPipeline.mjs'
-import { frontierMixSelect } from '@evimed/domain'
+import { frontierMixSelect, PLATFORM_PUBLISHER_USER_ID } from '@evimed/domain'
 import { AUTOPILOT_PLANNER_INSTRUCTIONS } from './autopilotNextAction.mjs'
 
 const components = Object.freeze({
@@ -30,18 +30,18 @@ export function parseRsiPolicyCandidate(surface, files) {
   return policy
 }
 /** Immutable inactive versions and phase-specific durable publication receipts. Candidate code is never imported.
- * @param {{config:any,service:any,documents?:any,database:any,supply?:any,store?:any,runtimeManager?:any,sourceChanges?:any}} dependencies */
-export function createRsiServingAdapters({ config, service, database, documents = new ProductDocuments(database) }) {
+ * @param {{config:any,service:any,documents?:any,database:any,supply?:any,store?:any,runtimeManager?:any,sourceChanges?:any,publicationOwnerId?:string}} dependencies */
+export function createRsiServingAdapters({ config, service, database, documents = new ProductDocuments(database), publicationOwnerId = PLATFORM_PUBLISHER_USER_ID }) {
   let importer = /** @type {any} */ (null)
   let observationReporter = /** @type {any} */ (null)
   const rootDir = config.rootDir ?? fileURLToPath(new URL('../../../', import.meta.url))
   const defaults = (/** @type {string} */ moduleId) => moduleId === 'frontier' ? { selectionThreshold: frontierSelectThreshold(config) }
     : moduleId === 'autopilot' ? { plannerInstructions: AUTOPILOT_PLANNER_INSTRUCTIONS } : { supplements: [] }
-  const owner = () => service.owner()
+  const owner = () => publicationOwnerId
   const id = (/** @type {any[]} */ values) => `rsi-serving:${rsiDigest(values)}`
-  /** @param {any} client @param {string} recordId */
-  async function read(client, recordId) {
-    const result = await client.query("SELECT payload, revision FROM evimed_product.documents WHERE user_id=$1 AND kind='knowledge' AND id=$2 AND deleted_at IS NULL", [await owner(), recordId])
+  /** @param {any} client @param {string} recordId @param {string} [recordOwner] */
+  async function read(client, recordId, recordOwner = publicationOwnerId) {
+    const result = await client.query("SELECT payload, revision FROM evimed_product.documents WHERE user_id=$1 AND kind='knowledge' AND id=$2 AND deleted_at IS NULL", [recordOwner, recordId])
     return result.rows[0] ?? null
   }
   /** @param {any} client @param {string} recordId @param {any} payload */
@@ -61,7 +61,7 @@ export function createRsiServingAdapters({ config, service, database, documents 
   /** Actual incumbent includes legacy active policy, otherwise the consumer's code defaults.
    * @param {string} moduleId @param {any} client */
   async function incumbent(moduleId, client) {
-    const row = await read(client, `evolution-module-policy-${moduleId}`)
+    const row = await read(client, `evolution-module-policy-${moduleId}`, await service.owner())
     const base = defaults(moduleId)
     if (row?.payload.status === 'active' && validateModuleEvolutionPolicy(moduleId, row.payload.policy)) {
       return { revisionId: `evolution-module-policy-${moduleId}:${row.revision}`, policy: { ...base, ...row.payload.policy } }
@@ -182,12 +182,12 @@ export function createRsiServingAdapters({ config, service, database, documents 
     return result
   }
   const unsupported = { async publish() { refuse('campaign_runtime_scope_unsupported') }, async inspect() { return null }, async rollback() { refuse('campaign_runtime_scope_unsupported') } }
-  return { currentTarget, evaluateFrontierSelection,
+  return { publicationOwnerId, currentTarget, evaluateFrontierSelection,
     /** @param {any} reporter */ setObservationReporter(reporter) { observationReporter = reporter },
-    /** A submitted model assertion cannot become a witness. @param {any} proof @param {any} row */
-    async verifyObservation(proof, row) {
+    /** A submitted model assertion cannot become a witness. @param {any} proof @param {any} row @param {{transactionClient?:any}} [options] */
+    async verifyObservation(proof, row, options = {}) {
       if (!proof?.id) return null
-      const stored = await read(database, proof.id)
+      const stored = await read(options.transactionClient ?? database, proof.id)
       return stored?.payload.operationId === row.operationId ? stored.payload : null
     },
     adapters: { policy, skill: unsupported, 'isolated-tool': unsupported }, readPolicy,

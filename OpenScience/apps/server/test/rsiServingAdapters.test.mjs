@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { ControlPlaneDatabase } from '../src/controlPlaneDatabase.mjs'
+import { RsiCampaignImporter } from '../src/rsiCampaignImporter.mjs'
 import { ProductDocuments } from '../src/productStore.mjs'
 import { createRsiServingAdapters, parseRsiPolicyCandidate } from '../src/rsiServingAdapters.mjs'
 import { frontierMixSelect } from '@evimed/domain'
@@ -21,16 +22,27 @@ test('campaign component rejects sibling fields, guardrails, missing component, 
 test('real ledger inactive stage, restart inspection, scope activation, frozen shadow projection and exact rollback', { skip: !url }, async () => {
   const database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 5, databaseConnectionTimeoutMs: 2000 })
   const owner = `rsi_adapter_${randomUUID().replaceAll('-', '')}`
+  const publisher = `rsi_publisher_${randomUUID().replaceAll('-', '')}`
   try {
     await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES ($1,'RSI adapter test','development')", [owner])
+    await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES ($1,'RSI publication test','development')", [publisher])
     const documents = new ProductDocuments(database)
-    const dependencies = { config: { frontierModel: 'deepseek-flash', frontierSelectThreshold: 65 }, service: { owner: async () => owner }, database, documents }
+    const dependencies = { config: { frontierModel: 'deepseek-flash', frontierSelectThreshold: 65 }, service: { owner: async () => owner }, database, documents, publicationOwnerId: publisher }
+    await documents.put(owner, 'knowledge', 'evolution-module-policy-frontier', { status: 'active', policy: { selectionThreshold: 65 } }, { expectedRevision: 0 })
     const serving = createRsiServingAdapters(dependencies)
+    assert.equal(serving.publicationOwnerId, publisher)
     const target = await serving.currentTarget('frontier-selection')
     assert.equal(target.qualified, true, target.issues?.join(','))
     const input = { operationId: 'adapter-test', surface: 'frontier-selection', phase: 'stage', files, expectedTarget: target }
     const stage = await serving.adapters.policy.publish(input)
     assert.equal(stage.installed, true)
+    const importer = new RsiCampaignImporter({ database, owner: publisher, verificationOptions: async () => ({}), currentTarget: serving.currentTarget, adapters: serving.adapters, activationPolicy: async () => ({ mode: 'shadow' }) })
+    await importer.transaction(async client => {
+      const contested = await database.query('SELECT pg_try_advisory_xact_lock(hashtext($1)) AS acquired', [`rsi-activation:${serving.publicationOwnerId}`])
+      assert.equal(contested.rows[0].acquired, false)
+      assert.equal((await serving.adapters.policy.inspect({ ...input, transactionClient: client })).revision, stage.revision)
+      assert.equal((await serving.currentTarget(input.surface, client)).baselineRevision, target.baselineRevision)
+    })
     assert.equal((await serving.currentTarget(input.surface)).baselineRevision, target.baselineRevision)
     assert.equal((await serving.readPolicy('frontier')).policy.selectionThreshold, 65)
     const restarted = createRsiServingAdapters(dependencies)
@@ -46,6 +58,11 @@ test('real ledger inactive stage, restart inspection, scope activation, frozen s
     const candidates = Array.from({ length: 12 }, (_, i) => ({ id: `i${i}`, genre: 'news', zh: false, score: i < 6 ? 70 : 90, selected: false, rule: null, safety: false, sourceId: `s${i}`, sourceCap: 3, eligible: true, summarized: true, besideSelected: false, eventId: null }))
     const selectionInput = { candidates, threshold: 65, events: {}, congressActive: false, preprintPlaces: 2, preprintMinScore: 60, genreFloors: [] }
     assert.deepEqual(await restarted.evaluateFrontierSelection(selectionInput, { executionId: 'mix-1', now: '2026-10-26' }), frontierMixSelect(selectionInput))
+    assert.equal((await documents.get(publisher, 'knowledge', witness.id)).payload.arm, 'shadow')
+    assert.equal(await documents.get(owner, 'knowledge', witness.id), null)
+    await database.transaction(async client => {
+      assert.equal((await restarted.verifyObservation({ id: witness.id }, { operationId: input.operationId }, { transactionClient: client })).revision, stage.revision)
+    })
     assert.equal(witness.arm, 'shadow')
     assert.ok(witness.incumbentPicks > witness.candidatePicks)
     assert.notEqual(witness.incumbentResultDigest, witness.candidateResultDigest)
@@ -56,10 +73,11 @@ test('real ledger inactive stage, restart inspection, scope activation, frozen s
     restarted.connectImporter({ select: async () => ({ revision: stage.revision, arm: 'candidate', operationId: input.operationId }) })
     assert.equal((await restarted.readPolicy('frontier')).policy.selectionThreshold, 65)
     assert.equal((await restarted.currentTarget(input.surface)).baselineRevision, target.baselineRevision)
+    assert.equal((await documents.get(owner, 'knowledge', 'evolution-module-policy-frontier')).revision, 1)
     assert.equal((await restarted.currentTarget('capability-skill')).qualified, false)
     await assert.rejects(() => restarted.adapters.skill.publish({}), { code: 'campaign_runtime_scope_unsupported' })
   } finally {
-    await database.query('DELETE FROM evimed_control.users WHERE id=$1', [owner])
+    await database.query('DELETE FROM evimed_control.users WHERE id=ANY($1::text[])', [[owner, publisher]])
     await database.close()
   }
 })
