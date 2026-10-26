@@ -22,9 +22,17 @@ description: |
     how they get around), without the sensitive reason.
   Each line says what it applies to, in the user's words (for whom, which document, which
   language: "给门诊患者写的科普材料一律用初中生读得懂的话", not "材料用通俗的话").
+  A preference that lays out a document or an answer (an order of parts, a fixed template, a
+  set of headings) is written as its places and what the user fills each one with, never as
+  content to produce: "每条先写结论；依据只写用户给过的，没给就不写依据", not "每条先写结论，再写依据".
+  A place names where something goes; it does not say that something always exists to put
+  there.
   Each preference file is about one specific topic; do not mix unrelated topics, and do not
   split one topic over several files. When the user changes a preference, update the
   existing file so that it states only the current choice.
+  A rule the user gives for one project ("这个项目的所有文字交付物一律用英文写") is not a preference of
+  theirs: it is that project's card (PROJECT_CONTEXT, 约束), because it holds for that project and not
+  for their other work.
   Not a preference: a condition that scopes one request ("这次只看亚洲人群的 RCT，不要图表")
   unless they say it is how they always want it, a mood, a question, a stance on a contested
   question, a fact about a project (-> PROJECT_CONTEXT), something the user said the assistant
@@ -74,5 +82,5 @@ fields:
       condition, exception or reason the user gave. No dates, events or plans.
       Example:
       - Meta 分析一律用随机效应模型。
-      - 报告先给结论，再给依据。
+      - 报告每条先写结论；依据只写用户给过的，没给就不写依据。
     merge_op: patch

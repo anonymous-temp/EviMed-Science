@@ -4,10 +4,6 @@
   "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C13); every name, number and identifier is invented",
   "expected": "Nothing is filed as a follow-up: a reminder at a date is the scheduler's, and a memory file never fires.",
   "decidable": true,
-  "arms": [
-    "native",
-    "legacy"
-  ],
   "replay": {
     "synthetic": true,
     "projectId": "default",

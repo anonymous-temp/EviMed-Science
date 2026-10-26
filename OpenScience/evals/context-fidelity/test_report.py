@@ -38,8 +38,8 @@ def learning(run_id, compaction=None, **fields):
     return event
 
 
-def compaction_record(seq, tokens, at="2026-09-01T10:00:00Z", replaced=6, policy="basic"):
-    return {"at": at, "seq": seq, "replaced": replaced, "tokens": tokens, "policy": policy}
+def compaction_record(seq, tokens, at="2026-09-01T10:00:00Z", replaced=6):
+    return {"at": at, "seq": seq, "replaced": replaced, "tokens": tokens}
 
 
 def write_ledger(directory, events):
@@ -136,10 +136,10 @@ class WeeklyReportTests(unittest.TestCase):
             started("run_1", "2026-09-01T09:00:00Z"),
             finished("run_1", "2026-09-01T10:00:00Z", status="failed", error_code="runtime_session_error"),
             started("run_2", "2026-09-01T09:00:00Z"),
-            finished("run_2", "2026-09-01T10:00:00Z", status="failed", error_code="compaction_handle_lost"),
+            finished("run_2", "2026-09-01T10:00:00Z", status="failed", error_code="model_max_tokens"),
         ])
         overflow = built["weeks"][0]["contextOverflow"]
-        self.assertEqual(overflow["attributable"], {"total": 1, "byCode": {"compaction_handle_lost": 1}})
+        self.assertEqual(overflow["attributable"], {"total": 1, "byCode": {"model_max_tokens": 1}})
         self.assertEqual(overflow["indistinguishable"]["total"], 1)
         self.assertIn("sub-code never reaches runs.jsonl", overflow["indistinguishable"]["reason"])
 

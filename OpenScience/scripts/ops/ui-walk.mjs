@@ -82,9 +82,10 @@
  *     unless an entry of `ui-walk-baseline.json` accepts it: a view, the rule up to a number or a literal part of the sentence, an owner, a
  *     day and a reason. After its day an entry accepts nothing. The report prints the delta (accepted by entry, not accepted, expired, no
  *     longer needed, can be lowered). The baseline is embedded in this file (`embed-walk-tables.mjs`); `OPEN_SCIENCE_WALK_BASELINE`
- *     names another file, or `none`. Two walks, two sets of debts: `OPEN_SCIENCE_WALK_PROFILE` is `owner` (the release walk on the
- *     owner-view account, the default; many pages hold no data, so a coverage gap — `not-observable`, `not-walked` — may be accepted) or
- *     `fixture` (the local walk on the data-rich fixture, which accepts none).
+ *     names another file, or `none`. Two walks, two sets of debts: `OPEN_SCIENCE_WALK_PROFILE` is `owner` (the production release walk,
+ *     the default, on a throwaway account that holds nothing: the pages that need an object of the account's own cannot be observed, so a
+ *     coverage gap — `not-observable`, `not-walked` — may be accepted; the name is the one the baseline files carry, from the account the
+ *     walk used to sign in as) or `fixture` (the local walk on the data-rich fixture, which accepts none).
  *     `scripts/ops/ui-walk-baseline.mjs propose <report.json> --owner … --until … --why …` writes the entries a rehearsal's report asks for.
  *   - A STEP THAT CANNOT RUN FAILS. A step that throws, times out before its target or finds its element absent is a failure naming
  *     what it did not reach (`STEP_TARGETS`); 18.1's `ReferenceError: drawerMarks is not defined` was a notice for a release. No baseline
@@ -101,35 +102,41 @@
  *   - Information that is not a finding (a retried load, what a guarded click refused, the axe line, the candidate check) is `report.info`.
  *     `OPEN_SCIENCE_WALK_CANDIDATE_CHECK=<candidate-check.json>` adds the kernel candidate check to it (report only).
  *
- * What it changes on the deployment: a session (it logs in and logs out), and
- * — only when asked for the chat page — the account's default runtime. The
- * shell warms that runtime from every page, not only the conversation, so a
- * walk that let those requests through started a runtime on each run
- * (2026-09-26 audit, F-G20: a walk began 14:46:59Z, the acceptance account's
- * default runtime started 14:47:07Z). Every `start_runtime` is therefore
- * refused in the browser, and counted per page in the report.
+ * What it changes on the deployment: one account of its own, and — only when asked for the chat page — that account's default
+ * runtime. The production walk signs in as nobody: it registers a throwaway account through the product's own self-registration
+ * (`walk-<UTC yyyymmddHHMM>-<6 hex>`, a random password held in memory), walks as it — an account with nothing in it, judged like any
+ * other empty account — and deletes it through the product's own `DELETE /api/account` at the end, on a pass, on a failure and on an
+ * interrupt (`throwaway-account.mjs`, which is mounted beside this file). It prints `account created:` and `account deleted:`, and a
+ * deletion that cannot be done is a `FAIL` line naming the account and a failed walk: a leftover account is never silent. (Until
+ * 2026-10-25 the walk signed in as the owner's own account, and every walk left its sessions in it.) The `fixture` profile signs in as
+ * the account `seed-walk-fixture.mjs` made on a local control plane (`OPEN_SCIENCE_WALK_USER`, `OPEN_SCIENCE_WALK_PASSWORD_FILE`) and
+ * logs out; the production profile refuses those two settings, so a stale file cannot name an account the walk would then ignore.
+ *
+ * The shell warms the account's default runtime from every page, not only the conversation, so a walk that let those requests through
+ * started a runtime on each run (2026-09-26 audit, F-G20: a walk began 14:46:59Z, the walk account's default runtime started
+ * 14:47:07Z). Every `start_runtime` is therefore refused in the browser, and counted per page in the report.
  *
  * It opens the chat page only when asked (`OPEN_SCIENCE_WALK_CHAT=1`), and
  * there it lets `start_runtime` through, because a frame bound to a live
  * session needs the account's default runtime — and it should be asked after
  * every release: on 2026-09-21 every page here walked clean while no
- * conversation of the acceptance account could load at all (its kernel frame
+ * conversation of the walk's account could load at all (its kernel frame
  * fetched a plugin bundle from a runtime that had not composed it, a 404, and
  * stopped at 「对话界面 60 秒内没有载入完成」). With it the walk waits for the
  * frame's composer, fails on any 4xx for a kernel application file, and
- * records whether the kernel's session statistics line is on screen.
+ * records whether the kernel's session statistics line is on screen. A brand-new account has no runtime, and the host's network
+ * changes the moment its first container starts, which aborts whatever the browser is loading then (2026-10-24: 「打开超时，请重试」);
+ * so a throwaway account's runtime is started through the API first, while the browser is idle, and the page then finds it up.
  *
- * The release switch (host-release-switch.sh) runs it after every release, in
- * a container of the release's runtime image, as the account
- * `shared/ui-walk.env` names.
+ * The release switch (host-release-switch.sh) runs it after every release, in a container of the release's runtime image, with this file
+ * and `throwaway-account.mjs` mounted side by side.
  *
  * Nothing is added to package.json: a browser automation dependency would
  * change the lockfile, and a changed lockfile makes the next release a full
  * runtime image rebuild. Point it at an installed playwright-core instead.
  *
  *   OPEN_SCIENCE_WALK_BASE_URL=https://evimed.example.org \
- *   OPEN_SCIENCE_WALK_USER=<account> \
- *   OPEN_SCIENCE_WALK_PASSWORD_FILE=/path/to/password \
+ *   [OPEN_SCIENCE_WALK_USER=<account> OPEN_SCIENCE_WALK_PASSWORD_FILE=/path/to/password]   # the fixture profile only \
  *   OPEN_SCIENCE_PLAYWRIGHT_CORE=/path/to/node_modules/playwright-core \
  *   [OPEN_SCIENCE_WALK_CHROMIUM=/path/to/chrome] \
  *   [OPEN_SCIENCE_WALK_OUT=/tmp/ui-walk] \
@@ -150,6 +157,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { brotliDecompressSync } from "node:zlib";
+import { contextTransport, openThrowawayAccount } from "./throwaway-account.mjs";
 
 /**
  * The embedded tables (written by `scripts/ops/embed-walk-tables.mjs` from `page-templates.json` and `ui-walk-baseline.json`; the walk is
@@ -255,13 +263,28 @@ const WALK_TABLES = {
   },
   "baseline": {
     "version": 1,
-    "about": ["What the UI walk accepts for now (R19, plan §3 S9; audit D §4 S8). A finding the walk used to print as a NOTICE is a failure unless an entry here accepts it, and an entry says who owns the debt and the day it expires: after the deadline the walk fails again, so a baseline cannot become a place things are forgotten in.","An entry matches one view (`name@desktop`, `name@phone`, `name@*`, `*`, or the name a finding gives, such as `geo-answer`) and one finding: `rule` names a measured rule (`type-pairs`, `rows-ceiling`, `heading-order`, `axe`, `orphan-sentence`, `long-page`, … and the coverage gaps `not-observable` and `not-walked`) and `max` is the largest number accepted, so a page may only get better; `contains` instead matches a literal part of a finding's sentence. `profiles` (default: every profile) says which walk accepts it: `owner` is the production walk on the owner-view account, whose data leaves many pages empty, `fixture` is the local walk on the data-rich fixture, which accepts no coverage gap.","Never an entry for a probe that could not run (`step-failed`) or a check that failed on a real defect of a page: those are fixed. Lowering a `max`, or deleting an entry the walk reports as no longer needed, is the way the file shrinks (the walk prints both). `node scripts/ops/ui-walk-baseline.mjs propose <report.json> --owner … --until … --why …` writes the entries a rehearsal's report asks for; `check` validates this file."],
+    "about": ["What the UI walk accepts for now (R19, plan §3 S9; audit D §4 S8). A finding the walk used to print as a NOTICE is a failure unless an entry here accepts it, and an entry says who owns the debt and the day it expires: after the deadline the walk fails again, so a baseline cannot become a place things are forgotten in.","An entry matches one view (`name@desktop`, `name@phone`, `name@*`, `*`, or the name a finding gives, such as `geo-answer`) and one finding: `rule` names a measured rule (`type-pairs`, `rows-ceiling`, `heading-order`, `axe`, `orphan-sentence`, `long-page`, … and the coverage gaps `not-observable` and `not-walked`) and `max` is the largest number accepted, so a page may only get better; `contains` instead matches a literal part of a finding's sentence. `profiles` (default: every profile) says which walk accepts it: `owner` is the production walk on the throwaway account it registers and deletes (2026-10-25; an account that holds nothing, so many pages are empty), `fixture` is the local walk on the data-rich fixture, which accepts no coverage gap.","Never an entry for a probe that could not run (`step-failed`) or a check that failed on a real defect of a page: those are fixed. Lowering a `max`, or deleting an entry the walk reports as no longer needed, is the way the file shrinks (the walk prints both). `node scripts/ops/ui-walk-baseline.mjs propose <report.json> --owner … --until … --why …` writes the entries a rehearsal's report asks for; `check` validates this file."],
     "entries": [
       {"view":"files","rule":"not-walked","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the owner's knowledge base holds no finished PDF, so the original of a PDF is not read on the production walk (the fixture walk reads one); data, not a defect"},
       {"view":"memory-project@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the project the production walk opens on 记忆胶囊's 项目 has no memories and no works, so no row is there to open (the fixture walk opens one); data, not a defect"},
       {"view":"chat@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk's account is an operator's (statistics and the context ring are drawn by design) and its conversation has run no tool (no chip to count); the fixture walk judges both"},
       {"view":"chat@phone","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk's account is an operator's (statistics and the context ring are drawn by design) and its conversation has run no tool (no chip to count); the fixture walk judges both"},
-      {"view":"chat@desktop","contains":"the runtime was already up, so a start refused for cleanup could not be shown","owner":"controller","until":"2026-12-01","why":"the owner's runtime was running when the production walk reached the conversation, so the refused start is not shown there (the fixture walk shows it); data, not a defect"}
+      {"view":"chat@desktop","contains":"the runtime was already up, so a start refused for cleanup could not be shown","owner":"controller","until":"2026-12-01","why":"the owner's runtime was running when the production walk reached the conversation, so the refused start is not shown there (the fixture walk shows it); data, not a defect"},
+      {"view":"calculation-history","rule":"not-walked","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"evidence-matrix","rule":"not-walked","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"files-reader","rule":"not-walked","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"geo@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"virtual-research@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"files@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"knowledge-pages@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"knowledge-graph@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"memory@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"memory-methods@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"memory-overview@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"memory-map@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"autopilot@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"memory-map@phone","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
+      {"view":"memory-overview@phone","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"on the throwaway account the production walk registers (2026-10-25) every card of the overview is its empty recipe, so the headline sentence and the cards have nothing to be compared on; the fixture walk compares them with data"}
     ]
   },
   "operatorSentences": [
@@ -828,11 +851,11 @@ export function findingText(entry) {
   return typeof entry === "string" ? entry : entry.text;
 }
 
-/** What a page could not be looked at for want of data on the account: the owner walk may be given these by the baseline, a fixture walk never. */
+/** What a page could not be looked at for want of data on the account: the production (`owner`) walk may be given these by the baseline, a fixture walk never. */
 export const COVERAGE_RULES = new Set(["not-observable", "not-walked"]);
 /** A probe that did not run proves nothing about the page it was for; no baseline entry accepts it. */
 export const UNACCEPTABLE_RULES = new Set(["step-failed"]);
-/** The two walks the baseline tells apart: the release walk on the owner-view account (many pages hold no data) and the local walk on the data-rich fixture. */
+/** The two walks the baseline tells apart: the production release walk on a throwaway account (it holds no data) and the local walk on the data-rich fixture. */
 export const WALK_PROFILES = ["owner", "fixture"];
 
 /**
@@ -3795,24 +3818,28 @@ async function walkCleanupCover(context, base, waitMs) {
 
 async function main() {
   const base = required("OPEN_SCIENCE_WALK_BASE_URL").replace(/\/+$/, "");
-  const username = required("OPEN_SCIENCE_WALK_USER");
-  // Read from a file and never printed: the password is not an argument, an
-  // environment value or a log line.
-  const password = (await readFile(required("OPEN_SCIENCE_WALK_PASSWORD_FILE"), "utf8")).trim();
+  const setting = await walkSetting();
+  const signIn = walkSignIn(setting.profile);
+  const problems = [...setting.problems, ...signIn.problems];
+  if (problems.length) {
+    for (const problem of problems) console.error(`the walk cannot start: ${problem}`);
+    return 2;
+  }
+  // The fixture's password is read from a file and never printed: it is not an argument, an environment value or a log line. The
+  // production walk has none: its account's password is made and held by `throwaway-account.mjs`.
+  const password = signIn.mode === "seeded" ? (await readFile(signIn.passwordFile, "utf8")).trim() : "";
   const require = createRequire(import.meta.url);
   const playwright = require(required("OPEN_SCIENCE_PLAYWRIGHT_CORE"));
   const out = process.env.OPEN_SCIENCE_WALK_OUT?.trim() || "/tmp/evimed-ui-walk";
   await mkdir(out, { recursive: true });
-  const setting = await walkSetting();
-  if (setting.problems.length) {
-    for (const problem of setting.problems) console.error(`the walk cannot start: ${problem}`);
-    return 2;
-  }
 
   const browser = await playwright.chromium.launch({
     headless: true,
     ...(process.env.OPEN_SCIENCE_WALK_CHROMIUM ? { executablePath: process.env.OPEN_SCIENCE_WALK_CHROMIUM } : {}),
     args: ["--no-sandbox"],
+    // An interrupt is the walk's to answer: it deletes its account first, through the browser context's session, and only then closes the
+    // browser (the playwright default closes the browser and exits at once, which would leave the account behind).
+    handleSIGINT: false, handleSIGTERM: false, handleSIGHUP: false,
   });
   /** @type {string[]} */ const failures = [];
   /** @type {Array<string | Finding>} */ const notices = [];
@@ -3821,6 +3848,8 @@ async function main() {
   const runtimeStartsRefused = {};
   let current = "";
   let allowRuntimeStart = false;
+  /** The production walk's own account, until it is deleted. @type {Awaited<ReturnType<typeof openThrowawayAccount>> | null} */
+  let throwaway = null;
   try {
     const context = await browser.newContext({ ignoreHTTPSErrors: true, locale: "zh-CN", timezoneId: "Asia/Shanghai" });
     await context.addInitScript(forgetProjectChoice);
@@ -3832,12 +3861,24 @@ async function main() {
       runtimeStartsRefused[current] = (runtimeStartsRefused[current] ?? 0) + 1;
       return route.abort();
     });
-    const login = await context.request.post(`${base}/api/auth/login`, {
-      data: { username, password }, headers: { "content-type": "application/json" },
-    });
-    if (login.status() !== 200) {
-      console.error(`login answered ${login.status()}; nothing was walked.`);
-      return 2;
+    if (signIn.mode === "seeded") {
+      const login = await context.request.post(`${base}/api/auth/login`, {
+        data: { username: signIn.username, password }, headers: { "content-type": "application/json" },
+      });
+      if (login.status() !== 200) {
+        console.error(`login answered ${login.status()}; nothing was walked.`);
+        return 2;
+      }
+    } else {
+      // The session is the context's own: the registration signs the new account in, and its cookie is the one every page below carries.
+      try {
+        throwaway = await openThrowawayAccount({ base, send: contextTransport(context, base), prefix: "walk", onSignal: () => browser.close() });
+      } catch (error) {
+        console.error(`the walk cannot start: ${String(/** @type {any} */ (error)?.message ?? error)}; nothing was walked.`);
+        if (/** @type {any} */ (error)?.account) console.log(`FAIL account ${/** @type {any} */ (error).account} may exist and was not deleted: the registration did not finish; an operator has to look for it`);
+        return 2;
+      }
+      report.account = { id: throwaway.id, deleted: false };
     }
     // The catalogue the leak check is derived from. An unreadable catalogue
     // fails the walk: silently checking against no ids would pass every page.
@@ -3852,7 +3893,8 @@ async function main() {
     // Whether this account is an operator's: its conversation draws session statistics and the context ring by design (R13 E-17), a
     // researcher's does not. Presentation only, as in the app (`useOperator`): an unreadable answer is a researcher.
     const meAtStart = await context.request.get(`${base}/api/me`).catch(() => null);
-    const operator = meAtStart?.ok() ? (await meAtStart.json().catch(() => ({})))?.data?.operator === true : false;
+    const meData = meAtStart?.ok() ? (await meAtStart.json().catch(() => ({})))?.data ?? {} : {};
+    const operator = meData.operator === true;
     const found = await discoverRoutes(context, base, notices, failures, setting.only);
     const everything = [...ROUTES, ...found.routes];
     // A name that is no view of this walk is a typo that would walk nothing and pass.
@@ -4099,6 +4141,8 @@ async function main() {
     else notices.push("frontier-event@desktop: not observable: the hot list names no event, so the hand-off of 深入研究 to the conversation (A01) was not read");
     if (process.env.OPEN_SCIENCE_WALK_CHAT === "1") {
       current = "chat@desktop";
+      // A throwaway account has no runtime yet: start it now, through the API, while no page is loading.
+      if (throwaway) report.info.push(await prewarmRuntime(context, base, throwaway.csrfToken, meData?.project?.id));
       await freshPage(VIEWPORTS[0][1]);
       allowRuntimeStart = true;
       const kernelMisses = [];
@@ -4120,19 +4164,33 @@ async function main() {
       allowRuntimeStart = false;
       await recordStep(report, failures, notices, "chat-cleanup-cover", () => walkCleanupCover(context, base, waitMs));
     }
-    // Log out for real: the request needs the shell's origin and the
-    // session's CSRF token (under `data` in /api/me), and without them the
-    // logout answered 403 and left a seven-day session behind after every
-    // walk. Checked, not assumed — /api/me must answer 401 afterwards.
-    const me = await context.request.get(`${base}/api/me`).catch(() => null);
-    const csrf = me?.ok() ? (await me.json().catch(() => ({})))?.data?.csrfToken : undefined;
-    const logout = await context.request.post(`${base}/api/auth/logout`, {
-      headers: { origin: base, ...(csrf ? { "x-open-science-csrf": String(csrf) } : {}) },
-    }).catch(() => null);
-    const after = await context.request.get(`${base}/api/me`).catch(() => null);
-    report.logout = { status: logout?.status() ?? null, meAfter: after?.status() ?? null };
-    if (after?.status() !== 401) failures.push(`logout: /api/me still answers ${after?.status() ?? "nothing"} after logging out — the walk's session is alive`);
+    if (throwaway) {
+      // The production walk ends by deleting its account, which ends its session. Checked, not assumed: the account is gone or the walk
+      // fails naming it (`throwaway-account.mjs` printed the FAIL line), and /api/me must answer 401 afterwards.
+      const outcome = await throwaway.close();
+      report.account = { id: throwaway.id, deleted: outcome.deleted, ...(outcome.reason ? { reason: outcome.reason } : {}) };
+      if (!outcome.deleted) failures.push(`account: ${throwaway.id} was not deleted (${outcome.reason}); nobody can sign in to it, so an operator has to remove it`);
+      const after = await context.request.get(`${base}/api/me`).catch(() => null);
+      report.logout = { status: null, meAfter: after?.status() ?? null };
+      if (outcome.deleted && after?.status() !== 401) failures.push(`account: /api/me still answers ${after?.status() ?? "nothing"} after ${throwaway.id} was deleted — the walk's session is alive`);
+    } else {
+      // Log out for real: the request needs the shell's origin and the
+      // session's CSRF token (under `data` in /api/me), and without them the
+      // logout answered 403 and left a seven-day session behind after every
+      // walk. Checked, not assumed — /api/me must answer 401 afterwards.
+      const me = await context.request.get(`${base}/api/me`).catch(() => null);
+      const csrf = me?.ok() ? (await me.json().catch(() => ({})))?.data?.csrfToken : undefined;
+      const logout = await context.request.post(`${base}/api/auth/logout`, {
+        headers: { origin: base, ...(csrf ? { "x-open-science-csrf": String(csrf) } : {}) },
+      }).catch(() => null);
+      const after = await context.request.get(`${base}/api/me`).catch(() => null);
+      report.logout = { status: logout?.status() ?? null, meAfter: after?.status() ?? null };
+      if (after?.status() !== 401) failures.push(`logout: /api/me still answers ${after?.status() ?? "nothing"} after logging out — the walk's session is alive`);
+    }
   } finally {
+    // A walk that ended on an error still deletes its account (the browser's session is needed for it, so before the browser closes);
+    // the call is idempotent, and on a normal end it has already been made above.
+    await throwaway?.close();
     await browser.close();
   }
   // Nothing the walk saw is only reported: a finding fails the walk unless the baseline accepts it, with an owner and a day (R19 S4).
@@ -4210,7 +4268,7 @@ function describeEntry(entry) {
 }
 
 /**
- * What the walk is set up to be: its profile (`OPEN_SCIENCE_WALK_PROFILE`, the owner-view release walk unless the local fixture walk says
+ * What the walk is set up to be: its profile (`OPEN_SCIENCE_WALK_PROFILE`, the production release walk unless the local fixture walk says
  * `fixture`), the day it counts deadlines from (`OPEN_SCIENCE_WALK_TODAY`, only a test sets it), and the baseline it was built with — or
  * the file `OPEN_SCIENCE_WALK_BASELINE` names, or `none` for a walk that accepts nothing. Problems are sentences; the walk exits 2 on any.
  * @param {Record<string, string | undefined>} [env]
@@ -4242,6 +4300,28 @@ export async function walkSetting(env = process.env) {
   // gate never sets it.
   const only = (env.OPEN_SCIENCE_WALK_ONLY ?? "").split(",").map((name) => name.trim()).filter(Boolean);
   return { profile, today, baseline, baselineSource, problems, only };
+}
+
+/**
+ * How the walk gets signed in, by its profile. The production (`owner`) walk registers a throwaway account and signs in as nobody else,
+ * so it refuses the two settings that name an account: a host file that still names one (`shared/ui-walk.env` did until 2026-10-25)
+ * would otherwise be ignored in silence, and the person who wrote it would think the walk went through it. The `fixture` walk signs in
+ * as the account its local control plane was seeded with, so it needs both. Problems are sentences; the walk exits 2 on any.
+ * @param {string} profile @param {Record<string, string | undefined>} [env]
+ * @returns {{ mode: "register" | "seeded", username: string, passwordFile: string, problems: string[] }}
+ */
+export function walkSignIn(profile, env = process.env) {
+  const username = (env.OPEN_SCIENCE_WALK_USER ?? "").trim();
+  const passwordFile = (env.OPEN_SCIENCE_WALK_PASSWORD_FILE ?? "").trim();
+  /** @type {string[]} */ const problems = [];
+  if (profile === "fixture") {
+    if (!username) problems.push("OPEN_SCIENCE_WALK_USER is required by the fixture profile: the account seed-walk-fixture.mjs made");
+    if (!passwordFile) problems.push("OPEN_SCIENCE_WALK_PASSWORD_FILE is required by the fixture profile: the file seed-walk-fixture.mjs wrote its password to");
+    return { mode: "seeded", username, passwordFile, problems };
+  }
+  const named = [username && "OPEN_SCIENCE_WALK_USER", passwordFile && "OPEN_SCIENCE_WALK_PASSWORD_FILE"].filter(Boolean);
+  if (named.length) problems.push(`${named.join(" and ")} name${named.length === 1 ? "s" : ""} an account, and the production walk signs in as none: it registers a throwaway account and deletes it at the end (they are the fixture profile's settings)`);
+  return { mode: "register", username: "", passwordFile: "", problems };
 }
 
 /* ------------------------------------------------------------------------- R13: axe-core (V-6) */
@@ -4903,6 +4983,29 @@ function globalConversationAddress(page) {
  * says so in the report instead of failing the release on its own vantage.
  * @param {any} page @param {string} base
  */
+/**
+ * Start a throwaway account's default runtime through the API, before the chat page is opened. The page's own start would do the same,
+ * but the walk's browser shares the host's network, and the first runtime container of an account adds a network interface at the moment
+ * the page is loading: Chromium aborts what is in flight with ERR_NETWORK_CHANGED and the shell says 「打开超时，请重试」 after a minute
+ * (2026-10-24, a live check of a brand-new account; an account whose runtime is already up never saw it, which is why the owner's walk
+ * did not). Started here, nothing is loading; the page then finds a runtime that is up. Not a gate: a start that is refused or slow is
+ * a line in the report, and the page's own start and its retry take over as they always did.
+ * @param {any} context @param {string} base @param {string} csrf @param {unknown} projectId the account's default project, as `/api/me` names it
+ * @returns {Promise<string>} the line for the report
+ */
+async function prewarmRuntime(context, base, csrf, projectId) {
+  const started = Date.now();
+  try {
+    const project = String(projectId ?? "default");
+    const answer = await context.request.post(`${base}/api/commands/start_runtime`, {
+      data: {}, headers: { origin: base, "x-open-science-csrf": csrf, "x-open-science-project": project }, timeout: 150_000,
+    });
+    return `chat: the throwaway account's runtime was started through the API first (${answer.status()} after ${Math.round((Date.now() - started) / 1000)} s)`;
+  } catch (error) {
+    return `chat: the throwaway account's runtime could not be started through the API first (${String(/** @type {any} */ (error)?.message ?? error).slice(0, 80)}); the page starts it`;
+  }
+}
+
 async function walkChat(page, base) {
   let networkChanged = 0;
   const onFailed = (request) => { if (/ERR_NETWORK_CHANGED/.test(request.failure()?.errorText ?? "")) networkChanged += 1; };

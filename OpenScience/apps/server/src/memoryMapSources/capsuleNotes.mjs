@@ -21,7 +21,7 @@
  * @module memoryMapSources/capsuleNotes
  */
 
-import { MEMORY_KIND_LABELS_ZH } from "../researchMemoryPersistence.mjs";
+import { MEMORY_KIND_LABELS_ZH } from "../memoryKinds.mjs";
 import { entryProject } from "../capsuleEntryProject.mjs";
 import { bucketsOf } from "./activity.mjs";
 import { excerpt, instant, nodeId, recencyWeight } from "./common.mjs";

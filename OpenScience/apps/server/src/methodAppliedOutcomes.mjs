@@ -10,13 +10,15 @@
  * [{ id, digest }], at, … }`); this module reads them and moves the counters (`LearningService.recordApplied`,
  * `foldApplied`):
  *
- *  - `corrected`: a correction, preference or rejection on the run whose `concerns` names this method, at the body the run read
- *    (its mounted digest, or its content digest — the judge is shown the cards of what the run opened and may name either);
- *  - `clean`: the conversation moved on — a `silent` event, an acceptance, or a later turn with verdict `none` — and no
- *    correction on the run is left unattributed.
+ *  - `corrected`: a correction, preference or rejection on the run — a follow-up, or a steer typed into it that the judge read that way —
+ *    whose `concerns` names this method, at the body the run read (its mounted digest, or its content digest — the judge is shown the
+ *    cards of what the run opened and may name either);
+ *  - `clean`: the run was kept — accepted or adopted on the next turn, or its delivered file opened or downloaded (`used`) — and no
+ *    correction on the run is left unattributed (`learningRunOutcome`).
  *
  * What is never recorded: a correction that names no method (the researcher corrected the answer, and nothing says it was the
- * method: a missing attribution is not a clean run), a run nobody reacted to (no event: unknown, never clean), a run the
+ * method: a missing attribution is not a clean run), a run nobody reacted to or whose next message was about something else (silence is
+ * unknown, not approval, since 2026-10-25: `silent` and `none` count for nothing, neither clean nor corrected), a run the
  * platform made (`isResearcherOwnedWork`: an acceptance driver's traffic teaches nothing), and a method whose body has changed
  * since the run read it (the counters are about the text it held then).
  *
@@ -28,27 +30,15 @@
 
 import { createHash } from "node:crypto";
 
-import { LEARNING_EVIDENCE_TRIGGER, isLearningCorrection, isResearcherOwnedWork, mountedMethodDigest } from "@evimed/domain";
+import { LEARNING_EVIDENCE_TRIGGER, isLearningCorrection, isResearcherOwnedWork, learningRunOutcome, mountedMethodDigest } from "@evimed/domain";
 
 /** How far back the events are read, and how much of the ledger one settlement may read: bounds, not opinions. */
 const DEFAULT_WINDOW_MS = 72 * 3_600_000;
 const PAGE = 200;
 const MAX_PAGES = 5;
 
-const MOVED_ON_VERDICTS = Object.freeze(["accept", "none"]);
-
 /** @param {string} text @returns {string} */
 const sha256 = (text) => createHash("sha256").update(text, "utf8").digest("hex");
-
-/**
- * Whether an evidence event says the conversation moved on from the run: nothing was said (`silent`), or what was said accepted
- * the work or was about something else.
- * @param {any} detail @returns {boolean}
- */
-function isMovedOn(detail) {
-  if (isLearningCorrection(detail)) return false;
-  return detail?.evidence === "silent" || MOVED_ON_VERDICTS.includes(String(detail?.verdict ?? ""));
-}
 
 /**
  * @param {{
@@ -59,9 +49,13 @@ function isMovedOn(detail) {
  *   now?: () => number, windowMs?: number,
  *   onApplied?: ((outcome: "corrected" | "clean") => void) | null,
  *   audit?: ((event: string, detail: Record<string, unknown>) => unknown) | null,
+ *   official?: { methods: (userId: string) => Promise<{ key: string, name: string, sha: string, digest: string }[]>,
+ *     recordApplied: (applied: { key: string, sha: string, runId: string, outcome: "corrected" | "clean", at: string }) => Promise<{ changed: boolean }> } | null,
  * }} dependencies
+ *   `official`: the platform's official methods (`officialPacks.mjs`) a run opened are not methods of the account's: the same reading of the researcher's
+ *   next words is folded into the platform's own record of that body, across every account that was offered it.
  */
-export function createMethodAppliedOutcomes({ learning, feedback, resolveProject, runsOf, now = () => Date.now(), windowMs = DEFAULT_WINDOW_MS, onApplied = null, audit = null }) {
+export function createMethodAppliedOutcomes({ learning, feedback, resolveProject, runsOf, now = () => Date.now(), windowMs = DEFAULT_WINDOW_MS, onApplied = null, audit = null, official = null }) {
   /** @param {string} event @param {Record<string, unknown>} detail */
   const say = (event, detail) => { try { void Promise.resolve(audit?.(event, detail)).catch(() => {}); } catch { /* an audit line never decides */ } };
 
@@ -107,8 +101,11 @@ export function createMethodAppliedOutcomes({ learning, feedback, resolveProject
     if (!evidence.size) return result;
     /** @type {Map<string, any>} */
     const byName = new Map();
+    /** The platform's official methods the account holds, by name. @type {Map<string, { key: string, name: string, sha: string, digest: string }>} */
+    const officialByName = new Map();
     try {
       for (const document of await learning.approvedMethods(userId)) byName.set(String(document?.payload?.frontmatter?.name ?? ""), document);
+      if (official) for (const method of await official.methods(userId)) officialByName.set(method.name, method);
     } catch (error) {
       say("learning.applied.read", { userId, code: typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "methods_unreadable" });
       return { ...result, failed: 1 };
@@ -129,25 +126,30 @@ export function createMethodAppliedOutcomes({ learning, feedback, resolveProject
         if (!opened.length) continue;
         result.runs += 1;
         const corrections = events.filter((event) => isLearningCorrection(event.detail));
-        const movedOn = events.some((event) => isMovedOn(event.detail));
+        const kept = learningRunOutcome(events.map((event) => event.detail)) === "clean";
         const latest = (/** @type {any[]} */ list) => String(list.map((event) => String(event.detail?.at ?? event.occurredAt ?? "")).sort().at(-1) ?? "");
         for (const entry of opened) {
-          const document = byName.get(String(entry.name));
-          if (!document) continue;
-          const payload = document.payload ?? {};
+          const own = byName.get(String(entry.name));
+          const platform = own ? null : officialByName.get(String(entry.name)) ?? null;
+          if (!own && !platform) continue;
+          const payload = own?.payload ?? {};
+          const methodId = own ? own.id : /** @type {any} */ (platform).key;
           // The reaction is to the text the run read: a method amended since holds another body and is not credited with it.
-          if (mountedMethodDigest(payload, sha256) !== entry.digest) { result.stale += 1; continue; }
+          if ((own ? mountedMethodDigest(payload, sha256) : /** @type {any} */ (platform).digest) !== entry.digest) { result.stale += 1; continue; }
           const named = corrections.filter((event) => (Array.isArray(event.detail?.concerns) ? event.detail.concerns : []).some((/** @type {any} */ concern) =>
-            concern?.id === document.id && (concern?.digest === entry.digest || concern?.digest === payload.contentDigest)));
+            concern?.id === methodId && (concern?.digest === entry.digest || concern?.digest === (own ? payload.contentDigest : entry.digest))));
           /** @type {"corrected" | "clean" | null} */
           let outcome = null;
           if (named.length) outcome = "corrected";
-          else if (!corrections.length && movedOn) outcome = "clean";
+          else if (kept) outcome = "clean";
           else if (corrections.length) { result.unattributed += 1; continue; }
           if (!outcome) continue;
           const at = latest(named.length ? named : events);
           try {
-            const { changed } = await learning.recordApplied(userId, document.id, { runId, outcome, at: at || new Date(now()).toISOString() }, payload.contentDigest);
+            const appliedAt = at || new Date(now()).toISOString();
+            const { changed } = own
+              ? await learning.recordApplied(userId, methodId, { runId, outcome, at: appliedAt }, payload.contentDigest)
+              : await /** @type {any} */ (official).recordApplied({ key: methodId, sha: /** @type {any} */ (platform).sha, runId, outcome, at: appliedAt, userId });
             if (changed) {
               result[outcome] += 1;
               try { onApplied?.(outcome); } catch { /* a counter never decides */ }

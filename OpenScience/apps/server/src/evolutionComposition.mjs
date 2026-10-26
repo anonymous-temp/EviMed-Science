@@ -13,7 +13,6 @@ import { evolutionRepairSeed, readEvolutionPreviousCandidate } from './evolution
 import { trustedEvolutionNativeName } from './evolutionToolRouting.mjs';
 import { createEvolutionDevelopmentComparison } from './evolutionDevelopmentComparison.mjs';
 import { normalizeEvolutionDataRequirements } from './evolutionDataRequirements.mjs';
-import { createEvolutionLearningCoupling } from './evolutionLearningCoupling.mjs';
 import { saveEvolutionEvaluation } from './evolutionEvaluationGaps.mjs';
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -84,7 +83,7 @@ export function createEvolutionDecisionModel({ config, usageLedger, fetchImpl, o
 /** Compose the optional platform loop using the same ledger, runtime and inbox as research.
  * @param {any} dependencies */
 export function createEvolution({ config, store, documents, jobs, database, usageLedger, notifications, registry, runtimeManager,
-  researchSessions, agentRuns, evaluationIsolation, sourceService, autopilot, dataSemantics, controller, canRun, resolvePositiveEvidence = null, observeHandbookOutcome = null, judgeService = null, report = () => {}, fetchImpl = fetch, webReader = null }) {
+  researchSessions, agentRuns, evaluationIsolation, sourceService, autopilot, dataSemantics, controller, canRun, resolvePositiveEvidence = null, judgeService = null, report = () => {}, fetchImpl = fetch, webReader = null }) {
   if (!config.evolutionEnabled || !database || !documents || !jobs || !usageLedger) return null;
   const settingsIssues = validateEvolutionConfiguration(config);
   // A module whose settings are wrong stays off with the reason reported; it never stops the platform (`loadConfig` refuses first).
@@ -101,14 +100,12 @@ export function createEvolution({ config, store, documents, jobs, database, usag
     wakeAgenda: input => integration.wakeAgenda(input),
   } });
   const integration = new EvolutionIntegration({ service, autopilot, judgeService, report });
-  const learningCoupling = createEvolutionLearningCoupling({service,database});
   service.callbacks.adjudicationOpportunity = async input => {
     const userId=await service.owner(), user=await store.userById(userId);
     const project=await store.projectFor(user,'evolution-research-opportunities','循证进化研究机会');
     return service.addOpportunity({id:`evolution-disagreement-${evolutionKey(input)}`,userId,projectId:project.id,status:'available',origin:'platform-inference',
       title:'核对复现分析中的证据分歧',prompt:`${input.publicPaperId ? `独立核查公开论文 ${input.publicPaperId}。` : ''}平台的独立复现和跨家族复核发现值得进一步核对的证据分歧。请开展独立文献核查，保留来源并区分已发表结论与平台推断；不将平台裁定作为新的实证证据。`,taskTypes:['evidence-update'],basis:{kind:'adjudicated-platform-inference',...input}});
   };
-  service.callbacks.scanHandbookGaps = () => learningCoupling.scan();
   const executionEvidence = createProspectiveExecutionEvidence(config);
   const evidenceRegistration = createEvolutionEvidenceRegistration({ service, integration, store, agentRuns, runtimeManager, sourceService, executionEvidence });
   service.callbacks.pollProspectiveTargets = () => evidenceRegistration.pollProspectiveTargets();
@@ -120,8 +117,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
     if (!image?.kernelVersion || !image.imageId) return null;
     return { kernelVersion: image.kernelVersion, baselineVersion: `${image.imageId}:${config.sourceRevision ?? 'unknown'}` };
   } });
-  const supply = createPlatformSkillSupply(config, { report, resolveHandbookSelection: async project => service.callbacks.handbookSelection
-    ? service.callbacks.handbookSelection(project) : (await service.tools()).map(row => ({toolId:row.id})) });
+  const supply = createPlatformSkillSupply(config, { report });
   const candidateEvaluator = createEvolutionCandidateEvaluator({ config, controller, fetchImpl,
     withReviewLock: (id, operation) => service.withLock(`candidate-review:${id}`, operation),
     evaluateWorkflowSmoke: createEvolutionWorkflowSmoke({ service, runs, store }),
@@ -291,7 +287,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
   notifications?.onAction?.(engineReviews.decide);
   service.callbacks.engineReviewPrepared = async dossierId => { try { await engineReviews.announce(dossierId); } catch { engineReviews.counters.announceFailed++; } };
   service.callbacks.announceEngineReviews = async () => { try { await engineReviews.announcePending(); } catch { engineReviews.counters.announceFailed++; } };
-  const feedback = createEvolutionFeedback({ service, maintenance, resolvePositiveEvidence, observeHandbookOutcome });
+  const feedback = createEvolutionFeedback({ service, maintenance, resolvePositiveEvidence });
   service.callbacks.observeFeedback = feedback.observeFeedback;
   // The sources the platform asks the knowledge-source plugin for (`evolutionSourceRequests.mjs`): filed from what the scout finds, kept until the plugin has them.
   const frontierSources = config.frontierEnabled ? createFrontierEvolutionDiscovery({ database }) : null;

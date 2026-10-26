@@ -1,0 +1,30 @@
+{
+  "id": "p01-project-rule-with-a-request",
+  "class": "keep-project-rule-in-the-card",
+  "observedIn": "written for the memory-capsule next round on 2026-10-25 (the memory package, M8; found by S7 of evals/capsule-longitudinal on production, release 5d98694214c4: the rule the person gave the project in its first conversation did not reach the next one); every name, number and identifier is invented",
+  "expected": "A rule the person gives for this project, in the same message as a small request, is a line under 约束 of the project's card (so the next conversation of the project is handed it up front): not a preference of theirs, and not a working fact filed where only a search finds it.",
+  "decidable": true,
+  "judge": "Does the card's 约束 say that the project's text deliverables are written in English, in the person's words, and is the rule absent from the user-level preferences?",
+  "replay": {
+    "synthetic": true,
+    "projectId": "p_review",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "这个项目的所有文字交付物一律用英文写，不要写中文。先帮我写一句话的项目简介：这是一篇关于 SGLT2 抑制剂的综述。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "Project summary: a review of SGLT2 inhibitors."
+      }
+    ]
+  },
+  "expect": {
+    "requireKeys": ["project.constraints"],
+    "keyValues": { "project.constraints": ["英文", "English", "english"] },
+    "requireTextContains": ["英文"],
+    "noRecordOfKinds": ["preference"]
+  }
+}

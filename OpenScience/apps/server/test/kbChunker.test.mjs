@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { KB_CHUNK_TARGET_TOKENS, chunkDocument, documentTerms, estimateTokens, trigramTerms, tsqueryLiteral, tsvectorLiteral } from "../src/kbChunker.mjs";
 import { sourcePageForOffset } from "@evimed/domain";
-import { searchTokens } from "../src/memoryRecallPolicy.mjs";
+import { searchTokens } from "../src/searchTokens.mjs";
 
 test("a page map cuts the document page by page, and every chunk is an exact slice", () => {
   const text = "第一页：抗凝治疗概述。\n第二页：利伐沙班 15 mg 每日一次。\n第三页：出血处理。";

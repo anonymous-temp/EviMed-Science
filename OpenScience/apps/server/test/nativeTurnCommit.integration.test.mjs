@@ -18,14 +18,14 @@ import { NativeMemoryWorker } from "../src/nativeMemoryWorker.mjs";
 import { NativeTurnCommit } from "../src/nativeTurnCommit.mjs";
 import { OpenVikingClient } from "../src/openVikingClient.mjs";
 import { OpenVikingSessions } from "../src/openVikingSessions.mjs";
-import { ResearchMemoryStore } from "../src/researchMemory.mjs";
-import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
+import { MemorySettingsStore } from "../src/memorySettings.mjs";
+import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
 import { startOpenVikingStub } from "./helpers/openVikingStub.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) { const parsed = new URL(url); assert.ok(["127.0.0.1", "localhost", "::1"].includes(parsed.hostname)); assert.match(parsed.pathname, /evimed_test/); }
 const options = { skip: !url && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
-const config = { ovNativeMemoryEnabled: true, memoryEnabled: true, memoryContextLimit: 8, memoryContextMaxChars: 20_000, nativeMemoryReplayAttempts: 3 };
+const config = { memoryEngineEnabled: true, memoryEnabled: true, memoryContextLimit: 8, memoryContextMaxChars: 20_000, nativeMemoryReplayAttempts: 3 };
 const TOKEN = "workload-token-for-tests";
 const CONVERSATION = "session_0123456789abcdef0123456789abcdef";
 const ENGINE_SESSION = `dsh-${CONVERSATION}`;
@@ -37,7 +37,7 @@ const users = [];
 before(async () => {
   if (!url) return;
   database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 4, databaseConnectionTimeoutMs: 5_000 });
-  await migrateResearchMemory(database);
+  await migrateMemorySettings(database);
 });
 after(async () => {
   if (!url) return;
@@ -61,14 +61,13 @@ test("a short exchange is learned from while the runtime lives: ledger row, proj
   const client = new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: "evimed" });
   const sessions = new OpenVikingSessions(client, { timeoutMs: 2_000, fastTimeoutMs: 1_000 });
   const overlay = new NativeMemoryOverlay({ database });
-  const researchMemory = new ResearchMemoryStore(config, { database });
-  assert.equal(await researchMemory.memoryEngine(userId), "native");
+  const memorySettings = new MemorySettingsStore(config, { database });
   const runs = [];
   const conversations = {
     running: async () => runs.filter((run) => run.status === "running"),
     runsOf: async (_project, id) => runs.filter((run) => run.sessionId === id),
   };
-  const admission = createMemoryAdmission({ config, researchMemory, conversations });
+  const admission = createMemoryAdmission({ config, memorySettings, conversations });
   const handler = createMemoryGatewayHandler({
     config,
     runtimeManager: { assertActiveEviMedWorkloadToken: async (token) => { if (token === TOKEN) return { userId, projectId: project.id }; throw new Error("no"); } },
@@ -86,10 +85,10 @@ test("a short exchange is learned from while the runtime lives: ledger row, proj
   /** @type {Set<{ fn: () => void }>} */
   const timers = new Set();
   const committer = new NativeTurnCommit({
-    config: { ...config, nativeMemoryTurnCommitSettleMs: 100 }, researchMemory, sessions, admission, conversations, commit: handler.commitSession,
+    config: { ...config, nativeMemoryTurnCommitSettleMs: 100 }, memorySettings, sessions, admission, conversations, commit: handler.commitSession,
     setTimer: (fn) => { const timer = { fn }; timers.add(timer); return timer; }, clearTimer: (timer) => { timers.delete(timer); }, wait: async () => {},
   });
-  const worker = new NativeMemoryWorker({ config, researchMemory, sessions, overlay });
+  const worker = new NativeMemoryWorker({ config, memorySettings, sessions, overlay });
   const turnEnds = async (id) => {
     runs.push({ id, sessionId: CONVERSATION, status: "succeeded" });
     await committer.noteRunFinished(project, runs.at(-1));
@@ -140,16 +139,16 @@ test("an account deleted while its turn's commit waited commits nothing, writes 
   users.push(userId);
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Turn commit test','development')", [userId]);
   const project = { id: "p_gone", userId };
-  const researchMemory = new ResearchMemoryStore(config, { database });
+  const memorySettings = new MemorySettingsStore(config, { database });
   const conversations = { running: async () => [], runsOf: async () => [] };
-  const admission = createMemoryAdmission({ config, researchMemory, conversations });
+  const admission = createMemoryAdmission({ config, memorySettings, conversations });
   const reports = [];
   let reads = 0;
   let commits = 0;
   /** @type {Set<{ fn: () => void }>} */
   const timers = new Set();
   const committer = new NativeTurnCommit({
-    config, researchMemory, admission, conversations,
+    config, memorySettings, admission, conversations,
     sessions: { configured: true, readSession: async () => { reads += 1; return { result: { pending_tokens: 120, message_count: 2 } }; } },
     commit: async () => { commits += 1; return { commit: "accepted" }; },
     setTimer: (fn) => { const timer = { fn }; timers.add(timer); return timer; }, clearTimer: (timer) => { timers.delete(timer); }, wait: async () => {},
@@ -166,8 +165,6 @@ test("an account deleted while its turn's commit waited commits nothing, writes 
   assert.equal(commits, 0);
   assert.equal(reads, 0, "the engine is not asked about a conversation of an account that is gone");
   assert.equal(nativeMemoryCounters().turnCommits.not_learning, 1);
-  assert.equal(await researchMemory.memoryEngine(userId), "legacy", "an account that is gone is on no engine");
   const rows = await database.query("SELECT 1 FROM evimed_memory.settings WHERE user_id=$1", [userId]);
   assert.equal(rows.rowCount, 0, "and nothing is written for it");
-  await assert.rejects(researchMemory.setMemoryEngine(userId, "native"), { code: "memory_engine_invalid" });
 });

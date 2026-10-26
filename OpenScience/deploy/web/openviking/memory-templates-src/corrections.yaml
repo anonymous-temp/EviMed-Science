@@ -11,6 +11,9 @@ description: |
     "先给结论再给依据"), the rule applying to the kind of thing it was said about;
   - adopts an approach by name ("好，就按这个三栏表来，其他材料也这样", "对，用 IPTW"). A bare
     "不错" or "谢谢" is not the approval of an approach.
+  A rule that lays out a document or an answer ("先给结论再给依据") is kept as its places and
+  what the user fills them with ("每条先写结论；依据只写用户给过的，没给就不写"), never as content
+  to produce: a place in a layout is not a promise that there is something to put in it.
   The rule is what is kept. The numbers, names and conclusions of the study, case, document
   or product that was being discussed are not part of it.
   One file per subject; a later correction on the same subject updates that file. The

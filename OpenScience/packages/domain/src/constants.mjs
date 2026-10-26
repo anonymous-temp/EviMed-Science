@@ -43,15 +43,21 @@ export const METHOD_INDUCTION_MIN_TRAJECTORIES = 3
 
 /**
  * The embedding shortlist the consolidation pass groups from (`methodSimilarity.pairs`): each method's nearest
- * neighbours by cosine of the method text's embedding, at most `METHOD_SIMILARITY_TOP_K` per method, none below
- * `METHOD_SIMILARITY_PAIR_FLOOR`. SkillPyramid's SCREEN retrieves by name, description and embedding similarity; ours
- * had only shared words. Provisional: 0.80 sits below `DEDUP_SEMANTIC_COSINE` (0.95), which is for "these are the
- * same text", because a shortlist only decides what DECIDE reads, and DECIDE is the one that says whether two methods
- * are related. Chosen before there is a distribution of scores over a real library, to be read from the job result's
- * `shortlist` figures and moved once there is one; nothing in the pass depends on the exact number.
+ * `METHOD_SIMILARITY_TOP_K` neighbours by cosine of the method text's embedding, none below `METHOD_SIMILARITY_PAIR_FLOOR`.
+ * SkillPyramid's SCREEN retrieves by name, description and embedding similarity; ours had only shared words.
+ *
+ * The floor is a candidate floor, not a decision about relatedness: SCREEN (names and descriptions) thins the pairs and DECIDE
+ * (the bodies of one group, only when the group changed) says whether two methods are related, so a pair that is let through
+ * costs one reading and a pair that is kept out can never be related. It was 0.80, chosen before there was a distribution; the
+ * first distribution there is — the closest pair of a production library, read off the hourly pass's `shortlist.topScore` on
+ * 2026-10-25 — was 0.70, so for eleven days nothing was above the floor and no group ever formed. It is 0.50 now: 0.20 below the
+ * only measured number, and still a refusal for texts that are not near each other at all. What bounds the cost is the number
+ * of neighbours (five per method, so a group is at most a method and its five nearest, and the incremental pass for one changed
+ * method reads exactly those), not the floor. The result of every pass carries the distribution of neighbour cosines
+ * (`shortlist.p50`, `shortlist.p90`, with `topScore`) so the number is moved by data, not by a second guess.
  */
-export const METHOD_SIMILARITY_PAIR_FLOOR = 0.8
-export const METHOD_SIMILARITY_TOP_K = 20
+export const METHOD_SIMILARITY_PAIR_FLOOR = 0.5
+export const METHOD_SIMILARITY_TOP_K = 5
 
 /**
  * When a merge the consolidation pass built, and nobody has used, goes away (`retirementProposal`, code
@@ -230,17 +236,6 @@ export const SKILL_AUTHORING_LIMITS = Object.freeze({
   maxReferenceDepth: 1,
   referenceTocLineThreshold: 100,
 })
-
-/**
- * How long the text of a general lesson may be to leave its account for the platform's handbooks: name, description and body together, in
- * characters (`handbookFieldChecks` in the control plane applies it; `min` is the shortest that says anything).
- *
- * Written here, beside the authoring limits, because the step that writes the lesson has to be told it and held to it: on 2026-10-12 sixteen
- * account handbooks averaged 9.5 KB and 14 of the 17 platform candidates made from them failed this one check, which is a defect of telling
- * the writer nothing, not of the lesson. A lesson filed as an account handbook (`signal: "reviewer"`) is handed this as
- * `authoringLimits.maxHandbookChars` and the `method-candidate` contract returns an over-long one to be shortened in place.
- */
-export const HANDBOOK_TEXT_LIMITS = Object.freeze({ min: 80, max: 6000 })
 
 /** Tool-result pruning thresholds mirrored from the preset row, in Unicode code points. */
 export const TOOL_RESULT_PRUNER = Object.freeze({ thresholdChars: 8192, headChars: 4096, tailChars: 1024 })

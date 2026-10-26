@@ -15,6 +15,7 @@ import { CapsuleService } from "../src/capsuleService.mjs";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { LearningService } from "../src/learningService.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
+import { makeCapsule } from "./helpers/capsuleFixtures.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) {
@@ -52,12 +53,12 @@ before(async () => {
   doctor = { id: account.userId };
 
   // The institution's shelf: one school, with a method and a fact.
-  school = (await capsules.create(hospital, { title: "经方思路" })).id;
+  school = (await makeCapsule(capsules, hospital, { title: "经方思路" })).id;
   await capsules.addEntry(hospital, school, { factKind: "method_preference", layer: "methods", origin: "explicit",
     content: "先核对方证眼目，不吻合时不得套用经方名。" });
   await capsules.addEntry(hospital, school, { factKind: "expertise", layer: "profile", origin: "explicit",
     content: "代表方示例：桂枝汤、小柴胡汤。" });
-  foreign = (await capsules.create(stranger, { title: "别人的胶囊" })).id;
+  foreign = (await makeCapsule(capsules, stranger, { title: "别人的胶囊" })).id;
 
   // The doctor's own habit, learned.
   await learning.createCandidate(doctor.id, {
@@ -80,7 +81,7 @@ after(async () => {
 const options = { skip: !url && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
 
 test("a doctor's recall hands over their own habits first, then the named school's methods and facts", options, async () => {
-  const result = await recallForAgent({ capsules, memorySubstrate: null, learning },
+  const result = await recallForAgent({ capsules, learning },
     { user: doctor, institution: { id: hospital } }, { query: "桂枝汤", capsuleIds: [school] });
   assert.deepEqual(result.methods.map((method) => method.source), ["learned", "capsule"], "the person's own come first");
   const [own, borrowed] = result.methods;
@@ -96,14 +97,14 @@ test("a doctor's recall hands over their own habits first, then the named school
 });
 
 test("without capsuleIds a doctor reads the capsules in force, and the institution's shelf only when named", options, async () => {
-  const result = await recallForAgent({ capsules, memorySubstrate: null, learning }, { user: doctor, institution: { id: hospital } }, { query: "桂枝汤" });
+  const result = await recallForAgent({ capsules, learning }, { user: doctor, institution: { id: hospital } }, { query: "桂枝汤" });
   assert.deepEqual(result.methods.map((method) => method.source), ["learned"]);
   assert.equal(result.items.length, 0, "nothing is in force for this doctor");
   assert.equal(result.capsules, undefined);
 });
 
 test("methods can be asked for by half, or not at all", options, async () => {
-  const ask = (methods) => recallForAgent({ capsules, memorySubstrate: null, learning },
+  const ask = (methods) => recallForAgent({ capsules, learning },
     { user: doctor, institution: { id: hospital } }, { query: "x", capsuleIds: [school], methods });
   assert.deepEqual((await ask("own")).methods.map((method) => method.source), ["learned"]);
   assert.deepEqual((await ask("capsules")).methods.map((method) => method.source), ["capsule"]);
@@ -112,31 +113,48 @@ test("methods can be asked for by half, or not at all", options, async () => {
 
 test("a capsule nobody on this key may read is refused, and says nothing about whether it exists", options, async () => {
   await assert.rejects(
-    () => recallForAgent({ capsules, memorySubstrate: null, learning }, { user: doctor, institution: { id: hospital } }, { query: "x", capsuleIds: [foreign] }),
+    () => recallForAgent({ capsules, learning }, { user: doctor, institution: { id: hospital } }, { query: "x", capsuleIds: [foreign] }),
     (error) => error.status === 404 && error.code === "capsule_not_found",
   );
   await assert.rejects(
-    () => recallForAgent({ capsules, memorySubstrate: null, learning }, { user: doctor, institution: { id: hospital } }, { query: "x", capsuleIds: [randomUUID()] }),
+    () => recallForAgent({ capsules, learning }, { user: doctor, institution: { id: hospital } }, { query: "x", capsuleIds: [randomUUID()] }),
     (error) => error.status === 404 && error.code === "capsule_not_found",
   );
 });
 
 test("the budget is spent in the mount's order: the doctor's own capsule methods, then their habits, then a school's", options, async () => {
-  const own = (await capsules.create(doctor.id, { title: "我的记忆胶囊" })).id;
+  const own = (await capsules.ownCapsule(doctor.id, { create: true })).id;
   await capsules.addEntry(doctor.id, own, { factKind: "method_preference", layer: "methods", origin: "explicit", content: "复诊先问睡眠。" });
-  await capsules.activate(doctor.id, own, { mode: "own" });
-  const result = await recallForAgent({ capsules, memorySubstrate: null, learning }, { user: doctor, institution: { id: hospital } }, { query: "x" });
+  const result = await recallForAgent({ capsules, learning }, { user: doctor, institution: { id: hospital } }, { query: "x" });
   assert.deepEqual(result.methods.map((method) => [method.source, method.capsuleId ?? null]), [["capsule", own], ["learned", null]]);
-  const withSchool = await recallForAgent({ capsules, memorySubstrate: null, learning }, { user: doctor, institution: { id: hospital } },
+  const withSchool = await recallForAgent({ capsules, learning }, { user: doctor, institution: { id: hospital } },
     { query: "x", capsuleIds: [own, school] });
   assert.deepEqual(withSchool.methods.map((method) => [method.source, method.capsuleId ?? null]), [["capsule", own], ["learned", null], ["capsule", school]],
     "the institution's school is the doctor's to borrow, and borrowed methods come last");
 });
 
 test("a doctor with no memory yet still reads the named school, and nothing of anyone else's", options, async () => {
-  const result = await recallForAgent({ capsules, memorySubstrate: null, learning },
+  const result = await recallForAgent({ capsules, learning },
     { user: null, institution: { id: hospital } }, { query: "桂枝汤", capsuleIds: [school] });
   assert.deepEqual(result.methods.map((method) => method.source), ["capsule"]);
   assert.equal(result.sources.memory, 0);
   assert.ok(result.items.every((item) => item.source === "capsule"));
+});
+
+test("the platform's own starter methods come last, only for an account that holds them, and never from a named school", options, async () => {
+  const official = { key: "official:daily-writing:status-report", capsuleId: "official-copy:daily-writing", description: "周报与进展汇报：事实只用你给的", whenToUse: "写周报时。",
+    body: "没给的栏留空。", scope: ["conversation"] };
+  const other = { ...official, key: "official:review:pooling", body: "可比性不够就不合并。", scope: ["meta-analysis"] };
+  const held = capsules.official;
+  capsules.official = /** @type {any} */ ({ methodsFor: async (/** @type {string} */ userId) => (userId === doctor.id ? [official, other] : []) });
+  try {
+    const result = await recallForAgent({ capsules, learning }, { user: doctor, institution: { id: hospital } }, { query: "x" });
+    assert.deepEqual(result.methods.map((method) => method.source), ["capsule", "learned", "official"], "below everything of the person's own: their capsule, then what was learnt");
+    assert.deepEqual(result.methods[2], { source: "official", id: official.key, capsuleId: official.capsuleId, title: official.description, summary: null, whenToUse: official.whenToUse,
+      content: official.body, digest: result.methods[2].digest, since: null, contextOnly: true });
+    assert.match(result.methods[2].digest, /^sha256:[a-f0-9]{64}$/);
+    const named = await recallForAgent({ capsules, learning }, { user: doctor, institution: { id: hospital } }, { query: "x", capsuleIds: [school] });
+    assert.ok(!named.methods.some((method) => method.source === "official"));
+    assert.ok(!(await recallForAgent({ capsules, learning }, { user: doctor, institution: { id: hospital } }, { query: "x", methods: "own" })).methods.some((method) => method.source === "official"));
+  } finally { capsules.official = held; }
 });

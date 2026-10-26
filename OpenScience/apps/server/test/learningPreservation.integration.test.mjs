@@ -114,8 +114,8 @@ test("deleting a project keeps its methods, their revisions and its pending lear
     const project = await app.store.requireProject(await app.store.userById(user.id), "paper");
     await mkdir(path.join(project.metaDir, TRANSCRIPT_DIR_NAME), { recursive: true });
     await writeFile(transcriptPath(project, "run_paper"), '{"schemaVersion":1,"runId":"run_paper"}\n');
-    const waiting = await jobs.enqueue(user.id, "distill", { runId: "run_paper", trigger: "delivered" },
-      { idempotencyKey: "distill:run_paper:delivered", projectId: "paper" });
+    const waiting = await jobs.enqueue(user.id, "distill", { runId: "run_paper", trigger: "edit_diff" },
+      { idempotencyKey: "distill:run_paper:edit_diff", projectId: "paper" });
     const pass = await jobs.enqueue(user.id, "consolidate", { action: "sleep", date: "2026-09-27T00:00:00.000Z" },
       { idempotencyKey: "consolidate:sleep:test", projectId: "paper" });
 
@@ -158,7 +158,7 @@ test("deleting a project keeps its methods, their revisions and its pending lear
     // the SQL is checked against the real schema here, not only a double.
     const summary = await learningSummary(database, user.id);
     assert.deepEqual(summary.methods, { candidate: 0, approved: 0, retired: 2 }, "the one effective and the one amended and waiting both stopped with the project they came from");
-    assert.deepEqual(summary.lessons.byTrigger, { delivered: 1 });
+    assert.deepEqual(summary.lessons.byTrigger, { edit_diff: 1 });
     const everyone = await learningLedgerCounts(database);
     assert.ok(everyone.methods.retired >= 2);
     // The usage summary narrowed to the loop's own purpose, which the

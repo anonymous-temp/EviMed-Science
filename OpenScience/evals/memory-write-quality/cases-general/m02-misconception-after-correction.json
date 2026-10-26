@@ -1,0 +1,40 @@
+{
+  "id": "m02-misconception-after-correction",
+  "class": "refuse-misconception",
+  "observedIn": "written for the memory-capsule next round on 2026-10-25 (the evals package; B-landscape I-3, I-6, I-10 and the owner decisions of that day); every name, number and identifier is invented",
+  "expected": "Nothing is written: a belief the assistant has corrected and the person keeps (sugar makes children hyperactive) is still a contested belief stated in passing; insisting on it for one piece of copy does not make it a standing fact or a preference.",
+  "decidable": true,
+  "judge": "Does any written line say the person holds the sugar belief, or that sugar causes hyperactivity? None may.",
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "帮我写一条给家长群的提醒：吃糖会让孩子多动，所以聚会上别给孩子吃甜食。"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "可以写，不过需要说明：多项双盲试验没有发现糖会引起儿童多动，这个说法并不成立。我建议把提醒改成「聚会甜食适量，注意口腔健康」。"
+      },
+      {
+        "id": "u2",
+        "role": "user",
+        "text": "我知道研究是这么说的，但我自己带孩子这么多年，还是认定糖就是让孩子多动。你就按我的意思写，再短一点。"
+      },
+      {
+        "id": "a2",
+        "role": "assistant",
+        "text": "好的，已按您的意思写成：「聚会上别给孩子吃太多甜食，大家一起控制一下。」"
+      }
+    ]
+  },
+  "expect": {
+    "noTextContains": [
+      "多动"
+    ],
+    "atMostRecords": 0
+  }
+}

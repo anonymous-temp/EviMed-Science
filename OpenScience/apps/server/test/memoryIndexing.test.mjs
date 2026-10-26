@@ -543,15 +543,10 @@ test("worker uses ProductJobs leases and retries a bounded failed index job", as
   assert.equal(calls[1][4].message, "Memory indexing failed.");
 });
 
-// One worker, two producers. The capsule half publishes approved facts; the
-// record half carries one research memory. They are dispatched by the kind the
-// queue leased, never by inspecting a payload, so a capsule job can never be
-// handed to the component that indexes records and call it a bad payload.
-test("the worker leases both halves of the index and gives each to the component that owns it", async () => {
-  const claimed = [
-    { id: "job-capsule", userId: "owner", leaseToken: "lease", attempts: 0, kind: "memory-index", payload: { capsuleId: "c" } },
-    { id: "job-record", userId: "owner", leaseToken: "lease", attempts: 0, kind: "memory-record-index", payload: { recordId: "r" } },
-  ];
+// One worker, one producer: the capsule half publishes approved facts. (A second half indexed the legacy engine's records until
+// that engine was deleted, 2026-10-25; its job kind is deleted at start by `legacyMemoryRetirement.mjs` and nothing claims it.)
+test("the worker leases the capsule half of the index and gives it to the component that owns it", async () => {
+  const claimed = [{ id: "job-capsule", userId: "owner", leaseToken: "lease", attempts: 0, kind: "memory-index", payload: { capsuleId: "c" } }];
   const asked = [];
   const jobs = {
     async claim(kinds) { asked.push(kinds); return claimed.shift() ?? null; },
@@ -559,19 +554,12 @@ test("the worker leases both halves of the index and gives each to the component
   };
   const ran = [];
   const indexing = { async rebuild(job) { ran.push(["capsule", job.id]); return { status: "published" }; }, async reconcile() {} };
-  const substrate = { async indexRecord(job) { ran.push(["record", job.id]); return { status: "indexed" }; } };
-  const worker = new MemoryIndexWorker({ jobs, indexing, substrate, pollMs: 60_000, reconcileMs: 60_000 });
+  const worker = new MemoryIndexWorker({ jobs, indexing, pollMs: 60_000, reconcileMs: 60_000 });
 
-  assert.deepEqual(worker.kinds, ["memory-index", "memory-record-index"]);
+  assert.deepEqual(worker.kinds, ["memory-index"], "the retired record kind has no claimer");
   await worker.tick();
-  await worker.tick();
-  assert.deepEqual(ran, [["capsule", "job-capsule"], ["record", "job-record"]]);
-  assert.deepEqual(asked[0], ["memory-index", "memory-record-index"]);
-});
-
-test("a worker with no substrate does not lease the work it could not run", () => {
-  const worker = new MemoryIndexWorker({ jobs: {}, indexing: {}, pollMs: 60_000, reconcileMs: 60_000 });
-  assert.deepEqual(worker.kinds, ["memory-index"]);
+  assert.deepEqual(ran, [["capsule", "job-capsule"]]);
+  assert.deepEqual(asked[0], ["memory-index"]);
 });
 
 test("worker stops retrying a job whose input the index will refuse again", async () => {
@@ -588,20 +576,7 @@ test("worker stops retrying a job whose input the index will refuse again", asyn
   }
 });
 
-// Both halves can be left behind by the same outage, so both are reconciled.
-// The capsule ledger re-arms from what it published; the record half re-arms
-// the jobs its writers enqueued. A reconcile that drove only one of them would
-// leave a deleted memory's copy in the index with nothing left to remove it.
-test("the reconcile drives both halves of the index, not only the one it started with", async () => {
-  const ran = [];
-  const indexing = { async reconcile() { ran.push("capsules"); return 1; } };
-  const substrate = { async reconcileRecords() { ran.push("records"); return 2; } };
-  const worker = new MemoryIndexWorker({ jobs: {}, indexing, substrate, pollMs: 60_000, reconcileMs: 60_000 });
-  await worker.reconcile();
-  assert.deepEqual(ran.sort(), ["capsules", "records"]);
-});
-
-test("a worker with no substrate still reconciles the half it has", async () => {
+test("the reconcile re-arms the capsule ledger from what it published", async () => {
   const ran = [];
   const indexing = { async reconcile() { ran.push("capsules"); return 1; } };
   const worker = new MemoryIndexWorker({ jobs: {}, indexing, pollMs: 60_000, reconcileMs: 60_000 });
@@ -616,10 +591,7 @@ test("with no index provider the worker drains the queue instead of letting it g
   // a Postgres trigger cannot read a Node config. Nothing was constructed to
   // claim them, so they accumulated silently: two had been queued since
   // 2026-09-15 when the 2026-09-16 review found them (M5).
-  const claimed = [
-    { id: "job-capsule", userId: "owner", leaseToken: "lease", attempts: 0, kind: "memory-index", payload: { capsuleId: "c" } },
-    { id: "job-record", userId: "owner", leaseToken: "lease", attempts: 0, kind: "memory-record-index", payload: { recordId: "r" } },
-  ];
+  const claimed = [{ id: "job-capsule", userId: "owner", leaseToken: "lease", attempts: 0, kind: "memory-index", payload: { capsuleId: "c" } }];
   const finished = [];
   const jobs = {
     async claim() { return claimed.shift() ?? null; },
@@ -630,13 +602,11 @@ test("with no index provider the worker drains the queue instead of letting it g
   const worker = new MemoryIndexWorker({ jobs, indexing: null, pollMs: 60_000, reconcileMs: 60_000 });
 
   assert.equal(worker.draining, true);
-  assert.deepEqual(worker.kinds, ["memory-index", "memory-record-index"], "with no index, neither half has a claimer");
-  await worker.tick();
+  assert.deepEqual(worker.kinds, ["memory-index"], "with no index, the capsule half is drained rather than left to grow");
   await worker.tick();
   assert.deepEqual(finished, [
     ["job-capsule", { skipped: "no_index_provider" }],
-    ["job-record", { skipped: "no_index_provider" }],
-  ], "the job rows say why they were closed rather than disappearing");
+  ], "the job row says why it was closed rather than disappearing");
 
   // And reconcile has nothing to reconcile against, rather than throwing on a
   // null index every interval.

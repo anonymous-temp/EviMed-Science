@@ -394,25 +394,19 @@ async function dispatchRun(base, sessionId, dispatchId, text = "research this qu
   return { response, body: await response.json() };
 }
 
-/** A research-memory store at the interface, for the two cases a dispatch has
- *  to tell apart: a deployment that has none, and one whose store is broken. */
+/** The memory settings store at the interface, for the two cases a dispatch has to tell apart: a deployment that has none, and one whose
+ *  store is broken (the researcher's pauses are read from it at every dispatch, and a pause that cannot be read is no licence to read). */
 function memoryStoreDouble({ configured = true, fail = null } = {}) {
   const refuse = () => { if (fail) throw fail; };
   return {
     configured,
     async status() {
-      return fail
-        ? { configured, connected: false, code: "memory_unavailable", structured: false }
-        : { configured, connected: configured, code: null, structured: configured };
+      return fail ? { configured, connected: false, code: "memory_unavailable" } : { configured, connected: configured, code: null };
     },
-    async relevant() { refuse(); return []; },
-    // What a dispatch reads of the memory since review M6 (the standing profile and the counts beside it).
-    async residentRecords() { refuse(); return []; },
-    async lookupCounts() { refuse(); return { user: 0, project: 0, session: 0 }; },
-    async list() { refuse(); return []; },
-    async listRecords() { refuse(); return []; },
-    async listAllRecords() { refuse(); return []; },
-    async profile() { refuse(); return { records: [], memos: [] }; },
+    async settings() { refuse(); return { learningPaused: false, recallPaused: false, pausedProjects: [] }; },
+    async sessionState() { refuse(); return { trialCapsuleId: null }; },
+    async residentState() { refuse(); return { digest: null, deliveredAt: null, compactedAt: null, compactedSince: false }; },
+    async noteResidentDelivered() { refuse(); },
   };
 }
 
@@ -425,7 +419,7 @@ test("a deployment with no research memory store still dispatches", async () => 
     const result = await startRun(base, "ses_memory_absent");
     assert.equal(result.response.status, 202, JSON.stringify(result.body));
     assert.equal(result.body.data.status, "running");
-  }, { researchMemory: memoryStoreDouble({ configured: false }) });
+  }, { memorySettings: memoryStoreDouble({ configured: false }) });
 });
 
 // A store that exists and cannot answer is the opposite case. Continuing would
@@ -443,22 +437,7 @@ test("a research memory store that cannot answer fails the dispatch and records 
     const runs = await listRuns(base);
     assert.equal(runs.body.data[0].status, "failed");
     assert.equal(runs.body.data[0].errorCode, "memory_unavailable");
-  }, { researchMemory: memoryStoreDouble({ fail: offline }) });
-});
-
-// The third case, and the one the prompt's old "科研记忆服务暂时不可用" note used
-// to serve: a deployment with no store of its own whose recall still fails.
-// That is what a strict index asks for when the index is down, and it is a
-// rejection like any other — a run that has been told to stop is not a run to
-// decorate with an excuse and dispatch anyway.
-test("a recall that fails rejects the dispatch even where the store itself is absent", async () => {
-  const offline = new HttpError(503, "memory_index_unavailable", "The memory index is unavailable.");
-  await withApp(async ({ base }) => {
-    assert.equal((await bind(base, "ses_memory_strict", { mode: "open-domain" })).status, 200);
-    const result = await startRun(base, "ses_memory_strict");
-    assert.equal(result.response.status, 503, JSON.stringify(result.body));
-    assert.equal(result.body.code, "memory_index_unavailable");
-  }, { researchMemory: memoryStoreDouble({ configured: false, fail: offline }) });
+  }, { memorySettings: memoryStoreDouble({ fail: offline }) });
 });
 
 test("starts immutable open-domain and specialist run identities from research-session bindings", async () => {
@@ -9051,6 +9030,28 @@ test("a run's ledger row keeps why each learned method's card was there, from a 
       { name: "d", digest: digest("d") },
     ]);
   } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a steer typed into a running turn keeps its words unless they carry a credential or an identifier by SHAPE: a message that mentions a password column is kept", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-steer-words-"));
+  const project = { id: "steer-words", userId: "researcher", rootDir: root, workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+  const binding = { sessionId: "ses_steer", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+  await mkdir(project.workspaceDir, { recursive: true });
+  await mkdir(project.metaDir, { recursive: true });
+  const store = new AgentRunStore({ get: async () => binding }, { model: "deepseek/deepseek-v4-flash", readSessionHistory: async () => [], monitorIntervalMs: 60_000 });
+  try {
+    await store.dispatch(project, { sessionId: binding.sessionId, dispatchId: "steered" }, async () => ({ accepted: true }));
+    await store.recordSteeredInput(project, binding.sessionId, "req_a", "把密码列去掉，token 也不要");
+    await store.recordSteeredInput(project, binding.sessionId, "req_b", "我的手机号 13800138000，发给我");
+    await store.recordSteeredInput(project, binding.sessionId, "req_c", "密码是 hunter2hunter2，登录用");
+    const [run] = await store.list(project);
+    assert.equal(run.corrections, 3, "every steer is counted, whatever it says");
+    assert.deepEqual(run.steers.map((steer) => steer.text), ["把密码列去掉，token 也不要"], "words that are language are kept; a phone number and a secret assigned to a name are shapes, and the count says it happened");
+  } finally {
+    await store.cancelSession(project, binding.sessionId);
+    await store.closeProject(project);
     await rm(root, { recursive: true, force: true });
   }
 });

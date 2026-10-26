@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { migrateResearchMemory } from "./researchMemoryPersistence.mjs";
+import { migrateMemorySettings } from "./memorySettingsPersistence.mjs";
 import { HttpError } from "./security.mjs";
 
 /**
@@ -61,7 +61,7 @@ export class MapEdgeCorrections {
     if (!this.database) throw new HttpError(503, "memory_unconfigured", "The research memory store is not configured.");
     if (!made.has(this.database)) {
       const attempt = (async () => {
-        await migrateResearchMemory(this.database);
+        await migrateMemorySettings(this.database);
         await this.database.query(`CREATE TABLE IF NOT EXISTS evimed_memory.map_edge_dismissals (
           user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
           edge_id text NOT NULL CHECK (edge_id ~ '^e_[0-9a-f]{24}$'),

@@ -42,6 +42,8 @@ test("the real application answers a project that holds no study whatever state 
     deepseekApiKey: "test-provider-key", deepseekBaseUrl: `http://127.0.0.1:${upstream.address().port}`,
     modelGatewaySigningSecret: secret,
     requireDurableUsageLedger: true, modelGatewayReservationMaxOutputTokens: 4096,
+    // The starter packs' publication scans them with the model at start; this file counts only the conversation's own calls.
+    officialPacksEnabled: false,
   });
   // Closed in the order that leaves no connection to a dropped database.
   t.after(async () => {

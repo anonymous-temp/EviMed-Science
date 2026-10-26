@@ -1,12 +1,22 @@
 #!/usr/bin/env node
-/** Observe a real module-owned VCR run, preserving partial work and resumable evidence. */
+/**
+ * Observe a real module-owned VCR run, preserving partial work and the evidence of each step as it happens.
+ *
+ * It signs in as nobody: after the candidate release is verified it registers a throwaway account (`throwaway-account.mjs`), makes the
+ * study in it from `--study-input`, observes the module's run, and deletes the account through the product at the end — on a result,
+ * an error or an interrupt (exit 4 and a FAIL line when it cannot). The account is deleted, so what it made is too: the evidence this
+ * writes under `--out` (`observation.json` after every step, the delivered bytes) is the whole record, a study cannot be named again
+ * and a run still going when the observation ends is cancelled with its account (exit 3) — give a long study a long `--timeout-ms`.
+ */
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { assertCandidate } from './result-revision-acceptance.mjs';
+import { fetchTransport, openThrowawayAccount } from './throwaway-account.mjs';
 
 export const VCR_ACCEPTANCE_ACTIONS = Object.freeze({
   'vcr-protocol': { section: 'run', payload: { step: 'definition' } },
@@ -29,54 +39,45 @@ export function moduleRun(run, capability, projectId, previousIds = []) {
 }
 
 /** api is authenticated and returns the actual platform data envelope's data. Tests inject protocol doubles only. */
-export async function observeVcrRun({ api, manifest, expectedRevision, capability, studyId, create, checkpoint,
+export async function observeVcrRun({ api, manifest, expectedRevision, capability, create,
   persist, saveArtifact, timeoutMs = 1_800_000, pollMs = 3000, now = Date.now, pause = sleep }) {
   assert.ok(VCR_ACCEPTANCE_ACTIONS[capability], 'choose one of the five VCR capabilities');
   assert.ok(Number.isSafeInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 7_200_000);
   assert.ok(Number.isSafeInteger(pollMs) && pollMs > 0);
-  const report = checkpoint ?? { schemaVersion: 1, scope: 'actual-hosted-module-native-vcr', capability,
+  const report = { schemaVersion: 1, scope: 'actual-hosted-module-native-vcr', capability,
     expectedRevision, releaseId: manifest.app.releaseId, startedAt: new Date(now()).toISOString(), accepted: false,
     qualified: false, artifacts: [] };
-  assert.equal(report.capability, capability); assert.equal(report.expectedRevision, expectedRevision);
-  assert.equal(report.releaseId, manifest.app.releaseId);
   assertCandidate(manifest, await api('/api/health'), await api('/api/ready'), expectedRevision);
   report.candidateVerified = true;
-  if (!report.studyId) {
-    if (studyId) report.studyId = studyId;
-    else {
-      assert.ok(create && typeof create.question === 'string' && create.question.length > 0 && create.question.length <= 2000,
-        'a complete bounded study question is required; questions are never silently clipped');
-      assert.equal(create.dataTier, 'T0', 'this create path contains no patient data; T1 studies must be created through the real data plane first');
-      assert.ok(!report.createAttempted, 'creation reply is unknown; recover the owned study ID and resume with --study, never recreate automatically');
-      report.createAttempted = true; await persist(report);
-      const made = await api('/api/vcr/studies', create);
-      assert.ok(made.id && made.projectId, 'module creation omitted its actual study/project identity');
-      report.studyId = made.id; report.projectId = made.projectId; report.created = made;
-      await persist(report);
-    }
-  }
+  assert.ok(create && typeof create.question === 'string' && create.question.length > 0 && create.question.length <= 2000,
+    'a complete bounded study question is required; questions are never silently clipped');
+  assert.equal(create.dataTier, 'T0', 'this create path contains no patient data; a T1 study needs the real data plane, which a throwaway account has not got');
+  // Said before the request: a reply that never comes back leaves this line as the evidence that the study may exist.
+  report.createAttempted = true; await persist(report);
+  const made = await api('/api/vcr/studies', create);
+  assert.ok(made.id && made.projectId, 'module creation omitted its actual study/project identity');
+  report.studyId = made.id; report.projectId = made.projectId; report.created = made;
+  await persist(report);
   const study = await api(`/api/vcr/studies/${encodeURIComponent(report.studyId)}`);
   assert.ok(study.projectId, 'study lacks its control project');
   if (report.projectId) assert.equal(study.projectId, report.projectId);
   report.projectId = study.projectId;
   report.study = { id: report.studyId, projectId: study.projectId, dataTier: study.dataTier, intendedUse: study.intendedUse };
   const runs = () => api('/api/agent-runs', undefined, report.projectId);
-  if (!report.requestAttempted) {
-    const before = await runs();
-    // Creation already requests the programme. Its first worker dispatch can race this observer.
-    report.previousRunIds = report.created ? [] : before.filter(run => terminal.has(run.status)).map(run => run.id);
-    report.requestAttempted = true; report.requestedAt = new Date(now()).toISOString(); await persist(report);
-    const action = VCR_ACCEPTANCE_ACTIONS[capability];
-    const reply = await api(`/api/vcr/studies/${encodeURIComponent(report.studyId)}/${action.section}`, action.payload, report.projectId);
-    // advance() can report a currently running upstream step while the requested step remains queued.
-    // Correlate the reply to the requested capability rather than attributing that other step's work.
-    if (reply.runId) {
-      const returned = (await runs()).find(run => run.id === reply.runId);
-      if (moduleRun(returned, capability, report.projectId, report.previousRunIds)) report.runId = reply.runId;
-    }
-    report.moduleReply = reply;
-    await persist(report);
+  // The study is new, so no run of it is a previous one. Creation already requests the programme; its first worker dispatch can race
+  // this observer.
+  report.previousRunIds = [];
+  report.requestAttempted = true; report.requestedAt = new Date(now()).toISOString(); await persist(report);
+  const action = VCR_ACCEPTANCE_ACTIONS[capability];
+  const reply = await api(`/api/vcr/studies/${encodeURIComponent(report.studyId)}/${action.section}`, action.payload, report.projectId);
+  // advance() can report a currently running upstream step while the requested step remains queued.
+  // Correlate the reply to the requested capability rather than attributing that other step's work.
+  if (reply.runId) {
+    const returned = (await runs()).find(run => run.id === reply.runId);
+    if (moduleRun(returned, capability, report.projectId, report.previousRunIds)) report.runId = reply.runId;
   }
+  report.moduleReply = reply;
+  await persist(report);
   // An uncertain POST is observed, never retried. Only this project's module runs can satisfy the request.
   const deadline = now() + timeoutMs;
   let run;
@@ -126,16 +127,15 @@ export async function observeVcrRun({ api, manifest, expectedRevision, capabilit
 }
 
 async function main() {
-  const username = String(process.env.OPEN_SCIENCE_ACCEPTANCE_USERNAME ?? '').trim();
-  if (!username) {
-    // A missing setting is not a credential: say what to set rather than the fixed driver error below.
-    process.stderr.write('Name the account the driver signs in as: OPEN_SCIENCE_ACCEPTANCE_USERNAME.\n'); process.exitCode = 2; return;
-  }
   const args = {}; const entries = process.argv.slice(2);
   for (let index = 0; index < entries.length; index += 2) {
     assert.ok(entries[index].startsWith('--') && entries[index + 1], 'arguments use --name value');
     args[entries[index].slice(2)] = entries[index + 1];
   }
+  // A missing setting is not a credential: say what to set rather than the fixed driver error below.
+  const refuse = message => { process.stderr.write(`${message}\n`); process.exitCode = 2; };
+  // A throwaway account holds no study: the one to observe is made in it from the input, and none can be named.
+  if (!args['study-input'] || args.study) return refuse('A throwaway account holds no study: give --study-input <study json>; there is no --study.');
   const base = String(args.base ?? process.env.OPEN_SCIENCE_ACCEPTANCE_BASE_URL ?? '').replace(/\/+$/, '');
   const url = new URL(base);
   assert.ok(url.protocol === 'https:' || url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname), 'use HTTPS or an SSH loopback tunnel');
@@ -143,9 +143,11 @@ async function main() {
   const manifest = JSON.parse(await readFile(args['candidate-manifest'] ?? process.env.OPEN_SCIENCE_ACCEPTANCE_CANDIDATE_MANIFEST, 'utf8'));
   const expectedRevision = args['expected-revision'] ?? process.env.OPEN_SCIENCE_ACCEPTANCE_EXPECTED_REVISION;
   const out = path.resolve(args.out); await mkdir(out, { recursive: true, mode: 0o700 });
-  const evidence = path.join(out, 'observation.json'); let checkpoint;
-  try { checkpoint = JSON.parse(await readFile(evidence, 'utf8')); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-  let headers = {};
+  const evidence = path.join(out, 'observation.json');
+  // An earlier observation belongs to an account that is gone: its study cannot be resumed, and writing over it would lose it.
+  if (existsSync(evidence)) return refuse('The output directory already holds an observation of an account that has been deleted: use a new --out.');
+  const create = JSON.parse(await readFile(args['study-input'], 'utf8'));
+  /** @type {Record<string, string>} */ let headers = {};
   const api = async (route, data, projectId, raw = false) => {
     const response = await fetch(`${base}${route}`, { method: data === undefined ? 'GET' : 'POST',
       headers: { 'content-type': 'application/json', ...headers, ...(projectId ? { 'x-open-science-project': projectId } : {}) },
@@ -166,20 +168,25 @@ async function main() {
     }
     return (await response.json()).data;
   };
-  // Verify release before sending a credential or making any authenticated mutation.
-  assertCandidate(manifest, await api('/api/health'), await api('/api/ready'), expectedRevision);
-  const login = await fetch(`${base}/api/auth/login`, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(30_000),
-    headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username,
-      password: (await readFile(process.env.OPEN_SCIENCE_ACCEPTANCE_PASSWORD_FILE, 'utf8')).trim() }) });
-  assert.equal(login.status, 200, 'acceptance login failed');
-  const csrf = (await login.json()).data?.csrfToken;
-  const cookie = login.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
-  assert.ok(csrf && cookie, 'authentication did not establish a session'); headers = { cookie, 'x-open-science-csrf': csrf };
-  const persist = async report => { await writeFile(`${evidence}.tmp`, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 }); await rename(`${evidence}.tmp`, evidence); };
+  /** The newest evidence: what the account's deletion cancels if the observation ends with the run still going. @type {any} */ let latest = null;
+  const persist = async report => { latest = report; await writeFile(`${evidence}.tmp`, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 }); await rename(`${evidence}.tmp`, evidence); };
   const saveArtifact = async (relative, bytes) => { const target = path.join(out, 'deliverable', safeArtifactPath(relative)); await mkdir(path.dirname(target), { recursive: true, mode: 0o700 }); await writeFile(target, bytes, { mode: 0o600 }); };
-  const create = args['study-input'] ? JSON.parse(await readFile(args['study-input'], 'utf8')) : undefined;
-  const report = await observeVcrRun({ api, manifest, expectedRevision, capability: args.capability, studyId: args.study,
-    create, checkpoint, persist, saveArtifact, timeoutMs: Number(args['timeout-ms'] ?? 1_800_000) });
+  // Verify release before any account is made or any authenticated mutation is sent: a wrong release creates nothing.
+  assertCandidate(manifest, await api('/api/health'), await api('/api/ready'), expectedRevision);
+  const account = await openThrowawayAccount({ base, send: fetchTransport(base), prefix: 'acc', stop: async () => {
+    if (!latest?.runId || terminal.has(latest.run?.status)) return;
+    await api(`/api/agent-runs/${encodeURIComponent(latest.runId)}/cancel`, {}, latest.projectId);
+  } });
+  headers = { ...account.headers };
+  /** @type {any} */ let report = null; let failed = false;
+  try {
+    report = await observeVcrRun({ api, manifest, expectedRevision, capability: args.capability,
+      create, persist, saveArtifact, timeoutMs: Number(args['timeout-ms'] ?? 1_800_000) });
+  } catch { failed = true; }
+  // Deleted whatever happened above: the evidence is under --out, the account is not needed again.
+  const outcome = await account.close();
+  if (!outcome.deleted) { process.stderr.write('VCR acceptance driver left its throwaway account: see the FAIL line above.\n'); process.exitCode = 4; return; }
+  if (failed) throw new Error('observation failed');
   process.stdout.write(JSON.stringify({ studyId: report.studyId, projectId: report.projectId, runId: report.runId ?? null,
     observation: report.observation, accepted: report.accepted, usableDelivery: report.usableDelivery,
     verificationComplete: report.verificationComplete, acceptanceIndependent: report.acceptanceIndependent,
@@ -188,5 +195,5 @@ async function main() {
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(() => {
   // Upstream responses and authentication errors can contain credentials. Only a fixed driver error is printed.
-  process.stderr.write('VCR acceptance driver failed; preserve the checkpoint and investigate without redispatch.\n'); process.exitCode = 2;
+  process.stderr.write('VCR acceptance driver failed; the evidence under --out is what was observed, and nothing is redispatched.\n'); process.exitCode = 2;
 });

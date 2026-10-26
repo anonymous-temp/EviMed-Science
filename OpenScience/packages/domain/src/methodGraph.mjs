@@ -915,7 +915,19 @@ export function retirementProposal(method, options) {
 
 /** How many stored evidence quotes one method is read for, and how long a quote may be: the bound on a check, not a policy. */
 const STORED_QUOTES_LIMIT = 20
-const STORED_QUOTE_LENGTH = { min: 8, max: 600 }
+/**
+ * How long a stored evidence quotation may be, in characters. Two is enough since 2026-10-25: 「太长了」 is a good follow-up and the
+ * rule sentence carries its meaning; the quotation only proves the person said it, and a quotation that short is kept only when it is the
+ * researcher's own reaction (`verifiedEvidence`, `methodDistillationRuns.mjs`), because two characters of anything else are in any text.
+ */
+export const METHOD_EVIDENCE_QUOTE_LENGTH = Object.freeze({ min: 2, max: 600 })
+const STORED_QUOTE_LENGTH = METHOD_EVIDENCE_QUOTE_LENGTH
+/**
+ * A rewrite of a method must keep the stored quotations its body carries, from this length: eight characters are words a rewrite
+ * would be wrong to rephrase; two or three are inside half the sentences of the language, and a body that happens to hold 「太长」 would
+ * refuse every rewording of itself. The short ones stay on the record (`provenance.evidence`) and are not asked of the body.
+ */
+const BODY_QUOTE_MIN = 8
 
 /** @param {unknown} text @returns {string} */
 const squashed = (text) => String(text ?? '').replace(/\s+/g, ' ').trim()
@@ -944,7 +956,7 @@ export function storedEvidenceQuotes(provenance) {
 /**
  * Whether a rewrite of a method (a merge's canonical body, or an amendment) still carries what the method stored: every
  * `## Verification` and `## Constraints` item (`preservedSectionsIntact`), and every evidence quotation the method's own
- * body carries. A stored quotation that sits in the body is part of what the method says, and a rewrite that rephrases it
+ * body carries (from `BODY_QUOTE_MIN` characters). A stored quotation that sits in the body is part of what the method says, and a rewrite that rephrases it
  * has moved the method away from the words it was learnt from; one the body does not carry is held by the record
  * (`provenance.evidence`, which a merge passes on to its canonical method), so the body is not asked to repeat it.
  * Code, no model: the whole check is containment of normalised text, decided before the rewrite is written.
@@ -956,7 +968,7 @@ export function bodyPreservation(source, afterBody) {
   const items = preservedSectionsIntact(String(source?.body ?? ''), String(afterBody ?? ''))
   const before = squashed(source?.body)
   const after = squashed(afterBody)
-  const quotesDropped = storedEvidenceQuotes(source?.provenance).filter((quote) => before.includes(quote) && !after.includes(quote))
+  const quotesDropped = storedEvidenceQuotes(source?.provenance).filter((quote) => quote.length >= BODY_QUOTE_MIN && before.includes(quote) && !after.includes(quote))
   return { ok: items.ok && quotesDropped.length === 0, dropped: items.dropped, quotesDropped }
 }
 

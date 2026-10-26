@@ -9,7 +9,6 @@ export async function freezeSeededMemory(call,{seedIds,requiredSeeds=[],judge,re
  const deadline=Date.now()+timeoutMs;let profile;
  do{
   profile=await call('GET','/api/memory/profile');
-  if(profile.engine!=='native')throw new Error('Native memory identity mismatch');
   if(Array.isArray(profile.pending)&&profile.pending.length===0&&profile.records?.length){
    const settings=await call('PUT','/api/memory/settings',{learningPaused:true,recallPaused:false});
    if(settings.learningPaused!==true||settings.recallPaused!==false)throw Error('Native memory freeze was not applied');
@@ -43,7 +42,6 @@ export async function freezeCanaryMemory(call,{seedIds,marker,sleep=ms=>new Prom
  const deadline=Date.now()+timeoutMs;
  do{
   const profile=await call('GET','/api/memory/profile');
-  if(profile.engine!=='native')throw Error('Native canary profile required');
   const matches=(profile.records??[]).filter(r=>String(r.value??'').includes(marker)&&/^viking:\/\/user\/[^/]+\/memories\//.test(r.document?.uri??r.uri??r.id??''));
   if(profile.pending?.length===0&&matches.length){
    await call('PUT','/api/memory/settings',{learningPaused:true,recallPaused:false});

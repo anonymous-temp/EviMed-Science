@@ -1,6 +1,6 @@
-// What a memory never holds is one text (`@evimed/domain`'s MEMORY_NEVER_KEPT_TEXT), read by both extractors: the native engine
-// through its eight type templates and the legacy extraction through its instruction. A rule edited in one place only is how the
-// two came to disagree about the assistant's own words (2026-10-14); this holds them to the same sentence.
+// What a memory never holds is one text (`@evimed/domain`'s MEMORY_NEVER_KEPT_TEXT), read by the engine through its ten type
+// templates. (A second extractor, the legacy one, read it through its own instruction until 2026-10-25; a rule edited in one place only is
+// how the two came to disagree about the assistant's own words on 2026-10-14. The templates are the one place now.)
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readFile, readdir } from "node:fs/promises";
@@ -10,18 +10,17 @@ import { fileURLToPath } from "node:url";
 
 import { MEMORY_DECIDE_TEXT, MEMORY_NEVER_KEPT_TEXT } from "@evimed/domain";
 import { renderMemoryTemplates } from "../../../deploy/web/openviking/memory-templates-src/build.mjs";
-import { MemoryIntelligence } from "../src/memoryIntelligence.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
 const indent = (text) => text.trimEnd().split("\n").map((line, index) => (index === 0 ? line : `  ${line}`)).join("\n");
 
-test("the engine's eight templates carry the never-kept text and the decide text, line for line, as the deployed files and as rendered", async () => {
+test("the engine's ten templates carry the never-kept text and the decide text, line for line, as the deployed files and as rendered", async () => {
   const never = indent(MEMORY_NEVER_KEPT_TEXT);
   const decide = indent(MEMORY_DECIDE_TEXT);
   const directory = path.join(root, "deploy/web/openviking/memory-templates");
   const files = (await readdir(directory)).filter((name) => name.endsWith(".yaml"));
-  assert.equal(files.length, 8);
+  assert.equal(files.length, 10);
   const rendered = renderMemoryTemplates();
   for (const name of files) {
     const deployed = await readFile(path.join(directory, name), "utf8");
@@ -56,9 +55,15 @@ test("the shared text splits what is never kept from how a line is chosen, in th
   assert.match(MEMORY_DECIDE_TEXT, /Write it in the first conversation it appears in, even as one line; do not wait to see it twice\./);
   assert.match(MEMORY_DECIDE_TEXT, /A bare "不错" or "谢谢" confirms no approach\./);
   assert.match(MEMORY_DECIDE_TEXT, /Lean towards keeping what the person asked to be remembered\. Lean towards leaving a line out when it is sensitive or about someone else\./);
-  // The signal words are examples of how a rule is said and no list to match; a repeated demonstration is no fourth tier.
+  // The signal words are examples of how a rule is said and no list to match. A choice shown in a request is not a fourth tier either:
+  // the one place it is written is OBSERVATIONS, a note the control plane counts across conversations (owner decision 6 of 2026-10-25),
+  // and the engine never promotes it itself ("do not wait to see it twice" is about what the person said, not about a note).
   assert.match(MEMORY_DECIDE_TEXT, /"以后", "一律", "默认", "always" are ways people say a rule, not a list to match/);
-  assert.doesNotMatch(MEMORY_DECIDE_TEXT, /twice in separate|two separate conversations|repeated/i);
+  assert.match(MEMORY_DECIDE_TEXT, /The one place a choice of form, tool or method made inside a request is noted is OBSERVATIONS: a note kept to see whether a second conversation repeats it, never a fact about them\./);
+  assert.doesNotMatch(MEMORY_DECIDE_TEXT, /twice in separate|two separate conversations/i);
+  // An import the person asked for is their statement, line by line, under the same never-kept rules.
+  assert.match(MEMORY_DECIDE_TEXT, /- Imported: they bring over what another assistant remembered about them and ask to have it imported[^\n]*the never-kept rules still apply line by line/);
+  assert.match(MEMORY_NEVER_KEPT_TEXT, /request to import what another assistant remembered about them is not such material/);
   assert.doesNotMatch(MEMORY_NEVER_KEPT_TEXT, /When that is doubtful, leave it out/);
 });
 
@@ -90,29 +95,9 @@ test("the templates say where a memory belongs: corrections under preferences, n
   assert.match(profile, /a stance on a contested\s+question/);
 });
 
-test("the legacy extraction states the same text, and it names what an assistant or a dispatch said", async () => {
-  let system = "";
-  const intelligence = new MemoryIntelligence({ deepseekProviderEnabled: true, deepseekApiKey: "unit-test-key", deepseekBaseUrl: "https://api.deepseek.com",
-    deepseekModel: "deepseek-v4-pro", memoryExtractionEnabled: true, memoryExtractionTimeoutMs: 1_000 }, {
-    configured: false,
-    async listRecords() { return []; },
-    async upsertRecord(_user, input) { return { ...input, id: input.key, version: 1, revisions: [], evidence: [], evidenceCount: 0 }; },
-    async getRecord() { throw Object.assign(new Error("not found"), { code: "memory_not_found" }); },
-  }, {
-    fetchImpl: async (_input, init) => {
-      system = JSON.parse(String(init.body)).messages[0].content;
-      return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [] }) } }] });
-    },
-  });
-  await intelligence.recordRun({ id: "p1", userId: "u1" }, { id: "run_1", sessionId: "s1", status: "succeeded", finishedAt: "2026-10-14T00:00:00.000Z" },
-    [{ info: { id: "m1", role: "user" }, parts: [{ type: "text", text: "我是后端工程师，主要写 Go。" }] }]);
-  assert.ok(system.includes(MEMORY_NEVER_KEPT_TEXT), "the legacy instruction does not state the never-kept text");
-  assert.ok(system.includes(MEMORY_DECIDE_TEXT), "the legacy instruction does not state how a line is chosen");
-  assert.doesNotMatch(system, /When that is doubtful, leave it out|across separate tasks/);
-  assert.match(system, /A request to be reminded at a date, or to repeat a task on a schedule, is a scheduled task and never a follow_up/);
-  // The sentence the legacy extraction lacked until 2026-10-14, and the engine's templates always had.
+test("the never-kept text names what an assistant or a dispatch said", () => {
   assert.match(MEMORY_NEVER_KEPT_TEXT, /Anything the assistant proposed, floated, summarised or inferred that the user did not themselves state or confirm in a user-role message/);
-  assert.match(system, /Both must cite a message the person wrote themselves/);
+  assert.doesNotMatch(MEMORY_NEVER_KEPT_TEXT, /When that is doubtful, leave it out|across separate tasks/);
 });
 
 test("the lab variant says the never-kept block once, in the profile, and is never rendered over what is deployed", async () => {
@@ -137,4 +122,37 @@ test("the lab variant says the never-kept block once, in the profile, and is nev
   const refused = spawnSync(process.execPath, [build, "--variant", "short-never"], { encoding: "utf8" });
   assert.notEqual(refused.status, 0);
   assert.match(refused.stderr, /never over the deployed templates/);
+});
+
+test("a rule given for one project is that project's card, said in the card's template and in the three that could take it instead (M8)", async () => {
+  const directory = path.join(root, "deploy/web/openviking/memory-templates");
+  const text = async (name) => readFile(path.join(directory, `${name}.yaml`), "utf8");
+  const card = await text("project_context");
+  assert.match(card, /A rule the user gives for "this project" or for the named work \("这个项目的所有文字交付物一律用英文写"/);
+  assert.match(card, /is a line under 约束\s+of that project's card — also when it comes with a request for something small/);
+  assert.match(card, /also when no card exists yet/);
+  assert.match(await text("project_facts"), /a rule for what one project delivers —\s+its language, format, house style, a date the user set — is that card's 约束/);
+  assert.match(await text("decisions"), /a rule for what one project\s+delivers — its language, format, house style — is that card's 约束/);
+  assert.match(await text("preferences"), /A rule the user gives for one project \("这个项目的所有文字交付物一律用英文写"\) is not a preference of\s+theirs: it is that project's card/);
+});
+
+test("a remembered layout keeps its places as places, and the two types of 2026-10-25 say what they are for (M2, M3, M4)", async () => {
+  const directory = path.join(root, "deploy/web/openviking/memory-templates");
+  const text = async (name) => readFile(path.join(directory, `${name}.yaml`), "utf8");
+  for (const name of ["preferences", "corrections"]) {
+    const body = await text(name);
+    assert.match(body, /每条先写结论；依据只写用户给过的，没给就不写/, `${name} writes the layout as places the person fills`);
+    assert.match(body, /never as\s+content\s+to\s+produce/, name);
+  }
+  assert.doesNotMatch(await text("preferences"), /- 报告先给结论，再给依据。/, "the example no longer promises a basis");
+  const observations = await text("observations");
+  assert.match(observations, /a NOTE, not a memory/);
+  assert.match(observations, /never shown, never recalled and never a premise/);
+  assert.match(observations, /Each conversation that shows\s+the choice adds ITS OWN line to the file/);
+  assert.match(observations, /^directory: "viking:\/\/user\/\{\{ user_space \}\}\/memories\/observations"$/m);
+  const recent = await text("recent_work");
+  assert.match(recent, /at most three lines, newest first/);
+  assert.match(recent, /Never\s+the content of the work/);
+  assert.match(recent, /The lines REPLACE each other/);
+  assert.match(recent, /^directory: "viking:\/\/user\/\{\{ user_space \}\}\/memories\/recent_work"$/m);
 });

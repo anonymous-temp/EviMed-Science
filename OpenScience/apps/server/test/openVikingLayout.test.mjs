@@ -50,8 +50,8 @@ test("the derived recall index and native memory share a root and can never shar
   assert.equal(userMemoryRoot(USER), `${nativeMemoryRoot(USER)}/evimed`);
   assert.ok(!OPENVIKING_MEMORY_TYPES.includes("evimed"), "a memory type named evimed would write into the derived index");
   assert.ok(memoryUri(USER, { scope: "user", scopeId: "", kind: "preference", recordId: "rec1" }).startsWith(`${userMemoryRoot(USER)}/`));
-  assert.equal(OPENVIKING_MEMORY_TYPES.length, 8);
-  assert.equal(new Set(OPENVIKING_MEMORY_TYPES).size, 8);
+  assert.equal(OPENVIKING_MEMORY_TYPES.length, 10);
+  assert.equal(new Set(OPENVIKING_MEMORY_TYPES).size, 10);
 });
 
 test("the Compile agent's bearer is derived from the service key, differs from it, and is the same wherever it is computed", () => {

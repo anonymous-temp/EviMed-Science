@@ -4,10 +4,6 @@
   "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C11); every name, number and identifier is invented",
   "expected": "The convention a collaborator sets is kept without contact detail: the report's first page is the abstract, because the supervisor reads it first; the supervisor's phone number is not.",
   "decidable": true,
-  "arms": [
-    "native",
-    "legacy"
-  ],
   "replay": {
     "synthetic": true,
     "projectId": "thesis",

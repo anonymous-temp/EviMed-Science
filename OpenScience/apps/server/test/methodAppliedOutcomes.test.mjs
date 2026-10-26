@@ -51,7 +51,7 @@ async function fixture() {
   return { learning, grade, slides, events, runs, settle, applied, run, event, counts, mounted };
 }
 
-test("a correction that names the method, at the body the run read, is its run's reaction; silence and acceptance are a clean one", async () => {
+test("a correction that names the method, at the body the run read, is its run's reaction; an acceptance, an adoption and a file taken are a clean one, and silence is neither", async () => {
   const f = await fixture();
   f.run("run_a", [f.grade]);
   f.event("run_a", { evidence: "follow-up", verdict: "correction", rule: "shorter", quote: "不对，短一点", concerns: [{ id: f.grade.id, digest: f.mounted(f.grade) }] });
@@ -61,15 +61,36 @@ test("a correction that names the method, at the body the run read, is its run's
   f.event("run_c", { evidence: "follow-up", verdict: "accept", concerns: [] });
   f.run("run_d", [f.grade]);
   f.event("run_d", { evidence: "follow-up", verdict: "none", concerns: [] });
+  f.run("run_e", [f.grade]);
+  f.event("run_e", { evidence: "silent", verdict: "none", concerns: [] });
+  f.event("run_e", { evidence: "used", verdict: "none", concerns: [] });
+  f.run("run_f", [f.grade]);
+  f.event("run_f", { evidence: "follow-up", verdict: "adopt", rule: "keep", quote: "以后都这样", concerns: [] });
   const result = await f.settle.settleUser("u1");
-  assert.deepEqual(result, { runs: 4, corrected: 1, clean: 3, unattributed: 0, stale: 0, failed: 0 });
+  // run_b was left alone and run_d was answered about something else: unknown, which counts for nothing (silence is not approval).
+  assert.deepEqual(result, { runs: 6, corrected: 1, clean: 3, unattributed: 0, stale: 0, failed: 0 });
   const counts = await f.counts(f.grade);
   assert.deepEqual([counts.appliedCorrected, counts.appliedClean], [1, 3]);
   assert.deepEqual(f.applied.sort(), ["clean", "clean", "clean", "corrected"]);
   assert.equal(methodHarmTest((await f.learning.getMethod("u1", f.grade.id)).payload.learning).state, "watching");
   // The same window again counts nothing twice.
-  assert.deepEqual(await f.settle.settleUser("u1"), { runs: 4, corrected: 0, clean: 0, unattributed: 0, stale: 0, failed: 0 });
+  assert.deepEqual(await f.settle.settleUser("u1"), { runs: 6, corrected: 0, clean: 0, unattributed: 0, stale: 0, failed: 0 });
   assert.equal((await f.counts(f.grade)).appliedClean, 3);
+});
+
+test("a steer typed into the run counts against the method the judge says it is about, exactly as a follow-up does; one it read as nothing does not", async () => {
+  const f = await fixture();
+  f.run("run_s1", [f.grade]);
+  f.event("run_s1", { evidence: "steer", verdict: "correction", rule: "shorter", quote: "再短一点", concerns: [{ id: f.grade.id, digest: f.mounted(f.grade) }] });
+  f.run("run_s2", [f.grade]);
+  f.event("run_s2", { evidence: "steer", verdict: "none", quote: "顺便问下几点了", concerns: [] });
+  f.event("run_s2", { evidence: "used", verdict: "none", concerns: [] });
+  f.run("run_s3", [f.grade]);
+  f.event("run_s3", { evidence: "steer", verdict: "correction", quote: "再加一节", concerns: [] });
+  const result = await f.settle.settleUser("u1");
+  assert.deepEqual(result, { runs: 3, corrected: 1, clean: 1, unattributed: 1, stale: 0, failed: 0 });
+  const counts = await f.counts(f.grade);
+  assert.deepEqual([counts.appliedCorrected, counts.appliedClean], [1, 1]);
 });
 
 test("only the method named is corrected: a correction that names none leaves the run unattributed, and a method not opened is not counted", async () => {
@@ -96,10 +117,10 @@ test("the judge may name the content digest as well as the mounted one, and a st
   assert.equal((await f.settle.settleUser("u1")).corrected, 2);
 });
 
-test("a reaction that arrives after silence is the run's reaction, and a correction is never taken back", async () => {
+test("a reaction that arrives after the run was used is the run's reaction, and a correction is never taken back", async () => {
   const f = await fixture();
   f.run("run_late", [f.grade]);
-  f.event("run_late", { evidence: "silent", verdict: "none" }, "2026-10-23T09:00:00.000Z");
+  f.event("run_late", { evidence: "used", verdict: "none" }, "2026-10-23T09:00:00.000Z");
   await f.settle.settleUser("u1");
   assert.equal((await f.counts(f.grade)).appliedClean, 1);
   f.event("run_late", { evidence: "follow-up", verdict: "correction", concerns: [{ id: f.grade.id, digest: f.mounted(f.grade) }] }, "2026-10-23T10:00:00.000Z");
@@ -114,16 +135,16 @@ test("a method amended since the run read it, a run the platform made, an old ev
   // Amended since: the run's digest is not the body it holds now.
   f.run("run_old_body", [f.grade]);
   f.runs.at(-1).methodsInvoked[0].digest = `sha256:${"0".repeat(64)}`;
-  f.event("run_old_body", { evidence: "silent", verdict: "none" });
+  f.event("run_old_body", { evidence: "used", verdict: "none" });
   // A harness's run teaches nothing.
   f.run("run_driver", [f.slides], { automated: true });
-  f.event("run_driver", { evidence: "silent", verdict: "none" });
+  f.event("run_driver", { evidence: "used", verdict: "none" });
   // Older than the window.
   f.run("run_ancient", [f.slides]);
-  f.event("run_ancient", { evidence: "silent", verdict: "none" }, "2026-10-01T00:00:00.000Z");
+  f.event("run_ancient", { evidence: "used", verdict: "none" }, "2026-10-01T00:00:00.000Z");
   // And one that is good.
   f.run("run_fine", [f.slides]);
-  f.event("run_fine", { evidence: "silent", verdict: "none" });
+  f.event("run_fine", { evidence: "used", verdict: "none" });
   const result = await f.settle.settleUser("u1");
   assert.deepEqual(result, { runs: 2, corrected: 0, clean: 1, unattributed: 0, stale: 1, failed: 0 });
   assert.equal((await f.counts(f.slides)).appliedClean, 1);
@@ -144,4 +165,39 @@ test("four corrected runs of the answer line stop the method at the next pass, w
   await f.settle.settleUser("u1");
   const [proposal] = await f.learning.retirementProposals("u1", { nowMs: NOW });
   assert.deepEqual({ id: proposal.document.id, code: proposal.proposal.code, immediate: proposal.proposal.immediate }, { id: f.grade.id, code: "harm", immediate: true });
+});
+
+// 2026-10-25: a run that opened one of the platform's official methods (`officialPacks.mjs`) is read the same way, and recorded in the platform's own
+// record of that body — never in the account's methods, which it is not one of.
+test("what the researcher did after a run that opened an official method goes to the platform's record of that body, by the same reading", async () => {
+  const official = { key: "official:daily-writing:status-report", name: "official-daily-writing-status-report", sha: "a".repeat(64), digest: `sha256:${"b".repeat(64)}` };
+  const events = [];
+  const recorded = [];
+  const runs = [
+    { id: "run_x", status: "succeeded", methodsInvoked: [{ name: official.name, digest: official.digest }] },
+    { id: "run_y", status: "succeeded", methodsInvoked: [{ name: official.name, digest: official.digest }] },
+    { id: "run_z", status: "succeeded", methodsInvoked: [{ name: official.name, digest: `sha256:${"c".repeat(64)}` }] },
+    { id: "run_w", status: "succeeded", methodsInvoked: [{ name: official.name, digest: official.digest }] },
+  ];
+  const event = (/** @type {string} */ runId, /** @type {any} */ detail) => events.push({ id: `e${events.length}`, userId: "u1", projectId: "p1", runId, trigger: "learning-evidence",
+    subject: { type: "run", id: runId }, detail: { sessionId: "s1", at: "2026-10-23T11:00:00.000Z", ...detail }, occurredAt: "2026-10-23T11:00:00.000Z" });
+  event("run_x", { evidence: "follow-up", verdict: "correction", quote: "不对", concerns: [{ id: official.key, digest: official.digest }] });
+  // Silence is unknown: the clean run is one the person used (opened a delivered file), as for an account's own method.
+  event("run_y", { evidence: "silent", verdict: "none", concerns: [] });
+  event("run_y", { evidence: "used", verdict: "none" });
+  event("run_z", { evidence: "silent", verdict: "none", concerns: [] });
+  event("run_z", { evidence: "used", verdict: "none" });
+  event("run_w", { evidence: "follow-up", verdict: "correction", quote: "不对", concerns: [] });
+  const settle = createMethodAppliedOutcomes({
+    learning: { approvedMethods: async () => [], recordApplied: async () => { throw new Error("an official method is not one of the account's"); } },
+    feedback: { async list() { return { items: events, nextCursor: null }; } },
+    resolveProject: async (_user, projectId) => ({ id: projectId }),
+    runsOf: async () => runs,
+    now: () => NOW,
+    official: { methods: async () => [official], recordApplied: async (applied) => { recorded.push(applied); return { changed: true }; } },
+  });
+  const result = await settle.settleUser("u1");
+  assert.deepEqual(result, { runs: 4, corrected: 1, clean: 1, unattributed: 1, stale: 1, failed: 0 });
+  assert.deepEqual(recorded.map(({ runId, outcome }) => [runId, outcome]).sort(), [["run_x", "corrected"], ["run_y", "clean"]]);
+  assert.ok(recorded.every((applied) => applied.key === official.key && applied.sha === official.sha));
 });

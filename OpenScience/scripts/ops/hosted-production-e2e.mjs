@@ -345,7 +345,7 @@ async function main() {
       throw failure("hosted_e2e_signals_invalid", "The production signal table does not expose a disproportionality metric.");
     }
 
-    // Automation deliberately writes neither a run summary nor a preference (memoryIntelligence.recordRun).
+    // Automation deliberately writes neither a run summary nor a preference (`memoryAdmission.mjs` refuses a turn the platform started).
     // Native user-conversation extraction is accepted separately; marking this scripted run as human would bypass that rule.
     const projectMemory = await jsonFetch(`${base}/api/memory/records?scope=project&scopeId=${encodeURIComponent(projectId)}&pageSize=100`, { headers: scoped });
     const profile = await jsonFetch(`${base}/api/memory/profile`, { headers: scoped });

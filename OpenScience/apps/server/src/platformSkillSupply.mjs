@@ -37,8 +37,8 @@ export async function verifyPlatformSkillGeneration(config,reference){
 }
 /** Immutable shared methods only; researcher data/results never enter this store.
  * Active selection is copied to a generation at runtime launch and never changed during a run.
- * @param {any} config @param {{listActive?:()=>Promise<any[]>,report?:(code:string)=>void,resolveHandbookSelection?:((project:any)=>Promise<any[]>)|null}} [dependencies] */
-export function createPlatformSkillSupply(config,{listActive,report=()=>{},resolveHandbookSelection=null}={}){
+ * @param {any} config @param {{listActive?:()=>Promise<any[]>,report?:(code:string)=>void}} [dependencies] */
+export function createPlatformSkillSupply(config,{listActive,report=()=>{}}={}){
   const root=path.join(config.dataDir,'.openscience','platform-skills'),activeFile=path.join(root,'active.json');
   let mutation=Promise.resolve();
   /** What went wrong and was not allowed to cost a runtime start or a dispatch, for the operator (`status()`). An optional
@@ -92,11 +92,9 @@ export function createPlatformSkillSupply(config,{listActive,report=()=>{},resol
       if(!packageCheck.ok)throw new HttpError(400,'extension_contract_invalid',packageCheck.issues.map(issue=>`${issue.field}: ${issue.message}`).join(' '));
       const {files,skillBody,hasFrontmatter,description,body,id}=packageCheck;
       if(card?.toolKind==='workflow'&&evaluation.verificationLevel==='V0'&&evaluation.smokePassed!==true)throw invalid();
-      // A text-only handbook entry (flywheel F16) is effective only after its independent re-check, which the caller states and this refuses to run without.
-      if(card?.toolKind==='handbook'&&(evaluation.recheckPassed!==true||candidate.publicationKind!=='skill'||Object.keys(candidate.files??{}).some(name=>name!=='SKILL.md')))throw invalid();
-      if(card?.toolKind!=='workflow'&&card?.toolKind!=='handbook'&&evaluation.verificationLevel==='V0')throw invalid();
+      if(card?.toolKind!=='workflow'&&evaluation.verificationLevel==='V0')throw invalid();
       const digest=`sha256:${sha(canonicalJson(files))}`;
-      if(card?.toolKind!=='handbook'&&(!/^[a-f0-9]{64}$/.test(evaluation.evaluationReceiptHash??'')||evaluation.confirmatory!==true||evaluation.candidateFreeze?.artifactDigest!==digest))throw invalid();
+      if(!/^[a-f0-9]{64}$/.test(evaluation.evaluationReceiptHash??'')||evaluation.confirmatory!==true||evaluation.candidateFreeze?.artifactDigest!==digest)throw invalid();
       const nativeName=`platform-${sha(id+'\0'+digest).slice(0,24)}`;
       // Discovery metadata is platform-owned; frozen candidate bytes remain untouched.
       // Written whole by the platform from two checked fields (`runtimeSkillText`): the builder's front matter never reaches a tenant.
@@ -204,17 +202,7 @@ export function createPlatformSkillSupply(config,{listActive,report=()=>{},resol
       const pins=listActive?await listActive():await active();
       if(pins.length>PLATFORM_SKILL_MAX_TOOLS)throw invalid();
       // An ordinary project gets methods only, not development inputs or evaluator assets.
-      let selected=pins.filter(pin=>(!project.capabilityId||!pin.capabilityIds?.length||pin.capabilityIds.includes(project.capabilityId))&&(!project.track||pin.track===project.track));
-      const handbookPins=selected.filter(pin=>String(pin.id).startsWith('handbook-'));
-      if(handbookPins.length){
-        const entries=resolveHandbookSelection?await resolveHandbookSelection(project):handbookPins.map(pin=>({toolId:pin.id}));
-        const byId=new Map(handbookPins.map(pin=>[pin.id,pin]));
-        const bounded=[];let bytes=0;
-        for(const entry of entries){const pin=byId.get(entry.toolId);if(!pin||bounded.length>=6)continue;
-          const size=Buffer.byteLength(pin.content?.['SKILL.md']??'');if(bytes+size>8192)continue;
-          bounded.push(pin);bytes+=size;}
-        selected=[...selected.filter(pin=>!String(pin.id).startsWith('handbook-')),...bounded];
-      }
+      const selected=pins.filter(pin=>(!project.capabilityId||!pin.capabilityIds?.length||pin.capabilityIds.includes(project.capabilityId))&&(!project.track||pin.track===project.track));
       if(!selected.length)return null;
       if(project.capabilityId&&selected.length<=30)return materialize(selected);
       // Unknown-scope sessions and large libraries expose one search entry. Tool bodies remain

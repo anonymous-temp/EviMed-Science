@@ -1,18 +1,21 @@
 import { createHash } from "node:crypto";
-import { carriesPlatformContext, identifierShapesIn, platformIdentifiersIn } from "@evimed/domain";
+import { carriesPlatformContext, identifierShapesIn, linkStatesLeftFor, platformIdentifiersIn } from "@evimed/domain";
 import { filterCapturedMessage } from "./memoryGateway.mjs";
 import { contentHash, lineFingerprint, memoryLines } from "./nativeMemoryOverlay.mjs";
 import {
-  recordNativeCheck, recordNativeCommit, recordNativeExtraction, recordNativeOperations, recordNativePass, recordNativeWrite, recordRejectionLines,
+  recordNativeCheck, recordNativeCommit, recordNativeExtraction, recordNativeExtractionFailure, recordNativeOperations, recordNativePass, recordNativeWrite,
+  recordPolicySync, recordRejectionLines, recordResetSweep,
 } from "./nativeMemoryMetrics.mjs";
+import { NativeMemoryObservations } from "./nativeMemoryObservations.mjs";
 import { containsRemoved, nearRemoved } from "./nativeMemoryRejections.mjs";
 import { SOURCE_LABEL_PREFIX, sourcesNamedIn } from "./nativeMemoryStore.mjs";
-import { PROJECT_MEMORY_TYPES, nativeMemoryFile, parseArchiveUri } from "./openVikingSessions.mjs";
+import { OPENVIKING_MEMORY_TYPES } from "./openVikingLayout.mjs";
+import { PROJECT_MEMORY_TYPES, nativeMemoryFile, observationFile, parseArchiveUri } from "./openVikingSessions.mjs";
 
 /**
  * The overlay's worker: what the native memory engine did, read into the overlay, and what it cannot do for itself, done.
  *
- * Each pass, for every account on the native engine:
+ * Each pass, for every account the memory plane knows (`overlay.accounts()`):
  *  1. **Registration.** An account the engine's admin routes do not know cannot have its settings changed or be deleted;
  *     the gateway registers on first sight, this catches what it could not.
  *  2. **The commit ledger.** The gateway writes a row for every commit it forwarded; the engine's own idle commits never
@@ -28,10 +31,21 @@ import { PROJECT_MEMORY_TYPES, nativeMemoryFile, parseArchiveUri } from "./openV
  *     words win over their deletion), is taken out again — the file restored or deleted when nothing else is left — and
  *     the revision says why. The templates are the first line (the "never keep" block); this is the code that holds the
  *     closed half of it, seconds after the write rather than before (README §5.3 of the course correction).
+ *  4b. **What a reset could not wait for.** An extraction the engine had accepted before the person reset their memory still writes files
+ *     after it. The reset wrote down the commits it found running (`native_reset_tombstones`); each pass asks the engine about them, and
+ *     whenever one finishes, the files it wrote that still hold exactly what its diff says are taken out again, however late that is
+ *     (`#sweepTombstones`; an archive the reset had in its ledger and the scan finds again is settled the same way). A task the engine
+ *     no longer holds is closed as `unknown` after a day: nothing could be said of it, and it is counted.
+ *  4c. **Where each line came from.** The first commit that brought a line is kept per line (`native_line_origins`), beyond the 32
+ *     revisions a file holds; an account's older revisions are read into it once (`#indexOrigins`).
+ *  4d. **The type allowlist.** An account whose settings were stored before a memory type was added keeps the old list (a settings PATCH
+ *     stores one; the deployment's default applies only to an account never PATCHed): the pass checks the list against the deployment's
+ *     and rewrites it, restating the account's learning switch (`#syncPolicy`, idempotent, every six hours at most).
+ *  4e. **A repeated choice.** After a commit that wrote a note of the `observations` type, the notes two different conversations wrote
+ *     are promoted to preferences (`nativeMemoryObservations.mjs`).
  *  5. **Replay.** A failed extraction is never retried upstream: its archive keeps the messages and a `.failed.json`. The
  *     messages are committed again as a new session, with a cap and a back-off, so one rate-limited minute does not lose a
  *     conversation for good.
- *  6. **Runtimes.** An idle runtime launched for the engine its account is no longer on is let go, so the next one is right.
  *
  * Source labels (`labelSource`) are written here too, on the call of whoever learns that a source changed.
  *
@@ -40,6 +54,10 @@ import { PROJECT_MEMORY_TYPES, nativeMemoryFile, parseArchiveUri } from "./openV
 
 /** How long a commit may stay without a diff, a failure marker or a task before it is treated as failed and replayed. */
 const LOST_AFTER_MS = 30 * 60_000;
+/** How long a reset's tombstone waits for an extraction before it is closed as unknown: the engine keeps a task a day. */
+const TOMBSTONE_MAX_AGE_MS = 24 * 3_600_000;
+/** The catch-all project: it has no subject of its own, and so no card and no recent work (`residentProfile.mjs`). */
+const CATCH_ALL_PROJECT_ID = "default";
 /** The back-off between replays: one minute, doubled each time, an hour at most. */
 const replayDelay = (/** @type {number} */ attempts) => Math.min(3_600_000, 60_000 * 2 ** Math.max(0, attempts));
 
@@ -81,6 +99,11 @@ export function cleanBody(body, rejected) {
   return { text, reasons, hasStatements: memoryLines(kept.filter((line) => !isLabelLine(line)).join("\n")).some((line) => !/^#/.test(line)) };
 }
 
+/** Whether a commit's diff wrote (or changed) a note of the `observations` type. @param {any} diff @param {string} root `nativeMemoryRoot(userId)` */
+export function touchesObservations(diff, root) {
+  return ["adds", "updates"].some((list) => (Array.isArray(diff?.operations?.[list]) ? diff.operations[list] : []).some((/** @type {any} */ operation) => observationFile(String(operation?.uri ?? ""), root) !== null));
+}
+
 const REASON_CODE = /^[a-z][a-z0-9_]{0,59}$/;
 
 /**
@@ -117,8 +140,8 @@ export function extractionFacts(diff, task = null) {
 
 export class NativeMemoryWorker {
   /**
-   * @param {{ config: any, researchMemory: any, sessions: import("./openVikingSessions.mjs").OpenVikingSessions,
-   *   overlay: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay, runtimeManager?: any, nativeMemory?: any,
+   * @param {{ config: any, memorySettings: any, sessions: import("./openVikingSessions.mjs").OpenVikingSessions,
+   *   overlay: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay, nativeMemory?: any,
    *   projectOfSession?: ((userId: string, sessionId: string) => Promise<string | null>) | null,
    *   rejectionJudge?: ReturnType<typeof import("./nativeMemoryRejections.mjs").createRejectionJudge> | null,
    *   now?: () => Date, report?: (line: string) => void }} dependencies
@@ -126,17 +149,21 @@ export class NativeMemoryWorker {
    *   `rejectionJudge` says whether a line near one the person removed repeats it (`nativeMemoryRejections.mjs`); absent, only a verbatim
    *   repeat and a line that contains a removed one are met.
    */
-  constructor({ config, researchMemory, sessions, overlay, runtimeManager = null, nativeMemory = null, projectOfSession = null, rejectionJudge = null, now = () => new Date(), report = () => {} }) {
+  constructor({ config, memorySettings, sessions, overlay, nativeMemory = null, projectOfSession = null, rejectionJudge = null, now = () => new Date(), report = () => {} }) {
     this.config = config ?? {};
-    this.researchMemory = researchMemory;
+    this.memorySettings = memorySettings;
     this.sessions = sessions;
     this.overlay = overlay;
-    this.runtimeManager = runtimeManager;
     this.nativeMemory = nativeMemory;
     this.projectOfSession = projectOfSession;
     this.rejectionJudge = rejectionJudge;
     /** The consolidation of an account's memories, set by the composition root beside this worker (it reads files back through `ingestConsolidation`). @type {{ tick: (userId: string) => Promise<string> } | null} */
     this.consolidation = null;
+    /** What promotes a choice two conversations repeated (`nativeMemoryObservations.mjs`); built from the store when there is one. @type {{ promote: (userId: string) => Promise<any> } | null} */
+    this.observations = nativeMemory && typeof nativeMemory.keepRepeatedChoice === "function"
+      ? new NativeMemoryObservations({ overlay, sessions, memorySettings, keepRepeatedChoice: (userId, choice) => nativeMemory.keepRepeatedChoice(userId, choice), report }) : null;
+    /** When each account's type allowlist was last checked against the deployment's (`#syncPolicy`). @type {Map<string, number>} */
+    this.policyChecked = new Map();
     this.now = now;
     this.report = report;
     this.replayAttempts = Math.max(0, Math.trunc(Number(this.config.nativeMemoryReplayAttempts ?? 5)));
@@ -149,7 +176,7 @@ export class NativeMemoryWorker {
   }
 
   get applicable() {
-    return this.config.ovNativeMemoryEnabled === true && Boolean(this.sessions?.configured && this.overlay?.configured && this.researchMemory?.configured);
+    return this.config.memoryEngineEnabled === true && Boolean(this.sessions?.configured && this.overlay?.configured && this.memorySettings?.configured);
   }
 
   /** What readiness reports: whether the worker applies here, whether it is running, and what its last pass did. */
@@ -181,11 +208,15 @@ export class NativeMemoryWorker {
     let commits = 0;
     let accounts = 0;
     try {
-      const native = await this.researchMemory.accountsOnEngine("native");
-      for (const { userId } of native) {
+      // The offers of the page's import that nobody saved are not kept past their hour (a saved one a day: what was saved is the engine's).
+      await this.overlay.deleteExpiredImports().catch(() => 0);
+      for (const userId of await this.overlay.accounts()) {
         accounts += 1;
         try {
           await this.#register(userId);
+          await this.#syncPolicy(userId);
+          await this.#indexOrigins(userId);
+          await this.#sweepTombstones(userId);
           await this.scanArchives(userId);
           commits += await this.processCommits({ userId });
           await this.nativeMemory?.processAdmissions(userId);
@@ -195,7 +226,6 @@ export class NativeMemoryWorker {
           this.report(`native memory worker: ${userId.slice(0, 8)}… ${String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 120)}`);
         }
       }
-      await this.runtimeManager?.releaseMemoryEngineRuntimes?.().catch(() => []);
       this.last = { at: this.now().toISOString(), ok: true, accounts, commits, error: null };
       recordNativePass(true);
     } catch (error) {
@@ -212,6 +242,123 @@ export class NativeMemoryWorker {
     await this.sessions.register(userId);
     await this.overlay.noteRegistered(userId);
     recordNativeWrite("registration");
+  }
+
+  /**
+   * The account's type allowlist in the engine is the deployment's. The engine applies `server.user_config_defaults` to an account whose
+   * settings were never stored; a settings PATCH stores them (every PATCH of ours restates the list), so an account that was PATCHed
+   * before `observations` and `recent_work` existed would never extract them. Idempotent: an account already on the list is left alone, and
+   * the check is made at most once in six hours per account in a process. The account's own learning switch is restated, not changed.
+   * @param {string} userId
+   */
+  async #syncPolicy(userId) {
+    const checked = this.policyChecked.get(userId);
+    if (checked !== undefined && this.now().getTime() - checked < 6 * 3_600_000) return;
+    try {
+      const held = await this.sessions.settings(userId);
+      // An account the engine's admin routes do not know yet has the default; it is looked at again at the next pass.
+      if (!held) return;
+      const expected = [...OPENVIKING_MEMORY_TYPES].sort();
+      if (held.memoryTypes.length === expected.length && held.memoryTypes.every((type, index) => type === expected[index])) {
+        recordPolicySync("current");
+      } else {
+        const settings = await this.memorySettings.settings(userId);
+        await this.sessions.setLearning(userId, !settings.learningPaused);
+        recordPolicySync("rewritten");
+      }
+      this.policyChecked.set(userId, this.now().getTime());
+    } catch (error) {
+      recordPolicySync("failed");
+      this.report(`native memory policy: ${userId.slice(0, 8)}… ${String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 120)}`);
+    }
+  }
+
+  /**
+   * Once per account: the lines of the revisions the overlay already holds are read into the per-line origin index, oldest first, so that a
+   * line brought before the index existed still names the commit that brought it. A person's edit or a platform check takes lines out
+   * of the index as it takes them out of the file; the file's present text has the last word.
+   * @param {string} userId
+   */
+  async #indexOrigins(userId) {
+    if (await this.overlay.originsIndexed(userId)) return;
+    let after = "0";
+    for (;;) {
+      const page = await this.overlay.revisionsForIndex(userId, { afterId: after, limit: 500 });
+      if (!page.length) break;
+      for (const revision of page) {
+        after = revision.id;
+        const brought = revision.actor === "engine" && revision.reason !== "consolidation" && revision.change !== "deleted" && revision.after !== null;
+        await this.overlay.syncOrigins(userId, revision.uri, {
+          after: revision.change === "deleted" || revision.after === null ? "" : String(revision.after),
+          before: String(revision.before ?? ""),
+          origin: brought ? { revisionId: revision.id, engineSession: revision.engineSession, archiveUri: revision.archiveUri, projectId: revision.projectId, at: revision.changedAt } : null,
+        });
+      }
+      if (page.length < 500) break;
+    }
+    // What the files say now has the last word: a line that left them by a route no revision records is not in the index either.
+    for (const file of (await this.overlay.files(userId)).values()) {
+      if (file.body !== null) await this.overlay.syncOrigins(userId, file.uri, { after: file.body });
+    }
+    await this.overlay.noteOriginsIndexed(userId);
+  }
+
+  /**
+   * The extractions a reset found still running (`native_reset_tombstones`): when one has finished, the files it wrote after the reset are
+   * taken out. The engine's task says whether it is still running and where its diff is; a task it no longer holds (it keeps one a day) is
+   * closed as unknown, and an archive with no task is looked for where it was.
+   * @param {string} userId
+   */
+  async #sweepTombstones(userId) {
+    for (const tombstone of await this.overlay.openTombstones(userId)) {
+      try {
+        const age = this.now().getTime() - Date.parse(String(tombstone.resetAt));
+        const task = tombstone.taskId ? await this.sessions.task(userId, tombstone.taskId) : null;
+        if (task && (task.status === "running" || task.status === "pending") && age < TOMBSTONE_MAX_AGE_MS) { recordResetSweep("waiting"); continue; }
+        const diffUri = typeof task?.result?.memory_diff_uri === "string" ? task.result.memory_diff_uri : `${tombstone.archiveUri}/memory_diff.json`;
+        const diffText = await this.sessions.read(userId, diffUri);
+        let diff = null;
+        try { diff = diffText ? JSON.parse(diffText) : null; } catch { diff = null; }
+        if (diff && typeof diff === "object") {
+          const removed = await this.#removeWrittenBy(userId, diff);
+          await this.overlay.closeTombstone(userId, tombstone.archiveUri, "swept", removed);
+          recordResetSweep("swept", removed);
+        } else if (task && ["completed", "failed", "cancelled"].includes(String(task.status))) {
+          // It ended and wrote nothing to take out.
+          await this.overlay.closeTombstone(userId, tombstone.archiveUri, "swept", 0);
+          recordResetSweep("swept");
+        } else if (age >= TOMBSTONE_MAX_AGE_MS) {
+          await this.overlay.closeTombstone(userId, tombstone.archiveUri, "unknown", 0);
+          recordResetSweep("unknown");
+        } else {
+          recordResetSweep("waiting");
+        }
+      } catch (error) {
+        this.report(`native memory reset sweep: ${userId.slice(0, 8)}… ${String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 120)}`);
+      }
+    }
+  }
+
+  /**
+   * The files an extraction's diff added or updated that still hold exactly what the diff says it left — a file that says anything else
+   * was written since, by a later conversation or by the person, and is theirs — removed from the engine and the overlay.
+   * @param {string} userId @param {any} diff @returns {Promise<number>} files removed
+   */
+  async #removeWrittenBy(userId, diff) {
+    const root = this.sessions.memoryRoot(userId);
+    let removed = 0;
+    for (const list of ["adds", "updates"]) {
+      for (const operation of Array.isArray(diff?.operations?.[list]) ? diff.operations[list] : []) {
+        const uri = String(operation?.uri ?? "");
+        if (!nativeMemoryFile(uri, root) && !observationFile(uri, root)) continue;
+        const current = await this.sessions.read(userId, uri).catch(() => null);
+        if (current === null || contentHash(current) !== contentHash(String(operation?.after ?? ""))) continue;
+        await this.sessions.remove(userId, uri);
+        await this.overlay.removeFile(userId, uri);
+        removed += 1;
+      }
+    }
+    return removed;
   }
 
   /**
@@ -279,14 +426,19 @@ export class NativeMemoryWorker {
       try { diff = JSON.parse(diffText); } catch { diff = null; }
       if (diff && typeof diff === "object") {
         // An extraction the engine had accepted before the account reset its memory finishes after it: its files are what the
-        // person asked to forget, and they are taken out again instead of being read into the overlay as new memories.
-        const removed = await this.#undoBeforeReset(commit, diff);
+        // person asked to forget, and they are taken out again instead of being read into the overlay as new memories. A reset
+        // that found this very archive running wrote it down, and then no message needs to be readable to know.
+        const tombstone = await this.overlay.tombstone(commit.userId, commit.archiveUri);
+        const removed = tombstone ? await this.#removeWrittenBy(commit.userId, diff) : await this.#undoBeforeReset(commit, diff);
+        if (tombstone && tombstone.state === "open") await this.overlay.closeTombstone(commit.userId, commit.archiveUri, "swept", removed ?? 0);
         if (removed !== null) {
           await this.overlay.completeCommit(commit.userId, commit.archiveUri, { operations: 0, extraction: { skipped: 0, skipReasons: {}, extracted: {}, memoryTypes: [], fromTask: false, beforeReset: removed } });
           recordNativeCommit("before_reset");
           return true;
         }
         const operations = await this.ingest(commit, diff);
+        // A note of the observations type may have just been written by a second conversation.
+        if (this.observations && touchesObservations(diff, this.sessions.memoryRoot(commit.userId))) await this.observations.promote(commit.userId);
         // A commit that wrote nothing is the one worth asking about: the engine's task result says what the extraction did and
         // what it refused. A task that is gone (the engine keeps them a day) or unreadable leaves the diff's own account.
         const task = operations === 0 && commit.taskId ? await this.sessions.task(commit.userId, commit.taskId).catch(() => null) : null;
@@ -299,9 +451,15 @@ export class NativeMemoryWorker {
     }
     const failed = await this.sessions.read(commit.userId, `${commit.archiveUri}/.failed.json`);
     let reason = failed !== null ? "the extraction failed" : "";
+    // Why, as far as the engine's own marker says (v0.5.2 fails an extraction whose output ran out of room as `budget_exhausted` and does not retry it).
+    if (failed !== null) {
+      let detail = failed;
+      try { detail = String(JSON.parse(failed)?.error ?? failed); } catch { /* the marker's text is the detail */ }
+      recordNativeExtractionFailure(detail);
+    }
     if (!reason && commit.taskId) {
       const task = await this.sessions.task(commit.userId, commit.taskId);
-      if (task?.status === "failed") reason = String(task.error ?? "the extraction failed").slice(0, 300);
+      if (task?.status === "failed") { reason = String(task.error ?? "the extraction failed").slice(0, 300); recordNativeExtractionFailure(task.error); }
       else if (task?.status === "running" || task?.status === "pending") return false;
     }
     if (!reason && Date.now() - Date.parse(String(commit.createdAt)) > LOST_AFTER_MS) reason = "no diff, no failure and no task after thirty minutes";
@@ -320,8 +478,8 @@ export class NativeMemoryWorker {
    * @param {any} commit @param {any} diff @returns {Promise<number | null>} files removed, or null when the commit is not from before a reset
    */
   async #undoBeforeReset(commit, diff) {
-    if (typeof this.researchMemory?.resetInstant !== "function") return null;
-    const resetAt = await this.researchMemory.resetInstant(commit.userId).catch(() => null);
+    if (typeof this.memorySettings?.resetInstant !== "function") return null;
+    const resetAt = await this.memorySettings.resetInstant(commit.userId).catch(() => null);
     if (!resetAt) return null;
     const raw = await this.sessions.read(commit.userId, `${commit.archiveUri}/messages.jsonl`).catch(() => null);
     let latest = Number.NEGATIVE_INFINITY;
@@ -336,20 +494,7 @@ export class NativeMemoryWorker {
       latest = Math.max(latest, at);
     }
     if (!timed || latest >= Date.parse(resetAt)) return null;
-    const root = this.sessions.memoryRoot(commit.userId);
-    let removed = 0;
-    for (const list of ["adds", "updates"]) {
-      for (const operation of Array.isArray(diff?.operations?.[list]) ? diff.operations[list] : []) {
-        const uri = String(operation?.uri ?? "");
-        if (!nativeMemoryFile(uri, root)) continue;
-        const current = await this.sessions.read(commit.userId, uri).catch(() => null);
-        if (current === null || contentHash(current) !== contentHash(String(operation?.after ?? ""))) continue;
-        await this.sessions.remove(commit.userId, uri);
-        await this.overlay.removeFile(commit.userId, uri);
-        removed += 1;
-      }
-    }
-    return removed;
+    return this.#removeWrittenBy(commit.userId, diff);
   }
 
   /**
@@ -369,12 +514,7 @@ export class NativeMemoryWorker {
       return false;
     };
     if (!await authorized()) return false;
-    if (await this.researchMemory.memoryEngine(userId) !== "native") {
-      await this.overlay.abandonCommit(userId, commit.archiveUri, "the account is no longer on the native engine");
-      recordNativeCommit("abandoned");
-      return true;
-    }
-    const settings = await this.researchMemory.settings(userId);
+    const settings = await this.memorySettings.settings(userId);
     if (settings.learningPaused || (commit.projectId && settings.pausedProjects.includes(commit.projectId))) {
       await this.overlay.abandonCommit(userId, commit.archiveUri, "learning is paused");
       recordNativeCommit("abandoned");
@@ -453,7 +593,8 @@ export class NativeMemoryWorker {
     for (const [list, change] of /** @type {const} */ ([["adds", "added"], ["updates", "updated"], ["deletes", "deleted"]])) {
       for (const operation of Array.isArray(operations[list]) ? operations[list] : []) {
         const uri = String(operation?.uri ?? "");
-        const file = nativeMemoryFile(uri, root);
+        // A note of the observations type is written and counted like a memory file; nothing but `nativeMemoryObservations.mjs` reads it back.
+        const file = nativeMemoryFile(uri, root) ?? observationFile(uri, root);
         if (!file) continue;
         counts[change] += 1;
         const projectId = PROJECT_MEMORY_TYPES.includes(file.type) ? commit.projectId ?? null : null;
@@ -465,7 +606,10 @@ export class NativeMemoryWorker {
         const after = String(operation?.after ?? "");
         const recorded = await this.overlay.addRevision({ ...base, uri, memoryType: file.type, change, actor: "engine", reason: "",
           before: change === "updated" ? String(operation?.before ?? "") : null, after, projectId });
-        await this.#afterWrite(userId, uri, file.type, { projectId, diffAfter: after, diffBefore: change === "updated" ? String(operation?.before ?? "") : "", fresh: recorded !== null, archiveUri: commit.archiveUri, rewordings });
+        const body = await this.#afterWrite(userId, uri, file.type, { projectId, diffAfter: after, diffBefore: change === "updated" ? String(operation?.before ?? "") : "", fresh: recorded !== null, archiveUri: commit.archiveUri, rewordings });
+        // The lines this commit brought are recorded as its own, beyond the revisions a file keeps (what the checks took out is not).
+        if (body !== null) await this.overlay.syncOrigins(userId, uri, { after: body, before: change === "updated" ? String(operation?.before ?? "") : "",
+          origin: { revisionId: recorded?.id ?? null, engineSession: commit.engineSession, archiveUri: commit.archiveUri, projectId, at: changedAt } });
       }
     }
     recordNativeOperations(counts);
@@ -521,7 +665,11 @@ export class NativeMemoryWorker {
       return new Map();
     });
     // The tag of a project's file is put back: a rewrite is not known to keep it.
-    for (const entry of written) await this.#afterWrite(userId, entry.uri, entry.type, { projectId: entry.projectId, diffAfter: entry.after, diffBefore: entry.before, fresh: true, archiveUri: null, rewordings });
+    for (const entry of written) {
+      const body = await this.#afterWrite(userId, entry.uri, entry.type, { projectId: entry.projectId, diffAfter: entry.after, diffBefore: entry.before, fresh: true, archiveUri: null, rewordings });
+      // A line the consolidation wrote anew names no conversation; a line it kept is already in the index with its own.
+      if (body !== null) await this.overlay.syncOrigins(userId, entry.uri, { after: body, before: entry.before, origin: { engineSession: null, archiveUri, projectId: entry.projectId } });
+    }
     return counts;
   }
 
@@ -530,10 +678,20 @@ export class NativeMemoryWorker {
    * Acts on the file as it is now, not as the diff says: a later commit may already have changed it.
    * @param {string} userId @param {string} uri @param {string} type
    * @param {{ projectId: string | null, diffAfter: string, diffBefore?: string, fresh: boolean, archiveUri: string | null, rewordings?: Map<string, { rejected: string, via: "contained" | "judged" }> }} context
+   * @returns {Promise<string | null>} the file's text after the checks, or null when the file is gone
    */
   async #afterWrite(userId, uri, type, { projectId, diffAfter, diffBefore = "", fresh, archiveUri, rewordings = new Map() }) {
     const current = await this.sessions.read(userId, uri);
-    if (current === null) return;
+    if (current === null) return null;
+    // What a project was last worked on is the project's: a conversation of the catch-all has no project to carry it, and a file written
+    // from one is taken out (the project card is never handed over in the default project either).
+    if (type === "recent_work" && projectId === CATCH_ALL_PROJECT_ID) {
+      recordNativeCheck("recent_work_default_project");
+      await this.sessions.remove(userId, uri);
+      await this.overlay.addRevision({ userId, uri, memoryType: type, change: "deleted", actor: "platform", reason: "recent_work_default_project", before: null, after: null, projectId });
+      await this.overlay.removeFile(userId, uri);
+      return null;
+    }
     const rejected = await this.overlay.rejectedFingerprints(userId, type);
     // Only what this write brought is held to the checks: the lines of the text it left that the text it found did not have (a line the
     // person wrote themselves, or the engine wrote earlier and the checks let stay, is not this write's to be asked about again).
@@ -577,7 +735,7 @@ export class NativeMemoryWorker {
         await this.overlay.addRevision({ userId, uri, memoryType: type, change: "deleted", actor: "platform", reason: reasons.join(","), before: null, after: null, projectId });
         await this.overlay.forgetText(userId, uri);
         await this.overlay.removeFile(userId, uri);
-        return;
+        return null;
       }
     }
     if (projectId) {
@@ -592,6 +750,7 @@ export class NativeMemoryWorker {
     for (const source of await this.overlay.sources(userId, [uri])) {
       if (source.state in LABEL_WORDS) await this.#writeLabel(userId, uri, type, source, source.state);
     }
+    return body;
   }
 
   /**
@@ -701,10 +860,15 @@ export class NativeMemoryWorker {
    * @returns {Promise<number>} files labelled or unlabelled
    */
   async labelSource(userId, source, state) {
-    if (!this.applicable || await this.researchMemory.memoryEngine(userId) !== "native") return 0;
+    if (!this.applicable) return 0;
     let touched = 0;
     for (const link of await this.overlay.filesNaming(source, { userId })) {
       if (link.state === state) continue;
+      // A check moves a link only where it adds knowledge (`linkStatesLeftFor`, the rule the retired records engine kept): a correction
+      // never lowers a retraction, a check that could not answer never undoes a finding, and a clean answer is only what a link nobody
+      // had answered for becomes (or a document that is back in the library, `removed`): it never lifts a retraction, a correction
+      // or an expiry.
+      if (!linkStatesLeftFor(state).includes(link.state)) continue;
       await this.overlay.markSource(userId, link.uri, source, state);
       const held = await this.overlay.file(userId, link.uri);
       if (await this.#writeLabel(userId, link.uri, held?.memoryType ?? "project_facts", source, state)) touched += 1;

@@ -1,0 +1,36 @@
+{
+  "id": "i01-import-from-another-assistant",
+  "class": "keep-imported-memory-export",
+  "observedIn": "written for the memory-capsule next round on 2026-10-25 (the evals package; B-landscape I-3, I-6, I-10 and the owner decisions of that day); every name, number and identifier is invented",
+  "expected": "The lines of a memory export the person pasted and asked to import are kept as theirs: the role and research focus as profile, the two habits as preferences (owner decision 3, 2026-10-25).",
+  "decidable": true,
+  "judge": "Is each of the four imported lines written as the person's own, and none of them attributed to a document or to the other assistant?",
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      {
+        "id": "u1",
+        "role": "user",
+        "text": "这是我在另一个 AI 助手里的记忆导出，请把它们导入到这里：\n- 我是心内科医生，主要做房颤的临床研究\n- 我喜欢先看结论再看细节\n- 写英文邮件时用美式拼写\n- 我在杭州工作，通勤骑自行车"
+      },
+      {
+        "id": "a1",
+        "role": "assistant",
+        "text": "好的，已把这四条作为您自己的信息导入：心内科医生、做房颤临床研究；喜欢先看结论再看细节；英文邮件用美式拼写；在杭州工作、骑自行车通勤。"
+      }
+    ]
+  },
+  "expect": {
+    "requireAnyKind": [
+      "profile",
+      "preference"
+    ],
+    "requireTextContains": [
+      "房颤",
+      "结论",
+      "美式拼写"
+    ],
+    "atLeastRecords": 1
+  }
+}

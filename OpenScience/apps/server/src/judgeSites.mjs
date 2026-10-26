@@ -17,8 +17,8 @@ const fields = {
 // A site's spend books to its module's usage purpose (plan 2026-10-06 §3). J10-J12 and J17 are the evolution module's (§4.4, self-iteration);
 // J11 and J12 sat under `learning` and drew on the per-account learning cap. J13 (`engine`), J14 and J16 (`learning`) are left as they were:
 // the plan names no purpose for them, and whose budget pays for an evidence card's recall or a reader's topic request is an owner decision.
-// J23 (2026-10-10) is the harm check on a lesson before it can become a platform handbook (`learningPlatformHandbooks.mjs`), which is the evolution
-// module's own path and its own budget; it is no part of the Jev plan, and J16 (the "same method" pair question) was never meant for it.
+// J23 (2026-10-10) is the harm check on a method before it can join the platform's pack of everyone's (`officialPromotion.mjs`; it was the platform handbook
+// path's until 2026-10-25) and keeps the evolution purpose, which no cap counts; it is no part of the Jev plan, and J16 (the "same method" pair question) was never meant for it.
 const policies = Object.fromEntries(JUDGE_SITE_IDS.map(id=>[id,Object.freeze({id,purpose:id==='reply-check'?'review':['J1','J14','J16'].includes(id)?'learning':['J10','J11','J12','J17','J23'].includes(id)?'evolution':id==='J5'||id==='J6'?'frontier':id==='J2'?'channel-intent':id==='J3'?'routing':id==='J7'?'source-understanding':['J21','J22'].includes(id)?'geo':id==='J4'?'review':'engine',interactive:['J2','J3','J13'].includes(id),pairwise:pairSites.has(id),threshold:id==='J4'?0.7:id==='J8'?0.9:0.8,calibration:id==='reply-check'?'calibrated':'uncalibrated'})]));
 export const JUDGE_SITES = Object.freeze(policies);
 /** The most characters of state (its JSON) any site reads; past it a request is `judge_input_too_large`. The gateway's body ceiling is derived from it. */

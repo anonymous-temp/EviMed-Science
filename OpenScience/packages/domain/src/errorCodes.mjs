@@ -1147,6 +1147,11 @@ export const CONTROL_PLANE_ERROR_CODES = Object.freeze([
   'memory_engine_unavailable',
   'memory_engine_unsupported',
   'memory_content_refused',
+  // 2026-10-25: 「从其他 AI 导入」 (`nativeMemoryImport.mjs`): the account paused memory, asked too often, the offer is gone or the text could not be read.
+  'memory_import_paused',
+  'memory_import_rate_limited',
+  'memory_import_expired',
+  'memory_import_unavailable',
   'memory_engine_invalid',
   'memory_gateway_disabled',
   'memory_gateway_unauthenticated',
@@ -1340,9 +1345,6 @@ const capsuleTransferErrorCodes = Object.freeze([
   // method, not 「内容已发生变化」 — what a bare 409 used to be read as.
   'method_no_earlier_version',
   'method_revision_unavailable',
-  // The same two for a capability handbook (`HandbookLibrary`): one that is gone, and a version that is.
-  'handbook_unavailable',
-  'handbook_revision_unavailable',
 ])
 
 /**
@@ -2747,13 +2749,15 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   evidence_community_not_found: '这个官方专区不存在，或还没有发布。',
   method_no_earlier_version: '这个做法没有更早的版本。',
   method_revision_unavailable: '要回到的版本已不存在，刷新后再试。',
-  handbook_unavailable: '这条经验已不存在，刷新后再试。',
-  handbook_revision_unavailable: '要回到的版本已不存在，刷新后再试。',
 
   // ——— 记忆：原生引擎 (nativeMemoryStore.mjs, memoryGateway.mjs) ———
   memory_engine_unavailable: '记忆服务暂时不可用，稍后再来看；对话照常进行，不受影响。',
   memory_engine_unsupported: '这项操作在当前的记忆方式下不可用。',
   memory_content_refused: '这条含有密钥、证件号、手机号、卡号或邮箱这类信息，没有记下。可以只记住不含这些信息的部分。',
+  memory_import_paused: '记忆已暂停，恢复记忆后才能导入。',
+  memory_import_rate_limited: '一小时内导入的次数太多了，稍后再试。',
+  memory_import_expired: '这份导入清单已经失效，请重新粘贴一次。',
+  memory_import_unavailable: '暂时没能读这段文字，稍后再试。',
   memory_engine_invalid: '记忆引擎只能是 legacy 或 native。',
   memory_gateway_disabled: '这个部署没有开放原生记忆。',
   memory_gateway_unauthenticated: '记忆网关不认识这个调用方。',
@@ -2993,6 +2997,10 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   memory_engine_unavailable: 'upstream',
   memory_engine_unsupported: 'capped',
   memory_content_refused: 'capped',
+  memory_import_paused: 'capped',
+  memory_import_rate_limited: 'capped',
+  memory_import_expired: 'capped',
+  memory_import_unavailable: 'upstream',
   memory_engine_invalid: 'capped',
   memory_gateway_disabled: 'capped',
   memory_gateway_unauthenticated: 'capped',

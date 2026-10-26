@@ -36,7 +36,7 @@ const skill = (body) => renderMethodSkill({
 
 /** One archived distillation result, as `archiveLatestResult` writes it. */
 async function archive(dataDir, dispatchId, { body = BODY, candidate = {}, receipt = true, at = null } = {}) {
-  const directory = path.join(dataDir, "users", "cdss-access", "projects", LEARNING_PROJECT_ID, ".openscience", "learning-results", dispatchId);
+  const directory = path.join(dataDir, "users", "researcher", "projects", LEARNING_PROJECT_ID, ".openscience", "learning-results", dispatchId);
   const deliverable = path.join(directory, "deliverables", "method-candidate");
   await mkdir(deliverable, { recursive: true });
   await writeFile(path.join(deliverable, "SKILL.md"), skill(body));
@@ -60,22 +60,22 @@ test("the newest complete archive of the method is found, and restored at accoun
     await writeFile(path.join(directory, "deliverables", "method-candidate", "SKILL.md"), skill(BODY).replace("pre-submission-freeze-check", "another-method"));
   });
 
-  const found = await findArchivedMethod({ dataDir, userId: "cdss-access", name: "pre-submission-freeze-check" });
+  const found = await findArchivedMethod({ dataDir, userId: "researcher", name: "pre-submission-freeze-check" });
   assert.match(found?.file ?? "", /method-distillation-new/, "the newest archive that is complete, not a newer partial one");
 
   const documents = productDocumentsDouble();
   const learning = new LearningService({ documents });
-  const report = await restoreLearnedMethod({ learning, dataDir, userId: "cdss-access", name: "pre-submission-freeze-check", apply: false });
+  const report = await restoreLearnedMethod({ learning, dataDir, userId: "researcher", name: "pre-submission-freeze-check", apply: false });
   assert.equal(report.state, "restorable");
   assert.equal(report.sourceRunId, "run_1f85b832");
   assert.equal(report.title, "提交前先冻结");
   assert.equal(documents.rows.size, 0, "a report writes nothing");
 
-  const restored = await restoreLearnedMethod({ learning, dataDir, userId: "cdss-access", name: "pre-submission-freeze-check",
+  const restored = await restoreLearnedMethod({ learning, dataDir, userId: "researcher", name: "pre-submission-freeze-check",
     sourceProjectId: "deleted-project", apply: true });
   assert.equal(restored.state, "restored");
   assert.equal(restored.status, "approved");
-  const method = await learning.getMethod("cdss-access", "method:learned:pre-submission-freeze-check");
+  const method = await learning.getMethod("researcher", "method:learned:pre-submission-freeze-check");
   assert.equal(method.projectId, null, "the account's, so no project deletion takes it again");
   assert.equal(method.payload.provenance.sourceProjectId, "deleted-project");
   assert.equal(method.payload.provenance.runId, "run_1f85b832");
@@ -85,16 +85,16 @@ test("the newest complete archive of the method is found, and restored at accoun
   assert.equal(method.payload.body.trim(), BODY, "the archived body, as the SKILL.md parser reads it");
 
   // Idempotent: the second run finds it in the library and leaves it alone.
-  const again = await restoreLearnedMethod({ learning, dataDir, userId: "cdss-access", name: "pre-submission-freeze-check", apply: true });
+  const again = await restoreLearnedMethod({ learning, dataDir, userId: "researcher", name: "pre-submission-freeze-check", apply: true });
   assert.equal(again.state, "present");
   assert.equal(documents.rows.size, 1);
   // A name no archive holds is said so.
-  assert.equal((await restoreLearnedMethod({ learning, dataDir, userId: "cdss-access", name: "never-learnt", apply: true })).state, "not_archived");
+  assert.equal((await restoreLearnedMethod({ learning, dataDir, userId: "researcher", name: "never-learnt", apply: true })).state, "not_archived");
 });
 
 test("the command line names one account and one method, and nothing else", () => {
-  assert.deepEqual(parseArguments(["--user", "cdss-access", "--name", "pre-submission-freeze-check"]),
-    { apply: false, userId: "cdss-access", name: "pre-submission-freeze-check", dataDir: null, archive: null, sourceProjectId: null });
+  assert.deepEqual(parseArguments(["--user", "researcher", "--name", "pre-submission-freeze-check"]),
+    { apply: false, userId: "researcher", name: "pre-submission-freeze-check", dataDir: null, archive: null, sourceProjectId: null });
   assert.equal(parseArguments(["--user", "u", "--name", "a-b", "--apply", "--data-dir", "/data"]).apply, true);
   assert.throws(() => parseArguments(["--name", "a-b"]), /--user is required/);
   assert.throws(() => parseArguments(["--user", "u", "--name", "../etc"]), /kebab-case/);

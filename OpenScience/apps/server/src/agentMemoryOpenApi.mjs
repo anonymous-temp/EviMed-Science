@@ -65,9 +65,9 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
         "",
         "Three rules hold everywhere in this API and are worth reading before the endpoints:",
         "",
-        "1. Nothing you write becomes an active memory. Every record extracted from an episode stays `pending`, and a note stays an unconfirmed candidate, until the account owner confirms it — on their memory page, or through the dashboard operations with a key carrying `memory.manage`, which a key holds only when its requests come from that person's own clicks. An episode may add evidence to a memory that is already in force; it never changes, replaces or re-activates one. There is no parameter that changes this; a caller's assertion that its user said something outright is not that user saying it.",
+        "1. Nothing you write becomes an active memory. An episode stays a pending candidate, and a note an unconfirmed one, until the account owner confirms it — on their memory page, or through the dashboard operations with a key carrying `memory.manage`, which a key holds only when its requests come from that person's own clicks. There is no parameter that changes this; a caller's assertion that its user said something outright is not that user saying it.",
         "2. A key's scope is a property of the key. A key bound to a project cannot read or write outside it, and no request field widens that. An integration key (minted with `subjects: true`) may name the person a request is for in the `X-Subject` header — a doctor behind a hospital's HIS — and every read and write is then that person's own memory and nobody else's; without the header it is the key's own account, the institution. A subject is given its memory the first time something is written for it; reading one that has none answers as an empty memory.",
-        "3. An account's memory is on one of two engines, and the API follows the account's. On the platform's own records (`engine: \"legacy\"`) everything below applies as written. On the native memory engine (`engine: \"native\"`) memory is the engine's own files: `/recall`, `/records` and `/dashboard` read them, a forget removes the file from the engine (an undo brings it back with the `version` the forget answered with), an edit replaces its text, and `/episodes` stages a pending candidate without extraction or activation; explicit confirmation admits that exact revision through a durable native session; active native files have no pending state or usage counts, and `restore` is the undo. Notes, observations and methods are the same on both. Every answer that reads or acts on an account's memory names its engine: `engine` in an object body, and the `X-Memory-Engine` header on all of them. A deployment that cannot reach the engine for a native account answers `503 memory_engine_unavailable`, never the other engine's rows.",
+        "3. An account's memory is the memory engine's own files. `/recall`, `/records` and `/dashboard` read them, a forget removes the file from the engine (an undo brings it back with the `version` the forget answered with), an edit replaces its text, and `/episodes` stages a pending candidate without extraction or activation; explicit confirmation admits that exact revision through a durable native session. Active files have no pending state or usage counts, and `restore` is the undo. A deployment that cannot reach the engine answers `503 memory_engine_unavailable`.",
         "",
         "Memory is context, never permission: nothing recalled here loosens a contract, relaxes a safety rule, or reaches a host the platform's gateways would not.",
       ].join("\n"),
@@ -88,14 +88,7 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
           description: `An account API key, minted at POST /api/agent-keys (\`subjects: true\` makes it an integration key). Scopes: ${AGENT_KEY_SCOPES.join(", ")}.`,
         },
       },
-      headers: {
-        MemoryEngine: {
-          description: "Which engine keeps the memory this answer read or acted on: `legacy` (the platform's own records) or `native` (the memory engine's own files). See rule 3.",
-          schema: { type: "string", enum: ["legacy", "native"] },
-        },
-      },
       schemas: {
-        Engine: { type: "string", enum: ["legacy", "native"], description: "Which engine keeps the account's memory. See rule 3." },
         FactKind: { type: "string", enum: [...CAPSULE_FACT_KINDS] },
         RecallRequest: {
           type: "object",
@@ -107,13 +100,9 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
             limit: { type: "integer", minimum: 1, maximum: 50, default: 10 },
             factKinds: { type: "array", items: { $ref: "#/components/schemas/FactKind" } },
             since: { type: "string", format: "date-time" },
-            asOf: {
-              type: "string",
-              description: "The time the question is about, an ISO date (`2025-06-30`, read at the end of that day) or instant; now when omitted. Applies to the account's records: the version that held then comes back, or the earliest version labelled `not_yet_valid` when nothing was recorded that early. Native accounts return `400 memory_as_of_unsupported` for historical personal-memory recall; they never return current memory labelled as historical. A capsule fact has no interval of its own and is returned as it is.",
-            },
             scope: {
               type: "string", enum: ["all", "capsule", "conversation", "agenda"], default: "all",
-              description: "`conversation`: the structured records and notes the platform keeps for this account; `capsule`: the facts of its active capsules (or of `capsuleIds`); `all`: both. `agenda` is reserved and currently refused.",
+              description: "`conversation`: the memory files the engine keeps for this account; `capsule`: the facts of its active capsules (or of `capsuleIds`); `all`: both. `agenda` is reserved and currently refused.",
             },
             capsuleIds: {
               type: "array", minItems: 1, maxItems: AGENT_RECALL_MAX_CAPSULES, uniqueItems: true, items: { type: "string", minLength: 1, maxLength: 200 },
@@ -148,7 +137,6 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
               type: "object",
               properties: {
                 items: { type: "array", items: { type: "object", additionalProperties: true } },
-                engine: { $ref: "#/components/schemas/Engine" },
                 sources: { type: "object", properties: { memory: { type: "integer" }, capsule: { type: "integer" } } },
                 mode: { type: "string" },
                 contextOnly: { type: "boolean", const: true },
@@ -288,11 +276,10 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
             data: {
               type: "object",
               properties: {
-                engine: { $ref: "#/components/schemas/Engine" },
                 switches: { $ref: "#/components/schemas/Settings" },
                 records: { type: "array", items: { $ref: "#/components/schemas/BoardRecord" }, description: "What is in force." },
                 pending: { type: "array", items: { type: "object", additionalProperties: true },
-                  description: "What waits for the person: records held for them (`type: record`, confirm with POST /records/{id}/confirm) and notes an outside agent proposed (`type: note`, POST /notes/{id}/confirm or /reject)." },
+                  description: "What waits for the person: the notes and episodes an outside agent proposed (`type: note`, POST /notes/{id}/confirm or /reject)." },
                 forgotten: { type: "array", items: { $ref: "#/components/schemas/BoardRecord" }, description: "Forgotten, restorable." },
                 habits: { type: "array", items: { $ref: "#/components/schemas/BoardHabit" } },
                 recentChanges: { type: "array", items: { $ref: "#/components/schemas/BoardChange" }, description: `What changed by itself in the last ${BOARD_RECENT_DAYS} days, newest first.` },
@@ -334,11 +321,11 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
       "/recall": {
         post: {
           summary: "Search this account's memory",
-          description: "Searches both forms of this account's memory — the structured records the platform keeps (profile, preferences, behaviours, corrections, notes; for an account on the native engine, the engine's own memory files) and the facts of its active capsules, or of the capsules named in `capsuleIds` — and returns each item with `source` (`memory` or `capsule`) and its provenance. Memory records come first, then capsule facts; `limit` bounds the union. A record whose origin is `inferred` is the platform's own guess and has not been confirmed by anyone. A fact read out of a knowledge-base document is returned only to a recall in that document's project. It also returns `methods`: how this account works (its learned methods) and how the capsules read work (their work-style entries), the account's own first. Reading a method counts nothing.",
+          description: "Searches both forms of this account's memory — the engine's own memory files (profile, preferences, corrections, project facts) and the facts of its active capsules, or of the capsules named in `capsuleIds` — and returns each item with `source` (`memory` or `capsule`) and its provenance. Memory files come first, then capsule facts; `limit` bounds the union. A fact read out of a knowledge-base document is returned only to a recall in that document's project. It also returns `methods`: how this account works (its learned methods) and how the capsules read work (their work-style entries), the account's own first. Reading a method counts nothing.",
           security: [{ agentApiKey: ["memory.read"] }],
           requestBody: jsonBody({ $ref: "#/components/schemas/RecallRequest" }),
           responses: {
-            200: { description: "Matching memory, hydrated from the record store, and the methods that apply.", content: { "application/json": { schema: { $ref: "#/components/schemas/RecallResponse" } } } },
+            200: { description: "Matching memory, read back from the files, and the methods that apply.", content: { "application/json": { schema: { $ref: "#/components/schemas/RecallResponse" } } } },
             400: errorResponse("Malformed request."),
             404: errorResponse("A capsule named in `capsuleIds` is unavailable (`capsule_not_found`)."),
             ...common,
@@ -360,8 +347,8 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
       },
       "/records": {
         get: {
-          summary: "List structured memory records",
-          description: "Active records only unless `status` asks otherwise. A pending record is a proposal nobody has agreed to; reading one as fact is the failure the pending state exists to prevent.",
+          summary: "List memory records",
+          description: "The engine's memory files as records: all are in force, so a `status` that excludes `active` finds none.",
           security: [{ agentApiKey: ["memory.read"] }],
           parameters: [
             { name: "scope", in: "query", schema: { type: "string" } },
@@ -371,22 +358,21 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
             { name: "query", in: "query", schema: { type: "string" } },
             { name: "pageSize", in: "query", schema: { type: "integer", minimum: 1, maximum: 200, default: 50 } },
           ],
-          responses: { 200: { description: "Records, newest first.", headers: { "X-Memory-Engine": { $ref: "#/components/headers/MemoryEngine" } } }, ...common, 503: errorResponse("The API is not enabled in this deployment, or memory storage is unavailable, or the account is on the native engine and the deployment cannot reach it (`memory_engine_unavailable`).") },
+          responses: { 200: { description: "Records, newest first." }, ...common, 503: errorResponse("The API is not enabled in this deployment, or memory storage is unavailable, or the deployment cannot reach the memory engine (`memory_engine_unavailable`).") },
         },
       },
       "/episodes": {
         post: {
           summary: "Submit a conversation for extraction",
           description: [
-            "The transcript endpoint. The platform's own extractor reads the turns and decides what is worth remembering, subject to the same evidence rules a run of ours is subject to: every candidate must quote its source byte for byte, and everything it produces is `pending` until the account owner confirms it. A candidate that would change or replace a memory already in force is refused and counted in `rejected`.",
-            "This is the only way to add memory in bulk. There is no endpoint that writes a record directly, because a record with no evidence behind it is what the record shape exists to make impossible.",
+            "The transcript endpoint. The turns are staged as a pending candidate; nothing is extracted before the account owner confirms it. Confirming (`POST /notes/{id}/confirm`) sends only the person's own statements — never the assistant's — through the platform's captured-message privacy filter into a durable admission, from which the memory engine's own extraction decides what is worth remembering.",
+            "This is the only way to add memory in bulk. There is no endpoint that writes a memory file directly, because a memory with no conversation behind it is what the engine's design refuses.",
           ].join(" "),
           security: [{ agentApiKey: ["memory.write"] }],
           requestBody: jsonBody({ $ref: "#/components/schemas/EpisodeRequest" }),
           responses: {
-            202: { description: "Legacy: extraction ran and every resulting record remains pending. Native: the transcript is staged as an existing candidate note, with extracted=0, activated=0, state=pending_confirmation, candidateId and confirm.path pointing to POST /notes/{id}/confirm. No extracting session is opened before confirmation." },
-            400: errorResponse("Malformed transcript, project identity, or request fields. Native episodes return a pending candidate and require explicit confirmation before extraction."),
-
+            202: { description: "The transcript is staged as a candidate note, with extracted=0, activated=0, state=pending_confirmation, candidateId and confirm.path pointing to POST /notes/{id}/confirm. No extracting session is opened before confirmation." },
+            400: errorResponse("Malformed transcript, project identity, or request fields."),
             ...common,
           },
         },
@@ -410,7 +396,7 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
       "/dashboard": {
         get: {
           summary: "The memory dashboard",
-          description: "Everything a person's own memory page shows, in one read: the switches, what is in force with where each came from (`source`), how established it is (`basis`) and how often it was used (`usage`), 「曾经如此」 (`wasTrue`), what waits for them, what they forgot, their habits, and 「最近变化」 with the act that takes each back. Derived when read from the record store and the method ledger; nothing here is stored twice. A subject with no memory yet reads an empty dashboard.",
+          description: "Everything a person's own memory page shows, in one read: the switches, what is in force with where each came from (`source`), what waits for them, what they forgot, their habits, and 「最近变化」 with the act that takes each back. Derived when read from the memory engine's files and the method ledger; nothing here is stored twice. A subject with no memory yet reads an empty dashboard.",
           security: [{ agentApiKey: ["memory.read"] }],
           responses: { 200: { description: "The dashboard.", content: { "application/json": { schema: { $ref: "#/components/schemas/Dashboard" } } } }, ...common },
         },
@@ -437,7 +423,7 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
       "/records/{id}/confirm": {
         post: {
           summary: "Confirm a proposal",
-          description: "Legacy: a pending record is put in force. Native: the candidate revision is admitted once to the native engine; the response carries an admission receipt and does not claim extraction completed.",
+          description: "A memory file of the engine is in force when it is written, so this answers `409 memory_not_pending`; a staged candidate is confirmed at `/notes/{id}/confirm`.",
           security: [{ agentApiKey: ["memory.manage"] }],
           parameters: [recordId],
           requestBody: jsonBody({ $ref: "#/components/schemas/ExpectedVersion" }),
@@ -447,7 +433,7 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
       "/records/{id}/forget": {
         post: {
           summary: "Forget a memory",
-          description: "Out of every answer from now on, kept restorable, and remembered as rejected so the next extraction does not write it back.",
+          description: "Out of every answer from now on, kept restorable (`/records/{id}/undo`), and remembered as rejected so the next extraction does not write it back.",
           security: [{ agentApiKey: ["memory.manage"] }],
           parameters: [recordId],
           requestBody: jsonBody({ $ref: "#/components/schemas/ExpectedVersion" }),
@@ -457,6 +443,7 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
       "/records/{id}/restore": {
         post: {
           summary: "Restore a forgotten memory",
+          description: "Refused (`400 memory_engine_unsupported`): bring a forgotten memory back with `/records/{id}/undo`, naming the version the forget answered with.",
           security: [{ agentApiKey: ["memory.manage"] }],
           parameters: [recordId],
           requestBody: jsonBody({ $ref: "#/components/schemas/ExpectedVersion" }),
@@ -514,11 +501,11 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
       "/notes/{id}/confirm": {
         post: {
           summary: "Confirm a proposed note",
-          description: "Legacy: a proposed note is put in force. Native: this existing route confirms notes and staged external-session batches. It returns an idempotent admission receipt keyed by candidate ID and revision; states are queued, submitting, pending, completed, failed, uncertain, suspended or cancelled. Full external transcripts remain candidate evidence; admission uses only original user statements after the existing captured-message privacy filter. No admissible user content returns state=skipped, reason=no_user_content and makes no extracting-session write. Every retry rechecks current engine, project policy and candidate revision/status. Only completed means native extraction settled. recordIds may contain multiple native records; taskId and archiveUri are present when known. Retry the same confirmation to read or recover its receipt; uncertain submissions are inspected before any retry and never blindly appended twice.",
+          description: "This route confirms notes and staged external-session batches. It returns an idempotent admission receipt keyed by candidate ID and revision; states are queued, submitting, pending, completed, failed, uncertain, suspended or cancelled. Full external transcripts remain candidate evidence; admission uses only original user statements after the existing captured-message privacy filter. No admissible user content returns state=skipped, reason=no_user_content and makes no extracting-session write. Every retry rechecks current engine, project policy and candidate revision/status. Only completed means native extraction settled. recordIds may contain multiple native records; taskId and archiveUri are present when known. Retry the same confirmation to read or recover its receipt; uncertain submissions are inspected before any retry and never blindly appended twice.",
           security: [{ agentApiKey: ["memory.manage"] }],
           parameters: [noteId],
           requestBody: jsonBody({ $ref: "#/components/schemas/ExpectedRevision" }),
-          responses: { 200: { description: "Legacy note in force, or native candidate plus its truthful admission receipt." }, 404: errorResponse("No such proposed note."), 409: errorResponse("It changed since it was read."), ...common },
+          responses: { 200: { description: "The candidate plus its truthful admission receipt." }, 404: errorResponse("No such proposed note."), 409: errorResponse("It changed since it was read."), ...common },
         },
       },
       "/notes/{id}/reject": {
@@ -533,7 +520,7 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
       "/subject": {
         delete: {
           summary: "Forget one person entirely",
-          description: "An integration key only, naming the person in X-Subject: their account and everything in it is deleted the way an account is — the recall index first, then the records. `deleted` is false when there was nothing to delete.",
+          description: "An integration key only, naming the person in X-Subject: their account and everything in it is deleted the way an account is — the engine's memory first, then the rows. `deleted` is false when there was nothing to delete.",
           security: [{ agentApiKey: ["memory.manage"] }],
           responses: { 200: { description: "Whether anything was deleted." }, ...common },
         },

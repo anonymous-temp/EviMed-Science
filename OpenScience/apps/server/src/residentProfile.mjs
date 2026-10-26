@@ -5,44 +5,42 @@ import { isInternalProjectOf } from "./internalProjects.mjs";
 import { recordResidentCard, recordResidentOmitted, recordResidentProfile } from "./memoryMetrics.mjs";
 import { estimatePromptTokens } from "./modelGateway.mjs";
 import { renderMemoryContext } from "./researchContext.mjs";
-import { memoryPausedFor } from "./researchMemory.mjs";
+import { memoryPausedFor } from "./memorySettings.mjs";
 
 /**
- * The resident profile: the one thing of the researcher's memory that is pushed into a conversation.
+ * The resident profile: what the platform itself puts in front of a conversation of the researcher's memory.
  *
  * Hidden knowledge (review M6, owner ruling of 2026-10-10). Every dispatch used to hand the model the memories the platform
  * had retrieved for the question — up to eight records and 20,000 characters, episodic and project records among them — and
  * the capsule's profile besides, and did it again at every follow-up of the same conversation. The project's own ablations
  * showed no gain from it (v8 and v9 worse, v10 and v11 inconclusive), published work finds that always-present personal
  * context costs answers that did not need it, and every product that documents its load point hands a small standing layer
- * up front and lets the model look the rest up. So:
+ * up front and lets the model look the rest up. So the platform pushes little, once:
  *
- *  - What is pushed is the standing profile only — the records of the durable kinds (profile, preference, behavior,
- *    correction) and the capsule's own profile entries, at most `maxRecords` of them and `CAPSULE_PROFILE_MAX_TOKENS` tokens in
- *    all — with one short line saying what else can be looked up, by scope.
- *  - It is pushed once: at a conversation's first dispatch, and again only when it changed, or when the kernel compacted the
- *    conversation since (a compaction takes the block out of the history it was written into). The digest of what a
- *    conversation was last handed and the compaction that came after are the conversation's own state in
- *    `evimed_memory.sessions`; a follow-up that finds the block unchanged adds nothing to the context.
- *  - Everything else is the recall tool's (`evimed_capsule_recall`): the model asks when the question points at earlier work.
- *
- * A delegated child never saw the conversation, so it is handed the profile as it stands at every dispatch
- * (`memory.md`), whether or not the root was.
- *
- * Two additions on 2026-10-23, both read from the plan's I1/I3:
- *
+ *  - **The person's own profile and preferences are the engine's to hand over**: the unmodified memory plugin gives a session
+ *    `profile.md` and the listing of `preferences/` and `entities/` at its start, and the rest is looked up through the plugin's
+ *    tools. What the platform adds is what the engine has no place for: the project's card and the capsule's profile entries.
+ *    (The legacy engine's records — the durable kinds, the lookup counts, the usage counters — were this block's first half until
+ *    that engine was deleted on 2026-10-25.)
  *  - **The project's card is resident inside a project** (the owner's 「和项目连起来」 standard, which was reachable only by the
  *    model deciding to search): when a person is in a conversation of a named project (not the catch-all, not one of the
  *    platform's own), the card — field, goal, subject, material, stage, constraints, the six general slots and whatever clinical
  *    elements were stated — leads the block, within `PROJECT_CARD_MAX_CHARS`. It is the same card the memory page's 项目 tab
- *    shows, read by the same reader for either engine, handed once per conversation like the profile (it is part of what the
- *    digest is taken over) and never to a turn nobody is in (`attended`). A card that cannot be read is no reason for a
- *    dispatch to fail: the conversation goes on without it.
- *  - **A native account is handed the capsule's half** (`none("native")` used to return before the capsule was asked): the
- *    engine's own plugin hands over `profile.md` and the listing of `preferences/` and `entities/` at a session's start, and
- *    nothing of the capsule — the own capsule's profile entries, such as the notes a project's runs wrote — reached such a
- *    conversation at all. They lead no block of their own: they are the same memos the legacy profile carries after its
- *    records, under the same token cap, and the records half stays the engine's (one account, one path).
+ *    shows, read by the same reader, handed once per conversation (it is part of what the digest is taken over) and never to a
+ *    turn nobody is in (`attended`). A card that cannot be read is no reason for a dispatch to fail: the conversation goes on
+ *    without it.
+ *  - **The capsule's profile entries** — the own capsule's, such as the notes a project's runs wrote — follow the card, under
+ *    the token cap `CAPSULE_PROFILE_MAX_TOKENS` and at most `maxRecords` of them. A received pack's profile facts are never in the block
+ *    (a guest brings methods, not an identity).
+ *  - It is pushed once: at a conversation's first dispatch, and again only when it changed, or when the kernel compacted the
+ *    conversation since (a compaction takes the block out of the history it was written into). The digest of what a
+ *    conversation was last handed and the compaction that came after are the conversation's own state in
+ *    `evimed_memory.sessions`; a follow-up that finds the block unchanged adds nothing to the context.
+ *  - A deployment whose memory engine is off mounts the capsule's own recall tool (`evimed_capsule_recall`), and the line beside the
+ *    profile says how many capsule notes can be looked up with it. With the engine on that tool is not mounted, and the line says nothing.
+ *
+ * A delegated child never saw the conversation, so it is handed the profile as it stands at every dispatch
+ * (`memory.md`), whether or not the root was.
  *
  * @module residentProfile
  */
@@ -50,7 +48,7 @@ import { memoryPausedFor } from "./researchMemory.mjs";
 /** The most characters of the project's card a conversation is handed. */
 export const PROJECT_CARD_MAX_CHARS = 1_500;
 
-/** The project the catch-all is: it has no single subject, so it has no card (`memoryIntelligence.mjs` keeps no project fact in it). */
+/** The project the catch-all is: it has no single subject, so it has no card (no project card is ever written for it). */
 const CATCH_ALL_PROJECT_ID = "default";
 
 /**
@@ -84,16 +82,13 @@ export function projectCardMemo(projectId, rows, { maxChars = PROJECT_CARD_MAX_C
 }
 
 /**
- * The line beside the profile: what can be looked up, by scope, for a model that would otherwise not know a recall has
- * anything to find. Empty when there is nothing, and nothing in it but counts and the tool's name.
- * @param {{ omitted?: number, user?: number, project?: number, session?: number, capsule?: number }} counts
+ * The line beside the profile: what can be looked up with the capsule's recall tool, for a model that would otherwise not know a recall
+ * has anything to find. Empty when there is nothing, and nothing in it but counts and the tool's name.
+ * @param {{ omitted?: number, capsule?: number }} counts
  */
-export function lookupLine({ omitted = 0, user = 0, project = 0, session = 0, capsule = 0 }) {
+export function lookupLine({ omitted = 0, capsule = 0 }) {
   const parts = [
     omitted > 0 ? `未列出的画像 ${omitted} 条` : "",
-    project > 0 ? `本项目记忆 ${project} 条` : "",
-    session > 0 ? `本次对话的记忆 ${session} 条` : "",
-    user > 0 ? `其他记忆 ${user} 条` : "",
     capsule > 0 ? `胶囊笔记 ${capsule} 条` : "",
   ].filter(Boolean);
   return parts.length ? `可查（${SOCKET_TOOL_NAMES.capsuleRecall}）：${parts.join("，")}。` : "";
@@ -103,19 +98,18 @@ export function lookupLine({ omitted = 0, user = 0, project = 0, session = 0, ca
  * The block, within its caps.
  *
  * The project's card leads, outside the entry cap and with room of its own in the token budget (it is the project's, not one
- * more entry of the person's profile); then the research records, then the capsule's entries. An entry that does not fit the
- * token budget is left out and a later, shorter one may still fit; the rest is counted in the line beside the profile.
+ * more entry of the person's profile); then the capsule's entries. An entry that does not fit the token budget is left out and a
+ * later, shorter one may still fit; the rest is counted in the line beside the profile.
  *
- * @param {{ records?: readonly any[], capsuleFacts?: readonly any[], card?: any | null, counts?: { user?: number, project?: number, session?: number }, capsuleCount?: number,
- *   maxRecords?: number, maxTokens?: number }} input
+ * @param {{ capsuleFacts?: readonly any[], card?: any | null, capsuleCount?: number, maxRecords?: number, maxTokens?: number }} input
  * @returns {{ text: string, profile: string, memos: any[], omitted: number }}
  *   `profile` is the memos alone, which is what the digest is taken over: the counts beside it move with every record written.
  */
-export function renderResidentProfile({ records = [], capsuleFacts = [], card = null, counts = {}, capsuleCount = 0, maxRecords = 24, maxTokens = CAPSULE_PROFILE_MAX_TOKENS }) {
-  const candidates = [...records, ...capsuleFactMemos(capsuleFacts)];
+export function renderResidentProfile({ capsuleFacts = [], card = null, capsuleCount = 0, maxRecords = 24, maxTokens = CAPSULE_PROFILE_MAX_TOKENS }) {
+  const candidates = capsuleFactMemos(capsuleFacts);
   const bound = Math.max(0, Math.trunc(Number(maxRecords)) || 0);
   // Room kept for the line, so saying what was left out cannot itself break the budget.
-  const reserve = estimatePromptTokens(lookupLine({ omitted: 9_999, user: 9_999, project: 9_999, session: 9_999, capsule: 9_999 }));
+  const reserve = estimatePromptTokens(lookupLine({ omitted: 9_999, capsule: 9_999 }));
   /** @type {any[]} */
   const memos = card ? [card] : [];
   // The card's own room: what it takes is not taken from the profile's.
@@ -128,20 +122,71 @@ export function renderResidentProfile({ records = [], capsuleFacts = [], card = 
     entries += 1;
   }
   const omitted = candidates.length - entries;
-  const line = lookupLine({ omitted, ...counts, capsule: capsuleCount });
+  const line = lookupLine({ omitted, capsule: capsuleCount });
   const profile = renderMemoryContext(memos);
   // With no profile to give but something to look up, the line is the block.
   const text = profile ? renderMemoryContext(memos, { lookup: line }) : line;
   return { text, profile, memos, omitted };
 }
 
+/**
+ * What a turn typed in the kernel's own composer was handed up front, for the run it becomes. That turn reaches the model with no dispatch,
+ * so the block went in at the capsule plugin's first step (`capsuleGateway.mjs` `session`), before the control plane had a run to name it
+ * on; the conversation's state kept what it held (`noteResidentDelivered`), and when the run ends this is what its record says it recalled.
+ * A dispatched run named its own, a run that already names some is left as it is, and a block handed over before the run began (an earlier
+ * turn's, still in the conversation) is not this run's.
+ * @param {{ dispatchId?: string | null, recalledMemories?: readonly unknown[] | null, startedAt?: string | null, finishedAt?: string | null } | null | undefined} run
+ * @param {{ deliveredAt?: string | null, memos?: readonly { id: string, kind?: string, scope?: string }[] } | null | undefined} state `residentState`
+ * @returns {{ id: string, kind?: string, scope?: string }[]}
+ */
+export function nativeResidentMemos(run, state) {
+  if (!run || run.dispatchId) return [];
+  if (Array.isArray(run.recalledMemories) && run.recalledMemories.length) return [];
+  if (!state?.deliveredAt || !state.memos?.length) return [];
+  const delivered = Date.parse(state.deliveredAt);
+  const started = Date.parse(String(run.startedAt ?? ""));
+  const finished = run.finishedAt ? Date.parse(run.finishedAt) : Number.POSITIVE_INFINITY;
+  if (!Number.isFinite(delivered) || !Number.isFinite(started)) return [];
+  return delivered >= started - 5_000 && delivered <= finished + 5_000 ? [...state.memos] : [];
+}
+
+/**
+ * The resident block as the capsule gateway's first step asks for it (`capsuleGateway.mjs` `session`), for a turn typed in the kernel's own
+ * composer. Built from the one decision a dispatch takes (`ResidentProfiles.forDispatch`), with the two facts only the ledger has:
+ *
+ *  - a conversation with a run the control plane dispatched is told nothing — that prompt carries the block in its own context, and said
+ *    twice it is only longer;
+ *  - a turn nobody is in (a run the platform started: automated, scheduled, a module's) is handed no project card, as at a dispatch; a turn
+ *    typed into the composer is a person's, which is why `attended` is the absence of such a run.
+ *
+ * Whether the conversation already holds the block, whether memory is paused for it and the card's own limits (the default project, an
+ * internal project, 1,500 characters) are `forDispatch`'s.
+ * @param {{ residentProfiles: ResidentProfiles, activeRuns: (project: any) => Promise<any[]>, startedByPlatform: (run: any) => boolean }} services
+ */
+export function nativeSessionResident({ residentProfiles, activeRuns, startedByPlatform }) {
+  return {
+    /** @param {any} user @param {any} project @param {string} sessionId */
+    async forSession(user, project, sessionId) {
+      const running = (await activeRuns(project)).filter((run) => run.sessionId === sessionId);
+      if (running.some((run) => run.dispatchId)) return null;
+      const block = await residentProfiles.forDispatch(user.id, { projectId: project.id, sessionId, attended: !running.some(startedByPlatform) });
+      if (!block.due || !block.text || !block.digest) return null;
+      return { text: block.text, digest: block.digest, memories: block.memories.map((/** @type {any} */ memo) => ({ id: memo.id, kind: memo.kind, scope: memo.scope })) };
+    },
+    /** @param {any} user @param {any} project @param {string} sessionId @param {{ digest: string, memories: { id: string, kind?: string, scope?: string }[] }} receipt */
+    attached(user, project, sessionId, receipt) {
+      return residentProfiles.acknowledge(user.id, { projectId: project.id, sessionId, ...receipt });
+    },
+  };
+}
+
 export class ResidentProfiles {
   /**
    * @param {{ config: any, store: any, capsules?: { profileFacts: Function, lookupCount?: Function } | null,
-   *   projectCard?: ((userId: string, projectId: string, engine: "native" | "legacy") => Promise<readonly any[]>) | null }} dependencies
-   *   `store` is the research-memory store; `capsules` the capsule service, whose absence leaves the profile to the records.
-   *   `projectCard` reads the rows of a project's card for the engine the account is on (the rows the memory page's 项目 tab
-   *   shows); without it no card is handed over.
+   *   projectCard?: ((userId: string, projectId: string) => Promise<readonly any[]>) | null }} dependencies
+   *   `store` is the memory settings store (the switches and the conversation's hand-over state); `capsules` the capsule service,
+   *   whose absence leaves the profile to the card. `projectCard` reads the rows of a project's card (the rows the memory page's
+   *   项目 tab shows); without it no card is handed over.
    */
   constructor({ config, store, capsules = null, projectCard = null }) {
     this.config = config;
@@ -156,18 +201,18 @@ export class ResidentProfiles {
   /**
    * The project's card as a memo, when this dispatch is one a person is in, inside a project that has a subject of its own.
    * Any failure of the read is no card: the conversation goes on without it.
-   * @param {string} userId @param {string} projectId @param {boolean} attended @param {"native" | "legacy"} engine
+   * @param {string} userId @param {string} projectId @param {boolean} attended
    */
-  async #card(userId, projectId, attended, engine) {
+  async #card(userId, projectId, attended) {
     if (!attended || !this.projectCard || !projectId || projectId === CATCH_ALL_PROJECT_ID || isInternalProjectOf(this.config, userId, projectId)) return null;
-    // Bounded: the card of a native account is a read of the engine, and a dispatch is not to wait on an engine that hangs
+    // Bounded: the card is a read of the engine, and a dispatch is not to wait on an engine that hangs
     // (`OPEN_SCIENCE_MEMORY_RESIDENT_CARD_TIMEOUT_MS`). A card read late is not read; the next message asks again.
     const deadline = Math.max(100, Math.trunc(Number(this.config?.memoryResidentCardTimeoutMs ?? 1_500)) || 1_500);
     /** @type {ReturnType<typeof setTimeout> | undefined} */
     let timer;
     try {
       const rows = await Promise.race([
-        this.projectCard(userId, projectId, engine),
+        this.projectCard(userId, projectId),
         new Promise((_resolve, reject) => { timer = setTimeout(() => reject(Object.assign(new Error("the project card was not read in time"), { code: "resident_card_timeout" })), deadline); }),
       ]);
       const memo = projectCardMemo(projectId, /** @type {any} */ (rows));
@@ -186,38 +231,33 @@ export class ResidentProfiles {
    *
    * Reads fail loudly where the dispatch's memory always did: a store that cannot answer rejects the dispatch rather than
    * sending the run out without the profile it would have had (the caller wraps it in `memoryRecallRejection`). The
-   * capsule's half degrades — a capsule that cannot be read leaves the records — and so does the project's card.
+   * capsule's half degrades — a capsule that cannot be read leaves the card — and so does the project's card.
    *
    * @param {string} userId @param {{ projectId: string, sessionId: string | null, attended?: boolean }} scope
    *   `attended`: a person is in this turn now (the web chat, an IM channel). A scheduled task, an episode, a module's step and
    *   a platform job are turns nobody is in, and are handed no project card.
-   * @returns {Promise<{ text: string, memories: any[], due: boolean, reason: string, omitted: number, delivered: () => Promise<void> }>}
+   * @returns {Promise<{ text: string, memories: any[], due: boolean, reason: string, omitted: number, digest: string | null, delivered: () => Promise<void> }>}
+   *   `digest` names the block, for a caller that hands it over in two steps (`acknowledge`): the capsule gateway's first-step context
    */
   async forDispatch(userId, { projectId, sessionId, attended = false }) {
     const none = (/** @type {string} */ reason) => {
       recordResidentProfile(reason);
-      return { text: "", memories: [], due: false, reason, omitted: 0, delivered: async () => {} };
+      return { text: "", memories: [], due: false, reason, omitted: 0, digest: null, delivered: async () => {} };
     };
     // The deployment's switch, then the researcher's own: nothing of the memory is handed over, and the profile a
     // conversation was given earlier is not taken back.
     if (this.config?.memoryRecallEnabled === false) return none("paused");
-    // An account on the native engine is handed its profile and preferences by the engine's memory plugin at the start of each
-    // session (2026-10-13): the records half from here would be the same facts twice, from two stores. What the plugin does not
-    // have is the capsule's profile entries and the project's card, and those are handed over below.
-    const native = typeof this.store.memoryEngine === "function" && await this.store.memoryEngine(userId) === "native";
     const pause = await memoryPausedFor(this.store, userId, projectId, sessionId);
     if (pause.recall) return none("paused");
 
-    const [records, counts] = native ? [[], {}] : await Promise.all([
-      this.store.residentRecords(userId, { projectId, sessionId, limit: this.maxRecords }),
-      this.store.lookupCounts(userId, { projectId, sessionId }),
-    ]);
-    const card = await this.#card(userId, projectId, attended, native ? "native" : "legacy");
+    const card = await this.#card(userId, projectId, attended);
     const capsuleFacts = this.capsules ? await this.capsules.profileFacts(userId, projectId, CAPSULE_PROFILE_FACT_KINDS).catch(() => []) : [];
-    // The line beside the profile names the recall tool, which a native conversation does not have: its lookup is the engine's.
-    const capsuleCount = !native && typeof this.capsules?.lookupCount === "function" ? await this.capsules.lookupCount(userId, projectId, CAPSULE_PROFILE_FACT_KINDS).catch(() => 0) : 0;
-    const block = renderResidentProfile({ records, capsuleFacts, card, counts, capsuleCount, maxRecords: this.maxRecords });
-    if (!block.text) return none(native ? "native" : "empty");
+    // The line beside the profile names the capsule's recall tool, which a conversation has only when this deployment has no memory
+    // engine: with one, a lookup is the engine's own.
+    const capsuleCount = this.config?.memoryEngineEnabled !== true && typeof this.capsules?.lookupCount === "function"
+      ? await this.capsules.lookupCount(userId, projectId, CAPSULE_PROFILE_FACT_KINDS).catch(() => 0) : 0;
+    const block = renderResidentProfile({ capsuleFacts, card, capsuleCount, maxRecords: this.maxRecords });
+    if (!block.text) return none("empty");
     if (block.omitted > 0) recordResidentOmitted(block.omitted);
 
     const digest = createHash("sha256").update(block.profile).digest("hex");
@@ -238,14 +278,22 @@ export class ResidentProfiles {
     recordResidentProfile(reason);
     const memories = block.memos;
     return {
-      text: block.text, memories, due, reason, omitted: block.omitted,
+      text: block.text, memories, due, reason, omitted: block.omitted, digest,
       // After the prompt that carried it was accepted, so a dispatch that failed leaves the next one to hand it over.
       delivered: async () => {
         if (!due) return;
-        if (state && sessionId) await this.store.noteResidentDelivered(userId, projectId, sessionId, digest).catch(() => {});
-        const used = memories.map((memo) => /^record:(.+)$/.exec(String(memo.id))?.[1]).filter(Boolean);
-        if (used.length && typeof this.store.noteRecordUsage === "function") void Promise.resolve(this.store.noteRecordUsage(userId, used)).catch(() => {});
+        if (state && sessionId) await this.store.noteResidentDelivered(userId, projectId, sessionId, digest, memories).catch(() => {});
       },
     };
+  }
+
+  /**
+   * The block was handed to a conversation by the kernel's own first step (the capsule gateway's `session`), and the step has entered: the
+   * conversation now holds it, so the next one is not handed it again. The second half of a hand-over made in two calls; a dispatch's
+   * `delivered` is the same note made in one.
+   * @param {string} userId @param {{ projectId: string, sessionId: string, digest: string, memories?: readonly { id: string, kind?: string, scope?: string }[] }} receipt
+   */
+  async acknowledge(userId, { projectId, sessionId, digest, memories = [] }) {
+    await this.store.noteResidentDelivered(userId, projectId, sessionId, digest, memories);
   }
 }

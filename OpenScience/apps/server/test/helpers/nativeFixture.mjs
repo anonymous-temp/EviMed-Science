@@ -16,8 +16,8 @@ import { NativeMemoryWorker } from "../../src/nativeMemoryWorker.mjs";
 import { OpenVikingClient } from "../../src/openVikingClient.mjs";
 import { OpenVikingResources } from "../../src/openVikingResources.mjs";
 import { OpenVikingSessions } from "../../src/openVikingSessions.mjs";
-import { ResearchMemoryStore } from "../../src/researchMemory.mjs";
-import { migrateResearchMemory } from "../../src/researchMemoryPersistence.mjs";
+import { MemorySettingsStore } from "../../src/memorySettings.mjs";
+import { migrateMemorySettings } from "../../src/memorySettingsPersistence.mjs";
 import { resetNativeMemoryMetrics } from "../../src/nativeMemoryMetrics.mjs";
 import { startOpenVikingStub } from "./openVikingStub.mjs";
 
@@ -26,7 +26,7 @@ export function nativeIntegration({ config: settings = {} } = {}) {
   const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
   if (url) { const parsed = new URL(url); assert.ok(["127.0.0.1", "localhost", "::1"].includes(parsed.hostname)); assert.match(parsed.pathname, /evimed_test/); }
   const options = { skip: !url && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
-  const config = { ovNativeMemoryEnabled: true, memoryContextLimit: 8, memoryContextMaxChars: 20_000, nativeMemoryReplayAttempts: 3, ...settings };
+  const config = { memoryEngineEnabled: true, memoryContextLimit: 8, memoryContextMaxChars: 20_000, nativeMemoryReplayAttempts: 3, ...settings };
   /** @type {ControlPlaneDatabase} */
   let database;
   /** @type {string[]} */
@@ -35,7 +35,7 @@ export function nativeIntegration({ config: settings = {} } = {}) {
   before(async () => {
     if (!url) return;
     database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 4, databaseConnectionTimeoutMs: 5_000 });
-    await migrateResearchMemory(database);
+    await migrateMemorySettings(database);
   });
   after(async () => {
     if (!url) return;
@@ -58,14 +58,14 @@ export function nativeIntegration({ config: settings = {} } = {}) {
     const sessions = new OpenVikingSessions(client, { timeoutMs: 2_000, fastTimeoutMs: 1_000 });
     const overlay = new NativeMemoryOverlay({ database });
     const merged = { ...config, ...extra };
-    const researchMemory = new ResearchMemoryStore(merged, { database });
+    const memorySettings = new MemorySettingsStore(merged, { database });
     let clock = new Date("2026-10-13T08:00:00.000Z");
     const store = new NativeMemoryStore({ sessions, overlay, now: () => clock, conversationTitles });
-    const worker = new NativeMemoryWorker({ config: merged, researchMemory, sessions, overlay, now: () => clock });
+    const worker = new NativeMemoryWorker({ config: merged, memorySettings, sessions, overlay, now: () => clock });
     const resources = new OpenVikingResources({ client });
     // The consolidation reads times the database wrote (its own clock): its `now` is the real one, turned forward by hand.
     let skew = 0;
-    const consolidation = new NativeMemoryConsolidation({ config: merged, researchMemory, sessions, resources, overlay, ingest: (id, task) => worker.ingestConsolidation(id, task), now: () => new Date(Date.now() + skew) });
+    const consolidation = new NativeMemoryConsolidation({ config: merged, memorySettings, sessions, resources, overlay, ingest: (id, task) => worker.ingestConsolidation(id, task), now: () => new Date(Date.now() + skew) });
     const root = sessions.memoryRoot(userId);
     const engineUser = sessions.engineUser(userId);
     /** @param {string} relPath @param {string} text @param {{ type?: string, tags?: string[] }} [how] */
@@ -86,7 +86,7 @@ export function nativeIntegration({ config: settings = {} } = {}) {
       return { session, ...committed };
     }
     return {
-      userId, stub, sessions, overlay, researchMemory, store, worker, resources, consolidation, advanceConsolidation: (/** @type {number} */ ms) => { skew += ms; }, root, engineUser, seed, commitConversation,
+      userId, stub, sessions, overlay, memorySettings, store, worker, resources, consolidation, advanceConsolidation: (/** @type {number} */ ms) => { skew += ms; }, root, engineUser, seed, commitConversation,
       database, config: merged, advance: (/** @type {number} */ ms) => { clock = new Date(clock.getTime() + ms); }, now: () => clock,
     };
   }

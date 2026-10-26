@@ -42,7 +42,7 @@ export const OPENVIKING_ENGINE_FACTS = Object.freeze(["version", "modelKey", "me
 
 /** Which facts each feature built on the engine needs. `ready(feature)` answers from these. */
 export const OPENVIKING_ENGINE_FEATURES = Object.freeze({
-  /** Sessions, the engine's own extraction, the memory plugin (`OPEN_SCIENCE_OV_NATIVE_MEMORY_ENABLED`). */
+  /** Sessions, the engine's own extraction, the memory plugin (on exactly when OpenViking is configured: `config.memoryEngineEnabled`). */
   nativeMemory: Object.freeze(["version", "modelKey", "memoryTemplates"]),
   /** Resources, Compile, the wiki and the graph (`OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED`). */
   knowledge: Object.freeze(["version", "modelKey", "skills", "compileIdentity"]),

@@ -31,8 +31,5 @@
     "requireKeys": [
       "project.goal"
     ]
-  },
-  "arms": [
-    "native"
-  ]
+  }
 }

@@ -35,7 +35,6 @@ vi.mock("@/lib/apiClient", async () => ({
   updateMemorySettings: (...args: unknown[]) => updateMemorySettings(...args),
 }));
 vi.mock("@/lib/methodsClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/methodsClient")>("@/lib/methodsClient")), listAllMethods: () => Promise.resolve([]) }));
-vi.mock("@/lib/handbooksClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/handbooksClient")>("@/lib/handbooksClient")), listAllHandbooks: () => Promise.resolve([]) }));
 
 const memory = (id: string, over: Partial<MapNode> = {}): MapNode => ({
   id: `memory:${id}`, type: "memory", subtype: "preference", group: "偏好", label: `记忆 ${id}`, weight: 0.4, state: "current", at: "2026-09-10T00:00:00.000Z",
@@ -74,7 +73,7 @@ function busyMap(over: Partial<MemoryMap> = {}): MemoryMap {
 
 const record = (id: string): WebStructuredMemory => ({
   id, scope: "user", scopeId: "", kind: "preference", key: `k.${id}`, value: `记忆 ${id}`, summary: `记忆 ${id}`, origin: "inferred", status: "active", confidence: 1, importance: 0.5,
-  sensitive: false, evidenceCount: 0, version: 1, createdAt: "2026-09-10T00:00:00Z", updatedAt: "2026-09-10T00:00:00Z", lastConfirmedAt: null, expiresAt: null, evidence: [], revisions: [],
+  sensitive: false, evidenceCount: 0, version: 1, createdAt: "2026-09-10T00:00:00Z", updatedAt: "2026-09-10T00:00:00Z", lastConfirmedAt: null, expiresAt: null, evidence: [], revisions: [], document: { id: "nm_profile" },
 });
 
 function Where() {
@@ -113,28 +112,15 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("the landing's header: the verbs of a capsule are on the map too", () => {
-  it("has the 记忆 switch and the one 「⋯」 of the lists, with the same four entries, and runs the 「刚记住了」 prompt", async () => {
+  it("has the 记忆 switch and the one 「⋯」 of the lists, with the same entries (and 从其他 AI 导入 beside 分享与导入), and runs the 「刚记住了」 prompt", async () => {
     const user = userEvent.setup();
     open();
     expect(await screen.findByRole("switch", { name: "记忆" })).toHaveAttribute("aria-checked", "true");
     expect(writePrompt).toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "记忆设置" }));
     const menu = await screen.findByRole("menu", { name: "记忆设置" });
-    expect([...menu.querySelectorAll("[role^=menuitem]")].map((item) => item.textContent)).toEqual(["分享与导入", "已忘记的内容", "本项目不使用记忆", "重置记忆"]);
-    // No 记住这一条 for an account whose memory is not the engine's own.
-    expect(screen.queryByRole("button", { name: "记住这一条" })).toBeNull();
-  });
-
-  it("offers 记住这一条 to an account on the engine's own memory, and only then", async () => {
-    fetchMemoryMap.mockResolvedValue(busyMap({ engine: "native" }));
-    open();
-    expect(await screen.findByRole("button", { name: "记住这一条" })).toBeInTheDocument();
-    cleanup();
-    fetchMemoryMap.mockResolvedValue(busyMap({ engine: "postgres" }));
-    open();
-    await screen.findByRole("switch", { name: "记忆" });
-    await screen.findByText(/EviMed 记住了你的/u);
-    expect(screen.queryByRole("button", { name: "记住这一条" })).toBeNull();
+    expect([...menu.querySelectorAll("[role^=menuitem]")].map((item) => item.textContent)).toEqual(["分享与导入", "从其他 AI 导入", "已忘记的内容", "本项目不使用记忆", "重置记忆"]);
+    expect(screen.getByRole("button", { name: "记住这一条" })).toBeInTheDocument();
   });
 
   it("pauses the project the map is narrowed to, and a map of every project the project the shell is in", async () => {

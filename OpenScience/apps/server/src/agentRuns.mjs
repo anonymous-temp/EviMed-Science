@@ -4,7 +4,7 @@ import { reviewDeliveredRegister } from "./reportRegisterJudge.mjs";
 import { createHash } from "node:crypto";
 import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
-import { FILE_DELIVERABLE_KIND, availableRunActions, availableRunStepActions, compareArtifacts, fileFormatIssues, hasSensitiveText, identifierShapesIn, runIsStalled } from "@evimed/domain";
+import { FILE_DELIVERABLE_KIND, availableRunActions, availableRunStepActions, compareArtifacts, fileFormatIssues, identifierShapesIn, runIsStalled } from "@evimed/domain";
 import {
   HttpError,
   assertNoSymlinkPath,
@@ -841,7 +841,6 @@ function foldEvents(events) {
         ...current,
         ...(!current.promptDispatchStartedAt&&typeof event.promptDispatchStartedAt==='string'&&Number.isFinite(Date.parse(event.promptDispatchStartedAt))?{promptDispatchStartedAt:event.promptDispatchStartedAt}:{}),
         ...(event.transcript ? { transcript: normalizeTranscriptReceipt(event.transcript) } : {}),
-        ...(event.capabilityHandbooks ? { capabilityHandbooks: normalizeCapabilityHandbooks(event.capabilityHandbooks) } : {}),
         ...(event.methodsLoaded ? { methodsLoaded: normalizeMethodDigests(event.methodsLoaded) } : {}),
         ...(event.methodsInvoked ? { methodsInvoked: normalizeMethodDigests(event.methodsInvoked) } : {}),
         ...(event.mountedSkills ? { mountedSkills: normalizeMountedSkills(event.mountedSkills) } : {}),
@@ -1066,20 +1065,6 @@ function normalizeRecalledMemories(value) {
   return rows.length > 0 ? rows.slice(0, 40) : undefined;
 }
 
-/** The supplementary body never belongs in the run ledger, only its exact receipt. */
-function normalizeCapabilityHandbooks(value) {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item) => typeof item?.id === "string" && item.id.startsWith("method:capability-handbook:") && item.id.length <= 256
-    && typeof item.ownerId === "string" && /^[A-Za-z0-9_.:@-]{1,128}$/.test(item.ownerId)
-    && typeof item.capabilityId === "string" && /^[a-z][a-z0-9-]{0,63}$/.test(item.capabilityId)
-    && /^sha256:[a-f0-9]{64}$/.test(item.contentDigest)
-    && /^\.evimed-handbooks\/[a-f0-9]{64}\/SKILL\.md$/.test(item.path)
-    && Number.isSafeInteger(item.version) && item.version > 0)
-    .slice(0, 24).map(({ id, ownerId, capabilityId, contentDigest, path: filePath, version, requestId }) => ({ id, ownerId, capabilityId, contentDigest, path: filePath, version,
-      ...(typeof requestId === "string" && requestId.length > 0 && requestId.length <= 512 && ![...requestId].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127) ? { requestId } : {}),
-    }));
-}
-
 function normalizeMethodDigests(value) {
   if (!Array.isArray(value)) return undefined;
   /** @type {{name: string, digest: string, seq?: number, trial?: boolean, reason?: string}[]} */
@@ -1149,10 +1134,10 @@ function normalizeRepairRounds(value) {
   return { content, structural };
 }
 
-/** @param {any} value @returns {{at: string, seq: number, replaced: number, tokens: number, policy: string}[] | undefined} */
+/** @param {any} value @returns {{at: string, seq: number, replaced: number, tokens: number}[] | undefined} */
 function normalizeCompactionRecords(value) {
   if (!Array.isArray(value)) return undefined;
-  /** @type {{at: string, seq: number, replaced: number, tokens: number, policy: string}[]} */
+  /** @type {{at: string, seq: number, replaced: number, tokens: number}[]} */
   const entries = [];
   for (const item of value.slice(-maxCompactionRecords)) {
     if (!item || typeof item !== "object") continue;
@@ -1162,7 +1147,6 @@ function normalizeCompactionRecords(value) {
       seq: item.seq,
       replaced: Number.isSafeInteger(item.replaced) && item.replaced >= 0 ? item.replaced : 0,
       tokens: Number.isSafeInteger(item.tokens) && item.tokens >= 0 ? item.tokens : 0,
-      policy: typeof item.policy === "string" ? item.policy.slice(0, 32) : "",
     });
   }
   return entries;
@@ -1315,13 +1299,13 @@ function validateNativeTurn(value) {
 const STEER_TEXT_CHARS = 1500;
 
 /**
- * The words of a steer as the ledger may hold them: trimmed and cut, and none at all when they carry a credential or an identifier
- * (`hasSensitiveText`, `identifierShapesIn`, the checks the memory path keeps by) — the count and the request id still say it happened.
+ * The words of a steer as the ledger may hold them: trimmed and cut, and none at all when they carry a credential or an identifier by
+ * shape (`identifierShapesIn`, the check the memory path keeps by; not a word list) — the count and the request id still say it happened.
  * @param {unknown} text @returns {string}
  */
 function steerTextOf(text) {
   const value = typeof text === "string" ? text.trim().slice(0, STEER_TEXT_CHARS) : "";
-  return value && !hasSensitiveText(value) && !identifierShapesIn(value).length ? value : "";
+  return value && !identifierShapesIn(value).length ? value : "";
 }
 
 /**
@@ -4415,9 +4399,6 @@ export class AgentRunStore {
     /** @type {((project: any, run: any) => Promise<unknown>) | null} */
     this.onOriginCardRun = typeof options.onOriginCardRun === "function" ? options.onOriginCardRun : null;
     this.setRuntimePlatformSkillScope = options.setRuntimePlatformSkillScope ?? (() => {});
-    // A runtime launched for the other memory engine than its account is on now is replaced here, between two runs
-    // (`RuntimeManager.adoptMemoryEngine`). A failure never stops a dispatch.
-    this.adoptRuntimeMemoryEngine = options.adoptRuntimeMemoryEngine ?? (() => {});
     this.onPlatformSkillExecution = options.onPlatformSkillExecution ?? (async () => {});
     this.onPlatformSkillRetrieval = options.onPlatformSkillRetrieval ?? (async () => {});
     // What the independent reviewer found on this run's deliverables, as
@@ -4750,7 +4731,7 @@ export class AgentRunStore {
 
   /**
    * Every conversation of a project with its runs, newest first: one read of the ledger for what `conversationRuns` answers one
-   * conversation at a time. What reading older memories against the conversations they came from asks (`memoryEvidenceProvenance.mjs`).
+   * conversation at a time. What naming the conversations a native memory file came from asks of the ledger (`nativeConversationTitles` in `server.mjs`).
    * @param {any} project @returns {Promise<Map<string, Record<string, any>[]>>}
    */
   async conversationIndex(project) {
@@ -5206,7 +5187,6 @@ export class AgentRunStore {
           effectiveRouteReason: effectiveRouteReason ?? "session-binding",
         }
       : { effectiveAgentId, effectiveAgentVersion, effectiveRuntimeAgent, effectiveRouteReason };
-    try { await this.adoptRuntimeMemoryEngine(project); } catch { /* memory never stops a dispatch: the runtime stays as it is */ }
     await this.setRuntimePlatformSkillScope(project, selected.effectiveAgentId ?? null);
     // The run is recorded under the identity it ran as. A ledger row whose specialist pin differs from its effective identity is
     // refused by the fold (and the whole project's ledger with it), so a turn of another capability than the conversation's
@@ -5423,7 +5403,7 @@ export class AgentRunStore {
    * reason a run fails.
    * @param {any} project
    * @param {string} rawRunId
-   * @param {{platformSkillGeneration?: any, personalSkillGeneration?: any, transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], capabilityHandbooks?: any[], appendCapabilityHandbooks?: any[], mountedSkills?: string[], recalledMemories?: {id: string, kind?: string, scope?: string}[], appendRecalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any, pagesRead?: any[], pagesReadTotal?: number}} patch
+   * @param {{platformSkillGeneration?: any, personalSkillGeneration?: any, transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], mountedSkills?: string[], recalledMemories?: {id: string, kind?: string, scope?: string}[], appendRecalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any, pagesRead?: any[], pagesReadTotal?: number}} patch
    */
   /** Recorded by the trusted manager immediately before its first native prompt; never retroactive. @param {any} project @param {string} runId @param {string} at */
   async recordRuntimeEgressDispatch(project,runId,at){
@@ -5461,10 +5441,6 @@ export class AgentRunStore {
         at: this.now().toISOString(),
         ...(current.promptDispatchStartedAt ? { promptDispatchStartedAt: current.promptDispatchStartedAt } : {}),
         ...(patch.transcript ? { transcript: patch.transcript } : current.transcript ? { transcript: current.transcript } : {}),
-        ...(patch.appendCapabilityHandbooks || patch.capabilityHandbooks ? { capabilityHandbooks: normalizeCapabilityHandbooks(
-          (patch.appendCapabilityHandbooks ? [...(current.capabilityHandbooks ?? []), ...patch.appendCapabilityHandbooks] : patch.capabilityHandbooks)
-            .filter((item, index, all) => item?.ownerId === project.userId && all.findIndex(other => other?.id === item.id && other?.contentDigest === item.contentDigest) === index)) }
-          : current.capabilityHandbooks ? { capabilityHandbooks: current.capabilityHandbooks } : {}),
         ...(patch.methodsLoaded ? { methodsLoaded: patch.methodsLoaded } : current.methodsLoaded ? { methodsLoaded: current.methodsLoaded } : {}),
         ...(patch.methodsInvoked ? { methodsInvoked: patch.methodsInvoked } : current.methodsInvoked ? { methodsInvoked: current.methodsInvoked } : {}),
         ...(patch.mountedSkills ? { mountedSkills: patch.mountedSkills } : current.mountedSkills ? { mountedSkills: current.mountedSkills } : {}),

@@ -18,10 +18,9 @@
  * vocabulary there would be the one that drifts.
  *
  * The acts are the workbench's own acts, with the workbench's semantics:
- * confirming a proposal makes it the person's own statement, editing makes it
- * theirs, forgetting archives it (restorable), undo saves the previous state
- * forward, and each rejection is written to the feedback ledger so the next
- * extraction does not write it straight back. Only a key carrying
+ * editing makes a memory the person's own, forgetting removes the file (restorable
+ * by undo, and each rejection keeps the next extraction from writing it straight
+ * back), undo saves the previous state forward. Only a key carrying
  * `memory.manage` may take them: the integrator declares, by holding one, that
  * its requests come from the person's own dashboard.
  *
@@ -33,7 +32,7 @@ import { cleanMethodDisplay } from "@evimed/domain";
 import { bodyVersionOf, effectiveStatusReason, methodStepsOf } from "./learningService.mjs";
 import { filterCapturedMessage } from "./memoryGateway.mjs";
 import { NATIVE_RECORD_ID } from "./nativeMemoryStore.mjs";
-import { memoryPausedFor } from "./researchMemory.mjs";
+import { memoryPausedFor } from "./memorySettings.mjs";
 import { HttpError } from "./security.mjs";
 
 /** How long a learned method wears 「新」 (build spec §8.4). */
@@ -63,7 +62,7 @@ function instantMs(value) {
 /** The source of a record, from the basis its own evidence and revisions give.
  * @param {any} record */
 function recordSource(record) {
-  if (record?.engine === "native" && ["explicit", "manual"].includes(record.origin)) return "self";
+  if (["explicit", "manual"].includes(record?.origin)) return "self";
   const basis = record?.provenance?.basis;
   if (["stated", "confirmed", "edited"].includes(basis)) return "self";
   if (basis === "inferred") return "inferred";
@@ -77,12 +76,11 @@ function methodSource(payload) {
 }
 
 /**
- * The states a record has been through that no longer hold, with when each
- * held: its earlier values (a revision stores the state that was replaced, at
- * the moment it was), and the records it replaced. 「曾经如此」.
- * @param {any} record @param {any[]} replaced records superseded by this one
+ * The states a record has been through that no longer hold, with when each held: its earlier values (a revision stores the
+ * state that was replaced, at the moment it was). 「曾经如此」.
+ * @param {any} record
  */
-function wasTrue(record, replaced) {
+function wasTrue(record) {
   const revisions = [...(record.revisions ?? [])].sort((left, right) => left.version - right.version);
   const current = String(record.summary || record.value || "");
   /** @type {any[]} */
@@ -98,14 +96,11 @@ function wasTrue(record, replaced) {
       ...(revision.by ? { by: revision.by } : {}),
     });
   });
-  for (const old of replaced) {
-    earlier.push({ recordId: old.id, summary: String(old.summary || old.value || ""), from: old.validFrom ?? old.createdAt, until: old.invalidSince ?? old.updatedAt });
-  }
   return earlier.sort((left, right) => String(right.until ?? "").localeCompare(String(left.until ?? "")));
 }
 
-/** One record, as a dashboard row. @param {any} record @param {any[]} replaced @param {Record<string, any>} usage */
-function recordRow(record, replaced, usage) {
+/** One record, as a dashboard row. @param {any} record */
+function recordRow(record) {
   const source = recordSource(record);
   return {
     id: record.id,
@@ -123,12 +118,13 @@ function recordRow(record, replaced, usage) {
       runs: record.provenance?.runs ?? 0,
       conversations: record.provenance?.conversations ?? 0,
     },
-    usage: usage[record.id] ?? { count: 0, lastUsedAt: null },
+    // The engine keeps no use counter: a memory file is read by the engine's own recall, which counts nothing.
+    usage: { count: 0, lastUsedAt: null },
     quotes: (record.evidence ?? []).slice(-3).map((/** @type {any} */ item) => ({ quote: item.quote, observedAt: item.observedAt, sourceRef: item.sourceRef })),
     history: [...(record.revisions ?? [])].sort((left, right) => right.version - left.version).slice(0, 5)
       .map((/** @type {any} */ revision) => ({ version: revision.version, summary: revision.summary || revision.value, status: revision.status,
         changedAt: revision.changedAt, ...(revision.by ? { by: revision.by } : {}) })),
-    wasTrue: wasTrue(record, replaced),
+    wasTrue: wasTrue(record),
     sensitive: record.sensitive === true,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
@@ -173,45 +169,30 @@ function habitRow(document, nowMs, basis) {
  * waits for the person, what was forgotten, the habits and what they were
  * counted from, what was never learned, and what changed.
  *
- * @param {{ researchMemory: any, nativeMemory?: any, learning?: any, capsules?: any,
+ * @param {{ memorySettings: any, nativeMemory?: any, learning?: any, capsules?: any,
  *   projectId?: string | null, observations?: { basis: (userId: string) => Promise<Map<string, any>>, neverLearned: (userId: string) => Promise<any[]> } | null,
  *   now?: () => Date }} services
  * @param {{ id: string } | null} user null: a subject with no memory yet — an empty dashboard
  */
-export async function memoryBoard({ researchMemory, nativeMemory = null, learning = null, capsules = null, observations = null, projectId = null, now = () => new Date() }, user) {
+export async function memoryBoard({ memorySettings, nativeMemory = null, learning = null, capsules = null, observations = null, projectId = null, now = () => new Date() }, user) {
   const nowMs = now().getTime();
   if (!user) {
-    return { engine: "legacy", switches: { learningPaused: false, recallPaused: false }, records: [], pending: [], forgotten: [], habits: [], neverLearned: [], recentChanges: [] };
+    return { switches: { learningPaused: false, recallPaused: false }, records: [], pending: [], forgotten: [], habits: [], neverLearned: [], recentChanges: [] };
   }
-  const settings = await researchMemory.settings(user.id);
-  const native = typeof researchMemory.memoryEngine === "function" && await researchMemory.memoryEngine(user.id) === "native";
-  if (native && !nativeMemory?.configured) throw new HttpError(503, "memory_engine_unavailable", "The memory service is unavailable.");
-  const recordStore = native ? nativeMemory : researchMemory;
-  const all = [...await recordStore.listRecords(user.id, { statuses: ["active", "pending", "superseded", "archived"], pageSize: 100 }),
-    ...(native ? await researchMemory.listRecords(user.id, { statuses: ["pending"], pageSize: 100 }) : [])]
+  const settings = await memorySettings.settings(user.id);
+  if (!nativeMemory?.configured) throw new HttpError(503, "memory_engine_unavailable", "The memory service is unavailable.");
+  const all = (await nativeMemory.listRecords(user.id, { statuses: ["active", "pending", "superseded", "archived"], pageSize: 100 }))
     .filter((/** @type {any} */ record) => record.kind !== "run_summary" && (!projectId || (record.scope === "project" && record.scopeId === projectId)));
-  const usage = native ? {} : await researchMemory.recordUsage(user.id, all.map((/** @type {any} */ record) => record.id)).catch(() => ({}));
-  /** @type {Map<string, any[]>} */
-  const replacedBy = new Map();
-  for (const record of all) {
-    if (record.status !== "superseded" || !record.supersededBy) continue;
-    replacedBy.set(record.supersededBy, [...(replacedBy.get(record.supersededBy) ?? []), record]);
-  }
-  const row = (/** @type {any} */ record) => recordRow(record, replacedBy.get(record.id) ?? [], usage);
+  const row = (/** @type {any} */ record) => recordRow(record);
 
-  // What waits for the person: records held for them, and the notes an
-  // outside agent proposed (`/note`), which are capsule candidates.
+  // What waits for the person: the notes and episodes an outside agent proposed (`/note`, `/episodes`), which are capsule candidates.
   /** @type {any[]} */
-  const pending = (await Promise.all(all.filter((/** @type {any} */ record) => record.status === "pending").map(async (/** @type {any} */ record) => {
-    const admission = native ? await nativeMemory.overlay.admission(user.id, `record:${record.id}`, record.version) : null;
-    if (admission?.state === "completed") return null;
-    return { type: "record", ...row(record), ...(admission ? { admission: { state: admission.state, taskId: admission.taskId, recordIds: admission.recordIds } } : {}) };
-  }))).filter(Boolean);
+  const pending = [];
   if (capsules?.documents) {
     const notes = await capsules.documents.list(user.id, "fact", { limit: 50, filter: { status: "candidate" } });
     for (const note of notes.items ?? []) {
       if (note.payload?.transfer || (projectId && note.projectId !== projectId)) continue;
-      const admission = native ? await nativeMemory.overlay.admission(user.id, note.id, note.revision) : null;
+      const admission = await nativeMemory.overlay.admission(user.id, note.id, note.revision);
       if (admission?.state === "completed") continue;
       pending.push({ ...(admission ? { admission: { state: admission.state, taskId: admission.taskId, recordIds: admission.recordIds } } : {}), type: "note", id: note.id, capsuleId: note.payload.capsuleId, kind: note.payload.factKind, summary: note.payload.content,
         revision: note.revision, source: "inferred", sourceLabel: BOARD_SOURCES.inferred, createdAt: note.createdAt });
@@ -230,7 +211,7 @@ export async function memoryBoard({ researchMemory, nativeMemory = null, learnin
   // 「最近变化」: what changed by itself, newest first, each with the act that
   // takes it back.
   const since = new Date(nowMs - BOARD_RECENT_DAYS * DAY_MS).toISOString();
-  const recordChanges = (native ? await nativeMemory.changes(user.id, { since, limit: 20 }) : await researchMemory.recentChanges(user.id, { since, limit: 20 })).filter((/** @type {any} */ change) => !projectId || all.some((record) => record.id === change.id)).map((/** @type {any} */ change) => ({
+  const recordChanges = (await nativeMemory.changes(user.id, { since, limit: 20 })).filter((/** @type {any} */ change) => !projectId || all.some((record) => record.id === change.id)).map((/** @type {any} */ change) => ({
     type: "record", recordId: change.id, kind: change.kind, change: change.change, summary: change.summary, at: change.changedAt,
     undo: { action: "undo", path: `records/${encodeURIComponent(change.id)}/undo`, expectedVersion: change.version },
   }));
@@ -308,79 +289,14 @@ async function nativeRecordAction(native, user, recordId, action, body) {
 /**
  * One act on one record: `confirm`, `edit`, `forget`, `restore` or `undo`.
  *
- * @param {{ researchMemory: any, nativeMemory?: any, feedbackEvents?: any }} services
+ * @param {{ nativeMemory?: any }} services
  * @param {{ id: string }} user @param {string} recordId @param {string} action @param {any} body
  * @returns {Promise<{ record: any, event: string }>}
  */
-export async function recordAction({ researchMemory, nativeMemory = null, feedbackEvents = null }, user, recordId, action, body) {
-  const native = typeof researchMemory.memoryEngine === "function" && await researchMemory.memoryEngine(user.id) === "native";
-  const nativeRecord = native && NATIVE_RECORD_ID.test(recordId);
-  if (nativeRecord && !nativeMemory?.configured) throw new HttpError(503, "memory_engine_unavailable", "The memory service is unavailable.");
-  if (native && !nativeRecord) {
-    const candidate = await researchMemory.getRecord(user.id, recordId);
-    if (candidate.status !== "pending" && !(candidate.status === "archived" && candidate.revisions?.some((/** @type {any} */ revision) => revision.status === "pending"))) {
-      throw new HttpError(404, "memory_not_found", "No such pending memory candidate.");
-    }
-  }
-  if (nativeRecord) return nativeRecordAction(nativeMemory, user, recordId, action, body);
-
-  const projectId = "default";
-  const remember = async (/** @type {() => Promise<any>} */ operation) => {
-    if (!feedbackEvents) return;
-    // The act stands whether or not its trace could be written, as on the
-    // workbench page (`recordFeedback`).
-    await operation().catch(() => null);
-  };
-  if (action === "undo") {
-    const input = bodyOf(body, ["expectedVersion"]);
-    const result = await researchMemory.undo(user.id, recordId, { expectedVersion: positive(input.expectedVersion, "expectedVersion") });
-    await remember(() => (result.undone === "removed"
-      ? feedbackEvents.recordMemoryDeletion(user.id, { record: result.previous, projectId, reason: "undone" })
-      : feedbackEvents.recordMemoryUpdate(user.id, { before: result.previous, after: result.record, projectId })));
-    return { record: result.record, event: `memory.record.undo.${result.undone}` };
-  }
-  const input = bodyOf(body, action === "edit" ? ["expectedVersion", "summary", "value"] : ["expectedVersion"]);
-  const expectedVersion = positive(input.expectedVersion, "expectedVersion");
-  const existing = await researchMemory.getRecord(user.id, recordId);
-  if (existing.version !== expectedVersion) throw new HttpError(409, "memory_conflict", "This memory changed since it was read.");
-  const next = { ...existing };
-  let reason;
-  if (action === "confirm") {
-    if (existing.status !== "pending") throw new HttpError(409, "memory_not_pending", "Only a memory waiting for its owner can be confirmed.");
-    if (native) {
-      if (!nativeMemory?.configured) throw new HttpError(503, "memory_engine_unavailable", "The memory service is unavailable.");
-      if ((await memoryPausedFor(researchMemory, user.id, existing.scope === "project" ? existing.scopeId : null)).learning) throw new HttpError(409, "memory_learning_paused", "Memory learning is paused for this scope.");
-      const admission = await nativeMemory.admitCandidate(user.id, { candidateId: `record:${recordId}`, revision: expectedVersion,
-        projectId: existing.scope === "project" ? existing.scopeId : null, text: existing.value || existing.summary });
-      return { record: { ...existing, admission }, event: "memory.record.admission" };
-    }
-    // The person's own act: it is now their statement (`memoryRoutes` PATCH).
-    Object.assign(next, { status: "active", origin: "explicit", confidence: 1, lastConfirmedAt: new Date().toISOString() });
-    reason = "user confirmed a pending memory";
-  } else if (action === "edit") {
-    if (input.summary === undefined && input.value === undefined) throw new HttpError(400, "agent_memory_payload_invalid", "Edit the summary, the value, or both.");
-    for (const field of /** @type {const} */ (["summary", "value"])) {
-      if (input[field] === undefined) continue;
-      const text = typeof input[field] === "string" ? input[field].trim() : "";
-      if (!text || text.length > (field === "value" ? 100_000 : 2_000)) throw new HttpError(400, "agent_memory_payload_invalid", `${field} is empty or too long.`);
-      next[field] = text;
-    }
-    Object.assign(next, { origin: "manual", lastConfirmedAt: new Date().toISOString(), status: native ? existing.status : existing.status === "pending" ? "active" : existing.status });
-    reason = "user updated structured memory";
-  } else if (action === "forget") {
-    if (existing.status === "archived") throw new HttpError(409, "memory_already_forgotten", "This memory is already forgotten.");
-    next.status = "archived";
-    reason = "user archived the memory";
-  } else if (action === "restore") {
-    if (existing.status !== "archived") throw new HttpError(409, "memory_not_forgotten", "Only a forgotten memory can be restored.");
-    next.status = native ? "pending" : "active";
-    reason = "user restored the memory";
-  } else {
-    throw new HttpError(404, "not_found", "No such memory action.");
-  }
-  const updated = await researchMemory.upsertRecord(user.id, next, null, { expectedVersion, reason, by: "user" });
-  await remember(() => feedbackEvents.recordMemoryUpdate(user.id, { before: existing, after: updated, projectId }));
-  return { record: updated, event: `memory.record.${action}` };
+export async function recordAction({ nativeMemory = null }, user, recordId, action, body) {
+  if (!NATIVE_RECORD_ID.test(recordId)) throw new HttpError(404, "memory_not_found", "No such memory.");
+  if (!nativeMemory?.configured) throw new HttpError(503, "memory_engine_unavailable", "The memory service is unavailable.");
+  return nativeRecordAction(nativeMemory, user, recordId, action, body);
 }
 
 /**
@@ -439,10 +355,10 @@ export async function methodDetail({ learning }, user, methodId) {
 }
 
 /**
- * Confirm or reject a note an outside agent proposed.
- * @param {{ capsules: any, researchMemory?: any, nativeMemory?: any }} services @param {{ id: string }} user @param {string} noteId @param {string} action @param {any} body
+ * Confirm or reject a note an outside agent proposed: confirming admits it to the engine, rejecting retires it.
+ * @param {{ capsules: any, memorySettings?: any, nativeMemory?: any }} services @param {{ id: string }} user @param {string} noteId @param {string} action @param {any} body
  */
-export async function noteAction({ capsules, researchMemory = null, nativeMemory = null }, user, noteId, action, body) {
+export async function noteAction({ capsules, memorySettings = null, nativeMemory = null }, user, noteId, action, body) {
   if (!capsules?.documents) throw new HttpError(503, "product_state_unavailable", "Research memory is unavailable.");
   const input = bodyOf(body, ["expectedRevision"]);
   const note = await capsules.documents.get(user.id, "fact", noteId);
@@ -450,10 +366,9 @@ export async function noteAction({ capsules, researchMemory = null, nativeMemory
   if (!["confirm", "reject"].includes(action)) throw new HttpError(404, "not_found", "No such note action.");
   const revision = positive(input.expectedRevision, "expectedRevision");
   if (note.revision !== revision) throw new HttpError(409, "product_revision_conflict", "This candidate changed since it was read.");
-  const native = typeof researchMemory?.memoryEngine === "function" && await researchMemory.memoryEngine(user.id) === "native";
-  if (native && action === "confirm") {
+  if (action === "confirm") {
     if (!nativeMemory?.configured) throw new HttpError(503, "memory_engine_unavailable", "The memory service is unavailable.");
-    if ((await memoryPausedFor(researchMemory, user.id, note.projectId ?? null)).learning) throw new HttpError(409, "memory_learning_paused", "Memory learning is paused for this scope.");
+    if ((await memoryPausedFor(memorySettings, user.id, note.projectId ?? null)).learning) throw new HttpError(409, "memory_learning_paused", "Memory learning is paused for this scope.");
     let text = note.payload.content;
     if (note.payload.externalSession) {
       const messages = Array.isArray(note.payload.externalSession.messages) ? note.payload.externalSession.messages : [];
@@ -468,8 +383,5 @@ export async function noteAction({ capsules, researchMemory = null, nativeMemory
     const admission = await nativeMemory.admitCandidate(user.id, { candidateId: noteId, revision, projectId: note.projectId ?? null, text });
     return { ...note, admission };
   }
-  return capsules.updateEntry(user.id, note.payload.capsuleId, noteId, {
-    status: action === "confirm" ? "approved" : "retired",
-    expectedRevision: positive(input.expectedRevision, "expectedRevision"),
-  });
+  return capsules.updateEntry(user.id, note.payload.capsuleId, noteId, { status: "retired", expectedRevision: revision });
 }

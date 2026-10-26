@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Note } from "@/components/ui/Note";
 import { Switch } from "@/components/ui/Switch";
-import { CAPSULE_ENTRY_TYPES, fromSender } from "@/lib/capsuleText";
+import { CAPSULE_ENTRY_TYPES, fromSender, providedBy } from "@/lib/capsuleText";
 import { announceMemoryChanged, disableCapsule, enableReceivedCapsule, type ReceivedCapsule } from "@/lib/memoryClient";
 import { productErrorMessage } from "@/lib/productClient";
 import { toast } from "@/lib/toast";
@@ -83,8 +83,8 @@ export function ReceivedCardView({ state, card, workStyle, onRetry, onRetryWorkS
                   <ListRow
                     key={pack.id} title={pack.title} titleProps={{ "data-overview-row": "" }}
                     meta={pack.takenDown
-                      ? <span>{pack.takenDown.by === "operator" ? "已被平台下架并停用" : "已被作者下架并停用"}</span>
-                      : <span>{[pack.card?.author ? fromSender(pack.card.author) : null, pack.card?.summary || contents(pack)].filter(Boolean).join(" · ")}</span>}
+                      ? <span>{pack.takenDown.by === "operator" ? "已被平台下架并停用" : "作者已撤回，这份已停用"}</span>
+                      : <span>{[pack.card?.author ? (pack.official ? providedBy(pack.card.author) : fromSender(pack.card.author)) : null, pack.card?.summary || contents(pack)].filter(Boolean).join(" · ")}</span>}
                     trailing={(
                       <Switch
                         label={`启用“${pack.title}”`} checked={pack.enabled} disabled={busy !== null || Boolean(pack.takenDown)}

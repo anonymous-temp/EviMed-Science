@@ -427,7 +427,7 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
   }
 
   // The same question the control plane asks (`RuntimeManager.isBackgroundProject`): a name that a client can choose
-  // is background work only for an operator or the acceptance account, from the same two settings.
+  // is background work only for an operator, from the same setting.
   const isBackground = (userId, projectId) => isInternalProjectOf(config, userId, projectId);
 
   function evolutionAdmissionAvailable() {

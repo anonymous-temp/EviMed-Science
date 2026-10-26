@@ -7,7 +7,7 @@ export const REVIEWED_SEED_MODE='reviewed-authored-seed-with-semantic-check';
 const hash=v=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
 const dimensions=['scope','qualification','ordering','negation','noConflictingContent'];
 export function nativeReviewRecords(profile){
- if(profile.engine!=='native'||!Array.isArray(profile.pending)||profile.pending.length||!Array.isArray(profile.records)||profile.records.length>64)throw Error('Review requires settled native profile');
+ if(!Array.isArray(profile.pending)||profile.pending.length||!Array.isArray(profile.records)||profile.records.length>64)throw Error('Review requires settled native profile');
  const records=profile.records.map(r=>({recordId:r.id,uri:r.document?.uri??r.uri??r.id,body:r.value??r.body,version:r.version??null}));
  if(records.some(r=>typeof r.recordId!=='string'||!r.recordId||r.recordId.length>1024||!/^viking:\/\/user\/[^/]+\/memories\//.test(r.uri??'')||typeof r.body!=='string'||Buffer.byteLength(r.body)>32768)||new Set(records.map(r=>JSON.stringify([r.recordId,r.uri]))).size!==records.length)throw Error('Bounded unique native URI/body records required');
  return records.sort((a,b)=>a.uri.localeCompare(b.uri)||String(a.recordId).localeCompare(String(b.recordId))).map(r=>({...r,bodySha256:approvedBodyHash(r.body)}));

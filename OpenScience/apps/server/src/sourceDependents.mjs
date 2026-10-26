@@ -6,7 +6,7 @@
  *
  * - **Read, never labelled.** The labelling of what rests on a source is `knowledgeChange.mjs`'s, done when the source
  *   changes; this only reads the same links (`KnowledgeChangeService.dependents`) when a researcher opens the document.
- * - **Recorded links only.** A memory is found by its `record_sources` row, a result by the identities its inputs record
+ * - **Recorded links only.** A memory file is found by the source its text names, as the overlay recorded it, a result by the identities its inputs record
  *   (the document's id, or the digest of its exact bytes — how a result that read the file names it), a method by the
  *   result it was linked to. Never by what any of them says.
  * - **The account's own, in this project.** Everything is read under the document's owner and the document's project:

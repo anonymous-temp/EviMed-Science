@@ -4,10 +4,6 @@
   "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C17); every name, number and identifier is invented",
   "expected": "The assistant restating a preference it was handed changes nothing: the memory the first conversation wrote is byte for byte the same afterwards.",
   "decidable": true,
-  "arms": [
-    "native",
-    "legacy"
-  ],
   "replay": {
     "synthetic": true,
     "projectId": "default",

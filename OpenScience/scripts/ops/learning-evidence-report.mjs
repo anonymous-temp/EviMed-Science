@@ -6,9 +6,10 @@
  *   node scripts/ops/learning-evidence-report.mjs --user <id>   # one account
  *   node scripts/ops/learning-evidence-report.mjs --json        # the same, as JSON
  *
- * Per account: when it last left learning evidence (a steer, a follow-up judged on the next turn, a result corrected in the page, or the
- * silence of a settled run), how much of each kind in the last 7 and 30 days, the lessons queued and how they ended (30 days), and the learned
- * methods in force. The loop stopped teaching for eleven days (2026-10-12 to 10-23) and nothing said so: an account that works every day and has
+ * Per account: when it last left learning evidence (a steer, a follow-up judged on the next turn, a result corrected in the page, a delivered
+ * file opened or downloaded, or the silence of a settled run), how much of each kind in the last 7 and 30 days, how many were corrections and how
+ * many kept the work (an acceptance, an adoption or a use: silence counts for neither), the lessons queued and how they ended (30 days), and the
+ * learned methods in force. The loop stopped teaching for eleven days (2026-10-12 to 10-23) and nothing said so: an account that works every day and has
  * no evidence for a week is the sign, and this is where an operator reads it. The same numbers are the metrics
  * `open_science_learning_evidence_total`, `open_science_learning_evidence_last_at` and `open_science_learning_lessons_total`.
  *
@@ -22,8 +23,11 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const DAY_MS = 86_400_000;
 /** The evidence kinds and lesson triggers the report names; anything else is `other`, as the metrics do. */
-const KINDS = ["steer", "follow-up", "result-corrected", "silent"];
-const TRIGGERS = ["correction", "routine", "repair_accepted", "edit_diff", "delivered"];
+const KINDS = ["steer", "follow-up", "result-corrected", "silent", "used"];
+const TRIGGERS = ["correction", "adopted", "routine", "script", "edit_diff"];
+/** The verdicts that say the run was not right, and the ones that say the work was kept (`@evimed/domain` `learningEvidence.mjs`). */
+const CORRECTION_VERDICTS = ["correction", "preference", "rejection"];
+const KEPT_VERDICTS = ["accept", "adopt"];
 
 /** @param {string[]} argv */
 export function parseArguments(argv) {
@@ -73,7 +77,7 @@ export async function learningEvidenceReport(database, { user = null, now = new 
     if (!accounts.has(id)) {
       accounts.set(id, { user: id, lastEvidenceAt: null, daysSinceEvidence: null,
         evidence7d: Object.fromEntries([...KINDS, "other"].map((kind) => [kind, 0])), evidence30d: Object.fromEntries([...KINDS, "other"].map((kind) => [kind, 0])),
-        corrections30d: 0, lessons30d: Object.fromEntries([...TRIGGERS, "other"].map((trigger) => [trigger, 0])), lessonsQueued30d: 0, lessonsDistilled30d: 0,
+        corrections30d: 0, kept30d: 0, lessons30d: Object.fromEntries([...TRIGGERS, "other"].map((trigger) => [trigger, 0])), lessonsQueued30d: 0, lessonsDistilled30d: 0,
         lessonsFailed30d: 0, methodsInForce: 0 });
     }
     return accounts.get(id);
@@ -83,7 +87,8 @@ export async function learningEvidenceReport(database, { user = null, now = new 
     const kind = closed(row.evidence, KINDS);
     entry.evidence7d[kind] += Number(row.d7);
     entry.evidence30d[kind] += Number(row.d30);
-    if (["steer", "result-corrected"].includes(row.evidence) || (row.evidence === "follow-up" && ["correction", "preference", "rejection"].includes(row.verdict))) entry.corrections30d += Number(row.d30);
+    if (row.evidence === "result-corrected" || (["steer", "follow-up"].includes(row.evidence) && CORRECTION_VERDICTS.includes(row.verdict))) entry.corrections30d += Number(row.d30);
+    if (row.evidence === "used" || (row.evidence === "follow-up" && KEPT_VERDICTS.includes(row.verdict))) entry.kept30d += Number(row.d30);
     const last = row.last_at ? new Date(row.last_at).getTime() : NaN;
     if (Number.isFinite(last) && (!entry.lastEvidenceAt || last > Date.parse(entry.lastEvidenceAt))) {
       entry.lastEvidenceAt = new Date(last).toISOString();
@@ -105,11 +110,11 @@ export async function learningEvidenceReport(database, { user = null, now = new 
 export function renderReport(rows) {
   if (!rows.length) return "no account has left learning evidence, queued a lesson or holds a learned method\n";
   const sum = (/** @type {Record<string, number>} */ counts) => Object.values(counts).reduce((total, value) => total + value, 0);
-  const lines = [["account", "last evidence", "days", "7d (st/fu/rc/si)", "30d (st/fu/rc/si)", "corrected 30d", "lessons 30d", "distilled", "failed", "methods"]];
+  const lines = [["account", "last evidence", "days", "7d (st/fu/rc/si/us)", "30d (st/fu/rc/si/us)", "corrected 30d", "kept 30d", "lessons 30d", "distilled", "failed", "methods"]];
   for (const row of rows) {
     const split = (/** @type {Record<string, number>} */ counts) => KINDS.map((kind) => counts[kind]).join("/");
     lines.push([row.user, row.lastEvidenceAt ?? "never", row.daysSinceEvidence ?? "-", `${sum(row.evidence7d)} (${split(row.evidence7d)})`, `${sum(row.evidence30d)} (${split(row.evidence30d)})`,
-      row.corrections30d, row.lessonsQueued30d, row.lessonsDistilled30d, row.lessonsFailed30d, row.methodsInForce].map(String));
+      row.corrections30d, row.kept30d, row.lessonsQueued30d, row.lessonsDistilled30d, row.lessonsFailed30d, row.methodsInForce].map(String));
   }
   const widths = lines[0].map((_, column) => Math.max(...lines.map((line) => line[column].length)));
   return `${lines.map((line) => line.map((cell, column) => cell.padEnd(widths[column])).join("  ").trimEnd()).join("\n")}\n`;

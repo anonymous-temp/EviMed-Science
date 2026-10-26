@@ -1,18 +1,22 @@
 /**
- * The shape of a case in `cases-general/`, one definition for the two arms.
+ * The shape of a case in `cases-general/`.
  *
- * The native arm (`run_native_eval.mjs`) replays a case through OpenViking's engine and the legacy arm
- * (`run_write_quality_eval.mjs`) through the platform's own extractor. A case says which of them it is for (`arms`, both when
- * absent) and asks only checks that code can decide over what one replay left: records by kind, a string present or absent,
- * a count of operations, the card's keys. A check that a reading is needed for is a `judge` question printed beside the
- * result, never matched.
+ * The native arm (`run_native_eval.mjs`) replays a case through OpenViking's engine and asks only checks that code can decide
+ * over what one replay left: records by kind, a string present or absent, a count of operations, the card's keys. A check that
+ * a reading is needed for is a `judge` question printed beside the result, never matched. (A second arm replayed the cases
+ * through the platform's own extractor until that engine was deleted on 2026-10-25; the cases kept their shape, and the ones only
+ * that extractor could answer, the cross-key conflict among them, went with it.)
  *
  * Added with the 2026-10-23 work-order corpus (research G §6): `requireAnyKind` (the keep-side is satisfied by any of several
  * kinds: a form complaint may land as a preference or as a correction), a `replay.seed` (a conversation held first, so a case
  * can start from a memory the engine itself wrote: the recall echo, the upgrade, the repeated demonstration), `seedKeeps` and
  * `unchangedSinceSeed` (what the seed must have stored, and that the case's own conversation left it byte for byte),
- * `droppedAtTheDoor` (the messages the memory door must not forward: platform text posing as the person's words) and
- * `requireConflictWith` (the legacy extractor's `conflictsWith`, which never fired on production).
+ * `droppedAtTheDoor` (the messages the memory door must not forward: platform text posing as the person's words).
+ *
+ * Added 2026-10-25 (the evals package): `pendingTemplate`, a sentence saying which owner decision the case anticipates and what must
+ * change in the memory templates before it can pass (the cross-conversation repetition and the import cases). A pending case still
+ * runs, so a live run shows when it has become true; while it fails it is reported as `pending-template`, never as a failure, and
+ * when it passes the row says the marker can be dropped.
  *
  * @module caseShape
  */
@@ -21,11 +25,8 @@
 export const GENERAL_EXPECT_FIELDS = Object.freeze([
   "noTextContains", "noRecordOfKinds", "atMostRecords", "atLeastRecords", "requireKinds", "requireAnyKind", "requireTextContains",
   "briefRefusedWhenTagged", "identifierShapes", "requireKeys", "noKeys", "keyValues",
-  "seedKeeps", "unchangedSinceSeed", "droppedAtTheDoor", "requireConflictWith",
+  "seedKeeps", "unchangedSinceSeed", "droppedAtTheDoor",
 ]);
-
-/** The two arms a case may be for. */
-export const CASE_ARMS = Object.freeze(["native", "legacy"]);
 
 /** @param {any} value */
 const nonEmptyStrings = (value) => Array.isArray(value) && value.length > 0 && value.every((entry) => typeof entry === "string" && entry);
@@ -55,8 +56,8 @@ export function generalCaseIssues(item) {
   if (typeof item.expected !== "string" || !item.expected.trim()) issues.push(`${item.file}: expected is missing`);
   issues.push(...messageIssues(`${item.file}: replay`, item.replay?.messages));
   if (item.replay?.seed !== undefined) issues.push(...messageIssues(`${item.file}: replay.seed`, item.replay.seed?.messages));
-  if (item.arms !== undefined && !(nonEmptyStrings(item.arms) && item.arms.every((/** @type {string} */ arm) => CASE_ARMS.includes(arm)))) {
-    issues.push(`${item.file}: arms is not a non-empty list of ${CASE_ARMS.join(" / ")}`);
+  if (item.pendingTemplate !== undefined && !(typeof item.pendingTemplate === "string" && item.pendingTemplate.trim().length >= 40)) {
+    issues.push(`${item.file}: pendingTemplate says which decision the case anticipates and what must change first (a sentence)`);
   }
   if (item.decidable !== false && !item.expect) issues.push(`${item.file}: a decidable case names no expectation`);
   if (item.decidable === false && typeof item.judge !== "string") issues.push(`${item.file}: an undecidable case names no judge question`);
@@ -72,17 +73,5 @@ export function generalCaseIssues(item) {
       issues.push(`${item.file}: expect.droppedAtTheDoor is not a list of ids of the case's own messages`);
     }
   }
-  if (expect.requireConflictWith !== undefined) {
-    const held = new Set((item.replay?.existingKeys ?? []).map((/** @type {any} */ record) => record?.key));
-    if (!nonEmptyStrings(expect.requireConflictWith) || !expect.requireConflictWith.every((/** @type {string} */ key) => held.has(key))) {
-      issues.push(`${item.file}: expect.requireConflictWith names a key the case does not store first (replay.existingKeys)`);
-    }
-    if (!Array.isArray(item.arms) || item.arms.length !== 1 || item.arms[0] !== "legacy") issues.push(`${item.file}: a conflict is the legacy extractor's: arms is ["legacy"]`);
-  }
   return issues;
-}
-
-/** Whether a case is for an arm. @param {any} item @param {"native" | "legacy"} arm */
-export function runsOnArm(item, arm) {
-  return !Array.isArray(item.arms) || item.arms.includes(arm);
 }

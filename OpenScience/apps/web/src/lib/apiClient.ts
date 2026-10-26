@@ -560,8 +560,6 @@ export interface WebMemorySettings {
   /** Projects where memory is neither written nor used. */
   pausedProjects: string[];
   updatedAt: string | null;
-  /** Which kind of account this is. The page behaves the same for both; it reads this only to leave out what one kind cannot do. */
-  engine?: "legacy" | "native";
 }
 
 export type WebStructuredMemoryKind =
@@ -595,7 +593,7 @@ export interface WebStructuredMemory {
   lastConfirmedAt: string | null;
   expiresAt: string | null;
   /** Who it came from and how established it is, counted from its evidence
-   *  (`recordProvenance` in researchMemory.mjs). Absent from a control plane
+   *  (`recordProvenance` in memorySettings.mjs). Absent from a control plane
    *  older than it. */
   provenance?: WebMemoryProvenance;
   /** The record that replaced this one, and since when it stopped holding —
@@ -615,6 +613,9 @@ export interface WebStructuredMemory {
     /** The project the conversation was held in, when the control plane knows it (a memory of the native engine names the
      *  conversation it came out of this way; it keeps no quotation, so `quote` is empty there). */
     projectId?: string | null;
+    /** What a memory the platform itself wrote was written from, in the person's words (「从其他 AI 导入」, 「你在两次对话里都这样做」): the
+     *  control plane names it for an import and for a choice two conversations made, where there is no conversation to link to. */
+    label?: string;
   }>;
   revisions: Array<{
     version: number;
@@ -628,11 +629,10 @@ export interface WebStructuredMemory {
     runId?: string;
   }>;
   /**
-   * Set on a memory the engine of an account keeps as a file (`memoryNative.ts` reads it). Such a memory has a topic as its
-   * `summary` and the file's text as its `value`; a line of the profile document has the line as its `value`. The server also
-   * sends the file's address and hash; the page has no use for them and the type leaves them out so nothing can show them.
+   * A memory is a file of the engine (`memoryNative.ts` reads it): a topic as its `summary` and the file's text as its `value`;
+   * a line of the profile document has the line as its `value`. The server also sends the file's address and hash; the page has
+   * no use for them and the type leaves them out so nothing can show them.
    */
-  engine?: "native";
   nativeType?: string;
   /** Present on a line of the profile document: the document the line belongs to. */
   document?: { id: string };
@@ -689,8 +689,6 @@ export interface WebMemoryProfile {
   conversations?: Record<string, string>;
   /** Per record id. A record with no entry has never been used. */
   usage?: Record<string, WebMemoryUsage>;
-  /** Kind of account; absent from a control plane older than the second engine. */
-  engine?: "legacy" | "native";
   /** What 「记住这一条」 asked and the engine has not written yet. */
   pending?: WebPendingMemory[];
 }
@@ -704,7 +702,7 @@ export interface WebPendingMemory {
 }
 
 /** The memory page's search: keyword over everything stored, unioned with the
- *  recall index's semantic hits, each resolved back to the stored record. */
+ *  engine's semantic hits, each read back from its file. */
 export interface WebMemorySearch {
   items: WebStructuredMemory[];
   query: string;
@@ -1657,14 +1655,14 @@ export async function updateMemorySettings(
 }
 
 /** Deletes every memory this account holds; the switches stay. */
-export async function resetMemory(): Promise<{ structured: number }> {
+export async function resetMemory(): Promise<{ methods: number; entries: number }> {
   if (!hasWebApi) throw new BackendUnavailableError("memory.reset");
   const res = await fetchWithWebAuth(apiUrl("/memory/reset"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ confirm: "reset" }),
   });
-  return parseApiResponse<{ structured: number }>(res);
+  return parseApiResponse<{ methods: number; entries: number }>(res);
 }
 
 /**
@@ -1691,7 +1689,8 @@ export async function updateStructuredMemory(
   if (!hasWebApi) throw new BackendUnavailableError("memory.record.update");
   // A memory kept as a file has no summary and no importance of its own: the control plane refuses them by name, so they are not sent.
   const fields = { ...update };
-  if (record.engine === "native") { delete fields.summary; delete fields.importance; }
+  delete fields.summary;
+  delete fields.importance;
   const res = await fetchWithWebAuth(apiUrl(`/memory/records/${encodeURIComponent(record.id)}`), {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },

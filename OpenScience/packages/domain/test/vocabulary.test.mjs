@@ -100,15 +100,15 @@ test("EviMed tool names cover both worlds", () => {
   assert.ok(isEviMedToolName("mcp__evimed__web_read"));
   assert.ok(isEviMedToolName("evimed_submit_deliverable"));
   assert.ok(!isEviMedToolName("bash"));
-  // Ten since `evimed_compact_request` joined them: a tool the manager calls to
-  // ask for a compaction, mounted only where the engine that serves it is.
   // Eleven since `evimed_package_check`: the submission's verdict without the
   // submission. Twelve since `evimed_await`: delegation stopped waiting inside
   // its own call, and the parent collects here. Fourteen since the two claim
   // tools: a claim written and judged at a time, and the numbering rendered.
   // Thirteen since `evimed_complete_run` left (2026-09-20): no plugin
-  // registers it, so the vocabulary does not claim it is mounted.
-  assert.equal(SOCKET_TOOL_NAME_LIST.length, 13);
+  // registers it, so the vocabulary does not claim it is mounted. Twelve since
+  // `evimed_compact_request` left (2026-10-25): it was mounted only under the
+  // `structured` compaction policy, which was deleted after its A/B.
+  assert.equal(SOCKET_TOOL_NAME_LIST.length, 12);
   assert.ok(!SOCKET_TOOL_NAME_LIST.includes("evimed_complete_run"));
   assert.ok(!MOUNTED_TOOL_NAMES.includes("evimed_complete_run"), "a skill telling a run to call it would degrade the run");
   assert.ok(!isEviMedToolName("evimed_complete_run"));
@@ -126,7 +126,7 @@ test("EviMed tool names cover both worlds", () => {
   assert.ok(SOCKET_TOOL_NAME_LIST.includes("evimed_render_report"));
   assert.ok(SOCKET_TOOL_NAME_LIST.includes("evimed_await"));
   assert.ok(SOCKET_TOOL_NAME_LIST.includes("evimed_revise_deliverable"));
-  assert.ok(SOCKET_TOOL_NAME_LIST.includes("evimed_compact_request"));
+  assert.ok(!SOCKET_TOOL_NAME_LIST.includes("evimed_compact_request"));
   assert.ok(SOCKET_TOOL_NAME_LIST.includes("evimed_package_check"));
 });
 

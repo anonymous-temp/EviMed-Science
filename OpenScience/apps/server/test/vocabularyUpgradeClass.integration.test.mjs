@@ -16,7 +16,7 @@ import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { migrateGeo } from "../src/geoPersistence.mjs";
 import { migrateNativeMemory } from "../src/nativeMemoryPersistence.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
-import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
+import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
 import { migrateVcr } from "../src/vcrPersistence.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
@@ -32,7 +32,7 @@ const restart = () => /** @type {any} */ (Object.create(database));
 /** Every module in the order a fresh deployment applies them, by the schema whose CHECKs it owns. */
 const modules = [
   ["evimed_product", (/** @type {any} */ db) => migrateProductStore(db)],
-  ["evimed_memory", async (/** @type {any} */ db) => { await migrateResearchMemory(db); await migrateNativeMemory(db); }],
+  ["evimed_memory", async (/** @type {any} */ db) => { await migrateMemorySettings(db); await migrateNativeMemory(db); }],
   ["evimed_credits", (/** @type {any} */ db) => migrateEvimedCredits(db)],
   ["evimed_channels", (/** @type {any} */ db) => migrateChannels(db)],
   ["evimed_frontier", async (/** @type {any} */ db) => { await migrateEvidenceZones(db); }],

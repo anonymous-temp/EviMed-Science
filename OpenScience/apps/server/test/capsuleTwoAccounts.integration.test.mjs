@@ -22,7 +22,7 @@ import { capsuleSearchText } from "../src/memoryGateway.mjs";
 import { NotificationService } from "../src/notificationService.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
 import { ResidentProfiles } from "../src/residentProfile.mjs";
-import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
+import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) {
@@ -45,7 +45,7 @@ before(async () => {
   if (!url) return;
   directory = await mkdtemp("/tmp/evimed-two-accounts-");
   database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 6, databaseConnectionTimeoutMs: 5_000 });
-  await migrateResearchMemory(database);
+  await migrateMemorySettings(database);
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,$3,'development'),($2,$4,'development')", [A, B, `Ada ${tag}`, `Bo ${tag}`]);
   await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,$3,'Work',1048576),($2,$3,'Work',1048576)", [A, B, PROJECT]);
   documents = new ProductDocuments(database);
@@ -74,10 +74,8 @@ async function learnedMethod(body) {
 
 /** A native account's opening block, for a conversation in the project. */
 const opening = () => new ResidentProfiles({ config: {}, store: /** @type {any} */ ({
-  async memoryEngine() { return "native"; },
   async settings() { return { learningPaused: false, recallPaused: false, pausedProjects: [] }; },
   async sessionState() { return { trialCapsuleId: null }; },
-  async residentRecords() { throw new Error("a native account's records are the engine's"); },
   async lookupCounts() { throw new Error("a native account's records are the engine's"); },
   async residentState() { return { digest: null, compactedSince: false }; },
   async noteResidentDelivered() {},
@@ -97,10 +95,8 @@ async function mounted(label) {
 test("two accounts, end to end: preview, send, receive, try once, enable, B's conversation carries A's way of working, disable, a newer version in place", options, async () => {
   // ---- A: a method it learned, preferences it said, and what must not leave. -------------------------------------------------
   await learnedMethod("合并之前先报告 I² 和预测区间；I² 超过 50% 先找原因再谈合并。");
-  await database.query(`INSERT INTO evimed_memory.records(id,user_id,scope,scope_id,kind,key,value,summary,status,origin,confidence,importance,version)
-    VALUES($1,$3,'user','','preference','tables','表格一律放在正文里，不放附录','','active','explicit',1,0.5,1),
-      ($2,$3,'user','','preference','inferred-one','助手以为对方喜欢长段落','','active','inferred',0.6,0.5,1)`, [`tr_${tag}_1`, `tr_${tag}_2`, A]);
   const own = await capsules.ownCapsule(A, { create: true });
+  await capsules.addEntry(A, own.id, { factKind: "preference", layer: "profile", content: "表格一律放在正文里，不放附录" });
   await capsules.note(A, PROJECT, { factKind: "preference", content: "助手猜对方喜欢先给结论" });
   await documents.put(A, "fact", randomUUID(), { capsuleId: own.id, factKind: "preference", layer: "sources", content: "资料里写的偏好：一律用 APA。",
     origin: "inferred", status: "approved", sourceId: `src_${"b".repeat(32)}`, projectId: PROJECT, contextOnly: true, provenance: [] }, { expectedRevision: 0 });
@@ -124,12 +120,12 @@ test("two accounts, end to end: preview, send, receive, try once, enable, B's co
   assert.deepEqual((await mounted("before")).count, 0);
 
   // A trial: the pack as context, writing nothing of B's.
-  const before = Number((await database.query("SELECT (SELECT count(*) FROM evimed_memory.records WHERE user_id=$1) + (SELECT count(*) FROM evimed_product.documents WHERE user_id=$1 AND kind='fact' AND payload->>'capsuleId' <> $2) AS n", [B, pack.id])).rows[0].n);
+  const before = Number((await database.query("SELECT (SELECT count(*) FROM evimed_product.documents WHERE user_id=$1 AND kind='fact' AND payload->>'capsuleId' <> $2) AS n", [B, pack.id])).rows[0].n);
   await capsules.prepareTrial(B, pack.id, { projectId: PROJECT });
   const context = await capsules.trialContext(B, pack.id);
   assert.match(context, /合并之前先报告 I²/);
   assert.match(context, /表格一律放在正文里/);
-  const after = Number((await database.query("SELECT (SELECT count(*) FROM evimed_memory.records WHERE user_id=$1) + (SELECT count(*) FROM evimed_product.documents WHERE user_id=$1 AND kind='fact' AND payload->>'capsuleId' <> $2) AS n", [B, pack.id])).rows[0].n);
+  const after = Number((await database.query("SELECT (SELECT count(*) FROM evimed_product.documents WHERE user_id=$1 AND kind='fact' AND payload->>'capsuleId' <> $2) AS n", [B, pack.id])).rows[0].n);
   assert.equal(after, before, "a trial writes nothing into B's own memory");
 
   told.length = 0;
@@ -157,9 +153,8 @@ test("two accounts, end to end: preview, send, receive, try once, enable, B's co
   assert.equal(await search("表格"), null, "nothing of the pack is found");
 
   // ---- A sends a newer version (and now says something about itself); B takes it in place. -------------------------------------
-  await database.query(`INSERT INTO evimed_memory.records(id,user_id,scope,scope_id,kind,key,value,summary,status,origin,confidence,importance,version)
-    VALUES($1,$2,'user','','profile','role','临床流行病学家，做系统综述','','active','explicit',1,0.5,1),
-      ($3,$2,'project',$4,'decision','criteria','本项目只纳入近十年的随机对照试验','','active','explicit',1,0.5,1)`, [`tr_${tag}_3`, A, `tr_${tag}_4`, PROJECT]);
+  await capsules.addEntry(A, own.id, { factKind: "profile", layer: "profile", content: "临床流行病学家，做系统综述" });
+  await capsules.addEntry(A, own.id, { factKind: "decision", layer: "knowledge", content: "本项目只纳入近十年的随机对照试验" });
   const second = await sharing.deliver(A, own.id, { recipients: [B], scopes: ["workstyle", "+profile", "+knowledge"] });
   assert.equal(second.snapshot.supersedes, sent.snapshot.id, "the next version of what B took in");
   const next = (await sharing.pending(B)).find((item) => item.snapshotId === second.snapshot.id);

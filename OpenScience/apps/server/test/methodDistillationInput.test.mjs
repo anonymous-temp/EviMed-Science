@@ -14,7 +14,7 @@ import { METHOD_SKILL_SCHEMA, SOCKET_TOOL_NAME_LIST } from "@evimed/domain";
 
 import { LEARNING_PROJECT_ID } from "../src/internalProjects.mjs";
 import {
-  MethodDistillationRuns, buildDistillationInput, evidenceCorpus, lessonQueryText, reactionsOf, unionEvidence, verifiedEvidence,
+  MethodDistillationRuns, buildDistillationInput, evidenceCorpus, lessonQueryText, reactionCorpus, reactionsOf, unionEvidence, verifiedEvidence,
 } from "../src/methodDistillationRuns.mjs";
 import { TRANSCRIPT_DIR_NAME, transcriptPath } from "../src/runTranscripts.mjs";
 
@@ -72,9 +72,9 @@ test("the first request and the intervention survive a long delegated run, and n
   assert.ok(!text.includes("锚点与回执"), "the closing summary of the platform's submit is not in it either");
 });
 
-test("a trigger that points at an edit or a repair still reads a tail, without the choreography in it", () => {
+test("a trigger that points at an edit still reads a tail, without the choreography in it", () => {
   const { transcript, run } = delegatedRun();
-  const input = buildDistillationInput({ run, trigger: "repair_accepted", transcript });
+  const input = buildDistillationInput({ run, trigger: "edit_diff", transcript });
   assert.ok(input.transcriptExcerpts.length >= 1);
   assert.ok(input.transcriptExcerpts.every((excerpt) => excerpt.anchor.kind === "tail"));
   const text = JSON.stringify(input.transcriptExcerpts);
@@ -133,6 +133,28 @@ test("a stored quotation must be in what the distillation was shown, from the ru
   assert.equal(unionEvidence(many.map((quote) => ({ quote })), [{ quote: "最新的一条引用内容" }]).at(-1).quote, "最新的一条引用内容", "past twenty the oldest give way");
 });
 
+test("a quotation of two characters is evidence when it is the researcher's own reaction, and is not when it is only in some text: 「太长了」 is a person saying so, 「周报」 is a word in a request", () => {
+  const { transcript, run } = delegatedRun();
+  const feedback = [
+    { id: "fe_1", trigger: "learning-evidence", detail: { evidence: "follow-up", verdict: "correction", rule: "回答写得更短", quote: "太长了" } },
+    { id: "fe_2", trigger: "learning-evidence", detail: { evidence: "steer", verdict: "correction", rule: "写得更短", quote: "短点" } },
+    { id: "fe_3", trigger: "result-corrected", detail: { instruction: "删掉第二节" } },
+  ];
+  const input = buildDistillationInput({ run, trigger: "correction", transcript, feedback });
+  const corpus = evidenceCorpus(input);
+  const reactions = reactionCorpus(input);
+  assert.ok(reactions.get("run_1")?.includes("太长了") && reactions.get("run_1")?.includes("短点") && reactions.get("run_1")?.includes("删掉第二节"), "what the person said of the run, by their own words");
+  assert.ok(!reactions.get("run_1")?.some((text) => text.includes("回答写得更短")), "the judge's rule is not the person's words");
+  const entry = (quote, runId = "run_1") => ({ runId, seqRange: [6, 6], quote });
+  const { kept, dropped } = verifiedEvidence([entry("太长了"), entry("短点"), entry("周报"), entry("回答写得更短"), entry("太长了", "run_other"), entry("短")], corpus, reactions);
+  assert.deepEqual(kept.map((item) => item.quote), ["太长了", "短点"]);
+  assert.equal(dropped, 4, "a short quotation of a request, of the judge's rule, of another run's words, and one character are dropped, never repaired");
+  // Without the reactions a short quotation proves nothing; eight characters or more are checked against everything shown, as before.
+  assert.deepEqual(verifiedEvidence([entry("太长了"), entry("帮我把本周随访数据整理成周报")], corpus).kept.map((item) => item.quote), ["帮我把本周随访数据整理成周报"]);
+  // A method keeps them: a union holds short quotations once, and the newest of twenty stay.
+  assert.deepEqual(unionEvidence([{ runId: "a", seqRange: [1, 2], quote: "太长了" }], [{ runId: "b", seqRange: [3, 4], quote: "太长了" }, { quote: "短点" }]).map((item) => item.quote), ["太长了", "短点"]);
+});
+
 // ---------------------------------------------------------------------------------------------------- applyCandidate
 
 const BODY = ["## Purpose", "P.", "", "## When to Use", "W.", "", "## Inputs", "I.", "", "## Workflow", "1. Do.", "", "## Verification", "- Checked.", "",
@@ -186,6 +208,19 @@ test("a created method stores the quotations that are in the input, the scope it
   const talk = ledger();
   await distillationOver(talk).applyCandidate(job, { id: "run_2", effectiveAgentId: "open-domain-answer" }, { skill: SKILL, candidate: { operation: "create" } }, { signal: "run" });
   assert.equal(talk.created[0].provenance.scope, "conversation");
+});
+
+test("a created method stores a researcher's two-character reaction as evidence when it is handed the reactions it was shown", async () => {
+  const { transcript, run } = delegatedRun();
+  const feedback = [{ id: "fe_1", trigger: "learning-evidence", detail: { evidence: "follow-up", verdict: "correction", rule: "回答写得更短", quote: "太长了" } }];
+  const input = buildDistillationInput({ run, trigger: "correction", transcript, feedback });
+  const learning = ledger();
+  const candidate = { operation: "create", evidence: [{ runId: "run_1", seqRange: [6, 6], quote: "太长了" }, { runId: "run_1", seqRange: [6, 6], quote: "周报" }] };
+  await distillationOver(learning).applyCandidate(job, run, { skill: SKILL, candidate }, { signal: "researcher", evidence: evidenceCorpus(input), reactions: reactionCorpus(input) });
+  assert.deepEqual(learning.created[0].provenance.evidence, [{ runId: "run_1", seqRange: [6, 6], quote: "太长了" }]);
+  const without = ledger();
+  await distillationOver(without).applyCandidate(job, run, { skill: SKILL, candidate }, { signal: "researcher", evidence: evidenceCorpus(input) });
+  assert.equal(without.created[0].provenance.evidence, undefined, "no reactions, no short quotation");
 });
 
 test("an amendment keeps the quotations the method stood on and its scope; a lesson from another scope widens it to none, and never narrows one that had none", async () => {
@@ -269,7 +304,7 @@ test("the related methods are the nearest to what the lesson is about, the files
   assert.ok(queries[0].includes("每节不要超过三行，数字都带单位") && queries[0].includes("帮我把本周随访数据整理成周报"), "what the person said and first asked");
   assert.ok(queries[0].includes("总览") && queries[0].includes("md"), "and the shape of what was left");
   assert.deepEqual(dispatched[0].input.trajectory.artifacts[0].shape?.labels, ["周报", "总览", "下周计划"], "the digest says what kind of thing the run left");
-  assert.equal(dispatched[0].input.extractorVersion, "8");
+  assert.equal(dispatched[0].input.extractorVersion, "9");
 
   await make({ similarity: { nearest: async () => { throw new Error("embedder down"); } } }).execute({ project, run, job: lesson });
   assert.deepEqual(dispatched[1].input.relatedMethods.map((entry) => entry.id), library.slice(0, 8).map((entry) => entry.id), "the most recently written, as before");
@@ -299,4 +334,62 @@ test("a routine's peer is digested from its own ledger record, and the lesson's 
   assert.equal(first.trajectory.requests[0].text, "帮我把本周随访数据整理成周报，按科室分三节，每节三行");
   assert.deepEqual(first.trajectory.artifacts.map((artifact) => [artifact.path, artifact.shape?.labels]), [["report/weekly.md", ["周报", "总览", "下周计划"]]]);
   assert.equal(second.trajectory, null);
+});
+
+test("the tool order the distillation is shown is the run's executed trace when it has one, and the peer's is its own", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "evimed-distill-traces-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { project, run } = await projectWith(root);
+  const { persistToolTraces } = await import("../src/toolExecutionEdges.mjs");
+  const completed = (/** @type {string} */ tool, /** @type {number} */ turn) => ({ role: "tool", turn, parts: [{ type: "tool", tool, status: "completed", input: {}, output: "ok" }] });
+  await persistToolTraces({ project, run, sessions: [{ sessionId: ROOT, capability: null, transcript: { messages: [completed("web_search", 0), completed("evimed_plan", 0), completed("bash", 1)] } }] });
+  // A peer with its own transcript and no trace of its own: the transcript's calls, as before.
+  await writeFile(transcriptPath(project, "run_0"), await (await import("node:fs/promises")).readFile(transcriptPath(project, run.id)));
+  /** @type {any[]} */ const dispatched = [];
+  const distillation = new MethodDistillationRuns({
+    learning: { async listMethods() { return { items: [] }; } },
+    dispatch: async (request) => { dispatched.push(request); return { runId: "lr_1", sessionId: "ls_1", dispatchId: request.dispatchId }; },
+    readResult: async () => ({ status: "running" }),
+    resolveRun: async (_resolved, runId) => ({ ...run, id: runId }),
+  });
+  await distillation.execute({ project, run, job: { userId: "u1", projectId: "p", payload: { runId: run.id, trigger: "routine", scope: "clinical-evidence-synthesis", peers: [{ runId: "run_0", projectId: "p" }] } } });
+  assert.deepEqual(dispatched[0].input.trajectory.tools, ["web_search", "bash"], "what completed, the platform's own calls out");
+  assert.deepEqual(dispatched[0].input.peerRuns[0].trajectory.tools, ["read"], "a run with no trace reads the transcript's own calls");
+});
+
+test("a script lesson is shown the program that recurred, with how often and the sources of its occurrences; no other lesson carries one", async (t) => {
+  const { transcript, run } = delegatedRun();
+  const scripts = { hash: "a".repeat(32), runs: 3, conversations: 2, exemplars: [{ runId: "run_1", at: "2026-10-25T00:00:00.000Z", source: "print(1)" }, { runId: "run_2", source: "x".repeat(20_000) }] };
+  const plain = { header: { completeness: "complete", sessions: [{ sessionId: ROOT, parentSessionId: null }] }, messages: [user(2, "把本周的导出清理一下")] };
+  const input = buildDistillationInput({ run, trigger: "script", transcript: plain, scripts });
+  assert.equal(input.trigger, "script");
+  assert.equal(input.signal, "run", "nobody corrected a program that recurred");
+  assert.deepEqual([input.scripts.hash, input.scripts.runs, input.scripts.conversations], ["a".repeat(32), 3, 2]);
+  assert.equal(input.scripts.exemplars[0].source, "print(1)");
+  assert.equal(input.scripts.exemplars[1].source.length, 16_000, "bounded like every other text the distillation reads");
+  assert.deepEqual(input.transcriptExcerpts, [], "no intervention to anchor on");
+  assert.equal(Object.hasOwn(buildDistillationInput({ run, trigger: "routine", transcript, scripts }), "scripts"), false, "only a script lesson carries the program");
+  assert.equal(Object.hasOwn(buildDistillationInput({ run, trigger: "correction", transcript }), "scripts"), false);
+
+  // Through execute: the sources are read from the account's occurrences, and a lesson whose occurrences are gone is not retried.
+  const root = await mkdtemp(path.join(tmpdir(), "evimed-distill-script-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { project, run: stored } = await projectWith(root);
+  /** @type {any[]} */ const dispatched = [];
+  const make = (/** @type {any[]} */ exemplars) => new MethodDistillationRuns({
+    learning: { async listMethods() { return { items: [] }; } },
+    scriptUses: { exemplars: async () => exemplars },
+    dispatch: async (request) => { dispatched.push(request); return { runId: "lr_1", sessionId: "ls_1", dispatchId: request.dispatchId }; },
+    readResult: async () => ({ status: "running" }),
+  });
+  const payload = { runId: stored.id, trigger: "script", scope: "conversation", scriptHash: "a".repeat(32), runs: 3, conversations: 2, dispatchKey: "a".repeat(32) };
+  await make(scripts.exemplars).execute({ project, run: stored, job: { userId: "u1", projectId: "p", payload } });
+  assert.equal(dispatched[0].input.scripts.exemplars.length, 2);
+  assert.match(dispatched[0].question, /Distil at most one reusable method/);
+  await assert.rejects(() => make([]).execute({ project, run: stored, job: { userId: "u1", projectId: "p", payload } }), { code: "distillation_run_unavailable" });
+  await assert.rejects(() => make(scripts.exemplars).execute({ project, run: stored, job: { userId: "u1", projectId: "p", payload: { ...payload, scriptHash: "not-a-hash" } } }), { code: "distillation_run_unavailable" });
+  // Two scripts that complete their count in one run are two lessons: their dispatch identities differ.
+  const second = { ...payload, scriptHash: "b".repeat(32), dispatchKey: "b".repeat(32) };
+  await make(scripts.exemplars).execute({ project, run: stored, job: { userId: "u1", projectId: "p", payload: second } });
+  assert.notEqual(dispatched[0].dispatchId, dispatched.at(-1).dispatchId);
 });

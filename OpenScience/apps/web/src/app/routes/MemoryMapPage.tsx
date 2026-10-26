@@ -209,7 +209,6 @@ export function MemoryMapPage() {
       toolbar={toolbar}
       actions={(
         <MemoryHeaderActions
-          native={doc?.engine === "native"}
           // 「本项目」 is the project the map is narrowed to; with every project shown it is the shell's own.
           projectId={selection.project === OTHER_PROJECT ? null : selection.project ?? undefined}
           onChanged={reload}

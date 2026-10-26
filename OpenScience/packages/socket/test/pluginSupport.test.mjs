@@ -3,7 +3,7 @@
  *
  * `runtime/skills/community/plugin-support.json` is what an operator reads to
  * learn what a runtime carries, and its `nativePlugins` listed nine of thirteen
- * (production audit, 2026-09-26): the web provider, the compaction swap, the
+ * (production audit, 2026-09-26): the web provider, the compaction guard, the
  * startup probe and the client-registry row were each mounted and each absent
  * from it. The list is derived here from the two composition files, never
  * counted, so the next row added to either is a red test until it is recorded.

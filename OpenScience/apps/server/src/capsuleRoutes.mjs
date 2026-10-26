@@ -1,8 +1,7 @@
 import { HttpError, readJson, sendJson } from "./security.mjs";
 import { withoutSharerAccount } from "./capsuleSharerAccount.mjs";
 import { CAPSULE_TRANSFER_MAX_BYTES } from "./capsuleTransferService.mjs";
-import { DOCUMENT_MEMORY_LAYER } from "./derivedMemory.mjs";
-import { recordShareTrial } from "./capsuleShareMetrics.mjs";
+import { recordShareEnabled, recordShareOpened, recordShareTrial } from "./capsuleShareMetrics.mjs";
 import { productId } from "./productPersistence.mjs";
 
 /** @param {any} req @param {number} limit @param {string[]} allowed */
@@ -14,12 +13,13 @@ async function bodyOf(req, limit, allowed) {
   return value;
 }
 
-/** @param {URL} url */
-function pageOptions(url) {
-  return { limit: Number(url.searchParams.get("limit") ?? 50), cursor: url.searchParams.get("cursor"), deleted: url.searchParams.get("deleted") === "true" };
-}
-
 /** Typed user endpoints; no generic product document write API is exposed.
+ *
+ * The routes are the ones a page, the evaluation harness or an integrator reads or writes through, and no others (2026-10-25: the
+ * generic create, list, read, rename, delete, restore, history, activate, recall and entry add-and-list routes had no caller and were
+ * deleted with their tests and with the service methods that only they called): the person's one capsule
+ * (`/mine`, its entries' edit and undo), the packs received (`/received`, `/:id/enable|disable|trial`), the file transfer
+ * (`/transfers/*`, `/:id/exports*`) and sharing below.
  *
  * Every action on a pack — export, revoke, import (or an upgrade in place),
  * enable, disable, a trial — writes an audit row (build spec §12; 2026-09-26
@@ -59,15 +59,6 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
     // behalf here (the capsule scan) is metered to.
     const current = async () => (typeof store.selectedProject === "function" ? (await store.selectedProject(req, user))?.id ?? null : null);
 
-    if (parts.length === 0) {
-      if (method === "GET") return reply(await service.list(user.id, pageOptions(url)));
-      if (method === "POST") return reply(await service.create(user.id, await bodyOf(req, maxJsonBytes, ["title", "description"])), 201);
-    }
-    if (parts.length === 1 && parts[0] === "recall" && method === "POST") {
-      const body = await bodyOf(req, maxJsonBytes, ["query", "projectId", "limit"]);
-      body.projectId = await project(body.projectId);
-      return reply(await service.recall(user.id, { ...body, accountCreatedAt: user.accountCreatedAt }));
-    }
     // 「收到的胶囊」: every pack someone shared, trusted whole (plan §3.3 #4).
     if (parts.length === 1 && parts[0] === "received" && method === "GET") {
       return reply(await service.received(user.id));
@@ -76,10 +67,6 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
     if (parts.length === 1 && parts[0] === "mine") {
       if (method === "GET") return reply(await service.mine(user.id));
       if (method === "POST") return reply(await service.ownCapsule(user.id, { create: true }));
-    }
-    // The capsules in force are the account's one list (a project has none of its own: `projectId` is not read).
-    if (parts.length === 1 && parts[0] === "active" && method === "GET") {
-      return reply(await service.active(user.id));
     }
     // ------------------------------------------------------------------ sharing inside the platform
     const shares = () => {
@@ -211,8 +198,12 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
       if (!transferService) throw new HttpError(503, "product_state_unavailable", "Capsule transfer is temporarily unavailable.");
       const accountContext = { accountCreatedAt: user.accountCreatedAt, projectId: await current() };
       if (parts[0] === "transfers" && method === "POST") {
-        if (parts[1] === "preview") return reply(await transferService.preview(user.id,
-          await bodyOf(req, CAPSULE_TRANSFER_MAX_BYTES * 2 + 4096, ["archive", "password"]), accountContext));
+        if (parts[1] === "preview") {
+          const previewed = await transferService.preview(user.id, await bodyOf(req, CAPSULE_TRANSFER_MAX_BYTES * 2 + 4096, ["archive", "password"]), accountContext);
+          // A file read is the file channel's `opened`: a delivery or a link is opened through its own route, which counts it there.
+          recordShareOpened("file");
+          return reply(previewed);
+        }
         if (parts[1] === "import") {
           const imported = await transferService.import(user.id,
             await bodyOf(req, CAPSULE_TRANSFER_MAX_BYTES * 2 + 4096, ["archive", "password", "expectedDigest", "confirmed", "title"]), accountContext);
@@ -260,29 +251,6 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
       throw new HttpError(404, "not_found", "Capsule transfer route not found.");
     }
     const [capsuleId, action, entryId, entryAction] = parts;
-    if (parts.length === 1) {
-      if (method === "GET") return reply(await service.get(user.id, capsuleId));
-      if (method === "PATCH") return reply(await service.update(user.id, capsuleId,
-        await bodyOf(req, maxJsonBytes, ["title", "description", "expectedRevision"])));
-      if (method === "DELETE") {
-        const body = await bodyOf(req, maxJsonBytes, ["expectedRevision"]);
-        const removed = await service.remove(user.id, capsuleId, body.expectedRevision);
-        // A deleted capsule is no longer handed out (2026-10-10 review C-5): its links end and its hosted snapshots
-        // are revoked, after the removal itself succeeded. What recipients already imported is theirs, as with a revoke.
-        const endedLinks = links ? await links.revokeForCapsule(user.id, capsuleId) : 0;
-        const snapshots = transferService?.revokeAllForCapsule ? await transferService.revokeAllForCapsule(user.id, capsuleId) : [];
-        if (endedLinks || snapshots.length) await audit(user, "capsule.share.withdrawn-on-delete", { capsuleId, links: endedLinks, snapshots: snapshots.length });
-        return reply(removed);
-      }
-    }
-    if (parts.length === 2 && action === "activate" && method === "POST") {
-      // `clearGuests` is how the received packs are turned off while one's own capsule is put in force: asked for, never a side effect.
-      // No `projectId`: a capsule is in force for the account and so in every project, and a request that names one is refused by
-      // name (`capsule_payload_invalid`) rather than answered as though it had been enabled for that project alone.
-      const body = await bodyOf(req, maxJsonBytes, ["mode", "clearGuests"]);
-      if (body.clearGuests !== undefined && typeof body.clearGuests !== "boolean") throw new HttpError(400, "capsule_payload_invalid", "Invalid clearGuests.");
-      return reply(await service.activate(user.id, capsuleId, body));
-    }
     // A received pack: one click in force, one click out, or tried once in a
     // conversation of its own that writes nothing into the researcher's memory.
     // For the whole account, so in every project (a pack was once enabled for one project alone; 2026-10-24, one capsule per
@@ -292,6 +260,8 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
     if (parts.length === 2 && action === "enable" && method === "POST") {
       await bodyOf(req, maxJsonBytes, []);
       const enabled = await service.enableReceived(user.id, capsuleId, { projectId: await current() });
+      // How the pack reached this account says which channel's funnel the click belongs to; a platform pack is no share and counts for none.
+      recordShareEnabled(enabled?.sharedFrom?.channel);
       await audit(user, "capsule.pack.enable", { capsuleId });
       return reply(enabled);
     }
@@ -314,27 +284,6 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
       await audit(user, "capsule.pack.trial", { capsuleId, projectId, sessionId: body.sessionId });
       return reply({ capsuleId, sessionId: body.sessionId });
     }
-    if (parts.length === 2 && action === "restore" && method === "POST") {
-      const body = await bodyOf(req, maxJsonBytes, ["expectedRevision"]);
-      return reply(await service.restore(user.id, capsuleId, body.expectedRevision));
-    }
-    if (parts.length === 2 && action === "history" && method === "GET") {
-      await service.get(user.id, capsuleId);
-      return reply(await service.documents.history(user.id, "capsule", capsuleId, {
-        limit: Number(url.searchParams.get("limit") ?? 50),
-        beforeRevision: url.searchParams.has("beforeRevision") ? Number(url.searchParams.get("beforeRevision")) : null,
-      }));
-    }
-    if (action === "entries" && parts.length === 2) {
-      if (method === "GET") return reply(await service.entries(user.id, capsuleId, pageOptions(url)));
-      if (method === "POST") {
-        const body = await bodyOf(req, maxJsonBytes, ["factKind", "layer", "content"]);
-        // Only a document's publication writes the document layer: an entry in
-        // it is recalled in its document's project alone and never listed.
-        if (body.layer === DOCUMENT_MEMORY_LAYER) throw new HttpError(400, "capsule_payload_invalid", "Invalid layer.");
-        return reply(await service.addEntry(user.id, capsuleId, { ...body, origin: "explicit", provenance: [{ type: "user", id: user.id }] }), 201);
-      }
-    }
     if (action === "entries" && parts.length === 3 && method === "PATCH") {
       return reply(await service.updateEntry(user.id, capsuleId, entryId,
         await bodyOf(req, maxJsonBytes, ["content", "status", "expectedRevision"])));
@@ -344,15 +293,6 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
     if (action === "entries" && parts.length === 4 && entryAction === "undo" && method === "POST") {
       const body = await bodyOf(req, maxJsonBytes, ["expectedRevision"]);
       return reply(await service.undoEntry(user.id, capsuleId, entryId, { expectedRevision: body.expectedRevision }));
-    }
-    if (action === "entries" && parts.length === 4 && entryAction === "history" && method === "GET") {
-      await service.get(user.id, capsuleId);
-      const entry = await service.documents.get(user.id, "fact", entryId);
-      if (!entry || entry.payload.capsuleId !== capsuleId) throw new HttpError(404, "capsule_entry_not_found", "The capsule entry is unavailable.");
-      return reply(await service.documents.history(user.id, "fact", entryId, {
-        limit: Number(url.searchParams.get("limit") ?? 50),
-        beforeRevision: url.searchParams.has("beforeRevision") ? Number(url.searchParams.get("beforeRevision")) : null,
-      }));
     }
     throw new HttpError(404, "not_found", "Capsule route not found.");
   };

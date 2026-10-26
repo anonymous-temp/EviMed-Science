@@ -10,9 +10,6 @@
  *
  * The medical examples are the capabilities' own starter prompts, kept short enough to read as a pill.
  *
- * It lived in `generalTools.mjs` beside a six-card group for the tools page (2026-10-13 to 2026-10-14); the group is gone and
- * the pills stay.
- *
  * @module @evimed/domain/src/blankExamples
  */
 

@@ -604,6 +604,7 @@ const fs = require("fs");
 const log = (entry) => fs.appendFileSync(process.env.FAKE_PLAYWRIGHT_LOG, JSON.stringify(entry) + "\n");
 const json = (status, body) => ({ status: () => status, ok: () => status < 400, json: async () => body });
 let loggedIn = false;
+let deleteAsks = 0;
 // What each probe of the walk reads on a page that is right. FAKE_PROBE=<kind> makes that kind read a page that is wrong.
 const BAD = process.env.FAKE_PROBE || "";
 function probe(kind, arg, search) {
@@ -937,13 +938,33 @@ function context() {
     async addInitScript(script) { initScripts.push(script); log({ initScript: script.name }); },
     newPage,
     request: {
-      async post(url) { if (url.endsWith("/api/auth/login")) { loggedIn = true; return json(200, {}); } loggedIn = false; return json(200, {}); },
+      // The walk's own API calls, as the product answers them: the registration signs the new account in, the deletion signs it out, a login
+      // is the fixture's, and a logout is the fixture's too. FAKE_REGISTER=closed: a deployment that takes no new accounts; FAKE_DELETE=busy|refused:
+      // an account that is busy for the first two asks, and one the product will not delete.
+      async post(url, options = {}) {
+        log({ request: { method: "POST", path: new URL(url).pathname, data: options.data ?? null, headers: options.headers ?? {} } });
+        if (url.endsWith("/api/auth/register")) {
+          if (process.env.FAKE_REGISTER === "closed") return json(403, { code: "self_registration_disabled" });
+          loggedIn = true; return json(201, { data: { user: { id: "x" }, csrfToken: "csrf-register" } });
+        }
+        if (url.endsWith("/api/auth/login")) { loggedIn = true; return json(200, { data: { csrfToken: "csrf-login" } }); }
+        if (url.endsWith("/api/commands/start_runtime")) return json(200, { data: { running: true } });
+        if (url.endsWith("/api/auth/logout")) { loggedIn = false; return json(200, {}); }
+        return json(200, {});
+      },
+      async delete(url, options = {}) {
+        log({ request: { method: "DELETE", path: new URL(url).pathname, data: options.data ?? null, headers: options.headers ?? {} } });
+        deleteAsks += 1;
+        if (process.env.FAKE_DELETE === "refused") return json(403, { code: "invalid_password" });
+        if (process.env.FAKE_DELETE === "busy" && deleteAsks <= 2) return json(409, { code: "account_busy" });
+        loggedIn = false; return json(200, { data: true });
+      },
       async get(url) {
         // FAKE_EMPTY_LISTS: the lists the walk reads its ids from answer nothing, as a module that is off for the account does.
         if (process.env.FAKE_EMPTY_LISTS && /\/api\/(vcr|frontier|agent-runs|sources|connectors)|\/diagnosis$/.test(url)) return json(404, {});
         // FAKE_DISCOVERY=500|refused: a list that the deployment cannot answer, and one the account may not read.
         if (process.env.FAKE_DISCOVERY && url.endsWith("/api/geo/projects")) return process.env.FAKE_DISCOVERY === "500" ? json(500, {}) : json(403, {});
-        if (url.endsWith("/api/agents")) return json(200, { data: ["a1", "a2", "a3", "a4", "a5"].map((id) => ({ id: "capability-" + id })) });
+        if (url.endsWith("/api/agents")) return json(200, { data: (process.env.FAKE_AGENTS === "few" ? ["a1"] : ["a1", "a2", "a3", "a4", "a5"]).map((id) => ({ id: "capability-" + id })) });
         if (url.endsWith("/api/geo/projects")) return json(200, { data: { projects: [{ id: "geo_1" }] } });
         if (url.endsWith("/api/geo/projects/geo_1/diagnosis")) return json(200, { data: { errors: [{ snapshotId: "snap_old", firstSnapshotId: "snap_1" }] } });
         if (url.endsWith("/api/vcr/studies/std_calc")) return json(200, { data: { id: "std_calc", purpose: "calculation" } });
@@ -968,10 +989,13 @@ function context() {
 module.exports = { chromium: { launch: async () => ({ newContext: async () => context(), close: async () => {} }) } };
 `;
 
+/** The settings that make the walk the fixture profile's: the account its local control plane was seeded with, and the file its password is in. */
+const WALK_FIXTURE_ACCOUNT = { OPEN_SCIENCE_WALK_PROFILE: "fixture", OPEN_SCIENCE_WALK_USER: "walk-fixture", OPEN_SCIENCE_WALK_PASSWORD_FILE: "@password" };
+
 /** What the walk takes for axe-core's build: a banner and `axe.run`. The fake page never runs it. */
 const FAKE_AXE_SOURCE = "/*! axe v4.12.1\n * a stand-in for the test\n */\nwindow.axe = { version: \"4.12.1\" };\nwindow.axe.run = function () {};\n";
 
-async function walk(env = {}, { axe = false, baseline = null } = {}) {
+async function walk(env = {}, { axe = false, baseline = null, reportRequired = true } = {}) {
   const dir = await mkdtemp(path.join(tmpdir(), "ui-walk-"));
   await mkdir(path.join(dir, "playwright-core"));
   if (axe) await writeFile(path.join(dir, "axe.min.js"), FAKE_AXE_SOURCE);
@@ -981,12 +1005,16 @@ async function walk(env = {}, { axe = false, baseline = null } = {}) {
   // finding, under a made-up owner. The baseline's own tests (`applyBaseline`, the `baseline` describe below) use real entries.
   await writeFile(path.join(dir, "baseline.json"), JSON.stringify(baseline ?? { entries: [{ view: "*", contains: ":", owner: "test", until: "2999-12-31", why: "the walk's control flow is under test, not its baseline" }] }));
   const result = await new Promise((resolve) => {
+    const settings = { ...env };
+    // `@password` is the password file this helper wrote (the fixture profile's).
+    if (settings.OPEN_SCIENCE_WALK_PASSWORD_FILE === "@password") settings.OPEN_SCIENCE_WALK_PASSWORD_FILE = path.join(dir, "password");
     execFile(process.execPath, [path.join(repoRoot, "scripts/ops/ui-walk.mjs")], {
       env: {
         ...process.env,
         OPEN_SCIENCE_WALK_BASE_URL: "https://evimed.example.org",
-        OPEN_SCIENCE_WALK_USER: "cdss-access",
-        OPEN_SCIENCE_WALK_PASSWORD_FILE: path.join(dir, "password"),
+        // The production walk signs in as nobody; the settings that name an account are the fixture profile's (`WALK_FIXTURE_ACCOUNT`).
+        OPEN_SCIENCE_WALK_USER: "",
+        OPEN_SCIENCE_WALK_PASSWORD_FILE: "",
         OPEN_SCIENCE_PLAYWRIGHT_CORE: path.join(dir, "playwright-core"),
         OPEN_SCIENCE_WALK_OUT: path.join(dir, "out"),
         OPEN_SCIENCE_WALK_CHAT: "",
@@ -994,14 +1022,16 @@ async function walk(env = {}, { axe = false, baseline = null } = {}) {
         OPEN_SCIENCE_WALK_AXE: axe ? path.join(dir, "axe.min.js") : "",
         OPEN_SCIENCE_WALK_BASELINE: path.join(dir, "baseline.json"),
         FAKE_PLAYWRIGHT_LOG: path.join(dir, "log.jsonl"),
-        ...env,
+        ...settings,
       },
       timeout: 60_000,
     }, (error, stdout, stderr) => resolve({ code: error ? error.code : 0, stdout, stderr }));
   });
-  const log = (await readFile(path.join(dir, "log.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+  const log = (await readFile(path.join(dir, "log.jsonl"), "utf8").catch(() => "")).trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
   // A walk that died before it wrote its report says why (its stderr), not that a file is missing.
-  const report = JSON.parse(await readFile(path.join(dir, "out", "report.json"), "utf8").catch((error) => { throw new Error(`the walk wrote no report (exit ${result.code}): ${result.stderr || result.stdout}`, { cause: error }); }));
+  const report = reportRequired
+    ? JSON.parse(await readFile(path.join(dir, "out", "report.json"), "utf8").catch((error) => { throw new Error(`the walk wrote no report (exit ${result.code}): ${result.stderr || result.stdout}`, { cause: error }); }))
+    : null;
   await rm(dir, { recursive: true, force: true });
   return { ...result, log, report };
 }
@@ -1190,6 +1220,106 @@ test("the chat page, when asked for, is the one page allowed to start the runtim
   assert.deepEqual([...new Set(log.slice(0, chatAt).filter((entry) => entry.start).map((entry) => entry.verdict))], ["aborted"]);
   // The conversation's own start is let through; the cleanup cover that follows it is answered by the walk itself, and never reaches the runtime.
   assert.deepEqual(log.slice(chatAt).filter((entry) => entry.start).map((entry) => entry.verdict), ["allowed", "fulfilled"]);
+});
+
+/** What the walk asked of the product's API through the browser context, in order: `{ method, path, data, headers }`. */
+const requestsOf = (log) => log.filter((entry) => entry.request).map((entry) => entry.request);
+const firstPageAt = (log) => log.findIndex((entry) => entry.goto);
+
+test("the production walk registers a throwaway account of its own, walks as it, and deletes it through the product", async () => {
+  const { code, stdout, stderr, log, report } = await walk();
+  assert.equal(code, 0, stdout + stderr);
+  const requests = requestsOf(log);
+  const register = requests.find((request) => request.path === "/api/auth/register");
+  assert.match(register.data.username, /^walk-\d{12}-[0-9a-f]{6}$/);
+  assert.equal(register.data.name, register.data.username);
+  assert.ok(register.data.password.length >= 24, "a password nobody types");
+  assert.equal(register.headers.origin, "https://evimed.example.org");
+  const removal = requests.find((request) => request.path === "/api/account");
+  assert.equal(removal.method, "DELETE");
+  assert.deepEqual(removal.data, { confirm: register.data.username, password: register.data.password });
+  assert.equal(removal.headers["x-open-science-csrf"], "csrf-register");
+  assert.equal(removal.headers.origin, "https://evimed.example.org");
+  // Nobody is signed in as, and nothing is logged out of: the account is made first and ended last.
+  assert.equal(requests.some((request) => request.path === "/api/auth/login" || request.path === "/api/auth/logout"), false);
+  const registerAt = log.findIndex((entry) => entry.request?.path === "/api/auth/register");
+  const removeAt = log.findIndex((entry) => entry.request?.path === "/api/account");
+  assert.ok(registerAt >= 0 && registerAt < firstPageAt(log), "registered before any page");
+  assert.ok(removeAt > log.map((entry, index) => (entry.goto ? index : -1)).reduce((last, index) => Math.max(last, index), -1), "deleted after the last page");
+  assert.match(stdout, new RegExp(`^account created: ${register.data.username}$`, "m"));
+  assert.match(stdout, new RegExp(`^account deleted: ${register.data.username}$`, "m"));
+  assert.equal(stdout.includes(register.data.password) || stderr.includes(register.data.password) || JSON.stringify(report).includes(register.data.password), false, "the password is nowhere");
+  assert.deepEqual(report.account, { id: register.data.username, deleted: true });
+  assert.equal(report.logout.meAfter, 401, "the session is gone once the account is");
+});
+
+test("a walk whose account cannot be deleted fails, naming the account, and never prints the password", async () => {
+  const { code, stdout, stderr, log, report } = await walk({ FAKE_DELETE: "refused" });
+  const { username, password } = requestsOf(log).find((request) => request.path === "/api/auth/register").data;
+  assert.equal(code, 1, stdout + stderr);
+  assert.match(stdout, new RegExp(`^FAIL account ${username} was NOT deleted \\(403 invalid_password\\)`, "m"));
+  assert.ok(report.failures.some((line) => line.startsWith(`account: ${username} was not deleted (403 invalid_password)`)), report.failures.join("\n"));
+  assert.deepEqual(report.account, { id: username, deleted: false, reason: "403 invalid_password" });
+  assert.equal(stdout.includes(password) || stderr.includes(password), false);
+  assert.doesNotMatch(stdout, /^account deleted:/m);
+});
+
+test("a walk that cannot start still deletes the account it made", async () => {
+  const { code, stdout, stderr, log } = await walk({ FAKE_AGENTS: "few" }, { reportRequired: false });
+  assert.equal(code, 2, stdout + stderr);
+  assert.match(stderr, /the capability catalogue answered 200 with 1 ids; nothing was walked/);
+  const requests = requestsOf(log);
+  assert.deepEqual(requests.map((request) => `${request.method} ${request.path}`), ["POST /api/auth/register", "DELETE /api/account"]);
+  assert.match(stdout, /^account created: walk-/m);
+  assert.match(stdout, /^account deleted: walk-/m);
+});
+
+test("a deployment that takes no new accounts stops the walk before any page, with the reason", async () => {
+  const { code, stdout, stderr, log } = await walk({ FAKE_REGISTER: "closed" }, { reportRequired: false });
+  assert.equal(code, 2, stdout + stderr);
+  assert.match(stderr, /the walk cannot start: registering walk-\d{12}-[0-9a-f]{6} was refused \(403 self_registration_disabled\): this deployment does not take new accounts/);
+  assert.equal(firstPageAt(log), -1, "no page was opened");
+  assert.deepEqual(requestsOf(log).map((request) => request.path), ["/api/auth/register"], "nothing to delete, nothing asked");
+});
+
+test("the production walk refuses the settings that name an account: an old host file must not be ignored in silence", async () => {
+  for (const settings of [{ OPEN_SCIENCE_WALK_USER: "an-old-account" }, { OPEN_SCIENCE_WALK_PASSWORD_FILE: "/run/walk/password" }, { OPEN_SCIENCE_WALK_USER: "an-old-account", OPEN_SCIENCE_WALK_PASSWORD_FILE: "/run/walk/password" }]) {
+    const { code, stderr, log } = await walk(settings, { reportRequired: false });
+    assert.equal(code, 2, JSON.stringify(settings));
+    assert.match(stderr, /the walk cannot start: OPEN_SCIENCE_WALK_(USER|PASSWORD_FILE)(?: and OPEN_SCIENCE_WALK_PASSWORD_FILE)? names? an account, and the production walk signs in as none/);
+    assert.deepEqual(requestsOf(log), [], "no account was made");
+  }
+});
+
+test("the fixture profile signs in as the account its control plane was seeded with, and logs out; it makes and deletes none", async () => {
+  const { stdout, log } = await walk(WALK_FIXTURE_ACCOUNT, { reportRequired: false });
+  const requests = requestsOf(log);
+  const login = requests.find((request) => request.path === "/api/auth/login");
+  assert.deepEqual(login.data, { username: "walk-fixture", password: "not-a-real-password" });
+  assert.ok(requests.some((request) => request.path === "/api/auth/logout"), "it logs out");
+  assert.equal(requests.some((request) => request.path === "/api/auth/register" || request.method === "DELETE"), false);
+  assert.doesNotMatch(stdout, /^account (created|deleted):/m);
+  // It needs both of its settings, and says which is missing.
+  for (const [missing, said] of [["OPEN_SCIENCE_WALK_USER", /OPEN_SCIENCE_WALK_USER is required by the fixture profile/], ["OPEN_SCIENCE_WALK_PASSWORD_FILE", /OPEN_SCIENCE_WALK_PASSWORD_FILE is required by the fixture profile/]]) {
+    const refused = await walk({ ...WALK_FIXTURE_ACCOUNT, [missing]: "" }, { reportRequired: false });
+    assert.equal(refused.code, 2);
+    assert.match(refused.stderr, said);
+    assert.deepEqual(requestsOf(refused.log), []);
+  }
+});
+
+test("a throwaway account's runtime is started through the API before the chat page, while no page is loading; the fixture's is not", async () => {
+  const { code, stdout, stderr, log, report } = await walk({ OPEN_SCIENCE_WALK_CHAT: "1" });
+  assert.equal(code, 0, stdout + stderr);
+  const startAt = log.findIndex((entry) => entry.request?.path === "/api/commands/start_runtime");
+  const homeAt = log.findIndex((entry) => entry.goto?.endsWith("/app/home"));
+  assert.ok(startAt > 0 && startAt < homeAt, "started before the page that needs it is opened");
+  const start = log[startAt].request;
+  assert.deepEqual([start.method, start.data, start.headers["x-open-science-csrf"], start.headers["x-open-science-project"]], ["POST", {}, "csrf-register", "default"]);
+  assert.ok(report.info.some((line) => /^chat: the throwaway account's runtime was started through the API first \(200 after \d+ s\)$/.test(line)), report.info.join("\n"));
+  assert.ok(report.pages["chat@desktop"].loaded, "the conversation frame still loads");
+  const other = await walk({ ...WALK_FIXTURE_ACCOUNT, OPEN_SCIENCE_WALK_CHAT: "1" }, { reportRequired: false });
+  assert.equal(requestsOf(other.log).some((request) => request.path === "/api/commands/start_runtime"), false, "an account that was seeded keeps its own runtime state");
 });
 
 test("the global entry verifies its project and accepts a native session address", async () => {

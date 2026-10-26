@@ -49,10 +49,9 @@ async function projectFixture() {
 /** The researcher's own capsule in force for p1: one profile line and one approved work-style method. */
 async function ownCapsule() {
   const capsules = new CapsuleService(/** @type {any} */ (productDocumentsDouble()));
-  const own = await capsules.create(USER, { title: "我的记忆胶囊" });
+  const own = await capsules.ownCapsule(USER, { create: true });
   await capsules.addEntry(USER, own.id, { factKind: "profile", layer: "profile", content: "心内科临床药师" });
   await capsules.addEntry(USER, own.id, { factKind: "method_preference", layer: "methods", content: "先做敏感性分析再下结论" });
-  await capsules.activate(USER, own.id, { mode: "own", projectId: "p1" });
   return capsules;
 }
 
@@ -164,7 +163,7 @@ test("the composition root gives the runtime manager the researcher's switches f
     async sessionState(_userId, _projectId, sessionId) { return { trialCapsuleId: sessionId === "ses_trial" ? "pack-1" : null }; },
     async relevant() { return []; },
   };
-  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false, memoryExtractionEnabled: false, researchMemory: store });
+  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false, memorySettings: store });
   try {
     await app.listen(0, "127.0.0.1");
     assert.equal(typeof app.runtimeManager.memoryPause, "function");

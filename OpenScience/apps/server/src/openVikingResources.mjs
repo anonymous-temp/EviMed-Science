@@ -33,8 +33,11 @@ import { HttpError } from "./security.mjs";
  * - **Every find, grep and compile names its roots.** Isolation between projects is the path prefix; a `find` with no
  *   target searches everything the user can see. Between users it is the engine's own (another user's subtree answers
  *   403), and the acting user is set by `OpenVikingClient.request` and nowhere else.
- * - **A compile is always submitted with an `Idempotency-Key` and never with `args`.** The same key and body answer
- *   the same task; a non-empty `args` fails the task at submission on v0.5.0. Every root it names is inside the acting
+ * - **A compile is always submitted with an `Idempotency-Key` and never with `args`** — but for the one argument a v0.5.2 engine
+ *   reads, `mode` (2026-10-25). The same key and body answer the same task; a non-empty `args` fails the task at submission on v0.5.0.
+ *   From v0.5.2 a compile is incremental by default, so a retry with the same instruction over the same sources is a no-op that
+ *   writes nothing: the one retry the knowledge pages make, of a wiki that came out as its index alone, asks `mode: "full"`
+ *   (`compileRetryMode`) on an engine that is v0.5.2 or later and sends no `args` on any other. Every root it names is inside the acting
  *   user's own resources: the engine refuses another user's root (403 at submission) but takes a target under the
  *   account-shared `viking://resources/…` or `viking://agent/…` roots, which the identity shim of the v0.5.0 pin used to
  *   refuse, so `submitCompile` refuses them itself.
@@ -345,10 +348,10 @@ export class OpenVikingResources {
   /**
    * Submit one compile. Answers the task as the engine reports it: `{ taskId, status, stage }`.
    * @param {string} userId
-   * @param {{ from: string[], to: string, skill: string, instruction?: string | null, idempotencyKey: string }} submission
-   *   `skill`: one of `OPENVIKING_SKILL_NAMES`
+   * @param {{ from: string[], to: string, skill: string, instruction?: string | null, idempotencyKey: string, mode?: "full" | null }} submission
+   *   `skill`: one of `OPENVIKING_SKILL_NAMES`; `mode`: `"full"` only, for an engine that reads it (`compileRetryMode`), else absent
    */
-  async submitCompile(userId, { from, to, skill, instruction = null, idempotencyKey }) {
+  async submitCompile(userId, { from, to, skill, instruction = null, idempotencyKey, mode = null }) {
     if (!OPENVIKING_SKILL_NAMES.includes(skill)) throw new HttpError(500, "knowledge_skill_unknown", "That compile skill is not one this deployment installs.");
     if (!Array.isArray(from) || !from.length || from.length > 16) throw new HttpError(500, "knowledge_compile_invalid", "A compile reads between one and sixteen roots.");
     if (!idempotencyKey) throw new HttpError(500, "knowledge_compile_invalid", "A compile is always submitted with an idempotency key.");
@@ -362,7 +365,7 @@ export class OpenVikingResources {
     }
     try {
       const body = await this.client.request({ method: "POST", path: "/api/v1/compile", userId, idempotencyKey, timeoutMs: READ_TIMEOUT_MS,
-        body: { from, to, skill: skillUri(skill), ...(instruction ? { instruction: String(instruction) } : {}) } });
+        body: { from, to, skill: skillUri(skill), ...(instruction ? { instruction: String(instruction) } : {}), ...(mode === "full" ? { args: { mode: "full" } } : {}) } });
       this.counters.compiles += 1;
       return compileTask(body?.result);
     } catch (error) { this.counters.failures += 1; throw error; }

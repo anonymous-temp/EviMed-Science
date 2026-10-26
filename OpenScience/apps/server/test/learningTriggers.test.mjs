@@ -2,9 +2,10 @@
 //
 // Under the defaults it could not start at all: one producer needed 「采纳」 and 「我改过」 on the same deliverable (zero adoptions in
 // production), the other a server-side repair round that has defaulted to 0 since 2026-09-17. The signals that replaced them: a
-// correction (typed into the run, written down by the extractor, a result corrected in the page, or the next turn's first message
-// read as one), a repaired delivery where an operator asks for it, and a routine — τ clean trajectories of one scope and one shape,
-// decided when a run is settled (`routineLessonFor`). A finished delivery queues no lesson of its own any more.
+// correction (typed into the run, a result corrected in the page, or the next turn's first message
+// read as one), and a routine — τ clean trajectories of one scope and one shape,
+// decided when a run is settled (`routineLessonFor`). A finished delivery queues no lesson of its own any more, and neither does one that was repaired
+// inside its run (2026-10-25: that producer, and the account handbook it fed, are deleted).
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -12,10 +13,9 @@ import { EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, METHOD_INDUCTION_MIN_TRAJ
 import { VERIFICATION_ROUTE_REASON } from "../src/autopilotService.mjs";
 import { LEARNING_PROJECT_ID } from "../src/internalProjects.mjs";
 import {
-  CONVERSATION_SCOPE, LEARNING_REFUSAL_REASONS, LearningTriggers, REPAIR_SAMPLE_PURPOSE, ROUTINE_PERIOD_DAYS, correctionLessonFor, learningRefusal, learningScopeOf,
+  CONVERSATION_SCOPE, LEARNING_REFUSAL_REASONS, LearningTriggers, ROUTINE_PERIOD_DAYS, adoptedLessonFor, correctionLessonFor, deliveredSomething, learningRefusal, learningScopeOf,
   learningTriggersFor, lessonPeers, routineLessonFor, routinePeriodMs, routinePeriodOf,
 } from "../src/learningTriggers.mjs";
-import { sampledByHash } from "../src/runSampling.mjs";
 import { DISTILLATION_TRIGGERS, buildDistillationInput, distillationDispatchId, lessonSignal } from "../src/methodDistillationRuns.mjs";
 
 const HOUR = 3_600_000;
@@ -56,39 +56,25 @@ test("a conversation that read clinical context, or a correction about one, queu
   assert.deepEqual(refused, ["clinical_context", "clinical_context"], "each refusal is counted by its reason");
 });
 
-test("a finished delivery queues no lesson of its own; one that needed repairs in its own turn is the repair lesson", () => {
+test("a finished delivery queues no lesson of its own, and one that needed repairs in its own turn teaches nothing either: the gate's bookkeeping is not the researcher's method", () => {
   const clean = run();
   assert.deepEqual(learningTriggersFor({ run: clean, runs: [clean] }), [], "its content is the settled run and the routine over three of them");
 
-  const repaired = run();
-  const projection = { plan: { items: [{ id: "d1", attempts: 1 }, { id: "d2", attempts: 3 }] } };
-  const lessons = learningTriggersFor({ run: repaired, runs: [repaired], projection });
-  assert.deepEqual(triggers(lessons), ["repair_accepted"]);
-  // The retired producer's key, so a job it already queued is this job.
-  assert.equal(lessons[0].idempotencyKey, `distill:${repaired.id}:repair_accepted`);
-  assert.equal(lessons[0].payload.inRunAttempts, 3);
-
-  // A server-side round still counts, where a deployment turned them back on.
-  const serverRepaired = run({ repairRounds: { content: 1, structural: 0 } });
-  assert.deepEqual(triggers(learningTriggersFor({ run: serverRepaired, runs: [serverRepaired] })), ["repair_accepted"]);
+  // Repaired inside the run, by the run's own attempts or by the server's rounds: no lesson, and no input to read one from.
+  const repaired = run({ repairRounds: { content: 1, structural: 0 } });
+  assert.deepEqual(learningTriggersFor({ run: repaired, runs: [repaired], projection: { plan: { items: [{ id: "d1", attempts: 1 }, { id: "d2", attempts: 3 }] } } }), []);
+  assert.ok(!DISTILLATION_TRIGGERS.includes("repair_accepted"), "the trigger is deleted, not only unused");
 
   // A run that delivered nothing taught nothing about delivering.
   const empty = run({ artifacts: [] });
   assert.deepEqual(learningTriggersFor({ run: empty, runs: [empty] }), []);
 });
 
-test("a correction the researcher made is a lesson, whether sent mid-run or written down by the extractor", () => {
+test("a correction the researcher typed into the running turn is a lesson (the next message's correction is the evidence ledger's)", () => {
   const steered = run({ corrections: 2 });
   const lessons = learningTriggersFor({ run: steered, runs: [steered] });
   assert.deepEqual(triggers(lessons), ["correction"]);
   assert.equal(lessons[0].payload.steeredCorrections, 2);
-
-  const said = run();
-  const extracted = learningTriggersFor({
-    run: said, runs: [said],
-    memoryResult: { corrections: [{ recordId: "rec_1", key: "correction.renal_dosing", scope: "user" }] },
-  });
-  assert.deepEqual(extracted[0].payload.corrections, [{ recordId: "rec_1", key: "correction.renal_dosing" }]);
 
   // A failed run still carries the researcher's rule; it delivered nothing else.
   const failed = run({ status: "failed", corrections: 1, artifacts: [] });
@@ -162,7 +148,7 @@ test("a routine lesson's peers read in both shapes it has been queued in", () =>
     [{ runId: "run_a", projectId: "aspirin" }, { runId: "run_b", projectId: null }]);
   // Queued before 2026-09-28: run ids only, every one in the lesson's own project.
   assert.deepEqual(lessonPeers({ peerRunIds: ["run_a", "", 7, "run_b"] }), [{ runId: "run_a", projectId: null }, { runId: "run_b", projectId: null }]);
-  assert.deepEqual(lessonPeers({ trigger: "delivered" }), []);
+  assert.deepEqual(lessonPeers({ trigger: "edit_diff" }), []);
 });
 
 // ---------------------------------------------------------------------------------------------------- gates
@@ -281,48 +267,24 @@ test("a finished run is handed to the evidence ledger after its lessons, with th
   assert.deepEqual(seen, []);
 });
 
-/** A run id the hash of the repair sample puts in (or out of) a share. @param {number} share @param {boolean} taken @param {Record<string, any>} [overrides] */
-function repairSampledRun(share, taken, overrides = {}) {
-  for (let attempt = 0; attempt < 500; attempt += 1) {
-    const candidate = run({ repairRounds: { content: 1, structural: 0 }, ...overrides });
-    if (sampledByHash(candidate.id, share, REPAIR_SAMPLE_PURPOSE) === taken) return candidate;
-  }
-  throw new Error("no run id found for the repair sample");
-}
-
-test("a delivery that needed repairs inside its run queues no lesson by default: the gate's bookkeeping is not the researcher's method (owner, 2026-10-12)", async () => {
+test("a delivery that needed repairs inside its run queues no lesson: the gate's bookkeeping is not the researcher's method (owner, 2026-10-12; the sample was deleted on 2026-10-25)", async () => {
   const project = { id: "project_1", userId: "user_1" };
   /** @type {any[]} */ const enqueued = [];
   const jobs = { enqueue: async (_userId, _kind, payload, options) => { enqueued.push({ trigger: payload.trigger, key: options.idempotencyKey }); return { id: "job" }; } };
-  const counted = /** @type {boolean[]} */ ([]);
-  const triggersFor = (/** @type {any[]} */ ledger, /** @type {any} */ options = {}) => new LearningTriggers({
-    jobs, agentRuns: { list: async () => ledger, runWorkflowProjection: async () => ({ plan: { items: [{ id: "d1", attempts: 3 }] } }) },
-    onRepairSample: (distilled) => counted.push(distilled), ...options });
+  const triggersFor = (/** @type {any[]} */ ledger) => new LearningTriggers({
+    jobs, agentRuns: { list: async () => ledger, runWorkflowProjection: async () => ({ plan: { items: [{ id: "d1", attempts: 3 }] } }) } });
 
-  const repaired = run();
-  assert.deepEqual(triggers(learningTriggersFor({ run: repaired, runs: [repaired], projection: { plan: { items: [{ id: "d1", attempts: 3 }] } } })), ["repair_accepted"]);
-
-  // Default: none, and the skipped one is a number.
-  assert.deepEqual(await triggersFor([repaired]).afterRun(project, repaired), { queued: [], skipped: null, sampledOut: ["repair_accepted"] });
+  const repaired = run({ repairRounds: { content: 1, structural: 0 } });
+  assert.deepEqual(await triggersFor([repaired]).afterRun(project, repaired), { queued: [], skipped: null });
   assert.deepEqual(enqueued, []);
-  assert.deepEqual(counted, [false]);
 
   // A researcher's correction in that same run is still a lesson.
-  const corrected = run({ corrections: 1 });
-  assert.deepEqual(await triggersFor([corrected]).afterRun(project, corrected), { queued: ["correction"], skipped: null, sampledOut: ["repair_accepted"] });
+  const corrected = run({ corrections: 1, repairRounds: { content: 1, structural: 0 } });
+  assert.deepEqual(await triggersFor([corrected]).afterRun(project, corrected), { queued: ["correction"], skipped: null });
+  assert.deepEqual(enqueued.map((entry) => entry.trigger), ["correction"]);
   // A clean delivery queues nothing at the run's end.
   const clean = run();
   assert.deepEqual(await new LearningTriggers({ jobs, agentRuns: { list: async () => [clean], runWorkflowProjection: async () => null } }).afterRun(project, clean), { queued: [], skipped: null });
-
-  // The lever: every repaired delivery restores the old behaviour; a share is a hash of the run id.
-  const every = triggersFor([repaired], { repairShare: 1 });
-  assert.deepEqual(await every.afterRun(project, repaired), { queued: ["repair_accepted"], skipped: null });
-  const inside = repairSampledRun(0.5, true);
-  const outside = repairSampledRun(0.5, false);
-  const half = (/** @type {any} */ subject) => triggersFor([subject], { repairShare: 0.5 }).afterRun(project, subject);
-  assert.deepEqual(await half(inside), { queued: ["repair_accepted"], skipped: null });
-  assert.deepEqual(await half(outside), { queued: [], skipped: null, sampledOut: ["repair_accepted"] });
-  assert.deepEqual(await half(outside), { queued: [], skipped: null, sampledOut: ["repair_accepted"] }, "the same run, the same answer");
 });
 
 test("a lesson that could not be queued is audited and counted, and the others still go", async () => {
@@ -336,12 +298,12 @@ test("a lesson that could not be queued is audited and counted, and the others s
     },
   };
   const result = await new LearningTriggers({
-    jobs, repairShare: 1,
+    jobs,
     agentRuns: { list: async () => [subject], runWorkflowProjection: async () => null },
     audit: async (event, detail) => { audits.push({ event, ...detail }); },
     onRefused: (reason) => refused.push(reason),
   }).afterRun({ id: "p", userId: "u" }, subject);
-  assert.deepEqual(result.queued, ["repair_accepted"]);
+  assert.deepEqual(result.queued, []);
   assert.deepEqual(audits.map((entry) => [entry.event, entry.code, entry.detail]),
     [["learning.distill.enqueue", "product_job_queue_full", "correction"]]);
   assert.deepEqual(refused, ["enqueue_failed"]);
@@ -350,7 +312,7 @@ test("a lesson that could not be queued is audited and counted, and the others s
 // ---------------------------------------------------------------------------------------------------- inputs
 
 test("a routine induction reads each run of the family by its digest, never by raw lines", () => {
-  assert.ok(DISTILLATION_TRIGGERS.includes("delivered"), "a job queued before 2026-10-23 is still read");
+  assert.ok(!DISTILLATION_TRIGGERS.includes("delivered"), "the trigger is deleted, not only unused");
   assert.ok(DISTILLATION_TRIGGERS.includes("routine"));
   const transcript = (text) => ({
     header: { completeness: "complete" },
@@ -370,13 +332,13 @@ test("a routine induction reads each run of the family by its digest, never by r
     [["run_1", "complete", ["第一次综述"]], ["run_2", "unavailable", null]]);
   assert.deepEqual(input.transcriptExcerpts, [], "a routine carries digests and no raw lines");
   // Every other trigger reads one run.
-  assert.deepEqual(buildDistillationInput({ run: { id: "r" }, trigger: "delivered", transcript: null }).peerRuns, []);
+  assert.deepEqual(buildDistillationInput({ run: { id: "r" }, trigger: "edit_diff", transcript: null }).peerRuns, []);
 });
 
 test("the distiller sees which related methods were retired, and why", () => {
   const input = buildDistillationInput({
     run: { id: "run_4" },
-    trigger: "repair_accepted",
+    trigger: "edit_diff",
     transcript: null,
     relatedMethods: [
       { id: "method:learned:a", payload: { contentDigest: "sha256:a", frontmatter: { name: "a" }, body: "A", status: "approved" } },
@@ -469,4 +431,77 @@ test("two corrections of one run are two dispatches, and a lesson with no discri
   assert.notEqual(first, second, "the second correction does not adopt the first one's bounded run");
   assert.equal(distillationDispatchId("run_1", "correction"), distillationDispatchId("run_1", "correction", ""));
   assert.match(first, /^method-distillation-[a-f0-9]{32}$/);
+});
+
+// ---------------------------------------------------------------------------------------------------- adopted (2026-10-25)
+
+/** A follow-up the judge read as an adoption, as the ledger holds it. @param {string} [verdict] */
+const adoptEvent = (verdict = "adopt") => ({ id: "feedback:learning-evidence:adopt", trigger: "learning-evidence", runId: "run_orig", subject: { type: "run", id: "run_orig" },
+  detail: { evidence: "follow-up", verdict, rule: "周报都按刚才的做法写", quote: "以后周报都按这个来", concerns: [] } });
+
+test("what a run delivered is a file, or an answer: the ledger's history holds more than the question", () => {
+  assert.equal(deliveredSomething(run({ artifacts: [], outputFiles: ["report/weekly.md"] })), true);
+  assert.equal(deliveredSomething(run({ artifacts: [], unverifiedArtifacts: ["d/x.md"] })), true);
+  assert.equal(deliveredSomething(run({ artifacts: [], transcript: { completeness: "complete", messages: 4 } })), true, "an answer in the conversation: the stored transcript holds more than the question");
+  assert.equal(deliveredSomething(run({ artifacts: [], observedMessages: 3 })), true, "or the monitor counted more while the run went");
+  assert.equal(deliveredSomething(run({ artifacts: [], transcript: { completeness: "complete", messages: 1 }, observedMessages: 1 })), false, "only the question");
+  assert.equal(deliveredSomething(run({ artifacts: [], observedMessages: 0 })), false);
+  assert.equal(deliveredSomething(run({ status: "failed" })), false, "a run that did not finish has nothing to keep");
+  assert.equal(deliveredSomething(null), false);
+});
+
+test("an adoption is a lesson about the run whose way was kept, queued at once with the person's words as its evidence; nothing else is", () => {
+  const original = run({ id: "run_orig" });
+  const lesson = adoptedLessonFor({ run: original, runs: [original], project: { id: "p1" }, event: adoptEvent() });
+  assert.equal(lesson?.trigger, "adopted");
+  assert.ok(DISTILLATION_TRIGGERS.includes("adopted"));
+  assert.equal(lesson?.idempotencyKey, "distill:run_orig:adopted:feedback:learning-evidence:adopt");
+  assert.deepEqual(lesson?.payload.feedbackEventIds, ["feedback:learning-evidence:adopt"]);
+  assert.equal(lesson?.payload.dispatchKey, "feedback:learning-evidence:adopt");
+  assert.equal(lessonSignal({ trigger: "adopted", feedback: lesson?.payload.feedback }), "researcher", "their own choice, in their own words");
+  // The distillation is handed the run's trajectory with the adoption as an intervention carrying its verdict, and a closing excerpt.
+  const transcript = { header: { completeness: "complete" }, messages: [
+    { sessionId: "session_1", role: "user", source: "user", seq: 1, turnStartSeq: 1, parts: [{ type: "text", text: "写本周周报" }] },
+    { sessionId: "session_1", role: "assistant", source: "user", seq: 2, turnStartSeq: 1, parts: [{ type: "text", text: "结论：本周完成两项。" }] },
+  ] };
+  const input = buildDistillationInput({ run: original, trigger: "adopted", transcript, feedback: lesson?.payload.feedback });
+  assert.equal(input.signal, "researcher");
+  assert.deepEqual(input.trajectory.interventions.map((entry) => [entry.kind, entry.verdict, entry.text, entry.rule]), [["follow-up", "adopt", "以后周报都按这个来", "周报都按刚才的做法写"]]);
+  assert.equal(input.transcriptExcerpts.length, 1, "the closing messages of the run: the reply the person kept");
+  assert.equal(input.transcriptExcerpts[0].anchor.kind, "closing");
+  // Nothing else is an adoption: not a correction, an acceptance, a steer, a silence, a result corrected, and not an event of another kind.
+  for (const verdict of ["correction", "preference", "rejection", "accept", "none"]) assert.equal(adoptedLessonFor({ run: original, runs: [original], event: adoptEvent(verdict) }), null, verdict);
+  assert.equal(adoptedLessonFor({ run: original, runs: [original], event: { ...adoptEvent(), detail: { evidence: "steer", verdict: "adopt" } } }), null);
+  assert.equal(adoptedLessonFor({ run: original, runs: [original], event: { ...adoptEvent(), trigger: "deliverable-edited" } }), null);
+  assert.equal(adoptedLessonFor({ run: original, runs: [original], event: { ...adoptEvent(), id: "" } }), null);
+  // A run that delivered nothing has nothing to keep.
+  const nothing = run({ id: "run_orig", artifacts: [], outputFiles: [], transcript: { completeness: "complete", messages: 1 }, observedMessages: 1 });
+  assert.equal(adoptedLessonFor({ run: nothing, runs: [nothing], event: adoptEvent() }), null);
+});
+
+test("an adoption passes the gates every other lesson passes, and is queued once per event, marked when the run drew on a pack nobody vouched for", async () => {
+  const original = run({ id: "run_orig" });
+  const event = adoptEvent();
+  assert.equal(adoptedLessonFor({ run: run({ id: "run_orig", automated: true }), runs: [], event }), null, "the platform's own work");
+  assert.equal(adoptedLessonFor({ run: original, runs: [original], project: { id: LEARNING_PROJECT_ID }, event }), null, "an internal project");
+  assert.equal(adoptedLessonFor({ run: original, runs: [original], event, internalAgent: () => true }), null, "an internal capability");
+  const unread = run({ id: "run_unread", transcript: { completeness: "partial" } });
+  assert.equal(adoptedLessonFor({ run: unread, runs: [unread], event }), null, "a transcript that cannot be read");
+  assert.equal(adoptedLessonFor({ run: run({ id: "r", status: "running" }), runs: [], event }), null);
+  assert.equal(adoptedLessonFor({ run: original, runs: [original], event, guestInfluence: true })?.payload.guestInfluence.uncorroborated, true);
+
+  const project = { id: "project_1", userId: "user_1" };
+  const enqueued = [];
+  const jobs = { enqueue: async (_userId, kind, payload, options) => { enqueued.push({ kind, payload, options }); return { id: "job" }; } };
+  const refused = [];
+  const triggersWith = (extra = {}) => new LearningTriggers({ jobs, agentRuns: { list: async () => [original] }, onRefused: (reason) => refused.push(reason), ...extra });
+  assert.deepEqual(await triggersWith().afterAdoption(project, { event, runId: "run_orig" }), { queued: ["adopted"], skipped: null });
+  assert.deepEqual([enqueued[0].kind, enqueued[0].payload.trigger, enqueued[0].options.projectId, enqueued[0].options.idempotencyKey], ["distill", "adopted", "project_1", "distill:run_orig:adopted:feedback:learning-evidence:adopt"]);
+  assert.deepEqual(await triggersWith().afterAdoption(project, { event, runId: "run_gone" }), { queued: [], skipped: "run_unavailable" });
+  const paused = { configured: true, settings: async () => ({ learningPaused: true, recallPaused: false, pausedProjects: [] }) };
+  assert.deepEqual(await triggersWith({ memory: paused }).afterAdoption(project, { event, runId: "run_orig" }), { queued: [], skipped: "paused" });
+  assert.deepEqual(await triggersWith({ canReuseRun: async () => false }).afterAdoption(project, { event, runId: "run_orig" }), { queued: [], skipped: "clinical_context" });
+  assert.deepEqual(await triggersWith().afterAdoption(project, { event: adoptEvent("accept"), runId: "run_orig" }), { queued: [], skipped: "not_eligible" });
+  assert.deepEqual(refused, ["run_unavailable", "paused", "clinical_context", "not_eligible"], "every refusal is counted by its reason");
+  assert.equal(enqueued.length, 1);
 });

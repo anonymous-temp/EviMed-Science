@@ -1,35 +1,33 @@
 import { isInternalProjectOf } from "./internalProjects.mjs";
 import { isPlatformStartedRun } from "./memoryDispatch.mjs";
 import { platformSessionOf } from "./openVikingSessions.mjs";
-import { endedBeforeReset, memoryPausedFor } from "./researchMemory.mjs";
+import { endedBeforeReset, memoryPausedFor } from "./memorySettings.mjs";
 
 /**
  * Whose conversations the native memory engine may learn from, and whom it may be read for.
  *
- * Hidden knowledge: on the legacy path these decisions are spread over the places that act on them — `recordRun` refuses an
- * automated run, an internal project, a paused account, a trial conversation and one that read a patient record; the recall
- * tool honours the pause; the dispatch withholds the profile. On the native path the unmodified memory plugin does all of
- * the acting, inside the runtime, and knows none of it: it captures every turn and reads the profile at every session start.
- * So the one place the platform can decide is the door every one of its requests passes — the memory gateway — and this
- * module is that decision, made once and asked by the gateway and by the memory page alike.
+ * Hidden knowledge: the unmodified memory plugin does all of the acting, inside the runtime, and knows none of this policy: it
+ * captures every turn and reads the profile at every session start. So the one place the platform can decide is the door every
+ * one of its requests passes — the memory gateway — and this module is that decision, made once and asked by the gateway and by
+ * the memory page alike. (Before the legacy engine was deleted, on 2026-10-25, the same decisions were spread over the places
+ * that acted on them: the platform's own extraction refused an automated run, an internal project and the rest one by one.)
  *
  * Two answers, never one flag:
  *  - `learn` — whether what is said in this conversation may reach the engine (messages, commits, `remember`). False for a
- *    caller that must not be learned from: an account on the legacy engine, the platform's own projects, a conversation
+ *    caller that must not be learned from: memory switched off here, the platform's own projects, a conversation
  *    whose current turn the platform started (an automated run, a LoopX continuation, a scheduled task: the turn a captured
  *    message was spoken in when its time says so, else the turn in progress) or a subagent's,
  *    a paused account or project, a conversation trying someone else's capsule, a conversation that read a patient record,
  *    and any conversation while the engine's own policy cannot be confirmed (its templates are the "never keep" rules), and
  *    anything said before the account last reset its memory (`before_reset`, below).
  *  - `recall` — whether the account's memories may be read into this conversation (the profile, listings, search, `read`).
- *    False for the legacy engine, the platform's own projects, a recall pause and a trial conversation.
+ *    False for memory switched off here, the platform's own projects, a recall pause and a trial conversation.
  *
  * What a reset leaves in flight (`before_reset`): the memory page's 「重置记忆」 deletes the account's files and its engine sessions, and
  * from that instant a message spoken before it is not learned from again. The unmodified plugin keeps an offline queue and replays what
  * it could not post for seven days, each message with the time it was spoken, so a conversation that was over before the reset can
  * arrive after it and open a fresh engine session with the very words the person asked to forget. The message's own time decides when it
- * has one; without one, the conversation's last turn decides when it is over (the rule extraction applies on the other engine,
- * `endedBeforeReset`); a turn still running is the person's now, whenever it began.
+ * has one; without one, the conversation's last turn decides when it is over (`endedBeforeReset`); a turn still running is the person's now, whenever it began.
  *
  * Refused callers are answered, not failed: a write is accepted and not forwarded, a read finds nothing. The plugin is
  * unmodified and has no vocabulary for "you may not", and a conversation never waits on memory.
@@ -38,7 +36,7 @@ import { endedBeforeReset, memoryPausedFor } from "./researchMemory.mjs";
  */
 
 /**
- * @typedef {{ native: boolean, learn: boolean, recall: boolean, learnReason: string | null, recallReason: string | null, sessionId: string | null }} MemoryAdmission
+ * @typedef {{ learn: boolean, recall: boolean, learnReason: string | null, recallReason: string | null, sessionId: string | null }} MemoryAdmission
  */
 
 export { isPlatformStartedRun };
@@ -67,7 +65,7 @@ function runAt(runs, at) {
 /**
  * @param {{
  *   config: any,
- *   researchMemory: any,
+ *   memorySettings: any,
  *   engineReady?: (() => { ok: boolean, code: string | null }) | null,
  *   conversations?: {
  *     running: (project: any) => Promise<{ id: string, sessionId: string }[]>,
@@ -78,7 +76,7 @@ function runAt(runs, at) {
  *   clinicalContext?: ((userId: string, projectId: string, runs: { sessionId: string, runId: string }[]) => Promise<boolean>) | null,
  * }} dependencies
  */
-export function createMemoryAdmission({ config, researchMemory, engineReady = null, conversations = null, internalAgent = null, clinicalContext = null }) {
+export function createMemoryAdmission({ config, memorySettings, engineReady = null, conversations = null, internalAgent = null, clinicalContext = null }) {
   /**
    * @param {{ user: any, project: any, engineSessionId?: string | null, at?: number | null }} caller `engineSessionId` is the
    *   engine's session (`dsh-<conversation>`) when the request names one; without it the answer is the project's running
@@ -90,9 +88,8 @@ export function createMemoryAdmission({ config, researchMemory, engineReady = nu
     const userId = String(user.id);
     const projectId = String(project.id);
     /** @param {string} reason @returns {MemoryAdmission} */
-    const neither = (reason, sessionId = null) => ({ native: reason !== "legacy_engine", learn: false, recall: false, learnReason: reason, recallReason: reason, sessionId });
-    if (!researchMemory?.configured || config?.memoryEnabled === false) return neither("legacy_engine");
-    if (await researchMemory.memoryEngine(userId) !== "native") return neither("legacy_engine");
+    const neither = (reason, sessionId = null) => ({ learn: false, recall: false, learnReason: reason, recallReason: reason, sessionId });
+    if (!memorySettings?.configured || config?.memoryEnabled === false) return neither("memory_off");
     // The platform's own projects: a lesson, an evaluation cell, a source being read. Nothing of them is the person's.
     if (isInternalProjectOf(config, userId, projectId)) return neither("internal_project");
 
@@ -100,22 +97,22 @@ export function createMemoryAdmission({ config, researchMemory, engineReady = nu
     const named = engineSessionId ? platformSessionOf(engineSessionId) : null;
     // Which conversation this is: the one the request names, or the only one running in the project.
     const sessionId = named ?? (running.length === 1 ? running[0].sessionId : null);
-    const pause = await memoryPausedFor(researchMemory, userId, projectId, sessionId);
+    const pause = await memoryPausedFor(memorySettings, userId, projectId, sessionId);
     // With several running and none named, a trial among them protects the person: nothing is read or written.
     let trial = pause.trial;
-    if (!named && running.length > 1 && typeof researchMemory.sessionState === "function") {
-      const states = await Promise.all(running.map((run) => researchMemory.sessionState(userId, projectId, run.sessionId).catch(() => ({ trialCapsuleId: null }))));
+    if (!named && running.length > 1 && typeof memorySettings.sessionState === "function") {
+      const states = await Promise.all(running.map((run) => memorySettings.sessionState(userId, projectId, run.sessionId).catch(() => ({ trialCapsuleId: null }))));
       trial = trial || states.some((state) => Boolean(state?.trialCapsuleId));
     }
     if (trial) return neither("trial", sessionId);
 
     const recallReason = config?.memoryRecallEnabled === false || pause.recall ? "paused" : null;
     /** @param {string | null} learnReason @returns {MemoryAdmission} */
-    const answer = (learnReason) => ({ native: true, learn: learnReason === null, recall: recallReason === null, learnReason, recallReason, sessionId });
+    const answer = (learnReason) => ({ learn: learnReason === null, recall: recallReason === null, learnReason, recallReason, sessionId });
 
     if (pause.learning) return answer("paused");
     // What was said before the account reset its memory is not learned from again, whenever it reaches the engine.
-    const resetAt = typeof researchMemory.resetInstant === "function" ? await researchMemory.resetInstant(userId).catch(() => null) : null;
+    const resetAt = typeof memorySettings.resetInstant === "function" ? await memorySettings.resetInstant(userId).catch(() => null) : null;
     if (resetAt && typeof at === "number" && Number.isFinite(at) && at < Date.parse(resetAt)) return answer("before_reset");
     // The engine's templates are where "what is never kept" lives. While they cannot be confirmed loaded, the engine would
     // extract by its built-in types, which copy quoted messages into memory: nothing is sent to it.

@@ -18,7 +18,7 @@ test("an unrouted prompt that names an installed tool is routed by the classifie
   const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local",
     bootstrapUser: "", bootstrapPassword: "", stateStore: "postgres", requireSharedStateStore: true, databaseUrl: database.url,
     evolutionEnabled: true, operatorUsers: "evolution-operator", evimedWorkloadSigningSecret: randomBytes(32).toString("hex"),
-    researchMemory: { configured: false, async status() { return { configured: false }; } } });
+    memorySettings: { configured: false, async status() { return { configured: false }; } } });
   try {
     assert.ok(app.evolution, "the module is composed");
     const address = await app.listen(0, "127.0.0.1");
@@ -66,7 +66,7 @@ test("with the module off an ordinary prompt touches nothing of it: no scope cal
   const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local",
     bootstrapUser: "", bootstrapPassword: "", stateStore: "postgres", requireSharedStateStore: true, databaseUrl: database.url,
     evolutionEnabled: false, evimedWorkloadSigningSecret: randomBytes(32).toString("hex"),
-    researchMemory: { configured: false, async status() { return { configured: false }; } } });
+    memorySettings: { configured: false, async status() { return { configured: false }; } } });
   try {
     assert.equal(app.evolution, null);
     const address = await app.listen(0, "127.0.0.1");

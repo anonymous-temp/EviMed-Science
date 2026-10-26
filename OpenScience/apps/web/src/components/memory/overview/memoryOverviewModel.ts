@@ -45,7 +45,7 @@ export function amountOf(count: number): Amount {
 }
 
 /** The document the overview reads: the map's, without its lines and lineages. */
-export type OverviewDoc = Pick<MemoryMap, "summary" | "facets" | "nodes" | "buckets" | "events" | "missing" | "scope"> & { engine?: MemoryMap["engine"] };
+export type OverviewDoc = Pick<MemoryMap, "summary" | "facets" | "nodes" | "buckets" | "events" | "missing" | "scope">;
 
 /**
  * The parts of the capsule the one read of the map answers for. 我的做法 is not one of them: the map folds its marks to a hundred and fifty, and
@@ -275,9 +275,13 @@ export interface ReceivedCard {
   more: number;
 }
 
-/** 收到的: the packs other people shared and this account took in, the newest first, with the switch that puts one in force. */
+/**
+ * 收到的: the packs other people shared and this account took in, the newest first, with the switch that puts one in force. The platform's own
+ * starter packs (「EviMed 证据中心」) are on every shelf and come after the ones a person took in themselves, so they never push those out of the card.
+ */
 export function receivedCard(packs: readonly ReceivedCapsule[]): ReceivedCard {
-  const ordered = [...packs].sort((left, right) => String(right.importedAt ?? "").localeCompare(String(left.importedAt ?? "")) || left.id.localeCompare(right.id));
+  const ordered = [...packs].sort((left, right) => Number(Boolean(left.official)) - Number(Boolean(right.official))
+    || String(right.importedAt ?? "").localeCompare(String(left.importedAt ?? "")) || left.id.localeCompare(right.id));
   return { count: ordered.length, shape: ordered.length === 0 ? "recipe" : "rows", rows: ordered.slice(0, TOP_ROWS), more: Math.max(0, ordered.length - TOP_ROWS) };
 }
 

@@ -77,7 +77,7 @@
       },
       {
         "name": "a figure that belongs to one task",
-        "trigger": "delivered",
+        "trigger": "routine",
         "signal": "run",
         "lesson": "The deck's price slide quoted 99 yuan a seat, taken from this quarter's price list.",
         "expect": {

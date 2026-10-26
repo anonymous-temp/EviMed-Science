@@ -16,9 +16,8 @@
  * one on a subdirectory the runtime controller never mounts, and fail every
  * upload after locking the project (2026-09-21, reproduced live).
  *
- * The paired evaluation creates its own project through the public API
- * (`evals/method-quality/configs/*.json`, `eval-method-*`); it is the platform
- * measuring itself and is hidden the same way.
+ * An evaluation harness creates its own project through the public API
+ * (`eval-*`); it is the platform measuring itself and is hidden the same way.
  *
  * @module internalProjects
  */
@@ -100,7 +99,9 @@ const EVALUATION_CELL_PROJECT = /^methodeval-[a-f0-9]{24}$/;
  * every accepted run was read as the researcher's own work — the learning loop
  * distilled methods from them (two of which then taught every later run to
  * write package bookkeeping into its report) and 「与你相关」 read their topics
- * as the researcher's interests.
+ * as the researcher's interests. Since 2026-10-25 the drivers run in a throwaway
+ * account of their own, deleted when they end, so none of that can reach a
+ * person's account; the name is internal only in an operator's.
  */
 const SELF_MEASUREMENT_PROJECT = /^(?:acceptance|audit)-[a-z0-9-]+$/;
 
@@ -109,8 +110,8 @@ const SELF_MEASUREMENT_PROJECT = /^(?:acceptance|audit)-[a-z0-9-]+$/;
  * runtime (`RuntimeManager.makeRoomFor`), and what a prompt refused behind that
  * stop is named. The owner of the work reads it as "ask again later", never as
  * a failure of the work: the learning loop's job and the source worker's job
- * wait and resume, and the paired evaluation excludes the cell instead of
- * scoring it (`evals/method-quality/run_paired.py`).
+ * wait and resume, and an evaluation harness excludes the cell instead of
+ * scoring it.
  */
 export const RUNTIME_YIELDED_CODE = "runtime_yielded";
 
@@ -143,14 +144,14 @@ export function isInternalProject(projectId) {
 const CLIENT_NAMEABLE_INTERNAL = /^(?:(?:acceptance|audit)-[a-z0-9-]+|eval-method-[a-z0-9-]+)$/;
 
 /**
- * Whether an account may hold the platform's self-measurement projects: an operator, or the
- * deployment's configured acceptance account (`OPEN_SCIENCE_ACCEPTANCE_USERNAME`).
- * @param {{ operatorUsers?: string[], acceptanceUsername?: string } | null | undefined} config @param {unknown} userId
+ * Whether an account may hold the platform's self-measurement projects: an operator. A driver's throwaway account
+ * holds ordinary projects, charged and counted like any researcher's.
+ * @param {{ operatorUsers?: string[] } | null | undefined} config @param {unknown} userId
  */
 export function isMeasurementAccount(config, userId) {
   const id = String(userId ?? "");
   if (!id) return false;
-  return (config?.operatorUsers ?? []).includes(id) || (Boolean(config?.acceptanceUsername) && config?.acceptanceUsername === id);
+  return (config?.operatorUsers ?? []).includes(id);
 }
 
 /**
@@ -161,10 +162,10 @@ export function isMeasurementAccount(config, userId) {
  * A name alone is a waiver anyone can type: `POST /api/projects` takes an id from its caller, and
  * `projectIdFromName` derives one from a researcher's own title (an English "Audit trial" becomes
  * `audit-trial`). So `acceptance-*`, `audit-*` and `eval-method-*` are internal only when the account
- * that owns them is an operator or the acceptance account, and are ordinary projects for everyone
- * else. The names the server makes itself (the loop's, the knowledge base's, the frontier's, an
- * evaluation cell's, the evolution module's) are reserved at creation and stay internal by name.
- * @param {{ operatorUsers?: string[], acceptanceUsername?: string } | null | undefined} config
+ * that owns them is an operator, and are ordinary projects for everyone else. The names the server makes itself
+ * (the loop's, the knowledge base's, the frontier's, an evaluation cell's, the evolution module's) are reserved at
+ * creation and stay internal by name.
+ * @param {{ operatorUsers?: string[] } | null | undefined} config
  * @param {unknown} userId @param {unknown} projectId @returns {boolean}
  */
 export function isInternalProjectOf(config, userId, projectId) {

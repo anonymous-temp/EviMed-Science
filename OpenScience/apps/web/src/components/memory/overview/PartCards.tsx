@@ -39,8 +39,10 @@ function BarRow({ label, count, max, to, name }: { label: string; count: number;
  * bars of the aspects the memory page files them under, more the same bars and the newest three. Never a radar here (the map's 维度 view has
  * it): few points are shown as themselves.
  */
-export function AboutYouCardView({ state, card, native, onRetry, onOpen, onRemember, onChat, errorMessage }: {
-  state: CardState; card: AboutYouCard | null; native: boolean; onRetry: () => void; onOpen: Open; onRemember: () => void; onChat: () => void; errorMessage?: string;
+export function AboutYouCardView({ state, card, onRetry, onOpen, onRemember, onImportFromAssistant, errorMessage }: {
+  state: CardState; card: AboutYouCard | null; onRetry: () => void; onOpen: Open; onRemember: () => void;
+  /** 「从其他 AI 导入」: the second step a card with nothing in it offers (2026-10-25). */
+  onImportFromAssistant?: () => void; errorMessage?: string;
 }) {
   const content = card && card.count > 0 ? card : null;
   const biggest = Math.max(1, ...(card?.bars.map((bar) => bar.count) ?? [1]));
@@ -50,7 +52,12 @@ export function AboutYouCardView({ state, card, native, onRetry, onOpen, onRemem
       drill={{ to: partAddress("you"), label: "在地图里看" }} errorMessage={errorMessage} onRetry={onRetry}
     >
       {!content && (
-        <Recipe action={native ? <RecipeButton onPress={onRemember}>记住这一条</RecipeButton> : <RecipeButton onPress={onChat}>去对话</RecipeButton>}>
+        <Recipe action={(
+          <>
+            <RecipeButton onPress={onRemember}>记住这一条</RecipeButton>
+            {onImportFromAssistant && <RecipeButton onPress={onImportFromAssistant}>从其他 AI 导入</RecipeButton>}
+          </>
+        )}>
           你说过的偏好、背景和写作习惯会记在这里，下次对话自动带上。
         </Recipe>
       )}

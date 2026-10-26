@@ -19,7 +19,7 @@ const SERVER_MADE = [LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, FRONTIER_PROJECT_I
 /** @param {(context: { app: any, base: string, user: any }) => Promise<void>} run @param {Record<string, any>} [overrides] */
 async function withApp(run, overrides = {}) {
   const dataDir = await mkdtemp(path.join(tmpdir(), "os-internal-dispatch-"));
-  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false, memoryExtractionEnabled: false, autopilotEnabled: true, ...overrides });
+  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false, autopilotEnabled: true, ...overrides });
   const address = await app.listen(0, "127.0.0.1");
   const base = `http://127.0.0.1:${address.port}`;
   try {

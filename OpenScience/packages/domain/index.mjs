@@ -302,7 +302,6 @@ export {
   MEMORY_PROMOTION_MIN_OCCURRENCES,
   MEMORY_PROMOTION_MIN_RUNS,
   MAX_ACTIVE_LEARNED_METHODS,
-  HANDBOOK_TEXT_LIMITS,
   METHOD_HARM_TEST,
   METHOD_MOUNT,
   METHOD_SCIENTIFIC_HARM_TEST,
@@ -474,8 +473,9 @@ export {
   transcriptMessageText,
 } from './src/trajectoryDigest.mjs'
 
-// learningEvidence — one reaction of the researcher to a run, as the feedback ledger keeps it (steer, follow-up, result-corrected, silent)
+// learningEvidence — one reaction of the researcher to a run, as the feedback ledger keeps it (steer, follow-up, result-corrected, silent, used)
 export {
+  LEARNING_ACCEPT_VERDICTS,
   LEARNING_CORRECTION_VERDICTS,
   LEARNING_EVIDENCE_KINDS,
   LEARNING_EVIDENCE_LIMITS,
@@ -483,8 +483,12 @@ export {
   LEARNING_EVIDENCE_TRIGGER,
   LEARNING_EVIDENCE_VERDICTS,
   LEARNING_FOLLOW_UP_WINDOW_MS,
+  LEARNING_RULE_VERDICTS,
+  LEARNING_STEER_VERDICTS,
   cleanLearningEvidence,
   isLearningCorrection,
+  isLearningKept,
+  learningRunOutcome,
 } from './src/learningEvidence.mjs'
 
 // skillSupply — a skill package's source, licence, version, scripts, references, dependencies and operations as one
@@ -834,8 +838,6 @@ export {
   formatDependsOn,
   isMethodDigest,
   learnedMethodCardEntry,
-  handbookText,
-  handbookTextFits,
   methodBodySections,
   methodContentDigest,
   mountedMethodDigest,
@@ -888,6 +890,7 @@ export {
   isUnprovenMerge,
   bodyPreservation,
   storedEvidenceQuotes,
+  METHOD_EVIDENCE_QUOTE_LENGTH,
   restartCarried,
   methodLevel,
   methodStrength,

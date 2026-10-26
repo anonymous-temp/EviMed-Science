@@ -1,15 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { factItems, factRowSummary, factRowTitle } from "./memoryItems";
+import { factItems, factRowSummary } from "./memoryItems";
 import { fileStatements, fileSummary, fileTopic, isFileMemory, isProfileLine, memoryText } from "./memoryNative";
-import { legacyProfile, nativeFile, nativeProfile, nativeProfileLine } from "./__fixtures__/memoryProfiles";
+import { nativeFile, nativeProfile, nativeProfileLine } from "./__fixtures__/memoryProfiles";
 
 describe("a memory kept as a file", () => {
-  it("is a file when it has no document, a line when it has one, and neither on the older engine", () => {
+  it("is a file when it has no document and a line when it has one", () => {
     expect(isFileMemory(nativeFile("回答结构", "- x"))).toBe(true);
     expect(isProfileLine(nativeFile("回答结构", "- x"))).toBe(false);
     expect(isProfileLine(nativeProfileLine("临床药师"))).toBe(true);
     expect(isFileMemory(nativeProfileLine("临床药师"))).toBe(false);
-    expect(legacyProfile.records.some((record) => isFileMemory(record) || isProfileLine(record))).toBe(false);
   });
 
   it("names its topic in words and says its statements without bullets or heading marks", () => {
@@ -25,19 +24,15 @@ describe("a memory kept as a file", () => {
     const items = factItems(nativeProfile.records, []);
     const file = items.find((item) => item.kind === "record" && item.record.summary === "回答结构");
     const line = items.find((item) => item.kind === "record" && item.record.value === "所在科室是临床药学部。");
-    expect(file && factRowTitle(file)).toBe("回答结构");
+    expect(file?.text).toBe("回答结构");
     expect(file && factRowSummary(file)).toBe("先给结论，再给依据；表格不超过五列");
-    expect(line && factRowTitle(line)).toBe("所在科室是临床药学部。");
+    expect(line?.text).toBe("所在科室是临床药学部。");
     expect(line && factRowSummary(line)).toBeUndefined();
-    // The older engine's rows are what they were.
-    const old = factItems(legacyProfile.records, []);
-    expect(old.every((item) => factRowSummary(item) === undefined)).toBe(true);
   });
 
   it("edits a file from its whole text, and a sentence from the sentence", () => {
     expect(memoryText(nativeFile("回答结构", "- 先给结论。"))).toBe("- 先给结论。");
     expect(memoryText(nativeProfileLine("所在科室是临床药学部。"))).toBe("所在科室是临床药学部。");
-    expect(memoryText(legacyProfile.records[0])).toBe("临床药师，关注老年人慢病管理。");
   });
 
   it("files itself under the same headings as the kinds it stands for", () => {

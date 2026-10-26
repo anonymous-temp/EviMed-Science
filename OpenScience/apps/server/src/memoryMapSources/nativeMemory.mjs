@@ -1,25 +1,25 @@
 /**
- * THE SEAM FOR THE NATIVE MEMORY ENGINE.
+ * The map's memory source: the account's memory files in OpenViking's native engine.
  *
- * An account switched to OpenViking's native memory engine keeps its memories as files, not as rows of `evimed_memory`. The map
- * must draw them exactly as it draws a PostgreSQL account's, so this source asks a reader for the account's memories in the one
- * shape the store already speaks and hands them to the same function the PostgreSQL source uses (`recordsContribution`): the marks,
- * the lines, the lineages, the radar and the events then cannot differ between the two engines.
+ * An account's memories are files, not rows: this source asks a reader for them in the one shape the memory page's store speaks
+ * and hands them to `recordsContribution` (`records.mjs`), so the marks, the lines, the radar and the events cannot differ from what the
+ * page lists. (A PostgreSQL source over the legacy engine's `evimed_memory.records` stood beside it until that engine was deleted,
+ * 2026-10-25.)
  *
- * What the package that builds the native engine supplies is `readMemories` — and nothing else:
+ * What the store supplies is `readMemories` — and nothing else:
  *
  *   readMemories(request: MapSourceRequest) => Promise<NativeMemories>
  *
  *   NativeMemories = {
  *     records: NativeRecord[],       // the account's memories, newest change first, at most MAP_RECORD_LIMIT
  *     sources?: NativeSource[],      // what each rests on
- *     conflicts?: NativeConflict[],  // the disagreements still open
- *     usage?: Record<string, { count: number }>,   // how often each was handed to a conversation
+ *     conflicts?: NativeConflict[],  // the disagreements still open (a file of the engine has none)
+ *     usage?: Record<string, { count: number }>,   // how often each was handed to a conversation (the engine counts none)
  *   }
- *   NativeRecord = {                 // the shape of `publicRecord` in researchMemory.mjs, the fields the map reads
+ *   NativeRecord = {                 // the shape of `publicRecord` in `nativeMemoryStore.mjs`, the fields the map reads
  *     id: string,                    // the memory's stable id; becomes `memory:<id>`
  *     scope: "user" | "project", scopeId: string,
- *     kind: string,                  // one of MEMORY_KINDS; the memory page's vocabulary
+ *     kind: string,                  // one of MEMORY_KINDS (`memoryKinds.mjs`); the memory page's vocabulary
  *     key: string, value: string, summary: string,
  *     status: "active" | "pending" | "superseded",   // a forgotten memory is not handed over
  *     importance: number,            // 0..1
@@ -28,13 +28,12 @@
  *     supersededBy: string | null,   // the id of the memory that replaced this one
  *     revisions: { version: number, value: string, summary: string, status: string, changedAt: string | null, by?: string, runId?: string }[],
  *   }
- *   NativeSource   = { recordId: string, type: "knowledge_source" | "doi" | "evidence_card" | "frontier_item", id: string, state: "current" | "changed" | "retracted" | "expired" | "unknown", linkedAt: string | null }
+ *   NativeSource   = { recordId: string, type: "knowledge_source" | "doi", id: string, state: "current" | "changed" | "retracted" | "expired" | "unknown", linkedAt: string | null }
  *   NativeConflict = { recordId: string, otherId: string, recordStatus?: string, otherStatus?: string }
  *
- * Until it is wired — `readMemories` absent — this source stands aside and contributes nothing, so a deployment with no native
- * engine behaves exactly as before. Once wired, a throw is that account's `missing: ["native-memory"]` and nothing else. The
- * source applies only to an account whose `request.engine` is `"native"`; the PostgreSQL source stands aside for that account.
- * Back-office fields (who wrote a memory, how sure it is) are not part of this interface and never reach the document.
+ * Without `readMemories` (a deployment with no memory engine) this source stands aside and contributes nothing. Once wired, a throw is
+ * that account's `missing: ["native-memory"]` and nothing else. Back-office fields (who wrote a memory, how sure it is) are not part of
+ * this interface and never reach the document.
  *
  * @module memoryMapSources/nativeMemory
  */
@@ -54,7 +53,7 @@ import { MAP_RECORD_LIMIT, recordsContribution } from "./records.mjs";
 export function createNativeMemorySource({ readMemories = null } = {}) {
   return {
     name: "native-memory",
-    applies: (request) => request.engine === "native" && typeof readMemories === "function",
+    applies: () => typeof readMemories === "function",
     async read(request) {
       const held = await /** @type {NonNullable<typeof readMemories>} */ (readMemories)(request);
       const records = (held?.records ?? []).slice(0, MAP_RECORD_LIMIT)

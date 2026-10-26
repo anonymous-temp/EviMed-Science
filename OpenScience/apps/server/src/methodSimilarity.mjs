@@ -23,8 +23,9 @@
  * When embedding is unavailable (no embedder composed, or a call failed) every answer degrades to the lexical shortlist
  * and says so: the arrays this module returns carry a non-enumerable `mode`, `"embedding"` or `"lexical"`, so a caller
  * can put it in a job result without a comparison against a plain array breaking. `pairs` also carries `topScore`, the
- * highest cosine between any two methods whether or not it reached the floor, so a provisional floor can be read
- * against a real library. A failed call is not retried for
+ * highest cosine between any two methods whether or not it reached the floor, and `distribution`, the median and the ninetieth
+ * percentile of every method's nearest-neighbour cosines (floor or not), so the floor can be read against a real library and
+ * moved by what it shows. A failed call is not retried for
  * `retryAfterMs`, so an embedder that is down costs one request, not one per method per pass.
  *
  * @module methodSimilarity
@@ -133,12 +134,25 @@ function dot(left, right) {
  * @template T
  * @param {T[]} list @param {"embedding" | "lexical"} mode
  * @param {number | null} [topScore] the highest cosine seen between two methods, floor or not (embedding mode)
- * @returns {T[] & {mode: "embedding" | "lexical", topScore?: number | null}}
+ * @param {{p50: number, p90: number, n: number} | null} [distribution] the cosines of the neighbour pairs the shortlist looked at, floor or not (embedding mode)
+ * @returns {T[] & {mode: "embedding" | "lexical", topScore?: number | null, distribution?: {p50: number, p90: number, n: number} | null}}
  */
-function withMode(list, mode, topScore = null) {
+function withMode(list, mode, topScore = null, distribution = null) {
   Object.defineProperty(list, "mode", { value: mode, enumerable: false });
   if (topScore !== null) Object.defineProperty(list, "topScore", { value: topScore, enumerable: false });
+  if (distribution) Object.defineProperty(list, "distribution", { value: distribution, enumerable: false });
   return /** @type {any} */ (list);
+}
+
+/**
+ * The value at a fraction of a sorted list, nearest rank, rounded to four places: what a report quotes as p50 and p90.
+ * @param {readonly number[]} sorted ascending @param {number} fraction
+ * @returns {number}
+ */
+export function quantileOf(sorted, fraction) {
+  if (!sorted.length) return 0;
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(fraction * sorted.length) - 1));
+  return Math.round(sorted[index] * 1e4) / 1e4;
 }
 
 /** @param {any} left @param {any} right @returns {number} */
@@ -248,10 +262,12 @@ export function createMethodSimilarity({ embed = null, logger = null, cacheLimit
    * The pairs of a library that are close enough to be read together: each method's nearest `topK` neighbours at or above
    * `floor`, every unordered pair once, best first. In lexical mode the pairs are `candidatePairs`' (their `score` is the
    * count of shared words, not a cosine), with the same per-method bound. Each pair also carries `overlap`, the same number
-   * under the name the consolidation's grouping already reads.
+   * under the name the consolidation's grouping already reads. The answer's `distribution` is the cosines of the nearest-
+   * neighbour pairs of every method taken whether or not they reached the floor (each unordered pair once), so what the floor
+   * kept out is as visible as what it let through.
    * @param {readonly any[]} methods method documents
    * @param {{topK?: number, floor?: number}} [options]
-   * @returns {Promise<{a: string, b: string, score: number, overlap: number}[] & {mode: "embedding" | "lexical", topScore?: number | null}>}
+   * @returns {Promise<{a: string, b: string, score: number, overlap: number}[] & {mode: "embedding" | "lexical", topScore?: number | null, distribution?: {p50: number, p90: number, n: number} | null}>}
    */
   async function pairs(methods, { topK = METHOD_SIMILARITY_TOP_K, floor = METHOD_SIMILARITY_PAIR_FLOOR } = {}) {
     const list = [...(methods ?? [])];
@@ -261,6 +277,8 @@ export function createMethodSimilarity({ embed = null, logger = null, cacheLimit
         const { methods: methodVectors } = await vectors(list);
         /** @type {Map<string, {a: string, b: string, score: number, overlap: number}>} */
         const found = new Map();
+        /** @type {Map<string, number>} every method's nearest-neighbour pairs, floor or not */
+        const seen = new Map();
         let top = -1;
         for (let left = 0; left < list.length; left += 1) {
           const neighbours = [];
@@ -268,16 +286,19 @@ export function createMethodSimilarity({ embed = null, logger = null, cacheLimit
             if (right === left) continue;
             const score = dot(methodVectors[left], methodVectors[right]);
             if (score > top) top = score;
-            if (score >= floor) neighbours.push({ right, score });
+            neighbours.push({ right, score });
           }
           neighbours.sort((one, two) => two.score - one.score || byId(list[one.right], list[two.right]));
           for (const { right, score } of neighbours.slice(0, Math.max(0, topK))) {
             const [first, second] = left < right ? [left, right] : [right, left];
             const key = `${first}\u0000${second}`;
-            if (!found.has(key)) found.set(key, { a: list[first].id, b: list[second].id, score, overlap: score });
+            seen.set(key, score);
+            if (score >= floor && !found.has(key)) found.set(key, { a: list[first].id, b: list[second].id, score, overlap: score });
           }
         }
-        return withMode([...found.values()].sort((one, two) => two.score - one.score || one.a.localeCompare(two.a) || one.b.localeCompare(two.b)), "embedding", Math.round(top * 1e4) / 1e4);
+        const scores = [...seen.values()].sort((one, two) => one - two);
+        return withMode([...found.values()].sort((one, two) => two.score - one.score || one.a.localeCompare(two.a) || one.b.localeCompare(two.b)), "embedding",
+          Math.round(top * 1e4) / 1e4, { p50: quantileOf(scores, 0.5), p90: quantileOf(scores, 0.9), n: scores.length });
       } catch (error) {
         failed(error);
       }
