@@ -13,7 +13,10 @@ const key = id => `rsi-import:${createHash('sha256').update(id).digest('hex')}`
 
 /** Deployment callbacks are authority, never manifest-supplied attestations.
  * publish/inspect/rollback must be idempotent under operationId and return installed identity.
- * currentTarget runs inside the same database fence used by existing surface publishers.
+ * All publishers of these surfaces MUST use pg_advisory_xact_lock(hashtext(`rsi-activation:${owner}`)).
+ * currentTarget must read the authoritative generation through the supplied transaction client.
+ * select is admission for new executions only: existing immutable run records are never rewritten.
+ * A trusted runPin may retain an admitted revision only while this generation is compatible.
  * verificationOptions must authenticate issuer/evaluator and supply expectedIdentity, qualification and trustStore.
  */
 export class RsiCampaignImporter {
@@ -56,10 +59,19 @@ export class RsiCampaignImporter {
     if(staged.state!=='staged')return staged
     return this.resume(m.id,verified.files)
   }
+  /** Stop is committed before any external compensation. @param {any} client @param {any} stored @param {string} reason @param {string|undefined} [revision] */
+  async stop(client,stored,reason,revision=stored.payload.revision) {
+    return this.write(client,{...stored.payload,...(revision?{revision}:{}),state:'stopped',stopReason:reason,stoppedAt:this.now(),rollbackOperationId:`${stored.payload.operationId}-rollback`},stored.revision)
+  }
+  /** Own active generation may be the live baseline; any third generation is stale. @param {any} row @param {any} current */
+  compatible(row,current) {
+    return rsiCompatibilityIssues({...row.target,baselineRevision:row.phase==='activate' && current?.baselineRevision===row.revision?row.revision:row.previousRevision},current).length===0
+  }
+  /** @param {any} row */
+  expired(row) {return !(Date.parse(row.expiresAt)>Date.parse(this.now()))}
   /** A restart inspects the same operation before publishing. Files are reloaded only through a verified import.
    * @param {string} id @param {any} [files] */
   async resume(id,files) {
-    if(!this.isBound())return {state:'waiting',reason:'campaign_binding_unavailable'}
     return this.transaction(async client=>{
       const stored=await this.read(client,id);if(!stored)conflict('campaign_journal_missing')
       const row=stored.payload;if(row.state!=='staged')return row
@@ -67,7 +79,10 @@ export class RsiCampaignImporter {
       const installed=await adapter.inspect({operationId:row.operationId,surface:row.surface,phase:row.phase})
       const current=await this.currentTarget(row.surface,client)
       const expected={...row.target,baselineRevision:row.phase==='activate' && rsiActivationReceipt(installed,row)?installed.revision:row.target.baselineRevision}
-      if(Date.parse(row.expiresAt)<=Date.parse(this.now()) || rsiCompatibilityIssues(expected,current).length)conflict('campaign_target_changed')
+      // Inspect first: expiry disallows new effects, but cannot hide an already activated effect.
+      if(!this.isBound() || this.expired(row) || rsiCompatibilityIssues(expected,current).length) {
+        return this.stop(client,stored,!this.isBound()?'campaign_binding_unavailable':this.expired(row)?'campaign_bundle_expired':'campaign_target_changed',rsiActivationReceipt(installed,row)?installed.revision:undefined)
+      }
       let proof=installed
       if(!rsiActivationReceipt(proof,row)) {
         if(installed?.installed)conflict('campaign_installed_identity_conflict')
@@ -89,7 +104,7 @@ export class RsiCampaignImporter {
       }
       if(!rsiActivationReceipt(proof,row))conflict('campaign_publication_unwitnessed')
       return this.write(client,{...row,state:'exposed',revision:proof.revision,publishedAt:this.now()},stored.revision)
-    })
+    }).then(async row=>row.state==='stopped'?this.rollback(id):row)
   }
   /** Proof verifier returns bounded execution identities from the actual consumer, never raw user data.
    * @param {string} id @param {any} proof */
@@ -98,8 +113,11 @@ export class RsiCampaignImporter {
     return this.transaction(async client=>{
       const stored=await this.read(client,id);if(!stored)conflict('campaign_journal_missing')
       const row=stored.payload;if(!['exposed','consumer-observed','broadly-active'].includes(row.state))return row
+      const current=await this.currentTarget(row.surface,client)
+      if(this.expired(row) || !this.compatible(row,current))return this.stop(client,stored,'campaign_target_changed')
       const witness=await this.verifyObservation(proof,row)
       if(!witness || witness.operationId!==row.operationId || witness.candidateDigest!==row.candidateDigest || !['candidate','control','shadow'].includes(witness.arm) || witness.revision!==(witness.arm==='control'?row.previousRevision:row.revision) || typeof witness.id!=='string' || !/^[a-zA-Z0-9_.:-]{1,160}$/.test(witness.id) || !/^\d{4}-\d{2}-\d{2}$/.test(witness.day) || !['ok','error','critical'].includes(witness.outcome))conflict('campaign_consumer_witness_invalid')
+      if(witness.consumerDigest!==undefined && witness.consumerDigest!==row.evidenceReferences.consumerDigest)conflict('campaign_consumer_witness_invalid')
       if(witness.outcome==='critical' && !['corrupt-bytes','unauthorized-behavior','incompatible-generation','deterministic-regression'].includes(witness.criticalCode))conflict('campaign_consumer_witness_invalid')
       const o=structuredClone(row.observations)
       if(o.witnessIds.includes(witness.id))return row
@@ -120,11 +138,11 @@ export class RsiCampaignImporter {
   }
   /** Exact prior compatible generation only; customer outputs and history are untouched. @param {string} id */
   async rollback(id) {
-    if(!this.isBound())return {state:'waiting',reason:'campaign_binding_unavailable'}
     return this.transaction(async client=>{
       const stored=await this.read(client,id);if(!stored)conflict('campaign_journal_missing')
       const row=stored.payload;if(row.state!=='stopped')return row
       const current=await this.currentTarget(row.surface,client)
+      if(!row.revision)return {...row,reason:'campaign_no_external_generation'}
       if(current.dependencyDigest!==row.target.dependencyDigest || ![row.revision,row.previousRevision].includes(current.baselineRevision))return {...row,reason:'campaign_rollback_incompatible'}
       const adapter=this.adapters[row.kind]
       if(!adapter?.rollback)return {...row,reason:'campaign_rollback_unavailable'}
@@ -136,10 +154,26 @@ export class RsiCampaignImporter {
   /** Registry supplies both revisions and selection; consumer reports chosen revision including controls.
    * @param {string} surface @param {any} context */
   async select(surface,context={}) {
-    return this.transaction(async client=>{
-      const result=await client.query("SELECT payload FROM evimed_product.documents WHERE user_id=$1 AND kind='knowledge' AND payload->>'recordType'='rsi-campaign-import' AND payload->>'surface'=$2 AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 1",[this.owner,surface])
-      const row=result.rows[0]?.payload
-      return row?rsiCampaignSelection(row,context):{revision:(await this.currentTarget(surface,client)).baselineRevision,arm:'control'}
+    const result=await this.transaction(async client=>{
+      const current=await this.currentTarget(surface,client)
+      const records=await client.query("SELECT payload,revision FROM evimed_product.documents WHERE user_id=$1 AND kind='knowledge' AND payload->>'recordType'='rsi-campaign-import' AND payload->>'surface'=$2 AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 1 FOR UPDATE",[this.owner,surface])
+      const stored=records.rows[0],row=stored?.payload
+      if(!row)return {selection:{revision:current.baselineRevision,arm:'control'}}
+      if(!this.isBound() || this.expired(row) || !this.compatible(row,current)) {
+        const stopped=['stopped','rolled-back'].includes(row.state)?row:await this.stop(client,stored,!this.isBound()?'campaign_binding_unavailable':this.expired(row)?'campaign_bundle_expired':'campaign_target_changed')
+        return {stopped,selection:{revision:current.baselineRevision===row.revision?null:current.baselineRevision,arm:'control',reason:stopped.stopReason??'campaign_generation_stopped'}}
+      }
+      if(['stopped','rolled-back'].includes(row.state))return {selection:{revision:current.baselineRevision===row.revision?null:current.baselineRevision,arm:'control'}}
+      return {selection:rsiCampaignSelection(row,context)}
     })
+    if(result.stopped?.state==='stopped') {
+      await this.rollback(result.stopped.id)
+      // Re-read after compensation; never return a historical baseline over a newer incumbent.
+      return this.transaction(async client=>{
+        const current=await this.currentTarget(surface,client)
+        return {revision:current.baselineRevision===result.stopped.revision?null:current.baselineRevision,arm:'control',reason:result.selection.reason}
+      })
+    }
+    return result.selection
   }
 }

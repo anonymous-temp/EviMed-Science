@@ -88,3 +88,19 @@ test('expired external activation is reconciled and rolled back under same opera
  const recovered=await new RsiCampaignImporter(f.options).resume('bundle')
  assert.equal(recovered.state,'rolled-back');assert.equal(f.target.baselineRevision,'base');assert.equal(rollbackId,`${active.operationId}-rollback`)
 }))
+test('own active baseline stays eligible until expiry or binding withdrawal, then reconciles incumbent',skip,async()=>{
+ for(const cause of ['expiry','binding','newer'])await withDatabase(async(database,owner)=>{
+  const f=await fixture(database,owner);const receipts=new Map();let rollbackCount=0
+  f.options.activationPolicy=async()=>({mode:'global',allowGlobal:true,minExecutions:10,minDays:3,maxErrors:0})
+  f.options.adapters.policy={inspect:async({phase})=>receipts.get(phase),publish:async input=>{receipts.set(input.phase,{installed:true,phase:input.phase,operationId:input.operationId,candidateDigest:rsiDigest(f.files),revision:'candidate'});if(input.phase==='activate')f.target.baselineRevision='candidate'},rollback:async input=>{rollbackCount++;f.target.baselineRevision=input.revision;return {...input,installed:true}}}
+  let importer=new RsiCampaignImporter(f.options)
+  await importer.importBundle(f.envelope)
+  assert.equal((await importer.select(f.target.surface,{userId:'u',projectId:'p'})).revision,'candidate')
+  if(cause==='expiry'){f.options.now=()=> '2026-10-28T12:00:00Z';importer=new RsiCampaignImporter(f.options)}
+  if(cause==='binding')f.unbind()
+  if(cause==='newer')f.target.baselineRevision='third-incumbent'
+  const selected=await importer.select(f.target.surface,{runPin:'candidate'})
+  assert.equal(selected.revision,cause==='newer'?'third-incumbent':'base')
+  assert.equal(rollbackCount,cause==='newer'?0:1)
+ })
+})
