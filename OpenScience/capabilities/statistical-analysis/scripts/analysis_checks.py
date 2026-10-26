@@ -12,8 +12,8 @@ deduplicated or silently recoded; metrics retain every numerically usable test r
 ``fit_stages=[{"name": "imputer", "fitIds": [...], "idLevel": "patient",
 "predictors": ["age"]}, ...]`` describes ALL fitting stages, including imputation,
 scaling, feature selection, tuning and the final model. idLevel defaults to
-patient; observation IDs must be globally unambiguous when used as fitIds. Omit
-fitIds to say scope is unknown, not clean. predictor_columns names the final
+patient; observation IDs must be globally unambiguous when used as fitIds. Omitted
+or empty fitIds are not checked, never clean. predictor_columns names the final
 predictors. withheld_rows is the count excluded upstream (None means unknown).
 The caller owns these declarations: no check certifies their completeness,
 temporal availability, external validity or the appropriateness of a model.
@@ -31,7 +31,8 @@ as [{"id": "auc", "source": ["analyses", 0, "auc"], "reported": 0.923,
 "absoluteTolerance": 0.0005, "relativeTolerance": 0}]. Paths are typed key/index
 lists, never dotted strings or prose. A comparison passes when absolute difference
 <= max(absoluteTolerance, relativeTolerance * abs(source)); both tolerances default
-to zero. Unknown, null, nonfinite and nonnumeric values are not_checked. This is
+to zero. Unknown, null, nonfinite and nonnumeric values are not_checked. An empty
+comparison list is partial with reason no_comparisons. This is
 only a check of the supplied bindings; research_calculate still owns rendering.
 
 Optional local JSON CLI (reads a file or stdin, emits aggregate JSON to stdout):
@@ -214,8 +215,9 @@ def _fit_scope(rows, stages, patient_column, observation_column, split_column, t
     for stage in stages:
         item = {"stage": stage["name"], "idLevel": stage.get("idLevel", "patient")}
         column = observation_column if item["idLevel"] == "observation" else patient_column
-        if column is None or stage.get("fitIds") is None:
-            reason = "observation_key_undeclared" if column is None else "fit_scope_undeclared"
+        if column is None or not stage.get("fitIds"):
+            reason = ("observation_key_undeclared" if column is None else
+                      "fit_scope_undeclared" if stage.get("fitIds") is None else "fit_scope_empty")
             notes.append(_note("fit_scope", reason, stage=stage["name"]))
             checked.append({**item, "status": "not_checked", "reason": reason})
             continue
@@ -469,7 +471,8 @@ def compare_reported_numbers(results, comparisons):
             checked.append({**item, "status": "match" if difference_exact <= tolerance_exact else "mismatch", "source": binding["source"],
                             "expected": expected, "reported": reported, "absoluteDifference": difference, "tolerance": tolerance})
     counts = Counter(item["status"] for item in checked)
-    return {"schemaVersion": 1, "kind": "reported_number_audit", "status": "partial" if counts["not_checked"] else "complete",
+    return {"schemaVersion": 1, "kind": "reported_number_audit", "status": "partial" if not checked or counts["not_checked"] else "complete",
+            **({"reason": "no_comparisons"} if not checked else {}),
             "scope": "explicit_numeric_bindings_only", "proseChecked": False, "comparisons": checked,
             "counts": {"requested": len(checked), "matched": counts["match"], "mismatched": counts["mismatch"], "notChecked": counts["not_checked"]}}
 
