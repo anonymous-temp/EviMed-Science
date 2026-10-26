@@ -1,12 +1,9 @@
 [Unit]
-Description=Owner configured offline campaign
+Description=Offline RSI campaign (frontier selection), monthly, on the lab host
+After=docker.service network-online.target
+Requires=docker.service
 [Service]
 Type=oneshot
-User=rsi-lab
-WorkingDirectory=/srv/rsi-lab/release/OpenScience
-EnvironmentFile=/etc/rsi-lab/launcher.env
-ExecStart=/usr/bin/node evals/rsi-campaigns/run.mjs resume /run/rsi-lab/manifest.json /run/rsi-lab/inputs.json /run/rsi-lab/config.json
-NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/srv/rsi-lab
+ExecStart=/usr/local/lib/evimed-rsi/rsi-lab-monthly.sh
+TimeoutStartSec=12h
+Nice=10

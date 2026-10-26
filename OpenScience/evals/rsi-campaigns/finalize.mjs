@@ -54,18 +54,24 @@ export async function finalizeCampaign({completed,manifest,inputs,files,evidence
  if(manifest.surface!=='frontier-selection'||files.length!==1||files[0].path!=='policy.json'||files[0].content!==canonicalRsiJson({selectionThreshold:state.frozenPolicy.threshold}))fail('campaign_frozen_candidate_changed');
  const expected={binding,candidateDigest,frozenPolicyDigest:state.frozenPolicyDigest,registrationDigest:manifest.registration.digest,datasetDigest:rsiDigest(inputs.sources),consumerDigest,corpusDigest:confirmation.digest};
  if(Object.entries(expected).some(([k,v])=>evidence[k]!==v)||Date.parse(evidence.confirmationOpenedAt)<=Date.parse(state.frozenAt)||!Number.isFinite(Date.parse(evidence.confirmationOpenedAt))||Date.parse(evidence.confirmationOpenedAt)>Date.parse(now))fail('campaign_evidence_binding_changed');
- const roots=inputs.registration.sourceRoots;
- if(!roots||!Array.isArray(roots[dev.id])||!roots[dev.id].length||!Array.isArray(roots[confirmation.id])||!roots[confirmation.id].length||roots[dev.id].some(r=>roots[confirmation.id].includes(r)))fail('campaign_confirmation_not_independent');
+ // A production bundle never comes from synthetic data, and its confirmation days follow development's with no shared row.
+ if(manifest.data.classification==='synthetic')fail('campaign_evidence_scope_not_release_eligible');
+ const devSource=inputs.sources[dev.id],confirmSource=inputs.sources[confirmation.id];
+ const devDays=(devSource?.days??[]).map(d=>d.day),confirmDays=(confirmSource?.days??[]).map(d=>d.day);
+ if(!devDays.length||!confirmDays.length||devDays.some(d=>confirmDays.includes(d))||[...devDays].sort().at(-1)>=[...confirmDays].sort()[0])fail('campaign_confirmation_not_independent');
+ const devIds=new Set(devSource.days.flatMap(d=>d.rows.map(r=>String(r.id))));
+ if(confirmSource.days.some(d=>d.rows.some(r=>devIds.has(String(r.id)))))fail('campaign_confirmation_not_independent');
  const consumerProof=evidence.consumerProof;
  if(!consumerProof||consumerProof.executed!==true||consumerProof.consumerDigest!==consumerDigest||consumerProof.candidateDigest!==candidateDigest||consumerProof.baselineRevision!==currentTarget.baselineRevision||consumerProof.corpusDigest!==confirmation.digest||consumerProof.resultDigest!==state.stages.confirmation.resultDigest)fail('campaign_consumer_proof_untrusted');
  const q=evidence.qualification, statistics=evidence.statistics;
  if(!state.evaluation?.statisticsInput || rsiDigest(statistics)!==rsiDigest(state.evaluation.statisticsInput) || rsiDigest(statistics.observations)!==state.evaluation.observationDigest)fail('campaign_measured_evidence_changed');
  const groupProof=evidence.sourceGroupProof;
- if(!Array.isArray(groupProof)||groupProof.length!==statistics?.registration?.groups?.length||new Set(groupProof.map(g=>g.sourceRoot)).size!==groupProof.length||new Set(groupProof.map(g=>g.id)).size!==groupProof.length||groupProof.some(g=>g.exposure!=='sealed'||!roots[confirmation.id].includes(g.sourceRoot)||!statistics.registration.groups.some(row=>row.id===g.id)))fail('campaign_source_group_proof_invalid');
+ if(!Array.isArray(groupProof)||groupProof.length!==statistics?.registration?.groups?.length||new Set(groupProof.map(g=>g.day)).size!==groupProof.length||new Set(groupProof.map(g=>g.id)).size!==groupProof.length||groupProof.some(g=>g.exposure!=='sealed'||!confirmDays.includes(g.day)||!statistics.registration.groups.some(row=>row.id===g.id&&row.day===g.day)))fail('campaign_source_group_proof_invalid');
  if(!q||q.status!=='qualified'||!profile.qualificationDigests?.includes(rsiDigest(q))||!q.claims?.includes(manifest.claim)||q.consumerDigest!==consumerDigest||q.procedureDigest!==rsiDigest(statistics.registration.procedure)||!profile.procedureDigests?.includes(q.procedureDigest)||(!Number.isFinite(Date.parse(q.expiresAt))||Date.parse(q.expiresAt)<=Date.parse(now)))fail('campaign_procedure_not_qualified');
  if(purpose!=='production'||q.testOnly===true||q.evidenceScope!=='population-task-family')fail('campaign_evidence_scope_not_release_eligible');
  if(rsiDigest(statistics.registration)!==rsiDigest(inputs.registration.statistics)||statistics.receipt.confirmation_exposed!==false||statistics.receipt.look!==1||!Object.hasOwn(statistics.registration.claims,manifest.claim)||manifest.registration.procedure!==statistics.registration.procedure.id)fail('campaign_statistics_binding_changed');
- const evaluated=await evaluateStatistics({...statistics,receipt:{...statistics.receipt,now,registration_digest:'bound-by-runner'}},{pythonExecutable:statisticsPython,modulePath:statisticsModulePath});
+ // The evaluator's own attested digest is re-checked by the statistics; it is never filled in here.
+ const evaluated=await evaluateStatistics({...statistics,receipt:{...statistics.receipt,now:now.replace(/Z$/,'+00:00')}},{pythonExecutable:statisticsPython,modulePath:statisticsModulePath});
  if(evaluated.registration_digest!==rsiDigest(statistics.registration))fail('campaign_statistics_digest_mismatch');
  if(evaluated.decision!=='qualified'||evaluated.evidenceScope!=='population-task-family')fail('campaign_statistics_not_qualified');
  if(loadSigners)({publisher,evaluator}=await loadSigners());
@@ -84,14 +90,17 @@ export async function finalizeCli(configPath) {
  const c=await readRsiDeploymentRecord(configPath);
  if(!configPath?.startsWith('/run/rsi-lab/')||c.profileRef&&!c.profileRef.startsWith('/run/rsi-lab/'))fail('campaign_owner_mount_required');
  // Explicit owner configuration only; no environment-selected credential chain or executable adapters.
- if(c.purpose!=='production'||!c.publisher?.credentialRef||!c.evaluator?.credentialRef)fail('campaign_signer_unavailable');
+ if(c.purpose!=='production'||[c.publisher,c.evaluator].some(signer=>signer?.provider!=='file'&&!signer?.credentialRef))fail('campaign_signer_unavailable');
  const input=JSON.parse(await readFile(c.inputPath,'utf8'));
  const profile=await readRsiDeploymentRecord(c.profileRef);
  if(profile.testOnly===true)fail('campaign_evidence_scope_not_release_eligible');
  const loadSigners=async()=>({publisher:await createCampaignSigner(c.publisher),evaluator:await createCampaignSigner(c.evaluator)});
  let incidentTransport;
  if(input.manifest.data.classification==='authorized-incident') {const {createRsiOssTransport}=await import('../../apps/server/src/rsiOssTransport.mjs');incidentTransport=await createRsiOssTransport(c.transport);}
- const envelope=await finalizeCampaign({...input,profile,currentTarget:c.currentTarget,root:c.consumerRoot,closurePaths:c.closurePaths,loadSigners,incidentTransport,statisticsPython:c.statisticsPython??'python3',closureSettings:c.closureSettings??{},closurePins:c.closurePins??{},statisticsModulePath:c.statisticsModulePath});
+ // A lab without a production channel declares `currentTarget: "manifest"`: the bundle carries the campaign's target and the
+ // production importer makes the compare-and-swap against what it serves at import time.
+ const currentTarget=c.currentTarget==='manifest'?input.manifest?.target:c.currentTarget;
+ const envelope=await finalizeCampaign({...input,profile,currentTarget,root:c.consumerRoot,closurePaths:c.closurePaths,loadSigners,incidentTransport,statisticsPython:c.statisticsPython??'python3',closureSettings:c.closureSettings??{},closurePins:c.closurePins??{},statisticsModulePath:c.statisticsModulePath});
  await writeFile(c.outputPath,`${JSON.stringify(envelope)}\n`,{flag:'wx',mode:0o600});
  return {status:'signed',bundleDigest:rsiDigest(envelope)};
 }

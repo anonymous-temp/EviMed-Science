@@ -1,7 +1,8 @@
 /** Public RSI campaign contracts. Validation checks shape, never grants source or signing authority. */
 export const RSI_CAMPAIGN_LIMITS = Object.freeze({ campaignCny: 1000, monthCny: 30000 })
 export const RSI_CAMPAIGN_SCHEMA_VERSION = 1
-export const RSI_CAMPAIGN_CLAIMS = Object.freeze(['efficiency', 'targeted-repair', 'absolute-contract'])
+/** `superiority` is for a deterministic consumer whose arms make no model call: quality alone is claimed, cost is not. */
+export const RSI_CAMPAIGN_CLAIMS = Object.freeze(['efficiency', 'targeted-repair', 'superiority', 'absolute-contract'])
 export const RSI_CAMPAIGN_SURFACES = Object.freeze({
   'frontier-selection': { kind: 'policy', consumer: 'frontier-mix', activation: 'shadow' },
   'frontier-screen': { kind: 'policy', consumer: 'frontier-screen', activation: 'shadow' },
@@ -42,7 +43,9 @@ export function rsiCampaignIssues(value) {
   const budget = value.budget
   if (!keysWithin(budget, ['campaignCny', 'monthCny']) || !finite(budget.campaignCny) || budget.campaignCny <= 0 || budget.campaignCny > RSI_CAMPAIGN_LIMITS.campaignCny
     || !finite(budget.monthCny) || budget.monthCny <= 0 || budget.monthCny > RSI_CAMPAIGN_LIMITS.monthCny || budget.campaignCny > budget.monthCny) issues.push('campaign_budget_invalid')
-  if (!keysWithin(value.models, ['solver', 'improver', 'reviewer']) || !['solver', 'improver', 'reviewer'].every(role => modelIdentity(value.models?.[role]))) issues.push('campaign_model_invalid')
+  // A registered grid (a threshold sweep) proposes without a model; only the improver may say so.
+  const gridImprover = keysWithin(value.models?.improver, ['provider', 'model']) && value.models.improver.provider === 'none' && value.models.improver.model === 'registered-grid'
+  if (!keysWithin(value.models, ['solver', 'improver', 'reviewer']) || !['solver', 'improver', 'reviewer'].every(role => modelIdentity(value.models?.[role]) || (role === 'improver' && gridImprover))) issues.push('campaign_model_invalid')
   if (rsiCompatibilityIssues(value.target, value.target).length || value.target?.surface !== value.surface) issues.push('campaign_target_invalid')
   if (!keysWithin(value.registration, ['digest', 'procedure', 'claim']) || !digest(value.registration.digest) || !identifier(value.registration.procedure)
     || value.registration.claim !== value.claim) issues.push('campaign_registration_invalid')
@@ -77,7 +80,9 @@ export function rsiLabBindingIssues(binding) {
       && /^oss-[a-z0-9-]+\.aliyuncs\.com$/.test(url.hostname) && identifier(transport?.region)
       && url.hostname === `oss-${transport.region}.aliyuncs.com` && transport.region === host?.region
   } catch { /* unbound or invalid endpoints never fall back to a production URL */ }
-  if (!record(transport) || !endpoint || !bucket(transport.incidentBucket) || !bucket(transport.bundleBucket) || transport.incidentBucket === transport.bundleBucket) issues.push('campaign_transport_unavailable')
+  // `{kind: 'none'}` is a lab without the incident/bundle channels: public and synthetic campaigns run, an incident campaign does not.
+  const none = record(transport) && transport.kind === 'none' && Object.keys(transport).length === 1
+  if (!none && (!record(transport) || !endpoint || !bucket(transport.incidentBucket) || !bucket(transport.bundleBucket) || transport.incidentBucket === transport.bundleBucket)) issues.push('campaign_transport_unavailable')
   if (!record(binding?.signer) || !identifier(binding.signer.keyId) || !digest(binding.signer.publicKeySha256)) issues.push('campaign_signer_unavailable')
   return issues
 }

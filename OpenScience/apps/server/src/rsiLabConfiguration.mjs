@@ -7,7 +7,7 @@ export function rsiLabConfigurationIssues(configuration) {
   const issues = rsiLabBindingIssues(configuration);
   if (configuration?.host?.role !== undefined && configuration.host.role !== 'rsi-lab') issues.push('campaign_host_unavailable');
   if (configuration && Object.keys(configuration).some(key => !['host', 'transport', 'signer', 'authority', 'budget', 'providers'].includes(key))) issues.push('campaign_lab_configuration_invalid');
-  const sections = {host:['provider','purpose','instanceId','region','role'],transport:['endpoint','region','incidentBucket','bundleBucket'],signer:['keyId','publicKeySha256'],authority:['role','accountId','dataDir','databaseRole'],budget:['campaignCny','monthCny'],providers:['deepseekFlash','qwenMax']};
+  const sections = {host:['provider','purpose','instanceId','region','role'],transport:['kind','endpoint','region','incidentBucket','bundleBucket'],signer:['keyId','publicKeySha256'],authority:['role','accountId','dataDir','databaseRole'],budget:['campaignCny','monthCny'],providers:['deepseekFlash','qwenMax']};
   for (const [section, allowed] of Object.entries(sections)) {
     const value = configuration?.[section];
     if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !allowed.includes(key))) issues.push('campaign_lab_configuration_invalid');

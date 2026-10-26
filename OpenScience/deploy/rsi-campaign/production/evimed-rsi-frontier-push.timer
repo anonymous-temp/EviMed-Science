@@ -1,0 +1,8 @@
+[Unit]
+Description=Monthly frontier snapshot for the RSI lab: the 1st at 00:30 Asia/Shanghai
+[Timer]
+OnCalendar=*-*-01 00:30:00 Asia/Shanghai
+Persistent=true
+Unit=evimed-rsi-frontier-push.service
+[Install]
+WantedBy=timers.target
