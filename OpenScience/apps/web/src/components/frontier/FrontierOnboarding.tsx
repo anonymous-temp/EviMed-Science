@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   FRONTIER_ONBOARDING_LIMITS,
   FRONTIER_READER_ROLE_LABELS_ZH,
@@ -28,6 +28,9 @@ const TAGS_OFFERED = 12;
  * chosen specialties). 跳过 is always there, and whatever was chosen before it is kept. Finished or skipped, the card is gone for
  * good; the answer is changed later in 「管理关注」 (`mode="edit"`, the same card with 取消 instead of 跳过). The ranking that reads
  * the answer is the server's; the card only asks.
+ *
+ * The card is a form: its one primary button is the form's submit — 下一步, then 完成 — and the action of the questions above it, not
+ * the page's (the page's own primary action stands in its header).
  */
 export function FrontierOnboarding({ initial = null, mode = "first", onClose }: {
   /** The answer so far (editing it). */
@@ -73,9 +76,18 @@ export function FrontierOnboarding({ initial = null, mode = "first", onClose }: 
   const ready = step === "role" ? role !== null : step === "specialties" ? specialties.length >= FRONTIER_ONBOARDING_LIMITS.specialtiesMin : true;
   // The chosen specialties have no tag in use yet: nothing to pick, and finishing is the one thing left.
   const noTags = step === "interests" && !hot.loading && offered.length === 0;
-  const finish = <Button size="sm" loading={saving} disabled={specialties.length < FRONTIER_ONBOARDING_LIMITS.specialtiesMin} onClick={() => void save(true)}>完成</Button>;
+  const canFinish = specialties.length >= FRONTIER_ONBOARDING_LIMITS.specialtiesMin;
+  const finish = <Button type="submit" size="sm" loading={saving} disabled={!canFinish}>完成</Button>;
+  // The submit is the step's one way on: the next question, or, on the last, the answer saved as finished.
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (saving) return;
+    if (step !== "interests") {
+      if (ready) setStep(STEPS[index + 1]);
+    } else if (canFinish) void save(true);
+  };
   return (
-    <section aria-labelledby="frontier-onboarding-title" data-frontier-onboarding="" className="rounded-card border border-border bg-surface p-4">
+    <form aria-labelledby="frontier-onboarding-title" data-frontier-onboarding="" onSubmit={submit} className="rounded-card border border-border bg-surface p-4">
       <header className="flex items-center gap-2">
         <h2 id="frontier-onboarding-title" className="min-w-0 flex-1 text-body font-semibold leading-6 text-text">{QUESTIONS[step]}</h2>
         <span className="shrink-0 text-caption tabular-nums text-text-3" aria-label={`第 ${index + 1} 步，共 ${STEPS.length} 步`}>{index + 1}/{STEPS.length}</span>
@@ -130,10 +142,10 @@ export function FrontierOnboarding({ initial = null, mode = "first", onClose }: 
       <footer className="mt-4 flex items-center gap-2">
         {index > 0 && <Button variant="secondary" size="sm" disabled={saving} onClick={() => setStep(STEPS[index - 1])}>上一步</Button>}
         {step !== "interests"
-          ? <Button size="sm" disabled={!ready || saving} onClick={() => setStep(STEPS[index + 1])}>下一步</Button>
+          ? <Button type="submit" size="sm" disabled={!ready || saving}>下一步</Button>
           : !noTags && finish}
       </footer>
-    </section>
+    </form>
   );
 }
 
