@@ -136,7 +136,7 @@ Mobile navigation must close after a destination is selected, move focus into th
 | Tag | Noninteractive classification/state | Never masquerade as a control |
 | Filter chip | Changes a query/selection | Pressed state and clear/reset behavior |
 | Tab | A related view in one context | Tab/panel association and correct keyboard activation |
-| Switch | Immediate, reversible preference | Optimistic selection with pending lock and failure rollback; delayed runtime activation uses an explicit apply button and effective-time status, not an on/off promise |
+| Switch | Immediate, reversible preference; also the saved choice of a setting that takes effect in a later runtime | Optimistic selection with pending lock and failure rollback; a delayed runtime activation is a labelled switch for what was saved with its effective-time status beside it (integration review 2026-10-26: 「应用启用/应用停用」 text buttons read as states and dropped the label), never an on/off promise of immediate effect |
 
 Keep existing sizes 28 small, 36 default and 44 primary, with 16/20px icons and consistent stroke. Actual pointer targets must meet WCAG 2.5.8 or a valid exception; 44px is a preferred touch target, not a blanket AA minimum. A small icon can have a larger invisible hit area. Hover-only controls must also appear on focus and have a touch path.
 
@@ -282,7 +282,7 @@ Owner **H** for shared host mutations; **B** when persistence or runtime activat
 
 A transport timeout after submission may have an unknown server outcome. Do not blindly roll back, resubmit or invent a sixth UI success: retain the submitted intent under `failed-kept` with an explicit unknown-outcome marker, then reconcile by request/version identity. Late earlier responses cannot overwrite newer user intent. Read lifecycle and mutation lifecycle are different state machines.
 
-An immediate reversible Switch may move optimistically once, then locks at that requested position while pending; it does not keep moving with retries. A confirmed failure reverts it. Scope, invariant label and error remain visible. Configuration that takes effect only in a later runtime/session uses an Apply/Enable action plus persisted/effective status rather than a switch that implies immediate activation.
+An immediate reversible Switch may move optimistically once, then locks at that requested position while pending; it does not keep moving with retries. A confirmed failure reverts it. Scope, invariant label and error remain visible. Configuration that takes effect only in a later runtime/session is a labelled switch for the saved choice with its persisted/effective status beside it (「已保存，下次对话生效」), so nothing implies immediate activation (integration review 2026-10-26).
 
 ### DS21.3 Undo and unsaved work
 

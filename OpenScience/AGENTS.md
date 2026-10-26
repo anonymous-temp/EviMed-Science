@@ -243,8 +243,8 @@ per-project workspace + JSONL provenance.
   buttons/inputs/empty states; keep the four-state discipline (loading skeleton /
   empty / error-with-retry / success) on every list page. Apply the full read and mutation state
   contracts: unknown is not zero; first-read and refresh failures are distinct; useful old results and
-  drafts are preserved with local recovery. Switches are immediate reversible preferences, and
-  activation in a later runtime uses an explicit action and an effective-time status. An
+  drafts are preserved with local recovery. Switches are reversible preferences; a setting that takes effect
+  in a later runtime is a labelled switch for the saved choice with its effective-time status beside it. An
   `aria-disabled` busy button needs a real duplicate-activation guard.
 - Each touched public component adopts the nine-field JSDoc header in `DESIGN.md` (anatomy, variants,
   states, hit area, keyboard, long content, theme, responsive, verification), written from its real
