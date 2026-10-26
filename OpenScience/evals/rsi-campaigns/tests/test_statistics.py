@@ -10,7 +10,7 @@ SPEC.loader.exec_module(MODULE)
 
 def fixture(claim='efficiency', mode='paired-t', n=40):
     groups = [{'id': str(i), 'family': 'office', 'failure_slice': i < n // 2} for i in range(n)]
-    registration = {'version': 1, 'mode': mode, 'groups': groups, 'G_target': n,
+    registration = {'version': 1, 'paid_cost_budget': 1000, 'consumer_id': 'test-consumer', 'corpus_digest': 'test-corpus', 'mode': mode, 'groups': groups, 'G_target': n,
                     'claims': {claim: 0.05}, 'expires_at': '2030-01-01T00:00:00+00:00',
                     'cost_identity': 'all paid attempts including failures and evaluator',
                     'families': {'office': {'margin': 0.03, 'repeats': 1 if mode == 'deterministic' else 3,
@@ -28,6 +28,7 @@ def fixture(claim='efficiency', mode='paired-t', n=40):
     receipt = {'registration_digest': MODULE.registration_digest(registration), 'confirmation_exposed': False,
                'look': 1, 'complete_costs': True, 'cost_identity': registration['cost_identity'],
                'now': '2026-10-26T00:00:00+00:00', 'expired_budget': False}
+    receipt['deterministic_qualification'] = {'type': 'trusted-deterministic-finite-corpus', 'qualification_id': 'test-external-receipt', 'externally_verified': True, 'consumer_id': 'test-consumer', 'corpus_digest': 'test-corpus'}
     return registration, rows, receipt
 
 
@@ -89,6 +90,30 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
         receipt['registration_digest'] = MODULE.registration_digest(reg)
         self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
+
+    def test_cost_inference_uses_registered_weights_but_retains_paid_total(self):
+        reg, rows, receipt = fixture(mode='deterministic')
+        reg['families']['office']['forms'] = {'original': .9, 'equivalent': .1}
+        receipt['registration_digest'] = MODULE.registration_digest(reg)
+        for row in rows:
+            if row['arm'] == 'candidate': row['cost'] = 0 if row['form'] == 'original' else 2
+        result = MODULE.evaluate(reg, rows, receipt)
+        self.assertEqual(result['decision'], 'qualified')
+        self.assertEqual(result['cost_totals']['candidate'], 80)
+        self.assertAlmostEqual(result['quantities']['efficiency']['cost_contrast']['mean'], -.7)
+
+    def test_empty_slice_tiny_alpha_and_sparse_slice_fail_closed(self):
+        for mutation in ('empty', 'tiny-alpha', 'sparse'):
+            reg, rows, receipt = fixture('targeted-repair', n=40)
+            if mutation == 'empty':
+                for group in reg['groups']: group['failure_slice'] = False
+            if mutation == 'tiny-alpha': reg['claims'] = {'targeted-repair': 1e-300}
+            receipt['registration_digest'] = MODULE.registration_digest(reg)
+            for row in rows:
+                if row['arm'] == 'candidate': row['quality'] += .1 + int(row['group']) * .001
+            result = MODULE.evaluate(reg, rows, receipt)
+            self.assertEqual(result['decision'], 'inconclusive')
+            __import__('json').dumps(result, allow_nan=False)
 
     def test_review_malformed_and_overflow_fail_closed(self):
         for reg, rows, receipt in (([], [], {}), ({}, [[]], {})):

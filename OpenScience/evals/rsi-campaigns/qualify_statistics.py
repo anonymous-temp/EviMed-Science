@@ -2,7 +2,12 @@
 import argparse
 import json
 import numpy as np
-from scipy.stats import beta, t
+from scipy.stats import beta
+import importlib.util
+from pathlib import Path
+_spec = importlib.util.spec_from_file_location('campaign_statistics', Path(__file__).with_name('statistics.py'))
+_statistics = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_statistics)
 
 
 def calibrate(seed=20261026, simulations=20000, groups=80, batch=256):
@@ -31,24 +36,51 @@ def calibrate(seed=20261026, simulations=20000, groups=80, batch=256):
             count = min(batch, simulations - start)
             quality = rng.normal(quality_mean, .05, (count, groups))
             cost = rng.normal(cost_mean, .08, (count, groups))
-            def limits(values):
-                mean = values.mean(axis=1)
-                width = t.ppf(.95, values.shape[1] - 1) * values.std(axis=1, ddof=1) / np.sqrt(values.shape[1])
-                influence = np.max((values - mean[:, None]) ** 2, axis=1) / np.sum((values - mean[:, None]) ** 2, axis=1)
-                return mean - width, mean + width, influence <= .2
-            ql, _, qok = limits(quality + .03)
-            _, cu, cok = limits(cost)
-            accepted = (ql > 0) & (cu <= 0) & qok & cok
-            if claim == 'targeted-repair':
-                lower, _, ok = limits(quality[:, :groups // 2])
-                accepted &= (lower > 0) & ok
-            passed += int(accepted.sum())
+            for index in range(count):
+                q = np.clip(quality[index], -.49, .49)
+                factor = .9 if claim == 'efficiency' else 1.1
+                costs = [(1., float(factor + c)) for c in cost[index]]
+                try:
+                    verdict, _ = _statistics.numeric_decision(q, [.03] * groups,
+                        [i < groups // 2 for i in range(groups)], costs, {claim: .05})
+                except ValueError:
+                    verdict = 'inconclusive'
+                if start == 0 and index == 0:
+                    _validate_wrapper(q, costs, claim, verdict)
+                passed += verdict == 'qualified'
         results.append({'scenario': name, 'claim': claim, 'expected_positive': positive,
                         'qualified': passed, 'simulations': simulations, 'rate': passed / simulations,
                         'binomial_95_upper': 1. if passed == simulations else float(beta.ppf(.95, passed + 1, simulations - passed))})
-    return {'seed': seed, 'groups': groups, 'batch': batch, 'scenarios': results,
-            'scope': 'Pure mathematical Gaussian contrasts only; not end-to-end or universal coverage qualification',
+    qualification_passed = all(s['binomial_95_upper'] <= .05 for s in results if not s['expected_positive'])
+    return {'qualification_passed': qualification_passed, 'allocated_alpha': .05, 'scenario_role': 'registered mathematical qualification controls; no held-back confirmation evidence', 'seed': seed, 'groups': groups, 'batch': batch, 'scenarios': results,
+            'scope': 'Shared-core mathematical clipped Gaussian contrasts with exact wrapper equivalence controls only; not end-to-end or universal coverage qualification',
             'dependencies': {'numpy': np.__version__, 'scipy': __import__('scipy').__version__}}
+
+
+def _validate_wrapper(quality, costs, claim, expected):
+    """Check aggregation, minimum slice size and core parity on each scenario."""
+    n = len(quality)
+    registration = {'version': 1, 'mode': 'paired-t', 'paid_cost_budget': 1000,
+        'groups': [{'id': str(i), 'family': 'calibration', 'failure_slice': i < n // 2} for i in range(n)],
+        'G_target': n, 'claims': {claim: .05}, 'expires_at': '2030-01-01T00:00:00+00:00',
+        'cost_identity': 'all mathematical arm/form/repeat costs',
+        'families': {'calibration': {'margin': .03, 'repeats': 3, 'score_type': 'bounded-continuous',
+            'pilot_rationale': 'Preregistered mathematical calibration scenario, not empirical task-family evidence',
+            'forms': {'original': .5, 'equivalent': .5}}}}
+    rows = []
+    for i in range(n):
+        for arm, arm_index in [('baseline', 0), ('candidate', 1)]:
+            for form in ('original', 'equivalent'):
+                for repeat in range(3):
+                    rows.append({'group': str(i), 'arm': arm, 'form': form, 'repeat': repeat,
+                        'quality': .5 + (float(quality[i]) if arm_index else 0),
+                        'cost': costs[i][arm_index], 'status': 'measured', 'critical_violations': 0})
+    receipt = {'registration_digest': _statistics.registration_digest(registration),
+        'confirmation_exposed': False, 'look': 1, 'complete_costs': True,
+        'cost_identity': registration['cost_identity'], 'now': '2026-10-26T00:00:00+00:00', 'expired_budget': False}
+    actual = _statistics.evaluate(registration, rows, receipt)
+    if actual['decision'] != expected:
+        raise AssertionError(f"shared-core/wrapper mismatch: {expected}, {actual}")
 
 
 if __name__ == '__main__':
