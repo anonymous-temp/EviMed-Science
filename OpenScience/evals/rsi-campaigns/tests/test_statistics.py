@@ -127,6 +127,18 @@ class DecisionTests(unittest.TestCase):
         receipt['registration_digest'] = MODULE.registration_digest(reg)
         self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
 
+    def test_trusted_zero_cost_targeted_repair_finite_corpus(self):
+        reg, rows, receipt = fixture('targeted-repair', mode='deterministic')
+        for row in rows:
+            row['cost'] = 0
+            if row['arm'] == 'candidate': row['quality'] += .1
+        self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'qualified')
+        reg['claims'] = {'efficiency': .05}
+        receipt['registration_digest'] = MODULE.registration_digest(reg)
+        self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'not-qualified')
+        rows[0]['cost'] = None
+        self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
+
     def test_review_malformed_and_overflow_fail_closed(self):
         for reg, rows, receipt in (([], [], {}), ({}, [[]], {})):
             self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
