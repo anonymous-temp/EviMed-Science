@@ -7,7 +7,7 @@ import { after, before, beforeEach, test } from "node:test";
 import { REFERENCE_PRICE_LIST } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { FRONTIER_BRIEF_VERSION } from "../src/frontierBrief.mjs";
-import { FRONTIER_EDITOR_VERSION, FRONTIER_REASON_VERSION, FRONTIER_SCORE_VERSION } from "../src/frontierEditor.mjs";
+import { FRONTIER_EDITOR_VERSION, FRONTIER_REASON_VERSION, FRONTIER_SCORE_VERSION, FRONTIER_TITLE_VERSION } from "../src/frontierEditor.mjs";
 import { FRONTIER_FAITH_VERSION } from "../src/frontierFaith.mjs";
 import { FRONTIER_LEAD_VERSION } from "../src/frontierLead.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
@@ -88,14 +88,17 @@ function fakeEditor() {
 }
 
 test("the arguments: a window of at most thirty days, the steps by name, a resume point", () => {
-  assert.deepEqual(parseArguments([]), { apply: false, days: 30, since: null, steps: ["genre", "lead", "brief", "reason", "facts", "faith"], concurrency: 4, limit: 100_000, minOldTotal: 50 });
+  assert.deepEqual(parseArguments([]), { apply: false, days: 30, since: null, steps: ["genre", "title", "lead", "brief", "reason", "facts", "faith"], concurrency: 4, limit: 100_000, minOldTotal: 50 });
   assert.deepEqual(parseArguments(["--steps", "reason,score,genre", "--min-old-total", "40"]), { apply: false, days: 30, since: null, steps: ["genre", "score", "reason"], concurrency: 4, limit: 100_000, minOldTotal: 40 }, "score only by name, after genre");
   assert.deepEqual(parseArguments(["--apply", "--steps", "reason,genre", "--since", "2026-10-01T00:00:00Z"]).steps, ["genre", "reason"]);
   assert.deepEqual(parseArguments(["--steps", "faith,facts"]).steps, ["facts", "faith"]);
+  assert.deepEqual(parseArguments(["--steps", "reason,title,genre"]).steps, ["genre", "title", "reason"], "title follows genre");
   assert.throws(() => parseArguments(["--days", "31"]));
   assert.throws(() => parseArguments(["--steps", "summary"]));
   const estimate = estimateRewriteCost({ genre: 1, lead: 100, brief: 100, reason: 100 }, REFERENCE_PRICE_LIST.model["deepseek-flash"]);
   assert.ok(estimate.cny > 0 && estimate.cny < 5, `about ¥0.01 an item a step, measured: ${estimate.cny}`);
+  const titles = estimateRewriteCost({ title: 1000 }, REFERENCE_PRICE_LIST.model["deepseek-flash"]);
+  assert.ok(titles.cny > 1 && titles.cny < 3, `about ¥0.0016 a title, measured on 127 sample titles: ${titles.cny}`);
   const checks = estimateRewriteCost({ facts: 100, faith: 100 }, REFERENCE_PRICE_LIST.model["deepseek-flash"]);
   assert.ok(checks.cny > 0.4 && checks.cny < 2, `facts and a check, erring high of the measured ¥0.0045 an item: ${checks.cny}`);
 });
@@ -129,6 +132,108 @@ test("the report asks nothing and writes nothing; --apply writes every step; a s
   const again = await frontierRewrite({ database, editor, threshold: 80, since: SINCE, until: UNTIL, apply: true, steps: writing });
   assert.deepEqual([again.genre.items, again.lead.items, again.brief.items, again.reason.items], [0, 0, 0, 0]);
   assert.deepEqual(editor.asked, { genre: 1, lead: 1, brief: 1, reason: 1 }, "nothing asked twice");
+});
+
+/** The content version the readers' caches follow. */
+const contentVersion = async () => Number((await database.query("SELECT value FROM evimed_frontier.meta WHERE key = 'content_version'")).rows[0]?.value ?? 0);
+
+test("title (c4-title): the report asks nothing; --apply writes the answered titles with their words, a change row and one version bump; refusals and kept titles are stamped; a failed call is not; a second run asks only what was not stamped", options, async () => {
+  const hook = await insertItem(database, { sourceId: "wx", sourceType: "media", evidenceType: null, title: "重磅！司美格鲁肽获批？-医学界官网", titleZh: "重磅！司美格鲁肽获批？-医学界官网",
+    summaryZh: "国家药监局批准司美格鲁肽。", visibleAt: "2026-10-10T00:00:00Z" });
+  const clean = await insertItem(database, { sourceId: "wx", sourceType: "media", evidenceType: null, title: "国家药监局批准司美格鲁肽新适应症", titleZh: "国家药监局批准司美格鲁肽新适应症", visibleAt: "2026-10-10T01:00:00Z" });
+  const english = await insertItem(database, { title: "Oral PCSK9 Inhibition", titleZh: "口服 PCSK9 抑制", summaryZh: "卡片摘要。", visibleAt: "2026-10-10T02:00:00Z" });
+  const refused = await insertItem(database, { sourceId: "wx", sourceType: "media", evidenceType: null, title: "【指南】右心疾病无创影像评估共识", titleZh: "【指南】右心疾病无创影像评估共识", visibleAt: "2026-10-10T03:00:00Z" });
+  const failing = await insertItem(database, { title: "Fails to answer", titleZh: "无法回答", visibleAt: "2026-10-10T04:00:00Z" });
+  const waiting = await insertItem(database, { title: "No Chinese title yet", visibleAt: "2026-10-10T05:00:00Z" });
+  const stamped = await insertItem(database, { title: "Already written", titleZh: "已经写过", visibleAt: "2026-10-10T06:00:00Z" });
+  const outside = await insertItem(database, { title: "Outside the window", titleZh: "窗口之外", visibleAt: "2026-09-01T00:00:00Z" });
+  await database.query("UPDATE evimed_frontier.items SET platform = 'wechat', channel = 'wechat', genre = 'approval', genre_basis = 'code' WHERE id = $1", [hook.id]);
+  await database.query("UPDATE evimed_frontier.items SET editor_diagnostics = $2::jsonb WHERE id = $1", [stamped.id, JSON.stringify({ titleVersion: FRONTIER_TITLE_VERSION })]);
+  await database.query("UPDATE evimed_frontier.items SET editor_diagnostics = $2::jsonb WHERE id = $1", [failing.id, JSON.stringify({ scoreVersion: "keep-me", titleVersion: "frontier-title-1.older" })]);
+  await database.query("UPDATE evimed_frontier.item_texts SET body_excerpt = $2 WHERE item_id = $1", [hook.id, "国家药监局批准司美格鲁肽用于降低心血管事件风险。"]);
+  await database.query("UPDATE evimed_frontier.item_texts SET reader_tidy = $2::jsonb WHERE item_id = $1", [hook.id, JSON.stringify({ sha: "s", source: "excerpt", drop: [] })]);
+
+  /** @type {any[]} */
+  const inputs = [];
+  const editor = { mode: "answer",
+    async writeTitle(/** @type {any} */ input) {
+      inputs.push(input);
+      if (input.titleRaw.startsWith("重磅")) return { titleZh: "国家药监局批准司美格鲁肽用于降低心血管事件风险", basis: "rewritten" };
+      if (input.titleRaw === "国家药监局批准司美格鲁肽新适应症") return { titleZh: input.titleRaw, basis: "kept" };
+      if (input.titleRaw === "Oral PCSK9 Inhibition") return { titleZh: "口服 PCSK9 抑制剂降低 LDL-C", basis: "translated" };
+      if (input.titleRaw === "Fails to answer" && this.mode === "answer") throw Object.assign(new Error("down"), { code: "model_gateway_upstream_unavailable" });
+      return null;
+    } };
+  const report = await frontierRewrite({ database, editor, threshold: 80, since: SINCE, until: UNTIL, steps: ["title"] });
+  assert.deepEqual(inputs, [], "the report asks nothing");
+  assert.deepEqual(report.title, { items: 5, byLanguage: { zh: 3, other: 2 }, titleVersion: FRONTIER_TITLE_VERSION, written: 0, kept: 0, refused: 0, raced: 0 },
+    "not the item with no Chinese title, the stamped one or the one outside the window");
+  assert.deepEqual(report.calls, { title: 5 });
+  assert.equal(report.versions.title, FRONTIER_TITLE_VERSION);
+  assert.equal((await database.query("SELECT count(*)::int AS n FROM evimed_frontier.items WHERE editor_diagnostics->>'titleVersion' = $1", [FRONTIER_TITLE_VERSION])).rows[0].n, 1, "the report wrote nothing");
+
+  const versionBefore = await contentVersion();
+  const applied = await frontierRewrite({ database, editor, threshold: 80, since: SINCE, until: UNTIL, steps: ["title"], apply: true });
+  assert.equal(applied.failed, 1, "the failed call is counted");
+  assert.deepEqual(applied.title, { items: 5, byLanguage: { zh: 3, other: 2 }, titleVersion: FRONTIER_TITLE_VERSION, written: 2, kept: 1, refused: 1, raced: 0 });
+  const hookInput = inputs.find((input) => input.titleRaw.startsWith("重磅"));
+  assert.deepEqual(hookInput, { sourceName: "医药观澜", titleRaw: "重磅！司美格鲁肽获批？-医学界官网", isChinese: true, genre: "approval", summaryZh: "国家药监局批准司美格鲁肽。",
+    text: "国家药监局批准司美格鲁肽用于降低心血管事件风险。", titleZh: "重磅！司美格鲁肽获批？-医学界官网" });
+  const english1 = inputs.find((input) => input.titleRaw === "Oral PCSK9 Inhibition");
+  assert.equal(english1.isChinese, false);
+  assert.equal(english1.titleZh, "口服 PCSK9 抑制");
+
+  const rows = new Map((await database.query(`SELECT id, title_zh, editor_diagnostics, lexemes::text AS lexemes FROM evimed_frontier.items`)).rows.map((row) => [String(row.id), row]));
+  assert.equal(rows.get(hook.id).title_zh, "国家药监局批准司美格鲁肽用于降低心血管事件风险");
+  assert.equal(rows.get(hook.id).editor_diagnostics.titleVersion, FRONTIER_TITLE_VERSION);
+  assert.match(rows.get(hook.id).lexemes, /国家药监局/, "the search words follow the title");
+  assert.equal(rows.get(english.id).title_zh, "口服 PCSK9 抑制剂降低 LDL-C");
+  assert.equal(rows.get(clean.id).title_zh, "国家药监局批准司美格鲁肽新适应症", "a kept title stays");
+  assert.equal(rows.get(clean.id).editor_diagnostics.titleVersion, FRONTIER_TITLE_VERSION, "and is stamped, so it is not asked again");
+  assert.equal(rows.get(refused.id).title_zh, "【指南】右心疾病无创影像评估共识", "a refused answer keeps the title there was");
+  assert.equal(rows.get(refused.id).editor_diagnostics.titleVersion, FRONTIER_TITLE_VERSION, "and is stamped");
+  assert.equal(rows.get(failing.id).title_zh, "无法回答");
+  assert.deepEqual(rows.get(failing.id).editor_diagnostics, { scoreVersion: "keep-me", titleVersion: "frontier-title-1.older" }, "a failed call writes nothing");
+  assert.equal(rows.get(waiting.id).title_zh, null);
+  assert.equal(rows.get(outside.id).title_zh, "窗口之外");
+  const changes = (await database.query("SELECT item_id::text AS id, op, reason FROM evimed_frontier.item_changes WHERE reason = 'title' ORDER BY item_id")).rows;
+  assert.deepEqual(changes.map((row) => row.id).sort(), [hook.id, english.id].sort(), "a change row for each title that moved, none for a kept one");
+  assert.ok(changes.every((row) => row.op === "upsert"));
+  assert.equal(await contentVersion(), versionBefore + 1, "one bump for the batch");
+
+  // A second run asks only what was not stamped: the failed one, and now it is answered.
+  inputs.length = 0;
+  editor.mode = "refuse";
+  const again = await frontierRewrite({ database, editor, threshold: 80, since: SINCE, until: UNTIL, steps: ["title"], apply: true });
+  assert.deepEqual(inputs.map((input) => input.titleRaw), ["Fails to answer"]);
+  assert.deepEqual([again.failed, again.title.items, again.title.refused], [0, 1, 1]);
+  assert.equal(await contentVersion(), versionBefore + 1, "a run that changed no title bumps nothing");
+  inputs.length = 0;
+  const third = await frontierRewrite({ database, editor, threshold: 80, since: SINCE, until: UNTIL, steps: ["title"], apply: true });
+  assert.deepEqual([inputs.length, third.title.items], [0, 0], "nothing asked twice");
+});
+
+test("title (c4-title): a title the pipeline wrote while the answer was being asked is not overwritten and not stamped; a stopped budget asks nothing", options, async () => {
+  const item = await insertItem(database, { title: "Oral PCSK9 Inhibition", titleZh: "口服 PCSK9 抑制", visibleAt: "2026-10-10T02:00:00Z" });
+  const editor = {
+    async writeTitle() {
+      // The pipeline re-edited the item while the call was out.
+      await database.query("UPDATE evimed_frontier.items SET title_zh = '流水线刚写的标题' WHERE id = $1", [item.id]);
+      return { titleZh: "口服 PCSK9 抑制剂降低 LDL-C", basis: "translated" };
+    },
+  };
+  const versionBefore = await contentVersion();
+  const raced = await frontierRewrite({ database, editor, threshold: 80, since: SINCE, until: UNTIL, steps: ["title"], apply: true });
+  assert.deepEqual([raced.failed, raced.title.raced, raced.title.written], [0, 1, 0]);
+  const row = (await database.query("SELECT title_zh, editor_diagnostics FROM evimed_frontier.items WHERE id = $1", [item.id])).rows[0];
+  assert.equal(row.title_zh, "流水线刚写的标题");
+  assert.equal(row.editor_diagnostics?.titleVersion ?? null, null, "the answer was to a title that is no longer there");
+  assert.equal(await contentVersion(), versionBefore);
+  const asked = /** @type {string[]} */ ([]);
+  const stopped = await frontierRewrite({ database, editor: { async writeTitle(/** @type {any} */ input) { asked.push(input.titleRaw); return null; } }, budget: async () => ({ state: "throttled" }),
+    threshold: 80, since: SINCE, until: UNTIL, steps: ["title"], apply: true });
+  assert.equal(stopped.stopped, "budget");
+  assert.deepEqual(asked, []);
 });
 
 test("a refused answer keeps what was there; a budget no longer ok stops the run where it can resume", options, async () => {
