@@ -689,7 +689,7 @@ test("a Chinese source's title follows the title rule: kept when it already does
   assert.equal(refused.result.output?.titleZh, "国家药监局批准司美格鲁肽新适应症");
   assert.deepEqual(refused.counters, { kept: 0, rewritten: 0, refused: 1 });
   assert.equal((await write("国家药监局批准司美格鲁肽新适应症", "")).result.output?.titleZh, "国家药监局批准司美格鲁肽新适应症", "an empty answer keeps the source's");
-  assert.match(FRONTIER_EDIT_INSTRUCTIONS, /原标题是悬念、钩子、问句、感叹，带前缀标签或网站、栏目名后缀，或超过 40 个字时，按同样的写法改写/);
+  assert.match(FRONTIER_EDIT_INSTRUCTIONS, /没有悬念、钩子、问句和感叹号，没有前缀标签和网站、栏目名后缀，也不超过 40 个字，就一字不改地照抄，不要为了写得更好而改写；有其中任一处毛病时才改写/);
   assert.doesNotMatch(FRONTIER_EDIT_INSTRUCTIONS, /原样照抄标题/);
 });
 
@@ -739,12 +739,13 @@ test("the title version is a hash of the title rule and the words about a title:
   for (const instructions of [FRONTIER_EDIT_INSTRUCTIONS, FRONTIER_TITLE_INSTRUCTIONS]) {
     assert.ok(instructions.includes(FRONTIER_TITLE_RULE));
     for (const genre of FRONTIER_GENRES) assert.ok(instructions.includes(FRONTIER_TITLE_GUIDES_ZH[genre]), genre);
-    assert.match(instructions, /带前缀标签或网站、栏目名后缀，或超过 40 个字时/);
+    assert.match(instructions, /没有前缀标签和网站、栏目名后缀，也不超过 40 个字，就一字不改地照抄/);
   }
   // The rule says it once and in plain words: the prefix label, the site or media name, and the 40 characters.
   assert.match(FRONTIER_TITLE_RULE, /开头不加期刊、会议或栏目名加竖线、方括号的前缀/);
   assert.match(FRONTIER_TITLE_RULE, /不带网站或媒体名/);
-  assert.match(FRONTIER_TITLE_RULE, /不超过 40 个字/);
+  assert.match(FRONTIER_TITLE_RULE, /最多 40 个字/);
+  assert.match(FRONTIER_TITLE_RULE, /期刊名写进句子里/);
 });
 
 test("a standalone title: kept, rewritten, translated or refused, with one rewrite that names what was wrong (c4-title)", async () => {
@@ -794,6 +795,33 @@ test("a standalone title: kept, rewritten, translated or refused, with one rewri
   // A call that fails is not an answer: it throws with the code (the step writes nothing for it) - the budget's included.
   await assert.rejects(ask({ titleRaw: hook, isChinese: true, titleZh: hook }, [refuse("usage_budget_exceeded")]), { code: "usage_budget_exceeded" });
   await assert.rejects(ask({ titleRaw: hook, isChinese: true, titleZh: hook }, [title("【审批】司美格鲁肽获批"), refuse("frontier_provider_unavailable")]), { code: "frontier_provider_unavailable" });
+});
+
+test("a standalone title's first answer is held to 40 characters and told by how much to cut; the rewrite is held to the edit's 60 (c4-title)", async () => {
+  const text = "国家药监局批准司美格鲁肽用于降低心血管事件风险，纳入 17,604 例患者，事件降低 20%。";
+  const long = "国家药监局批准司美格鲁肽用于降低成人心血管事件风险的新适应症上市申请";
+  const input = { sourceName: "医学界", titleRaw: "重磅！司美格鲁肽获批？", isChinese: true, titleZh: "重磅！司美格鲁肽获批？", text };
+  assert.equal([...long].length, 34);
+  const over = `${long}，纳入17,604例患者`;
+  assert.ok([...over].length > 40 && [...over].length <= 60);
+  const model = stubModel([() => ({ title_zh: over }), (call) => {
+    assert.match(call.body.messages.at(-1).content, new RegExp(`title_zh 太长：现在 ${[...over].length} 个字，不能超过 40 个字，请删掉至少 ${[...over].length - 40} 个字`));
+    return { title_zh: `${long}，纳入17,604例患者`.replace("成人", "") };
+  }]);
+  const result = await new FrontierEditor(config, { owner, callModel: model.callModel }).writeTitle(input);
+  assert.equal(model.calls.length, 2);
+  assert.equal(result?.basis, "rewritten");
+  // The rewrite may keep a title the edit's check accepts (over 40, within 60): it is not refused for a few characters.
+  const stubborn = stubModel([() => ({ title_zh: over }), () => ({ title_zh: over })]);
+  assert.deepEqual(await new FrontierEditor(config, { owner, callModel: stubborn.callModel }).writeTitle(input), { titleZh: over, basis: "rewritten" });
+  // Past 60 it is refused both times, and the item keeps the title it had.
+  const tooLong = `${over}${over}`;
+  const refused = stubModel([() => ({ title_zh: tooLong }), () => ({ title_zh: tooLong })]);
+  assert.equal(await new FrontierEditor(config, { owner, callModel: refused.callModel }).writeTitle(input), null);
+  // A title within 40 is one call.
+  const brief = stubModel([() => ({ title_zh: "国家药监局批准司美格鲁肽新适应症" })]);
+  assert.equal((await new FrontierEditor(config, { owner, callModel: brief.callModel }).writeTitle(input))?.basis, "rewritten");
+  assert.equal(brief.calls.length, 1);
 });
 
 test("the title call's input states the source: the head of the text at most 600 characters, numbers checked against title, summary and text only (c4-title)", () => {

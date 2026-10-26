@@ -97,8 +97,10 @@ export const FRONTIER_REWRITE_UNSURE = Object.freeze(["news", "commentary", "ind
  */
 export const REWRITE_CALL_TOKENS = Object.freeze({
   genre: { cached: 900, prompt: 1_400, output: 150 },
-  // c4-title's live check (2026-10-26), replaced below by the measured figure.
-  title: { cached: 1_300, prompt: 800, output: 40 },
+  // c4-title's live check (2026-10-26, deepseek-flash, the 127 sample rows: 153 calls, 1.2 to a title because one answer in five is sent
+  // back once for its length): per title, the cached instructions, the rest of the prompt (estimated uncached: the measured run had
+  // the provider's cache warm) and the output. About CNY 0.0016 a title.
+  title: { cached: 1_000, prompt: 650, output: 33 },
   lead: { cached: 1_000, prompt: 2_600, output: 260 },
   brief: { cached: 1_000, prompt: 2_800, output: 520 },
   reason: { cached: 700, prompt: 1_900, output: 120 },

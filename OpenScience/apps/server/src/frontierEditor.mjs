@@ -188,9 +188,9 @@ const TITLE_GUIDE_LINE = FRONTIER_GENRES.map((genre) => `${FRONTIER_GENRE_LABELS
  * rule, rewritten from the source's own facts when it is a hook, a question, an exclamation, carries a prefix label or a site or column
  * suffix, or runs past 40 characters. Said once; the edit's `title_zh` line and the standalone title call both show it.
  */
-const CHINESE_SOURCE_TITLE_SENTENCE = "条目注明「中文信源：是」时：原标题已经写明主体和结果、也没有上面这些毛病，就原样照抄，不要只为换个说法而改写；原标题是悬念、钩子、问句、感叹，带前缀标签或网站、栏目名后缀，或超过 40 个字时，按同样的写法改写，只用原文里有的事实和数字。";
+const CHINESE_SOURCE_TITLE_SENTENCE = "条目注明「中文信源：是」时：原标题写明了主体和结果，没有悬念、钩子、问句和感叹号，没有前缀标签和网站、栏目名后缀，也不超过 40 个字，就一字不改地照抄，不要为了写得更好而改写；有其中任一处毛病时才改写，只改毛病，只用原文里有的事实和数字。";
 /** The one sentence only the standalone title call needs: an item already has a Chinese title, which it keeps when it is right. */
-const TITLE_KEEP_SENTENCE = "条目给了「现有中文标题」时，它已经符合这些写法就原样照抄。";
+const TITLE_KEEP_SENTENCE = "条目给了「现有中文标题」时，它没有上面这些毛病就一字不改地照抄。";
 
 /**
  * The standalone title (c4-title, `scripts/ops/frontier-rewrite.mjs --steps title`): the edit's title rule and genre formulas without the
@@ -556,11 +556,12 @@ export function titleNumberSource(input) {
  * the source - and carry none of the marks. A title that fails is sent back once with what was wrong; the caller keeps the title
  * it had when it fails again.
  * @param {any} answer @param {string} input
- * @param {{ isChinese: boolean, titleRaw: string, titleZh?: string | null }} context
+ * @param {{ isChinese: boolean, titleRaw: string, titleZh?: string | null, limit?: number }} context `limit`: the length past which a
+ *   written title is sent back (default the edit's 60)
  * @returns {{ output: { title_zh: string | null, basis: "kept" | "rewritten" | "translated" | null }, issues: string[],
  *   numbers: { checked: number, missing: Array<{ field: string, raw: string }>, unitMismatches: Array<{ field: string, raw: string }> } }}
  */
-export function verifyTitle(answer, input, { isChinese, titleRaw, titleZh = null }) {
+export function verifyTitle(answer, input, { isChinese, titleRaw, titleZh = null, limit = FRONTIER_TEXT_LIMITS.title }) {
   const noNumbers = { checked: 0, missing: [], unitMismatches: [] };
   const none = { title_zh: null, basis: /** @type {null} */ (null) };
   if (!answer || typeof answer !== "object") return { output: none, issues: ["没有读到 JSON 对象，请只输出一个 JSON 对象。"], numbers: noNumbers };
@@ -575,7 +576,7 @@ export function verifyTitle(answer, input, { isChinese, titleRaw, titleZh = null
     return marks.length ? { output: none, issues: [marksIssue(marks)], numbers: noNumbers }
       : { output: { title_zh: current, basis: "kept" }, issues: [], numbers: noNumbers };
   }
-  const { issues, numbers } = titleIssues(text, titleNumberSource(input));
+  const { issues, numbers } = titleIssues(text, titleNumberSource(input), limit);
   return { output: issues.length ? none : { title_zh: text, basis: isChinese ? "rewritten" : "translated" }, issues: issues.map(({ issue }) => issue), numbers };
 }
 
@@ -1503,12 +1504,13 @@ const marksIssue = (marks) => `title_zh 里不能出现「${marks.join("")}」�
  * `TITLE_MARKS`, every number in the source. The first is the kind a refusal is recorded as; each carries the sentence a rewrite is
  * sent back with (a length is told against the 40 characters the rule asks for, the limit of the check being 60).
  * @param {string} text @param {string} numberSource what the title's numbers are checked against
+ * @param {number} [limit] the length past which a title is sent back (the edit's check: 60)
  */
-function titleIssues(text, numberSource) {
+function titleIssues(text, numberSource, limit = FRONTIER_TEXT_LIMITS.title) {
   /** @type {Array<{ kind: FrontierTitleRefusal, issue: string }>} */
   const issues = [];
   const length = codePoints(text);
-  if (length > FRONTIER_TEXT_LIMITS.title) issues.push({ kind: "length", issue: lengthIssue("title_zh", length, FRONTIER_TITLE_CHARS) });
+  if (length > limit) issues.push({ kind: "length", issue: lengthIssue("title_zh", length, FRONTIER_TITLE_CHARS) });
   if (LINK.test(text)) issues.push({ kind: "link", issue: "title_zh 里不能出现链接或网址。" });
   if (!isChineseProse(text)) issues.push({ kind: "language", issue: "title_zh 要用中文写。" });
   const marks = frontierTitleMarks(text);
@@ -2824,8 +2826,13 @@ export class FrontierEditor {
    */
   async writeTitle(input) {
     const modelInput = buildTitleInput(input);
+    // The first answer is held to the 40 characters the rule asks for, and is told how long it was and by how much to cut (a model
+    // cannot count characters: in the live check of 2026-10-26 one answer in five ran past 40); the rewrite is held to the 60 the
+    // edit's check allows, so a title near the request is not refused for a few characters.
+    let round = 0;
     const result = await this.#write(FRONTIER_TITLE_INSTRUCTIONS, modelInput, {}, TITLE_MAX_TOKENS,
-      { verify: (/** @type {any} */ answer) => verifyTitle(answer, modelInput, { isChinese: input.isChinese, titleRaw: input.titleRaw, titleZh: input.titleZh }) });
+      { verify: (/** @type {any} */ answer) => verifyTitle(answer, modelInput, { isChinese: input.isChinese, titleRaw: input.titleRaw, titleZh: input.titleZh,
+        limit: (round += 1) === 1 ? FRONTIER_TITLE_CHARS : FRONTIER_TEXT_LIMITS.title }) });
     if (result.error) throw Object.assign(new Error(result.error), { code: result.error });
     const titleZh = result.output?.title_zh;
     const basis = result.output?.basis;
