@@ -355,3 +355,8 @@ The memory capsule's next round (a gap list and research of 2026-10-25; the rese
   status, never a fallback). 「与你相关」 reads the person's native memory.
 - No weekly go/no-go inspection before launch; the DashScope endpoint move waits for a workspace id.
 - 「没用的和历史的都不留」: dead code, dead arms and historical leftovers are deleted rather than kept.
+
+
+## Owner decisions adopted 2026-10-26: authorized incident reproduction
+
+One authorized failure incident may supply a useful RSI reproduction; the former five-account threshold and closed-code-only export restriction do not apply to this path. Read only the relevant conversation through existing owner/project access and the deployment's agreements, including clinical rights. Export only purpose-scoped problem, reproduction, expected/actual behavior and exact source-bound quotations, with authoritative authorization, run and revision identifiers. Never export credentials, workload markers, unrelated history or tenant-wide raw databases. Invalidation or deletion stops queued exports and withdraws exported cases through durable tombstones. Existing aggregate signals retain separate account classes with a user floor of one and an independently configured operator floor. This sensor is separate from personal method learning and does not duplicate observation writers.

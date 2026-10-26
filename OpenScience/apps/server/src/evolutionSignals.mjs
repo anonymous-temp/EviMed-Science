@@ -21,7 +21,7 @@ export function evolutionDataShape(dataset) {
   return 'unknown';
 }
 
-/** All user signals stay owner scoped. Only thresholded counts and closed codes become platform inputs. `operatorIds` names the
+/** All user signals stay owner scoped. Aggregate counts and closed codes remain separate from the authorized incident export path. `operatorIds` names the
  * accounts of the operator class and `floors` the number of different accounts each class needs (`evolutionAccountFloors`).
  * @param {{service:any,capabilityIds:()=>Promise<string[]>,operatorIds?:()=>string[],floors?:{user:number,operator:number}}} dependencies */
 export function createEvolutionSignals({ service, capabilityIds, operatorIds = () => [], floors = evolutionAccountFloors() }) {
