@@ -115,6 +115,16 @@ class DecisionTests(unittest.TestCase):
             self.assertEqual(result['decision'], 'inconclusive')
             __import__('json').dumps(result, allow_nan=False)
 
+    def test_registered_half_alpha_and_fixed_slice_protocol(self):
+        reg, rows, receipt = fixture('targeted-repair', n=80)
+        reg['procedure'] = {'id': 'rsi-paired-source-v2', 'test_alpha_fraction': .9, 'minimum_slice_groups': 30}
+        receipt['registration_digest'] = MODULE.registration_digest(reg)
+        self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
+        reg['procedure']['test_alpha_fraction'] = .5
+        reg['procedure']['minimum_slice_groups'] = 1
+        receipt['registration_digest'] = MODULE.registration_digest(reg)
+        self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
+
     def test_review_malformed_and_overflow_fail_closed(self):
         for reg, rows, receipt in (([], [], {}), ({}, [[]], {})):
             self.assertEqual(MODULE.evaluate(reg, rows, receipt)['decision'], 'inconclusive')
