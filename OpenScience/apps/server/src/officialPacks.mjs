@@ -74,8 +74,8 @@ function newCounters() {
     scan: { ok: 0, partial: 0, unavailable: 0 },
     /** A method flagged by the scan and left out of its pack. */
     flagged: 0,
-    /** Accounts' copies made, continued to a newer version, and found current. */
-    adoption: { created: 0, upgraded: 0, unchanged: 0, removed: 0, failed: 0 },
+    /** Accounts' copies made, continued to a newer version, found current, removed, failed, and (reshelved) taken off the shelf again after a failed upgrade. */
+    adoption: { created: 0, upgraded: 0, unchanged: 0, removed: 0, failed: 0, reshelved: 0 },
     /** What a run was given: official cards offered, left out because the person's own method covers the same thing, the nearness could not be read. */
     mount: { offered: 0, leftOutPersonal: 0, deltaUnread: 0 },
     /** The official methods runs opened. */
@@ -315,11 +315,21 @@ export class OfficialPacks {
         // A copy the platform took off because its pack was withdrawn is the platform's to give back when the pack is published again.
         if (copy?.payload?.takenDown || (copy?.deletedAt && copy.payload?.withdrawnByPlatform !== true)) { result.unchanged += 1; continue; }
         let existing = copy ?? null;
+        const givenBack = Boolean(copy?.deletedAt);
         if (copy?.deletedAt) {
           const { withdrawnByPlatform: _withdrawn, ...payload } = copy.payload;
           existing = await this.documents.put(userId, "capsule", copy.id, payload, { expectedRevision: copy.revision, restoreDeleted: true });
         }
-        const outcome = await this.transfers.adoptOfficial(userId, publication, { existing });
+        /** @type {"created" | "upgraded" | "unchanged"} */
+        let outcome;
+        try {
+          outcome = await this.transfers.adoptOfficial(userId, publication, { existing });
+        } catch (error) {
+          // The copy was given back so that it could continue to this version. If it could not, it must not stay on the shelf as it was taken
+          // off — with the approved facts of a version (a withdrawn method among them) that `methodsFor` would mount until the next good pass.
+          if (givenBack) await this.#reshelve(userId, copy.id);
+          throw error;
+        }
         result[outcome] += 1;
         this.counters.adoption[outcome] += 1;
       } catch (error) {
@@ -337,8 +347,7 @@ export class OfficialPacks {
     for (const copy of await this.#copies(userId)) {
       if (live.has(copy.id)) continue;
       try {
-        const marked = await this.documents.put(userId, "capsule", copy.id, { ...copy.payload, withdrawnByPlatform: true }, { expectedRevision: copy.revision });
-        await this.documents.remove(userId, "capsule", copy.id, marked.revision);
+        await this.#takeOff(userId, copy);
         result.removed += 1; this.counters.adoption.removed += 1;
       } catch { clean = false; }
     }
@@ -347,6 +356,28 @@ export class OfficialPacks {
       this.settled.set(userId, stamp);
     }
     return result;
+  }
+
+  /** Take an account's copy off its shelf as the platform's doing, marked so that a later publication of the pack gives it back. @param {string} userId @param {any} copy */
+  async #takeOff(userId, copy) {
+    const marked = await this.documents.put(userId, "capsule", copy.id, { ...copy.payload, withdrawnByPlatform: true }, { expectedRevision: copy.revision });
+    await this.documents.remove(userId, "capsule", copy.id, marked.revision);
+  }
+
+  /**
+   * A copy given back for an upgrade that failed goes off the shelf again, as it was (`#takeOff`), counted and said. Never throws: the upgrade's own
+   * failure is the one that is reported, and a copy that cannot be shelved again is said as well, because it is then the one thing a mount would read wrong.
+   * @param {string} userId @param {string} copyId
+   */
+  async #reshelve(userId, copyId) {
+    try {
+      const current = await this.documents.get(userId, "capsule", copyId);
+      if (!current) return;
+      await this.#takeOff(userId, current);
+      this.counters.adoption.reshelved += 1;
+    } catch (error) {
+      this.report(`official pack copy ${copyId} could not be taken off the shelf again: ${/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.name ?? "error"}`);
+    }
   }
 
   /** An account a person holds: not the platform's own, not an integration's subject. @param {string} userId */
@@ -515,7 +546,7 @@ export function officialPackMetricFamilies(stats) {
     { name: "open_science_official_method_flagged_total", type: "counter", series: [{ value: stats.flagged }],
       help: "Official methods the scan flagged and left out of their pack." },
     { name: "open_science_official_pack_adoptions_total", type: "counter", series: series(stats.adoption, "result"),
-      help: "Accounts' copies of official packs: made, continued to a newer version, found current, removed because the pack is no longer published, or failed (read again next time)." },
+      help: "Accounts' copies of official packs: made, continued to a newer version, found current, removed because the pack is no longer published, failed (read again next time), or taken off the shelf again because a copy given back could not be brought to the version published." },
     { name: "open_science_official_method_mount_total", type: "counter", series: series(stats.mount, "result"),
       help: "Official methods in the mount: offered to a run, left out because the person's own method says the same thing (`leftOutPersonal`), or not decided because the closeness could not be read (`deltaUnread`)." },
     { name: "open_science_official_method_opened_total", type: "counter", series: [{ value: stats.opened }],
