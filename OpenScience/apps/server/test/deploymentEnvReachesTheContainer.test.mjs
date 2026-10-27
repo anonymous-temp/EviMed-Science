@@ -337,6 +337,9 @@ const operatorLevers = {
   // The promotion of a person's general method to the pack of everyone's (2026-10-25): a lever that never arrived would leave the default on, and three a day, whatever the operator set.
   OPEN_SCIENCE_OFFICIAL_PROMOTION_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_OFFICIAL_PROMOTION_PER_DAY: ["open-science-web"],
+  // An account is a voice only in standing (2026-10-27): a floor that never arrived would hold at fourteen days and three runs whatever the operator set.
+  OPEN_SCIENCE_OFFICIAL_PROMOTION_MIN_ACCOUNT_AGE_DAYS: ["open-science-web"],
+  OPEN_SCIENCE_OFFICIAL_PROMOTION_MIN_FINISHED_RUNS: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY: ["open-science-web"],
   // Sharing memory inside the platform (evidence-flywheel F17-F19, 2026-10-05): a lever that does not arrive leaves share links

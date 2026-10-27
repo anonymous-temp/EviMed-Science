@@ -690,6 +690,10 @@ function countSetting(overrides, key, name, fallback) {
  *   pack 「大家的做法」 (`officialPromotion.mjs`), after the code's field checks, a generality judge, a harm judge, the author rule and an independent re-check by a
  *   model of another family. It needs the learning loop on and a review provider that is not DeepSeek: with none, nothing is considered and nothing is spent.
  *   `OPEN_SCIENCE_OFFICIAL_PROMOTION_PER_DAY` (3, at most 30) bounds the methods re-checked and activated in a day, each a model call of the platform's own.
+ *   An account is a voice only when it is at least `OPEN_SCIENCE_OFFICIAL_PROMOTION_MIN_ACCOUNT_AGE_DAYS` days old (14) and has finished
+ *   `OPEN_SCIENCE_OFFICIAL_PROMOTION_MIN_FINISHED_RUNS` runs of its own (3) — the author of a method that waits for a second account and the second
+ *   account alike, and the author again when the method is re-checked — because accounts register themselves: two accounts made minutes apart (an
+ *   acceptance harness's, on 2026-10-27) corroborated each other and put a test conversation's method on every account's shelf.
  *   (This replaced the platform handbook path, `OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_*`, whose one producer was a repaired delivery read at share 0; 2026-10-25.)
  *
  * @param {Record<string, any>} overrides
@@ -698,6 +702,13 @@ function evidenceFlywheelSettings(overrides) {
   const promotionRaw = overrides.officialPromotionPerDay !== undefined ? overrides.officialPromotionPerDay : process.env.OPEN_SCIENCE_OFFICIAL_PROMOTION_PER_DAY;
   const promotionPerDay = promotionRaw == null || promotionRaw === "" ? 3 : Number(promotionRaw);
   if (!Number.isSafeInteger(promotionPerDay) || promotionPerDay < 1 || promotionPerDay > 30) throw new Error(`OPEN_SCIENCE_OFFICIAL_PROMOTION_PER_DAY must be a whole number from 1 to 30, got ${JSON.stringify(promotionRaw)}.`);
+  /** @param {string} key @param {string} name @param {number} fallback @param {number} max */
+  const standingFloor = (key, name, fallback, max) => {
+    const raw = overrides[key] !== undefined ? overrides[key] : process.env[name];
+    const value = raw == null || raw === "" ? fallback : Number(raw);
+    if (!Number.isSafeInteger(value) || value < 0 || value > max) throw new Error(`${name} must be a whole number from 0 to ${max}, got ${JSON.stringify(raw)}.`);
+    return value;
+  };
   const perDayRaw = overrides.evolutionModuleLeadsPerDay !== undefined ? overrides.evolutionModuleLeadsPerDay : process.env.OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY;
   const moduleLeadsPerDay = perDayRaw == null || perDayRaw === "" ? 5 : Number(perDayRaw);
   if (!Number.isSafeInteger(moduleLeadsPerDay) || moduleLeadsPerDay < 1 || moduleLeadsPerDay > 50) throw new Error(`OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY must be a whole number from 1 to 50, got ${JSON.stringify(perDayRaw)}.`);
@@ -717,6 +728,8 @@ function evidenceFlywheelSettings(overrides) {
     evolutionModuleLeadsPerDay: moduleLeadsPerDay,
     officialPromotionEnabled: overrides.officialPromotionEnabled ?? boolEnv("OPEN_SCIENCE_OFFICIAL_PROMOTION_ENABLED", true),
     officialPromotionPerDay: promotionPerDay,
+    officialPromotionMinAccountAgeDays: standingFloor("officialPromotionMinAccountAgeDays", "OPEN_SCIENCE_OFFICIAL_PROMOTION_MIN_ACCOUNT_AGE_DAYS", 14, 365),
+    officialPromotionMinFinishedRuns: standingFloor("officialPromotionMinFinishedRuns", "OPEN_SCIENCE_OFFICIAL_PROMOTION_MIN_FINISHED_RUNS", 3, 1000),
   };
 }
 

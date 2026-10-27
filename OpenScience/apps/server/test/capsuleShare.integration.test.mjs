@@ -14,7 +14,7 @@ import { CapsuleShareLinks } from "../src/capsuleShareLinks.mjs";
 import { sharedFrom } from "../src/capsuleShareLabel.mjs";
 import { capsuleShareMetricFamilies, resetCapsuleShareMetrics } from "../src/capsuleShareMetrics.mjs";
 import { CapsuleSharing } from "../src/capsuleSharing.mjs";
-import { createGuestInfluence, guestMarkedRuns, shareIsCorroborated } from "../src/capsuleShareTrust.mjs";
+import { accountStanding, createGuestInfluence, guestMarkedRuns, shareIsCorroborated } from "../src/capsuleShareTrust.mjs";
 import { CapsuleTransferService, renderCapsuleTransferFiles } from "../src/capsuleTransferService.mjs";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { LearningTriggers } from "../src/learningTriggers.mjs";
@@ -594,6 +594,24 @@ async function ledgerRow(userId, runId, { purpose = "kernel", status = "settled"
 async function finishedRuns(userId, count, prefix) { for (let index = 0; index < count; index += 1) await ledgerRow(userId, `${prefix}-${index}`); }
 /** @param {string} userId @param {number} instant when the account is judged @param {number} days how old it was then */
 const createdBefore = (userId, instant, days) => database.query("UPDATE evimed_control.users SET created_at=$2::timestamptz WHERE id=$1", [userId, new Date(instant - days * DAY).toISOString()]);
+
+test("the promotion of a method to 「大家的做法」 asks the same of named accounts: a deleted account is absent, and one is a voice only old enough with finished runs of its own", options, async () => {
+  const instant = Date.now();
+  const [settled, busyNew, idle] = ["settled", "busy-new", "idle"].map((name) => `standing_${name}_${tag}`);
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES ($1,'S','development'),($2,'B','development'),($3,'I','development')", [settled, busyNew, idle]);
+  try {
+    await createdBefore(settled, instant, 30); await createdBefore(busyNew, instant, 0); await createdBefore(idle, instant, 30);
+    await finishedRuns(settled, 3, `standing-s-${tag}`);
+    await finishedRuns(busyNew, 5, `standing-b-${tag}`);   // a harness account: many runs, minutes old
+    await ledgerRow(idle, `standing-i-${tag}-0`); await ledgerRow(idle, `standing-i-${tag}-1`, { purpose: "learning" });
+    const read = (extra = {}) => accountStanding(database, [settled, busyNew, idle, `standing_deleted_${tag}`], { minAccountAgeDays: 14, minFinishedRuns: 3, now: () => instant, ...extra });
+    assert.deepEqual(Object.fromEntries(await read()), { [settled]: true, [busyNew]: false, [idle]: false }, "the deleted account is absent; minutes old is no voice; a background purpose is no run");
+    assert.deepEqual(Object.fromEntries(await read({ minAccountAgeDays: 0 })), { [settled]: true, [busyNew]: true, [idle]: false }, "the thresholds are the operator's");
+    assert.deepEqual(await accountStanding(database, []), new Map());
+  } finally {
+    await database.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])", [[settled, busyNew, idle]]);
+  }
+});
 
 test("an account counts toward a share's corroboration only when it is old enough and has finished runs; the keepers left out are counted, nothing is blocked", options, async () => {
   resetCapsuleShareMetrics();

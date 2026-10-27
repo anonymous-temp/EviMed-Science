@@ -121,7 +121,7 @@ import { PROMOTION_CLASSES, createOfficialPromotion, officialPromotionMetricFami
 import { retireHandbookArm } from "./handbookArmRetirement.mjs";
 import { evidenceEstablishedAuthors } from "./evidenceAuthorStanding.mjs";
 import { callReviewModel } from "./reviewModel.mjs";
-import { guestMarkedRuns } from "./capsuleShareTrust.mjs";
+import { accountStanding, guestMarkedRuns } from "./capsuleShareTrust.mjs";
 import { createEvolutionLeadSources, evolutionLeadSourceMetricFamilies, programmeLeadReader } from "./evolutionLeadSources.mjs";
 import { createCalculationReceiptReader } from "./evidenceCalculationReceipts.mjs";
 import { createEvidenceRecalculation, createOfficialZoneMatcher, evidenceRecalculationMetricFamilies } from "./evidenceRecalculation.mjs";
@@ -1818,6 +1818,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         module: "learning", limits: { daily: 0, weekly: 0, moduleDaily: 0 } }) : null,
       audit: (event, detail) => securityAudit(config, event, "recorded", detail),
       established: userIds => evidenceEstablishedAuthors(productDatabase, userIds),
+      // An author and the account that corroborates it count only in standing (old enough, with runs of their own): accounts register themselves.
+      standing: userIds => accountStanding(productDatabase, userIds, { minAccountAgeDays: config.officialPromotionMinAccountAgeDays,
+        minFinishedRuns: config.officialPromotionMinFinishedRuns }),
       recentGuestRun: async (userId, runId) => (runId ? (await guestMarkedRuns(productDatabase, userId, [runId])).has(runId) : false),
     });
     // A person who paused learning has no method of theirs taken anywhere: the pause is read at the moment, not when the method was written.

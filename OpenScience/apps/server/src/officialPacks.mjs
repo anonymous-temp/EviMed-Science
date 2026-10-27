@@ -312,8 +312,14 @@ export class OfficialPacks {
       try {
         const copy = await this.documents.get(userId, "capsule", `official-copy:${publication.packId}`, { includeDeleted: true });
         // What the account deleted is not made again; what an author or the operator took down stays down (`CapsuleTransferService.takeDown`).
-        if (copy?.deletedAt || copy?.payload?.takenDown) { result.unchanged += 1; continue; }
-        const outcome = await this.transfers.adoptOfficial(userId, publication, { existing: copy ?? null });
+        // A copy the platform took off because its pack was withdrawn is the platform's to give back when the pack is published again.
+        if (copy?.payload?.takenDown || (copy?.deletedAt && copy.payload?.withdrawnByPlatform !== true)) { result.unchanged += 1; continue; }
+        let existing = copy ?? null;
+        if (copy?.deletedAt) {
+          const { withdrawnByPlatform: _withdrawn, ...payload } = copy.payload;
+          existing = await this.documents.put(userId, "capsule", copy.id, payload, { expectedRevision: copy.revision, restoreDeleted: true });
+        }
+        const outcome = await this.transfers.adoptOfficial(userId, publication, { existing });
         result[outcome] += 1;
         this.counters.adoption[outcome] += 1;
       } catch (error) {
@@ -325,12 +331,16 @@ export class OfficialPacks {
         }
       }
     }
-    // A pack that is no longer published is taken off the shelf it was on.
+    // A pack that is no longer published is taken off the shelf it was on, marked as the platform's doing so that a later publication of the same
+    // pack gives it back (a copy the person deleted stays deleted).
     const live = new Set(publications.map((publication) => `official-copy:${publication.packId}`));
     for (const copy of await this.#copies(userId)) {
       if (live.has(copy.id)) continue;
-      try { await this.documents.remove(userId, "capsule", copy.id, copy.revision); result.removed += 1; this.counters.adoption.removed += 1; }
-      catch { clean = false; }
+      try {
+        const marked = await this.documents.put(userId, "capsule", copy.id, { ...copy.payload, withdrawnByPlatform: true }, { expectedRevision: copy.revision });
+        await this.documents.remove(userId, "capsule", copy.id, marked.revision);
+        result.removed += 1; this.counters.adoption.removed += 1;
+      } catch { clean = false; }
     }
     if (clean) {
       if (this.settled.size >= SETTLED_LIMIT) this.settled.delete(/** @type {string} */ (this.settled.keys().next().value));

@@ -9,6 +9,11 @@
  *
  *   node scripts/ops/official-packs.mjs                                  # the published packs, and every method body that has outcomes or was stopped
  *   node scripts/ops/official-packs.mjs --restore <official:pack:method> <body hash>    # give a stopped body back, counted from nothing
+ *   node scripts/ops/official-packs.mjs --withdraw <official:shared-practices:method>  # take a promoted method out of 「大家的做法」 for good
+ *
+ * A withdrawal refuses the method's record and drops its text (`withdrawPromoted`); the running server's promotion tick publishes the pack again within its
+ * interval, which takes the method — or the pack, when it was the last — off every shelf. It is for what should never have been promoted (a test
+ * conversation's method, 2026-10-27), not for a method that turned out to be bad: those the cross-account counters stop, restorably.
  *
  * The report names ids, hashes and counts and never a text. Uses the configuration the server runs with.
  *
@@ -17,10 +22,17 @@
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
-/** @param {string[]} argv @returns {{ restore: { key: string, sha: string } | null }} */
+/** @param {string[]} argv @returns {{ restore: { key: string, sha: string } | null, withdraw: string | null }} */
 export function parseArguments(argv) {
-  const options = { restore: /** @type {{ key: string, sha: string } | null} */ (null) };
+  const options = { restore: /** @type {{ key: string, sha: string } | null} */ (null), withdraw: /** @type {string | null} */ (null) };
   for (let index = 0; index < argv.length; index += 1) {
+    if (argv[index] === "--withdraw") {
+      const key = argv[index + 1];
+      if (!key || !/^official:shared-practices:[a-z0-9][a-z0-9-]*$/.test(key)) throw new Error("--withdraw needs a method id of 「大家的做法」 (official:shared-practices:<method>)");
+      options.withdraw = key;
+      index += 1;
+      continue;
+    }
     if (argv[index] !== "--restore") throw new Error(`unknown argument ${argv[index]}`);
     const key = argv[index + 1];
     const sha = argv[index + 2];
@@ -35,11 +47,12 @@ export function parseArguments(argv) {
 
 async function main() {
   const options = parseArguments(process.argv.slice(2));
-  const [{ loadConfig }, { createStore }, { ProductDocuments }, { OfficialPacks }] = await Promise.all([
+  const [{ loadConfig }, { createStore }, { ProductDocuments }, { OfficialPacks }, { withdrawPromoted }] = await Promise.all([
     import("../../apps/server/src/config.mjs"),
     import("../../apps/server/src/store.mjs"),
     import("../../apps/server/src/productStore.mjs"),
     import("../../apps/server/src/officialPacks.mjs"),
+    import("../../apps/server/src/officialPromotion.mjs"),
   ]);
   const config = loadConfig();
   const store = createStore(config);
@@ -48,6 +61,12 @@ async function main() {
     if (!database) throw new Error("no control-plane database is configured");
     // Reading and giving back need neither the scanner nor the sealed archives: only the publisher's records.
     const packs = new OfficialPacks({ documents: new ProductDocuments(database), database, transfers: /** @type {any} */ (null), scanner: /** @type {any} */ (null) });
+    if (options.withdraw) {
+      const result = await withdrawPromoted(packs.documents, packs.publisherId, options.withdraw);
+      process.stdout.write(`${JSON.stringify({ ...result, key: options.withdraw })}\n`);
+      if (!result.withdrawn) process.exitCode = 1;
+      return;
+    }
     if (options.restore) {
       const restored = await packs.restore(options.restore.key, options.restore.sha);
       process.stdout.write(`${JSON.stringify({ restored, key: options.restore.key })}\n`);

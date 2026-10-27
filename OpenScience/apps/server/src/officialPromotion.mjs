@@ -17,7 +17,8 @@
  *   unpublished result — and names its class from a closed list; an answer that is not that shape is dropped, never softened. (3) A model of an
  *   independent family (the Jev judge port, site J23) is asked whether the method carries harmful or manipulative instructions. (4) The author
  *   rule: the account is established — three published evidence cards that each carry a ✓ — or its method is corroborated by another account's
- *   method of the same scope and class that also passed the first two gates. (5) The independent re-check: a model of another family (the review
+ *   method of the same scope and class that also passed the first two gates, where both accounts are in standing (`standing`: at least
+ *   `OPEN_SCIENCE_OFFICIAL_PROMOTION_MIN_ACCOUNT_AGE_DAYS` old with `…_MIN_FINISHED_RUNS` runs of their own). (5) The independent re-check: a model of another family (the review
  *   provider, which must not be DeepSeek) answers the same question about the text alone, with the same class, and the code field checks pass
  *   again against the source account's facts as they are now.
  * - **The harm check cannot hurt the author, and it never blocks anything it could not answer.** A method the judge settles as harmful is not
@@ -34,6 +35,11 @@
  * - **Provenance is internal, and short.** Until a decision the record holds what the re-check needs (the account, the method, its project); once
  *   the method is in the pack it holds a one-way contributor key and nothing else, and no notice anywhere names an account — not when a method is
  *   taken, not when it is stopped. The pack holds the text and nothing more.
+ * - **A voice is an account in standing, and it must still be one when the method is re-checked.** Accounts register themselves, and on
+ *   2026-10-27 two that an acceptance harness had made minutes apart corroborated each other and put a test conversation's method on every
+ *   account's shelf. So a method waits (`awaiting_corroboration`) until its author is in standing and another author in standing taught the same
+ *   kind of method; the wait is re-read every tick and ends after `AWAITING_CORROBORATION_DAYS`, and a waiting or candidate method whose author's
+ *   account is gone is refused at once (`author_gone`), keeping no text.
  * - **It is bounded.** At most `perDay` methods are re-checked and activated a day, and the pack holds at most `SHARED_PRACTICES_LIMIT` methods: a
  *   newer one takes the place of the oldest.
  *
@@ -58,6 +64,8 @@ export const PROMOTION_JUDGE_ATTEMPTS = 3;
 export const PROMOTION_DEFAULT_PER_DAY = 3;
 /** The most methods the pack of everyone's holds: a newer one takes the place of the oldest. */
 export const SHARED_PRACTICES_LIMIT = 60;
+/** How long a method waits for its author to be in standing and for a second account (the learning window's ninety days). */
+export const AWAITING_CORROBORATION_DAYS = 90;
 const PAGE = 100;
 
 /** Identifier formats: DOI, PMID/PMCID, registry numbers, addresses, e-mail, paths. Format checks, not prose. */
@@ -166,15 +174,22 @@ export function promotionJudgeMessages({ text, scopeId }) {
  *   review?: ((input: { text: string, scopeId: string }) => Promise<any>) | null,
  *   harm?: ((input: { text: string, scopeId: string }) => Promise<any>) | null,
  *   established: (userIds: string[]) => Promise<Set<string>>,
+ *   standing?: ((userIds: string[]) => Promise<Map<string, boolean>>) | null,
  *   recentGuestRun?: ((userId: string, runId: string | null) => Promise<boolean>) | null,
  *   perDay?: number, now?: () => Date, report?: ((code: string) => void) | null,
  *   audit?: ((event: string, detail: { code: string, detail: string }) => Promise<unknown> | unknown) | null }} options
  *   `documents` is the product ledger and the records are the publisher account's (`officialPacks.publisherId`); `officialPacks` publishes the pack when a
  *   method joins it. `review` is the independent family's reading and absent when there is none, which turns the whole path off. `harm` asks the judge port
  *   (`judgeService.judge("J23", …)`) and answers with its result as it is (`{ outcome, value, code }`); absent, no method is checked and the skip is counted.
+ *   `standing` answers, for the accounts that still exist among those named, whether each is a voice (`accountStanding` in `capsuleShareTrust.mjs`); a
+ *   deployment that composes this path passes it, and its absence (unit tests of the other gates) counts every named account as existing and in standing.
  */
-export function createOfficialPromotion({ documents, officialPacks, facts, judge, review = null, harm = null, established, recentGuestRun = null, perDay = PROMOTION_DEFAULT_PER_DAY,
-  now = () => new Date(), report = null, audit = null }) {
+export function createOfficialPromotion({ documents, officialPacks, facts, judge, review = null, harm = null, established, standing = null, recentGuestRun = null,
+  perDay = PROMOTION_DEFAULT_PER_DAY, now = () => new Date(), report = null, audit = null }) {
+  /** @param {string[]} userIds @returns {Promise<Map<string, boolean>>} */
+  const standingOf = async (userIds) => (standing ? standing(userIds) : new Map(userIds.map((id) => [id, true])));
+  /** The author an undecided record still names (a decided one names none). @param {any} row */
+  const authorOf = (row) => String(row?.payload?.derivedFrom?.userId ?? "");
   const publisher = () => String(officialPacks?.publisherId ?? "");
   const counters = {
     considered: 0,
@@ -234,14 +249,20 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
   /** The method as the judges are shown it: its text and the kind of work it is for, and nothing of an account. @param {ReturnType<typeof promotionText>} text */
   const shown = (text) => `${text.name}\n${text.description}\n${text.whenToUse}\n\n${text.body}`;
 
-  /** Whether another account's method of this scope and class that passed the first two gates stands beside this one. @param {any} row */
+  /**
+   * Whether another account's method of this scope and class that passed the first two gates stands beside this one, both authors in standing.
+   * @param {any} row
+   */
   async function corroborated(row) {
     const own = row.payload.contributor;
     const peers = (await all()).filter((other) => other.id !== row.id && other.payload.scopeId === row.payload.scopeId && other.payload.lessonClass === row.payload.lessonClass
       && other.payload.contributor !== own && ["awaiting_corroboration", "candidate"].includes(other.payload.status));
     // Two accounts arriving at a method of one kind independently. A method already in the pack is not a voice for the next one: if it
     // were, the first promotion of a scope and class would let every later method of that pair through on the model's word alone.
-    return peers.length > 0;
+    if (!peers.length) return false;
+    // Each a voice: two accounts registered minutes apart are one harness, not two people.
+    const known = await standingOf([authorOf(row), ...peers.map(authorOf)].filter(Boolean));
+    return known.get(authorOf(row)) === true && peers.some((peer) => known.get(authorOf(peer)) === true);
   }
 
   /** After a method passed the first two gates: promote it, and any waiting method it corroborates. @param {any} row */
@@ -383,6 +404,15 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
   async function recheck(row) {
     const payload = row.payload;
     if (!review) return null;
+    // The author is still an account, and — for a method that came in on another account's word — still in standing: a harness that deletes its
+    // accounts at the end of a run leaves nothing behind that the platform repeats to everyone.
+    const author = authorOf(row);
+    const known = await standingOf(author ? [author] : []);
+    if (!known.has(author) || (payload.promotedBy !== "established_author" && known.get(author) !== true)) {
+      const reason = known.has(author) ? "author_not_in_standing" : "author_gone";
+      rejectedFor(reason);
+      return update(row, { status: counted("rejected"), reason: [reason] });
+    }
     const answer = await review({ text: shown(payload.text), scopeId: payload.scopeId });
     const independent = answer?.independent === true;
     const sameClass = answer?.general === true && answer?.class === payload.lessonClass;
@@ -415,11 +445,43 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
     }
   }
 
-  /** One pass: judge what is waiting for a judge and re-check candidates within the day's bound. */
+  /**
+   * The methods waiting for a second account, read again: one whose author's account is gone is refused at once, one that waited past
+   * `AWAITING_CORROBORATION_DAYS` is refused, and one whose author is now in standing beside another author in standing is a candidate.
+   * Each refusal keeps no text. @returns {Promise<number>} how many became candidates
+   */
+  async function rereadWaiting() {
+    const waiting = (await all()).filter((row) => row.payload.status === "awaiting_corroboration").slice(0, PAGE);
+    if (!waiting.length) return 0;
+    const known = await standingOf([...new Set(waiting.map(authorOf).filter(Boolean))]);
+    const oldest = now().getTime() - AWAITING_CORROBORATION_DAYS * 86_400_000;
+    let promoted = 0;
+    for (const row of waiting) {
+      if (!known.has(authorOf(row))) { rejectedFor("author_gone"); await update(row, { status: counted("rejected"), reason: ["author_gone"] }); continue; }
+      if (Date.parse(row.payload.judgedAt ?? row.payload.createdAt ?? "") < oldest) {
+        rejectedFor("corroboration_expired");
+        await update(row, { status: counted("rejected"), reason: ["corroboration_expired"] });
+        continue;
+      }
+      if (await corroborated(row)) { await update(row, { status: counted("candidate"), promotedBy: "corroborated" }); promoted += 1; }
+    }
+    return promoted;
+  }
+
+  /** What the pack of everyone's holds, as one digest of its active records: a change the server did not make (an operator's withdrawal) is published. */
+  let activeDigest = /** @type {string | null} */ (null);
+  async function publishIfChanged() {
+    const digest = sha((await all()).filter((row) => row.payload.status === "active").map((row) => `${row.id}:${row.payload.method?.sha ?? ""}`).sort());
+    if (activeDigest !== null && digest !== activeDigest) await officialPacks?.publishAll();
+    activeDigest = digest;
+  }
+
+  /** One pass: judge what is waiting for a judge, read the waiting methods again, and re-check candidates within the day's bound. */
   async function tick() {
-    const result = { judged: 0, rechecked: 0 };
+    const result = { judged: 0, rechecked: 0, corroborated: 0 };
     try {
       for (const row of (await all()).slice(0, PAGE).filter((candidate) => candidate.payload.status === "judge_pending")) { await judgeRow(row); result.judged += 1; }
+      result.corroborated = await rereadWaiting();
       if (review) {
         let room = perDay - await takenToday();
         for (const row of (await all()).filter((candidate) => candidate.payload.status === "candidate")) {
@@ -433,6 +495,7 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
           }
         }
       }
+      await publishIfChanged();
     } catch (error) {
       counters.failures += 1;
       report?.(typeof /** @type {any} */ (error)?.code === "string" ? `official_promotion_${/** @type {any} */ (error).code}` : "official_promotion_tick_failed");
@@ -442,6 +505,30 @@ export function createOfficialPromotion({ documents, officialPacks, facts, judge
 
   return { consider, tick, stats: () => ({ ...counters, outcomes: { ...counters.outcomes }, rejectedBy: { ...counters.rejectedBy }, harmChecks: { ...counters.harmChecks },
     harmSkippedBy: { ...counters.harmSkippedBy }, perDay, reviewConfigured: Boolean(review) }) };
+}
+
+/**
+ * An operator takes one method out of the pack of everyone's (`scripts/ops/official-packs.mjs --withdraw`): its record is refused with the reason
+ * `operator_withdrawn` and keeps neither its text nor its method, so nothing of it can come back by a restore; the running server's promotion tick sees the
+ * pack's active set change and publishes it again, which takes the method — or the whole pack, when it was the last — off every shelf.
+ * @param {any} documents @param {string} publisherId @param {string} key the method's key in the pack (`official:shared-practices:<method>`)
+ * @param {{ now?: () => Date }} [options]
+ * @returns {Promise<{ withdrawn: boolean, id?: string }>}
+ */
+export async function withdrawPromoted(documents, publisherId, key, { now = () => new Date() } = {}) {
+  /** @type {string | null} */ let cursor = null;
+  for (let pages = 0; pages < 20; pages += 1) {
+    const page = await documents.list(publisherId, "preferences", { limit: PAGE, cursor, filter: { recordType: OFFICIAL_PROMOTED_RECORD } });
+    const row = page.items.find((/** @type {any} */ item) => item.payload.status === "active" && item.payload.method?.key === key);
+    if (row) {
+      await documents.put(publisherId, "preferences", row.id, { ...row.payload, status: "rejected", reason: ["operator_withdrawn"], method: null, text: null, derivedFrom: null,
+        withdrawnAt: now().toISOString(), updatedAt: now().toISOString() }, { expectedRevision: row.revision });
+      return { withdrawn: true, id: row.id };
+    }
+    if (!page.nextCursor) break;
+    cursor = page.nextCursor;
+  }
+  return { withdrawn: false };
 }
 
 /**

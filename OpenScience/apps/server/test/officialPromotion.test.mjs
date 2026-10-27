@@ -5,7 +5,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { PLATFORM_PUBLISHER_USER_ID } from "@evimed/domain";
 import {
-  PROMOTION_CLASSES, PROMOTION_TEXT_LIMITS, SHARED_PRACTICES_LIMIT, createOfficialPromotion, methodFieldChecks, officialPromotionMetricFamilies, promotionJudgeMessages,
+  AWAITING_CORROBORATION_DAYS, PROMOTION_CLASSES, PROMOTION_TEXT_LIMITS, SHARED_PRACTICES_LIMIT, createOfficialPromotion, methodFieldChecks, officialPromotionMetricFamilies,
+  promotionJudgeMessages, withdrawPromoted,
 } from "../src/officialPromotion.mjs";
 import { SHARED_PRACTICES_PACK_ID } from "../src/officialPacks.mjs";
 
@@ -88,7 +89,7 @@ test("an established author's general method is judged, re-checked by an indepen
   const [candidate] = records(f);
   assert.deepEqual([candidate.payload.status, candidate.payload.lessonClass, candidate.payload.promotedBy], ["candidate", "numbers-and-tables", "established_author"]);
   assert.equal(f.published.count, 0, "nothing is in the pack before the re-check");
-  assert.deepEqual(await f.promotion.tick(), { judged: 0, rechecked: 1 });
+  assert.deepEqual(await f.promotion.tick(), { judged: 0, rechecked: 1, corroborated: 0 });
   assert.equal(f.reviewed.length, 1);
   assert.ok(!JSON.stringify(f.reviewed[0]).includes("senior-1"), "the reviewer is shown the method text alone");
   const [active] = records(f);
@@ -188,11 +189,11 @@ test("nothing is effective before the independent re-check: no reviewer asks not
 test("no more methods are re-checked and activated in a day than the bound, and the next day has room", async () => {
   const f = build({ perDay: 2 });
   for (const author of ["senior-1", "senior-2", "senior-3"]) await f.promotion.consider(method(author, { payload: { contentDigest: `sha256:${author}` } }));
-  assert.deepEqual(await f.promotion.tick(), { judged: 0, rechecked: 2 });
+  assert.deepEqual(await f.promotion.tick(), { judged: 0, rechecked: 2, corroborated: 0 });
   assert.deepEqual(records(f).map((row) => row.payload.status).sort(), ["active", "active", "candidate"]);
-  assert.deepEqual(await f.promotion.tick(), { judged: 0, rechecked: 0 }, "the day is spent");
+  assert.deepEqual(await f.promotion.tick(), { judged: 0, rechecked: 0, corroborated: 0 }, "the day is spent");
   f.clock.time = new Date(f.clock.time.getTime() + 24 * 3_600_000);
-  assert.deepEqual(await f.promotion.tick(), { judged: 0, rechecked: 1 });
+  assert.deepEqual(await f.promotion.tick(), { judged: 0, rechecked: 1, corroborated: 0 });
   assert.deepEqual(records(f).map((row) => row.payload.status), ["active", "active", "active"]);
 });
 
@@ -245,7 +246,7 @@ test("a method the independent judge settles as harmful is not promoted: it is r
   assert.equal(JSON.stringify(asked).includes("senior-1"), false);
   const [row] = records(f);
   assert.deepEqual([row.payload.status, row.payload.harmChecked.outcome], ["rejected", "flagged"]);
-  assert.deepEqual(await f.promotion.tick(), { judged: 0, rechecked: 0 });
+  assert.deepEqual(await f.promotion.tick(), { judged: 0, rechecked: 0, corroborated: 0 });
   assert.equal(f.reviewed.length, 0, "a flagged method never reaches the re-check");
   assert.deepEqual(f.promotion.stats().harmChecks, { clear: 0, flagged: 1, uncertain: 0, skipped: 0 });
   assert.equal(f.promotion.stats().rejectedBy.harm_flagged, 1);
@@ -281,7 +282,7 @@ test("a judge that is not there, not calibrated, off, over budget, broken or uns
     assert.equal(f.promotion.stats().harmChecks[outcome], 1, label);
     assert.equal(f.promotion.stats().harmChecks.flagged, 0, label);
     if (outcome === "skipped") assert.deepEqual(f.promotion.stats().harmSkippedBy, { [code]: 1 }, label);
-    assert.deepEqual(await f.promotion.tick(), { judged: 0, rechecked: 1 }, `${label}: the method reaches the re-check as it would have`);
+    assert.deepEqual(await f.promotion.tick(), { judged: 0, rechecked: 1, corroborated: 0 }, `${label}: the method reaches the re-check as it would have`);
   }
 });
 
@@ -309,4 +310,93 @@ test("the counters are exported as families, and nothing for a path that was not
   assert.deepEqual(families.get("open_science_official_promotion_harm_check_skipped_total")?.series, [{ value: 1, labels: { reason: "judge_uncalibrated" } }]);
   assert.deepEqual(families.get("open_science_official_promotion_harm_checks_total")?.series.map((entry) => entry.value), [0, 0, 0, 1]);
   for (const family of families.values()) assert.match(family.name, /^open_science_official_promotion_/);
+});
+
+// 2026-10-27: two accounts an acceptance harness registered minutes apart corroborated each other and put a test conversation's weekly-report method
+// on every account's shelf. A voice is an account in standing (old enough, with runs of its own), and it must still exist when the method is re-checked.
+
+/** A standing reader over a table of accounts: absent = deleted, false = exists but not in standing. @param {Record<string, boolean>} table */
+const standingOver = (table) => async (ids) => new Map(ids.filter((id) => id in table).map((id) => [id, table[id]]));
+
+test("two accounts that are not in standing do not corroborate each other, and one in standing beside one that is not is no corroboration either", async () => {
+  const table = { "fresh-1": false, "fresh-2": false, "old-1": true };
+  const f = build({ standing: standingOver(table) });
+  assert.equal((await f.promotion.consider(method("fresh-1"))).state, "awaiting_corroboration");
+  assert.equal((await f.promotion.consider(method("fresh-2"))).state, "awaiting_corroboration", "two harness accounts are one harness");
+  assert.equal((await f.promotion.consider(method("old-1"))).state, "awaiting_corroboration", "a voice in standing beside two that are not is alone");
+  assert.deepEqual(records(f).map((row) => row.payload.status), ["awaiting_corroboration", "awaiting_corroboration", "awaiting_corroboration"]);
+  await f.promotion.tick();
+  assert.equal(f.published.count, 0, "nothing reached the pack");
+  // A second account in standing arrives: the two voices in standing are candidates, the fresh ones keep waiting.
+  table["old-2"] = true;
+  assert.equal((await f.promotion.consider(method("old-2"))).state, "candidate");
+  const byAuthor = Object.fromEntries(records(f).map((row) => [row.payload.derivedFrom?.userId ?? row.payload.contributor, row.payload.status]));
+  assert.equal(byAuthor["old-1"], "candidate");
+  assert.equal(byAuthor["fresh-1"], "awaiting_corroboration");
+});
+
+test("a waiting method is read again every tick: its author coming into standing beside another voice makes it a candidate", async () => {
+  const table = { "a-1": false, "a-2": true };
+  const f = build({ standing: standingOver(table) });
+  await f.promotion.consider(method("a-1"));
+  await f.promotion.consider(method("a-2"));
+  assert.deepEqual(records(f).map((row) => row.payload.status), ["awaiting_corroboration", "awaiting_corroboration"]);
+  table["a-1"] = true; // fourteen days and three runs later
+  const result = await f.promotion.tick();
+  assert.equal(result.corroborated, 2);
+  assert.ok(records(f).every((row) => ["candidate", "active"].includes(row.payload.status)));
+});
+
+test("a waiting method whose author's account is gone is refused at once and keeps no text, and one that waited past the window is refused too", async () => {
+  const table = { "gone-1": false, "slow-1": false };
+  const f = build({ standing: standingOver(table) });
+  await f.promotion.consider(method("gone-1"));
+  await f.promotion.consider(method("slow-1"));
+  delete table["gone-1"]; // the harness deleted its account at the end of the run
+  await f.promotion.tick();
+  const gone = records(f).find((row) => row.payload.reason?.includes("author_gone"));
+  assert.ok(gone, "refused as author_gone");
+  assert.deepEqual([gone.payload.status, gone.payload.text, gone.payload.derivedFrom], ["rejected", null, null]);
+  f.clock.time = new Date(f.clock.time.getTime() + (AWAITING_CORROBORATION_DAYS + 1) * 86_400_000);
+  await f.promotion.tick();
+  const slow = records(f).find((row) => row.payload.reason?.includes("corroboration_expired"));
+  assert.ok(slow && slow.payload.text === null, "the wait ends, and the text with it");
+  assert.deepEqual(f.promotion.stats().rejectedBy, { author_gone: 1, corroboration_expired: 1 });
+});
+
+test("the re-check asks again: a candidate whose author is gone, or came in on another account's word and fell out of standing, is refused and never published", async () => {
+  const table = { "c-1": true, "c-2": true, "senior-9": true };
+  const f = build({ standing: standingOver(table), perDay: 100 });
+  await f.promotion.consider(method("c-1"));
+  await f.promotion.consider(method("c-2"));
+  assert.deepEqual(records(f).map((row) => row.payload.status), ["candidate", "candidate"]);
+  delete table["c-1"];
+  table["c-2"] = false;
+  await f.promotion.tick();
+  assert.deepEqual(records(f).map((row) => [row.payload.status, row.payload.reason?.[0]]), [["rejected", "author_gone"], ["rejected", "author_not_in_standing"]]);
+  assert.equal(f.published.count, 0);
+  assert.equal(f.reviewed.length, 0, "no reviewer is paid for a method whose author no longer counts");
+  // An established author is not asked for standing again, only to exist.
+  table["senior-9"] = false;
+  await f.promotion.consider(method("senior-9"));
+  await f.promotion.tick();
+  assert.equal(records(f).find((row) => row.payload.status === "active")?.payload.promotedBy, "established_author");
+});
+
+test("an operator's withdrawal refuses the method's record for good, and the next tick publishes the pack again without it", async () => {
+  const f = build();
+  await f.promotion.consider(method("senior-1"));
+  await f.promotion.tick();
+  const [active] = records(f);
+  assert.equal(active.payload.status, "active");
+  const publishedAfterActivation = f.published.count;
+  await f.promotion.tick(); // the digest is now known; nothing changed
+  assert.equal(f.published.count, publishedAfterActivation);
+  assert.deepEqual(await withdrawPromoted(f.documents, PLATFORM_PUBLISHER_USER_ID, "official:shared-practices:no-such-method"), { withdrawn: false });
+  const result = await withdrawPromoted(f.documents, PLATFORM_PUBLISHER_USER_ID, active.payload.method.key);
+  assert.deepEqual(result, { withdrawn: true, id: active.id });
+  const [withdrawn] = records(f);
+  assert.deepEqual([withdrawn.payload.status, withdrawn.payload.reason, withdrawn.payload.method, withdrawn.payload.text], ["rejected", ["operator_withdrawn"], null, null]);
+  await f.promotion.tick();
+  assert.equal(f.published.count, publishedAfterActivation + 1, "the running server publishes the pack again");
 });

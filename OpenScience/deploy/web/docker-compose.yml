@@ -758,6 +758,9 @@ services:
       # A person's general method may join the platform's pack 「大家的做法」 after an independent re-check (2026-10-25): the switch (on) and the methods re-checked in a day (3).
       OPEN_SCIENCE_OFFICIAL_PROMOTION_ENABLED:
       OPEN_SCIENCE_OFFICIAL_PROMOTION_PER_DAY:
+      # An account is a voice for a method of everyone's only when it is this many days old (14) and has finished this many runs of its own (3).
+      OPEN_SCIENCE_OFFICIAL_PROMOTION_MIN_ACCOUNT_AGE_DAYS:
+      OPEN_SCIENCE_OFFICIAL_PROMOTION_MIN_FINISHED_RUNS:
       # What the platform reads for one account that asks it to verify a card's sources, per rolling day.
       OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY:
       # The most the judging of readers' challenges may spend in a day.
