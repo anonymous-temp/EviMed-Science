@@ -186,8 +186,40 @@ const ITEM_FIELDS = `i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i
  *   steps?: string[], apply?: boolean, limit?: number, concurrency?: number, timeZone?: string, minOldTotal?: number,
  *   onProgress?: (line: string) => void }} input
  */
-export async function frontierRewrite({ database, editor = null, budget = null, threshold, since, until = new Date(), steps = [...FRONTIER_REWRITE_DEFAULT_STEPS],
+/** The SQLSTATEs PostgreSQL ends a statement or transaction with when it lost a race it can be asked again: a deadlock victim and a
+ * serialization failure. */
+const CONFLICT_CODES = new Set(["40P01", "40001"]);
+
+/**
+ * The database the rewrite writes through: a query or a transaction that PostgreSQL ended as a deadlock victim or a serialization
+ * failure is asked again, up to `attempts` times with a short growing pause, and anything else is thrown as it was. The rewrite runs
+ * beside the live pipeline, which locks the same rows in its own order: the first run of 2026-10-27 died on one deadlock 12 s in and
+ * wrote nothing after it. Every write here re-reads what it changes inside its transaction, so a second attempt is the same write.
+ * @param {any} database @param {{ attempts?: number, pause?: (ms: number) => Promise<void> }} [options]
+ */
+export function retryingOnConflict(database, { attempts = 5, pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = {}) {
+  /** @template T @param {() => Promise<T>} work @returns {Promise<T>} */
+  const again = async (work) => {
+    for (let attempt = 1; ; attempt += 1) {
+      try { return await work(); } catch (error) {
+        if (!CONFLICT_CODES.has(String(/** @type {any} */ (error)?.code ?? "")) || attempt >= attempts) throw error;
+        await pause(40 * attempt + Math.floor(Math.random() * 40));
+      }
+    }
+  };
+  return new Proxy(database, {
+    get(target, property) {
+      if (property === "query") return (/** @type {any[]} */ ...args) => again(() => target.query(...args));
+      if (property === "transaction") return (/** @type {(client: any) => Promise<any>} */ work) => again(() => target.transaction(work));
+      const value = target[property];
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+export async function frontierRewrite({ database: given, editor = null, budget = null, threshold, since, until = new Date(), steps = [...FRONTIER_REWRITE_DEFAULT_STEPS],
   apply = false, limit = 100_000, concurrency = 4, timeZone = "Asia/Shanghai", minOldTotal = FRONTIER_REWRITE_SCORE_MIN_OLD_TOTAL, onProgress = () => {} }) {
+  const database = retryingOnConflict(given);
   const worthy = threshold - FRONTIER_READER_MARGIN;
   /** @type {Record<string, any>} */
   const summary = { applied: apply, since: since.toISOString(), until: until.toISOString(), steps, versions: { lead: FRONTIER_LEAD_VERSION,
