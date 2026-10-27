@@ -15,7 +15,7 @@ function fixture(options={}){
   const context=new EventEmitter();context.settings=settings;context.closed=false;context.close=async()=>{if(options.closeFailure)throw new Error('sensitive-cdp-endpoint');context.closed=true;};
   context.route=async(_pattern,handler)=>{context.routeHandler=handler;};
   const page=new EventEmitter();let url='about:blank',position=0;const history=['about:blank'];page.url=()=>url;page.evaluate=async fn=>vm.runInNewContext('String.prototype.slice=()=>{throw Error("page override")};('+fn.toString()+')()',{document:{title:options.title??'<untrusted> source'}});page.setDefaultTimeout=()=>{};page.setDefaultNavigationTimeout=()=>{};
-  page.actions=[];page.goto=async target=>{page.actions.push(['navigate',target]);url=target;history.splice(position+1);history.push(url);position++;};page.goBack=async()=>{position=Math.max(0,position-1);url=history[position];};page.goForward=async()=>{position=Math.min(history.length-1,position+1);url=history[position];};page.reload=async()=>{};
+  page.actions=[];page.goto=async target=>{page.actions.push(['navigate',target]);if(options.gotoError)throw new Error(options.gotoError);url=target;history.splice(position+1);history.push(url);position++;};page.goBack=async()=>{position=Math.max(0,position-1);url=history[position];};page.goForward=async()=>{position=Math.min(history.length-1,position+1);url=history[position];};page.reload=async()=>{};
   page.setViewportSize=async value=>page.actions.push(['resize',value]);page.mouse={click:async(...args)=>{page.actions.push(['click',...args]);if(options.action)await options.action.promise;},wheel:async(...args)=>page.actions.push(['scroll',...args])};page.keyboard={press:async value=>page.actions.push(['key',value]),insertText:async value=>page.actions.push(['text',value])};
   page.screenshot=async()=>{options.shotStarted?.resolve();if(options.shot)await options.shot.promise;return options.oversize?Buffer.alloc(1024*1024):Buffer.from([255,216,255,217]);};page.mainFrame=()=>page;page.close=async()=>{page.closed=true;};
   context.newPage=async()=>{context.emit('page',page);return page;};context.newCDPSession=async()=>({send:async name=>{assert.equal(name,'Page.getNavigationHistory');return{currentIndex:position,entries:history.map(u=>({url:u}))};},detach:async()=>{}});
@@ -50,6 +50,18 @@ test('private URLs/redirect requests and arbitrary commands are refused without 
  let aborted=0,continued=0;await f.contexts[0].routeHandler({request:()=>({url:()=> 'http://169.254.169.254/'}),abort:async()=>aborted++,continue:async()=>continued++});assert.equal(aborted,1);assert.equal(continued,0);
  await f.contexts[0].routeHandler({request:()=>({url:()=> 'https://public.example.org/'}),abort:async()=>aborted++,continue:async()=>continued++});assert.equal(continued,1);assert.equal(aborted,1);
  const denied=await f.service.command(scope,{...base,command:{type:'navigate',url:'https://rebind.example.org/'}});assert.equal(denied.state.error.code,'managed_browser_unavailable');assert.equal(f.contexts[0].page.actions.length,0);
+});
+test('a navigation the browser refused is a page that did not open, and the reply keeps the address that was asked for',async()=>{
+ // 2026-10-27: a certificate error left the page blank, so the reply said about:blank with an action of unknown outcome and the chrome lost the address.
+ const gotoError='page.goto: net::ERR_CERT_AUTHORITY_INVALID at https://untrusted.example.org/\nCall log:\n  - navigating to "https://untrusted.example.org/", waiting until "domcontentloaded"';
+ const f=fixture({gotoError});const opened=await f.service.open(scope,request),body={id:opened.id,sessionId:request.sessionId,tabId:request.tabId,sequence:1,command:{type:'navigate',url:'https://untrusted.example.org'}};
+ const result=await f.service.command(scope,body);
+ assert.equal(result.state.error.code,'managed_browser_page_failed');assert.equal(result.state.url,'https://untrusted.example.org/','the requested address, normalised');assert.equal(result.state.loading,false);
+ assert.equal(f.contexts[0].page.actions.length,1,'asked once');assert.deepEqual(await f.service.command(scope,body),result,'a retry replays the same answer and asks nothing again');assert.equal(f.contexts[0].page.actions.length,1);
+ await f.service.close();
+ // Anything else that goes wrong (a timeout, a closed page) is still an action whose outcome nobody knows.
+ for(const message of ['page.goto: Timeout 15000ms exceeded.','page.goto: Target page, context or browser has been closed'])await unknownOutcome(message);
+ async function unknownOutcome(message){const g=fixture({gotoError:message}),o=await g.service.open(scope,request);const r=await g.service.command(scope,{id:o.id,sessionId:request.sessionId,tabId:request.tabId,sequence:1,command:{type:'navigate',url:'https://public.example.org/'}});assert.equal(r.state.error.code,'managed_browser_action_unknown',message);assert.equal(r.state.url,'about:blank');await g.service.close();}
 });
 test('timeout consumes click and retries return the same unknown outcome, with joined physical cleanup',async()=>{
  const action=defer(),f=fixture({action,timeoutMs:30});const opened=await f.service.open(scope,request),body={id:opened.id,sessionId:request.sessionId,tabId:request.tabId,sequence:1,command:{type:'click',x:1,y:1,button:'left'}};
