@@ -140,11 +140,11 @@ describe("继续追问 on the reading page (c3-ask; chips at the article's end s
     expect(within(block).getAllByRole("button").map((button) => button.textContent)).toEqual(["自己提问…"]);
   });
 
-  it("深入研究 is the same way in, from the toolbar: the question that fits the item, the item's line, the item as origin", async () => {
+  it("深入研究 is the same way in, from the title row: the question that fits the item, the item's line, the item as origin", async () => {
     wide();
     show();
-    const toolbar = await screen.findByRole("group", { name: "阅读视图与操作" });
-    await userEvent.click(within(toolbar).getByRole("button", { name: "深入研究" }));
+    await screen.findByRole("group", { name: "阅读视图与操作" });
+    await userEvent.click(within(document.querySelector("[data-page-header]") as HTMLElement).getByRole("button", { name: "深入研究" }));
     const intent = intentOf();
     expect(intent.draft.startsWith("这项研究可靠吗？")).toBe(true);
     expect(intent.draft).toContain(`frontier:${ID}`);
