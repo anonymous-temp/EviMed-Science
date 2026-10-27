@@ -764,7 +764,7 @@ test("a memory session of a named project begins with the platform's line naming
   await named.call("POST", "/api/v1/sessions", { session_id: SESSION });
   const written = named.stub.sent("POST", `/api/v1/sessions/${SESSION}/messages`);
   assert.equal(written.length, 1);
-  assert.deepEqual(written[0].body, { role: "assistant", parts: [{ type: "text", text: "（平台信息，不是用户说的话）这段对话在用户的项目「订单服务重构」里进行。" }] });
+  assert.deepEqual(written[0].body, { role: "assistant", parts: [{ type: "text", text: "（平台信息，不是用户说的话）这段对话在用户的项目「订单服务重构」里进行。用户问的问题、让做的事和讲的个人背景都不是对这个项目的描述。" }] });
   // The person's first message follows it, through the door as always.
   await named.call("POST", `/api/v1/sessions/${SESSION}/messages`, { role: "user", content: "这个仓库里测试文件一律不要动，要改先问我。" });
   assert.equal(named.stub.sent("POST", `/api/v1/sessions/${SESSION}/messages`).length, 2);
