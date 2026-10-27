@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GeoAnalysisWorkbench } from './GeoAnalysisWorkbench';
+import { normalizeGeoAnalysisView } from '../../../../server/src/geoAnalysisRegistry.mjs';
 const read=vi.hoisted(()=>vi.fn());
 const memberRead=vi.hoisted(()=>vi.fn());
 const navigation=vi.hoisted(()=>({open:vi.fn(),create:vi.fn(),current:vi.fn(),stage:vi.fn(),scope:vi.fn(),publication:vi.fn()}));
@@ -382,4 +383,22 @@ it('publishes main-area controls without mounting another global toolbar or disc
   expect(mounted.container.querySelector('[data-toolbar]')).toBeNull();
   expect(screen.queryByText('所选数据分析')).toBeNull();
   expect(screen.getByTestId('export')).toHaveTextContent('gsel_frozen');
+});
+
+
+describe('the workbench\'s own view switch', () => {
+  it('asks the server only for fields the chosen view declares, whatever the previous view had filled in', async () => {
+    read.mockReset().mockImplementation(async (_geo, _scope, view) => {
+      normalizeGeoAnalysisView(view); // the server refuses a field the view does not declare, with 400 geo_read_filter_invalid
+      return { view, selection: { reference: 'gsel_switch' }, digest: 'd', columns: [], rows: [], page: { total: 0, shown: 0, nextOffset: null }, availability: { status: 'empty' } };
+    });
+    render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialDescriptor={{ viewId: 'V17', sourceType: 'official', sourceRelationship: 'wrong', topN: 30 }} /></MemoryRouter>);
+    fireEvent.click(screen.getByText('所选数据分析'));
+    await waitFor(() => expect(read).toHaveBeenCalledWith('geo', { round: 'old' }, expect.objectContaining({ viewId: 'V17', sourceType: 'official' }), 0, undefined));
+    fireEvent.click(screen.getByRole('button', { name: /^分析：/ })); fireEvent.click(screen.getByRole('menuitemradio', { name: '当前水平与目标' }));
+    await waitFor(() => expect(read).toHaveBeenLastCalledWith('geo', { round: 'old' }, { viewId: 'V01', dimension: 'project' }, 0, undefined));
+    fireEvent.click(screen.getByRole('button', { name: /^分析：/ })); fireEvent.click(screen.getByRole('menuitemradio', { name: '平台指标比较' }));
+    await waitFor(() => expect(read).toHaveBeenLastCalledWith('geo', { round: 'old' }, { viewId: 'V04', dimension: 'engine' }, 0, undefined));
+    expect(await screen.findByRole('button', { name: /^分析：平台指标比较/ })).toBeTruthy();
+  });
 });

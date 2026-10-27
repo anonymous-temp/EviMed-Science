@@ -31,6 +31,60 @@ export const GEO_ANALYSIS_OPTIONS: ReadonlyArray<{ value: GeoAnalysisId; label: 
               { value: "V22", label: "页面引用观察历史" },
             ];
 const descriptorKeys = ['errorFacet','errorView','metricId','dimension','timeGrain','entityKind','entityKey','sourceType','sourceSearch','sourceRelationship','sourceLevel','sourceFacet','topN','ownedMetricId','categoryMode','financeFacet','strategyVersion','targetVersion','publicationFacet','evidenceKind'] as const;
+
+type DescriptorKey = typeof descriptorKeys[number];
+const SOURCE_FILTERS = ['sourceType', 'sourceSearch', 'sourceRelationship', 'topN'] as const;
+/**
+ * What each view declares besides `viewId` and `dimension`. The server (`geoAnalysisRegistry.mjs`) answers a field its view does not
+ * declare with 400 `geo_read_filter_invalid`, so a descriptor is built from this table and never by spreading another view's.
+ * `geoAnalysisMode.test.ts` holds the table against the registry's own validation.
+ */
+export const GEO_ANALYSIS_VIEW_FIELDS: Readonly<Record<GeoAnalysisId, readonly DescriptorKey[]>> = {
+  V01: ['metricId'], V02: ['metricId', 'timeGrain'], V03: ['metricId'],
+  V04: ['metricId', 'entityKind', 'entityKey'], V05: ['metricId', 'entityKind', 'entityKey'],
+  V06: ['metricId', 'categoryMode'], V07: [], V11: [], V12: [], V14: [],
+  V08: ['metricId', 'timeGrain', 'entityKind', 'entityKey'],
+  V09: [], V10: [], V15: [], V24: [],
+  V13: ['errorFacet', 'errorView'], V16: ['evidenceKind'], V23: ['publicationFacet'], V25: ['financeFacet'],
+  V26: ['strategyVersion', 'targetVersion'], V27: ['metricId'],
+  V17: [...SOURCE_FILTERS], V18: [...SOURCE_FILTERS, 'sourceLevel'], V19: [...SOURCE_FILTERS, 'sourceLevel', 'sourceFacet'],
+  V20: [...SOURCE_FILTERS], V21: ['ownedMetricId'], V22: [...SOURCE_FILTERS, 'sourceLevel'],
+};
+/** The dimension a view opens on; the views that do not choose one are read as a whole project. */
+function defaultDimension(viewId: GeoAnalysisId): NonNullable<GeoAnalysisDescriptor['dimension']> {
+  return viewId === 'V05' ? 'group' : ['V02', 'V03', 'V04'].includes(viewId) ? 'engine' : 'project';
+}
+/** Metrics the view cannot read (the registry's own refusals): rivals read M-16/M-17 only, the platform views none of the rival and cost ones. */
+function metricFits(viewId: GeoAnalysisId, metricId: string): boolean {
+  if (viewId === 'V08') return ['M-16', 'M-17'].includes(metricId);
+  if (['V04', 'V05', 'V27'].includes(viewId)) return !['M-16', 'M-17', 'M-18', 'M-21'].includes(metricId);
+  return true;
+}
+/**
+ * The descriptor for choosing `viewId` while `from` is open: the new view's own defaults, plus the choices that mean the same in both
+ * views (metric, time grain, source filters, entity). A frozen plan version belongs to V26 alone and is never carried into another view.
+ */
+export function geoAnalysisDescriptorForView(viewId: GeoAnalysisId, from?: GeoAnalysisDescriptor | null): GeoAnalysisDescriptor {
+  const next: Record<string, string | number> = { viewId, dimension: defaultDimension(viewId) };
+  if (!from || from.viewId === viewId) return from ? { ...from } : next as unknown as GeoAnalysisDescriptor;
+  const declared = GEO_ANALYSIS_VIEW_FIELDS[viewId];
+  const was = GEO_ANALYSIS_VIEW_FIELDS[from.viewId];
+  const carry = (key: DescriptorKey) => {
+    const value = from[key];
+    if (value != null && declared.includes(key) && was.includes(key)) next[key] = value as string | number;
+  };
+  if (typeof from.metricId === 'string' && declared.includes('metricId') && was.includes('metricId') && metricFits(viewId, from.metricId)) next.metricId = from.metricId;
+  carry('timeGrain');
+  // The platform views share one entity choice; a rival view reads brands only and a generic name needs a metric-free read.
+  if (['V04', 'V05'].includes(viewId) && ['V04', 'V05'].includes(from.viewId)) for (const key of ['entityKind', 'entityKey'] as const) carry(key);
+  if (viewId !== 'V21' && from.viewId !== 'V21') for (const key of SOURCE_FILTERS) carry(key);
+  return next as unknown as GeoAnalysisDescriptor;
+}
+/** A change inside the open view (a filter, a search) replaces the history entry; opening, switching and leaving a view add one. */
+export function geoAnalysisChangeReplaces(search: string, descriptor: GeoAnalysisDescriptor | null): boolean {
+  const open = geoAnalysisDescriptor(search);
+  return !!descriptor && !!open && open.viewId === descriptor.viewId;
+}
 export function geoAnalysisDescriptor(search: string): GeoAnalysisDescriptor | null {
   const params = new URLSearchParams(search);
   const viewId = params.get('analysis');
@@ -55,7 +109,8 @@ export function geoAnalysisSearch(search: string, descriptor: GeoAnalysisDescrip
     const original = Object.fromEntries(descriptorKeys.filter(key => params.has(key)).map(key => [key, params.getAll(key)]));
     params.set(RETURN_PARAM, JSON.stringify(original));
   }
-  const inheritedVersions = !wasAnalysis ? ['strategyVersion', 'targetVersion'].map(key => [key, params.get(key)] as const) : [];
+  // A frozen plan version is V26's alone: any other view is refused the field, so it is inherited only into V26.
+  const inheritedVersions = !wasAnalysis && descriptor?.viewId === 'V26' ? ['strategyVersion', 'targetVersion'].map(key => [key, params.get(key)] as const) : [];
   const held = params.get(RETURN_PARAM);
   params.delete('analysis');
   for (const key of descriptorKeys) params.delete(key);
@@ -72,10 +127,8 @@ export function geoAnalysisSearch(search: string, descriptor: GeoAnalysisDescrip
         if (Array.isArray(values) && values.every(value => typeof value === 'string')) for (const value of values) params.append(key, value);
       }
     } catch { /* A malformed optional return snapshot cannot change the current business scope. */ }
-    // Direct analysis links have no originating snapshot; retain only their frozen plan identity.
-    else if (wasAnalysis) for (const key of ['strategyVersion', 'targetVersion']) {
-      const value = new URLSearchParams(search).get(key); if (value) params.set(key, value);
-    }
+    // A direct analysis link has no originating snapshot, and its descriptor fields are the analysis's, not the business view's: they are
+    // not left behind in the address, where the next view opened from it would inherit them.
     params.delete(RETURN_PARAM);
   }
   return params.toString();

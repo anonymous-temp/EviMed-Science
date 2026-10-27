@@ -20,7 +20,7 @@ import { geoSessionIdFromChatPath } from "@/lib/geoLocation";
 import { webErrorMessage } from "@/lib/apiClient";
 import { Section } from "@/components/ui/Section";
 import { Disclosure } from "@/components/ui/Disclosure";
-import { GEO_ANALYSIS_OPTIONS, geoAnalysisSearch } from "./geoAnalysisMode";
+import { GEO_ANALYSIS_OPTIONS, geoAnalysisDescriptorForView, geoAnalysisSearch } from "./geoAnalysisMode";
 import { Toolbar, type ToolbarProps } from "@/components/ui/Toolbar";
 import { DataTable } from "@/components/ui/DataTable";
 import { Button } from "@/components/ui/Button";
@@ -258,12 +258,7 @@ function AnalysisPage({
             label: "分析",
             value: view.viewId,
             options: GEO_ANALYSIS_OPTIONS,
-            onChange: (value) =>
-              setView({
-                ...view,
-                viewId: value as GeoAnalysisId,
-                dimension: value === "V05" ? "group" : ["V02", "V03", "V04"].includes(value ?? "") ? "engine" : "project",
-              }),
+            onChange: (value) => { if (value) setView(geoAnalysisDescriptorForView(value as GeoAnalysisId, view)); },
           },
           ...(view.viewId === "V26" ? [{kind:"select" as const,label:"方案版本",value:view.strategyVersion!=null?String(view.strategyVersion):null,allLabel:"所选范围最新方案",options:data?.view.strategyVersion?[{value:String(data.view.strategyVersion),label:`方案版本 ${data.view.strategyVersion}`}]:[],onChange:(value:string|null)=>setView({...view,strategyVersion:value?Number(value):undefined,targetVersion:undefined})}] : []),
         ]}

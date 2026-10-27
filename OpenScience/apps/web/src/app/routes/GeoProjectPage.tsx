@@ -19,7 +19,7 @@ import {
   type GeoStepKey,
 } from "@/lib/geoClient";
 import { GeoAnalysisWorkbench } from "@/components/geo/GeoAnalysisWorkbench";
-import { GEO_ANALYSIS_OPTIONS, geoAnalysisDescriptor, geoAnalysisSearch } from "@/components/geo/geoAnalysisMode";
+import { GEO_ANALYSIS_OPTIONS, geoAnalysisChangeReplaces, geoAnalysisDescriptor, geoAnalysisDescriptorForView, geoAnalysisSearch } from "@/components/geo/geoAnalysisMode";
 import { GeoConversationPane } from "@/components/geo/GeoConversationPane";
 import { geoChatPath } from "@/lib/geoLocation";
 import { useProjectStore } from "@/lib/projects";
@@ -462,6 +462,9 @@ function GeoBand({
   const destination = (next: GeoTabKey, view?: string, step?: string, section?: string) => {
     const kept = new URLSearchParams(geoAnalysisSearch(params.toString(), null));
     kept.delete("questionMode");
+    // 方案's focus on one source or page belongs to the visit that set it (a source's 「打开实施方案」); leaving 方案 ends it, so a later
+    // visit — 「调整方案」 included — reads the whole plan again. The analysis range (selectionRef) stays: the band shows it as 「分析范围」.
+    if (!(next === "plan" && tab === "plan")) { kept.delete("planSource"); kept.delete("planUrl"); }
     const nextView = view ?? (next === tab && step === undefined ? params.get("view") ?? undefined : undefined);
     if (!nextView) kept.delete("view");
     // Only an addressed conversation travels in the address: the project's own is where every open begins, and a copy of its id turned
@@ -487,7 +490,8 @@ function GeoBand({
             : selectedStep === "sources" ? { label: "选目标档", onClick: () => navigate(destination("plan", undefined, "sources", "targets")) }
               : selectedStep === "content" ? { label: "让 AI 写下一批", onClick: ask("请为现在还没有稿件的问题群写下一批稿件，先写讲错最严重、离目标最远的。") } : null;
   const analysis = !onChat && !snapshotId ? geoAnalysisDescriptor(location.search) : null;
-  const changeAnalysis = (descriptor: Parameters<typeof geoAnalysisSearch>[1]) => navigate({ pathname: location.pathname, search: geoAnalysisSearch(location.search, descriptor), hash: location.hash });
+  const changeAnalysis = (descriptor: Parameters<typeof geoAnalysisSearch>[1]) => navigate({ pathname: location.pathname, search: geoAnalysisSearch(location.search, descriptor), hash: location.hash },
+    { replace: geoAnalysisChangeReplaces(location.search, descriptor) });
   const controls = onChat ? undefined : toolbar;
   const relatedViews: Array<{ value: GeoTabKey; label: string }> = selectedStep === "diagnosis"
     ? [{ value: "visibility", label: "可见度" }, { value: "accuracy", label: "准确与安全" }]
@@ -498,7 +502,7 @@ function GeoBand({
     views: undefined,
     summary: controls?.summary,
     navigation: [
-      ...(!onChat && !snapshotId ? [{ kind: "select" as const, label: "数据分析", value: analysis?.viewId ?? null, allLabel: "当前业务", options: GEO_ANALYSIS_OPTIONS, onChange: (value: string | null) => changeAnalysis(value ? { ...analysis, viewId: value as NonNullable<typeof analysis>["viewId"] } : null) }] : []),
+      ...(!onChat && !snapshotId ? [{ kind: "select" as const, label: "数据分析", value: analysis?.viewId ?? null, allLabel: "当前业务", options: GEO_ANALYSIS_OPTIONS, onChange: (value: string | null) => changeAnalysis(value ? geoAnalysisDescriptorForView(value as NonNullable<typeof analysis>["viewId"], analysis) : null) }] : []),
       ...(!onChat && !analysis && relatedViews.length > 1 ? [{ kind: "select" as const, label: "分析视图", value: tab, pinned: true,
         options: relatedViews, onChange: (next: string | null) => { if (next) navigate(destination(next as GeoTabKey, undefined, selectedStep ?? undefined)); } }] : []),
       ...(controls?.navigation ?? []),
@@ -640,7 +644,9 @@ const GeoAnalysisMainArea = memo(function GeoAnalysisMainArea({ api }: { api: Ge
   const navigate = useNavigate();
   const analysis = geoAnalysisDescriptor(location.search);
   if (!analysis) return null;
-  const change = (descriptor: Parameters<typeof geoAnalysisSearch>[1]) => navigate({ pathname: location.pathname, search: geoAnalysisSearch(location.search, descriptor), hash: location.hash });
+  // A filter or a search inside the open view replaces its history entry; opening, switching and leaving a view add one.
+  const change = (descriptor: Parameters<typeof geoAnalysisSearch>[1]) => navigate({ pathname: location.pathname, search: geoAnalysisSearch(location.search, descriptor), hash: location.hash },
+    { replace: geoAnalysisChangeReplaces(location.search, descriptor) });
   return <section data-geo-main-area="analysis" className="flex flex-col gap-4">
     <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-section font-semibold">{GEO_ANALYSIS_OPTIONS.find(item => item.value === analysis.viewId)?.label}</h2><Button variant="text" onClick={() => change(null)}>返回{GEO_TABS.find(item => item.key === api.tab)?.label}</Button></div>
     <GeoAnalysisWorkbench geoId={api.geoId} project={api.project} mainArea={{ descriptor: analysis, onChange: change }} />
