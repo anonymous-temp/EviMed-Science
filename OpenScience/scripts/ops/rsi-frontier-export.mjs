@@ -60,7 +60,7 @@ try {
   await client.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY");
   // An active module policy overrides the configured line (FrontierPipeline#processBatch reads `evolution-module-policy-frontier`).
   const policy = (await client.query(`SELECT payload->'policy'->'selectionThreshold' AS threshold FROM evimed_product.documents
-    WHERE id = 'evolution-module-policy-frontier' AND payload->>'status' = 'active' ORDER BY updated_at DESC LIMIT 1`)).rows[0];
+    WHERE id = 'evolution-module-policy-frontier' AND payload->>'status' = 'active' AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 1`)).rows[0];
   if (policy && Number.isFinite(Number(policy.threshold)) && policy.threshold !== null) {
     settings.threshold = Number(policy.threshold); settings.thresholdSource = "module-policy";
   }

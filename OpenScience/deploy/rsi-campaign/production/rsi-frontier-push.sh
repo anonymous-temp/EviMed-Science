@@ -8,16 +8,24 @@ umask 077
 MONTH=${1:-$(TZ=Asia/Shanghai date +%Y-%m)}
 [[ $MONTH =~ ^[0-9]{4}-[0-9]{2}$ ]] || { echo "month must be YYYY-MM" >&2; exit 2; }
 FROM=$(date -d "$MONTH-01 -2 month" +%Y-%m-01) TO=$(date -d "$MONTH-01 -1 day" +%F)
-LIB=/usr/local/lib/evimed-rsi OUT=/var/lib/evimed-rsi/export LAB=$(cat /etc/evimed-rsi/lab-host)
+# The three directories are this host's fixed layout; a test points them elsewhere.
+LIB=${RSI_LIB_DIR:-/usr/local/lib/evimed-rsi} OUT=${RSI_EXPORT_DIR:-/var/lib/evimed-rsi/export} CONF=${RSI_CONFIG_DIR:-/etc/evimed-rsi}
+LAB=$(cat "$CONF/lab-host")
 WEB=${RSI_EXPORT_WEB_CONTAINER:-web-open-science-web-1}
 mkdir -p "$OUT"
 NAME=frontier-$MONTH.json.gz
+# The export is compressed as it streams: no uncompressed copy of it is ever written on this host, and whatever a failed or interrupted
+# run leaves (a partial archive, a half-written checksum, or the uncompressed .json.tmp an older version of this script wrote) is removed
+# when the script ends, so a retry starts clean.
+trap 'rm -f "$OUT/$NAME.tmp" "$OUT/$NAME.sha256.tmp" "$OUT/frontier-$MONTH.json.tmp"' EXIT
 if [ ! -s "$OUT/$NAME.sha256" ]; then
-  docker exec -i "$WEB" node --input-type=module - --from "$FROM" --to "$TO" < "$LIB/rsi-frontier-export.mjs" > "$OUT/frontier-$MONTH.json.tmp"
-  gzip -n -c "$OUT/frontier-$MONTH.json.tmp" > "$OUT/$NAME.tmp" && rm -f "$OUT/frontier-$MONTH.json.tmp"
-  mv "$OUT/$NAME.tmp" "$OUT/$NAME" && (cd "$OUT" && sha256sum "$NAME" > "$NAME.sha256")
+  # Inside the serving container the export is niced and held to a capped heap, so it cannot take memory or CPU the web process needs.
+  docker exec -i "$WEB" nice -n 10 node --max-old-space-size="${RSI_EXPORT_MAX_HEAP_MB:-512}" --input-type=module - --from "$FROM" --to "$TO" < "$LIB/rsi-frontier-export.mjs" \
+    | gzip -n -c > "$OUT/$NAME.tmp"
+  mv "$OUT/$NAME.tmp" "$OUT/$NAME"
+  (cd "$OUT" && sha256sum "$NAME" > "$NAME.sha256.tmp" && mv "$NAME.sha256.tmp" "$NAME.sha256")
 fi
-SSH="ssh -i /etc/evimed-rsi/push_ed25519 -o UserKnownHostsFile=/etc/evimed-rsi/known_hosts -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=30"
+SSH="ssh -i $CONF/push_ed25519 -o UserKnownHostsFile=$CONF/known_hosts -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=30"
 # The data first, the checksum last: the lab starts only when both are there and they agree.
 rsync -e "$SSH" --chmod=F640 --timeout=600 "$OUT/$NAME" "rsi-inbox@$LAB:$NAME"
 rsync -e "$SSH" --chmod=F640 --timeout=60 "$OUT/$NAME.sha256" "rsi-inbox@$LAB:$NAME.sha256"

@@ -2,8 +2,15 @@
 Description=Push the month's public frontier snapshot to the offline RSI lab inbox (read-only export, write-only push)
 After=docker.service network-online.target
 Requires=docker.service
+# A failed run (the web container restarting, the lab unreachable) is tried again a quarter of an hour later, three times in six hours at
+# most; the script is idempotent, so a retry resumes at the push when the export is already there. Past that the unit stays failed for the
+# operator, and the next month's timer starts it afresh.
+StartLimitIntervalSec=6h
+StartLimitBurst=4
 [Service]
 Type=oneshot
 ExecStart=/usr/local/lib/evimed-rsi/rsi-frontier-push.sh
+Restart=on-failure
+RestartSec=15min
 TimeoutStartSec=1h
 Nice=10
