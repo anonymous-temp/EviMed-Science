@@ -13,6 +13,7 @@ import { constants as fsConstants, lstatSync, readdirSync } from "node:fs";
 import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { gzipSync } from "node:zlib";
 import { GENE_EXPRESSION_LIMITS, RUNTIME_LOCK_REASONS, RUN_CONTEXT_PROTOCOL, briefFileForSession, isolatedToolRowIsAdmitted, workspaceLayout } from "@evimed/domain";
 import { compactionConfigFromEnv, compactionRuntimeEnv, nativeInputText } from "@evimed/harness-port";
@@ -227,13 +228,40 @@ function incomingResponseBody(response) {
   });
 }
 
+/**
+ * The kernel answers HTTP 401 from one place, its admission check (dsh-client-connection `admit`), before any handler has
+ * run, and it refuses a correctly signed cookie there while its Connection is being rebuilt, which happens in the first
+ * seconds after a cold start. Seen on 2026-10-27: CI's readiness passed on `session/list` and the next `session/create`
+ * answered 401 (a rerun passed); release walks: the frame's first document answered 401, then 「打开超时」. Nothing ran, so a
+ * request whose body can be sent again is sent again, twice at most, these pauses apart; a streamed body never is. A 401 that
+ * outlives them is a credential the kernel does not take, not a race (`kernelAdmissionRetries.persisted`).
+ */
+export const KERNEL_ADMISSION_RETRY_DELAYS_MS = Object.freeze([250, 750]);
+/** What the retries above came to, since this process started (`open_science_runtime_kernel_admission_retries_total`). */
+export const kernelAdmissionRetries = { recovered: 0, persisted: 0 };
+
+/** @param {any} runtime @param {any} target @param {Record<string, any>} [options] @param {{ retryDelaysMs?: readonly number[] }} [retry] */
+export async function requestRuntime(runtime, target, options = {}, { retryDelaysMs = KERNEL_ADMISSION_RETRY_DELAYS_MS } = {}) {
+  const body = options.body;
+  const replayable = body == null || Buffer.isBuffer(body) || typeof body === "string" || body instanceof Uint8Array;
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await requestRuntimeOnce(runtime, target, options);
+    if (response.status !== 401 || !replayable || attempt >= retryDelaysMs.length || options.signal?.aborted) {
+      if (attempt > 0) kernelAdmissionRetries[response.status === 401 ? "persisted" : "recovered"] += 1;
+      return response;
+    }
+    await response.body?.cancel().catch(() => {});
+    await delay(retryDelaysMs[attempt], undefined, options.signal ? { signal: options.signal } : undefined);
+  }
+}
+
 /** TypeScript infers a destructured parameter as exactly the shape its
  *  defaults name, which rejects every other property a caller passes.
  *  @param {any} runtime
  *  @param {any} target
  *  @param {Record<string, any>} options2
  */
-export function requestRuntime(runtime, target, { method = "GET", headers = {}, body, signal } = {}) {
+function requestRuntimeOnce(runtime, target, { method = "GET", headers = {}, body, signal } = {}) {
   const url = target instanceof URL ? target : new URL(target, runtime.url);
   if (url.protocol !== "http:") {
     return Promise.reject(new Error("Hosted runtime transport only supports HTTP."));
@@ -6552,6 +6580,7 @@ export class RuntimeManager {
       // it (running and starting), the share it may hold while nobody needs
       // the room, and how often a researcher's start took one back.
       workloadTokenRefusals: { ...this.workloadTokenRefusals },
+      kernelAdmissionRetries: { ...kernelAdmissionRetries },
       attendanceReceiptWriteFailures: { ...this.attendanceReceiptWriteFailures },
       background: {
         active: this.backgroundRuntimeCount(),

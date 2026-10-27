@@ -10559,6 +10559,13 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
   );
   addMetric(
     lines,
+    "open_science_runtime_kernel_admission_retries_total",
+    "Runtime requests the kernel refused at admission (HTTP 401) and that were sent again, by how it ended: recovered (a retry was admitted, the kernel's Connection was being rebuilt) or persisted (still 401: a credential the kernel does not take).",
+    "counter",
+    Object.entries(runtimeStats.kernelAdmissionRetries ?? {}).map(([outcome, value]) => ({ value: Number(value) || 0, labels: { outcome } })),
+  );
+  addMetric(
+    lines,
     "open_science_attendance_receipt_write_failures_total",
     "Signed attendance receipts that could not be written (or mirrored to a remote runtime) before a prompt was forwarded, by where the prompt came from. The prompt is forwarded anyway; its turn reads as unattended unless its native route proves a person.",
     "counter",

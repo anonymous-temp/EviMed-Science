@@ -1127,6 +1127,17 @@ is stopping, is not this and is worth a look.
 The prompt is forwarded anyway; the turn reads as unattended (no question to the person, no task changes) unless its native
 route snapshot proves a person. A steady rise means the workspace disk or the AgentBay file API is failing, not the receipts.
 
+### A kernel answers 401 to a correctly signed cookie (2026-10-27)
+
+The kernel refuses a request with 401 only at its admission check, before any handler runs, and it does so to a valid
+browser-session cookie while its Connection is being rebuilt in the first seconds after a cold start (CI: readiness passed,
+the next `session/create` answered 401; release walks: the frame's first document answered 401 and the frame showed
+「打开超时」). Every runtime request whose body can be resent is sent again twice, 250 ms and 750 ms apart
+(`requestRuntime`), and `open_science_runtime_kernel_admission_retries_total{outcome}` says how it ended. `recovered` is the
+race and needs nothing. A rising `persisted` is a cookie the kernel does not take: compare the secret in the runtime's
+`$DSH_HOME/.credentials.yaml` with the start that wrote it, and the `Host` the request carried (the cookie's name is derived
+from it).
+
 ### NCBI's file server refuses a public GEO file
 
 `gene_expression_series` reads the series matrix from `ftp.ncbi.nlm.nih.gov`,
