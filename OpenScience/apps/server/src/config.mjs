@@ -3245,12 +3245,12 @@ export function loadConfig(overrides = {}) {
     // are finer controls and none of them is the whole thing: extraction off
     // still serves records, an index off still recalls by term match.
     memoryEnabled: overrides.memoryEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_ENABLED", true),
-    // 「记忆地图」 (memoryMap.mjs, 2026-10-12): the read-only map of what the platform remembers and knows. A view over the memory
-    // store, so it follows the subsystem's switch unless its own is set; off, its routes answer 503 by name and the page hides.
+    // The memory dashboard's document (memoryMap.mjs, 2026-10-12): the read-only map of what the platform remembers and knows. A view
+    // over the memory store, so it follows the subsystem's switch unless its own is set; off, its routes answer 503 by name and the page hides.
     memoryMapEnabled: overrides.memoryMapEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_MAP_ENABLED",
       overrides.memoryEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_ENABLED", true)),
     // The map's topics (memoryTopics.mjs): one Flash call groups an account's memories into open-vocabulary topics. `Enabled` off
-    // leaves the map without the 主题 view's data; `DailyRuns` is the most groupings one account may have made in a day (a grouping
+    // leaves the dashboard without topics; `DailyRuns` is the most groupings one account may have made in a day (a grouping
     // is only made when the memories changed, and a researcher's rename, merge or dismissal never costs one); `MinMemories` is how
     // few memories there must be before there is anything to group.
     memoryTopicsEnabled: overrides.memoryTopicsEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_TOPICS_ENABLED", true),
@@ -3261,14 +3261,6 @@ export function loadConfig(overrides = {}) {
     memoryTopicsMinMemories: Math.max(4, Math.min(200, Math.trunc(Number(
       overrides.memoryTopicsMinMemories ?? process.env.OPEN_SCIENCE_MEMORY_TOPICS_MIN_MEMORIES ?? 12,
     )) || 12)),
-    // The map's 「在做什么」 radar for any account (runTaskType.mjs): one Flash call says what kind of work a finished conversation was,
-    // from a short fixed list. `Enabled` off leaves the radar to the capabilities that answered; `DailyCalls` is the most such calls one
-    // account may have made in a day (a conversation is judged once, an older one only when the map is read) and 0 stops the judging.
-    taskTypeEnabled: overrides.taskTypeEnabled ?? boolEnv("OPEN_SCIENCE_TASK_TYPE_ENABLED", true),
-    taskTypeDailyCalls: (() => {
-      const asked = Number(overrides.taskTypeDailyCalls ?? process.env.OPEN_SCIENCE_TASK_TYPE_DAILY_CALLS ?? 60);
-      return Number.isFinite(asked) ? Math.max(0, Math.min(1000, Math.trunc(asked))) : 60;
-    })(),
     // Off by default: turning it on publishes an account's memory to whoever
     // holds an API key. A deployment decides that, never a default.
     agentMemoryApiEnabled:

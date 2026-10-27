@@ -75,7 +75,7 @@ function manyMemories(count: number, relations: number): MemoryMap {
     summary: { ...doc.summary, memories: count },
     facets: { ...doc.facets, aboutYou: [{ id: "preference", label: "偏好", count }] },
     nodes: [...doc.nodes.filter((node) => node.type !== "memory"), ...memories], edges,
-    events: memories.map((node) => ({ id: `${node.id}:created`, at: node.at as string, type: "memory" as const, change: "created", ref: node.id, lane: "account", kind: "preference", text: node.label })),
+    events: memories.map((node) => ({ id: `${node.id}:created`, at: node.at as string, type: "memory" as const, change: "created", ref: node.id, text: node.label })),
   };
 }
 
@@ -166,7 +166,7 @@ describe("总览 as a data page", () => {
     // A memory from June: inside the whole range, outside the last thirty days.
     const doc = livedIn();
     const old = memoryMark("old", { at: "2026-06-01T02:00:00.000Z", label: "六月的一句话" });
-    reads.fetchMemoryMap.mockResolvedValue({ ...doc, nodes: [...doc.nodes, old], events: [...doc.events, { id: "memory:old:created", at: old.at as string, type: "memory", change: "created", ref: old.id, lane: "account", kind: "preference", text: old.label }] });
+    reads.fetchMemoryMap.mockResolvedValue({ ...doc, nodes: [...doc.nodes, old], events: [...doc.events, { id: "memory:old:created", at: old.at as string, type: "memory", change: "created", ref: old.id, text: old.label }] });
     open();
     await ready();
     await screen.findByRole("list", { name: "最近变化" });

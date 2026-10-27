@@ -172,7 +172,6 @@ import {
 import { SpecialistClassifier } from "./specialistClassifier.mjs";
 import { ROUTING_DECISION_PATH, createRoutingDecisionRoutes } from "./routingDecision.mjs";
 import { RunTitleScheduler, RunTitler } from "./runTitles.mjs";
-import { TaskTyper, TaskTypeScheduler } from "./runTaskType.mjs";
 import { runEstimate } from "./runRoute.mjs";
 import { BUNDLED_EXAMPLES, createCommandRegistry } from "./commands.mjs";
 import { loadConfig } from "./config.mjs";
@@ -203,7 +202,6 @@ import { createCapsuleNotesSource } from "./memoryMapSources/capsuleNotes.mjs";
 import { createMethodsSource } from "./memoryMapSources/methods.mjs";
 import { createNativeMemorySource } from "./memoryMapSources/nativeMemory.mjs";
 import { createNativeRecordLinks } from "./memoryMapSources/recordLinks.mjs";
-import { createRunsSource } from "./memoryMapSources/runs.mjs";
 import { createTopicsSource } from "./memoryMapSources/topics.mjs";
 import { AgentApiKeyStore } from "./agentApiKeys.mjs";
 import { createAgentMemoryRoutes } from "./agentMemoryRoutes.mjs";
@@ -3662,13 +3660,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     titler: new RunTitler(config, { usageLedger, fetchImpl: overrides.runTitleFetch ?? globalThis.fetch }),
     recordTitle: (project, runId, title) => agentRuns.recordRunLabels(project, runId, { title, titleSource: "auto" }),
   });
-  // What kind of work a finished conversation was, for the memory map's radar: one metered flash call per conversation, recorded once
-  // on the ledger, off the critical path (runTaskType.mjs).
-  const taskTypes = new TaskTypeScheduler({
-    typer: new TaskTyper(config, { usageLedger, fetchImpl: overrides.taskTypeFetch ?? globalThis.fetch }),
-    recordType: (project, runId, taskType) => agentRuns.recordRunLabels(project, runId, { taskType }),
-    dailyCalls: () => config.taskTypeDailyCalls, usageLedger,
-  });
   // One fan-out per live run. The browser subscribes here, never to a kernel.
   const runEvents = new RunEventHub();
   // The kernel's own live stream, decoded onto the same fan-out. The flag is
@@ -4310,8 +4301,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // it, and a finished run's stops being routed at all.
       runtimeEventPump.noteRun(project, run);
       if (usagePurposeOfRun(run) !== "evolution") independentProductWork(() => runTitles.consider(project, run));
-      // A researcher's conversation that has just finished: what kind of work it was, once.
-      independentProductWork(() => taskTypes.consider(project, run));
       // A run started or ended: which one a model request belongs to may
       // have changed.
       runAttribution.delete(`${project.userId}\0${project.id}`);
@@ -5616,10 +5605,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     } : null });
   // 「记忆地图」: one read-only document assembled from independent sources, the topics a model groups the memories into, and the
   // links the memory drawer shows. The account is drawn from its memory files; the compiled graph of the knowledge base comes from the ledger's mirror.
-  // Without the memory engine there is nothing to draw of memory, and the map is its documents, methods and ledgers.
+  // Without the memory engine there is nothing to draw of memory, and the map is its documents and methods.
   const accountMemoryRecords = config.memoryEngineEnabled ? async (/** @type {string} */ userId) => (await nativeMemory.mapMemories(userId)).records : null;
   const memoryTopics = memorySettings.configured ? new MemoryTopics(config, memorySettings, { usageLedger, accountRecords: accountMemoryRecords }) : null;
-  const memoryMapProjectOf = (/** @type {any} */ user, /** @type {string} */ projectId) => store.requireProject(user, projectId);
   const memoryMapRoutes = createMemoryMapRoutes({
     config, memorySettings, store, context, decodeRouteComponent, audit, topics: memoryTopics,
     isInternalProject: internalFor,
@@ -5633,11 +5621,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       createCapsuleNotesSource({ capsules: capsuleService }),
       // The compiled graph and wiki of the project the map is drawn for, read from the ledger's mirror (knowledgePageService.fetchProducts).
       createKnowledgeGraphSource({ fetchProducts: (request) => (knowledgePages ? knowledgePages.fetchProducts(request) : Promise.resolve(null)) }),
-      createActivitySource({ agentRuns, projectOf: memoryMapProjectOf, learning: learningService, feedbackEvents }),
-      createRunsSource({
-        agentRuns, projectOf: memoryMapProjectOf, taskTypes,
-        isInternal: (/** @type {string} */ agentId) => (agentRuns.loadedAgentRegistry?.get?.(agentId)?.visibility ?? "public") === "internal",
-      }),
+      // The learned methods' events, which the dashboard's change chart counts beside the memories'.
+      createActivitySource({ learning: learningService }),
       createTopicsSource({ topics: memoryTopics, accountRecords: accountMemoryRecords }),
     ],
     edgeCorrections: new MapEdgeCorrections({ database: productDatabase }),
@@ -9544,7 +9529,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // following makes it reconnect to a kernel that is going away.
       await runtimeEventPump.closeAll();
       await runTitles.settle();
-      await taskTypes.settle();
       await agentRuns.closeAll();
       // After the run store, before the runtimes — and that order is the whole
       // point rather than a detail.

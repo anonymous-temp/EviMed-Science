@@ -14,16 +14,16 @@ const method = (id: string, at: string, over: Partial<WebMethod> = {}): WebMetho
   id, projectId: null, revision: 1, name: `method-${id}`, title: `做法 ${id}`, description: "", whenToUse: "", status: "approved", statusReason: null, origin: "inferred", counts: null,
   promotion: { status: "approved", reasons: [], missing: [] }, body: "", createdAt: at, updatedAt: at, ...over,
 });
-const event = (id: string, at: string, change = "created", over: Partial<MapEvent> = {}): MapEvent => ({ id: `memory:${id}:${change}`, at, type: "memory", change, ref: `memory:${id}`, lane: "account", kind: "preference", text: `记忆 ${id}`, ...over });
-const days = (rows: Array<[string, number]>): MapDay[] => rows.map(([t, document]) => ({ t, memory: 0, run: 0, method: 0, feedback: 0, document }));
+const event = (id: string, at: string, change = "created", over: Partial<MapEvent> = {}): MapEvent => ({ id: `memory:${id}:${change}`, at, type: "memory", change, ref: `memory:${id}`, text: `记忆 ${id}`, ...over });
+const days = (rows: Array<[string, number]>): MapDay[] => rows.map(([t, document]) => ({ t, document }));
 const pack = (id: string, importedAt: string | null, over: Partial<ReceivedCapsule> = {}): ReceivedCapsule => ({
   id, revision: 1, title: `包 ${id}`, description: "", issuerTrust: "verified", importedAt, enabled: true, counts: {}, methods: [], scanned: true, waiting: 0, scan: null, ...over,
 });
 
 function doc(over: Partial<OverviewDoc> = {}): OverviewDoc {
   return {
-    summary: { memories: 0, documents: 0, methods: 0, projects: 0, needsLook: 0, since: null },
-    facets: { projects: [], kinds: [], topics: [], dimensions: [], aboutYou: [], documentTypes: [] },
+    summary: { memories: 0, documents: 0, needsLook: 0, since: null },
+    facets: { projects: [], topics: [], aboutYou: [], documentTypes: [] },
     nodes: [], edges: [], buckets: { unit: "day", series: [] }, events: [], missing: [],
     scope: { projectId: null, range: { from: null, to: "2026-10-12", unit: "month" }, timeZone: "UTC", focus: null, depth: null },
     ...over,
@@ -50,7 +50,7 @@ describe("the numbers of the tiles", () => {
   it("counts 关于你 as the server counted it, before any memory is folded into a group; and from the marks when the server did not say", () => {
     expect(aboutYouCount(doc({ facets: { ...doc().facets, aboutYou: [{ id: "preference", label: "偏好", count: 7 }, { id: "profile", label: "背景", count: 5 }] } }))).toBe(12);
     const nodes = [memory("a"), memory("b"), memory("c", { projectId: "p1", subtype: "project_fact" }), memory("d", { state: "replaced" })];
-    expect(aboutYouCount({ nodes, facets: { projects: [], kinds: [], topics: [], dimensions: [] } })).toBe(2);
+    expect(aboutYouCount({ nodes, facets: { projects: [], topics: [] } })).toBe(2);
   });
 
   it("counts the projects that hold something and their memories, the memories that name no project the account has being one more project", () => {
@@ -64,7 +64,7 @@ describe("the numbers of the tiles", () => {
 
   it("counts the documents by the knowledge base's own count, and from the summary for an older control plane", () => {
     expect(knowledgeCount(doc({ facets: { ...doc().facets, documentTypes: [{ id: "a", label: "a", count: 31 }, { id: "b", label: "b", count: 9 }] } }))).toBe(40);
-    expect(knowledgeCount({ nodes: [], facets: { projects: [], kinds: [], topics: [], dimensions: [] }, summary: { ...doc().summary, documents: 4 } })).toBe(4);
+    expect(knowledgeCount({ nodes: [], facets: { projects: [], topics: [] }, summary: { ...doc().summary, documents: 4 } })).toBe(4);
   });
 
   it("counts the packs in force, never a pack taken down, and all of them; a pack is never a memory", () => {

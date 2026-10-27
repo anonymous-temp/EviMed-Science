@@ -3,9 +3,9 @@ import { MEMORY_CHANGED_EVENT } from "@/lib/memoryClient";
 import { fetchMemoryMap, refreshTopics, type MapQuery, type MemoryMap } from "@/lib/memoryMapClient";
 
 /**
- * The memory map's document (every block unless `include` names the blocks a page draws), read again only when what the server filters changes — the project, the range, the focus and its
- * depth — and when a memory changed on screen. The topic, the kind, the aspect and the search narrow the document in hand, so the
- * five views switch without asking (spec §5.2).
+ * The memory map's document (the blocks the dashboard draws unless `include` names others), read again only when what the server filters changes — the project, the range, the focus and its
+ * depth — and when a memory changed on screen. The topic, the kind and the search narrow the document in hand, so the
+ * dashboard's panels switch without asking.
  *
  * Refreshes retain the current selection's document. Changing project, range or focus immediately removes the old document:
  * its marks and actions must never appear under the next selection's header, even if that request fails.

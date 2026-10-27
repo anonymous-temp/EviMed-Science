@@ -27,8 +27,8 @@
 
 import { SOURCE_KINDS } from "@evimed/domain";
 
+import { dayOf } from "../memoryTimeline.mjs";
 import { sourceDisplayOf } from "../sourceDisplay.mjs";
-import { bucketsOf } from "./activity.mjs";
 import { excerpt, instant, nodeId } from "./common.mjs";
 
 /** How many projects' documents one read lists. */
@@ -39,6 +39,28 @@ export const MAP_DOCUMENT_PAGE = 100;
 export const MAP_DOCUMENT_LOOKUPS = 30;
 /** How many pages of one project are followed to fill `MAP_DOCUMENT_PAGE` documents once the compiled files are left out. */
 export const MAP_DOCUMENT_PAGES = 4;
+/** How many days the calendar of added documents covers. */
+export const MAP_BUCKET_DAYS = 365;
+
+/**
+ * The days, in a zone, and how many documents were added on each, over the last year: the dashboard's 知识 lane of its change chart.
+ * @param {readonly string[]} added the instants the documents were added at (ISO) @param {string} timeZone @param {Date} now
+ * @returns {{ t: string, document: number }[]}
+ */
+export function documentDays(added, timeZone, now) {
+  const format = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" });
+  const from = new Date(now.getTime() - MAP_BUCKET_DAYS * 86_400_000).toISOString();
+  /** @type {Map<string, { t: string, document: number }>} */
+  const days = new Map();
+  for (const at of added) {
+    if (at < from || at > now.toISOString()) continue;
+    const t = dayOf(at, format);
+    const bucket = days.get(t) ?? { t, document: 0 };
+    bucket.document += 1;
+    days.set(t, bucket);
+  }
+  return [...days.values()].sort((left, right) => left.t.localeCompare(right.t));
+}
 
 /** Whether a source record is a file the engine compiled and the platform mirrored (a wiki page or a graph entity), not a document. @param {any} item */
 export function isCompiledMirror(item) { return sourceDisplayOf(item).origin === "wiki"; }
@@ -134,8 +156,8 @@ export function createDocumentsSource({ sources, namedSources = null }) {
         } catch { /* the placeholders stand (principle 19) */ }
       }
       // The days the documents were added, for the growth strip: the newest of each project that the page read.
-      const added = items.map((item) => instant(item.createdAt)).filter((at) => at !== null).map((at) => ({ at: /** @type {string} */ (at), type: "document" }));
-      return { nodes, edges, buckets: bucketsOf(added, request.timeZone, request.now), facets: { documentTypes, projectDocuments } };
+      const added = items.map((item) => instant(item.createdAt)).filter((at) => at !== null);
+      return { nodes, edges, buckets: documentDays(/** @type {string[]} */ (added), request.timeZone, request.now), facets: { documentTypes, projectDocuments } };
     },
   };
 }
