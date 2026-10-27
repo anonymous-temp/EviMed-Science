@@ -29,6 +29,9 @@
  *    bound by the control plane and `workspace/create` is refused for any
  *    other path. Hiding a control is presentation; the refusal lives in
  *    `@evimed/domain`'s runtime-UI surface and does not depend on this body.
+ *  - Links in an answer. A plain click on an external http(s) link in an
+ *    answer's prose opens the reader's own browser tab (2026-10-27), where the
+ *    chat's own default would open its sidebar browser; see `answerLinkToOpen`.
  *
  * The language pack is its own body (`runtimeUiLocale.mjs`), so either can be
  * switched off without the other.
@@ -263,6 +266,39 @@ export function shellStylesheet(pin, operator = false) {
 }
 
 /**
+ * The address a click on a link in an answer should open in the reader's own browser tab, or null when the click is the
+ * kernel's to handle.
+ *
+ * It is the answer's prose and nothing else: an anchor inside an `assistant-step` flow item (the chat's own data attribute, the
+ * one the stylesheet above already names), outside every block of ours that the step also holds (each carries a `data-evimed-*`
+ * attribute: the source cards, the reply check, the delivered files, the notices), and outside a button, a dialog or a menu.
+ * Tool rows, the user's turn, the composer, the right pane and the sidebar are not flow items of that kind, so none of their
+ * links is reached. A plain primary click only -- a modified one keeps whatever the kernel does with it -- and only an external
+ * http(s) address: an address on this page's own origin is a route of the application (a file, an anchor) and stays the kernel's.
+ *
+ * @param {any} event A click.
+ * @param {string} [origin] This page's origin.
+ * @returns {string | null}
+ */
+export function answerLinkToOpen(event, origin) {
+  if (!event || event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return null;
+  const start = event.target && typeof event.target.closest === 'function' ? event.target : event.target?.parentElement;
+  const anchor = start && typeof start.closest === 'function' ? start.closest('a[href]') : null;
+  if (!anchor || anchor.hasAttribute('download')) return null;
+  const step = anchor.closest('[data-chat-flow-kind="assistant-step"]');
+  if (!step) return null;
+  if (anchor.closest('button,[role="button"],[role="dialog"],[role="menu"],[role="tooltip"]')) return null;
+  for (let node = anchor; node && node !== step; node = node.parentElement) {
+    for (const attribute of Array.from(node.attributes ?? [])) if (/^data-evimed-/.test(/** @type {any} */ (attribute).name)) return null;
+  }
+  let url;
+  try { url = new URL(anchor.href); } catch { return null; }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+  if (origin && url.origin === origin) return null;
+  return url.href;
+}
+
+/**
  * @param {any} ctx Native Cordis client context.
  * @param {any} [_config]
  * @param {any} target Browser global, injectable by the contract suite.
@@ -364,7 +400,29 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     doc.head.appendChild(style);
     ctx.effect(() => () => { style.remove(); }, 'evimed-shell: stylesheet');
   }
+
+  // A link in an answer opens in the reader's own browser tab (owner, 2026-10-27), as the 依据 popover's and the reply check's
+  // already do. The kernel's chat decides this itself: ui-chat 0.2.1-rc.2 keeps a `linkOpening` preference (`sidebar` |
+  // `new-tab`, default `sidebar`) in its `ui-chat` settings namespace, and on `sidebar` a plain click opens the sidebar
+  // browser. The preference's row is hidden here and its host read and write are out of reach of a hosted page (the proxy denies
+  // the `settings` namespace, and the form client keeps a non-loopback page's settings in the page only), so the default
+  // cannot be seeded from the profile. This is the narrow adapter: a capture listener on the document, so it runs before the
+  // chat's own delegated handler, that answers only what `answerLinkToOpen` selects. The managed browser stays a tool and a
+  // tab; only the chat's links stop opening it. Delete when the kernel lets a hosted client keep `ui-chat.linkOpening`
+  // (then set it to `new-tab` in the profile and remove this listener and the function above).
+  if (doc && typeof doc.addEventListener === 'function' && typeof target.open === 'function') {
+    /** @param {any} event */
+    const openAnswerLink = (event) => {
+      const href = answerLinkToOpen(event, target.location?.origin);
+      if (!href) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      target.open(href, '_blank', 'noopener,noreferrer');
+    };
+    doc.addEventListener('click', openAnswerLink, true);
+    ctx.effect(() => () => { doc.removeEventListener('click', openAnswerLink, true); }, 'evimed-shell: answer links');
+  }
 }
 
 /** The body as the socket's build composes it: its helpers, then `apply`. */
-export const BODY = Object.freeze({ name: 'shell', inject, parts: Object.freeze([evimedBrand, evimedFavicon, shellStylesheet, apply]) });
+export const BODY = Object.freeze({ name: 'shell', inject, parts: Object.freeze([evimedBrand, evimedFavicon, shellStylesheet, answerLinkToOpen, apply]) });

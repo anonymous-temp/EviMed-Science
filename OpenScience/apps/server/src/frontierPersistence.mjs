@@ -333,14 +333,15 @@ ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS quoted_zh text;
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS reader_tidy jsonb;
 CREATE INDEX IF NOT EXISTS item_texts_reader_tidy_due ON evimed_frontier.item_texts (item_id)
   WHERE reader_tidy IS NULL AND (body_text IS NOT NULL OR abstract_raw IS NOT NULL OR body_excerpt IS NOT NULL);
--- reader-text 2026-10-22 (frontierLead.mjs, frontierInsight.mjs): the reader's 导读 paragraph, written from the settled reader text
--- and kept with the hash of the text it was written from (lead_basis = reader_tidy->>'sha'); the 「AI 解读」 of a 精选 item, its
--- cited reports ([{n, item_id}]) and its basis (the text's and the related reports' hash); and when a published item's text last
--- changed, so a late abstract is edited even after the owed-edit window. A full text the platform read itself (an open-access PDF
+-- reader-text 2026-10-22 (frontierLead.mjs): the reader's 导读 paragraph, written from the settled reader text
+-- and kept with the hash of the text it was written from (lead_basis = reader_tidy->>'sha'); the insight columns below are the retired
+-- 「AI 解读」 (owner, 2026-10-27: the reader keeps the 导读 and the 要点 and nothing writes or reads them; no destructive DDL, they stay
+-- on the rows they hold); and when a published item's text last changed, so a late abstract is edited even after the owed-edit window. A full text the platform read itself (an open-access PDF
 -- through the document parser) says so in item_texts.body_text_origin; the plugin's says nothing (null).
 ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS lead_zh text CHECK (char_length(lead_zh) <= 800);
 ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS lead_basis text;
 ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS lead_at timestamptz(3);
+-- RETIRED 2026-10-27 (owner): insight_zh, insight_refs, insight_basis and insight_at are no longer written or read.
 ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS insight_zh text CHECK (char_length(insight_zh) <= 800);
 ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS insight_refs jsonb;
 ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS insight_basis text;

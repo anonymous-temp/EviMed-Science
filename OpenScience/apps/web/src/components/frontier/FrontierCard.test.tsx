@@ -219,15 +219,29 @@ describe("a card", () => {
     expect(within(screen.getByRole("listitem").querySelector(".w-14") as HTMLElement).getByText("00:30")).toBeInTheDocument();
   });
 
-  it("in a day group, an item whose source gave only the day has no clock, in the column or on a phone, and keeps the column and its dot", () => {
+  it("in a day group, an item whose source gave only the day says 「当天」 in the column and on a phone, never a clock, and keeps its dot (owner, 2026-10-27)", async () => {
     renderCard(frontierItem({ datePrecision: "day", timelineAt: "2026-09-22T01:05:00.000Z", selected: true }), { markSelected: true, grouped: true });
     const item = screen.getByRole("listitem");
-    const column = item.querySelector(".w-14");
+    const column = item.querySelector(".w-14") as HTMLElement;
     expect(column).not.toBeNull();
-    expect(column?.querySelector("time")).toBeNull();
-    expect(column?.querySelector(".bg-accent")).not.toBeNull();
+    expect(column.querySelector("time")).toBeNull();
+    const said = within(column).getByText("当天");
+    expect(said).toHaveClass("text-caption", "text-text-3");
+    // Why there is no hour is the tooltip's, not a native title (the shell has none): it stays in the document for a screen reader.
+    expect(said).not.toHaveAttribute("title");
+    await userEvent.hover(said);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("来源只给出了日期");
+    expect(column.querySelector(".bg-accent")).not.toBeNull();
     expect(item).not.toHaveTextContent("09:05");
     expect(item.querySelector(".sm\\:hidden .tabular-nums")).toBeNull();
+    // On a phone the column is not drawn: the source line carries it.
+    const line = within(within(item).getByRole("article")).getByText("当天");
+    expect(line.closest(".sm\\:hidden")).not.toBeNull();
+  });
+
+  it("in a day group, an item with an hour says no 「当天」", () => {
+    renderCard(frontierItem({ datePrecision: "instant", timelineAt: "2026-09-22T01:05:00.000Z" }), { grouped: true });
+    expect(screen.getByRole("listitem")).not.toHaveTextContent("当天");
   });
 
   it("in a list not cut into days, an item with only a day says 「今天」 where an instant says its clock", () => {

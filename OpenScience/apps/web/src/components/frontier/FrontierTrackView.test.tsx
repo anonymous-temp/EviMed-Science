@@ -224,9 +224,27 @@ describe("热榜's line while a congress is on", () => {
     ]);
     wrap(<CongressNowLine />);
     const link = await screen.findByRole("link", { name: /ESMO 2026/ });
-    expect(link).toHaveTextContent("ESMO 2026进行中·57 条");
+    // Said as what it is (owner, 2026-10-27): the caption, the congress by its code and name, its state, and what its page holds.
+    expect(link).toHaveTextContent("会议专题ESMO 2026 · 欧洲肿瘤内科学会年会进行中每日 AI 速递 · 收录 57 条");
     expect(link).toHaveAttribute("href", "/app/frontier/congress/esmo-2026");
     expect(screen.getAllByRole("link")).toHaveLength(1);
+    expect(screen.getByText("会议专题")).toHaveClass("text-caption", "text-text-3");
+    // One line where there is room, wrapping on a phone.
+    expect(link).toHaveClass("flex", "flex-wrap");
+  });
+  it("says the count the hub says: the congress list's own itemCount, never a number of its own", async () => {
+    client.listFrontierCongresses.mockResolvedValue([
+      { id: "esmo-2026", code: "ESMO 2026", name: "欧洲肿瘤内科学会年会", nameEn: "", start: "2026-10-23", end: "2026-10-27", city: null, specialty: null, specialtyLabel: null, status: "ongoing", itemCount: 624 },
+    ]);
+    wrap(<CongressNowLine />);
+    expect(await screen.findByRole("link")).toHaveTextContent("收录 624 条");
+  });
+  it("names the congress by its code alone where it has no name of its own", async () => {
+    client.listFrontierCongresses.mockResolvedValue([
+      { id: "esmo-2026", code: "ESMO 2026", name: "ESMO 2026", nameEn: "", start: "2026-10-23", end: "2026-10-27", city: null, specialty: null, specialtyLabel: null, status: "ongoing", itemCount: 5 },
+    ]);
+    wrap(<CongressNowLine />);
+    expect(await screen.findByRole("link")).toHaveTextContent("会议专题ESMO 2026进行中");
   });
   it("is nothing while no congress is on, or the one on has no items", async () => {
     client.listFrontierCongresses.mockResolvedValue([{ id: "esmo-2026", code: "ESMO 2026", name: "x", nameEn: "", start: "2026-10-23", end: "2026-10-27", city: null, specialty: null, specialtyLabel: null, status: "ongoing", itemCount: 0 }]);

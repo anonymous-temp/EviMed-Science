@@ -293,6 +293,24 @@ export function itemClock(item: Pick<FrontierItem, "timelineAt" | "datePrecision
 }
 
 /**
+ * What the clock column says for an item `itemClock` gives no hour (owner, 2026-10-27: a row with only the dot read as a fault): 「当天」,
+ * the day the group is headed with, and as the tooltip's words why there is no hour. Null for an item that has one.
+ */
+export function dayOnlyClock(item: Pick<FrontierItem, "datePrecision">): { text: string; hint: string } | null {
+  return item.datePrecision === "day" ? { text: "当天", hint: "来源只给出了日期" } : null;
+}
+
+/**
+ * A safety alert with nothing written about it (owner, 2026-10-27): the PMDA and PRAC notices come as a title and nothing else, and the
+ * day's mix always takes them (`safety-bypass`), so 精选 opened on four rows of 「日本PMDA 修订…的注意事项」. The card reads `summary`
+ * alone (the 导读 and the 要点 belong to the reader), so an alert whose summary is empty is title-only. 精选 leaves such an alert to the
+ * safety strip at its top (`foldedIntoStrip`); 全部 draws it as it always did.
+ */
+export function titleOnlyAlert(item: Pick<FrontierItem, "safetyAlert" | "summary">): boolean {
+  return item.safetyAlert && !(item.summary ?? "").trim();
+}
+
+/**
  * When an item came, in a list that is not cut into days (与我相关, a search by relevance, an event's list), said in the card's meta row
  * after its source: the clock today (「09:06」; 「今天」 for an item that has no hour), the day before (「10月20日」), the year too before
  * this one. A day-grouped list has the clock in its own column instead (`itemClock`). Beijing time.

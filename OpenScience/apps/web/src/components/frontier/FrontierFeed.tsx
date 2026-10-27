@@ -40,10 +40,13 @@ export const FEED_PAGE_SIZE = 30;
  * AIHOT's timeline has it — not one more filter on the band (owner, 2026-10-25);
  * while it empties the list it stays above the empty state. A search's results
  * open with 「关注“<词>”」 (`followSearch`), which makes the words a topic follow.
+ *
+ * `omit` leaves an item out of the day groups (owner, 2026-10-27: 精选 gives a title-only safety alert to its strip); the heading's count
+ * is of what is drawn. A search's results are not cut into days and keep every match.
  */
 export function FeedList({
   view, q, filtered, empty, listing, error, fresh, firstRun, loadingMore, renderItem,
-  onRetry, onFresh, onMore, onAll, onClear, unread, followSearch,
+  onRetry, onFresh, onMore, onAll, onClear, unread, followSearch, omit,
 }: {
   view: "selected" | "all";
   q: string;
@@ -68,11 +71,16 @@ export function FeedList({
   unread?: { pressed: boolean; onChange: (pressed: boolean) => void };
   /** A search's 「关注“<词>”」 (or 「已关注“<词>”」). */
   followSearch?: ToolbarAction | null;
+  /** Items the day groups do not draw (not applied to a search's results). */
+  omit?: (item: FrontierItem) => boolean;
 }) {
   if (!listing) {
     return error ? <LoadError message={error} onRetry={onRetry} /> : <FrontierSkeleton />;
   }
-  const days = q ? [] : groupByDay(listing.items);
+  const drawn = q || !omit ? listing.items : listing.items.filter((item) => !omit(item));
+  const days = q ? [] : groupByDay(drawn);
+  // Everything on this page was left out, and there is another page: it is not empty yet, and 「加载更多」 is the way on.
+  const leftToLoad = drawn.length === 0 && listing.items.length > 0 && listing.nextCursor !== null;
   const unreadToggle = unread && (
     <FilterChip pressed={unread.pressed} className="shrink-0" onClick={() => unread.onChange(!unread.pressed)}>只看未读</FilterChip>
   );
@@ -91,8 +99,8 @@ export function FeedList({
           <ArrowUp size={16} aria-hidden="true" />有 {fresh >= FEED_PAGE_SIZE ? `${fresh}+` : fresh} 条新的
         </Button>
       )}
-      {listing.items.length === 0 && !q && unread?.pressed && <div className="flex justify-end">{unreadToggle}</div>}
-      {listing.items.length === 0 ? (
+      {drawn.length === 0 && !q && unread?.pressed && <div className="flex justify-end">{unreadToggle}</div>}
+      {drawn.length === 0 && !leftToLoad ? (
         // An empty list always says where to go from it (DESIGN.md rule 8): out of a search or a filter, to the full list, or to the zones.
         q ? <EmptyState icon={Search} title={`没有找到和“${q}”相关的动态`} action={<Button variant="secondary" onClick={onClear}>清除搜索</Button>} />
           : filtered ? <EmptyState icon={Filter} title="没有结果" action={<Button variant="secondary" onClick={onClear}>清除筛选</Button>} />

@@ -1963,7 +1963,7 @@ export const EXTENSION_ERROR_CODES = Object.freeze([
   'skill_platform_not_found', 'skill_platform_not_copyable', 'skill_platform_unreadable',
 ])
 
-export const MANAGED_BROWSER_ERROR_CODES = Object.freeze(['managed_browser_invalid','managed_browser_not_found','managed_browser_sequence_conflict','managed_browser_busy','managed_browser_unavailable','managed_browser_action_unknown']);
+export const MANAGED_BROWSER_ERROR_CODES = Object.freeze(['managed_browser_invalid','managed_browser_not_found','managed_browser_sequence_conflict','managed_browser_busy','managed_browser_unavailable','managed_browser_action_unknown','managed_browser_page_failed']);
 
 export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...Object.keys(EVOLUTION_ERROR_MESSAGES),
@@ -2110,6 +2110,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   managed_browser_busy: '浏览器正在处理操作，请稍后重试。',
   managed_browser_unavailable: '浏览器暂时无法连接，可稍后重试。',
   managed_browser_action_unknown: '本次操作结果尚未确认，请先查看页面再继续。',
+  managed_browser_page_failed: '页面无法打开，可在系统浏览器中打开。',
 
   extension_contract_invalid: '提交的内容格式不正确，请检查后重新提交。',
   extension_proof_untrusted: '这个扩展尚未取得平台可核对的兼容记录。',

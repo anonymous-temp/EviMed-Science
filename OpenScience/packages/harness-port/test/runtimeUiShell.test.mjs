@@ -9,7 +9,7 @@ import test from 'node:test';
 import { colorRole } from '@evimed/design-tokens';
 import { kernelThemeTokens } from '@evimed/design-tokens/kernel';
 
-import { EVIMED_FAVICON, GEOMETRY_KERNEL_PIN, apply, inject, shellStylesheet } from '../src/runtimeUiShell.mjs';
+import { BODY, EVIMED_FAVICON, GEOMETRY_KERNEL_PIN, answerLinkToOpen, apply, inject, shellStylesheet } from '../src/runtimeUiShell.mjs';
 import { fakeCtx, fakeTarget, kernelSlots, kitFor, renderStatic } from './helpers/frameFakes.mjs';
 
 /** @param {{ framed?: boolean, react?: boolean, embedded?: boolean }} [options] */
@@ -270,4 +270,90 @@ test('the three rules are the researcher\'s and the operator\'s alike', () => {
   for (const css of [shellStylesheet(GEOMETRY_KERNEL_PIN), shellStylesheet(GEOMETRY_KERNEL_PIN, true)]) {
     assert.ok(css.includes('.dsh-mmd-badge,.dsh-mmd-btn') && css.includes('section[aria-busy]') && css.includes('dsh-slash-option-skill-'));
   }
+});
+
+// A link in an answer opens in the reader's own tab. The kernel's chat would open its sidebar browser (its `linkOpening`
+// default, unreachable here); the shell's capture listener answers only a plain click on an external link in an answer's prose.
+test('a plain click on a link in an answer opens a new tab and goes no further; everything else is left to the kernel', async () => {
+  const { createRequire } = await import('node:module');
+  const require = createRequire(new URL('../../../apps/web/package.json', import.meta.url));
+  const { JSDOM } = require('js' + 'dom');
+  const dom = new JSDOM(`<div id="root">
+    <div data-chat-flow-kind="assistant-step">
+      <p>见 <a id="plain" href="https://example.org/paper">论文</a>，<a id="nested" href="http://example.org/b?x=1#y"><strong>粗体</strong></a>，
+        <a id="file" href="/files/report.pdf">报告</a>，<a id="anchor" href="#note">注</a>，<a id="mail" href="mailto:someone@example.org">邮件</a>，
+        <a id="save" href="https://example.org/data.csv" download>数据</a></p>
+      <div data-evimed-sources><ul><li data-evimed-source><a id="card" href="https://example.org/card">来源</a></li></ul></div>
+      <div data-evimed-reply-check><a id="check" href="https://example.org/check">核对</a></div>
+      <div role="dialog"><a id="dialog" href="https://example.org/dialog">弹层</a></div>
+      <button type="button"><a id="inbutton" href="https://example.org/button">按钮</a></button>
+    </div>
+    <div data-chat-flow-kind="user"><a id="user" href="https://example.org/user">用户</a></div>
+    <div data-chat-flow-kind="tool-call"><a id="tool" href="https://example.org/tool">工具</a></div>
+    <aside id="pane"><a id="pane-link" href="https://example.org/pane">窗格</a></aside>
+  </div>`, { url: 'https://app.example/frame/' });
+  const { document, MouseEvent } = dom.window;
+  const f = fixture();
+  /** @type {any[][]} */ const opened = [];
+  f.target.document = document;
+  f.target.location = { origin: 'https://app.example' };
+  f.target.open = (/** @type {any[]} */ ...args) => { opened.push(args); return null; };
+  apply(f.ctx, {}, f.target, undefined, f.kit);
+
+  /** @type {string[]} */ const reached = [];
+  const bubbled = (/** @type {Event} */ event) => reached.push(`bubble:${/** @type {any} */ (event.target).id}`);
+  document.getElementById('root').addEventListener('click', bubbled);
+  // A capture handler registered after the shell's, as a kernel's own would be.
+  const kernel = (/** @type {Event} */ event) => reached.push(`capture:${/** @type {any} */ (event.target).id}`);
+  document.addEventListener('click', kernel, true);
+  /** @param {string} id @param {Record<string, any>} [init] */
+  const click = (id, init = {}) => {
+    reached.length = 0;
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0, ...init });
+    document.getElementById(id).dispatchEvent(event);
+    return { prevented: event.defaultPrevented, reached: [...reached] };
+  };
+
+  const plain = click('plain');
+  assert.deepEqual(opened, [['https://example.org/paper', '_blank', 'noopener,noreferrer']], 'a new tab, with no opener');
+  assert.equal(plain.prevented, true);
+  assert.deepEqual(plain.reached, [], 'neither the kernel\'s capture handler nor its bubble handler ran');
+  // A click on what is inside the link is a click on the link.
+  const nested = click('nested');
+  assert.deepEqual(opened.at(-1), ['http://example.org/b?x=1#y', '_blank', 'noopener,noreferrer']);
+  assert.equal(nested.prevented, true);
+  assert.equal(opened.length, 2);
+
+  // A modified or non-primary click keeps the kernel's own behaviour.
+  for (const init of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }, { button: 2 }]) {
+    const left = click('plain', init);
+    assert.equal(left.prevented, false, JSON.stringify(init));
+    assert.deepEqual(left.reached, ['capture:plain', 'bubble:plain'], JSON.stringify(init));
+  }
+  assert.equal(opened.length, 2, 'no modified click opened a tab of ours');
+
+  // Outside the answer's prose, or not an external web address: the kernel's.
+  for (const id of ['user', 'tool', 'pane-link', 'file', 'anchor', 'mail', 'save', 'card', 'check', 'dialog', 'inbutton']) {
+    const left = click(id);
+    assert.equal(left.prevented, false, id);
+    assert.deepEqual(left.reached, [`capture:${id}`, `bubble:${id}`], id);
+  }
+  assert.equal(opened.length, 2, 'nothing else was opened');
+
+  // Torn down with the page's plugin: the kernel's behaviour is back.
+  for (const effect of f.ctx.effects) effect.dispose();
+  const afterwards = click('plain');
+  assert.equal(afterwards.prevented, false);
+  assert.equal(opened.length, 2);
+  dom.window.close();
+});
+
+test('the answer-link adapter is installed only where a document and a window.open exist, and is part of the body the page receives', () => {
+  const bare = fixture();
+  bare.target.open = undefined;
+  apply(bare.ctx, {}, bare.target, undefined, bare.kit);
+  assert.ok(!bare.ctx.effects.some((/** @type {any} */ effect) => effect.label === 'evimed-shell: answer links'));
+  assert.ok(BODY.parts.includes(answerLinkToOpen), 'the page evaluates the body\'s parts, so the decision has to travel with it');
+  assert.equal(answerLinkToOpen({ button: 0, target: null }), null);
+  assert.equal(answerLinkToOpen(null), null);
 });

@@ -217,6 +217,40 @@ test('a research call reads as a verb and its subject, never as a tool name; the
   assert.doesNotMatch(failed, /upstream|refused/);
 });
 
+test('a tool row is a step of the process view -- a plain line, the name at 400, the count a grey chip at 12 px -- and the cards are only the plan and the task', () => {
+  // 2026-10-27: the kernel's own 「思考」 and 「读取」 rows are plain lines at the content size; ours were bordered cards
+  // with a 600 title beside them, so one finished turn showed two sizes of row.
+  const f = frame();
+  const rows = {
+    shell: renderStatic(f.view('bash'), { block: settled('bash', { command: 'python3 count.py' }, 'ok') }),
+    frontier: renderStatic(f.view('mcp__evimed__frontier_search'), {
+      block: settled('mcp__evimed__frontier_search', { query: '司美格鲁肽' }, JSON.stringify({ status: 'success', summary: 'ok', data: { items: Array.from({ length: 20 }, (_, index) => index) } })),
+    }),
+    plain: renderStatic(f.view('evimed_delegate'), { block: { get kind() { throw new Error('a shape from a newer kernel'); } } }),
+    delegate: renderStatic(f.view('evimed_delegate'), { block: settled('evimed_delegate', { deliverableId: 'evidence' }, ok({ handle: 'h-1', deliverableId: 'evidence', childSessionId: 'child-1', status: 'started' })) }),
+  };
+  assert.match(rows.shell, /运行脚本/);
+  assert.match(rows.frontier, /20 条/);
+  assert.match(rows.plain, /data-evimed-toolview="plain"/);
+  assert.match(rows.delegate, /data-evimed-toolview="delegate"/);
+  for (const [name, html] of Object.entries(rows)) {
+    const row = /^<div style="([^"]*)"/.exec(html)?.[1] ?? '';
+    assert.doesNotMatch(row, /border|padding/, `${name}: the row is a line, not a card`);
+    assert.match(row, /font-size:var\(--dsh-content-font-size, 14px\)/, `${name}: the row follows the content size the kernel's own rows follow`);
+    const title = /<span style="([^"]*)"/.exec(html)?.[1] ?? '';
+    assert.match(title, /font-weight:400/, `${name}: the name is not a heading`);
+    assert.doesNotMatch(html, /font-weight:600/, `${name}: nothing in a step is bold`);
+  }
+  for (const html of [rows.shell, rows.frontier, rows.delegate]) {
+    const chip = /<span style="([^"]*background:[^"]*)"/.exec(html)?.[1] ?? '';
+    assert.match(chip, /font-size:12px/, 'the count is a chip at the caption size');
+    assert.match(chip, /height:20px/);
+    assert.match(chip, /line-height:20px/);
+  }
+  // What stays a card: the plan, which is a list to read, and the scheduled task, which carries a button.
+  assert.match(renderStatic(f.view('evimed_plan'), { block: settled('evimed_plan', PLAN_ARGS, PLAN_RESULT) }), /border:1px solid/);
+});
+
 test('an outcome is counted from the result, and a quotation check says what it found', () => {
   const kitted = kit();
   const quote = toolLineView(settled('mcp__evimed__locate_quote', { quote: '36% for all-cause mortality' },

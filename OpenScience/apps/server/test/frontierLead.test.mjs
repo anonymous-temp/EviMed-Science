@@ -1,9 +1,9 @@
-// The reader's 导读 paragraph and 「AI 解读」 (frontierLead.mjs, frontierInsight.mjs, 2026-10-22), the full text of an open-access
-// PDF as contract paragraphs (frontierFullTextParagraphs), and a translated section heading keeping its mark.
+// The reader's 导读 paragraph (frontierLead.mjs, 2026-10-22), the full text of an open-access PDF as contract paragraphs
+// (frontierFullTextParagraphs), and a translated section heading keeping its mark. (The 「AI 解读」 that shared this file was retired on
+// 2026-10-27 with its pipeline step.)
 import assert from "node:assert/strict";
 import test from "node:test";
 import { verifyParagraph } from "../src/frontierEditor.mjs";
-import { buildInsightInput, frontierInsightBasis, frontierInsightWorthAsking, frontierWriteInsight, verifyInsight } from "../src/frontierInsight.mjs";
 import { FRONTIER_LEAD_GUIDES, FRONTIER_LEAD_INSTRUCTIONS, FRONTIER_LEAD_LIMITS, buildLeadInput, frontierLeadInstructions, frontierLeadLimit, frontierWriteLead,
   verifyLead } from "../src/frontierLead.mjs";
 import { FRONTIER_GENRES } from "@evimed/domain";
@@ -99,63 +99,6 @@ test("a 导读's numbers are checked against the title and the text, not the dat
   const dated = buildLeadInput({ sourceName: "来源 2026", date: "2026-10-21", titleRaw: "FDA 批准新药", text: `${"FDA 批准一款新药用于成人慢性乙肝。".repeat(6)}`, kind: "body" });
   assert.ok(verifyLead({ lead_zh: "FDA 于 2026 年 10 月 21 日批准一款新药用于成人慢性乙肝。" }, dated).issues.some((issue) => issue.includes("2026")));
   assert.deepEqual(verifyLead({ lead_zh: "FDA 批准一款新药用于成人慢性乙肝。" }, dated).issues, []);
-});
-
-/** @type {import("../src/frontierInsight.mjs").FrontierInsightRef[]} */
-const refs = [
-  { n: 1, itemId: "11", publicId: "p11", relation: "same-event", sourceName: "GSK", date: "2026-10-20", title: "GSK：Bepirovirsen 获 FDA 批准", summary: "GSK 宣布 FDA 批准。" },
-  { n: 2, itemId: "12", publicId: "p12", relation: "entity", sourceName: "NEJM", date: "2025-11-08", title: "B-Well 1 和 2 试验结果", summary: "两项 III 期试验功能性治愈率 19%。" },
-];
-const insightInput = buildInsightInput({ sourceName: "丁香园肿瘤时间", date: "2026-10-21", title: "全球首创乙肝功能性治愈疗法获批", lead: "导读。", text: SOURCE, refs });
-
-test("the 解读 is shown the item and its related reports under their numbers, or that there are none", () => {
-  assert.match(insightInput, /【这条消息】\n来源：丁香园肿瘤时间/);
-  assert.match(insightInput, /\[1\] 同一事件｜2026-10-20｜GSK｜GSK：Bepirovirsen 获 FDA 批准\n {4}导读：GSK 宣布 FDA 批准。/);
-  assert.match(insightInput, /\[2\] 同一药物或试验｜2025-11-08｜NEJM/);
-  assert.match(buildInsightInput({ sourceName: "S", title: "T", text: "x", refs: [] }), /【相关报道】无/);
-});
-
-test("the 解读's checks: every mark names a report it was shown, numbers in the material, long enough, one paragraph; empty is no 解读", () => {
-  const good = "这次获批的依据与 2025 年公布的 B-Well 两项 III 期试验一致，功能性治愈率同为 19% [2]。GSK 的公告与这篇报道给出的适应证相同 [1]。国内仍在审评，正大天晴持有中国商业化权益，上市时间尚无消息，长期停药后的持久性也还要更长随访来回答。";
-  const checked = verifyInsight({ insight_zh: good }, insightInput, refs);
-  assert.deepEqual(checked.issues, []);
-  assert.deepEqual(checked.cited, [2, 1]);
-  assert.ok(verifyInsight({ insight_zh: good.replace("[1]", "[3]") }, insightInput, refs).issues.some((issue) => issue.includes("[3]")));
-  assert.ok(verifyInsight({ insight_zh: "太短了 [1]。" }, insightInput, refs).issues.some((issue) => issue.includes("太短")));
-  assert.ok(verifyInsight({ insight_zh: good.replace("19%", "23%") }, insightInput, refs).issues.some((issue) => issue.includes("23%")));
-  assert.ok(verifyInsight({ insight_zh: `${good}\n另一段。` }, insightInput, refs).issues.some((issue) => issue.includes("一段话")));
-  assert.deepEqual(verifyInsight({ insight_zh: "" }, insightInput, refs).output, { insight_zh: null });
-  assert.equal(verifyInsight({ insight_zh: "  " }, insightInput, refs).issues.length, 0);
-});
-
-test("the 解读 names the reports it judged related, cites only those, and at least one (production, 2026-10-22)", () => {
-  const good = "这次获批的依据与 2025 年公布的 B-Well 两项 III 期试验一致，功能性治愈率同为 19% [2]。GSK 的公告与这篇报道给出的适应证相同 [1]。国内仍在审评，正大天晴持有中国商业化权益，上市时间尚无消息，长期停药后的持久性也还要更长随访来回答。";
-  assert.deepEqual(verifyInsight({ related: [1, 2], insight_zh: good }, insightInput, refs).issues, []);
-  // A report judged unrelated and then written about ("[2] 与本条不是同一试验"): the sentence that should not be there.
-  const aboutUnrelated = verifyInsight({ related: [1], insight_zh: good }, insightInput, refs);
-  assert.ok(aboutUnrelated.issues.some((issue) => issue.includes("不相关的报道 [2]")));
-  // A text that cites no report is the item restated, not its place among the reports.
-  const restated = "这条消息把旅客携带自用药品的豁免边界与执法数据放在同一份答复里，豁免以合理数量为限，涉及危险药物或抗生素时须持医生处方，数量是否合理由海关按个别情况综合评估，必要时咨询卫生署。";
-  assert.ok(verifyInsight({ related: [1], insight_zh: restated }, insightInput, refs).issues.some((issue) => issue.includes("没有标注任何相关报道")));
-  // Nothing related is no 解读, whatever text came with it.
-  assert.deepEqual(verifyInsight({ related: [], insight_zh: good }, insightInput, refs).output, { insight_zh: null });
-});
-
-test("when a 解读 is asked for, and the basis it is kept with", async () => {
-  assert.equal(frontierInsightWorthAsking({ text: "短。", refs }), true, "related reports are material");
-  assert.equal(frontierInsightWorthAsking({ text: "短。", refs: [] }), false, "no related report and a short text: nothing to put in context");
-  assert.equal(frontierInsightWorthAsking({ text: "字".repeat(5_000), refs: [] }), false, "alone, a long text is restated, not put in context");
-  assert.equal(frontierInsightBasis("sha", refs), frontierInsightBasis("sha", [...refs].reverse()), "the related reports' order does not matter");
-  assert.notEqual(frontierInsightBasis("sha", refs), frontierInsightBasis("sha", refs.slice(0, 1)), "a new or gone report does");
-  assert.notEqual(frontierInsightBasis("sha", refs), frontierInsightBasis("other", refs), "and so does the text");
-  const editor = {
-    async writeJson(/** @type {string} */ _instructions, /** @type {string} */ _input, /** @type {number} */ _max, /** @type {any} */ options) {
-      const checked = options.verify({ insight_zh: "与此前公布的 B-Well 试验结果一致，功能性治愈率同为 19% [2]；公告给出的适应证与本报道相同 [1]，国内仍在审评，上市时间与长期停药后的持久性还有待更多数据。" });
-      return { verification: checked.issues.length ? "dropped" : "passed", output: checked.output, error: null };
-    },
-  };
-  const written = await frontierWriteInsight(editor, { sourceName: "S", title: "T", text: SOURCE, refs });
-  assert.deepEqual([written.verification, written.cited], ["passed", [2, 1]]);
 });
 
 test("an open-access PDF's text becomes the contract's paragraphs: headings marked, references and what follows cut", () => {

@@ -1,5 +1,4 @@
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
-import { FRONTIER_SOURCE_STREAM_COLUMNS } from "./frontierSourceColumns.mjs";
 /**
  * The frontier feed's processing pipeline (「前沿动态」 处理管线, plan §10.3).
  *
@@ -113,8 +112,6 @@ import { FRONTIER_BRIEF_VERSION, frontierBriefWanted, frontierWriteBrief } from 
 import { FRONTIER_FAITH_VERSION, FRONTIER_STUDY_FACTS_VERSION, faithDiagnostic, faithSource, frontierEnsureStudyFacts, frontierFaithCheckBrief, frontierFaithCheckLead,
   frontierFaithCheckSummary, frontierStudyFactsWanted, frontierWriteFaith } from "./frontierFaithStep.mjs";
 import { frontierStudyFactsView } from "./frontierStudyFacts.mjs";
-import { FRONTIER_INSIGHT_LIMITS, frontierInsightBasis, frontierInsightWorthAsking, frontierWriteInsight } from "./frontierInsight.mjs";
-import { frontierItemFollowups } from "./frontierEventReading.mjs";
 import { FRONTIER_PRIMARY_LIMITS, frontierJudgeReports, frontierLexicalScore, frontierPrimarySource, frontierReportBody, frontierReportsText } from "./frontierPrimaryReports.mjs";
 import { frontierTextOverlap, frontierTextTokens } from "./frontierEvents.mjs";
 import { frontierScreenExcerpt, frontierScreenSource } from "./frontierIngest.mjs";
@@ -304,9 +301,8 @@ const TRANSLATE_BATCH = 3;
 /** Reader texts settled a round: those the model judges (one call each, at once), and those code settles alone. */
 const TIDY_MODEL_BATCH = 6;
 const TIDY_PLAIN_BATCH = 200;
-/** 导读 paragraphs and 「AI 解读」 written a round, all at once (frontierLead.mjs, frontierInsight.mjs). */
+/** 导读 paragraphs written a round, all at once (frontierLead.mjs). */
 const LEAD_BATCH = 8;
-const INSIGHT_BATCH = 4;
 /** 「AI 要点」 written a round, all at once (frontierBrief.mjs). */
 const BRIEF_BATCH = 6;
 /** Study facts made a round (c3-faith: one call each, at once), and the genres whose items have them. */
@@ -323,8 +319,6 @@ const ASK_PRIORITY_SCORE = 72;
 const FULLTEXT_BATCH = 2;
 /** Published items whose summary text is made a round (`#readerSummaries`: a read of the entry, no model). */
 const SUMMARY_BATCH = 200;
-/** A trial key that is a registry number (ClinicalTrials.gov, ISRCTN, ChiCTR, EU CTR, jRCT, CTRI, ANZCTR): one trial, wherever it stands. */
-const FRONTIER_REGISTERED_TRIAL_KEY = "^trial:(nct[0-9]{8}|isrctn[0-9]+|chictr|euctr|jrct|ctri|actrn)";
 const FULLTEXT_TIMEOUT_MS = 180_000;
 /** How far back a published item gets its 导读 written (a late text, the backfill of 2026-10-22). */
 export const FRONTIER_LEAD_WINDOW_MS = 30 * DAY;
@@ -936,7 +930,7 @@ function orderedFlags(flags) {
  * @typedef {{ claimed: number, promoted: number, published: number, merged: number, screenedOut: number, held: number,
  *             failed: number, dropped: number, waiting: number, deferred: number, edited: number, rescored: number, embedded: number,
  *             preprintLane: number, genreFloor: number, zhTarget: number, eventPrimary: number, translated: number, tidied: number,
- *             tidyDropped: number, leads: number, insights: number, asks: number, retagged: number, studyFacts: number, faithChecked: number,
+ *             tidyDropped: number, leads: number, asks: number, retagged: number, studyFacts: number, faithChecked: number,
  *             faithMismatched: number, faithRepaired: number, faithTrimmed: number, faithUnchecked: number }} FrontierBatchSummary
  */
 
@@ -1009,8 +1003,8 @@ export class FrontierPipeline {
       textGaveUp: 0, readerSummaries: 0,
       // A top journal's research paper read through the reports of it (c3-primary): made, held again after the plugin read it, judged not research.
       primaryReports: 0, primaryRevived: 0, primaryNotResearch: 0,
-      // The reader's 导读 and 「AI 解读」: written, left empty (the source supports none), dropped by their checks, and insights asked.
-      leads: 0, leadsEmpty: 0, leadsDropped: 0, insights: 0, insightsEmpty: 0, insightsAsked: 0,
+      // The reader's 导读: written, left empty (the source supports none), dropped by its checks.
+      leads: 0, leadsEmpty: 0, leadsDropped: 0,
       // The reader's 「AI 要点」 (frontierBrief.mjs): written, recorded as none (no fields survived, or a genre without fields), and the
       // fields its checks dropped, by why.
       briefs: 0, briefsEmpty: 0, briefFieldsDropped: /** @type {Record<string, number>} */ ({}),
@@ -1108,7 +1102,7 @@ export class FrontierPipeline {
     /** @type {FrontierBatchSummary} */
     const summary = { claimed: 0, promoted: 0, published: 0, merged: 0, screenedOut: 0, held: 0, failed: 0, dropped: 0,
       waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0, preprintLane: 0, genreFloor: 0, zhTarget: 0, eventPrimary: 0,
-      translated: 0, tidied: 0, tidyDropped: 0, leads: 0, insights: 0, asks: 0, retagged: 0, studyFacts: 0, faithChecked: 0, faithMismatched: 0, faithRepaired: 0,
+      translated: 0, tidied: 0, tidyDropped: 0, leads: 0, asks: 0, retagged: 0, studyFacts: 0, faithChecked: 0, faithMismatched: 0, faithRepaired: 0,
       faithTrimmed: 0, faithUnchecked: 0 };
     try {
       const capabilities = await migrateFrontier(this.database, { dimension: this.dimension });
@@ -1136,7 +1130,6 @@ export class FrontierPipeline {
       await this.#faithSummary(context);
       await this.#lead(context);
       await this.#brief(context);
-      await this.#insight(context);
       await this.#ask(context);
       await this.#track(context);
       summary.translated += await this.#translate(context);
@@ -3361,124 +3354,6 @@ export class FrontierPipeline {
       this.lastError = codeOf(error);
       this.track.lastError = codeOf(error);
     }
-  }
-
-  /**
-   * The 「AI 解读」 of a 精选 item or a safety alert (`frontierInsight.mjs`), once its 导读 is written: the related reports it may
-   * cite are gathered (its event's other reports and follow-ups, then earlier items naming the same drug or trial), and the basis
-   * — the reader text's hash and those reports' ids — decides: unchanged since the last look, nothing is asked; no related report
-   * and a short text, it is recorded as none without a call; otherwise the model writes one or answers that there is nothing to
-   * say. Looked at again at most every `FRONTIER_INSIGHT_LIMITS.refreshMs`, so a follow-up that joins the event is taken in. Items
-   * flagged retracted get none. The same budget and provider rules as the 导读.
-   * @param {any} context
-   */
-  async #insight(context) {
-    const { now, budget, summary } = context;
-    if (!this.editor.available || typeof this.editor.writeJson !== "function" || budget.state === "exhausted" || this.#providerPause(now)) return;
-    const claimed = (await this.database.query(`WITH picked AS (
-        SELECT i.id FROM evimed_frontier.items i JOIN evimed_frontier.item_texts t ON t.item_id = i.id
-        WHERE i.state = 'published' AND (i.selected OR i.safety_alert) AND NOT ('retracted' = ANY(i.flags)) AND i.visible_at > $2
-          AND (i.lease_until IS NULL OR i.lease_until <= $1) AND t.reader_tidy IS NOT NULL AND i.lead_basis = t.reader_tidy->>'sha'
-          AND (i.insight_at IS NULL OR i.insight_at <= $3)
-        ORDER BY i.safety_alert DESC, i.insight_at NULLS FIRST, i.visible_at DESC, i.id DESC
-        LIMIT $4
-        FOR UPDATE OF i SKIP LOCKED)
-      UPDATE evimed_frontier.items i SET lease_owner = $5, lease_until = $6 FROM picked WHERE i.id = picked.id
-      RETURNING i.id, i.title_raw, i.title_zh, i.lead_zh, i.summary_zh, i.entity_keys, i.event_id, i.primary_source_id, i.published_at,
-        i.insight_basis, i.lease_until`,
-    [now, new Date(now.getTime() - FRONTIER_INSIGHT_LIMITS.windowDays * DAY), new Date(now.getTime() - FRONTIER_INSIGHT_LIMITS.refreshMs),
-      INSIGHT_BATCH, this.workerId, new Date(now.getTime() + this.leaseMs)])).rows;
-    if (!claimed.length) return;
-    await Promise.all(claimed.map((item) => this.#withItemLease(item, async () => {
-      if (this.#providerPause(now)) return false;
-      const texts = (await this.database.query("SELECT * FROM evimed_frontier.item_texts WHERE item_id = $1", [item.id])).rows[0];
-      const reader = frontierReaderText(texts);
-      const sha = texts?.reader_tidy?.sha;
-      if (!reader || !sha) return false;
-      const refs = await this.#insightRefs(item);
-      const basis = frontierInsightBasis(sha, refs);
-      /** @type {{ insight: string | null, cited: number[] }} */
-      let written = { insight: null, cited: [] };
-      if (basis !== item.insight_basis && frontierInsightWorthAsking({ text: reader.text, refs })) {
-        const sources = await this.#sources([item.primary_source_id]);
-        const source = sources.get(item.primary_source_id);
-        this.counters.insightsAsked += 1;
-        const result = await frontierWriteInsight(this.editor, {
-          sourceName: frontierSourceDisplayName({ id: item.primary_source_id, name: source?.name ?? item.primary_source_id, ownerEntity: source?.owner_entity, access: source?.access, journal: texts?.journal }),
-          date: item.published_at ? isoDayIn(item.published_at, this.timeZone) : null, title: item.title_zh || item.title_raw,
-          lead: item.lead_zh || item.summary_zh || null, text: reader.text, refs });
-        if (result.error && (frontierProviderUnavailable(result.error) || result.error === "usage_budget_exceeded" || result.error === "frontier_editor_unavailable")) {
-          if (frontierProviderUnavailable(result.error)) this.#pauseForProvider(now, result.error);
-          return false;
-        }
-        written = result.verification === "passed" || result.verification === "repaired" ? { insight: result.insight, cited: result.cited } : written;
-      } else if (basis === item.insight_basis) {
-        // Nothing moved since the last look: only the look is recorded.
-        return this.#writeUnderLease(item, async (client) => {
-          await client.query("UPDATE evimed_frontier.items SET insight_at = $2, lease_owner = NULL, lease_until = NULL WHERE id = $1", [item.id, now]);
-        });
-      }
-      const cited = written.cited.flatMap((n) => { const ref = refs.find((entry) => entry.n === n); return ref ? [{ n, item_id: ref.itemId }] : []; });
-      const done = await this.#writeUnderLease(item, async (client) => {
-        await client.query(`UPDATE evimed_frontier.items SET insight_zh = $2, insight_refs = $3::jsonb, insight_basis = $4, insight_at = $5,
-          lease_owner = NULL, lease_until = NULL WHERE id = $1`, [item.id, written.insight, JSON.stringify(cited), basis, now]);
-        await bumpFrontierVersion(client);
-      });
-      if (done) {
-        summary.insights += written.insight ? 1 : 0;
-        this.counters.insights += written.insight ? 1 : 0;
-        if (!written.insight) this.counters.insightsEmpty += 1;
-      }
-      return done;
-    })));
-  }
-
-  /**
-   * The related reports an insight may cite, numbered from 1: the item's event's other reports and follow-ups
-   * (`frontierItemFollowups`, newest first), then earlier published items of the last year that share a registered trial, a
-   * named trial with a drug or a disease, two drugs, or the item's own drug and a disease with it, the most shared first — at most `FRONTIER_INSIGHT_LIMITS.refs`, each with its date, source, title and 导读.
-   * @param {any} item @returns {Promise<import("./frontierInsight.mjs").FrontierInsightRef[]>}
-   */
-  async #insightRefs(item) {
-    const followups = await frontierItemFollowups(this.database, item.id, { limit: 8 }).catch(() => null);
-    // Related by what it is about, not by a word it shares (measured 2026-10-22: a glucose-meter recall drew four diabetes-drug
-    // items through one shared key): the same registered trial; the same named trial or cohort with a drug or a disease too (a
-    // name alone is shared — "trial:charls" stood on 32 unrelated papers, "trial:mint" on a myasthenia trial, a lymphoma study and
-    // an emergency-department model); two of the same drugs; or the item's own drug (its first) and a disease both — a common
-    // companion drug and a common disease are not enough (amlodipine and hypertension drew three unrelated studies).
-    const keys = (Array.isArray(item.entity_keys) ? item.entity_keys : []).filter((key) => /^(?:drug|trial|disease):/.test(String(key)));
-    const principal = keys.find((key) => String(key).startsWith("drug:")) ?? null;
-    const byEntity = keys.some((key) => /^(?:drug|trial):/.test(String(key))) ? (await this.database.query(`SELECT i.public_id FROM (
-        SELECT i.public_id, i.timeline_at,
-          (SELECT count(*) FROM unnest(i.entity_keys) k WHERE k = ANY($2::text[]) AND k ~ '${FRONTIER_REGISTERED_TRIAL_KEY}') AS registered,
-          (SELECT count(*) FROM unnest(i.entity_keys) k WHERE k = ANY($2::text[]) AND k LIKE 'trial:%') AS trials,
-          (SELECT count(*) FROM unnest(i.entity_keys) k WHERE k = ANY($2::text[]) AND k LIKE 'drug:%') AS drugs,
-          (SELECT count(*) FROM unnest(i.entity_keys) k WHERE k = ANY($2::text[]) AND k LIKE 'disease:%') AS diseases,
-          ($6::text IS NOT NULL AND $6::text = ANY(i.entity_keys)) AS principal
-        FROM evimed_frontier.items i
-        WHERE i.state = 'published' AND i.id <> $1 AND i.entity_keys && $2::text[] AND i.visible_at > $3
-          AND ($4::bigint IS NULL OR i.event_id IS DISTINCT FROM $4::bigint) AND i.timeline_at <= (SELECT timeline_at FROM evimed_frontier.items WHERE id = $1)) i
-      WHERE i.registered > 0 OR (i.trials > 0 AND (i.drugs > 0 OR i.diseases > 0)) OR i.drugs >= 2 OR (i.principal AND i.diseases > 0)
-      ORDER BY i.registered DESC, i.trials DESC, i.drugs + i.diseases DESC, i.timeline_at DESC
-      LIMIT $5`, [item.id, keys, new Date(Date.now() - FRONTIER_INSIGHT_LIMITS.entityLookbackDays * DAY), item.event_id ?? null,
-      FRONTIER_INSIGHT_LIMITS.refs, principal])).rows.map((row) => String(row.public_id)) : [];
-    /** @type {Array<{ publicId: string, relation: "same-event" | "follows" | "entity" }>} */
-    const wanted = [];
-    for (const row of (followups?.rows ?? []).slice(0, 4)) wanted.push({ publicId: row.itemId, relation: row.relation });
-    for (const publicId of byEntity) if (!wanted.some((entry) => entry.publicId === publicId)) wanted.push({ publicId, relation: "entity" });
-    const chosen = wanted.slice(0, FRONTIER_INSIGHT_LIMITS.refs);
-    if (!chosen.length) return [];
-    const rows = (await this.database.query(`SELECT i.id, i.public_id, coalesce(i.title_zh, i.title_raw) AS title, coalesce(i.lead_zh, i.summary_zh) AS summary,
-        i.timeline_at, i.primary_source_id, s.name AS source_name, s.owner_entity AS source_owner, ${FRONTIER_SOURCE_STREAM_COLUMNS}
-      FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
-      WHERE i.public_id = ANY($1::text[]) AND i.state = 'published'`, [chosen.map((entry) => entry.publicId)])).rows;
-    const byPublic = new Map(rows.map((row) => [String(row.public_id), row]));
-    return chosen.flatMap((entry) => { const row = byPublic.get(entry.publicId); return row ? [row] : []; }).map((row, index) => ({
-      n: index + 1, itemId: String(row.id), publicId: String(row.public_id),
-      relation: chosen.find((entry) => entry.publicId === String(row.public_id))?.relation ?? "entity",
-      sourceName: frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name, ownerEntity: row.source_owner, access: row.source_access, journal: row.item_journal }),
-      date: row.timeline_at ? isoDayIn(row.timeline_at, this.timeZone) : null, title: String(row.title), summary: row.summary ?? null,
-    }));
   }
 
   /**

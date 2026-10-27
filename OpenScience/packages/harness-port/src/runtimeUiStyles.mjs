@@ -26,6 +26,7 @@
  *   tone: (name: string) => string,
  *   text: Record<string, any>, meta: Record<string, any>, card: Record<string, any>, line: Record<string, any>,
  *   title: Record<string, any>, quiet: Record<string, any>, tag: Record<string, any>,
+ *   step: Record<string, any>, stepTitle: Record<string, any>,
  *   button: Record<string, any>, textButton: Record<string, any>, link: Record<string, any>,
  * }}
  */
@@ -58,6 +59,12 @@ export function frameStyles() {
     line: { ...text, display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, color: 'var(--dsw-alias-label-secondary)' },
     title: { ...ellipsis, color: 'var(--dsw-alias-label-primary)', fontWeight: 600 },
     quiet: { ...ellipsis, color: 'var(--dsw-alias-label-tertiary)' },
+    // A step of the process view (2026-10-27): the line the kernel draws for its own 「思考」 and 「读取」 rows, so a
+    // tool of ours reads as one more step and not as a card among lines. No border, no card padding, the content
+    // size, the name at 400 -- weight 600 is for a heading or a name that must be told from the text around it
+    // (DESIGN.md), and a step is not that. The count or state beside it stays the grey `tag`, 12 / 20.
+    step: { ...text, display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, color: 'var(--dsw-alias-label-secondary)' },
+    stepTitle: { ...ellipsis, flex: '0 1 auto', fontWeight: 400, color: 'var(--dsw-alias-label-secondary)' },
     // A tag that nothing clicks: grey, 20 px high, radius 4. Colour is for
     // clinical safety alone (整改方案 §4), so a state is words on grey.
     tag: {

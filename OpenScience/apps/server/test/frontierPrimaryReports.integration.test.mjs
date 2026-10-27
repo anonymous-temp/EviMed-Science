@@ -139,7 +139,7 @@ function editorWith(behaviour = {}) {
         const checked = opts.verify(behaviour.judge ? behaviour.judge(parsed) : { paper: "research", reports: [] });
         return { verification: checked.issues.length ? "dropped" : "passed", output: checked.output, error: null };
       }
-      if (!instructions.includes("「AI 导读」")) return { verification: "passed", output: { insight_zh: null }, error: null };
+      if (!instructions.includes("「AI 导读」")) return { verification: "passed", output: {}, error: null };
       this.leadInputs.push(input);
       this.leadInstructions.push(instructions);
       const checked = opts.verify(behaviour.lead ? behaviour.lead(input) : { lead_zh: "" });

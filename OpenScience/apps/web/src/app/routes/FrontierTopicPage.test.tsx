@@ -133,7 +133,7 @@ describe("a topic page", () => {
 describe("热点话题 in 热榜 and 当前热点", () => {
   it("lists each topic as its question, its field, the event in one line, the count and the time, the whole title a link", () => {
     render(<MemoryRouter><HotTopics topics={[topic(), topic({ id: "b1b2c3d4e5f6a7b8", title: "高温中暑如何识别和急救", peg: null, surge: false, domainLabel: "环境气候", itemCount: 0 })]} /></MemoryRouter>);
-    const rows = within(screen.getByRole("list", { name: "热点话题" })).getAllByRole("listitem");
+    const rows = within(screen.getByRole("list", { name: "热搜里的健康问题" })).getAllByRole("listitem");
     expect(rows).toHaveLength(2);
     expect(within(rows[0]).getByRole("link", { name: "运动会诱发心源性猝死吗？风险有多大" })).toHaveAttribute("href", "/app/frontier/topics/a1b2c3d4e5f6a7b8");
     expect(rows[0]).toHaveTextContent("公众人物3 篇");
@@ -147,16 +147,26 @@ describe("热点话题 in 热榜 and 当前热点", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("sits above 热榜's current ranking, and not above a week's", async () => {
+  it("sits under 热榜's current ranking, which stands first as 「医学热点」 with its count, and not under a week's (owner, 2026-10-27)", async () => {
     const events = [{ rank: 1, id: "ev1", title: "某事件", latest: null, sourceCount72h: 4, reportCount: 5, primary: null, hasPrimary: false,
       firstAt: ago(30), lastAt: ago(3), status: "developing" as const, heat: 30, rankChange: null, badge: null, trend: null, period: null }];
     const { unmount } = render(<MemoryRouter><HotBoard state={{ board: { window: "current", takenAt: ago(0.2), since: ago(72), events }, error: null }} onRetry={vi.fn()} /></MemoryRouter>);
-    const topics = await screen.findByRole("list", { name: "热点话题" });
-    expect(topics.compareDocumentPosition(screen.getByRole("list", { name: "热榜" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const topics = await screen.findByRole("list", { name: "热搜里的健康问题" });
+    const ranking = screen.getByRole("list", { name: "热榜" });
+    expect(ranking.compareDocumentPosition(topics) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Two headed sections, the ranking's first: the same Section component, the heading with its count.
+    const headings = screen.getAllByRole("heading", { level: 2 });
+    expect(headings.map((heading) => heading.textContent)).toEqual(["医学热点", "热搜里的健康问题"]);
+    expect(screen.getByRole("region", { name: "医学热点" })).toContainElement(ranking);
+    expect(screen.getByRole("region", { name: "医学热点" })).toHaveTextContent("医学热点1");
+    expect(screen.queryByRole("heading", { name: /^热点话题/ })).toBeNull();
     unmount();
     render(<MemoryRouter><HotBoard state={{ board: { window: "week", takenAt: ago(0.2), since: ago(168), events }, error: null }} onRetry={vi.fn()} /></MemoryRouter>);
     await waitFor(() => expect(client.fetchFrontierTopics).toHaveBeenCalledTimes(2));
-    expect(screen.queryByRole("list", { name: "热点话题" })).toBeNull();
+    expect(screen.queryByRole("list", { name: "热搜里的健康问题" })).toBeNull();
+    // A week's ranking is the ranking alone, as it was.
+    expect(screen.getByRole("list", { name: "热榜" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /医学热点/ })).toBeNull();
   });
 
   it("lets one active surge topic lead 当前热点, two events after it", async () => {

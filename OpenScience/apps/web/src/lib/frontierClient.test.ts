@@ -586,7 +586,7 @@ describe("the reader's blocks (contract B)", () => {
   it("leaves out what the server did not fill, and makes nothing up in its place", () => {
     const item = parseFrontierItemDetail(rawItem({ summary: "列表里的导读" }))!;
     expect(item).toMatchObject({
-      lead: "列表里的导读", insight: null, body: null, media: [], quoted: null, metrics: null, tags: [], scoreParts: null, sameEvent: null, followups: null,
+      lead: "列表里的导读", body: null, media: [], quoted: null, metrics: null, tags: [], scoreParts: null, sameEvent: null, followups: null,
       channel: null, platform: null, author: null, thumb: null,
     });
     // A body the server did not call incomplete is complete; a Chinese text with no kind is not called a translation.
@@ -602,32 +602,6 @@ describe("the reader's blocks (contract B)", () => {
     expect([undefined, null, "full", "ABSTRACT", 3].map(source)).toEqual([null, null, null, null, null]);
     // The heading marker is the text's own: the client keeps it for the reader to set, and never strips or adds one.
     expect(parseFrontierItemDetail(rawItem({ body: { zh: "## 方法\n\n正文", source: "body" } }))!.body!.zh).toBe("## 方法\n\n正文");
-  });
-
-  it("reads 「AI 解读」 and the reports it cites, each field by field", () => {
-    const insight = (value: unknown) => parseFrontierItemDetail(rawItem({ insight: value }))!.insight;
-    expect(insight({
-      text: "  三项试验结果一致[2]，但随访仍短[1]，另见[7]。 ",
-      refs: [
-        { n: 2, publicId: "item-b", title: "第二篇", source: "NEJM", at: "2026-10-20T02:00:00Z" },
-        { n: 1, publicId: "item-a", title: "第一篇", source: "  ", at: "not a time" },
-        { n: 2, publicId: "item-c", title: "同号的第二个", source: "Lancet", at: "2026-10-20T02:00:00Z" },
-        { n: 0, publicId: "item-d", title: "从零", source: "", at: "2026-10-20T02:00:00Z" },
-        { n: 1.5, publicId: "item-e", title: "小数", source: "", at: "2026-10-20T02:00:00Z" },
-        { n: 3, publicId: "", title: "没有文章", source: "", at: "2026-10-20T02:00:00Z" },
-        { n: 4, publicId: "item-f", title: " ", source: "", at: "2026-10-20T02:00:00Z" },
-        "not a ref",
-      ],
-    })).toEqual({
-      text: "三项试验结果一致[2]，但随访仍短[1]，另见[7]。",
-      refs: [
-        { n: 1, publicId: "item-a", title: "第一篇", source: "", at: null },
-        { n: 2, publicId: "item-b", title: "第二篇", source: "NEJM", at: "2026-10-20T02:00:00Z" },
-      ],
-    });
-    // Most items have none; a 解读 without its words is none, and one without refs is still one.
-    for (const value of [undefined, null, "一段话", { text: " " }, { refs: [] }]) expect(insight(value)).toBeNull();
-    expect(insight({ text: "没有引用的解读。" })).toEqual({ text: "没有引用的解读。", refs: [] });
   });
 
   it("does not point an item at itself as the one the occurrence selected", () => {
@@ -753,5 +727,23 @@ describe("an item's genre and 「AI 要点」 (ct-write 2026-10-24)", () => {
       quote: { label: "作者结论", text: "It works.", zh: "有效。" },
       about: { publicId: "p1", title: "Original" },
     });
+  });
+});
+
+describe("a congress hub's counts (owner, 2026-10-27)", () => {
+  const hub = (over: Record<string, unknown>) => ({
+    congress: { id: "esmo-2026", code: "ESMO 2026", name: "欧洲肿瘤内科学会年会", nameEn: "ESMO", start: "2026-10-23", end: "2026-10-27", status: "ongoing" },
+    days: [], listId: "l1", ...over,
+  });
+
+  it("reads what the congress holds and how many of them the days list", async () => {
+    const { parseFrontierCongressHub } = await import("./frontierClient");
+    expect(parseFrontierCongressHub(hub({ itemCount: 624, listedCount: 400 }))).toMatchObject({ itemCount: 624, listedCount: 400 });
+  });
+
+  it("takes the two as one number from a server that sends only the count, and never lists more than it holds", async () => {
+    const { parseFrontierCongressHub } = await import("./frontierClient");
+    expect(parseFrontierCongressHub(hub({ itemCount: 57 }))).toMatchObject({ itemCount: 57, listedCount: 57 });
+    expect(parseFrontierCongressHub(hub({ itemCount: 5, listedCount: 9 }))).toMatchObject({ itemCount: 5, listedCount: 5 });
   });
 });

@@ -178,7 +178,11 @@ function HubBody({ hub, onItem }: { hub: FrontierCongressHub; onItem: (item: Fro
           <span className="tabular-nums">{congressDates(congress.start, congress.end)}</span>
           {congress.city && <><span aria-hidden="true">·</span><span>{congress.city}</span></>}
           {congress.specialtyLabel && <><span aria-hidden="true">·</span><span>{congress.specialtyLabel}</span></>}
-          {hub.itemCount > 0 && <><span aria-hidden="true">·</span><span className="tabular-nums">收录 {hub.itemCount} 条</span></>}
+          {/* The congress's own count, the one its list line says (owner, 2026-10-27: this said 400 where that said 624); where the
+            * hub lists fewer than it holds, it says which. */}
+          {hub.itemCount > 0 && <><span aria-hidden="true">·</span><span className="tabular-nums">
+            {hub.listedCount < hub.itemCount ? `收录 ${hub.itemCount} 条，显示最新 ${hub.listedCount} 条` : `收录 ${hub.itemCount} 条`}
+          </span></>}
           {congress.sourceUrl && <a href={congress.sourceUrl} {...EXTERNAL} className="text-link hover:underline">会议信息<span aria-hidden="true"> ↗</span></a>}
         </div>
       )}

@@ -179,6 +179,19 @@ async function furnishTrack(database, insertComposedItem, { hoursAgo, log }) {
       [row.id, facts({ kind: "guideline", body: { text: "示例循证医学协会", quote: "示例循证医学协会" }, scope: { text: "2 型糖尿病诊疗", quote: "诊疗指南" },
         recommendations: [{ text: "把体重管理写入起始治疗目标", grade: "strong", quote: "体重管理" }, { text: "起始治疗即考虑心肾保护", grade: null, quote: "心肾保护" }] }),
       FRONTIER_TRACK_FACTS_VERSION]);
+    // The reader opens its 「AI 要点」 panel with every kind of field and the source's own words at its end (2026-10-27): a
+    // production guideline drew the panel's dividers and its quote, which the fixture's items had none of, and the walk counted
+    // their border kinds only on production.
+    await database.query("UPDATE evimed_frontier.items SET brief = $2::jsonb WHERE id = $1", [row.id, JSON.stringify({
+      genre: "guideline",
+      points: [
+        { key: "issuer", text: "示例循证医学协会，2026 年版" },
+        { key: "population", text: "成人 2 型糖尿病的诊疗，含合并肥胖与慢性肾病者" },
+        { key: "changes", items: ["把体重管理写入起始治疗目标（强推荐，中等质量证据）", "起始治疗即考虑心肾保护（弱推荐）"] },
+        { key: "basis", text: "多项随机对照试验与系统评价" },
+      ],
+      quote: { text: "Weight management should be a primary treatment goal.", zh: "体重管理应成为首要治疗目标。" },
+    })]);
   }
   const today = frontierDayIn(new Date());
   const congress = FRONTIER_CONGRESSES.find((entry) => frontierCongressStatus(entry, today) === "ongoing")
