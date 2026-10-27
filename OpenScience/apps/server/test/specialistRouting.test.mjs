@@ -68,7 +68,7 @@ test("a capability id inside the request is a word of it: the model is asked, an
 test("the model's answer is final, and it is asked first", async () => {
   for (const [query, id] of [
     ["Can you peer-review my pull request description?", "peer-review"],
-    ["分析一下这份数据 sales.xlsx，告诉我哪个地区卖得最好", "dataset-research-scoping"],
+    ["用 trial.csv 比较两组的生存，给我 Kaplan–Meier 和 Cox 结果", "statistical-analysis"],
     ["帮我写一份消息队列选型报告", "clinical-evidence-synthesis"],
   ]) {
     // The model that claims it routes it (a commission is the model's to recognise)...
@@ -79,6 +79,13 @@ test("the model's answer is final, and it is asked first", async () => {
     // ...and with the model's none there is no rule left to overrule it.
     assert.equal((await routeOpenDomain({ query, agents, classifier: classifier("none") })).specialist, null);
   }
+  // An unlisted package (module-only, or off 科研工具 since 2026-10-26) is no candidate: the stub answers only from the candidates it
+  // is handed, so a null here is the package missing from them; its leading slash command still names it.
+  const unlisted = agents.find((agent) => agent.id === "dataset-research-scoping");
+  assert.equal(unlisted?.listed, false);
+  const offered = classifier("dataset-research-scoping");
+  assert.equal((await routeOpenDomain({ query: "我手上有一份住院数据，能做什么研究？", agents, classifier: offered })).specialist?.agentId ?? null, null);
+  assert.equal((await routeOpenDomain({ query: "/dataset-research-scoping 我手上有一份住院数据", agents, classifier: offered })).specialist?.agentId, "dataset-research-scoping");
   // The rules that used to correct a model's none are gone with the net: FAERS vocabulary included.
   assert.equal((await routeOpenDomain({ query: "分析奥希替尼的 FAERS 药物警戒信号", agents, classifier: classifier("none") })).specialist, null);
   // A request is classified once, and a request that a structured choice names is never put to the model.
