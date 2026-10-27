@@ -141,7 +141,7 @@ describe("a policy, an industry report, a news report", () => {
 });
 
 describe("AI 要点 as a soft panel (owner, 2026-10-27)", () => {
-  it("is one rounded panel on the grey step with no border: each label a caption over its words, a faint rule between fields, the quotation last", async () => {
+  it("is one rounded panel on the grey step with no border: each label a caption over its words, the page's one hairline between fields, the quotation last", async () => {
     show(rawBriefedPaper());
     const brief = await screen.findByRole("region", { name: "AI 要点" });
     const panel = brief.querySelector("[data-prose]") as HTMLElement;
@@ -156,15 +156,16 @@ describe("AI 要点 as a soft panel (owner, 2026-10-27)", () => {
       expect(field.className).not.toMatch(/grid/);
       expect(before(field.querySelector("dt")!, field.querySelector("dd")!)).toBe(true);
     }
-    expect(panel.querySelector("dl")).toHaveClass("divide-y", "divide-faint");
+    // The page's one rule (the walk counts border kinds; a production guideline read five against the reading page's three).
+    expect(panel.querySelector("dl")).toHaveClass("divide-y", "divide-border");
     // A few items are compact bullets with the accent mark.
     expect(panel.querySelector("ul")).toHaveClass("list-disc", "marker:text-accent");
     // The quotation is at the panel's end, inside it, with a thin rule at its left.
     const quote = panel.querySelector("figure")!;
     expect(panel).toContainElement(quote);
     expect(before(panel.querySelector("dl")!, quote)).toBe(true);
-    expect(quote.firstElementChild).toHaveClass("border-l-2", "pl-4");
-    expect(quote).toHaveClass("border-t", "border-faint");
+    expect(quote.querySelector(".border-l-2")).toBeNull();
+    expect(quote).toHaveClass("border-t", "border-border");
   });
 
   it("has no rule over a quotation that has no fields before it", async () => {

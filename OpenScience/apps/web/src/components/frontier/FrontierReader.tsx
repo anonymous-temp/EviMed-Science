@@ -265,7 +265,9 @@ export function ReaderBrief({ brief, item, className }: { brief: FrontierBrief; 
   return (
     <Block label="AI 要点" labelClassName={AI_LABEL} className={className}>
       <div data-prose="" className="max-w-measure-body rounded-card bg-surface-1 px-5">
-        <dl className="divide-y divide-faint">
+        {/* One rule for the page (owner, 2026-10-27; the walk counts border kinds): the panel's dividers are the hairline the right
+            column's blocks and the ruled sections use, and the quote has no rule of its own — its label sets it apart. */}
+        <dl className="divide-y divide-border">
           {brief.about && (
             <div className="py-4">
               <dt className={LABEL}>解读的研究</dt>
@@ -287,12 +289,10 @@ export function ReaderBrief({ brief, item, className }: { brief: FrontierBrief; 
           ))}
         </dl>
         {brief.quote && (
-          <figure className={cn("py-4", fields && "border-t border-faint")}>
-            <div className="border-l-2 border-border pl-4">
-              <figcaption className={LABEL}>{brief.quote.label}</figcaption>
-              <blockquote lang={quoteLang} className="mt-1 break-words text-reading text-text-2">{brief.quote.text}</blockquote>
-              {brief.quote.zh && <p className="mt-1 break-words text-reading text-text-2">{brief.quote.zh}</p>}
-            </div>
+          <figure className={cn("py-4", fields && "border-t border-border")}>
+            <figcaption className={LABEL}>{brief.quote.label}</figcaption>
+            <blockquote lang={quoteLang} className="mt-1 break-words text-reading text-text-2">{brief.quote.text}</blockquote>
+            {brief.quote.zh && <p className="mt-1 break-words text-reading text-text-2">{brief.quote.zh}</p>}
           </figure>
         )}
       </div>
