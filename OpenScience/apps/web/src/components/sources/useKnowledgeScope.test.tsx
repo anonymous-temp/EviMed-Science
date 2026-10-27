@@ -54,6 +54,16 @@ describe("the knowledge base's scope menu", () => {
     expect(onChange).toHaveBeenCalledWith({ kind: "shared" });
   });
 
+  it("hides the storage project of personal materials and nothing that only starts with its name", async () => {
+    useProjectStore.setState({ projects: [
+      { id: "default", name: "我的研究" }, { id: "evimed-library", name: "EviMed 资料库" }, { id: "evimed-library-notes", name: "读书笔记" },
+    ] });
+    render(<Menu scope={{ kind: "all" }} onChange={() => undefined} />);
+    await userEvent.click(screen.getByRole("button", { name: "范围：我的资料" }));
+    const menu = await screen.findByRole("menu", { name: "范围" });
+    expect([...menu.querySelectorAll("[role^=menuitem]")].map((item) => item.textContent)).toEqual(["我的资料", "我的研究", "读书笔记", "跨项目可用"]);
+  });
+
   it("says which scope is chosen when it is the shared one, and still names a project the list does not hold", async () => {
     const { unmount } = render(<Menu scope={{ kind: "shared" }} onChange={() => undefined} />);
     expect(screen.getByRole("button", { name: "范围：跨项目可用" })).toBeInTheDocument();

@@ -23,6 +23,9 @@ import type { KnowledgePageAddress, SourceKind, SourceScope } from "./sourceClie
 /** The shared documents of the account, as a scope: no project's. */
 export const SHARED_SCOPE = "shared";
 
+/** Where an account's personal materials are stored (the server's reserved id): a place, never a project to choose or to open. */
+export const LIBRARY_PROJECT_ID = "evimed-library";
+
 export interface KnowledgeListState {
   /** `shared`, a project's id, or null for the complete owned library. */
   scope: string | null;

@@ -6,7 +6,7 @@ import type { ScopeChoice, ScopeGroup, ScopeMenuProps } from "@/components/ui/Sc
 import { useGeoFeature } from "@/lib/geoClient";
 import { labelOf, useProjectLabels } from "@/lib/projectNames";
 import { useProjectStore } from "@/lib/projects";
-import { SHARED_SCOPE } from "@/lib/knowledgeNav";
+import { LIBRARY_PROJECT_ID, SHARED_SCOPE } from "@/lib/knowledgeNav";
 import type { SourceScope } from "@/lib/sourceClient";
 import { useVcrFeature } from "@/lib/vcrClient";
 
@@ -35,7 +35,8 @@ export function useKnowledgeScope(scope: SourceScope, onChange: (scope: SourceSc
   // A draft study (nobody has spoken in it yet) is not a place documents are filed; it is left out like the sidebar leaves it out.
   const { studies: vcrIds, drafts: vcrDrafts } = useVcrProjects(vcrOn, projectsKey);
   const groups = useMemo(() => {
-    const visible = projects.filter(project => !project.id.startsWith("evimed-library"));
+    // Personal storage is a place the page lists as 「我的资料」, not a project; a project the person named `evimed-library-…` is theirs.
+    const visible = projects.filter(project => project.id !== LIBRARY_PROJECT_ID);
     const own = visible.filter((project) => !geoIds.has(project.id) && !vcrIds.has(project.id));
     const studies = visible.filter((project) => vcrIds.has(project.id) && !vcrDrafts.has(project.id));
     const communication = visible.filter((project) => geoIds.has(project.id));

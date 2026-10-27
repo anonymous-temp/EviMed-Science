@@ -1,15 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { getDocument, GlobalWorkerOptions, TextLayer, type PDFDocumentProxy } from "pdfjs-dist/legacy/build/pdf.mjs";
 import workerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
-import { previewUrl } from "@/lib/artifactFile";
+import { previewUrl, sourceFileUrl } from "@/lib/artifactFile";
 import { Button } from "@/components/ui/Button";
 import { findPdfQuotationPage, markPdfQuotation } from "@/lib/pdfQuotation";
 import "./sourcePdf.css";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
-/** One page at a time bounds canvas memory, including long documents on phones. */
-export function SourcePdf({ path, projectId, initialPage, quote }: { path: string; projectId: string; initialPage: number | null; quote: string }) {
+/**
+ * One page at a time bounds canvas memory, including long documents on phones.
+ * A document in personal storage has no project folder to read from: it is opened by its own id (`sourceFileId`), through the
+ * source-bound original route, which is how its original is shown everywhere else.
+ */
+export function SourcePdf({ path, projectId, sourceFileId, initialPage, quote }: { path: string; projectId: string; sourceFileId?: string; initialPage: number | null; quote: string }) {
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [page, setPage] = useState(initialPage ?? 1);
   const [locating, setLocating] = useState(false);
@@ -43,7 +47,7 @@ export function SourcePdf({ path, projectId, initialPage, quote }: { path: strin
     let loading: ReturnType<typeof getDocument> | undefined;
     setError(false);
     setPdf(null);
-    void previewUrl(path, "base", projectId).then(async url => {
+    void (sourceFileId ? Promise.resolve(sourceFileUrl(sourceFileId, "preview")) : previewUrl(path, "base", projectId)).then(async url => {
       if (!alive) return;
       if (!url) throw new Error("Preview unavailable");
       loading = getDocument({ url, withCredentials: true });
@@ -51,7 +55,7 @@ export function SourcePdf({ path, projectId, initialPage, quote }: { path: strin
       if (alive) setPdf(document);
     }).catch(() => { if (alive) setError(true); });
     return () => { alive = false; void loading?.destroy(); };
-  }, [path, projectId]);
+  }, [path, projectId, sourceFileId]);
   useEffect(() => {
     const element = root.current;
     if (!element || !pdf) return;
