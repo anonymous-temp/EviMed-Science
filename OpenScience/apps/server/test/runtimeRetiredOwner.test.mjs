@@ -2,12 +2,12 @@
 // instead of registered (2026-10-27: a walk's throwaway account was deleted while a page of it started a runtime, which then ran,
 // unowned, until a restart forgot it).
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { RUNTIME_KERNEL_NAME, RuntimeManager } from "../src/runtimeManager.mjs";
+import { RUNTIME_KERNEL_NAME, RuntimeManager, issueEviMedWorkloadToken } from "../src/runtimeManager.mjs";
 
 async function projectIn(root, userId, id) {
   const rootDir = path.join(root, userId, id);
@@ -52,4 +52,31 @@ test("a runtime that was booting when the deletion began is closed, not register
   assert.equal(manager.runtimes.has(manager.key(project)), false, "nothing is left registered for the deleted account");
   assert.equal(closed, 1, "the container it made is closed");
   assert.equal(manager.startingWorkloads.has(manager.key(project)), false);
+});
+
+test("a workload token is refused as soon as its account's deletion begins: a booting kernel's and a registered runtime's alike, and given back with the deletion's undo", async (t) => {
+  const { manager } = await fixture(t);
+  const secret = "workload-signing-secret-of-at-least-32-bytes";
+  manager.config.evimedWorkloadSigningSecret = secret;
+  const tokenFile = path.join(os.tmpdir(), `os-retired-owner-token-${process.pid}`);
+  const token = issueEviMedWorkloadToken({ secret, userId: "walk-1", projectId: "default", nowSeconds: Math.floor(Date.now() / 1000), ttlSeconds: 300, jti: "jwt_retired" });
+  await writeFile(tokenFile, `${token}\n`, { mode: 0o600 });
+  t.after(() => rm(tokenFile, { force: true }));
+  const refused = () => manager.assertActiveEviMedWorkloadToken(token).then(() => null, (error) => ({ status: error.status, code: error.code }));
+  // A kernel still booting is accepted on the file its start was given...
+  manager.starts.set("walk-1:default", Promise.resolve());
+  manager.startingWorkloads.set("walk-1:default", { workloadTokenFile: tokenFile });
+  assert.equal((await manager.assertActiveEviMedWorkloadToken(token)).userId, "walk-1");
+  // ...until the account's deletion has begun, before its start has ended and been closed.
+  manager.retireOwner("walk-1");
+  assert.deepEqual(await refused(), { status: 401, code: "evimed_workload_token_invalid" });
+  assert.equal(manager.workloadTokenRefusals.runtime, 1);
+  // A registered runtime of the account is no different.
+  manager.starts.delete("walk-1:default");
+  manager.startingWorkloads.delete("walk-1:default");
+  manager.runtimes.set("walk-1:default", { workloadTokenFile: tokenFile, closedByManager: false, exitedAt: null, modelGatewayTokenJti: "jwt_retired", close: async () => {} });
+  assert.deepEqual(await refused(), { status: 401, code: "evimed_workload_token_invalid" });
+  // A deletion that failed before the account was gone gives it back.
+  manager.retireOwner("walk-1", { undo: true });
+  assert.equal((await manager.assertActiveEviMedWorkloadToken(token)).runtimeGeneration, "jwt_retired");
 });

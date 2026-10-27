@@ -4343,7 +4343,10 @@ export class RuntimeManager {
       const starting = !registered && this.starts.has(key) ? this.startingWorkloads.get(key) ?? null : null;
       /** @type {any} */
       const runtime = registered ?? starting;
-      const stillCurrent = () => (starting ? this.starts.has(key) && this.startingWorkloads.get(key) === starting && !this.runtimes.has(key)
+      // An account whose deletion has begun is served no more: a kernel booting for it is closed when its start ends (`retireOwner`), and until
+      // then its token must not reach the gateways (memory, models, sources) that would write for an account on its way out.
+      const stillCurrent = () => !this.retiredOwners.has(String(payload.userId)) && (starting
+        ? this.starts.has(key) && this.startingWorkloads.get(key) === starting && !this.runtimes.has(key)
         : this.runtimes.get(key) === runtime && !runtime.closedByManager && !runtime.exitedAt);
       if (!runtime?.workloadTokenFile || !stillCurrent()) throw workloadTokenError();
       if (typeof this.provider.acceptedWorkloadTokens === "function") {
