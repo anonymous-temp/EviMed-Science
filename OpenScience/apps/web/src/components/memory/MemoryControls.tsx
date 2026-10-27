@@ -32,7 +32,7 @@ import { AsyncSwitch } from "@/components/ui/AsyncSwitch";
  * and the capsules others shared).
  */
 export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotten, onRemember, onImport, projectId: shown }: {
-  /** The project 「本项目不使用记忆」 acts on: the one the page shows. `undefined` is the shell's own project; `null` is a page showing none that can be paused (the 「其他」 of the 项目 tab), where the item is off. */
+  /** The project 「本项目不使用记忆」 acts on: the one the page shows. `undefined` is the shell's own project; `null` is a page showing none that can be paused (the 「未归入项目」 of the 项目 tab), where the item is off. */
   projectId?: string | null;
   onReset: () => void;
   /** A switch was changed: 项目 says 「本项目已暂停记忆」 from the same setting. */

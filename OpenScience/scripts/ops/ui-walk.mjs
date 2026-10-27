@@ -2478,7 +2478,7 @@ export async function readMemoryMapHeadline(page) {
 /** The parts of the overview, in the order its cards stand. */
 export const MEMORY_OVERVIEW_PARTS = Object.freeze(["growth", "you", "projects", "methods", "knowledge", "received"]);
 /** The tabs of 记忆胶囊, in the order its band shows them. */
-export const MEMORY_TABS = Object.freeze(["总览", "地图", "关于你", "项目", "做法"]);
+export const MEMORY_TABS = Object.freeze(["总览", "地图", "关于你", "项目", "做法", "收到的"]);
 
 /**
  * The overview, judged: its six cards in order and none still loading or silently failed; the sentence over them is the cards' numbers; each

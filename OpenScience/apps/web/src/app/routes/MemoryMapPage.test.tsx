@@ -401,7 +401,7 @@ describe("记忆地图", () => {
     await screen.findByText(/EviMed 记住了你的/u);
     expect(screen.getByRole("heading", { name: "记忆胶囊" })).toBeInTheDocument();
     const tabs = screen.getByRole("tablist", { name: "记忆" });
-    expect(within(tabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["总览", "地图", "关于你", "项目", "做法"]);
+    expect(within(tabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["总览", "地图", "关于你", "项目", "做法", "收到的"]);
     expect(within(tabs).getByRole("tab", { name: "地图" })).toHaveAttribute("aria-selected", "true");
     await user.click(within(tabs).getByRole("tab", { name: "做法" }));
     expect(where()).toBe("/app/memory?tab=methods");

@@ -14,6 +14,10 @@ const fetchMemorySettings = vi.fn();
 const updateMemorySettings = vi.fn();
 const resetMemory = vi.fn();
 const fetchMyCapsule = vi.fn();
+const fetchReceivedCapsules = vi.fn();
+const enableReceivedCapsule = vi.fn();
+const disableCapsule = vi.fn();
+const previewCapsuleExport = vi.fn();
 const fetchProjectOverview = vi.fn();
 const archiveMemoryRecord = vi.fn();
 const restoreCapsuleEntry = vi.fn();
@@ -43,11 +47,18 @@ vi.mock("@/lib/memoryClient", async () => {
     ...actual,
     ensureMyCapsule: () => Promise.resolve(null),
     fetchMyCapsule: (...args: unknown[]) => fetchMyCapsule(...args),
+    fetchReceivedCapsules: (...args: unknown[]) => fetchReceivedCapsules(...args),
+    enableReceivedCapsule: (...args: unknown[]) => enableReceivedCapsule(...args),
+    disableCapsule: (...args: unknown[]) => disableCapsule(...args),
     archiveMemoryRecord: (...args: unknown[]) => archiveMemoryRecord(...args),
     restoreCapsuleEntry: (...args: unknown[]) => restoreCapsuleEntry(...args),
     fetchProjectOverview: (...args: unknown[]) => fetchProjectOverview(...args),
   };
 });
+vi.mock("@/lib/productClient", async () => ({
+  ...(await vi.importActual<typeof import("@/lib/productClient")>("@/lib/productClient")),
+  previewCapsuleExport: (...args: unknown[]) => previewCapsuleExport(...args),
+}));
 vi.mock("@/lib/methodsClient", async () => {
   const actual = await vi.importActual<typeof import("@/lib/methodsClient")>("@/lib/methodsClient");
   return {
@@ -71,7 +82,9 @@ vi.mock("@/lib/vcrClient", async () => ({
 }));
 vi.mock("@/lib/memoryMapFeature", () => ({ useMemoryMapFeature: () => map.feature }));
 vi.mock("@/components/memory/useMemoryWritePrompt", () => ({ useMemoryWritePrompt: () => {} }));
-vi.mock("./CapsuleTransferPanel", () => ({ ShareDrawer: ({ onClose }: { onClose: () => void }) => <div role="dialog" aria-label="分享与导入"><button onClick={onClose}>关闭</button></div> }));
+vi.mock("./CapsuleTransferPanel", () => ({
+  ShareDrawer: ({ onClose, initialTab }: { onClose: () => void; initialTab?: string }) => <div role="dialog" aria-label="分享与导入" data-tab={initialTab}><button onClick={onClose}>关闭</button></div>,
+}));
 vi.mock("@/components/markdown-viewer/MarkdownViewer", () => ({ MarkdownViewer: ({ children }: { children: string }) => <div>{children}</div> }));
 
 const record = (patch: Partial<WebStructuredMemory> = {}): WebStructuredMemory => ({
@@ -96,6 +109,13 @@ const method = {
   scope: { applicability: "报告交付前", counterexamples: [], current: true },
   statusChangedAt: "2026-09-22T02:00:00Z", bodyUpdatedAt: "2026-09-22T02:00:00Z", trajectories: 3, createdAt: "2026-09-21T06:00:00Z", updatedAt: "2026-09-22T06:00:00Z",
 };
+
+/** A received pack as the shelf reads it: the platform's starter packs and what a colleague shared. */
+const pack = (patch: Record<string, unknown> = {}) => ({
+  id: "cap_pack_1", revision: 1, title: "李主任的工作方式", description: "", issuerTrust: "verified", importedAt: "2026-10-20T02:00:00Z", enabled: true,
+  counts: { method_preference: 3, writing_style: 1 }, methods: ["结果表一律给三线表", "先问清楚再动手"], scanned: true, waiting: 0, scan: null,
+  card: { author: "李主任", summary: "先问清楚再动手，结果表一律给三线表" }, official: null, ...patch,
+});
 
 const entry = (patch: Record<string, unknown> = {}) => ({
   id: "entry_1", revision: 1, createdAt: "2026-09-14T02:00:00Z", updatedAt: "2026-09-14T02:00:00Z", deletedAt: null, projectId: null,
@@ -167,6 +187,12 @@ describe("记忆胶囊", () => {
     searchMemories.mockResolvedValue({ items: [], query: "", semantic: 0, conversations: {}, usage: {} });
     // Most tests are about the memories; the overview above them has tests of its own and is unreadable by default.
     fetchProjectOverview.mockRejectedValue(new Error("not read"));
+    fetchReceivedCapsules.mockResolvedValue([
+      pack(),
+      pack({ id: "cap_official_1", title: "日常文稿", enabled: true, importedAt: null, official: { packId: "everyday-documents" }, card: { author: "EviMed 证据中心", summary: "写信、写总结、改文字时的通用做法" } }),
+      pack({ id: "cap_official_2", title: "文献检索与引用", enabled: false, importedAt: null, official: { packId: "literature" }, card: { author: "EviMed 证据中心", summary: "查文献、核对引用" } }),
+    ]);
+    previewCapsuleExport.mockResolvedValue({ entries: [] });
   });
   afterEach(() => { cleanup(); vi.clearAllMocks(); useProjectStore.setState({ projects: [], currentId: "default" }); });
 
@@ -210,7 +236,7 @@ describe("记忆胶囊", () => {
     );
     await screen.findByRole("switch", { name: "记忆" });
     const tabs = screen.getByRole("tablist", { name: "记忆" });
-    expect(within(tabs).getAllByRole("tab").map((item) => item.textContent?.replace(/\d+$/u, ""))).toEqual(["总览", "地图", "关于你", "项目", "做法"]);
+    expect(within(tabs).getAllByRole("tab").map((item) => item.textContent?.replace(/\d+$/u, ""))).toEqual(["总览", "地图", "关于你", "项目", "做法", "收到的"]);
     expect(within(tabs).getByRole("tab", { name: "地图" })).toHaveAttribute("aria-selected", "false");
     await user.click(within(tabs).getByRole("tab", { name: "地图" }));
     expect(await screen.findByText("地图页")).toBeInTheDocument();
@@ -276,7 +302,7 @@ describe("记忆胶囊", () => {
     await screen.findByRole("button", { name: /药学背景/ });
     const tabs = screen.getByRole("tablist", { name: "记忆" });
     // 成长 is not a tab: what happened each week is the map's 「时间」 view.
-    expect(within(tabs).getAllByRole("tab").map((item) => item.textContent)).toEqual(["关于你4", "项目1", "做法1"]);
+    expect(within(tabs).getAllByRole("tab").map((item) => item.textContent)).toEqual(["关于你4", "项目1", "做法1", "收到的2"]);
     const search = screen.getByRole("searchbox", { name: "搜索记忆" });
     const band = document.querySelector("[data-page-chrome]")!;
     expect(band).toContainElement(tabs);
@@ -672,7 +698,7 @@ describe("记忆胶囊", () => {
     listAllMethods.mockResolvedValue([]);
     open();
     await screen.findByText("还没有关于你的记忆");
-    expect(within(screen.getByRole("tablist", { name: "记忆" })).getAllByRole("tab").map((item) => item.textContent)).toEqual(["关于你", "项目", "做法"]);
+    expect(within(screen.getByRole("tablist", { name: "记忆" })).getAllByRole("tab").map((item) => item.textContent)).toEqual(["关于你", "项目", "做法", "收到的2"]);
   });
 
   it("says what will appear on a tab that is empty, and nothing is a 「还没有记忆」 for a tab that could not be read", async () => {
@@ -952,5 +978,94 @@ describe("记忆胶囊", () => {
     // Nothing in the page's own reads creates anything; the capsule's creation is the share drawer's (CapsuleTransferPanel.test).
     expect(resetMemory).not.toHaveBeenCalled();
     expect(archiveMemoryRecord).not.toHaveBeenCalled();
+  });
+
+  describe("收到的", () => {
+    it("is a tab of its own that counts the packs in force, and lists every pack as a row with its own switch", async () => {
+      open("?tab=received");
+      const list = await screen.findByRole("list", { name: "收到的胶囊" });
+      const tab = within(screen.getByRole("tablist", { name: "记忆" })).getByRole("tab", { name: /收到的/ });
+      expect(tab).toHaveAttribute("aria-selected", "true");
+      expect(tab.textContent).toBe("收到的2");
+      // A person's own pack first, the platform's starter packs after it; one switch each, named after its pack.
+      expect(within(list).getAllByRole("listitem").map((row) => within(row).getByRole("switch").getAttribute("aria-label"))).toEqual([
+        "启用“李主任的工作方式”", "启用“日常文稿”", "启用“文献检索与引用”",
+      ]);
+      expect(within(list).getByRole("switch", { name: "启用“文献检索与引用”" })).toHaveAttribute("aria-checked", "false");
+      expect(within(list).getByText("来自李主任 · 先问清楚再动手，结果表一律给三线表")).toBeInTheDocument();
+      expect(within(list).getByText("EviMed 证据中心提供 · 写信、写总结、改文字时的通用做法")).toBeInTheDocument();
+    });
+
+    it("keeps the row and its switch two targets: the row opens what is in the pack, the switch turns it on and does not open it", async () => {
+      const user = userEvent.setup();
+      enableReceivedCapsule.mockResolvedValue(null);
+      open("?tab=received");
+      const list = await screen.findByRole("list", { name: "收到的胶囊" });
+      await user.click(within(list).getByRole("switch", { name: "启用“文献检索与引用”" }));
+      await waitFor(() => expect(enableReceivedCapsule).toHaveBeenCalledWith("cap_official_2"));
+      expect(screen.queryByRole("dialog")).toBeNull();
+      await user.click(within(list).getByRole("button", { name: "李主任的工作方式" }));
+      const drawer = await screen.findByRole("dialog", { name: "李主任的工作方式" });
+      expect(within(drawer).getByText("来自李主任")).toBeInTheDocument();
+      expect(within(drawer).getByText("研究方法 3 · 写作偏好 1")).toBeInTheDocument();
+      expect(within(drawer).getByText("结果表一律给三线表")).toBeInTheDocument();
+      expect(enableReceivedCapsule).toHaveBeenCalledTimes(1);
+    });
+
+    it("has one action in its toolbar, 分享与导入, which opens the drawer on 导入", async () => {
+      const user = userEvent.setup();
+      open("?tab=received");
+      await screen.findByRole("list", { name: "收到的胶囊" });
+      const toolbar = document.querySelector("[data-toolbar]")!;
+      expect(within(toolbar as HTMLElement).queryByRole("searchbox")).toBeNull();
+      await user.click(within(toolbar as HTMLElement).getByRole("button", { name: "分享与导入" }));
+      expect(await screen.findByRole("dialog", { name: "分享与导入" })).toHaveAttribute("data-tab", "import");
+    });
+
+    it("says what the account could hand over in one sentence above the list, and not at all when it holds nothing", async () => {
+      const user = userEvent.setup();
+      previewCapsuleExport.mockResolvedValue({ entries: [
+        { factKind: "method_preference" }, { factKind: "method_preference" }, { factKind: "preference" }, { factKind: "writing_style" }, { factKind: "expertise" },
+      ] });
+      fetchMyCapsule.mockResolvedValue({ capsule: { id: "cap_mine" }, capsules: [], entries: [], forgotten: [] });
+      open("?tab=received");
+      const sentence = await screen.findByText("你能交出去的：2 种做法、2 条标准与偏好、1 条背景。");
+      await user.click(within(sentence.closest("[data-note]") as HTMLElement).getByRole("button", { name: "分享与导入" }));
+      expect(await screen.findByRole("dialog", { name: "分享与导入" })).toHaveAttribute("data-tab", "export");
+    });
+
+    it("draws no sentence for an account with nothing to hand over", async () => {
+      open("?tab=received");
+      await screen.findByRole("list", { name: "收到的胶囊" });
+      expect(screen.queryByText(/你能交出去的/)).toBeNull();
+    });
+
+    it("is a recipe with one button when no pack was received", async () => {
+      fetchReceivedCapsules.mockResolvedValue([]);
+      open("?tab=received");
+      expect(await screen.findByText("还没有收到胶囊")).toBeInTheDocument();
+      expect(within(document.querySelector("[data-page-body]") as HTMLElement).getAllByRole("button")).toHaveLength(1);
+    });
+
+    it("says a pack could not be read in place of an empty shelf", async () => {
+      fetchReceivedCapsules.mockRejectedValue(new Error("down"));
+      open("?tab=received");
+      expect(await screen.findByText("没有读到全部记忆。")).toBeInTheDocument();
+      expect(screen.queryByRole("list", { name: "收到的胶囊" })).toBeNull();
+    });
+  });
+
+  it("names the bucket of memories that belong to no project 「未归入项目」 in the project chooser", async () => {
+    fetchMemoryProfile.mockResolvedValue({
+      records: [record({ id: "rec_orphan", kind: "project_fact", scope: "project", scopeId: "prj_gone", key: "project.fact.gone", value: "已删除项目里的一条。", summary: "已删除项目里的一条。" })],
+      groups: {}, activeCount: 1, pendingCount: 0, conversations: {}, usage: {},
+    });
+    const user = userEvent.setup();
+    open("?tab=project");
+    // The orphaned memory is the one thing the account has under a project, so the chooser names where it is.
+    await user.click(await screen.findByRole("button", { name: /^项目：/ }));
+    const menu = await screen.findByRole("menu", { name: "项目" });
+    expect(within(menu).getByRole("menuitemradio", { name: "未归入项目" })).toBeInTheDocument();
+    expect(within(menu).queryByRole("menuitemradio", { name: "其他" })).toBeNull();
   });
 });

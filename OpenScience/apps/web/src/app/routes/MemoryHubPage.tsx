@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router";
 import { useAddressOpen, useAddressText, withParam } from "@/lib/addressState";
+import { useCapsuleData } from "@/components/capsule/useCapsuleData";
 import { usePageScroll } from "@/lib/pageScroll";
 import { Brain } from "lucide-react";
 import { searchMemories, type WebStructuredMemory } from "@/lib/apiClient";
+import type { ReceivedCapsule } from "@/lib/memoryClient";
 import { SELF_SECTIONS } from "@/lib/memoryGroups";
 import { useProjectLabels } from "@/lib/projectNames";
 import { useProjectStore } from "@/lib/projects";
@@ -19,6 +21,8 @@ import { MemoryControls } from "@/components/memory/MemoryControls";
 import { MEMORY_OVERVIEW_ADDRESS, memoryTabAddress, MemoryFrame, type MemoryPageTab, type MemoryTab } from "@/components/memory/MemoryFrame";
 import { GroupSection, MemoryListRow, PendingMemoryRows } from "@/components/memory/MemoryRows";
 import { MethodDrawer } from "@/components/memory/PracticeDrawer";
+import { enabledPackCount, ReceivedTab } from "@/components/memory/ReceivedTab";
+import { readHandover } from "@/components/memory/handover";
 import { ProjectOverview } from "@/components/memory/ProjectOverview";
 import { factItems, factRowSummary, factsOfProject, OTHER_PROJECT, practiceItems, projectScopeGroups, type FactItem, type PracticeItem } from "@/components/memory/memoryItems";
 import { ImportDialog } from "@/components/memory/ImportDialog";
@@ -29,7 +33,7 @@ import { useMemoryWritePrompt } from "@/components/memory/useMemoryWritePrompt";
 import { useProjectChoices } from "@/components/memory/useProjectChoices";
 import { useProjectOverview } from "@/components/memory/useProjectOverview";
 import { useKnowledgeConversation } from "@/components/sources/useKnowledgeConversation";
-import { ShareDrawer } from "./CapsuleTransferPanel";
+import { ShareDrawer, type ShareTab } from "./CapsuleTransferPanel";
 import { knownErrorCodeMessage } from "@evimed/domain";
 
 /**
@@ -40,12 +44,12 @@ import { knownErrorCodeMessage } from "@evimed/domain";
 function tabFromAddress(params: URLSearchParams): MemoryTab | null {
   if (params.get("method")) return "methods";
   const named = params.get("tab");
-  return named === "methods" || named === "project" || named === "self" ? named : null;
+  return named === "methods" || named === "project" || named === "self" || named === "received" ? named : null;
 }
 
 /** The reads a tab needs that did not answer, named by tab: a list that could not be read is never an empty one. */
 const SOURCES_OF: Record<MemoryTab, readonly MemoryRead[]> = {
-  self: ["profile", "mine"], project: ["profile", "mine"], methods: ["methods"],
+  self: ["profile", "mine"], project: ["profile", "mine"], methods: ["methods"], received: ["received"],
 };
 
 /** What a conversation begun from an empty tab leaves in the composer, unsent: the blanks are the person's to fill. */
@@ -112,6 +116,29 @@ export function MemoryHubPage() {
   return <MemoryHub mapOn={feature === "on"} />;
 }
 
+/**
+ * The 收到的 tab's body: the packs, and above them what this account could hand over. The hand-over is read here, when the tab is open,
+ * and not with the lists — it is a preview of an export, and a failed read leaves the sentence out instead of saying nothing is there.
+ * With no pack at all the tab is a recipe whose one button opens 分享与导入 on 导入.
+ */
+function ReceivedPanel({ packs, onShare, onImport, onChanged }: {
+  packs: readonly ReceivedCapsule[];
+  onShare: () => void;
+  onImport: () => void;
+  onChanged: () => void;
+}) {
+  const handover = useCapsuleData(readHandover);
+  if (packs.length === 0) {
+    return (
+      <EmptyState
+        icon={Brain} title="还没有收到胶囊" description="别人分享给你的做法，收下后一键就能启用，不会混进你自己的记忆。"
+        action={<Button onClick={onImport}>分享与导入</Button>}
+      />
+    );
+  }
+  return <ReceivedTab packs={packs} handover={handover.data} onShare={onShare} onChanged={onChanged} />;
+}
+
 function MemoryHub({ mapOn }: { mapOn: boolean }) {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
@@ -121,12 +148,16 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
   const [pickedTab, setPickedTab] = useState<MemoryTab>("self");
   const tab = tabFromAddress(params) ?? pickedTab;
   const search = useAddressText("q", 80);
-  const query = search.draft;
+  // The packs received have no search: a handful of rows, and what a search of memories finds is not in them.
+  const query = tab === "received" ? "" : search.draft;
   // The project the address names, else the one with facts the page picked when the shell's own had none.
   const [pickedProject, setPickedProject] = useState<string | null>(null);
   const projectChoice = params.get("project") ?? pickedProject;
   const { value: openKey, open: setOpenKey, close } = useAddressOpen("open");
   const [drawer, setDrawer] = useState<"share" | "forgotten" | "remember" | "import" | null>(null);
+  // 分享与导入 opens on the tab the press named: 导出 from the menu and the hand-over sentence, 导入 from the 收到的 toolbar.
+  const [shareTab, setShareTab] = useState<ShareTab>("export");
+  const openShare = (next: ShareTab) => { setShareTab(next); setDrawer("share"); };
   const [found, setFound] = useState<WebStructuredMemory[] | null>(null);
   // What the conversations behind a search's hits were about, for the drawer's source link.
   const [searchConversations, setSearchConversations] = useState<Record<string, string>>({});
@@ -212,7 +243,9 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
   }, [data.methods, readIn, params, setParams, facts, records, entries, everyPractice]);
 
   const serviceDown = data.serviceDown;
-  const unread = (["profile", "mine", "methods"] as const).filter((name) => data[name] === null && !(serviceDown && name === "profile"));
+  // The packs received are the 收到的 tab's alone: a failure to read them is not said over the memories.
+  const unread = (["profile", "mine", "methods", "received"] as const)
+    .filter((name) => data[name] === null && !(serviceDown && name === "profile") && (name !== "received" || tab === "received"));
   const tabUnread = SOURCES_OF[tab].some((name) => unread.includes(name));
   // What 「记住这一条」 asked and is not written yet (about twelve seconds), and whether that is taking longer than it should.
   const pending = useMemo(() => data.profile?.pending ?? [], [data.profile]);
@@ -252,6 +285,7 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
     self: loading("self") ? undefined : self.length,
     project: loading("project") ? undefined : projectFacts.length,
     methods: loading("methods") ? undefined : practices.length,
+    received: loading("received") ? undefined : enabledPackCount(data.received ?? []),
   };
   const scrollAnchor = usePageScroll(readIn(SOURCES_OF[tab]) && landed);
 
@@ -295,6 +329,9 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
       return <LoadError message={knownErrorCodeMessage("memory_engine_unavailable") ?? "记忆服务暂时不可用。"} onRetry={reload} />;
     }
     if (tabUnread) return null;
+    if (tab === "received") {
+      return <ReceivedPanel packs={data.received ?? []} onShare={() => openShare("export")} onImport={() => openShare("import")} onChanged={reload} />;
+    }
     if (tab === "self") {
       if (self.length === 0) {
         return waiting ?? empty("还没有关于你的记忆", "你在对话里说过的偏好、背景和写作习惯会出现在这里。", { label: "在对话里说说你自己", onPress: speakAbout(SELF_DRAFT) });
@@ -360,13 +397,15 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
           projectId={tab === "project" ? (scope && scope !== OTHER_PROJECT ? scope : null) : undefined}
           onReset={reload}
           onSettingsChanged={reloadOverview}
-          onShare={() => setDrawer("share")}
+          onShare={() => openShare("export")}
           onForgotten={() => setDrawer("forgotten")}
           onRemember={() => setDrawer("remember")}
           onImport={() => setDrawer("import")}
         />
       )}
-      toolbar={{ label: "搜索记忆", search: { label: "搜索记忆", value: query, maxLength: 80, onChange: search.setDraft, onClear: search.clear, inputProps: search.composition } }}
+      toolbar={tab === "received"
+        ? { label: "收到的胶囊", actions: <Button size="sm" variant="secondary" onClick={() => openShare("import")}>分享与导入</Button> }
+        : { label: "搜索记忆", search: { label: "搜索记忆", value: query, maxLength: 80, onChange: search.setDraft, onClear: search.clear, inputProps: search.composition } }}
     >
       <span ref={scrollAnchor} hidden />
       {unread.length > 0 && <LoadError className="mb-4" message="没有读到全部记忆。" onRetry={reload} />}
@@ -397,7 +436,7 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
         />
       )}
       {drawer === "import" && <ImportDialog onClose={() => setDrawer(null)} onSaved={reload} />}
-      {drawer === "share" && <ShareDrawer onClose={() => setDrawer(null)} onImported={reload} />}
+      {drawer === "share" && <ShareDrawer initialTab={shareTab} onClose={() => setDrawer(null)} onImported={reload} />}
       {drawer === "forgotten" && (
         <ForgottenDrawer
           records={records}

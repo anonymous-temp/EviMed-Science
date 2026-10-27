@@ -75,11 +75,11 @@ describe("the projects the 项目 tab can show", () => {
     ]);
   });
 
-  it("groups the choices for the header's menu: the researcher's own with no heading, then each module's under its name, and 「其他」 last", () => {
+  it("groups the choices for the header's menu: the researcher's own with no heading, then each module's under its name, and 「未归入项目」 last", () => {
     const orphan = factItems([record({ id: "x", kind: "project_fact", scope: "project", scopeId: "deleted" })], []);
     const groups = projectScopeGroups(projectChoices(projects, sets, orphan));
     expect(groups.map((group) => [group.heading ?? null, group.choices.map((choice) => choice.label)])).toEqual([
-      [null, ["疳证 Meta", "信尔美"]], ["虚拟临床研究", ["糖尿病研究"]], ["循证 GEO", ["波立维"]], [null, ["其他"]],
+      [null, ["疳证 Meta", "信尔美"]], ["虚拟临床研究", ["糖尿病研究"]], ["循证 GEO", ["波立维"]], [null, ["未归入项目"]],
     ]);
     expect(groups.at(-1)?.choices[0]?.id).toBe(OTHER_PROJECT);
     expect(projectScopeGroups([])).toEqual([]);
@@ -95,13 +95,13 @@ describe("the projects the 项目 tab can show", () => {
     expect(choices.map((choice) => [choice.id, choice.name])).toEqual([["g1", "波立维 · 9月29日"], ["g2", "波立维 · 10月1日"]]);
   });
 
-  it("lists a project with no facts too, and a 「其他」 only when some fact names no project the account still has", () => {
+  it("lists a project with no facts too, and a 「未归入项目」 only when some fact names no project the account still has", () => {
     expect(projectChoices(projects, sets, factItems([record({ id: "x", kind: "project_fact", scope: "project", scopeId: "p1" })], [])).map((choice) => choice.id)).not.toContain(OTHER_PROJECT);
     const orphan = factItems([record({ id: "x", kind: "project_fact", scope: "project", scopeId: "deleted" })], []);
-    expect(projectChoices(projects, sets, orphan).at(-1)).toEqual({ id: OTHER_PROJECT, name: "其他", kind: "own" });
+    expect(projectChoices(projects, sets, orphan).at(-1)).toEqual({ id: OTHER_PROJECT, name: "未归入项目", kind: "own" });
   });
 
-  it("gives a project its own facts, and 「其他」 the ones no project holds", () => {
+  it("gives a project its own facts, and 「未归入项目」 the ones no project holds", () => {
     const facts = factItems([
       record({ id: "a", kind: "project_fact", scope: "project", scopeId: "p1" }), record({ id: "b", kind: "project_fact", scope: "project", scopeId: "deleted" }),
       record({ id: "c", kind: "decision", scope: "user" }), record({ id: "d", kind: "preference" }),

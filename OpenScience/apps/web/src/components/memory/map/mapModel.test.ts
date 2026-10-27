@@ -134,7 +134,7 @@ describe("the topics of a capsule the model has not grouped", () => {
     const kind = narrowMap(withTopics, { ...none, topic: "derived:kind:偏好" });
     expect(ids(kind.nodes)).toEqual(["memory:a"]);
     expect(ids(narrowMap(withTopics, { ...none, topic: "derived:project:p" }).nodes)).toEqual(["memory:c", "memory:d"]);
-    expect(derivedTopics({ nodes: small }, () => null, now).some((topic) => topic.label === "其他项目")).toBe(true);
+    expect(derivedTopics({ nodes: small }, () => null, now).some((topic) => topic.label === "未归入项目")).toBe(true);
   });
 });
 

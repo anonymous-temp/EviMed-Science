@@ -6,16 +6,16 @@ import type { ScopeMenuProps } from "@/components/ui/ScopeMenu";
 import type { TabItem } from "@/components/ui/Tabs";
 import type { ToolbarProps } from "@/components/ui/Toolbar";
 
-/** The memory page's three lists. */
-export type MemoryTab = "self" | "project" | "methods";
+/** The memory page's four lists: what is about the person, what is in a project, what was learned, what was received. */
+export type MemoryTab = "self" | "project" | "methods" | "received";
 /**
  * The page's tab bar also holds 总览 and 地图, which are pages of their own (`/app/memory/overview`, `/app/memory/map`) read as two more tabs
  * of this one: 总览 is the capsule as six parts, 地图 the explorer it drills into, and the lists are what each of them opens.
  */
 export type MemoryPageTab = MemoryTab | "overview" | "map";
 
-export const MEMORY_TAB_NAMES: Record<MemoryPageTab, string> = { overview: "总览", map: "地图", self: "关于你", project: "项目", methods: "做法" };
-const ORDER: readonly MemoryPageTab[] = ["overview", "map", "self", "project", "methods"];
+export const MEMORY_TAB_NAMES: Record<MemoryPageTab, string> = { overview: "总览", map: "地图", self: "关于你", project: "项目", methods: "做法", received: "收到的" };
+const ORDER: readonly MemoryPageTab[] = ["overview", "map", "self", "project", "methods", "received"];
 /** The tabs that are pictures of the capsule, offered where the deployment draws them (`OPEN_SCIENCE_MEMORY_MAP_ENABLED`): they read the map's document. */
 const PICTURES: ReadonlySet<MemoryPageTab> = new Set(["overview", "map"]);
 

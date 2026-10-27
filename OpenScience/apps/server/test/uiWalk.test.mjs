@@ -2922,7 +2922,7 @@ test("总览's sentence is held to its cards, each card to the rows it draws, an
     card("knowledge", { shape: "types", count: 39, bars: [31, 8] }),
     card("received", { count: 2, rows: 2 }),
   ].map((entry) => ({ ...entry, ...(over[entry.part] ?? {}) }));
-  const read = (over = {}, headline = "胶囊里有 7 件关于你和项目的事、2 种做法、39 份资料；近 30 天新增 13 件。") => ({ headline, tabs: ["总览", "地图", "关于你", "项目", "做法"], canvases: 1, cards: cards(over), look: { count: 1, rows: 1 } });
+  const read = (over = {}, headline = "胶囊里有 7 件关于你和项目的事、2 种做法、39 份资料；近 30 天新增 13 件。") => ({ headline, tabs: ["总览", "地图", "关于你", "项目", "做法", "收到的"], canvases: 1, cards: cards(over), look: { count: 1, rows: 1 } });
   assert.deepEqual(memoryOverviewFindings(at, read()), { failures: [], notices: [] });
   // The sentence's numbers are the cards': memories are 关于你's and 项目's together.
   assert.deepEqual(memoryOverviewFindings(at, read({}, "胶囊里有 8 件关于你和项目的事、2 种做法、39 份资料。")).failures, [`${at}: the sentence says 8 memories and the cards count 7`]);
@@ -2939,7 +2939,7 @@ test("总览's sentence is held to its cards, each card to the rows it draws, an
   assert.deepEqual(memoryOverviewFindings(at, read({ methods: { state: "loading", count: null } })).failures, [`${at}: the methods card is still loading`]);
   // The order, the tabs and the one canvas.
   assert.match(memoryOverviewFindings(at, { ...read(), cards: [...cards()].reverse() }).failures[0], /the cards read “received、knowledge/u);
-  assert.deepEqual(memoryOverviewFindings(at, { ...read(), tabs: ["地图", "关于你"] }).failures, [`${at}: the tabs read “地图、关于你” (总览、地图、关于你、项目、做法)`]);
+  assert.deepEqual(memoryOverviewFindings(at, { ...read(), tabs: ["地图", "关于你"] }).failures, [`${at}: the tabs read “地图、关于你” (总览、地图、关于你、项目、做法、收到的)`]);
   assert.deepEqual(memoryOverviewFindings(at, { ...read(), canvases: 2 }).failures, [`${at}: 2 canvases on the page (one: the growth strip; every other card is words and rows)`]);
   assert.deepEqual(memoryOverviewFindings(at, { ...read(), look: { count: 9, rows: 6 } }).failures, [`${at}: 6 rows of what needs a look (five, and the count)`]);
   // An account of recipes has nothing to compare: not observable, never a pass.

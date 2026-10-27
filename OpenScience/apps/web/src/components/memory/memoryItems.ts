@@ -93,6 +93,8 @@ export interface ProjectChoice {
 
 /** The choice that holds the facts naming no project the account still has. */
 export const OTHER_PROJECT = "__other";
+/** What that bucket is called wherever it is printed: the project chooser, the lists, the dashboard. */
+export const OTHER_PROJECT_LABEL = "未归入项目";
 
 /**
  * The projects the 项目 tab can show, in the order the dropdown lists them:
@@ -115,7 +117,7 @@ export function projectChoices(
     .map((project): ProjectChoice => ({ id: project.id, name: labels.get(project.id) ?? project.name, kind: kindOf(project.id) }))
     .sort((left, right) => order.indexOf(left.kind) - order.indexOf(right.kind));
   const orphans = facts.some((fact) => fact.group === "project" && (fact.projectId === null || !known.has(fact.projectId)));
-  return orphans ? [...listed, { id: OTHER_PROJECT, name: "其他", kind: "own" }] : listed;
+  return orphans ? [...listed, { id: OTHER_PROJECT, name: OTHER_PROJECT_LABEL, kind: "own" }] : listed;
 }
 
 /** The heading and mark of each group of the project menu: the researcher's own projects need neither a heading nor a new mark. */
@@ -128,7 +130,7 @@ const SCOPE_GROUPS = {
 /**
  * The project choices as the header's scope menu groups them (`ScopeMenu`): the researcher's own projects first, then each module's
  * own group under its name, as the sidebar and the knowledge base list them — so two studies with one name are never mistaken for the
- * researcher's own projects. The choice that holds the facts naming no project the account still has is an ordinary entry, 「其他」.
+ * researcher's own projects. The choice that holds the facts naming no project the account still has is an ordinary entry, 「未归入项目」.
  */
 export function projectScopeGroups(choices: readonly ProjectChoice[]): ScopeGroup[] {
   const groups: ScopeGroup[] = [];
@@ -147,7 +149,7 @@ export function projectScopeGroups(choices: readonly ProjectChoice[]): ScopeGrou
   return groups;
 }
 
-/** The facts of the project a dropdown names; the ones that name none the account has under 「其他」. */
+/** The facts of the project a dropdown names; the ones that name none the account has under 「未归入项目」. */
 export function factsOfProject(facts: readonly FactItem[], projectId: string | null, known: ReadonlySet<string>): FactItem[] {
   return facts.filter((fact) => fact.group === "project" && (projectId === OTHER_PROJECT
     ? fact.projectId === null || !known.has(fact.projectId)

@@ -350,7 +350,7 @@ describe("the page's place in the capsule", () => {
     const { container } = open();
     await ready();
     const tabs = screen.getByRole("tablist", { name: "记忆" });
-    expect(within(tabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["总览", "地图", "关于你", "项目", "做法"]);
+    expect(within(tabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["总览", "地图", "关于你", "项目", "做法", "收到的"]);
     expect(within(tabs).getByRole("tab", { name: "总览" })).toHaveAttribute("aria-selected", "true");
     const facts = expectComposed(container, { tablists: 1 });
     expect(facts.toolbars).toHaveLength(0);

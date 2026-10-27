@@ -135,7 +135,7 @@ export function derivedTopics(doc: Pick<MemoryMap, "nodes">, projectName: (id: s
   for (const node of doc.nodes) {
     if (node.type !== "memory" || node.state === "replaced") continue;
     add(`${DERIVED_TOPIC}kind:${kindTitle(String(node.subtype ?? ""))}`, kindTitle(String(node.subtype ?? "")), node);
-    if (node.projectId) add(`${DERIVED_TOPIC}project:${node.projectId}`, projectName(node.projectId) ?? "其他项目", node);
+    if (node.projectId) add(`${DERIVED_TOPIC}project:${node.projectId}`, projectName(node.projectId) ?? "未归入项目", node);
   }
   const day = 86_400_000;
   const recent = (node: MapNode, from: number, to: number) => {
