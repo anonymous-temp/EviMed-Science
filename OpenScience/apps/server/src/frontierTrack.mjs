@@ -215,7 +215,7 @@ export async function frontierWriteCongressRecap(editor, { congress, refs }) {
 // ───────────────────────── the module ─────────────────────────
 
 /**
- * @typedef {{ database: any, now?: () => Date, timeZone?: string, calendar?: readonly import("@evimed/domain").FrontierCongress[] }} FrontierTrackOptions
+ * @typedef {{ database: any, now?: () => Date, timeZone?: string, calendar?: readonly import("@evimed/domain").FrontierCongress[], readCacheMs?: number }} FrontierTrackOptions
  * @typedef {{ editor: any, workerId: string, leaseMs: number, now: Date, budget: { state: string },
  *   providerPaused: () => boolean, onProviderRefused: (code: string) => void, providerUnavailable?: (code: string) => boolean,
  *   readerText: (texts: any) => ({ source: string, text: string } | null), itemGenre: (item: any) => string,
@@ -237,12 +237,19 @@ const encodeCursor = (at, id) => Buffer.from(JSON.stringify({ at, id }), "utf8")
 
 export class FrontierTrack {
   /** @param {FrontierTrackOptions} options */
-  constructor({ database, now = () => new Date(), timeZone = "Asia/Shanghai", calendar = FRONTIER_CONGRESSES }) {
+  constructor({ database, now = () => new Date(), timeZone = "Asia/Shanghai", calendar = FRONTIER_CONGRESSES, readCacheMs = 0 }) {
     if (!database) throw new TypeError("The tracker needs a database.");
     this.database = database;
     this.now = now;
     this.timeZone = timeZone;
     this.calendar = calendar;
+    // The congress list and a congress's hub are the same for every reader and cost a regex over a window's text per congress:
+    // 13.9 s for the list of 17 on production (2026-10-27, 40k items), past the walk's 30 s under a release's start. With
+    // `readCacheMs` (the service's reader) a read is answered from the last result and one refresh runs behind it once it is
+    // older than that; a refresh that fails leaves the last result standing. 0 (the pipeline, the tests) reads every time.
+    this.readCacheMs = readCacheMs;
+    /** @type {Map<string, { at: number, value: any, pending: Promise<any> | null }>} */
+    this.readCache = new Map();
     this.counters = {
       rounds: 0, asked: 0, approvals: 0, guidelines: 0, none: 0, failed: 0, droppedFields: /** @type {Record<string, number>} */ ({}),
       recapsAsked: 0, recapsWritten: 0, recapsEmpty: 0, recapsDropped: 0, recapsFailed: 0,
@@ -441,7 +448,30 @@ export class FrontierTrack {
    * 会议: the congresses on now, coming in the next 60 days and ended within the last 30, with the number of items each has.
    * Ongoing first (the one ending soonest first), then the coming ones by start, then the recent by end, newest first.
    */
+  /**
+   * Answer `read` from the cache under `key` (see the constructor): fresh, the last value; stale, the last value while one refresh
+   * runs; absent, the read itself (callers that arrive together share it).
+   * @template T @param {string} key @param {() => Promise<T>} read @returns {Promise<T>}
+   */
+  async #cached(key, read) {
+    if (!(this.readCacheMs > 0)) return read();
+    const entry = this.readCache.get(key) ?? { at: 0, value: undefined, pending: null };
+    this.readCache.set(key, entry);
+    const refresh = () => {
+      entry.pending ??= read().then((value) => { entry.at = Date.now(); entry.value = value; return value; })
+        .finally(() => { entry.pending = null; });
+      return entry.pending;
+    };
+    if (entry.at && Date.now() - entry.at < this.readCacheMs) return entry.value;
+    if (entry.at) { refresh().catch(() => {}); return entry.value; }
+    return refresh();
+  }
+
   async congresses() {
+    return this.#cached("congresses", () => this.#readCongresses());
+  }
+
+  async #readCongresses() {
     const today = frontierDayIn(this.now(), this.timeZone);
     const order = { ongoing: 0, upcoming: 1, recent: 2 };
     const open = this.calendar.map((congress) => ({ congress, status: frontierCongressStatus(congress, today) }))
@@ -473,6 +503,11 @@ export class FrontierTrack {
   async congress(id) {
     const congress = frontierCongressById(id, this.calendar);
     if (!congress) return null;
+    return this.#cached(`congress:${congress.id}`, () => this.#readCongress(congress));
+  }
+
+  /** @param {import("@evimed/domain").FrontierCongress} congress */
+  async #readCongress(congress) {
     const today = frontierDayIn(this.now(), this.timeZone);
     const matched = congressItemsSql(congress, this.timeZone, 1);
     const rows = today >= frontierCongressItemWindow(congress).from ? (await this.database.query(`SELECT i.id, i.public_id, ${ITEM_DAY_SQL("$1")} AS day, i.selected,

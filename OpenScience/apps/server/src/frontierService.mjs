@@ -569,7 +569,8 @@ export class FrontierService {
     /** The hot-event topics (`FrontierTopics`, c2-leads 2026-10-25): 热榜's 「热点话题」, the topic page and `frontier_search`; null serves none. */
     this.topics = topics;
     /** 追踪 (c3-track 2026-10-25, `frontierTrack.mjs`): the approval and guideline records and the congress hubs, read. */
-    this.trackReader = new FrontierTrack({ database, now, timeZone: String(config.frontierTimeZone || "Asia/Shanghai") });
+    // The congress list and hubs are read from a ten-minute cache refreshed behind the read (`readCacheMs`, frontierTrack.mjs).
+    this.trackReader = new FrontierTrack({ database, now, timeZone: String(config.frontierTimeZone || "Asia/Shanghai"), readCacheMs: 10 * 60_000 });
     /** Typed follows (`FrontierFollowWatch`, c3-watch): their reading, matches and counts; null stores a typed follow by its words and counts none. */
     this.watch = watch;
     /** The selection line a card's score band is read against (the pipeline's own). */
@@ -588,7 +589,13 @@ export class FrontierService {
     this.seen = new Map();
   }
 
-  async ready() { return migrateFrontier(this.database, { dimension: this.dimension }); }
+  async ready() {
+    const migrated = await migrateFrontier(this.database, { dimension: this.dimension });
+    // The first reader after a start would otherwise wait out the whole congress count (14 s on production): read it once, now,
+    // in the background, after the schema is there. A failure here is the first reader's to see again.
+    if (!this.trackWarmed) { this.trackWarmed = true; this.trackReader.congresses().catch(() => {}); }
+    return migrated;
+  }
 
   /** Whether this account sees the module. @param {{ id?: string }} user */
   allows(user) { return frontierAudienceAllows(this.config, user); }
