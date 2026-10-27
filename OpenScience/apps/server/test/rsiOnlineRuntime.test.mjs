@@ -68,10 +68,13 @@ test('maintenance admission is checked both before and inside the online queue c
   allowed = true; await worker.tick(); assert.equal(claimed, 1);
   await worker.close();
 });
-test('production server composes only serving evolution and declares dedicated online queues', async () => {
+test('production server composes evolution through the one serving switch and declares dedicated online queues', async () => {
   const code = await readFile(new URL('../src/server.mjs', import.meta.url), 'utf8');
-  assert.doesNotMatch(code, /import\s*\{\s*createEvolution\s*\}|evolution\.model\(|evolution\.loops|evolution\.budgeted\(|evolution\.runtimeSession/);
-  assert.match(code, /createEvolutionServing\(/);
+  // Neither composition is built directly: the switch (evolutionMode.mjs) decides, and the members only the full composition has are
+  // reached through `experimental`, inside the blocks that serving skips.
+  assert.doesNotMatch(code, /import\s*\{\s*createEvolution(?:Serving)?\s*\}|createEvolution(?:Serving)?\(/);
+  assert.match(code, /composeEvolution\(/);
+  assert.doesNotMatch(code, /evolution\.model\(|evolution\.loops|evolution\.budgeted\(|evolution\.runtimeSession/);
   assert.ok(PRODUCT_JOB_KINDS.includes('rsi-incident-export'));
   assert.ok(PRODUCT_JOB_KINDS.includes('rsi-bundle-poll'));
 });

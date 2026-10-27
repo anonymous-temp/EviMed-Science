@@ -3070,6 +3070,14 @@ export function loadConfig(overrides = {}) {
     evolutionMaxConcurrency: Number(overrides.evolutionMaxConcurrency ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_CONCURRENCY ?? 1),
     evolutionLightConcurrency: Number(overrides.evolutionLightConcurrency ?? process.env.OPEN_SCIENCE_EVOLUTION_LIGHT_CONCURRENCY ?? 2),
     evolutionSearchPaused: overrides.evolutionSearchPaused ?? boolEnv("OPEN_SCIENCE_EVOLUTION_SEARCH_PAUSED", false),
+    // The serving cutover (2026-10-26, the offline RSI lab): on, the control plane composes only what serves published state (events, decision
+    // expiries, the operators' digest, a retirement's completion, a published tool's self-check) and nothing experimental runs online. It is a
+    // one-way cutover of queued experimental work: at the first worker poll the nine experimental job kinds that are queued or lease-expired are
+    // cancelled as `evolution_offline_only`, queued events of any other type are closed as `retired-to-lab`, pending decision cards whose default
+    // is an experiment are closed, an unanswered harm review takes the protective retirement, the experimental POST /api/evolution routes answer
+    // 409, and the search pause above is implied. Off (the default), evolution composes exactly as before the lab and `evolutionSearchPaused`
+    // alone governs the pause.
+    evolutionServingOnly: overrides.evolutionServingOnly ?? boolEnv("OPEN_SCIENCE_EVOLUTION_SERVING_ONLY", false),
     evolutionMaxDecisionCards: Number(overrides.evolutionMaxDecisionCards ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_DECISION_CARDS ?? 3),
     // How many different accounts of a class a user-originated signal or lead needs before the platform loop reads it (review D-E12). Researchers
     // need five, always: one person's private work must not steer the platform. An operator's own account is the platform's, and on a deployment

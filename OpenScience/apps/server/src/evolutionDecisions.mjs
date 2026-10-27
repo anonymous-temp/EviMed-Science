@@ -119,12 +119,14 @@ export class EvolutionDecisions {
     return saved;
   }
   /**
-   * What a card nobody answered takes. A harm review's is its protective option, the soft retirement the same decision reverses,
-   * whatever was stored as conservative: cards written before 2026-10-26 named `keep`, and keeping a tool the harm test flagged
-   * silenced its alarm with nobody having decided it. Every other card takes its conservative option.
+   * What a card nobody answered takes: its conservative option. Under the serving cutover a harm review's is instead its protective
+   * option, the soft retirement the same decision reverses, whatever was stored as conservative: cards written before 2026-10-26 named
+   * `keep`, and keeping a tool the harm test flagged silenced its alarm with nobody having decided it. Without the cutover a card
+   * keeps what it stored, as it always has; the retirement of a tool is the cutover's, not a default of the platform.
    * @param {any} row
    */
   async unansweredOption(row) {
+    if (this.config.evolutionServingOnly !== true) return row.payload.conservative;
     const subject = typeof row.payload.subjectId === 'string' ? await this.service.get(row.payload.subjectId) : null;
     if (subject?.payload?.recordType === 'evolution-maintenance-review' && subject.payload.kind === 'sequential-harm') {
       const protective = row.payload.options.find((/** @type {any} */ item) => (item.operation ?? item.id) === 'maintenance-retire');
