@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
 import { chromium } from "playwright-core";
-import { ADDRESS_CASES, PAGE_TEMPLATES, addressProbe, addressStateFindings, compositionFindings, familyFindings, forgetProjectChoice, measure, measureComposition, memoryMapHeadlineFindings, memoryReady, moduleReady, moduleResultProbe, moduleViewAddressHolds, moduleViewLabels, pageFindings, readMemoryMapHeadline, readModuleResult, routeReady, rowClickShown, scrollPage, verifyCompactWorkflowViews, verifyModuleNavigation, waitMemory, walkCalculationHistory, walkMemoryMap } from "../../../scripts/ops/ui-walk.mjs";
+import { ADDRESS_CASES, PAGE_TEMPLATES, addressProbe, addressStateFindings, compositionFindings, familyFindings, forgetProjectChoice, measure, measureComposition, memoryReady, moduleReady, moduleResultProbe, moduleViewAddressHolds, moduleViewLabels, pageFindings, readModuleResult, routeReady, rowClickShown, scrollPage, verifyCompactWorkflowViews, verifyModuleNavigation, waitMemory, walkCalculationHistory, walkMemoryOverview } from "../../../scripts/ops/ui-walk.mjs";
 
 const executable = process.env.OPEN_SCIENCE_MANAGED_BROWSER_TEST_CHROME;
 const skip = !executable && "An explicit disposable Chromium executable is required; missing is not pass";
@@ -327,52 +327,60 @@ test("the folded workflow probe opens the menu, checks all destinations and clos
 test("memory readiness waits for data, distinguishes errors, and requires the addressed controls", { skip }, async () => {
   await page.route("http://memory.walk/**", (route) => route.fulfill({ contentType: "text/html; charset=utf-8", body: '<main><div role="tablist" aria-label="记忆"><button role="tab" aria-selected="true">关于你</button></div><input type="search" aria-label="搜索记忆"><div data-page-body><div class="animate-pulse">Loading</div></div></main>' }));
   await page.goto("http://memory.walk/app/memory?tab=self");
-  assert.equal(await page.evaluate(memoryReady, { map: false, selected: "关于你" }), false);
+  assert.equal(await page.evaluate(memoryReady, { overview: false, selected: "关于你" }), false);
   await page.evaluate(() => { setTimeout(() => { globalThis.document.querySelector("[data-page-body]").innerHTML = '<ul><li><button data-row-title="A">A</button></li></ul>'; }, 50); });
-  await page.waitForFunction(memoryReady, { map: false, selected: "关于你" });
-  assert.equal(await page.evaluate(memoryReady, { map: true }), false);
-  assert.equal(await page.evaluate(memoryReady, { map: false, selected: "项目" }), false);
-  await page.evaluate(() => { globalThis.document.querySelector("input").setAttribute("aria-label", "搜索记忆地图"); });
-  assert.equal(await page.evaluate(memoryReady, { map: false }), false);
+  await page.waitForFunction(memoryReady, { overview: false, selected: "关于你" });
+  assert.equal(await page.evaluate(memoryReady, { overview: true }), false);
+  assert.equal(await page.evaluate(memoryReady, { overview: false, selected: "项目" }), false);
+  await page.evaluate(() => { globalThis.document.querySelector("input").setAttribute("aria-label", "搜索"); });
+  assert.equal(await page.evaluate(memoryReady, { overview: false }), false);
   await page.evaluate(() => {
     globalThis.document.querySelector("input").setAttribute("aria-label", "搜索记忆");
     globalThis.document.querySelector("[data-page-body]").innerHTML = '<div role="alert">暂时读不到记忆。<button>重试</button></div>';
   });
-  assert.equal(await page.evaluate(memoryReady, { map: false }), true, "error is terminal, not successful empty coverage");
+  assert.equal(await page.evaluate(memoryReady, { overview: false }), true, "error is terminal, not successful empty coverage");
   assert.equal(await page.locator("main [role=alert]").count(), 1);
   await assert.rejects(waitMemory(page, false), /memory data could not be read/);
   assert.equal(await page.locator("[data-row-title]").count(), 0);
   await page.unroute("http://memory.walk/**");
 });
 
-test("map readiness waits for the map's own sentence or empty state, not only for the skeleton to be gone", { skip }, async () => {
-  // Between the settings and the map's own request the page draws neither a skeleton nor a list: "nothing is loading" was true then.
-  await page.route("http://map-ready.walk/**", (route) => route.fulfill({ contentType: "text/html; charset=utf-8", body: '<main><div role="tablist" aria-label="记忆"><button role="tab" aria-selected="true">地图</button></div><input aria-label="搜索记忆地图"><div data-page-body></div></main>' }));
-  await page.goto("http://map-ready.walk/app/memory/map");
-  assert.equal(await page.evaluate(memoryReady, { map: true, selected: "地图" }), false);
-  await page.evaluate(() => { globalThis.document.querySelector("[data-page-body]").innerHTML = '<p data-headline>EviMed 记住了你的 3 件事。</p>'; });
-  assert.equal(await page.evaluate(memoryReady, { map: true, selected: "地图" }), true);
-  await page.evaluate(() => { globalThis.document.querySelector("[data-page-body]").innerHTML = '<div data-empty>还没有记住什么</div>'; });
-  assert.equal(await page.evaluate(memoryReady, { map: true, selected: "地图" }), true);
-  await page.unroute("http://map-ready.walk/**");
+test("overview readiness waits for the sentence or the recipe, not only for the skeleton to be gone", { skip }, async () => {
+  // Between the settings and the map's document the page draws neither a skeleton nor a table: "nothing is loading" was true then.
+  await page.route("http://overview-ready.walk/**", (route) => route.fulfill({ contentType: "text/html; charset=utf-8", body: '<main><div role="tablist" aria-label="记忆"><button role="tab" aria-selected="true">总览</button></div><input aria-label="搜索记忆"><div data-page-body></div></main>' }));
+  await page.goto("http://overview-ready.walk/app/memory/overview");
+  assert.equal(await page.evaluate(memoryReady, { overview: true, selected: "总览" }), false);
+  await page.evaluate(() => { globalThis.document.querySelector("[data-page-body]").innerHTML = '<p data-headline>记住了 3 条关于你的事。</p>'; });
+  assert.equal(await page.evaluate(memoryReady, { overview: true, selected: "总览" }), true);
+  await page.evaluate(() => { globalThis.document.querySelector("[data-page-body]").innerHTML = '<div data-empty>还没有记下关于你的事。</div>'; });
+  assert.equal(await page.evaluate(memoryReady, { overview: true, selected: "总览" }), true);
+  await page.unroute("http://overview-ready.walk/**");
 });
 
-test("map addressed state checks query and view through Back and reload, and rejects parameter loss", { skip }, async () => {
-  const content = '<main><div role="tablist" aria-label="记忆"><button role="tab" aria-selected="true">地图</button></div><div role="group" aria-label="地图的视图"><button aria-pressed="true">维度</button></div><input aria-label="搜索记忆地图" value="探针"><div data-page-body><p data-headline>EviMed 记住了你的 0 件事。</p></div></main>';
-  await page.route("http://map.walk/**", (route) => route.fulfill({ contentType: "text/html; charset=utf-8", body: content }));
-  await page.goto("http://map.walk/app/memory/map?view=dims&q=" + encodeURIComponent("探针"));
-  await page.waitForFunction(memoryReady, { map: true, selected: "地图", query: "探针" });
-  const first = await page.evaluate(addressProbe, ["memory-map"]);
-  await page.goto("http://map.walk/app/capabilities");
+test("the 收到的 tab has no search box to wait for: its one action is in the toolbar", { skip }, async () => {
+  await page.route("http://received-ready.walk/**", (route) => route.fulfill({ contentType: "text/html; charset=utf-8", body: '<main><div role="tablist" aria-label="记忆"><button role="tab" aria-selected="true">收到的 5</button></div><div data-toolbar><button>分享与导入</button></div><div data-page-body><ul><li>包</li></ul></div></main>' }));
+  await page.goto("http://received-ready.walk/app/memory?tab=received");
+  assert.equal(await page.evaluate(memoryReady, { overview: false, selected: "收到的" }), true);
+  assert.equal(await page.evaluate(memoryReady, { overview: false, selected: "关于你" }), false);
+  await page.unroute("http://received-ready.walk/**");
+});
+
+test("overview addressed state checks the range and the query through Back and reload, and rejects parameter loss", { skip }, async () => {
+  const content = '<main><div role="tablist" aria-label="记忆"><button role="tab" aria-selected="true">总览</button></div><div role="group" aria-label="时间范围"><button aria-pressed="true">近 30 天</button></div><input aria-label="搜索记忆" value="探针"><div data-page-body><p data-headline>记住了 3 条关于你的事。</p></div></main>';
+  await page.route("http://overview.walk/**", (route) => route.fulfill({ contentType: "text/html; charset=utf-8", body: content }));
+  await page.goto("http://overview.walk/app/memory/overview?range=30d&q=" + encodeURIComponent("探针"));
+  await page.waitForFunction(memoryReady, { overview: true, selected: "总览", query: "探针" });
+  const first = await page.evaluate(addressProbe, ["memory-overview"]);
+  await page.goto("http://overview.walk/app/capabilities");
   await page.goBack();
-  const back = await page.evaluate(addressProbe, ["memory-map"]);
+  const back = await page.evaluate(addressProbe, ["memory-overview"]);
   await page.reload();
-  const reload = await page.evaluate(addressProbe, ["memory-map"]);
-  const chosen = ADDRESS_CASES.find((entry) => entry.page === "memory-map");
+  const reload = await page.evaluate(addressProbe, ["memory-overview"]);
+  const chosen = ADDRESS_CASES.find((entry) => entry.page === "memory-overview");
   const read = { pressed: [true], first, away: "/app/capabilities", back, reload };
   assert.deepEqual(addressStateFindings(chosen, read), { failures: [], notices: [] });
   assert.ok(addressStateFindings(chosen, { ...read, reload: { ...reload, search: "", query: "" } }).notices.length >= 2);
-  await page.unroute("http://map.walk/**");
+  await page.unroute("http://overview.walk/**");
 });
 
 function moduleFixture(module, { programme = true, canonical = false, omit = "", duplicate = false, missingRail = false, collapsed = false, requestedSteps = [] } = {}) {
@@ -424,11 +432,11 @@ test("calculation result choices include conversation only with its canonical se
 });
 
 
-test("twelve unfiltered map marks retain exact drawer identity through reload, Back and Close; zero is not coverage", { skip }, async () => {
-  const html = (count) => `<meta charset="utf-8"><main><div role="tablist" aria-label="记忆"><button role="tab" aria-selected="true">地图</button></div><input aria-label="搜索记忆地图"><p data-headline>EviMed 记住了你的 ${count} 件事。</p><div data-page-body><ul aria-label="标记">${Array.from({ length: count }, (_, i) => `<li><button data-row-title="Mark ${i}" onclick="history.pushState({},'', '?open=record:m${i}');render()">Mark ${i}</button></li>`).join("")}</ul>${count ? "" : "<p data-empty>No marks yet</p>"}</div><div id="drawer"></div></main><script>function render(){const host=globalThis.document.querySelector('#drawer');host.replaceChildren();if(new URLSearchParams(location.search).has('open')){const dialog=globalThis.document.createElement('div');dialog.setAttribute('role','dialog');const close=globalThis.document.createElement('button');close.textContent='关闭';close.onclick=()=>{history.replaceState({},'',location.pathname);render()};dialog.append(close);host.append(dialog)}}addEventListener('popstate',render);render()</script>`;
+test("twelve rows of the overview's table retain exact drawer identity through reload, Back and Close; zero is not coverage", { skip }, async () => {
+  const html = (count) => `<meta charset="utf-8"><main><div role="tablist" aria-label="记忆"><button role="tab" aria-selected="true">总览</button></div><input aria-label="搜索记忆">${count ? `<p data-headline>记住了 ${count} 条关于你的事。</p>` : ""}<div data-page-body><ul aria-label="最近变化">${Array.from({ length: count }, (_, i) => `<li><button data-row-title="Row ${i}" data-overview-row onclick="history.pushState({},'', '?open=record:m${i}');render()">Row ${i}</button></li>`).join("")}</ul>${count ? "" : "<p data-empty>No changes yet</p>"}</div><div id="drawer"></div></main><script>function render(){const host=globalThis.document.querySelector('#drawer');host.replaceChildren();if(new URLSearchParams(location.search).has('open')){const dialog=globalThis.document.createElement('div');dialog.setAttribute('role','dialog');const close=globalThis.document.createElement('button');close.textContent='关闭';close.onclick=()=>{history.replaceState({},'',location.pathname);render()};dialog.append(close);host.append(dialog)}}addEventListener('popstate',render);render()</script>`;
   for (const count of [12, 0]) {
     await page.route("http://marks.walk/**", (route) => route.fulfill({ contentType: "text/html; charset=utf-8", body: html(count) }));
-    const result = await walkMemoryMap(page, "http://marks.walk", "/app/memory/map");
+    const result = await walkMemoryOverview(page, "http://marks.walk", "/app/memory/overview");
     if (count) {
       assert.deepEqual(result.failures, []);
       assert.equal(result.read.rows, 12);
@@ -624,26 +632,6 @@ test("adopted GEO walks eight steps, contextual siblings and both header destina
   assert.equal(page.url(), "http://geo-context.walk/app/geo/study");
   await page.unroute("http://geo-context.walk/**");
 });
-
-
-test("memory headline comparison reads all paged marks and restores the initial list", { skip }, async () => {
-  const row = '<li><span aria-hidden="true">●</span>Memory</li>';
-  await page.route("http://memory-paging.walk/**", route => route.fulfill({ contentType: "text/html; charset=utf-8", body: `<main><div role="tablist" aria-label="记忆"><button role="tab" aria-selected="true">地图</button></div><input aria-label="搜索记忆地图"><div data-headline>EviMed 记住了你的 32 件事。</div><div data-page-body><ul aria-label="标记">${row.repeat(30)}</ul><button data-show-more onclick="more(this)">显示更多 · 还有 2 个</button></div></main><script>function more(button){globalThis.document.querySelector("ul").insertAdjacentHTML("beforeend",${JSON.stringify(row.repeat(2))});button.remove()}</script>` }));
-  await page.goto("http://memory-paging.walk/app/memory/map");
-  const read = await readMemoryMapHeadline(page);
-  assert.equal(read.expanded, 1);
-  assert.equal(read.initialMore, true);
-  assert.equal(read.marks.length, 32);
-  assert.deepEqual(memoryMapHeadlineFindings('memory-map@desktop', read), { failures: [], notices: [] });
-  assert.equal(await page.locator('ul li').count(), 30);
-  assert.ok(memoryMapHeadlineFindings('memory-map@desktop', { ...read, more: true }).notices.length);
-  assert.ok(memoryMapHeadlineFindings('memory-map@desktop', { ...read, marks: [...read.marks, { glyph: '⬢', warn: false, replaced: false }] }).notices.length);
-  assert.ok(memoryMapHeadlineFindings('memory-map@desktop', { ...read, headline: 'EviMed 记住了你的 31 件事。' }).failures.length);
-  await page.unroute("http://memory-paging.walk/**");
-});
-
-
-
 
 
 test("Inbox selection controls are owned by one named toolbar, and their kinds count against the page's budget", { skip }, async () => {

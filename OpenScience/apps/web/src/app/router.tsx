@@ -6,6 +6,7 @@ import { FrameSkeleton } from "./routes/RuntimeUiFrame";
 import { LoginPage } from "./routes/LoginPage";
 import { NotFound } from "./routes/NotFound";
 import { RouteError } from "./routes/RouteError";
+import { MemoryMapRedirect } from "./routes/MemoryMapRedirect";
 
 /**
  * Every workbench page is its own chunk.
@@ -32,7 +33,6 @@ const VcrMethodWorkbenchPage = lazy(() => import("./routes/VcrMethodWorkbenchPag
 const CapabilitiesPage = lazy(() => import("./routes/CapabilitiesPage").then((m) => ({ default: m.CapabilitiesPage })));
 const InboxPage = lazy(() => import("./routes/InboxPage").then((m) => ({ default: m.InboxPage })));
 const MemoryHubPage = lazy(() => import("./routes/MemoryHubPage").then((m) => ({ default: m.MemoryHubPage })));
-const MemoryMapPage = lazy(() => import("./routes/MemoryMapPage").then((m) => ({ default: m.MemoryMapPage })));
 const MemoryOverviewPage = lazy(() => import("./routes/MemoryOverviewPage").then((m) => ({ default: m.MemoryOverviewPage })));
 const SharedCapsulePage = lazy(() => import("./routes/SharedCapsulePage").then((m) => ({ default: m.SharedCapsulePage })));
 const AccountPage = lazy(() => import("./routes/AccountPage").then((m) => ({ default: m.AccountPage })));
@@ -142,9 +142,9 @@ export const routes: RouteObject[] = [
         // by `SessionFrameHost`). `?task=` and `?digest=` are the old addresses and are resolved by the page.
         { path: "autopilot/:taskId?", element: <AutopilotPage /> },
         { path: "memory", element: <MemoryHubPage /> },
-        // 「记忆地图」: the explorable picture of the memory page's contents, a data page of its own (DESIGN.md 「页面结构」).
-        { path: "memory/map", element: <MemoryMapPage /> },
-        // 「总览」: the capsule as six parts of one picture, where `/app/memory` lands and each card drills into the map from (DESIGN.md 「页面结构」).
+        // 「记忆地图」 was a tab until 2026-10-27, and is part of 总览 now: an old address goes there with what it can carry over.
+        { path: "memory/map", element: <MemoryMapRedirect /> },
+        // 「总览」: the capsule as one data page, where `/app/memory` lands (DESIGN.md 「页面结构」).
         { path: "memory/overview", element: <MemoryOverviewPage /> },
         // A share link and a delivery from the inbox (flywheel F17): the same preview, trial and import a file has, with no file.
         { path: "memory/shared/:token", element: <SharedCapsulePage /> },

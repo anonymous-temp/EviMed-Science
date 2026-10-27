@@ -27,7 +27,7 @@ test("each finding nobody accepted becomes one entry: a number holds a page, a c
     found("not-walked", "geo-answer", "geo-answer: not walked — the first project lists no wrong sentence with an answer"),
     found("notice", "inbox@desktop", "inbox@desktop: the page does not show the choice it was given"),
     found("type-pairs", "memory@desktop", "memory@desktop: 5 pairs", 5, { owner: "x", until: "2999-01-01" }),
-    found("step-failed", "memory-map-drawer", "memory-map-drawer: the step could not run"),
+    found("step-failed", "memory-overview-drawer", "memory-overview-drawer: the step could not run"),
   ]), who);
   assert.deepEqual(proposed.map((entry) => ({ ...entry, owner: undefined, until: undefined, why: undefined })), [
     { view: "files@desktop", rule: "type-pairs", max: 9 },

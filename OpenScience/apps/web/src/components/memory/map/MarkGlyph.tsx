@@ -13,14 +13,18 @@ export function glyphOf(node: Pick<MapNode, "type" | "subtype">): string {
   }
 }
 
-/** A mark's shape and state in a row: colour, shape and words (the row says the words). Decoration for a reader who sees; hidden from one who listens. */
-export function MarkGlyph({ node }: { node: Pick<MapNode, "type" | "subtype" | "state"> }) {
+/**
+ * A mark's shape and state in a row: colour, shape and words (the row says the words). Decoration for a reader who sees; hidden from one who listens.
+ * It is a graphic in the data colour — the picture's own mark, drawn the way the chart and the graph draw it — and not a word: text that opens
+ * something is the only accent text. `glyph` is for a row that stands for a change of the chart (a lane's own shape).
+ */
+export function MarkGlyph({ node, glyph }: { node: Pick<MapNode, "type" | "subtype" | "state">; glyph?: string }) {
   return (
     <span
       aria-hidden="true"
       className={cn("inline-block w-4 text-center text-ui leading-none", node.state === "check" ? "text-warn" : node.state === "replaced" ? "text-text-3" : "text-accent")}
     >
-      {glyphOf(node)}
+      {glyph ?? glyphOf(node)}
     </span>
   );
 }

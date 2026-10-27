@@ -216,8 +216,8 @@ const WALK_TABLES = {
       {"view":"memory","route":"/app/memory?tab=self","pattern":"/app/memory","family":"memory","template":"T1","shapes":2,"rows":true},
       {"view":"memory-project","route":"/app/memory?tab=project","pattern":"/app/memory","family":"memory","template":"T1","shapes":2,"rows":true},
       {"view":"memory-methods","route":"/app/memory?tab=methods","pattern":"/app/memory","family":"memory","template":"T1","shapes":2,"rows":true},
+      {"view":"memory-received","route":"/app/memory?tab=received","pattern":"/app/memory","family":"memory","template":"T1","shapes":2,"rows":true},
       {"view":"memory-overview","route":"/app/memory/overview","pattern":"/app/memory/overview","family":"memory","template":"T4","budget":"data","shapes":2,"rows":true},
-      {"view":"memory-map","route":"/app/memory/map","pattern":"/app/memory/map","family":"memory","template":"T4","budget":"data","shapes":3,"rows":true},
       {"view":"memory-shared-missing","route":"/app/memory/shared/impeccable-audit-missing","pattern":"/app/memory/shared/:token","family":"memory-record","template":"screen","rows":false},
       {"view":"autopilot","route":"/app/autopilot","pattern":"/app/autopilot/:taskId?","family":"autopilot","template":"T2","shapes":2,"rows":true},
       {"view":"inbox","route":"/app/inbox","pattern":"/app/inbox","family":"inbox","template":"T1","shapes":2,"rows":true,"budgetOverride":{"controls":9},"budgetNote":"controls: each message row carries its selection checkbox (design system v3.1, 2026-10-26: select messages and mark them read together; the batch actions are in the toolbar only while something is ticked) — a 16 px native checkbox, one look, the ninth beside the shell's, the tabs, the source and kind chips and the rows; 9 on the fixture walk of 2026-10-26 (int/1026-fix)"},
@@ -257,6 +257,7 @@ const WALK_TABLES = {
       {"pattern":"/app/handoff","template":"screen","why":"opens only with a hand-off in the address; without one it returns to the conversation"},
       {"pattern":"/app/runs","template":"screen","why":"a redirect to the newest run's conversation, decided at run time"},
       {"pattern":"/app/files/open","template":"screen","why":"a compiled file named by its place: it reads the file and goes to the document's page, which `files-reader` walks"},
+      {"pattern":"/app/memory/map","template":"screen","why":"a redirect to 总览 (2026-10-27: the map's relation graph and topics are a panel of it): it carries over what it can and is decided by the address, and the router test holds each case"},
       {"pattern":"/app/memory/delivered/:deliveryId","template":"screen","why":"the same page as a share link (`memory-shared-missing` walks that component with an address that is not there)"},
       {"pattern":"/app/account/simulated/:page","template":"T1","why":"the simulated wallet's two commerce pages exist only where the deployment's wallet is simulated; elsewhere the page is one sentence, which `not-found` and the router tests hold"}
     ]
@@ -281,10 +282,8 @@ const WALK_TABLES = {
       {"view":"memory@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
       {"view":"memory-methods@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
       {"view":"memory-overview@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
-      {"view":"memory-map@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
       {"view":"autopilot@desktop","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
-      {"view":"memory-map@phone","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"the production walk signs in as a throwaway account it registers and deletes (2026-10-25), so the account holds none of this page's data: no row, mark or object is there to open (the fixture walk reads the page with data); data, not a defect"},
-      {"view":"memory-overview@phone","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"on the throwaway account the production walk registers (2026-10-25) every card of the overview is its empty recipe, so the headline sentence and the cards have nothing to be compared on; the fixture walk compares them with data"}
+      {"view":"memory-overview@phone","rule":"not-observable","profiles":["owner"],"owner":"controller","until":"2026-12-01","why":"on the throwaway account the production walk registers (2026-10-25) the overview is its one recipe under five tiles that read zero, so the headline sentence and the tiles have nothing to be compared on; the fixture walk compares them with data"}
     ]
   },
   "operatorSentences": [
@@ -2211,8 +2210,8 @@ export function pageProbe([kind, arg]) {
     };
   }
   if (kind === "memoryTabs") {
-    // The page's tab list is the band's (总览 · 地图 · 关于你 · 项目 · 做法); the growth tab and its sentence went into the map in R19, and into the overview's first card after.
-    const names = ["总览", "地图", "关于你", "项目", "做法"];
+    // The page's tab list is the band's (总览 · 关于你 · 项目 · 做法 · 收到的); the map was a tab until 2026-10-27 and is part of 总览 now.
+    const names = ["总览", "关于你", "项目", "做法", "收到的"];
     const tabs = all("[role='tab']").filter(visible).map((el) => {
       const text = words(el);
       const name = names.find((candidate) => text.startsWith(candidate)) ?? text;
@@ -2225,43 +2224,27 @@ export function pageProbe([kind, arg]) {
     const names = all("a, button").map(words);
     return { title: text.includes("这个分享不能打开"), back: names.includes("回到记忆胶囊"), retry: names.includes("重试") };
   }
-  if (kind === "memoryMap") {
-    const text = words(main);
-    // The sentence over the picture and the marks of the list under it, read as the page draws them: a mark's shape is its first aria-hidden
-    // character (`MarkGlyph`), amber when it needs a look; a replaced one says so in its line, a folded group has the hexagon.
-    const marksList = all("main ul[aria-label='标记']").find(visible);
-    const marks = marksList ? [...marksList.querySelectorAll(":scope > li")].map((li) => {
-      const glyph = li.querySelector("span[aria-hidden='true']");
-      return { glyph: glyph ? words(glyph) : "", warn: Boolean(glyph && String(glyph.className).includes("text-warn")), replaced: words(li).includes("已被后来的说法替代") };
-    }) : [];
-    return {
-      headline: all("[data-headline]").filter(visible).map(words)[0] ?? null,
-      marks,
-      more: all("[data-show-more]").some(visible),
-      views: all("[role='group'][aria-label='地图的视图'] button").filter(visible).map(words),
-      figures: all("[data-chart]").filter(visible).map((el) => ({ kind: el.getAttribute("data-chart"), named: Boolean(el.querySelector("[role='img'][aria-label]")) })),
-      lists: all("main ul[aria-label]").filter(visible).map((el) => ({ label: el.getAttribute("aria-label"), rows: el.querySelectorAll(":scope > li").length })),
-      thin: text.includes("再多聊几次，这里会长出你的地图"),
-      empty: text.includes("还没有记住什么"),
-    };
-  }
   if (kind === "memoryOverview") {
-    // The six cards as the page draws them, by the markers of `OverviewCard`: which part, in what state (loading, error, recipe or content), in what
-    // shape, the number in its heading and what it draws — the rows and the bars — so the walk can hold the sentence over the cards to them.
-    const trailingNumber = (el) => Number(/(\d+)\s*$/.exec(el.getAttribute("aria-label") ?? "")?.[1] ?? NaN);
+    // The five tiles as the page draws them — a whole link each, its label, its number, its note and where it goes; a tile that is still being
+    // read is an aria-hidden skeleton, one whose read failed has no number — and the table behind the charts, so the walk can hold the sentence to the tiles.
+    const band = all("section[aria-label='记忆胶囊的五个数字']").find(visible);
+    const tiles = band ? [...band.querySelectorAll(":scope > div > *")].map((el) => {
+      const value = el.querySelector("[data-stat-value]");
+      const number = value ? Number(words(value).replace(/[,\s]/g, "")) : NaN;
+      const label = el.querySelector(".truncate");
+      const note = [...el.querySelectorAll(".text-caption")].filter((node) => node !== label).map(words).join(" ");
+      return { label: label ? words(label) : "", value: Number.isFinite(number) ? number : null, note, href: el.getAttribute("href"), loading: el.getAttribute("aria-hidden") === "true" };
+    }) : [];
+    const rowList = all("main ul[aria-label]").filter((el) => visible(el) && (el.getAttribute("aria-label") === "最近变化" || el.getAttribute("aria-label") === "需要看一眼的记忆"))[0] ?? null;
     return {
       headline: all("[data-headline]").filter(visible).map(words)[0] ?? null,
       tabs: all("[role='tablist'][aria-label='记忆'] [role='tab']").filter(visible).map(words),
       canvases: all("[data-chart]").filter(visible).length,
-      cards: all("[data-overview-card]").filter(visible).map((el) => ({
-        part: el.getAttribute("data-overview-card"), state: el.getAttribute("data-state"), shape: el.getAttribute("data-shape"),
-        count: el.hasAttribute("data-count") ? Number(el.getAttribute("data-count")) : null,
-        memories: el.hasAttribute("data-memories") ? Number(el.getAttribute("data-memories")) : null,
-        rows: [...el.querySelectorAll("[data-overview-row]")].filter(visible).length,
-        bars: [...el.querySelectorAll("ul[aria-label] [role='img'][aria-label]")].filter(visible).map(trailingNumber),
-        more: Number(el.getAttribute("data-more") ?? 0),
-      })),
-      look: (() => { const section = document.querySelector("[data-overview-look]"); return section ? { count: Number(section.getAttribute("data-overview-look")), rows: section.querySelectorAll("[data-overview-row]").length } : null; })(),
+      figures: all("[data-chart]").filter(visible).map((el) => ({ kind: el.getAttribute("data-chart"), named: Boolean(el.querySelector("[role='img'][aria-label]")) })),
+      tiles,
+      rows: rowList ? [...rowList.querySelectorAll(":scope > li [data-overview-row]")].filter(visible).length : 0,
+      recipe: all("[data-empty]").filter(visible).length,
+      recipeButtons: all("[data-empty] button").filter(visible).length,
     };
   }
   if (kind === "knowledgeGraph") {
@@ -2362,7 +2345,7 @@ export const PAGE_PROBES = {
   "memory-project": [["memoryTabs", ["desktop"]]],
   "memory-methods": [["memoryTabs", ["desktop"]]],
   "memory-shared-missing": [["sharedMissing", ["desktop", "phone"]]],
-  "memory-map": [["memoryMap", ["desktop", "phone"]]],
+  "memory-received": [["memoryTabs", ["desktop"]]],
   "memory-overview": [["memoryOverview", ["desktop", "phone"]]],
   "knowledge-graph": [["knowledgeGraph", ["desktop", "phone"]]],
   inbox: [["inboxSafety", ["desktop"]]],
@@ -2384,158 +2367,97 @@ export const MISSING_RECORDS = {
   "extensions-skill-missing": { sentence: "找不到这个技能，它可能已被移除。", back: "回到技能列表", to: "/app/extensions/installed" },
 };
 
-/** The five views of 记忆地图, in the order its one row of switches shows them. */
-export const MEMORY_MAP_VIEWS = Object.freeze(["关系", "主题", "维度", "时间", "活跃"]);
 /** The knowledge base's tabs, in the order its band shows them (R19: 资料 · 知识页 · 图谱, one tab list; the graph is a tab and no longer a second switch). */
 export const KNOWLEDGE_VIEWS = Object.freeze(["资料", "知识页", "图谱"]);
 
 /**
- * What 记忆地图's first mark did, and what the drawer's closing did: the click opens the memory page's own drawer and writes the mark into
- * the address (`open=`), and closing it takes both away. A page with no mark to press says so; it is not a pass.
+ * What 总览's first row did, and what the drawer's closing did: the click opens the memory page's own drawer and writes what it opens into the
+ * address (`open=`), and closing it takes both away. A page with no row to press says so; it is not a pass.
  * @param {string} name the report's page name
  * @param {{ rows: number, opened: { dialog: boolean, address: boolean } | null, closed: { dialog: boolean, address: boolean } | null }} read
  * @returns {{ failures: string[], notices: string[] }}
  */
-export function memoryMapFindings(name, read) {
+export function memoryDrawerFindings(name, read) {
   const current = `${name}@desktop`;
   /** @type {string[]} */ const failures = [];
   /** @type {string[]} */ const notices = [];
   if (read.rows === 0 || !read.opened) {
-    notices.push(`${current}: not observable: the page lists no mark that opens, so the drawer was not tried`);
+    notices.push(`${current}: not observable: the page lists no change that opens, so the drawer was not tried`);
     return { failures, notices };
   }
-  if (!read.opened.dialog) failures.push(`${current}: pressing the first mark opened no drawer`);
+  if (!read.opened.dialog) failures.push(`${current}: pressing the first row opened no drawer`);
   if (!read.opened.address) failures.push(`${current}: the open drawer is not in the address (a reload or Back would lose it)`);
   if (read.closed) {
     if (read.closed.dialog) failures.push(`${current}: the drawer did not close`);
-    if (read.closed.address) failures.push(`${current}: the drawer closed and its mark is still in the address`);
+    if (read.closed.address) failures.push(`${current}: the drawer closed and its row is still in the address`);
   } else if (read.opened.dialog) failures.push(`${current}: the drawer has no 关闭 button to press`);
   return { failures, notices };
 }
 
-/**
- * The sentence over 记忆地图 against the list under it: the headline's numbers must be the rows the page draws, and a page that says it
- * holds nothing has proved nothing. Pure, so the rule is tested without a browser.
- *
- * The sentence is 「EviMed 记住了你的 N 件事，其中 M 件…」 (N memories in force, M of them needing a look), or — when no memory is written — 「胶囊里有
- * … ，还没有记下关于你的事」 / 「还没有记住什么」. The rows are the marks of the list: a memory is a ● or a ◆ (a replaced one says so in its line and
- * is not counted, as the server does not), a mark that needs a look wears the amber. The two are compared only when the list is whole: a
- * list with a 显示更多 left, or with a folded group (⬢) in it, holds more than its rows, and says so as a notice, not a pass.
- *
- * A headline of zero memories is **not observable**: nothing was there to compare, which is a different thing from agreeing.
- * @param {string} current the report's `name@viewport`
- * @param {{ headline?: string | null, marks?: Array<{ glyph: string, warn: boolean, replaced: boolean }>, more?: boolean }} read
- * @returns {{ failures: string[], notices: string[] }}
- */
-export function memoryMapHeadlineFindings(current, read) {
-  /** @type {string[]} */ const failures = [];
-  /** @type {string[]} */ const notices = [];
-  if (read.headline === undefined || read.marks === undefined) return { failures, notices };
-  if (!read.headline) {
-    notices.push(`${current}: not observable: the page has no headline, so its numbers were not compared with its rows`);
-    return { failures, notices };
-  }
-  const said = /记住了你的\s*(\d+)\s*件事/u.exec(read.headline);
-  const memories = said ? Number(said[1]) : 0;
-  const looks = said ? Number(/其中\s*(\d+)\s*件/u.exec(read.headline)?.[1] ?? 0) : 0;
-  const drawn = read.marks.filter((mark) => (mark.glyph === "●" || mark.glyph === "◆") && !mark.replaced);
-  if (memories === 0) {
-    if (drawn.length > 0) failures.push(`${current}: the headline holds no memory (“${read.headline}”) and the list draws ${drawn.length}`);
-    else notices.push(`${current}: not observable: the headline holds no memory, so its numbers were not compared with any row`);
-    return { failures, notices };
-  }
-  if (read.more || read.marks.some((mark) => mark.glyph === "⬢")) {
-    notices.push(`${current}: not compared: the list is longer or folded, so its rows are not the headline's ${memories} memories`);
-    return { failures, notices };
-  }
-  if (drawn.length !== memories) failures.push(`${current}: the headline says ${memories} memories and the list draws ${drawn.length}`);
-  const amber = drawn.filter((mark) => mark.warn).length;
-  if (amber !== looks) failures.push(`${current}: the headline says ${looks} need a look and the list marks ${amber}`);
-  return { failures, notices };
-}
-
-/** Read the complete visible mark list by its own paging controls, retaining the initial paged state as evidence. */
-export async function readMemoryMapHeadline(page) {
-  let expanded = 0;
-  const before = await page.evaluate(pageProbe, ["memoryMap"]);
-  try {
-    while (expanded < 100 && await page.locator("[data-show-more]:visible").count()) {
-      const rows = await page.locator("main ul[aria-label='标记'] > li").count();
-      await page.locator("[data-show-more]:visible").first().click();
-      expanded += 1;
-      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
-      if (await page.locator("main ul[aria-label='标记'] > li").count() <= rows) throw new Error("memory map paging did not reveal additional marks");
-    }
-    return { ...await page.evaluate(pageProbe, ["memoryMap"]), initialMore: before.more, expanded };
-  } finally {
-    if (expanded) {
-      await page.reload({ waitUntil: "domcontentloaded" });
-      await waitMemory(page, true, { selected: "地图" });
-    }
-  }
-}
-
-/** The parts of the overview, in the order its cards stand. */
-export const MEMORY_OVERVIEW_PARTS = Object.freeze(["growth", "you", "projects", "methods", "knowledge", "received"]);
+/** The five tiles of the overview, in the order its band stands, and the tab each tile's number is also on (a tab carries its number when it has one). */
+export const MEMORY_OVERVIEW_TILES = Object.freeze(["关于你", "项目", "做法", "收到的", "知识"]);
+const TILE_TABS = Object.freeze({ 关于你: "关于你", 做法: "做法", 收到的: "收到的" });
 /** The tabs of 记忆胶囊, in the order its band shows them. */
-export const MEMORY_TABS = Object.freeze(["总览", "地图", "关于你", "项目", "做法", "收到的"]);
+export const MEMORY_TABS = Object.freeze(["总览", "关于你", "项目", "做法", "收到的"]);
 
 /**
- * The overview, judged: its six cards in order and none still loading or silently failed; the sentence over them is the cards' numbers; each
- * card draws as many things as its heading counts; the page has one canvas. A page that has nothing to compare is **not observable**, never a pass.
+ * The overview, judged: its five tiles in order, each a number that was read; the sentence over them is the tiles' numbers; the tabs are the
+ * five, with no 地图 among them, and a tab that carries a number carries the tile's; the page draws at most two canvases (the change chart and the
+ * relation graph); behind a sentence there is a table of changes, and an account with nothing has one recipe with one button instead.
+ * A page that has nothing to compare is **not observable**, never a pass.
  *
- * The sentence names three counts — 「N 件关于你和项目的事」 (the 关于你 card's memories and the 项目 card's), 「N 种做法」 and 「N 份资料」 — and a
- * card that counts something the sentence leaves out is as wrong as a sentence that counts what no card has. A card whose heading carries no
- * number (a recipe, an error) counts as nothing; one in error is named, because a failed read is not a zero.
- *
- * What a card draws: a card of `rows` lists its things one by one, so its rows are its number (项目's table and 收到的 list are cut at eight, and
- * say how many more there are); a card of `bars` or `types` ranks what it counts, so its bars add up to its number.
+ * The sentence is 「记住了 N 条关于你的事、P 个项目的 M 条记忆，学会了 K 种做法；最近一次在…」: each clause is the tile of its name (项目's note says
+ * 「M 条记忆」), and a clause the sentence leaves out is a tile that holds nothing (or was not read). A tile whose read failed has no number
+ * and is named, because a failed read is not a zero.
  * @param {string} current the report's `name@viewport`
- * @param {{ headline: string | null, tabs?: string[], canvases?: number, cards: Array<{ part: string, state: string, shape: string | null, count: number | null, memories: number | null, rows: number, bars: number[], more: number }>, look?: { count: number, rows: number } | null }} read
+ * @param {{ headline: string | null, tabs?: string[], canvases?: number, tiles: Array<{ label: string, value: number | null, note?: string, href?: string | null, loading?: boolean }>, rows?: number, recipe?: number, recipeButtons?: number }} read
  * @returns {{ failures: string[], notices: string[] }}
  */
 export function memoryOverviewFindings(current, read) {
   /** @type {string[]} */ const failures = [];
   /** @type {string[]} */ const notices = [];
-  const order = read.cards.map((card) => card.part).join(",");
-  if (order !== MEMORY_OVERVIEW_PARTS.join(",")) failures.push(`${current}: the cards read “${read.cards.map((card) => card.part).join("、")}” (${MEMORY_OVERVIEW_PARTS.join("、")})`);
+  const order = read.tiles.map((tile) => tile.label).join(",");
+  if (order !== MEMORY_OVERVIEW_TILES.join(",")) failures.push(`${current}: the tiles read “${read.tiles.map((tile) => tile.label).join("、")}” (${MEMORY_OVERVIEW_TILES.join("、")})`);
   if (read.tabs && read.tabs.length > 0 && read.tabs.map((tab) => tab.replace(/\s*\d+$/, "")).join(",") !== MEMORY_TABS.join(",")) failures.push(`${current}: the tabs read “${read.tabs.join("、")}” (${MEMORY_TABS.join("、")})`);
-  if ((read.canvases ?? 0) > 1) failures.push(`${current}: ${read.canvases} canvases on the page (one: the growth strip; every other card is words and rows)`);
-  for (const card of read.cards) {
-    if (card.state === "loading") failures.push(`${current}: the ${card.part} card is still loading`);
-    if (card.state === "error") failures.push(`${current}: the ${card.part} card could not be read`);
+  if ((read.canvases ?? 0) > 2) failures.push(`${current}: ${read.canvases} canvases on the page (two: the change chart and the relation graph)`);
+  for (const tile of read.tiles) {
+    if (tile.loading) failures.push(`${current}: the ${tile.label} tile is still loading`);
+    else if (tile.value === null) failures.push(`${current}: the ${tile.label} tile could not be read`);
+    else if (!tile.href) failures.push(`${current}: the ${tile.label} tile is a number and goes nowhere (a number opens what it counts)`);
   }
-  const by = Object.fromEntries(read.cards.map((card) => [card.part, card]));
-  const counted = (part) => (by[part]?.state === "content" ? by[part].count ?? 0 : 0);
-  const unread = read.cards.some((card) => card.state === "error" || card.state === "loading");
-  const expected = { memories: counted("you") + (by.projects?.state === "content" ? by.projects.memories ?? 0 : 0), methods: counted("methods"), documents: counted("knowledge") };
-  const said = (pattern) => { const found = pattern.exec(read.headline ?? ""); return found ? Number(found[1]) : 0; };
-  const sentence = { memories: said(/(\d+)\s*件关于你和项目的事/u), methods: said(/(\d+)\s*种做法/u), documents: said(/(\d+)\s*份资料/u) };
+  const by = Object.fromEntries(read.tiles.map((tile) => [tile.label, tile]));
+  const value = (label) => by[label]?.value ?? null;
+  const unread = read.tiles.some((tile) => tile.loading || tile.value === null);
+  // What each tab carries is the tile's number; a tab with nothing in it carries none.
+  for (const [label, tabName] of Object.entries(TILE_TABS)) {
+    const tab = read.tabs?.find((entry) => entry.replace(/\s*\d+$/, "") === tabName);
+    const shown = tab ? Number(/(\d+)\s*$/.exec(tab)?.[1] ?? 0) : null;
+    if (shown !== null && value(label) !== null && shown !== value(label)) failures.push(`${current}: the ${tabName} tab says ${shown} and its tile ${value(label)}`);
+  }
+  const said = (pattern) => { const found = pattern.exec(read.headline ?? ""); return found ? found.slice(1).map(Number) : null; };
+  const sentence = { about: said(/(\d+)\s*条关于你的事/u), projects: said(/(\d+)\s*个项目的\s*(\d+)\s*条记忆/u), methods: said(/学会了\s*(\d+)\s*种做法/u) };
+  // 项目's tile counts the projects that hold anything (a project of documents only too) and says, in its note, how many memories they hold; the sentence
+  // names projects only by their memories, so a project with documents and no memory is a tile's number the sentence does not repeat.
+  const projectMemories = Number(/(\d+)\s*条记忆/u.exec(by["项目"]?.note ?? "")?.[1] ?? 0);
   if (!unread) {
+    const holds = (value("关于你") ?? 0) + projectMemories + (value("做法") ?? 0);
     if (!read.headline) {
-      if (expected.memories + expected.methods + expected.documents > 0) failures.push(`${current}: the cards count ${expected.memories} memories, ${expected.methods} methods and ${expected.documents} documents and the page has no sentence over them`);
+      if (holds > 0) failures.push(`${current}: the tiles count ${value("关于你")} about you, ${projectMemories} project memories and ${value("做法")} methods and the page has no sentence over them`);
     } else {
-      for (const [name, word] of [["memories", "memories"], ["methods", "methods"], ["documents", "documents"]]) {
-        if (sentence[name] !== expected[name]) failures.push(`${current}: the sentence says ${sentence[name]} ${word} and the cards count ${expected[name]}`);
-      }
+      const check = (word, said, expected) => { if ((said?.[0] ?? 0) !== expected) failures.push(`${current}: the sentence says ${said?.[0] ?? 0} ${word} and the tile counts ${expected}`); };
+      check("memories about you", sentence.about, value("关于你") ?? 0);
+      if (sentence.projects) {
+        check("projects", sentence.projects, value("项目") ?? 0);
+        if (sentence.projects[1] !== projectMemories) failures.push(`${current}: the sentence says ${sentence.projects[1]} project memories and the 项目 tile's note says ${projectMemories}`);
+      } else if (projectMemories > 0) failures.push(`${current}: the sentence leaves out the projects and the 项目 tile's note says ${projectMemories} project memories`);
+      check("methods", sentence.methods, value("做法") ?? 0);
+    }
+    if (holds > 0 && (read.rows ?? 0) === 0 && (read.recipe ?? 0) === 0) failures.push(`${current}: the page counts what it holds and has no table of changes behind it`);
+    if (holds === 0) {
+      if ((read.recipeButtons ?? 0) !== 1) failures.push(`${current}: an account with nothing has ${read.recipeButtons ?? 0} buttons in its recipe (one)`);
+      notices.push(`${current}: not observable: the account holds no memory and no method, so the sentence and the table were not compared with the tiles`);
     }
   }
-  for (const card of read.cards) {
-    if (card.state !== "content" || card.count === null) continue;
-    if (card.shape === "rows") {
-      const drawn = card.rows + card.more;
-      if (drawn !== card.count) failures.push(`${current}: the ${card.part} card counts ${card.count} and draws ${drawn}`);
-    } else if (card.shape === "table") {
-      if (card.rows + card.more !== card.count) failures.push(`${current}: the ${card.part} card counts ${card.count} projects and draws ${card.rows + card.more}`);
-    } else if (card.shape === "bars" || card.shape === "types") {
-      const sum = card.bars.reduce((total, bar) => total + (Number.isFinite(bar) ? bar : 0), 0);
-      if (card.part !== "knowledge" || card.bars.length > 0) {
-        if (sum !== card.count) failures.push(`${current}: the ${card.part} card counts ${card.count} and its bars add up to ${sum}`);
-      }
-    }
-  }
-  if (read.look && read.look.rows > 5) failures.push(`${current}: ${read.look.rows} rows of what needs a look (five, and the count)`);
-  if (read.cards.length > 0 && read.cards.every((card) => card.state === "recipe")) notices.push(`${current}: not observable: every card is a recipe, so the sentence and the cards were not compared`);
   return { failures, notices };
 }
 
@@ -2617,7 +2539,7 @@ async function walkKnowledgeGraph(page, base, route) {
 }
 
 /** The tabs a memory address names, and the one it must open on. */
-const MEMORY_TAB_OF = { memory: "关于你", "memory-project": "项目", "memory-methods": "做法" };
+const MEMORY_TAB_OF = { memory: "关于你", "memory-project": "项目", "memory-methods": "做法", "memory-received": "收到的" };
 
 /**
  * What a probe read, judged. A probe that returned nothing (a page that did not render what it looks for) is not a pass the walk
@@ -2661,19 +2583,6 @@ export function probeFindings(name, viewportName, kind, r) {
       if (wanted && selected && selected.name !== wanted) failures.push(`${current}: the address names ${wanted} and the page opens on ${selected.name}`);
       if (key === "memory-landing" && selected?.name === "关于你" && count("关于你") === 0 && (count("项目") > 0 || count("做法") > 0)) {
         failures.push(`${current}: the page opens on an empty 关于你 while 项目 holds ${count("项目")} and 做法 ${count("做法")}`);
-      }
-      break;
-    }
-    case "memoryMap": {
-      // The five views are one group of pressed buttons in the toolbar, every figure has a name, and a figure has the same marks as a list under it.
-      if (r.views.join(",") !== MEMORY_MAP_VIEWS.join(",")) failures.push(`${current}: the view switch reads “${r.views.join("、")}” (${MEMORY_MAP_VIEWS.join("、")})`);
-      for (const figure of r.figures) if (!figure.named) failures.push(`${current}: the ${figure.kind} figure has no accessible name`);
-      if (r.figures.some((figure) => figure.kind === "relations") && !r.lists.some((list) => list.label === "标记" && list.rows > 0)) failures.push(`${current}: the graph has no list of the same marks under it`);
-      if (r.thin && r.figures.some((figure) => figure.kind === "relations")) failures.push(`${current}: the page says there is too little to draw and draws the graph`);
-      {
-        const counted = memoryMapHeadlineFindings(current, r);
-        failures.push(...counted.failures);
-        notices.push(...counted.notices);
       }
       break;
     }
@@ -3480,7 +3389,7 @@ export const STEP_TARGETS = {
   "files-pdf": "the original of the knowledge base's first finished PDF, opened on its own page",
   "files-return": "a document opened from a search of the knowledge base, and both ways back to that search",
   "extensions-create": "the new-skill drawer, opened from the 「添加技能」 menu and saved empty with every write refused",
-  "memory-map-drawer": "the first mark of 记忆地图's list, and the drawer it opens",
+  "memory-overview-drawer": "the first row of 总览's table of changes, and the drawer it opens",
   "knowledge-graph-mark": "the first mark of the knowledge graph, and the page it opens",
   "evidence-matrix": "a finished package's evidence matrix, and the dialog a row opens",
   "address-state": "the choices of the inbox and the memory page in the address, kept through Back",
@@ -3754,17 +3663,17 @@ async function walkRowClicks(page, base, route, name, popups) {
 }
 
 /**
- * How many marks 记忆地图's list shows that open the drawer (a button; a document is a link to a page of its own, which is another walk's).
+ * How many rows 总览's table of changes has that open a drawer (a button; the documents' row is a link to the knowledge base, which is another walk's).
  * Like every function the walk hands to the browser it is read there as source text, so it names nothing of this module: a helper
  * shared with the next probe was the `ReferenceError: drawerMarks is not defined` of release 18.1, found by nobody for a release.
  */
 export function markRowsProbe() {
-  return [...document.querySelectorAll("main ul[aria-label='标记'] > li button[data-row-title]")].filter((el) => el.getBoundingClientRect().width > 0 && !el.closest("[role='dialog']")).length;
+  return [...document.querySelectorAll("main ul[aria-label='最近变化'] > li button[data-row-title]")].filter((el) => el.getBoundingClientRect().width > 0 && !el.closest("[role='dialog']")).length;
 }
 
-/** Presses the first mark that opens the drawer. */
+/** Presses the first row that opens a drawer. */
 export function clickFirstMarkProbe() {
-  const mark = [...document.querySelectorAll("main ul[aria-label='标记'] > li button[data-row-title]")].find((el) => el.getBoundingClientRect().width > 0 && !el.closest("[role='dialog']"));
+  const mark = [...document.querySelectorAll("main ul[aria-label='最近变化'] > li button[data-row-title]")].find((el) => el.getBoundingClientRect().width > 0 && !el.closest("[role='dialog']"));
   if (!mark) return false;
   mark.click();
   return true;
@@ -3776,38 +3685,44 @@ export function drawerStateProbe() {
 }
 
 /**
- * 记忆地图's mark and its drawer: the first mark of the list is pressed, the drawer is read as open and in the address, and its own 关闭
- * is pressed and read again. Pressing a mark opens a drawer and reads; nothing here writes.
+ * 总览's first row and its drawer: the first row of the table of changes that opens a drawer is pressed, the drawer is read as open and in the
+ * address, and its own 关闭 is pressed and read again. Pressing a row opens a drawer and reads; nothing here writes. A row that opens the
+ * forgotten list (a header drawer, which the address does not hold) is not the one pressed: the first of the others is.
  */
-export async function walkMemoryMap(page, base, route) {
+export async function walkMemoryOverview(page, base, route) {
   await openRoute(page, base, route);
-  await waitMemory(page, true, { selected: "地图" });
+  await waitMemory(page, true, { selected: "总览" });
   const rows = await page.evaluate(markRowsProbe);
-  if (rows === 0) return { ...memoryMapFindings("memory-map", { rows: 0, opened: null, closed: null }), read: { rows } };
+  if (rows === 0) return { ...memoryDrawerFindings("memory-overview", { rows: 0, opened: null, closed: null }), read: { rows } };
   await page.evaluate(clickFirstMarkProbe);
-  await page.waitForFunction(() => new URLSearchParams(location.search).has("open") && Boolean(document.querySelector("[role='dialog']")), undefined, { timeout: 15_000 });
+  await page.waitForFunction(() => new URLSearchParams(location.search).has("open") && Boolean(document.querySelector("[role='dialog']")), undefined, { timeout: 15_000 }).catch(() => null);
   const opened = await page.evaluate(drawerStateProbe);
-  if (!opened.dialog) return { ...memoryMapFindings("memory-map", { rows, opened, closed: null }), read: { rows, opened, closed: null } };
-  if (!opened.open) throw new Error("the first mark has no addressed identity");
+  if (!opened.dialog) return { ...memoryDrawerFindings("memory-overview", { rows, opened, closed: null }), read: { rows, opened, closed: null } };
+  if (!opened.open) {
+    // The forgotten list is the header's drawer and is not in the address: closing it is all there is to read.
+    const pressedForgotten = await page.evaluate(clickNamed, ["button", "关闭", "[role='dialog']"]);
+    if (pressedForgotten) await page.getByRole("dialog").waitFor({ state: "hidden" });
+    return { ...memoryDrawerFindings("memory-overview", { rows, opened: { ...opened, address: true }, closed: pressedForgotten ? await page.evaluate(drawerStateProbe) : null }), read: { rows, opened, forgotten: true } };
+  }
   await page.reload({ waitUntil: "domcontentloaded" });
-  await waitMemory(page, true, { selected: "地图" });
+  await waitMemory(page, true, { selected: "总览" });
   await page.getByRole("dialog").waitFor({ state: "visible" });
   const reload = await page.evaluate(drawerStateProbe);
-  if (reload.open !== opened.open || !reload.dialog) throw new Error("reloading the mark lost its addressed identity or drawer");
-  // Reloading the document preserves the pushed entry; Back must still return to the unfiltered map.
+  if (reload.open !== opened.open || !reload.dialog) throw new Error("reloading the row lost its addressed identity or drawer");
+  // Reloading the document preserves the pushed entry; Back must still return to the overview as it was.
   await page.goBack();
-  await waitMemory(page, true, { selected: "地图" });
+  await waitMemory(page, true, { selected: "总览" });
   await page.getByRole("dialog").waitFor({ state: "hidden" });
   const back = await page.evaluate(drawerStateProbe);
-  if (back.address || back.dialog) throw new Error("Back did not close the mark");
+  if (back.address || back.dialog) throw new Error("Back did not close the row");
   await page.evaluate(clickFirstMarkProbe);
   await page.getByRole("dialog").waitFor({ state: "visible" });
   const reopened = await page.evaluate(drawerStateProbe);
-  if (reopened.open !== opened.open) throw new Error("the first unfiltered mark changed identity");
+  if (reopened.open !== opened.open) throw new Error("the first row changed identity");
   const pressed = await page.evaluate(clickNamed, ["button", "关闭", "[role='dialog']"]);
   if (pressed) await page.getByRole("dialog").waitFor({ state: "hidden" });
   const closed = pressed ? await page.evaluate(drawerStateProbe) : null;
-  const judged = memoryMapFindings("memory-map", { rows, opened, closed });
+  const judged = memoryDrawerFindings("memory-overview", { rows, opened, closed });
   return { ...judged, read: { rows, opened, reload, back, reopened, closed } };
 }
 
@@ -4147,7 +4062,7 @@ async function main() {
               notices.push(`${current}: no data source without a key is unset, so the 可选 rows were not read`);
               continue;
             }
-            const read = kind === "memoryMap" ? await readMemoryMapHeadline(page) : await page.evaluate(pageProbe, [kind, arg]);
+            const read = await page.evaluate(pageProbe, [kind, arg]);
             (report.pages[current].probes ||= {})[kind] = read;
             const judged = probeFindings(name, viewportName, kind, read);
             failures.push(...judged.failures);
@@ -4197,7 +4112,7 @@ async function main() {
             // A08 on the knowledge base: a search, a document opened from it, and both ways back (only where there is a document to open).
             if (name === "files" && clicked.rows.length > 0) await recordStep(report, failures, notices, "files-return", () => walkKnowledgeReturn(page, base, route));
             if (name === "extensions-installed") await recordStep(report, failures, notices, "extensions-create", () => walkSkillDrawer(page, base, route));
-            if (name === "memory-map") await recordStep(report, failures, notices, "memory-map-drawer", () => walkMemoryMap(page, base, route));
+            if (name === "memory-overview") await recordStep(report, failures, notices, "memory-overview-drawer", () => walkMemoryOverview(page, base, route));
             if (name === "knowledge-graph") await recordStep(report, failures, notices, "knowledge-graph-mark", () => walkKnowledgeGraph(page, base, route));
           }
         } catch (error) {
@@ -4617,7 +4532,7 @@ export function addressAct([kind, first = "", second = ""]) {
 /**
  * Where a list page is and what its controls say, read in the page: the address, and — per `kind` — the inbox's selected tab, or the memory
  * page's selected tab and the text of its search box.
- * @param {["inbox" | "memory" | "memory-map"]} args
+ * @param {["inbox" | "memory" | "memory-overview"]} args
  */
 export function addressProbe([kind]) {
   const visible = (el) => {
@@ -4632,14 +4547,14 @@ export function addressProbe([kind]) {
     const selected = list ? [...list.querySelectorAll("[role='tab'][aria-selected='true']")].map(words) : [];
     return { ...base, found: Boolean(list), selected: selected[0] ?? null };
   }
-  if (kind === "memory" || kind === "memory-map") {
+  if (kind === "memory" || kind === "memory-overview") {
     // The page's tab list is the band's, named 记忆 (the inbox's toolbar has a tab list of its own, 消息视图).
     const list = [...document.querySelectorAll("[role='tablist']")].find((el) => el.getAttribute("aria-label") === "记忆" && visible(el));
     const tabs = list ? [...list.querySelectorAll("[role='tab']")].filter(visible) : [];
     const selected = tabs.find((el) => el.getAttribute("aria-selected") === "true");
-    const box = [...document.querySelectorAll("main input")].find((el) => el.getAttribute("aria-label") === (kind === "memory-map" ? "搜索记忆地图" : "搜索记忆") && visible(el));
-    const views = [...document.querySelectorAll("[role='group'][aria-label='地图的视图'] button[aria-pressed='true']")].filter(visible);
-    return { ...base, found: tabs.length > 0, selected: selected ? words(selected) : null, query: box ? box.value : null, ...(kind === "memory-map" ? { view: views[0] ? words(views[0]) : null } : {}) };
+    const box = [...document.querySelectorAll("main input")].find((el) => el.getAttribute("aria-label") === "搜索记忆" && visible(el));
+    const ranges = [...document.querySelectorAll("[role='group'][aria-label='时间范围'] button[aria-pressed='true']")].filter(visible);
+    return { ...base, found: tabs.length > 0, selected: selected ? words(selected) : null, query: box ? box.value : null, ...(kind === "memory-overview" ? { range: ranges[0] ? words(ranges[0]) : null } : {}) };
   }
   return null;
 }
@@ -4652,38 +4567,43 @@ export function addressProbe([kind]) {
 export const ADDRESS_CASES = [
   { page: "inbox", route: "/app/inbox", probe: "inbox", act: [["tab", "未读"]], fill: null, search: { filter: "unread" }, state: { selected: "未读" } },
   { page: "memory", route: "/app/memory?tab=self", probe: "memory", act: [["tab", "项目"]], fill: ["搜索记忆", "探针"], search: { tab: "project", q: "探针" }, state: { selected: "项目", query: "探针" } },
-  { page: "memory-map", route: "/app/memory/map", probe: "memory-map", act: [["chip", "地图的视图", "维度"]], fill: ["搜索记忆地图", "探针"], search: { view: "dims", q: "探针" }, state: { selected: "地图", view: "维度", query: "探针" } },
+  { page: "memory-overview", route: "/app/memory/overview", probe: "memory-overview", act: [["chip", "时间范围", "近 30 天"]], fill: ["搜索记忆", "探针"], search: { range: "30d", q: "探针" }, state: { selected: "总览", range: "近 30 天", query: "探针" } },
 ];
 
-/** Whether every card of the overview has finished reading (loaded, failed or empty), and the page has drawn its cards at all. Read in the page as source text. */
+/**
+ * Whether the overview's five tiles are drawn and none is still being read (a tile whose read failed is read: it says so). Read in the page as source text.
+ */
 export function overviewReady() {
-  const cards = [...document.querySelectorAll("[data-overview-card]")];
-  return cards.length > 0 && cards.every((el) => el.getAttribute("data-state") !== "loading");
+  const band = document.querySelector("section[aria-label='记忆胶囊的五个数字']");
+  const tiles = band ? [...band.querySelectorAll(":scope > div > *")] : [];
+  return tiles.length === 5 && tiles.every((el) => el.getAttribute("aria-hidden") !== "true");
 }
 
 /** Memory controls mount before data. An error is terminal but never empty or successful coverage.
- * @param {{ map: boolean, selected?: string, query?: string }} wanted
+ * @param {{ overview: boolean, selected?: string, query?: string }} wanted
  */
 export function memoryReady(wanted) {
   const main = document.querySelector("main");
   const visible = (el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0;
-  if (!main || location.pathname !== (wanted.map ? "/app/memory/map" : "/app/memory")) return false;
+  if (!main || location.pathname !== (wanted.overview ? "/app/memory/overview" : "/app/memory")) return false;
   const selected = [...main.querySelectorAll("[role='tablist'][aria-label='记忆'] [aria-selected='true']")].find(visible);
   if (!selected || (wanted.selected && !selected.textContent?.trim().startsWith(wanted.selected))) return false;
-  const box = [...main.querySelectorAll("input")].find((el) => el.getAttribute("aria-label") === (wanted.map ? "搜索记忆地图" : "搜索记忆") && visible(el));
-  if (!box || (wanted.query !== undefined && box.value !== wanted.query)) return false;
+  const box = [...main.querySelectorAll("input")].find((el) => el.getAttribute("aria-label") === "搜索记忆" && visible(el));
+  // The 收到的 tab has no search: its one action is in the toolbar, and the box is not there to wait for.
+  const searchless = wanted.selected === "收到的";
+  if (!searchless && (!box || (wanted.query !== undefined && box.value !== wanted.query))) return false;
   if ([...main.querySelectorAll("[role='alert'], [data-inline-alert='error'], [data-inline-alert='warning']")].some(visible)) return true;
   if ([...main.querySelectorAll(".animate-pulse, [aria-busy='true']")].some(visible)) return false;
-  // The map's own data: the sentence over it (an empty capsule has one too) or its empty state. The page mounts its controls, reads its
-  // settings and draws no skeleton in the moment before the map is asked for, and "nothing is loading" was true then: the walk read the
-  // lists of a map that had not arrived and called the page unobservable (fixture walks of 2026-10-26).
-  if (wanted.map && !main.querySelector("[data-headline], [data-empty]")) return false;
+  // The overview's own data: the sentence over it or its recipe (an account with nothing). The page mounts its controls, reads its
+  // settings and draws no skeleton in the moment before the map's document is asked for, and "nothing is loading" was true then: the walk read
+  // the tiles of a document that had not arrived and called the page unobservable (fixture walks of 2026-10-26).
+  if (wanted.overview && !main.querySelector("[data-headline], [data-empty]")) return false;
   return Boolean(main.querySelector("[data-page-body]"));
 }
 
 /** Wait for memory data as well as its controls; fail an unreadable page instead of calling it empty. */
-export async function waitMemory(page, map, state = {}) {
-  await page.waitForFunction(memoryReady, { map, ...state }, { timeout: 30_000 });
+export async function waitMemory(page, overview, state = {}) {
+  await page.waitForFunction(memoryReady, { overview, ...state }, { timeout: 30_000 });
   const errors = await page.locator("main [role='alert'], main [data-inline-alert='error']").allTextContents();
   if (errors.length) throw new Error(`memory data could not be read: ${errors.join("; ").slice(0, 180)}`);
 }
@@ -4770,7 +4690,7 @@ async function walkAddressState(page, base) {
   const failures = [];
   for (const c of ADDRESS_CASES) {
     await openRoute(page, base, c.route);
-    if (c.probe !== "inbox") await waitMemory(page, c.probe === "memory-map", { selected: c.probe === "memory-map" ? "地图" : "关于你" });
+    if (c.probe !== "inbox") await waitMemory(page, c.probe === "memory-overview", { selected: c.probe === "memory-overview" ? "总览" : "关于你" });
     const pressed = [];
     for (const act of c.act) {
       pressed.push(Boolean(await page.evaluate(addressAct, act)));
@@ -4781,7 +4701,7 @@ async function walkAddressState(page, base) {
       await page.getByRole("searchbox", { name: c.fill[0] }).fill(c.fill[1], { timeout: 5_000 }).catch(() => null);
       await page.waitForTimeout(1_200);
     }
-    if (c.probe !== "inbox") await waitMemory(page, c.probe === "memory-map", { selected: c.state.selected, query: c.state.query });
+    if (c.probe !== "inbox") await waitMemory(page, c.probe === "memory-overview", { selected: c.state.selected, query: c.state.query });
     const first = await page.evaluate(addressProbe, [c.probe]);
     let away = null;
     let back = null;
@@ -4793,12 +4713,12 @@ async function walkAddressState(page, base) {
         away = await page.evaluate(() => location.pathname);
         await page.goBack();
         await page.waitForTimeout(1_500);
-        if (c.probe !== "inbox") await waitMemory(page, c.probe === "memory-map", { selected: c.state.selected, query: c.state.query });
+        if (c.probe !== "inbox") await waitMemory(page, c.probe === "memory-overview", { selected: c.state.selected, query: c.state.query });
         back = await page.evaluate(addressProbe, [c.probe]);
       }
       // The address loaded again: a reload, a pasted link.
       await openRoute(page, base, `${first.path}${first.search}`);
-      if (c.probe !== "inbox") await waitMemory(page, c.probe === "memory-map", { selected: c.state.selected, query: c.state.query });
+      if (c.probe !== "inbox") await waitMemory(page, c.probe === "memory-overview", { selected: c.state.selected, query: c.state.query });
       reload = await page.evaluate(addressProbe, [c.probe]);
     }
     const read = { pressed, first, away, back, reload };

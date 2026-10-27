@@ -72,10 +72,11 @@ const PROJECT_DRAFT = "我来说说这个项目的情况，请记住：\n\n目�
  *  - 做法: what the platform learned, read, stopped, or taken back to the
  *    version before. Never typed in: methods are learned, not written (owner
  *    ruling 2026-09-20).
- *  - 总览 (`/app/memory/overview`) and 地图 (`/app/memory/map`): pages of their own that wear this page's frame — the capsule as six parts
- *    and the explorer they drill into. 「成长」 was a tab until 2026-10-17: the line of how much the capsule held said "grew to 75" over a
- *    line that fell to 42; what the capsule gained is the overview's first card now, what happened each week the map's 「时间」 view, and
- *    `?tab=growth` arrives at the overview.
+ *  - 收到的: the packs other people shared and the platform's starter packs, one row each — a switch puts one in force, a press opens
+ *    what is in it — and, above them, what this account could hand over (2026-10-27; it was a card of 总览).
+ *  - 总览 (`/app/memory/overview`): a data page of its own that wears this page's frame — the capsule as five numbers, the changes over
+ *    time and, with enough to see, the relations and topics (the map's former tab). 「成长」 was a tab until 2026-10-17: the line of how
+ *    much the capsule held said "grew to 75" over a line that fell to 42; `?tab=growth` arrives at the overview.
  *
  * What the page no longer has, and why: the two stat blocks and 「查看做法」
  * counted the same methods three ways and moved nothing the reader could see;
@@ -84,7 +85,7 @@ const PROJECT_DRAFT = "我来说说这个项目的情况，请记住：\n\n目�
  * budget); 「推断」 sat on every row of a page where nearly every row is
  * learned, and then once in every drawer: whose words a memory is, is not said
  * on the page at all (owner ruling of 2026-10-10).
- * The tabs, the toolbar's search and the project scope of the header are `MemoryFrame`'s, which the map draws too, so the two pages are one
+ * The tabs, the toolbar's search and the project scope of the header are `MemoryFrame`'s, which the overview draws too, so the two pages are one
  * column and one band. The header is the title, the 「记忆」 switch and one 「⋯」 (分享与导入 ·
  * 已忘记的内容 · 本项目不使用记忆 · 重置记忆); the page asks nothing of the
  * server to be read — making the capsule on first use moved to opening 分享与导入.
@@ -107,13 +108,13 @@ export function MemoryHubPage() {
     if (feature === "loading") return <RunsSkeleton filter={false} />;
     if (feature === "on") return <Navigate to={MEMORY_OVERVIEW_ADDRESS} replace />;
   }
-  // 「成长」 is the overview's first card now (and the map's 时间 view behind it): an address that names the old tab goes to the overview
+  // 「成长」 is the overview's chart now: an address that names the old tab goes to the overview
   // (where the deployment draws it), else to the first list. `?tab=capsules` was `/app/capsules`'s and lands on the overview too.
   if (params.get("tab") === "growth" || params.get("tab") === "capsules") {
     if (feature === "loading") return <RunsSkeleton filter={false} />;
     return <Navigate to={feature === "on" ? MEMORY_OVERVIEW_ADDRESS : memoryTabAddress("self")} replace />;
   }
-  return <MemoryHub mapOn={feature === "on"} />;
+  return <MemoryHub overviewOn={feature === "on"} />;
 }
 
 /**
@@ -132,14 +133,14 @@ function ReceivedPanel({ packs, onShare, onImport, onChanged }: {
     return (
       <EmptyState
         icon={Brain} title="还没有收到胶囊" description="别人分享给你的做法，收下后一键就能启用，不会混进你自己的记忆。"
-        action={<Button onClick={onImport}>分享与导入</Button>}
+        action={<Button variant="secondary" onClick={onImport}>分享与导入</Button>}
       />
     );
   }
   return <ReceivedTab packs={packs} handover={handover.data} onShare={onShare} onChanged={onChanged} />;
 }
 
-function MemoryHub({ mapOn }: { mapOn: boolean }) {
+function MemoryHub({ overviewOn }: { overviewOn: boolean }) {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const projects = useProjectStore((state) => state.projects);
@@ -294,8 +295,8 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
     : null;
   const setProjectChoice = (id: string | null) => { if (id) setParams((current) => withParam(current, "project", id), { replace: true }); };
   const chooseTab = (next: MemoryPageTab) => {
-    // 总览 and 地图 are pages of their own that read as this page's first tabs.
-    if (next === "map" || next === "overview") { navigate(memoryTabAddress(next)); return; }
+    // 总览 is a page of its own that reads as this page's first tab.
+    if (next === "overview") { navigate(memoryTabAddress(next)); return; }
     setLanded(true);
     setParams((current) => withParam(current, "tab", next));
   };
@@ -320,7 +321,7 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
     query.trim()
       ? <EmptyState icon={Brain} title="没有找到" reason="换个关键词试试，或清空搜索框看全部。" />
       : <EmptyState icon={Brain} title={title} description={action?.onPress ? description : undefined} reason={action?.onPress ? undefined : description}
-        action={action?.onPress ? <Button onClick={action.onPress}>{action.label}</Button> : undefined} />
+        action={action?.onPress ? <Button variant="secondary" onClick={action.onPress}>{action.label}</Button> : undefined} />
   );
 
   const list = () => {
@@ -388,7 +389,7 @@ function MemoryHub({ mapOn }: { mapOn: boolean }) {
     <MemoryFrame
       tab={tab}
       counts={counts}
-      map={mapOn}
+      overview={overviewOn}
       onTab={chooseTab}
       scope={tab === "project" && choices.length > 0 ? { label: "项目", groups: projectScopeGroups(choices), value: scope, onChange: setProjectChoice } : undefined}
       actions={(

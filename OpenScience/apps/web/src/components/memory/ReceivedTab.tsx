@@ -82,7 +82,7 @@ export function PackDrawer({ pack, onClose }: { pack: ReceivedCapsule; onClose: 
  * as such and cannot be switched on.
  *
  * Above the list, one sentence says what this account could hand over (the 工作方式卡's counts), with the way to do it; nothing when
- * there is nothing to hand over. The sentence's action opens 分享与导入 on 导出, the toolbar's on 导入.
+ * there is nothing to hand over. The sentence's action (「去分享」) opens 分享与导入 on 导出, the toolbar's 「分享与导入」 on 导入: two buttons of one label would be one too many.
  */
 export function ReceivedTab({ packs, handover, onShare, onChanged }: {
   packs: readonly ReceivedCapsule[];
@@ -121,7 +121,7 @@ export function ReceivedTab({ packs, handover, onShare, onChanged }: {
   const pack = opened ? ordered.find((item) => item.id === opened) ?? null : null;
   return (
     <div className="space-y-4">
-      {sentence && <Note action={<Button size="sm" variant="secondary" onClick={onShare}>分享与导入</Button>}>{sentence}</Note>}
+      {sentence && <Note action={<Button size="sm" variant="secondary" onClick={onShare}>去分享</Button>}>{sentence}</Note>}
       <List label="收到的胶囊">
         {ordered.map((item) => (
           <ListRow

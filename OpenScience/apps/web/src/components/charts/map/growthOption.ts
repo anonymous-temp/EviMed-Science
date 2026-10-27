@@ -1,23 +1,32 @@
 import type { EChartsCoreOption } from "echarts/core";
-import { LANE_GLYPHS, LANE_WORDS, type Growth, type GrowthEvent, type Lane } from "@/components/memory/overview/memoryOverviewModel";
+import { LANE_GLYPHS, LANE_WORDS, type ChangeEvent, type Growth, type Lane } from "@/components/memory/overview/memoryOverviewModel";
 import { escapeTooltip } from "../echartsBase";
-import { heatStep } from "./activityOption";
 import { weekLabels } from "./changeWeeks";
 import type { MapPalette } from "./palette";
 import { dayEndMs, dayIn, dayStartMs } from "./zone";
 
 /**
- * The growth strip of the overview: what the capsule gained, on one axis — the only canvas of the page.
+ * The change chart of the dashboard (「变化」): what the capsule gained and lost, on one axis — the page's one canvas besides the relation graph.
  *
- * Up to thirty gains it is **one dot for each**, in a lane for each kind that has any: 记下 ●, 学会 ▲, 资料 ■, 收下 ◆. A day with several
- * stacks its dots up the lane instead of hiding them behind one another. Past thirty a dot each is a pile, and the strip counts the weeks:
- * one cell for each week and lane, its count printed in it, in six steps of one hue. Either way it counts gains only — what was replaced or
- * forgotten is the time view's — and colours are the map's two: the brand accent for the mark and the one hue of the heat, a shape (never
- * the colour) telling the kind. Where nothing happened nothing is drawn: no line joins sparse points and no empty day is marked as missed.
+ * Up to thirty changes it is **one dot for each**, in a lane for each kind that has any: 记下 ●, 学会 ▲, 资料 ■, 收下 ◆, 忘记 ✕. A day with several
+ * stacks its dots up the lane instead of hiding them behind one another. Past thirty a dot each is a pile, and the chart counts the weeks:
+ * one cell for each week and lane, its count printed in it, in six steps of one hue; the week the reader selected is drawn with a frame round
+ * its cells. Either way colours are the map's two — the brand accent for the mark and the one hue of the heat — a shape (never the colour) telling
+ * the kind. Where nothing happened nothing is drawn: no line joins sparse points and no empty day is marked as missed.
  */
 
-/** The symbol of a lane, by shape. */
-export const LANE_SYMBOLS: Readonly<Record<Lane, string>> = { noted: "circle", learned: "triangle", documents: "rect", received: "diamond" };
+/** The symbol of a lane, by shape; the cross of 忘记 is a plus turned a quarter (`LANE_ROTATION`). */
+export const LANE_SYMBOLS: Readonly<Record<Lane, string>> = {
+  noted: "circle", learned: "triangle", documents: "rect", received: "diamond",
+  forgotten: "path://M-1,-4L1,-4L1,-1L4,-1L4,1L1,1L1,4L-1,4L-1,1L-4,1L-4,-1L-1,-1Z",
+};
+export const LANE_ROTATION: Readonly<Record<Lane, number>> = { noted: 0, learned: 0, documents: 0, received: 0, forgotten: 45 };
+
+/** Which of the six steps a week's count falls in: 0 for none, then five by its share of the busiest cell. */
+export function heatStep(total: number, busiest: number): number {
+  if (total <= 0 || busiest <= 0) return 0;
+  return Math.max(1, Math.min(5, Math.ceil((total / busiest) * 5)));
+}
 
 /** How far a dot may be moved up or down inside its lane when a day has several, as a share of the lane. */
 const SPREAD = 0.6;
@@ -38,7 +47,7 @@ export interface GrowthDot {
 }
 
 /** The dots of a strip: one for each event, those of one day and lane in a column. */
-export function growthDots(events: readonly GrowthEvent[], lanes: readonly Lane[], timeZone: string): GrowthDot[] {
+export function growthDots(events: readonly ChangeEvent[], lanes: readonly Lane[], timeZone: string): GrowthDot[] {
   const dots: GrowthDot[] = [];
   const groups = new Map<string, number[]>();
   events.forEach((event, index) => {
@@ -56,8 +65,8 @@ export function growthDots(events: readonly GrowthEvent[], lanes: readonly Lane[
 }
 
 /** What a dot says when it is pointed at: the thing, or the lane's word, and the day. */
-export function dotTooltip(event: GrowthEvent, formatDay: (day: string) => string): string {
-  const what = event.title || { noted: "记下了一件事", learned: "学会了一个做法", documents: "放进了一份资料", received: "收下了一个胶囊" }[event.lane];
+export function dotTooltip(event: ChangeEvent, formatDay: (day: string) => string): string {
+  const what = event.title || { noted: "记下了一件事", learned: "学会了一个做法", documents: "放进了一份资料", received: "收下了一个胶囊", forgotten: "忘记了一件事" }[event.lane];
   return `<div style="max-width:260px;white-space:normal">${escapeTooltip(what)}</div><div>${escapeTooltip(`${LANE_WORDS[event.lane]} · ${formatDay(event.day)}`)}</div>`;
 }
 
@@ -69,15 +78,17 @@ export function weekCellTooltip(week: Growth["weeks"][number], formatDay: (day: 
 
 export interface GrowthInput {
   growth: Growth;
-  events: readonly GrowthEvent[];
+  events: readonly ChangeEvent[];
   timeZone: string;
   palette: MapPalette;
   /** A calendar day as the page words it (「9月15日」). */
   formatDay: (day: string) => string;
+  /** The Monday of the week the reader selected: its cells are framed. */
+  selectedWeek?: string | null;
 }
 
 /** The strip as a chart option; null when there is nothing to draw. */
-export function growthOption({ growth, events, timeZone, palette, formatDay }: GrowthInput): EChartsCoreOption | null {
+export function growthOption({ growth, events, timeZone, palette, formatDay, selectedWeek = null }: GrowthInput): EChartsCoreOption | null {
   if (growth.shape === "none" || !growth.first) return null;
   const rows = growth.lanes.map((lane) => `${LANE_GLYPHS[lane]} ${LANE_WORDS[lane]}`);
   const rowAxis = {
@@ -102,7 +113,7 @@ export function growthOption({ growth, events, timeZone, palette, formatDay }: G
       },
       yAxis: rowAxis,
       series: growth.lanes.map((lane) => ({
-        type: "scatter", name: LANE_WORDS[lane], symbol: LANE_SYMBOLS[lane], symbolSize: 12, z: 3,
+        type: "scatter", name: LANE_WORDS[lane], symbol: LANE_SYMBOLS[lane], symbolRotate: LANE_ROTATION[lane], symbolSize: 12, z: 3,
         itemStyle: { color: palette.current, borderColor: palette.surface, borderWidth: 1 },
         data: dots.filter((dot) => dot.lane === lane).map((dot) => ({ value: dot.value, event: dot.event })),
       })),
@@ -112,6 +123,7 @@ export function growthOption({ growth, events, timeZone, palette, formatDay }: G
   // Weekly counts: a cell for each week and lane, its count printed in it. A custom series, not a heatmap: the library's cartesian heatmap
   // is drawn only through a visual map, and the cell's step is already decided here, one hue in six steps (`heatStep`).
   const busiest = Math.max(1, ...growth.weeks.flatMap((week) => growth.lanes.map((lane) => week.counts[lane])));
+  const chosen = growth.weeks.map((week) => week.start === selectedWeek);
   const cells = growth.weeks.flatMap((week, weekIndex) => growth.lanes.map((lane, laneIndex) => {
     const count = week.counts[lane];
     return { value: [weekIndex, laneIndex, count, heatStep(count, busiest)] };
@@ -130,7 +142,10 @@ export function growthOption({ growth, events, timeZone, palette, formatDay }: G
         return {
           type: "group",
           children: [
-            { type: "rect", shape: { x: x - width / 2 + 1, y: y - height / 2 + 1, width: Math.max(1, width - 2), height: Math.max(1, height - 2), r: 2 }, style: { fill: palette.heat[api.value(3) as number] } },
+            {
+              type: "rect", shape: { x: x - width / 2 + 1, y: y - height / 2 + 1, width: Math.max(1, width - 2), height: Math.max(1, height - 2), r: 2 },
+              style: { fill: palette.heat[api.value(3) as number], ...(chosen[api.value(0) as number] ? { stroke: palette.text, lineWidth: 1.5 } : {}) },
+            },
             ...(count > 0 ? [{ type: "text", style: { text: String(count), x, y, textAlign: "center", textVerticalAlign: "middle", fill: palette.text, fontSize: 11 } }] : []),
           ],
         };

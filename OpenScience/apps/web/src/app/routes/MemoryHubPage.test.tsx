@@ -222,24 +222,21 @@ describe("记忆胶囊", () => {
     await waitFor(() => expect(updateMemorySettings).toHaveBeenCalledWith({ pausedProjects: ["prj_1"] }));
   });
 
-  it("keeps the visualization first while explicit list addresses remain available", async () => {
-    const user = userEvent.setup();
+  it("has the overview first and the four lists after it, and no 地图 among them", async () => {
     map.feature = "on";
     render(
       <MemoryRouter initialEntries={["/app/memory?tab=self"]}>
         <Routes>
           <Route path="/app/memory" element={<MemoryHubPage />} />
-          <Route path="/app/memory/map" element={<p>地图页</p>} />
           <Route path="/app/memory/overview" element={<p>总览页</p>} />
         </Routes>
       </MemoryRouter>,
     );
     await screen.findByRole("switch", { name: "记忆" });
     const tabs = screen.getByRole("tablist", { name: "记忆" });
-    expect(within(tabs).getAllByRole("tab").map((item) => item.textContent?.replace(/\d+$/u, ""))).toEqual(["总览", "地图", "关于你", "项目", "做法", "收到的"]);
-    expect(within(tabs).getByRole("tab", { name: "地图" })).toHaveAttribute("aria-selected", "false");
-    await user.click(within(tabs).getByRole("tab", { name: "地图" }));
-    expect(await screen.findByText("地图页")).toBeInTheDocument();
+    expect(within(tabs).getAllByRole("tab").map((item) => item.textContent?.replace(/\d+$/u, ""))).toEqual(["总览", "关于你", "项目", "做法", "收到的"]);
+    expect(within(tabs).getByRole("tab", { name: /^关于你/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByRole("tab", { name: "地图" })).toBeNull();
   });
 
   it("opens the overview on the unqualified memory landing address", async () => {
@@ -251,7 +248,7 @@ describe("记忆胶囊", () => {
     expect(await screen.findByText("总览首页")).toBeInTheDocument();
   });
 
-  it("goes to the overview from its tab, and draws neither 总览 nor 地图 where the deployment does not draw the map", async () => {
+  it("goes to the overview from its tab, and draws no 总览 where the deployment does not draw the map", async () => {
     const user = userEvent.setup();
     map.feature = "on";
     render(
@@ -268,7 +265,6 @@ describe("记忆胶囊", () => {
     map.feature = "off";
     open();
     await screen.findByRole("switch", { name: "记忆" });
-    expect(screen.queryByRole("tab", { name: "地图" })).toBeNull();
     expect(screen.queryByRole("tab", { name: "总览" })).toBeNull();
   });
 
@@ -1022,7 +1018,7 @@ describe("记忆胶囊", () => {
       expect(await screen.findByRole("dialog", { name: "分享与导入" })).toHaveAttribute("data-tab", "import");
     });
 
-    it("says what the account could hand over in one sentence above the list, and not at all when it holds nothing", async () => {
+    it("says what the account could hand over in one sentence above the list, with its own button (the toolbar has the other), and not at all when it holds nothing", async () => {
       const user = userEvent.setup();
       previewCapsuleExport.mockResolvedValue({ entries: [
         { factKind: "method_preference" }, { factKind: "method_preference" }, { factKind: "preference" }, { factKind: "writing_style" }, { factKind: "expertise" },
@@ -1030,7 +1026,7 @@ describe("记忆胶囊", () => {
       fetchMyCapsule.mockResolvedValue({ capsule: { id: "cap_mine" }, capsules: [], entries: [], forgotten: [] });
       open("?tab=received");
       const sentence = await screen.findByText("你能交出去的：2 种做法、2 条标准与偏好、1 条背景。");
-      await user.click(within(sentence.closest("[data-note]") as HTMLElement).getByRole("button", { name: "分享与导入" }));
+      await user.click(within(sentence.closest("[data-note]") as HTMLElement).getByRole("button", { name: "去分享" }));
       expect(await screen.findByRole("dialog", { name: "分享与导入" })).toHaveAttribute("data-tab", "export");
     });
 

@@ -670,7 +670,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
           {!firstRun && addMenu()}
           {!shared && !firstRun && (
             <Menu label="更多" items={[
-              { label: "在记忆地图中查看", onSelect: () => navigate("/app/memory/map") },
+              { label: "在记忆总览中查看", onSelect: () => navigate("/app/memory/overview") },
               ...(pagesOffered && line?.canCompile ? [{ label: compileAsking ? "正在重新整理" : "重新整理知识页", icon: RefreshCw, disabled: compileAsking, onSelect: () => void compileNow() }] : []),
               { label: exporting ? "正在导出" : "导出到 Obsidian", icon: Download, disabled: exporting || !hasWebApi, onSelect: () => void exportVault() },
             ]} />

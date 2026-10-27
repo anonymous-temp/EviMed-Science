@@ -7,16 +7,6 @@
  */
 import { productRequest } from "./productClient";
 
-export type MapView = "graph" | "topics" | "dims" | "time" | "activity";
-export const MAP_VIEWS: readonly MapView[] = ["graph", "topics", "dims", "time", "activity"];
-
-/**
- * The parts of a capsule the overview's cards drill into the map by: what is about the person, what is in a project, what was learned to do,
- * and what is known. 成长 is the time view and 收到的 is not on the map at all, so neither is a part.
- */
-export type MapPart = "you" | "project" | "method" | "knowledge";
-export const MAP_PARTS: readonly MapPart[] = ["you", "project", "method", "knowledge"];
-
 export type MapNodeType = "you" | "project" | "memory" | "document" | "reference" | "method" | "entity" | "page" | "cluster";
 export type MapState = "current" | "check" | "replaced";
 export type MapReason = "source-retracted" | "conflict" | "source-changed" | "source-expired" | "expired";
@@ -154,10 +144,10 @@ export interface MapQuery {
 
 /** Every block of the document: the views switch between them without asking again. */
 export const MAP_INCLUDE_ALL = "summary,facets,nodes,edges,buckets,lanes,events";
-/** What the overview reads: no lines and no lineages, which only the relation and time views draw. */
-export const MAP_INCLUDE_OVERVIEW = "summary,facets,nodes,buckets,events";
+/** What the dashboard reads: the marks, the lines of the relation graph and the events of the change chart; no lineages, which nothing draws. */
+export const MAP_INCLUDE_DASHBOARD = "summary,facets,nodes,edges,buckets,events";
 
-/** The whole document, every block: the views switch between them without asking again. The overview asks for the blocks it draws. */
+/** The whole document, every block by default; a page asks for the blocks it draws. */
 export function fetchMemoryMap(query: MapQuery, timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone, include = MAP_INCLUDE_ALL): Promise<MemoryMap> {
   const params = new URLSearchParams({ include, timeZone });
   if (query.projectId) params.set("projectId", query.projectId);

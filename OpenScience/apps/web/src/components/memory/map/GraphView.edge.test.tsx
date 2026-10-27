@@ -34,7 +34,7 @@ function view(onHideEdge?: (edge: MapEdge) => Promise<void>) {
   const open = vi.fn();
   render(
     <GraphView doc={{ nodes, edges, truncated: { nodes: 0, edges: 0 } }} narrowed={narrowed} selected={null} actions={{ onOpen: open, onFocus: vi.fn() }}
-      chain={null} focused={false} onHideEdge={onHideEdge} />,
+      onHideEdge={onHideEdge} />,
   );
   return open;
 }
