@@ -415,11 +415,19 @@ def audit_predictions(rows, *, outcome_column, positive_label, negative_label, p
     if overlap:
         findings.append(_finding("patient_split_overlap", overlap))
     fit_scope = _fit_scope(rows, fit_stages, patient_id_column, observation_id_column, split_column, train, test, findings, notes)
-    compromise_codes = {"patient_split_overlap", "fit_test_contamination", "target_in_predictors", "identifier_in_predictors", "split_in_predictors", "probability_in_predictors", "duplicate_exact", "duplicate_conflicting", "repeated_measurements", "repeated_patient_unresolved"}
-    compromised = bool(compromise_codes & {item["code"] for item in findings})
-    validation = "compromised" if compromised else "not_established" if notes or findings or not y else "supported_by_declared_checks"
-    metrics = _unsupported("probability_label_mismatch") if mismatch else _metrics(y, probabilities, int(calibration_bins), threshold, positive_label, negative_label, validation != "supported_by_declared_checks")
     split_complete = not missingness["all"]["patientId"] and not counts["unknownSplitRows"] and bool(counts["trainRows"] and counts["testRows"])
+    compromise_codes = {"patient_split_overlap", "fit_test_contamination", "target_in_predictors", "identifier_in_predictors", "split_in_predictors", "probability_in_predictors", "duplicate_exact", "duplicate_conflicting", "repeated_patient_unresolved"}
+    # Repeated visits are reported as an independence finding. They compromise the
+    # evaluation only when the split could not keep each patient on one side: a
+    # checked patient-level split with no overlap leaves them a reported property
+    # of the data, not a reason to relabel the held-out metrics.
+    patient_grouped = split_complete and not overlap
+    if not patient_grouped:
+        compromise_codes.add("repeated_measurements")
+    compromised = bool(compromise_codes & {item["code"] for item in findings})
+    open_findings = [item for item in findings if not (patient_grouped and item["code"] == "repeated_measurements")]
+    validation = "compromised" if compromised else "not_established" if notes or open_findings or not y else "supported_by_declared_checks"
+    metrics = _unsupported("probability_label_mismatch") if mismatch else _metrics(y, probabilities, int(calibration_bins), threshold, positive_label, negative_label, validation != "supported_by_declared_checks")
     return {"schemaVersion": 1, "kind": "prediction_audit", "status": "partial" if findings or notes or metrics["status"] != "complete" else "complete",
             "classMapping": {"outcomeColumn": outcome_column, "positiveLabel": _scalar(positive_label), "negativeLabel": _scalar(negative_label),
                              "probabilityColumn": probability_column, "probabilityLabel": _scalar(probability_label)},

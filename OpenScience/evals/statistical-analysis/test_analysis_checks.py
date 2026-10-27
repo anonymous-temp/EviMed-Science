@@ -140,6 +140,54 @@ def test_duplicate_exact_conflicting_and_distinct_visits_are_not_conflated():
     assert unresolved["duplicates"]["conflictingGroups"] == 0
 
 
+def repeated_visit_rows(patient_level_split=True):
+    """40 patients with two visits each; the split is by patient unless a visit-level one is asked for."""
+    data = []
+    for patient in range(40):
+        for visit in (1, 2):
+            if patient_level_split:
+                split = "train" if patient < 30 else "test"
+            else:
+                split = "train" if visit == 1 or patient < 20 else "test"
+            event = (patient + visit) % 2
+            data.append({"patient": f"private-p{patient}", "visit": f"v{visit}", "split": split, "diagnosis": event,
+                         "p": min(.95, max(.05, .25 + .5 * event + .01 * ((patient * 7 + visit) % 9)))})
+    return data
+
+
+def test_repeated_visits_on_a_patient_level_split_are_reported_but_do_not_compromise_validation():
+    data = repeated_visit_rows()
+    train_patients = sorted({row["patient"] for row in data if row["split"] == "train"})
+    result = audit(data, positive_label=1, negative_label=0, probability_label=1,
+                   fit_stages=[{"name": "model", "fitIds": train_patients}])
+    assert result["checks"]["splitOverlap"] == {"status": "checked", "overlapPatients": 0}
+    assert result["duplicates"]["repeatedMeasurementPatients"] == 40
+    assert "repeated_measurements" in codes(result)
+    assert not {"patient_split_overlap", "fit_test_contamination"} & codes(result)
+    assert result["validation"]["status"] == "supported_by_declared_checks"
+    assert result["metrics"]["scope"] == "declared_heldout_rows"
+    assert result["status"] == "partial"  # The independence finding stays visible.
+
+
+def test_repeated_visits_with_a_patient_in_both_partitions_remain_compromised():
+    data = repeated_visit_rows(patient_level_split=False)
+    result = audit(data, positive_label=1, negative_label=0, probability_label=1,
+                   fit_stages=[{"name": "model", "fitIds": ["private-p0"]}])
+    assert {"repeated_measurements", "patient_split_overlap"} <= codes(result)
+    assert result["validation"]["status"] == "compromised"
+    assert result["metrics"]["scope"] == "valid_test_rows_descriptive"
+
+
+def test_repeated_visits_stay_compromising_when_the_split_cannot_be_checked():
+    data = repeated_visit_rows()
+    for row in data[::2]:
+        row["patient"] = None  # The patient-level split is no longer established.
+    result = audit(data, positive_label=1, negative_label=0, probability_label=1,
+                   fit_stages=[{"name": "model", "fitIds": ["private-p0"]}])
+    assert result["checks"]["splitOverlap"]["status"] == "not_checked"
+    assert result["validation"]["status"] != "supported_by_declared_checks"
+
+
 def test_missing_identifiers_unknown_split_and_withheld_rows_cannot_certify_independence():
     data = rows()
     del data[2]["patient"]
