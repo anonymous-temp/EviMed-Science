@@ -344,6 +344,8 @@ it("empties the view with one sentence and no button", async () => {
   serve({ items: [], nextCursor: null });
   open();
   expect(await screen.findByText("收件箱为空")).toBeInTheDocument();
+  // An empty inbox says what arrives here: a new account opened at night has nothing yet and nothing to do about it.
+  expect(screen.getByText("定时任务的结果、长任务的进展、别人分享给你的记忆和每天的前沿精选会送到这里。")).toBeInTheDocument();
   await userEvent.click(screen.getByRole("tab", { name: "未读" }));
   await waitFor(() => expect(api.listInbox).toHaveBeenLastCalledWith({ unread: true }));
   expect(await screen.findByText("没有未读消息")).toBeInTheDocument();

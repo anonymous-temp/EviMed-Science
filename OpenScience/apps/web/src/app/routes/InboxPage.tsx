@@ -412,7 +412,8 @@ export function InboxPage() {
       {error && <LoadError className="mb-4" message={error} onRetry={() => void reload()} />}
       <div>
         {items === null || order === null ? <RunsSkeleton filter={false} />
-          : items.length === 0 && order.pinned.length === 0 ? (!error && <EmptyState icon={Bell} title={filter === "unread" ? "没有未读消息" : "收件箱为空"} />)
+          : items.length === 0 && order.pinned.length === 0 ? (!error && <EmptyState icon={Bell} title={filter === "unread" ? "没有未读消息" : "收件箱为空"}
+            reason={filter === "unread" ? undefined : "定时任务的结果、长任务的进展、别人分享给你的记忆和每天的前沿精选会送到这里。"} />)
             : (
               <>
                 {pinnedEntries.length > 0 && (

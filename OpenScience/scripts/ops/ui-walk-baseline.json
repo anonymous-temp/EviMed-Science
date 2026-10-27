@@ -182,6 +182,16 @@
       "owner": "controller",
       "until": "2026-12-01",
       "why": "on the throwaway account the production walk registers (2026-10-25) the overview is its one recipe under five tiles that read zero, so the headline sentence and the tiles have nothing to be compared on; the fixture walk compares them with data"
+    },
+    {
+      "view": "inbox@desktop",
+      "rule": "not-observable",
+      "profiles": [
+        "owner"
+      ],
+      "owner": "controller",
+      "until": "2026-12-01",
+      "why": "the throwaway account the production walk registers has a notice only once the frontier's recipient scan reaches it (the weekly is queued to every account in pages, a tick at a time); a walk that deletes the account first finds an empty inbox, whose empty state says what arrives there (the fixture walk opens a row); timing, not a defect"
     }
   ]
 }
