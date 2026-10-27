@@ -1288,11 +1288,17 @@ const sourceIntakeErrorCodes = Object.freeze([
   'knowledge_compile_failed',
   'knowledge_compile_cancelled',
   'knowledge_compile_misplaced',
+  // Personal storage is where an account keeps its own materials, not a project, so it has no pages to compile.
+  'knowledge_storage_project',
+  // A save, a copy or a retry that was chosen on a version of the document that has moved on since (a note edited elsewhere,
+  // a document replaced); the page reloads and the person chooses again.
+  'source_revision_conflict',
   // 连接网盘 (`openListClient.mjs`): OpenList's own refusals, named so the
   // browse toast says what happened rather than a bare 502. No storage covers
   // the account's namespace; the deployment's credential was not accepted.
   'openlist_storage_missing',
   'openlist_credential_rejected',
+  'openlist_permission_denied',
 ])
 
 /**
@@ -1341,6 +1347,8 @@ const libraryErrorCodes = Object.freeze([
   'library_unavailable',
   'library_payload_invalid',
   'library_source_invalid',
+  // 「添加到项目」 on a document whose preserved original is no longer there to copy.
+  'library_original_missing',
   'library_item_not_found',
   'library_full',
   'library_source_removed',
@@ -2790,9 +2798,13 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   knowledge_compile_misplaced: '这一轮整理把图谱写到了错误的位置，已清理，图谱保持上一轮的样子；可以再点一次“重新整理”。',
   openlist_storage_missing: '这个账户还没有接入网盘，无法从网盘导入。可以先直接上传文件。',
   openlist_credential_rejected: '网盘服务没有接受这个部署的凭据，暂时无法浏览网盘。请联系管理员。',
+  openlist_permission_denied: '网盘不允许这个账户访问它的目录，暂时无法浏览网盘。请联系管理员。',
+  knowledge_storage_project: '个人资料只是存放资料的地方，不整理成知识页。把资料添加到某个项目后，可以在那个项目里整理。',
+  source_revision_conflict: '这份资料刚刚有了新的内容。刷新知识库后再试。',
   library_unavailable: '个人资料库暂时不可用，稍后再试。',
   library_payload_invalid: '资料库请求的内容不完整，刷新页面后再试。',
   library_source_invalid: '没有找到这份资料，刷新知识库后再试。',
+  library_original_missing: '这份资料的原件已经找不到了，没办法添加到项目。',
   autopilot_material_not_found: '找不到这份资料，或它不属于这个研究问题所在的项目。先把文件加入这个项目的知识库，再关联到问题。',
   autopilot_materials_full: '这个研究问题已关联了足够多的资料。先移除不再需要的，再添加新的。',
   autopilot_agenda_not_found: '找不到这个定时任务。它可能已被删除，回到任务列表刷新后再看。',

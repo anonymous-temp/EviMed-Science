@@ -97,6 +97,27 @@ test("A-B-A creates a separately frozen copy and never changes its earlier snaps
   assert.equal(second.source.payload.copiedFrom.revision, a.source.revision);
 });
 
+test("a copy chosen on a row the platform's reading has moved on since is still current, and copying that version again finds one snapshot", durable, async t => {
+  const ctx = await signedIn(); t.after(ctx.close);
+  const api = async (route, method, body) => {
+    const response = await fetch(`${ctx.base}${route}`, { method, headers: ctx.headers, body: JSON.stringify(body) });
+    assert.ok(response.ok, await response.clone().text()); return (await response.json()).data;
+  };
+  const note = await api("/api/library/notes", "POST", { title: "Reading", body: "stays the same" });
+  const chosen = note.source.revision;
+  // What background reading does to a fresh upload: records move the revision and leave the bytes and the version alone.
+  const stored = await ctx.app.sourceService.get(ctx.user.id, note.source.id);
+  const moved = await ctx.app.sourceService.documents.put(ctx.user.id, "source", stored.id, { ...stored.payload, updatedAt: new Date().toISOString() },
+    { expectedRevision: stored.revision, projectId: stored.projectId });
+  assert.ok(moved.revision > chosen, "the record moved on");
+  const first = await api(`/api/library/${note.source.id}/projects`, "POST", { projectId: ctx.project.id, expectedRevision: chosen });
+  const again = await api(`/api/library/${note.source.id}/projects`, "POST", { projectId: ctx.project.id, expectedRevision: moved.revision });
+  assert.equal(again.source.id, first.source.id); assert.equal(again.duplicate, true);
+  const stale = await fetch(`${ctx.base}/api/library/${note.source.id}/projects`, { method: "POST", headers: ctx.headers,
+    body: JSON.stringify({ projectId: ctx.project.id, expectedRevision: moved.revision + 50 }) });
+  assert.equal(stale.status, 409);
+});
+
 test("personal links use the public reader without a project and preserve an explicit unshare on refetch", durable, async t => {
   let version = "A"; let paidToolCalls = 0;
   const ctx = await signedIn({ deepseekToolsFetch: async () => { paidToolCalls += 1; throw new Error("Personal intake must not call paid web tools."); }, webReadHostIntervalMs: 0, webReadTransport: async ({ url }) => url.pathname === "/robots.txt"

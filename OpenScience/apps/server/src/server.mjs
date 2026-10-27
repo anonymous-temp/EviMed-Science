@@ -2340,7 +2340,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     write: ({ user, project, rel, buffer, meta, register }) => writeProjectUpload({ config, user, project }, { root: "base", rel, buffer, meta, register }) });
   const personalLibraryRoutes = createPersonalLibraryRoutes({ store, sources: sourceService, knowledge: knowledgeEntries,
     write: personalLibraryWrite, readFile: (project, rel) => readFileNoFollow(project.baseDir, resolveScopedPath(project.baseDir, rel)),
-    maxJsonBytes: config.maxJsonBytes, maxFileBytes: config.maxFileBytes, internalProject: (user, id) => isInternalProjectOf(config, user.id, id) });
+    maxJsonBytes: config.maxJsonBytes, maxFileBytes: config.maxFileBytes, internalProject: (user, id) => isInternalProjectOf(config, user.id, id),
+    // A 循证 GEO project or a 虚拟临床研究 study the account owns is not a place a document is copied to.
+    moduleProject: async (user, id) => Boolean(await geo?.store.projectByControlProject(user.id, id))
+      || (await vcr?.store.studyByControlProject(user.id, id))?.userId === user.id });
   // The one entity vocabulary (entityVocabulary.mjs, plan §4.2): the frontier's glossary and entity keys, read by
   // the pipeline, the evidence zones, autopilot agendas, GEO products and VCR studies. It follows the frontier
   // module: off, every answer is empty and no table is read.
