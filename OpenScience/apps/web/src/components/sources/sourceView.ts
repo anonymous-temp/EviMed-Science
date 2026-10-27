@@ -47,10 +47,14 @@ export function kindIcon(kind: string): LucideIcon {
 }
 
 /**
- * Where a document's original is read from: its own file, or — for a document that lives in the cloud drive, whose
- * original is not in the project — the text that was read from it.
+ * Captured cloud-drive revisions preserve the original bytes. Legacy remote paths have only their parsed text.
  */
+export function hasCapturedDriveOriginal(source: SourceRecord): boolean {
+  return source.display.origin === "drive" && (source.payload.paths[0]?.startsWith("knowledge-base/.evimed-revisions/") ?? false);
+}
+
 export function originalPathOf(source: SourceRecord): string | null {
+  if (hasCapturedDriveOriginal(source)) return source.payload.paths[0];
   if (source.display.origin === "drive") return source.payload.outputs?.artifactPath ?? null;
   return source.payload.paths[0] ?? null;
 }

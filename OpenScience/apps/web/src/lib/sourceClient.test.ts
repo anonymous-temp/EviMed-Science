@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { addSourceLink, addSourceNote, getSourceNote, listSources, refetchSource, saveSourceNote, saveToKnowledgeBase, getSourceUnderstanding, listSourceUnderstandingHistory, getKnowledgePageAt, saveKnowledgePage } from "./sourceClient";
+import { copySourceToProject, getOpenListStatus, type SourceRecord, addSourceLink, addSourceNote, getSourceNote, listSources, refetchSource, saveSourceNote, saveToKnowledgeBase, getSourceUnderstanding, listSourceUnderstandingHistory, getKnowledgePageAt, saveKnowledgePage } from "./sourceClient";
 
 const request = vi.hoisted(() => vi.fn());
 const command = vi.hoisted(() => vi.fn());
@@ -85,4 +85,25 @@ it("sends the addressed output revision on both reader reload and save", async (
   const input = {sourceId:"same-source",markdown:"changed alias",baseSha256:"b".repeat(64),address};
   await saveKnowledgePage(input);
   expect(request).toHaveBeenLastCalledWith("/knowledge-pages/page","PUT",input);
+});
+
+describe("personal library contracts", () => {
+ beforeEach(() => request.mockReset());
+ it("keeps all-owned separate from a project literally named all", async () => {
+  await listSources({ kind: "all" }, { q: "notes", cursor: "next", kind: "note" });
+  expect(request).toHaveBeenLastCalledWith("/sources?scope=all&kind=note&q=notes&cursor=next");
+  await listSources({ kind: "project", projectId: "all" });
+  expect(request).toHaveBeenLastCalledWith("/sources?projectId=all");
+ });
+ it("creates personal notes and links without any implicit current project", async () => {
+  await addSourceLink(null, "https://example.org/paper"); expect(request).toHaveBeenLastCalledWith("/library/links", "POST", { url: "https://example.org/paper" });
+  await addSourceNote(null, { title: "My note", body: "text" }); expect(request).toHaveBeenLastCalledWith("/library/notes", "POST", { title: "My note", body: "text" });
+ });
+});
+
+it("binds a project copy to the displayed immutable source revision", async () => {
+ const source = { id: "src_one", revision: 7 } as SourceRecord;
+ await copySourceToProject(source, "project-one");
+ expect(request).toHaveBeenLastCalledWith("/library/src_one/projects", "POST", { projectId: "project-one", expectedRevision: 7 });
+ await getOpenListStatus(); expect(request).toHaveBeenLastCalledWith("/sources/openlist/status");
 });

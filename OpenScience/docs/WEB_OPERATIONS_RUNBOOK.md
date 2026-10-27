@@ -1290,6 +1290,18 @@ re-runs an understanding, never reads a file again and never changes a depth, a 
 researcher or the judge already typed is left alone, and a second run reports nothing to do. Run it once after the release and read the
 report's `format` count: those documents were not named by the judge, and a 「重新读取」 on one reads it under its new type.
 
+### Personal materials and project use (2026-10-27)
+
+The knowledge page now opens the account's materials (`GET /api/sources?scope=all`). This is an authenticated, paginated source inventory, not permission to retrieve another project's private context. `scope=shared` remains the explicitly cross-project-available library subset; a project query retains its existing scope. Internal background work is excluded from the all-materials view.
+
+Personal intake uses `POST /api/library/uploads` (`filename`, `data`, `encoding`), `/api/library/links` (`url`) and `/api/library/notes` (`title`, `body`). No caller-supplied owner or project is accepted. The reserved per-account `evimed-library` project is only the original-byte storage adapter: it is hidden from project lists, unavailable to interactive runtimes, capacity-limited, and never a Compile target. Source publication, active library membership and ingestion jobs share the existing transaction. An explicitly unshared logical document stays unshared through later edits; retaining identical bytes elsewhere does not authorize the writer to revoke that independent retention.
+
+`POST /api/library/:sourceId/projects` takes `projectId` and `expectedRevision`. It saves an independent immutable version with server-derived source provenance and rejects stale selections. It does not create a live cross-project edit link. Chat handoff uses an eligible destination and preserves every selected reference; it never changes an empty selection into a broad query.
+
+Personal originals use `GET /api/sources/:id/file?mode=read|preview|download`; the source and authenticated owner determine the file. This route accepts no arbitrary path, root or project. Captured cloud-drive originals remain originals before and after parsing. A legacy drive row without a preserved original may serve its parsed text, explicitly identified as `parsed-text`; it must not be presented as a preserved Office/PDF file.
+
+`GET /api/sources/openlist/status` reports `ready`, `unconfigured`, `storage_missing`, `permission_denied` or `unavailable`. Ready requires the configured storage and the account's namespace to be readable, not just a running container. The existing operator readiness page remains the deployment diagnostic entry. The ordinary UI provides retry and direct upload when the drive is unavailable; it does not configure storage or credentials.
+
 ### Knowledge pages (「知识页」) and the knowledge graph
 
 `OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED` (on when OpenViking is the deployment's index, needs Postgres) covers the whole path: every
@@ -1314,6 +1326,8 @@ and `checks.memoryIndex.engine` in `/api/ready`. `evals/knowledge-pages` is the 
 answer; its 2026-10-12 run, on the pages of the self-built compiler since removed, did not show pages raising cross-document
 answer quality over a decomposition instruction (+0.014, interval −0.053 to 0.085), so their value is browsing, accumulation
 and the graph.
+
+New ordinary-project Compile rounds use project materials only by default. `OPEN_SCIENCE_KNOWLEDGE_PAGES_INCLUDE_LIBRARY=true` is an explicit operator opt-in to the earlier whole-library wiki input behavior; it is not the default and never widens shared GEO authorization. Personal library search remains available in authorized private conversations independently of this Compile setting. To include a personal material in a project's normal compilation, explicitly add its selected version to that project. Existing compiled pages remain readable, and personal-resource synchronization is not disabled by excluding the storage project from Compile.
 
 `OPEN_SCIENCE_DOCUMENT_MEMORY_ENABLED` (default off since 2026-10-13) is whether each readable document's summary and key claims
 are written into the memory capsule's `sources` layer. Off stops new writes only; what was written goes when its document does.

@@ -170,7 +170,7 @@ function KeyPointsBody({ source, busy, versionPath, onShowPage, onRetry }: {
   }, [source.id, familyId, currentUnderstandingId]);
 
   const meaning = table ? (
-    <DatasetMeaningPanel projectId={source.projectId} path={source.payload.paths[0] ?? ""} sha256={source.payload.fingerprint?.sha256 ?? null} />
+    !source.personal && <DatasetMeaningPanel projectId={source.projectId} path={source.payload.paths[0] ?? ""} sha256={source.payload.fingerprint?.sha256 ?? null} />
   ) : null;
   if (error) return <LoadError message={error} onRetry={() => setAttempt((value) => value + 1)} />;
   if (!detail) {

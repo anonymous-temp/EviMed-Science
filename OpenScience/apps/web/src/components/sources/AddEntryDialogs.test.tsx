@@ -32,3 +32,28 @@ it("guards a new note's body even before a title is entered", () => {
   expect(screen.getByRole("alertdialog")).toBeInTheDocument();
   expect(close).not.toHaveBeenCalled();
 });
+
+it("defaults a note to personal and lets the person explicitly choose a project", async () => {
+ const added = vi.fn(); const personal = { id: "personal", personal: true, display: { shared: true } };
+ api.addSourceNote.mockResolvedValue({ source: personal });
+ render(<NewNoteDialog projectId={null} destinations={[{ id: "one", label: "研究项目" }]} onClose={() => {}} onAdded={added} />);
+ const destination = screen.getByRole("combobox", { name: "保存位置" });
+ expect(destination).toHaveAccessibleDescription("个人资料可在自己的项目中使用；添加到项目会保存独立版本。循证 GEO 仍按项目资料权限使用。");
+ const title = screen.getByRole("textbox", { name: "标题" }); fireEvent.change(title, { target: { value: "Notes" } });
+ fireEvent.submit(title.closest("form")!);
+ await waitFor(() => expect(api.addSourceNote).toHaveBeenCalledWith(null, { title: "Notes", body: "" }));
+ expect(added).toHaveBeenCalledWith(personal);
+ expect(personal.display.shared).toBe(true);
+ fireEvent.focus(screen.getByRole("combobox", { name: "保存位置" })); fireEvent.click(screen.getByRole("button", { name: "研究项目" }));
+ expect(destination).toHaveAccessibleDescription("先保存到所选项目；可再设为跨项目可用。");
+ fireEvent.change(title, { target: { value: "Project notes" } }); fireEvent.submit(title.closest("form")!);
+ await waitFor(() => expect(api.addSourceNote).toHaveBeenCalledWith("one", { title: "Project notes", body: "" }));
+});
+
+it.each([["note", "标题"], ["link", "网址"]])("focuses the first writing field and keeps personal destination closed for %s", (kind, label) => {
+ render(kind === "note" ? <NewNoteDialog projectId={null} onClose={() => {}} onAdded={() => {}} /> : <AddLinkDialog projectId={null} onClose={() => {}} onAdded={() => {}} />);
+ expect(screen.getByRole("textbox", { name: label })).toHaveFocus();
+ const destination = screen.getByRole("combobox", { name: "保存位置" });
+ expect(destination).toHaveValue("个人资料"); expect(destination).toHaveAttribute("aria-expanded", "false");
+ expect(screen.queryByRole("listbox")).toBeNull();
+});

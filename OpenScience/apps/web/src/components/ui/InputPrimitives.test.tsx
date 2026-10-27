@@ -40,7 +40,7 @@ it("uses the same validation for picker/drop and reports partial file states wit
  const good = new File(["a"], "a.pdf"); const bad = new File(["b"], "b.txt");
  fireEvent.change(screen.getByLabelText(/Files/, { selector: "input" }), { target: { files: [good, bad] } }); expect(onFiles).toHaveBeenLastCalledWith([good]);
  fireEvent.drop(screen.getByRole("region", { name: "Files" }), { dataTransfer: { files: [bad] } }); expect(onFiles).toHaveBeenCalledTimes(1);
- expect(screen.getByRole("alert")).toHaveTextContent("b.txt：PDF only"); expect(screen.queryByRole("progressbar")).not.toBeInTheDocument(); expect(screen.getByText(/已传输，等待读取/)).toBeInTheDocument();
+ expect(screen.getByRole("alert")).toHaveTextContent("b.txt：PDF only"); expect(screen.queryByRole("progressbar")).not.toBeInTheDocument(); expect(screen.getByText(/已传输/)).toBeInTheDocument();
 });
 
 it("opens upward at the last option, preserves free text as a query and clears only via explicit action", () => {

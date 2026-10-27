@@ -21,10 +21,10 @@ describe("the knowledge base's address", () => {
 
   it("writes the list of delivered files as a view of its own, which is not a type and belongs to a project", () => {
     expect(listPath({ scope: "paper-1", kind: null, q: "", view: "outputs" })).toBe("/app/files?scope=paper-1&view=outputs");
-    expect(listPath({ scope: null, kind: "table", q: "疳证", view: "outputs" })).toBe("/app/files?view=outputs&q=%E7%96%B3%E8%AF%81");
-    expect(readListState(params("view=outputs&q=a"))).toEqual({ scope: null, kind: null, q: "a", view: "outputs" });
+    expect(listPath({ scope: "default", kind: "table", q: "疳证", view: "outputs" })).toBe("/app/files?scope=default&view=outputs&q=%E7%96%B3%E8%AF%81");
+    expect(readListState(params("scope=default&view=outputs&q=a"))).toEqual({ scope: "default", kind: null, q: "a", view: "outputs" });
     // A type beside the view is not read, and the shared documents have no delivered files to be a view of.
-    expect(readListState(params("view=outputs&kind=table")).kind).toBeNull();
+    expect(readListState(params("scope=default&view=outputs&kind=table")).kind).toBeNull();
     expect(readListState(params("scope=shared&view=outputs"))).toEqual({ scope: "shared", kind: null, q: "" });
     expect(readListState(params("view=elsewhere"))).toEqual(none);
     expect(readerPath("src_abc", { scope: "paper-1", kind: null, q: "", view: "outputs" })).toBe("/app/files/src_abc?scope=paper-1&view=outputs");
@@ -32,16 +32,16 @@ describe("the knowledge base's address", () => {
 
   it("writes the graph as a view of the 知识页, with the mark in focus and how far it reaches, and reads it back as untrusted", () => {
     expect(listPath({ scope: "paper-1", kind: "wiki", q: "", view: "graph" })).toBe("/app/files?scope=paper-1&kind=wiki&view=graph");
-    expect(listPath({ scope: null, kind: "wiki", q: "", view: "graph", graph: "kg", focus: "trial-rocket-af", depth: 2 }))
-      .toBe("/app/files?kind=wiki&view=graph&graph=kg&focus=trial-rocket-af&depth=2");
-    expect(readListState(params("view=graph&graph=kg&focus=trial-rocket-af&depth=2")))
-      .toEqual({ scope: null, kind: "wiki", q: "", view: "graph", graph: "kg", focus: "trial-rocket-af", depth: 2 });
+    expect(listPath({ scope: "default", kind: "wiki", q: "", view: "graph", graph: "kg", focus: "trial-rocket-af", depth: 2 }))
+      .toBe("/app/files?scope=default&kind=wiki&view=graph&graph=kg&focus=trial-rocket-af&depth=2");
+    expect(readListState(params("scope=default&view=graph&graph=kg&focus=trial-rocket-af&depth=2")))
+      .toEqual({ scope: "default", kind: "wiki", q: "", view: "graph", graph: "kg", focus: "trial-rocket-af", depth: 2 });
     // The graph is always of the 知识页, wiki unless said otherwise, and a depth means something only beside a focus.
-    expect(readListState(params("view=graph&kind=table&graph=odd&depth=2"))).toEqual({ scope: null, kind: "wiki", q: "", view: "graph" });
-    expect(readListState(params("view=graph&focus=a&depth=9"))).toEqual({ scope: null, kind: "wiki", q: "", view: "graph", focus: "a" });
+    expect(readListState(params("scope=default&view=graph&kind=table&graph=odd&depth=2"))).toEqual({ scope: "default", kind: "wiki", q: "", view: "graph" });
+    expect(readListState(params("scope=default&view=graph&focus=a&depth=9"))).toEqual({ scope: "default", kind: "wiki", q: "", view: "graph", focus: "a" });
     // The shared documents have no pages to draw.
     expect(readListState(params("scope=shared&view=graph"))).toEqual({ scope: "shared", kind: null, q: "" });
-    expect(readerPath("src_abc", { scope: null, kind: "wiki", q: "", view: "graph", graph: "kg", focus: "x", depth: 3 })).toBe("/app/files/src_abc?kind=wiki&view=graph&graph=kg&focus=x&depth=3");
+    expect(readerPath("src_abc", { scope: "default", kind: "wiki", q: "", view: "graph", graph: "kg", focus: "x", depth: 3 })).toBe("/app/files/src_abc?scope=default&kind=wiki&view=graph&graph=kg&focus=x&depth=3");
   });
 
   it("puts a document at its own address, carrying the list it was opened from and what it shows", () => {
@@ -71,10 +71,10 @@ describe("the knowledge base's address", () => {
   });
 
   it("turns a list state into a scope and back, with the tab's own project standing for none", () => {
-    expect(scopeOf(none, "default")).toEqual({ kind: "project", projectId: "default" });
+    expect(scopeOf(none, "default")).toEqual({ kind: "all" });
     expect(scopeOf({ ...none, scope: "paper-1" }, "default")).toEqual({ kind: "project", projectId: "paper-1" });
     expect(scopeOf({ ...none, scope: "shared" }, "default")).toEqual({ kind: "shared" });
-    expect(scopeParam({ kind: "project", projectId: "default" }, "default")).toBeNull();
+    expect(scopeParam({ kind: "project", projectId: "default" }, "default")).toBe("default");
     expect(scopeParam({ kind: "project", projectId: "paper-1" }, "default")).toBe("paper-1");
     expect(scopeParam({ kind: "shared" }, "default")).toBe("shared");
   });

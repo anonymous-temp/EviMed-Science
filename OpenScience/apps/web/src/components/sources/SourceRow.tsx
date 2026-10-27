@@ -18,15 +18,16 @@ import { RETRYABLE, highlightParts, isReading, isUsable, kindIcon, metaLine, sta
  * so they cannot disagree.
  */
 export function sourceMenuItems(source: SourceRecord, {
-  duplicate, busy, onRetry, onShare, onDuplicates, onDelete,
+  duplicate, busy, onRetry, onShare, onDuplicates, onDelete, onAddToProject,
 }: {
   duplicate: boolean; busy: boolean;
-  onRetry: () => void; onShare: () => void; onDuplicates: () => void; onDelete: () => void;
+  onRetry: () => void; onShare: () => void; onDuplicates: () => void; onDelete: () => void; onAddToProject?: () => void;
 }): MenuEntry[] {
   const link = source.display.origin === "link";
   const items: MenuEntry[] = [
+    ...(onAddToProject ? [{ label: "添加到项目", onSelect: onAddToProject }] : []),
     ...(link || RETRYABLE.includes(source.payload.status) ? [{ label: "重新读取", onSelect: onRetry }] : []),
-    ...(source.display.shared === true ? [{ label: "改为仅本项目", onSelect: onShare }] : []),
+    ...(source.display.shared === true ? [{ label: source.personal ? "取消跨项目可用" : "改为仅本项目", onSelect: onShare }] : []),
     ...(source.display.shared === false && isUsable(source) ? [{ label: "设为所有项目可用", onSelect: onShare }] : []),
     ...(duplicate ? [{ label: "处理疑似重复", onSelect: onDuplicates }] : []),
     "separator",
@@ -46,7 +47,7 @@ export function sourceMenuItems(source: SourceRecord, {
  * document: each is the page it is on and one line around the match, with what was typed marked, and is a link that opens
  * the document at that page (`passageTo`).
  */
-export function SourceRow({ source, busy, duplicate, showShared, projectName, to, onOpen, passages = [], query = "", passageTo, selected, onSelect, onRetry, onShare, onDuplicates, onDelete }: {
+export function SourceRow({ source, busy, duplicate, showShared, projectName, to, onOpen, passages = [], query = "", passageTo, selected, onSelect, onRetry, onShare, onDuplicates, onDelete, onAddToProject }: {
   source: SourceRecord;
   busy: boolean;
   duplicate: boolean;
@@ -68,11 +69,11 @@ export function SourceRow({ source, busy, duplicate, showShared, projectName, to
   onRetry: () => void;
   onShare: () => void;
   onDuplicates: () => void;
-  onDelete: () => void;
+  onDelete: () => void; onAddToProject?: () => void;
 }) {
   const { display } = source;
   const Icon = kindIcon(display.kind);
-  const menu = sourceMenuItems(source, { duplicate, busy, onRetry, onShare, onDuplicates, onDelete });
+  const menu = sourceMenuItems(source, { duplicate, busy, onRetry, onShare, onDuplicates, onDelete, onAddToProject });
   return (
     <ListRow
       leading={onSelect ? <IconButton icon={selected ? SquareCheck : Square} size="sm" label={`选择“${display.title}”`}

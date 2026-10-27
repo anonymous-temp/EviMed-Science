@@ -14,7 +14,7 @@ import type { KnowledgePageAddress, SourceKind, SourceScope } from "./sourceClie
  * /app/files/<source id>?<the same three>&tab=<content | original>&page=<n>
  * ```
  *
- * `scope` is absent for the project the tab is in. `view=outputs` is the list of files the project's conversations delivered
+ * `scope` is absent for the complete owned library; every project has an explicit scope. `view=outputs` is the list of files the project's conversations delivered
  * (「对话产出」), which stands in the row of type filters and is not a type: when it is there `kind` is not. The document page
  * carries the list's three so that its way back
  * (「知识库」) is the list it came from, and it reads the document by its own id, wherever that document lives.
@@ -24,7 +24,7 @@ import type { KnowledgePageAddress, SourceKind, SourceScope } from "./sourceClie
 export const SHARED_SCOPE = "shared";
 
 export interface KnowledgeListState {
-  /** `shared`, a project's id, or null for the project the tab is in. */
+  /** `shared`, a project's id, or null for the complete owned library. */
   scope: string | null;
   kind: SourceKind | null;
   q: string;
@@ -51,8 +51,8 @@ const SOURCE_ID = /^[A-Za-z0-9_:.-]{1,200}$/;
 export function readListState(params: URLSearchParams): KnowledgeListState {
   const scope = (params.get("scope") ?? "").trim();
   const kind = params.get("kind") ?? "";
-  const outputs = params.get("view") === "outputs" && scope !== SHARED_SCOPE;
-  const graph = params.get("view") === "graph" && scope !== SHARED_SCOPE;
+  const outputs = params.get("view") === "outputs" && !!scope && scope !== SHARED_SCOPE;
+  const graph = params.get("view") === "graph" && !!scope && scope !== SHARED_SCOPE;
   const focus = (params.get("focus") ?? "").trim();
   const depth = Number(params.get("depth"));
   return {
@@ -137,16 +137,16 @@ export function legacySourceParam(params: URLSearchParams): string | null {
   return id && SOURCE_ID.test(id) ? id : null;
 }
 
-/** The scope a list state names, with the tab's project standing for none. */
-export function scopeOf(state: KnowledgeListState, currentProjectId: string): SourceScope {
+/** The scope a list state names, with absence naming the complete owned library. */
+export function scopeOf(state: KnowledgeListState, _currentProjectId: string): SourceScope {
   if (state.scope === SHARED_SCOPE) return { kind: "shared" };
-  return { kind: "project", projectId: state.scope ?? currentProjectId };
+  return state.scope ? { kind: "project", projectId: state.scope } : { kind: "all" };
 }
 
-/** The `scope` parameter for a scope: nothing for the tab's own project. */
-export function scopeParam(scope: SourceScope, currentProjectId: string): string | null {
+/** The `scope` parameter for a scope: every project is explicit and the owned library is the default. */
+export function scopeParam(scope: SourceScope, _currentProjectId: string): string | null {
   if (scope.kind === "shared") return SHARED_SCOPE;
-  return scope.projectId === currentProjectId ? null : scope.projectId;
+  return scope.kind === "all" ? null : scope.projectId;
 }
 
 /* ----------------------------------------------- a compiled file by place -- */

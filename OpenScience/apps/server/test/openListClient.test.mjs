@@ -178,3 +178,12 @@ test("a list's deadline covers the body, and a shorter per-call deadline is hono
   await assert.rejects(Promise.race([client.list("/tenants", { timeoutMs: 1_000 }), guard]), { code: "openlist_timeout", status: 503 });
   assert.ok(Date.now() - started < 5_000, "the per-call deadline, not the client's 60 s, bounded the call");
 });
+
+test("an account permission refusal retains only its named code", async () => {
+  const { client } = fixture([{ code: 403, message: "private path and credential", data: null }]);
+  await assert.rejects(client.list("/tenants/user-one"), (error) => {
+    assert.equal(error.code, "openlist_permission_denied");
+    assert.equal(error.message.includes("private path"), false);
+    return true;
+  });
+});

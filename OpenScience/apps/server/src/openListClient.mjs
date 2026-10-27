@@ -200,6 +200,7 @@ function refusal(parsed) {
   if (parsed?.code === 500 && message.includes("storage not found")) {
     return failure("openlist_storage_missing", "No OpenList storage is mounted at this path.", 404);
   }
+  if (parsed?.code === 403) return failure("openlist_permission_denied", "OpenList refused access to this account namespace.");
   if (parsed?.code === 401) return failure("openlist_credential_rejected", "OpenList did not accept this deployment's credential.");
   return failure("openlist_request_failed", "OpenList rejected the request.");
 }

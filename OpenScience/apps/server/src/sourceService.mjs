@@ -1,3 +1,4 @@
+import { LIBRARY_PROJECT_ID, ownedSourceProjectSql } from "./internalProjects.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -167,7 +168,7 @@ export function projectSourceManifestRecord(row) {
   // `display` is what a row says about its document (`sourceDisplayOf`), worked out here so the page computes nothing about
   // content. `shared` is the list query's own column (whether the account library holds the document), not part of the record.
   const { shared = null, ...record } = row;
-  return { ...record, readable: sourceReadable(row.payload), display: sourceDisplayOf(row, { shared }), payload: { ...payload, outputs: publicOutputs, ...(verdict ? { omissionAudit: verdict } : {}), ...(analysis ? { analysis: {
+  return { ...record, personal: row.projectId === LIBRARY_PROJECT_ID, readable: sourceReadable(row.payload), display: sourceDisplayOf(row, { shared }), payload: { ...payload, outputs: publicOutputs, ...(verdict ? { omissionAudit: verdict } : {}), ...(analysis ? { analysis: {
     generation: analysis.generation, phase: analysis.phase, schemaVersion: analysis.schemaVersion, unitCount: analysis.unitCount,
     ...(Number.isSafeInteger(analysis.pageCount) ? { pageCount: analysis.pageCount } : {}),
     run: projectRun(analysis.run),
@@ -572,9 +573,10 @@ export class SourceService {
    * to do leaves the registration exactly as it is.
    * @param {any} documents @param {any} jobs
    * `afterRemove` is told once a document is recorded as going, so what rests on it can be labelled.
-   * @param {{extractorVersion?:string,now?:()=>Date,beforeRemove?:((event:any)=>Promise<any>)|null,beforeReplace?:((event:any)=>Promise<any>)|null,afterReplace?:((event:{userId:string,projectId:string,logicalPath?:string,familyId?:string,sourceRetired?:boolean,replaced:{sourceId:string,sha256:string,version:number},by:{sourceId:string,version:number,at:string}})=>Promise<any>)|null,afterRemove?:((event:{userId:string,projectId:string,sourceId:string,source:any})=>Promise<any>)|null,report?:(code:string)=>void,evolutionSignals?:any,judgeService?:any,prepareRegistration?:((userId:string,input:any)=>Promise<any>)|null}} options */
-  constructor(documents, jobs, { extractorVersion = "evimed-analysis-1.0.0", now = () => new Date(), afterReplace = null, afterRemove = null, beforeRemove = null, beforeReplace = null, report = () => {}, evolutionSignals = null, judgeService = null, prepareRegistration = null } = {}) {
+   * @param {{measurementAccounts?:string[],extractorVersion?:string,now?:()=>Date,beforeRemove?:((event:any)=>Promise<any>)|null,beforeReplace?:((event:any)=>Promise<any>)|null,afterReplace?:((event:{userId:string,projectId:string,logicalPath?:string,familyId?:string,sourceRetired?:boolean,replaced:{sourceId:string,sha256:string,version:number},by:{sourceId:string,version:number,at:string}})=>Promise<any>)|null,afterRemove?:((event:{userId:string,projectId:string,sourceId:string,source:any})=>Promise<any>)|null,report?:(code:string)=>void,evolutionSignals?:any,judgeService?:any,prepareRegistration?:((userId:string,input:any)=>Promise<any>)|null}} options */
+  constructor(documents, jobs, { measurementAccounts = [], extractorVersion = "evimed-analysis-1.0.0", now = () => new Date(), afterReplace = null, afterRemove = null, beforeRemove = null, beforeReplace = null, report = () => {}, evolutionSignals = null, judgeService = null, prepareRegistration = null } = {}) {
     if (!documents || !jobs) throw new TypeError("SourceService requires product documents and jobs.");
+    this.measurementAccounts = measurementAccounts;
     this.judgeService = judgeService;
     this.documents = documents;
     this.jobs = jobs;
@@ -637,7 +639,8 @@ export class SourceService {
     const legacyPaths = legacy?.payload.paths ?? [];
     const unambiguousLegacy = legacy?.payload.logicalPath === logicalPath || (legacyPaths.includes(logicalPath)
       && legacyPaths.filter(entry => sourceOriginOf({ connectorType: sourceConnector.type, path: entry }) === "note").length === 1);
-    const sourceId = note && !unambiguousLegacy
+    const independentSnapshot = logicalPath.startsWith("knowledge-base/imports/");
+    const sourceId = (note && !unambiguousLegacy) || independentSnapshot
       ? sourceIdFor(projectId, digest(`${logicalPath}\0${sha256}`)) : legacyId;
     const familyId = `fam_${digest(`${projectId}\0${sourceConnector.type}\0${sourceConnector.id}\0${logicalPath}`).slice(0, 32)}`;
     return this.withRegistrationLocks([`publication:${userId}:${projectId}`, `source:${userId}:${sourceId}`, `family:${userId}:${familyId}`], async () => {
@@ -1399,9 +1402,9 @@ export class SourceService {
    * for the page and not for the chosen chip — so the chips are an inventory that does not move as one is chosen.
    * Without a database (`status` or `familyId` asked, or none is configured) it is the plain list and has no counts.
    * `bodyShas` are the documents the knowledge-base index matched the search in, beside what the document is called and says.
-   * @param {string} userId @param {{projectId?:string|null,shared?:boolean,status?:string|null,state?:string|null,kind?:string|null,q?:string|null,bodyShas?:string[],familyId?:string|null,limit?:number,cursor?:string|null}} options
+   * @param {string} userId @param {{projectId?:string|null,shared?:boolean,all?:boolean,status?:string|null,state?:string|null,kind?:string|null,q?:string|null,bodyShas?:string[],familyId?:string|null,limit?:number,cursor?:string|null}} options
    */
-  async list(userId, { projectId = null, shared = false, status = null, state = null, kind = null, q = null, bodyShas = [], familyId = null, limit = 50, cursor = null }) {
+  async list(userId, { projectId = null, shared = false, all = false, status = null, state = null, kind = null, q = null, bodyShas = [], familyId = null, limit = 50, cursor = null }) {
     const wantsState = state != null && state !== "";
     const wantsStatus = (status != null && status !== "") || (familyId != null && familyId !== "");
     if (wantsState) {
@@ -1413,13 +1416,13 @@ export class SourceService {
     const needle = q == null ? "" : String(q).trim();
     if (needle.length > 200) throw new HttpError(400, "source_payload_invalid", "The search is too long.");
     if (shared && wantsStatus) throw new HttpError(400, "source_payload_invalid", "The shared documents are not filtered by status.");
-    if (!wantsStatus) {
-      if (!shared) text(projectId, "project id", 160);
-      const bodies = [...new Set((Array.isArray(bodyShas) ? bodyShas : []).filter((sha) => typeof sha === "string" && /^[a-f0-9]{64}$/.test(sha)))].slice(0, 500);
-      return this.listPage(userId, { projectId, shared, state: wantsState ? String(state) : null, kind: wantsKind ? String(kind) : null, q: needle, bodyShas: needle ? bodies : [], limit, cursor });
-    }
     const selectedStatus = status == null || status === "" ? null : text(status, "source status", 40);
     const selectedFamily = familyId == null || familyId === "" ? null : text(familyId, "family id", 80);
+    if (!wantsStatus || all) {
+      if (!shared && !all) text(projectId, "project id", 160);
+      const bodies = [...new Set((Array.isArray(bodyShas) ? bodyShas : []).filter((sha) => typeof sha === "string" && /^[a-f0-9]{64}$/.test(sha)))].slice(0, 500);
+      return this.listPage(userId, { projectId, shared, all, status: selectedStatus, familyId: selectedFamily, state: wantsState ? String(state) : null, kind: wantsKind ? String(kind) : null, q: needle, bodyShas: needle ? bodies : [], limit, cursor });
+    }
     const page = await this.documents.list(userId, "source", {
       projectId: text(projectId, "project id", 160), limit, cursor,
       filter: { ...(selectedStatus ? { status: selectedStatus } : {}), ...(selectedFamily ? { familyId: selectedFamily } : {}) },
@@ -1430,9 +1433,9 @@ export class SourceService {
   /**
    * The database half of `list`: the scope (a project's sources, or one source per document the account library holds),
    * the filters as predicates over the record, the page with its cursor and the chip counts.
-   * @param {string} userId @param {{projectId:string|null,shared:boolean,state:string|null,kind:string|null,q:string,bodyShas?:string[],limit:number,cursor:string|null}} options
+   * @param {string} userId @param {{projectId:string|null,shared:boolean,all?:boolean,status?:string|null,familyId?:string|null,state:string|null,kind:string|null,q:string,bodyShas?:string[],limit:number,cursor:string|null}} options
    */
-  async listPage(userId, { projectId, shared, state, kind, q, bodyShas = [], limit, cursor }) {
+  async listPage(userId, { projectId, shared, all = false, status = null, familyId = null, state, kind, q, bodyShas = [], limit, cursor }) {
     const database = this.documents.database;
     if (!database) throw new HttpError(503, "source_state_unavailable", "Listing sources requires durable shared storage.");
     const bounded = productInteger(limit, 1, 100);
@@ -1463,7 +1466,9 @@ export class SourceService {
             WHERE s.user_id=${user} AND s.kind='source' AND s.deleted_at IS NULL
             ORDER BY s.payload->'fingerprint'->>'sha256', (s.id=l.payload->>'sourceId') DESC, s.created_at DESC, s.id DESC) d`
         : "evimed_product.documents d";
-      const where = ["coalesce(d.payload->'publication'->>'current','true') <> 'false'", shared ? "TRUE" : `d.user_id=${user} AND d.kind='source' AND d.deleted_at IS NULL AND d.project_id=${bind(projectId)}`];
+      const where = [shared ? "TRUE" : "coalesce(d.payload->'publication'->>'current','true') <> 'false'", shared ? "TRUE" : `d.user_id=${user} AND d.kind='source' AND d.deleted_at IS NULL ${all ? `AND ${ownedSourceProjectSql('d', this.measurementAccounts.includes(userId))}` : `AND d.project_id=${bind(projectId)}`}`];
+      if (status) where.push(`d.payload->>'status'=${bind(status)}`);
+      if (familyId) where.push(`d.payload->>'familyId'=${bind(familyId)}`);
       if (state) where.push(SOURCE_STATE_SQL[state]);
       if (q) where.push(`(${searchSql(bind(q), bodyShas.length ? bind(bodyShas) : null)})`);
       if (withKind && kind) where.push(`${KIND_SQL}=${bind(kind)}`);
@@ -1997,6 +2002,16 @@ export class SourceService {
       const updated = await client.query(`UPDATE evimed_product.documents SET payload=$3::jsonb,deleted_at=coalesce(deleted_at,clock_timestamp()),
         revision=revision+1,updated_at=clock_timestamp() WHERE user_id=$1 AND kind='source' AND id=$2 RETURNING *`, [userId, sourceId, JSON.stringify(payload)]);
       await recordRevision(client, updated.rows[0]);
+      if (current.project_id === LIBRARY_PROJECT_ID) {
+        await client.query(`WITH removed AS (UPDATE evimed_product.documents SET
+          payload=jsonb_set(payload,'{personalSourceIds}',coalesce(payload->'personalSourceIds','[]'::jsonb)-$3::text),
+          deleted_at=CASE WHEN payload->>'explicitRetention'='false'
+            AND jsonb_array_length(coalesce(payload->'personalSourceIds','[]'::jsonb)-$3::text)=0 THEN clock_timestamp() ELSE NULL END,
+          updated_at=clock_timestamp(),revision=revision+1 WHERE user_id=$1 AND kind='preferences' AND deleted_at IS NULL
+          AND id='library:'||$2::text AND payload->>'recordType'='library-item' RETURNING user_id,kind,id,revision,payload,deleted_at)
+          INSERT INTO evimed_product.revisions(user_id,kind,id,revision,payload,deleted_at) SELECT * FROM removed`,
+        [userId, current.payload.fingerprint?.sha256 ?? "", sourceId]);
+      }
       await client.query(`UPDATE evimed_product.jobs SET status='canceled',finished_at=clock_timestamp(),updated_at=clock_timestamp(),lease_token=NULL,lease_expires_at=NULL
         WHERE user_id=$1 AND kind='ingest' AND payload->>'sourceId'=$2 AND payload->>'action' IS DISTINCT FROM 'source-delete' AND status IN ('queued','running')`, [userId, sourceId]);
       // Which conversations used the document is the account's record about a document that is going: it goes with it.

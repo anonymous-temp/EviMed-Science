@@ -1,3 +1,4 @@
+import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
 import { DocumentExportActions } from "@/components/document/DocumentExportActions";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Code2, Download, Eye, ExternalLink, FileSearch, History, Loader2, X } from "lucide-react";
@@ -6,6 +7,7 @@ import { previewKindForName, type PreviewKind } from "@/lib/artifacts";
 import {
   base64ToBytes,
   downloadArtifact,
+  downloadSourceFile, readSourceFile, sourceFileUrl,
   downloadInlineArtifact,
   openArtifactExternally,
   previewUrl,
@@ -90,7 +92,9 @@ export function FilePreviewInspector({
   lead,
   embedded = false,
   page,
+  sourceFileId,
 }: {
+  sourceFileId?: string;
   data: FilePreviewInspectorT;
   onClose: () => void;
   /** Pane-level header buttons (e.g. maximize), rendered before Close. */
@@ -126,7 +130,7 @@ export function FilePreviewInspector({
   const [bytes, setBytes] = useState<ArrayBuffer | null>(null);
   // A clinical evidence matrix reads as a table, not as JSON; the JSON stays
   // one toggle away.
-  const matrixFile = isClaimMatrixPath(data.path);
+  const matrixFile = !sourceFileId && isClaimMatrixPath(data.path);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"preview" | "code">(kind === "text" && !matrixFile ? "code" : "preview");
@@ -138,7 +142,8 @@ export function FilePreviewInspector({
   const runFileAction = async () => {
     try {
       if (hostedWeb) {
-        if (data.content !== undefined) downloadInlineArtifact(data.content, data.filename);
+        if (sourceFileId) downloadSourceFile(sourceFileId, data.filename);
+        else if (data.content !== undefined) downloadInlineArtifact(data.content, data.filename);
         else await downloadArtifact(data.path, data.root, data.filename, data.projectId);
       } else {
         await openArtifactExternally(data.path, data.root);
@@ -156,13 +161,14 @@ export function FilePreviewInspector({
     // the user opens a different file, and the async loads below only fill in
     // what the NEW file needs — without this, the previous file's text/url/bytes
     // would linger and bleed into the new preview.
+    setShowHistory(false);
     setText(data.content ?? null);
     setUrl(null);
     setBytes(null);
     (async () => {
       try {
         if (needsUrl) {
-          const u = await previewUrl(data.path, data.root, data.projectId);
+          const u = sourceFileId ? sourceFileUrl(sourceFileId, "preview") : await previewUrl(data.path, data.root, data.projectId);
           if (cancelled) return;
           setUrl(u);
           // Browser dev has no local server; html can still preview inline content.
@@ -171,7 +177,7 @@ export function FilePreviewInspector({
           }
         }
         if (needsText && data.content === undefined) {
-          const f = await readArtifact(data.path, data.root, data.projectId);
+          const f = sourceFileId ? await readSourceFile(sourceFileId) : await readArtifact(data.path, data.root, data.projectId);
           if (cancelled) return;
           if (f && f.encoding === "utf8") setText(f.data);
           // The file was read but isn't text — say so instead of falling
@@ -181,7 +187,7 @@ export function FilePreviewInspector({
             setError("当前文件暂不支持在线预览。");
         }
         if (needsBytes) {
-          const f = await readArtifact(data.path, data.root, data.projectId);
+          const f = sourceFileId ? await readSourceFile(sourceFileId) : await readArtifact(data.path, data.root, data.projectId);
           if (cancelled) return;
           if (f && f.encoding === "base64") setBytes(base64ToBytes(f.data));
           else setError("当前文件暂不支持在线预览。");
@@ -195,7 +201,7 @@ export function FilePreviewInspector({
     return () => {
       cancelled = true;
     };
-  }, [data.path, data.content, data.root, data.projectId, kind, needsUrl, needsText, needsBytes]);
+  }, [data.path, data.content, data.root, data.projectId, sourceFileId, kind, needsUrl, needsText, needsBytes]);
 
   const canToggle =
     kind === "html" || kind === "markdown" || kind === "molecule" || kind === "genome" || matrixFile;
@@ -225,7 +231,7 @@ export function FilePreviewInspector({
           </div>
         )}
         <div className="flex-1" />
-        <Tooltip content="查看文件的历史版本、代码与关联对话">
+        {!sourceFileId && <Tooltip content="查看文件的历史版本、代码与关联对话">
           <button
             className={cn(showHistory ? "text-accent" : "text-text hover:opacity-60")}
             aria-label="版本记录"
@@ -234,7 +240,7 @@ export function FilePreviewInspector({
           >
             <History size={16} aria-hidden="true" />
           </button>
-        </Tooltip>
+        </Tooltip>}
         <Tooltip content={fileActionLabel} kind="label">
           <button
             className="text-text hover:opacity-60"
@@ -250,7 +256,7 @@ export function FilePreviewInspector({
         </button>
       </header>}
 
-      {!embedded && hostedWeb && data.content === undefined && (kind === "markdown" || /\.txt$/i.test(data.filename)) && (
+      {!embedded && !sourceFileId && hostedWeb && data.content === undefined && (kind === "markdown" || /\.txt$/i.test(data.filename)) && (
         <div className="shrink-0 border-b border-border px-4 py-2"><DocumentExportActions source={{ artifactId: data.path, root: data.root }} /></div>
       )}
       {!embedded && lead && <div className="shrink-0 border-b border-border px-4 py-3">{lead}</div>}
@@ -266,7 +272,7 @@ export function FilePreviewInspector({
           <PreviewError
             error={error}
             filename={data.filename}
-            path={data.path}
+            path={sourceFileId ? undefined : data.path}
             root={data.root}
             projectId={data.projectId}
             onOpenExternally={() => void runFileAction()}
@@ -278,6 +284,7 @@ export function FilePreviewInspector({
           <Suspense fallback={<ViewerFallback />}>
             <Body
               kind={kind}
+              sourceFileId={sourceFileId}
               url={url}
               text={text}
               bytes={bytes}
@@ -308,6 +315,7 @@ export function pdfFrameSource(url: string, page?: number, fitWidth = false): st
 }
 
 function Body({
+  sourceFileId,
   kind,
   url,
   text,
@@ -321,6 +329,7 @@ function Body({
   page,
   fitWidth,
 }: {
+  sourceFileId?: string;
   kind: PreviewKind;
   url: string | null;
   text: string | null;
@@ -429,6 +438,7 @@ function Body({
     );
   }
   if (kind === "markdown") {
+    if (sourceFileId && text !== null && !showCode) return <div className="p-4"><MarkdownViewer variant="document" reading={{ verified: new Map(), runId: null }}>{text}</MarkdownViewer></div>;
     if (showCode) {
       return text !== null ? (
         <div className="p-3">

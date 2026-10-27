@@ -1,3 +1,4 @@
+import { createPersonalLibraryRoutes, createPersonalLibraryWriter } from "./personalLibraryIntake.mjs";
 import {RuntimePromptStops} from './runtimePromptStops.mjs';
 import {withSessionPromptAdmission} from './runtimePromptAdmission.mjs';
 import { resolveVcrReplyStudy,vcrReplyUsesStudy } from './vcrReplyContext.mjs';
@@ -1901,7 +1902,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let knowledgePageRoutes = null;
   // A file that arrives with new bytes for one the project already held is a source change: what rests on the old
   // document is labelled and told (N15). `resultImpacts` is composed below; the hook runs only after boot.
-  const sourceService = productDocuments && productJobs ? new SourceService(productDocuments, productJobs, { evolutionSignals,
+  const sourceService = productDocuments && productJobs ? new SourceService(productDocuments, productJobs, { evolutionSignals, measurementAccounts: config.operatorUsers,
     judgeService,
     beforeRemove: event => invalidateRsiSource(event),
     beforeReplace: event => invalidateRsiSource(event),
@@ -1971,7 +1972,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // through closures: the write path and the reader are built further down this function.
   const knowledgeEntries = sourceService ? createKnowledgeBaseEntries({
     sources: sourceService,
-    write: ({ user, project, rel, buffer, meta, register }) => writeProjectUpload({ config, user, project }, { root: "base", rel, buffer, meta, register }),
+    write: (request) => personalLibraryWrite(request),
     readWeb: (url, options) => webReader.read(url, options),
     readFile: (project, rel) => readFileNoFollow(project.baseDir, resolveScopedPath(project.baseDir, rel)),
     readTimeoutMs: config.webReadTimeoutMs,
@@ -2037,6 +2038,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     },
     // 资料组成: the library counted by year and keyword, in SQL over the account's documents of the project.
     composition: productDatabase ? (userId, project) => projectComposition(productDatabase, userId, project.id) : null,
+    file: {
+      read: (user, project, rel) => commands.invoke("read_artifact", { path: rel, root: "base" }, { config, user, project }),
+      serve: (req, res, user, project, rel, download) => sendWorkspaceFile(req, res, { config, user, project }, rel, download, "base"),
+    },
     maxJsonBytes: config.maxJsonBytes });
   // One intake for every way a file reaches `knowledge-base/`: the upload
   // route and the upload command both register what they wrote. The web page
@@ -2330,6 +2335,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const library = createLibrary({ config, store, documents: productDocuments, sources: sourceService, capsules: capsuleService,
     kbIndex, report: (code) => process.stderr.write(`personal library: ${code}\n`) });
   libraryService = library.service;
+  const personalLibraryWrite = createPersonalLibraryWriter({ sources: sourceService, library: () => libraryService,
+    write: ({ user, project, rel, buffer, meta, register }) => writeProjectUpload({ config, user, project }, { root: "base", rel, buffer, meta, register }) });
+  const personalLibraryRoutes = createPersonalLibraryRoutes({ store, sources: sourceService, knowledge: knowledgeEntries,
+    write: personalLibraryWrite, readFile: (project, rel) => readFileNoFollow(project.baseDir, resolveScopedPath(project.baseDir, rel)),
+    maxJsonBytes: config.maxJsonBytes, maxFileBytes: config.maxFileBytes, internalProject: (user, id) => isInternalProjectOf(config, user.id, id) });
   // The one entity vocabulary (entityVocabulary.mjs, plan §4.2): the frontier's glossary and entity keys, read by
   // the pipeline, the evidence zones, autopilot agendas, GEO products and VCR studies. It follows the frontier
   // module: off, every answer is empty and no table is read.
@@ -7058,6 +7068,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (evolution && await evolution.routes(req, res)) return;
       if (await sourceRoutes(req, res)) return;
       if (knowledgePageRoutes && await knowledgePageRoutes(req, res)) return;
+      if (await personalLibraryRoutes(req, res)) return;
       if (await library.routes(req, res)) return;
       if (await autopilotRoutes(req, res)) return;
       if (await evidenceTopicRequestRoutes(req, res)) return;
@@ -9917,9 +9928,9 @@ function splitTarPath(tarPath) {
   throw new HttpError(400, "project_export_path_too_long", "Project export contains a path too long for the tar format.");
 }
 
-async function sendWorkspaceFile(req, res, ctx, rel, download) {
+async function sendWorkspaceFile(req, res, ctx, rel, download, forcedRoot = null) {
   const url = new URL(req.url ?? "/", apiBaseFromRequest(req, ctx.config));
-  const root = normalizeRoot(url.searchParams.get("root"));
+  const root = forcedRoot ?? normalizeRoot(url.searchParams.get("root"));
   const base = root === "base" ? ctx.project.baseDir : ctx.project.workspaceDir;
   const full = resolveScopedPath(base, rel);
   let opened;

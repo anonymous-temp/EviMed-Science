@@ -316,8 +316,8 @@ export class LibraryService {
       ? this.sources.withRegistrationLocks([`library:${userId}`], work) : work();
   }
 
-  /** @param {string} userId @param {unknown} sourceId */
-  async addCurrent(userId, sourceId) {
+  /** @param {string} userId @param {unknown} sourceId @param {{personal?:boolean}} [options] */
+  async addCurrent(userId, sourceId, { personal = false } = {}) {
     const source = await this.documents.get(userId, "source", librarySourceId(sourceId));
     if (!source) throw new HttpError(404, "library_source_invalid", "The source is unavailable.");
     // A knowledge page quotes the documents of its own project; in another project those documents are not there to check it against.
@@ -334,7 +334,7 @@ export class LibraryService {
         throw new HttpError(409, "library_full", `The personal library holds at most ${this.maxItems} documents.`);
       }
       const payload = {
-        recordType: LIBRARY_RECORD_TYPE, sourceId: source.id, sha256, addedAt: this.now().toISOString(),
+        recordType: LIBRARY_RECORD_TYPE, explicitRetention: !personal, personalSourceIds: personal ? [source.id] : [], sourceId: source.id, sha256, addedAt: this.now().toISOString(),
         source: { id: source.id, projectId: source.projectId }, snapshot: describeLibrarySource(source), copy: null,
         // A document removed and added back keeps what it already published,
         // so publishing it again adds nothing twice.
@@ -356,6 +356,12 @@ export class LibraryService {
         if (!record) throw error;
       }
     }
+    if (!created && (personal || record.payload.explicitRetention === false)) {
+      record = await this.documents.put(userId, RECORD_KIND, id, { ...record.payload,
+        explicitRetention: personal ? record.payload.explicitRetention !== false : true,
+        personalSourceIds: personal ? [...new Set([...(record.payload.personalSourceIds ?? []), source.id])] : record.payload.personalSourceIds ?? [],
+      }, { expectedRevision: record.revision });
+    }
     // Resolved among every live copy, so adding a document again from another
     // project leaves the entry reading the copy it already reads.
     const candidates = (await this.#liveSources(userId, [sha256])).get(sha256) ?? [source];
@@ -372,13 +378,26 @@ export class LibraryService {
       ? this.sources.withRegistrationLocks([`library:${userId}`], work) : work();
   }
 
-  /** @param {string} userId @param {unknown} sourceId */
-  async removeCurrent(userId, sourceId) {
+  /** @param {string} userId @param {unknown} sourceId @param {{personal?:boolean}} [options] */
+  async removeCurrent(userId, sourceId, { personal = false } = {}) {
     const record = await this.#requireEntry(userId, sourceId);
+    if (personal) {
+      const remaining = (record.payload.personalSourceIds ?? []).filter(id => id !== sourceId);
+      if (record.payload.explicitRetention !== false || remaining.length) {
+        await this.documents.put(userId, RECORD_KIND, record.id, { ...record.payload, personalSourceIds: remaining }, { expectedRevision: record.revision });
+        return { sourceId, removed: false };
+      }
+    } else {
+      record.payload.explicitUnshared = true;
+      const saved = await this.documents.put(userId, RECORD_KIND, record.id, record.payload, { expectedRevision: record.revision });
+      record.revision = saved.revision;
+    }
     await this.documents.remove(userId, RECORD_KIND, record.id, record.revision);
     this.counters.removed += 1;
     // A copy that could not be deleted now goes with the next convergence pass.
-    await this.#removeCopy(userId, record.payload.sourceId).catch((error) => this.#failed(error));
+    const removeCopy = () => this.#removeCopy(userId, record.payload.sourceId).catch((error) => this.#failed(error));
+    if (this.sources.afterPublication) await this.sources.afterPublication(removeCopy);
+    else await removeCopy();
     return { sourceId: record.payload.sourceId, removed: true };
   }
 

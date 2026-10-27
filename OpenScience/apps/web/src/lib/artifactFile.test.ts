@@ -1,15 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const apiMocks = vi.hoisted(() => ({
+  request: vi.fn(),
   invokeCommand: vi.fn(),
   webFileDownloadUrl: vi.fn(),
 }));
 
 vi.mock("./apiClient", () => ({
-  hasWebApi: true,
+  hasWebApi: true, webApiBase: "https://science.example/api",
   invokeCommand: apiMocks.invokeCommand,
   webFileDownloadUrl: apiMocks.webFileDownloadUrl,
 }));
+
+vi.mock("./productClient", () => ({ productRequest: apiMocks.request }));
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -59,4 +62,14 @@ describe("artifactFile", () => {
     await downloadArtifact("knowledge-base/a.pdf", "base", "a.pdf", "paper2");
     expect(apiMocks.webFileDownloadUrl).toHaveBeenLastCalledWith("knowledge-base/a.pdf", "base", "paper2");
   });
+});
+
+it("reads and downloads a personal original through the source identity only", async () => {
+ const { readSourceFile, sourceFileUrl, downloadSourceFile } = await import("./artifactFile");
+ apiMocks.request.mockResolvedValue({ encoding: "utf8", data: "text" });
+ await readSourceFile("src_one");
+ expect(apiMocks.request).toHaveBeenCalledWith("/sources/src_one/file?mode=read");
+ expect(sourceFileUrl("src_one", "preview")).toBe("https://science.example/api/sources/src_one/file?mode=preview");
+ const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function(this: HTMLAnchorElement) { expect(this.href).toBe("https://science.example/api/sources/src_one/file?mode=download"); expect(this.download).toBe("paper.pdf"); });
+ downloadSourceFile("src_one", "paper.pdf"); expect(click).toHaveBeenCalledOnce();
 });

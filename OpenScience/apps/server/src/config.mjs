@@ -3488,6 +3488,8 @@ export function loadConfig(overrides = {}) {
     // asking for four more; a gate of ours, and the account's own caps already bound the cost). The caps count what this account's compile tasks used, as the engine
     // reports it when each ends (CNY; 0 = no cap): a round is not started past them, and a task is asked to stop after
     // `knowledgePagesTaskTimeoutMs`. `knowledgeGraphEnabled` off compiles the wiki only.
+    // Explicit operator opt-in: ordinary projects compile only their own inputs.
+    knowledgePagesIncludeLibrary: overrides.knowledgePagesIncludeLibrary ?? boolEnv("OPEN_SCIENCE_KNOWLEDGE_PAGES_INCLUDE_LIBRARY", false),
     knowledgePagesMinSources: Math.max(1, Math.min(200, Math.trunc(Number(overrides.knowledgePagesMinSources ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_MIN_SOURCES ?? 1)) || 1)),
     knowledgePagesDebounceMs: Math.max(0, Math.min(86_400_000, Math.trunc(Number(overrides.knowledgePagesDebounceMs ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_DEBOUNCE_MS ?? 600_000)) || 0)),
     knowledgePagesDailyLimitCny: Number(overrides.knowledgePagesDailyLimitCny ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_DAILY_LIMIT_CNY ?? 10),

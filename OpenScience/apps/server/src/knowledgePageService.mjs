@@ -8,6 +8,7 @@ import { knowledgeDigest, knowledgeGenerationRoots, knowledgeOutputPath, readKno
 import { compileIdempotencyKey } from "./openVikingResources.mjs";
 import { isCompiledPage } from "./openVikingSourceSync.mjs";
 import { HttpError } from "./security.mjs";
+import { LIBRARY_PROJECT_ID } from "./internalProjects.mjs";
 import { projectSourceManifestRecord, sourceIndexDocument, sourceReadable } from "./sourceService.mjs";
 
 /**
@@ -266,7 +267,7 @@ export class KnowledgePageService {
    * @param {string} userId @param {string} projectId @param {string} sourceId
    */
   async noteSourceReady(userId, projectId, sourceId, { strict = false } = {}) {
-    if (!this.enabled) return;
+    if (!this.enabled || projectId === LIBRARY_PROJECT_ID) return;
     try {
       const source = await this.sources.get(userId, sourceId);
       if (!source || source.projectId !== projectId || KnowledgePageService.isPage(source)) return;
@@ -389,6 +390,7 @@ export class KnowledgePageService {
    * @param {string} userId @param {string} projectId @param {{ immediate?: boolean }} [options]
    */
   async schedule(userId, projectId, { immediate = false } = {}) {
+    if (projectId === LIBRARY_PROJECT_ID) return null;
     if (!this.enabled) return null;
     const { value } = await this.#state(userId, projectId);
     const wait = immediate ? 0 : this.config.knowledgePagesDebounceMs;
@@ -406,6 +408,7 @@ export class KnowledgePageService {
    * @param {string} userId @param {string} projectId @param {{ language?: string | null }} [options]
    */
   async requestRound(userId, projectId, { language = null } = {}) {
+    if (projectId === LIBRARY_PROJECT_ID) throw new HttpError(400, "knowledge_storage_project", "Personal storage cannot be compiled.");
     if (!this.enabled) return null;
     await this.#updateState(userId, projectId, (value) => {
       value.pending.manual = "added";
@@ -429,6 +432,7 @@ export class KnowledgePageService {
    * @returns {Promise<"scheduled" | "waiting" | "skipped">} `waiting`: a round is already queued or running for it
    */
   async catchUp(userId, projectId) {
+    if (projectId === LIBRARY_PROJECT_ID) return "skipped";
     if (!this.enabled) return "skipped";
     const { value } = await this.#state(userId, projectId);
     const context = await this.#knowledgeContext(userId, projectId);
@@ -845,7 +849,7 @@ export class KnowledgePageService {
     const roots = this.resources.roots(user.id, project.id);
     const from = tree === "wiki" ? [roots.sources] : [roots.sources];
     // The account's library is a compile source beside the project's own documents, when it holds any.
-    if (tree === "wiki" && this.config.knowledgePagesIncludeLibrary !== false) {
+    if (tree === "wiki" && this.config.knowledgePagesIncludeLibrary === true) {
       const library = await this.resources.listSources(user.id, roots.library).catch(() => []);
       if (library.length) from.push(roots.library);
     }
@@ -868,6 +872,7 @@ export class KnowledgePageService {
   async runJob(job) {
     const userId = job.userId;
     const projectId = String(job.payload?.projectId ?? job.projectId ?? "");
+    if (projectId === LIBRARY_PROJECT_ID) return { result: { skipped: "storage_project" } };
     if (!this.enabled) return { result: { skipped: "disabled" } };
     const { value: state } = await this.#state(userId, projectId);
     if (Number(job.payload?.round) !== state.round) return { result: { skipped: "round_superseded" } };
@@ -905,7 +910,8 @@ export class KnowledgePageService {
       if (this.sourceSync) {
         try {
           const projectSync = await this.sourceSync.reconcileProject(userId, projectId);
-          const librarySync = await this.sourceSync.reconcileLibrary(userId);
+          const librarySync = this.config.knowledgePagesIncludeLibrary === true
+            ? await this.sourceSync.reconcileLibrary(userId) : { failed: [] };
           if (projectSync.failed.length || librarySync.failed.length) return defer("knowledge_source_sync_pending", 30_000);
           const verified = await this.sourceSync.reconcileProject(userId, projectId, { apply: false });
           if (verified.missing.length || verified.stale.length || verified.extra.length) return defer("knowledge_source_sync_pending", 30_000);
@@ -1479,6 +1485,7 @@ export class KnowledgePageService {
    */
   async recordFailure(job, code) {
     const projectId = String(job.payload?.projectId ?? job.projectId ?? "");
+    if (projectId === LIBRARY_PROJECT_ID) return;
     if (!projectId) return;
     const { value } = await this.#state(job.userId, projectId).catch(() => ({ value: null }));
     if (value?.run?.generationId && value.round !== Number(job.payload?.round)) return;

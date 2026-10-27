@@ -17,7 +17,7 @@ import { SourcesPage } from "./SourcesPage";
 const mocks = vi.hoisted(() => ({
   listSources: vi.fn(), retrySource: vi.fn(), removeSource: vi.fn(), refetchSource: vi.fn(),
   addSourceLink: vi.fn(), addSourceNote: vi.fn(), getSourceNote: vi.fn(), saveSourceNote: vi.fn(),
-  getSourceUnderstanding: vi.fn(),
+  getSourceUnderstanding: vi.fn(), getOpenListStatus: vi.fn(), uploadPersonalFile: vi.fn(),
   browseOpenList: vi.fn(), importOpenListSource: vi.fn(), listSourceFolders: vi.fn(), registerSourceFolder: vi.fn(), syncSourceFolder: vi.fn(), setSourceFolderStatus: vi.fn(),
   listDuplicateCandidates: vi.fn(), decideDuplicateGroup: vi.fn(), addToLibrary: vi.fn(), removeFromLibrary: vi.fn(),
   pickFiles: vi.fn(), uploadFilesToWorkspace: vi.fn(), downloadArtifact: vi.fn(), downloadKnowledgeVault: vi.fn(), listProjectOutputs: vi.fn(), getSourceComposition: vi.fn(),
@@ -29,7 +29,7 @@ const context = vi.hoisted(() => ({ projectId: "default", features: { openList: 
 // Only the request functions are replaced. `sourceFailureMessage` is a pure projection over the one error dictionary,
 // and a test that stubbed it would prove the page renders a string this file wrote rather than the registry's.
 vi.mock("@/lib/sourceClient", async (importOriginal) => ({ ...(await importOriginal<object>()), ...Object.fromEntries(
-  ["listSources", "retrySource", "removeSource", "refetchSource", "addSourceLink", "addSourceNote", "getSourceNote", "saveSourceNote", "getSourceUnderstanding",
+  ["getOpenListStatus", "uploadPersonalFile", "listSources", "retrySource", "removeSource", "refetchSource", "addSourceLink", "addSourceNote", "getSourceNote", "saveSourceNote", "getSourceUnderstanding",
     "browseOpenList", "importOpenListSource", "listSourceFolders", "registerSourceFolder", "syncSourceFolder", "setSourceFolderStatus",
     "listDuplicateCandidates", "decideDuplicateGroup", "addToLibrary", "removeFromLibrary", "requestKnowledgeCompile",
     "getKnowledgeStatus", "getKnowledgeTree", "getKnowledgeGraph"].map((name) => [name, (mocks as Record<string, unknown>)[name]])) }));
@@ -117,7 +117,7 @@ function Probe() {
   const how = useNavigationType();
   return <p data-testid="location" data-how={how} data-search={location.search} data-state={JSON.stringify(location.state ?? null)}>{location.pathname}</p>;
 }
-function renderPage(entry = "/app/files") {
+function renderPage(entry = "/app/files?scope=default") {
   return render(<MemoryRouter initialEntries={[entry]}><SourcesPage /><Probe /></MemoryRouter>);
 }
 /** The address the page is at: its path and its query. */
@@ -156,6 +156,8 @@ describe("知识库", () => {
     mocks.saveSourceNote.mockResolvedValue({ source: { ...note, id: "src_note_2" }, duplicate: false, changed: true });
     mocks.pickFiles.mockResolvedValue([]);
     mocks.uploadFilesToWorkspace.mockResolvedValue([]);
+    mocks.getOpenListStatus.mockResolvedValue({ state: "ready" });
+    mocks.uploadPersonalFile.mockResolvedValue({ source: { ...guideline, personal: true, projectId: "evimed-library" } });
     mocks.browseOpenList.mockResolvedValue({ entries: [], nextCursor: null });
     mocks.listSourceFolders.mockResolvedValue({ items: [], nextCursor: null });
     mocks.downloadArtifact.mockResolvedValue(undefined);
@@ -164,6 +166,59 @@ describe("知识库", () => {
     mocks.getSourceComposition.mockResolvedValue({ total: 0, dated: 0, keyworded: 0, years: [], keywords: [] });
   });
   afterEach(() => { vi.useRealTimers(); });
+
+  it("defaults to all owned material without asking a project to compile", async () => {
+    renderPage("/app/files");
+    expect(await screen.findByRole("button", { name: "范围：我的资料" })).toBeInTheDocument();
+    await waitFor(() => expect(mocks.listSources).toHaveBeenCalledWith({ kind: "all" }, { q: "", limit: 50 }));
+    expect(mocks.getKnowledgeStatus).not.toHaveBeenCalled(); expect(mocks.getKnowledgeGraph).not.toHaveBeenCalled();
+    expect(screen.queryByRole("tab", { name: /知识页/ })).toBeNull();
+  });
+  it("keeps individual personal upload successes when another file is refused", async () => {
+    mocks.uploadPersonalFile.mockResolvedValueOnce({ source: { ...guideline, personal: true, display: { ...guideline.display, shared: true } } }).mockRejectedValueOnce(new Error("too large"));
+    renderPage("/app/files");
+    await userEvent.click(await screen.findByRole("button", { name: "添加" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "上传文件" }));
+    expect(screen.getByRole("combobox", { name: "保存位置" })).toHaveValue("个人资料");
+    expect(screen.getByRole("combobox", { name: "保存位置" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByLabelText(/选择资料文件/, { selector: "input" })).toHaveFocus();
+    expect(screen.getByText(/个人资料可在自己的项目中使用；添加到项目会保存独立版本。循证 GEO 仍按项目资料权限使用。/)).toBeInTheDocument();
+    await userEvent.upload(screen.getByLabelText(/选择资料文件/, { selector: "input" }), [new File(["x"], "one.pdf"), new File(["x"], "two.pdf")]);
+    await waitFor(() => expect(mocks.uploadPersonalFile).toHaveBeenCalledTimes(2));
+    expect(mocks.uploadFilesToWorkspace).not.toHaveBeenCalled();
+    expect(await screen.findByText(/^two.pdf：失败/)).toBeInTheDocument();
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("已上传 1 个文件");
+  });
+
+  it.each([
+    ["/app/files", "个人资料"], ["/app/files?scope=shared", "个人资料"], ["/app/files?scope=paper-1", "疳证 Meta 文献检索"],
+  ])("opens the upload form from an unavailable drive with the current scope destination: %s", async (address, destination) => {
+    mocks.getOpenListStatus.mockResolvedValue({ state: "unconfigured" });
+    renderPage(address);
+    await userEvent.click(await screen.findByRole("button", { name: "添加" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "从网盘导入" }));
+    const drive = await screen.findByRole("dialog", { name: "从网盘导入" });
+    await userEvent.click(await within(drive).findByRole("button", { name: "上传文件" }));
+    const upload = await screen.findByRole("dialog", { name: "上传资料" });
+    expect(screen.queryByRole("dialog", { name: "从网盘导入" })).toBeNull();
+    expect(within(upload).getByRole("combobox", { name: "保存位置" })).toHaveValue(destination);
+    expect(within(upload).getByRole("combobox", { name: "保存位置" })).toHaveAttribute("aria-expanded", "false");
+    expect(within(upload).getByLabelText(/选择资料文件/, { selector: "input" })).toHaveFocus();
+    expect(mocks.pickFiles).not.toHaveBeenCalled(); expect(mocks.uploadFilesToWorkspace).not.toHaveBeenCalled(); expect(mocks.uploadPersonalFile).not.toHaveBeenCalled();
+  });
+
+  it("keeps the upload picker focused and handles its first click without moving the destination field", async () => {
+    renderPage("/app/files");
+    await userEvent.click(await screen.findByRole("button", { name: "添加" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "上传文件" }));
+    const picker = screen.getByLabelText(/选择资料文件/, { selector: "input" });
+    const destination = screen.getByRole("combobox", { name: "保存位置" });
+    expect(picker).toHaveFocus(); expect(destination).toHaveAttribute("aria-expanded", "false");
+    const clicked = vi.fn(); picker.addEventListener("click", clicked);
+    await userEvent.click(picker);
+    expect(clicked).toHaveBeenCalledOnce(); expect(destination).toHaveAttribute("aria-expanded", "false");
+    expect(mocks.uploadPersonalFile).not.toHaveBeenCalled();
+  });
 
   // 2026-10-07 plan §2.3, mockup k01: the title, the scope, a search and one primary action; one row of chips; one list.
   describe("the page", () => {
@@ -273,7 +328,7 @@ describe("知识库", () => {
       cleanup();
       mocks.listSources.mockReset();
       mocks.listSources.mockResolvedValue(listing([]));
-      renderPage("/app/files?q=没有这个");
+      renderPage("/app/files?scope=default&q=没有这个");
       expect(await screen.findByText("没有找到相关资料")).toBeInTheDocument();
       expect(screen.getAllByRole("button", { name: "添加" })).toHaveLength(1);
       expect(within(screen.getByRole("heading", { level: 1, name: "知识库" }).closest("header")!).getByRole("button", { name: "添加" })).toBeInTheDocument();
@@ -281,7 +336,7 @@ describe("知识库", () => {
       mocks.listSources.mockImplementation(async (scope) => scope.kind === "shared" ? listing([]) : listing([guideline]));
       renderPage();
       await userEvent.click(await screen.findByRole("button", { name: "范围：我的研究" }));
-      await userEvent.click(await screen.findByRole("menuitemradio", { name: "所有项目共享" }));
+      await userEvent.click(await screen.findByRole("menuitemradio", { name: "跨项目可用" }));
       expect(await screen.findByText("还没有资料设为所有项目可用。")).toBeInTheDocument();
       expect(within(screen.getByRole("heading", { level: 1, name: "知识库" }).closest("header")!).getByRole("button", { name: "添加" })).toBeInTheDocument();
     });
@@ -368,10 +423,10 @@ describe("知识库", () => {
     it("has four things in its menu: read again, share (or not), settle a duplicate, delete — and not the pipeline's", async () => {
       renderPage();
       await menuOf(sheet.display.title);
-      expect((await screen.findAllByRole("menuitem")).map((item) => item.textContent)).toEqual(["重新读取", "改为仅本项目", "删除"]);
+      expect((await screen.findAllByRole("menuitem")).map((item) => item.textContent)).toEqual(["添加到项目", "重新读取", "改为仅本项目", "删除"]);
       await userEvent.keyboard("{Escape}");
       await menuOf(guideline.display.title);
-      expect((await screen.findAllByRole("menuitem")).map((item) => item.textContent)).toEqual(["重新读取", "设为所有项目可用", "删除"]);
+      expect((await screen.findAllByRole("menuitem")).map((item) => item.textContent)).toEqual(["添加到项目", "重新读取", "设为所有项目可用", "删除"]);
       for (const removed of ["调整分析", "查看理解", "取消读取", "所有项目可用"]) expect(screen.queryByRole("menuitem", { name: removed === "所有项目可用" ? "所有项目可用" : removed })).not.toBeInTheDocument();
     });
 
@@ -518,7 +573,7 @@ describe("知识库", () => {
       mocks.getKnowledgeStatus.mockResolvedValue({ ...statusCompiled, state: "below_threshold", readable: 1, minSources: 3, pages: 0 });
       mocks.getKnowledgeTree.mockResolvedValue({ pages: [], counts: { wiki: 0, kg: 0 } });
       mocks.pickFiles.mockResolvedValue([]);
-      renderPage("/app/files?kind=wiki");
+      renderPage("/app/files?scope=default&kind=wiki");
       expect(await screen.findByText("还没有知识页")).toBeInTheDocument();
       const recipe = document.querySelector("[data-step-state='empty']")!;
       expect(recipe).toHaveTextContent("用 你的 1 份资料（还差 2 份）");
@@ -530,7 +585,7 @@ describe("知识库", () => {
       await waitFor(() => expect(mocks.pickFiles).toHaveBeenCalled());
       // 「你的 1 份资料」 is the way to them.
       await userEvent.click(within(recipe as HTMLElement).getByRole("button", { name: /^你的 1 份资料/ }));
-      await waitFor(() => expect(addressOf()).toBe("/app/files"));
+      await waitFor(() => expect(addressOf()).toBe("/app/files?scope=default"));
     });
 
     it("offers no tabs, no dot and no 重新整理 where the deployment compiles no pages", async () => {
@@ -546,19 +601,19 @@ describe("知识库", () => {
     it("browses the compiled files as a tree by type on the 知识页 tab, each opening in the reader, and falls back to the list where the tree cannot be read", async () => {
       context.features = { knowledgePages: true };
       mocks.listSources.mockResolvedValue({ ...listing([guideline]), counts: counts({ all: 3, literature: 1, wiki: 2 }) });
-      renderPage("/app/files?kind=wiki");
+      renderPage("/app/files?scope=default&kind=wiki");
       const tabs = await screen.findByRole("tablist", { name: "知识库" });
       expect(within(tabs).getByRole("tab", { name: /^知识页/ })).toHaveAttribute("aria-selected", "true");
       expect(await screen.findByText("概念")).toBeInTheDocument();
       const opener = (await screen.findAllByRole("link", { name: "盘点差异率" }))[0]!;
-      expect(opener).toHaveAttribute("href", expect.stringMatching(/^\/app\/files\/src_[a-f0-9]{32}\?kind=wiki$/));
+      expect(opener).toHaveAttribute("href", expect.stringMatching(/^\/app\/files\/src_[a-f0-9]{32}\?scope=default&kind=wiki$/));
       expect(screen.getAllByText("来源已更改").length).toBeGreaterThanOrEqual(3);
       // The toolbar over the tree is the search and the count of pages — no types, which belong to documents.
       expect(screen.queryByRole("group", { name: "资料类型" })).toBeNull();
       expect(screen.getByRole("searchbox", { name: "搜索资料和内容" })).toBeInTheDocument();
       cleanup();
       mocks.getKnowledgeTree.mockRejectedValue(new Error("down"));
-      renderPage("/app/files?kind=wiki");
+      renderPage("/app/files?scope=default&kind=wiki");
       expect(await screen.findByText(/知识页的目录暂时没能读取/)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
       expect(screen.getByText(guideline.display.title)).toBeInTheDocument();
@@ -567,9 +622,9 @@ describe("知识库", () => {
     it("switches to the graph tab, whose kind of graph is the first chip group of the same toolbar, and keeps that in the address", async () => {
       context.features = { knowledgePages: true };
       mocks.listSources.mockResolvedValue({ ...listing([guideline]), counts: counts({ all: 3, literature: 1, wiki: 2 }) });
-      renderPage("/app/files?kind=wiki");
+      renderPage("/app/files?scope=default&kind=wiki");
       await userEvent.click(await screen.findByRole("tab", { name: "图谱" }));
-      await waitFor(() => expect(addressOf()).toBe("/app/files?kind=wiki&view=graph"));
+      await waitFor(() => expect(addressOf()).toBe("/app/files?scope=default&kind=wiki&view=graph"));
       await waitFor(() => expect(mocks.getKnowledgeGraph).toHaveBeenCalledWith("default", "wiki"));
       const toolbar = document.querySelector("[data-toolbar]")!;
       expect(document.querySelectorAll("[data-toolbar]")).toHaveLength(1);
@@ -577,17 +632,17 @@ describe("知识库", () => {
       expect(document.querySelector("[data-page-chrome]")).toContainElement(screen.getByRole("tablist", { name: "知识库" }));
       expect(screen.queryByRole("tablist", { name: "知识页的视图" })).toBeNull();
       await userEvent.click(await screen.findByRole("button", { name: "实体和关系" }));
-      await waitFor(() => expect(addressOf()).toBe("/app/files?kind=wiki&view=graph&graph=kg"));
+      await waitFor(() => expect(addressOf()).toBe("/app/files?scope=default&kind=wiki&view=graph&graph=kg"));
       await waitFor(() => expect(mocks.getKnowledgeGraph).toHaveBeenCalledWith("default", "kg"));
       // The graph is also a list, and a mark of it opens its file in the reader.
       const row = await screen.findByRole("link", { name: "2014 年《柳叶刀》新型口服抗凝药荟萃分析" });
-      expect(row).toHaveAttribute("href", "/app/files/src_c52267a68a26fb6c418a9e7a990cc89a?kind=wiki&view=graph&graph=kg");
+      expect(row).toHaveAttribute("href", "/app/files/src_c52267a68a26fb6c418a9e7a990cc89a?scope=default&kind=wiki&view=graph&graph=kg");
     });
 
     it("keeps old addresses working: the 知识页 type is the 知识页 tab, its graph view is the 图谱 tab, anything else is 资料", async () => {
       context.features = { knowledgePages: true };
       mocks.listSources.mockResolvedValue({ ...listing([guideline]), counts: counts({ all: 3, literature: 1, wiki: 2 }) });
-      for (const [address, name] of [["/app/files?kind=wiki", "知识页"], ["/app/files?kind=wiki&view=graph", "图谱"], ["/app/files?kind=wiki&view=graph&graph=kg", "图谱"], ["/app/files?kind=literature", "资料"], ["/app/files", "资料"]] as const) {
+      for (const [address, name] of [["/app/files?scope=default&kind=wiki", "知识页"], ["/app/files?scope=default&kind=wiki&view=graph", "图谱"], ["/app/files?scope=default&kind=wiki&view=graph&graph=kg", "图谱"], ["/app/files?scope=default&kind=literature", "资料"], ["/app/files?scope=default", "资料"]] as const) {
         renderPage(address);
         const tabs = await screen.findByRole("tablist", { name: "知识库" });
         expect(within(tabs).getByRole("tab", { name: new RegExp(`^${name}`, "u") })).toHaveAttribute("aria-selected", "true");
@@ -652,7 +707,7 @@ describe("知识库", () => {
       await waitFor(() => expect(within(menu).getByText("虚拟临床研究")).toBeInTheDocument());
       expect(within(menu).getByText("我的项目")).toBeInTheDocument();
       expect(within(menu).getByText("循证 GEO")).toBeInTheDocument();
-      expect(within(menu).getAllByRole("menuitemradio").map((item) => item.textContent)).toEqual(["我的研究", "疳证 Meta 文献检索", "二甲双胍外部对照研究", "波立维", "所有项目共享"]);
+      expect(within(menu).getAllByRole("menuitemradio").map((item) => item.textContent)).toEqual(["我的资料", "我的研究", "疳证 Meta 文献检索", "二甲双胍外部对照研究", "波立维", "跨项目可用"]);
       expect(within(menu).getByRole("menuitemradio", { name: "我的研究" })).toHaveAttribute("aria-checked", "true");
     });
 
@@ -670,7 +725,7 @@ describe("知识库", () => {
       mocks.listSources.mockImplementation(async (scope) => scope.kind === "shared" ? listing([{ ...sheet, projectId: "paper-1" }]) : listing([guideline]));
       renderPage();
       await userEvent.click(await screen.findByRole("button", { name: "范围：我的研究" }));
-      await userEvent.click(await screen.findByRole("menuitemradio", { name: "所有项目共享" }));
+      await userEvent.click(await screen.findByRole("menuitemradio", { name: "跨项目可用" }));
       const row = await screen.findByText("疳证纳入研究提取表.xlsx").then((node) => node.closest("li") as HTMLElement);
       expect(within(row).getByText("数据表 · 47 KB · 对话产出 · 疳证 Meta 文献检索")).toBeInTheDocument();
       expect(mocks.listSources).toHaveBeenLastCalledWith({ kind: "shared" }, { q: "", limit: 50 });
@@ -682,13 +737,13 @@ describe("知识库", () => {
       mocks.listSources.mockImplementation(async (scope) => scope.kind === "shared" ? listing([]) : listing([guideline]));
       renderPage();
       await userEvent.click(await screen.findByRole("button", { name: "范围：我的研究" }));
-      await userEvent.click(await screen.findByRole("menuitemradio", { name: "所有项目共享" }));
+      await userEvent.click(await screen.findByRole("menuitemradio", { name: "跨项目可用" }));
       expect(await screen.findByText("还没有资料设为所有项目可用。")).toBeInTheDocument();
       expect(screen.getByText("在项目的资料里，用资料的“⋯”菜单选“设为所有项目可用”。")).toBeInTheDocument();
       // Where the sentence points is one press away.
       await userEvent.click(screen.getByRole("button", { name: "回到项目的资料" }));
       expect(await screen.findByText(guideline.display.title)).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "范围：我的研究" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "范围：我的资料" })).toBeInTheDocument();
     });
   });
 
@@ -702,11 +757,11 @@ describe("知识库", () => {
     it.each([
       ["no storage is mounted", { openList: false }],
       ["the control plane sends no features", undefined],
-    ])("offers no drive when %s", async (_case, features) => {
+    ])("keeps the drive entry when %s", async (_case, features) => {
       context.features = features;
       renderPage();
       await userEvent.click(await screen.findByRole("button", { name: "添加" }));
-      expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["上传文件", "添加网页链接", "新建笔记"]);
+      expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["上传文件", "添加网页链接", "新建笔记", "从网盘导入"]);
     });
 
     it("uploads into the project the page lists whatever each file is, refuses none by its name, and reads what it uploaded", async () => {
@@ -753,9 +808,11 @@ describe("知识库", () => {
       mocks.uploadFilesToWorkspace.mockResolvedValue(["knowledge-base/a.pdf"]);
       renderPage();
       await userEvent.click(await screen.findByRole("button", { name: "范围：我的研究" }));
-      await userEvent.click(await screen.findByRole("menuitemradio", { name: "所有项目共享" }));
+      await userEvent.click(await screen.findByRole("menuitemradio", { name: "跨项目可用" }));
       await userEvent.click(await screen.findByRole("button", { name: "添加" }));
       await userEvent.click(await screen.findByRole("menuitem", { name: "上传文件" }));
+      await userEvent.click(screen.getByRole("combobox", { name: "保存位置" }));
+      await userEvent.click(screen.getByRole("button", { name: "我的研究" }));
       await userEvent.upload(screen.getByLabelText(/选择资料文件/, { selector: "input" }), new File(["x"], "a.pdf"));
       await waitFor(() => expect(mocks.uploadFilesToWorkspace).toHaveBeenCalledWith(expect.anything(), "knowledge-base", "base", "default", expect.any(Function)));
       expect(await screen.findByRole("button", { name: "范围：我的研究" })).toBeInTheDocument();
@@ -790,7 +847,7 @@ describe("知识库", () => {
       await userEvent.click(within(dialog).getByRole("button", { name: "保存" }));
       await waitFor(() => expect(mocks.addSourceNote).toHaveBeenCalledWith("default", { title: "10月3日组会记录", body: "确定分组。" }));
       // The note opens on its own page, where its editor is; the list it was written from is the way back.
-      await waitFor(() => expect(addressOf()).toBe("/app/files/src_note"));
+      await waitFor(() => expect(addressOf()).toBe("/app/files/src_note?scope=default"));
     });
 
     it("opens the drive from the menu, and browses it for the project the page lists", async () => {
@@ -827,15 +884,15 @@ describe("知识库", () => {
       expect([...first.querySelectorAll("span.bg-highlight")].map((mark) => mark.textContent)).toEqual(["达比加群"]);
       expect(first.textContent).toBe("第 2 页…达比加群酯为另一选择，剂量 150 mg…");
       // Opened at the page, from the list it was found in.
-      expect(first).toHaveAttribute("href", "/app/files/src_guideline?q=%E8%BE%BE%E6%AF%94%E5%8A%A0%E7%BE%A4&tab=original&page=2");
-      expect(second).toHaveAttribute("href", "/app/files/src_guideline?q=%E8%BE%BE%E6%AF%94%E5%8A%A0%E7%BE%A4");
+      expect(first).toHaveAttribute("href", "/app/files/src_guideline?scope=default&q=%E8%BE%BE%E6%AF%94%E5%8A%A0%E7%BE%A4&tab=original&page=2");
+      expect(second).toHaveAttribute("href", "/app/files/src_guideline?scope=default&q=%E8%BE%BE%E6%AF%94%E5%8A%A0%E7%BE%A4");
       await userEvent.click(first);
-      expect(addressOf()).toBe("/app/files/src_guideline?q=%E8%BE%BE%E6%AF%94%E5%8A%A0%E7%BE%A4&tab=original&page=2");
+      expect(addressOf()).toBe("/app/files/src_guideline?scope=default&q=%E8%BE%BE%E6%AF%94%E5%8A%A0%E7%BE%A4&tab=original&page=2");
     });
 
     it("are for the rows that have them, and a row the box matched by its name has none", async () => {
       mocks.listSources.mockResolvedValue(withPassages([guideline, sheet], { src_sheet: [{ page: null, snippet: "…75 项研究…", start: 1, end: 5 }] }));
-      renderPage("/app/files?q=75");
+      renderPage("/app/files?scope=default&q=75");
       await screen.findByText(sheet.display.title);
       expect(within(rowOf(guideline.display.title)).queryByRole("list", { name: "正文里的匹配" })).not.toBeInTheDocument();
       expect(within(rowOf(sheet.display.title)).getByRole("list", { name: "正文里的匹配" })).toBeInTheDocument();
@@ -848,7 +905,7 @@ describe("知识库", () => {
       mocks.listSources.mockImplementation(async (_scope, options) => options?.cursor
         ? withPassages([guideline, second], { src_second: [{ page: 7, snippet: "第二页的匹配", start: 1, end: 5 }] })
         : { ...withPassages([guideline], { src_guideline: [{ page: 1, snippet: "第一页的匹配", start: 1, end: 5 }] }), nextCursor: "cursor-2" });
-      renderPage("/app/files?q=%E5%8C%B9%E9%85%8D");
+      renderPage("/app/files?scope=default&q=%E5%8C%B9%E9%85%8D");
       // What was typed is marked inside the line, so the line is read as text, not as one element's.
       const said = () => document.body.textContent ?? "";
       await waitFor(() => expect(said()).toContain("第一页的匹配"));
@@ -864,7 +921,7 @@ describe("知识库", () => {
 
     it("keep the list's own search when the server has no text to offer: no list, no empty heading", async () => {
       mocks.listSources.mockResolvedValue(listing([guideline]));
-      renderPage("/app/files?q=%E5%85%B1%E8%AF%86");
+      renderPage("/app/files?scope=default&q=%E5%85%B1%E8%AF%86");
       await screen.findByText(guideline.display.title);
       expect(screen.queryByRole("list", { name: "正文里的匹配" })).not.toBeInTheDocument();
       expect(screen.getByRole("searchbox", { name: "搜索资料和内容" })).toHaveValue("共识");
@@ -905,7 +962,7 @@ describe("知识库", () => {
       renderPage();
       const user = userEvent.setup();
       await user.click(await screen.findByRole("button", { name: /对话产出/ }));
-      await waitFor(() => expect(addressOf()).toBe("/app/files?view=outputs"));
+      await waitFor(() => expect(addressOf()).toBe("/app/files?scope=default&view=outputs"));
       const list = await screen.findByRole("list", { name: "对话产出" });
       const rows = within(list).getAllByRole("listitem");
       expect(rows).toHaveLength(2);
@@ -920,25 +977,25 @@ describe("知识库", () => {
       expect(screen.getByRole("button", { name: "添加" })).toBeInTheDocument();
       // A type brings the documents back and takes the view out of the address.
       await user.click(within(screen.getByRole("group", { name: "资料类型" })).getByRole("button", { name: /数据表/ }));
-      await waitFor(() => expect(addressOf()).toBe("/app/files?kind=table"));
+      await waitFor(() => expect(addressOf()).toBe("/app/files?scope=default&kind=table"));
       expect(await screen.findByRole("list", { name: "资料" })).toBeInTheDocument();
       expect(screen.queryByRole("list", { name: "对话产出" })).not.toBeInTheDocument();
     });
 
     it("is searched by the box, opens from its address, and says in one sentence when there is nothing or nothing matches", async () => {
       mocks.listProjectOutputs.mockResolvedValue(outputs);
-      renderPage("/app/files?view=outputs");
+      renderPage("/app/files?scope=default&view=outputs");
       const user = userEvent.setup();
       const list = await screen.findByRole("list", { name: "对话产出" });
       expect(screen.getByRole("button", { name: /对话产出/ })).toHaveAttribute("aria-pressed", "true");
       await user.type(screen.getByRole("searchbox", { name: "搜索资料和内容" }), "房颤");
       await waitFor(() => expect(within(list).getAllByRole("listitem")).toHaveLength(1));
-      await waitFor(() => expect(addressOf()).toBe("/app/files?view=outputs&q=%E6%88%BF%E9%A2%A4"));
+      await waitFor(() => expect(addressOf()).toBe("/app/files?scope=default&view=outputs&q=%E6%88%BF%E9%A2%A4"));
       await user.type(screen.getByRole("searchbox", { name: "搜索资料和内容" }), "不存在");
       expect(await screen.findByText("没有找到相关产出")).toBeInTheDocument();
       cleanup();
       mocks.listProjectOutputs.mockResolvedValue([]);
-      renderPage("/app/files?view=outputs");
+      renderPage("/app/files?scope=default&view=outputs");
       expect(await screen.findByText("这个项目的对话还没有产出文件。")).toBeInTheDocument();
       // The header still has its 「添加」: the library's empty state is not the page.
       expect(screen.getByRole("button", { name: "添加" })).toBeInTheDocument();
@@ -946,7 +1003,7 @@ describe("知识库", () => {
 
     it("says when it could not be read, with 重试, and does not turn the failure into an empty list", async () => {
       mocks.listProjectOutputs.mockRejectedValueOnce(new WebApiError("down", { status: 503 }));
-      renderPage("/app/files?view=outputs");
+      renderPage("/app/files?scope=default&view=outputs");
       const user = userEvent.setup();
       expect(await screen.findByText("无法加载对话产出，请重试。")).toBeInTheDocument();
       expect(screen.queryByText("这个项目的对话还没有产出文件。")).not.toBeInTheDocument();
@@ -1013,7 +1070,7 @@ describe("知识库", () => {
       expect(screen.queryByText("资料组成")).not.toBeInTheDocument();
       cleanup();
       mocks.listProjectOutputs.mockResolvedValue([{ runId: "run_1", title: "综述", path: "deliverables/a/report.md", at: "2020-10-10T08:00:00.000Z" }]);
-      renderPage("/app/files?view=outputs");
+      renderPage("/app/files?scope=default&view=outputs");
       await screen.findByRole("list", { name: "对话产出" });
       expect(screen.queryByText("资料组成")).not.toBeInTheDocument();
     });
@@ -1038,46 +1095,46 @@ describe("知识库", () => {
       renderPage();
       const chips = await screen.findByRole("group", { name: "资料类型" });
       await userEvent.click(within(chips).getByRole("button", { name: /数据表/ }));
-      await waitFor(() => expect(addressOf()).toBe("/app/files?kind=table"));
+      await waitFor(() => expect(addressOf()).toBe("/app/files?scope=default&kind=table"));
       await userEvent.click(screen.getByRole("button", { name: "范围：我的研究" }));
       await userEvent.click(await screen.findByRole("menuitemradio", { name: "疳证 Meta 文献检索" }));
       // A scope of its own clears the type; the project the tab is in is the default and is not written.
       await waitFor(() => expect(addressOf()).toBe("/app/files?scope=paper-1"));
       await userEvent.click(screen.getByRole("button", { name: "范围：疳证 Meta 文献检索" }));
-      await userEvent.click(await screen.findByRole("menuitemradio", { name: "所有项目共享" }));
+      await userEvent.click(await screen.findByRole("menuitemradio", { name: "跨项目可用" }));
       await waitFor(() => expect(addressOf()).toBe("/app/files?scope=shared"));
       await userEvent.type(screen.getByRole("searchbox", { name: "搜索资料和内容" }), "共识");
       await waitFor(() => expect(addressOf()).toBe("/app/files?scope=shared&q=%E5%85%B1%E8%AF%86"));
-      await userEvent.click(screen.getByRole("button", { name: "范围：所有项目共享" }));
+      await userEvent.click(screen.getByRole("button", { name: "范围：跨项目可用" }));
       await userEvent.click(await screen.findByRole("menuitemradio", { name: "我的研究" }));
-      await waitFor(() => expect(addressOf()).toBe("/app/files?q=%E5%85%B1%E8%AF%86"));
+      await waitFor(() => expect(addressOf()).toBe("/app/files?scope=default&q=%E5%85%B1%E8%AF%86"));
     });
 
     it("changes the address by replacing it, so the back button leaves the list rather than undoing a filter", async () => {
       renderPage();
       const chips = await screen.findByRole("group", { name: "资料类型" });
       await userEvent.click(within(chips).getByRole("button", { name: /数据表/ }));
-      await waitFor(() => expect(addressOf()).toBe("/app/files?kind=table"));
+      await waitFor(() => expect(addressOf()).toBe("/app/files?scope=default&kind=table"));
       expect(screen.getByTestId("location")).toHaveAttribute("data-how", "REPLACE");
     });
 
     it("clears the search from its own button and from Escape, and the address follows", async () => {
-      renderPage("/app/files?q=%E5%85%B1%E8%AF%86");
+      renderPage("/app/files?scope=default&q=%E5%85%B1%E8%AF%86");
       const box = await screen.findByRole("searchbox", { name: "搜索资料和内容" });
       expect(box).toHaveValue("共识");
       await userEvent.click(screen.getByRole("button", { name: "清除搜索" }));
       expect(box).toHaveValue("");
-      await waitFor(() => expect(addressOf()).toBe("/app/files"));
+      await waitFor(() => expect(addressOf()).toBe("/app/files?scope=default"));
       await userEvent.type(box, "疳");
-      await waitFor(() => expect(addressOf()).toBe("/app/files?q=%E7%96%B3"));
+      await waitFor(() => expect(addressOf()).toBe("/app/files?scope=default&q=%E7%96%B3"));
       await userEvent.keyboard("{Escape}");
       expect(box).toHaveValue("");
-      await waitFor(() => expect(addressOf()).toBe("/app/files"));
+      await waitFor(() => expect(addressOf()).toBe("/app/files?scope=default"));
     });
 
     it("moves the box when the address changes under it (the back button between two lists)", async () => {
-      const Mover = () => { const navigate = useNavigate(); return <button type="button" onClick={() => navigate("/app/files?q=%E5%8D%81")}>改地址</button>; };
-      render(<MemoryRouter initialEntries={["/app/files?q=%E5%85%B1%E8%AF%86"]}><SourcesPage /><Probe /><Mover /></MemoryRouter>);
+      const Mover = () => { const navigate = useNavigate(); return <button type="button" onClick={() => navigate("/app/files?scope=default&q=%E5%8D%81")}>改地址</button>; };
+      render(<MemoryRouter initialEntries={["/app/files?scope=default&q=%E5%85%B1%E8%AF%86"]}><SourcesPage /><Probe /><Mover /></MemoryRouter>);
       expect(await screen.findByRole("searchbox", { name: "搜索资料和内容" })).toHaveValue("共识");
       await userEvent.click(screen.getByRole("button", { name: "改地址" }));
       await waitFor(() => expect(screen.getByRole("searchbox", { name: "搜索资料和内容" })).toHaveValue("十"));
@@ -1095,14 +1152,14 @@ describe("知识库", () => {
     });
 
     it("sends a document named by ?source= to its own page, with the list's state kept for the way back", async () => {
-      renderPage("/app/files?source=src_guideline&scope=paper-1");
+      renderPage("/app/files?scope=paper-1&source=src_guideline");
       await waitFor(() => expect(addressOf()).toBe("/app/files/src_guideline?scope=paper-1"));
     });
 
     it("does not take a ?source= that is not a document's id for one", async () => {
-      renderPage("/app/files?source=..%2F..%2Fetc");
+      renderPage("/app/files?scope=default&source=..%2F..%2Fetc");
       expect(await screen.findByRole("heading", { level: 1, name: "知识库" })).toBeInTheDocument();
-      expect(addressOf()).toContain("/app/files?source=");
+      expect(addressOf()).toContain("/app/files?scope=default&source=");
     });
 
     describe("coming back to it", () => {
@@ -1114,19 +1171,19 @@ describe("知识库", () => {
 
       it("keeps where the list was, and how much of it was loaded, when a document is opened", async () => {
         mocks.listSources.mockResolvedValue(listing([guideline, sheet]));
-        const { container } = renderPage("/app/files?kind=literature");
+        const { container } = renderPage("/app/files?scope=default&kind=literature");
         const link = await screen.findByRole("link", { name: guideline.display.title });
         scrollerOf(container).scrollTop = 321;
         await userEvent.click(link);
-        expect(JSON.parse(window.sessionStorage.getItem(POSITION("kind=literature"))!)).toEqual({ scroll: 321, count: 2 });
+        expect(JSON.parse(window.sessionStorage.getItem(POSITION("scope=default&kind=literature"))!)).toEqual({ scroll: 321, count: 2 });
       });
 
       it("brings the list back as it was left — the same documents loaded, the same scroll — when the back button returns to it", async () => {
-        window.sessionStorage.setItem(POSITION("kind=literature"), JSON.stringify({ scroll: 480, count: 120 }));
+        window.sessionStorage.setItem(POSITION("scope=default&kind=literature"), JSON.stringify({ scroll: 480, count: 120 }));
         mocks.listSources.mockImplementation(async (_scope, options) => options?.cursor
           ? listing(many(101, 120), { counts: { all: 120, literature: 120 } })
           : listing(many(1, 100), { nextCursor: "c2", counts: { all: 120, literature: 120 } }));
-        const { container } = renderPage("/app/files?kind=literature");
+        const { container } = renderPage("/app/files?scope=default&kind=literature");
         await screen.findByText("资料 120");
         expect(mocks.listSources).toHaveBeenNthCalledWith(1, { kind: "project", projectId: "default" }, { kind: "literature", q: "", limit: 100 });
         expect(mocks.listSources).toHaveBeenNthCalledWith(2, { kind: "project", projectId: "default" }, { kind: "literature", q: "", cursor: "c2", limit: 50 });
@@ -1139,13 +1196,13 @@ describe("知识库", () => {
       });
 
       it("brings it back through 「知识库」 on the document's page as well, which is a new entry and not the back button — and not for a visit of its own", async () => {
-        window.sessionStorage.setItem(POSITION(""), JSON.stringify({ scroll: 90, count: 2 }));
+        window.sessionStorage.setItem(POSITION("scope=default"), JSON.stringify({ scroll: 90, count: 2 }));
         function Elsewhere() {
           const navigate = useNavigate();
           return (
             <>
-              <button type="button" onClick={() => navigate("/app/files")}>从侧栏进入</button>
-              <button type="button" onClick={() => navigate("/app/files", { state: { kbRestore: true } })}>从资料页回来</button>
+              <button type="button" onClick={() => navigate("/app/files?scope=default")}>从侧栏进入</button>
+              <button type="button" onClick={() => navigate("/app/files?scope=default", { state: { kbRestore: true } })}>从资料页回来</button>
               <button type="button" onClick={() => navigate("/app/chat")}>离开</button>
             </>
           );
@@ -1162,7 +1219,7 @@ describe("知识库", () => {
       });
 
       it("starts at the top for a visit of its own, and ignores a kept position that is not a position", async () => {
-        window.sessionStorage.setItem(POSITION(""), JSON.stringify({ scroll: -4, count: "many" }));
+        window.sessionStorage.setItem(POSITION("scope=default"), JSON.stringify({ scroll: -4, count: "many" }));
         const { container } = renderPage();
         await screen.findByText(guideline.display.title);
         expect(scrollerOf(container).scrollTop).toBe(0);
@@ -1243,9 +1300,9 @@ describe("知识库", () => {
       .filter((node) => node.matches("input[type=search]") || node.querySelector("[aria-pressed]"));
 
     it.each([
-      ["资料", "/app/files"],
-      ["知识页", "/app/files?kind=wiki"],
-      ["图谱", "/app/files?kind=wiki&view=graph"],
+      ["资料", "/app/files?scope=default"],
+      ["知识页", "/app/files?scope=default&kind=wiki"],
+      ["图谱", "/app/files?scope=default&kind=wiki&view=graph"],
     ])("%s: one row of tabs, one toolbar in the sticky band before the body, and no control that filters stands in the body", async (_name, address) => {
       context.features = { knowledgePages: true };
       mocks.listSources.mockResolvedValue({ ...listing([guideline, sheet]), counts: counts({ all: 4, literature: 1, table: 1, wiki: 2 }) });
@@ -1264,7 +1321,7 @@ describe("知识库", () => {
     it("draws the graph as the picture first and the same marks as a list under it, both after the toolbar", async () => {
       context.features = { knowledgePages: true };
       mocks.listSources.mockResolvedValue({ ...listing([guideline]), counts: counts({ all: 3, literature: 1, wiki: 2 }) });
-      const { container } = renderPage("/app/files?kind=wiki&view=graph");
+      const { container } = renderPage("/app/files?scope=default&kind=wiki&view=graph");
       const list = await screen.findByRole("list", { name: "页面" });
       const { toolbars } = compositionFacts(container);
       const picture = container.querySelector("[data-chart]")!;
