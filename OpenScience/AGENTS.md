@@ -202,7 +202,7 @@ per-project workspace + JSONL provenance.
   configures or opens a destination.
 - **Page structure** (one-object and drawer restrictions qualified by the October 20 workbench ruling
   below; 2026-10-07 plan §9.4, `DESIGN.md` 「页面结构」): a page serves one coherent task — a list of
-  one kind of object, with a data page (the 记忆地图, the knowledge base's reader and graph) and a
+  one kind of object, with a data page (the memory dashboard 总览, the knowledge base's reader and graph) and a
   connected workbench (the related inputs, configuration, progress and results of one task, in the
   main area) as the named exceptions (`DESIGN.md` rule 1); short record detail opens in a drawer, long
   configuration and documents use the main area; articles and documents have addressed reading pages,

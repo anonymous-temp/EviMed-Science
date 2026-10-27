@@ -13,9 +13,9 @@ const base = (): MemoryMap => ({
   version: 1,
   scope: { projectId: null, range: { from: null, to: "2026-10-12", unit: "month" }, timeZone: "Asia/Shanghai", focus: null, depth: null },
   status: { topics: "empty" },
-  summary: { memories: 0, documents: 0, methods: 0, projects: 0, needsLook: 0, since: null },
-  facets: { projects: [], kinds: [], aboutYou: [], documentTypes: [], topics: [], dimensions: [] },
-  nodes: [], edges: [], buckets: { unit: "day", series: [] }, lanes: [], events: [], truncated: { nodes: 0, edges: 0 }, missing: [],
+  summary: { memories: 0, documents: 0, needsLook: 0, since: null },
+  facets: { projects: [], aboutYou: [], documentTypes: [], topics: [] },
+  nodes: [], edges: [], buckets: { unit: "day", series: [] }, events: [], truncated: { nodes: 0, edges: 0 }, missing: [],
 });
 
 export const memoryMark = (id: string, over: Partial<MapNode> = {}): MapNode => ({
@@ -26,8 +26,8 @@ export const methodMark = (id: string, at: string, label = `做法 ${id}`): MapN
 export const documentMark = (id: string, projectId: string | null, at: string, label = `资料 ${id}`): MapNode => ({
   id: `document:${id}`, type: "document", subtype: "literature", group: "文献与指南", label, state: "current", at, projectId, open: { kind: "page", href: `/app/files/${id}` },
 });
-const days = (rows: Array<[string, number]>): MapDay[] => rows.map(([t, document]) => ({ t, memory: 0, run: 0, method: 0, feedback: 0, document }));
-export const createdEvent = (id: string, at: string, text = id): MapEvent => ({ id: `memory:${id}:created`, at, type: "memory", change: "created", ref: `memory:${id}`, lane: "account", kind: "preference", text });
+const days = (rows: Array<[string, number]>): MapDay[] => rows.map(([t, document]) => ({ t, document }));
+export const createdEvent = (id: string, at: string, text = id): MapEvent => ({ id: `memory:${id}:created`, at, type: "memory", change: "created", ref: `memory:${id}`, text });
 
 /**
  * The owner's first day on the native engine: no memory file, some documents in three projects, no learned method, nothing received. The
@@ -40,10 +40,10 @@ export function ownerFirstDay(over: Partial<MemoryMap> = {}): MemoryMap {
   ];
   return {
     ...base(),
-    summary: { memories: 0, documents: 3, methods: 0, projects: 2, needsLook: 0, since: null },
+    summary: { memories: 0, documents: 3, needsLook: 0, since: null },
     facets: {
       projects: [{ id: "prj_a", name: "阿司匹林一级预防", kind: "own", memories: 0, documents: 22 }, { id: "prj_b", name: "房颤抗凝", kind: "own", memories: 0, documents: 17 }, { id: "prj_c", name: "空项目", kind: "own", memories: 0, documents: 0 }],
-      kinds: [], aboutYou: [], documentTypes: [{ id: "literature", label: "文献与指南", count: 31 }, { id: "document", label: "文档", count: 9 }, { id: "table", label: "数据表", count: 7 }], topics: [], dimensions: [],
+      aboutYou: [], documentTypes: [{ id: "literature", label: "文献与指南", count: 31 }, { id: "document", label: "文档", count: 9 }, { id: "table", label: "数据表", count: 7 }], topics: [],
     },
     nodes: [{ id: "project:prj_a", type: "project", label: "阿司匹林一级预防", state: "current", projectId: "prj_a" }, { id: "project:prj_b", type: "project", label: "房颤抗凝", state: "current", projectId: "prj_b" }, ...documents],
     buckets: { unit: "day", series: days([["2026-09-22", 1], ["2026-09-30", 1], ["2026-10-05", 1]]) },
@@ -72,11 +72,11 @@ export function livedIn(over: Partial<MemoryMap> = {}): MemoryMap {
   ];
   return {
     ...base(),
-    summary: { memories: 7, documents: 2, methods: 2, projects: 2, needsLook: 1, since: "2026-09-25" },
+    summary: { memories: 7, documents: 2, needsLook: 1, since: "2026-09-25" },
     facets: {
       projects: [{ id: "prj_a", name: "阿司匹林一级预防", kind: "own", memories: 1, documents: 22 }, { id: "prj_b", name: "房颤抗凝", kind: "own", memories: 2, documents: 17 }],
-      kinds: [], aboutYou: [{ id: "profile", label: "背景", count: 1 }, { id: "preference", label: "偏好", count: 1 }, { id: "correction", label: "纠正", count: 1 }, { id: "writing_style", label: "写作习惯", count: 1 }],
-      documentTypes: [{ id: "literature", label: "文献与指南", count: 31 }, { id: "document", label: "文档", count: 8 }], topics: [], dimensions: [],
+      aboutYou: [{ id: "profile", label: "背景", count: 1 }, { id: "preference", label: "偏好", count: 1 }, { id: "correction", label: "纠正", count: 1 }, { id: "writing_style", label: "写作习惯", count: 1 }],
+      documentTypes: [{ id: "literature", label: "文献与指南", count: 31 }, { id: "document", label: "文档", count: 8 }], topics: [],
     },
     nodes,
     buckets: { unit: "day", series: days([["2026-09-22", 1], ["2026-10-05", 1]]) },

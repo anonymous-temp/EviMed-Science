@@ -10,9 +10,9 @@ afterEach(() => { cleanup(); vi.resetAllMocks(); });
 function documentFor(projectId: string): MemoryMap {
   return {
     version: 1, scope: { projectId, range: { from: null, to: "2026-10-19", unit: "month" }, timeZone: "Asia/Shanghai", focus: null, depth: null },
-    status: { topics: "ready" }, summary: { memories: 1, documents: 0, methods: 0, projects: 1, needsLook: 0, since: null },
-    facets: { projects: [], kinds: [], topics: [], dimensions: [] }, nodes: [], edges: [], buckets: { unit: "day", series: [] },
-    lanes: [], events: [], truncated: { nodes: 0, edges: 0 }, missing: [],
+    status: { topics: "ready" }, summary: { memories: 1, documents: 0, needsLook: 0, since: null },
+    facets: { projects: [], topics: [] }, nodes: [], edges: [], buckets: { unit: "day", series: [] },
+    events: [], truncated: { nodes: 0, edges: 0 }, missing: [],
   };
 }
 const query = (projectId: string): MapQuery => ({ projectId, range: "all", focus: null, depth: 1 });
