@@ -130,6 +130,17 @@ export function isSelfMeasurementProject(projectId) {
   return SELF_MEASUREMENT_PROJECT.test(String(projectId ?? ""));
 }
 
+/**
+ * Whether a project is where an account keeps its own materials (personal storage), as opposed to where the platform does
+ * background work. Both are internal — hidden from the project list and never an interactive runtime — but the materials in
+ * the first are the person's: readers of what the person has (the memory map's documents, 「与你相关」) include it and stay
+ * away from every other internal project.
+ * @param {unknown} projectId @returns {boolean}
+ */
+export function isAccountStorageProject(projectId) {
+  return String(projectId ?? "") === LIBRARY_PROJECT_ID;
+}
+
 /** @param {unknown} projectId @returns {boolean} */
 export function isInternalProject(projectId) {
   const id = String(projectId ?? "");

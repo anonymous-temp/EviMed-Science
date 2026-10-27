@@ -117,7 +117,7 @@ test("the inventory of the knowledge is the knowledge base's own count of each p
   const doc = (id, projectId, at) => ({ id, projectId, createdAt: at, deletedAt: null, payload: { title: id, docType: "published-paper", paths: [`${id}.pdf`] } });
   // Two projects: one holds 250 documents of which the page reads 100 (the newest), the other has 3 and 40 compiled files.
   const sources = {
-    list: async (_userId, { projectId }) => (projectId === "prj_a"
+    list: async (_userId, { projectId }) => (projectId === "evimed-library" ? { items: [], counts: { all: 0 }, nextCursor: null } : projectId === "prj_a"
       ? { items: [doc("src_1", "prj_a", "2026-10-10T00:00:00Z"), doc("src_2", "prj_a", "2026-10-10T05:00:00Z"), doc("src_3", "prj_a", "2026-10-01T00:00:00Z")], counts: { all: 250, literature: 200, table: 30, document: 20, page: 0, note: 0, image: 0, wiki: 0 }, nextCursor: null }
       : { items: [], counts: { all: 43, literature: 1, table: 0, document: 2, page: 0, note: 0, image: 0, wiki: 40 }, nextCursor: null }),
   };
@@ -134,6 +134,35 @@ test("the inventory of the knowledge is the knowledge base's own count of each p
   assert.deepEqual(map.facets.documentTypes.map((type) => [type.id, type.count]), [["literature", 201], ["table", 30], ["document", 22]]);
   assert.equal(map.summary.documents, 3, "the headline's marks are the ones drawn");
   assert.equal(map.buckets.series.reduce((sum, day) => sum + day.document, 0), 3);
+});
+
+test("personal storage is read beside the projects of a whole-account map, hanging from the account; no other internal project is, and a project's map never reads it", async () => {
+  const doc = (id, projectId, at) => ({ id, projectId, createdAt: at, deletedAt: null, payload: { title: id, docType: "published-paper", paths: [`${id}.pdf`] } });
+  const asked = [];
+  const sources = { list: async (_userId, { projectId }) => {
+    asked.push(projectId);
+    if (projectId === "evimed-library") return { items: [doc("src_mine", "evimed-library", "2026-10-10T00:00:00Z")], counts: { all: 1, literature: 1, wiki: 0 }, nextCursor: null };
+    return { items: [doc("src_a", projectId, "2026-10-01T00:00:00Z")], counts: { all: 2, literature: 2, wiki: 0 }, nextCursor: null };
+  } };
+  const found = await createDocumentsSource({ sources }).read(request({ projects: [{ id: "prj_a", name: "甲" }] }));
+  assert.deepEqual(asked, ["prj_a", "evimed-library"], "the account's own storage, and no other internal project (the request carries none of them)");
+  const mine = found.nodes.find((node) => node.id === "document:src_mine");
+  assert.equal(mine.projectId, null, "storage is not a project: no mark of it, and no 「其他」 either");
+  assert.deepEqual(found.edges.map((edge) => [edge.from, edge.to]), [["document:src_a", "project:prj_a"], ["document:src_mine", "you:account"]]);
+  assert.deepEqual(found.facets.projectDocuments, [{ id: "prj_a", count: 2 }], "storage has no row among the projects' counts");
+  assert.deepEqual(found.facets.documentTypes, [{ id: "literature", label: "文献与指南", count: 3 }], "its documents are in the account's inventory");
+  // The aggregator: the document is on the map and counted, under the account.
+  const map = await buildMemoryMap({ sources: [createDocumentsSource({ sources })] }, { user, projects: [{ id: "prj_a", name: "甲" }], now: NOW, include: "summary,facets,nodes,edges" });
+  assert.equal(map.summary.documents, 2);
+  assert.ok(map.nodes.some((node) => node.id === "you:account"), "the account is a mark for the documents that hang from it");
+  assert.equal(map.nodes.some((node) => node.id === "project:__other"), false);
+  assert.deepEqual(map.facets.projects.map((project) => project.id), ["prj_a"]);
+  // One project's map reads that project alone.
+  asked.length = 0;
+  await createDocumentsSource({ sources }).read(request({ projectId: "prj_a", projects: [{ id: "prj_a", name: "甲" }] }));
+  assert.deepEqual(asked, ["prj_a"]);
+  // A document of storage that a memory names is the account's too, not 「其他」.
+  assert.equal(documentNode(doc("src_mine", "evimed-library", "2026-10-10T00:00:00Z")).projectId, null);
 });
 
 const NOTE = (id, over = {}, payload = {}) => ({ id, revision: 1, createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-01T00:00:00Z", deletedAt: null, projectId: null,
@@ -179,7 +208,7 @@ test("the notes of the account's own capsule are memories on the map and in its 
 
 test("a documents read that failed in every project is the source's failure; one project failing is only its own", async () => {
   const asked = request({ projects: [{ id: "p1", name: "一" }, { id: "p2", name: "二" }] });
-  const half = createDocumentsSource({ sources: { list: async (_u, { projectId }) => { if (projectId === "p1") throw new Error("boom"); return { items: [{ id: "src_2", projectId, createdAt: "2026-09-01T00:00:00Z", payload: { title: "二的资料", paths: ["a.md"] } }] }; } } });
+  const half = createDocumentsSource({ sources: { list: async (_u, { projectId }) => { if (projectId === "p1") throw new Error("boom"); return { items: projectId === "p2" ? [{ id: "src_2", projectId, createdAt: "2026-09-01T00:00:00Z", payload: { title: "二的资料", paths: ["a.md"] } }] : [] }; } } });
   assert.deepEqual((await half.read(asked)).nodes.map((node) => node.id), ["document:src_2"]);
   const none = createDocumentsSource({ sources: { list: async () => { throw new Error("db down"); } } });
   await assert.rejects(() => none.read(asked), /db down/);

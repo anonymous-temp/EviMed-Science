@@ -9,7 +9,7 @@ import { createEntityVocabulary } from "../src/entityVocabulary.mjs";
 import { EvidenceZoneService } from "../src/evidenceZoneService.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { FRONTIER_PROFILE_ENTITY_PHRASES, FrontierProfiles, frontierReasonText, frontierRecurringEntityKeys } from "../src/frontierProfiles.mjs";
-import { FRONTIER_PROJECT_ID } from "../src/internalProjects.mjs";
+import { FRONTIER_PROJECT_ID, LIBRARY_PROJECT_ID } from "../src/internalProjects.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
 import { MemorySettingsStore } from "../src/memorySettings.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
@@ -40,7 +40,7 @@ before(async () => {
   await migrateFrontier(database, { dimension: 1024 });
   await migrateProductStore(database);
   for (const id of users) await database.query("INSERT INTO evimed_control.users(id, name, auth_type) VALUES ($1, $1, 'development')", [id]);
-  for (const [userId, id] of [["reader", "kb"], ["reader", "paused"], ["reader", FRONTIER_PROJECT_ID], ["other", "kb"]]) {
+  for (const [userId, id] of [["reader", "kb"], ["reader", "paused"], ["reader", FRONTIER_PROJECT_ID], ["reader", LIBRARY_PROJECT_ID], ["other", "kb"], ["other", LIBRARY_PROJECT_ID]]) {
     await database.query("INSERT INTO evimed_control.projects(user_id, id, name, quota_bytes) VALUES ($1, $2, $2, 1000000)", [userId, id]);
   }
   memory = new MemorySettingsStore({}, { database });
@@ -140,6 +140,17 @@ test("the library's titles and stored understanding summaries are inputs too, th
     "only what the reader's own readable library in an unpaused, ordinary project says");
   assert.equal(editorCalls.length, 0);
   assert.equal(await profiles().refreshUser("other").then((outcome) => outcome.phrases), 2, "another reader's library is theirs");
+});
+
+test("the reader's personal storage is their own library too, and the platform's other internal projects still are not", options, async () => {
+  // Personal storage is internal by name (hidden, never a runtime) and is where an upload lands unless a project is chosen.
+  await document("reader", LIBRARY_PROJECT_ID, "src_mine", { title: "阿哌沙班在房颤中的应用", summary: "二甲双胍" });
+  await document("reader", FRONTIER_PROJECT_ID, "src_internal", { title: "司美格鲁肽心力衰竭", summary: "司美格鲁肽 司美格鲁肽" });
+  await document("other", LIBRARY_PROJECT_ID, "src_other", { title: "司美格鲁肽心力衰竭", summary: "司美格鲁肽 心力衰竭" });
+  await profiles().refreshUser("reader");
+  const { phrases } = await stored("reader");
+  assert.deepEqual(phrases.map((phrase) => [phrase.text, phrase.source]).sort(), [["二甲双胍", "library"], ["阿哌沙班", "library"], ["房颤", "library"]].sort(),
+    "only the reader's own storage: another reader's storage is theirs, and the frontier project's documents are the platform's");
 });
 
 test("a key the zones already gave is not given twice, and the two signals fail apart", options, async () => {
