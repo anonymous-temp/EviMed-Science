@@ -156,6 +156,13 @@ in `discovery_daily` and `/v1/health` `discovery` (`today`, `history` of 14 days
 - **A source whose pages never read is `degraded`.** When at least 90 % of the last 20 page reads of a source's entries failed
   (and at least 10 were made) its health is `degraded` although its feed polls cleanly (`policy.text_failing`, from each poll and
   the hourly re-check); it clears itself when newer pages read. A page that failed but whose feed text stood in is neither.
+- **A read the process does not come back from is not started again at once.** A polled source is leased for its read
+  (`lease_owner`, `lease_until`), and so is a WeChat account (`social/collector.py` `_lease`); every way a read ends clears
+  the lease. A lease still held when the process starts again is a read that killed it (the clean stop releases its own):
+  the source is marked failed (`last_error_code` `worker_died`) and waits the failure backoff of `policy.failure_delay_s` —
+  up to 30 minutes at the first death, doubling to six hours — instead of being read first after every restart
+  (2026-10-27: one account's articles sent the plugin out of memory about once a minute for five hours, buying the same
+  posts again at ¥0.26 a time).
 - **Markup is taken out of a parsed page once.** `adapters/common.decompose_all` decomposes only the outermost of the nodes a
   `css()` lists; selectolax freed a node twice when an `<svg>` or `<noscript>` held another one, which left lexbor's tree
   looping (`Node.text()` appended about 35 MB a second) or empty (the text of the whole page gone). No code calls

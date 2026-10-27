@@ -141,7 +141,8 @@ class SocialCollector:
                 if neutral:
                     await conn.execute(
                         """UPDATE evimed_knowledge.sources SET next_poll_at = %s, last_attempt_at = %s, last_error_code = %s,
-                                  cursor = coalesce(%s, cursor), updated_at = %s WHERE id = %s""",
+                                  cursor = coalesce(%s, cursor), updated_at = %s, lease_owner = NULL, lease_until = NULL
+                            WHERE id = %s""",
                         (next_at, now, (detail or "")[:100] or None, Jsonb(cursor) if cursor is not None else None, now,
                          row["id"]))
                     return
@@ -158,7 +159,8 @@ class SocialCollector:
                               last_new_entry_at = CASE WHEN %(new)s > 0 THEN %(now)s ELSE last_new_entry_at END,
                               last_nonempty_at = CASE WHEN %(seen)s > 0 THEN %(now)s ELSE last_nonempty_at END,
                               consecutive_failures = %(failures)s, failing_since = %(failing)s, last_error_code = %(detail)s,
-                              cursor = coalesce(%(cursor)s, cursor), health = %(health)s, updated_at = %(now)s
+                              cursor = coalesce(%(cursor)s, cursor), health = %(health)s, updated_at = %(now)s,
+                              lease_owner = NULL, lease_until = NULL
                         WHERE id = %(id)s""",
                     {"next": next_at, "now": now, "last_ok": last_ok, "ok": ok, "new": result.new, "seen": result.seen,
                      "failures": failures, "failing": failing_since, "detail": (detail or "")[:100] or None,
@@ -254,15 +256,30 @@ class SocialCollector:
     async def run_wechat(self, now: datetime) -> dict:
         if not self.dajiala.configured or self._paused(DAJIALA, now):
             return {"skipped": "unconfigured" if not self.dajiala.configured else "paused"}
-        due = [row for row in await self._rows("dajiala") if row["next_poll_at"] <= now]
+        due = [row for row in await self._rows("dajiala")
+               if row["next_poll_at"] <= now and (row["lease_until"] is None or row["lease_until"] < now)]
         due.sort(key=lambda row: (wechat_mod.priority(row), row["next_poll_at"], row["id"]))
         done: Counter = Counter()
         for row in due[:WECHAT_PER_TICK]:
+            if not await self._lease(row, now):
+                continue
             outcome = await self._wechat_account(row, now)
             done[outcome] += 1
             if outcome in ("capped", "balance", "refused", "rate-limited"):
                 break
         return dict(done)
+
+    async def _lease(self, row: dict, now: datetime) -> bool:
+        """Take an account for one read, as the scheduler takes a source it polls. Every way a read ends clears the lease
+        (``_finish``); a read the process did not come back from — it was killed inside it — leaves the lease, which the
+        next start turns into a failed read with its backoff (``Crawler._recover_dead_leases``) instead of reading the same
+        account again at once, after every restart, for ever (2026-10-27)."""
+        async with self._pool.connection() as conn:
+            taken = await (await conn.execute(
+                """UPDATE evimed_knowledge.sources SET lease_owner = %s, lease_until = %s
+                    WHERE id = %s AND (lease_until IS NULL OR lease_until < %s) RETURNING id""",
+                (self._settings.worker_id, now + timedelta(seconds=self._settings.lease_s), row["id"], now))).fetchone()
+        return taken is not None
 
     async def _wechat_account(self, row: dict, now: datetime) -> str:
         cursor = dict(row["cursor"] or {})
