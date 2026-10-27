@@ -172,6 +172,13 @@ test("remember from the page goes through the engine as a conversation, shows as
   const page = await store.profile(userId);
   assert.equal(page.pending.length, 1, "until the engine has written it the page says it is pending");
   assert.equal(page.pending[0].text, "我习惯用中文写综述的摘要");
+  // Remembered from a named project's page: the engine is told which project first, as a conversation of it is; the catch-all says none.
+  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,active_workspace) VALUES ($1,'p-orders','订单服务重构','w') ON CONFLICT DO NOTHING", [userId]).catch(() => null);
+  await store.remember(userId, { text: "这个仓库里测试文件一律不要动", projectId: "p-orders", projectName: "订单服务重构" }).catch(() => null);
+  assert.match(JSON.stringify(seen), /这段对话在用户的项目「订单服务重构」里进行。.*请记住：这个仓库里测试文件一律不要动/s);
+  assert.equal(JSON.parse(JSON.stringify(seen))[0].role, "assistant", "the platform's line comes first, as the assistant's, never as the person's");
+  await store.remember(userId, { text: "默认项目里的一句话", projectId: "default", projectName: "默认" }).catch(() => null);
+  assert.doesNotMatch(JSON.stringify(seen), /这段对话在用户的项目/);
   await assert.rejects(store.remember(userId, { text: "   " }), (error) => error.code === "memory_payload_invalid");
   await assert.rejects(store.remember(userId, { text: "my phone is 13800138000 please keep it" }), (error) => error.code === "memory_content_refused");
   assert.ok(root.startsWith("viking://user/"));

@@ -32,7 +32,7 @@ function fixedAdmission(answer = {}) {
   return { asked, admit: async (caller) => { asked.push(caller.engineSessionId ?? null); return { ...base, ...(typeof answer === "function" ? answer(caller) : answer) }; } };
 }
 
-async function fixture(t, { admission = fixedAdmission(), config = {}, overlay = null, stubOptions = {}, memoryTool = null, capsuleSearch = null, timeoutMs = 4_000 } = {}) {
+async function fixture(t, { admission = fixedAdmission(), config = {}, overlay = null, stubOptions = {}, memoryTool = null, capsuleSearch = null, timeoutMs = 4_000, project = {} } = {}) {
   resetNativeMemoryMetrics();
   const stub = await startOpenVikingStub(t, stubOptions);
   const client = new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: "evimed" });
@@ -41,7 +41,7 @@ async function fixture(t, { admission = fixedAdmission(), config = {}, overlay =
   const handler = createMemoryGatewayHandler({
     config: { memoryEngineEnabled: true, memoryEnabled: true, ...config },
     runtimeManager: { assertActiveEviMedWorkloadToken: async (token) => { if (token === TOKEN) return { userId: USER, projectId: "p1" }; throw new Error("no"); } },
-    store: { userById: async (id) => (id === USER ? { id } : null), requireProject: async (_user, id) => ({ id, userId: USER }) },
+    store: { userById: async (id) => (id === USER ? { id } : null), requireProject: async (_user, id) => ({ id, userId: USER, ...project }) },
     sessions, admission, overlay, memoryTool, capsuleSearch,
   });
   const server = createServer((req, res) => { void handler(req, res, (failure) => failures.push(failure)); });
@@ -757,4 +757,21 @@ test("a conversation of one project reads no other named project's card, decisio
   assert.equal((await call("GET", `/api/v1/content/read?uri=${encodeURIComponent(otherCard)}`)).status, 404);
   const viaTool = await mcp({ jsonrpc: "2.0", id: 7, method: "tools/call", params: { name: "search", arguments: { query: "英文" } } });
   assert.doesNotMatch(JSON.stringify(viaTool.messages), /一律用英文|OTHER-DECISION/);
+});
+
+test("a memory session of a named project begins with the platform's line naming the project, and the catch-all's with none (S7, 2026-10-27)", async t => {
+  const named = await fixture(t, { project: { name: "订单服务重构" } });
+  await named.call("POST", "/api/v1/sessions", { session_id: SESSION });
+  const written = named.stub.sent("POST", `/api/v1/sessions/${SESSION}/messages`);
+  assert.equal(written.length, 1);
+  assert.deepEqual(written[0].body, { role: "assistant", parts: [{ type: "text", text: "（平台信息，不是用户说的话）这段对话在用户的项目「订单服务重构」里进行。" }] });
+  // The person's first message follows it, through the door as always.
+  await named.call("POST", `/api/v1/sessions/${SESSION}/messages`, { role: "user", content: "这个仓库里测试文件一律不要动，要改先问我。" });
+  assert.equal(named.stub.sent("POST", `/api/v1/sessions/${SESSION}/messages`).length, 2);
+});
+
+test("the catch-all project's memory session carries no project line", async t => {
+  const plain = await fixture(t, { project: { id: "default", name: "默认" } });
+  await plain.call("POST", "/api/v1/sessions", { session_id: SESSION });
+  assert.equal(plain.stub.sent("POST", `/api/v1/sessions/${SESSION}/messages`).length, 0);
 });

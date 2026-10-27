@@ -12,7 +12,7 @@ export const MEMORY_GATEWAY_ROUTES = Object.freeze([
  *  learned from, refused, or failed upstream. */
 export const MEMORY_GATEWAY_OUTCOMES = Object.freeze(["forwarded", "local", "withheld", "refused", "failed"]);
 /** What became of one captured message. */
-export const MEMORY_GATEWAY_MESSAGE_OUTCOMES = Object.freeze(["forwarded", "platform_context", "no_text", "not_learning", "invalid"]);
+export const MEMORY_GATEWAY_MESSAGE_OUTCOMES = Object.freeze(["forwarded", "platform_context", "no_text", "not_learning", "invalid", "project_line", "project_line_failed"]);
 /** What became of one commit. */
 export const MEMORY_GATEWAY_COMMIT_OUTCOMES = Object.freeze(["accepted", "nothing_pending", "not_learning", "rate_limited", "failed"]);
 /** Why a caller's conversation is not learned from or read (`memoryAdmission`). */

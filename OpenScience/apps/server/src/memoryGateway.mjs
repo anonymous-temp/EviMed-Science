@@ -1,10 +1,14 @@
-import { carriesPlatformContext, maskIdentifiers, unwrapUserWrappers } from "@evimed/domain";
+import { carriesPlatformContext, maskIdentifiers, projectContextLine, unwrapUserWrappers } from "@evimed/domain";
+
 import {
   recordGatewayCommit, recordGatewayMasked, recordGatewayMessage, recordGatewayRefusal, recordGatewayRequest,
   recordGatewayUpstreamFailure, recordGatewayWithheld, recordLedgerFailure, recordRecallNote,
 } from "./nativeMemoryMetrics.mjs";
 import { CORRECTIONS_UNDER_PREFERENCES, DERIVED_INDEX_SEGMENT, OBSERVATIONS_SEGMENT, nativeMemoryFile, parseArchiveUri } from "./openVikingSessions.mjs";
 import { HttpError } from "./security.mjs";
+
+/** The catch-all project: it has no single subject, so its conversations are given no project line (`residentProfile.mjs` names it the same). */
+const CATCH_ALL_PROJECT_ID = "default";
 
 /**
  * The memory gateway: `/internal/memory/v1/…`, the one door between a runtime and OpenViking's native memory engine.
@@ -458,6 +462,23 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     return { status: unavailable ? 503 : 502, json: refusal("memory_gateway_upstream_unavailable", "The memory service is not reachable."), outcome: "failed", failure: code || "memory_gateway_upstream_unavailable" };
   }
 
+  /**
+   * The first message of a memory session held in a named project of the personal namespace: the platform's line saying which project it is
+   * (`projectContextLine`), so a rule the person gives for "this repository" goes on that project's card instead of into their preferences.
+   * The catch-all names no project, and a shared project's namespace is the project itself. Best effort: a session without the line is still
+   * a session, and the failure is counted.
+   * @param {any} ctx @param {string} sessionId
+   */
+  async function noteProjectContext(ctx, sessionId) {
+    if (ctx.shared || !ctx.project || ctx.project.id === CATCH_ALL_PROJECT_ID) return;
+    const line = projectContextLine(ctx.project.name);
+    if (!line) return;
+    try {
+      await ctx.sessions.addMessage(ctx.user.id, sessionId, { role: "assistant", parts: [{ type: "text", text: line }] });
+      recordGatewayMessage("project_line");
+    } catch { recordGatewayMessage("project_line_failed"); }
+  }
+
   async function resolveContext(user, project, expected = null) {
     if (expected && (!memoryContexts || expected.ownerId !== user.id || expected.projectId !== project.id || project.userId !== user.id)) {
       throw new HttpError(403, 'memory_scope_denied', 'The memory context does not match this project.');
@@ -627,7 +648,9 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         return { status: 200, json: local, outcome: "withheld" };
       }
       await ctx.ensureRegistered();
-      return { status: 200, json: await ctx.sessions.createSession(ctx.user.id, sessionId), outcome: "forwarded" };
+      const created = await ctx.sessions.createSession(ctx.user.id, sessionId);
+      await noteProjectContext(ctx, sessionId);
+      return { status: 200, json: created, outcome: "forwarded" };
     },
     async sessionRead(ctx) {
       const sessionId = ctx.match[1];
@@ -667,6 +690,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         // A conversation whose session start the gateway answered itself (it began as a platform turn): made now.
         if (/** @type {any} */ (error)?.code !== "memory_index_not_found") throw error;
         await ctx.sessions.createSession(ctx.user.id, sessionId);
+        await noteProjectContext(ctx, sessionId);
         answer = await ctx.sessions.addMessage(ctx.user.id, sessionId, decision.forward);
       }
       recordGatewayMessage("forwarded");

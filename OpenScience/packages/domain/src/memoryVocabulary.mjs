@@ -184,6 +184,20 @@ export function unwrapUserWrappers(text) {
 }
 
 /**
+ * The one line the platform writes at the start of a conversation's memory session when the conversation is held in a named project
+ * (not the catch-all): the engine is shown which project it belongs to, so a rule the person gives for "this repository" or "this
+ * project" goes on that project's card and not into their preferences, which every conversation is handed (measured on the lab engine
+ * 2026-10-27: c03 wrote a preference 3/3 without it and the project's card with the rule under 约束 3/3 with it). It is the
+ * platform's, said as such, and the templates keep nothing the platform says; the memory gateway writes it and the write-quality
+ * runner replays it for a case held in a named project.
+ * @param {unknown} projectName @returns {string | null} null when there is no name to give
+ */
+export function projectContextLine(projectName) {
+  const name = String(projectName ?? '').replace(/[\r\n「」]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60)
+  return name ? `（平台信息，不是用户说的话）这段对话在用户的项目「${name}」里进行。` : null
+}
+
+/**
  * The text with every platform tag removed — for display of a record that was
  * stored before the extractor could recognise them. Never a summary: what is
  * left is what was stored, minus envelopes nobody typed.

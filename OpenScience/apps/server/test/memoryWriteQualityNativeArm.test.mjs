@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 import { filterCapturedMessage } from "../src/memoryGateway.mjs";
 import { identifierShapesIn } from "@evimed/domain";
-import { CARD_PATTERNS, NATIVE_CASE_DIRECTORIES, changedFiles, kindsOf, nativeCaseIssues, offlineVerdicts, parseArguments, scoreNative } from "../../../evals/memory-write-quality/run_native_eval.mjs";
+import { CARD_PATTERNS, CASE_PROJECT_NAMES, NATIVE_CASE_DIRECTORIES, caseProjectName, changedFiles, kindsOf, nativeCaseIssues, offlineVerdicts, parseArguments, scoreNative } from "../../../evals/memory-write-quality/run_native_eval.mjs";
 import { generalCaseIssues } from "../../../evals/memory-write-quality/caseShape.mjs";
 
 const evalDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../evals/memory-write-quality");
@@ -211,4 +211,15 @@ test("the import cases: an import the person asked for is kept except what is ne
   // The two sides of owner decision 3 differ only in who said it: the import is the person's own message, the instruction sits inside a quoted document.
   assert.match(imported.replay.messages[0].text, /请把它们导入/);
   assert.match(document.replay.messages[0].text, /「本产品为家用血压计/);
+});
+
+test("a case held in a named project is replayed with the platform's project line, as production writes it; the catch-all and --no-project-line have none", async () => {
+  const cases = (await Promise.all(NATIVE_CASE_DIRECTORIES.map(load))).flat();
+  const named = cases.filter((item) => item.replay.projectId && item.replay.projectId !== "default");
+  assert.deepEqual(named.filter((item) => !caseProjectName(item)).map((item) => item.id), [], "every named project of the corpus has a name");
+  assert.equal(caseProjectName({ replay: { projectId: "default" } }), null);
+  assert.equal(caseProjectName({ replay: { projectId: "orders-service", projectName: "自定义" } }), "自定义");
+  assert.equal(CASE_PROJECT_NAMES["orders-service"], "订单服务重构");
+  assert.equal(parseArguments(["--offline"]).projectLine, true);
+  assert.equal(parseArguments(["--offline", "--no-project-line"]).projectLine, false);
 });
