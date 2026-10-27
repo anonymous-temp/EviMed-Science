@@ -8239,13 +8239,28 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             throw new HttpError(409, "account_busy", "Account has queued or running tasks.");
           }
         }
-        // The account's own deletion of itself stops what was working in it: the researcher's stop.
+        // The account's own deletion of itself stops what was working in it: the researcher's stop. A runtime that a page of the account
+        // was starting as the deletion began would otherwise register after the stop, for an account that no longer exists, and run until
+        // the next release (2026-10-27, a walk's throwaway account): the owner is retired first, so such a start closes what it made.
+        runtimeManager.retireOwner(user.id);
+        let accountDeleted = false;
+        /** @type {any} */
+        let data;
+        /** @type {any} */
+        let subjectsDeleted;
+        /** @type {any} */
+        let memoryIndexPurge = null;
+        /** @type {string[]} */
+        let geoScreenshots = [];
+        /** @type {import("./vcrStoreBase.mjs").VcrArtifacts | null} */
+        let vcrArtifacts = null;
+        try {
         await Promise.all(projects.map((project) => runtimeManager.stop(project, { by: "user" })));
         await managedBrowser.closeOwner(user.id);
         // The accounts an integration key of this one made for the people
         // behind it go first: a subject's memory has no owner once its
         // institution is gone, and nothing else would ever delete it.
-        const subjectsDeleted = await deleteAgentSubjects(user.id);
+        subjectsDeleted = await deleteAgentSubjects(user.id);
         // What the memory engine holds of the account goes with it, before the rows that say it was there (a deletion that cannot
         // reach the engine fails here, named, and is asked again — never an account gone with its memory left behind).
         // Nothing of the account is committed to the engine from here, and its commits in flight finish first: a commit that reached
@@ -8263,13 +8278,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         await memoryWithdrawals?.migrate();
         // The engine's copies of the account's documents, and the wiki and graphs compiled from them: one attempt, never waited on.
         void sourceSync?.forgetAccount(user.id);
-        let memoryIndexPurge = null;
-        /** @type {string[]} */
-        let geoScreenshots = [];
-        /** @type {import("./vcrStoreBase.mjs").VcrArtifacts | null} */
-        let vcrArtifacts = null;
         await invalidateRsiSource({ userId: user.id });
-        const data = await store.deleteUser(user, {
+        data = await store.deleteUser(user, {
           beforeLock: memoryIndexing ? (id, client) => memoryIndexing.lockAccountDeletion(id, client) : null,
           beforeDelete: async (id, client) => {
             if (client && hostedExtensions && !await productDatabase.withTransactionClient(client, () => hostedExtensions.joinAccount(id))) {
@@ -8290,6 +8300,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             if (client) vcrArtifacts = (await deleteVcrUserRows(client, id)).artifacts;
           },
         });
+        accountDeleted = true;
+        } finally { if (!accountDeleted) runtimeManager.retireOwner(user.id, { undo: true }); }
         // The screenshots only those rows referenced, now that they are gone.
         await removeGeoScreenshotFiles(config.dataDir, geoScreenshots, (code) => process.stderr.write(`geo screenshot cleanup: ${code}\n`));
         // And the patient-level files and engine job directories the study rows

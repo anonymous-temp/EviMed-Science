@@ -421,3 +421,18 @@ test("the actual overlay returns the 201st sensitive URI and refuses any incompl
   assert.deepEqual(complete, uris);
   await assert.rejects(overlay.sensitiveUris(userId, 200), { code: "memory_index_listing_too_large" });
 });
+
+test("the files of another named project are what a project's conversation does not read; the catch-all's and the account's are read everywhere", options, async (t) => {
+  const { userId, overlay, root } = await fixture(t);
+  const file = (rel) => `${root}/${rel}`;
+  await overlay.upsertFile({ userId, uri: file("projects/review.md"), memoryType: "project_context", projectId: "p-review", body: "## 约束\n- 一律用英文" });
+  await overlay.upsertFile({ userId, uri: file("decisions/review.md"), memoryType: "decisions", projectId: "p-review", body: "- 先做检索" });
+  await overlay.upsertFile({ userId, uri: file("projects/outreach.md"), memoryType: "project_context", projectId: "p-outreach", body: "## 目标\n- 社区科普" });
+  await overlay.upsertFile({ userId, uri: file("recent_work/default.md"), memoryType: "recent_work", projectId: "default", body: "- 写了一封邮件" });
+  await overlay.upsertFile({ userId, uri: file("preferences/self/short.md"), memoryType: "preferences", projectId: null, body: "- 回答短一点" });
+  assert.deepEqual(await overlay.otherProjectUris(userId, "p-outreach"), [file("decisions/review.md"), file("projects/review.md")]);
+  assert.deepEqual(await overlay.otherProjectUris(userId, "p-review"), [file("projects/outreach.md")]);
+  assert.deepEqual(await overlay.otherProjectUris(userId, "default"), [file("decisions/review.md"), file("projects/outreach.md"), file("projects/review.md")],
+    "the catch-all is inside no project: it reads no named project's files");
+  await assert.rejects(overlay.otherProjectUris(userId, "p-outreach", 1), /memory_index_listing_too_large|exceeds/);
+});

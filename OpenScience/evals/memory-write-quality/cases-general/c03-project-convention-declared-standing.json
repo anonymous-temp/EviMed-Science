@@ -1,32 +1,34 @@
 {
-  "id": "c03-project-convention-declared-standing",
-  "class": "work-order-project-convention",
-  "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C03); every name, number and identifier is invented",
-  "expected": "A convention the person sets for this repository is kept on the project's card (under its constraints) or as a preference naming the repository: test files are not edited without asking.",
-  "decidable": true,
-  "replay": {
-    "synthetic": true,
-    "projectId": "orders-service",
-    "messages": [
-      {
-        "id": "u1",
-        "role": "user",
-        "text": "这个仓库里测试文件一律不要动，要改先问我。"
-      },
-      {
-        "id": "a1",
-        "role": "assistant",
-        "text": "好的，之后不会改动测试文件，需要改时先问您。"
-      }
-    ]
-  },
-  "expect": {
-    "requireAnyKind": [
-      "project_fact",
-      "preference"
-    ],
-    "requireTextContains": [
-      "测试"
-    ]
-  }
+ "id": "c03-project-convention-declared-standing",
+ "class": "work-order-project-convention",
+ "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C03); every name, number and identifier is invented; tightened 2026-10-27 (was project_fact or preference: the lab wrote a preference 3/3 before the preferences template named a repository's rule as the work's)",
+ "expected": "A convention the person sets for this repository is kept on the repository's card (under its constraints), never as a preference of the person's: a preference is handed to every conversation, and a rule for one piece of work leaked into another project when it was one (S7, 2026-10-27).",
+ "decidable": true,
+ "replay": {
+  "synthetic": true,
+  "projectId": "orders-service",
+  "messages": [
+   {
+    "id": "u1",
+    "role": "user",
+    "text": "这个仓库里测试文件一律不要动，要改先问我。"
+   },
+   {
+    "id": "a1",
+    "role": "assistant",
+    "text": "好的，之后不会改动测试文件，需要改时先问您。"
+   }
+  ]
+ },
+ "expect": {
+  "requireAnyKind": [
+   "project_fact"
+  ],
+  "requireTextContains": [
+   "测试"
+  ],
+  "noRecordOfKinds": [
+   "preference"
+  ]
+ }
 }

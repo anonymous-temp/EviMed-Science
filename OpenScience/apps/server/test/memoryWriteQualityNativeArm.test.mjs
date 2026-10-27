@@ -20,7 +20,7 @@ test("both directories are replayed, and every case in them is shaped for this a
   const cases = (await Promise.all(NATIVE_CASE_DIRECTORIES.map(load))).flat();
   assert.deepEqual(cases.flatMap(nativeCaseIssues), []);
   const general = await load("cases-general");
-  assert.equal(general.length, 49, "the eleven general cases of 2026-10-12, the 25 work-order cases of 2026-10-23 (C01-C24, the last in two variants), the upgrade, the eleven of 2026-10-25 (misconception, symptom-to-trait, import, repetition), and the project rule given with a small request (M8)");
+  assert.equal(general.length, 50, "the eleven general cases of 2026-10-12, the 25 work-order cases of 2026-10-23 (C01-C24, the last in two variants), the upgrade, the eleven of 2026-10-25 (misconception, symptom-to-trait, import, repetition), the project rule given with a small request (M8), and the same rule said back by the assistant (S7, 2026-10-27)");
   assert.ok(general.every((item) => item.replay.synthetic === true), "every name and number in them is invented");
   assert.ok(cases.length >= 35);
 });

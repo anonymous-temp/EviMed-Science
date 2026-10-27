@@ -1,0 +1,42 @@
+{
+ "id": "p02-project-rule-acknowledged",
+ "class": "keep-project-rule-in-the-card",
+ "observedIn": "written on 2026-10-27 for S7 (production kept no record of the rule on 10-27 while the lab kept p01 3/3): the assistant's reply says back the rule, as production replies do; every name is invented",
+ "expected": "A rule the person gives for this project, said back by the assistant, is still a line under 约束 of the project's card and never a preference of the person's: a preference reaches every project, and the rule leaked into another project's reply in S7.",
+ "decidable": true,
+ "judge": "Does the card's 约束 say that the project's text deliverables are written in English, in the person's words, and is the rule absent from the user-level preferences?",
+ "replay": {
+  "synthetic": true,
+  "projectId": "p_review",
+  "messages": [
+   {
+    "id": "u1",
+    "role": "user",
+    "text": "这个项目的所有文字交付物一律用英文写，不要写中文。先帮我写一句话的项目简介：这是一篇关于 SGLT2 抑制剂的综述。"
+   },
+   {
+    "id": "a1",
+    "role": "assistant",
+    "text": "好的，这个项目的文字交付物我之后都用英文写。\n\nProject summary: This is a narrative review of SGLT2 inhibitors, covering their mechanisms, cardiorenal outcomes and safety."
+   }
+  ]
+ },
+ "expect": {
+  "requireKeys": [
+   "project.constraints"
+  ],
+  "keyValues": {
+   "project.constraints": [
+    "英文",
+    "English",
+    "english"
+   ]
+  },
+  "requireTextContains": [
+   "英文"
+  ],
+  "noRecordOfKinds": [
+   "preference"
+  ]
+ }
+}

@@ -3687,6 +3687,19 @@ export class RuntimeManager {
     // lists as mounted, instead of selecting every capsule again per read.
     this.lastMountedCapsuleMethods = new Map();
     this.starts = new Map();
+    /**
+     * A kernel between its launch and its registration, by project key: the token file it was given, so the plugins that call a gateway
+     * while the kernel boots (the memory plugin's MCP client connects as it is mounted) are not refused as a runtime nobody knows. Measured on
+     * 2026-10-27: every start drew two to five 401s (`open_science_workload_token_refusals_total{reason="runtime"}`) before the record existed.
+     * @type {Map<string, { workloadTokenFile: string | null }>}
+     */
+    this.startingWorkloads = new Map();
+    /**
+     * Accounts whose deletion has begun, by id, with when: no runtime of theirs starts, and one that was starting when the deletion began closes
+     * what it made instead of registering it (`retireOwner`). Kept for an hour, longer than any start.
+     * @type {Map<string, number>}
+     */
+    this.retiredOwners = new Map();
     /** Cold callers enroll before policy/database reads; every waiter reauthorizes its own result. */
     this.coldStartAttempts = new Map();
     /** @type {AsyncLocalStorage<{key:string,promise:Promise<any>|null,attempt:any,open:boolean}>} */
@@ -4265,6 +4278,23 @@ export class RuntimeManager {
     this.workloadTokenRefusals[reason] = (this.workloadTokenRefusals[reason] ?? 0) + 1;
   }
 
+  /**
+   * An account's deletion has begun: from now on no runtime of it starts, and a start already under way closes its runtime instead of registering
+   * it. The deletion stops the runtimes it can see after this; `undo` takes it back when the deletion failed before the account was gone.
+   * @param {string} userId @param {{ undo?: boolean }} [options]
+   */
+  retireOwner(userId, { undo = false } = {}) {
+    if (undo) { this.retiredOwners.delete(String(userId)); return; }
+    const now = Date.now();
+    for (const [id, at] of this.retiredOwners) if (now - at > 3_600_000) this.retiredOwners.delete(id);
+    this.retiredOwners.set(String(userId), now);
+  }
+
+  /** @param {any} project */
+  assertOwnerNotRetired(project) {
+    if (this.retiredOwners.has(String(project?.userId ?? ""))) throw new HttpError(410, "account_deleted", "This account is being deleted; its runtime does not start.");
+  }
+
   /** Verify the current bounded token file and recheck liveness after I/O.
    * @param {unknown} token */
   async assertActiveEviMedWorkloadToken(token) {
@@ -4279,9 +4309,15 @@ export class RuntimeManager {
       const payload = verifyEviMedWorkloadToken(token, { secret: this.config.evimedWorkloadSigningSecret,
         userId: claims.userId, projectId: claims.projectId });
       const key = this.key({ userId: payload.userId, id: payload.projectId });
-      const runtime = this.runtimes.get(key);
+      const registered = this.runtimes.get(key);
       reason = "runtime";
-      if (!runtime?.workloadTokenFile || runtime.closedByManager || runtime.exitedAt) throw workloadTokenError();
+      // A kernel still booting is the one its token file was written for: it is accepted on that file, for as long as its start lasts.
+      const starting = !registered && this.starts.has(key) ? this.startingWorkloads.get(key) ?? null : null;
+      /** @type {any} */
+      const runtime = registered ?? starting;
+      const stillCurrent = () => (starting ? this.starts.has(key) && this.startingWorkloads.get(key) === starting && !this.runtimes.has(key)
+        : this.runtimes.get(key) === runtime && !runtime.closedByManager && !runtime.exitedAt);
+      if (!runtime?.workloadTokenFile || !stillCurrent()) throw workloadTokenError();
       if (typeof this.provider.acceptedWorkloadTokens === "function") {
         reason = "superseded";
         // A remote runtime's token file is in its session, not on this host:
@@ -4293,7 +4329,7 @@ export class RuntimeManager {
             const expected = Buffer.from(String(candidate));
             return expected.length === actual.length && timingSafeEqual(expected, actual);
           });
-        if (!accepted || this.runtimes.get(key) !== runtime || runtime.closedByManager || runtime.exitedAt) throw workloadTokenError();
+        if (!accepted || !stillCurrent()) throw workloadTokenError();
         return {
           ...payload,
           runtimeGeneration: typeof runtime.modelGatewayTokenJti === "string" ? runtime.modelGatewayTokenJti : null,
@@ -4317,7 +4353,7 @@ export class RuntimeManager {
       reason = "superseded";
       if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) throw workloadTokenError();
       reason = "runtime";
-      if (this.runtimes.get(key) !== runtime || runtime.closedByManager || runtime.exitedAt) throw workloadTokenError();
+      if (!stillCurrent()) throw workloadTokenError();
       return {
         ...payload,
         runtimeGeneration: typeof runtime.modelGatewayTokenJti === "string" ? runtime.modelGatewayTokenJti : null,
@@ -4728,6 +4764,7 @@ export class RuntimeManager {
       const warm = () => { this.scheduleIdleStop(project); return existing; };
       return withPluginAdmission && this.pluginService ? this.pluginService.withAdmission(project, warm) : warm();
     }
+    this.assertOwnerNotRetired(project);
     if (opening) this.openingStarts.add(key);
     if (dispatch) this.dispatchStarts.add(key);
     const pending = this.starts.get(key);
@@ -4763,10 +4800,15 @@ export class RuntimeManager {
       this.enforceRuntimeCapacity(project, { starting: true });
       const modelGatewayScope = this.pendingModelGatewayScopes.get(key) ?? null;
       if (this.config.runtimeMode === "kernel") {
-        const runtime = await this.startKernel(project, modelGatewayScope, modelGatewayProfile);
+        let runtime;
+        try { runtime = await this.startKernel(project, modelGatewayScope, modelGatewayProfile); }
+        finally { if (!runtime) this.startingWorkloads.delete(key); }
         if (attempt) { attempt.runtime = runtime; attempt.generation = typeof runtime.modelGatewayTokenJti === "string" ? runtime.modelGatewayTokenJti : null; }
         created = runtime;
         this.runtimes.set(key, runtime);
+        this.startingWorkloads.delete(key);
+        // The account's deletion began while this kernel booted: the start fails and its runtime is closed (`closeRejectedStart`).
+        this.assertOwnerNotRetired(project);
         this.yieldedRuntimes.delete(key);
         this.pendingModelGatewayScopes.delete(key);
         this.scheduleEviMedWorkloadRefresh(project, runtime);
@@ -5013,6 +5055,7 @@ export class RuntimeManager {
       // here. The retired kernel needed three copying passes at this point;
       // they are gone with it.
       const dshSync = await this.provider.bootstrap(project, plan, { budgetScope: modelGatewayScope });
+      if (dshSync.workloadTokenFile) this.startingWorkloads.set(key, { workloadTokenFile: dshSync.workloadTokenFile });
       mcpSync = {
         copied: 0,
         configured: dshSync.configured ? 1 : 0,

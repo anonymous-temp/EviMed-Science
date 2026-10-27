@@ -1059,8 +1059,12 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
               throw new HttpError(503, 'memory_scope_denied', 'The memory privacy state is unavailable.');
             }) : await overlay.sensitiveUris(user.id);
             if (shared) await ctx.ensureRegistered();
+            // Another named project's card, decisions, working facts, open items and recent work: a rule given for one project ("this
+            // project's deliverables in English") is that project's, and a conversation elsewhere that searched for it applied it there
+            // (S7, 2026-10-27). The personal namespace only; a shared project's namespace holds its own project alone.
+            const otherProjects = shared || !overlay?.configured || typeof overlay.otherProjectUris !== "function" ? [] : await overlay.otherProjectUris(user.id, project.id);
             // The observations (`memories/observations`) are never read back, in either namespace.
-            return [`${userRoot}/memories/${DERIVED_INDEX_SEGMENT}`, `${userRoot}/memories/${OBSERVATIONS_SEGMENT}`,
+            return [`${userRoot}/memories/${DERIVED_INDEX_SEGMENT}`, `${userRoot}/memories/${OBSERVATIONS_SEGMENT}`, ...otherProjects,
               ...(shared ? [`${userRoot}/memories/profile.md`, `${userRoot}/memories/.overview.md`, `${userRoot}/memories/.abstract.md`, ...await privatePreferences(ctx)] : []),
               ...sensitive.filter((/** @type {string} */ uri) => !shared || uri === userRoot || uri.startsWith(`${userRoot}/`))];
           })();

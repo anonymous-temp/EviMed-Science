@@ -742,3 +742,19 @@ test("the native capsule search is the capsule's own recall, scoped to the proje
   assert.deepEqual(await createNativeCapsuleSearch({ service: null })({ user: { id: "u1" }, project: { id: "p9" }, query: "引用", limit: 4 }), []);
   assert.deepEqual(await search_({ user: { id: "u1" }, project: { id: "p9" }, query: "  ", limit: 4 }), []);
 });
+
+test("a conversation of one project reads no other named project's card, decisions or facts: search, read and list leave them out (S7, 2026-10-27)", async t => {
+  const otherCard = `${ROOT}/memories/projects/sglt2 抑制剂综述.md`, otherDecision = `${ROOT}/memories/decisions/sglt2.md`, own = `${ROOT}/memories/projects/高血压科普.md`;
+  const asked = [];
+  const { sessions, mcp, call } = await fixture(t, { overlay: { configured: true, sensitiveUris: async () => [],
+    otherProjectUris: async (userId, projectId) => { asked.push([userId, projectId]); return [otherCard, otherDecision]; } } });
+  sessions.search = async () => ({ result: { memories: [
+    { uri: otherCard, abstract: "所有文字交付物一律用英文写" }, { uri: otherDecision, abstract: "OTHER-DECISION" }, { uri: own, abstract: "OWN-CARD" },
+  ], resources: [], skills: [], total: 3 } });
+  const found = await call("POST", "/api/v1/search/search", { query: "项目简介" });
+  assert.deepEqual(found.json.result.memories.map((hit) => hit.abstract), ["OWN-CARD"], "the project's own card only");
+  assert.deepEqual(asked[0], [USER, "p1"], "asked for the files of projects other than the conversation's");
+  assert.equal((await call("GET", `/api/v1/content/read?uri=${encodeURIComponent(otherCard)}`)).status, 404);
+  const viaTool = await mcp({ jsonrpc: "2.0", id: 7, method: "tools/call", params: { name: "search", arguments: { query: "英文" } } });
+  assert.doesNotMatch(JSON.stringify(viaTool.messages), /一律用英文|OTHER-DECISION/);
+});

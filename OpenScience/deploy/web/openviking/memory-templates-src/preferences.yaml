@@ -30,9 +30,12 @@ description: |
   Each preference file is about one specific topic; do not mix unrelated topics, and do not
   split one topic over several files. When the user changes a preference, update the
   existing file so that it states only the current choice.
-  A rule the user gives for one project ("这个项目的所有文字交付物一律用英文写") is not a preference of
-  theirs: it is that project's card (PROJECT_CONTEXT, 约束), because it holds for that project and not
-  for their other work.
+  A rule the user gives for one project or one named piece of work — "this project", "this repository",
+  "this manuscript", "this course" ("这个项目的所有文字交付物一律用英文写", "这个仓库里测试文件一律不要动",
+  "这篇稿子的参考文献用温哥华格式") — is not a preference of theirs: it is that work's card (PROJECT_CONTEXT,
+  约束), because it holds for that work and not for their other work, and a preference is handed to every
+  conversation they have. Only a rule they give for all their work ("我写的东西都…", "以后都…") is a
+  preference.
   Not a preference: a condition that scopes one request ("这次只看亚洲人群的 RCT，不要图表")
   unless they say it is how they always want it, a mood, a question, a stance on a contested
   question, a fact about a project (-> PROJECT_CONTEXT), something the user said the assistant
