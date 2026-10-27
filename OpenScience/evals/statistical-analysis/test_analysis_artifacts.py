@@ -89,12 +89,16 @@ def test_briefs_keep_goldens_outside_model_input():
         'statistics-001-wdbc-group-comparison', 'statistics-002-wdbc-sequential-transform',
         'statistics-003-lung-native-r', 'statistics-004-goal-driven-comparison',
         'statistics-005-goal-driven-prediction', 'statistics-006-followup-unit-correction',
+        'statistics-007-resume-cached-analysis', 'statistics-008-report-population-reconciliation',
     }
     for brief in briefs:
         assert set(['id', 'title', 'why', 'inputs', 'mustDo', 'mustNotDo', 'gradedOn']) <= brief.keys()
         for fixture in brief['fixtures']:
             assert (HERE / fixture['source']).is_file()
-            assert fixture['source'].endswith('.csv')
+            # Inputs only: a prior package or report is a model input, an answer key never is.
+            assert fixture['source'].startswith(('fixtures/', 'live/fixtures/'))
+            assert fixture['source'].endswith(('.csv', '.zip', '.md', '.json'))
+            assert 'expected' not in fixture['source'] and 'reference_values' not in fixture['source']
         assert 'expected.json' not in json.dumps(brief['inputs'])
         assert 'reference_values' not in json.dumps(brief['inputs'])
 

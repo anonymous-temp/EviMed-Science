@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "statistical-analysis",
-  "note": "Six public-data briefs: three numerical controls and three goal-driven, multi-turn agent scenarios. Only the inputs and follow-up prompts reach a live run. Expected values and evaluator scripts remain outside its workspace. Adding briefs or passing offline tests does not constitute live agent acceptance.",
+  "note": "Eight public-data briefs: three numerical controls, three goal-driven multi-turn agent scenarios, and two continuation scenarios (statistics-007, 008) that specify the cached-state and report-population guidance. Only the inputs and follow-up prompts reach a live run. Expected values and evaluator scripts remain outside its workspace. Adding briefs or passing offline tests does not constitute live agent acceptance.",
   "briefs": [
     {
       "id": "statistics-001-wdbc-group-comparison",
@@ -178,6 +178,82 @@
         "Overwrite the source CSV or silently change the comparison direction."
       ],
       "gradedOn": "Reference criteria: first answer agrees with frozen WDBC expected.json; follow-up effect and interval scale by 0.1, t/df/p and group counts remain unchanged. A dedicated replay judge is planned, not implemented; the runner captures both turns for independent review."
+    },
+    {
+      "id": "statistics-007-resume-cached-analysis",
+      "title": "Resume a delivered analysis and convert units from its cached results",
+      "why": "A unit-only follow-up answered by rerunning the packaged pipeline wastes work and can silently change the delivered result. The answer comes from the executed estimates, and the delivered state stays untouched.",
+      "inputs": {
+        "datasetPath": "data/prior-analysis.zip",
+        "priorAnalysisPath": "data/prior-analysis.zip",
+        "analysisQuestion": "data/prior-analysis.zip 是上一轮已经实际执行完成的模拟研究分析包。请在当前项目中恢复它，读取已有报告、数值结果和记录，用两句话告诉我当前 B 组相对 A 组的平均差异和区间。请沿用已完成的计算，这一轮不需要重跑。",
+        "outputLanguage": "zh"
+      },
+      "fixtures": [
+        {
+          "source": "live/fixtures/prior-analysis.zip",
+          "destination": "data/prior-analysis.zip"
+        }
+      ],
+      "followUps": [
+        "保持刚才同一批数据、分组和已经算好的估计，现在把报告单位从毫米改成厘米。请只做必要的换算和报告更新，原始结果保留，告诉我均值差、95%区间和哪些量不变。"
+      ],
+      "mustDo": [
+        "Restore the package and read its executed estimates, report and records before answering.",
+        "Convert the cached estimate and interval endpoints by the stated factor and say which quantities change and which do not.",
+        "Verify the converted values against the cached ones, allowing for the rounding of the stored values.",
+        "Write the conversion as new files and leave the delivered results, fitted state, receipts and input files byte-identical."
+      ],
+      "mustNotDo": [
+        "Run the packaged pipeline (including any run_all entry point), refit a model or rerun bootstrap or cross-validation for a unit-only change.",
+        "Rebuild provenance, refresh timestamps or revalidate the whole package to clear an advisory notice.",
+        "Fabricate a successful execution receipt or run unrelated skills to make a notice disappear."
+      ],
+      "gradedOn": "Reference criteria: the reported difference and interval equal the cached ones, scaled by 0.1 within the rounding of the stored values; every archive file is byte-identical in the snapshots before and after the continuation, and the transcript shows no execution of the original analysis. A successful shell call is not evidence of reuse: only the independent state verdict (snapshot comparison with the supplied archive) establishes it."
+    },
+    {
+      "id": "statistics-008-report-population-reconciliation",
+      "title": "Reconcile a prior report's denominators and predictive values by population",
+      "why": "A report that explains a held-out positive predictive value with the whole-data event proportion mixes populations. Every percentage must be recomputed from the numerator and denominator of the population it names.",
+      "inputs": {
+        "datasetPath": "data/breast-cancer.csv",
+        "priorAnalysisPath": "data/prior-statistical-report.md",
+        "analysisQuestion": "请复核这份已有的统计分析报告：data/prior-statistical-report.md，配套结果和逐条预测是 data/prior-analysis-results.json、data/prior-predictions.csv，原始数据及字典也在 data/ 下。重点核对每个结论实际用的是哪一批人、分母和百分比是否匹配，以及PPV的解释。发现不一致请更正并交付修订后的统计分析报告和可复核的更正记录，保留正确结果，不要重新拟合模型，也不要添加无关分析。",
+        "outputLanguage": "zh"
+      },
+      "fixtures": [
+        {
+          "source": "live/fixtures/breast-cancer.csv",
+          "destination": "data/breast-cancer.csv"
+        },
+        {
+          "source": "live/fixtures/wdbc-dictionary.md",
+          "destination": "data/wdbc-dictionary.md"
+        },
+        {
+          "source": "live/fixtures/prior-statistical-report.md",
+          "destination": "data/prior-statistical-report.md"
+        },
+        {
+          "source": "live/fixtures/prior-analysis-results.json",
+          "destination": "data/prior-analysis-results.json"
+        },
+        {
+          "source": "live/fixtures/prior-predictions.csv",
+          "destination": "data/prior-predictions.csv"
+        }
+      ],
+      "mustDo": [
+        "State for each conclusion which population it used (whole data, training set, held-out set or complete cases) and recompute its percentage from that population's numerator and denominator.",
+        "Read a positive predictive value as true positives among predicted positives, distinct from sensitivity.",
+        "Correct every inconsistent statement in a revised report and deliver a reviewable correction record, keeping the results that were right."
+      ],
+      "mustNotDo": [
+        "Explain a held-out predictive value with the whole-data event proportion as though the populations were the same.",
+        "Refit the model or add unrelated analyses.",
+        "Change a correct result to match the prior wording."
+      ],
+      "gradedOn": "Reference criteria: whole-data, training and held-out counts recomputed from the supplied source rows and predictions (evaluator-owned bindings, never in the workspace); the revised report and correction record name the population of each percentage; no classifier is refitted."
     }
   ]
 }

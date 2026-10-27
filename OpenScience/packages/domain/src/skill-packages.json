@@ -1025,18 +1025,18 @@
       "id": "capability/statistical-analysis",
       "name": "statistical-analysis",
       "origin": "capability",
-      "version": "1.4.0",
+      "version": "1.4.1",
       "source": {"kind":"release"},
-      "digest": "sha256:9bbd06996345f50dd855aad81349f84dfafbc452960ada76204260f5af09762e",
+      "digest": "sha256:cd9eb6653b98cdf7d938ada2faf071c0c73913be64426b9727e7a5e07cf81a58",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
-        {"path":"scripts/analysis_checks.py","sha256":"8ba258cddfd71259f5022c8e129636ff7e0a12ed95324f33868aca03c8a1cd76"},
+        {"path":"scripts/analysis_checks.py","sha256":"5665d82b867efabb6d899aeed263555e52b59e149f05915a8b9be62f98d61268"},
         {"path":"scripts/analysis_methods.py","sha256":"43405739eeeb483706088d1ad5062fd93420db740e7340b813f57d880fb51996"},
-        {"path":"scripts/analysis_session.py","sha256":"c7176dc4368023a9928ec94f1b535766b0b6288d2fc7f425ac132590b37800e0"},
+        {"path":"scripts/analysis_session.py","sha256":"2b62a585a569c0eb83b0d8c5e4a5f898ac989f2a3c8d77cd1aa41cbcdd95c5cf"},
         {"path":"scripts/run_analysis.py","sha256":"ec1666014d8a9bcb4cb223653977601d2449f41fb485ceca0334e9fb634ff321"}
       ],
       "references": [
-        {"path":"capability.yaml","sha256":"a2d72528bec461842b2d4f74ddabb1c50161f80aa44aaa67b22edfec8b9dee34"},
+        {"path":"capability.yaml","sha256":"30800c185c59ac26aac0951509f70b5616e8dda5d3b77d4c5e12869d772c2d38"},
         {"path":"scripts/analysis_method_records.json","sha256":"6dac24227531b26c8f8822ea660340104ad3c17a13c6ca15d1ddb298c87e6bc8"}
       ],
       "dependencies": [

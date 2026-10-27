@@ -471,7 +471,7 @@
       "id": "statistical-analysis",
       "visibility": "public",
       "evalHarness": "evals/statistical-analysis",
-      "briefCount": 6,
+      "briefCount": 8,
       "realDelivery": {
         "status": "accepted",
         "evidence": "evals/statistical-analysis/results/2026-09-30-statistics-001-wdbc-group-comparison-run2/run.json",
@@ -485,7 +485,7 @@
         "evals/statistical-analysis/results/2026-10-26-multi-turn/README.md",
         "evals/statistical-analysis/results/2026-10-26-multi-turn/acceptance.json"
       ],
-      "note": "The current DSH + DeepSeek production run delivered the WDBC comparison and executable analysis. Independent replay confirms the input hash and primary Welch statistics; preserved source fingerprints match. The review retains residual threshold-interval and report-framing findings, so delivery acceptance is not an unqualified scientific quality pass. Sequential Python and native R scenarios remain in progress. 2026-10-26: three additional goal-driven agent briefs cover autonomous comparison, leakage-aware prediction and a unit-correction follow-up. They are unrun; the September delivery remains the only capability-level acceptance linked here. 2026-10-26 follow-through: an auxiliary natural multi-turn suite completed five candidate-local real DeepSeek/DSH cases (11 turns), 83 independent numerical checks and isolated saved-model replay. Later real cases close initial over-recomputation and report-population findings. These auxiliary cases do not relabel the six canonical briefs or the existing production-delivery record; source/evaluator/state evidence and remaining deployment limits are recorded in the linked report."
+      "note": "The current DSH + DeepSeek production run delivered the WDBC comparison and executable analysis. Independent replay confirms the input hash and primary Welch statistics; preserved source fingerprints match. The review retains residual threshold-interval and report-framing findings, so delivery acceptance is not an unqualified scientific quality pass. Sequential Python and native R scenarios remain in progress. 2026-10-26: three additional goal-driven agent briefs cover autonomous comparison, leakage-aware prediction and a unit-correction follow-up. They are unrun; the September delivery remains the only capability-level acceptance linked here. 2026-10-26 follow-through: an auxiliary natural multi-turn suite completed five candidate-local real DeepSeek/DSH cases (11 turns), 83 independent numerical checks and isolated saved-model replay. Later real cases close initial over-recomputation and report-population findings. Two briefs (statistics-007 and 008, cached-state resume and report-population reconciliation) specify those two follow-through cases and stay unrun as canonical briefs. These auxiliary cases do not relabel the canonical briefs or the existing production-delivery record; source/evaluator/state evidence and remaining deployment limits are recorded in the linked report."
     },
     {
       "id": "tool-builder",
