@@ -258,7 +258,15 @@
         },
         "J23": {
           "threshold": 0.8,
-          "calibration": "uncalibrated"
+          "calibration": "calibrated",
+          "promptFingerprint": "e6169385f1286ea3f937770cf843e8ecb01df03731b8764fd36377c4f3dde221",
+          "calibratedAt": "2026-10-27T08:04:46.564Z",
+          "evidence": "evals/judge-sites/J23/benefit-2026-10-27.json",
+          "measured": 92,
+          "settled": 91,
+          "correct": 91,
+          "lower95": 0.9676158352635655,
+          "resultSha256": "28967e23167d0f3a9f364da80b9c0aa908749e3f0a4361e2350d79734643a6f5"
         },
         "meta-evidence-role": {
           "threshold": 0.8,
