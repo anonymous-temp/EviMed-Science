@@ -25,6 +25,7 @@ import {
   ReaderNotes,
   ReaderOutline,
   ReaderQuote,
+  ReaderResearch,
   ReaderSameEvent,
   ReaderSourceAction,
   ReaderText,
@@ -188,6 +189,7 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
     } : undefined,
     actions: <div className="relative"><ReaderActions {...actions} />{chooser("absolute right-0 top-full")}</div>,
   } : undefined;
+  // The page's one primary action stands in the title's row, where every page has it (the walk's primary-action rule).
   return (
     <PageShell
       className="[&_h1]:line-clamp-none [&_h1]:text-balance"
@@ -197,6 +199,7 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
       eyebrow={<ReaderByline item={item} />}
       underTitle={originalTitle && <p lang={item.lang !== "und" ? item.lang : undefined} className="max-w-measure-body text-ui text-text-3">{originalTitle}</p>}
       toolbar={toolbar}
+      actions={wide ? <ReaderResearch onResearch={research} /> : undefined}
       asideLabel="文章操作与推荐"
       aside={wide ? <ReaderNotes item={item} reports={reports} outline={outline.length > 0 ? <ReaderOutline entries={outline} layout="inline" /> : undefined} /> : undefined}
     >

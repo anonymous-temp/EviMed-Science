@@ -73,11 +73,12 @@ describe("a journal article", () => {
     // The switch: AI 导读 is the one open, the text is the other option, named for what it is.
     expect(isOn(optionOf("AI 导读"))).toBe(true);
     expect(isOn(optionOf("查看摘要"))).toBe(false);
-    // The header is the title alone (owner: 「查看原文又跑到右上角去了」): the actions are the toolbar's, or the bar's. The original title
-    // stays under the title, and the toolbar comes after it.
+    // The header holds the title and the page's one primary, 「深入研究」, as every page's does (the walk's primary-action rule,
+    // 2026-10-27); the way to the original stays in the toolbar (owner: 「查看原文又跑到右上角去了」). The original title stays under
+    // the title, and the toolbar comes after it.
     expectComposed(document.body, { tablists: 1, stepRail: false, toolbar: true });
     const header = document.querySelector("[data-page-header]") as HTMLElement;
-    expect(within(header).queryAllByRole("button")).toEqual([]);
+    expect(within(header).queryAllByRole("button").map((button) => button.textContent)).toEqual(["深入研究"]);
     expect(within(header).queryAllByRole("link")).toEqual([]);
     const originalTitle = screen.getByText("Oral PCSK9 Inhibition and Cardiovascular Outcomes");
     expect(header.compareDocumentPosition(originalTitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -230,19 +231,20 @@ describe("an X post with every block", () => {
     expectComposed(document.body, { tablists: 0, stepRail: false, toolbar: true });
   });
 
-  it("puts the actions in one toolbar row under the title, the right column from 推荐理由: 「在 X 查看原帖 ↗」, ☆, ⋯, then 深入研究 as the one primary", async () => {
+  it("puts the actions in one toolbar row under the title, the right column from 推荐理由: 「在 X 查看原帖 ↗」, ☆, ⋯, and 深入研究 the one primary in the title's row", async () => {
     wide();
     show("/app/frontier/items/x-post-0001");
     const rail = await screen.findByRole("complementary", { name: "文章操作与推荐" });
     const toolbar = toolbarOf();
     const actions = within(toolbar).getByRole("group", { name: "文章操作" });
-    // In the row's own order: the original, ☆, ⋯, and the primary last. A post has no 查看正文: its text is on the page.
+    // In the row's own order: the original, ☆, ⋯. The primary is the title row's. A post has no 查看正文: its text is on the page.
     const controls = within(actions).getAllByRole("link").concat(within(actions).getAllByRole("button"));
     expect(within(actions).getAllByRole("link")[0]).toHaveAccessibleName("在 X 查看原帖");
     expect(within(actions).getAllByRole("link")[0]).toHaveAttribute("href", "https://x.com/arena/status/1");
-    expect(within(actions).getAllByRole("button").map((button) => button.getAttribute("aria-label") ?? button.textContent)).toEqual(["收藏", "更多操作", "深入研究"]);
-    expect(within(actions).getByRole("button", { name: "深入研究" })).toHaveClass("bg-accent");
-    expect(controls).toHaveLength(4);
+    expect(within(actions).getAllByRole("button").map((button) => button.getAttribute("aria-label") ?? button.textContent)).toEqual(["收藏", "更多操作"]);
+    const header = document.querySelector("[data-page-header]") as HTMLElement;
+    expect(within(header).getByRole("button", { name: "深入研究" })).toHaveClass("bg-accent");
+    expect(controls).toHaveLength(3);
     expect(within(toolbar).queryByRole("tab")).not.toBeInTheDocument();
     // The right column is the column beside the page, from the back row down, and starts at 推荐理由; the actions are not in it.
     const blocks = within(rail).getAllByRole("region").map((region) => region.getAttribute("aria-label")
@@ -252,7 +254,7 @@ describe("an X post with every block", () => {
     expect(rail.parentElement!.firstElementChild).toContainElement(screen.getByRole("navigation", { name: "返回" }));
     // No bar at the window's bottom where the toolbar is there.
     expect(screen.queryByRole("navigation", { name: "阅读工具" })).not.toBeInTheDocument();
-    await userEvent.click(within(actions).getByRole("button", { name: "深入研究" }));
+    await userEvent.click(within(header).getByRole("button", { name: "深入研究" }));
     expect(screen.getByTestId("where")).toHaveTextContent("/app/chat");
   });
 
@@ -864,9 +866,9 @@ describe("the AI view and the text view", () => {
     expect(screen.getByText(/^国家药品监督管理局近日批准口服司美格鲁肽片上市。/)).toBeInTheDocument();
     for (const name of [/^AI (导读|要点)$/, /事件后续/]) expect(screen.queryByRole("heading", { name }), String(name)).not.toBeInTheDocument();
     expect(within(toolbarOf()).queryByRole("tab")).not.toBeInTheDocument();
-    // The way to the original and 深入研究 are the toolbar's all the same.
+    // The way to the original is the toolbar's, and 深入研究 the title row's, all the same.
     expect(within(toolbarOf()).getByRole("link", { name: "打开原文" })).toBeInTheDocument();
-    expect(within(toolbarOf()).getByRole("button", { name: "深入研究" })).toBeInTheDocument();
+    expect(within(document.querySelector("[data-page-header]") as HTMLElement).getByRole("button", { name: "深入研究" })).toBeInTheDocument();
   });
 
   it("has no switch for an item with neither a text nor an abstract: its 导读 alone, and no text view to open", async () => {
@@ -876,7 +878,7 @@ describe("the AI view and the text view", () => {
     expect(screen.queryByRole("heading", { name: /^(正文|摘要|全文)/ })).not.toBeInTheDocument();
     expect(within(toolbarOf()).queryByRole("tab")).not.toBeInTheDocument();
     expect(client.fetchFrontierAbstractZh).not.toHaveBeenCalled();
-    expect(within(toolbarOf()).getAllByRole("button").map((button) => button.getAttribute("aria-label") ?? button.textContent)).toEqual(["收藏", "更多操作", "深入研究"]);
+    expect(within(toolbarOf()).getAllByRole("button").map((button) => button.getAttribute("aria-label") ?? button.textContent)).toEqual(["收藏", "更多操作"]);
   });
 
   it("shows a long text whole on its view, however many paragraphs: no fold, no 展开全文", async () => {

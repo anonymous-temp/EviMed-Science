@@ -821,15 +821,15 @@ export interface ReaderViewSwitch {
 /**
  * The reader's actions, at the right end of the page's one toolbar row (owner, 2026-10-27: the box in the column's top corner held five
  * controls in two rows and a switch; the row is 「AI 导读 | 查看正文」 at the left and these at the right): 「打开原文 ↗」, the publisher's
- * page (a post's 「在 X 查看原帖 ↗」, where the post is on the page already), ☆ and ⋯, then 「深入研究」, the page's one primary button.
+ * page (a post's 「在 X 查看原帖 ↗」, where the post is on the page already), ☆ and ⋯; 「深入研究」, the page's one primary button, is
+ * the title row's (`ReaderResearch`).
  * The row stands in the band above the text, so ☆ and ⋯ act on the article and not on a list in its text (the walk's
  * control-after-content read the old rail's ☆ as the text's list control, 2026-10-24).
  */
-export function ReaderActions({ item, more, onStar, onResearch }: {
+export function ReaderActions({ item, more, onStar }: {
   item: FrontierItem;
   more: MenuEntry[];
   onStar: () => void;
-  onResearch: () => void;
 }) {
   const starred = item.state.starred;
   return (
@@ -839,10 +839,19 @@ export function ReaderActions({ item, more, onStar, onResearch }: {
       </a>
       <IconButton icon={Star} label="收藏" aria-pressed={starred} className={starred ? "text-accent [&_svg]:fill-current" : undefined} onClick={onStar} />
       <Menu label="更多操作" items={more}><IconButton icon={MoreHorizontal} label="更多操作" /></Menu>
-      <Button variant="primary" onClick={onResearch}>
-        <MessageSquareText size={16} aria-hidden="true" /><span className="truncate">深入研究</span>
-      </Button>
     </div>
+  );
+}
+
+/**
+ * 「深入研究」, the reader's one primary action, in the title's row (the header's `actions`) as on every page: the walk's
+ * primary-action rule read it at 148 px in the toolbar row under the title (fixture walk, 2026-10-27).
+ */
+export function ReaderResearch({ onResearch }: { onResearch: () => void }) {
+  return (
+    <Button variant="primary" onClick={onResearch}>
+      <MessageSquareText size={16} aria-hidden="true" /><span className="truncate">深入研究</span>
+    </Button>
   );
 }
 
