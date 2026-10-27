@@ -1,29 +1,35 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, expect, it, vi } from "vitest";
+import { WEB_SESSION_STARTED_EVENT } from "@/lib/sessionLifecycle";
+import { WebApiError } from "@/lib/apiClient";
+import { UnsavedRouteGuard } from "@/app/layout/UnsavedRouteGuard";
+import { dirtyRouteState } from "@/lib/useUnsavedGuard";
 import { ExtensionsPage } from "./ExtensionsPage";
 import { useProjectStore } from "@/lib/projects";
 
 // The import drawer is the old import page moved, with the same behaviour: a file or a public repository previewed before it
 // is imported, and the migration of an earlier export one version at a time under one retry key. These are those tests, kept.
 const api = vi.hoisted(() => ({
-  pendingPersonalSkillTransfers: vi.fn(), uploadPersonalSkillTransfer: vi.fn(), previewPersonalSkillTransfer: vi.fn(), confirmPersonalSkillTransfer: vi.fn(),
+  fetchWebMe: vi.fn(), pendingPersonalSkillTransfers: vi.fn(), uploadPersonalSkillTransfer: vi.fn(), previewPersonalSkillTransfer: vi.fn(), confirmPersonalSkillTransfer: vi.fn(),
   listPersonalSkills: vi.fn(), uploadPersonalSkill: vi.fn(), previewPersonalSkillImport: vi.fn(), previewPersonalSkillRepository: vi.fn(), importPersonalSkill: vi.fn(), listPlatformSkills: vi.fn(), inventory: vi.fn(),
   projectPlatformSkills: vi.fn(), projectBuiltinPlugins: vi.fn(), projectExtensions: vi.fn(), extensionCatalogue: vi.fn(), extensionInstallations: vi.fn(), getPersonalSkill: vi.fn(), personalSkillHistory: vi.fn(), personalSkillDefaults: vi.fn(), projectSkills: vi.fn(), personalSkillSupply: vi.fn(),
 }));
 vi.mock("@/lib/skillLibraryClient", async original => ({ ...(await original<object>()), ...pick(api, ["pendingPersonalSkillTransfers", "uploadPersonalSkillTransfer", "previewPersonalSkillTransfer", "confirmPersonalSkillTransfer", "listPersonalSkills", "uploadPersonalSkill", "previewPersonalSkillImport", "previewPersonalSkillRepository", "importPersonalSkill", "listPlatformSkills", "projectPlatformSkills", "getPersonalSkill", "personalSkillHistory", "personalSkillDefaults", "projectSkills", "personalSkillSupply"]) }));
 vi.mock("@/lib/extensionsClient", async original => ({ ...(await original<object>()), inventory: api.inventory, projectBuiltinPlugins: api.projectBuiltinPlugins, projectExtensions: api.projectExtensions, extensionCatalogue: api.extensionCatalogue, extensionInstallations: api.extensionInstallations }));
-vi.mock("@/lib/apiClient", async original => ({ ...(await original<object>()), listWebPlugins: vi.fn().mockResolvedValue([]), listWebPluginRevisions: vi.fn().mockResolvedValue([]) }));
+vi.mock("@/lib/apiClient", async original => ({ ...(await original<object>()), fetchWebMe: api.fetchWebMe, listWebPlugins: vi.fn().mockResolvedValue([]), listWebPluginRevisions: vi.fn().mockResolvedValue([]) }));
 function pick<T extends object, K extends keyof T>(source: T, keys: K[]): Pick<T, K> { return Object.fromEntries(keys.map(key => [key, source[key]])) as Pick<T, K>; }
 const detail = { skill: { instructions: "Preserve actual source quotations.", description: "核对保留来源", invocation: { userInvocable: true, modelInvocable: false }, metadata: {}, whenToUse: "需要核对来源时", resources: [{ path: "参考/证据.csv", size: 12, digest: "sha256:fixture" }], scripts: [{ path: "scripts/check.py", size: 8 }], digest: "sha256:fixture" } };
 const personal = { id: "skill:fresh", revision: 1, payload: { title: "我的核对方法", description: "核对", instructions: "Preserve sources.", nativeName: "personal-fresh", digest: "sha256:fresh", resources: [], prepared: true }, createdAt: "", updatedAt: "", deletedAt: null };
-function open() { return render(<MemoryRouter initialEntries={["/app/extensions/skills"]}><Routes><Route path="/app/extensions/:tab/:itemId?" element={<ExtensionsPage />} /></Routes></MemoryRouter>); }
+function open() { return render(<MemoryRouter initialEntries={["/app/extensions/skills"]}><UnsavedRouteGuard /><Routes><Route path="/app/extensions/:tab/:itemId?" element={<ExtensionsPage />} /></Routes></MemoryRouter>); }
 /** The page's one primary action: 「新建技能」, then 「导入」 in its menu. */
 async function openImport(user: ReturnType<typeof userEvent.setup>) { await user.click(await screen.findByRole("button", { name: "添加技能" })); await user.click(screen.getByRole("menuitem", { name: "导入技能" })); }
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
 beforeEach(() => {
   vi.resetAllMocks();
+  window.sessionStorage.clear();
+  api.fetchWebMe.mockImplementation(async ({projectId}: {projectId:string}) => ({user:{id:"import-owner",tenantId:"tenant-one"},project:{id:projectId}}));
   useProjectStore.setState({ currentId: "project-one", projects: [{ id: "project-one", name: "当前项目" }] });
   api.pendingPersonalSkillTransfers.mockResolvedValue({ items: [] });
   api.listPersonalSkills.mockResolvedValue({ items: [personal], nextCursor: null });
@@ -44,7 +50,7 @@ it("previews an exact repository commit/subtree and imports only after explicit 
   await user.type(screen.getByLabelText("技能名称"), "仓库核对技能"); await user.type(screen.getByLabelText("公开仓库"), "example/skills"); await user.type(screen.getByLabelText("固定提交"), "a".repeat(40)); await user.type(screen.getByLabelText("技能子目录"), "skills/check");
   await user.click(screen.getByRole("button", { name: "预览" })); expect(await screen.findByText("example/skills")).toBeInTheDocument(); expect(screen.getByText("a".repeat(40))).toBeInTheDocument();
   expect(api.previewPersonalSkillRepository).toHaveBeenCalledWith({ repository: "example/skills", commit: "a".repeat(40), subdirectory: "skills/check" }); expect(api.importPersonalSkill).not.toHaveBeenCalled();
-  await user.click(screen.getByRole("button", { name: "确认导入" })); await waitFor(() => expect(api.importPersonalSkill).toHaveBeenCalledWith("owned-repo", "仓库核对技能"));
+  await user.click(screen.getByRole("button", { name: "确认导入" })); await waitFor(() => expect(api.importPersonalSkill).toHaveBeenCalledWith("owned-repo", "仓库核对技能", expect.any(String)));
 });
 it("branches cannot replace commit pins and changing a subtree invalidates the earlier preview", async () => {
   api.previewPersonalSkillRepository.mockResolvedValue({ resourceId: "owned-repo", immutableSource: { repository: "example/skills", commit: "a".repeat(40), subdirectory: "" }, preview: { ...detail.skill, resources: [], scripts: [] }, findings: [] });
@@ -80,7 +86,11 @@ it("imports one revision at a time with a stable key and only reports complete o
 it("pause lets the current call finish, then resumes the same intent without losing adopted rows", async () => {
   const current = deferred<typeof partialTransfer>(); api.confirmPersonalSkillTransfer.mockReturnValueOnce(current.promise).mockResolvedValueOnce({ ...partialTransfer, status: "complete" });
   const user = await previewTransfer(); await user.click(screen.getByRole("button", { name: "确认迁移" })); await waitFor(() => expect(api.confirmPersonalSkillTransfer).toHaveBeenCalledTimes(1)); await user.click(screen.getByRole("button", { name: "暂停迁移" }));
+  expect(screen.getByRole("status")).toHaveTextContent("正在暂停，当前请求仍在核对。");
+  expect(screen.queryByText("迁移已暂停；继续时会核对同一迁移进度。")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "暂停迁移" })).toBeDisabled();
   await act(async () => current.resolve(partialTransfer)); expect(await screen.findByText("已保存 1 个版本")).toBeInTheDocument(); expect(api.confirmPersonalSkillTransfer).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole("status")).toHaveTextContent("迁移已暂停；继续时会核对同一迁移进度。");
   await user.click(screen.getByRole("button", { name: "继续迁移" })); await screen.findByText("迁移完成；技能已保存，尚未启用。"); expect(api.confirmPersonalSkillTransfer.mock.calls[0][0]).toEqual(api.confirmPersonalSkillTransfer.mock.calls[1][0]);
 });
 it("transport failure keeps partial progress and the same retry key", async () => {
@@ -170,7 +180,7 @@ it("previews native skill content and scripts before the explicit import action"
   expect(screen.getByText("scripts/check.py")).toBeInTheDocument();
   expect(api.importPersonalSkill).not.toHaveBeenCalled();
   await user.click(screen.getByRole("button", { name: "确认导入" }));
-  await waitFor(() => expect(api.importPersonalSkill).toHaveBeenCalledWith("upload:fixture", "我的检查方法"));
+  await waitFor(() => expect(api.importPersonalSkill).toHaveBeenCalledWith("upload:fixture", "我的检查方法", expect.any(String)));
   // The visible result: the new skill is open at its own address.
   expect(await screen.findByRole("dialog", { name: "我的核对方法" })).toBeInTheDocument();
 });
@@ -188,4 +198,220 @@ it("a failed preview creates no skill and a changed file invalidates the earlier
   await screen.findByRole("button", { name: "确认导入" });
   await user.upload(screen.getByLabelText("技能文件"), new File(["two"], "second.md", { type: "text/markdown" }));
   expect(screen.queryByRole("button", { name: "确认导入" })).not.toBeInTheDocument();
+});
+
+
+it("freezes an unknown ordinary import and recovers with the same server confirmation key", async () => {
+  api.previewPersonalSkillRepository.mockResolvedValue({ resourceId: "owned-repo", immutableSource: { repository: "example/skills", commit: "a".repeat(40) }, preview: { ...detail.skill, resources: [], scripts: [] }, findings: [] });
+  api.importPersonalSkill.mockRejectedValueOnce(new Error("response lost")).mockResolvedValueOnce(personal);
+  open(); const user = userEvent.setup(); await openImport(user);
+  await user.click(screen.getByRole("button", { name: "公开仓库" }));
+  await user.type(screen.getByLabelText("技能名称"), "Confirmed intent");
+  await user.type(screen.getByLabelText("公开仓库"), "example/skills");
+  await user.type(screen.getByLabelText("固定提交"), "a".repeat(40));
+  await user.click(screen.getByRole("button", { name: "预览" }));
+  await user.click(await screen.findByRole("button", { name: "确认导入" }));
+  const recover = await screen.findByRole("button", { name: "核查并继续同一次导入" });
+  expect(screen.getByLabelText("技能名称")).toBeDisabled();
+  expect(screen.getByRole("button", { name: "公开仓库" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "预览" })).toBeDisabled();
+  expect(screen.queryByRole("dialog", { name: personal.payload.title })).not.toBeInTheDocument();
+  await user.click(recover);
+  await waitFor(() => expect(api.importPersonalSkill).toHaveBeenCalledTimes(2));
+  expect(api.importPersonalSkill.mock.calls[0]).toEqual(api.importPersonalSkill.mock.calls[1]);
+  expect(api.importPersonalSkill.mock.calls[0][2]).toEqual(expect.any(String));
+  expect(await screen.findByRole("dialog", { name: personal.payload.title })).toBeInTheDocument();
+});
+
+it("guards transfer file drafts and permits a failed first request to return without claiming a saved journal", async () => {
+  api.confirmPersonalSkillTransfer.mockRejectedValue(new Error("unknown response"));
+  const user = await previewTransfer();
+  await user.click(screen.getByRole("button", { name: "返回技能列表" }));
+  await user.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "取消" }));
+  expect(screen.getByRole("region", { name: "迁移预览" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "确认迁移" }));
+  await screen.findByRole("button", { name: "继续迁移" });
+  expect(screen.getByText(/尚未收到回执时/)).toBeInTheDocument();
+  expect(screen.queryByText("已保存 1 个版本")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "返回技能列表" }));
+  await user.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "返回列表" }));
+  expect(screen.queryByRole("region", { name: "技能历史迁移" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "添加技能" })).toBeInTheDocument();
+});
+
+
+it("protects a transfer upload in flight from project switching until it settles", async () => {
+  const staged = deferred<{ reference: string; sourceDigest: string; format: string; sourceSkills: [] }>();
+  api.uploadPersonalSkillTransfer.mockReturnValue(staged.promise);
+  open(); const user = userEvent.setup(); await openImport(user);
+  await user.click(screen.getByRole("button", { name: "历史与账户数据" }));
+  await user.upload(screen.getByLabelText("迁移文件"), new File(['{}'], "history.json", { type: "application/json" }));
+  await user.click(screen.getByRole("button", { name: "上传迁移文件" }));
+  expect(dirtyRouteState()).toBe("busy");
+  let switching!: Promise<void>;
+  await act(async () => { switching = useProjectStore.getState().select("another-project"); });
+  expect(screen.getByRole("button", { name: "放弃修改并切换" })).toHaveAttribute("aria-disabled", "true");
+  expect(useProjectStore.getState().currentId).toBe("project-one");
+  await act(async () => { staged.resolve({ reference: "transfer:upload", sourceDigest: "sha256:x", format: "portable", sourceSkills: [] }); });
+  await user.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "取消" }));
+  await switching;
+  expect(screen.getByLabelText("迁移文件")).toHaveValue("C:\\fakepath\\history.json");
+  expect(useProjectStore.getState().currentId).toBe("project-one");
+});
+
+
+it("returns from a paused migration and resumes the authenticated journal with the original intent", async () => {
+  const current = deferred<typeof partialTransfer>();
+  api.confirmPersonalSkillTransfer.mockReturnValueOnce(current.promise).mockResolvedValueOnce({ ...partialTransfer, status: "complete" });
+  const user = await previewTransfer();
+  await user.click(screen.getByRole("button", { name: "确认迁移" }));
+  await user.click(screen.getByRole("button", { name: "暂停迁移" }));
+  expect(screen.getByRole("button", { name: "返回技能列表" })).toBeDisabled();
+  await act(async () => { current.resolve(partialTransfer); });
+  const originalIntent = api.confirmPersonalSkillTransfer.mock.calls[0][0];
+  api.pendingPersonalSkillTransfers.mockResolvedValue({ items: [{ ...recoveredTransfer, idempotencyKey: originalIntent.idempotencyKey }] });
+  await user.click(screen.getByRole("button", { name: "返回技能列表" }));
+  await user.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "返回列表" }));
+  await user.click(await screen.findByRole("button", { name: "继续未完成的迁移" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "继续迁移" })).toBeEnabled());
+  await user.click(screen.getByRole("button", { name: "继续迁移" }));
+  await screen.findByText("迁移完成；技能已保存，尚未启用。");
+  expect(api.confirmPersonalSkillTransfer.mock.calls[1][0]).toEqual(originalIntent);
+});
+
+async function unknownOrdinaryImport() {
+  api.previewPersonalSkillRepository.mockResolvedValue({ resourceId: "owned-repo", immutableSource: { repository: "example/skills", commit: "a".repeat(40) }, preview: { ...detail.skill, resources: [], scripts: [] }, findings: [] });
+  api.importPersonalSkill.mockRejectedValueOnce(new Error("response lost"));
+  const view = open(), user = userEvent.setup(); await openImport(user);
+  await user.click(screen.getByRole("button", { name: "公开仓库" }));
+  await user.type(screen.getByLabelText("技能名称"), "Recover this intent");
+  await user.type(screen.getByLabelText("公开仓库"), "example/skills");
+  await user.type(screen.getByLabelText("固定提交"), "a".repeat(40));
+  await user.click(screen.getByRole("button", { name: "预览" }));
+  await user.click(await screen.findByRole("button", { name: "确认导入" }));
+  await screen.findByRole("button", { name: "核查并继续同一次导入" });
+  return { view, user, original: [...api.importPersonalSkill.mock.calls[0]] };
+}
+
+it("recovers ordinary import metadata after a page remount, requires explicit replay and clears only on success", async () => {
+  const { view, user, original } = await unknownOrdinaryImport();
+  const keys = Object.keys(window.sessionStorage).filter(key => key.startsWith("evimed:ordinary-skill-import:v1:") && !key.endsWith(":probe"));
+  expect(keys).toHaveLength(1);
+  const saved = JSON.parse(window.sessionStorage.getItem(keys[0])!);
+  expect(Object.keys(saved).sort()).toEqual(["schemaVersion", "userId", "tenantId", "projectId", "resourceId", "title", "idempotencyKey"].sort());
+  expect(saved).toMatchObject({ userId: "import-owner", tenantId: "tenant-one", projectId: "project-one", idempotencyKey: original[2] });
+  view.unmount(); open();
+  await user.click(await screen.findByRole("button", { name: "继续核查普通导入" }));
+  expect(api.importPersonalSkill).toHaveBeenCalledTimes(1);
+  expect(screen.getByLabelText("技能名称")).toHaveValue("Recover this intent");
+  expect(screen.getByRole("button", { name: "公开仓库" })).toBeDisabled();
+  api.importPersonalSkill.mockResolvedValue(personal);
+  await user.click(screen.getByRole("button", { name: "核查并继续同一次导入" }));
+  await screen.findByRole("dialog", { name: personal.payload.title });
+  expect(api.importPersonalSkill.mock.calls[1]).toEqual(original);
+  expect(window.sessionStorage.getItem(keys[0])).toBeNull();
+});
+
+it("does not show another account or project's ordinary intent and keeps the original pointer for its owner", async () => {
+  const { view, user } = await unknownOrdinaryImport(); view.unmount();
+  api.fetchWebMe.mockImplementation(async ({projectId}: {projectId:string}) => ({user:{id:"another-owner",tenantId:"tenant-one"},project:{id:projectId}}));
+  const otherAccount = open(); await openImport(user);
+  expect(screen.queryByRole("button", { name: "核查并继续同一次导入" })).not.toBeInTheDocument();
+  expect(screen.getByLabelText("技能名称")).toHaveValue(""); otherAccount.unmount();
+  api.fetchWebMe.mockImplementation(async ({projectId}: {projectId:string}) => ({user:{id:"import-owner",tenantId:"tenant-one"},project:{id:projectId}}));
+  useProjectStore.setState({ currentId: "project-two" });
+  const otherProject = open(); await openImport(user);
+  expect(screen.queryByRole("button", { name: "核查并继续同一次导入" })).not.toBeInTheDocument();
+  expect(screen.getByLabelText("技能名称")).toHaveValue(""); otherProject.unmount();
+  useProjectStore.setState({ currentId: "project-one" }); open();
+  expect(await screen.findByRole("button", { name: "继续核查普通导入" })).toBeInTheDocument();
+  expect(api.importPersonalSkill).toHaveBeenCalledTimes(1);
+});
+
+it("disables confirmation until identity and tab storage have been verified", async () => {
+  const identity = deferred<{user:{id:string;tenantId:string};project:{id:string}}>(); api.fetchWebMe.mockReturnValue(identity.promise);
+  api.previewPersonalSkillRepository.mockResolvedValue({ resourceId: "owned-repo", immutableSource: { repository: "example/skills", commit: "a".repeat(40) }, preview: { ...detail.skill, resources: [], scripts: [] }, findings: [] });
+  open(); const user = userEvent.setup(); await openImport(user);
+  await user.click(screen.getByRole("button", { name: "公开仓库" }));
+  await user.type(screen.getByLabelText("技能名称"), "Waiting for identity"); await user.type(screen.getByLabelText("公开仓库"), "example/skills"); await user.type(screen.getByLabelText("固定提交"), "a".repeat(40));
+  await user.click(screen.getByRole("button", { name: "预览" }));
+  expect(await screen.findByRole("button", { name: "确认导入" })).toBeDisabled(); expect(api.importPersonalSkill).not.toHaveBeenCalled();
+  const blocked = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new DOMException("blocked", "SecurityError"); });
+  try {
+    await act(async () => { identity.resolve({user:{id:"import-owner",tenantId:"tenant-one"},project:{id:"project-one"}}); });
+    expect(await screen.findByRole("button", { name: "重试核对" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "确认导入" })).toBeDisabled(); expect(api.importPersonalSkill).not.toHaveBeenCalled();
+  } finally { blocked.mockRestore(); }
+});
+
+it("keeps an expired or refused ordinary recovery pointer and never creates a fresh retry intent", async () => {
+  const { view, user, original } = await unknownOrdinaryImport(); view.unmount(); open();
+  await user.click(await screen.findByRole("button", { name: "继续核查普通导入" }));
+  api.importPersonalSkill.mockRejectedValue(new WebApiError("owned upload expired or unavailable", {status:404,code:"product_document_not_found"}));
+  await user.click(screen.getByRole("button", { name: "核查并继续同一次导入" }));
+  await screen.findByRole("alert");
+  expect(api.importPersonalSkill.mock.calls[1]).toEqual(original);
+  expect(Object.keys(window.sessionStorage).some(key => window.sessionStorage.getItem(key)?.includes(original[2]))).toBe(true);
+  expect(screen.getByLabelText("技能名称")).toBeDisabled();
+  expect(screen.queryByRole("dialog", { name: personal.payload.title })).not.toBeInTheDocument();
+});
+
+
+it("clears visible recovery on a session boundary without erasing the original account's pointer", async () => {
+  const { user } = await unknownOrdinaryImport();
+  api.fetchWebMe.mockImplementation(async ({projectId}: {projectId:string}) => ({user:{id:"new-account",tenantId:"tenant-one"},project:{id:projectId}}));
+  await act(async () => { window.dispatchEvent(new Event(WEB_SESSION_STARTED_EVENT)); });
+  await openImport(user);
+  expect(screen.getByLabelText("技能名称")).toHaveValue("");
+  expect(screen.queryByText(/Recover this intent/)).not.toBeInTheDocument();
+  expect(api.importPersonalSkill).toHaveBeenCalledTimes(1);
+  expect(Object.keys(window.sessionStorage).some(key => window.sessionStorage.getItem(key)?.includes("Recover this intent"))).toBe(true);
+});
+
+it("never dispatches an ordinary import if storing its confirmed intent fails after preview", async () => {
+  api.previewPersonalSkillRepository.mockResolvedValue({ resourceId: "owned-repo", immutableSource: { repository: "example/skills", commit: "a".repeat(40) }, preview: { ...detail.skill, resources: [], scripts: [] }, findings: [] });
+  open(); const user = userEvent.setup(); await openImport(user);
+  await user.click(screen.getByRole("button", { name: "公开仓库" }));
+  await user.type(screen.getByLabelText("技能名称"), "Must be recoverable"); await user.type(screen.getByLabelText("公开仓库"), "example/skills"); await user.type(screen.getByLabelText("固定提交"), "a".repeat(40));
+  await user.click(screen.getByRole("button", { name: "预览" }));
+  const confirm = await screen.findByRole("button", { name: "确认导入" }); expect(confirm).toBeEnabled();
+  const blocked = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new DOMException("full", "QuotaExceededError"); });
+  try { await user.click(confirm); expect(api.importPersonalSkill).not.toHaveBeenCalled(); expect(screen.getByRole("button", { name: "确认导入" })).toBeDisabled(); }
+  finally { blocked.mockRestore(); }
+});
+
+it.each([400, 404, 0])("keeps rejection/unknown intent %s on cancel and clears only after explicit checked abandonment", async status => {
+  const { user, original } = await unknownOrdinaryImport();
+  api.importPersonalSkill.mockRejectedValue(status ? new WebApiError("Refused import", {status,code:"extension_contract_invalid"}) : new Error("response lost again"));
+  await user.click(screen.getByRole("button", { name: "核查并继续同一次导入" })); await screen.findByRole("alert");
+  const key = Object.keys(window.sessionStorage).find(key => window.sessionStorage.getItem(key)?.includes(original[2]))!;
+  expect(key).toBeTruthy();
+  await user.click(screen.getByRole("button", { name: "前往已添加列表核查" }));
+  expect(await screen.findByRole("button", { name: "继续核查普通导入" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "插件与技能" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "继续核查普通导入" }));
+  await user.click(screen.getByRole("button", { name: "已核查，放弃本次确认" }));
+  expect(screen.getByRole("alertdialog")).toHaveTextContent("不删除已保存的技能");
+  await user.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "取消" }));
+  expect(window.sessionStorage.getItem(key)).not.toBeNull();
+  expect(screen.getByRole("button", { name: "核查并继续同一次导入" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "已核查，放弃本次确认" }));
+  await user.click(screen.getByRole("button", { name: "放弃本次确认" }));
+  expect(window.sessionStorage.getItem(key)).toBeNull();
+  expect(screen.queryByRole("button", { name: "继续核查普通导入" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "添加技能" })).toBeInTheDocument();
+  expect(api.importPersonalSkill).toHaveBeenCalledTimes(2);
+});
+
+it("rejects a title exceeding the server UTF-8 byte budget before storing or submitting an intent", async () => {
+  api.previewPersonalSkillRepository.mockResolvedValue({ resourceId: "owned-repo", immutableSource: { repository: "example/skills", commit: "a".repeat(40) }, preview: { ...detail.skill, resources: [], scripts: [] }, findings: [] });
+  open(); const user = userEvent.setup(); await openImport(user);
+  await user.click(screen.getByRole("button", { name: "公开仓库" }));
+  await user.type(screen.getByLabelText("技能名称"), "名".repeat(81)); await user.type(screen.getByLabelText("公开仓库"), "example/skills"); await user.type(screen.getByLabelText("固定提交"), "a".repeat(40));
+  await user.click(screen.getByRole("button", { name: "预览" }));
+  await user.click(await screen.findByRole("button", { name: "确认导入" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("240 字节");
+  expect(api.importPersonalSkill).not.toHaveBeenCalled();
+  expect(Object.keys(window.sessionStorage).filter(key => key.startsWith("evimed:ordinary-skill-import:v1:"))).toHaveLength(0);
+  expect(screen.getByLabelText("技能名称")).toBeEnabled();
 });

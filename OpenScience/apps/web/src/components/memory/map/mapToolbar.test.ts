@@ -13,18 +13,18 @@ const labels = (toolbar: ReturnType<typeof build>) => (toolbar.filters ?? []).ma
 describe("the map's one row of controls", () => {
   it("is the five views first — pinned, and never counted as a filter — then what narrows them, then the search", () => {
     const toolbar = build({ view: "topics" });
-    const views = toolbar.filters![0];
-    expect(views).toMatchObject({ kind: "chips", label: "地图的视图", value: "topics", neutral: "topics", pinned: true });
+    const views = toolbar.navigation![0];
+    expect(views).toMatchObject({ kind: "chips", label: "地图的视图", value: "topics", pinned: true });
     expect(views?.kind === "chips" ? views.options.map((option) => option.label) : null).toEqual(["关系", "主题", "维度", "时间", "活跃"]);
-    expect(labels(toolbar)).toEqual(["chips:地图的视图", "select:全部时间", "select:种类", "toggle:只看需要看一眼的"]);
+    expect(labels(toolbar)).toEqual(["select:全部时间", "select:种类", "toggle:只看需要看一眼的"]);
     expect(toolbar.search).toMatchObject({ label: "搜索记忆地图", value: "", maxLength: 80 });
     expect(toolbar.onClear).toBeDefined();
   });
 
   it("has no filter for nothing: no kinds and nothing to look at, no menu and no toggle — and the views and the search before the document is read", () => {
     const empty = { facets: { projects: [], kinds: [], topics: [], dimensions: [] }, summary: { memories: 0, documents: 0, methods: 0, projects: 0, needsLook: 0, since: null } };
-    expect(labels(build({}, { doc: empty }))).toEqual(["chips:地图的视图", "select:全部时间"]);
-    expect(labels(build({}, { doc: null }))).toEqual(["chips:地图的视图", "select:全部时间"]);
+    expect(labels(build({}, { doc: empty }))).toEqual(["select:全部时间"]);
+    expect(labels(build({}, { doc: null }))).toEqual(["select:全部时间"]);
   });
 
   it("keeps the look toggle while it is on, so the page can let go of it, and draws each narrowing as a mark that lets go with a press", () => {
@@ -33,7 +33,7 @@ describe("the map's one row of controls", () => {
       doc: { ...doc, summary: { ...doc.summary, needsLook: 0 } }, topicName: "回答风格", aspectName: "偏好", focusLabel: "记忆 m1", onNarrow,
     });
     expect(labels(toolbar)).toEqual([
-      "chips:地图的视图", "select:全部时间", "select:种类", "toggle:只看需要看一眼的", "toggle:主题：回答风格", "toggle:维度：偏好", "toggle:聚焦：记忆 m1", "select:深度", "toggle:来源链",
+      "select:全部时间", "select:种类", "toggle:只看需要看一眼的", "toggle:主题：回答风格", "toggle:维度：偏好", "toggle:聚焦：记忆 m1", "select:深度", "toggle:来源链",
     ]);
     const marks = (toolbar.filters ?? []).filter((filter) => filter.kind === "toggle" && filter.label.includes("："));
     for (const mark of marks) { if (mark.kind === "toggle") { expect(mark.pressed).toBe(true); mark.onChange(false); } }

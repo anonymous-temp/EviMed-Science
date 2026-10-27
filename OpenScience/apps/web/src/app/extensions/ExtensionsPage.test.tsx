@@ -1,27 +1,34 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router";
-import { beforeEach, expect, it, vi } from "vitest";
+import { createMemoryRouter, RouterProvider, MemoryRouter, Route, Routes, useLocation } from "react-router";
+import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { CAPABILITY_DISPLAY } from "@evimed/domain";
-import { WebApiError } from "@/lib/apiClient";
+import { UnsavedRouteGuard } from "@/app/layout/UnsavedRouteGuard";
+import { WebApiError, getWebProjectId, setWebProjectId } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import { useToastStore } from "@/lib/toast";
 import { ExtensionsPage } from "./ExtensionsPage";
+
+const NativeRequest = globalThis.Request;
+beforeAll(() => { globalThis.Request = class extends NativeRequest {
+  constructor(input: RequestInfo | URL, init?: RequestInit) { super(input, init ? { ...init, signal: undefined } : init); }
+}; });
+afterAll(() => { globalThis.Request = NativeRequest; });
 
 // Existing authoring and deep-link journeys remain supported by the new catalogue.
 const skills = vi.hoisted(() => ({ listPlatformSkills: vi.fn(), projectPlatformSkills: vi.fn(), listPersonalSkills: vi.fn(), pendingPersonalSkillTransfers: vi.fn(),
   getPersonalSkill: vi.fn(), personalSkillHistory: vi.fn(), personalSkillDefaults: vi.fn(), projectSkills: vi.fn(), personalSkillSupply: vi.fn(), createPersonalSkill: vi.fn(), saveProjectSkills: vi.fn() }));
 const extensions = vi.hoisted(() => ({ inventory: vi.fn(), extensionCatalogue: vi.fn(), extensionInstallations: vi.fn(), projectExtensions: vi.fn(), projectBuiltinPlugins: vi.fn() }));
-const api = vi.hoisted(() => ({ listWebPlugins: vi.fn(), listWebResearchAgents: vi.fn(), putWebResearchSession: vi.fn() }));
+const api = vi.hoisted(() => ({ listWebPlugins: vi.fn(), listWebResearchAgents: vi.fn(), putWebResearchSession: vi.fn(), fetchWebMe: vi.fn() }));
 vi.mock("@/lib/skillLibraryClient", async original => ({ ...(await original<object>()), ...skills }));
 vi.mock("@/lib/extensionsClient", async original => ({ ...(await original<object>()), ...extensions }));
 vi.mock("@/lib/apiClient", async original => ({ ...(await original<object>()), ...api }));
 const mine = { id: "skill:mine", revision: 1, payload: { title: "我的检索方案", description: "自己写的", instructions: "Use sources.", nativeName: "personal-x", digest: "sha256:x", resources: [], prepared: true }, createdAt: "", updatedAt: "", deletedAt: null };
 function Where() { return <p data-testid="where">{useLocation().pathname}</p>; }
-function open(path: string) { return render(<MemoryRouter initialEntries={[path]}><Where /><Routes><Route path="/app/extensions/:tab/:itemId?" element={<ExtensionsPage />} /></Routes></MemoryRouter>); }
+function open(path: string) { return render(<MemoryRouter initialEntries={[path]}><UnsavedRouteGuard /><Where /><Routes><Route path="/app/extensions/:tab/:itemId?" element={<ExtensionsPage />} /></Routes></MemoryRouter>); }
 /** The same page with the conversation route beside it: a tool row opens a conversation, and that is where it lands. */
 function openWithChat(path: string) {
-  return render(<MemoryRouter initialEntries={[path]}><Where /><Routes><Route path="/app/extensions/:tab/:itemId?" element={<ExtensionsPage />} /><Route path="/app/chat" element={<p>对话</p>} /></Routes></MemoryRouter>);
+  return render(<MemoryRouter initialEntries={[path]}><UnsavedRouteGuard /><Where /><Routes><Route path="/app/extensions/:tab/:itemId?" element={<ExtensionsPage />} /><Route path="/app/chat" element={<p>对话</p>} /></Routes></MemoryRouter>);
 }
 const row = (name: string, group: string, extra: object = {}) => ({ id: `curated:${name}`, name, title: `${group}技能 ${name}`, use: `${name} 的一句话用途`, group, source: "platform", canCopy: true, requirement: { required: false, reason: null }, ...extra });
 const platformList = { groups: ["科研分析", "长任务", "循证 GEO"], geoGroup: "循证 GEO", loopxGroup: "长任务", items: [row("a", "科研分析"), row("b", "科研分析")] };
@@ -49,6 +56,8 @@ beforeEach(() => {
   extensions.extensionInstallations.mockResolvedValue({ items: [], nextCursor: null });
   extensions.projectExtensions.mockResolvedValue({ revision: 0, selections: [], effectiveGeneration: null });
   extensions.projectBuiltinPlugins.mockResolvedValue({ revision: 1, payload: { disabled: [] }, items: [], activation: { phase: "saved", savedRevision: 1, effectiveRevision: null, error: null } });
+  window.sessionStorage.clear();
+  api.fetchWebMe.mockImplementation(async ({ projectId }: { projectId: string }) => ({ user: { id: "owner" }, project: { id: projectId } }));
   api.listWebPlugins.mockResolvedValue([]);
   api.listWebResearchAgents.mockResolvedValue([]);
   api.putWebResearchSession.mockImplementation(async (sessionId: string, selection: object) => ({ sessionId, ...selection }));
@@ -58,7 +67,7 @@ const openCreate = async () => {
   open("/app/extensions/skills");
   await userEvent.click(await screen.findByRole("button", { name: "添加技能" }));
   await userEvent.click(screen.getByRole("menuitem", { name: "创建技能" }));
-  return screen.getByRole("dialog", { name: "新建技能" });
+  return screen.getByRole("region", { name: "新建技能" });
 };
 const created = { ...mine, id: "skill:created", revision: 1 };
 
@@ -152,8 +161,8 @@ it("two clicks on 保存 while the first is on its way make one skill", async ()
   fireEvent.submit(drawer.querySelector("form")!);
   expect(skills.createPersonalSkill).toHaveBeenCalledTimes(1);
   // The drawer does not close under a save that has not finished.
-  await userEvent.click(within(drawer).getByRole("button", { name: "关闭" }));
-  expect(screen.getByRole("dialog", { name: "新建技能" })).toBeInTheDocument();
+  await userEvent.click(within(drawer).getByRole("button", { name: "返回技能列表" }));
+  expect(screen.getByRole("region", { name: "新建技能" })).toBeInTheDocument();
   finish(created);
   await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/app/extensions/skills/skill%3Acreated"));
   expect(skills.createPersonalSkill).toHaveBeenCalledTimes(1);
@@ -182,7 +191,7 @@ it("a skill the server refused to create says why and leaves the form as it was"
   await userEvent.type(within(drawer).getByLabelText("技能说明"), "先查指南。");
   await userEvent.click(within(drawer).getByRole("button", { name: "保存" }));
   expect(await within(drawer).findByRole("alert")).toHaveTextContent("提交的内容格式不正确，请检查后重新提交。");
-  expect(screen.getByRole("dialog", { name: "新建技能" })).toBeInTheDocument();
+  expect(screen.getByRole("region", { name: "新建技能" })).toBeInTheDocument();
   expect(within(drawer).getByLabelText("名称")).toHaveValue("我的检索方案");
   expect(skills.saveProjectSkills).not.toHaveBeenCalled();
 });
@@ -289,4 +298,97 @@ it("an address with no such tab goes to discovery", async () => {
   open("/app/extensions/nothing");
   await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/app/extensions/discover"));
   expect(await screen.findByRole("button", { name: "科研分析技能 a" })).toBeInTheDocument();
+});
+
+
+it("returns from main-area creation only after discarding, and keeps the same draft when cancelled", async () => {
+  const editor = await openCreate();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+  await userEvent.type(within(editor).getByLabelText("名称"), "Draft skill");
+  await userEvent.click(screen.getByRole("button", { name: "返回技能列表" }));
+  const confirm = screen.getByRole("alertdialog");
+  await userEvent.click(within(confirm).getByRole("button", { name: "取消" }));
+  expect(screen.getByLabelText("名称")).toHaveValue("Draft skill");
+  await userEvent.click(screen.getByRole("button", { name: "返回技能列表" }));
+  await userEvent.click(screen.getByRole("button", { name: "放弃修改" }));
+  expect(screen.queryByRole("region", { name: "新建技能" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "添加技能" })).toBeInTheDocument();
+});
+
+
+it("cancels a project switch before identity, storage and draft change, then switches after explicit discard", async () => {
+  setWebProjectId("owned-project");
+  api.fetchWebMe.mockImplementation(async ({ projectId }: {projectId: string}) => ({user: {id: "owner"},project:{id:projectId,name:"Project"}}));
+  await openCreate();
+  await userEvent.type(screen.getByLabelText("名称"), "Original project draft");
+  let switching!: Promise<void>;
+  await act(async () => { switching = useProjectStore.getState().select("second-project"); });
+  expect(api.fetchWebMe).not.toHaveBeenCalledWith({ projectId: "second-project" });
+  expect(getWebProjectId()).toBe("owned-project");
+  expect(useProjectStore.getState().currentId).toBe("owned-project");
+  await userEvent.click(screen.getByRole("button", { name: "取消" }));
+  await switching;
+  expect(screen.getByLabelText("名称")).toHaveValue("Original project draft");
+  expect(useProjectStore.getState().switching).toBeNull();
+  await act(async () => { switching = useProjectStore.getState().select("second-project"); });
+  await userEvent.click(screen.getByRole("button", { name: "放弃修改并切换" }));
+  await switching;
+  expect(api.fetchWebMe).toHaveBeenCalledWith({ projectId: "second-project" });
+  expect(getWebProjectId()).toBe("second-project");
+  expect(useProjectStore.getState().currentId).toBe("second-project");
+  expect(screen.queryByLabelText("名称")).not.toBeInTheDocument();
+});
+
+it("browser Back keeps a dirty personal edit on cancel and restores the catalogue after discard", async () => {
+  skills.getPersonalSkill.mockResolvedValue(mine);
+  const router = createMemoryRouter([{ path: "/app/extensions/:tab/:itemId?", element: <><UnsavedRouteGuard /><ExtensionsPage /></> }],
+    { initialEntries: ["/app/extensions/installed", "/app/extensions/skills/skill%3Amine"], initialIndex: 1 });
+  render(<RouterProvider router={router} />);
+  await screen.findByRole("dialog", { name: "我的检索方案" });
+  await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+  await userEvent.click(screen.getByRole("menuitem", { name: "编辑" }));
+  await userEvent.type(screen.getByLabelText("名称"), " draft");
+  await act(() => router.navigate(-1));
+  await userEvent.click(screen.getByRole("button", { name: "取消" }));
+  expect(screen.getByLabelText("名称")).toHaveValue("我的检索方案 draft");
+  await act(() => router.navigate(-1));
+  await userEvent.click(screen.getByRole("button", { name: "放弃修改并离开" }));
+  expect(await screen.findByRole("heading", { name: "插件与技能" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "添加技能" })).toBeInTheDocument();
+  expect(screen.queryByLabelText("名称")).not.toBeInTheDocument();
+});
+
+
+it("asks again if a draft changes while the requested project's access proof is pending", async () => {
+  let prove!: (value: unknown) => void;
+  api.fetchWebMe.mockImplementation(({projectId}: {projectId:string}) => projectId === "second-project" ? new Promise(resolve => { prove = resolve; }) : Promise.resolve({user:{id:"owner"},project:{id:projectId}}));
+  await openCreate();
+  await userEvent.type(screen.getByLabelText("名称"), "First draft");
+  let switching!: Promise<void>;
+  await act(async () => { switching = useProjectStore.getState().select("second-project"); });
+  await userEvent.click(screen.getByRole("button", { name: "放弃修改并切换" }));
+  await waitFor(() => expect(api.fetchWebMe).toHaveBeenCalledWith({projectId:"second-project"}));
+  await userEvent.type(screen.getByLabelText("名称"), " changed");
+  await act(async () => { prove({ user: { id: "owner" }, project: { id: "second-project" } }); });
+  expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "取消" }));
+  await switching;
+  expect(useProjectStore.getState().currentId).toBe("owned-project");
+  expect(screen.getByLabelText("名称")).toHaveValue("First draft changed");
+});
+
+
+it("retains the original project and draft when access proof fails after discard was authorized", async () => {
+  api.fetchWebMe.mockImplementation(({projectId}: {projectId:string}) => projectId === "denied-project" ? Promise.reject(new Error("Project access denied")) : Promise.resolve({user:{id:"owner"},project:{id:projectId}}));
+  await openCreate();
+  await userEvent.type(screen.getByLabelText("名称"), "Still valuable");
+  let switching!: Promise<unknown>;
+  await act(async () => { switching = useProjectStore.getState().select("denied-project").catch(error => error); });
+  await userEvent.click(screen.getByRole("button", { name: "放弃修改并切换" }));
+  await expect(switching).resolves.toEqual(expect.objectContaining({ message: "Project access denied" }));
+  expect(screen.getByLabelText("名称")).toHaveValue("Still valuable");
+  expect(useProjectStore.getState().currentId).toBe("owned-project");
+  await userEvent.click(screen.getByRole("button", { name: "返回技能列表" }));
+  expect(screen.getByRole("alertdialog")).toBeInTheDocument();
 });

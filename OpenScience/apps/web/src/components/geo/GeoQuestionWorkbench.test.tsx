@@ -6,6 +6,8 @@ import { GeoQuestionWorkbench } from './GeoQuestionWorkbench';
 import { geoProject } from './__fixtures__/geoTabs';
 import type { GeoQuestions } from '@/lib/geoClient';
 import type { GeoDiagnosisProgress } from '@/lib/geoQuestionWorkbenchClient';
+const originals=vi.hoisted(()=>vi.fn());
+vi.mock('@/lib/geoClient',async original=>({...await original<typeof import('@/lib/geoClient')>(),getGeoQuestions:originals}));
 const identity = vi.hoisted(() => ({ fetchWebMe: vi.fn() }));
 vi.mock('@/lib/apiClient', async original => ({ ...(await original<typeof import('@/lib/apiClient')>()), fetchWebMe: identity.fetchWebMe }));
 const client = vi.hoisted(() => ({ getGeoDiagnosisProgress: vi.fn(), previewGeoQuestions: vi.fn(), importGeoQuestions: vi.fn(), startGeoDiagnosis: vi.fn(), recoverGeoDiagnosis: vi.fn() }));
@@ -19,7 +21,7 @@ const progress = (patch: Partial<GeoDiagnosisProgress> = {}): GeoDiagnosisProgre
 ], ...patch });
 function Address() { const location = useLocation(); return <output>{location.search}</output>; }
 function show(path = '/questions', viewer = false) { return render(<MemoryRouter initialEntries={[path]}><GeoQuestionWorkbench geoId="g1" project={geoProject({}, viewer ? { access: { roles: ['viewer'], abilities: ['read'], owner: false } } : {})} data={data} onSaved={vi.fn()} /><Address /></MemoryRouter>); }
-beforeEach(() => { sessionStorage.clear(); localStorage.clear(); identity.fetchWebMe.mockReset(); identity.fetchWebMe.mockResolvedValue({ user: { id: 'u1' }, tenant: { id: 't1' } }); Object.values(client).forEach(fn => fn.mockReset()); client.getGeoDiagnosisProgress.mockResolvedValue(progress()); client.startGeoDiagnosis.mockResolvedValue({ roundId: 'r1', setVersion: 3 }); client.recoverGeoDiagnosis.mockResolvedValue({ roundId: 'r2', setVersion: 3 }); });
+beforeEach(() => { originals.mockReset(); sessionStorage.clear(); localStorage.clear(); identity.fetchWebMe.mockReset(); identity.fetchWebMe.mockResolvedValue({ user: { id: 'u1' }, tenant: { id: 't1' } }); Object.values(client).forEach(fn => fn.mockReset()); client.getGeoDiagnosisProgress.mockResolvedValue(progress()); client.startGeoDiagnosis.mockResolvedValue({ roundId: 'r1', setVersion: 3 }); client.recoverGeoDiagnosis.mockResolvedValue({ roundId: 'r2', setVersion: 3 }); });
 it('opens import on an empty set, preserves quoted CSV duplicates and saves only after preview', async () => {
   show();
   await userEvent.click(screen.getByRole('button', { name: '导入问句' }));
@@ -198,7 +200,7 @@ it('keeps every editing entry disabled while a preview is pending', async () => 
   let complete!: (value: unknown) => void;
   client.previewGeoQuestions.mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
   await userEvent.click(screen.getByRole('button', { name: '核对导入预览' }));
-  for (const name of ['调整口径', '编辑为新版本', '导入问句']) expect(screen.getByRole('button', { name })).toBeDisabled();
+  for (const name of ['编辑为新版本', '导入问句']) expect(screen.queryByRole('button', { name })).toBeNull();
   expect(screen.getByLabelText('第 1 题文本')).toBeDisabled();
   await act(async () => { complete({ rows: [], contract, actualRows: 1, measuredRows: 1, plannedCalls: 1, duplicateCandidates: [] }); });
   expect(await screen.findByRole('button', { name: '保存为新版本' })).toBeEnabled();
@@ -252,4 +254,128 @@ it('says why a job failed in a sentence, never by its code', async () => {
   show('/questions?diagnosisRound=r1'); await screen.findByText(/总任务 102/);
   expect(screen.queryByText(/delivery_unknown_no_automatic_retry/)).toBeNull();
   expect(screen.getByText(/请求可能已经送达，但没有收到回答/)).toBeInTheDocument();
+});
+
+async function importUnsavedRows() {
+  await userEvent.click(screen.getByRole('button',{name:'导入问句'}));
+  const csv=new File(['ID,Question\n001,Original imported row'],'draft.csv',{type:'text/csv'});
+  Object.defineProperty(csv,'arrayBuffer',{value:async()=>new TextEncoder().encode('ID,Question\n001,Original imported row').buffer});
+  await userEvent.upload(screen.getByLabelText(/选择 Excel/),csv);
+  await userEvent.selectOptions(await screen.findByLabelText('原题文本'),'1');
+  await userEvent.selectOptions(screen.getByLabelText('原编号'),'0');
+  await userEvent.click(screen.getByRole('button',{name:'读取映射行'}));
+  await screen.findByLabelText('第 1 题文本');
+}
+
+it('retains imported rows and mapping on continue, then clears them on confirmed discard and reload',async()=>{
+  const mounted=show();await importUnsavedRows();
+  await userEvent.clear(screen.getByLabelText('第 1 题文本'));
+  await userEvent.type(screen.getByLabelText('第 1 题文本'),'Edited unsaved original');
+  await userEvent.click(screen.getByRole('button',{name:'返回问题列表'}));
+  await userEvent.click(screen.getByRole('button',{name:'取消'}));
+  expect(screen.getByLabelText('第 1 题文本')).toHaveValue('Edited unsaved original');
+  expect(screen.getByLabelText('原编号')).toHaveValue('0');
+  expect(screen.getByRole('button',{name:'返回问题列表'})).toHaveFocus();
+  await userEvent.click(screen.getByRole('button',{name:'返回问题列表'}));
+  await userEvent.click(screen.getByRole('button',{name:'放弃修改'}));
+  await userEvent.click(screen.getByRole('button',{name:'导入问句'}));
+  expect(screen.queryByLabelText('第 1 题文本')).toBeNull();
+  expect(screen.queryByLabelText('原编号')).toBeNull();
+  expect(screen.queryByRole('button',{name:'保存为新版本'})).toBeNull();
+  mounted.unmount();show();await userEvent.click(screen.getByRole('button',{name:'导入问句'}));
+  expect(screen.queryByLabelText('第 1 题文本')).toBeNull();expect(data.version).toBe(3);
+});
+
+it('discards current editing changes while keeping the saved original version authoritative on reopen',async()=>{
+  const original:GeoQuestions={...data,groups:[{id:'g',name:'G',pool:null,typicalQuestion:'',journeyStage:null,audience:null,weight:null,isControl:false,signal:null,questions:[{id:'q1',originalId:'001',text:'Saved original',kind:'client',platform:null,sourceUrl:null,isMeasured:true}]}]};
+  render(<MemoryRouter><GeoQuestionWorkbench geoId="g1" project={geoProject()} data={original} onSaved={vi.fn()}/></MemoryRouter>);
+  await userEvent.click(screen.getByRole('button',{name:'编辑为新版本'}));
+  fireEvent.change(screen.getByLabelText('第 1 题文本'),{target:{value:'Unsaved edit'}});
+  await userEvent.click(screen.getByRole('button',{name:'返回问题列表'}));
+  await userEvent.click(screen.getByRole('button',{name:'放弃修改'}));
+  await userEvent.click(screen.getByRole('button',{name:'编辑为新版本'}));
+  expect(screen.getByLabelText('第 1 题文本')).toHaveValue('Saved original');
+  expect(original.version).toBe(3);expect(original.groups[0].questions[0].originalId).toBe('001');
+});
+
+it('retains the exact submitted-but-unknown operation when its displayed draft is discarded',async()=>{
+  const input={rows:[{text:'Awaiting server reconciliation',originalId:'001'}],contract,requestKey:'do-not-resubmit-as-new'};
+  const storageKey='geo-question-import:t1:u1:prj_geo_1:g1';localStorage.setItem(storageKey,JSON.stringify({input}));
+  const mounted=show();await screen.findByDisplayValue('Awaiting server reconciliation');
+  await userEvent.click(screen.getByRole('button',{name:'返回问题列表'}));
+  await userEvent.click(screen.getByRole('button',{name:'放弃修改'}));
+  expect(JSON.parse(localStorage.getItem(storageKey)!).input).toEqual(input);
+  mounted.unmount();show();
+  await userEvent.click(await screen.findByRole('button',{name:'继续核查上次保存'}));
+  expect(await screen.findByDisplayValue('Awaiting server reconciliation')).toBeVisible();
+  expect(JSON.parse(localStorage.getItem(storageKey)!).input.requestKey).toBe(input.requestKey);
+  expect(client.importGeoQuestions).not.toHaveBeenCalled();
+});
+
+it('recovers an unknown-result save in the same mount using the exact original payload and key',async()=>{
+  show();await importUnsavedRows();
+  client.previewGeoQuestions.mockImplementation(async (_id,input)=>({...input,actualRows:1,measuredRows:1,plannedCalls:1,duplicateCandidates:[]}));
+  client.importGeoQuestions.mockRejectedValueOnce(new Error('Response unknown')).mockResolvedValueOnce({version:4});
+  await userEvent.click(screen.getByRole('button',{name:'核对导入预览'}));
+  await userEvent.click(await screen.findByRole('button',{name:'保存为新版本'}));await screen.findByRole('alert');
+  const original=client.importGeoQuestions.mock.calls[0][1];
+  await userEvent.click(screen.getByRole('button',{name:'返回问题列表'}));
+  await userEvent.click(screen.getByRole('button',{name:'放弃修改'}));
+  await userEvent.click(screen.getByRole('button',{name:'继续核查上次保存'}));
+  expect(screen.getByLabelText('第 1 题文本')).toHaveValue(original.rows[0].text);
+  expect(screen.getByRole('button',{name:'保存为新版本'})).toBeVisible();
+  expect(client.previewGeoQuestions).toHaveBeenCalledTimes(1);expect(client.importGeoQuestions).toHaveBeenCalledTimes(1);
+  expect(JSON.parse(localStorage.getItem('geo-question-import:t1:u1:prj_geo_1:g1')!).input).toEqual(original);
+  await userEvent.click(screen.getByRole('button',{name:'保存为新版本'}));
+  await waitFor(()=>expect(client.importGeoQuestions).toHaveBeenCalledTimes(2));expect(client.importGeoQuestions.mock.calls[1][1]).toEqual(original);
+});
+
+
+const savedOriginals = ():GeoQuestions => ({...data,groups:[{id:'g',name:'Saved group',pool:null,typicalQuestion:'',journeyStage:null,audience:null,weight:null,isControl:false,signal:null,questions:[{id:'saved-q',originalId:'original-001',text:'Authoritative saved question',kind:'client',platform:null,sourceUrl:null,isMeasured:true}]}]});
+it('cannot replace an imported draft from the same editor mode and keeps raw mapping intact on cancel',async()=>{
+ render(<MemoryRouter><GeoQuestionWorkbench geoId="g1" project={geoProject()} data={savedOriginals()} onSaved={vi.fn()}/></MemoryRouter>);
+ await importUnsavedRows();
+ expect(screen.queryByRole('button',{name:'编辑为新版本'})).toBeNull();expect(screen.queryByRole('button',{name:'导入问句'})).toBeNull();
+ expect(screen.getByLabelText('原编号')).toHaveValue('0');
+ await userEvent.click(screen.getByRole('button',{name:'返回问题列表'}));await userEvent.click(screen.getByRole('button',{name:'取消'}));
+ expect(screen.getByLabelText('第 1 题文本')).toHaveValue('Original imported row');expect(screen.getByLabelText('原编号')).toHaveValue('0');
+ expect(originals).not.toHaveBeenCalled();
+ await userEvent.click(screen.getByRole('button',{name:'返回问题列表'}));await userEvent.click(screen.getByRole('button',{name:'放弃修改'}));
+ await userEvent.click(screen.getByRole('button',{name:'编辑为新版本'}));
+ expect(screen.getByLabelText('第 1 题文本')).toHaveValue('Authoritative saved question');
+});
+
+it('ignores an old full-version replacement after its editor unmounts and another import is in progress',async()=>{
+ let finish!:(value:GeoQuestions)=>void;originals.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+ const selected={...savedOriginals(),selection:{reference:'gsel_selected'}} as GeoQuestions;
+ const mounted=render(<MemoryRouter><GeoQuestionWorkbench geoId="g1" project={geoProject()} data={selected} onSaved={vi.fn()}/></MemoryRouter>);
+ await userEvent.click(screen.getByRole('button',{name:'编辑为新版本'}));
+ await waitFor(()=>expect(originals).toHaveBeenCalledWith('g1',3));
+ expect(screen.queryByRole('button',{name:'编辑为新版本'})).toBeNull();expect(screen.getByRole('button',{name:'返回问题列表'})).toBeDisabled();
+ mounted.unmount();show();await importUnsavedRows();
+ await act(async()=>{finish(savedOriginals());});
+ expect(screen.getByLabelText('第 1 题文本')).toHaveValue('Original imported row');expect(screen.getByLabelText('原编号')).toHaveValue('0');
+});
+
+it.each(['import','edit'] as const)('does not replace a current %s draft when slow account recovery discovers an older pending operation',async mode=>{
+ let finishIdentity!:(value:unknown)=>void;identity.fetchWebMe.mockImplementationOnce(()=>new Promise(resolve=>{finishIdentity=resolve;}));
+ const oldInput={rows:[{text:'Older submitted original',originalId:'old-001'}],contract,requestKey:'original-unknown-operation'};
+ const scope='geo-question-import:t1:u1:prj_geo_1:g1';localStorage.setItem(scope,JSON.stringify({input:oldInput}));
+ client.previewGeoQuestions.mockImplementation(async (_id,input)=>({...input,actualRows:1,measuredRows:1,plannedCalls:1,duplicateCandidates:[]}));
+ if(mode==='import'){show();await importUnsavedRows();}
+ else {render(<MemoryRouter><GeoQuestionWorkbench geoId="g1" project={geoProject()} data={savedOriginals()} onSaved={vi.fn()}/></MemoryRouter>);await userEvent.click(screen.getByRole('button',{name:'编辑为新版本'}));}
+ fireEvent.change(screen.getByLabelText('第 1 题文本'),{target:{value:'Current fresh draft'}});
+ await userEvent.click(screen.getByRole('button',{name:'核对导入预览'}));
+ await act(async()=>{finishIdentity({user:{id:'u1'},tenant:{id:'t1'}});});
+ expect(screen.getByLabelText('第 1 题文本')).toHaveValue('Current fresh draft');expect(screen.getByLabelText('第 1 题文本')).toBeEnabled();
+ if(mode==='import')expect(screen.getByLabelText('原编号')).toHaveValue('0');
+ expect(screen.getByRole('button',{name:'保存为新版本'})).toBeDisabled();expect(JSON.parse(localStorage.getItem(scope)!).input).toEqual(oldInput);
+ await userEvent.click(screen.getByRole('button',{name:'继续核查上次保存'}));await userEvent.click(screen.getByRole('button',{name:'取消'}));
+ expect(screen.getByLabelText('第 1 题文本')).toHaveValue('Current fresh draft');
+ if(mode==='import')expect(screen.getByLabelText('原编号')).toHaveValue('0');
+ await userEvent.click(screen.getByRole('button',{name:'继续核查上次保存'}));await userEvent.click(screen.getByRole('button',{name:'放弃修改'}));
+ expect(screen.getByLabelText('第 1 题文本')).toHaveValue('Older submitted original');
+ expect(client.importGeoQuestions).not.toHaveBeenCalled();expect(JSON.parse(localStorage.getItem(scope)!).input).toEqual(oldInput);
+ client.importGeoQuestions.mockResolvedValueOnce({version:4});await userEvent.click(screen.getByRole('button',{name:'保存为新版本'}));
+ await waitFor(()=>expect(client.importGeoQuestions).toHaveBeenCalledWith('g1',oldInput));
 });

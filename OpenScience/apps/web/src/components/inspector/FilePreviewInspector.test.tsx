@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FilePreviewInspector as FilePreviewInspectorT } from "@ai4s/shared";
 import { FilePreviewInspector, PreviewError, pdfFrameSource } from "./FilePreviewInspector";
 import { readArtifact, readClaimVerification } from "@/lib/artifactFile";
@@ -11,6 +11,7 @@ const probeLargeFile = vi.fn();
 const downloadArtifact = vi.fn();
 const downloadInlineArtifact = vi.fn();
 const openArtifactExternally = vi.fn();
+beforeEach(() => { downloadArtifact.mockClear(); });
 vi.mock("@/lib/apiClient", async (importOriginal) => {
   const mod = await importOriginal<typeof import("@/lib/apiClient")>();
   return {
@@ -47,6 +48,15 @@ const md: FilePreviewInspectorT = {
 };
 
 describe("FilePreviewInspector — markdown", () => {
+  it("keeps the project scope on the combined Markdown download", async () => {
+    vi.mocked(readArtifact).mockResolvedValueOnce({ path: "notes/report.md", mime: "text/markdown", encoding: "utf8", size: 10, data: "# Scoped" });
+    downloadArtifact.mockResolvedValueOnce(undefined);
+    render(<FilePreviewInspector data={{ ...md, content: undefined, projectId: "project-2", root: "workspace" }} onClose={() => {}} />);
+    expect(await screen.findByRole("heading", { name: "Scoped" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "导出与打印" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "下载 Markdown" }));
+    expect(downloadArtifact).toHaveBeenCalledWith("notes/report.md", "workspace", "report.md", "project-2");
+  });
   it("renders markdown as a formatted document by default", async () => {
     render(<FilePreviewInspector data={md} onClose={() => {}} />);
     // The heading is real document markup, not raw "# Findings" text.

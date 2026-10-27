@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -102,4 +102,39 @@ describe("StepRail", () => {
     expect(sentence).toHaveClass("truncate");
     expect(nav).toHaveClass("h-10");
   });
+});
+
+it('offers all real destinations only when the visible rail overflows and preserves full status text', async () => {
+  narrow();
+  const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(189);
+  const scroll = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(604);
+  render(rail({ visible: true, activeSteps: ['questions'], trailing: '正在准备下一轮研究材料与完整状态' }));
+  await userEvent.click(screen.getByRole('button', { name: '全部步骤' }));
+  expect(screen.getByRole('menuitemradio', { name: '问题 · 进行中' })).toHaveAttribute('href', '/app/geo/g1/questions');
+  expect(screen.getByRole('menuitemradio', { name: '问题 · 进行中' })).toHaveAttribute('aria-checked', 'true');
+  expect(screen.getByText('正在准备下一轮研究材料与完整状态')).not.toHaveClass('truncate');
+  width.mockRestore(); scroll.mockRestore();
+});
+
+it('stabilizes disclosure when moving the trailing status changes the list width, and preserves manual browsing on equivalent props', async () => {
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function(this: HTMLElement) {
+    return this.tagName === 'OL' ? (screen.queryByRole('button', { name: '全部步骤' }) ? 600 : 400) : 720;
+  });
+  vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(500);
+  vi.spyOn(HTMLElement.prototype, 'offsetLeft', 'get').mockImplementation(function(this: HTMLElement) { return this.hasAttribute('aria-current') ? 500 : 0; });
+  vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(80);
+  const callbacks = new Set<() => void>();
+  vi.stubGlobal('ResizeObserver', class { constructor(private callback: () => void) { callbacks.add(callback); } observe() {} disconnect() { callbacks.delete(this.callback); } });
+  try {
+    const { container, rerender } = render(rail({ visible: true, activeSteps: ['questions'], trailing: '完整运行状态' }));
+    expect(screen.getByRole('button', { name: '全部步骤' })).toBeVisible();
+    const list = container.querySelector('ol')!;
+    list.scrollLeft = 0;
+    rerender(rail({ visible: true, steps: STEPS.map(step => ({ ...step })), activeSteps: ['questions'], trailing: '完整运行状态' }));
+    await act(async () => { [...callbacks].forEach(callback => callback()); });
+    expect(screen.getByRole('button', { name: '全部步骤' })).toBeVisible();
+    expect(list.scrollLeft).toBe(0);
+    await userEvent.click(screen.getByRole('button', { name: '全部步骤' }));
+    expect(screen.getByRole('menuitemradio', { name: '监测 · 未开始' })).toBeDisabled();
+  } finally { vi.unstubAllGlobals(); }
 });

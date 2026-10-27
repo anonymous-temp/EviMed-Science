@@ -1,6 +1,7 @@
 import { flushSync } from "react-dom";
 import { create } from "zustand";
 import { webErrorMessage, createWebProject, fetchWebMe, getWebProjectId, hasWebApi, listWebProjects, renameWebProject, setWebProjectId, type WebMe, type WebProject } from "@/lib/apiClient";
+import { dirtyExitSnapshot, dirtyRouteState, discardDirtyRoutes, requestProjectExit } from "@/lib/useUnsavedGuard";
 import { clearScrollMemory } from "@/lib/scrollMemory";
 import { warmWebRuntime } from "@/lib/runtimeWarm";
 
@@ -137,6 +138,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       land?.();
       return;
     }
+    if (dirtyRouteState() !== "clean" && !await requestProjectExit(signal)) {
+      if (generation === switchGeneration && get().switching) set({ switching: null });
+      return;
+    }
+    if (generation !== switchGeneration || signal?.aborted) return;
+    const approvedDraft = dirtyExitSnapshot();
     set({ switching: projectId });
     let me: WebMe | null;
     try {
@@ -156,6 +163,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       set({ switching: null });
       throw new Error("该项目当前不可用。");
     }
+    if (dirtyExitSnapshot() !== approvedDraft && dirtyRouteState() !== "clean" && !await requestProjectExit(signal)) {
+      if (generation === switchGeneration) set({ switching: null });
+      return;
+    }
+    if (generation !== switchGeneration) return;
+    if (signal?.aborted) { set({ switching: null }); return; }
+    discardDirtyRoutes();
     setWebProjectId(projectId);
     // Remembered offsets are keyed by path, and a path is relative to its
     // project's workspace: two projects' `outputs/report.md` would share one.

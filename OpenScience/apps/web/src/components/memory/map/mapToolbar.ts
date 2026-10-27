@@ -28,13 +28,8 @@ export function rangeLabel(range: string): string {
  * whatever else narrows the page (a topic, an aspect, the mark in focus) — and the search at the end. The project is the header's
  * (`ScopeMenu`), not a filter among these. A press on a control changes the shared selection; nothing here is a view of its own.
  *
- * The views are one group of chips, not a second row of tabs: the page's tab row is 记忆胶囊's four tabs, and a page has one.
- * Three things follow from the views being among the filters, and are said here so nobody undoes them:
- *  - the views are `pinned`: on a phone every other filter folds into one 「筛选」 chip, and the five views stay on the row — they are how the
- *    page is used, and a person should not have to open a menu to leave 关系;
- *  - the view is never counted as a filter (`neutral` is the view in force), so 「清除筛选」 does not appear for choosing 主题;
- *  - on the time view the window is the weekly bars' slider, so the 时间 menu is not drawn there and a window that is set is a mark
- *    that lets go of it, like a topic.
+ * The views are navigation, not a query filter: changing or clearing filters leaves the chosen representation intact.
+ * On the time view the window is the weekly bars' slider, so a selected window is a removable mark instead of a second menu.
  */
 export function mapToolbar({ selection, doc, topicName, aspectName, focusLabel, onView, onNarrow, onClear, search }: {
   /** `part` is the card of the overview the map was opened from: one mark that lets go of it, like a topic. */
@@ -49,9 +44,7 @@ export function mapToolbar({ selection, doc, topicName, aspectName, focusLabel, 
   onClear: () => void;
   search: { draft: string; setDraft: (value: string) => void; clear: () => void; composition: object };
 }): ToolbarProps {
-  const filters: ToolbarFilter[] = [
-    { kind: "chips", label: "地图的视图", options: VIEW_OPTIONS, value: selection.view, neutral: selection.view, pinned: true, onChange: (view) => onView(view as MapView) },
-  ];
+  const filters: ToolbarFilter[] = [];
   const windowed = selection.range !== "all";
   if (selection.view === "time") {
     if (windowed) filters.push({ kind: "toggle", label: `时间：${rangeLabel(selection.range)}`, pressed: true, icon: X, onChange: () => onNarrow({ range: "all" }) });
@@ -84,6 +77,7 @@ export function mapToolbar({ selection, doc, topicName, aspectName, focusLabel, 
   }
   return {
     label: "地图的视图与筛选",
+    navigation: [{ kind: "chips", label: "地图的视图", options: VIEW_OPTIONS, value: selection.view, pinned: true, onChange: (view) => onView(view as MapView) }],
     filters,
     onClear,
     search: { label: "搜索记忆地图", value: search.draft, maxLength: 80, onChange: search.setDraft, onClear: search.clear, inputProps: search.composition },

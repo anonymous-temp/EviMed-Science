@@ -1,3 +1,4 @@
+import { CompositionActionsGallery } from "@/test/CompositionActionsGallery";
 import { PendingFeedbackBoundary } from "@/components/ui/PendingFeedback";
 import { measurement } from "@/lib/measurement";
 import { useSearchParams } from "react-router";
@@ -124,9 +125,9 @@ function useGalleryToasts() {
 export function GalleryPage() {
   const [params] = useSearchParams();
   const suite = params.get("suite");
-  if (suite === "science" || suite === "inputs") {
-    return <PageShell title={suite === "science" ? "科学查看器验收" : "输入组件验收"} width="wide" documentTitle="本地组件验收">
-      <div data-gallery-suite={suite}>{suite === "science" ? <ScientificViewerGallery /> : <InputPrimitivesGallery />}</div>
+  if (suite === "science" || suite === "inputs" || suite === "composition") {
+    return <PageShell title={suite === "science" ? "科学查看器验收" : suite === "composition" ? "页面操作布局验收" : "输入组件验收"} width="wide" documentTitle="本地组件验收">
+      <div data-gallery-suite={suite}>{suite === "science" ? <ScientificViewerGallery /> : suite === "composition" ? <CompositionActionsGallery /> : <InputPrimitivesGallery />}</div>
       <Toaster />
     </PageShell>;
   }

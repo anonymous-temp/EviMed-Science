@@ -1,22 +1,25 @@
 import { createPortal } from "react-dom";
 import { useContext, useEffect } from "react";
 import { UNSAFE_DataRouterContext, useBlocker } from "react-router";
-import { dirtyRouteState, useDirtyRouteState } from "@/lib/useUnsavedGuard";
+import { dirtyRouteShouldBlock, discardDirtyRoutes, useDirtyRouteState, resolveProjectExit, useProjectExitPending } from "@/lib/useUnsavedGuard";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
-function DataRouteGuard() {
+function DataRouteGuard({ projectPending }: { projectPending: boolean }) {
   const state = useDirtyRouteState();
-  const blocker = useBlocker(({ currentLocation, nextLocation }) => dirtyRouteState() !== "clean" && currentLocation.pathname !== nextLocation.pathname);
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => dirtyRouteShouldBlock(currentLocation, nextLocation));
   useEffect(() => {
-    if (state === "local-confirm" && blocker.state === "blocked") blocker.reset();
-  }, [state, blocker]);
-  if (state === "local-confirm" || blocker.state !== "blocked") return null;
+    if ((state === "local-confirm" || projectPending) && blocker.state === "blocked") blocker.reset();
+  }, [state, blocker, projectPending]);
+  if (projectPending || state === "local-confirm" || blocker.state !== "blocked") return null;
   return createPortal(<ConfirmDialog title="离开并放弃未保存的修改？" body="此页面中的修改尚未保存。" confirmLabel="放弃修改并离开" busy={state === "busy"}
-    onCancel={() => blocker.reset()} onConfirm={() => blocker.proceed()} />, document.body);
+    onCancel={() => blocker.reset()} onConfirm={() => { discardDirtyRoutes(); blocker.proceed(); }} />, document.body);
 }
 
 /** One blocker per host router; lightweight story/test routers have no transitions to block. */
 export function UnsavedRouteGuard() {
   const router = useContext(UNSAFE_DataRouterContext);
-  return router ? <DataRouteGuard /> : null;
+  const pendingProject = useProjectExitPending(), state = useDirtyRouteState();
+  useEffect(() => () => resolveProjectExit(false), []);
+  return <>{pendingProject && createPortal(<ConfirmDialog title="切换项目并放弃未保存的修改？" body={state === "busy" ? "请求仍在进行中，请等待结果后再切换项目。" : "当前项目中的未保存修改将被放弃。已保存的迁移可从原项目的未完成记录继续。"} confirmLabel="放弃修改并切换" busy={state === "busy"}
+    onCancel={() => resolveProjectExit(false)} onConfirm={() => resolveProjectExit(true)} />, document.body)}{router ? <DataRouteGuard projectPending={pendingProject} /> : null}</>;
 }

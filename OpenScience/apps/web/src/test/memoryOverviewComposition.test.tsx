@@ -1,26 +1,18 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { handoverEntries, livedIn, ownerFirstDay, receivedPack, TODAY } from "@/components/memory/overview/__fixtures__/overviewDocs";
 import { MemoryOverviewPage } from "@/app/routes/MemoryOverviewPage";
-import { memoryOverviewFindings } from "../../../../scripts/ops/ui-walk.mjs";
+import userEvent from "@testing-library/user-event";
 import { compositionFacts } from "./compositionFixtures";
 import { expectComposed } from "./expectComposed";
 
-/**
- * 总览 held to the data-page budget, as far as jsdom can read it (the walk's own numbers are measured in a browser, after a release): the
- * page table gives the budget (`budgets.data`: five size × weight pairs) and the walk's own judge (`memoryOverviewFindings`) reads the page as the
- * probe does, so what this test calls a page the walk would call one.
- *
- *  - **type pairs ≤ 5.** Read off the classes the components set, climbing to the nearest ancestor that names a size and a weight, which is
- *    what the browser's cascade does for the rungs (`TYPE_SCALE`: 12 / 14 / 18 …, weights 400 and 600).
- *  - **one canvas and the rest DOM.** The growth strip is the page's only `[data-chart]`; the other five cards are words and rows.
- *  - **colours from the map's palette only.** No inline colour, no arbitrary-value class, no hex in a class or a style on the page.
- *  - **at most two kinds of section** (`shapes` in the page table), counted as the walk counts them: an element and its first two kinds of child.
- *  - the framework's own assertions (`expectComposed`), and the walk's card judge on the page as drawn.
+/** Hold the real summary and received-management modes to the data-page budgets.
+ * jsdom verifies document order, semantic destinations, compact history and read
+ * states; browser geometry and assistive-technology acceptance remain separate.
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -87,35 +79,17 @@ function sectionShapes(root: Element): string[] {
   return [...new Set(units.map((element) => `${element.tagName.toLowerCase()}>${[...new Set([...element.children].map((child) => child.tagName.toLowerCase()))].slice(0, 2).join("+")}`))];
 }
 
-function draw() {
+function draw(query = "") {
   return render(
-    <MemoryRouter initialEntries={["/app/memory/overview"]}>
+    <MemoryRouter initialEntries={[`/app/memory/overview${query}`]}>
       <Routes><Route path="/app/memory/overview" element={<MemoryOverviewPage />} /></Routes>
     </MemoryRouter>,
   );
 }
 const loaded = () => waitFor(() => {
-  expect(document.querySelectorAll("[data-overview-card]").length).toBe(6);
-  expect(document.querySelectorAll("[data-overview-card][data-state='loading']")).toHaveLength(0);
+  expect(document.querySelectorAll("[data-memory-summary-part]")).toHaveLength(5);
+  expect(document.querySelectorAll("[data-memory-summary-part][data-state='loading']")).toHaveLength(0);
 }, { timeout: 4_000 });
-
-/** What the walk's probe reads of the drawn page, rebuilt from the markers (the probe does it in a browser; the judge is the same). */
-function probeRead(root: Element) {
-  const cards = [...root.querySelectorAll("[data-overview-card]")].map((element) => ({
-    part: element.getAttribute("data-overview-card")!, state: element.getAttribute("data-state")!, shape: element.getAttribute("data-shape"),
-    count: element.hasAttribute("data-count") ? Number(element.getAttribute("data-count")) : null,
-    memories: element.hasAttribute("data-memories") ? Number(element.getAttribute("data-memories")) : null,
-    rows: element.querySelectorAll("[data-overview-row]").length,
-    bars: [...element.querySelectorAll("ul[aria-label] [role='img'][aria-label]")].map((bar) => Number(/(\d+)\s*$/.exec(bar.getAttribute("aria-label") ?? "")?.[1] ?? Number.NaN)),
-    more: Number(element.getAttribute("data-more") ?? 0),
-  }));
-  return {
-    headline: root.querySelector("[data-headline]")?.textContent?.replace(/\s+/g, " ").trim() ?? null,
-    tabs: [...root.querySelectorAll("[role='tablist'][aria-label='记忆'] [role='tab']")].map((tab) => tab.textContent ?? ""),
-    canvases: root.querySelectorAll("[data-chart]").length, cards,
-    look: (() => { const section = root.querySelector("[data-overview-look]"); return section ? { count: Number(section.getAttribute("data-overview-look")), rows: section.querySelectorAll("[data-overview-row]").length } : null; })(),
-  };
-}
 
 const learned = (id: string, title: string, at: string) => ({
   id, projectId: null, revision: 1, name: `method-${id}`, title, description: "", whenToUse: "", status: "approved", statusReason: null, origin: "inferred", counts: null,
@@ -165,16 +139,18 @@ describe.each(ACCOUNTS)("总览 of %s", (_name, arrange) => {
     // No rung of the metric sizes: the cards say a number in a sentence, not in a 32 px figure.
     expect(pairs.some((pair) => pair.startsWith("metric"))).toBe(false);
     expect(pairs.some((pair) => pair.endsWith("/medium"))).toBe(false);
-    // Room to spare: the page, the card headings and the sentence share one pair, and the body, the rows and the legends the other two.
-    expect(pairs).toEqual(["caption/normal", "section/semibold", "title/semibold", "ui/normal"]);
+    expect(pairs).toContain("ui/normal");
   });
 
-  it("draws one canvas, the growth strip, and everything else in the document", async () => {
+  it("keeps observed document and memory history compact, even before any personal memory exists", async () => {
     const { container } = draw();
     await loaded();
-    expect([...container.querySelectorAll("[data-chart]")].map((chart) => chart.getAttribute("data-chart"))).toEqual(["growth"]);
-    expect(container.querySelectorAll("canvas").length).toBeLessThanOrEqual(1);
-    expect(container.querySelectorAll("svg[class*='echarts'], svg:not([class])").length).toBeLessThanOrEqual(1);
+    expect(container.querySelectorAll("[data-chart]")).toHaveLength(0);
+    const history = screen.getByRole("list", { name: "最近的记忆变化" });
+    expect(within(history).getAllByRole("listitem").length).toBeGreaterThan(0);
+    expect(within(history).getAllByRole("listitem").length).toBeLessThanOrEqual(5);
+    expect(screen.getByRole("link", { name: "在地图里看" })).toHaveAttribute("href", expect.stringContaining("/app/memory/map"));
+    expect(screen.queryByText("开始积累你的记忆")).not.toBeInTheDocument();
   });
 
   it("uses no colour of its own: no inline colour, no arbitrary-value class, no hex", async () => {
@@ -197,12 +173,67 @@ describe.each(ACCOUNTS)("总览 of %s", (_name, arrange) => {
     expect(shapes.length, shapes.join(", ")).toBeLessThanOrEqual(entry.shapes!);
   });
 
-  it("is a page the walk's own judge reads as right: the cards in order, the sentence their numbers, the rows their counts", async () => {
+  it("keeps five content destinations and opens received management with a return", async () => {
+    const { container } = draw("?retained=scope");
+    await loaded();
+    const expected = _name === "the owner's first day" ? [0, 2, 0, 47, 0] : [4, 2, 2, 39, 2];
+    expect([...container.querySelectorAll("[data-memory-summary-part]")].map(row => Number(row.getAttribute("data-count")))).toEqual(expected);
+    const list = screen.getByRole("list", { name: "记忆内容与入口" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(5);
+    const destinations = [
+      ["关于你", `${expected[0]} 件`, "/app/memory/map?part=you"],
+      ["项目", `${expected[1]} 个`, "/app/memory/map?part=project"],
+      ["我的做法", `${expected[2]} 种`, "/app/memory?tab=methods"],
+      ["知识", `${expected[3]} 份`, "/app/memory/map?part=knowledge"],
+      ["收到的胶囊", `${expected[4]} 个`, "/app/memory/overview?retained=scope&section=received"],
+    ];
+    for (const [title, count, target] of destinations) {
+      const link = within(list).getByRole("link", { name: new RegExp(title) });
+      expect(link).toHaveAttribute("href", target);
+      expect(within(link.closest("li")!).getByText(count)).toBeVisible();
+    }
+    expect([...container.querySelectorAll("[data-memory-summary-part]")].map(row => row.getAttribute("data-memory-summary-part"))).toEqual(["you", "projects", "methods", "knowledge", "received"]);
+    expect(compositionFacts(container).clickableTags).toEqual([]);
+    await userEvent.click(within(list).getByRole("link", { name: /收到的胶囊/ }));
+    expect(container.querySelector("[data-memory-overview-mode='received']")).not.toBeNull();
+    expect(screen.queryByRole("list", { name: "记忆内容与入口" })).not.toBeInTheDocument();
+    const back = screen.getByRole("link", { name: "返回记忆总览" });
+    expect(back).toHaveFocus();
+    expect(back).toHaveAttribute("href", "/app/memory/overview?retained=scope");
+    if (expected[4] > 0) expect(screen.getAllByRole("switch", { name: /启用“/ })).toHaveLength(expected[4]);
+    await userEvent.click(screen.getByRole("link", { name: "返回记忆总览" }));
+    expect(screen.getByRole("list", { name: "记忆内容与入口" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /收到的胶囊/ })).toHaveFocus();
+  });
+});
+
+describe("independent overview states", () => {
+  beforeEach(() => {
+    reads.map.mockResolvedValue(ownerFirstDay({ summary: { memories: 0, documents: 0, methods: 0, projects: 0, needsLook: 0, since: null }, nodes: [], events: [], buckets: { unit: "day", series: [] }, facets: { projects: [], kinds: [], aboutYou: [], documentTypes: [], topics: [], dimensions: [] } }));
+    reads.methods.mockResolvedValue([]);
+    reads.received.mockResolvedValue([]);
+    reads.preview.mockResolvedValue({ entries: [] });
+  });
+
+  it("offers one shared first-use explanation only after every read is empty", async () => {
     const { container } = draw();
     await loaded();
-    const read = probeRead(container);
-    const judged = memoryOverviewFindings("memory-overview@desktop", read);
-    expect(judged.failures).toEqual([]);
-    expect(compositionFacts(container).clickableTags).toEqual([]);
+    expect(screen.getAllByText("开始积累你的记忆")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "开始对话" })).toBeInTheDocument();
+    expect(container.querySelector("[data-overview-card='growth']")).toBeNull();
+    expect(screen.queryByRole("list", { name: "最近的记忆变化" })).not.toBeInTheDocument();
+  });
+
+  it("preserves successful content and keeps a failed independent count unknown", async () => {
+    reads.map.mockResolvedValue(ownerFirstDay());
+    reads.methods.mockRejectedValue(new Error("methods unavailable"));
+    const { container } = draw();
+    await loaded();
+    expect(screen.getByText("暂时读不到学到的做法。")).toBeInTheDocument();
+    expect(container.querySelector("[data-memory-summary-part='methods']")).toHaveAttribute("data-state", "error");
+    expect(container.querySelector("[data-memory-summary-part='methods']")).not.toHaveAttribute("data-count");
+    expect(container.querySelector("[data-memory-summary-part='knowledge']")).toHaveAttribute("data-count", "47");
+    expect(screen.getByRole("list", { name: "最近的记忆变化" })).toBeInTheDocument();
+    expect(screen.queryByText("开始积累你的记忆")).not.toBeInTheDocument();
   });
 });

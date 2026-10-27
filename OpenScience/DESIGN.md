@@ -1,6 +1,6 @@
 # EviMed design system
 
-Engineering companion to [Frontend Design System v3.1](docs/FRONTEND_DESIGN_SYSTEM.md), revised 2026-10-26 after owner review. The full specification owns principles/acceptance; this file maps implementation and the component-contract adoption. Component JSDoc plus executable fixtures own each implemented component's details. The token package is the numerical authority. Module plans own evolving product scope; old audits remain dated evidence.
+Engineering companion to [Frontend Design System v3.2](docs/FRONTEND_DESIGN_SYSTEM.md), revised 2026-10-27 after owner review. The full specification owns principles/acceptance; this file maps implementation and the component-contract adoption. Component JSDoc plus executable fixtures own each implemented component's details. The token package is the numerical authority. Module plans own evolving product scope; old audits remain dated evidence.
 
 ## Product and brand
 
@@ -12,7 +12,7 @@ This palette is implemented locally, not deployed. External Vue consumers must a
 
 ## Token authority and generated consumers
 
-Local implementation: **token package 3.0.0**, specification **3.1** (2026-10-26). Generated consumers and release digests are coordinated in this worktree. The preceding 2.2.0 main read and 2.3.0 warm-brand candidate are historical baselines, not the current source identity. Publication, remote branch identity, main adoption and deployment require their own receipts. Edit `packages/design-tokens/src/index.mjs`, then regenerate CSS, Tailwind, Element Plus/ECharts/kernel themes, Figma and DTCG exports together; `src/release.json` binds digests to this version.
+Local implementation: **token package 3.0.0**, specification **3.2** (2026-10-27); DS22 adoption remains pending its execution receipts. Generated consumers and release digests are coordinated in this worktree. The preceding 2.2.0 main read and 2.3.0 warm-brand candidate are historical baselines, not the current source identity. Publication, remote branch identity, main adoption and deployment require their own receipts. Edit `packages/design-tokens/src/index.mjs`, then regenerate CSS, Tailwind, Element Plus/ECharts/kernel themes, Figma and DTCG exports together; `src/release.json` binds digests to this version.
 
 `scripts/build/brand-assets.mjs` derives SVG identity, PWA metadata and the serialized native mark identity from the token roles and the shared EviMedMark path. `scripts/build/rasterize-brand-icons.mjs` creates installation PNGs from those SVGs. Preserve deterministic sources and record actual rendering; a stale PNG is not fixed by updating its source alone.
 
@@ -101,11 +101,13 @@ Compose using PageShell slots: scope, steps, activity, tabs, toolbar and headlin
 | Settings | Preferences/account/permissions within their boundaries | Stable section navigation, explicit persistence and errors |
 | Connected workbench | Task-related inputs, configuration, progress and outputs | Main-area working context; short ancillary edits only in drawers |
 
+DS22.1–DS22.8 in the canonical specification own the current-task modes, scoped header actions, workflow/view/filter distinctions, adaptive filters, shared emptiness, import/edit placement, meaningful density and whole-page verification. Local implementation and scoped page-state-width evidence are recorded in `../docs/superpowers/plans/2026-10-27-page-composition-v3.2.md`; AT51–AT58 remain open where the ledger identifies missing routes, states or acceptance. Token package 3.0.0 is unchanged. Preserve the dated v3.1 ledger and its seven OPEN acceptance items separately; this revision claims no deployment.
+
 ### Rules that supersede blanket older wording
 
-- One page serves a coherent task, not necessarily one data shape. Connected configuration and result workbenches are expressly allowed. Do not stack unrelated metadata.
+- One page serves a coherent task, not necessarily one data shape. Connected configuration and results are allowed in the current mode; do not default-stack complete overview/list/edit/analysis workbenches. Do not stack unrelated metadata.
 - Helpful purpose, required inputs, units, prerequisites, limitations and recovery instructions are allowed. Internal implementation narration belongs in diagnostics. Grey-text counters cannot decide language quality.
-- Keep one dominant action per local action group and at most one main header action. A contextual action in a workbench is not forbidden simply because it is below the header.
+- Keep one dominant action per local action group and a header default of at most one primary and two common secondary actions, then labeled overflow. Read-only pages may have no primary action. A contextual action in a workbench is not forbidden simply because it is below the header.
 - Keep one coherent view-navigation/control band. Workflow progress and result navigation have different meanings; compacting them must not hide the process or require an unexplained second vocabulary.
 - A static Tag does not perform an action. Filters, tabs, links and buttons retain distinct semantics even when their appearance is restrained.
 - Informative empty destinations and zero-count filters are allowed when they preserve context or explain prerequisites. Never erase the selected filter merely because a refreshed count is zero.

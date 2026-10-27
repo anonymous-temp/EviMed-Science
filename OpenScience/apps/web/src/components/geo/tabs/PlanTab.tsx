@@ -1,4 +1,4 @@
-import { GeoAnalysisWorkbench } from "../GeoAnalysisWorkbench";
+import { GeoAnalysisEntry } from "../GeoAnalysisEntry";
 import { ensureGeoConversationSession } from "../geoConversationSession";
 import { GEO_ARTICLE_CHANNEL_LABELS_ZH } from "@evimed/domain";
 import { useRef, useState } from "react";
@@ -27,6 +27,9 @@ export function PlanTab({ geoId, project, sourceId, sourceUrl, selectionRef, emb
   const [params] = useSearchParams();
   const location = useLocation();
   const requestedVersion = Number(params.get("strategyVersion"));
+  sourceId ??= params.get("planSource") ?? undefined;
+  sourceUrl ??= params.get("planUrl") ?? undefined;
+  selectionRef ??= params.get("selectionRef") ?? undefined;
   const options = { ...(selectionRef ? {selectionRef} : {}), ...(sourceUrl ? {url:sourceUrl} : {}), ...(sourceId ? { sourceId } : {}), ...(requestedVersion > 0 ? {strategyVersion: requestedVersion} : {}) };
   const { state, reload } = useGeoStrategy(geoId, options);
   const frame = useGeoFrame();
@@ -78,7 +81,7 @@ export function PlanTab({ geoId, project, sourceId, sourceUrl, selectionRef, emb
           {mayConverse && <Button variant="text" size="sm" className="self-start" disabled={busy || plan.version == null} onClick={() => void handoff(action)}>用于内容</Button>}
         </div>)}
       </Section>
-      <GeoAnalysisWorkbench key={`frozen-plan:${plan.version??"none"}`} geoId={geoId} project={project} initialView="V26" title="方案目标与实测分析" initialDescriptor={{viewId:"V26",...(plan.version!=null?{strategyVersion:plan.version}:{})}} embedded/>
+      <GeoAnalysisEntry key={`frozen-plan:${plan.version??"none"}`} geoId={geoId} project={project} initialView="V26" title="方案目标与实测分析" initialDescriptor={{viewId:"V26",...(plan.version!=null?{strategyVersion:plan.version}:{})}} embedded/>
       <Targets geoId={geoId} plan={plan} onChosen={() => { reload(); frame?.data.invalidate(); }} />
       <Battlefield geoId={geoId} plan={plan} />
       <EnginePromises plan={plan} />

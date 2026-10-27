@@ -34,24 +34,27 @@ function download(url: string) {
 }
 
 /**
- * One of the reader's own skills, opened from the list. The page this replaces stacked ten sections; the drawer has two
- * tabs — what the skill says and where it is used (内容), and its earlier states (版本) — with the actions in its menu.
- *
- * A skill is used in a project only once it is selected for it, so 「在项目里使用」 is on this tab as a switch beside the
- * text it applies to, and a skill selected at an older state says so and offers 「更新到最新内容」. States are told apart
- * by the day and time they were saved, not by the ledger's number.
+ * Anatomy: short content/version inspection in a drawer; long authoring in the main area.
+ * Variants: content, version comparison and edit share one persistent controller.
+ * States: reading, missing, error, editing, mutation and removal retain server permissions.
+ * Hit area: shared Menu, Button and ApplyControl primitives.
+ * Keyboard: drawer dismissal and the editor's dirty return/route guard.
+ * Long content: instructions wrap; editing uses the page's reading width.
+ * Theme: semantic surface and text roles.
+ * Responsive: one fluid editing column; inspection uses Drawer responsiveness.
+ * Verification: PersonalSkillDrawer.test.tsx covers save failure, return and project activation.
  */
-export function PersonalSkillDrawer({ skillId, projectId, onClose, onChanged, onRemoved }: {
+export function PersonalSkillDrawer({ skillId, projectId, onClose, onChanged, onRemoved, onEditingChange }: {
   skillId: string; projectId: string; onClose: () => void;
   /** The skill's words changed (an edit, a restore): the list re-reads. */
-  onChanged: () => void; onRemoved: () => void;
+  onChanged: () => void; onRemoved: () => void; onEditingChange?: (editing: boolean) => void;
 }) {
   const projectName = useProjectStore(state => state.projects.find(project => project.id === projectId)?.name);
   const alive = useRef(true), generation = useRef(0), working = useRef(false);
   const [skill, setSkill] = useState<PersonalSkill | null>(null), [history, setHistory] = useState<SkillVersion[]>([]);
   const [defaults, setDefaults] = useState<SkillSelectionRecord | null>(null), [selection, setSelection] = useState<SkillSelectionRecord | null>(null), [supply, setSupply] = useState<SkillSupplyResult | null>(null);
   const [error, setError] = useState<string | null>(null), [missing, setMissing] = useState(false), [busy, setBusy] = useState(false), [editing, setEditing] = useState(false), [removing, setRemoving] = useState(false), [compared, setCompared] = useState<SkillVersion | null>(null);
-  const [dirty, setDirty] = useState(false);
+  useEffect(() => { onEditingChange?.(editing); return () => onEditingChange?.(false); }, [editing, onEditingChange]);
   const [view, setView] = useState<"content" | "versions">("content");
   const load = useCallback(async () => {
     const request = ++generation.current;
@@ -92,12 +95,15 @@ export function PersonalSkillDrawer({ skillId, projectId, onClose, onChanged, on
     ]} />
   );
   if (missing) return <Drawer title="技能" onClose={onClose}><MissingRecord noun="技能" list="回到技能列表" onBack={onClose} /></Drawer>;
+  if (editing && skill) return <section aria-label="编辑技能" className="mx-auto w-full max-w-read">
+    <p className="mb-4 text-ui text-text-2">{skill.payload.title} · {projectName ?? "当前项目"}</p>
+    {error && <p role="alert" className="mb-4 text-ui text-error">{error}</p>}
+    <SkillEditor cancelLabel="返回技能详情" initial={{ expectedRevision: skill.revision, title: skill.payload.title, description: skill.payload.description, instructions: skill.payload.instructions }} busy={busy} onSave={value => void save(value)} onCancel={() => setEditing(false)} />
+  </section>;
   return (
-    <Drawer title={skill?.payload.title ?? "技能"} description="我的技能" onClose={onClose} dirty={editing && dirty} busy={busy} actions={menu || undefined}>
+    <Drawer title={skill?.payload.title ?? "技能"} description="我的技能" onClose={onClose} busy={busy} actions={menu || undefined}>
       {error && <p role="alert" className="mb-4 text-ui text-error">{error}<Button variant="text" disabled={busy} onClick={() => void load()}>刷新</Button></p>}
-      {!skill ? !error && <FilesSkeleton /> : editing ? (
-        <SkillEditor onDirtyChange={setDirty} key={skill.revision} initial={{ expectedRevision: skill.revision, title: skill.payload.title, description: skill.payload.description, instructions: skill.payload.instructions }} busy={busy} onSave={value => void save(value)} onCancel={() => setEditing(false)} />
-      ) : (
+      {!skill ? !error && <FilesSkeleton /> : (
         <div className="flex flex-col gap-6">
           <Toolbar label="技能内容" views={{ label: "技能内容", items: [{ value: "content", label: "内容" }, { value: "versions", label: "版本" }], value: view, onChange: next => setView(next as "content" | "versions") }} />
           {view === "content" ? (

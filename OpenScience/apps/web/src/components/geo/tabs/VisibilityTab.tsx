@@ -1,4 +1,4 @@
-import { GeoAnalysisWorkbench } from "../GeoAnalysisWorkbench";
+import { GeoAnalysisEntry } from "../GeoAnalysisEntry";
 import { useMemo, useState } from "react";
 import {
   readGeoCell,
@@ -137,7 +137,7 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
   return (
     <div data-geo-tab="visibility" className="flex flex-col gap-6">
       <GeoComparison geoId={geoId} view={project} />
-      <GeoAnalysisWorkbench geoId={geoId} project={project} initialView="V02" />
+      <GeoAnalysisEntry geoId={geoId} project={project} initialView="V02" />
       <MetricTrend
         project={project}
         watch={watch}

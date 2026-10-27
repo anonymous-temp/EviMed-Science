@@ -54,7 +54,7 @@ vi.mock("@/components/geo/geoScroll", () => scroll);
 // toolbar hook, one filter, so what the band does with a tab's controls can be read.
 const marker = vi.hoisted(() => (name: string, useGeoToolbar: (toolbar: unknown) => void) => ({ geoId, project }: { geoId: string; project: { name: string } }) => {
   const [choice, setChoice] = useState("初始视图");
-  useGeoToolbar({ filters: [{ kind: "chips", label: `${name} 的筛选`, options: [{ value: "a", label: "甲" }, { value: "b", label: "乙" }], value: "a", onChange: () => undefined }] });
+  useGeoToolbar({ navigation: [{kind:"select",label:`${name} 的业务视图`,value:"business",options:[{value:"business",label:"当前业务结果"}],onChange:()=>undefined}], filters: [{ kind: "chips", label: `${name} 的筛选`, options: [{ value: "a", label: "甲" }, { value: "b", label: "乙" }], value: "a", onChange: () => undefined }] });
   return <div data-testid={`${name}-tab`}>{geoId}:{project.name}<button onClick={() => setChoice("已选择的视图")}>{`${name} 调整视图`}</button><span>{choice}</span></div>;
 });
 const toolbarHook = vi.hoisted(() => async () => (await import("@/components/geo/geoFrame")).useGeoToolbar as (toolbar: unknown) => void);
@@ -69,6 +69,11 @@ vi.mock("@/components/geo/tabs/SourcesTab", async () => ({ SourcesTab: marker("s
 vi.mock("@/components/geo/tabs/ActionsTab", async () => ({ ActionsTab: marker("actions", await toolbarHook()) }));
 vi.mock("@/components/geo/tabs/PlanTab", async () => ({ PlanTab: marker("plan", await toolbarHook()) }));
 vi.mock("@/components/geo/tabs/EvidenceTab", async () => ({ EvidenceTab: marker("evidence", await toolbarHook()), readableSourceRef: () => null }));
+
+vi.mock("@/components/geo/GeoAnalysisWorkbench", async () => { const hook = await toolbarHook(); return { GeoAnalysisWorkbench: ({ mainArea }: { mainArea: {descriptor: {viewId: string}} }) => {
+  hook({ summary: "所选分析", filters: [{kind:"select",label:"分析维度",value:"project",options:[{value:"project",label:"整体"}],onChange:()=>undefined}] });
+  return <div data-testid="analysis-main">{mainArea.descriptor.viewId}</div>;
+} }; });
 
 function Landed() {
   const location = useLocation();
@@ -160,7 +165,7 @@ beforeEach(() => {
 });
 
 async function chooseResult(label: string) {
-  if (label === "总览") { await userEvent.click(await screen.findByRole("button", { name: "项目总览" })); return; }
+  if (label === "总览") { const link = screen.queryByRole("link", { name: "项目总览" }); if (link) await userEvent.click(link); await screen.findByRole("heading", {level:2,name:"总览"}); return; }
   const steps: Record<string, string> = { "可见度": "诊断", "准确与安全": "诊断", "问题与回答": "问题", "信源": "信源", "行动": "内容", "方案": "信源", "依据": "证据" };
   await chooseStep(new RegExp(`^${steps[label]}`));
   if (["可见度", "准确与安全", "信源", "方案"].includes(label)) {
@@ -184,7 +189,7 @@ describe("a GEO project's page", () => {
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
     expect(document.querySelectorAll("[data-step-rail]")).toHaveLength(1);
     expect(screen.queryByRole("button", { name: /^查看：/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "项目总览" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "项目总览" })).not.toBeInTheDocument();
   });
 
   it("does not offer weekly generation to a read-only member", async () => {
@@ -937,4 +942,41 @@ describe("the analysis range", () => {
       view.unmount();
     }
   });
+});
+
+
+describe("GEO analysis main area", () => {
+  it("unmounts the business area and returns with exact originating context", async () => {
+    renderProject("/app/geo/geo_masi/questions?view=journey&analysis=V26&strategyVersion=7&targetVersion=3&session=ses_keep&questionVersion=4&selectionRef=gsel_exact");
+    expect(await screen.findByTestId("analysis-main")).toHaveTextContent("V26");
+    expect(screen.queryByTestId("questions-tab")).toBeNull();
+    expect(document.querySelectorAll("[data-toolbar]")).toHaveLength(1);
+    await userEvent.click(screen.getByRole("button", {name:"返回问题与回答"}));
+    expect(await screen.findByTestId("questions-tab")).toBeVisible();
+    expect(screen.getByTestId("landed")).toHaveTextContent("view=journey");
+    expect(screen.getByTestId("landed")).toHaveTextContent("selectionRef=gsel_exact");
+    expect(screen.getByTestId("landed")).toHaveTextContent("strategyVersion=7");
+    expect(screen.getByTestId("landed")).not.toHaveTextContent("analysis=");
+  });
+});
+
+
+it('merges child business navigation into the parent toolbar without replacing it with analysis navigation',async()=>{
+ renderProject('/app/geo/geo_masi/sources');
+ expect(await screen.findByRole('button',{name:'sources 的业务视图：当前业务结果'})).toBeVisible();
+ expect(screen.getByRole('button',{name:/^数据分析/})).toBeVisible();
+ expect(document.querySelectorAll('[data-toolbar]')).toHaveLength(1);
+});
+
+it('declares analysis scope separately from its frequent step action and keeps native header icons and menu separation',async()=>{
+ renderProject('/app/geo/geo_masi/questions?selectionRef=gsel_keep&questionVersion=2');
+ await screen.findByTestId('questions-tab');
+ const toolbar=document.querySelector('[data-toolbar]') as HTMLElement;
+ expect(toolbar.querySelector('[data-toolbar-scope]')).toHaveTextContent('分析范围 · 已筛选');
+ expect(within(toolbar).getByRole('button',{name:'加问'}).closest('[data-header-actions]')).toBeInTheDocument();
+ expect(screen.getByRole('button',{name:'对话'}).querySelector('svg')).toBeInTheDocument();
+ expect(screen.getByRole('button',{name:'周报'}).querySelector('svg')).toBeInTheDocument();
+ await userEvent.click(screen.getByRole('button',{name:'更多操作'}));
+ expect(screen.getByRole('menu').querySelector('[role=separator]')).toBeInTheDocument();
+ expect(screen.getByRole('menuitem',{name:'删除'})).toBeVisible();
 });

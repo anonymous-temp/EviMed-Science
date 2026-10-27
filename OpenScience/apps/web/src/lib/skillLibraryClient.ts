@@ -65,7 +65,8 @@ export const personalSkillDefaults = () => productRequest<SkillSelectionRecord>(
 export const savePersonalSkillDefaults = (expectedRevision: number, skills: SkillSelection[]) => productRequest<SkillSelectionRecord>("/skills/defaults", "PUT", { expectedRevision, skills: skills.map(({ skillId, revision }) => ({ skillId, revision })) });
 export const projectSkills = (projectId: string) => productRequest<SkillSelectionRecord>(`/projects/${encodeURIComponent(projectId)}/skills`);
 export const saveProjectSkills = (projectId: string, expectedRevision: number, skills: SkillSelection[]) => productRequest<SkillSelectionRecord>(`/projects/${encodeURIComponent(projectId)}/skills`, "PUT", { expectedRevision, skills: skills.map(({ skillId, revision }) => ({ skillId, revision })) });
-export const importPersonalSkill = (resourceId: string, title: string) => productRequest<PersonalSkill>("/skills/import", "POST", { resourceId, title });
+/** A repeated confirmation uses the same server-bound intent after an unknown response. */
+export const importPersonalSkill = (resourceId: string, title: string, idempotencyKey: string) => productRequest<PersonalSkill>("/skills/import", "POST", { resourceId, title, idempotencyKey });
 export interface SkillImportPreview {
   supply?: (SkillAvailabilityView & { package: SkillPackageView | null }) | null;
   description: string; instructions: string;

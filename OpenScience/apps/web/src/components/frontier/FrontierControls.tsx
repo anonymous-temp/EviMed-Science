@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import type { FrontierHotBoard, FrontierHotWindow } from "@/lib/frontierClient";
-import { Button } from "@/components/ui/Button";
 import type { TabItem } from "@/components/ui/Tabs";
 import type { ToolbarAction, ToolbarFilter, ToolbarProps, ToolbarSearch, ToolbarToken } from "@/components/ui/Toolbar";
 import { feedFilters, tagToken, type ChosenTag, type FrontierFilterValue, type HotTags } from "./FrontierFilters";
@@ -92,6 +91,8 @@ export function frontierToolbar({
   const feed = feedFilters({ value: filters, showWindow, searching, onChange: onFilters, hotTags, specialtyFollow });
   const chosenTag = tag ? [tagToken(tag, () => onFilters({ tag: "" }))] : [];
   let controls: ToolbarFilter[] = [];
+  let navigation: NonNullable<ToolbarProps["navigation"]> = [];
+  let actionPlan: ToolbarProps["actionPlan"];
   let tokens: ToolbarToken[] = [];
   let actions: ReactNode;
   let summary: string | undefined;
@@ -118,19 +119,22 @@ export function frontierToolbar({
       break;
     case "daily":
     case "weekly":
-      controls = [
+      navigation = [
         { kind: "chips", label: "简报周期", pinned: true, options: [{ value: "daily", label: "日报" }, { value: "weekly", label: "周报" }], value: view, onChange: (next) => onView(next as PageView) },
-        ...issue.filters,
       ];
+      controls = issue.filters;
       actions = issue.actions;
       break;
     case "track":
-      controls = track.filters;
+      if (track.filters[0]?.kind === "chips") {
+        navigation = [track.filters[0]];
+        controls = track.filters.slice(1);
+      } else controls = track.filters;
       break;
     case "zones":
       controls = zones.filters;
       summary = zones.summary;
-      if (zones.onCreate) actions = <Button variant="text" size="sm" onClick={zones.onCreate}>新建专区</Button>;
+      if (zones.onCreate) actionPlan = { primary: { id: "create-zone", label: "新建专区", onSelect: zones.onCreate } };
       break;
     default:
       break;
@@ -146,6 +150,8 @@ export function frontierToolbar({
       panelId: "frontier-view",
     },
     filters: controls,
+    navigation,
+    actionPlan,
     tokens,
     sheetLead,
     onClear: clearable ? onClear : undefined,

@@ -8,9 +8,9 @@ export interface DocumentExport {
   state: 'queued' | 'running' | 'ready' | 'partial' | 'failed' | 'canceled';
   formats: Partial<Record<DocumentFormat, { state: 'queued' | 'ready' | 'failed'; code?: string }>>;
 }
-export function requestDocumentExport(source: DocumentSource, formats?:DocumentFormat[]) {
+export function requestDocumentExport(source: DocumentSource, formats?:DocumentFormat[], projectId?: string) {
   if ('geoId' in source) return productRequest<DocumentExport>(`/geo/projects/${encodeURIComponent(source.geoId)}/export`, 'POST', {kind:'selected',selectionRef:source.selectionRef,view:source.view,expectedDigest:source.expectedDigest,formats:formats??['csv']});
-  return productRequest<DocumentExport>('/document-exports', 'POST', { projectId: getWebProjectId(), source, formats: ['docx', 'pdf', 'html'] });
+  return productRequest<DocumentExport>('/document-exports', 'POST', { projectId: projectId ?? getWebProjectId(), source, formats: ['docx', 'pdf', 'html'] });
 }
 export function getDocumentExport(id: string) { return productRequest<DocumentExport>(`/document-exports/${encodeURIComponent(id)}`); }
 export function retryDocumentFormat(id: string, format: DocumentFormat) {

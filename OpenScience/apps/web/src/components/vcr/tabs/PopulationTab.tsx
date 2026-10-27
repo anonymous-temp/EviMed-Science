@@ -114,13 +114,12 @@ function PopulationView({ studyId, study, data, reload, onStudyChanged }: {
     : null);
 
   const templates = <VcrDefinitionsSection studyId={studyId} knowledge={data.knowledge} canWrite={mayWrite} canRun={study.abilities.includes("run")} onChanged={changed} />;
-  if (nothing) return <div className="flex flex-col gap-6">{templates}{failed
+  if (nothing) return <div className="flex flex-col gap-6">{failed
     ? <VcrStepFailed studyId={studyId} study={study} step="population" partial={data.partial} />
-    : <VcrStepPending studyId={studyId} study={study} step="population" />}</div>;
+    : <VcrStepPending studyId={studyId} study={study} step="population" />}{templates}</div>;
 
   return (
     <div className="flex flex-col gap-6">
-      {templates}
       {failed
         ? <VcrStepFailed studyId={studyId} study={study} step="population" partial={data.partial} />
         : data.partial && <PartialResultNote sentence={data.partial.sentence} resume={{ studyId, study, step: "population" }} />}
@@ -136,10 +135,7 @@ function PopulationView({ studyId, study, data, reload, onStudyChanged }: {
           )}
         </div>
       </Stale>
-
-
-
-
+      {templates}
     </div>
   );
 }

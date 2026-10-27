@@ -251,7 +251,10 @@ export function FilePreviewInspector({
       </header>}
 
       {!embedded && hostedWeb && data.content === undefined && (kind === "markdown" || /\.txt$/i.test(data.filename)) && (
-        <div className="shrink-0 border-b border-border px-4 py-2"><DocumentExportActions source={{ artifactId: data.path, root: data.root }} /></div>
+        <div className="shrink-0 border-b border-border px-4 py-2"><DocumentExportActions source={{ artifactId: data.path, root: data.root }} projectId={data.projectId} groupLabel={kind === "markdown" ? "导出与打印" : undefined} extraItems={kind === "markdown" && !showHistory && !loading && !error && tab !== "code" && text !== null ? [
+          { label: "下载 Markdown", onSelect: () => { const filename = data.path.slice(data.path.lastIndexOf("/") + 1); void downloadArtifact(data.path, data.root, filename, data.projectId).catch(failure => toast.error(`无法下载 ${filename}：${parseFailureMessage(failure, "该文件")}`)); } },
+          { label: "打印 / 存为 PDF", onSelect: () => window.print() },
+        ] : []} /></div>
       )}
       {!embedded && lead && <div className="shrink-0 border-b border-border px-4 py-3">{lead}</div>}
 
@@ -289,6 +292,7 @@ export function FilePreviewInspector({
               matrixFile={matrixFile}
               page={page}
               fitWidth={embedded}
+              externalExportActions={!embedded && hostedWeb && data.content === undefined}
             />
           </Suspense>
         )}
@@ -320,6 +324,7 @@ function Body({
   matrixFile,
   page,
   fitWidth,
+  externalExportActions,
 }: {
   kind: PreviewKind;
   url: string | null;
@@ -334,6 +339,7 @@ function Body({
   page?: number;
   /** A pane of its own (the drawer's 原文): the PDF opens fit to the pane's width, without the viewer's thumbnail column. */
   fitWidth?: boolean;
+  externalExportActions?: boolean;
 }) {
   const reportRun = useReportRun();
   if (matrixFile && !showCode) {
@@ -443,7 +449,7 @@ function Body({
     // It follows the theme like the rest of the shell; printing gets white
     // paper from the reader's print copy.
     return text !== null ? (
-      <ReportReader path={path} root={root} text={text} layout="pane" run={reportRun?.run ?? null} runId={reportRun?.runId ?? null} />
+      <ReportReader path={path} root={root} text={text} layout="pane" run={reportRun?.run ?? null} runId={reportRun?.runId ?? null} externalExportActions={externalExportActions} />
     ) : (
       <Note text="当前文件暂不支持在线预览。" />
     );

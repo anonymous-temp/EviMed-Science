@@ -1,5 +1,6 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
-import { createMemoryRouter, RouterProvider, useNavigate } from "react-router";
+import { useMemo, useState } from "react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { createMemoryRouter, RouterProvider, useNavigate, useLocation } from "react-router";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { useUnsavedGuard } from "@/lib/useUnsavedGuard";
 import { UnsavedRouteGuard } from "./UnsavedRouteGuard";
@@ -75,4 +76,55 @@ it("mounts route confirmation outside an inert dialog host and preserves its dra
   await act(() => router.navigate("/next"));
   fireEvent.click(screen.getByRole("button", { name: "放弃修改并离开" }));
   expect(await screen.findByRole("heading", { name: "Next" })).toBeInTheDocument();
+});
+
+
+function ModeEditor({ finishSave }: {finishSave?: () => Promise<void>}) {
+  const [text, setText] = useState('Original draft'), [saved, setSaved] = useState(false), [busy, setBusy] = useState(false);
+  const navigate = useNavigate(), location = useLocation();
+  const options = useMemo(() => ({ samePathChange: (from: string, to: string) => new URLSearchParams(from).get('analysis') !== new URLSearchParams(to).get('analysis'), onRouteDiscard: () => {setText('');setSaved(true);} }), []);
+  const guard = useUnsavedGuard(!saved, () => undefined, busy, options);
+  return <><UnsavedRouteGuard /><input aria-label="Original rows" value={text} onChange={event=>setText(event.target.value)} /><output>{location.search}</output>
+    <button onClick={()=>void navigate('/mode?questionMode=import&analysis=V26')}>Analysis mode</button>
+    <button onClick={()=>void navigate('/mode?questionMode=import&sourceSearch=filter')}>Filter query</button>
+    <button onClick={()=>{setBusy(true);void (finishSave?.()??Promise.resolve()).then(()=>{guard.markSaved();setSaved(true);setBusy(false);});}}>Save draft</button></>;
+}
+function modeRouter(finishSave?:()=>Promise<void>) { return createMemoryRouter([{path:'/mode',element:<ModeEditor finishSave={finishSave}/>}], {initialEntries:['/mode?questionMode=import&analysis=V26','/mode?questionMode=import'],initialIndex:1}); }
+
+it('guards same-path mode exits, keeps ordinary filters working and restores input focus on cancel',async()=>{
+ const router=modeRouter();render(<RouterProvider router={router}/>);
+ const input=screen.getByRole('textbox',{name:'Original rows'});input.focus();fireEvent.change(input,{target:{value:'Valuable rows'}});
+ fireEvent.click(screen.getByRole('button',{name:'Filter query'}));
+ expect(router.state.location.search).toContain('sourceSearch=filter');expect(screen.queryByRole('alertdialog')).toBeNull();
+ input.focus();await act(()=>router.navigate('/mode?questionMode=import&analysis=V26'));
+ fireEvent.click(screen.getByRole('button',{name:'取消'}));expect(input).toHaveValue('Valuable rows');expect(input).toHaveFocus();
+ await act(()=>router.navigate('/mode?questionMode=import&analysis=V26'));
+ fireEvent.click(screen.getByRole('button',{name:'放弃修改并离开'}));
+ await waitFor(()=>expect(router.state.location.search).toContain('analysis=V26'));
+ expect(input).toHaveValue('');
+});
+
+it('blocks back and forward mode transitions and preserves the draft when either is cancelled',async()=>{
+ const router=createMemoryRouter([{path:'/mode',element:<ModeEditor/>}],{initialEntries:['/mode?analysis=V01','/mode?questionMode=import','/mode?analysis=V26'],initialIndex:1});
+ render(<RouterProvider router={router}/>);
+ for(const direction of [-1,1]) {
+   await act(()=>router.navigate(direction));expect(screen.getByRole('alertdialog')).toBeVisible();
+   fireEvent.click(screen.getByRole('button',{name:'取消'}));
+   expect(router.state.location.search).toBe('?questionMode=import');
+   expect(screen.getByRole('textbox',{name:'Original rows'})).toHaveValue('Original draft');
+ }
+});
+
+it('keeps an asynchronous save protected and allows a mode transition after saving',async()=>{
+ let finish!:()=>void;const saving=new Promise<void>(resolve=>{finish=resolve;});
+ const router=modeRouter(()=>saving);render(<RouterProvider router={router}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Save draft'}));
+ fireEvent.click(screen.getByRole('button',{name:'Analysis mode'}));
+ expect(screen.getByRole('button',{name:'放弃修改并离开'})).toHaveAttribute('aria-disabled','true');
+ expect(router.state.location.search).not.toContain('analysis=');
+ await act(async()=>{finish();await saving;});
+ fireEvent.click(screen.getByRole('button',{name:'取消'}));
+ fireEvent.click(screen.getByRole('button',{name:'Analysis mode'}));
+ await waitFor(()=>expect(router.state.location.search).toContain('analysis=V26'));
+ expect(screen.queryByRole('alertdialog')).toBeNull();expect(screen.getByRole('textbox',{name:'Original rows'})).toHaveValue('Original draft');
 });

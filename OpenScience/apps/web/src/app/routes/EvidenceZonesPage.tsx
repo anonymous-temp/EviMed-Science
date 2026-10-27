@@ -4,7 +4,6 @@ import { Navigate, useSearchParams } from "react-router";
 import { PageShell } from "@/components/layout/PageShell";
 import { FrontierBack } from "@/components/frontier/FrontierBack";
 import { ZoneDirectoryBody, readZoneScope, useZoneDirectory, zoneDirectoryControls } from "@/components/frontier/EvidenceZoneDirectory";
-import { Menu } from "@/components/ui/Menu";
 
 /**
  * `/app/frontier/zones`. The directory of evidence zones is a view of the feed page since 2026-10-22 (the owner: 证据专区 opens in
@@ -47,7 +46,7 @@ function ZoneChooser({ fromItem }: { fromItem: string }) {
     <PageShell
       title="选择证据专区"
       back={<FrontierBack />}
-      actions={directory.canCreate ? <Menu label="更多操作" items={[{ label: "新建专区", onSelect: () => directory.setCreating(!directory.creating) }]} /> : undefined}
+      actionPlan={directory.canCreate ? { primary: { id: "create-zone", label: "新建专区", onSelect: () => directory.setCreating(!directory.creating) } } : undefined}
       toolbar={{
         label: "专区筛选",
         filters: controls.filters,

@@ -43,6 +43,10 @@ const geo = vi.hoisted(() => ({
   getGeoAnswer: vi.fn(),
 }));
 vi.mock("@/lib/geoClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/geoClient")>()), ...geo }));
+vi.mock("@/lib/geoAnalysisClient", async (original) => ({
+  ...(await original<typeof import("@/lib/geoAnalysisClient")>()),
+  getGeoAnalysis: vi.fn().mockRejectedValue(new Error("analysis unavailable")),
+}));
 vi.mock("@/components/geo/useOpenGeoConversation", () => ({ useOpenGeoConversation: () => vi.fn() }));
 
 /**
@@ -107,7 +111,7 @@ describe.each(PAGES)("$id $name", (sample) => {
 });
 
 describe("T3 the module page", () => {
-  it("has its step rail, fixed in the band, on every tab, with the same steps and the same rows", () => {
+  it("has its step rail, fixed in the band, on every tab, with the same eight reachable steps and conditional toolbar rows", () => {
     const steps: string[][] = [];
     const rows: number[] = [];
     const heights: string[] = [];
@@ -123,21 +127,22 @@ describe("T3 the module page", () => {
       unmount();
     }
     expect(steps.every((ids) => ids.length === 8 && ids.join() === steps[0].join())).toBe(true);
-    // The rail, the tabs and the toolbar row (drawn or reserved): the same three on all five tabs.
-    expect(new Set(rows)).toEqual(new Set([3]));
+    // Keep the rail and view row on every tab; add a toolbar only for actual task controls.
+    expect(new Set(rows)).toEqual(new Set([2, 3]));
     expect(new Set(heights)).toEqual(new Set(["h-10"]));
   });
 
-  it("reserves the toolbar's row on a tab that has none, so the band does not jump when the tab changes", () => {
-    const withToolbar = render(modulePageAt("visibility"));
-    const reserved = render(modulePageAt("overview"));
-    const rowOf = (container: HTMLElement) => compositionFacts(container).chrome!.lastElementChild as HTMLElement;
-    const drawn = rowOf(withToolbar.container);
-    const empty = rowOf(reserved.container);
-    expect(drawn).toHaveClass("min-h-11");
-    expect(empty).toHaveClass("min-h-11");
-    expect(empty).toHaveAttribute("aria-hidden", "true");
-    expect(compositionFacts(reserved.container).toolbars).toHaveLength(0);
+  it("draws a toolbar only when the current task has controls", () => {
+    const controlled = render(modulePageAt("visibility"));
+    const overview = render(modulePageAt("overview"));
+    const facts = compositionFacts(controlled.container);
+    expect(facts.toolbars).toHaveLength(1);
+    expect(facts.chrome!.contains(facts.toolbars[0])).toBe(true);
+    const summary = compositionFacts(overview.container);
+    expect(summary.toolbars).toHaveLength(0);
+    expect(summary.chrome!.children).toHaveLength(2);
+    expect(summary.chrome!.querySelector("[aria-hidden='true'].min-h-11")).toBeNull();
+    expect(summary.tablists[0]).toHaveAttribute("aria-label", "项目视图");
   });
 
   it("underlines the steps the open tab is built from, and moves the underline with the tab", async () => {
@@ -235,14 +240,71 @@ describe("the GEO project page, as a module page (T3) and its overview as a data
     const { container } = renderGeo(key === "overview" ? "/app/geo/geo_masi" : `/app/geo/geo_masi/${key}`);
     await waitFor(() => expect(container.querySelector("[data-geo-tab]")).not.toBeNull(), { timeout: 4000 });
     // The tab's own read has landed when its page-level toolbar (where it has one) is drawn; settle the layout effects.
-    await screen.findByRole("button", { name: "项目总览" });
+    if (key === "overview") expect(screen.queryByRole("link", { name: "项目总览" })).not.toBeInTheDocument();
+    else expect(await screen.findByRole("link", { name: "项目总览" })).toHaveAttribute("href", "/app/geo/geo_masi?session=ses_geo_masi");
     expect(screen.queryByRole("button", { name: /^查看：/ })).not.toBeInTheDocument();
     const facts = expectComposed(container, { stepRail: true, tablists: 0 });
     expect(facts.stepRails).toHaveLength(1);
     expect(facts.stepRails[0].querySelectorAll("[data-rail-step]")).toHaveLength(8);
     expect(screen.getByRole("navigation", { name: "循证 GEO 进度" })).toBeInTheDocument();
     expect(facts.chrome).toHaveClass("sticky", "top-0");
-    expect(facts.chrome!.children).toHaveLength(2);
+    expect(facts.chrome!.children).toHaveLength(1 + facts.toolbars.length);
+    const railLinks = facts.stepRails[0].querySelectorAll("a[href]");
+    expect(railLinks).toHaveLength(8);
+    for (const link of railLinks) expect(link.getAttribute("href")).toMatch(/^\/app\/geo\/geo_masi/);
+  });
+
+  it("navigates each distinct workflow destination with its own current step and selected context", async () => {
+    const { container } = renderGeo("/app/geo/geo_masi?selectionRef=gsel_exact&questionVersion=4&session=ses_keep");
+    const expected = [
+      ["evidence", "evidence", null, ""], ["journey", "questions", "journey", ""],
+      ["questions", "questions", null, ""], ["diagnosis", "accuracy", null, "#geo-errors"],
+      ["sources", "sources", null, ""], ["content", "actions", null, ""],
+      ["distribution", "actions", null, "#geo-delivery"], ["monitoring", "visibility", null, "#geo-trend"],
+    ];
+    await screen.findByRole("navigation", { name: "循证 GEO 进度" });
+    const destinations = new Set<string>();
+    for (const [step, tab, view, hash] of expected) {
+      const link = container.querySelector(`[data-rail-step='${step}'] a`) ?? container.querySelector(`a[data-rail-step='${step}']`);
+      expect(link).not.toBeNull();
+      const address = new URL(link!.getAttribute("href")!, "https://example.test");
+      expect(address.pathname).toBe(`/app/geo/geo_masi/${tab}`);
+      expect(address.searchParams.get("step")).toBe(step);
+      expect(address.searchParams.get("view")).toBe(view);
+      expect(address.hash).toBe(hash);
+      for (const [key, value] of [["selectionRef", "gsel_exact"], ["questionVersion", "4"], ["session", "ses_keep"]]) expect(address.searchParams.get(key)).toBe(value);
+      destinations.add(address.href);
+      await userEvent.click(link!);
+      await waitFor(() => expect(container.querySelector(`[data-geo-tab='${tab}']`)).not.toBeNull());
+      expect(container.querySelector("[data-step-rail] [aria-current='step']")?.closest("[data-rail-step]")).toHaveAttribute("data-rail-step", step);
+    }
+    expect(destinations.size).toBe(8);
+  });
+
+  it("keeps the selected question range in the scoped business view and overview return", async () => {
+    const { container } = renderGeo("/app/geo/geo_masi/sources?selectionRef=gsel_exact&questionVersion=4&session=ses_keep");
+    await waitFor(() => expect(container.querySelector("ul[aria-label='信源']")).not.toBeNull());
+    expect(container.querySelector("[data-geo-analysis]")).toBeNull();
+    expect(screen.getByRole("button", { name: "分析范围 · 已筛选" })).toBeInTheDocument();
+    const back = screen.getByRole("link", { name: "项目总览" });
+    const address = new URL(back.getAttribute("href")!, "https://example.test");
+    expect(address.searchParams.get("selectionRef")).toBe("gsel_exact");
+    expect(address.searchParams.get("questionVersion")).toBe("4");
+    expect(address.searchParams.get("session")).toBe("ses_keep");
+    await userEvent.click(screen.getByRole("button", { name: "数据分析" }));
+    await userEvent.click(screen.getByRole("menuitemradio", { name: "方案冻结实测与规划目标" }));
+    expect(await screen.findByRole("heading", { name: "方案冻结实测与规划目标" })).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "信源" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "返回信源" }));
+    await screen.findByRole("list", { name: "信源" });
+    const returned = new URL(screen.getByRole("link", { name: "项目总览" }).getAttribute("href")!, "https://example.test");
+    expect(returned.searchParams.get("selectionRef")).toBe("gsel_exact");
+    expect(returned.searchParams.get("questionVersion")).toBe("4");
+    expect(returned.searchParams.get("session")).toBe("ses_keep");
+    await userEvent.click(screen.getByRole("link", { name: "项目总览" }));
+    await waitFor(() => expect(container.querySelector("[data-geo-tab='overview']")).not.toBeNull());
+    const scopeLink = container.querySelector("[data-step-rail] a[href]");
+    expect(scopeLink).toHaveAttribute("href", expect.stringContaining("selectionRef=gsel_exact"));
   });
 
   // The rail's click and a 「需要你」 row end in `#geo-<block>`; a tab that is rebuilt without the id leaves the link landing at the top
@@ -372,8 +434,8 @@ describe("the GEO lists, data pages and reading page, each by its template", () 
   /** The landmarks of each page, in the order a reader meets them. */
   const ORDER: Record<string, string[]> = {
     questions: ["[data-geo-group]"],
-    // The pictures above the list are the embedded selected-data analysis (GEO v3), which replaced the two fixed charts.
-    sources: ["[data-geo-analysis]", "ul[aria-label='信源']"],
+    // Sources lead with their business list; full analysis is an explicit mode.
+    sources: ["ul[aria-label='信源']"],
     accuracy: ["[data-chart-grid]", "[data-geo-error-list]"],
     visibility: ["[data-chart='trend']", "[data-heat-row]", "[data-geo-engine-trend]"],
   };

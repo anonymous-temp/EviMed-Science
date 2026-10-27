@@ -1,4 +1,4 @@
-import { GeoAnalysisWorkbench } from "../GeoAnalysisWorkbench";
+import { GeoAnalysisEntry } from "../GeoAnalysisEntry";
 import { AskAi } from "../AskAi";
 import { GeoQuestionWorkbench } from "../GeoQuestionWorkbench";
 import { useGeoPath } from "../useGeoPath";
@@ -30,7 +30,7 @@ import { GEO_POOL_KINDS, GEO_POOLS, groupName, monthDay, platformName } from "..
 import { clusterName, groupsByStage, groupTally, mentionText } from "../spine/clusterModel";
 import { ClusterDrawerHost } from "../spine/ClusterDrawerHost";
 import { ClusterLink } from "../spine/ClusterLink";
-import { GEO_CLUSTER_FILTER_PARAM, useGeoDrawerAddress, useGeoSearchChange, useGeoSearchParam } from "../spine/drawerParams";
+import { GEO_CLUSTER_FILTER_PARAM, useGeoDrawerAddress, useGeoSearchChange, useGeoSearchParam, useGeoFilterReset } from "../spine/drawerParams";
 import { useGeoClusters, useGeoQuestionCatalog } from "../spine/spineData";
 import { answerPath } from "./geoTabText";
 import { StepPending, TabError, TabSkeleton } from "./geoTabKit";
@@ -91,6 +91,7 @@ export function QuestionsTab({ geoId, project }: { geoId: string; project: GeoPr
     copy.delete("selectionRef"); copy.delete("groupIds"); copy.delete("cluster");
     return copy;
   }, { replace: true });
+  const editingMode = params.get("questionMode") === "import" || params.get("questionMode") === "edit";
   const view = geoQuestionsView(params.get(GEO_VIEW_PARAM));
   const switcher = {
     kind: "chips" as const,
@@ -106,10 +107,10 @@ export function QuestionsTab({ geoId, project }: { geoId: string; project: GeoPr
   const rows = clusters.state.kind === "ready" ? clusters.state.data.groups : [];
 
   // The journey is a page of its own kind: the emotion curve and the stages, then the groups in them.
-  if (view === "journey") {
+  if (view === "journey" && !editingMode) {
     return (
       <div data-geo-tab="questions" className="flex flex-col gap-8">
-        <JourneyTab geoId={geoId} project={project} toolbar={frame?.step === "journey" ? undefined : { filters: [switcher] }} />
+        <JourneyTab geoId={geoId} project={project} toolbar={frame?.step === "journey" ? undefined : { navigation: [switcher] }} />
         <StageGroups rows={rows} loading={clusters.state.kind === "loading"} />
         <ClusterDrawerHost geoId={geoId} project={project} />
       </div>
@@ -119,9 +120,9 @@ export function QuestionsTab({ geoId, project }: { geoId: string; project: GeoPr
   if (questions.state.kind === "error") return <TabError message={questions.state.message} onRetry={questions.reload} />;
   const data = questions.state.data;
   const groups = Array.isArray(data?.groups) ? data.groups.filter((group) => group && group.id) : [];
-  if (groups.length === 0) return <><GeoQuestionWorkbench geoId={geoId} project={project} data={data} onSaved={next => { setVersion(next); questions.reload(); clusters.reload(); frame?.data.invalidate(); }} /><StepPending geoId={geoId} project={project} step="questions" /></>;
+  if (groups.length === 0) return <><GeoQuestionWorkbench geoId={geoId} project={project} data={data} onSaved={next => { setVersion(next); questions.reload(); clusters.reload(); frame?.data.invalidate(); }} />{!editingMode && <StepPending geoId={geoId} project={project} step="questions" />}</>;
   return (
-    <><GeoQuestionWorkbench geoId={geoId} project={project} data={data} onSaved={next => { setVersion(next); questions.reload(); clusters.reload(); frame?.data.invalidate(); }} /><QuestionPage
+    <><GeoQuestionWorkbench geoId={geoId} project={project} data={data} onSaved={next => { setVersion(next); questions.reload(); clusters.reload(); frame?.data.invalidate(); }} />{!editingMode && <QuestionPage
       geoId={geoId}
       project={project}
       view={view}
@@ -136,7 +137,7 @@ export function QuestionsTab({ geoId, project }: { geoId: string; project: GeoPr
         questions.reload();
         clusters.reload();
       }}
-    /><GeoAnalysisWorkbench embedded geoId={geoId} project={project} initialView="V06"/></>
+    />}{!editingMode && <GeoAnalysisEntry embedded geoId={geoId} project={project} initialView="V06"/>}</>
   );
 }
 
@@ -170,6 +171,7 @@ function QuestionPage({
   const [params] = useSearchParams();
   const [poolParam, setPoolParam] = useGeoSearchParam("pool");
   const pool: PoolFilter = GEO_POOLS.includes(poolParam as GeoPool) ? poolParam as GeoPool : "all";
+  const clearFilters = useGeoFilterReset(["pool", "questionSearch"]);
   const setPool = (value: PoolFilter) => setPoolParam(value === "all" ? null : value);
   const [queryParam, setQueryParam] = useGeoSearchParam("questionSearch");
   const query = queryParam ?? "";
@@ -190,6 +192,7 @@ function QuestionPage({
   const sets = Array.isArray(data.sets) ? data.sets.filter((set) => set && typeof set.version === "number") : [];
   const latest = sets.reduce<number | null>((top, set) => (top === null || set.version > top ? set.version : top), null);
   const current = data.version ?? (data.selection ? null : latest);
+  const versionSets = current != null && !sets.some(set => set.version === current) ? [...sets, {version:current,lockedAt:null}] : sets;
   const editable = current !== null && current === latest;
   const shownPools = pool === "all" || !pools.includes(pool as GeoPool) ? pools : [pool as GeoPool];
 
@@ -202,19 +205,22 @@ function QuestionPage({
   const matchedQuestions = found.reduce((sum, group) => sum + (matches.get(group.id)?.count ?? 0), 0);
 
   useGeoToolbar({
-    filters: [
-      switcher,
-      { kind: "chips", label: "问句池", options, value: pools.includes(pool as GeoPool) ? pool : "all", onChange: (value) => setPool(value as PoolFilter) },
-      ...(sets.length > 1 ? [{
+    navigation: [switcher,
+      ...(versionSets.length > 0 ? [{
         kind: "select" as const,
         label: "问句版本",
-        options: [...sets].sort((a, b) => b.version - a.version).map((set) => ({
+        options: [...versionSets].sort((a, b) => b.version - a.version).map((set) => ({
           value: String(set.version),
           label: [`第 ${set.version} 版`, set.lockedAt ? `${monthDay(set.lockedAt)}锁定` : null].filter(Boolean).join(" · "),
         })),
         value: current === null ? null : String(current),
         onChange: (value: string | null) => onVersion(value === null ? null : Number(value)),
       }] : []),
+    ],
+    onClear: clearFilters,
+    filters: [
+      { kind: "chips", label: "问句池", options, value: pools.includes(pool as GeoPool) ? pool : "all", onChange: (value) => setPool(value as PoolFilter) },
+
     ],
     search: { label: "搜索问题", value: query, maxLength: 80, onChange: setQuery, onClear: () => setQuery("") },
     summary: needle ? `匹配 ${matchedQuestions} 个问题` : `${counts.groups} 个问题群 · ${counts.measured} 问`,

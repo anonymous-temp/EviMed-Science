@@ -1,3 +1,4 @@
+import { WebApiError } from "@/lib/apiClient";
 import { useUnsavedGuard } from "@/lib/useUnsavedGuard";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -6,6 +7,7 @@ import { Input, inputClasses } from "@/components/ui/Input";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { SkillPackagePanel } from "@/components/skills/SkillPackagePanel";
 import { productErrorMessage } from "@/lib/productClient";
+import type { OrdinaryImportController, OrdinaryImportIntent } from "./useOrdinaryImportIntent";
 import { useProjectStore } from "@/lib/projects";
 import {
   confirmPersonalSkillTransfer, importPersonalSkill, pendingPersonalSkillTransfers, previewPersonalSkillImport, previewPersonalSkillRepository,
@@ -18,11 +20,22 @@ const FILE_INPUT_STYLE = "h-auto p-2 file:mr-3 file:cursor-pointer file:rounded 
 
 /**
  * Bringing a skill in: a file, a public repository at one commit, or the history and account data of an earlier export.
- * The three live in one drawer, opened from the page's 「新建技能」 menu, so the list stays where it is.
+ * Anatomy: source choice, inputs, preview and commit actions in the main area.
+ * Variants: file, repository and recoverable history transfer.
+ * States: draft, preview, pending, paused, error and complete preserve the source intent.
+ * Hit area: shared Button and Input controls.
+ * Keyboard: native form navigation and guarded return.
+ * Long content: wrapped previews retain all resource names.
+ * Theme: semantic surface and text roles.
+ * Responsive: one fluid form column.
+ * Verification: SkillImport.test.tsx covers source identity and transfer recovery.
  */
-export function SkillImportForm({ recovery, onBusy, onDone, onCancel, onDirtyChange }: {
+export function SkillImportForm({ recovery, onBusy, onDone, onCancel, onDirtyChange, cancelLabel = "取消", ordinaryStore, ordinaryRecovery, onInspect }: {
   /** An unfinished account migration to pick up where it stopped. */
   recovery?: PendingSkillTransfer;
+  onInspect: () => void;
+  ordinaryStore: OrdinaryImportController; ordinaryRecovery?: OrdinaryImportIntent;
+  cancelLabel?: string;
   onBusy: (busy: boolean) => void;
   /** The new skill's id, or nothing when a migration finished (it saves several). */
   onDone: (skillId?: string) => void;
@@ -30,17 +43,20 @@ export function SkillImportForm({ recovery, onBusy, onDone, onCancel, onDirtyCha
 }) {
   const alive = useRef(true), importingRequest = useRef(false);
   const [busy, setBusyState] = useState(false), [error, setError] = useState<string | null>(null);
-  const [file, setFile] = useState<File | null>(null), [title, setTitle] = useState("");
+  const [file, setFile] = useState<File | null>(null), [title, setTitle] = useState(ordinaryRecovery?.title ?? "");
   const [mode, setMode] = useState<"file" | "repository" | "transfer">(recovery ? "transfer" : "file");
   const [repository, setRepository] = useState(""), [commit, setCommit] = useState(""), [subdirectory, setSubdirectory] = useState("");
   const [preview, setPreview] = useState<{ resourceId: string; content: SkillImportPreview; source?: { repository: string; commit: string; subdirectory?: string } } | null>(null);
+  const intent = useRef<OrdinaryImportIntent | null>(ordinaryRecovery ?? null);
+  const [unknownImport, setUnknownImport] = useState(!!ordinaryRecovery);
+  const [refused, setRefused] = useState(false), [abandoning, setAbandoning] = useState(false);
   const dirty = !!file || !!title || !!repository || !!commit || !!subdirectory;
   useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
-  const closeGuard = useUnsavedGuard(dirty, onCancel, busy);
+  const closeGuard = useUnsavedGuard(mode !== "transfer" && dirty, onCancel, busy, { draftKey: JSON.stringify([mode, file?.name, title, repository, commit, subdirectory, unknownImport]) });
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const setBusy = (value: boolean) => { setBusyState(value); onBusy(value); };
   const importFile = async () => {
-    if (!title.trim() || importingRequest.current || mode === "file" && !file) return;
+    if (intent.current || !title.trim() || importingRequest.current || mode === "file" && !file) return;
     if (mode === "repository" && (!/^[A-Za-z0-9][A-Za-z0-9-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/.test(repository.trim()) || !/^[a-f0-9]{40}$/.test(commit.trim()))) { setError("请填写公开仓库名称和完整的 40 位提交编号。"); return; }
     importingRequest.current = true;
     setBusy(true); setError(null);
@@ -57,28 +73,35 @@ export function SkillImportForm({ recovery, onBusy, onDone, onCancel, onDirtyCha
     finally { importingRequest.current = false; if (alive.current) setBusy(false); }
   };
   const confirmImport = async () => {
-    if (!preview || !title.trim() || importingRequest.current) return;
+    if ((!preview && !intent.current) || !title.trim() || importingRequest.current || !ordinaryStore.ready) return;
+    if (new TextEncoder().encode(title).byteLength > 240) { setError("技能名称最多为 240 字节（中文通常最多 80 字），请缩短后再确认。"); return; }
+    try { intent.current = ordinaryStore.save(intent.current ?? { resourceId: preview!.resourceId, title, idempotencyKey: crypto.randomUUID() }); }
+    catch (caught) { setError(productErrorMessage(caught)); return; }
+    const request = intent.current;
     importingRequest.current = true;
     setBusy(true); setError(null);
     try {
-      const created = await importPersonalSkill(preview.resourceId, title);
-      if (alive.current) onDone(created.id);
-    } catch (caught) { if (alive.current) setError(productErrorMessage(caught)); }
+      const created = await importPersonalSkill(request.resourceId, request.title, request.idempotencyKey);
+      if (alive.current) { ordinaryStore.complete(request); closeGuard.markSaved(); onDone(created.id); }
+    } catch (caught) { if (alive.current) { setUnknownImport(true); setRefused(caught instanceof WebApiError && caught.status >= 400 && caught.status < 500); setError(productErrorMessage(caught)); } }
     finally { importingRequest.current = false; if (alive.current) setBusy(false); }
   };
   if (mode === "transfer") return <SkillTransferImport recovery={recovery} onBusy={onBusy} onClose={() => onDone()} />;
+  if (ordinaryRecovery && !ordinaryStore.owns(ordinaryRecovery)) return <p role="status" className="text-ui text-text-2">正在核对当前账户的导入确认记录。{ordinaryStore.state.phase === "error" && <Button variant="text" onClick={ordinaryStore.reload}>重试核对</Button>}<Button variant="text" onClick={onCancel}>返回技能列表</Button></p>;
   return (
     <><form className="flex flex-col gap-4" onSubmit={event => { event.preventDefault(); void importFile(); }}>
+      {ordinaryStore.state.phase !== "ready" && <p role="status" className="text-ui text-text-2">{ordinaryStore.state.phase === "error" ? ordinaryStore.state.message : "正在核对账户、项目与导入恢复存储，确认导入暂不可用。"}{ordinaryStore.state.phase === "error" && <Button type="button" variant="text" onClick={ordinaryStore.reload}>重试核对</Button>}</p>}
+      {ordinaryRecovery && <p role="note" data-layout-exception="ordinary-import-recovery" className="text-ui text-text-2">恢复上次确认：{ordinaryRecovery.title}。继续时先核查已保存结果；若尚未保存，将按原确认执行导入。</p>}
       <div className="flex gap-2">
-        <Button type="button" variant={mode === "file" ? "secondary" : "text"} disabled={busy} onClick={() => { setMode("file"); setPreview(null); }}>本地文件</Button>
-        <Button type="button" variant="text" disabled={busy} onClick={() => { setMode("repository"); setPreview(null); }}>公开仓库</Button>
-        <Button type="button" variant="text" disabled={busy} onClick={() => { setMode("transfer"); setPreview(null); }}>历史与账户数据</Button>
+        <Button type="button" variant={mode === "file" ? "secondary" : "text"} disabled={busy || unknownImport} onClick={() => { setMode("file"); setPreview(null); }}>本地文件</Button>
+        <Button type="button" variant="text" disabled={busy || unknownImport} onClick={() => { setMode("repository"); setPreview(null); }}>公开仓库</Button>
+        <Button type="button" variant="text" disabled={busy || unknownImport} onClick={() => { setMode("transfer"); setPreview(null); }}>历史与账户数据</Button>
       </div>
-      <Input label="技能名称" value={title} required disabled={busy} onChange={event => setTitle(event.target.value)} />
-      {mode === "file" ? <Input label="技能文件" type="file" className={FILE_INPUT_STYLE} accept=".md,.zip,.tgz,.gz" required disabled={busy} onChange={event => { setFile(event.target.files?.[0] ?? null); setPreview(null); }} /> : <>
-        <Input label="公开仓库" placeholder="owner/repository" value={repository} required disabled={busy} onChange={event => { setRepository(event.target.value); setPreview(null); }} />
-        <Input label="固定提交" placeholder="完整的 40 位提交编号" value={commit} required pattern="[a-f0-9]{40}" disabled={busy} onChange={event => { setCommit(event.target.value); setPreview(null); }} />
-        <Input label="技能子目录" placeholder="例如 skills/source-check，可留空" value={subdirectory} disabled={busy} onChange={event => { setSubdirectory(event.target.value); setPreview(null); }} />
+      <Input label="技能名称" value={title} required disabled={busy || unknownImport} onChange={event => setTitle(event.target.value)} />
+      {mode === "file" ? <Input label="技能文件" type="file" className={FILE_INPUT_STYLE} accept=".md,.zip,.tgz,.gz" required disabled={busy || unknownImport} onChange={event => { setFile(event.target.files?.[0] ?? null); setPreview(null); }} /> : <>
+        <Input label="公开仓库" placeholder="owner/repository" value={repository} required disabled={busy || unknownImport} onChange={event => { setRepository(event.target.value); setPreview(null); }} />
+        <Input label="固定提交" placeholder="完整的 40 位提交编号" value={commit} required pattern="[a-f0-9]{40}" disabled={busy || unknownImport} onChange={event => { setCommit(event.target.value); setPreview(null); }} />
+        <Input label="技能子目录" placeholder="例如 skills/source-check，可留空" value={subdirectory} disabled={busy || unknownImport} onChange={event => { setSubdirectory(event.target.value); setPreview(null); }} />
       </>}
       {preview && <section aria-label="导入预览" className="flex flex-col gap-3">
         {preview.source && <div className="text-caption text-text-2"><p>{preview.source.repository}</p><p className="break-all">{preview.source.commit}</p>{preview.source.subdirectory && <p>{preview.source.subdirectory}</p>}</div>}
@@ -89,8 +112,10 @@ export function SkillImportForm({ recovery, onBusy, onDone, onCancel, onDirtyCha
         {preview.content.resources.length > 0 && <List label="导入资源" divided>{preview.content.resources.map(resource => <ListRow key={resource.path} title={resource.path} meta={/^scripts\//.test(resource.path) ? "脚本" : "资源"} />)}</List>}
       </section>}
       {error && <p role="alert" className="text-ui text-error">{error}</p>}
-      <div className="flex gap-2"><Button type="submit" variant={preview ? "secondary" : "primary"} loading={busy}>预览</Button>{preview && <Button type="button" disabled={busy} onClick={() => void confirmImport()}>确认导入</Button>}<Button type="button" variant="text" disabled={busy} onClick={closeGuard.requestClose}>取消</Button></div>
-    </form>{closeGuard.confirming && <ConfirmDialog title="放弃未保存的修改？" confirmLabel="放弃修改" onConfirm={closeGuard.discard} onCancel={closeGuard.keepEditing} />}</>
+      {unknownImport && <p role="status" data-layout-exception="ordinary-import-unknown" className="text-ui text-text-2">{refused ? "服务已拒绝本次请求；尚未取得成功结果，之前的确认记录仍保留。" : "导入结果尚未确认，可能已经保存。"}继续时使用原确认记录核查；不会创建第二份技能。刷新或返回后，可在当前账户与项目的“待核查的普通导入”继续。上传资源过期或无权读取时，请先人工核查已添加列表。</p>}
+      {unknownImport && <div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" disabled={busy} onClick={() => { closeGuard.markSaved(); onInspect(); }}>前往已添加列表核查</Button><Button type="button" variant="text" disabled={busy} onClick={() => setAbandoning(true)}>已核查，放弃本次确认</Button></div>}
+      <div className="flex gap-2"><Button type="submit" variant={preview ? "secondary" : "primary"} disabled={unknownImport} loading={busy}>预览</Button>{(preview || ordinaryRecovery) && <Button type="button" disabled={busy || !ordinaryStore.ready} onClick={() => void confirmImport()}>{unknownImport ? "核查并继续同一次导入" : "确认导入"}</Button>}<Button type="button" variant="text" disabled={busy} onClick={closeGuard.requestClose}>{cancelLabel}</Button></div>
+    </form>{abandoning && <ConfirmDialog title="放弃这次导入确认？" body={refused ? "服务拒绝了最近一次请求；这不证明更早的请求没有保存结果。请先核查已添加列表。放弃只清除当前账户与项目的这条恢复记录，不删除已保存的技能；重新导入可能产生重复技能。" : "导入可能已经保存。请先核查已添加列表；放弃只清除当前账户与项目的这条恢复记录，不删除已保存的技能。之后重新导入可能产生重复技能。"} confirmLabel="放弃本次确认" onCancel={() => setAbandoning(false)} onConfirm={() => { if (intent.current && ordinaryStore.abandon(intent.current)) { closeGuard.markSaved(); onCancel(); } else setAbandoning(false); }} />}{closeGuard.confirming && <ConfirmDialog title="放弃未保存的修改？" body={unknownImport ? "导入结果仍未知；已保存的技能不会被删除。关闭后请先核查已添加列表，避免重新导入相同内容。" : undefined} confirmLabel="放弃修改" onConfirm={closeGuard.discard} onCancel={closeGuard.keepEditing} />}</>
   );
 }
 
@@ -100,6 +125,9 @@ function SkillTransferImport({ onBusy, onClose, recovery }: { recovery?: Pending
   const [upload, setUpload] = useState<SkillTransferUpload | null>(null), [selected, setSelected] = useState<string[]>([]);
   const [preview, setPreview] = useState<SkillTransferPreview | null>(null), [result, setResult] = useState<SkillTransferResult | null>(null);
   const [busy, setBusy] = useState(false), [started, setStarted] = useState(false), [paused, setPaused] = useState(false), [error, setError] = useState<string | null>(null);
+  const closeGuard = useUnsavedGuard(result?.status !== "complete" && (!!file || !!recovery || started), onClose, busy,
+    { draftKey: JSON.stringify([format, file?.name, selected, upload?.reference, preview?.reference, result, started, paused]) });
+  useEffect(() => { onBusy(busy); }, [busy, onBusy]);
   const alive = useRef(true), pending = useRef(false), stop = useRef(false), intent = useRef<(SkillTransferIntent & { idempotencyKey: string }) | null>(null);
   useEffect(() => { const stopRef = stop; alive.current = true; return () => { alive.current = false; stopRef.current = true; }; }, []);
   const recover = useCallback(async () => {
@@ -151,8 +179,8 @@ function SkillTransferImport({ onBusy, onClose, recovery }: { recovery?: Pending
     } catch (caught) { if (alive.current) { setError(productErrorMessage(caught)); setPaused(true); } }
     finally { pending.current = false; if (alive.current) setBusy(false); }
   };
-  return <section aria-label="技能历史迁移" className="flex flex-col gap-4">
-    <p className="text-ui text-text-2">迁移技能内容、资源和历史版本。账户数据中的角色、连接和启用设置不会导入。</p>
+  return <><section aria-label="技能历史迁移" className="flex flex-col gap-4">
+    <p role="note" data-layout-exception="transfer-scope" className="text-ui text-text-2">迁移技能内容、资源和历史版本。账户数据中的角色、连接和启用设置不会导入。</p>
     <label className="text-ui text-text">数据格式<select className={inputClasses({ className: "mt-2" })} aria-label="数据格式" disabled={busy || started} value={format} onChange={event => { setFormat(event.target.value as SkillTransferFormat); setFile(null); setUpload(null); setPreview(null); setSelected([]); }}><option value="portable">技能历史文件</option><option value="account">账户导出文件</option></select></label>
     <Input label="迁移文件" type="file" className={FILE_INPUT_STYLE} accept={format === "account" ? ".json,.tar.gz,.tgz" : ".json"} disabled={busy || started} onChange={event => { setFile(event.target.files?.[0] ?? null); setUpload(null); setPreview(null); setSelected([]); }} />
     {!started && <Button disabled={!file || busy} loading={busy && !upload} onClick={() => void stage()}>上传迁移文件</Button>}
@@ -162,9 +190,10 @@ function SkillTransferImport({ onBusy, onClose, recovery }: { recovery?: Pending
     {result?.mappings.some(mapping => mapping.imported > 0) && <List label="已保存的技能" divided>{result.mappings.filter(mapping => mapping.imported > 0).map(mapping => <ListRow key={mapping.sourceId} title={preview?.skills.find(skill => skill.sourceId === mapping.sourceId)?.title ?? "已保存的技能"} meta={`已保存 ${mapping.imported} 个版本`} to={`/app/extensions/skills/${encodeURIComponent(mapping.targetId)}`} />)}</List>}
     {result?.mappings.some(mapping => mapping.imported === 0) && <List label="待验证的技能" divided>{result.mappings.filter(mapping => mapping.imported === 0).map(mapping => <ListRow key={mapping.sourceId} title={preview?.skills.find(skill => skill.sourceId === mapping.sourceId)?.title ?? "待导入的技能"} meta="待验证，尚未保存" />)}</List>}
     {error && <p role="alert" className="text-ui text-error">{error}{recovery && !preview && <Button variant="text" disabled={busy} onClick={() => void recover()}>重试恢复预览</Button>}</p>}
-    {result?.status === "complete" ? <p role="status" className="text-ui text-text">迁移完成；技能已保存，尚未启用。</p> : paused ? <p role="status" className="text-ui text-text-2">迁移已暂停；继续时会核对同一迁移进度。</p> : busy && started ? <p role="status" className="text-ui text-text-2">正在验证并保存历史版本</p> : null}
-    <div className="flex gap-2">{preview && !started && <Button disabled={busy || !preview.skills.length} onClick={() => void run()}>确认迁移</Button>}{started && busy && <Button variant="secondary" onClick={() => { stop.current = true; setPaused(true); }}>暂停迁移</Button>}{started && !busy && result?.status !== "complete" && <Button disabled={!preview} onClick={() => void run()}>继续迁移</Button>}{(!started || result?.status === "complete" || recovery) && <Button variant="text" disabled={busy} onClick={onClose}>{started ? "完成" : "取消"}</Button>}</div>
-  </section>;
+    {result?.status === "complete" ? <p role="status" className="text-ui text-text">迁移完成；技能已保存，尚未启用。</p> : busy && started ? <p role="status" className="text-ui text-text-2">{paused && stop.current ? "正在暂停，当前请求仍在核对。" : "正在核对迁移进度。"}</p> : paused ? <p role="status" data-layout-exception="transfer-paused" className="text-ui text-text-2">迁移已暂停；继续时会核对同一迁移进度。</p> : null}
+    <div className="flex gap-2">{preview && !started && <Button disabled={busy || !preview.skills.length} onClick={() => void run()}>确认迁移</Button>}{started && busy && <Button variant="secondary" disabled={paused && stop.current} onClick={() => { stop.current = true; setPaused(true); }}>暂停迁移</Button>}{started && !busy && result?.status !== "complete" && <Button disabled={!preview} onClick={() => void run()}>继续迁移</Button>}<Button variant="text" disabled={busy} onClick={() => { if (result?.status === "complete") { closeGuard.markSaved(); onClose(); } else closeGuard.requestClose(); }}>{result?.status === "complete" ? "完成" : "返回技能列表"}</Button></div>
+    {started && result?.status !== "complete" && <p role="note" data-layout-exception="transfer-unknown" className="text-ui text-text-2">未确认的请求可以使用本页原确认记录继续核查。返回后请读取“未完成的技能迁移”；只有服务器保存的记录才可恢复。尚未收到回执时，不能确认迁移记录已保存。</p>}
+  </section>{closeGuard.confirming && <ConfirmDialog title="离开技能迁移？" body={started ? "已保存的技能会保留。返回列表后可核查服务器的未完成迁移记录；尚未收到回执的结果仍未知。" : "未提交的文件与预览将被放弃。"} confirmLabel="返回列表" onConfirm={closeGuard.discard} onCancel={closeGuard.keepEditing} />}</>;
 }
 
 /** Recovery comes only from current authenticated adoption journals, never browser persistence. */

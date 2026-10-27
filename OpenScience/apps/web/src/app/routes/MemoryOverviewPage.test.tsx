@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,6 +7,8 @@ import { handoverEntries, livedIn, ownerFirstDay, receivedPack, TODAY } from "@/
 import type { MemoryMap } from "@/lib/memoryMapClient";
 import type { WebMethod } from "@/lib/methodsClient";
 import { expectComposed } from "@/test/expectComposed";
+import { announceMemoryChanged } from "@/lib/memoryClient";
+import { useProjectStore } from "@/lib/projects";
 import { MemoryOverviewPage } from "./MemoryOverviewPage";
 
 const reads = vi.hoisted(() => ({
@@ -33,7 +35,7 @@ vi.mock("./CapsuleTransferPanel", () => ({
 
 function Where() {
   const location = useLocation();
-  return <p data-testid="where">{location.pathname}{location.search}</p>;
+  return <><p data-testid="where">{location.pathname}{location.search}</p><p data-testid="route-state">{JSON.stringify(location.state)}</p></>;
 }
 function open(search = "") {
   return render(
@@ -51,20 +53,22 @@ function open(search = "") {
   );
 }
 const where = () => screen.getByTestId("where").textContent;
-const card = (part: string) => document.querySelector<HTMLElement>(`[data-overview-card="${part}"]`)!;
-const PARTS = ["growth", "you", "projects", "methods", "knowledge", "received"];
+const part = (name: string) => document.querySelector<HTMLElement>(`[data-memory-summary-part="${name}"]`)!;
 const learnedMethod = (id: string, title: string, at: string): WebMethod => ({
   id, projectId: null, revision: 1, name: `method-${id}`, title, description: "", whenToUse: "", status: "approved", statusReason: null, origin: "inferred", counts: null,
   promotion: { status: "approved", reasons: [], missing: [] }, body: "", createdAt: at, updatedAt: at,
 });
-/** The page's one sentence: its text is broken up by the links that are its numbers, so it is read whole. */
 const sentenceOf = async () => {
   await waitFor(() => expect(document.querySelector("[data-headline]")).not.toBeNull());
   return document.querySelector<HTMLElement>("[data-headline]")!;
 };
 async function ready() {
-  await waitFor(() => expect(document.querySelectorAll("[data-overview-card][data-state='loading']")).toHaveLength(0), { timeout: 4_000 });
+  await waitFor(() => {
+    expect(document.querySelectorAll("[data-memory-summary-part]")).toHaveLength(5);
+    expect(document.querySelectorAll("[data-memory-summary-part][data-state='loading']")).toHaveLength(0);
+  }, { timeout: 4_000 });
 }
+const alertWith = (text: string) => [...document.querySelectorAll<HTMLElement>("[data-inline-alert]")].find(node => node.textContent?.includes(text))!;
 
 beforeEach(() => {
   // Only the clock is held: "the last thirty days" is counted from a day the fixtures are dated against, and nothing else is faked.
@@ -84,67 +88,97 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
-describe("总览 on the owner's first day: native memory, no memory file, documents in three projects, nothing learned or received", () => {
-  it("is a page with something on it: the documents, the projects and the strip of what was put in, and recipes for the rest — never three zeros", async () => {
+describe("v3.2 memory task composition", () => {
+  it("opens received-pack management deliberately and returns without losing query scope", async () => {
+    reads.fetchReceivedCapsules.mockResolvedValue([receivedPack("a")]);
+    open("?retained=scope");
+    await ready();
+    expect(screen.queryByRole("switch", { name: /启用/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("link", { name: /收到的胶囊/ }));
+    expect(await screen.findByRole("switch", { name: /启用/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "返回记忆总览" })).toHaveFocus();
+    expect(where()).toContain("retained=scope");
+    expect(where()).toContain("section=received");
+    await userEvent.click(screen.getByRole("link", { name: "返回记忆总览" }));
+    expect(screen.queryByRole("switch", { name: /启用/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /收到的胶囊/ })).toHaveFocus();
+    expect(where()).toContain("retained=scope");
+  });
+
+  it("leads with content and uses a compact list for sparse history", async () => {
+    open();
+    await ready();
+    const contents = screen.getByRole("heading", { name: "记忆内容" });
+    const history = screen.getByRole("heading", { name: "最近变化" });
+    expect(contents.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("list", { name: "最近的记忆变化" })).toBeInTheDocument();
+    expect(document.querySelector("[data-map-chart='growth']")).toBeNull();
+  });
+
+  it("preserves the known documents and projects on an owner's first day", async () => {
     open();
     expect(await sentenceOf()).toHaveTextContent("胶囊里有 47 份资料，还没有记下关于你的事；近 30 天新增 3 件。");
     await ready();
-    expect(screen.queryByText(/还没有记住什么/u)).toBeNull();
-    expect([...document.querySelectorAll("[data-overview-card]")].map((element) => element.getAttribute("data-overview-card"))).toEqual(PARTS);
-    // 成长: the one lane it has, drawn.
-    expect(card("growth")).toHaveAttribute("data-state", "content");
-    expect(card("growth")).toHaveAttribute("data-count", "3");
-    expect(within(card("growth")).getByRole("heading", { level: 2 })).toHaveTextContent("自9月22日起，放进 3 份资料");
-    // 项目: the projects that hold something, each with its own documents; the empty one is not a row.
-    expect(card("projects")).toHaveAttribute("data-count", "2");
-    expect(within(card("projects")).getByRole("table", { name: "各个项目" })).toBeInTheDocument();
-    expect(within(card("projects")).getByRole("link", { name: "阿司匹林一级预防" })).toHaveAttribute("href", "/app/memory?tab=project&project=prj_a");
-    expect(within(card("projects")).queryByText("空项目")).toBeNull();
-    // 知识: counted by the knowledge base, by kind.
-    expect(card("knowledge")).toHaveAttribute("data-count", "47");
-    expect(within(card("knowledge")).getByRole("list", { name: "资料的种类" })).toBeInTheDocument();
-    expect(within(card("knowledge")).getByRole("link", { name: /文献与指南/u })).toHaveAttribute("href", "/app/files?kind=literature");
-    // The other three are recipes with one button each.
-    for (const [part, button] of [["you", "记住这一条"], ["methods", "去做一件事"], ["received", "导入一个胶囊"]] as const) {
-      expect(card(part)).toHaveAttribute("data-state", "recipe");
-      expect(within(card(part)).getAllByRole("button", { name: button })).toHaveLength(1);
-    }
+    expect(part("projects")).toHaveAttribute("data-count", "2");
+    expect(part("knowledge")).toHaveAttribute("data-count", "47");
+    expect(part("you")).toHaveAttribute("data-count", "0");
+    expect(screen.queryByText("开始积累你的记忆")).not.toBeInTheDocument();
   });
 
-  it("writes the first line from 关于你's own button, and 「记住这一条」 is the header's too", async () => {
+  it("keeps the header's remember and import operations accessible", async () => {
     const user = userEvent.setup();
-    open();
-    await ready();
-    expect(screen.getAllByRole("button", { name: "记住这一条" })).toHaveLength(2);
-    await user.click(within(card("you")).getByRole("button", { name: "记住这一条" }));
+    open(); await ready();
+    expect(screen.getAllByRole("button", { name: "记住这一条" })).toHaveLength(1);
+    await user.click(screen.getByRole("button", { name: "记住这一条" }));
     expect(await screen.findByRole("dialog", { name: "记住这一条" })).toBeInTheDocument();
-  });
-
-  it("offers 从其他 AI 导入 beside it in the empty 关于你 card, and in the header's 「⋯」", async () => {
-    const user = userEvent.setup();
-    open();
-    await ready();
-    await user.click(within(card("you")).getByRole("button", { name: "从其他 AI 导入" }));
-    expect(await screen.findByRole("dialog", { name: "从其他 AI 导入" })).toBeInTheDocument();
-    await user.click(within(screen.getByRole("dialog", { name: "从其他 AI 导入" })).getByRole("button", { name: "关闭" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "关闭" }));
     await user.click(screen.getByRole("button", { name: "记忆设置" }));
     await user.click(await screen.findByRole("menuitem", { name: "从其他 AI 导入" }));
     expect(await screen.findByRole("dialog", { name: "从其他 AI 导入" })).toBeInTheDocument();
   });
 
-  it("opens 分享与导入 on 导入 from the recipe of 收到的, and on 导出 from the card of what could be handed over", async () => {
+  it("retains import and share operations in received-pack management", async () => {
     const user = userEvent.setup();
-    open();
-    await ready();
-    await user.click(within(card("received")).getByRole("button", { name: "导入一个胶囊" }));
+    open(); await ready();
+    await user.click(screen.getByRole("link", { name: /收到的胶囊/ }));
+    await user.click(await screen.findByRole("button", { name: "导入一个胶囊" }));
     expect(await screen.findByRole("dialog", { name: "分享与导入" })).toHaveAttribute("data-tab", "import");
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "关闭" }));
-    await user.click(within(card("received")).getByRole("button", { name: "分享与导入" }));
+    await user.click(screen.getByRole("button", { name: "分享与导入" }));
     expect(await screen.findByRole("dialog", { name: "分享与导入" })).toHaveAttribute("data-tab", "export");
+  });
+
+  it("does not show first-use guidance while any required read is unresolved", async () => {
+    reads.fetchMemoryMap.mockReturnValue(new Promise(() => {}));
+    open();
+    expect(await screen.findByRole("list", { name: "记忆内容与入口" })).toBeInTheDocument();
+    expect(part("you")).toHaveAttribute("data-state", "loading");
+    expect(part("you")).not.toHaveAttribute("data-count");
+    expect(screen.queryByText("开始积累你的记忆")).not.toBeInTheDocument();
+  });
+
+  it("shows one first-use guide only when every relevant read succeeded and is empty", async () => {
+    reads.fetchMemoryMap.mockResolvedValue(ownerFirstDay({ nodes: [], events: [], summary: { memories: 0, documents: 0, methods: 0, projects: 0, needsLook: 0, since: null }, buckets: { unit: "day", series: [] },
+      facets: { projects: [], kinds: [], aboutYou: [], documentTypes: [], topics: [], dimensions: [] } }));
+    open(); await ready();
+    expect(screen.getAllByText("开始积累你的记忆")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "开始对话" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "最近变化" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "上传资料" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "上传资料" }));
+    expect(where()).toBe("/app/files");
+  });
+
+  it("does not mistake preserved historical activity for first use when current counts are empty", async () => {
+    reads.fetchMemoryMap.mockResolvedValue(ownerFirstDay({ nodes: [], events: [], summary: { memories: 0, documents: 0, methods: 0, projects: 0, needsLook: 0, since: null },
+      facets: { projects: [], kinds: [], aboutYou: [], documentTypes: [], topics: [], dimensions: [] } }));
+    open(); await ready();
+    expect(screen.queryByText("开始积累你的记忆")).not.toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "最近的记忆变化" })).toBeInTheDocument();
   });
 });
 
-describe("总览 of an account that has lived a while", () => {
+describe("a populated account", () => {
   beforeEach(() => {
     reads.fetchMemoryMap.mockResolvedValue(livedIn());
     reads.fetchReceivedCapsules.mockResolvedValue([receivedPack("a"), receivedPack("b", { importedAt: "2026-09-30T02:00:00.000Z", enabled: true })]);
@@ -152,196 +186,163 @@ describe("总览 of an account that has lived a while", () => {
     reads.previewCapsuleExport.mockResolvedValue({ scopes: [], empty: false, tooMany: false, card: null, entries: handoverEntries({ methods: 3, standards: 5, background: 12 }) });
   });
 
-  it("says what it holds with each number a link to its part, and every card's number is the headline's", async () => {
-    open();
-    const sentence = await sentenceOf();
-    await ready();
-    // The last thirty days: seven memories noted, two methods learned, two documents added and two packs taken in.
+  it("preserves exact headline counts and the original scoped destinations", async () => {
+    open(); const sentence = await sentenceOf(); await ready();
     expect(sentence).toHaveTextContent("胶囊里有 7 件关于你和项目的事、2 种做法、39 份资料；近 30 天新增 13 件。");
-    const link = (name: RegExp) => within(sentence).getByRole("link", { name });
-    expect(link(/7 件关于你和项目的事/u)).toHaveAttribute("href", "/app/memory/map");
-    expect(link(/2 种做法/u)).toHaveAttribute("href", "/app/memory/map?part=method");
-    expect(link(/39 份资料/u)).toHaveAttribute("href", "/app/memory/map?part=knowledge");
-    expect(link(/件，看时间/u)).toHaveAttribute("href", "/app/memory/map?view=time");
-    // The cards: 关于你 and 项目 are the memories together, the others each their own number.
-    expect(Number(card("you").dataset.count) + Number(card("projects").dataset.memories)).toBe(7);
-    expect([card("methods").dataset.count, card("knowledge").dataset.count, card("received").dataset.count]).toEqual(["2", "39", "2"]);
-    expect(card("you").dataset.count).toBe("4");
+    expect(part("you")).toHaveAttribute("data-count", "4");
+    expect(part("projects")).toHaveAttribute("data-memories", "3");
+    expect(part("methods")).toHaveAttribute("data-count", "2");
+    expect(part("knowledge")).toHaveAttribute("data-count", "39");
+    expect(part("received")).toHaveAttribute("data-count", "2");
+    for (const [name, href] of [["you", "/app/memory/map?part=you"], ["projects", "/app/memory/map?part=project"], ["methods", "/app/memory?tab=methods"], ["knowledge", "/app/memory/map?part=knowledge"]]) {
+      expect(part(name).closest("li")!.querySelector("a")).toHaveAttribute("href", href);
+    }
   });
 
-  it("draws each part in the form its amount calls for, and headed by the sentence it proves", async () => {
-    open();
-    await ready();
-    expect(within(card("growth")).getByRole("heading", { level: 2 }).textContent).toBe("自9月22日起，记下 7 件、学会 2 种做法、放进 2 份资料、收下 2 个胶囊");
-    // 关于你: four statements, as themselves.
-    expect(within(card("you")).getByRole("heading", { level: 2 })).toHaveTextContent("关于你 · 4 件");
-    expect(within(within(card("you")).getByRole("list", { name: "关于你的记忆" })).getAllByRole("listitem")).toHaveLength(4);
-    // 项目: two, a table with a bar in each row, the most recently active first.
-    const table = within(card("projects")).getByRole("table", { name: "各个项目" });
-    // The newest thing in 阿司匹林一级预防 (a memory of 10月8日) is later than the newest in 房颤抗凝; its row reads name, bar, 记忆 1, 资料 22 (and 房颤抗凝 a memory to look at).
-    expect(within(table).getAllByRole("row").slice(1).map((row) => row.textContent)).toEqual(["阿司匹林一级预防122", "房颤抗凝2171"]);
-    // 我的做法: two, as rows with their day, and no count of use anywhere.
-    expect(within(within(card("methods")).getByRole("list", { name: "我的做法" })).getAllByRole("listitem")).toHaveLength(2);
-    expect(card("methods").textContent).not.toMatch(/使用|调用|载入|用过/u);
-    // 知识: counted by the knowledge base, with the memory resting on a changed source said in words and a link.
-    expect(within(card("knowledge")).getByRole("link", { name: "1 条记忆依据的资料变了，只看这些" })).toHaveAttribute("href", "/app/memory/map?look=1");
-    // 收到的: both packs, newest first, with the switch of each — and what could be handed over.
-    const packs = within(card("received")).getByRole("list", { name: "收到的胶囊" });
-    expect(within(packs).getAllByRole("listitem").map((row) => within(row).getByRole("switch").getAttribute("aria-label"))).toEqual(["启用“李主任的工作方式 a”", "启用“李主任的工作方式 b”"]);
-    expect(within(packs).getByRole("switch", { name: "启用“李主任的工作方式 b”" })).toHaveAttribute("aria-checked", "true");
-    expect(within(card("received")).getByRole("img", { name: "我能交出去的：方法 3 · 标准与偏好 5 · 背景 12" })).toBeInTheDocument();
-  });
-
-  it("drills each card into the map narrowed to its part, and 成长 into the time view", async () => {
-    open();
-    await ready();
-    const hrefs = Object.fromEntries(["growth", "you", "projects", "methods", "knowledge"].map((part) => [part, within(card(part)).getByRole("link", { name: "在地图里看" }).getAttribute("href")]));
-    expect(hrefs).toEqual({
-      growth: "/app/memory/map?view=time", you: "/app/memory/map?part=you", projects: "/app/memory/map?part=project", methods: "/app/memory/map?part=method", knowledge: "/app/memory/map?part=knowledge",
-    });
-  });
-
-  it("lists what needs a look, the sentence of its reason on each row, and opens it in the memory's own drawer", async () => {
-    const user = userEvent.setup();
+  it("puts a source-change item before the content and opens its own record", async () => {
     reads.fetchMemoryProfile.mockResolvedValue({ records: [plainRecord({ id: "p2", kind: "decision", summary: "主要结局取卒中和系统性栓塞", value: "主要结局取卒中和系统性栓塞" })], groups: {}, activeCount: 1, pendingCount: 0 });
-    open();
-    await ready();
+    open(); await ready();
     const section = screen.getByRole("heading", { name: "需要看一眼" }).closest("section")!;
+    expect(section.compareDocumentPosition(screen.getByRole("heading", { name: "记忆内容" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const row = within(section).getByRole("button", { name: "主要结局取卒中和系统性栓塞" });
     expect(within(row.closest("li")!).getByText("依据的资料有更新")).toBeInTheDocument();
-    await user.click(row);
+    await userEvent.click(row);
     expect(where()).toContain("open=record%3Ap2");
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 
-  it("opens a memory in the drawer from its row, a note of the capsule in the drawer of notes, and a document on its own page", async () => {
+  it("opens a visible memory or capsule note from the preview without losing identity", async () => {
     const user = userEvent.setup();
-    open();
-    await ready();
-    await user.click(within(card("you")).getByRole("button", { name: "回答先给结论" }));
+    open(); await ready();
+    const preview = screen.getByRole("list", { name: "关于你的记忆预览" });
+    await user.click(within(preview).getByRole("button", { name: "回答先给结论" }));
     expect(where()).toContain("open=record%3Ay2");
-    cleanup();
-    reads.fetchMyCapsule.mockResolvedValue({ capsule: { id: "cap_1" }, capsules: [], entries: [], forgotten: [] });
-    open();
-    await ready();
-    await user.click(within(card("you")).getByRole("button", { name: "引用写到页码" }));
+    cleanup(); open(); await ready();
+    await user.click(within(screen.getByRole("list", { name: "关于你的记忆预览" })).getByRole("button", { name: "引用写到页码" }));
     expect(where()).toContain("open=entry%3Ae4");
   });
 
-  it("switches a received pack on and says so, with the way back in the toast, and reads the packs again", async () => {
+  it("keeps the preview's ask-about operation", async () => {
     const user = userEvent.setup();
-    open();
-    await ready();
-    const before = reads.fetchReceivedCapsules.mock.calls.length;
-    await user.click(within(card("received")).getByRole("switch", { name: "启用“李主任的工作方式 a”" }));
-    await waitFor(() => expect(reads.enableReceivedCapsule).toHaveBeenCalledWith("a"));
-    await waitFor(() => expect(reads.fetchReceivedCapsules.mock.calls.length).toBeGreaterThan(before));
-  });
-
-  it("carries 就这个提问 in each row's 「⋯」, which opens a conversation with the question begun", async () => {
-    const user = userEvent.setup();
-    open();
-    await ready();
-    const row = within(card("methods")).getByRole("button", { name: "证据矩阵先行" }).closest("li")!;
+    open(); await ready();
+    const row = within(screen.getByRole("list", { name: "关于你的记忆预览" })).getByRole("button", { name: "回答先给结论" }).closest("li")!;
     await user.click(within(row).getByRole("button", { name: "更多" }));
     expect(await screen.findByRole("menuitem", { name: "就这个提问" })).toBeInTheDocument();
   });
+
+  it("opens a draft about an independently read method in the native conversation", async () => {
+    const previous = useProjectStore.getState();
+    useProjectStore.setState({ currentId: "project-test", select: async (_id, done) => { done?.(); } });
+    try {
+      const user = userEvent.setup();
+      open(); await ready();
+      const row = within(screen.getByRole("list", { name: "最近采用的做法" })).getByRole("button", { name: "证据矩阵先行" }).closest("li")!;
+      await user.click(within(row).getByRole("button", { name: "更多" }));
+      await user.click(await screen.findByRole("menuitem", { name: "就这个提问" }));
+      await waitFor(() => expect(where()).toBe("/app/chat"));
+      expect(screen.getByTestId("route-state")).toHaveTextContent("证据矩阵先行");
+    } finally {
+      useProjectStore.setState({ currentId: previous.currentId, select: previous.select });
+    }
+  });
+
+  it("enables a received pack and refreshes its actual shelf", async () => {
+    const user = userEvent.setup();
+    open(); await ready();
+    await user.click(screen.getByRole("link", { name: /收到的胶囊/ }));
+    const toggle = await screen.findByRole("switch", { name: "启用“李主任的工作方式 a”" });
+    const before = reads.fetchReceivedCapsules.mock.calls.length;
+    await user.click(toggle);
+    await waitFor(() => expect(reads.enableReceivedCapsule).toHaveBeenCalledWith("a"));
+    await waitFor(() => expect(reads.fetchReceivedCapsules.mock.calls.length).toBeGreaterThan(before));
+  });
 });
 
-describe("a read that failed is said, on its own card, and is never a zero", () => {
-  it("names a card whose source failed and leaves the rest drawn; the sentence leaves that number out", async () => {
+describe("read truth and recovery", () => {
+  it("keeps independent valid data and omits unavailable document and project counts", async () => {
     reads.fetchMemoryMap.mockResolvedValue(livedIn({ missing: ["documents"] }));
-    reads.listAllMethods.mockResolvedValue([learnedMethod("m1", "证据矩阵先行", "2026-09-24T02:00:00.000Z"), learnedMethod("m2", "先写方法学限制", "2026-10-02T02:00:00.000Z")]);
-    open();
-    await ready();
-    for (const part of ["projects", "knowledge", "growth"]) {
-      expect(card(part)).toHaveAttribute("data-state", "error");
-      expect(within(card(part)).getByRole("alert")).toHaveTextContent("这一部分有资料没有读到。");
-      expect(card(part).dataset.count).toBeUndefined();
-    }
-    for (const part of ["you", "methods"]) expect(card(part)).toHaveAttribute("data-state", "content");
-    const sentence = await sentenceOf();
-    expect(sentence).toHaveTextContent("胶囊里有 7 件关于你和项目的事、2 种做法。");
-    expect(sentence.textContent).not.toMatch(/份资料|新增/u);
+    reads.listAllMethods.mockResolvedValue([learnedMethod("m1", "证据矩阵先行", "2026-09-24T02:00:00.000Z")]);
+    open(); await ready();
+    expect(part("projects")).toHaveAttribute("data-state", "error");
+    expect(part("knowledge")).toHaveAttribute("data-state", "error");
+    expect(part("knowledge")).not.toHaveAttribute("data-count");
+    expect(part("you")).toHaveAttribute("data-count", "4");
+    expect(part("methods")).toHaveAttribute("data-count", "1");
+    expect(alertWith("部分来源暂未读到")).toBeInTheDocument();
+    expect((await sentenceOf()).textContent).not.toMatch(/份资料|新增/u);
   });
 
-  it("says a failed memory read is not 'nothing remembered': 关于你 is an error, and no recipe stands in its place", async () => {
+  it("does not treat a failed memory read as an empty account", async () => {
     reads.fetchMemoryMap.mockResolvedValue(ownerFirstDay({ missing: ["native-memory"] }));
-    open();
-    await ready();
-    expect(card("you")).toHaveAttribute("data-state", "error");
-    expect(within(card("you")).queryByRole("button", { name: "记住这一条" })).toBeNull();
-    expect(screen.queryByText(/还没有记下关于你的事/u)).toBeNull();
+    open(); await ready();
+    expect(part("you")).toHaveAttribute("data-state", "error");
+    expect(part("you")).not.toHaveAttribute("data-count");
+    expect(screen.queryByText("开始积累你的记忆")).not.toBeInTheDocument();
+    expect((await sentenceOf()).textContent).not.toMatch(/还没有记下关于你的事/u);
   });
 
-  it("fails the four cards of the map's document together when it cannot be read, each with 重试, and the methods and the packs are each their own", async () => {
+  it("retries the common map failure without hiding independent methods or received packs", async () => {
     reads.fetchMemoryMap.mockRejectedValueOnce(new Error("down")).mockResolvedValue(livedIn());
     reads.fetchReceivedCapsules.mockResolvedValue([receivedPack("a")]);
     reads.listAllMethods.mockResolvedValue([learnedMethod("m1", "证据矩阵先行", "2026-09-24T02:00:00.000Z")]);
-    const user = userEvent.setup();
-    open();
-    await waitFor(() => expect(card("growth")).toHaveAttribute("data-state", "error"));
-    for (const part of ["growth", "you", "projects", "knowledge"]) expect(card(part)).toHaveAttribute("data-state", "error");
-    expect(card("received")).toHaveAttribute("data-state", "content");
-    expect(card("methods")).toHaveAttribute("data-state", "content");
-    // The sentence names what was read: the methods, and nothing the map was to say.
+    open(); await ready();
+    expect(part("you")).toHaveAttribute("data-state", "error");
+    expect(part("received")).toHaveAttribute("data-count", "1");
+    expect(part("methods")).toHaveAttribute("data-count", "1");
     expect(await sentenceOf()).toHaveTextContent("胶囊里有 1 种做法。");
-    await user.click(within(card("you")).getByRole("button", { name: /重试/u }));
-    await waitFor(() => expect(card("you")).toHaveAttribute("data-state", "content"));
-    expect(card("growth")).toHaveAttribute("data-state", "content");
+    await userEvent.click(within(alertWith("暂时读不到记忆")).getByRole("button", { name: "重试" }));
+    await waitFor(() => expect(part("you")).toHaveAttribute("data-state", "content"));
   });
 
-  it("reads the learned methods on their own: a map that folded every method mark away still has a card of them, and a failed read of them is the card's and the strip's, never a card with none", async () => {
-    // The map folds its marks to a hundred and fifty and a method is among the first it folds: the document has no method mark at all.
+  it("reads methods independently of map folding and does not report an incomplete recent count", async () => {
     reads.fetchMemoryMap.mockResolvedValue(livedIn({ nodes: livedIn().nodes.filter((node) => node.type !== "method") }));
-    reads.listAllMethods.mockResolvedValue([learnedMethod("m1", "证据矩阵先行", "2026-09-24T02:00:00.000Z"), learnedMethod("m2", "先写方法学限制", "2026-10-02T02:00:00.000Z")]);
-    const user = userEvent.setup();
-    open();
-    await ready();
-    expect(card("methods")).toHaveAttribute("data-count", "2");
-    expect(within(card("methods")).getByRole("button", { name: "证据矩阵先行" })).toBeInTheDocument();
-    expect(card("growth").querySelector("h2")!.textContent).toContain("学会 2 种做法");
-    cleanup();
     reads.listAllMethods.mockRejectedValueOnce(new Error("methods down")).mockResolvedValue([learnedMethod("m1", "证据矩阵先行", "2026-09-24T02:00:00.000Z")]);
-    open();
-    await waitFor(() => expect(card("methods")).toHaveAttribute("data-state", "error"));
-    expect(within(card("methods")).getByRole("alert")).toHaveTextContent("暂时读不到学到的做法。");
-    expect(card("growth")).toHaveAttribute("data-state", "error");
-    for (const part of ["you", "projects", "knowledge"]) expect(card(part)).toHaveAttribute("data-state", "content");
-    expect((await sentenceOf()).textContent).not.toMatch(/种做法/u);
-    await user.click(within(card("methods")).getByRole("button", { name: /重试/u }));
-    await waitFor(() => expect(card("methods")).toHaveAttribute("data-state", "content"));
-    await waitFor(() => expect(card("growth")).toHaveAttribute("data-state", "content"));
+    open(); await ready();
+    expect(part("methods")).toHaveAttribute("data-state", "error");
+    expect(part("methods")).not.toHaveAttribute("data-count");
+    expect((await sentenceOf()).textContent).not.toMatch(/种做法|近 30 天新增/u);
+    await userEvent.click(within(alertWith("暂时读不到学到的做法")).getByRole("button", { name: "重试" }));
+    await waitFor(() => expect(part("methods")).toHaveAttribute("data-count", "1"));
+    expect(screen.getByRole("button", { name: "证据矩阵先行" })).toBeInTheDocument();
+    expect(part("methods").closest("li")!.querySelector("a")).toHaveAttribute("href", "/app/memory?tab=methods");
+    await userEvent.click(screen.getByRole("button", { name: "证据矩阵先行" }));
+    expect(where()).toContain("open=method%3Am1");
   });
 
-  it("fails the received card alone, and the hand-over half alone: each has its own retry", async () => {
+  it("keeps known historical entries visible with an incomplete label when another source fails", async () => {
     reads.fetchMemoryMap.mockResolvedValue(livedIn());
-    reads.fetchReceivedCapsules.mockRejectedValue(new Error("shelf down"));
+    reads.listAllMethods.mockRejectedValue(new Error("methods down"));
+    open(); await ready();
+    const history = screen.getByRole("list", { name: "最近的记忆变化" });
+    expect(within(history).getByRole("button", { name: "检索截止到今年九月" })).toBeInTheDocument();
+    expect(screen.getByText("仅显示已读取的变化，其他来源尚未完整读取。")).toBeInTheDocument();
+    expect((await sentenceOf()).textContent).not.toMatch(/近 30 天新增/u);
+  });
+
+  it("keeps received and handover errors independently recoverable", async () => {
+    reads.fetchMemoryMap.mockResolvedValue(livedIn());
+    reads.fetchReceivedCapsules.mockRejectedValueOnce(new Error("shelf down")).mockResolvedValue([receivedPack("a")]);
     reads.previewCapsuleExport.mockRejectedValue(new Error("preview down"));
-    open();
-    await waitFor(() => expect(card("received")).toHaveAttribute("data-state", "error"));
-    expect(card("you")).toHaveAttribute("data-state", "content");
-    cleanup();
-    reads.fetchReceivedCapsules.mockResolvedValue([receivedPack("a")]);
-    open();
-    await ready();
-    expect(card("received")).toHaveAttribute("data-state", "content");
-    const hand = card("received").querySelector<HTMLElement>("[data-overview-handover]")!;
+    open(); await ready();
+    expect(part("received")).toHaveAttribute("data-state", "error");
+    expect(part("you")).toHaveAttribute("data-state", "content");
+    await userEvent.click(within(alertWith("暂时读不到收到的胶囊")).getByRole("button", { name: "重试" }));
+    await waitFor(() => expect(part("received")).toHaveAttribute("data-count", "1"));
+    await userEvent.click(screen.getByRole("link", { name: /收到的胶囊/ }));
+    const hand = document.querySelector<HTMLElement>("[data-overview-handover]")!;
     expect(await within(hand).findByRole("note")).toHaveTextContent("暂时读不到你能交出去的内容。");
     expect(within(hand).getByRole("button", { name: /重试/u })).toBeInTheDocument();
   });
-});
 
-describe("总览 of an account with nothing at all", () => {
-  it("has no sentence and six recipes, each one button — and says so as nothing to compare, not as a page that passed", async () => {
-    reads.fetchMemoryMap.mockResolvedValue(ownerFirstDay({ nodes: [], summary: { memories: 0, documents: 0, methods: 0, projects: 0, needsLook: 0, since: null }, buckets: { unit: "day", series: [] },
-      facets: { projects: [], kinds: [], aboutYou: [], documentTypes: [], topics: [], dimensions: [] } }));
-    open();
-    await ready();
-    expect(screen.queryByText(/胶囊里有/u)).toBeNull();
-    for (const part of PARTS) expect(card(part)).toHaveAttribute("data-state", "recipe");
-    expect(within(card("growth")).getByRole("button", { name: "去对话" })).toBeInTheDocument();
-    expect(within(card("knowledge")).getByRole("button", { name: "上传一份资料" })).toBeInTheDocument();
+  it("retains the last valid values on a failed refresh and does not present a stale recent count as current", async () => {
+    reads.fetchMemoryMap.mockResolvedValueOnce(livedIn()).mockRejectedValueOnce(new Error("refresh failed"));
+    open(); await ready();
+    expect(part("you")).toHaveAttribute("data-count", "4");
+    act(() => announceMemoryChanged());
+    await waitFor(() => expect(alertWith("记忆暂未刷新")).toBeInTheDocument());
+    expect(part("you")).toHaveAttribute("data-count", "4");
+    expect((await sentenceOf()).textContent).not.toMatch(/近 30 天新增/u);
+    expect(screen.queryByText("开始积累你的记忆")).not.toBeInTheDocument();
   });
 });
 

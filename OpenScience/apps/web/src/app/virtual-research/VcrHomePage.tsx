@@ -16,6 +16,7 @@ import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
+import type { PageActionPlan } from "@/components/layout/HeaderActions";
 import { List } from "@/components/ui/ListRow";
 import { Note } from "@/components/ui/Note";
 import { Tag } from "@/components/ui/Tag";
@@ -127,8 +128,6 @@ export function VcrHomePage() {
 
   if (feature === "off" || listing.kind === "off") return <VcrOffPage />;
 
-  const newStudy = <Button onClick={() => ask("我想开展虚拟临床研究，问题是：")}><Plus size={16} aria-hidden="true" />开始研究对话</Button>;
-
   // A state with no study in it is not a chip: 0 is not a filter.
   const filters: ToolbarFilter[] = [];
   const stateOptions = (["need", "running", "done"] as const).filter((key) => counts[key] > 0);
@@ -155,7 +154,10 @@ export function VcrHomePage() {
 
   return (
     <HomeFrame
-      actions={tab === "studies" ? <>{newStudy}<Button variant="secondary" onClick={() => setReloads(value => value + 1)} disabled={listing.kind === "loading"}>刷新研究列表</Button></> : undefined}
+      actionPlan={tab === "studies" ? {
+        primary: { id: "new-study", label: "开始研究对话", icon: Plus, onSelect: () => ask("我想开展虚拟临床研究，问题是：") },
+        secondary: [{ id: "refresh-studies", label: "刷新研究列表", disabled: listing.kind === "loading", onSelect: () => setReloads(value => value + 1) }],
+      } : undefined}
       toolbar={{
         ...(tab !== "studies" ? { label: TABS.find(item => item.value === tab)?.label ?? "研究" } : {}),
         ...(onStudies ? {
@@ -217,11 +219,11 @@ export function VcrHomePage() {
  * drawing a second one under it. A component of its own, so that a panel handing the toolbar over re-renders the toolbar and never the
  * panel — the study page's frame does the same.
  */
-function HomeFrame({ actions, toolbar, children }: { actions: ReactNode; toolbar: ToolbarProps; children: ReactNode }) {
+function HomeFrame({ actionPlan, toolbar, children }: { actionPlan?: PageActionPlan; toolbar: ToolbarProps; children: ReactNode }) {
   const [panel, setPanel] = useState<ToolbarProps | null | undefined>(undefined);
   return (
     <ToolbarSlotContext.Provider value={setPanel}>
-      <PageShell title="虚拟临床研究" width="wide" actions={actions} back={toolbar.label ? <Link to="/app/virtual-research" className="rounded text-ui text-link">回到研究列表</Link> : undefined} toolbar={panel ? { ...toolbar, ...panel } : toolbar}>
+      <PageShell title="虚拟临床研究" width="wide" actionPlan={actionPlan} back={toolbar.label ? <Link to="/app/virtual-research" className="rounded text-ui text-link">回到研究列表</Link> : undefined} toolbar={panel ? { ...toolbar, ...panel } : toolbar}>
         {children}
       </PageShell>
     </ToolbarSlotContext.Provider>
