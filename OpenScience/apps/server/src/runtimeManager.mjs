@@ -4792,7 +4792,17 @@ export class RuntimeManager {
     // when the project goes over, whoever wrote the bytes.
     if (existing && existing.workspaceDir === project.workspaceDir && !replaceRuntime) {
       if (contextPolicy.kind === "geo-project") await this.assertContextPolicyGeneration(project);
-      const warm = () => { this.scheduleIdleStop(project); return existing; };
+      // What is registered when the admission is granted, not what was read before it: the admission waits behind a plugin
+      // apply, and an apply replaces the runtime (`replacePluginRuntime`). The record read before the wait then names a kernel
+      // that is gone, and a request sent with its cookie reaches the new kernel on the same socket and is refused for good
+      // (2026-10-28: a new account's first frame document answered 401 for its whole minute, then 「打开超时」).
+      const warm = () => {
+        const current = this.runtimes.get(key);
+        if (current && current.workspaceDir === project.workspaceDir) { this.scheduleIdleStop(project); return current; }
+        const pending = this.starts.get(key);
+        if (pending) return pending;
+        throw new HttpError(409, "runtime_busy", "The runtime was replaced while this request waited; retry shortly.");
+      };
       return withPluginAdmission && this.pluginService ? this.pluginService.withAdmission(project, warm) : warm();
     }
     this.assertOwnerNotRetired(project);
@@ -8070,10 +8080,17 @@ export class RuntimeManager {
         sendJson(res, noWake.status, noWake.body);
         return;
       }
-      const runtime = await this.start(project);
+      let runtime = await this.start(project);
       if (revalidate) await revalidate();
       await this.enforceRuntimeProxyPolicy(req, suffix, runtime);
       if (beforeForward) await beforeForward();
+      // The waits above can outlast the runtime they started from (a plugin apply replaces it): forwarded with the replaced
+      // runtime's cookie, the request reaches its successor on the same socket and is refused. The registered one is sent to.
+      const registered = this.runtimes.get(this.key(project));
+      if (registered && registered !== runtime && registered.workspaceDir === runtime.workspaceDir) {
+        runtime = registered;
+        await this.enforceRuntimeProxyPolicy(req, suffix, runtime);
+      }
       const incoming = new URL(req.url ?? "/", "http://open-science.local");
       const upstream = new URL(`${runtime.url}${suffix}`);
       // UI suffix is the complete raw path and query, including native combo-bundle syntax.

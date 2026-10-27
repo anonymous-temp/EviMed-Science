@@ -4911,3 +4911,19 @@ test('conditional continuation admission runs after runtime preparation and refu
  await assert.rejects(manager.dispatchPrompt(project,'root',{text:'Original computation completion',beforePrompt:async()=>{checks++;assert.equal(laterHumanCompleted,true);throw Object.assign(new Error('A newer human turn already completed'),{code:'vcr_completion_disclosed'});}}),error=>error.code==='vcr_completion_disclosed' && error.definitivelyRejected===true);
  assert.equal(checks,1);assert.ok(wire.includes('session/create'));assert.ok(!wire.includes('session/prompt'));
 });
+
+test("a warm start answers with the runtime registered when its plugin admission is granted, not the one it read before waiting", async () => {
+  const manager = new RuntimeManager({ runtimeMode: "kernel" });
+  manager.contextPolicyFor = async (p) => ({ kind: "owned", ownerId: p.userId, controlProjectId: p.id });
+  const key = manager.key(project);
+  const replaced = { ...fakeRuntime(project.id), workspaceDir: project.workspaceDir };
+  const successor = { ...fakeRuntime(project.id), workspaceDir: project.workspaceDir };
+  manager.runtimes.set(key, replaced);
+  // The admission waits behind a plugin apply, which replaces the runtime before it lets the start in.
+  manager.pluginService = { withAdmission: async (_p, operation) => { manager.runtimes.set(key, successor); return operation(); } };
+  assert.equal(await manager.start(project), successor, "a request sent with the replaced runtime's cookie is refused by its successor");
+  manager.runtimes.delete(key);
+  manager.runtimes.set(key, replaced);
+  manager.pluginService = { withAdmission: async (_p, operation) => { manager.runtimes.delete(key); return operation(); } };
+  await assert.rejects(manager.start(project), (error) => /** @type {any} */ (error).code === "runtime_busy", "a runtime stopped meanwhile is a retry, never the stopped record");
+});
