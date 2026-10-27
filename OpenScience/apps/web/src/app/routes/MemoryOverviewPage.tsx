@@ -37,6 +37,7 @@ import { listAllMethods } from "@/lib/methodsClient";
 import { measurement, type MetricReading } from "@/lib/measurement";
 import { useProjectLabels } from "@/lib/projectNames";
 import { toast } from "@/lib/toast";
+import { useNarrow } from "@/lib/useMediaQuery";
 
 /** Where each number of the headline and each tile leads: the list it counts. */
 const SELF = memoryTabAddress("self");
@@ -75,6 +76,7 @@ function reading(value: number | null, loading: boolean, failed: boolean, retry:
 }
 
 function Overview() {
+  const phone = useNarrow();
   const navigate = useNavigate();
   useMemoryWritePrompt();
   const labels = useProjectLabels();
@@ -186,7 +188,8 @@ function Overview() {
   // ---- the page ----
   const failed = map.failed && !doc;
   const partial = doc && doc.missing.length > 0 ? doc.missing : [];
-  const explore = selection.explore ?? (doc ? defaultExplore(doc) : "graph");
+  // On a phone the relation graph is drawn too small to follow a line: the topics, which are a list beside their words, are its first view there.
+  const explore = selection.explore ?? (phone ? "topics" : doc ? defaultExplore(doc) : "graph");
   const offerExplore = doc !== null && memoriesRead && exploreOffered(doc);
   const recent = (test?: (event: (typeof events)[number]) => boolean) => recentCount(events, today, test);
   const loadingMap = !doc && !map.failed;
