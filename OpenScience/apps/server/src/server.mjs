@@ -8245,6 +8245,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const subjectsDeleted = await deleteAgentSubjects(user.id);
         // What the memory engine holds of the account goes with it, before the rows that say it was there (a deletion that cannot
         // reach the engine fails here, named, and is asked again — never an account gone with its memory left behind).
+        // Nothing of the account is committed to the engine from here, and its commits in flight finish first: a commit that reached
+        // the engine as its deletion began left an extraction the deletion then waited on for ever (`nativeTurnCommit.forgetAccount`).
+        await nativeTurnCommit.forgetAccount(user.id);
         if (await nativeMemoryHeldBy(user.id)) await nativeMemory.eraseAccount(user.id);
         // The memory tables reference the account with ON DELETE CASCADE, so `store.deleteUser` below removes them inside the
         // transaction that can still fail.

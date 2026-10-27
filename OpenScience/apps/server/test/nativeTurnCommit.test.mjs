@@ -526,3 +526,31 @@ test("the real plugin, through the real bridge and gateway: it does not commit a
   assert.equal(stub.sessions.get(`${OV_USER}/${ENGINE_SESSION}`).commitCount, 1, "and the engine extracted the exchange once");
   assert.equal(nativeMemoryCounters().commits.accepted, 1);
 });
+
+test("an account being deleted has nothing armed or queued committed, and its commit in progress is waited for", async () => {
+  // A commit that reached the engine as the account's deletion began left an extraction the deletion waited on for ever
+  // (three undeletable throwaway accounts, 2026-10-27): the deletion forgets the account first.
+  const armedOnly = doubles();
+  await armedOnly.committer.noteRunFinished(project(), finished());
+  assert.equal(armedOnly.time.armed, 1);
+  await armedOnly.committer.forgetAccount(USER);
+  assert.equal(armedOnly.time.armed, 0, "the quiet's timer is cleared");
+  armedOnly.time.fire();
+  await armedOnly.committer.idle();
+  assert.equal(armedOnly.commits.length, 0, "nothing of the account reaches the engine");
+  assert.equal(counters().account_deleted, 1);
+
+  /** @type {(value?: any) => void} */ let release = () => {};
+  const inFlight = doubles({ commit: async (request) => { await new Promise((resolve) => { release = resolve; }); inFlight.commits.push(request); return { commit: "accepted" }; } });
+  await inFlight.committer.noteRunFinished(project(), finished());
+  inFlight.time.fire();
+  for (let i = 0; i < 20 && inFlight.committer.inFlight === 0; i += 1) await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+  let forgotten = false;
+  const forgetting = inFlight.committer.forgetAccount(USER).then(() => { forgotten = true; });
+  for (let i = 0; i < 5; i += 1) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(forgotten, false, "the deletion waits while the account's commit is in flight");
+  release();
+  await forgetting;
+  assert.equal(inFlight.commits.length, 1, "the commit in flight finished before the deletion went on");
+});

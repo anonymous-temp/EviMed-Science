@@ -26,10 +26,11 @@ export const MEMORY_GATEWAY_REFUSALS = Object.freeze([
   "memory_gateway_disabled", "memory_scope_denied",
 ]);
 /** What became of the end of an attended turn (`nativeTurnCommit.mjs`): armed, folded into a later one (debounced), turned away
- *  (dropped at the bound, a platform-started turn, an attended turn already running again), or what the commit did. */
+ *  (dropped at the bound, a platform-started turn, an attended turn already running again, an account being deleted), or what the
+ *  commit did. */
 export const NATIVE_TURN_COMMIT_OUTCOMES = Object.freeze([
   "scheduled", "debounced", "dropped", "platform_started", "conversation_running",
-  "committed", "nothing_pending", "not_learning", "before_reset", "rate_limited", "failed",
+  "committed", "nothing_pending", "not_learning", "before_reset", "rate_limited", "failed", "account_deleted",
 ]);
 /** What the worker did with a commit. */
 export const NATIVE_COMMIT_OUTCOMES = Object.freeze(["ingested", "empty", "failed", "replayed", "abandoned", "found_by_scan", "before_reset"]);

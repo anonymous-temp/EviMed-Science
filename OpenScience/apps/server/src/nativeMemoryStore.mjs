@@ -353,14 +353,17 @@ export class NativeMemoryStore {
    *   memoryContexts?: import('./geoNativeMemoryContext.mjs').GeoNativeMemoryContext | null,
    *   now?: () => Date, conversationTitles?: ConversationTitles | null,
    *   rejectionJudge?: { same: (request: any) => Promise<{ same: Map<number, string>, stated: Set<number> }> } | null,
-   *   report?: (line: string) => void }} dependencies
+   *   report?: (line: string) => void, settleExtractionsMs?: number }} dependencies
    *   `conversationTitles` names the conversations a memory came out of (the run ledger knows them; this store does not). `rejectionJudge` is the
    *   rejection list's own judge (`nativeMemoryRejections.mjs`), asked which other lines say what a forgotten one said
    *   (`nativeMemoryForgetEverywhere.mjs`); absent, only the lines that contain a forgotten line's words go with it. `memoryContexts` names
    *   the registered namespaces (the account's own and each shared GEO project's, `geoNativeMemoryContext.mjs`).
    */
-  constructor({ sessions, overlay, memoryContexts = null, now = () => new Date(), conversationTitles = null, rejectionJudge = null, report = () => {} }) {
+  constructor({ sessions, overlay, memoryContexts = null, now = () => new Date(), conversationTitles = null, rejectionJudge = null, report = () => {},
+    settleExtractionsMs = 20_000 }) {
     this.sessions = sessions;
+    /** How long an account deletion waits for the account's running extractions before it is refused as in progress. */
+    this.settleExtractionsMs = settleExtractionsMs;
     this.overlay = overlay;
     this.memoryContexts = memoryContexts;
     this.now = now;
@@ -1658,6 +1661,7 @@ export class NativeMemoryStore {
     this.#assertConfigured();
     this.#touch(userId);
     const views = await this.#contexts(userId);
+    await this.#settleExtractions(userId, views);
     let deleted = false;
     for (const context of views) {
       if (this.memoryContexts) await this.memoryContexts.assertKnown(context);
@@ -1668,6 +1672,31 @@ export class NativeMemoryStore {
     await this.overlay.purgeUser(userId);
     await this.overlay.forgetAccount(userId);
     return { deleted, pending: false };
+  }
+
+  /**
+   * No engine deletion is asked while an extraction of the account still runs. OpenViking's user deletion waits for the user's
+   * tasks and fails when one outlives that wait; an extraction that met the deletion's fence never finished (v0.5.1.1), so the
+   * deletion failed and every retry waited on the same task — three throwaway accounts stayed undeletable on 2026-10-27 until
+   * the engine was restarted. The ledger's pending commits name their tasks; past `waitMs` the deletion is refused as still in
+   * progress (the same 503 an unfinished engine deletion gives), to be asked again.
+   * @param {string} userId @param {any[]} views
+   */
+  async #settleExtractions(userId, views, { waitMs = this.settleExtractionsMs, pollMs = 500 } = {}) {
+    if (typeof this.overlay?.openCommits !== 'function') return;
+    const open = (await this.overlay.openCommits({ userId, limit: 100 })).filter((commit) => commit.state === 'pending' && commit.taskId);
+    if (!open.length) return;
+    const context = views.find((view) => view.kind === 'owned') ?? views[0];
+    if (typeof context?.sessions?.task !== 'function') return;
+    const deadline = Date.now() + waitMs;
+    for (const commit of open) {
+      for (;;) {
+        const task = await context.sessions.task(userId, commit.taskId).catch(() => null);
+        if (!task || !['pending', 'running'].includes(String(task.status ?? '').toLowerCase())) break;
+        if (Date.now() >= deadline) throw new HttpError(503, 'memory_engine_unavailable', 'Memory is still being written. Retry the deletion shortly.');
+        await new Promise((resolve) => { setTimeout(resolve, pollMs); });
+      }
+    }
   }
 
   /** The account's memories as the engine's own pack, for the account export. @param {string} userId */
