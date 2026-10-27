@@ -645,6 +645,21 @@ test("release switch includes the isolated replay overlay only for a configured 
   assert.match(log, /-f docker-compose.result-replay.yml/);
 });
 
+test("release switch composes the RSI serving overlay only where the deployment names its records directory, after the private override", async (t) => {
+  for (const configured of [false, true]) {
+    const { root, rel } = await host();
+    t.after(() => rm(root, { recursive: true, force: true }));
+    await writeFile(path.join(rel, "deploy/web/.env"), `OPEN_SCIENCE_RELEASE_ID=evimed-${NEW}-1\n` + "OPEN_SCIENCE_PUBLIC_HEALTH_URL=https://evimed.example.org/api/health\n"
+      + (configured ? "OPEN_SCIENCE_RSI_CONFIG_HOST_DIR=/srv/evimed/rsi\n" : "OPEN_SCIENCE_RSI_CONFIG_HOST_DIR=\n"));
+    const result = await runSwitch(root, ["--no-prune"]);
+    assert.equal(result.code, 0, result.stderr);
+    const compose = (await readFile(path.join(root, "docker.log"), "utf8")).split("\n").find((line) => line.startsWith("compose ") && line.includes(" config --hash"));
+    assert(compose);
+    if (configured) assert(compose.indexOf("-f docker-compose.rsi.yml") > compose.indexOf("compose.builtin.override.yml"), compose);
+    else assert.doesNotMatch(compose, /docker-compose\.rsi\.yml/);
+  }
+});
+
 test("release switch rejects a replay URL outside its internal network before moving current", async (t) => {
   const { root, rel } = await host();
   t.after(() => rm(root, { recursive: true, force: true }));
