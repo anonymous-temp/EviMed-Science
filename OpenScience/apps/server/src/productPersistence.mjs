@@ -413,14 +413,21 @@ BEGIN
   END IF;
 END $geo_review_job_kind$;
 INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-05-evolution-job-kinds-v1') ON CONFLICT DO NOTHING;
-DO $$ BEGIN
+-- The rebuild takes an exclusive lock on the hot jobs table, so it waits for it for seconds and not for ever (every statement behind a waiting
+-- exclusive lock waits too), and the new CHECK is added NOT VALID: it guards every new row at once and scanning the old rows is left to
+-- validateJobKindCheck, which runs after this transaction commits under a lock that blocks no read or write.
+DO $rsi_job_kinds$
+DECLARE previous_lock_timeout text := current_setting('lock_timeout');
+BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='evimed_product.jobs'::regclass
     AND conname='product_jobs_kind_check' AND position('rsi-incident-export' in pg_get_constraintdef(oid)) > 0
     AND position('rsi-bundle-poll' in pg_get_constraintdef(oid)) > 0) THEN
+    PERFORM set_config('lock_timeout', '5s', true);
     ALTER TABLE evimed_product.jobs DROP CONSTRAINT IF EXISTS product_jobs_kind_check;
-    ALTER TABLE evimed_product.jobs ADD CONSTRAINT product_jobs_kind_check CHECK (kind IN (${PRODUCT_JOB_KINDS.map(kind => `'${kind}'`).join(",")}));
+    ALTER TABLE evimed_product.jobs ADD CONSTRAINT product_jobs_kind_check CHECK (kind IN (${PRODUCT_JOB_KINDS.map(kind => `'${kind}'`).join(",")})) NOT VALID;
+    PERFORM set_config('lock_timeout', previous_lock_timeout, true);
   END IF;
-END $$;
+END $rsi_job_kinds$;
 INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-26-rsi-online-job-kinds-v1') ON CONFLICT DO NOTHING;
 
 -- What finished operations say about a capability version, a tool, a skill or an extension on THIS
@@ -711,6 +718,22 @@ export async function migrateProductStore(database) {
   migrations.set(database, attempt);
   try { await attempt; }
   catch (error) { migrations.delete(database); throw error; }
+  await validateJobKindCheck(database);
+}
+
+/** The jobs kind CHECK is rebuilt NOT VALID by the migration (its lock on the hot table lasts a moment), and its old rows are checked
+ * here, in a transaction of its own: VALIDATE CONSTRAINT blocks no read or write. Idempotent; a failure leaves the constraint guarding
+ * every new row, is said once, and is tried again by the next process.
+ * @param {any} database */
+async function validateJobKindCheck(database) {
+  try {
+    await database.transaction(async (/** @type {any} */ client) => {
+      const pending = await client.query("SELECT 1 FROM pg_constraint WHERE conrelid='evimed_product.jobs'::regclass AND conname='product_jobs_kind_check' AND NOT convalidated");
+      if (!pending.rows.length) return;
+      await client.query("SET LOCAL lock_timeout = '5s'");
+      await client.query("ALTER TABLE evimed_product.jobs VALIDATE CONSTRAINT product_jobs_kind_check");
+    });
+  } catch (error) { process.stderr.write(`product: jobs_kind_check_unvalidated ${/** @type {any} */ (error)?.code ?? "unknown"}\n`); }
 }
 
 /** @param {unknown} value @param {string} field @returns {string} */
