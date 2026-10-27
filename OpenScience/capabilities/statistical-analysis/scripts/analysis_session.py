@@ -219,10 +219,24 @@ def receipt_attempt(root, receipt, execution_id):
         return None
 
 
+# An undefined value (a p-value in a degenerate subgroup, a mean of nothing) is a
+# normal result: the runner stores it as null, keeps the raw file in provenance
+# and records this warning. It stays visible in status and never blocks reuse.
+ADVISORY_WARNING_CODES = frozenset({'nonfinite'})
+
+
 def good_attempt(attempt):
     return (isinstance(attempt, dict) and attempt.get('exitCode') == 0
-            and attempt.get('sourcesUnchanged') is True and not attempt.get('warnings')
+            and attempt.get('sourcesUnchanged') is True
+            and all(isinstance(item, dict) and item.get('code') in ADVISORY_WARNING_CODES
+                    for item in attempt.get('warnings') or [])
             and isinstance(attempt.get('output'), dict) and attempt['output'].get('observedWrite') is True)
+
+
+def advisories(attempt):
+    items = attempt.get('warnings') if isinstance(attempt, dict) else None
+    return [{'code': item['code'], 'field': item.get('field')} for item in (items or [])
+            if isinstance(item, dict) and item.get('code') in ADVISORY_WARNING_CODES][:20]
 
 
 def inspect(root, spec_value, state_value):
@@ -258,6 +272,7 @@ def inspect(root, spec_value, state_value):
         if any(not statuses[parent]['reusable'] for parent in step['dependsOn']):
             reasons.append('dependency_not_reusable')
         record = state['steps'].get(step_id) if state else None
+        warnings = []
         if state_status != 'valid':
             reasons.append(f'state_{state_status}')
         elif not record or not record['reusable']:
@@ -268,11 +283,14 @@ def inspect(root, spec_value, state_value):
             if (set(record['outputs']) != set(outputs) or any(value is None or value['size'] == 0
                     or content(value) != content(record['outputs'].get(key)) for key, value in outputs.items())):
                 reasons.append('outputs_changed_or_missing')
-            if not good_attempt(receipt_attempt(root, record['receipt'], record['executionId'])):
+            attempt = receipt_attempt(root, record['receipt'], record['executionId'])
+            if not good_attempt(attempt):
                 reasons.append('execution_receipt_unverified')
+            warnings = advisories(attempt)
         statuses[step_id] = {'id': step_id, 'signature': signature, 'reusable': not reasons,
                              'reasons': reasons, 'outputs': outputs, 'context': step['context'],
-                             'executionId': record['executionId'] if record else None}
+                             'executionId': record['executionId'] if record else None,
+                             'warnings': warnings}
     result = {'schemaVersion': 1, 'state': state_status, 'steps': [statuses[key] for key in steps]}
     return result, (spec_path, state_path, steps, ordered, protected, state)
 
@@ -372,6 +390,7 @@ def run_step(args):
         run_analysis.write_bytes(root, state_path, run_analysis.encoded(state), write_protected, create_only=True)
     print(json.dumps({'action': 'executed', 'step': args.step, 'executionId': summary['execution'],
                       'reusable': record['reusable'], 'reasons': record['reasons'],
+                      'warnings': advisories(attempt),
                       'receipt': summary['receipt'], 'state': state_path.relative_to(root).as_posix()}))
     return 0 if record['reusable'] else exit_code or 2
 

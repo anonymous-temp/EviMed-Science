@@ -155,13 +155,50 @@ class AnalysisSessionTests(unittest.TestCase):
         self.assertEqual((self.root / receipt['output']['beforeArtifact']['path']).read_bytes(), old)
 
     def test_success_requires_observed_finite_valid_output(self):
-        for source in ('pass', "from pathlib import Path\nPath('fit.json').write_text('{\"x\":NaN}')",
-                       "from pathlib import Path\nPath('fit.json').write_text('{broken')"):
+        for source in ('pass', "from pathlib import Path\nPath('fit.json').write_text('{broken')"):
             with self.subTest(source=source):
                 (self.root / 'fit.py').write_text(source)
                 result = self.command('run', '--step', 'fit', '--force')
                 self.assertNotEqual(result.returncode, 0)
                 self.assertFalse(self.flags()['fit'])
+
+    def test_undefined_values_are_a_result_and_do_not_block_dependants(self):
+        # A degenerate subgroup yields an undefined p-value; the step still ran.
+        (self.root / 'prep.py').write_text(
+            "from pathlib import Path\n"
+            "Path('prep.json').write_text('{\"mean\":2.0,\"pSubgroup\":NaN}')\n")
+        (self.root / 'summary.py').write_text(
+            "import json\nfrom pathlib import Path\n"
+            "v = json.loads(Path('prep.json').read_text())\n"
+            "Path('summary.json').write_text(json.dumps({'mean': v['mean'], 'pSubgroup': v['pSubgroup']}))\n")
+        self.steps = [
+            {'id': 'prep', 'script': 'prep.py', 'interpreter': 'python', 'inputs': ['data.csv'],
+             'outputs': ['prep.json'], 'results': 'prep.json', 'dependsOn': [], 'context': {}},
+            {'id': 'summary', 'script': 'summary.py', 'interpreter': 'python', 'inputs': ['prep.json'],
+             'outputs': ['summary.json'], 'results': 'summary.json', 'dependsOn': ['prep'], 'context': {}}]
+        self.write_spec()
+        first = self.run_step('prep')
+        self.assertTrue(first['reusable'])
+        self.assertEqual([item['code'] for item in first['warnings']], ['nonfinite'])
+        self.assertEqual(json.loads((self.root / 'prep.json').read_text()), {'mean': 2.0, 'pSubgroup': None})
+        row = next(item for item in self.status()['steps'] if item['id'] == 'prep')
+        self.assertTrue(row['reusable'])
+        self.assertEqual([(item['code'], item['field']) for item in row['warnings']], [('nonfinite', '$.pSubgroup')])
+        self.assertTrue(any((self.root / '.analysis-provenance').glob('*-results.raw.json')))
+        self.assertEqual(self.run_step('prep')['action'], 'reused')
+        second = self.run_step('summary')
+        self.assertEqual(second['action'], 'executed')
+        self.assertTrue(second['reusable'])
+        self.assertEqual(json.loads((self.root / 'summary.json').read_text()), {'mean': 2.0, 'pSubgroup': None})
+        self.assertEqual(self.run_step('summary')['action'], 'reused')
+
+    def test_other_warnings_still_block_reuse(self):
+        (self.root / 'fit.py').write_text(
+            "import json\nfrom pathlib import Path\nPath('fit.json').write_text(json.dumps({'value': 3}))\n"
+            "Path('data.csv').write_text('x\\n9\\n')\n")
+        result = self.command('run', '--step', 'fit', '--force')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(self.flags()['fit'])
 
     def test_each_declared_output_must_be_rewritten(self):
         self.steps[0]['outputs'].append('plot.txt')
