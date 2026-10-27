@@ -184,8 +184,8 @@ export function unwrapUserWrappers(text) {
 }
 
 /**
- * The one line the platform writes at the start of a conversation's memory session when the conversation is held in a named project
- * (not the catch-all): the engine is shown which project it belongs to, so a rule the person gives for "this repository" or "this
+ * The one line the platform writes at the head of each batch of a conversation's memory session that holds the person's words, when the
+ * conversation is held in a named project (not the catch-all): the engine is shown which project it belongs to, so a rule the person gives for "this repository" or "this
  * project" goes on that project's card and not into their preferences, which every conversation is handed (measured on the lab engine
  * 2026-10-27: c03 wrote a preference 3/3 without it and the project's card with the rule under 约束 3/3 with it; its second sentence says
  * that a question, a request or the person's background is no description of the project, which a card drawn from a question's topic

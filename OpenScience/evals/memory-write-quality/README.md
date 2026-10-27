@@ -46,8 +46,8 @@ its `written` is a sample of what the extractor wrote for it before the
 wrote nothing), and `preChange` says whether it `held` or `failed` the case's
 own checks.
 
-**A case held in a named project (2026-10-27).** Production writes one line of the platform's at the start of a conversation's memory
-session when the conversation is held in a named project (`projectContextLine` in `@evimed/domain`: the engine was otherwise never told
+**A case held in a named project (2026-10-27).** Production writes one line of the platform's at the head of each batch of a conversation's memory
+session that holds the person's words (just before a user message, while no message is pending) when the conversation is held in a named project (`projectContextLine` in `@evimed/domain`: the engine was otherwise never told
 which project it was in, and filed a rule for "this repository" as a preference that every conversation is handed). The native runner
 replays that line for every case whose `replay.projectId` is not `default`, under the project's name (`replay.projectName`, else
 `CASE_PROJECT_NAMES` in the runner); `--no-project-line` measures without it. Inside a named project a task line of 「最近在做」
