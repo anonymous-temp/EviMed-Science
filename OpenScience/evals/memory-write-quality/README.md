@@ -46,13 +46,21 @@ its `written` is a sample of what the extractor wrote for it before the
 wrote nothing), and `preChange` says whether it `held` or `failed` the case's
 own checks.
 
+**A case held in a named project (2026-10-27).** Production writes one line of the platform's at the start of a conversation's memory
+session when the conversation is held in a named project (`projectContextLine` in `@evimed/domain`: the engine was otherwise never told
+which project it was in, and filed a rule for "this repository" as a preference that every conversation is handed). The native runner
+replays that line for every case whose `replay.projectId` is not `default`, under the project's name (`replay.projectName`, else
+`CASE_PROJECT_NAMES` in the runner); `--no-project-line` measures without it. Inside a named project a task line of 「最近在做」
+(`recent_work`) is the feature, so a case of that context that keeps nothing else says `onlyKinds`, and `cardNoTextContains` reads the
+project's card alone.
+
 The decided checks, all over the records one replay wrote (`expect`):
 `noTextContains` (a string appears in none), `noRecordOfKinds`, `atMostRecords`,
 `requireKinds` (a map from a record kind to the least number of that kind —
 the other direction: something worth keeping was kept), `requireTextContains`
 (some record carries the string), `requireKeys` (some record is written under
 each key) and `keyValues` (a closed key holds only the values listed),
-`briefRefusedWhenTagged`, and
+`briefRefusedWhenTagged`, `onlyKinds` (every file written is of one of these kinds), `cardNoTextContains` (a string the project's card does not carry), and
 `identifierShapes` (offline: the code that refuses identifiers by their shape
 sees each kind in the researcher's message). A misspelt field is a shape error,
 not a silent pass. (A case could also carry `incidentCandidates`, what a leaking model

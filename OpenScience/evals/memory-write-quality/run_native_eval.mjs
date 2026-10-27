@@ -61,6 +61,12 @@ const PLATFORM_TAG = "<evimed-geo-run>geo_eval_run</evimed-geo-run>";
 /** The checks this runner decides: the corpus's whole vocabulary. */
 const FIELD_EXPECTATIONS = GENERAL_EXPECT_FIELDS;
 
+/** Where each kind's files live under `memories/`, for `onlyKinds` (a correction lives under the preferences, so a preference allows it). */
+const KIND_PLACES = Object.freeze({
+  profile: ["profile.md"], preference: ["preferences/"], correction: ["preferences/corrections/", "corrections/"], entity: ["entities/"],
+  project_fact: ["projects/", "project_facts/"], decision: ["decisions/"], follow_up: ["follow_ups/"], recent_work: ["recent_work/"],
+});
+
 /** What a project-card key looks like in the card's text. */
 export const CARD_PATTERNS = Object.freeze(/** @type {Record<string, RegExp>} */ ({
   "project.field": /^(?:领域|Field)[：:]\s*\S/im,
@@ -156,6 +162,17 @@ export function scoreNative(item, allFiles, operations, seedFiles = null) {
   for (const [kind, least] of Object.entries(expect.requireKinds ?? {})) if ((counts[kind] ?? 0) < Number(least)) failures.push(`${kind} ${counts[kind] ?? 0} < ${least}`);
   for (const needle of expect.requireTextContains ?? []) if (!text.includes(needle)) failures.push(`lacks "${needle}"`);
   if (expect.atMostRecords !== undefined && operations > expect.atMostRecords) failures.push(`${operations} memory operations > ${expect.atMostRecords}`);
+  // What a project's card must not carry, read in the card alone (a task line of 「最近在做」 names the task in the person's words).
+  const cardText = Object.entries(files).filter(([rel]) => rel.startsWith("projects/")).map(([, value]) => body(value)).join("\n");
+  for (const needle of expect.cardNoTextContains ?? []) if (cardText.includes(needle)) failures.push(`the card carries "${needle}"`);
+  // Only these kinds may be written at all (2026-10-27: inside a named project a task line of 「最近在做」 is the feature, and nothing else is).
+  if (Array.isArray(expect.onlyKinds)) {
+    for (const rel of Object.keys(files)) {
+      if (!(/** @type {string[]} */ (expect.onlyKinds)).some((kind) => (KIND_PLACES[/** @type {keyof typeof KIND_PLACES} */ (kind)] ?? []).some((place) => rel === place || rel.startsWith(place)))) {
+        failures.push(`wrote ${rel}, which is none of ${expect.onlyKinds.join("/")}`);
+      }
+    }
+  }
   if (expect.atLeastRecords !== undefined && operations < expect.atLeastRecords) failures.push(`${operations} memory operations < ${expect.atLeastRecords}`);
   for (const key of expect.requireKeys ?? []) if (!CARD_PATTERNS[key]?.test(text)) failures.push(`the card lacks ${key}`);
   for (const key of expect.noKeys ?? []) if (CARD_PATTERNS[key]?.test(text)) failures.push(`the card carries ${key}, which this work does not have`);

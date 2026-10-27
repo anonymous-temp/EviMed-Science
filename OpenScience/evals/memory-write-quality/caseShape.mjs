@@ -25,7 +25,7 @@
 export const GENERAL_EXPECT_FIELDS = Object.freeze([
   "noTextContains", "noRecordOfKinds", "atMostRecords", "atLeastRecords", "requireKinds", "requireAnyKind", "requireTextContains",
   "briefRefusedWhenTagged", "identifierShapes", "requireKeys", "noKeys", "keyValues",
-  "seedKeeps", "unchangedSinceSeed", "droppedAtTheDoor",
+  "seedKeeps", "unchangedSinceSeed", "droppedAtTheDoor", "onlyKinds", "cardNoTextContains",
 ]);
 
 /** @param {any} value */
@@ -64,6 +64,8 @@ export function generalCaseIssues(item) {
   const expect = item.expect ?? {};
   for (const field of Object.keys(expect)) if (!GENERAL_EXPECT_FIELDS.includes(field)) issues.push(`${item.file}: expect.${field} is not a check the runners decide`);
   if (expect.requireAnyKind !== undefined && !nonEmptyStrings(expect.requireAnyKind)) issues.push(`${item.file}: expect.requireAnyKind is not a list of record kinds`);
+  if (expect.onlyKinds !== undefined && !nonEmptyStrings(expect.onlyKinds)) issues.push(`${item.file}: expect.onlyKinds is not a list of record kinds`);
+  if (expect.cardNoTextContains !== undefined && !nonEmptyStrings(expect.cardNoTextContains)) issues.push(`${item.file}: expect.cardNoTextContains is not a list of strings`);
   if (expect.seedKeeps !== undefined && !nonEmptyStrings(expect.seedKeeps)) issues.push(`${item.file}: expect.seedKeeps is not a list of strings`);
   if ((expect.seedKeeps !== undefined || expect.unchangedSinceSeed !== undefined) && !item.replay?.seed) issues.push(`${item.file}: a check about the seed needs replay.seed`);
   if (expect.unchangedSinceSeed !== undefined && expect.unchangedSinceSeed !== true) issues.push(`${item.file}: expect.unchangedSinceSeed is true or absent`);

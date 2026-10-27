@@ -20,7 +20,10 @@ description: |
   never-kept rule about document content does not stop a correction from being recorded.
   Not a correction: the user changing their own preference ("以后改用 AMA 格式" -> PREFERENCES)
   or changing a decision about their project (-> PROJECT_CONTEXT or DECISIONS), and fixing a
-  number or a sentence in this one draft ("第二条数字错了，应该是 37%").
+  number or a sentence in this one draft ("第二条数字错了，应该是 37%"). Nor is the user holding to a
+  claim of theirs against what the assistant pointed out ("我知道研究是这么说的，但我还是认定…，你就按我的
+  意思写"): the assistant was not wrong, the request is for that one text, and the claim is their stance —
+  nothing of it is kept, neither the claim nor a rule to write as they say or to stop pointing out evidence.
 
   __NEVER_KEEP__
 
