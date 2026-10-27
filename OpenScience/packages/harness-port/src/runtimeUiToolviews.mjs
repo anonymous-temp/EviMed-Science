@@ -29,6 +29,10 @@
  * Two tools are drawn as a card and not a line: the ones that make and change a scheduled task (`schedule_task`, `update_task`; the
  * phrase's `card: 'task'`). The card is the task's name, when it runs and 「打开」, read from the tool's own answer (N-13).
  *
+ * A row is a step of the process view and is drawn as one (2026-10-27): the plain line the kernel draws for its own 「思考」 and
+ * 「读取」 rows -- the frame styles' `step`, the name at 400 and the count or state a grey `tag` beside it -- not a bordered card
+ * with a 600 title. The cards that remain are the plan and the scheduled task, which a reader opens or acts on.
+ *
  * The words are data, not code: `FRAME_VOCABULARY.toolViews`, built from
  * `@evimed/domain`'s `toolViewPhraseTable()` over its own tool list. Nothing
  * here names a tool; a tool added to the domain either arrives with words or
@@ -476,7 +480,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   /** @type {Map<string, string>} */
   const known = new Map();
 
-  const { card, line, title, tone, tag, quiet, button } = frameStyles();
+  const { card, line, title, tone, tag, quiet, button, step, stepTitle } = frameStyles();
 
   /** The run state for the conversation on screen, or null. */
   function useLive() {
@@ -495,7 +499,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   }
 
   /** @param {{ label: string }} props */
-  const PlainRow = ({ label }) => h('div', { style: line, 'data-evimed-toolview': 'plain' }, h('span', { style: title }, label));
+  const PlainRow = ({ label }) => h('div', { style: step, 'data-evimed-toolview': 'plain' }, h('span', { style: stepTitle }, label));
 
   /** @param {{ title?: string | null, text: string }} props */
   const RefusalRow = ({ title: name, text }) => h('div', { style: { ...line, color: tone('warn') }, 'data-evimed-toolview': 'refused' },
@@ -527,8 +531,8 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     const model = modelOf('delegate', () => delegateView(block, live, kit, known));
     if (!model) return h(PlainRow, { label: '子任务' });
     if (model.state === 'refused') return h(RefusalRow, { title: model.title, text: model.stateText });
-    return h('div', { style: { ...card, ...line }, 'data-evimed-toolview': 'delegate', 'data-state': model.state },
-      h('span', { style: { ...title, flex: '0 1 auto' } }, model.title),
+    return h('div', { style: step, 'data-evimed-toolview': 'delegate', 'data-state': model.state },
+      h('span', { style: stepTitle }, model.title),
       h('span', { style: tag }, model.stateText),
       model.childSessionId ? h(ChildLink, { childSessionId: model.childSessionId, title: model.title }) : null);
   }
@@ -560,8 +564,8 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     return function ToolRow({ block }) {
       const model = modelOf(phrase.verb, () => toolLineView(block, phrase, kit));
       if (!model) return h(PlainRow, { label: phrase.verb });
-      return h('div', { style: { ...card, ...line }, 'data-evimed-toolview': 'tool' },
-        h('span', { style: { ...title, flex: '0 1 auto' } }, model.label),
+      return h('div', { style: step, 'data-evimed-toolview': 'tool' },
+        h('span', { style: stepTitle }, model.label),
         model.outcome ? h('span', { style: tag }, model.outcome) : null);
     };
   }
@@ -577,8 +581,8 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       const model = modelOf(phrase.verb, () => taskCardView(block, phrase, kit));
       if (!model) return h(PlainRow, { label: phrase.verb });
       if (model.kind === 'line') {
-        return h('div', { style: { ...card, ...line }, 'data-evimed-toolview': 'tool' },
-          h('span', { style: { ...title, flex: '0 1 auto' } }, model.label),
+        return h('div', { style: step, 'data-evimed-toolview': 'tool' },
+          h('span', { style: stepTitle }, model.label),
           model.outcome ? h('span', { style: tag }, model.outcome) : null);
       }
       const open = () => {
