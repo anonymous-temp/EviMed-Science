@@ -1238,7 +1238,9 @@ export function RuntimeUiFrame({ projectId, origin, scope, scopeOwner = false, s
               {binding && <iframe
                 key={binding.frameId} ref={iframe} src={binding.frameUrl} title="对话"
                 className="absolute inset-0 h-full w-full border-0"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-modals"
+                // A link the conversation opens in a new tab (an answer's citation, a source card, 2026-10-27) is the site's own page,
+                // not a page that inherits this frame's sandbox and so loses its scripts' origin, its storage and its logins.
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals"
                 allow="clipboard-read; clipboard-write"
               />}
             </>
