@@ -18,7 +18,7 @@ import { addToLibrary, decideDuplicateGroup, knowledgePagesOffered, listDuplicat
 import { productErrorMessage } from "@/lib/productClient";
 import { pickFiles, uploadFilesToWorkspace } from "@/lib/backend";
 import { KNOWLEDGE_BASE_ACCEPT, KNOWLEDGE_BASE_UPLOAD_HINT, partitionKnowledgeBaseFiles } from "@/lib/knowledgeBaseFiles";
-import { legacySourceParam, listParams, readListState, readerPath, recallListPosition, rememberListPosition, scopeOf, scopeParam, type KnowledgeListState, type ListPosition } from "@/lib/knowledgeNav";
+import { LIBRARY_PROJECT_ID, legacySourceParam, listParams, listPath, readListState, readerPath, recallListPosition, rememberListPosition, scopeOf, scopeParam, type KnowledgeListState, type ListPosition } from "@/lib/knowledgeNav";
 import { useFileDrop } from "@/lib/useFileDrop";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
@@ -35,6 +35,7 @@ import { LoadError } from "@/components/cards/LoadError";
 import { FilesSkeleton } from "@/components/cards/Skeletons";
 import { PageShell } from "@/components/layout/PageShell";
 import { AddLinkDialog, NewNoteDialog } from "@/components/sources/AddEntryDialogs";
+import { useDriveEntry } from "@/components/sources/useDriveEntry";
 import { LibraryDriveImport } from "@/components/sources/LibraryDriveImport";
 import { DuplicateGroups } from "@/components/sources/DuplicateGroups";
 import { KnowledgeGraphView } from "@/components/sources/KnowledgeGraphView";
@@ -45,7 +46,7 @@ import { LibraryComposition } from "@/components/sources/LibraryComposition";
 import { ProjectOutputsList } from "@/components/sources/ProjectOutputsList";
 import { SourceRow } from "@/components/sources/SourceRow";
 import { groupRows, statusLine } from "@/components/sources/knowledgeView";
-import { isKnowledgePage, isReading, isUsable } from "@/components/sources/sourceView";
+import { destinationHint, isKnowledgePage, isReading, isUsable } from "@/components/sources/sourceView";
 import { roundKey, useKnowledgeStatus, useKnowledgeTree } from "@/components/sources/useKnowledge";
 
 /** The folder an upload lands in, under the project's base folder. */
@@ -111,6 +112,14 @@ export function SourcesPage() {
   // document, so it lands on that document's page (the drawer it used to open had no address at all).
   const legacy = legacySourceParam(params);
   if (legacy) return <Navigate to={readerPath(legacy, readListState(params))} replace />;
+  // An address from before the page listed every material by default named a project's pages, graph or outputs by leaving the scope
+  // out, meaning the project the tab is in. Without a scope the page lists the account's materials, which has none of those views,
+  // so the address is completed with that project instead of landing on a list that cannot show what it names.
+  if (!params.get("scope") && (params.get("view") === "graph" || params.get("view") === "outputs" || params.get("kind") === "wiki")) {
+    const completed = new URLSearchParams(params);
+    completed.set("scope", projectId);
+    return <Navigate to={listPath(readListState(completed))} replace />;
+  }
   return <KnowledgeBase key={projectId} currentProjectId={projectId} />;
 }
 
@@ -175,9 +184,10 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   const [uploadItems, setUploadItems] = useState<FileDropItem[]>([]);
   const [uploadProject, setUploadProject] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
-  // 从网盘导入 is offered only when there is a drive to open: OpenList configured and a storage mounted under its tenant
-  // root (`/api/me` `features.openList`). An entry that led to a drive with nothing in it answered every browse with an
-  // error (audit I3-4). Off until `/api/me` says so, and when it cannot.
+  // 从网盘导入 is in the menu only when the drive status for this account says there is something to open (or that it is
+  // unreachable for the moment, which its panel says and retries): an entry that always ended in 「请联系管理员」 was a dead end
+  // (audit I3-4, and the review of the personal library). Off until the status is read, and for a deployment with no drive.
+  const driveOffered = useDriveEntry();
 
   // Where the project's pages stand, and 「重新整理」, only where the deployment compiles them (`features.knowledgePages`).
   const [pagesOffered, setPagesOffered] = useState(false);
@@ -240,7 +250,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   }, [scopeProjectId, documentCount]);
   // Account views create personal material unless the person explicitly chooses a project.
   const addProjectId = scopeProjectId;
-  const destinationOptions = scopeMenu.groups.flatMap(group => group.choices).filter(choice => projects.some(project => project.id === choice.id) && choice.id !== "evimed-library");
+  const destinationOptions = scopeMenu.groups.flatMap(group => group.choices).filter(choice => projects.some(project => project.id === choice.id) && choice.id !== LIBRARY_PROJECT_ID);
   const conversationDestinations = scopeMenu.groups.filter(group => group.heading === "我的项目").flatMap(group => group.choices);
   const [targetDialog, setTargetDialog] = useState<{ sources: SourceRecord[]; conversation: boolean } | null>(null);
   const projectNames = useMemo(() => projectLabels(projects), [projects]);
@@ -556,7 +566,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
       { label: "上传文件", icon: FileUp, onSelect: () => { setUploadItems([]); setUploadProject(addProjectId); setDialog("upload"); } },
       { label: "添加网页链接", icon: Globe, onSelect: () => setDialog("link") },
       { label: "新建笔记", icon: StickyNote, onSelect: () => setDialog("note") },
-      { label: "从网盘导入", icon: Cloud, onSelect: () => setConnecting(true) },
+      ...(driveOffered ? [{ label: "从网盘导入", icon: Cloud, onSelect: () => setConnecting(true) }] : []),
     ]}>
       <Button disabled={!hasWebApi || uploading} loading={uploading}>{!uploading && <Plus size={16} aria-hidden="true" />}{label}</Button>
     </Menu>
@@ -576,7 +586,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   const documentList = outputsView ? null : items === null ? <FilesSkeleton /> : items.length === 0 ? (error ? null : nextCursor ? more
     : filtered ? <EmptyState icon={Search} title="没有找到相关资料" reason="换个关键词试试，或清空搜索框看全部。" />
       : shared ? <EmptyState icon={Folder} title="还没有资料设为所有项目可用。" description="在项目的资料里，用资料的“⋯”菜单选“设为所有项目可用”。"
-        action={<Button variant="secondary" onClick={() => update({ scope: null, kind: null })}>回到项目的资料</Button>} />
+        action={<Button variant="secondary" onClick={() => update({ scope: currentProjectId, kind: null })}>回到项目的资料</Button>} />
         : <EmptyState icon={Folder} title="把文献、指南、方案、数据表、网页或笔记放进来，对话里会读它们并标出处。" action={addMenu()} />
   ) : (
     <div>
@@ -713,7 +723,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
       {/* What a batch did is shown in the dialog that ran it, and goes with it: the next one opens empty. */}
       {dialog === "upload" && <FormDialog title="上传资料" onClose={() => { setDialog(null); setUploadItems([]); }} busy={uploading}>
         <div className="flex flex-col gap-4"><Combobox clearable={false} label="保存位置" value={uploadProject ?? addProjectId ?? "@personal"} options={[{ id: "@personal", label: "个人资料" }, ...destinationOptions]} onChange={id => { if (id) setUploadProject(id); }} disabled={uploading} />
-        <FileDrop initialFocus label="选择资料文件" hint={<>{!uploadProject && !addProjectId || uploadProject === "@personal" ? "个人资料可在自己的项目中使用；添加到项目会保存独立版本。循证 GEO 仍按项目资料权限使用。" : "先保存到所选项目；可再设为跨项目可用。"}{KNOWLEDGE_BASE_UPLOAD_HINT}传输完成后，资料列表会分别显示读取和可搜索状态。同名文件会成为这份资料的新版本，旧版本仍可查看；内容相同的文件不会重复添加。</>} accept={KNOWLEDGE_BASE_ACCEPT} disabled={uploading} onFiles={files => void uploadFiles(files)} items={uploadItems} />
+        <FileDrop initialFocus label="选择资料文件" hint={<>{destinationHint(!uploadProject && !addProjectId || uploadProject === "@personal")}{KNOWLEDGE_BASE_UPLOAD_HINT}传输完成后，资料列表会分别显示读取和可搜索状态。同名文件会成为这份资料的新版本，旧版本仍可查看；内容相同的文件不会重复添加。</>} accept={KNOWLEDGE_BASE_ACCEPT} disabled={uploading} onFiles={files => void uploadFiles(files)} items={uploadItems} />
         </div>
       </FormDialog>}
       {dialog === "link" && <AddLinkDialog destinations={destinationOptions} projectId={addProjectId} onClose={() => setDialog(null)} onAdded={onLinkAdded} />}

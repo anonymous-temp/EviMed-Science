@@ -38,7 +38,7 @@ it("defaults a note to personal and lets the person explicitly choose a project"
  api.addSourceNote.mockResolvedValue({ source: personal });
  render(<NewNoteDialog projectId={null} destinations={[{ id: "one", label: "研究项目" }]} onClose={() => {}} onAdded={added} />);
  const destination = screen.getByRole("combobox", { name: "保存位置" });
- expect(destination).toHaveAccessibleDescription("个人资料可在自己的项目中使用；添加到项目会保存独立版本。循证 GEO 仍按项目资料权限使用。");
+ expect(destination).toHaveAccessibleDescription("个人资料可在自己的项目中使用；添加到项目会保存独立版本。多人共享的循证 GEO 项目不读个人资料，需要时请直接保存到那个项目。");
  const title = screen.getByRole("textbox", { name: "标题" }); fireEvent.change(title, { target: { value: "Notes" } });
  fireEvent.submit(title.closest("form")!);
  await waitFor(() => expect(api.addSourceNote).toHaveBeenCalledWith(null, { title: "Notes", body: "" }));

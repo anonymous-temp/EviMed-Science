@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation, useNavigate, useNavigationType, useRoutes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -182,7 +182,8 @@ describe("知识库", () => {
     expect(screen.getByRole("combobox", { name: "保存位置" })).toHaveValue("个人资料");
     expect(screen.getByRole("combobox", { name: "保存位置" })).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByLabelText(/选择资料文件/, { selector: "input" })).toHaveFocus();
-    expect(screen.getByText(/个人资料可在自己的项目中使用；添加到项目会保存独立版本。循证 GEO 仍按项目资料权限使用。/)).toBeInTheDocument();
+    expect(screen.getByText(/个人资料可在自己的项目中使用；添加到项目会保存独立版本。多人共享的循证 GEO 项目不读个人资料，需要时请直接保存到那个项目。/)).toBeInTheDocument();
+    expect(screen.queryByText(/资料权限/)).toBeNull();
     await userEvent.upload(screen.getByLabelText(/选择资料文件/, { selector: "input" }), [new File(["x"], "one.pdf"), new File(["x"], "two.pdf")]);
     await waitFor(() => expect(mocks.uploadPersonalFile).toHaveBeenCalledTimes(2));
     expect(mocks.uploadFilesToWorkspace).not.toHaveBeenCalled();
@@ -193,10 +194,10 @@ describe("知识库", () => {
   it.each([
     ["/app/files", "个人资料"], ["/app/files?scope=shared", "个人资料"], ["/app/files?scope=paper-1", "疳证 Meta 文献检索"],
   ])("opens the upload form from an unavailable drive with the current scope destination: %s", async (address, destination) => {
-    mocks.getOpenListStatus.mockResolvedValue({ state: "unconfigured" });
+    mocks.getOpenListStatus.mockResolvedValue({ state: "unavailable" });
     renderPage(address);
     await userEvent.click(await screen.findByRole("button", { name: "添加" }));
-    await userEvent.click(screen.getByRole("menuitem", { name: "从网盘导入" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "从网盘导入" }));
     const drive = await screen.findByRole("dialog", { name: "从网盘导入" });
     await userEvent.click(await within(drive).findByRole("button", { name: "上传文件" }));
     const upload = await screen.findByRole("dialog", { name: "上传资料" });
@@ -428,6 +429,23 @@ describe("知识库", () => {
       await menuOf(guideline.display.title);
       expect((await screen.findAllByRole("menuitem")).map((item) => item.textContent)).toEqual(["添加到项目", "重新读取", "设为所有项目可用", "删除"]);
       for (const removed of ["调整分析", "查看理解", "取消读取", "所有项目可用"]) expect(screen.queryByRole("menuitem", { name: removed === "所有项目可用" ? "所有项目可用" : removed })).not.toBeInTheDocument();
+    });
+
+    it("offers 「添加到项目」 only where there is an original to copy: not for a compiled page, a drive document that was only read, or a removed original", async () => {
+      const compiled = makeSource("src_wiki", { title: "二甲双胍概念页", origin: "wiki", kind: "wiki", docType: "wiki-page" }, { paths: ["knowledge-base/wiki/concept/metformin.md"] });
+      const removed = makeSource("src_gone", { title: "已移除的资料.pdf" }, { status: "missing" });
+      const captured = makeSource("src_drive", { title: "网盘里保存了原件的指南.pdf", origin: "drive" }, { paths: ["knowledge-base/.evimed-revisions/captured/guide.pdf"], connector: { type: "openlist", id: "/g.pdf" } });
+      mocks.listSources.mockResolvedValue(listing([guideline, policy, compiled, removed, captured]));
+      renderPage("/app/files?scope=shared");
+      const itemsOf = async (title: string) => {
+        await menuOf(title);
+        const labels = (await screen.findAllByRole("menuitem")).map((item) => item.textContent);
+        await userEvent.keyboard("{Escape}");
+        return labels;
+      };
+      expect(await itemsOf(guideline.display.title)).toContain("添加到项目");
+      expect(await itemsOf(captured.display.title)).toContain("添加到项目");
+      for (const title of [policy.display.title, compiled.display.title, removed.display.title]) expect(await itemsOf(title)).not.toContain("添加到项目");
     });
 
     it("reads a saved page again from its address, and says whether it changed", async () => {
@@ -743,7 +761,34 @@ describe("知识库", () => {
       // Where the sentence points is one press away.
       await userEvent.click(screen.getByRole("button", { name: "回到项目的资料" }));
       expect(await screen.findByText(guideline.display.title)).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "范围：我的资料" })).toBeInTheDocument();
+      // The project the tab is in, named in the address: without a scope the page lists the account's materials.
+      expect(screen.getByRole("button", { name: "范围：我的研究" })).toBeInTheDocument();
+      expect(addressOf()).toBe("/app/files?scope=default");
+      expect(mocks.listSources).toHaveBeenLastCalledWith({ kind: "project", projectId: "default" }, { q: "", limit: 50 });
+    });
+  });
+
+  // An address from before the page listed every material by default left the project out when it named that project's pages, graph or
+  // outputs. It is completed with the project the tab is in, not listed as the account's materials, which have none of those views.
+  describe("an address that names a project's view without the project", () => {
+    it.each([
+      ["/app/files?kind=wiki", "/app/files?scope=default&kind=wiki"],
+      ["/app/files?kind=wiki&view=graph&focus=concept%2FA.md&depth=2", "/app/files?scope=default&kind=wiki&view=graph&focus=concept%2FA.md&depth=2"],
+      ["/app/files?view=outputs&q=report", "/app/files?scope=default&view=outputs&q=report"],
+    ])("%s", async (entry, completed) => {
+      renderPage(entry);
+      await waitFor(() => expect(addressOf()).toBe(completed));
+      expect(await screen.findByRole("button", { name: "范围：我的研究" })).toBeInTheDocument();
+      expect(mocks.listSources).not.toHaveBeenCalledWith({ kind: "all" }, expect.anything());
+    });
+
+    it("leaves the account's materials, a named project and the shared documents as they are", async () => {
+      for (const entry of ["/app/files", "/app/files?scope=paper-1&kind=wiki", "/app/files?scope=shared"]) {
+        cleanup();
+        renderPage(entry);
+        await screen.findByRole("heading", { level: 1, name: "知识库" });
+        expect(addressOf()).toBe(entry);
+      }
     });
   });
 
@@ -754,14 +799,33 @@ describe("知识库", () => {
       await waitFor(() => expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["上传文件", "添加网页链接", "新建笔记", "从网盘导入"]));
     });
 
-    it.each([
-      ["no storage is mounted", { openList: false }],
-      ["the control plane sends no features", undefined],
-    ])("keeps the drive entry when %s", async (_case, features) => {
-      context.features = features;
+    // A menu entry that always ends in 「请联系管理员」 is a dead end: it is shown only where the drive's own status for this account
+    // says there is something to open, or that it cannot be reached just now (the panel says so and retries).
+    it.each([["unconfigured"], ["storage_missing"], ["permission_denied"]])("leaves the drive out of the menu when its status is %s", async (state) => {
+      mocks.getOpenListStatus.mockResolvedValue({ state });
+      renderPage();
+      await waitFor(() => expect(mocks.getOpenListStatus).toHaveBeenCalled());
+      await userEvent.click(await screen.findByRole("button", { name: "添加" }));
+      expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["上传文件", "添加网页链接", "新建笔记"]);
+    });
+
+    it("keeps the drive in the menu while it is unreachable, and leaves it out until its status is known", async () => {
+      let answer!: (value: { state: string }) => void;
+      mocks.getOpenListStatus.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
       renderPage();
       await userEvent.click(await screen.findByRole("button", { name: "添加" }));
+      expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["上传文件", "添加网页链接", "新建笔记"]);
+      await userEvent.keyboard("{Escape}");
+      await act(async () => { answer({ state: "unavailable" }); });
+      await userEvent.click(screen.getByRole("button", { name: "添加" }));
       expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["上传文件", "添加网页链接", "新建笔记", "从网盘导入"]);
+    });
+
+    it("does not read the drive from the deployment's feature list: the account's own status decides", async () => {
+      context.features = { openList: false };
+      renderPage();
+      await userEvent.click(await screen.findByRole("button", { name: "添加" }));
+      await waitFor(() => expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toContain("从网盘导入"));
     });
 
     it("uploads into the project the page lists whatever each file is, refuses none by its name, and reads what it uploaded", async () => {

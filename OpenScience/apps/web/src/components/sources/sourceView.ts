@@ -59,6 +59,26 @@ export function originalPathOf(source: SourceRecord): string | null {
   return source.payload.paths[0] ?? null;
 }
 
+/**
+ * What the person needs to know about where a new material is kept (the 「保存位置」 hint): personal materials are used in their own
+ * projects, a copy in a project is a version of its own, and a shared 循证 GEO project does not read personal materials, so
+ * what it needs is saved into it.
+ */
+export function destinationHint(personal: boolean): string {
+  return personal ? "个人资料可在自己的项目中使用；添加到项目会保存独立版本。多人共享的循证 GEO 项目不读个人资料，需要时请直接保存到那个项目。"
+    : "先保存到所选项目；可再设为跨项目可用。";
+}
+
+/**
+ * Whether 「添加到项目」 can copy this document: the copy is made from the original the platform kept, so a compiled page, a
+ * cloud-drive document that was only read (no original captured) and a document whose original was removed have nothing to copy.
+ * The same rule the control plane applies, so the action is offered only where it can work.
+ */
+export function canCopyToProject(source: SourceRecord): boolean {
+  const original = source.payload.paths[0];
+  return source.payload.status !== "missing" && typeof original === "string" && original.startsWith("knowledge-base/") && !/^knowledge-base\/(?:wiki|kg)\//.test(original);
+}
+
 /** A note the researcher wrote here: its original is its editor, and saving it makes the next version. */
 export function isEditableNote(source: SourceRecord): boolean {
   return source.display.kind === "note" && source.display.origin === "note";

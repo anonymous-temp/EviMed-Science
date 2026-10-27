@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SourceDisplay, SourceRecord } from "@/lib/sourceClient";
-import { conversationDraft, fileNameOf, highlightParts, isEditableNote, isReading, isUsable, kindIcon, metaLine, originalPathOf, readerMeta, stateLabel } from "./sourceView";
+import { canCopyToProject, conversationDraft, destinationHint, fileNameOf, highlightParts, isEditableNote, isReading, isUsable, kindIcon, metaLine, originalPathOf, readerMeta, stateLabel } from "./sourceView";
 
 const display = (overrides: Partial<SourceDisplay> = {}): SourceDisplay => ({
   title: "幽门螺杆菌感染处理第六次全国共识报告", gist: null, docType: "review-guideline", typeLabel: "综述或指南", typeShort: "指南", kind: "literature",
@@ -119,5 +119,29 @@ describe("marking what was typed in a line", () => {
     expect(highlightParts("a.b (c) [d]", "(c) [d]")).toEqual([{ text: "a.b ", match: false }, { text: "(c)", match: true }, { text: " ", match: false }, { text: "[d]", match: true }]);
     expect(highlightParts("anything", ".*").map((part) => part.match)).toEqual([false]);
     expect(highlightParts("", "x")).toEqual([{ text: "", match: false }]);
+  });
+});
+
+describe("whether a document can be added to a project", () => {
+  it("can when the platform kept an original: an upload, a note, a saved page, a drive document captured as a file", () => {
+    expect(canCopyToProject(source())).toBe(true);
+    expect(canCopyToProject(source({ paths: ["knowledge-base/notes/组会记录-1a2b.md"] }, { kind: "note", origin: "note" }))).toBe(true);
+    expect(canCopyToProject(source({ paths: ["knowledge-base/.evimed-revisions/captured/共识.pdf"] }, { origin: "drive" }))).toBe(true);
+  });
+
+  it("cannot when there is nothing to copy: a compiled page, a drive document that was only read, an original that was removed", () => {
+    expect(canCopyToProject(source({ paths: ["knowledge-base/wiki/concept/a.md"] }, { origin: "wiki" }))).toBe(false);
+    expect(canCopyToProject(source({ paths: ["knowledge-base/kg/entities/a.md"] }))).toBe(false);
+    expect(canCopyToProject(source({ paths: ["openlist/制度/汇编.docx"] }, { origin: "drive" }))).toBe(false);
+    expect(canCopyToProject(source({ status: "missing" }))).toBe(false);
+    expect(canCopyToProject(source({ paths: [] }))).toBe(false);
+  });
+});
+
+describe("where a new material is kept, in the words of the hint", () => {
+  it("says what to do, not what the permission model is", () => {
+    for (const hint of [destinationHint(true), destinationHint(false)]) expect(hint).not.toMatch(/权限|权限模型|ACL/);
+    expect(destinationHint(true)).toContain("多人共享的循证 GEO 项目不读个人资料");
+    expect(destinationHint(false)).toBe("先保存到所选项目；可再设为跨项目可用。");
   });
 });

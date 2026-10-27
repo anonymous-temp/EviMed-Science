@@ -750,6 +750,8 @@ describe("native frame identity and readiness", () => {
       await act(async () => { await vi.advanceTimersByTimeAsync(130_000); });
       await act(async () => { screen.getByRole("button", { name: "查看已有成果" }).click(); await vi.advanceTimersByTimeAsync(0); });
       expect(screen.getByTestId("path")).toHaveTextContent("/app/files");
+      // The project named in the address: a bare /app/files is the account's materials, not this conversation's project.
+      expect(screen.getByTestId("search")).toHaveTextContent(/^\?scope=default$/);
       first.unmount();
 
       mocks.listRuns.mockRejectedValue(new Error("ledger down"));
@@ -758,6 +760,7 @@ describe("native frame identity and readiness", () => {
       await act(async () => { await vi.advanceTimersByTimeAsync(130_000); });
       await act(async () => { screen.getByRole("button", { name: "查看已有成果" }).click(); await vi.advanceTimersByTimeAsync(0); });
       expect(screen.getByTestId("path")).toHaveTextContent("/app/files");
+      expect(screen.getByTestId("search")).toHaveTextContent(/^\?scope=default$/);
     });
 
     it("says the same for a binding refused for the cleanup, and waits for it the same way", async () => {
@@ -2047,6 +2050,14 @@ describe("a scheduled task's card in the conversation", () => {
     await userEvent.click(screen.getByText("Back"));
     emit(frame, { type: "evimed.runtime-ui.shell-navigate", seq: 6, destination: "autopilot" });
     await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent(/^\/app\/autopilot$/));
+    view.unmount();
+  });
+
+  it("opens the materials of the project on screen when the frame's rail asks for the knowledge base, not the account's whole list", async () => {
+    const { view, frame } = await openConversationWithCard();
+    emit(frame, { type: "evimed.runtime-ui.shell-navigate", seq: 4, destination: "knowledge" });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent(/^\/app\/files$/));
+    expect(screen.getByTestId("search")).toHaveTextContent(/^\?scope=default$/);
     view.unmount();
   });
 

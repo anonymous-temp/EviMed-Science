@@ -5,6 +5,7 @@ import { FormDialog } from "@/components/ui/FormDialog";
 import { Input, Textarea } from "@/components/ui/Input";
 import { productErrorMessage } from "@/lib/productClient";
 import { addSourceLink, addSourceNote, type SourceRecord } from "@/lib/sourceClient";
+import { destinationHint } from "./sourceView";
 
 /**
  * 「添加网页链接」: one address. The control plane reads the page (a site's robots.txt is honoured, a page drawn in
@@ -37,7 +38,7 @@ export function AddLinkDialog({ projectId, destinations = [], onClose, onAdded }
   return (
     <FormDialog title="添加网页链接" onClose={onClose} busy={busy} dirty={url.trim().length > 0}>
       {(requestClose, markSaved) => <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (url.trim() && !busy) void submit(markSaved); }}>
-        <Combobox label="保存位置" hint={destination === "@personal" ? "个人资料可在自己的项目中使用；添加到项目会保存独立版本。循证 GEO 仍按项目资料权限使用。" : "先保存到所选项目；可再设为跨项目可用。"} clearable={false} value={destination} onChange={id => { if (id) setDestination(id); }} options={[{ id: "@personal", label: "个人资料" }, ...destinations]} disabled={busy} />
+        <Combobox label="保存位置" hint={destinationHint(destination === "@personal")} clearable={false} value={destination} onChange={id => { if (id) setDestination(id); }} options={[{ id: "@personal", label: "个人资料" }, ...destinations]} disabled={busy} />
         <Input data-autofocus label="网址" type="url" inputMode="url" placeholder="https://" value={url} onChange={(event) => setUrl(event.target.value)}
           error={error} disabled={busy} autoComplete="off" />
         <div className="flex justify-end gap-2">
@@ -77,7 +78,7 @@ export function NewNoteDialog({ projectId, destinations = [], onClose, onAdded }
   return (
     <FormDialog title="新建笔记" onClose={onClose} busy={busy} dirty={title.length > 0 || body.length > 0}>
       {(requestClose, markSaved) => <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (title.trim() && !busy) void submit(markSaved); }}>
-        <Combobox label="保存位置" hint={destination === "@personal" ? "个人资料可在自己的项目中使用；添加到项目会保存独立版本。循证 GEO 仍按项目资料权限使用。" : "先保存到所选项目；可再设为跨项目可用。"} clearable={false} value={destination} onChange={id => { if (id) setDestination(id); }} options={[{ id: "@personal", label: "个人资料" }, ...destinations]} disabled={busy} />
+        <Combobox label="保存位置" hint={destinationHint(destination === "@personal")} clearable={false} value={destination} onChange={id => { if (id) setDestination(id); }} options={[{ id: "@personal", label: "个人资料" }, ...destinations]} disabled={busy} />
         <Input data-autofocus label="标题" value={title} maxLength={120} onChange={(event) => setTitle(event.target.value)} disabled={busy} autoComplete="off" />
         <Textarea label="正文" value={body} rows={8} onChange={(event) => setBody(event.target.value)} disabled={busy} error={error} />
         <div className="flex justify-end gap-2">

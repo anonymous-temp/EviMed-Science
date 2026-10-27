@@ -9,6 +9,7 @@ import { scopedConversationPath, conversationNavigationState, newRuntimeUiIntent
 import { bindConversationCapability, conversationCapability } from "@/lib/dispatch";
 import { TASKS_PATH, taskPath } from "@/lib/taskLocation";
 import { saveToKnowledgeBase } from "@/lib/sourceClient";
+import { listPath } from "@/lib/knowledgeNav";
 import { getWebSessionSourceScope, putWebSessionSourceScope } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
 import { provideFrameSessionSearch, reportPathOf, searchKnowledgeSources, useFrameRunBinding, type FrameSessionSearchResult } from "@/lib/runtimeUiBridge";
@@ -789,7 +790,8 @@ export function RuntimeUiFrame({ projectId, origin, scope, scopeOwner = false, s
         // its own origin, so a destination it could spell freely would be a
         // redirect it could choose.
         const routes: Record<string, string> = {
-          "new-task": "/app/chat", knowledge: "/app/files",
+          // The materials of the project on screen: a bare /app/files is the account's, which the frame's rail did not mean.
+          "new-task": "/app/chat", knowledge: listPath({ scope: projectId, kind: null, q: "" }),
           memory: "/app/memory", capabilities: "/app/capabilities", account: "/app/account",
           geo: "/app/geo", "virtual-research": "/app/virtual-research", autopilot: TASKS_PATH,
         };
@@ -1182,7 +1184,8 @@ export function RuntimeUiFrame({ projectId, origin, scope, scopeOwner = false, s
   // session store and is not faked from the ledger, which keeps no reply text.
   const openExistingResults = async () => {
     if (scope) { navigate(`/app/geo/${encodeURIComponent(scope.geoProjectId)}/articles`); return; }
-    let target = "/app/files";
+    // The project's files, by name: a bare /app/files is the account's materials.
+    let target = listPath({ scope: projectId, kind: null, q: "" });
     try {
       const runs = (await readCurrentRuns()).filter((run) => sessionId && run.sessionId === sessionId);
       for (const run of runs.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))) {

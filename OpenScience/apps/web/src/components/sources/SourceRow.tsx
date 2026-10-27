@@ -10,12 +10,12 @@ import { cn } from "@/lib/cn";
 import { formatDay } from "@/lib/format";
 import { sourceFailureMessage, type SourcePassage, type SourceRecord } from "@/lib/sourceClient";
 import { useOperator } from "@/lib/useOperator";
-import { RETRYABLE, highlightParts, isReading, isUsable, kindIcon, metaLine, stateLabel } from "./sourceView";
+import { RETRYABLE, canCopyToProject, highlightParts, isReading, isUsable, kindIcon, metaLine, stateLabel } from "./sourceView";
 
 /**
- * What one can do to a document, in the order a menu offers it: read it again, make it available to every project
- * (or only this one), settle a suspected duplicate, delete. The row's 「⋯」 and the reader page's carry the same four,
- * so they cannot disagree.
+ * What one can do to a document, in the order a menu offers it: add it to a project (only where there is an original to copy),
+ * read it again, make it available to every project (or only this one), settle a suspected duplicate, delete. The row's 「⋯」
+ * and the reader page's carry the same entries, so they cannot disagree.
  */
 export function sourceMenuItems(source: SourceRecord, {
   duplicate, busy, onRetry, onShare, onDuplicates, onDelete, onAddToProject,
@@ -25,7 +25,7 @@ export function sourceMenuItems(source: SourceRecord, {
 }): MenuEntry[] {
   const link = source.display.origin === "link";
   const items: MenuEntry[] = [
-    ...(onAddToProject ? [{ label: "添加到项目", onSelect: onAddToProject }] : []),
+    ...(onAddToProject && canCopyToProject(source) ? [{ label: "添加到项目", onSelect: onAddToProject }] : []),
     ...(link || RETRYABLE.includes(source.payload.status) ? [{ label: "重新读取", onSelect: onRetry }] : []),
     ...(source.display.shared === true ? [{ label: source.personal ? "取消跨项目可用" : "改为仅本项目", onSelect: onShare }] : []),
     ...(source.display.shared === false && isUsable(source) ? [{ label: "设为所有项目可用", onSelect: onShare }] : []),
