@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ListRow, List } from "@/components/ui/ListRow";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { Input } from "@/components/ui/Input";
@@ -23,7 +23,7 @@ export function trendWords(trend: number): string {
  * narrows the whole map to that topic, and choosing it again lets go. The researcher's word is the stronger one: a topic can be
  * renamed in place, merged into another, or dismissed with 「不是这个」, and a regrouping keeps all three.
  */
-export function TopicsView({ topics, selected, grouping, status, onChoose, onChanged }: {
+export function TopicsView({ topics, selected, grouping, status, onChoose, onChanged, meta }: {
   topics: readonly MapTopic[];
   selected: string | null;
   /** A regrouping is on its way. */
@@ -32,6 +32,8 @@ export function TopicsView({ topics, selected, grouping, status, onChoose, onCha
   onChoose: (id: string | null) => void;
   /** After an edit: the document is read again. */
   onChanged: () => void;
+  /** At the heading's end: the switch between the graph and the topics. */
+  meta?: ReactNode;
 }) {
   const [renaming, setRenaming] = useState<{ id: string; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -60,7 +62,7 @@ export function TopicsView({ topics, selected, grouping, status, onChoose, onCha
   if (ranked.length === 0) {
     return (
       <ChartCard
-        level={2} title="记忆的主题" state="empty"
+        title="记忆的主题" meta={meta} state="empty"
         emptyText={grouping || status === "stale" ? "正在把记忆整理成主题。" : status === "off" ? "这里还没有开通主题。" : "记下的内容还不多，再多聊几次，这里会长出你关心的主题。"}
       />
     );
@@ -76,7 +78,7 @@ export function TopicsView({ topics, selected, grouping, status, onChoose, onCha
   ];
 
   return (
-    <ChartCard level={2} title={`记忆分成 ${ranked.length} 个主题，最多的是“${ranked[0]!.label}”`}>
+    <ChartCard title={`记忆分成 ${ranked.length} 个主题，最多的是“${ranked[0]!.label}”`} meta={meta}>
       <div className={ranked.length >= MIN_TOPICS ? "grid items-start gap-6 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]" : undefined}>
         {ranked.length >= MIN_TOPICS && <WordCloud topics={ranked} selected={selected} onChoose={(id) => onChoose(id === selected ? null : id)} label={`主题云，共 ${ranked.length} 个主题，排行在旁边。`} />}
         <List label="主题排行">

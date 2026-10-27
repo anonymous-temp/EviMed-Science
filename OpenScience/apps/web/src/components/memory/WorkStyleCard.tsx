@@ -1,4 +1,4 @@
-import type { WorkStyle } from "./memoryOverviewModel";
+import type { WorkStyle } from "@/components/memory/handover";
 
 /** The three categories of a way of working, in the order they are told, with the fill each is drawn in: blue, then the two greys of the data palette. */
 const PARTS = [

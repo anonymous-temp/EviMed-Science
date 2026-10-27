@@ -28,7 +28,7 @@ import {
   OPERATOR_SENTENCES, addressAct, ADDRESS_CASES, addressOpenFindings, addressProbe, addressStateFindings, addressStateHolds, AXE_RULES_PER_NOTICE, AXE_TAGS, axeLoaded, axeNotices,
   axeRun, axeVersionOf, composerFindings, composerProbe, COMPOSER_BOTTOM_PX, loadAxeSource, scanWithAxe,
   asFinding, CAPTURE_MAX_SLICES, CAPTURE_QUALITY, findingText, STEP_TARGETS,
-  discoverCalculationHistory, handoffFindings, handoffProbe, HANDOFF_FIELDS, knowledgeGraphFindings, KNOWLEDGE_VIEWS, memoryMapFindings, memoryMapHeadlineFindings, memoryOverviewFindings, MEMORY_OVERVIEW_PARTS, MEMORY_MAP_VIEWS, navigateForWalk, replaceWalkPage, walkFailureDiagnostics, assertWalkAuthenticated, recoverWalkLoad, routeLoadProbe, memoryRowCoverage, dailyRowCoverage, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
+  discoverCalculationHistory, handoffFindings, handoffProbe, HANDOFF_FIELDS, knowledgeGraphFindings, KNOWLEDGE_VIEWS, memoryDrawerFindings, memoryOverviewFindings, MEMORY_OVERVIEW_TILES, navigateForWalk, replaceWalkPage, walkFailureDiagnostics, assertWalkAuthenticated, recoverWalkLoad, routeLoadProbe, memoryRowCoverage, dailyRowCoverage, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
 } from "../../../scripts/ops/ui-walk.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -99,6 +99,7 @@ test("every page the router serves at a fixed address is walked, or says why it 
     "/app/handoff": "opens only with a hand-off in the address; without one it returns to the conversation",
     "/app/runs": "a redirect to the newest run's conversation, decided at run time",
     "/app/files/open": "a compiled file named by its place: it reads the file and goes to the document's page, which `files-reader` walks",
+    "/app/memory/map": "a redirect to 总览 (2026-10-27): the map's relation graph and topics are a panel of it; the router test holds each address it carries over",
   };
   const walked = new Set(ROUTES.map(([, address]) => address.split("?")[0]));
   const missing = pages.filter((page) => !walked.has(page) && !Object.hasOwn(notWalked, page));
@@ -549,7 +550,7 @@ test("a page's first-row clicks come to failures on every page; a page with noth
   }
   assert.deepEqual(rowClickVerdict("geo-questions", [{ label: "测量问句", shown: true }]), { failures: [], notices: [] });
   const empty = (name) => `${name}@desktop: not observable: no list on the page has a first row that opens (an empty list, a page without rows, or an account with none), so no click was made`;
-  assert.deepEqual(rowClickVerdict("memory-map", []), { failures: [], notices: [empty("memory-map")] });
+  assert.deepEqual(rowClickVerdict("memory-overview", []), { failures: [], notices: [empty("memory-overview")] });
   assert.equal(asFinding(empty("geo-accuracy")).rule, "not-observable");
   // A click that shows nothing is the same failure whichever way a page is spelled.
   assert.deepEqual(rowClickVerdict("geo-sources", rows).failures, [nothing("geo-sources", "笔记")]);
@@ -619,13 +620,11 @@ function probe(kind, arg, search) {
     case "rowWidth": return wrong ? { widths: [96], min: 96 } : { widths: [300], min: 300 };
     case "capabilityCards": return wrong ? { hits: ["可运行"], wraps: 2 } : { hits: [], wraps: 0 };
     case "memoryTabs": {
-      const names = { self: "关于你", project: "项目", methods: "做法", growth: "成长" };
+      const names = { self: "关于你", project: "项目", methods: "做法", received: "收到的" };
       const selected = wrong ? "关于你" : names[tab] || "项目";
-      return { tabs: [["关于你", 0], ["项目", 2], ["做法", 3], ["成长", 0]].map(([name, count]) => ({ name, count, selected: name === selected })), headline: { memories: 5, practices: wrong ? 9 : 3 } };
+      return { tabs: [["关于你", 0], ["项目", 2], ["做法", 3], ["收到的", 5]].map(([name, count]) => ({ name, count, selected: name === selected })), headline: { memories: 5, practices: wrong ? 9 : 3 } };
     }
     case "sharedMissing": return wrong ? { title: true, back: true, retry: true } : { title: true, back: true, retry: false };
-    case "memoryMap": return wrong ? { views: ["关系"], figures: [{ kind: "relations", named: false }], lists: [], thin: false, empty: false }
-      : { views: ["关系", "主题", "维度", "时间", "活跃"], figures: [{ kind: "relations", named: true }], lists: [{ label: "标记", rows: 3 }], thin: false, empty: false };
     case "calculationHistory": return { rows: wrong ? 0 : 2 };
     case "knowledgeGraph": return wrong ? { figures: [{ kind: "knowledge-wiki", named: false }], lists: [], legend: false, views: ["图谱"], engineAddress: true, empty: false }
       : { figures: [{ kind: "knowledge-wiki", named: true }], lists: [{ label: "页面", rows: 3 }], legend: true, views: ["资料", "知识页", "图谱"], engineAddress: false, empty: false };
@@ -789,7 +788,7 @@ function context() {
           const mode = process.env.FAKE_SCROLL || "";
           return { viewportHeight: phone ? 844 : 945, clientHeight: phone ? 844 : 945, scrollHeight: mode === "stretch" ? 2200 : mode === "tall" ? 9450 : mode === "taller" ? 47250 : phone ? 844 : 945 };
         }
-        // FAKE_THROW=<function name>: that probe throws in the page, as 18.1's memory-map step did (a helper outside the function's own text).
+        // FAKE_THROW=<function name>: that probe throws in the page, as 18.1's memory step did (a helper outside the function's own text).
         if (process.env.FAKE_THROW && typeof fn === "function" && fn.name === process.env.FAKE_THROW) throw new ReferenceError(fn.name + "Helper is not defined");
         // axe-core's source is put into the page as a string; the scan is a function. FAKE_AXE=clean|fail: nothing to report, a scan that throws.
         if (typeof fn === "string") {
@@ -868,7 +867,7 @@ function context() {
           return true;
         }
         if (typeof fn === "function" && fn.name === "clickRowTitled") return true;
-        // 记忆地图: a list of marks (FAKE_ROWS=none: an account with none), the drawer the first mark opened and the address that says so;
+        // 记忆总览: a table of changes (FAKE_ROWS=none: an account with none), the drawer the first row opened and the address that says so;
         // FAKE_CLOSE=stuck: a drawer that stays open when its 关闭 is pressed.
         if (typeof fn === "function" && fn.name === "markRowsProbe") return process.env.FAKE_ROWS === "none" ? 0 : 3;
         if (typeof fn === "function" && fn.name === "clickFirstMarkProbe") { dialogOpen = process.env.FAKE_ROWS !== "dead"; log({ markClick: new URL(url).pathname }); return true; }
@@ -890,7 +889,7 @@ function context() {
           const n = (addressCalls[kind] = (addressCalls[kind] ?? 0) + 1);
           const lost = process.env.FAKE_ADDRESS === "lost" && n > 1 && n < 4;
           if (kind === "inbox") return { path: "/app/inbox", search: lost ? "" : "?filter=unread", dialog: false, found: true, selected: lost ? "全部" : "未读 3" };
-          if (kind === "memory-map") return { path: "/app/memory/map", search: "?view=dims&q=" + encodeURIComponent("探针"), dialog: false, found: true, selected: "地图", query: "探针", view: "维度" };
+          if (kind === "memory-overview") return { path: "/app/memory/overview", search: "?range=30d&q=" + encodeURIComponent("探针"), dialog: false, found: true, selected: "总览", query: "探针", range: "近 30 天" };
           const search = "?tab=project&q=" + encodeURIComponent("探针");
           if (n === 4) return { path: "/app/memory", search: search + "&open=r1", dialog: true, found: true, selected: "项目 5", query: "探针" };
           if (n === 5) return { path: "/app/memory", search: process.env.FAKE_ADDRESS === "open" ? search + "&open=r1" : search, dialog: process.env.FAKE_ADDRESS === "open", found: true, selected: "项目 5", query: "探针" };
@@ -1101,16 +1100,16 @@ test("a finding the baseline does not accept fails the walk, whatever kind of no
 test("a probe that throws in the page fails the walk and says what it did not reach (R19 S3; 18.1's ReferenceError was a notice for a release)", async () => {
   const { code, report, stdout } = await walk({ FAKE_THROW: "markRowsProbe" });
   assert.equal(code, 1, "the walk was green with a probe that did not run");
-  const failure = report.failures.find((line) => line.startsWith("memory-map-drawer: the step could not run"));
-  assert.match(failure ?? "", /^memory-map-drawer: the step could not run, so the first mark of 记忆地图's list, and the drawer it opens was not reached \(ReferenceError: markRowsProbeHelper is not defined\)$/);
-  assert.equal(report.steps["memory-map-drawer"].target, STEP_TARGETS["memory-map-drawer"]);
-  assert.match(report.steps["memory-map-drawer"].error, /ReferenceError/);
-  assert.match(stdout, /FAIL memory-map-drawer: the step could not run/);
+  const failure = report.failures.find((line) => line.startsWith("memory-overview-drawer: the step could not run"));
+  assert.match(failure ?? "", /^memory-overview-drawer: the step could not run, so the first row of 总览's table of changes, and the drawer it opens was not reached \(ReferenceError: markRowsProbeHelper is not defined\)$/);
+  assert.equal(report.steps["memory-overview-drawer"].target, STEP_TARGETS["memory-overview-drawer"]);
+  assert.match(report.steps["memory-overview-drawer"].error, /ReferenceError/);
+  assert.match(stdout, /FAIL memory-overview-drawer: the step could not run/);
   // No baseline entry can accept it: a step that did not run is the one finding that is never a debt.
   assert.ok(!report.findings.some((entry) => entry.rule === "step-failed"), "it is a failure, not a finding the baseline could be asked about");
   // A step that ran says what it was for.
   const fine = await walk();
-  assert.equal(fine.report.steps["memory-map-drawer"].target, STEP_TARGETS["memory-map-drawer"]);
+  assert.equal(fine.report.steps["memory-overview-drawer"].target, STEP_TARGETS["memory-overview-drawer"]);
   for (const [name, read] of Object.entries(fine.report.steps)) assert.equal(typeof read.target, "string", `${name} names its target`);
 });
 
@@ -1444,7 +1443,7 @@ test("a row that shows nothing when clicked fails the page it is on, on every pa
   const lists = (name) => (name === "geo-sources" ? ["发现与处理记录", "信源"] : ["资料清单"]);
   // R13 made six of these pages notices "until a walk has reported how they behave"; R19 S4 made them what the others always were.
   for (const name of ROW_CLICK_PAGES) for (const list of lists(name)) assert.ok(report.failures.includes(sentence(name, list)), `${name}: ${list}`);
-  assert.ok(report.failures.includes("memory-map@desktop: pressing the first mark opened no drawer"));
+  assert.ok(report.failures.includes("memory-overview@desktop: pressing the first row opened no drawer"));
   assert.equal(report.failures.length, ROW_CLICK_PAGES.size + 1 + 2, report.failures.filter((line) => !line.includes("showed nothing")).join("\n"));
   for (const name of ["frontier-zones", "geo", "geo-accuracy", "geo-questions", "inbox", "geo-sources", "autopilot", "files"]) assert.ok(ROW_CLICK_PAGES.has(name), name);
   // 设置 › 账户 is rows with their own buttons and no list that opens anything (the fixture walk could only report it unobservable).
@@ -1825,10 +1824,10 @@ test("the page probes read what a fix left behind: the empty 关注, the memory 
   assert.deepEqual(read([node("button", { text: "添加关注" }), node("button", { attrs: { "aria-pressed": "false" }, text: "药物" }), node("p", { text: "没有结果" })], "followingEmpty"), { adds: 1, chips: 1, noResults: true });
   assert.deepEqual(read([node("p", { text: "暂无一手材料，以下均为转述报道。" })], "eventGroups"), { primary: true, other: false, none: true });
 
-  // The page's tab list is 关于你 · 项目 · 做法 · 地图 since R19; the growth tab and the sentence that counted its practices went into the map.
-  const tabs = [tab("关于你", 0, true), tab("项目", 5, false), tab("做法", 15, false), tab("地图", 0, false)];
+  // The page's tab list is 总览 · 关于你 · 项目 · 做法 · 收到的 since 2026-10-27; the map was a tab until then.
+  const tabs = [tab("关于你", 0, true), tab("项目", 5, false), tab("做法", 15, false), tab("收到的", 0, false)];
   assert.deepEqual(read(tabs, "memoryTabs"), {
-    tabs: [{ name: "关于你", count: 0, selected: true }, { name: "项目", count: 5, selected: false }, { name: "做法", count: 15, selected: false }, { name: "地图", count: 0, selected: false }],
+    tabs: [{ name: "关于你", count: 0, selected: true }, { name: "项目", count: 5, selected: false }, { name: "做法", count: 15, selected: false }, { name: "收到的", count: 0, selected: false }],
   });
 
   assert.deepEqual(read([node("a", { text: "回到记忆胶囊" }), node("h2", { text: "x" })], "sharedMissing"), { title: false, back: true, retry: false });
@@ -1879,7 +1878,7 @@ test("a page probe is judged on what it exists to guard, and a probe that read n
   assert.deepEqual(one("capabilities", "desktop", "capabilityCards", { hits: ["可运行", "已安装"], wraps: 1 }), {
     failures: ["capabilities@desktop: the tool cards still say 可运行, 已安装"], notices: ["capabilities@desktop: 1 card footer(s) take two lines"] });
 
-  const tabs = (selected, counts) => ({ tabs: ["关于你", "项目", "做法", "地图"].map((name, index) => ({ name, count: counts[index], selected: name === selected })) });
+  const tabs = (selected, counts) => ({ tabs: ["关于你", "项目", "做法", "收到的"].map((name, index) => ({ name, count: counts[index], selected: name === selected })) });
   assert.deepEqual(one("memory", "desktop", "memoryTabs", tabs("项目", [0, 5, 15, 0])).failures, ["memory@desktop: the address names 关于你 and the page opens on 项目"]);
   assert.deepEqual(one("memory", "desktop", "memoryTabs", tabs("关于你", [3, 5, 15, 0])).failures, []);
   assert.deepEqual(one("memory", "desktop", "memoryTabs", tabs("关于你", [0, 5, 15, 0])).failures, []);
@@ -2225,7 +2224,7 @@ test("the walk opens the pages whose ids the deployment's lists name: both studi
   const routeAt = log.findLastIndex((entry, index) => index < pressedAt && entry.route === String("**/api/**"));
   assert.ok(pressedAt >= 0 && routeAt >= 0 && log.findIndex((entry, index) => index > pressedAt && entry.unroute) > pressedAt);
   assert.equal(log.filter((entry) => entry.aborted).length, 0);
-  assert.deepEqual(Object.keys(report.steps).sort(), ["address-state", "evidence-matrix@desktop", "evidence-matrix@phone", "extensions-create", "files-pdf", "files-return", "frontier-event-handoff", "knowledge-graph-mark", "memory-map-drawer"]);
+  assert.deepEqual(Object.keys(report.steps).sort(), ["address-state", "evidence-matrix@desktop", "evidence-matrix@phone", "extensions-create", "files-pdf", "files-return", "frontier-event-handoff", "knowledge-graph-mark", "memory-overview-drawer"]);
 });
 
 test("a page that regresses on what R11 fixed fails the walk and names the page and the defect", async () => {
@@ -2474,7 +2473,7 @@ const listPage = ({ pressed = "未读 3", selected = "项目 5", query = "探针
   node("aside", {}, [node("a", { attrs: { href: "/app/capabilities" }, text: "科研工具" }), node("a", { attrs: { href: "/app/inbox" }, text: "收件箱" })]),
   node("main", {}, [
     node("div", { attrs: { role: "tablist", "aria-label": "消息视图" } }, [node("button", { attrs: { role: "tab", "aria-selected": String(pressed === "全部") }, text: "全部" }), node("button", { attrs: { role: "tab", "aria-selected": String(pressed.startsWith("未读")) }, text: pressed.startsWith("未读") ? pressed : "未读" })]),
-    node("div", { attrs: { role: "tablist", "aria-label": "记忆" } }, ["关于你", "项目 5", "做法 2", "地图"].map((name) => node("button", { attrs: { role: "tab", "aria-selected": String(name === selected) }, text: name }))),
+    node("div", { attrs: { role: "tablist", "aria-label": "记忆" } }, ["关于你", "项目 5", "做法 2", "收到的 3"].map((name) => node("button", { attrs: { role: "tab", "aria-selected": String(name === selected) }, text: name }))),
     ...(search ? [node("input", { attrs: { "aria-label": "搜索记忆" }, value: query })] : []),
     ...(dialog ? [node("div", { attrs: { role: "dialog" } })] : []),
   ]),
@@ -2500,7 +2499,7 @@ test("where a list page keeps its place is read from the address and from what i
     assert.equal(addressAct(["other"]), false);
   });
   assert.deepEqual(descendants(body).filter((el) => el.clicks > 0).map((el) => el.text), ["科研工具", "未读 3", "项目 5"]);
-  assert.deepEqual(ADDRESS_CASES.map((c) => c.page), ["inbox", "memory", "memory-map"]);
+  assert.deepEqual(ADDRESS_CASES.map((c) => c.page), ["inbox", "memory", "memory-overview"]);
   assert.equal(addressStateHolds({ selected: "未读" }, { selected: "未读 3" }), true);
   assert.equal(addressStateHolds({ query: "探针" }, { query: "探针 " }), false);
   assert.equal(addressStateHolds({ selected: "未读" }, null), false);
@@ -2590,9 +2589,9 @@ test("the walk tries the address of the inbox and the memory page, the event's h
   assert.equal(report.notices.filter((notice) => /^(inbox|memory|frontier-event)@desktop: /.test(notice) && /address|hand-off|draft|Back/.test(notice)).length, 0, report.notices.join("\n"));
   // Both cases were made, then Back, then the address again; the memory row was opened and Back closed it.
   assert.deepEqual(log.filter((entry) => entry.act).map((entry) => entry.act),
-    [["tab", "未读"], ["link", "/app/capabilities"], ["tab", "项目"], ["link", "/app/capabilities"], ["chip", "地图的视图", "维度"], ["link", "/app/capabilities"]]);
-  assert.deepEqual(log.filter((entry) => entry.fill).map((entry) => [entry.fill, entry.value]).filter(([name]) => name === "搜索记忆"), [["搜索记忆", "探针"]]);
-  assert.deepEqual(Object.keys(report.steps["address-state"]), ["target", "inbox", "memory", "memory-map", "memory-landing", "memory-row-coverage", "memory-open"]);
+    [["tab", "未读"], ["link", "/app/capabilities"], ["tab", "项目"], ["link", "/app/capabilities"], ["chip", "时间范围", "近 30 天"], ["link", "/app/capabilities"]]);
+  assert.deepEqual(log.filter((entry) => entry.fill).map((entry) => [entry.fill, entry.value]).filter(([name]) => name === "搜索记忆"), [["搜索记忆", "探针"], ["搜索记忆", "探针"]], "the memory page's search and the overview's, which share the box's name");
+  assert.deepEqual(Object.keys(report.steps["address-state"]), ["target", "inbox", "memory", "memory-overview", "memory-landing", "memory-row-coverage", "memory-open"]);
   assert.equal(report.steps["frontier-event-handoff"].after.path, "/app/chat");
 
   // The address that does not come back, a row that stays open after Back.
@@ -2830,137 +2829,87 @@ test("the memory page's project tab stacks one shape of section, and 记忆地�
   assert.deepEqual(pageFindings("memory-project", "desktop", clean({ sectionShapes: three }), []).failures,
     [`memory-project@desktop: the page stacks 3 kinds of section (budget 2): ${three.join(", ")}`]);
   assert.deepEqual(pageFindings("memory-project", "desktop", clean({ sectionShapes: ["section>h2+div"] }), []), { failures: [], notices: [] });
-  // The same switch counted eleven kinds of control on the map under the reading page's eight; the data-page budget is ten, and
-  // the page measures nine now that its sentence's count and its replay button are chips.
-  assert.equal(budgetKey("memory-map"), "memory-map");
-  assert.equal(BUDGET_BY_PAGE["memory-map"].controls, 10);
-  assert.deepEqual(pageFindings("memory-map", "desktop", clean({ controlKinds: 9, colorKinds: 6 }), []).failures, []);
-  assert.deepEqual(pageFindings("memory-map", "desktop", clean({ controlKinds: 11 }), []).failures, ["memory-map@desktop: 11 kinds of control (budget 10)"]);
+  // 总览 is held to the data-page budget of ten kinds of control, and a reading page keeps its eight.
+  assert.equal(budgetKey("memory-overview"), "memory-overview");
+  assert.equal(BUDGET_BY_PAGE["memory-overview"].controls, 10);
+  assert.deepEqual(pageFindings("memory-overview", "desktop", clean({ controlKinds: 10, colorKinds: 6 }), []).failures, []);
+  assert.deepEqual(pageFindings("memory-overview", "desktop", clean({ controlKinds: 11 }), []).failures, ["memory-overview@desktop: 11 kinds of control (budget 10)"]);
   assert.deepEqual(pageFindings("memory-tab-other", "desktop", clean({ controlKinds: 9 }), []).failures, ["memory-tab-other@desktop: 9 kinds of control (budget 8)"], "a reading page keeps its eight");
 });
 
-test("记忆地图 is a data page: three kinds of section, and its first mark and drawer are checked", () => {
-  assert.equal(SECTION_SHAPES_BY_PAGE["memory-map"], 3);
-  assert.ok(ROW_CLICK_PAGES.has("memory-map"), "a mark that opens nothing fails the page");
-  assert.ok(ROUTES.some(([name, route]) => name === "memory-map" && route === "/app/memory/map"));
-  assert.ok(ROUTES.some(([name, route]) => name === "memory" && route === "/app/memory?tab=self"), "the row-list probe names the list tab rather than the map landing");
-  assert.deepEqual(PAGE_PROBES["memory-map"], [["memoryMap", ["desktop", "phone"]]]);
-  // The sentence, the canvas and the list are three shapes; a fourth is one too many.
-  const sentence = ["section>p+div", "canvas>", "ul>li"];
-  assert.deepEqual(pageFindings("memory-map", "desktop", clean({ sectionShapes: sentence }), []), { failures: [], notices: [] });
-  const stacked = pageFindings("memory-map", "desktop", clean({ sectionShapes: [...sentence, "table>thead+tbody"] }), []);
-  assert.match(stacked.failures[0], /memory-map@desktop: the page stacks 4 kinds of section \(budget 3\)/u);
-  // A mark pressed that shows nothing is a failure; an account with no mark is "not observable", never a pass.
-  assert.deepEqual(rowClickVerdict("memory-map", [{ label: "标记", shown: false }]).failures, ["memory-map@desktop: clicking the first row of the list “标记” showed nothing — no drawer, no page, no opened row"]);
-  assert.deepEqual(rowClickVerdict("memory-map", [{ label: "标记", shown: true }]), { failures: [], notices: [] });
-});
-
-test("记忆地图's probe judges the view switch, the names of its figures and the list under the graph", () => {
-  const one = (name, viewport, kind, result) => probeFindings(name, viewport, kind, result);
-  const read = (over = {}) => ({ views: [...MEMORY_MAP_VIEWS], figures: [{ kind: "relations", named: true }], lists: [{ label: "标记", rows: 12 }], thin: false, empty: false, ...over });
-  assert.deepEqual(one("memory-map", "desktop", "memoryMap", read()), { failures: [], notices: [] });
-  assert.deepEqual(one("memory-map", "desktop", "memoryMap", read({ views: ["关系", "主题"] })).failures, ["memory-map@desktop: the view switch reads “关系、主题” (关系、主题、维度、时间、活跃)"]);
-  assert.deepEqual(one("memory-map", "phone", "memoryMap", read({ figures: [{ kind: "relations", named: false }] })).failures, ["memory-map@phone: the relations figure has no accessible name"]);
-  assert.deepEqual(one("memory-map", "desktop", "memoryMap", read({ lists: [] })).failures, ["memory-map@desktop: the graph has no list of the same marks under it"]);
-  assert.deepEqual(one("memory-map", "desktop", "memoryMap", read({ thin: true })).failures, ["memory-map@desktop: the page says there is too little to draw and draws the graph"]);
-  assert.deepEqual(one("memory-map", "desktop", "memoryMap", read({ figures: [], thin: true, lists: [{ label: "标记", rows: 3 }] })).failures, []);
-  assert.deepEqual(one("memory-map", "desktop", "memoryMap", read({ figures: [], empty: true, lists: [] })).failures, []);
-});
-
-test("记忆地图's headline is held to the rows the page draws, and a page that holds nothing proved nothing", () => {
-  const mark = (glyph, over = {}) => ({ glyph, warn: false, replaced: false, ...over });
-  const at = "memory-map@desktop";
-  const sentence = "EviMed 记住了你的 3 件事，其中 1 件需要看一眼。";
-  const rows = [mark("●", { warn: true }), mark("◆"), mark("●"), mark("■"), mark("▲")];
-  // The numbers are the rows: three memories (a document and a method are not memories), one of them amber.
-  assert.deepEqual(memoryMapHeadlineFindings(at, { headline: sentence, marks: rows, more: false }), { failures: [], notices: [] });
-  assert.deepEqual(memoryMapHeadlineFindings(at, { headline: "EviMed 记住了你的 5 件事。", marks: rows, more: false }).failures,
-    [`${at}: the headline says 5 memories and the list draws 3`, `${at}: the headline says 0 need a look and the list marks 1`]);
-  assert.deepEqual(memoryMapHeadlineFindings(at, { headline: sentence, marks: [...rows, mark("●", { warn: true })], more: false }).failures,
-    [`${at}: the headline says 3 memories and the list draws 4`, `${at}: the headline says 1 need a look and the list marks 2`]);
-  // A replaced memory is a row and is not a memory in force: the server does not count it either.
-  assert.deepEqual(memoryMapHeadlineFindings(at, { headline: sentence, marks: [...rows, mark("●", { replaced: true })], more: false }), { failures: [], notices: [] });
-  // A list with more to show, or a folded group, holds more than its rows: not compared, and said so.
-  const long = memoryMapHeadlineFindings(at, { headline: sentence, marks: rows, more: true });
-  assert.deepEqual(long.failures, []);
-  assert.match(long.notices[0], /not compared/u);
-  assert.match(memoryMapHeadlineFindings(at, { headline: sentence, marks: [...rows, mark("⬢")], more: false }).notices[0], /not compared/u);
-  // An account with no memory is not observable, whatever the page says about documents; a page that says it has none and draws some fails.
-  for (const headline of ["还没有记住什么。", "胶囊里有 47 份资料，还没有记下关于你的事。"]) {
-    const empty = memoryMapHeadlineFindings(at, { headline, marks: [mark("■")], more: false });
-    assert.deepEqual(empty.failures, []);
-    assert.match(empty.notices[0], /not observable/u);
-  }
-  assert.deepEqual(memoryMapHeadlineFindings(at, { headline: "还没有记住什么。", marks: [mark("●")], more: false }).failures,
-    [`${at}: the headline holds no memory (“还没有记住什么。”) and the list draws 1`]);
-  // No headline at all is not a pass either; a read that did not carry the fields (an older probe) is not judged.
-  assert.match(memoryMapHeadlineFindings(at, { headline: null, marks: [], more: false }).notices[0], /not observable/u);
-  assert.deepEqual(memoryMapHeadlineFindings(at, {}), { failures: [], notices: [] });
-  // And it is the probe's judgement of the page.
-  const probed = probeFindings("memory-map", "desktop", "memoryMap", { views: [...MEMORY_MAP_VIEWS], figures: [{ kind: "relations", named: true }], lists: [{ label: "标记", rows: 5 }], thin: false, empty: false,
-    headline: "EviMed 记住了你的 9 件事。", marks: rows, more: false });
-  assert.deepEqual(probed.failures, [`${at}: the headline says 9 memories and the list draws 3`, `${at}: the headline says 0 need a look and the list marks 1`]);
-});
-
-test("总览 is a data page of two kinds of section, walked at both widths, and its cards are read by the markers they carry", () => {
+test("总览 is a data page, walked at both widths: the five tiles are read by the page, the first row of its table and its drawer are checked", () => {
   assert.equal(budgetKey("memory-overview"), "memory-overview");
   assert.equal(SECTION_SHAPES_BY_PAGE["memory-overview"], 2);
   assert.ok(ROW_CLICK_PAGES.has("memory-overview"), "a row that opens nothing fails the page");
   assert.ok(ROUTES.some(([name, route]) => name === "memory-overview" && route === "/app/memory/overview"));
+  assert.ok(ROUTES.some(([name, route]) => name === "memory" && route === "/app/memory?tab=self"), "the row-list probe names the list tab rather than the overview landing");
   assert.deepEqual(PAGE_PROBES["memory-overview"], [["memoryOverview", ["desktop", "phone"]]]);
-  assert.deepEqual([...MEMORY_OVERVIEW_PARTS], ["growth", "you", "projects", "methods", "knowledge", "received"]);
+  assert.deepEqual([...MEMORY_OVERVIEW_TILES], ["关于你", "项目", "做法", "收到的", "知识"]);
+  // 地图 is not a page of the walk any more: its address is a redirect to 总览, and 收到的 is a list tab with the others.
+  assert.ok(!ROUTES.some(([name]) => name === "memory-map"), "the map is not walked");
+  assert.ok(ROUTES.some(([name, route]) => name === "memory-received" && route === "/app/memory?tab=received"));
+  assert.ok(ROW_CLICK_PAGES.has("memory-received"), "a pack's row opens its drawer, and a row that opens nothing fails the page");
+  assert.deepEqual(PAGE_PROBES["memory-received"], [["memoryTabs", ["desktop"]]]);
+  // A row pressed that shows nothing is a failure; an account with no row is "not observable", never a pass.
+  assert.deepEqual(rowClickVerdict("memory-overview", [{ label: "最近变化", shown: false }]).failures, ["memory-overview@desktop: clicking the first row of the list “最近变化” showed nothing — no drawer, no page, no opened row"]);
+  assert.deepEqual(rowClickVerdict("memory-overview", [{ label: "最近变化", shown: true }]), { failures: [], notices: [] });
 });
 
-test("总览's sentence is held to its cards, each card to the rows it draws, and a page of recipes proved nothing", () => {
+test("总览's sentence is held to its tiles, the tabs to the tiles, and a page that holds nothing proved nothing", () => {
   const at = "memory-overview@desktop";
-  const card = (part, over = {}) => ({ part, state: "content", shape: "rows", count: null, memories: null, rows: 0, bars: [], more: 0, ...over });
-  const cards = (over = {}) => [
-    card("growth", { shape: "strip", count: 20 }),
-    card("you", { count: 4, rows: 4 }),
-    card("projects", { shape: "table", count: 2, memories: 3, rows: 2 }),
-    card("methods", { count: 2, rows: 2 }),
-    card("knowledge", { shape: "types", count: 39, bars: [31, 8] }),
-    card("received", { count: 2, rows: 2 }),
-  ].map((entry) => ({ ...entry, ...(over[entry.part] ?? {}) }));
-  const read = (over = {}, headline = "胶囊里有 7 件关于你和项目的事、2 种做法、39 份资料；近 30 天新增 13 件。") => ({ headline, tabs: ["总览", "地图", "关于你", "项目", "做法"], canvases: 1, cards: cards(over), look: { count: 1, rows: 1 } });
+  const tile = (label, value, over = {}) => ({ label, value, note: "", href: `/app/${label}`, loading: false, ...over });
+  const tiles = (over = {}) => [tile("关于你", 4), tile("项目", 2, { note: "3 条记忆" }), tile("做法", 2), tile("收到的", 1, { note: "共 2 个" }), tile("知识", 39, { href: "/app/files" })]
+    .map((entry) => ({ ...entry, ...(over[entry.label] ?? {}) }));
+  const read = (over = {}, headline = "记住了 4 条关于你的事、2 个项目的 3 条记忆，学会了 2 种做法；最近一次在10月8日。") => ({
+    headline, tabs: ["总览", "关于你4", "项目", "做法2", "收到的1"], canvases: 2, tiles: tiles(over), rows: 12, recipe: 0, recipeButtons: 0,
+  });
   assert.deepEqual(memoryOverviewFindings(at, read()), { failures: [], notices: [] });
-  // The sentence's numbers are the cards': memories are 关于你's and 项目's together.
-  assert.deepEqual(memoryOverviewFindings(at, read({}, "胶囊里有 8 件关于你和项目的事、2 种做法、39 份资料。")).failures, [`${at}: the sentence says 8 memories and the cards count 7`]);
-  assert.deepEqual(memoryOverviewFindings(at, read({}, "胶囊里有 7 件关于你和项目的事、39 份资料。")).failures, [`${at}: the sentence says 0 methods and the cards count 2`]);
-  assert.deepEqual(memoryOverviewFindings(at, read({}, null)).failures, [`${at}: the cards count 7 memories, 2 methods and 39 documents and the page has no sentence over them`]);
-  // A card that draws fewer things than it counts, or bars that do not add up to it.
-  assert.deepEqual(memoryOverviewFindings(at, read({ you: { rows: 3 } })).failures, [`${at}: the you card counts 4 and draws 3`]);
-  assert.deepEqual(memoryOverviewFindings(at, read({ knowledge: { bars: [31, 7] } })).failures, [`${at}: the knowledge card counts 39 and its bars add up to 38`]);
-  assert.deepEqual(memoryOverviewFindings(at, read({ projects: { count: 12, rows: 8, more: 4 } })).failures, [], "a table cut at eight says how many more there are");
-  assert.deepEqual(memoryOverviewFindings(at, read({ received: { count: 11, rows: 8, more: 2 } })).failures, [`${at}: the received card counts 11 and draws 10`]);
-  // A card still loading or silently failed is named; its number is not compared, so one failure is not three.
-  const failed = memoryOverviewFindings(at, read({ knowledge: { state: "error", count: null, shape: null, bars: [] } }, "胶囊里有 7 件关于你和项目的事、2 种做法。"));
-  assert.deepEqual(failed.failures, [`${at}: the knowledge card could not be read`]);
-  assert.deepEqual(memoryOverviewFindings(at, read({ methods: { state: "loading", count: null } })).failures, [`${at}: the methods card is still loading`]);
-  // The order, the tabs and the one canvas.
-  assert.match(memoryOverviewFindings(at, { ...read(), cards: [...cards()].reverse() }).failures[0], /the cards read “received、knowledge/u);
-  assert.deepEqual(memoryOverviewFindings(at, { ...read(), tabs: ["地图", "关于你"] }).failures, [`${at}: the tabs read “地图、关于你” (总览、地图、关于你、项目、做法)`]);
-  assert.deepEqual(memoryOverviewFindings(at, { ...read(), canvases: 2 }).failures, [`${at}: 2 canvases on the page (one: the growth strip; every other card is words and rows)`]);
-  assert.deepEqual(memoryOverviewFindings(at, { ...read(), look: { count: 9, rows: 6 } }).failures, [`${at}: 6 rows of what needs a look (five, and the count)`]);
-  // An account of recipes has nothing to compare: not observable, never a pass.
-  const recipes = memoryOverviewFindings(at, { headline: null, tabs: [], canvases: 0, cards: MEMORY_OVERVIEW_PARTS.map((part) => card(part, { state: "recipe", shape: "recipe" })), look: null });
-  assert.deepEqual(recipes.failures, []);
-  assert.match(recipes.notices[0], /not observable/u);
+  // The sentence's numbers are the tiles': each clause is the tile of its name, 项目's memories are the note of its tile.
+  assert.deepEqual(memoryOverviewFindings(at, read({}, "记住了 5 条关于你的事、2 个项目的 3 条记忆，学会了 2 种做法。")).failures, [`${at}: the sentence says 5 memories about you and the tile counts 4`]);
+  assert.deepEqual(memoryOverviewFindings(at, read({}, "记住了 4 条关于你的事、2 个项目的 4 条记忆，学会了 2 种做法。")).failures, [`${at}: the sentence says 4 project memories and the 项目 tile's note says 3`]);
+  assert.deepEqual(memoryOverviewFindings(at, read({}, "记住了 4 条关于你的事，学会了 2 种做法。")).failures, [`${at}: the sentence leaves out the projects and the 项目 tile's note says 3 project memories`]);
+  assert.deepEqual(memoryOverviewFindings(at, read({}, "记住了 4 条关于你的事、3 个项目的 3 条记忆，学会了 2 种做法。")).failures, [`${at}: the sentence says 3 projects and the tile counts 2`]);
+  // A project of documents only is a number of the tile and no memory: the sentence does not repeat it.
+  assert.deepEqual(memoryOverviewFindings(at, read({ 项目: { value: 3, note: "" } }, "记住了 4 条关于你的事，学会了 2 种做法。")).failures, []);
+  assert.deepEqual(memoryOverviewFindings(at, read({}, "记住了 4 条关于你的事、2 个项目的 3 条记忆。")).failures, [`${at}: the sentence says 0 methods and the tile counts 2`]);
+  assert.deepEqual(memoryOverviewFindings(at, read({}, null)).failures, [`${at}: the tiles count 4 about you, 3 project memories and 2 methods and the page has no sentence over them`]);
+  // A tab that carries a number carries its tile's.
+  assert.deepEqual(memoryOverviewFindings(at, { ...read(), tabs: ["总览", "关于你5", "项目", "做法2", "收到的1"] }).failures, [`${at}: the 关于你 tab says 5 and its tile 4`]);
+  assert.deepEqual(memoryOverviewFindings(at, { ...read(), tabs: ["总览", "关于你4", "项目", "做法2", "收到的"] }).failures, [`${at}: the 收到的 tab says 0 and its tile 1`], "a tab that carries none says nothing is in it");
+  assert.deepEqual(memoryOverviewFindings(at, { ...read({ 收到的: { value: 0, note: "共 0 个" } }), tabs: ["总览", "关于你4", "项目", "做法2", "收到的"] }).failures, [], "a tab with nothing in it carries none");
+  // A tile still loading, one that could not be read, and a number that goes nowhere are named; a failed read is not a zero.
+  assert.deepEqual(memoryOverviewFindings(at, read({ 做法: { value: null, loading: true } })).failures, [`${at}: the 做法 tile is still loading`]);
+  assert.deepEqual(memoryOverviewFindings(at, read({ 知识: { value: null } }, "记住了 4 条关于你的事、2 个项目的 3 条记忆，学会了 2 种做法。")).failures, [`${at}: the 知识 tile could not be read`]);
+  assert.deepEqual(memoryOverviewFindings(at, read({ 收到的: { href: null } })).failures, [`${at}: the 收到的 tile is a number and goes nowhere (a number opens what it counts)`]);
+  // The order, the tabs and the two canvases.
+  assert.match(memoryOverviewFindings(at, { ...read(), tiles: [...tiles()].reverse() }).failures[0], /the tiles read “知识、收到的/u);
+  assert.deepEqual(memoryOverviewFindings(at, { ...read(), tabs: ["总览", "地图", "关于你4", "项目", "做法2", "收到的1"] }).failures, [`${at}: the tabs read “总览、地图、关于你4、项目、做法2、收到的1” (总览、关于你、项目、做法、收到的)`]);
+  assert.deepEqual(memoryOverviewFindings(at, { ...read(), canvases: 3 }).failures, [`${at}: 3 canvases on the page (two: the change chart and the relation graph)`]);
+  // A page that counts what it holds has a table behind its numbers.
+  assert.deepEqual(memoryOverviewFindings(at, { ...read(), rows: 0 }).failures, [`${at}: the page counts what it holds and has no table of changes behind it`]);
+  // An account with nothing is one recipe with one button; with the tiles at zero there is nothing to compare, which is not a pass.
+  const nothing = { headline: null, tabs: ["总览", "关于你", "项目", "做法", "收到的5"], canvases: 0, rows: 0, recipe: 1, recipeButtons: 1, tiles: tiles({ 关于你: { value: 0 }, 项目: { value: 0, note: "" }, 做法: { value: 0 }, 收到的: { value: 5 }, 知识: { value: 0 } }) };
+  const recipe = memoryOverviewFindings(at, nothing);
+  assert.deepEqual(recipe.failures, []);
+  assert.match(recipe.notices[0], /not observable/u);
+  assert.deepEqual(memoryOverviewFindings(at, { ...nothing, recipeButtons: 3 }).failures, [`${at}: an account with nothing has 3 buttons in its recipe (one)`]);
   // And it is the probe's judgement of the page.
-  assert.deepEqual(probeFindings("memory-overview", "phone", "memoryOverview", read({ you: { rows: 1 } })).failures, ["memory-overview@phone: the you card counts 4 and draws 1"]);
+  assert.deepEqual(probeFindings("memory-overview", "phone", "memoryOverview", read({ 关于你: { value: 3 } })).failures, [
+    "memory-overview@phone: the 关于你 tab says 4 and its tile 3", "memory-overview@phone: the sentence says 4 memories about you and the tile counts 3",
+  ]);
 });
 
-test("记忆地图's drawer is read open and in the address, then closed and gone from it", () => {
+test("总览's drawer is read open and in the address, then closed and gone from it", () => {
   const was = (dialog, address) => ({ dialog, address });
-  assert.deepEqual(memoryMapFindings("memory-map", { rows: 5, opened: was(true, true), closed: was(false, false) }), { failures: [], notices: [] });
-  assert.deepEqual(memoryMapFindings("memory-map", { rows: 5, opened: was(false, false), closed: null }).failures,
-    ["memory-map@desktop: pressing the first mark opened no drawer", "memory-map@desktop: the open drawer is not in the address (a reload or Back would lose it)"]);
-  assert.deepEqual(memoryMapFindings("memory-map", { rows: 5, opened: was(true, true), closed: was(true, true) }).failures,
-    ["memory-map@desktop: the drawer did not close", "memory-map@desktop: the drawer closed and its mark is still in the address"]);
-  assert.deepEqual(memoryMapFindings("memory-map", { rows: 5, opened: was(true, true), closed: null }).failures, ["memory-map@desktop: the drawer has no 关闭 button to press"]);
-  const none = memoryMapFindings("memory-map", { rows: 0, opened: null, closed: null });
+  assert.deepEqual(memoryDrawerFindings("memory-overview", { rows: 5, opened: was(true, true), closed: was(false, false) }), { failures: [], notices: [] });
+  assert.deepEqual(memoryDrawerFindings("memory-overview", { rows: 5, opened: was(false, false), closed: null }).failures,
+    ["memory-overview@desktop: pressing the first row opened no drawer", "memory-overview@desktop: the open drawer is not in the address (a reload or Back would lose it)"]);
+  assert.deepEqual(memoryDrawerFindings("memory-overview", { rows: 5, opened: was(true, true), closed: was(true, true) }).failures,
+    ["memory-overview@desktop: the drawer did not close", "memory-overview@desktop: the drawer closed and its row is still in the address"]);
+  assert.deepEqual(memoryDrawerFindings("memory-overview", { rows: 5, opened: was(true, true), closed: null }).failures, ["memory-overview@desktop: the drawer has no 关闭 button to press"]);
+  const none = memoryDrawerFindings("memory-overview", { rows: 0, opened: null, closed: null });
   assert.deepEqual(none.failures, []);
-  assert.match(none.notices[0], /not observable/u, "an account with no mark proves nothing");
+  assert.match(none.notices[0], /not observable/u, "an account with no row proves nothing");
 });
 
 test("the knowledge graph's first mark opens a knowledge page with no engine address in it, and Back brings the graph again", () => {

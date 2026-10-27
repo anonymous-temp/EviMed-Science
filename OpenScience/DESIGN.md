@@ -183,6 +183,16 @@ colour for use on it. The retired names `border`, `border-strong` and `muted` ar
   试验, 指南, 说明书, 其他研究) keep their categorical colours, the label is always printed, and each
   foreground / background pair is measured; the blue of a synthesis names a study type, not
   information, safety or strength (DS02.g). A topic colour never becomes a clinical grade.
+- **Accent text means one thing: it opens or does something** (the memory section's clickability grammar, owner 2026-10-27: 「分不出哪些可以点击
+  哪些不能」). Measured on these tokens the accent is 5.64:1 on the page but only 2.6:1 against `text` and 1.61:1 against `text-2`, so colour alone
+  cannot mark a link (WCAG G183). Hence: (1) a title, a name — a project's included —, a label or a number that opens nothing is ink (`text`,
+  `title-ink`, `text-2`, `text-3`), and a selection is a ground (`accent-soft`), never accent text; (2) a link inside a sentence is underlined,
+  always (`NoteParts`, a drawer's 「来源对话」); (3) a row or tile that goes to one place is pressed as a whole — hover `surface-2`, a focus ring and
+  its mark at the end, › opens here, ↗ leaves the section (`ListRow` `leaves`, `StatTile` `whole`) — with its title in ink, and a row that cannot
+  be pressed has neither the ground nor the mark; (4) a section's way out is one labelled link at the end of its header, accent, underlined,
+  with ›; (5) an action is a `Button`, `secondary` (the grey ground) in the memory section — never bare accent text; (6) a switch is the only
+  control of a row that is also pressed as a whole, and the two do not trigger each other. The marks of a picture (● ▲ ■ ◆ ✕) are graphics in the
+  data colour, not words. `clickabilityGrammar.test.ts` holds (1), (2) and the bare accent button in the memory section's sources.
 - **Restraint is the default; expression has a budget.** A reading page and a list page stay quiet.
   A page may spend **one brand moment** (a gradient, a serif headline, a hero), and charts and the
   32/40 metric rungs belong to data pages. Banning every expressive device is what made 循证 GEO
@@ -194,10 +204,13 @@ colour for use on it. The retired names `border`, `border-strong` and `muted` ar
   card's header. **What the capsule gained since its first day is the one chart that came back (2026-10-23), as the first card of 总览**
   (`/app/memory/overview`, a data page of its own): a dot for each gain up to thirty in a lane for each kind that has any (记下 ●, 学会 ▲,
   资料 ■, 收下 ◆), weekly counts after that, counting gains only — what was replaced or forgotten is the time view's — and `?tab=growth`
-  arrives at 总览. 总览 and 地图 are the memory page's two pictures; its three lists (关于你, 项目, 做法) are lists and nothing else; no peer's
-  memory page has a chart, so a chart on a list page needs an argument of this size. The explorable picture of the same memories is a data page of its own, 记忆地图 (see 「页面结构」
-  rule 1), reached from the memory page's last tab, 「地图」 (its page is drawn by the same `MemoryFrame` — one title, one column, the same four tabs in the sticky band — so the two read as one page: a map behind a menu item was not found, 2026-10-14; and its five views are one chip group of the one toolbar row, not a second row of tabs); it draws in the accent, the warn amber and one grey, tells a
-  mark's kind by shape and words, and prints a radar's numbers at its axes; the knowledge base's graph follows the same grammar.
+  arrives at 总览. **Since 2026-10-27 the map is no tab of its own** — it was a dashboard, and a dashboard that is not the landing is a page nobody
+  found: 总览 is the data page (template T4: toolbar, sentence, five tiles, 「变化」 — the chart above, now with 忘记 ✕ as its fifth lane —, 「关系与主题」
+  when there are at least twelve memories and three relations or a topic grouping, and the table behind the charts, 「最近变化」), `/app/memory/map` goes
+  to it with `explore=graph|topics`, `project`, `q`, `open`, `look`, `topic` and a 30- or 90-day `range` carried over, and its time, activity and dimension views
+  (the radar's angle and area read worst of all, NN/g) are gone: the chart and the table say what happened. 总览 is the memory page's one picture; its
+  four lists (关于你, 项目, 做法, 收到的) are lists and nothing else; no peer's memory page has a chart, so a chart on a list page needs an argument of this
+  size. The relation graph and the topics draw in the accent, the warn amber and one grey, tell a mark's kind by shape and words; the knowledge base's graph follows the same grammar.
 - **Every status is said three times** — colour, shape, words. Red and green mean opposite things
   in a Chinese market chart, and one reader in twelve cannot tell them apart at all.
 - **No colour outside the table.** `designTokens.test.ts` fails on a hex literal or a colour
@@ -503,18 +516,19 @@ pages after every release.
    own page, never above or below. The walk reads a page body's top-level sections by shape (a
    `<section>`, a list of rows, a table, a chart) and fails a page that stacks more kinds than its
    budget (`shapes` in `scripts/ops/page-templates.json`, the one table of the pages the walk visits, their template and budgets); groups of one shape — a group per use, a group per day — are
-   one kind. **The one exception is a data page** — the 记忆地图 (`/app/memory/map`), the 记忆总览 (`/app/memory/overview`: the capsule as six cards of one grammar — a sentence whose numbers
-   link to their parts, 成长 the page's only canvas, 关于你, 项目, 我的做法, 知识, 收到的 — each changing form with the amount it has to show: 0 a recipe with one button, 1–5 the
-   things themselves, 6–30 ranked bars or dots, 31 and more folded; held to two kinds of section and five size × weight pairs, of which four are used) and the knowledge base's graph
+   one kind. **The one exception is a data page** — the 记忆总览 (`/app/memory/overview`: the capsule as one data page — a toolbar of the range, only what needs a look and the search; a
+   sentence whose numbers each open the list they count; five tiles that are each a door to a list; 「变化」, what it gained and lost over time; 「关系与主题」 when there is
+   enough to see; and the table behind the charts, 「最近变化」, whose rows open the same drawers the marks do — held to two kinds of section and five size × weight pairs) and the knowledge base's graph
    view, the owner's formal requirement of 2026-10-12 that memory and knowledge be shown and not only listed: one
-   view at a time over one shared selection, switched by one row, with the same marks listed under the canvas, and
-   every mark opening the record's own drawer or the document's own page — so its three shapes (the sentence with
-   its switch and filters, the canvas, the list) are its budget; the memory page and the knowledge base page
+   shared selection narrowing the chart, the panel and the table together, and every mark and row opening the record's own drawer or the document's own page — so its shapes
+   (the numbers, the cards of charts and of the table) are its budget; the memory page and the knowledge base page
    themselves stay lists with one line, and a compiled wiki page opens as a document under rule 2. A data
    page is also held to the data-page budget of controls — 10 kinds and 7 text colours, against a reading
-   page's 8 and 5 (`budgets.data` in the page table): the 记忆地图 measures 9 and, with the memory page's tab bar above it, 10 — at the budget (and so does 总览; 2026-10-23, measured in Chromium on the pages' own fixtures with the walk's `measure`: a button the header or a recipe adds is a `text` button, the look of the sidebar's 28 px controls, because a filled one was the eleventh kind): the shell's three, the view
-   switch's two (the chosen view is a second kind), the chips, the search, the mark rows, the timeline
-   scrubber and the tabs; the count in its sentence and its replay button wear the chips' look and are not kinds of their own.
+   page's 8 and 5 (`budgets.data` in the page table). 总览 measures **10 kinds of control, 6 text colours, 3 kinds of border, 5 size × weight pairs and 2 kinds of section** on the `rich` fixture
+   (2026-10-27, Chromium, the walk's own `measure`, at 1440 and at 390): the shell's four, the tabs, the quiet chips (range and the toggle) with the search, the headline's links, the tiles, the text of the
+   rows, and `记住这一条` — a secondary `Button` at the header's own height (36), which is the same look as the sidebar's current item, because at 28 it was an eleventh kind. What it spent the budget on, and what it did not
+   spend: its tiles are cards of the one frame the charts are (`StatBand separate`), not cells with hairlines (a fourth kind of border); the table behind the charts and the relation graph are cards of the kind the chart is (`ChartCard`),
+   not sections that hold cards (two more shapes); the switch between 关系 and 主题 is the underlined `Toolbar` `views` the band has (not a second look); and the relation graph has no replay slider. The count in a sentence wears the chips' look and is not a kind of its own.
 2. **A row opens by the nature of what it is** (long configuration/mapping uses the main area under the October 20 correction below) (adopted 2026-10-08 with release 13, from the owner's
    screenshots of the scheduled-task and knowledge-base pages):
    - a **record** — a memory entry, an inbox message, an evidence-matrix row, a GEO
@@ -537,7 +551,8 @@ pages after every release.
 6. **What looks clickable shows a result where the reader is looking.** A drawer, a new page, a
    tab or a row opened in place — never a change somewhere below the fold. What opens answers the
    number or state the row shows: a red count opens the items it counts. A row that can be pressed
-   says so (`ListRow`: hover `surface-2`, selected `accent-soft`, a quiet › ⌄ ↗ mark at its end).
+   says so (`ListRow`: hover `surface-2`, selected `accent-soft`, a quiet › ⌄ ↗ mark at its end; `StatTile whole` the same for a tile that is a door; ↗ also marks a route that leaves the section the list is in) — and it is the
+   whole row or tile that is pressed, with its title in ink: accent text is for a link inside a sentence, underlined (「Colour → Rules」).
    The walk clicks the first row of each list on the rebuilt pages and fails a click that shows
    nothing; what a row's content holds is for unit tests, not the walk.
 
@@ -584,7 +599,7 @@ fills them. `compositionFixtures.tsx` holds a sample of each, `pageComposition.t
 | T1 列表页 | 前沿动态, 知识库, 记忆 (关于你 / 项目 / 做法), 收件箱, 科研工具, 插件与技能, the GEO and study homes | header · `toolbar` (views at the left; filters, search, count at the right) · `List` / `DataTable` · `ShowMore` | a list or a table | a drawer (a record), a page (a document), the main area (a conversation) |
 | T2 主从页 | 定时任务, 方法库, 假设卡 | header · `MasterDetail` (list 320–360 px, the record beside it; below 1024 px a `Drawer`, or the page swaps for a conversation) | a list and one record | the right-hand column |
 | T3 模块页 | 循证 GEO (including its addressed answer); VCR uses the conversation/result variant below | header (the primary action is 「下一步：…」; while working, a chip) · `steps` on every GEO tab · `activity` while working · `tabs` · `toolbar` · one tab's body | one kind per tab: a T1 list, a T2 split, a T4 chart grid, a settings panel | as T1 |
-| T4 数据页 | 记忆总览, 记忆地图, GEO 总览 / 可见度, 研究的对照 / 试验, 知识图谱 | header · `toolbar` · `headline` · `StatBand` (only the numbers that exist) · `ChartGrid` (full rows) · the table behind the charts | charts and one table | a drawer; a mark is a row |
+| T4 数据页 | 记忆总览, GEO 总览 / 可见度, 研究的对照 / 试验, 知识图谱 | header · `toolbar` · `headline` · `StatBand` (only the numbers that exist) · `ChartGrid` (full rows) · the table behind the charts | charts and one table | a drawer; a mark is a row |
 | T5 阅读页 | a knowledge-base document, a report, an evidence card, an event | back · document title · the primary action · `Outline` (from four sections) · the text · one 「来源与核对」 fold | a document; a long list is a table with a toolbar | — |
 | T6 设置页 | account, appearance, notifications, allowance, data sources, projects | header · a left rail of **settings sections only** · `Panel` groups | `Panel` | — |
 

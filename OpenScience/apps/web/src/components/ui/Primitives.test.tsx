@@ -153,6 +153,28 @@ describe("Tabs", () => {
 });
 
 describe("ListRow", () => {
+  // 2026-10-27: the mark at a row's end says where its press goes — › here, ↗ out of the section the list is in, an outside address included.
+  it("marks a route that leaves the section ↗, as an outside address, and a route that stays › ", () => {
+    render(
+      <MemoryRouter>
+        <List>
+          <ListRow title="这里" to="/app/memory?tab=self" />
+          <ListRow title="那里" to="/app/files/src_1" leaves />
+          <ListRow title="外面" href="https://example.org/" />
+          <ListRow title="没有去处" />
+        </List>
+      </MemoryRouter>,
+    );
+    const mark = (title: string) => screen.getByText(title).closest("li")!.querySelector("svg")?.getAttribute("class") ?? null;
+    expect(mark("这里")).toContain("lucide-chevron-right");
+    expect(mark("那里")).toContain("lucide-arrow-up-right");
+    expect(mark("外面")).toContain("lucide-arrow-up-right");
+    // A row that cannot be pressed has neither a mark nor the ground of one that can.
+    expect(mark("没有去处")).toBeNull();
+    expect(screen.getByText("没有去处").closest("li")!.className).not.toContain("hover:bg-surface-2");
+    expect(screen.getByText("这里").closest("li")!.className).toContain("hover:bg-surface-2");
+  });
+
   // Appendix E #27: 500 renders as 400 in Microsoft YaHei, so unread was
   // invisible on Windows. Unread is 600.
   it("sets an unread title in 600, a weight every Chinese face has", () => {

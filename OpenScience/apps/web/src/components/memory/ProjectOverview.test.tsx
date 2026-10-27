@@ -51,6 +51,33 @@ describe("the top of a project", () => {
     expect(shapes(show({ card: [{ slot: "goal", label: "目标", recordId: "rec_1", text: "比较两种抗凝药", updatedAt: null }], capabilities, works }).container)).toEqual(["section>h2+div"]);
   });
 
+  // 2026-10-27, the clickability grammar: what opens something looks it (a row, its mark), what only reports does not, and a label is a label.
+  it("draws the card's labels grey and its values in ink, each row opening its memory with the mark that says so", () => {
+    show({ card: [{ slot: "goal", label: "目标", recordId: "rec_1", text: "比较两种抗凝药", updatedAt: null }] });
+    const row = screen.getByRole("button", { name: "比较两种抗凝药" }).closest("li")!;
+    expect(within(row).getByText("目标")).toHaveClass("text-text-3");
+    expect(screen.getByRole("button", { name: "比较两种抗凝药" })).toHaveClass("text-text");
+    expect(row.querySelector("svg.lucide-chevron-right")).not.toBeNull();
+    expect(row.querySelector(".text-accent, .text-link")).toBeNull();
+  });
+
+  it("draws 「这个项目做过」 as a table that opens nothing: no link, no button, no row that takes a press, no mark", () => {
+    show({ capabilities: [{ id: "a", title: "统计分析", count: 7 }, { id: "b", title: "论文写作", count: 2 }] });
+    const table = screen.getByRole("table", { name: "这个项目做过" });
+    expect(table.querySelector("a, button, [role='button'], [data-row-open]")).toBeNull();
+    expect(table.className + [...table.querySelectorAll("tr")].map((row) => row.className).join(" ")).not.toMatch(/hover:|cursor-pointer/);
+    expect(table.querySelector("svg")).toBeNull();
+  });
+
+  it("marks a work's row ↗ because its press leaves the memory section for the file's own page", () => {
+    show({ works: [{ month: "2026-10", items: [{ runId: "run_1", title: "随访方案", path: "outputs/plan.docx", name: "plan.docx", at: "2026-10-03T08:00:00Z" }] }] });
+    const link = screen.getByRole("link", { name: "随访方案" });
+    expect(link).toHaveAttribute("href", workPath("run_1", "outputs/plan.docx"));
+    const row = link.closest("li")!;
+    expect(row.querySelector("svg.lucide-arrow-up-right")).not.toBeNull();
+    expect(row.querySelector("svg.lucide-chevron-right")).toBeNull();
+  });
+
   it("says in one line, with the one thing to do about it, that a project with memories has no card yet, and never draws a grid of empty slots", async () => {
     const onSpeak = vi.fn();
     show({}, { hasMemories: true, onSpeak });

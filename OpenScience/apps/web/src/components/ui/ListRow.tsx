@@ -26,7 +26,7 @@ import { cn } from "@/lib/cn";
  *   「›」 when it opens something (`to`, or `onOpen` without `expanded`: a drawer, a
  *   page, a conversation), 「⌄」 turned over while open when it expands in place
  *   (`onOpen` with `expanded` defined), 「↗」 when it leaves for an outside address
- *   (`href`, a new tab: a different arrow, because the reader does not stay).
+ *   (`href`, a new tab: a different arrow, because the reader does not stay) and for a route that leaves the section the list is in (`leaves`).
  *   A page does not draw its own arrow; `chevron={false}` is for the row whose press
  *   is not an opening (a 「返回上级」 row).
  * - **`trailing` does not swallow the press.** Text, a time or a Tag there lets the
@@ -189,6 +189,7 @@ export function ListRow({
   to,
   state,
   href,
+  leaves = false,
   onOpen,
   expanded,
   selected = false,
@@ -212,6 +213,8 @@ export function ListRow({
   state?: unknown;
   /** An outside address the row opens in a new tab. */
   href?: string;
+  /** A route the row opens that leaves the section the list is in (a file's own page from a memory list): its mark is ↗, as an outside address's. */
+  leaves?: boolean;
   /**
    * Opens the row, when it is neither a route nor an address. Beside `to` or
    * `href` it runs as the row is followed: a notice marks itself read on the
@@ -285,7 +288,7 @@ export function ListRow({
   // What the row does decides its mark: a route or a drawer opens something (›), an in-place row folds (⌄, turned over while
   // open), an outside address leaves (↗). A row with nothing to press has none.
   const mark = chevron === false || !interactive ? null
-    : to ? "open"
+    : to ? (leaves ? "away" : "open")
       : href ? "away"
         : expanded !== undefined ? "fold" : "open";
   const MarkIcon = mark === "away" ? ArrowUpRight : mark === "fold" ? ChevronDown : ChevronRight;

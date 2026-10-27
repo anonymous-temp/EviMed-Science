@@ -314,7 +314,7 @@ export function FactDrawer({ item, projectName, conversations, siblings = [], on
                 </ConversationLink>
               )}
               {materials.map((material) => (
-                <Link key={material.id} to={readerPath(material.id, { scope: null, kind: null, q: "" })} className="block max-w-measure text-left text-ui text-accent hover:underline">
+                <Link key={material.id} to={readerPath(material.id, { scope: null, kind: null, q: "" })} className="block max-w-measure rounded text-left text-ui text-accent underline underline-offset-4 hover:decoration-2">
                   {`依据的资料：《${memoryExcerpt(material.title, 60)}》`}
                 </Link>
               ))}

@@ -9,7 +9,7 @@ import { projectChoices, type FactItem, type ProjectChoice } from "./memoryItems
 /**
  * The projects the memory pages can be about, as the header's scope menu lists them (`projectScopeGroups`): the researcher's own, the
  * 虚拟临床研究 studies and the 循证 GEO projects, each an ordinary project underneath — the readers the sidebar and the knowledge base
- * use, so the pages cannot disagree about which project is which. The 项目 tab passes its facts, so a 「其他」 holds the ones that name
+ * use, so the pages cannot disagree about which project is which. The 项目 tab passes its facts, so a 「未归入项目」 holds the ones that name
  * a project the account no longer has; the map has no such facts and passes none.
  */
 export function useProjectChoices(facts: readonly FactItem[] = []): ProjectChoice[] {

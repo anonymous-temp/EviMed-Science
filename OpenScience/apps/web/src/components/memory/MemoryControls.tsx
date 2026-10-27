@@ -32,7 +32,7 @@ import { AsyncSwitch } from "@/components/ui/AsyncSwitch";
  * and the capsules others shared).
  */
 export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotten, onRemember, onImport, projectId: shown }: {
-  /** The project 「本项目不使用记忆」 acts on: the one the page shows. `undefined` is the shell's own project; `null` is a page showing none that can be paused (the 「其他」 of the 项目 tab), where the item is off. */
+  /** The project 「本项目不使用记忆」 acts on: the one the page shows. `undefined` is the shell's own project; `null` is a page showing none that can be paused (the 「未归入项目」 of the 项目 tab), where the item is off. */
   projectId?: string | null;
   onReset: () => void;
   /** A switch was changed: 项目 says 「本项目已暂停记忆」 from the same setting. */
@@ -93,9 +93,10 @@ export function MemoryControls({ onReset, onSettingsChanged, onShare, onForgotte
 
   return (
     <>
-      {/* `text`, not `secondary`: a filled 28 px button is a look of its own, and on the map and the overview — held to the data page's ten kinds of
-          control — one more look is the page over budget (measured: the map was at ten, and ten with this button as it was it was eleven). */}
-      {onRemember && <Button size="sm" variant="text" onClick={onRemember}>记住这一条</Button>}
+      {/* An action is a button, and the memory section's buttons are `secondary` (the grey ground): bare text beside the switch read as one more
+          label, not as something to press (owner, 2026-10-27). At the header's own height (36, as the 「⋯」 beside it), which is also the height of
+          the sidebar's current item: a filled 28 px button was a kind of control of its own, and a data page is held to ten. */}
+      {onRemember && <Button size="md" variant="secondary" onClick={onRemember}>记住这一条</Button>}
       {failed
         ? <span className="text-caption text-text-3">记忆开关暂时读取不到</span>
         : settings && (
