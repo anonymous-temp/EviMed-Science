@@ -61,9 +61,11 @@ import {
  * 「字体大小 间距啥的都再处理处理」 — the three AI blocks were 20, 16 and 18 px side by side on a wide screen): the title in the sans at 24 / 600,
  * balanced; the 导读 at 18 and the 要点 and 解读 at 16 at every width, all at 1.8 and in one 640 px measure (about 36 characters); the
  * interface at 14 and every block's label at 12, all 400 — a block is named by its colour, not a weight. The text itself is a view of
- * its own (owner, 2026-10-26: 「查看正文，在右上角地方啥的就行了，不要再弄到 AI 解读的下边去了」): 「查看正文」 at the head of the right
- * column swaps the AI blocks for the whole text, at 16 and 18 from 1280 px, with one 600 in it — the run-in heading of a structured
- * abstract's paragraph (「Background:」), as a journal sets it.
+ * its own (owner, 2026-10-26: 「查看正文，在右上角地方啥的就行了，不要再弄到 AI 解读的下边去了」): the second option of the toolbar's
+ * 「AI 导读 | 查看正文」 swaps the AI blocks for the whole text, at 16 and 18 from 1280 px, with one 600 in it — the run-in heading of a
+ * structured abstract's paragraph (「Background:」), as a journal sets it. On 2026-10-27 (owner, after the box of five controls in the
+ * column's corner and a 「就此提问」 list under it) the actions became one toolbar row under the title, the right column starts at 推荐理由,
+ * and the questions are the chips of 「继续追问」 at the article's end.
  *
  * Every block is drawn from what the server sent and only that: a field it could not fill is null and its block is not on the page.
  */
@@ -801,7 +803,8 @@ const hasVerdict = (item: FrontierItemDetail) => !item.sameEvent && Boolean(item
 function RailBlock({ label, children }: { label: string; children: ReactNode }) {
   const id = useId();
   return (
-    <section aria-labelledby={id} className="border-t border-border pt-3.5">
+    // The column's first block stands on the back row's line: no rule over it (the actions that used to head the column are the toolbar's).
+    <section aria-labelledby={id} className="border-t border-border pt-3.5 first:border-t-0 first:pt-0">
       <h2 id={id} className={LABEL}>{label}</h2>
       <div className="mt-2.5">{children}</div>
     </section>
@@ -861,11 +864,11 @@ export function ReaderNotes({ item, reports, outline }: { item: FrontierItemDeta
   );
 }
 
-/** The switch between the AI blocks and the text: what the button says, whether the text is open, and how to change it. */
+/** The switch between the AI blocks and the text: what the text's option says, whether the text is open, and how to change it. */
 export interface ReaderViewSwitch {
   /**
-   * 「查看正文」「查看摘要」「查看全文」: by what the text is (`readerTextKind`). The button names what it opens — 「AI 解读」 while the
-   * text is open — and carries no pressed state, which would say the opposite of its label (c4 review).
+   * 「查看正文」「查看摘要」「查看全文」: by what the text is (`readerTextKind`). It is the second option of the toolbar's switch beside
+   * 「AI 导读」, and the bottom bar's button names what it opens — 「AI 导读」 while the text is open.
    */
   label: string;
   text: boolean;
@@ -873,71 +876,73 @@ export interface ReaderViewSwitch {
 }
 
 /**
- * The right column's head (owner, 2026-10-26: 「查看正文，在右上角」): the two ways to the text side by side — 「查看正文」, which swaps
- * the AI blocks for the whole text (and reads 「AI 解读」 while it is open), and 「打开原文 ↗」, the publisher's page (a post's 「在 X 查看原帖
- * ↗」 alone, where the post is on the page already) — then 「深入研究」, the page's one primary button, with ☆ and ⋯ beside it. Its top is
- * the back row's.
+ * The reader's actions, at the right end of the page's one toolbar row (owner, 2026-10-27: the box in the column's top corner held five
+ * controls in two rows and a switch; the row is 「AI 导读 | 查看正文」 at the left and these at the right): 「打开原文 ↗」, the publisher's
+ * page (a post's 「在 X 查看原帖 ↗」, where the post is on the page already), ☆ and ⋯, then 「深入研究」, the page's one primary button.
+ * The row stands in the band above the text, so ☆ and ⋯ act on the article and not on a list in its text (the walk's
+ * control-after-content read the old rail's ☆ as the text's list control, 2026-10-24).
  */
-export function ReaderActions({ item, more, onStar, onResearch, view }: {
+export function ReaderActions({ item, more, onStar, onResearch }: {
   item: FrontierItem;
   more: MenuEntry[];
   onStar: () => void;
   onResearch: () => void;
-  view?: ReaderViewSwitch | null;
 }) {
   const starred = item.state.starred;
-  // A section of its own: ☆ and ⋯ act on the article, not on a list in its text that comes before them in the document (the walk's
-  // control-after-content read the rail's ☆ as the text's list control, 2026-10-24).
   return (
-    <section aria-label="文章操作" className="space-y-2">
-      <div className="flex items-center gap-2">
-        {view && (
-          <Button variant="secondary" className="min-w-0 flex-1" onClick={view.onToggle}>
-            {view.text ? <Sparkles size={16} aria-hidden="true" /> : <FileText size={16} aria-hidden="true" />}
-            <span className="truncate">{view.text ? "AI 解读" : view.label}</span>
-          </Button>
-        )}
-        <a href={item.url} {...EXTERNAL} className={buttonClasses({ variant: "secondary", className: "min-w-0 flex-1" })}>
-          <span className="truncate">{originalLinkLabel(item)}</span><ArrowUpRight size={16} aria-hidden="true" />
-        </a>
-      </div>
-      <div className="flex items-center gap-1">
-        <Button variant="primary" className="min-w-0 flex-1" onClick={onResearch}>
-          <MessageSquareText size={16} aria-hidden="true" /><span className="truncate">深入研究</span>
-        </Button>
-        <IconButton icon={Star} label="收藏" aria-pressed={starred} className={starred ? "text-accent [&_svg]:fill-current" : undefined} onClick={onStar} />
-        <Menu label="更多操作" items={more}><IconButton icon={MoreHorizontal} label="更多操作" /></Menu>
-      </div>
-    </section>
+    <div role="group" aria-label="文章操作" className="flex items-center gap-1">
+      <a href={item.url} {...EXTERNAL} className={buttonClasses({ variant: "secondary" })}>
+        <span className="truncate">{originalLinkLabel(item)}</span><ArrowUpRight size={16} aria-hidden="true" />
+      </a>
+      <IconButton icon={Star} label="收藏" aria-pressed={starred} className={starred ? "text-accent [&_svg]:fill-current" : undefined} onClick={onStar} />
+      <Menu label="更多操作" items={more}><IconButton icon={MoreHorizontal} label="更多操作" /></Menu>
+      <Button variant="primary" onClick={onResearch}>
+        <MessageSquareText size={16} aria-hidden="true" /><span className="truncate">深入研究</span>
+      </Button>
+    </div>
+  );
+}
+
+/** One question of 「继续追问」: a chip that holds one line, cut with 「…」 where the room is short, its whole text on hover. */
+function AskChip({ text, onAsk }: { text: string; onAsk: () => void }) {
+  return (
+    <Tooltip content={text} kind="label" whenTruncated>
+      <button type="button" onClick={onAsk} className={cn(filterChipClasses({ selected: true }), "min-w-0 max-w-full shrink")}>
+        <span className="truncate">{text}</span>
+      </button>
+    </Tooltip>
   );
 }
 
 /**
- * 「就此提问」 (c3-ask): the questions a reader of this item would put to the assistant, each a row that opens the conversation with the
- * question as a draft and the item as its origin, and 「自己提问…」, which opens it with the item alone. In the right column under the
- * actions on a wide screen, and at the end of the article on a narrow one. The questions are the server's; with none the block is the
- * reader's own question alone.
+ * 「继续追问」 (c3-ask; a block of the article since 2026-10-27, after it was a 「就此提问」 list of rows in the right column): the
+ * questions a reader of this item would put to the assistant, each a chip that opens the conversation with the question as a draft and
+ * the item as its origin, and 「自己提问…」, which opens it with the item alone. At the end of the article, after what the AI view says
+ * and its 事件后续, at every width. The questions are the server's; with none the block is the reader's own question alone.
  */
-export function ReaderAsk({ questions, onAsk, layout, className }: {
+export function ReaderAsk({ questions, onAsk, className }: {
   questions: readonly string[];
   /** A question of the item's, or null for the reader's own. */
   onAsk: (question: string | null) => void;
-  layout: "rail" | "article";
   className?: string;
 }) {
-  return layout === "rail"
-    ? <RailBlock label="就此提问"><AskRows questions={questions} onAsk={onAsk} flush /></RailBlock>
-    : <Block ruled label="就此提问" className={className}><AskRows questions={questions} onAsk={onAsk} /></Block>;
+  return (
+    <Block ruled label="继续追问" className={className}>
+      <ul aria-label="可以问的问题" className="flex flex-wrap gap-2">
+        {questions.map((question) => <li key={question} className="flex min-w-0 max-w-full"><AskChip text={question} onAsk={() => onAsk(question)} /></li>)}
+        <li className="flex"><AskChip text="自己提问…" onAsk={() => onAsk(null)} /></li>
+      </ul>
+    </Block>
+  );
 }
 
 /**
  * The rows of 就此提问 without a heading, for a page that sets its own (the event page's 「概要」 and 「一手材料」 are section headings):
- * each question opens the conversation with it as the draft, and 「自己提问…」 with the item alone. `flush` lets the rows' own padding
- * hang outside the column so their text lines up with the heading above (the right column's).
+ * each question opens the conversation with it as the draft, and 「自己提问…」 with the item alone.
  */
-export function AskRows({ questions, onAsk, flush = false }: { questions: readonly string[]; onAsk: (question: string | null) => void; flush?: boolean }) {
+export function AskRows({ questions, onAsk }: { questions: readonly string[]; onAsk: (question: string | null) => void }) {
   return (
-    <List divided label="可以问的问题" className={flush ? "-mx-2" : undefined}>
+    <List divided label="可以问的问题">
       {questions.map((question) => <ListRow key={question} title={question} onOpen={() => onAsk(question)} />)}
       <ListRow title={<span className="text-text-2">自己提问…</span>} onOpen={() => onAsk(null)} />
     </List>
@@ -970,7 +975,7 @@ const BAR_TOOL = "flex flex-col items-center justify-center gap-0.5 rounded text
 
 /**
  * Below 1024 px the article's own bar at the window's bottom (AIHOT `ReaderTools`, MIT): 收藏, the switch to the text (「正文」, then
- * 「AI 解读」) where there is one, 深入研究, the way to the original and ⋯. It steps aside while the reader scrolls down through the text
+ * 「AI 导读」) where there is one, 深入研究, the way to the original and ⋯. It steps aside while the reader scrolls down through the text
  * and comes back on the way up and at either end.
  */
 export function ReaderBar({ item, more, onStar, onResearch, view }: {
@@ -998,7 +1003,7 @@ export function ReaderBar({ item, more, onStar, onResearch, view }: {
         </button>
         {view && (
           <button type="button" onClick={view.onToggle} className={BAR_TOOL}>
-            {view.text ? <Sparkles size={20} aria-hidden="true" /> : <FileText size={20} aria-hidden="true" />}{view.text ? "AI 解读" : view.label.replace(/^查看/, "")}
+            {view.text ? <Sparkles size={20} aria-hidden="true" /> : <FileText size={20} aria-hidden="true" />}{view.text ? "AI 导读" : view.label.replace(/^查看/, "")}
           </button>
         )}
         <button type="button" onClick={onResearch} className={BAR_TOOL}>

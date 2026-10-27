@@ -33,6 +33,11 @@ function wide() {
     addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false,
   }) as unknown as MediaQueryList);
 }
+/** The page's one toolbar row from 1024 px (owner, 2026-10-27): the switch 「AI 导读 | 查看正文」 at its left, the actions at its right. */
+const toolbarOf = () => screen.getByRole("group", { name: "阅读视图与操作" });
+/** One option of the toolbar's switch. */
+const optionOf = (name: string | RegExp) => within(toolbarOf()).getByRole("tab", { name });
+const isOn = (option: HTMLElement) => option.getAttribute("aria-selected") === "true";
 function show(path = "/app/frontier/items/item-1") {
   return render(
     <MemoryRouter initialEntries={[path]}>
@@ -45,7 +50,7 @@ function show(path = "/app/frontier/items/item-1") {
 }
 
 describe("a journal article", () => {
-  it("opens on the AI view: its guide and original title, the way to the original in the right column, and no text, no 来源 line", async () => {
+  it("opens on the AI view: its guide and original title, the way to the original in the toolbar, and no text, no 来源 line", async () => {
     wide();
     show();
     expect(await screen.findByRole("heading", { name: "口服 PCSK9 抑制剂降低主要心血管事件", level: 1 })).toBeInTheDocument();
@@ -57,18 +62,30 @@ describe("a journal article", () => {
     expect(screen.queryByText(/^来源：/)).not.toBeInTheDocument();
     expect(client.fetchFrontierAbstractZh).not.toHaveBeenCalled();
     expect(client.markFrontierItemRead).toHaveBeenCalled();
-    // The way to the original is the column's, beside 查看摘要, and not the article's.
-    const rail = screen.getByRole("complementary", { name: "文章操作与推荐" });
-    const original = within(rail).getByRole("link", { name: "打开原文" });
+    // The way to the original is the toolbar's, at the right of the switch, and not the article's or the column's.
+    const toolbar = toolbarOf();
+    const original = within(toolbar).getByRole("link", { name: "打开原文" });
     expect(original).toHaveAttribute("href", "https://www.nejm.org/doi/full/10.1056/example");
     expect(original).toHaveAttribute("target", "_blank");
     expect(within(screen.getByRole("article", { name: "正文" })).queryByRole("link", { name: "打开原文" })).not.toBeInTheDocument();
-    expect(within(rail).getByRole("button", { name: "查看摘要" })).not.toHaveAttribute("aria-pressed");
-    // The header is the title alone (owner: 「查看原文又跑到右上角去了」): the actions are the right column's, or the bar's.
-    expectComposed(document.body, { tablists: 0, stepRail: false, toolbar: false });
+    const rail = screen.getByRole("complementary", { name: "文章操作与推荐" });
+    expect(within(rail).queryByRole("link", { name: "打开原文" })).not.toBeInTheDocument();
+    // The switch: AI 导读 is the one open, the text is the other option, named for what it is.
+    expect(isOn(optionOf("AI 导读"))).toBe(true);
+    expect(isOn(optionOf("查看摘要"))).toBe(false);
+    // The header is the title alone (owner: 「查看原文又跑到右上角去了」): the actions are the toolbar's, or the bar's. The original title
+    // stays under the title, and the toolbar comes after it.
+    expectComposed(document.body, { tablists: 1, stepRail: false, toolbar: true });
     const header = document.querySelector("[data-page-header]") as HTMLElement;
     expect(within(header).queryAllByRole("button")).toEqual([]);
     expect(within(header).queryAllByRole("link")).toEqual([]);
+    const originalTitle = screen.getByText("Oral PCSK9 Inhibition and Cardiovascular Outcomes");
+    expect(header.compareDocumentPosition(originalTitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(originalTitle.compareDocumentPosition(toolbar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(toolbar.compareDocumentPosition(screen.getByRole("article", { name: "正文" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The column starts at 推荐理由: no box of actions, no 就此提问.
+    expect(within(rail).getAllByRole("region")[0]).toHaveAccessibleName("推荐理由");
+    expect(within(rail).queryByRole("region", { name: "就此提问" })).not.toBeInTheDocument();
   });
 
   it("opens its stored abstract, in Chinese and under its own name, on the text view, with the original title still over it", async () => {
@@ -117,7 +134,7 @@ describe("a journal article", () => {
     show();
     await screen.findByRole("heading", { name: "AI 导读" });
     expect(screen.queryByRole("heading", { name: /^摘要/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^查看(摘要|正文|全文)$/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /^查看(摘要|正文|全文)$/ })).not.toBeInTheDocument();
     expect(client.fetchFrontierAbstractZh).not.toHaveBeenCalled();
   });
 
@@ -129,7 +146,7 @@ describe("a journal article", () => {
     show("/app/frontier/items/item-1?view=text");
     await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent(/^\/app\/frontier\/items\/item-1$/));
     expect(await screen.findByRole("heading", { name: "AI 导读" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^查看摘要$|^AI 解读$/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /^查看摘要$|^AI 导读$/ })).not.toBeInTheDocument();
   });
 
   it("keeps what the card left out of a paper in the column's 出处: its facts and the free full text, and what the paper is in the byline", async () => {
@@ -169,7 +186,7 @@ describe("an X post with every block", () => {
     expect(byline).toHaveTextContent(/Arena\.ai·@arena·X·.+·2 天前/);
     expect(byline.compareDocumentPosition(screen.getByRole("heading", { level: 1 })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const notes = screen.getByRole("complementary", { name: "文章操作与推荐" });
-    expect(within(notes).getByRole("link", { name: "在 X 查看原帖" })).toHaveAttribute("href", "https://x.com/arena/status/1");
+    expect(within(toolbarOf()).getByRole("link", { name: "在 X 查看原帖" })).toHaveAttribute("href", "https://x.com/arena/status/1");
     expect(within(article).queryByRole("link", { name: "在 X 查看原帖" })).not.toBeInTheDocument();
     expect(screen.getByText(/基于超 7\.5K 真实会话净提升/)).toBeInTheDocument();
     expect(screen.getByText(/它以综合第 11 名的成绩上榜/)).toBeInTheDocument();
@@ -185,7 +202,7 @@ describe("an X post with every block", () => {
     expect(within(quote).getByRole("link", { name: "在 X 查看被引用的帖子" })).toHaveAttribute("href", "https://x.com/arena/status/0");
     // A post is the item: its text is on the page beside the 导读, whole, with no switch to a text view and no 来源 line under it.
     expect(article).not.toHaveTextContent("来源：");
-    expect(within(notes).queryByRole("button", { name: /^(查看(正文|摘要|全文)|AI 解读)$/ })).not.toBeInTheDocument();
+    expect(within(toolbarOf()).queryByRole("tab")).not.toBeInTheDocument();
     expect(article).toHaveAttribute("data-reader-view", "written");
     // 事件后续 · 2, each row its own article, with the way to the whole event.
     const followups = screen.getByRole("region", { name: "事件后续 · 2" });
@@ -209,29 +226,33 @@ describe("an X post with every block", () => {
     expect(tags.map((tag) => [tag.textContent, tag.getAttribute("href")])).toEqual([
       ["#评测/基准", "/app/frontier?view=all&tag=benchmarks"], ["#Agent", "/app/frontier?view=all&tag=agent"], ["#DeepSeek", "/app/frontier?view=all&tag=deepseek"],
     ]);
-    expectComposed(document.body, { tablists: 0, stepRail: false });
+    // A post has no switch: one row of actions, in the band, with no row of views.
+    expectComposed(document.body, { tablists: 0, stepRail: false, toolbar: true });
   });
 
-  it("puts the actions at the head of the right column, its top on the back row: 「在 X 查看原帖 ↗」, then 深入研究 with ☆ and ⋯", async () => {
+  it("puts the actions in one toolbar row under the title, the right column from 推荐理由: 「在 X 查看原帖 ↗」, ☆, ⋯, then 深入研究 as the one primary", async () => {
     wide();
     show("/app/frontier/items/x-post-0001");
     const rail = await screen.findByRole("complementary", { name: "文章操作与推荐" });
-    const controls = within(rail).getAllByRole("link").concat(within(rail).getAllByRole("button"));
-    expect(within(rail).getAllByRole("link")[0]).toHaveAccessibleName("在 X 查看原帖");
-    expect(within(rail).getAllByRole("link")[0]).toHaveAttribute("href", "https://x.com/arena/status/1");
-    // 深入研究 is the page's one primary button and leads its row; ☆ and ⋯ follow it. A post has no 查看正文: its text is on the page.
-    expect(within(rail).getAllByRole("button").slice(0, 3).map((button) => button.getAttribute("aria-label") ?? button.textContent)).toEqual(["深入研究", "收藏", "更多操作"]);
-    expect(within(rail).queryByRole("button", { name: /^查看/ })).not.toBeInTheDocument();
-    expect(controls.length).toBeGreaterThan(3);
-    // The rail is the column beside the page, from the back row down; the blocks follow in their order.
+    const toolbar = toolbarOf();
+    const actions = within(toolbar).getByRole("group", { name: "文章操作" });
+    // In the row's own order: the original, ☆, ⋯, and the primary last. A post has no 查看正文: its text is on the page.
+    const controls = within(actions).getAllByRole("link").concat(within(actions).getAllByRole("button"));
+    expect(within(actions).getAllByRole("link")[0]).toHaveAccessibleName("在 X 查看原帖");
+    expect(within(actions).getAllByRole("link")[0]).toHaveAttribute("href", "https://x.com/arena/status/1");
+    expect(within(actions).getAllByRole("button").map((button) => button.getAttribute("aria-label") ?? button.textContent)).toEqual(["收藏", "更多操作", "深入研究"]);
+    expect(within(actions).getByRole("button", { name: "深入研究" })).toHaveClass("bg-accent");
+    expect(controls).toHaveLength(4);
+    expect(within(toolbar).queryByRole("tab")).not.toBeInTheDocument();
+    // The right column is the column beside the page, from the back row down, and starts at 推荐理由; the actions are not in it.
     const blocks = within(rail).getAllByRole("region").map((region) => region.getAttribute("aria-label")
       ?? (region.getAttribute("aria-labelledby") && document.getElementById(region.getAttribute("aria-labelledby")!)!.textContent));
-    // The actions are a section of their own, so ☆ and ⋯ belong to the article and not to a list in its text.
-    expect(blocks).toEqual(["文章操作", "就此提问", "推荐理由", "出处", "标签"]);
+    expect(blocks).toEqual(["推荐理由", "出处", "标签"]);
+    expect(within(rail).queryByRole("button", { name: "深入研究" })).not.toBeInTheDocument();
     expect(rail.parentElement!.firstElementChild).toContainElement(screen.getByRole("navigation", { name: "返回" }));
-    // No bar at the window's bottom where the column is there.
+    // No bar at the window's bottom where the toolbar is there.
     expect(screen.queryByRole("navigation", { name: "阅读工具" })).not.toBeInTheDocument();
-    await userEvent.click(within(rail).getByRole("button", { name: "深入研究" }));
+    await userEvent.click(within(actions).getByRole("button", { name: "深入研究" }));
     expect(screen.getByTestId("where")).toHaveTextContent("/app/chat");
   });
 
@@ -561,8 +582,7 @@ describe("a Chinese news article", () => {
     // The text is the other view's.
     expect(screen.queryByRole("heading", { name: "正文" })).not.toBeInTheDocument();
     expect(screen.getByText("王编辑").closest("div")).toHaveTextContent(/医脉通·王编辑·/);
-    const rail = screen.getByRole("complementary", { name: "文章操作与推荐" });
-    expect(within(rail).getByRole("link", { name: "打开原文" })).toHaveAttribute("href", "https://news.medlive.cn/article/1");
+    expect(within(toolbarOf()).getByRole("link", { name: "打开原文" })).toHaveAttribute("href", "https://news.medlive.cn/article/1");
     // A score without a reason is 「AI 评分」 alone; 精选 only where the item is selected.
     const verdict = screen.getByRole("region", { name: "AI 评分" });
     expect(verdict).toHaveTextContent("AI 评分 58");
@@ -576,7 +596,7 @@ describe("a Chinese news article", () => {
     expect(screen.getByRole("region", { name: "AI 导读" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "AI 解读" })).not.toBeInTheDocument();
     // 查看正文 opens the text, in Chinese and with no 中文 / 原文 switch (there is no original).
-    await userEvent.click(within(rail).getByRole("button", { name: "查看正文" }));
+    await userEvent.click(optionOf("查看正文"));
     expect(await screen.findByRole("heading", { name: "正文" })).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "正文语言" })).not.toBeInTheDocument();
     expect(screen.getByText(/^国家药品监督管理局近日批准口服司美格鲁肽片上市。/)).toBeInTheDocument();
@@ -598,7 +618,7 @@ describe("an item whose blocks the server could not fill", () => {
     expect(screen.getByRole("region", { name: "出处" })).toHaveTextContent("Arena.ai");
     expect(within(screen.getByRole("navigation", { name: "阅读工具" })).getByRole("link", { name: "打开原文" })).toBeInTheDocument();
     // Nothing written and nothing to read: one view, so no switch.
-    expect(screen.queryByRole("button", { name: /^(正文|摘要|全文|AI 解读)$/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^(正文|摘要|全文|AI 导读)$/ })).not.toBeInTheDocument();
   });
 
   it("says nothing of why a Chinese headline and guide are missing: the source headline and one plain way to the source (G5, 2026-10-25)", async () => {
@@ -748,9 +768,9 @@ describe("the text's addresses, lists and contents (2026-10-23)", () => {
     const rail = await screen.findByRole("complementary", { name: "文章操作与推荐" });
     expect(within(rail).queryByRole("navigation", { name: "本文目录" })).not.toBeInTheDocument();
     expect(document.querySelector("[data-outline]")).toBeNull();
-    await userEvent.click(within(rail).getByRole("button", { name: "查看全文" }));
+    await userEvent.click(optionOf("查看全文"));
     expect(within(await screen.findByRole("complementary", { name: "文章操作与推荐" })).getByRole("navigation", { name: "本文目录" })).toBeInTheDocument();
-    await userEvent.click(within(screen.getByRole("complementary", { name: "文章操作与推荐" })).getByRole("button", { name: "AI 解读" }));
+    await userEvent.click(optionOf("AI 导读"));
     expect(await screen.findByRole("region", { name: "AI 导读" })).toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "本文目录" })).not.toBeInTheDocument();
   });
@@ -774,8 +794,9 @@ describe("the text's addresses, lists and contents (2026-10-23)", () => {
   });
 });
 
-// The reading page's two views (2026-10-26): the AI view — 导读, 要点, 解读, 事件后续 — and, behind 「查看正文」 at the head of the right
-// column (the bar's fifth tool on a narrow screen), the text whole. The view is in the address (`?view=text`) and replaces the entry.
+// The reading page's two views (2026-10-26): the AI view — 导读, 要点, 解读, 事件后续 — and, behind 「查看正文」, the second option of the
+// toolbar's switch (2026-10-27; the bar's fifth tool on a narrow screen), the text whole. The view is in the address (`?view=text`) and
+// replaces the entry.
 /** An item with every block the AI view has — 导读, 要点, 解读, 事件后续 — and a text of two paragraphs, which is not a post. */
 const whole = () => detail(rawPolicy({ id: "whole-1", insight: rawOpenAccessPaper().insight, followups: rawXPost().followups }));
 const railOf = () => screen.getByRole("complementary", { name: "文章操作与推荐" });
@@ -784,7 +805,7 @@ const toolsOf = (bar: HTMLElement) => [...bar.querySelectorAll("button, a")].map
 describe("the AI view and the text view", () => {
   beforeEach(() => { wide(); client.fetchFrontierItem.mockResolvedValue(whole()); });
 
-  it("opens on the AI view; 查看正文 swaps it for the text, the button then reads 「AI 解读」, the address gains view=text, and a second press returns", async () => {
+  it("opens on the AI view; 查看正文 swaps it for the text, the switch's other option is 「AI 导读」, the address gains view=text, and a second press returns", async () => {
     show("/app/frontier/items/whole-1");
     const article = await screen.findByRole("article", { name: "正文" });
     // The AI view: 导读, 要点, 解读 and 事件后续, and nothing of the text.
@@ -792,8 +813,9 @@ describe("the AI view and the text view", () => {
     for (const name of ["AI 导读", "AI 要点", "AI 解读", "事件后续 · 2"]) expect(screen.getByRole("region", { name }), name).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "正文" })).not.toBeInTheDocument();
     expect(screen.queryByText("为支持医疗技术创新，……")).not.toBeInTheDocument();
-    const toggle = within(railOf()).getByRole("button", { name: "查看正文" });
-    expect(toggle).not.toHaveAttribute("aria-pressed");
+    const toggle = optionOf("查看正文");
+    expect(isOn(toggle)).toBe(false);
+    expect(isOn(optionOf("AI 导读"))).toBe(true);
     expect(screen.getByTestId("where")).not.toHaveTextContent("view=");
 
     await userEvent.click(toggle);
@@ -803,16 +825,17 @@ describe("the AI view and the text view", () => {
     expect(screen.getByText("只需 1 家三级医院牵头直接向省级医保部门申报。")).toBeInTheDocument();
     expect(article).toHaveAttribute("data-reader-view", "text");
     for (const name of ["AI 导读", "AI 要点", "AI 解读", "事件后续 · 2"]) expect(screen.queryByRole("region", { name }), name).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "查看正文" })).not.toBeInTheDocument();
-    const back = within(railOf()).getByRole("button", { name: "AI 解读" });
-    expect(back).not.toHaveAttribute("aria-pressed");
+    // The switch stays whole in the band: the text is the open option now, and AI 导读 the way back.
+    expect(isOn(optionOf("查看正文"))).toBe(true);
+    const back = optionOf("AI 导读");
+    expect(isOn(back)).toBe(false);
     expect(screen.getByTestId("where")).toHaveTextContent("/app/frontier/items/whole-1?view=text");
 
     await userEvent.click(back);
     expect(await screen.findByRole("region", { name: "AI 导读" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "事件后续 · 2" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "正文" })).not.toBeInTheDocument();
-    expect(within(railOf()).getByRole("button", { name: "查看正文" })).not.toHaveAttribute("aria-pressed");
+    expect(isOn(optionOf("查看正文"))).toBe(false);
     expect(screen.getByTestId("where")).toHaveTextContent(/^\/app\/frontier\/items\/whole-1$/);
   });
 
@@ -821,9 +844,11 @@ describe("the AI view and the text view", () => {
     expect(await screen.findByRole("heading", { name: "正文" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "AI 导读" })).not.toBeInTheDocument();
     const rail = railOf();
-    expect(within(rail).getByRole("button", { name: "AI 解读" })).not.toHaveAttribute("aria-pressed");
+    expect(isOn(optionOf("查看正文"))).toBe(true);
     expect(within(rail).getByRole("region", { name: "出处" })).toBeInTheDocument();
-    expect(within(rail).getByRole("region", { name: "就此提问" })).toBeInTheDocument();
+    // 继续追问 is the article's end, in the text view too; it is not in the column.
+    expect(within(screen.getByRole("article", { name: "正文" })).getByRole("region", { name: "继续追问" })).toBeInTheDocument();
+    expect(within(rail).queryByRole("region", { name: /提问|追问/ })).not.toBeInTheDocument();
   });
 
   it("replaces the history entry and keeps the location state, so 「‹ 前沿动态」 returns to the list in one press however often the view was switched", async () => {
@@ -838,13 +863,13 @@ describe("the AI view and the text view", () => {
       <Route path="/app/frontier" element={<Feed />} />
       <Route path="/app/frontier/items/:itemId" element={<><FrontierArticlePage /><Held /><Where /></>} />
     </Routes></MemoryRouter>);
-    await userEvent.click(await screen.findByRole("button", { name: "查看正文" }));
+    await userEvent.click(await screen.findByRole("tab", { name: "查看正文" }));
     expect(await screen.findByRole("heading", { name: "正文" })).toBeInTheDocument();
     expect(screen.getByTestId("where")).toHaveTextContent("?view=text");
     expect(JSON.parse(screen.getByTestId("held").textContent!)).toEqual({ evidenceFrom });
-    await userEvent.click(screen.getByRole("button", { name: "AI 解读" }));
+    await userEvent.click(screen.getByRole("tab", { name: "AI 导读" }));
     expect(await screen.findByRole("region", { name: "AI 导读" })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "查看正文" }));
+    await userEvent.click(screen.getByRole("tab", { name: "查看正文" }));
     expect(await screen.findByRole("heading", { name: "正文" })).toBeInTheDocument();
     expect(JSON.parse(screen.getByTestId("held").textContent!)).toEqual({ evidenceFrom });
     // Three switches later the way back is still one press, to the list entry as it was.
@@ -858,7 +883,7 @@ describe("the AI view and the text view", () => {
     expect(await screen.findByRole("region", { name: "AI 导读" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "正文 · AI 翻译" })).toBeInTheDocument();
     expect(screen.getByRole("article", { name: "正文" })).toHaveAttribute("data-reader-view", "written");
-    expect(within(railOf()).queryByRole("button", { name: /^(查看(正文|摘要|全文)|AI 解读)$/ })).not.toBeInTheDocument();
+    expect(within(toolbarOf()).queryByRole("tab")).not.toBeInTheDocument();
     // 事件后续 stays under it: the page is the AI view and the text at once.
     expect(screen.getByRole("region", { name: "事件后续 · 2" })).toBeInTheDocument();
   });
@@ -869,10 +894,10 @@ describe("the AI view and the text view", () => {
     expect(await screen.findByRole("heading", { name: "正文" })).toBeInTheDocument();
     expect(screen.getByText(/^国家药品监督管理局近日批准口服司美格鲁肽片上市。/)).toBeInTheDocument();
     for (const name of [/^AI (导读|要点|解读)$/, /事件后续/]) expect(screen.queryByRole("heading", { name }), String(name)).not.toBeInTheDocument();
-    expect(within(railOf()).queryByRole("button", { name: /^(查看(正文|摘要|全文)|AI 解读)$/ })).not.toBeInTheDocument();
-    // The way to the original and 深入研究 are the column's all the same.
-    expect(within(railOf()).getByRole("link", { name: "打开原文" })).toBeInTheDocument();
-    expect(within(railOf()).getByRole("button", { name: "深入研究" })).toBeInTheDocument();
+    expect(within(toolbarOf()).queryByRole("tab")).not.toBeInTheDocument();
+    // The way to the original and 深入研究 are the toolbar's all the same.
+    expect(within(toolbarOf()).getByRole("link", { name: "打开原文" })).toBeInTheDocument();
+    expect(within(toolbarOf()).getByRole("button", { name: "深入研究" })).toBeInTheDocument();
   });
 
   it("has no switch for an item with neither a text nor an abstract: its 导读 alone, and no text view to open", async () => {
@@ -880,9 +905,9 @@ describe("the AI view and the text view", () => {
     show("/app/frontier/items/bare-2?view=text");
     expect(await screen.findByRole("region", { name: "AI 导读" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /^(正文|摘要|全文)/ })).not.toBeInTheDocument();
-    expect(within(railOf()).queryByRole("button", { name: /^(查看(正文|摘要|全文)|AI 解读)$/ })).not.toBeInTheDocument();
+    expect(within(toolbarOf()).queryByRole("tab")).not.toBeInTheDocument();
     expect(client.fetchFrontierAbstractZh).not.toHaveBeenCalled();
-    expect(within(railOf()).getAllByRole("button").slice(0, 3).map((button) => button.getAttribute("aria-label") ?? button.textContent)).toEqual(["深入研究", "收藏", "更多操作"]);
+    expect(within(toolbarOf()).getAllByRole("button").map((button) => button.getAttribute("aria-label") ?? button.textContent)).toEqual(["收藏", "更多操作", "深入研究"]);
   });
 
   it("shows a long text whole on its view, however many paragraphs: no fold, no 展开全文", async () => {
@@ -890,7 +915,7 @@ describe("the AI view and the text view", () => {
     client.fetchFrontierItem.mockResolvedValue(detail(rawChineseNews({ id: "long-1", body: { zh: Array.from({ length: 8 }, (_, index) => `第 ${index + 1} 段。${paragraph}`).join("\n\n"),
       original: null, zhKind: "original-zh", complete: true, source: "body" } })));
     show("/app/frontier/items/long-1");
-    await userEvent.click(await within(await screen.findByRole("complementary", { name: "文章操作与推荐" })).findByRole("button", { name: "查看正文" }));
+    await userEvent.click(await screen.findByRole("tab", { name: "查看正文" }));
     const text = await screen.findByRole("region", { name: "正文" });
     expect(within(text).getByText(/^第 1 段/)).toBeInTheDocument();
     expect(within(text).getByText(/^第 8 段/)).toBeInTheDocument();
@@ -909,19 +934,19 @@ describe("the AI view and the text view", () => {
   ])("names the button for the text it opens (readerTextKind): $name reads 查看$kind", async ({ make, kind }) => {
     client.fetchFrontierItem.mockResolvedValue(make());
     show();
-    const toggle = await within(await screen.findByRole("complementary", { name: "文章操作与推荐" })).findByRole("button", { name: `查看${kind}` });
+    const toggle = await screen.findByRole("tab", { name: `查看${kind}` });
     await userEvent.click(toggle);
-    // The text it opens carries the same name as its block's.
+    // The text it opens carries the same name as its block's, and the switch says which of its two options is open.
     expect(await screen.findByRole("heading", { name: new RegExp(`^${kind}`) })).toBeInTheDocument();
-    expect(within(railOf()).getByRole("button", { name: "AI 解读" })).not.toHaveAttribute("aria-pressed");
-    expect(within(railOf()).queryByRole("button", { name: `查看${kind}` })).not.toBeInTheDocument();
+    expect(isOn(optionOf(`查看${kind}`))).toBe(true);
+    expect(isOn(optionOf("AI 导读"))).toBe(false);
   });
 
   it("asks for a paper's Chinese abstract only when its view is opened", async () => {
     client.fetchFrontierItem.mockResolvedValue({ ...frontierItemDetail({ id: "item-1" }), abstract: "Original abstract", abstractZh: null });
     client.fetchFrontierAbstractZh.mockResolvedValue({ abstractZh: "新生成的中文摘要", abstract: "Original abstract", note: null });
     show();
-    await userEvent.click(await within(await screen.findByRole("complementary", { name: "文章操作与推荐" })).findByRole("button", { name: "查看摘要" }));
+    await userEvent.click(await screen.findByRole("tab", { name: "查看摘要" }));
     expect(await screen.findByText("新生成的中文摘要")).toBeInTheDocument();
     expect(client.fetchFrontierAbstractZh).toHaveBeenCalledTimes(1);
     expect(client.fetchFrontierAbstractZh).toHaveBeenCalledWith("item-1");
@@ -984,7 +1009,7 @@ describe("出处 in the right column", () => {
 });
 
 describe("the narrow bar's fifth tool", () => {
-  it("is 「摘要」 / 「正文」 / 「全文」 beside 收藏, 深入研究, the original and ⋯, reads 「AI 解读」 while the text is open, and switches the view", async () => {
+  it("is 「摘要」 / 「正文」 / 「全文」 beside 收藏, 深入研究, the original and ⋯, reads 「AI 导读」 while the text is open, and switches the view", async () => {
     client.fetchFrontierItem.mockResolvedValue(whole());
     show("/app/frontier/items/whole-1");
     const bar = await screen.findByRole("navigation", { name: "阅读工具" });
@@ -997,11 +1022,11 @@ describe("the narrow bar's fifth tool", () => {
     await userEvent.click(tool);
     expect(await screen.findByRole("heading", { name: "正文" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "AI 导读" })).not.toBeInTheDocument();
-    expect(toolsOf(bar)).toEqual(["收藏", "AI 解读", "深入研究", "打开原文", "更多"]);
-    expect(within(bar).getByRole("button", { name: "AI 解读" })).not.toHaveAttribute("aria-pressed");
+    expect(toolsOf(bar)).toEqual(["收藏", "AI 导读", "深入研究", "打开原文", "更多"]);
+    expect(within(bar).getByRole("button", { name: "AI 导读" })).not.toHaveAttribute("aria-pressed");
     expect(screen.getByTestId("where")).toHaveTextContent("/app/frontier/items/whole-1?view=text");
 
-    await userEvent.click(within(bar).getByRole("button", { name: "AI 解读" }));
+    await userEvent.click(within(bar).getByRole("button", { name: "AI 导读" }));
     expect(await screen.findByRole("region", { name: "AI 导读" })).toBeInTheDocument();
     expect(toolsOf(bar)[1]).toBe("正文");
     expect(screen.getByTestId("where")).toHaveTextContent(/^\/app\/frontier\/items\/whole-1$/);

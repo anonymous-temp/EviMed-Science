@@ -71,6 +71,8 @@ import { Toolbar, type ToolbarProps } from "@/components/ui/Toolbar";
  *    the page has a toolbar, and no row is reserved;
  *  - `headline` (`HeadlineProps`) — the one sentence over a data page's body;
  *  - `eyebrow` — a reading page's line over its title (who published the article, when);
+ *  - `underTitle` — a reading page's line directly under its title (the article's original title, 2026-10-27), before the band: what
+ *    belongs to the title stays with it, and the band's controls come after;
  *  - `aside` — a reading page's right column (the frontier reader's actions, 推荐理由, 专科, 标签 and contents, 2026-10-23): from
  *    `lg` a sticky column of 15.5 rem beside everything from the way back down, its top on the back row; below `lg` it follows the
  *    body. The title, the eyebrow and the text share the left column's edge.
@@ -176,6 +178,8 @@ export interface PageShellProps<V extends string = string> {
   headline?: HeadlineProps;
   /** A reading page's line over its title. */
   eyebrow?: ReactNode;
+  /** A reading page's line directly under its title (the original-language title), before the band. */
+  underTitle?: ReactNode;
   /** A reading page's right column, sticky beside the page from `lg`. */
   aside?: ReactNode;
   /** The right column's accessible name. */
@@ -204,6 +208,7 @@ export function PageShell<V extends string = string>({
   toolbar,
   headline,
   eyebrow,
+  underTitle,
   aside,
   asideLabel,
   children,
@@ -263,6 +268,7 @@ export function PageShell<V extends string = string>({
         titleVariant={titleVariant}
         documentTitle={documentTitle}
       />
+      {underTitle && <div className="mt-1">{underTitle}</div>}
       {introduction && <div data-page-introduction="" className="mt-6">{introduction}</div>}
       {hasBand && (
         <div

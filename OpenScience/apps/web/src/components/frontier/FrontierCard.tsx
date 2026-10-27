@@ -91,7 +91,7 @@ export function useItemActions(item: FrontierItem, { reader = false, onHide, onS
     try { await addFrontierFollow({ kind, key, label, muted }); toast.success(muted ? "已屏蔽" : "已关注"); }
     catch (error) { toast.error(frontierErrorMessage(error)); }
   };
-  // One way into the assistant: 深入研究 is the question that fits the item, 就此提问 one of its own questions or the reader's (`openItemConversation`).
+  // One way into the assistant: 深入研究 is the question that fits the item, 继续追问 one of its own questions or the reader's (`openItemConversation`).
   const research = () => { trackFrontierItemAction("research", item.id); openItemConversation(navigate, item, researchQuestion(item)); };
   const ask = (question: string | null) => { trackFrontierItemAction("ask", item.id, { detail: question ? "suggested" : "own" }); openItemConversation(navigate, item, question); };
   const openEvent = () => { rememberFrontierPosition(); navigate(eventPath(item.event!.id), { state: origin }); };
