@@ -22,6 +22,7 @@ import {
   SCORE_LABEL,
   SCORE_NOTE,
   cardEyebrow,
+  dayOnlyClock,
   isSocialItem,
   itemClock,
   itemMarkdown,
@@ -137,7 +138,7 @@ const ABOVE = "relative z-sticky";
  *  - at the meta row's right, after the score, ☆ and ⋯ (深入研究 first);
  *  - a footer only when there is something for it: up to three of its tags, each narrowing the feed to it, and 「另有 N 家报道 ›」.
  *
- * In a day group the clock is a column of its own beside the card, with the 精选 dot.
+ * In a day group the clock is a column of its own beside the card, with the 精选 dot; an item with no hour says 「当天」 there.
  *
  * 不感兴趣 hides the card at once and, while the page says so (`hideStrip`), one line stands in its place (`FrontierHideStrip`).
  */
@@ -159,6 +160,7 @@ export function FrontierCard({ item, grouped = false, markSelected = false, onSt
     ? [[item.author.name, item.author.handle ? `@${item.author.handle}` : null].filter(Boolean).join(" "), platform].filter(Boolean).join(" · ")
     : item.source.name;
   const when = grouped ? "" : metaTime(item);
+  const dayOnly = dayOnlyClock(item);
   const [thumbFailed, setThumbFailed] = useState(false);
 
   // Hidden a moment ago: one line where the card was, to say why or take it back (owner, 2026-10-25).
@@ -169,8 +171,11 @@ export function FrontierCard({ item, grouped = false, markSelected = false, onSt
       {/* On a phone the clock joins the source line (as AIHOT's phone list has it): the column's 56 px go to the source's name. */}
       {grouped && (
         <div className="mt-3 hidden h-6 w-14 shrink-0 items-center justify-between pr-2 sm:flex">
-          {/* A day with no hour (the source gave only the date) has no clock; the column and the dot stay. */}
-          {itemClock(item) && <time dateTime={item.timelineAt} className="text-caption tabular-nums text-text-3">{itemClock(item)}</time>}
+          {/* A day with no hour (the source gave only the date) says 「当天」 where the clock would be (owner, 2026-10-27: an empty
+            * column with a dot read as a fault); the hover says why. */}
+          {itemClock(item)
+            ? <time dateTime={item.timelineAt} className="text-caption tabular-nums text-text-3">{itemClock(item)}</time>
+            : dayOnly && <span title={dayOnly.title} className="text-caption text-text-3">{dayOnly.text}</span>}
           <span aria-hidden="true" className={cn("h-1.5 w-1.5 shrink-0 rounded-full", item.selected ? "bg-accent" : "bg-border-control")} />
         </div>
       )}
@@ -190,6 +195,7 @@ export function FrontierCard({ item, grouped = false, markSelected = false, onSt
             <span>{who}</span>
             {when && <> · <time dateTime={item.timelineAt} className="tabular-nums">{when}</time></>}
             {grouped && itemClock(item) && <span className="sm:hidden"> · <span className="tabular-nums">{itemClock(item)}</span></span>}
+            {grouped && dayOnly && <span className="sm:hidden"> · <span title={dayOnly.title}>{dayOnly.text}</span></span>}
           </span>
           {markSelected && item.selected && <span className="sr-only">精选</span>}
           {item.source.platformProduced && <Tag>EviMed 出品</Tag>}

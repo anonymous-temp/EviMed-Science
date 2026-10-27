@@ -701,6 +701,52 @@ describe("精选's safety strip", () => {
   });
 });
 
+describe("精选's title-only safety alerts (owner, 2026-10-27)", () => {
+  // The PMDA and PRAC notices: a title and nothing else, always taken by the day's mix.
+  const titleOnly = (id: string, title: string, hours: number, over: Record<string, unknown> = {}) => frontierItem({
+    id, title, safetyAlert: true, summary: null, source: { id: "pmda", name: "日本 PMDA" }, timelineAt: ago(hours), datePrecision: "day", ...over });
+  const pmda1 = titleOnly("pmda-1", "日本PMDA 修订 amenamevir 的注意事项", 1);
+  const pmda2 = titleOnly("pmda-2", "日本PMDA 修订他克莫司水合物软膏的注意事项", 1.5);
+
+  it("leaves them to the strip: no card in the day group, the day's count is of what is drawn, and the strip carries them", async () => {
+    feed = async () => page([pmda1, pmda2, today, yesterday]);
+    alerts = async () => page([pmda1, pmda2, alert]);
+    renderPage();
+    await screen.findByText("今天的一条 RCT");
+    const drawn = screen.getAllByRole("article").map((card) => card.getAttribute("aria-labelledby"));
+    expect(drawn).toHaveLength(2);
+    expect(screen.queryByRole("heading", { level: 3, name: /日本PMDA/ })).not.toBeInTheDocument();
+    const heading = screen.getByRole("heading", { level: 2, name: /^今天/ });
+    expect(heading).toHaveTextContent("· 1 条");
+    const strip = await screen.findByRole("region", { name: "安全警示" });
+    expect(strip).toHaveTextContent("安全警示 3");
+    await userEvent.click(within(strip).getByRole("button", { name: "全部 ›" }));
+    expect(within(strip).getByRole("link", { name: /日本PMDA 修订他克莫司水合物软膏的注意事项/ })).toBeInTheDocument();
+  });
+
+  it("keeps an alert that says something as a card, and one older than the strip's window", async () => {
+    const older = titleOnly("pmda-old", "日本PMDA 修订英克司兰钠的注意事项", 60);
+    feed = async () => page([alert, today, older]);
+    renderPage();
+    expect(await screen.findByRole("heading", { level: 3, name: /葡萄糖注射液含不锈钢颗粒/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: /英克司兰钠/ })).toBeInTheDocument();
+  });
+
+  it("draws every one of them in 全部", async () => {
+    feed = async () => page([pmda1, pmda2, today]);
+    renderPage("/app/frontier?view=all");
+    expect(await screen.findByRole("heading", { level: 3, name: /amenamevir/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: /他克莫司水合物软膏/ })).toBeInTheDocument();
+  });
+
+  it("is not a page with nothing on it when the rest of the page's items are all alerts: there is another page, and 「加载更多」 is its way on", async () => {
+    feed = async () => page([pmda1, pmda2], { nextCursor: "c2" });
+    renderPage();
+    expect(await screen.findByRole("button", { name: "加载更多" })).toBeInTheDocument();
+    expect(screen.queryByText("暂无精选")).not.toBeInTheDocument();
+  });
+});
+
 describe("当前热点", () => {
   it("shows the three hottest with their heat and how they moved, and opens the whole list", async () => {
     client.fetchFrontierHotBoard.mockResolvedValue(board([

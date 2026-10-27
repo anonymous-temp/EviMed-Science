@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { frontierItem } from "./__fixtures__/frontierItems";
-import { FEED_TIME_ZONE, ago, cardEyebrow, clock, dailyMeta, dateClock, dayHeading, evidenceTag, feedDay, feedDayKey, groupByDay, hotBoardStamp, hotRowMeta, itemMarkdown, primaryHeld, rankChangeLabel, rankLabel, rankTone, askDraft, itemClock, itemLine, researchDraft, topicAskDraft, metaTime, originalLinkLabel, sameAddress, scoreBand, scoreBreakdown, shortDate, shortUrl, sparkline, splitUrls, stamp, statedDayKey, trimUrl, isStatedDayEnd, sinceText } from "./frontierText";
+import { FEED_TIME_ZONE, ago, cardEyebrow, clock, dailyMeta, dateClock, dayHeading, dayOnlyClock, titleOnlyAlert, evidenceTag, feedDay, feedDayKey, groupByDay, hotBoardStamp, hotRowMeta, itemMarkdown, primaryHeld, rankChangeLabel, rankLabel, rankTone, askDraft, itemClock, itemLine, researchDraft, topicAskDraft, metaTime, originalLinkLabel, sameAddress, scoreBand, scoreBreakdown, shortDate, shortUrl, sparkline, splitUrls, stamp, statedDayKey, trimUrl, isStatedDayEnd, sinceText } from "./frontierText";
 import type { FrontierItem } from "@/lib/frontierClient";
 
 // The feed reads Beijing time whatever the machine's zone is (UTC+8, no daylight saving): `at` is the instant of a Beijing wall clock,
@@ -114,6 +114,12 @@ describe("an item whose source gave a day and no hour", () => {
     expect(itemClock(day())).toBe("");
     expect(metaTime(day(), NOW)).toBe("今天");
     expect(metaTime(day({ timelineAt: at(21, 23, 59) }), NOW)).toBe("9月21日");
+  });
+
+  it("says 「当天」, and why there is no hour, where the clock would be — and nothing for an item that has one", () => {
+    expect(dayOnlyClock(day())).toEqual({ text: "当天", title: "来源只给出了日期" });
+    expect(dayOnlyClock(frontierItem({ datePrecision: "instant" }))).toBeNull();
+    expect(dayOnlyClock(frontierItem({ datePrecision: "inferred" }))).toBeNull();
   });
 
   it("keeps the clock of an instant, and of an item we only dated ourselves", () => {
@@ -412,5 +418,18 @@ describe("a moment that stands for a day and no hour (c4 review: the made-up 23:
     // An ordinary moment keeps its clock and its hours.
     expect(clock("2026-10-25T11:00:00.000Z")).toBe("19:00");
     expect(sinceText("2026-10-25T23:00:00.000Z", now)).toBe("4 小时前");
+  });
+});
+
+describe("a title-only safety alert (owner, 2026-10-27)", () => {
+  it("is an alert with no summary text: a blank one is none, and an alert that says something is not", () => {
+    expect(titleOnlyAlert(frontierItem({ safetyAlert: true, summary: null }))).toBe(true);
+    expect(titleOnlyAlert(frontierItem({ safetyAlert: true, summary: "" }))).toBe(true);
+    expect(titleOnlyAlert(frontierItem({ safetyAlert: true, summary: "  \n " }))).toBe(true);
+    expect(titleOnlyAlert(frontierItem({ safetyAlert: true, summary: "I 级召回，涉及 3 个批号。" }))).toBe(false);
+  });
+
+  it("is never an item that is not an alert, however little it says", () => {
+    expect(titleOnlyAlert(frontierItem({ safetyAlert: false, summary: null }))).toBe(false);
   });
 });

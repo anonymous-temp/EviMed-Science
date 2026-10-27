@@ -47,7 +47,7 @@ import { HotBoard, HotCard, isHotWindow, type HotState } from "@/components/fron
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { FrontierOffPage } from "@/components/frontier/FrontierStates";
 import { ForYouView, type ForYouState } from "@/components/frontier/ForYouView";
-import { SafetyStrip, recentAlerts, type SafetyAlerts } from "@/components/frontier/SafetyStrip";
+import { SafetyStrip, foldedIntoStrip, recentAlerts, type SafetyAlerts } from "@/components/frontier/SafetyStrip";
 import { SourcesLink } from "@/components/frontier/SourcesList";
 import { FollowList, FollowingView, followAnswers, followChoiceLabel, followChoiceParam, readFollowChoice, useFollowing } from "@/components/frontier/FollowingView";
 import { useNarrow } from "@/lib/useMediaQuery";
@@ -832,6 +832,8 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       onClear={() => { clearFilters(); setDraft(""); }}
       unread={{ pressed: unread, onChange: (next) => setFilters({ unread: next }) }}
       followSearch={searchFollow}
+      // 精选 leaves a title-only safety alert to the strip above it (owner, 2026-10-27); 全部 and 关注 draw every item.
+      omit={view === "selected" ? foldedIntoStrip : undefined}
     /></div>
   );
 
