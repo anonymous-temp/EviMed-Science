@@ -7,8 +7,6 @@ import {
   frontierErrorMessage,
   type FrontierBody,
   type FrontierBrief,
-  type FrontierInsight,
-  type FrontierInsightRef,
   type FrontierItem,
   type FrontierItemDetail,
   type FrontierMedia,
@@ -55,17 +53,18 @@ import {
 /*
  * The article reader's blocks (owner, 2026-10-22: the reader reads like AIHOT's detail page — AI 导读, 推荐理由 with AI 评分, the full
  * text with its AI translation and a 中文 / 原文 switch, the pictures, the quoted post, 专科 and 标签, 事件后续; later that evening the
- * 导读 set a size above the text as AIHOT sets it, an 「AI 解读」 where the material supports one, and a full text with its sections;
+ * 导读 set a size above the text as AIHOT sets it, an 「AI 解读」 where the material supported one (deleted 2026-10-27, below), and a full text with its sections;
  * 2026-10-23 the right column of actions and notes, a text that reads its addresses, lists and quotes, and a reading size).
  * The shapes follow AIHOT's `routes/item.tsx` and `features/item/*` (MIT). The type is EviMed's, set again on 2026-10-26 (owner:
  * 「字体大小 间距啥的都再处理处理」 — the three AI blocks were 20, 16 and 18 px side by side on a wide screen): the title in the sans at 24 / 600,
- * balanced; the 导读 at 18 and the 要点 and 解读 at 16 at every width, all at 1.8 and in one 640 px measure (about 36 characters); the
+ * balanced; the 导读 at 18 and the 要点 at 16 at every width, all at 1.8 and in one 640 px measure (about 36 characters); the
  * interface at 14 and every block's label at 12, all 400 — a block is named by its colour, not a weight. The text itself is a view of
  * its own (owner, 2026-10-26: 「查看正文，在右上角地方啥的就行了，不要再弄到 AI 解读的下边去了」): the second option of the toolbar's
  * 「AI 导读 | 查看正文」 swaps the AI blocks for the whole text, at 16 and 18 from 1280 px, with one 600 in it — the run-in heading of a
  * structured abstract's paragraph (「Background:」), as a journal sets it. On 2026-10-27 (owner, after the box of five controls in the
  * column's corner and a 「就此提问」 list under it) the actions became one toolbar row under the title, the right column starts at 推荐理由,
- * and the questions are the chips of 「继续追问」 at the article's end.
+ * and the questions are the chips of 「继续追问」 at the article's end; and 「AI 解读」 was deleted with its pipeline step and its field of
+ * the item API (owner: it said again what the 导读 and the 要点 say, in a third block).
  *
  * Every block is drawn from what the server sent and only that: a field it could not fill is null and its block is not on the page.
  */
@@ -226,7 +225,7 @@ export function bylineEvidence(item: FrontierItem): string | null {
   return item.evidenceType && GENRE_SAYS_EVIDENCE.has(item.evidenceType) ? null : evidenceTag(item);
 }
 
-/** The name of a block the model wrote (「AI 导读」, 「AI 解读」): in the accent, where every other block names itself in grey. */
+/** The name of a block the model wrote (「AI 导读」, 「AI 要点」): in the accent, where every other block names itself in grey. */
 const AI_LABEL = "text-caption text-accent";
 
 /**
@@ -287,71 +286,6 @@ export function ReaderBrief({ brief, item, className }: { brief: FrontierBrief; 
           <blockquote lang={quoteLang} className="mt-1 break-words text-reading text-text-2">{brief.quote.text}</blockquote>
           {brief.quote.zh && <p className="mt-1 break-words text-reading text-text-2">{brief.quote.zh}</p>}
         </figure>
-      )}
-    </Block>
-  );
-}
-
-/** A piece of the 解读's paragraph: its own words, or a report it cites. */
-export type InsightPart = string | FrontierInsightRef;
-
-/**
- * The 解读's paragraph as words and citations: `[n]` (ASCII brackets, n from 1) that names one of its refs is that ref; one that names
- * none stays the words it is, so a number the server sent no report for is never a dead link.
- */
-export function insightParts(text: string, refs: readonly FrontierInsightRef[]): InsightPart[] {
-  const byNumber = new Map(refs.map((ref) => [ref.n, ref]));
-  const parts: InsightPart[] = [];
-  let rest = 0;
-  for (const match of text.matchAll(/\[(\d{1,2})\]/g)) {
-    const ref = byNumber.get(Number(match[1]));
-    if (!ref) continue;
-    if (match.index > rest) parts.push(text.slice(rest, match.index));
-    parts.push(ref);
-    rest = match.index + match[0].length;
-  }
-  if (rest < text.length) parts.push(text.slice(rest));
-  return parts;
-}
-
-/**
- * 「AI 解读」: what the item means, in one paragraph, for an item whose material supports it — most have none and the block is not
- * there. A report it relies on is a small superscript link to its own article, named by its title for a screen reader; under the
- * paragraph the reports it cites, one row each — title, who published it, how long ago — each opening its article, whose way back
- * returns here.
- */
-export function ReaderInsight({ insight, item, className }: { insight: FrontierInsight; item: FrontierItemDetail; className?: string }) {
-  const origin = useFrontierOrigin();
-  const location = useLocation();
-  const state = { ...origin, evidenceFrom: { to: `${location.pathname}${location.search}`, label: item.title } };
-  const parts = insightParts(insight.text, insight.refs);
-  const cited = insight.refs.filter((ref) => parts.includes(ref));
-  return (
-    <Block label="AI 解读" labelClassName={AI_LABEL} className={className}>
-      <p data-prose="" className="max-w-measure-body whitespace-pre-line break-words text-pretty text-reading text-text">
-        {parts.map((part, index) => (typeof part === "string" ? part : (
-          <sup key={index} className="text-caption leading-none">
-            {/* One line of 12 px text with the page's corner: the look of the quoted post's 「原文」, so a citation is not a kind of
-              * control of its own beside the reader's others (the release walk counts them; a post with all its blocks has 9). The
-              * size is the sup's own: the base sheet's 75% of a 16 px paragraph is 12 px, and the scale's 12 says so. */}
-            <Link to={articlePath(part.publicId)} state={state} aria-label={part.title}
-              className="inline-block rounded px-px leading-none tabular-nums text-link hover:underline">[{part.n}]</Link>
-          </sup>
-        )))}
-      </p>
-      {cited.length > 0 && (
-        <List label="解读引用的报道" className="mt-3 max-w-measure-body">
-          {cited.map((ref) => (
-            <ListRow
-              key={ref.n}
-              to={articlePath(ref.publicId)}
-              state={state}
-              title={ref.title}
-              leading={<span className="w-5 text-caption tabular-nums text-text-3">{ref.n}</span>}
-              meta={[ref.source, sinceText(ref.at)].filter(Boolean).join(" · ") || undefined}
-            />
-          ))}
-        </List>
       )}
     </Block>
   );

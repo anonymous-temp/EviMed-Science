@@ -78,7 +78,7 @@ function askEditor(behaviour = {}) {
     owner, available: true, timeZone: "Asia/Shanghai", model: "deepseek-flash",
     asked: /** @type {string[]} */ ([]),
     async writeJson(/** @type {string} */ instructions, /** @type {string} */ input, /** @type {number} */ _max, /** @type {any} */ opts) {
-      if (!instructions.includes("「AI 导读」")) return { verification: "passed", output: { insight_zh: null }, error: null };
+      if (!instructions.includes("「AI 导读」")) return { verification: "passed", output: {}, error: null };
       const empty = (behaviour.noLead ?? []).some((title) => input.includes(title));
       const checked = opts.verify({ lead_zh: empty ? "" : "口服 PCSK9 抑制剂使心血管事件从 8.8% 降至 7.2%（HR 0.82）。" });
       return { verification: checked.issues.length ? "dropped" : "passed", output: checked.output, error: null };

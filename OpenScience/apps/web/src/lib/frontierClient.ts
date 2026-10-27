@@ -341,25 +341,6 @@ export interface FrontierBody {
   source: FrontierBodySource | null;
 }
 
-/** A report 「AI 解读」 relies on: `[n]` in its text names it, and it opens as its own article (`publicId`). */
-export interface FrontierInsightRef {
-  n: number;
-  publicId: string;
-  title: string;
-  /** The institution or account that published it; empty where the server named none. */
-  source: string;
-  at: string | null;
-}
-
-/**
- * 「AI 解读」 (contract B `insight`): one paragraph on what the item means, for a selected item whose material supports one — most
- * items have none. A related report it relies on is marked `[n]` in the text and is the entry of `refs` with that `n`.
- */
-export interface FrontierInsight {
-  text: string;
-  refs: FrontierInsightRef[];
-}
-
 /** One typed field of 「AI 要点」: its label (per genre: 研究问题, 发文机关与文号 …) and a sentence, or a few one-sentence items. */
 export interface FrontierBriefPoint {
   key: string;
@@ -424,8 +405,6 @@ export interface FrontierItemDetail extends FrontierItem {
   lead: string | null;
   /** 「AI 要点」, for a selected, near-line or safety item whose source supported its fields; null otherwise. */
   brief: FrontierBrief | null;
-  /** 「AI 解读」, where the server wrote one; null for most items. */
-  insight: FrontierInsight | null;
   body: FrontierBody | null;
   media: FrontierMedia[];
   quoted: FrontierQuoted | null;
@@ -1123,33 +1102,6 @@ export function parseFrontierItem(value: unknown): FrontierItem | null {
 
 /** The longest body the plugin sends (contract A: ≤ 40 000 characters). */
 const BODY_MAX = 40_000;
-/** 「AI 解读」 is one paragraph of at most 360 characters (contract B); anything far past that is not one, and is cut, never shown whole. */
-const INSIGHT_MAX = 1_200;
-/** The most reports one 解读 cites, and the highest `[n]` it can name. */
-const INSIGHT_REFS = 12;
-const INSIGHT_N = 99;
-
-/**
- * 「AI 解读」 and the reports it cites. A ref without its number, its article or its title is dropped (its `[n]` then reads as plain
- * text), and so is a second ref under a number already taken; the rest are ordered by number.
- */
-function parseInsight(value: unknown): FrontierInsight | null {
-  const raw = record(value);
-  const body = text(raw?.text)?.trim();
-  if (!raw || !body) return null;
-  const taken = new Set<number>();
-  const refs = (Array.isArray(raw.refs) ? raw.refs : []).flatMap((entry) => {
-    const ref = record(entry);
-    const n = ref?.n;
-    const publicId = text(ref?.publicId)?.trim();
-    const title = text(ref?.title)?.trim();
-    if (typeof n !== "number" || !Number.isInteger(n) || n < 1 || n > INSIGHT_N || taken.has(n) || !publicId || !title) return [];
-    taken.add(n);
-    return [{ n, publicId: publicId.slice(0, 128), title: title.slice(0, 300), source: text(ref?.source)?.trim().slice(0, 120) ?? "", at: moment(ref?.at) }];
-  }).sort((a, b) => a.n - b.n).slice(0, INSIGHT_REFS);
-  return { text: body.slice(0, INSIGHT_MAX), refs };
-}
-
 /** What one 要点 field holds at most: a sentence, a few items (a roundup lists more), and a quotation. */
 const BRIEF_TEXT_MAX = 400;
 const BRIEF_ITEMS_MAX = 6;
@@ -1211,7 +1163,6 @@ export function parseFrontierItemDetail(value: unknown): FrontierItemDetail | nu
     abstractZh: text(raw.abstractZh),
     lead: text(raw.lead) ?? item.summary,
     brief: parseFrontierBrief(raw.brief),
-    insight: parseInsight(raw.insight),
     body: zh || original ? {
       zh,
       original,

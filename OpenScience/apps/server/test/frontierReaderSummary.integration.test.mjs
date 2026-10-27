@@ -103,7 +103,7 @@ function editorWith(behaviour = {}) {
     owner, available: true, timeZone: "Asia/Shanghai", model: "deepseek-flash",
     leadInputs: /** @type {string[]} */ ([]), briefInputs: /** @type {string[]} */ ([]), translations: 0, tidyCalls: 0,
     async writeJson(/** @type {string} */ instructions, /** @type {string} */ input, /** @type {number} */ _max, /** @type {any} */ opts) {
-      if (!instructions.includes("「AI 导读」")) return { verification: "passed", output: { insight_zh: null }, error: null };
+      if (!instructions.includes("「AI 导读」")) return { verification: "passed", output: {}, error: null };
       this.leadInputs.push(input);
       const checked = opts.verify(behaviour.lead ? behaviour.lead(input) : { lead_zh: "" });
       return { verification: checked.issues.length ? "dropped" : "passed", output: checked.output, error: null };

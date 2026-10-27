@@ -7,7 +7,7 @@ import { rawBriefedPaper, rawIndustryShort, rawNewsLong, rawPolicy, rawSafetyAle
 import { FrontierArticlePage } from "./FrontierArticlePage";
 
 // The reader by genre (ct-write W6, 2026-10-24; the text a view of its own, 2026-10-26): what the item is in its byline, then the AI view —
-// 导读 → 要点 → 解读 — and behind 「查看正文」 (摘要, 全文) the text once, whole, as its genre is read. A post keeps its text on the AI view.
+// 导读 → 要点 — and behind 「查看正文」 (摘要, 全文) the text once, whole, as its genre is read. A post keeps its text on the AI view.
 const client = vi.hoisted(() => ({
   useFrontierFeature: vi.fn(), fetchFrontierItem: vi.fn(), fetchFrontierAbstractZh: vi.fn(), markFrontierItemRead: vi.fn(),
 }));

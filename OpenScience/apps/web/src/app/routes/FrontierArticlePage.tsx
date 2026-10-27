@@ -20,7 +20,6 @@ import {
   ReaderBrief,
   ReaderByline,
   ReaderFollowups,
-  ReaderInsight,
   ReaderLead,
   ReaderMedia,
   ReaderNotes,
@@ -51,7 +50,7 @@ type ArticleState = { kind: "loading" } | { kind: "ready"; item: FrontierItemDet
  * Two columns from 1024 px. The left one is the article, every line on one edge: the way back, who said it and when (with what it
  * is — its genre), the title, the original title, then ONE toolbar row in the page's band (owner, 2026-10-27) — at the left the switch
  * 「AI 导读 | 查看正文」, at the right 「打开原文 ↗」, ☆, ⋯ and 「深入研究」, the one primary — and one of two views under it. The AI view
- * (the default): AI 导读, AI 要点 (the genre's typed fields, ct-write 2026-10-24), AI 解读 where there is one, 事件后续. The text view
+ * (the default): AI 导读, AI 要点 (the genre's typed fields, ct-write 2026-10-24), 事件后续 (no more 「AI 解读」: deleted 2026-10-27). The text view
  * (`?view=text`, the switch's second option): the text whole — the article, a paper's abstract or its open-access full text, in Chinese
  * or the original — its pictures and the quoted post. A post shows its text in the AI view, whole, because the post is the item; an item
  * with nothing written about it shows its text alone; an item with no text has no switch. The article ends with 「继续追问」, the item's
@@ -110,7 +109,7 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
   const [params, setParams] = useSearchParams();
   // What the page can show: the blocks written about the item, and its text (the stored body, or a paper's abstract fetched on demand).
   const post = isPost(item);
-  const written = Boolean(item.lead || item.brief || item.insight);
+  const written = Boolean(item.lead || item.brief);
   // A paper's abstract is offered on the strength of its DOI or its journal; when the server turns out to have none, the switch goes.
   const [noAbstract, setNoAbstract] = useState(false);
   const textKind = item.body ? readerTextKind(item, item.body) : !noAbstract && (item.abstract || item.abstractZh || abstractOffered(item)) ? "摘要" : null;
@@ -208,7 +207,6 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
         <ReaderSameEvent item={item} className="mt-3" />
         {showWritten && item.lead && <ReaderLead text={item.lead} className="mt-6" />}
         {showWritten && item.brief && <ReaderBrief brief={item.brief} item={item} className="mt-8" />}
-        {showWritten && item.insight && <ReaderInsight insight={item.insight} item={item} className="mt-8" />}
         {showText && !wide && outline.length > 0 && <div className="mt-6"><ReaderOutline entries={outline} layout="folded" /></div>}
         {showText && (item.body && textKind
           ? <ReaderText kind={textKind} text={item.body} lang={item.lang} language={language} onLanguage={setLanguage}

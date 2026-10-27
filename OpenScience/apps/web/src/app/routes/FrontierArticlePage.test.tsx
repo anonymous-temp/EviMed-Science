@@ -440,18 +440,12 @@ describe("不感兴趣 on a phone's reading page (c2-hide)", () => {
 describe("an open-access paper with its whole text", () => {
   beforeEach(() => { client.fetchFrontierItem.mockResolvedValue(detail(rawOpenAccessPaper())); });
 
-  it("sets the 导读 as the lead, a size above the 解读, both in one measure and before it, with no text on the AI view", async () => {
+  it("sets the 导读 as the lead, at 18 in one 640 px measure, with no text on the AI view", async () => {
     show("/app/frontier/items/oa-paper-1");
     const lead = await screen.findByRole("region", { name: "AI 导读" });
-    const insight = screen.getByRole("region", { name: "AI 解读" });
-    // One paragraph each: the 导读 at 18 and the 解读 at 16 at every width, in the same 640 px measure.
     const leadText = within(lead).getByText(/口服 PCSK9 抑制剂使主要心血管事件风险降低 18%/);
     expect(leadText).toHaveClass("text-reading-lg", "max-w-measure-body");
     expect(leadText).not.toHaveClass("xl:text-reading-xl");
-    const insightText = insight.querySelector("[data-prose]")!;
-    expect(insightText).toHaveClass("text-reading", "max-w-measure-body");
-    expect(insightText).not.toHaveClass("text-reading-lg");
-    expect(lead.compareDocumentPosition(insight) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // The text is the other view's: nothing of it, and nothing that opens its parts, on this one.
     expect(screen.queryByRole("region", { name: /^全文/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { level: 3 })).not.toBeInTheDocument();
@@ -463,39 +457,16 @@ describe("an open-access paper with its whole text", () => {
     const text = await screen.findByRole("region", { name: "全文 · AI 翻译" });
     expect(text.querySelector("[data-prose]")).toHaveClass("text-reading", "xl:text-reading-lg", "space-y-5", "max-w-measure-body");
     expect(screen.queryByRole("region", { name: "AI 导读" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "AI 解读" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "AI 要点" })).not.toBeInTheDocument();
   });
 
-  it("links each report the 解读 cites to its own article by its title, lists them under it, and leaves an unnamed [n] as text", async () => {
-    show("/app/frontier/items/oa-paper-1");
-    const insight = await screen.findByRole("region", { name: "AI 解读" });
-    const paragraph = insight.querySelector("p")!;
-    const cites = within(paragraph).getAllByRole("link");
-    expect(cites.map((link) => [link.textContent, link.getAttribute("aria-label"), link.getAttribute("href")])).toEqual([
-      ["[1]", "MedPage Today：口服 PCSK9 抑制剂降低心血管事件 18%", "/app/frontier/items/f-2"],
-      ["[2]", "FDA 受理口服 PCSK9 抑制剂的上市申请", "/app/frontier/items/f-1"],
-    ]);
-    expect(cites.every((link) => link.parentElement!.tagName === "SUP")).toBe(true);
-    // The marker's size is a step of the scale, not the base sheet's 75% of the paragraph (13.5 px beside an 18 px text).
-    expect(cites.every((link) => link.parentElement!.classList.contains("text-caption"))).toBe(true);
-    // [3] names no report: it stays the words it is.
-    expect(paragraph).toHaveTextContent("还要看后续数据[3]。");
-    const rows = within(within(insight).getByRole("list", { name: "解读引用的报道" })).getAllByRole("listitem");
-    expect(rows.map((row) => row.textContent)).toEqual([
-      expect.stringMatching(/^1MedPage Today：口服 PCSK9 抑制剂降低心血管事件 18%MedPage Today · 4 小时前/),
-      expect.stringMatching(/^2FDA 受理口服 PCSK9 抑制剂的上市申请FDA · 2 天前/),
-    ]);
-    expect(within(rows[1]).getByRole("link")).toHaveAttribute("href", "/app/frontier/items/f-1");
-  });
-
-  it("opens a cited report as its own article, whose way back returns to this one", async () => {
+  it("opens a follow-up report as its own article, whose way back returns to this one", async () => {
     client.fetchFrontierItem.mockImplementation(async (id: string) => (id === "f-1"
       ? detail(rawXPost({ id: "f-1", title: "FDA 受理口服 PCSK9 抑制剂的上市申请", followups: null }))
-      : detail(rawOpenAccessPaper())));
+      : detail(rawOpenAccessPaper({ followups: rawXPost().followups }))));
     show("/app/frontier/items/oa-paper-1");
-    const insight = await screen.findByRole("region", { name: "AI 解读" });
-    await userEvent.click(within(insight.querySelector("p")!).getByRole("link", { name: "FDA 受理口服 PCSK9 抑制剂的上市申请" }));
+    const followups = await screen.findByRole("region", { name: "事件后续 · 2" });
+    await userEvent.click(within(followups).getAllByRole("link").find((link) => link.getAttribute("href") === "/app/frontier/items/f-1")!);
     expect(await screen.findByRole("heading", { level: 1, name: "FDA 受理口服 PCSK9 抑制剂的上市申请" })).toBeInTheDocument();
     expect(within(screen.getByRole("navigation", { name: "返回" })).getByRole("link")).toHaveTextContent("口服 PCSK9 抑制剂降低主要心血管事件");
   });
@@ -592,9 +563,7 @@ describe("a Chinese news article", () => {
     expect(screen.queryByRole("region", { name: "主题" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "标签" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: /事件后续/ })).not.toBeInTheDocument();
-    // A 导读 and no 解读: the block is not drawn for an item the server wrote none for.
     expect(screen.getByRole("region", { name: "AI 导读" })).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "AI 解读" })).not.toBeInTheDocument();
     // 查看正文 opens the text, in Chinese and with no 中文 / 原文 switch (there is no original).
     await userEvent.click(optionOf("查看正文"));
     expect(await screen.findByRole("heading", { name: "正文" })).toBeInTheDocument();
@@ -609,7 +578,7 @@ describe("an item whose blocks the server could not fill", () => {
       topics: [], tags: [], followups: null, author: null, platform: null, channel: null, abstract: null, abstractZh: null, flags: [{ key: "no-abstract", label: "无摘要" }], selected: false })));
     show("/app/frontier/items/x-post-0001");
     await screen.findByRole("heading", { level: 1 });
-    for (const name of [/AI 导读/, /AI 解读/, /^正文/, /^摘要/, /事件后续/, "推荐理由", "AI 评分", "主题", "专科", "标签", "本文目录"]) {
+    for (const name of [/AI 导读/, /^正文/, /^摘要/, /事件后续/, "推荐理由", "AI 评分", "主题", "专科", "标签", "本文目录"]) {
       expect(screen.queryByRole("heading", { name }), String(name)).not.toBeInTheDocument();
     }
     expect(screen.queryByRole("button", { name: /^查看大图/ })).not.toBeInTheDocument();
@@ -666,7 +635,7 @@ describe("an item whose blocks the server could not fill", () => {
   it("shows the card's own summary as the first block while no 导读 was written (G2: a record with no text still reads)", async () => {
     // The server sends the card's summary as `lead` until a 导读 exists, and the page sets it first, labelled 「AI 导读」.
     client.fetchFrontierItem.mockResolvedValue({ ...frontierItemDetail({ id: "item-1", summary: "FDA 批准 JEMPERLI 的补充申请，审评类别为标准审评。",
-      lead: "FDA 批准 JEMPERLI 的补充申请，审评类别为标准审评。", brief: null, insight: null, body: null, flags: [] }), abstract: null, abstractZh: null });
+      lead: "FDA 批准 JEMPERLI 的补充申请，审评类别为标准审评。", brief: null, body: null, flags: [] }), abstract: null, abstractZh: null });
     show();
     const lead = await screen.findByRole("region", { name: "AI 导读" });
     expect(within(lead).getByText("FDA 批准 JEMPERLI 的补充申请，审评类别为标准审评。")).toBeInTheDocument();
@@ -794,11 +763,11 @@ describe("the text's addresses, lists and contents (2026-10-23)", () => {
   });
 });
 
-// The reading page's two views (2026-10-26): the AI view — 导读, 要点, 解读, 事件后续 — and, behind 「查看正文」, the second option of the
+// The reading page's two views (2026-10-26): the AI view — 导读, 要点, 事件后续 — and, behind 「查看正文」, the second option of the
 // toolbar's switch (2026-10-27; the bar's fifth tool on a narrow screen), the text whole. The view is in the address (`?view=text`) and
 // replaces the entry.
-/** An item with every block the AI view has — 导读, 要点, 解读, 事件后续 — and a text of two paragraphs, which is not a post. */
-const whole = () => detail(rawPolicy({ id: "whole-1", insight: rawOpenAccessPaper().insight, followups: rawXPost().followups }));
+/** An item with every block the AI view has — 导读, 要点, 事件后续 — and a text of two paragraphs, which is not a post. */
+const whole = () => detail(rawPolicy({ id: "whole-1", followups: rawXPost().followups }));
 const railOf = () => screen.getByRole("complementary", { name: "文章操作与推荐" });
 const toolsOf = (bar: HTMLElement) => [...bar.querySelectorAll("button, a")].map((tool) => tool.textContent);
 
@@ -808,9 +777,9 @@ describe("the AI view and the text view", () => {
   it("opens on the AI view; 查看正文 swaps it for the text, the switch's other option is 「AI 导读」, the address gains view=text, and a second press returns", async () => {
     show("/app/frontier/items/whole-1");
     const article = await screen.findByRole("article", { name: "正文" });
-    // The AI view: 导读, 要点, 解读 and 事件后续, and nothing of the text.
+    // The AI view: 导读, 要点 and 事件后续, and nothing of the text.
     expect(article).toHaveAttribute("data-reader-view", "written");
-    for (const name of ["AI 导读", "AI 要点", "AI 解读", "事件后续 · 2"]) expect(screen.getByRole("region", { name }), name).toBeInTheDocument();
+    for (const name of ["AI 导读", "AI 要点", "事件后续 · 2"]) expect(screen.getByRole("region", { name }), name).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "正文" })).not.toBeInTheDocument();
     expect(screen.queryByText("为支持医疗技术创新，……")).not.toBeInTheDocument();
     const toggle = optionOf("查看正文");
@@ -824,7 +793,7 @@ describe("the AI view and the text view", () => {
     expect(screen.getByText("为支持医疗技术创新，……")).toBeInTheDocument();
     expect(screen.getByText("只需 1 家三级医院牵头直接向省级医保部门申报。")).toBeInTheDocument();
     expect(article).toHaveAttribute("data-reader-view", "text");
-    for (const name of ["AI 导读", "AI 要点", "AI 解读", "事件后续 · 2"]) expect(screen.queryByRole("region", { name }), name).not.toBeInTheDocument();
+    for (const name of ["AI 导读", "AI 要点", "事件后续 · 2"]) expect(screen.queryByRole("region", { name }), name).not.toBeInTheDocument();
     // The switch stays whole in the band: the text is the open option now, and AI 导读 the way back.
     expect(isOn(optionOf("查看正文"))).toBe(true);
     const back = optionOf("AI 导读");
@@ -889,11 +858,11 @@ describe("the AI view and the text view", () => {
   });
 
   it("shows an item with nothing written about it as its text alone, with no switch", async () => {
-    client.fetchFrontierItem.mockResolvedValue(detail(rawChineseNews({ id: "bare-1", summary: null, lead: null, brief: null, insight: null })));
+    client.fetchFrontierItem.mockResolvedValue(detail(rawChineseNews({ id: "bare-1", summary: null, lead: null, brief: null })));
     show("/app/frontier/items/bare-1");
     expect(await screen.findByRole("heading", { name: "正文" })).toBeInTheDocument();
     expect(screen.getByText(/^国家药品监督管理局近日批准口服司美格鲁肽片上市。/)).toBeInTheDocument();
-    for (const name of [/^AI (导读|要点|解读)$/, /事件后续/]) expect(screen.queryByRole("heading", { name }), String(name)).not.toBeInTheDocument();
+    for (const name of [/^AI (导读|要点)$/, /事件后续/]) expect(screen.queryByRole("heading", { name }), String(name)).not.toBeInTheDocument();
     expect(within(toolbarOf()).queryByRole("tab")).not.toBeInTheDocument();
     // The way to the original and 深入研究 are the toolbar's all the same.
     expect(within(toolbarOf()).getByRole("link", { name: "打开原文" })).toBeInTheDocument();
@@ -1046,7 +1015,7 @@ describe("the narrow bar's fifth tool", () => {
     show("/app/frontier/items/x-post-0001");
     expect(toolsOf(await screen.findByRole("navigation", { name: "阅读工具" }))).toEqual(["收藏", "深入研究", "查看原帖", "更多"]);
     cleanup();
-    client.fetchFrontierItem.mockResolvedValue(detail(rawChineseNews({ id: "bare-1", summary: null, lead: null, brief: null, insight: null })));
+    client.fetchFrontierItem.mockResolvedValue(detail(rawChineseNews({ id: "bare-1", summary: null, lead: null, brief: null })));
     show("/app/frontier/items/bare-1");
     expect(toolsOf(await screen.findByRole("navigation", { name: "阅读工具" }))).toEqual(["收藏", "深入研究", "打开原文", "更多"]);
     cleanup();

@@ -277,16 +277,14 @@ function translatingEditor(behaviour = {}) {
   const tidied = [];
   return {
     owner, available: true, asked, tidied, timeZone: "Asia/Shanghai", model: "deepseek-flash",
-    // The 导读 and the 解读 (frontierLead.mjs, frontierInsight.mjs): `behaviour.lead(input)` / `behaviour.insight(input)` answer, checked
-    // by the caller's own verify as the editor's #write does; nothing given, the answer is empty.
-    leads: /** @type {string[]} */ ([]), insights: /** @type {string[]} */ ([]),
+    // The 导读 (frontierLead.mjs): `behaviour.lead(input)` answers, checked by the caller's own verify as the editor's #write does;
+    // nothing given, the answer is empty.
+    leads: /** @type {string[]} */ ([]),
     async writeJson(/** @type {string} */ instructions, /** @type {string} */ input, /** @type {number} */ _maxTokens, /** @type {any} */ options) {
-      const kind = instructions.includes("「AI 导读」") ? "lead" : instructions.includes("「AI 解读」") ? "insight" : "other";
+      const kind = instructions.includes("「AI 导读」") ? "lead" : "other";
       if (kind === "lead") this.leads.push(input);
-      if (kind === "insight") this.insights.push(input);
       if (behaviour.writeFail) return { verification: "pending", output: null, error: behaviour.writeFail };
-      const answer = kind === "lead" ? (behaviour.lead ? behaviour.lead(input) : { lead_zh: "" })
-        : kind === "insight" ? (behaviour.insight ? behaviour.insight(input) : { insight_zh: "" }) : {};
+      const answer = kind === "lead" ? (behaviour.lead ? behaviour.lead(input) : { lead_zh: "" }) : {};
       const checked = options.verify(answer);
       return { verification: checked.issues.length ? "dropped" : "passed", output: checked.output, error: null };
     },
@@ -428,35 +426,6 @@ test("the 导读 is one paragraph written from the settled reader text, served a
   await set(paper.id, {}, { abstract_raw: `${abstract} Funding: Novo Nordisk.`, reader_tidy: null });
   await pipelineFor(again).processBatch();
   assert.equal(again.leads.length, 1);
-});
-
-test("the 「AI 解读」 of a 精选 item cites the related reports it was shown; without material it is not asked", options, async () => {
-  const earlier = await insertItem(database, { title: "B-Well trials report functional cure", titleZh: "B-Well 试验报告功能性治愈", summaryZh: "两项 III 期试验功能性治愈率 19%。",
-    visibleAt: "2026-09-01T00:00:00Z", timelineAt: "2026-09-01T00:00:00Z" });
-  const approval = await insertItem(database, { title: "FDA approves bepirovirsen", summaryZh: "FDA 批准。", selected: true, visibleAt: "2026-10-21T00:00:00Z",
-    timelineAt: "2026-10-21T00:00:00Z" });
-  const alone = await insertItem(database, { title: "A short selected note", summaryZh: "短讯。", selected: true, visibleAt: "2026-10-21T00:00:00Z" });
-  // Related by a drug and a disease both (a shared drug alone is not enough).
-  await set(earlier.id, { entity_keys: ["drug:bepirovirsen", "disease:chb", "trial:b-well 1"] }, {});
-  await set(approval.id, { score_total: 90, editor_version: FRONTIER_EDITOR_VERSION, entity_keys: ["drug:bepirovirsen", "disease:chb"] },
-    { abstract_raw: "The FDA approved bepirovirsen with nucleos(t)ide analogues for chronic hepatitis B; functional cure was 19% in the trials." });
-  await set(alone.id, { score_total: 90, editor_version: FRONTIER_EDITOR_VERSION }, { abstract_raw: "A short note." });
-  const insight = "这次获批所依据的正是此前报道的 B-Well 两项 III 期试验，功能性治愈率同为 19% [1]。两者口径一致，国内仍在审评，上市时间尚无消息，长期停药后的持久性还要更长随访来回答。";
-  const editor = translatingEditor({ lead: () => ({ lead_zh: "FDA 批准 bepirovirsen 联合核苷（酸）类似物治疗慢性乙肝，试验中功能性治愈率 19%。" }), insight: () => ({ insight_zh: insight }) });
-  const pipeline = pipelineFor(editor);
-  await pipeline.processBatch();
-  assert.equal(pipeline.status().lastError, null);
-  assert.equal(editor.insights.length, 1, "asked once: the approval has a related report; the short note alone has no material");
-  assert.match(editor.insights[0], /\[1\] 同一药物或试验｜2026-09-01｜.*｜B-Well 试验报告功能性治愈\n {4}导读：两项 III 期试验功能性治愈率 19%。/);
-  const { item } = (await serviceFor().getItem(reader, approval.publicId)).body;
-  assert.deepEqual(item.insight, { text: insight, refs: [{ n: 1, publicId: earlier.publicId, title: "B-Well 试验报告功能性治愈", source: item.insight.refs[0].source,
-    at: "2026-09-01T00:00:00.000Z" }] });
-  assert.equal((await serviceFor().getItem(reader, alone.publicId)).body.item.insight, null);
-  const looked = (await database.query("SELECT insight_basis, insight_at FROM evimed_frontier.items WHERE id = $1", [alone.id])).rows[0];
-  assert.ok(looked.insight_basis && looked.insight_at, "recorded as none for this basis, without a call");
-  // The cited report is withdrawn: the reader keeps the text and drops the ref (its mark reads as plain text).
-  await database.query("UPDATE evimed_frontier.items SET state = 'withdrawn' WHERE id = $1", [earlier.id]);
-  assert.deepEqual((await serviceFor().getItem(reader, approval.publicId)).body.item.insight.refs, []);
 });
 
 test("an open-access PDF the plugin could not read becomes the item's full text, once, and the reader text is settled again", options, async () => {
