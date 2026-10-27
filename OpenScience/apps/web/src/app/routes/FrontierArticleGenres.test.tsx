@@ -140,6 +140,41 @@ describe("a policy, an industry report, a news report", () => {
   });
 });
 
+describe("AI 要点 as a soft panel (owner, 2026-10-27)", () => {
+  it("is one rounded panel on the grey step with no border: each label a caption over its words, a faint rule between fields, the quotation last", async () => {
+    show(rawBriefedPaper());
+    const brief = await screen.findByRole("region", { name: "AI 要点" });
+    const panel = brief.querySelector("[data-prose]") as HTMLElement;
+    expect(panel).toHaveClass("rounded-card", "bg-surface-1", "max-w-measure-body");
+    expect(panel.className).not.toMatch(/\bborder\b/);
+    const fields = [...panel.querySelectorAll("dl > div")];
+    expect(fields).toHaveLength(3);
+    for (const field of fields) {
+      // The label is a caption (12 / 400 in the secondary grey) stacked over its value at the reading size, not a column beside it.
+      expect(field.querySelector("dt")).toHaveClass("text-caption", "text-text-3");
+      expect(field.querySelector("dd")).toHaveClass("text-reading", "text-text", "tabular-nums");
+      expect(field.className).not.toMatch(/grid/);
+      expect(before(field.querySelector("dt")!, field.querySelector("dd")!)).toBe(true);
+    }
+    expect(panel.querySelector("dl")).toHaveClass("divide-y", "divide-faint");
+    // A few items are compact bullets with the accent mark.
+    expect(panel.querySelector("ul")).toHaveClass("list-disc", "marker:text-accent");
+    // The quotation is at the panel's end, inside it, with a thin rule at its left.
+    const quote = panel.querySelector("figure")!;
+    expect(panel).toContainElement(quote);
+    expect(before(panel.querySelector("dl")!, quote)).toBe(true);
+    expect(quote.firstElementChild).toHaveClass("border-l-2", "pl-4");
+    expect(quote).toHaveClass("border-t", "border-faint");
+  });
+
+  it("has no rule over a quotation that has no fields before it", async () => {
+    const raw = rawBriefedPaper();
+    show({ ...raw, brief: { ...(raw.brief as Record<string, unknown>), points: [] } });
+    const brief = await screen.findByRole("region", { name: "AI 要点" });
+    expect(brief.querySelector("figure")).not.toHaveClass("border-t");
+  });
+});
+
 describe("a safety alert", () => {
   it("says 安全警示 once, lists what professionals should do, and quotes the warning", async () => {
     show(rawSafetyAlert());

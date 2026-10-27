@@ -243,50 +243,57 @@ export function ReaderLead({ text, className }: { text: string; className?: stri
 const articlePath = (id: string) => `/app/frontier/items/${encodeURIComponent(id)}`;
 
 /**
- * 「AI 要点」 (ct-write 2026-10-24): under the 导读, the item's facts as the fields its genre is read by — a paper's 研究问题, 设计与对象,
- * 主要结果, 安全性, 局限; a policy's 发文机关与文号, 核心内容, 适用对象, 时间节点; a deal's 事件, 交易与金额, 资产与阶段 — one label and its
- * sentence (or its few items) per row, the label in the block-label grey and the words at the reading size. The source's own words
- * (作者结论, 推荐意见, 警示原文 …) close it as a quotation, the original as written and its Chinese under it; a reading of another report
- * opens with 「解读的研究」, which is that report's article.
+ * 「AI 要点」 (ct-write 2026-10-24; a soft panel since 2026-10-27, owner: the old one was a table of ruled rows with the label in a
+ * column of its own and the words beside it): under the 导读, the item's facts as the fields its genre is read by — a paper's 研究问题,
+ * 设计与对象, 主要结果, 安全性, 局限; a policy's 发文机关与文号, 核心内容, 适用对象, 时间节点; a deal's 事件, 交易与金额, 资产与阶段.
+ * One rounded panel on the page's one grey step (`surface-1`, no border), the fields stacked — the label as a caption over its words
+ * at the reading size, a faint rule between two fields — with a few items as compact bullets whose marks are the accent, and the numbers
+ * tabular. The source's own words (作者结论, 推荐意见, 警示原文 …) close the panel as a quotation with a thin rule at its left, the
+ * original as written and its Chinese under it; a reading of another report opens with 「解读的研究」, which is that report's article.
  */
 export function ReaderBrief({ brief, item, className }: { brief: FrontierBrief; item: FrontierItemDetail; className?: string }) {
   const origin = useFrontierOrigin();
   const location = useLocation();
   const state = { ...origin, evidenceFrom: { to: `${location.pathname}${location.search}`, label: item.title } };
   const quoteLang = brief.quote && brief.quote.zh && item.lang !== "und" ? item.lang : undefined;
-  // The report a reading reads, as its own article, with the reading's own words about it under the link: one row, not two.
+  // The report a reading reads, as its own article, with the reading's own words about it under the link: one field, not two.
   const subject = brief.about ? brief.points.find((point) => point.key === "subject") ?? null : null;
   const points = subject ? brief.points.filter((point) => point !== subject) : brief.points;
+  const fields = Boolean(brief.about) || points.length > 0;
   return (
     <Block label="AI 要点" labelClassName={AI_LABEL} className={className}>
-      <dl data-prose="" className="max-w-measure-body">
-        {brief.about && (
-          <div className="grid gap-x-4 gap-y-0.5 border-b border-faint py-3 first:pt-0 sm:grid-cols-[6rem_1fr]">
-            <dt className="text-caption text-text-3 sm:pt-1">解读的研究</dt>
-            <dd className="min-w-0 break-words text-reading text-text">
-              <Link to={articlePath(brief.about.publicId)} state={state} className="rounded text-link hover:underline">《{brief.about.title}》</Link>
-              {subject?.text && <p className="mt-1 text-text-2">{subject.text}</p>}
-            </dd>
-          </div>
+      <div data-prose="" className="max-w-measure-body rounded-card bg-surface-1 px-5">
+        <dl className="divide-y divide-faint">
+          {brief.about && (
+            <div className="py-4">
+              <dt className={LABEL}>解读的研究</dt>
+              <dd className="mt-1 min-w-0 break-words text-reading tabular-nums text-text">
+                <Link to={articlePath(brief.about.publicId)} state={state} className="rounded text-link hover:underline">《{brief.about.title}》</Link>
+                {subject?.text && <p className="mt-1 text-text-2">{subject.text}</p>}
+              </dd>
+            </div>
+          )}
+          {points.map((point) => (
+            <div key={point.key} className="py-4">
+              <dt className={LABEL}>{point.label}</dt>
+              <dd className="mt-1 min-w-0 break-words text-reading tabular-nums text-text">
+                {point.text ?? (point.items.length === 1 ? point.items[0] : (
+                  <ul className="list-disc space-y-1 pl-5 marker:text-accent">{point.items.map((entry, index) => <li key={index}>{entry}</li>)}</ul>
+                ))}
+              </dd>
+            </div>
+          ))}
+        </dl>
+        {brief.quote && (
+          <figure className={cn("py-4", fields && "border-t border-faint")}>
+            <div className="border-l-2 border-border pl-4">
+              <figcaption className={LABEL}>{brief.quote.label}</figcaption>
+              <blockquote lang={quoteLang} className="mt-1 break-words text-reading text-text-2">{brief.quote.text}</blockquote>
+              {brief.quote.zh && <p className="mt-1 break-words text-reading text-text-2">{brief.quote.zh}</p>}
+            </div>
+          </figure>
         )}
-        {points.map((point) => (
-          <div key={point.key} className="grid gap-x-4 gap-y-0.5 border-b border-faint py-3 first:pt-0 last:border-b-0 sm:grid-cols-[6rem_1fr]">
-            <dt className="text-caption text-text-3 sm:pt-1">{point.label}</dt>
-            <dd className="min-w-0 break-words text-reading text-text">
-              {point.text ?? (point.items.length === 1 ? point.items[0] : (
-                <ul className="list-disc space-y-1 pl-5">{point.items.map((entry, index) => <li key={index}>{entry}</li>)}</ul>
-              ))}
-            </dd>
-          </div>
-        ))}
-      </dl>
-      {brief.quote && (
-        <figure className="mt-4 max-w-measure-body border-l-2 border-border pl-4">
-          <figcaption className="text-caption text-text-3">{brief.quote.label}</figcaption>
-          <blockquote lang={quoteLang} className="mt-1 break-words text-reading text-text-2">{brief.quote.text}</blockquote>
-          {brief.quote.zh && <p className="mt-1 break-words text-reading text-text-2">{brief.quote.zh}</p>}
-        </figure>
-      )}
+      </div>
     </Block>
   );
 }
