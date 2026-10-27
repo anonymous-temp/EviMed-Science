@@ -167,7 +167,9 @@ export const WEB_DOCKERFILE = "deploy/web/Dockerfile";
 // the text of each method, read and published once at start by `officialPackSources.mjs`). No other instruction changed.
 // 2026-10-26: reviewed ab52b59d4 against its parent: only the OpenViking compile-scope-proof.json
 // COPY and its explanatory comment were added; stages, commands, secrets and build arguments are unchanged.
-export const WEB_DOCKERFILE_SHA256 = "sha256:81ddc6225e84617ce3ab2f43b148fc070dd338d13fdc11d2bb8a22e506516087";
+// 2026-10-27: reviewed against its parent: two COPY lines and their comment were added to the final stage (pnpm-lock.yaml and
+// packages/domain/package.json, read by the RSI dependency closure); stages, commands, secrets and build arguments are unchanged.
+export const WEB_DOCKERFILE_SHA256 = "sha256:610eaeae6a18da7ea4f38681df04d4b9e2df4d1bca1ee08bb58809b8911937b7";
 export const WEB_INPUTS = Object.freeze([
   "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "deps-version.json",
   "apps/web/package.json", "apps/server/package.json", "packages/shared/package.json",
