@@ -9,7 +9,7 @@ other way around.
 package (`@evimed/design-tokens`) on 2026-09-26, when the fusion gave it a consumer in another
 repository: the Vue shell of EviMed cannot import a module out of `@evimed/domain`'s source tree.
 The old `@evimed/domain/design-tokens` path is gone; import the package. The full specification,
-[Frontend Design System v3.1](docs/FRONTEND_DESIGN_SYSTEM.md) (2026-10-26), owns the principles and
+[Frontend Design System v3.2](docs/FRONTEND_DESIGN_SYSTEM.md) (2026-10-27), owns the principles and
 the acceptance cases; this file holds the engineering rules and maps implementation and component
 adoption, and it defers to the specification and to the table. Component JSDoc plus the gallery and
 composition fixtures own each implemented component's details; module plans own evolving product
@@ -31,7 +31,9 @@ for another general action accent.
 
 ## Token authority and generated consumers
 
-Token package **3.0.0** implements specification **3.1** (2026-10-26). The 2.2.0 blue palette and the
+Token package **3.0.0** is the implemented token set; the current specification is **3.2**
+(2026-10-27), whose DS22 adoption remains pending its execution receipts (the token package does
+not change for a composition-only revision). The 2.2.0 blue palette and the
 2.3.0 warm-brand candidate are historical baselines, not the current source identity. Moving the
 brand and the status roles is a major version; a compatible added role is a minor and a tuned value
 within a role a patch. The specification, this file, `AGENTS.md`, the token package and release
@@ -631,19 +633,27 @@ warning; `layoutLint.test.ts` holds each number. Two more are counts that only f
 | T5 | an `Outline` from four sections; the serif title | a page of many screens with no contents; the action under the title |
 | T6 | settings sections only in the left rail | a link to another page (插件, 技能, 运维) drawn as a section |
 
-**What v3.1 states over the older blanket wording (2026-10-26).** These are the specification's page
-rules. The walk's budgets are unchanged: updating their semantic policy takes a focused test and
+**What v3.1 states over the older blanket wording (2026-10-26), as v3.2 amends it (2026-10-27).**
+DS22.1–DS22.8 in the canonical specification own the current-task modes, scoped header actions,
+workflow / view / filter distinctions, adaptive filters, shared emptiness, import / edit placement,
+meaningful density and whole-page verification. Local implementation and scoped page-state-width
+evidence are recorded in `../docs/superpowers/plans/2026-10-27-page-composition-v3.2.md`; AT51–AT58
+remain open where the ledger identifies missing routes, states or acceptance. Token package 3.0.0 is
+unchanged, the dated v3.1 ledger and its seven OPEN acceptance items stay separate, and this revision
+claims no deployment. These are the specification's page rules. The walk's budgets are unchanged: updating their semantic policy takes a focused test and
 observed evidence, and no budget is weakened, and no useful instruction deleted, just to obtain a
 green check. The walk's view inventory (`page-templates.json`) is an intended coverage map, not proof
 that every view was exercised.
 
 - One page serves a coherent task, not necessarily one data shape. Connected configuration and
-  result workbenches are expressly allowed; unrelated metadata is not stacked beside them.
+  results are allowed in the current mode; complete overview / list / edit / analysis workbenches are
+  not stacked by default, and unrelated metadata is not stacked beside them.
 - Helpful purpose, required inputs, units, prerequisites, limitations and recovery instructions are
   allowed. Internal implementation narration belongs in diagnostics, and a grey-text counter cannot
   decide language quality.
-- One dominant action per local action group, and at most one main header action; a contextual
-  action in a workbench is not forbidden simply because it is below the header.
+- One dominant action per local action group, and a header default of at most one primary and two
+  common secondary actions, then labelled overflow; a read-only page may have no primary action. A
+  contextual action in a workbench is not forbidden simply because it is below the header.
 - One coherent view-navigation / control band. Workflow progress and result navigation have
   different meanings: compacting them must not hide the process or force an unexplained second
   vocabulary.

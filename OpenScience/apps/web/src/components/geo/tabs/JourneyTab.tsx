@@ -1,4 +1,4 @@
-import { GeoAnalysisWorkbench } from "../GeoAnalysisWorkbench";
+import { GeoAnalysisEntry } from "../GeoAnalysisEntry";
 import { useState } from "react";
 import { Download } from "lucide-react";
 import { webErrorMessage } from "@/lib/apiClient";
@@ -43,8 +43,9 @@ export function JourneyTab({ geoId, project, toolbar }: { geoId: string; project
   useGeoToolbar(journey && !empty
     ? {
       ...toolbar,
-      filters: [
-        ...(toolbar?.filters ?? []),
+      filters: toolbar?.filters,
+      navigation: [
+        ...(toolbar?.navigation ?? []),
         // One way of seeing the journey is not a switch.
         ...(options.length > 1 ? [{ kind: "chips" as const, label: "旅程视图", options, value: current, onChange: (value: string) => setView(value as View) }] : []),
       ],
@@ -60,10 +61,10 @@ export function JourneyTab({ geoId, project, toolbar }: { geoId: string; project
     : toolbar ?? null);
   if (state.kind === "loading") return <TabSkeleton />;
   if (state.kind === "error") return <TabError message={state.message} onRetry={reload} />;
-  if (!journey || empty) return <><StepPending geoId={geoId} project={project} step="journey" /><GeoAnalysisWorkbench geoId={geoId} project={project} initialView="V10" embedded /></>;
+  if (!journey || empty) return <><StepPending geoId={geoId} project={project} step="journey" /><GeoAnalysisEntry geoId={geoId} project={project} initialView="V10" embedded /></>;
   return (
     <div data-geo-tab="journey">
-      <GeoAnalysisWorkbench geoId={geoId} project={project} initialView="V10" embedded />
+      <GeoAnalysisEntry geoId={geoId} project={project} initialView="V10" embedded />
       <div>
         {current === "journey" && <Stages stages={journey.stages} />}
         {current === "care" && <CareNodes nodes={journey.careNodes} />}

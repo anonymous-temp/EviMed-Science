@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readVcrStudy, type VcrStudy } from "@/lib/vcrClient";
 import { fixture, installVcrServer, STUDY_ID } from "../__fixtures__/serverFixtures";
@@ -127,6 +128,7 @@ describe("no title over an empty box", () => {
     installVcrServer(network.productRequest, { [tab("population")]: raw, "GET /vcr/definitions": { definitions: [{ id: "dfn_1", name: "成人 ECOG 0-1", versions: 1, uses: 1, latest: { text: "年龄不小于 18 岁" } }] } });
     const view = await drawTab(<PopulationTab studyId={STUDY_ID} study={study()} />);
     expect(await view.findByRole("heading", { name: "定义库" })).toBeInTheDocument();
+    await userEvent.click(view.getByText("管理定义与版本"));
     expect(view.getByRole("button", { name: "存入定义库" })).toBeInTheDocument();
     expect(view.getByLabelText("用定义库里的定义")).toBeInTheDocument();
   });

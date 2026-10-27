@@ -14,6 +14,18 @@ function column(width?: PageWidth) {
 }
 
 describe("PageShell", () => {
+  it("keeps common secondary actions directly available when the actual content column has room", () => {
+    const width = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(1100);
+    try {
+      render(<MemoryRouter><PageShell title="研究" actionPlan={{
+        primary: { id: "run", label: "开始", onSelect: () => {} },
+        secondary: [{ id: "report", label: "周报", onSelect: () => {} }, { id: "talk", label: "对话", onSelect: () => {} }],
+      }}><p>内容</p></PageShell></MemoryRouter>);
+      expect(screen.getByRole("button", { name: "周报" })).toBeVisible();
+      expect(screen.getByRole("button", { name: "对话" })).toBeVisible();
+    } finally { width.mockRestore(); }
+  });
+
   it("keeps a 16 px gutter on a phone and 24 px from 768 up, on one box that holds the title and the body", () => {
     const { box, heading } = column();
     expect(box).toHaveClass("px-4", "md:px-6");
@@ -80,13 +92,13 @@ describe("PageShell slots", () => {
     expect(band.querySelector("[data-page-header], [data-headline], [data-page-body]")).toBeNull();
   });
 
-  it("keeps the band's height from depending on the tab: a tab without a toolbar reserves the row, and a page with none reserves nothing", () => {
+  it("omits an empty toolbar row while retaining tab navigation (DS22.4)", () => {
     const { container, rerender } = render(<PageShell title="页" tabs={tabs} toolbar={toolbar}><p>正文</p></PageShell>);
     expect(container.querySelector("[data-toolbar]")?.parentElement).toHaveClass("min-h-11");
     rerender(<PageShell title="页" tabs={{ ...tabs, value: "plan" }} toolbar={null}><p>正文</p></PageShell>);
     expect(container.querySelector("[data-toolbar]")).toBeNull();
     const reserved = container.querySelector("[data-page-chrome] > [aria-hidden='true']");
-    expect(reserved).toHaveClass("min-h-11");
+    expect(reserved).toBeNull();
     rerender(<PageShell title="页" tabs={{ ...tabs, value: "plan" }}><p>正文</p></PageShell>);
     expect(container.querySelector("[data-page-chrome] > [aria-hidden='true']")).toBeNull();
   });

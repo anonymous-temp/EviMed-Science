@@ -1,12 +1,12 @@
 # EviMed Frontend Design System
 
-Version 3.1 · 2026-10-26 · Owner-reviewed specification; implementation and release status are separate.
+Version 3.2 · 2026-10-27 · Owner-reviewed specification; implementation and release status are separate.
 
 EviMed is a general-purpose agent platform with a professional medical layer. Ordinary writing, documents, spreadsheets, slides, code, data, web research and scheduled work are first-class tasks. Medical methods, vocabulary and checks enhance relevant work; they do not become entry requirements for other work.
 
 The owner's October 26 direction is **warm paper surfaces, restrained terracotta actions, and a near-black EviMed identity**. The implemented light identity is `#24211e`; the dark identity is light paper ink. The logo decision is near-black. Deep navy is the adopted information-status family, not a second general action accent. Preserve the existing molecule geometry and the useful native conversation surface.
 
-This revision supersedes v3.0 after the owner review and consolidates the September/October decisions. `DESIGN.md` is the engineering companion. The actual machine-readable values are in `packages/design-tokens`; prose does not create a competing token source. Historical reports describe their own dates, not current defects.
+This revision supersedes v3.1 after the October 27 page-composition review and consolidates the September/October decisions. `DESIGN.md` is the engineering companion. The actual machine-readable values are in `packages/design-tokens`; prose does not create a competing token source. Historical reports describe their own dates, not current defects.
 
 ## 1 Authority and acceptance
 
@@ -18,7 +18,7 @@ The October 26 audit examined 389 product TSX files through an AST inventory and
 
 ### 1.1 Status and release identity
 
-The local integration worktree now implements **token package 3.0.0** against **specification 3.1**. The preceding main 2.2.0 read and uncommitted 2.3.0 warm-brand candidate remain historical provenance. Generated values, component contracts and release digests belong to the coordinated major migration; compatible added roles are minor and within-role tuning is patch.
+The local integration worktree implements **token package 3.0.0** against the historical **specification 3.1** baseline. Specification **3.2** adds DS22 composition rules; shared controls and affected GEO, memory, reader, knowledge, research and skill-authoring surfaces have local implementation and scoped test/browser receipts. The route inventory, native runtime, accessibility and release acceptance remain open in `../../docs/superpowers/plans/2026-10-27-page-composition-v3.2.md`. This composition revision does not change token package 3.0.0. The preceding main 2.2.0 read and uncommitted 2.3.0 warm-brand candidate remain historical provenance. Generated values, component contracts and release digests belong to the coordinated major migration; compatible added roles are minor and within-role tuning is patch.
 
 Implemented locally: derived color/focus/status roles, shared interaction and input primitives, typed measurements/quantities, scientific-viewer repairs, scoped GEO/VCR/module adoption, and public component contracts. See the [execution ledger](../../docs/superpowers/plans/2026-10-26-design-system-v3-execution.md) for actual proof and outstanding gates. Local implementation does not establish publication, push, main adoption or deployment.
 
@@ -30,7 +30,7 @@ External Vue adoption, installed production PWA cache behavior, physical touch, 
 
 Proof codes: **L** lint/static contract; **T** behavioral or type test; **W** rendered route/interaction walk; **G** gallery/composition fixture; **M** manual keyboard/touch/assistive-technology check. A listed check is a required proof method, not a claim it exists or passed. New rules require an ID, owner, applicable states and proof method. Appendix A covers every DS group; DS21 and the component adoption table add rule-level detail.
 
-DS01-DS20 identifiers are retained; DS21 adds cross-component interaction. AT01-AT50 are the minimum regression scenarios, not a complete WCAG checklist. No UI rule creates an additional runtime evidence veto.
+DS01-DS21 identifiers are retained; DS22 adds page composition and complexity. AT01-AT58 are the minimum regression scenarios, not a complete WCAG checklist. No UI rule creates an additional runtime evidence veto.
 
 ## DS01 Product grammar and modes
 
@@ -116,7 +116,7 @@ Distinguish title, lead, added context and source. Each expanded block must answ
 
 Preserve the shared scale: 4/8/12/16/20/24/32/40/48/64px. Use tighter spacing inside groups and more space between distinct tasks. Default page gutters are 16px below 768px and 24px from there. Align a page title and its main content to the same structural edge.
 
-Use the established width roles: read 720px, page 1040px, wide 1200px with the existing larger-screen expansion, full for a genuinely full work surface. User-resized sidebars and panels are allowed; do not label a valid saved width as a defect because it differs from the default. Related input/configuration/progress/results can share one workbench. Unrelated content cannot be justified by calling it a workbench.
+Use the established width roles: read 720px, page 1040px, wide 1200px with the existing larger-screen expansion, full for a genuinely full work surface. User-resized sidebars and panels are allowed; do not label a valid saved width as a defect because it differs from the default. Related input/configuration/progress/results can share one workbench when they serve the current task and mode under DS22.1. This does not authorize default stacking of complete overview, list, edit and analysis workbenches.
 
 Radii remain tag 6, control/row 8, card 12, panel/dialog 16, composer 24px. Static surfaces do not acquire shadows merely because the palette is warm. Keep elevation for real overlays and the composer, using existing levels.
 
@@ -137,6 +137,8 @@ Mobile navigation must close after a destination is selected, move focus into th
 | Filter chip | Changes a query/selection | Pressed state and clear/reset behavior |
 | Tab | A related view in one context | Tab/panel association and correct keyboard activation |
 | Switch | Immediate, reversible preference; also the saved choice of a setting that takes effect in a later runtime | Optimistic selection with pending lock and failure rollback; a delayed runtime activation is a labelled switch for what was saved with its effective-time status beside it (integration review 2026-10-26: 「应用启用/应用停用」 text buttons read as states and dropped the label), never an on/off promise of immediate effect |
+
+Page, list, row and selection actions have distinct owners. Apply DS22.2 to header density and export-format menus; a dominant action in a local group does not authorize unrelated actions in the page header.
 
 Keep existing sizes 28 small, 36 default and 44 primary, with 16/20px icons and consistent stroke. Actual pointer targets must meet WCAG 2.5.8 or a valid exception; 44px is a preferred touch target, not a blanket AA minimum. A small icon can have a larger invisible hit area. Hover-only controls must also appear on focus and have a touch path.
 
@@ -159,6 +161,8 @@ Use a proven tabbability primitive or equivalent complete logic: exclude negativ
 Menus position within available space and scroll when content exceeds it. Test 30/100-item histories at short heights. Selection and focus remain visible. Ordinary notifications do not steal modal focus. Single-character shortcuts are scoped or disableable; commands and native editor shortcuts keep their established ownership. Current shortcut definitions come from the native surface; do not redefine Cmd/Ctrl+Enter independently in host documentation.
 
 ## DS09 State truth and recovery
+
+DS22.5 aggregates same-cause first-use emptiness at the parent while preserving independent errors, valid partial results and history.
 
 All lists/sections distinguish initial load, populated, first-use empty, filtered empty, partial, stale, first-read failure, refresh failure, denied and canceled as applicable. Preserve usable prior data with its timestamp after refresh failure. Initial failure leaves a persistent explanation and retry, not only a disappearing toast.
 
@@ -236,7 +240,7 @@ Use LCP <=2.5s, INP <=200ms and CLS <=0.1 as field goals at the 75th percentile,
 
 ## DS19 Components and page templates
 
-Reuse PageShell and its supported scope/steps/activity/tabs/toolbar/headline slots; align controls with the content they affect. Keep list, master-detail, workflow, data-map, reader and settings templates, plus the connected-workbench exception. New structure needs an explicit task rationale and responsive proof, not another arbitrary nested-card system.
+Reuse PageShell and its supported scope/steps/activity/tabs/toolbar/headline slots; align controls with the content they affect. Keep list, master-detail, workflow, data-map, reader and settings templates, plus a connected workbench for the current task and mode as defined in DS22. New structure needs an explicit task rationale and responsive proof, not another arbitrary nested-card system.
 
 Helpful purpose, units, prerequisites, limitations and recovery instructions are allowed. A mechanical grey-sentence counter cannot distinguish useful guidance from internal narration. Keep existing regression budgets while updating their semantic intent and tests; never delete necessary task guidance just to reduce a count. Informative zero-count or currently empty destinations may remain discoverable when they explain a prerequisite or preserve a selected filter; provide a useful reset/next action.
 
@@ -246,7 +250,7 @@ Every shared component adopts the ordered JSDoc contract template in DESIGN.md: 
 
 Maintain one normative English specification here, one engineering companion in DESIGN.md, and one generated token table. Module policies stay in their maintained plans. Chinese deliverables are dated immutable reading snapshots or a link/index; do not hand-maintain a second normative body. A future generated translation must record its source revision and hash and cannot silently replace the English authority. Mark old material historical. AGENTS.md points to the current authority and records new owner decisions without reversing unrelated edits. Each exception names rule, surface, rationale, equivalent access, owner, expiry and evidence.
 
-Do not deploy solely because a new palette builds. Review generated assets, theme-disabled native behavior, fixed scientific canvases, original/derived content, installed PWA and external Vue consumers. Preserve source revision, build/image identity and acceptance state separately. Publish the adopted brand in one coordinated change containing this specification, DESIGN.md, AGENTS.md, token 3.0.0 source/package/release metadata, generated consumers, brand assets and required consumer pin/readback updates. Consumer adoption outside this repository remains an explicit release gate. Product code, documentation and tests change together where the rule is executable. User-task outcomes decide whether a mechanical guardrail remains useful.
+Do not deploy solely because a new palette builds. Review generated assets, theme-disabled native behavior, fixed scientific canvases, original/derived content, installed PWA and external Vue consumers. Preserve source revision, build/image identity and acceptance state separately. For a token/brand release, publish the adopted brand in one coordinated change containing this specification, DESIGN.md, AGENTS.md, token 3.0.0 source/package/release metadata, generated consumers, brand assets and required consumer pin/readback updates. Consumer adoption outside this repository remains an explicit release gate. Product code, documentation and tests change together where the rule is executable. User-task outcomes decide whether a mechanical guardrail remains useful.
 
 The [adoption plan](../../docs/superpowers/plans/2026-10-26-frontend-design-system-v3.1-adoption.md#work-packages-and-closure) owns the ordered work packages and their exit conditions. Keep sequencing there instead of maintaining a second roadmap in this normative specification.
 
@@ -353,6 +357,42 @@ Owner **B**: H implements SearchInput/shared submit guard; K supplies native com
 
 Owner **H**, with existing server permissions. Verify **T/W/M**, AT48. Adopt opt-in batch operations where the backend supports them: visible selection checkboxes, indeterminate page checkbox, count, clear selection and labeled batch action bar. Default Select All means the current page. Selecting all matching results requires an explicit query-scoped option with a frozen scope/count and exclusions; it cannot silently include later arrivals. Cross-page selection uses stable IDs. Scope/tenant change clears selection; ordinary sorting preserves it. Mixed outcomes show per-item success/failure and retry only the failed subset without repeating successful effects. Disabled/unavailable objects state why. Destructive batch actions follow DS21.3; there is no blanket product-wide ban or promise of batch support on every list.
 
+## DS22 Page composition and complexity
+
+Adoption targets approved 2026-10-27. Owner **H**, with **B** acceptance where native navigation or task state crosses the host boundary; producer permissions, outcomes and evidence remain authoritative. These rules extend existing PageShell, Toolbar, StepRail and DocumentExport patterns. They require no second composer or parallel page framework. Each subrule's acceptance ID below includes its applicable populated, empty and failure transitions; record unsupported states explicitly rather than fabricating fixtures.
+
+### DS22.1 Current task and modes
+
+Verify **L/G/W**, AT51. A page MUST express one coherent current task. Overview, list, edit/import and analysis are distinct modes with explicit entry and return. Do not stack complete workbenches by default. Legitimate same-task vertical sections and side-by-side input/result or master/detail layouts remain valid when their relationship is clear and their responsive order preserves the task. Review whole-page hierarchy, not a count of containers.
+
+### DS22.2 Action ownership and budgets
+
+Verify **T/G/W/M**, AT52. Actions MUST belong to page, list, row or selection scope and appear beside the scope they affect. A page header SHOULD contain at most one primary and two common secondary actions, followed by labeled overflow for remaining actions; a read-only view may have zero primary actions. This is a header default, not permission to hide frequent actions, safety consequences, costs, permissions or unknown mutation outcomes. Preserve accessible labels and keyboard paths. Group export formats in one labeled menu using the existing export component, retaining every supported format, permission, pending/error state and actual output. Do not export invented empty data or advertise a format without its working path.
+
+### DS22.3 Workflow, views and filters
+
+Verify **T/G/W/M**, AT53. Workflow progress, view navigation and query filtering MUST have distinct semantics. Do not repeat a context selector or add competing navigation for the same state. Preserve the existing eight-step workflow: every step remains reachable through the rail or an explicit labeled all-steps/overflow affordance at narrow widths. Compact presentation must preserve current step, status, dependencies and result destinations; it cannot remove real workflow stages.
+
+### DS22.4 Adaptive filters and conditional tools
+
+Verify **T/G/W/M**, AT54. Filters MUST adapt to available width with deliberate grouping, wrapping or accessible disclosure, plus an applied-filter summary and clear/reset action. Avoid cascades of accidental wrapped controls and never shrink fonts to force a row. A conditional toolbar MUST NOT reserve an empty row solely to match another view's height. Keep core navigation stable, preserve focus on transitions, and maintain selection and scroll anchoring when controls appear or disappear. Content-dependent heights are valid.
+
+### DS22.5 Shared emptiness and independent truth
+
+Verify **T/G/W**, AT55. When sibling sections share one first-use cause or missing prerequisite, the parent MUST explain that cause and next action once rather than repeat empty cards. Keep valid partial data, independent failures, prior results and history visible in their own scope with local recovery. Unknown is not zero; filtered-empty is not first-use-empty. Do not suppress an independent error or manufacture an export to satisfy an empty-state layout.
+
+### DS22.6 Import and edit in context
+
+Verify **T/G/W/M**, AT56. Explicit import/edit modes belong in the main area when they are long or complex, with a clear return to the list that preserves draft and scope under the actual persistence policy. Short auxiliary edits/previews may use drawers. Essential sampling, cost and evidence parameters MUST remain visible at the commit point, including consequential choices disclosed earlier. Simplifying a page cannot remove workflow functionality or substitute a decorative control for it. Keep existing unsaved-work, pending, permission and unknown-outcome contracts.
+
+### DS22.7 Density and meaningful grouping
+
+Verify **G/W/M**, AT57. Cards MUST represent meaningful groups rather than enclose every heading. Sparse history should use a compact list; short selectors should use an appropriate width rather than fill available space automatically. Preserve readable labels, useful guidance and result content. No universal card maximum applies, and hiding content to satisfy a numeric complexity budget is invalid. Same-task scientific comparison may legitimately require multiple panels.
+
+### DS22.8 Whole-page verification and scope
+
+Verify **L/T/G/W/M** as applicable, AT58. Maintain an exact affected-surface map with route, mode, state, width, owner and evidence. Review whole pages across initial loading, first-use/filtered empty, populated, partial, stale, denied, error and mutation states where applicable, at narrow, intermediate and wide widths; include dark theme, zoom/short height and native boundaries where affected. A shared-component test alone cannot close page adoption. Geometry/lint tests detect their declared mechanical constraints; UI review separately judges task coherence, discoverability and preserved behavior. Neither a cosmetic classifier pass nor arbitrary budget relaxation establishes compliance. Timing evidence must name the measured interaction and environment: there is no universal five-second acceptance standard. Preserve historical v3.1 audit findings and its seven OPEN acceptance items separately from new DS22 work; local proof, commit/push, main adoption and deployment are separate receipts.
+
 ## Minimum acceptance scenarios (existing and new; not a pass list)
 
 | ID | Scenario | Required result |
@@ -407,6 +447,14 @@ Owner **H**, with existing server permissions. Verify **T/W/M**, AT48. Adopt opt
 | AT48 | Batch operation with mixed outcomes | Query/page selection scope explicit; permissions retained; retry failed items only; recovery truthful |
 | AT49 | Combobox/date/file primitives | Out-of-order async results and IME safe; date semantics stable; transfer/parse readiness and partial failure distinguishable |
 | AT50 | Component contract and release adoption | Nine JSDoc fields plus executable fixture/proof links; major version, generated consumers and external adoption receipts agree |
+| AT51 | Current task and explicit modes | Overview/list/edit/analysis entries and returns preserve coherent task, scope and legitimate same-task panels |
+| AT52 | Scoped actions and export menu | Header default, row/list/selection ownership, every export format and permission/pending/error outcome remain usable |
+| AT53 | Workflow and navigation semantics | Distinct workflow/view/filter controls; all eight steps reachable at narrow and wide widths |
+| AT54 | Adaptive filters and conditional toolbars | Applied summary/reset, readable wrapping/disclosure, no empty reserved toolbar; focus and scroll anchor survive transitions |
+| AT55 | Shared first-use state | One parent explanation; partial/history data and independent errors retained; unknown remains unknown and empty export is honest |
+| AT56 | Import/edit mode and return | Main-area complex work, short auxiliary drawer, preserved draft/scope and visible consequential commit parameters |
+| AT57 | Information density | Meaningful card groups, compact sparse history, appropriate selector width; no content hidden to pass a budget |
+| AT58 | Whole-page state and width matrix | Exact affected-surface map and separate geometry/behavior/UI evidence; historical open gates and release receipts remain distinct |
 
 ## Appendix A — ownership and verification coverage
 
@@ -435,12 +483,15 @@ Every requirement within a DS group inherits its row; a more specific DS02/DS21/
 | DS19 component contracts | H; K inventory stays upstream | L ordered JSDoc/fixture references; T/G public variants; W composition | AT35-AT42/49/50 |
 | DS20 governance | B release ownership | L/T version/digest/doc-link consistency; W native and consumer adoption receipt | AT03/04/50 |
 | DS21.1-DS21.10 | Per subrule above | Per-subrule L/T/W/G/M; do not replace behavioral proof with prose compliance | AT33-AT49 |
+| DS22.1-DS22.8 | H; B for native/task-state boundaries | Per-subrule L/T/G/W/M; exact page-state-width scope and retained functionality | AT51-AT58 |
 
 ### References and provenance
 
 - [Huashu Design 3.0.0, inspected commit](https://github.com/alchaincyf/huashu-design/blob/4fc7bfdbd5ec3fa2d43ce7a6433de60976a5e4b1/SKILL.md): requested design-review method; approved brand direction takes precedence over generic aesthetic warnings.
 - [Impeccable 4.7.1, inspected commit](https://github.com/pbakaus/impeccable/blob/3671d50f0ac9a662ce0615e85a256110c9cd720b/.agents/skills/impeccable/SKILL.md): Operate/Read, independent critique and technical review. Context/detector were attempted but engine unavailable; no clean detector claim.
 - [Carbon component documentation](https://www.carbondesignsystem.com/building-blocks/core/components/data-table/guidelines): anatomy, use, behavior and accessibility structure.
+- [Carbon empty-state patterns](https://www.carbondesignsystem.com/building-blocks/core/patterns/empty-states): contextual guidance and action hierarchy when several empty states coexist.
+- [NN/g progressive disclosure](https://www.nngroup.com/articles/progressive-disclosure/): keep frequent choices discoverable and defer specialized choices without obscuring their purpose.
 - [Atlassian foundations](https://atlassian.design/foundations) and [tools](https://atlassian.design/tools): semantic decisions connected to reusable implementation.
 - [Fluent responsible AI](https://fluent2.microsoft.design/responsible-AI): appropriate expectations, agency and attribution.
 - [WCAG 2.2](https://www.w3.org/TR/WCAG22/) and [APG modal pattern](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/): normative target versus implementation guidance.
@@ -450,4 +501,4 @@ Every requirement within a DS group inherits its row; a more specific DS02/DS21/
 - [APG tabs](https://www.w3.org/WAI/ARIA/apg/patterns/tabs/), [combobox](https://www.w3.org/WAI/ARIA/apg/patterns/combobox/) and [switch](https://www.w3.org/WAI/ARIA/apg/patterns/switch/): interaction patterns; expensive tabs justify manual activation.
 - [ARIA disabled](https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Attributes/aria-disabled), [fieldset semantics](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/fieldset) and [checkVisibility](https://developer.mozilla.org/en-US/docs/Web/API/Element/checkVisibility): ARIA requires activation suppression; focus eligibility is more than an attribute selector. These implementation references were refreshed for v3.1.
 
-The official skill snapshots were freshly read on October 26 through the GitHub connector. Carbon, Atlassian foundations, Fluent responsible AI, WCAG 2.2, APG modal guidance, target-size minimum, DTCG 2025.10 and Web Vitals were refreshed from their primary websites on October 26. The other reference links remain from the earlier research. Browser/source findings and task-specific decisions are the October audit's own evidence.
+The official skill snapshots were freshly read on October 26 through the GitHub connector. Carbon, Atlassian foundations, Fluent responsible AI, WCAG 2.2, APG modal guidance, target-size minimum, DTCG 2025.10 and Web Vitals were refreshed from their primary websites on October 26. Carbon's empty-state pattern and NN/g's progressive-disclosure guidance were consulted on October 27 for DS22. Their recommendations inform the product rules; numeric action budgets and verification thresholds are EviMed decisions, not external standards. The other reference links remain from the earlier research. Browser/source findings and task-specific decisions are the October audit's own evidence.

@@ -1,7 +1,7 @@
 import type { VcrObjectSelection } from "@/lib/runtimeUiNavigation";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
-import { ChevronLeft, MessageSquare, MoreHorizontal } from "lucide-react";
+import { ChevronLeft, MessageSquare } from "lucide-react";
 import { vcrCalculationPath } from "@/lib/vcrMethodLocation";
 import { toast } from "@/lib/toast";
 import { webErrorMessage } from "@/lib/apiClient";
@@ -10,8 +10,8 @@ import { PageShell } from "@/components/layout/PageShell";
 import type { ActivityStripProps } from "@/components/ui/ActivityStrip";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { Drawer } from "@/components/ui/Drawer";
-import { IconButton } from "@/components/ui/IconButton";
-import { Menu, type MenuEntry } from "@/components/ui/Menu";
+import type { MenuEntry } from "@/components/ui/Menu";
+import type { PageActionPlan } from "@/components/layout/HeaderActions";
 import type { ToolbarProps } from "@/components/ui/Toolbar";
 import { StudyFrameContext, type StudyFrameApi, type StudyPanelKey, type StudyPrimary } from "./studyFrameContext";
 import { budgetWaitOf } from "./VcrBudgetDialog";
@@ -112,21 +112,29 @@ export function StudyFrame({ studyId, study, view, reload, menu, onChat, onPanel
   // The primary action: the next step, in the header of every tab. While work goes on the strip under the header is what is said
   // and there is nothing to press for another step — it could only queue behind this one.
   const waitingBudget = study.abilities.includes("manage_study") && budgetWaitOf(study).count > 0;
-  const budgetButton = waitingBudget ? <Button onClick={() => onPanel("budget")}>确认预算</Button> : null;
   // The open tab's own primary (选定方案 on 试验) takes the header's primary look unless the budget waits, which lets the study go on and
   // outranks it; either way the next step is the quiet one beside it, and the header never holds two solid buttons.
-  const tabButton = tabPrimary ? <Button variant={waitingBudget ? "secondary" : "primary"} onClick={tabPrimary.onSelect}>{tabPrimary.label}</Button> : null;
+  const actionPlan: PageActionPlan = {
+    primary: waitingBudget ? { id: "budget", label: "确认预算", onSelect: () => onPanel("budget") } : tabPrimary ? { id: "tab-primary", label: tabPrimary.label, onSelect: tabPrimary.onSelect } : undefined,
+    secondary: [
+      ...(waitingBudget && tabPrimary ? [{ id: "tab-primary", label: tabPrimary.label, onSelect: tabPrimary.onSelect }] : []),
+      ...(view !== "chat" && (programme || study.conversation.sessionId) ? [{ id: "study-chat", label: "研究对话", icon: MessageSquare, onSelect: () => onChat() }] : []),
+    ],
+    overflow: menu,
+    overflowLabel: "更多操作",
+  };
   const strip = activityStripOf(study, { onCancel: mayRun ? cancel : undefined, cancelling });
   const controls = view === "chat" ? undefined : toolbar;
   const bandToolbar: ToolbarProps = {
     ...(controls ?? {}), views: undefined,
     actions: controls?.actions,
-    filters: [{ kind: "select", label: "查看", value: view === "patients" ? "population" : view, pinned: true,
+    navigation: [{ kind: "select", label: "查看", value: view === "patients" ? "population" : view, pinned: true,
       options: [...(programme || study.conversation.sessionId ? [{ value: "chat", label: "对话" }] : []), ...(programme ? VCR_TAB_ITEMS : VCR_TAB_ITEMS.filter(item => ["overview", "data", "population", "matching"].includes(item.key))).map(item => ({ value: item.key, label: item.label }))],
       onChange: next => { if (next) onView(next as StudyView); } },
       ...(view === "population" || view === "patients" ? [{ kind: "select" as const, label: "人群与患者", value: individual ? "individual" : "cohort", options: [{ value: "cohort", label: "队列总览" }, { value: "individual", label: "个体患者" }], onChange: (next: string | null) => { if (next) setParams(previous => { const updated = new URLSearchParams(previous); updated.set("level", next); if (next === "cohort") updated.delete("patient"); return updated; }); } }] : []),
       ...(controls?.views ? [{ kind: "select" as const, label: controls.views.label, value: controls.views.value, options: controls.views.items.map(item => ({ value: item.value, label: item.label })), onChange: (next: string | null) => { if (next) controls.views?.onChange(next); } }] : []),
-      ...(controls?.filters ?? [])],
+      ...(controls?.navigation ?? [])],
+    filters: controls?.filters,
   };
 
   return (
@@ -141,19 +149,7 @@ export function StudyFrame({ studyId, study, view, reload, menu, onChat, onPanel
           </Link>
         )}
         meta={programme ? <StudyMeta study={study} /> : "独立计算"}
-        actions={(
-          <>
-            {budgetButton}
-            {tabButton}
-            {view !== "chat" && (programme || study.conversation.sessionId) && <Button variant="secondary" onClick={() => onChat()}>
-              <MessageSquare size={16} aria-hidden="true" />
-              研究对话
-            </Button>}
-            <Menu label="更多操作" items={[...menu]}>
-              <IconButton icon={MoreHorizontal} label="更多操作" className="data-[state=open]:bg-surface-2 data-[state=open]:text-text" />
-            </Menu>
-          </>
-        )}
+        actionPlan={actionPlan}
         {...(strip ? { activity: strip } : {})}
         toolbar={bandToolbar}
         contentClassName={view === "chat" ? "mt-3" : undefined}

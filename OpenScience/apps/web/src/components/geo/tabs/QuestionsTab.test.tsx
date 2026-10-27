@@ -331,3 +331,43 @@ describe("问题与回答: by journey", () => {
     await waitFor(() => expect(screen.getByTestId("search")).toHaveTextContent(`group=${G_BRAND}`));
   });
 });
+
+it('makes import a main-area mode and restores the browsing list without starting measurement', async () => {
+  renderTab(geoProject(), '/app/geo/geo_1/questions?view=all&session=s1&questionVersion=2');
+  await screen.findByLabelText('搜索问题');
+  expect(screen.queryByLabelText(/选择 Excel/)).toBeNull();
+  await userEvent.click(screen.getByRole('button', {name:'导入问句'}));
+  expect(await screen.findByLabelText(/选择 Excel/)).toBeVisible();
+  expect(screen.queryByLabelText('搜索问题')).toBeNull();
+  expect(screen.getByTestId('search')).toHaveTextContent('questionMode=import');
+  expect(screen.getByTestId('search')).toHaveTextContent('session=s1');
+  expect(screen.getByTestId('search')).toHaveTextContent('questionVersion=2');
+  expect(client.runGeoStep).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByRole('button', {name:'返回问题列表'}));
+  expect(await screen.findByLabelText('搜索问题')).toBeVisible();
+  expect(screen.getByTestId('search')).not.toHaveTextContent('questionMode=');
+});
+
+it('keeps every-question navigation and the selected scope when clearing a question-list query',async()=>{
+ renderTab(geoProject(),'/app/geo/geo_1/questions?selectionRef=gsel_keep&engines=kimi&questionVersion=2&session=s1');
+ await screen.findByLabelText('搜索问题');
+ await userEvent.click(screen.getByRole('button',{name:'全部问句'}));
+ await userEvent.type(screen.getByLabelText('搜索问题'),'效果');
+ await userEvent.click(screen.getByRole('button',{name:'清除筛选'}));
+ const params=new URLSearchParams(screen.getByTestId('search').textContent!);
+ expect(params.get('view')).toBe('all');expect(params.get('selectionRef')).toBe('gsel_keep');expect(params.get('engines')).toBe('kimi');
+ expect(params.get('questionVersion')).toBe('2');expect(params.get('session')).toBe('s1');expect(params.has('questionSearch')).toBe(false);
+ expect(screen.getByRole('button',{name:'全部问句'})).toHaveAttribute('aria-pressed','true');
+});
+
+it('treats the current question version as visible navigation rather than a resettable filter',async()=>{
+ const original=questionSetFixture();client.getGeoQuestions.mockResolvedValue({...original,version:2,sets:[...original.sets,{version:2,lockedAt:null,measuredCount:8}]});
+ renderTab(geoProject(),'/app/geo/geo_1/questions?questionVersion=2&selectionRef=gsel_keep&engines=kimi');
+ const version=await screen.findByRole('button',{name:/问句版本：第 2 版/});expect(version).toBeVisible();
+ expect(screen.queryByRole('button',{name:'清除筛选'})).toBeNull();expect(screen.queryByRole('button',{name:/^筛选.*1/})).toBeNull();
+ await userEvent.click(screen.getByRole('button',{name:'存量'}));await userEvent.type(screen.getByLabelText('搜索问题'),'品牌');
+ await userEvent.click(screen.getByRole('button',{name:'清除筛选'}));
+ expect(screen.queryByRole('button',{name:'清除筛选'})).toBeNull();expect(screen.queryByRole('button',{name:/^筛选.*1/})).toBeNull();
+ expect(screen.getByRole('button',{name:/问句版本：第 2 版/})).toBeVisible();
+ const params=new URLSearchParams(screen.getByTestId('search').textContent!);expect(params.get('questionVersion')).toBe('2');expect(params.get('engines')).toBe('kimi');
+});

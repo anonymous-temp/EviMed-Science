@@ -116,3 +116,14 @@ export function useGeoSearchChange(): (changes: Readonly<Record<string, string |
     }, { replace: true });
   }, [setParams]);
 }
+
+/** Reset result-list queries without releasing a saved selection, canonical scope, version or business destination. */
+export function useGeoFilterReset(names: readonly string[]): () => void {
+  const [, setParams] = useSearchParams();
+  const key = names.join('\u0000');
+  return useCallback(() => setParams(previous => {
+    const copy = new URLSearchParams(previous);
+    for (const name of key.split('\u0000')) copy.delete(name);
+    return copy;
+  }, { replace: true }), [key, setParams]);
+}

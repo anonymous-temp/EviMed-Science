@@ -26,10 +26,10 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Drawer } from "@/components/ui/Drawer";
 import type { FilterOption } from "@/components/ui/FilterChips";
 import { List } from "@/components/ui/ListRow";
-import { Menu } from "@/components/ui/Menu";
+import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { ShowMore } from "@/components/ui/ShowMore";
 import { StepState } from "@/components/ui/StepState";
-import type { ToolbarFilter, ToolbarProps } from "@/components/ui/Toolbar";
+import type { ToolbarChips, ToolbarFilter, ToolbarProps } from "@/components/ui/Toolbar";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { FilesSkeleton } from "@/components/cards/Skeletons";
@@ -561,13 +561,14 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
     onAddToProject: () => setTargetDialog({ sources: [source], conversation: false }),
   });
 
-  const addMenu = (label = "添加") => (
-    <Menu label="添加" items={[
+  const addItems: MenuEntry[] = [
       { label: "上传文件", icon: FileUp, onSelect: () => { setUploadItems([]); setUploadProject(addProjectId); setDialog("upload"); } },
       { label: "添加网页链接", icon: Globe, onSelect: () => setDialog("link") },
       { label: "新建笔记", icon: StickyNote, onSelect: () => setDialog("note") },
       ...(driveOffered ? [{ label: "从网盘导入", icon: Cloud, onSelect: () => setConnecting(true) }] : []),
-    ]}>
+  ];
+  const addMenu = (label = "添加") => (
+    <Menu label="添加" items={addItems}>
       <Button disabled={!hasWebApi || uploading} loading={uploading}>{!uploading && <Plus size={16} aria-hidden="true" />}{label}</Button>
     </Menu>
   );
@@ -636,7 +637,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   const typeFilter: ToolbarFilter[] = kindOptions.length > 0 && (kindsPresent >= 2 || kind !== null || outputsChip)
     ? [{ kind: "chips", label: "资料类型", options: chipOptions, value: outputsView ? "outputs" : kind ?? "all", neutral: "all", maxVisible: chipOptions.length, onChange: chooseChip }]
     : [];
-  const graphFilter: ToolbarFilter[] = [{
+  const graphNavigation: ToolbarChips[] = [{
     kind: "chips", label: "图谱的类型", neutral: "wiki", options: [{ value: "wiki", label: "页面之间" }, { value: "kg", label: "实体和关系" }],
     value: listState.graph === "kg" ? "kg" : "wiki", pinned: true, onChange: (next) => update({ graph: next === "kg" ? "kg" : null, focus: null, depth: null }),
   }];
@@ -653,7 +654,8 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
     ),
   } : firstRun ? undefined : {
     label: tab === "sources" ? "资料的筛选" : tab === "pages" ? "知识页的搜索" : "图谱的筛选",
-    filters: tab === "sources" ? typeFilter : tab === "graph" ? graphFilter : [],
+    filters: tab === "sources" ? typeFilter : [],
+    navigation: tab === "graph" ? graphNavigation : [],
     onClear: tab === "sources" && filtered ? () => { setQuery(""); update({ kind: null, view: null, q: "" }); } : undefined,
     search: searchBox,
     summary: tab === "sources" ? (total === null ? undefined : `${total} 份`) : tab === "pages" ? (pageCount > 0 ? `${pageCount} 页` : undefined) : undefined,
@@ -680,16 +682,15 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
         title="知识库"
         scope={scopeMenu}
         meta={pagesOffered && !!scopeProjectId ? <KnowledgeStatusDot status={knowledge} asking={compileAsking} onCompile={() => void compileNow()} /> : undefined}
-        actions={<>
-          {!firstRun && addMenu()}
-          {!!scopeProjectId && !firstRun && (
-            <Menu label="更多" items={[
+        actionPlan={firstRun ? undefined : {
+          primary: { id: "add", label: "添加", items: addItems, disabled: !hasWebApi || uploading, loading: uploading },
+          overflowLabel: "更多",
+          overflow: scopeProjectId ? [
               { label: "在记忆总览中查看", onSelect: () => navigate("/app/memory/overview") },
               ...(pagesOffered && line?.canCompile ? [{ label: compileAsking ? "正在重新整理" : "重新整理知识页", icon: RefreshCw, disabled: compileAsking, onSelect: () => void compileNow() }] : []),
               { label: exporting ? "正在导出" : "导出到 Obsidian", icon: Download, disabled: exporting || !hasWebApi, onSelect: () => void exportVault() },
-            ]} />
-          )}
-        </>}
+          ] : [],
+        }}
         activity={compiling && !!scopeProjectId && knowledge ? {
           label: "整理知识页", phase: [knowledge.pages > 0 ? `已有 ${knowledge.pages} 页` : "", knowledge.typedPages.kg > 0 ? `${knowledge.typedPages.kg} 个实体` : ""].filter(Boolean).join("，") || undefined,
           startedAt: knowledge.stage?.startedAt ?? null, ...(knowledge.state === "queued" ? { waiting: "资料有更新，稍后会自动开始" } : {}),

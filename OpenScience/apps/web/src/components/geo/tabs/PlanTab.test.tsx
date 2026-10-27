@@ -77,11 +77,12 @@ describe("方案: what it is", () => {
     expect(client.getGeoJourney).not.toHaveBeenCalled();
   });
 
-  it("keeps plan tier controls separate from its embedded selected-analysis toolbar", async () => {
+  it("offers frozen-plan analysis as an explicit main-area entry", async () => {
     const view = renderPlan();
     await screen.findByRole("heading", { name: "目标" });
     expect([...view.container.querySelectorAll("[role=tablist], [data-toolbar], [role=searchbox], input")].filter(node=>!node.closest("[data-geo-analysis]"))).toHaveLength(0);
-    expect(view.container.querySelector("[data-geo-analysis] [data-toolbar]")).toBeInTheDocument();
+    expect(view.container.querySelector("[data-toolbar]")).toBeNull();
+    expect(screen.getByRole("link", { name: "方案目标与实测分析" })).toHaveAttribute("href", expect.stringContaining("analysis=V26"));
     // The only controls on the page that can be pressed are 「选这一档」 buttons: none is a chip of a filter group.
     for (const group of view.container.querySelectorAll("[role=group]")) {
       expect(group.querySelectorAll("[aria-pressed]"), group.getAttribute("aria-label") ?? "").toHaveLength(0);
@@ -449,8 +450,15 @@ it("keeps source-embedded generation subordinate while preserving its source con
   const generate = await screen.findByRole("button", { name: "生成方案" });
   expect(generate).toHaveClass("bg-surface-2");
   expect(generate).not.toHaveClass("bg-accent");
-  expect(screen.getByRole("region", { name: "方案目标与实测分析" })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "方案目标与实测分析" })).toHaveAttribute("href", expect.stringContaining("analysis=V26"));
   await userEvent.click(generate);
   await waitFor(() => expect(client.stageGeoPlanContext).toHaveBeenCalled());
   expect(client.stageGeoPlanContext.mock.calls[0][1]).toMatchObject({ mode: "strategy", url: "https://example.org/selected-page" });
+});
+
+it('reads the exact source plan URL identity and frozen version from the main-area address', async () => {
+  render(<MemoryRouter initialEntries={['/app/geo/geo_1/plan?planSource=source_exact&planUrl=https%3A%2F%2Fexample.org%2Fexact&selectionRef=gsel_exact&strategyVersion=7&session=s1']}><GeoFrameHarness project={project} tab="plan"><PlanTab {...props} /></GeoFrameHarness></MemoryRouter>);
+  await screen.findByRole('heading', {name:'实施方案'});
+  expect(client.getGeoStrategy).toHaveBeenCalledWith('geo_1', {sourceId:'source_exact',url:'https://example.org/exact',selectionRef:'gsel_exact',strategyVersion:7});
+  expect(screen.getByRole('link', {name:'方案目标与实测分析'})).toHaveAttribute('href', expect.stringContaining('strategyVersion='));
 });

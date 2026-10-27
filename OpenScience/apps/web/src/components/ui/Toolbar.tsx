@@ -1,3 +1,5 @@
+import { useContainerNarrow } from "@/lib/useContainerNarrow";
+import { HeaderActions, type PageActionPlan } from "@/components/layout/HeaderActions";
 import { isComposingKey, isSubmitKey } from "@/lib/compositionKeys";
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type InputHTMLAttributes, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { cn } from "@/lib/cn";
@@ -37,8 +39,7 @@ import { useNarrow } from "@/lib/useMediaQuery";
  * toggles are switches; on a phone it rises from the bottom (「重置」, 「查看结果」), on a wide screen it drops under the chip. It used to
  * be one long menu that stacked 全部栏目 over 全部专科 as one list of thirty-odd lines.
  *
- * In the sticky band (`inBand`, which `PageShell` sets) a row is one row, always: a module's band is the same height on every tab
- * (DESIGN.md rule 9). A `scroll` chip group gives way to the rest of its row by scrolling sideways rather than folding.
+ * In the sticky band (`inBand`, which `PageShell` sets), filters adapt to available width (DS22.4). A `scroll` chip group gives way to the rest of its row by scrolling sideways rather than folding.
  *
  * **One row with a filter button** (`oneRow`, 前沿动态; owner, 2026-10-25: 「不要横着罗列着，顶上弄好几行」). The views at the left and,
  * at the right of the same row, the open view's controls, then what is applied, 「筛选」 and the search last. A filter declared
@@ -216,6 +217,12 @@ export interface ToolbarProps {
   label?: string;
   views?: ToolbarViews;
   filters?: readonly ToolbarFilter[];
+  /** View/destination controls stay visible and never count as query filters. */
+  navigation?: readonly (ToolbarSelect | ToolbarChips)[];
+  /** Explicitly owned list actions; remain outside the filter sheet. */
+  actionPlan?: PageActionPlan;
+  /** The actual selected analysis scope and its configuration action; never a query filter or preference. */
+  scopeAction?: { id?: string; label: string; onSelect(): void; disabled?: boolean };
   /** Lets go of every filter and the search; its chip shows only while one is on. */
   onClear?: () => void;
   /** Lets go of every filter (not the search): the folded panel's 「重置」. Default `onClear`. */
@@ -223,7 +230,7 @@ export interface ToolbarProps {
   search?: ToolbarSearch;
   /** What the list holds, as a short count (「38 条结论」). A number that can be opened is a link of the caller's. */
   summary?: ReactNode;
-  /** Buttons for this list. */
+  /** @deprecated Temporary DS22 migration path; declare list-owned actionPlan. */
   actions?: ReactNode;
   /**
    * The controls for the rows ticked in the list below — how many are ticked, select all, clear, the action on them. The toolbar's own
@@ -780,7 +787,10 @@ function useCrowded(row: RefObject<HTMLDivElement | null>, enabled: boolean, bes
       }
     };
     check();
-    if (typeof ResizeObserver === "undefined") return undefined;
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener('resize', check);
+      return () => window.removeEventListener('resize', check);
+    }
     const observer = new ResizeObserver(check);
     observer.observe(element);
     return () => observer.disconnect();
@@ -812,7 +822,10 @@ function useViewsCrowded(root: RefObject<HTMLDivElement | null>, enabled: boolea
       }
     };
     check();
-    if (typeof ResizeObserver === "undefined") return undefined;
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener('resize', check);
+      return () => window.removeEventListener('resize', check);
+    }
     const observer = new ResizeObserver(check);
     observer.observe(element);
     if (list) observer.observe(list);
@@ -830,7 +843,10 @@ function BandSummary({ text, className }: { text: string; className: string }) {
     if (!element) return undefined;
     const check = () => setClipped(isTruncated(element));
     check();
-    if (typeof ResizeObserver === "undefined") return undefined;
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener('resize', check);
+      return () => window.removeEventListener('resize', check);
+    }
     const observer = new ResizeObserver(check);
     observer.observe(element);
     return () => observer.disconnect();
@@ -847,22 +863,25 @@ function BandSummary({ text, className }: { text: string; className: string }) {
 /* ---------------------------------------------------------------- toolbar */
 
 /**
- * Component: Toolbar; owner: H; rules: DS21, DESIGN.md component adoption.
- * Anatomy: Declared view/filter/search/summary/action row with responsive filter panel.
+ * Component: Toolbar; owner: H; rules: DS21, DS22.2–DS22.4/AT52–AT54, DESIGN.md component adoption.
+ * Anatomy: Declared view/filter/search/summary row with responsive filter panel; oneRow actions stay in the main band when spacious and get a bounded row when compact.
  * Variants: Band, oneRow, pinned/folded controls and custom sheetLead.
  * States: Controlled query/filter choices; local panel/search expansion; reset calls owner.
  * Hit area: Shared Tabs, FilterChip, Menu, Switch, SearchInput and Button targets.
  * Keyboard: Child keyboard behavior; composition-safe search; scoped / shortcut.
  * Long content: Overflow chips fold or scroll; applied tokens collapse with counts.
  * Theme: Shared semantic controls; no additional palette.
- * Responsive: Narrow filter sheet; measured band overflow folds filters; oneRow has phone search overlay.
+ * Responsive: Available width below 960px selects compact oneRow layout; other rows fold below 640px. Narrow filter sheet; measured band overflow folds filters; oneRow has phone search overlay.
  * Verification: Toolbar.test.tsx and Composition.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
  */
-export function Toolbar({ label = "筛选与操作", views, filters: declared = [], onClear, onReset, search, summary, actions, selection, className, inBand = false,
+export function Toolbar({ label = "筛选与操作", views, filters: declared = [], navigation = [], actionPlan, scopeAction, onClear, onReset, search, summary, actions, selection, className, inBand = false,
   oneRow = false, tokens: given = [], sheetLead, resultCount, searchShortcut = false }: ToolbarProps) {
-  const narrow = useNarrow();
+  const viewportNarrow = useNarrow();
   const row = useRef<HTMLDivElement>(null);
   const root = useRef<HTMLDivElement>(null);
+  const containerNarrow = useContainerNarrow(root, oneRow ? 960 : 640);
+  const narrow = viewportNarrow || containerNarrow;
+  const scopeControl = scopeAction && <Button data-toolbar-scope="" size="sm" variant="text" disabled={scopeAction.disabled} onClick={scopeAction.onSelect} className="h-auto min-h-sm min-w-0 shrink whitespace-normal text-left">{scopeAction.label}</Button>;
   const searchInput = useRef<HTMLInputElement>(null);
   const [foldOpen, setFoldOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -925,33 +944,34 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
         {clearable && <FilterChip className="shrink-0" onClick={reset}>清除</FilterChip>}
       </>
     );
-    const inline = kept.map((filter, index) => <Fragment key={`${filter.kind}-${filter.label}-${index}`}><Inline filter={filter} /></Fragment>);
+    const inline = [...navigation, ...kept].map((filter, index) => <Fragment key={`${filter.kind}-${filter.label}-${index}`}><Inline filter={filter} /></Fragment>);
     // On a phone the view's buttons and its count are in the sheet, after the filters.
-    const extra = narrow && (summary != null || actions) ? <>{summary != null && <span className="text-caption tabular-nums text-text-3">{summary}</span>}{actions}</> : undefined;
+    const extra = narrow && summary != null ? <span className="text-caption tabular-nums text-text-3">{summary}</span> : undefined;
     const trigger = (filters.length > 0 || (narrow && (sheetLead || extra))) && (
       <FoldChip filters={filters} count={count} resettable={folded + given.filter((token) => token.filter).length} narrow={narrow} onReset={reset} stepOut={false} open={foldOpen} onOpenChange={setFoldOpen}
         mark icon={narrow} align="end" lead={narrow ? sheetLead : undefined} extra={extra} resultCount={resultCount} />
     );
     if (!narrow) {
       return (
-        <div ref={root} data-toolbar="" role="group" aria-label={label} className={className}>
+        <div ref={root} data-toolbar="" data-toolbar-layout={one ? narrow ? "compact" : "inline" : undefined} role="group" aria-label={label} className={className}>
           <Tabs label={views.label} items={views.items} value={views.value} onChange={views.onChange} panelId={views.panelId} trailing={(
             <>
+              {scopeControl}
               {inline}
               {!tokensCrowded && tokenNodes}
               {trigger}
               {summary != null && (typeof summary === "string" ? <BandSummary text={summary} className={summaryClass} /> : <span className={summaryClass}>{summary}</span>)}
               {selection}
-              {actions}
+              {actionPlan ? <div data-toolbar-actions="" className="min-w-0 max-w-md"><HeaderActions plan={actionPlan} density="compact" /></div> : actions}
               {search && <SearchBox search={search} inputRef={searchInput} shortcut={searchShortcut} />}
             </>
           )} />
         </div>
       );
     }
-    const second = kept.length > 0 || applied.length > 0 || Boolean(searchToken);
+    const second = navigation.length > 0 || kept.length > 0 || applied.length > 0 || Boolean(searchToken);
     return (
-      <div ref={root} data-toolbar="" role="group" aria-label={label} className={className}>
+      <div ref={root} data-toolbar="" data-toolbar-layout={one ? narrow ? "compact" : "inline" : undefined} role="group" aria-label={label} className={className}>
         <div className="flex items-end gap-2 border-b border-border">
           {/* The views stay in the document while the search is open over them: the page's panel is named by its tab. */}
           <div className={cn("min-w-0 flex-1", searchOpen && "hidden")}>
@@ -970,6 +990,7 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
             </div>
           )}
         </div>
+        {(scopeControl || actionPlan || actions) && <div data-toolbar-actions="" className="flex min-w-0 max-w-full items-center justify-between gap-2 py-2">{scopeControl}{actionPlan ? <HeaderActions plan={actionPlan} /> : actions}</div>}
         {second && (
           // One line, only while something narrows the list or a pinned control has to stay in sight: it scrolls sideways rather than wrap.
           <div data-toolbar-row="" className="-ml-3 flex min-h-11 flex-nowrap items-center gap-1 overflow-x-auto py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -984,6 +1005,8 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
 
   const controls = (
     <>
+      {scopeControl}
+      {navigation.map((filter, index) => <Inline key={`navigation-${index}`} filter={filter} />)}
       {/* Keep pinned controls in the same child slot when late filters fold or unfold the row, including an open menu's focus. */}
       {declared.map((filter, index) => (!isFolded(filter)
         ? <Fragment key={`${filter.kind}-${filter.label}-${index}`}><Inline filter={filter} /></Fragment> : null))}
@@ -993,23 +1016,25 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
         <FoldChip filters={filters} count={folded} narrow={narrow} onReset={reset} open={foldOpen} onOpenChange={setFoldOpen}
           stepOut={Boolean(views) && narrow && declared.every((filter) => isFolded(filter))} />
       )}
-      {onClear && (active > 0 || searching) && <FilterChip className="shrink-0" onClick={onClear}>清除筛选</FilterChip>}
+      {groupsOf(filters).map(groupToken).filter((token): token is ToolbarToken => token !== null).map((token, index) => <TokenChip key={`applied-${index}`} token={token} />)}
+      {given.map((token, index) => <TokenChip key={`given-${index}`} token={token} />)}
+      {onClear && (active > 0 || searching || given.length > 0) && <FilterChip className="shrink-0" onClick={onClear}>清除筛选</FilterChip>}
     </>
   );
   const searchBox = search && <SearchBox search={search} inputRef={searchInput} shortcut={searchShortcut} />;
   // On a phone the search takes what the row has left, in the same row: it used to take a row of its own, and a module's band was
   // 36 px taller on the tabs with a search than on the others (the walk's module-chrome, 循证 GEO at 390 px, r19-guards2).
-  const end = (search || summary != null || actions || (selection && !narrow)) && (
+  const end = (search || summary != null || actions || actionPlan || (selection && !narrow)) && (
     <div className={cn("ml-auto flex min-w-0 items-center gap-2", (search || shrinkSummary) && "max-sm:flex-1")}>
       {searchBox}
       {/* In the band or beside a search, the count gives way before the mobile controls do; its full text remains accessible. */}
       {summary != null && (shrinkSummary && typeof summary === "string" ? <BandSummary text={summary} className={summaryClass} /> : <span className={summaryClass}>{summary}</span>)}
       {!narrow && selection}
-      {actions}
+      {actionPlan ? <HeaderActions plan={actionPlan} /> : actions}
     </div>
   );
   return (
-    <div ref={root} data-toolbar="" role="group" aria-label={label} className={className}>
+    <div ref={root} data-toolbar="" data-toolbar-layout={one ? narrow ? "compact" : "inline" : undefined} role="group" aria-label={label} className={className}>
       {views ? (
         <Tabs label={views.label} items={views.items} value={views.value} onChange={views.onChange} panelId={views.panelId} trailing={(
           <>

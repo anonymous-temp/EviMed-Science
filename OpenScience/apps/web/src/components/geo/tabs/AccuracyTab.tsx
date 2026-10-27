@@ -1,5 +1,5 @@
 import { safetyReading } from "../geoOverviewModel";
-import { GeoAnalysisWorkbench } from "../GeoAnalysisWorkbench";
+import { GeoAnalysisEntry } from "../GeoAnalysisEntry";
 import { useMemo, useState } from "react";
 import {
   readGeoCell,
@@ -26,7 +26,7 @@ import { engineName, GEO_ERROR_TYPE_WORDS, groupName } from "../geoText";
 import { GEO_VIEW_PARAM, geoSectionId } from "../geoTabs";
 import { ClaimRow } from "../spine/ClaimRow";
 import { ClusterDrawerHost } from "../spine/ClusterDrawerHost";
-import { GEO_CLUSTER_FILTER_PARAM, GEO_ENGINE_PARAM, useGeoDrawerAddress, useGeoSearchChange, useGeoSearchParam } from "../spine/drawerParams";
+import { GEO_CLUSTER_FILTER_PARAM, GEO_ENGINE_PARAM, useGeoDrawerAddress, useGeoSearchChange, useGeoSearchParam, useGeoFilterReset } from "../spine/drawerParams";
 import { GeoErrorGroupDrawer } from "../GeoErrorGroupDrawer";
 import {
   claimRows,
@@ -95,7 +95,7 @@ export function AccuracyTab({ geoId, project }: { geoId: string; project: GeoPro
   if (diagnosis.state.kind === "loading") return <TabSkeleton />;
   if (diagnosis.state.kind === "error") return <TabError message={diagnosis.state.message} onRetry={refresh} />;
   const diag = diagnosis.state.data;
-  return <><Accuracy geoId={geoId} project={project} diagnosis={diag} refresh={refresh} /><GeoAnalysisWorkbench embedded geoId={geoId} project={project} initialView="V12"/></>;
+  return <><Accuracy geoId={geoId} project={project} diagnosis={diag} refresh={refresh} /><GeoAnalysisEntry embedded geoId={geoId} project={project} initialView="V12"/></>;
 }
 
 function Accuracy({
@@ -191,7 +191,7 @@ function Accuracy({
   const [clusterParam, setClusterParam] = useGeoSearchParam(GEO_CLUSTER_FILTER_PARAM);
   const [showParam, setShowParam] = useGeoSearchParam("show");
   const [viewParam, setViewParam] = useGeoSearchParam(GEO_VIEW_PARAM);
-  const change = useGeoSearchChange();
+  const resetFilters = useGeoFilterReset([GEO_ENGINE_PARAM, TYPE_PARAM, TRACE_PARAM, GEO_CLUSTER_FILTER_PARAM]);
   const [query, setQuery] = useState("");
   const drawer = useGeoDrawerAddress();
   const handoff = useCorrectionHandoff(geoId, project);
@@ -241,13 +241,13 @@ function Accuracy({
   const { visible, remaining, more } = useShowMore(flat, { first: FIRST_SHOWN, step: PAGE, resetKey: `${view}|${show}|${engine}|${type}|${trace}|${cluster}|${query.trim()}` });
 
   const clearAll = () => {
-    change({ [GEO_ENGINE_PARAM]: null, [TYPE_PARAM]: null, [TRACE_PARAM]: null, [GEO_CLUSTER_FILTER_PARAM]: null });
+    resetFilters();
     setQuery("");
   };
   const hasErrors = counts.total > 0 || errors.length > 0;
   useGeoToolbar(hasErrors ? {
+    navigation: [{ kind: "chips", label: "视图", options: VIEW_OPTIONS, value: view, onChange: (value) => setViewParam(value === "claims" ? null : value) }],
     filters: [
-      { kind: "chips", label: "视图", options: VIEW_OPTIONS, value: view, onChange: (value) => setViewParam(value === "claims" ? null : value) },
       { kind: "chips", label: "处置状态", options: showOptions, value: show, onChange: (value) => setShowParam(value) },
       ...(engines.length > 1 ? [{
         kind: "select" as const,
@@ -269,7 +269,7 @@ function Accuracy({
       ...(trace ? [{ kind: "toggle" as const, label: `出处：${ERROR_TRACE_WORDS[trace]} ×`, pressed: true, onChange: () => setTraceParam(null) }] : []),
     ],
     search: { label: "搜索说法", value: query, maxLength: 80, onChange: setQuery, onClear: () => setQuery("") },
-    onClear: narrowed ? clearAll : undefined,
+    onClear: clearAll,
     summary: total == null ? "正在读取讲错清单" : `共 ${total} 条讲错 · 已读取 ${filtered.length} 条，归为 ${claims.length} 条说法`,
   } : null);
 

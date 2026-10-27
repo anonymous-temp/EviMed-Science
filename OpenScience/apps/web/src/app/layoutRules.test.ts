@@ -1,9 +1,9 @@
 // @vitest-environment node
-import { relative } from "node:path";
-import { readFileSync } from "node:fs";
+import { join, relative } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { isPageFile, scanGreySentences, scanHandwrittenLists, type Occurrence } from "../test/layoutScan";
+import { isPageFile, reviewedGreyStatusExceptions, scanGreySentences, scanHandwrittenLists, type Occurrence } from "../test/layoutScan";
 import { shellSources } from "../test/sourceStrings";
 import baseline from "./layout-baseline.json";
 
@@ -18,7 +18,8 @@ import baseline from "./layout-baseline.json";
  *     characters in `text-text-2`, `text-text-3` or `text-muted` that holds no clickable thing is a line nobody can act on —
  *     how a thing was made, what it may be used for, what the engine did. The cure is the model's context, a log or an
  *     operator's view; or, where the person can do something about it, a `Note` with that action; or, where it is a conclusion,
- *     a `Note` with a number that opens what it counts.
+ *     a `Note` with a number that opens what it counts. Individually reviewed, tested status and scope explanations are recorded separately;
+ *     a role alone does not bypass the check.
  *  2. **A hand-written divided list.** A `<ul>` or `<ol>` with `divide-y` outside `components/ui/` has no hover, no mark that
  *     says what a press does, no selected state: `List` and `ListRow` are the one list.
  *
@@ -61,6 +62,18 @@ function against(counts: Map<string, number>, recorded: Recorded): { rose: strin
 const sum = (counts: Map<string, number>) => [...counts.values()].reduce((a, b) => a + b, 0);
 
 describe("layout rules (counts may fall, never rise)", () => {
+  it("keeps each reviewed state exception tied to its exact source, text and behavioral test", () => {
+    expect(new Set(reviewedGreyStatusExceptions.map(entry => `${entry.file}:${entry.id}`)).size).toBe(reviewedGreyStatusExceptions.length);
+    for (const entry of reviewedGreyStatusExceptions) {
+      const source = sources.find(item => item.relative === entry.file);
+      expect(source, entry.file).toBeDefined();
+      const content = readFileSync(source!.path, "utf8");
+      expect(content.split(`data-layout-exception="${entry.id}"`)).toHaveLength(2);
+      expect(content).toContain(entry.text.slice(0, 4));
+      expect(entry.reason.length).toBeGreaterThan(20);
+      expect(existsSync(join(SRC, entry.test)), entry.test).toBe(true);
+    }
+  });
   it("walks the pages it names", () => {
     // Prove the walk walked before trusting what it did not find.
     expect(sources.length).toBeGreaterThan(250);
@@ -108,6 +121,11 @@ describe("layout rules (counts may fall, never rise)", () => {
     expect(scanGreySentences("a.tsx", `export const A = () => <p className="text-text">${long}</p>;`)).toEqual([]);
     // A `Note` is the sanctioned sentence; it is not an element the scan reads.
     expect(scanGreySentences("a.tsx", `export const A = () => <Note action={<button type="button">添加</button>}>${long}</Note>;`)).toEqual([]);
+    expect(scanGreySentences("a.tsx", `export const A = () => <p role="status" className="text-text-2">${long}</p>;`)).toHaveLength(1);
+    expect(scanGreySentences("a.tsx", `export const A = () => <p role="note" className="text-text-2">${long}</p>;`)).toHaveLength(1);
+    expect(scanGreySentences("src/app/extensions/SkillImport.tsx", `<p role="note" data-layout-exception="transfer-scope" className="text-text-2">迁移技能内容、资源和历史版本。账户数据中的角色、连接和启用设置不会导入。</p>`)).toEqual([]);
+    expect(scanGreySentences("src/app/extensions/SkillImport.tsx", `<p role="note" data-layout-exception="transfer-scope" className="text-text-2">迁移技能内容、资源和历史版本。账户数据中的角色、连接和启用设置不会导入。这里额外加入没有实际作用的实现过程说明。</p>`)).toHaveLength(1);
+    expect(scanGreySentences("a.tsx", `<p role="note" data-layout-exception="transfer-scope" className="text-text-2">迁移技能内容、资源和历史版本。账户数据中的角色、连接和启用设置不会导入。</p>`)).toHaveLength(1);
   });
 
   it("sees a hand-written divided list, and not a list of another kind", () => {

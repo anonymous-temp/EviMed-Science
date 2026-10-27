@@ -374,3 +374,12 @@ describe('the analysis rows carry words, not ids', () => {
     expect(container.textContent).not.toContain('round_internal_9');
   });
 });
+
+it('publishes main-area controls without mounting another global toolbar or disclosure', async () => {
+  read.mockResolvedValue({view:{viewId:'V26',strategyVersion:7},selection:{reference:'gsel_frozen'},digest:'frozen-digest',columns:[],rows:[],page:{total:0,shown:0,nextOffset:null},availability:{status:'ready'}});
+  const mounted = render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} mainArea={{ descriptor: { viewId:'V26',strategyVersion:7,targetVersion:3 }, onChange: vi.fn() }} /></MemoryRouter>);
+  await waitFor(() => expect(read).toHaveBeenLastCalledWith('geo', {round:'old'}, {viewId:'V26',strategyVersion:7,targetVersion:3}, 0, undefined));
+  expect(mounted.container.querySelector('[data-toolbar]')).toBeNull();
+  expect(screen.queryByText('所选数据分析')).toBeNull();
+  expect(screen.getByTestId('export')).toHaveTextContent('gsel_frozen');
+});

@@ -14,6 +14,7 @@ import { parseFailureMessage } from "@/lib/errorText";
 import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
 import { ClaimEvidenceList, type ClaimReading } from "@/components/markdown-viewer/ClaimCitation";
 import { Button } from "@/components/ui/Button";
+import { Menu } from "@/components/ui/Menu";
 import { Outline, useOutline } from "@/components/ui/Outline";
 import { Tabs } from "@/components/ui/Tabs";
 import { useWide } from "@/lib/useMediaQuery";
@@ -48,6 +49,7 @@ export function ReportReader({
   immutableVersion,
   onDownload,
   sourceRunId,
+  externalExportActions = false,
 }: {
   path: string;
   root?: FileRoot;
@@ -65,6 +67,8 @@ export function ReportReader({
   onDownload?: () => void | Promise<void>;
   /** Null suppresses ordinary workspace source links outside a scoped result grant. */
   sourceRunId?: string | null;
+  /** An enclosing inspector owns the combined export menu and print action. */
+  externalExportActions?: boolean;
 }) {
   const { document: matrix, verification, verified, verificationState, retry: retryChecks } = useClaimMatrix(path, root, !immutableVersion, immutableVersion);
   const [view, setView] = useState<"report" | "matrix">("report");
@@ -160,17 +164,10 @@ export function ReportReader({
         />
       )}
       <div className="flex-1" />
-      {/* One row on a phone: the short words are what is drawn, the full ones what is read out. */}
-      <Button size="md" variant="text" aria-label="下载 Markdown" onClick={() => void download()}>
-        <Download size={16} aria-hidden="true" />
-        <span aria-hidden="true" className="sm:hidden">下载</span>
-        <span aria-hidden="true" className="max-sm:hidden">下载 Markdown</span>
-      </Button>
-      <Button size="md" variant="text" aria-label="打印 / 存为 PDF" onClick={() => window.print()}>
-        <Printer size={16} aria-hidden="true" />
-        <span aria-hidden="true" className="sm:hidden">打印</span>
-        <span aria-hidden="true" className="max-sm:hidden">打印 / 存为 PDF</span>
-      </Button>
+      {!externalExportActions && <Menu label="导出与打印" items={[
+        { label: "下载 Markdown", icon: Download, onSelect: () => void download() },
+        { label: "打印 / 存为 PDF", icon: Printer, onSelect: () => window.print() },
+      ]}><Button size="md" variant="text">导出与打印</Button></Menu>}
     </div>
   );
 

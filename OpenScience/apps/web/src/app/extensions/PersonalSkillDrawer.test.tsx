@@ -93,7 +93,7 @@ it("opening an earlier state compares its text with the current one, and the com
   expect(within(drawer).queryByRole("region", { name: "版本比较" })).not.toBeInTheDocument();
 });
 
-it("the menu edits in the drawer, and a saved edit tells the list", async () => {
+it("the menu edits in the main area, and a saved edit tells the list", async () => {
   skills.updatePersonalSkill.mockResolvedValue(skill);
   show();
   await screen.findByRole("dialog", { name: "检索方案" });
@@ -166,4 +166,24 @@ it("exports the skill's history through the authenticated portable endpoint, fro
   await userEvent.click(screen.getByRole("menuitem", { name: "导出历史" }));
   expect(click).toHaveBeenCalledTimes(1);
   click.mockRestore();
+});
+
+
+it("keeps a failed edit in the main area and guards the return to details", async () => {
+  skills.updatePersonalSkill.mockRejectedValue(new Error("save unavailable"));
+  show();
+  await screen.findByRole("dialog", { name: "检索方案" });
+  await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+  await userEvent.click(screen.getByRole("menuitem", { name: "编辑" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  await userEvent.type(screen.getByLabelText("名称"), " draft");
+  await userEvent.click(screen.getByRole("button", { name: "保存" }));
+  await screen.findByRole("alert");
+  expect(screen.getByLabelText("名称")).toHaveValue("检索方案 draft");
+  await userEvent.click(screen.getByRole("button", { name: "返回技能详情" }));
+  await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "取消" }));
+  expect(screen.getByLabelText("名称")).toHaveValue("检索方案 draft");
+  await userEvent.click(screen.getByRole("button", { name: "返回技能详情" }));
+  await userEvent.click(screen.getByRole("button", { name: "放弃修改" }));
+  expect(await screen.findByRole("dialog", { name: "检索方案" })).toBeInTheDocument();
 });

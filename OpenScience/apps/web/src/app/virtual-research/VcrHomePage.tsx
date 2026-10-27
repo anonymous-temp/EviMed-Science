@@ -18,6 +18,7 @@ import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
+import type { PageActionPlan } from "@/components/layout/HeaderActions";
 import { List } from "@/components/ui/ListRow";
 import { Note } from "@/components/ui/Note";
 import { VcrTaskRequirements } from "@/components/vcr/VcrTaskRequirements";
@@ -122,8 +123,6 @@ export function VcrHomePage() {
 
   if (feature === "off" || listing.kind === "off") return <VcrOffPage />;
 
-  const newStudy = <Button onClick={() => ask("我想开展虚拟临床研究，问题是：")}><Plus size={16} aria-hidden="true" />开始研究对话</Button>;
-
   // A state with no study in it is not a chip: 0 is not a filter.
   const filters: ToolbarFilter[] = [];
   const stateOptions = (["need", "running", "done"] as const).filter((key) => counts[key] > 0);
@@ -150,7 +149,9 @@ export function VcrHomePage() {
 
   return (
     <HomeFrame
-      actions={tab === "studies" ? newStudy : undefined}
+      actionPlan={tab === "studies" ? {
+        primary: { id: "new-study", label: "开始研究对话", icon: Plus, onSelect: () => ask("我想开展虚拟临床研究，问题是：") },
+      } : undefined}
       introduction={tab === "studies" ? <section aria-label="开始研究任务" className="mb-8">
         <List label="研究任务" divided>
           {VCR_TASKS.map((task, index) => {
@@ -213,15 +214,15 @@ export function VcrHomePage() {
  * drawing a second one under it. A component of its own, so that a panel handing the toolbar over re-renders the toolbar and never the
  * panel — the study page's frame does the same.
  */
-function HomeFrame({ actions, introduction, toolbar, children }: { actions: ReactNode; introduction?: ReactNode; toolbar: ToolbarProps; children: ReactNode }) {
+function HomeFrame({ actionPlan, introduction, toolbar, children }: { actionPlan?: PageActionPlan; introduction?: ReactNode; toolbar: ToolbarProps; children: ReactNode }) {
   const [panel, setPanel] = useState<ToolbarProps | null | undefined>(undefined);
   const [params, setParams] = useSearchParams();
   const selected = TABS.find(item => item.value === params.get("tab"))?.value ?? "studies";
   const merged = panel ? { ...toolbar, ...panel } : toolbar;
-  const controls: ToolbarProps = { ...merged, filters: [{ kind: "select", label: "查看", value: selected, pinned: true, options: TABS.map(item => ({ value: item.value, label: item.label })), onChange: next => setParams(previous => { const updated = new URLSearchParams(previous); if (next === "studies") updated.delete("tab"); else if (next) updated.set("tab", next); return updated; }) }, ...(merged.filters ?? [])] };
+  const controls: ToolbarProps = { ...merged, navigation: [{ kind: "select", label: "查看", value: selected, pinned: true, options: TABS.map(item => ({ value: item.value, label: item.label })), onChange: next => setParams(previous => { const updated = new URLSearchParams(previous); if (next === "studies") updated.delete("tab"); else if (next) updated.set("tab", next); return updated; }) }, ...(merged.navigation ?? [])] };
   return (
     <ToolbarSlotContext.Provider value={setPanel}>
-      <PageShell title="虚拟临床研究" width="wide" actions={actions} introduction={introduction} back={toolbar.label ? <Link to="/app/virtual-research" className="rounded text-ui text-link">回到研究列表</Link> : undefined} toolbar={controls}>
+      <PageShell title="虚拟临床研究" width="wide" actionPlan={actionPlan} introduction={introduction} back={toolbar.label ? <Link to="/app/virtual-research" className="rounded text-ui text-link">回到研究列表</Link> : undefined} toolbar={controls}>
         {children}
       </PageShell>
     </ToolbarSlotContext.Provider>

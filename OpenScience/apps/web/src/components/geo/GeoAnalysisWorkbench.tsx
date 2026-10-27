@@ -20,12 +20,13 @@ import { geoSessionIdFromChatPath } from "@/lib/geoLocation";
 import { webErrorMessage } from "@/lib/apiClient";
 import { Section } from "@/components/ui/Section";
 import { Disclosure } from "@/components/ui/Disclosure";
-import { Toolbar } from "@/components/ui/Toolbar";
+import { GEO_ANALYSIS_OPTIONS, geoAnalysisSearch } from "./geoAnalysisMode";
+import { Toolbar, type ToolbarProps } from "@/components/ui/Toolbar";
 import { DataTable } from "@/components/ui/DataTable";
 import { Button } from "@/components/ui/Button";
 import { Note } from "@/components/ui/Note";
 import { DocumentExportActions } from "@/components/document/DocumentExportActions";
-import { geoMayConverse, useGeoReadScope, useGeoFrame } from "./geoFrame";
+import { geoMayConverse, useGeoReadScope, useGeoFrame, useGeoToolbar } from "./geoFrame";
 import { useGeoLoad } from "./geoProjectData";
 import { useGeoPath } from "./useGeoPath";
 import { useOpenGeoConversation } from "./useOpenGeoConversation";
@@ -45,6 +46,7 @@ export function GeoAnalysisWorkbench({
   geoId,
   project,
   initialView = "V01",
+  mainArea,
   embedded = false,
   initialDescriptor,
   titleLevel,
@@ -53,6 +55,7 @@ export function GeoAnalysisWorkbench({
   geoId: string;
   project: GeoProject;
   initialView?: GeoAnalysisId;
+  mainArea?: { descriptor: GeoAnalysisDescriptor; onChange(descriptor: GeoAnalysisDescriptor): void };
   embedded?: boolean;
   initialDescriptor?: GeoAnalysisDescriptor;
   /** The heading's rung when embedded: a page that already sets its blocks at the section rung sets this one there too, rather than adding a pair. */
@@ -60,6 +63,9 @@ export function GeoAnalysisWorkbench({
   title?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const scope = useGeoReadScope();
+  const mainIdentity = mainArea ? JSON.stringify([geoId, geoReadScopeQuery(scope), { ...mainArea.descriptor, sourceSearch: undefined }]) : undefined;
+  if (mainArea) return <AnalysisPage key={mainIdentity} geoId={geoId} project={project} view={mainArea.descriptor} setView={mainArea.onChange} mainArea />;
   if (embedded)
     return (
       <div data-geo-analysis="">
@@ -88,6 +94,10 @@ export function GeoAnalysisWorkbench({
       )}
     </Disclosure>
   );
+}
+function AnalysisToolbar({ mainArea, ...props }: ToolbarProps & { mainArea: boolean }) {
+  useGeoToolbar(mainArea ? { ...props, navigation: props.navigation?.slice(1) } : null);
+  return mainArea ? null : <Toolbar {...props} />;
 }
 function AnalysisBody({
   geoId,
@@ -121,11 +131,13 @@ function AnalysisPage({
   project,
   view,
   setView,
+  mainArea = false,
 }: {
   geoId: string;
   project: GeoProject;
   view: GeoAnalysisDescriptor;
   setView(view: GeoAnalysisDescriptor): void;
+  mainArea?: boolean;
 }) {
   const scope = useGeoReadScope(),
     frame = useGeoFrame();
@@ -135,6 +147,7 @@ function AnalysisPage({
   const mayConverse = geoMayConverse(project);
   const mayExport = !project.access || project.access.abilities.includes("run");
   const [page, setPage] = useState<{
+    identity: string;
     offset: number;
     reference: string;
     digest: string;
@@ -147,25 +160,31 @@ function AnalysisPage({
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const [relationshipUrl, setRelationshipUrl] = useState<string | null>(null);
+  const requestIdentity = JSON.stringify([geoId, geoReadScopeQuery(scope), view]);
+  const activePage = page?.identity === requestIdentity ? page : null;
   const { state, reload } = useGeoLoad(
-    `analysis:${geoId}:${geoReadScopeQuery(scope)}:${JSON.stringify(view)}:${page?.offset ?? 0}`,
+    `analysis:${geoId}:${geoReadScopeQuery(scope)}:${JSON.stringify(view)}:${activePage?.offset ?? 0}`,
     () =>
       getGeoAnalysis(
         geoId,
-        page ? { selectionRef: page.reference } : scope,
+        activePage ? { selectionRef: activePage.reference } : scope,
         view,
-        page?.offset ?? 0,
-        page?.digest,
+        activePage?.offset ?? 0,
+        activePage?.digest,
       ),
   );
   // While the next read is in flight the rows already on screen stay (a new search term must not flip the table back to its skeleton);
   // a failed read still shows its error.
-  const lastData = useRef<GeoAnalysisView | null>(null);
-  if (state.kind === "ready") lastData.current = state.data;
-  const data = state.kind === "ready" ? state.data : state.kind === "loading" ? lastData.current : null;
+  const lastData = useRef<{identity:string;data:GeoAnalysisView} | null>(null);
+  if (state.kind === "ready") lastData.current = {identity:requestIdentity,data:state.data};
+  const data = state.kind === "ready" ? state.data : lastData.current?.data ?? null;
+  const dataIdentity = state.kind === "ready" ? requestIdentity : lastData.current?.identity;
   const refreshing = state.kind === "loading" && data !== null;
   // The box shows every keystroke at once; the source search is asked for once the person pauses.
   const [searchText, setSearchText] = useState(view.sourceSearch ?? "");
+  useEffect(() => { setSearchText(view.sourceSearch ?? ""); }, [view.sourceSearch]);
+  const resultsLocked = Boolean(data) && (state.kind !== "ready" || searchText !== (view.sourceSearch ?? "") || dataIdentity !== requestIdentity);
+  useEffect(() => { setMembers(null); setRelationshipUrl(null); }, [requestIdentity, resultsLocked]);
   const latestView = useRef(view);
   latestView.current = view;
   const searchTimer = useRef<number | undefined>(undefined);
@@ -183,12 +202,12 @@ function AnalysisPage({
     else reload();
   };
   const sourceActionPath=(changes:Record<string,string>)=>{
-    const query=new URLSearchParams(geoSearchWithScope(location.search,{selectionRef:data!.selection.reference}));
+    const query=new URLSearchParams(geoAnalysisSearch(geoSearchWithScope(location.search,{selectionRef:data!.selection.reference}), null));
     for(const [key,value] of Object.entries(changes))query.set(key,value);
-    return `/app/geo/${encodeURIComponent(geoId)}/sources?${query}`;
+    return `/app/geo/${encodeURIComponent(geoId)}/${changes.planUrl ? "plan" : "sources"}?${query}`;
   };
   const explain = async (focus?: {rowKey:string;columnKey:string}) => {
-    if (!data) return;
+    if (!data || resultsLocked) return;
     setBusy(true);
     setError("");
     try {
@@ -232,47 +251,23 @@ function AnalysisPage({
   };
   return (
     <div className="flex flex-col gap-4" aria-busy={refreshing || undefined}>
-      <Toolbar
-        filters={[
+      <AnalysisToolbar mainArea={mainArea}
+        navigation={[
           {
             kind: "select",
             label: "分析",
             value: view.viewId,
-            options: [
-              { value: "V01", label: "当前水平与目标" },
-              { value: "V02", label: "指标趋势" },
-              { value: "V03", label: "可比变化排序" },
-              { value: "V10", label: "旅程与需求覆盖" },
-              { value: "V16", label: "结论条件与来源依据" },
-              { value: "V13", label: "讲错类型与严重程度" },
-              { value: "V23", label: "内容与发布覆盖" },
-              { value: "V24", label: "投放与发布状态" },
-              { value: "V25", label: "预算、结算与退款" },
-              { value: "V26", label: "方案冻结实测与规划目标" },
-              { value: "V15", label: "错误观察与处理历史" },
-              { value: "V27", label: "事件与采样观察" },
-              { value: "V09", label: "推荐表达与条件" },
-              { value: "V08", label: "已登记竞品与趋势" },
-              { value: "V04", label: "平台指标比较" },
-              { value: "V05", label: "问题群与平台" },
-              { value: "V06", label: "原始分类与平台" },
-              { value: "V07", label: "逐题采集与判定" },
-              { value: "V11", label: "采集与判定覆盖" },
-              { value: "V12", label: "回答与陈述正确性" },
-              { value: "V14", label: "临床主题与条件" },
-              { value: "V17", label: "来源类型覆盖" },
-              { value: "V18", label: "域名与页面排名" },
-              { value: "V19", label: "来源与平台或问题群" },
-              { value: "V20", label: "已确认信源关系" },
-              { value: "V21", label: "问题群提及与自有引用" },
-              { value: "V22", label: "页面引用观察历史" },
-            ],
+            options: GEO_ANALYSIS_OPTIONS,
             onChange: (value) =>
               setView({
+                ...view,
                 viewId: value as GeoAnalysisId,
                 dimension: value === "V05" ? "group" : ["V02", "V03", "V04"].includes(value ?? "") ? "engine" : "project",
               }),
           },
+          ...(view.viewId === "V26" ? [{kind:"select" as const,label:"方案版本",value:view.strategyVersion!=null?String(view.strategyVersion):null,allLabel:"所选范围最新方案",options:data?.view.strategyVersion?[{value:String(data.view.strategyVersion),label:`方案版本 ${data.view.strategyVersion}`}]:[],onChange:(value:string|null)=>setView({...view,strategyVersion:value?Number(value):undefined,targetVersion:undefined})}] : []),
+        ]}
+        filters={[
           ...(["V17","V18","V19","V20","V22"].includes(view.viewId)?[
             {kind:"select" as const,label:"来源类型",value:view.sourceType??null,allLabel:"全部类型",options:[...Object.entries({...GEO_SOURCE_KIND_LABELS_ZH,...Object.fromEntries((data?.definition?.sourceTypes??[]).filter(type=>type!=="unknown"&&!(type in GEO_SOURCE_KIND_LABELS_ZH)).map(type=>[type,type]))}).map(([value,label])=>({value,label:String(label)})),{value:"unknown",label:"类型未知"}],onChange:(value:string|null)=>setView({...view,sourceType:value??undefined})},
             {kind:"select" as const,label:"共同出现",value:view.sourceRelationship??"all",options:[{value:"all",label:"全部引用回答"},{value:"wrong",label:"共同出现我方错误"},{value:"mentions",label:"共同出现品牌提及"}],onChange:(value:string|null)=>setView({...view,sourceRelationship:value==="wrong"?"wrong":value==="mentions"?"mentions":"all"})},
@@ -281,7 +276,7 @@ function AnalysisPage({
             {kind:"select" as const,label:"图表显示",value:String(view.topN??15),options:[5,15,30,50].map(value=>({value:String(value),label:`前 ${value} 项及其余`})),onChange:(value:string|null)=>setView({...view,topN:Number(value??15)})},
           ]:[]),
           ...(view.viewId === "V25" ? [{kind:"select" as const,label:"收支维度",value:view.financeFacet??"ledger",options:[{value:"ledger",label:"逐条账目与余额"},{value:"group",label:"明确关联的问题群"}],onChange:(value:string|null)=>setView({...view,financeFacet:value==="group"?"group":"ledger"})}] : []),
-          ...(view.viewId === "V26" ? [{kind:"select" as const,label:"方案版本",value:view.strategyVersion!=null?String(view.strategyVersion):null,allLabel:"所选范围最新方案",options:data?.view.strategyVersion?[{value:String(data.view.strategyVersion),label:`方案版本 ${data.view.strategyVersion}`}]:[],onChange:(value:string|null)=>setView({...view,strategyVersion:value?Number(value):undefined,targetVersion:undefined})}] : []),
+
           ...(view.viewId === "V23" ? [{kind:"select" as const,label:"内容覆盖维度",value:view.publicationFacet??"group",options:[{value:"group",label:"问题群"},{value:"audience",label:"面向人群"},{value:"channel",label:"预期渠道"}],onChange:(value:string|null)=>setView({...view,publicationFacet:value==="audience"?"audience":value==="channel"?"channel":"group"})}] : []),
           ...(view.viewId === "V13" ? [
             {kind:"select" as const,label:"错误维度",value:view.errorFacet??"type",options:[{value:"type",label:"错误类型"},{value:"severity",label:"严重程度"}],onChange:(value:string|null)=>setView({...view,errorFacet:value==="severity"?"severity":"type"})},
@@ -354,18 +349,7 @@ function AnalysisPage({
             : []),
         ]}
         search={["V17","V18","V19","V20","V22"].includes(view.viewId)?{label:"搜索引用来源",value:searchText,maxLength:300,onChange:value=>{setSearchText(value);applySearch(value,SEARCH_DEBOUNCE_MS);},onClear:()=>{setSearchText("");applySearch("",0);}}:undefined}
-        actions={
-          data && mayConverse ? (
-            <Button
-              size="sm"
-              variant="secondary"
-              loading={busy}
-              onClick={() => void explain()}
-            >
-              在对话中解释
-            </Button>
-          ) : undefined
-        }
+        actionPlan={data && mayConverse ? {primary:{id:"explain-analysis",label:"在对话中解释",loading:busy,disabled:resultsLocked,onSelect:()=>void explain()}} : undefined}
       />
       {!!data?.availability?.reasons?.length && (
         <Note
@@ -412,11 +396,16 @@ function AnalysisPage({
           {error}
         </Note>
       )}
+      {resultsLocked && <p role="status" className="text-ui text-text-2">{state.kind === "error" ? "读取失败，以下仍为上次已读范围；重试成功前暂不可翻页、打开成员、导出或带入对话。" : "正在读取新筛选结果，以下仍为上次范围；完成前暂不可翻页、打开成员、导出或带入对话。"}</p>}
+      {state.kind === "error" && data && <Note tone="warn" action={<Button size="sm" variant="text" onClick={refresh}>重试读取分析</Button>}>{state.message}</Note>}
+      <fieldset disabled={resultsLocked} inert={resultsLocked || undefined} aria-label={resultsLocked ? state.kind === "error" ? "上次范围的分析结果（读取失败）" : "上次范围的分析结果（正在更新）" : "当前范围的分析结果"} className="flex min-w-0 flex-col gap-4 border-0 p-0"
+        onClickCapture={event => { if (resultsLocked) { event.preventDefault(); event.stopPropagation(); } }}>
       {data && <GeoAnalysisVisual data={data} onSelect={cell => {
+        if (resultsLocked) return;
         if (cell.members) { setMembers(cell.members); return; }
         const row = data.rows.find(item => item.key === cell.rowKey);
         if (row?.values[cell.columnKey]?.members) setMembers(row.values[cell.columnKey].members);
-        else setPage({offset: 0, reference: data.selection.reference, digest: data.digest});
+        else setPage({identity: dataIdentity!, offset: 0, reference: data.selection.reference, digest: data.digest});
       }} />}
       <DataTable<GeoAnalysisRow>
         label="所选分析数据"
@@ -425,7 +414,7 @@ function AnalysisPage({
         state={
           state.kind === "loading" && !data
             ? "loading"
-            : state.kind === "error"
+            : state.kind === "error" && !data
               ? "error"
               : data?.rows.length
                 ? "content"
@@ -463,7 +452,7 @@ function AnalysisPage({
                 </>}
                 {row.dimensions.kind === "source_history" && <p className="text-caption text-text-2">{row.dimensions.roundLabel} · 问题版本 {row.dimensions.setVersion??"未知"} · {surfaceText({ mode: row.dimensions.mode }) ?? "采样方式未知"}</p>}
                 {row.dimensions.sourceType && <p className="text-caption text-text-2">{GEO_SOURCE_KIND_LABELS_ZH[row.dimensions.sourceType as keyof typeof GEO_SOURCE_KIND_LABELS_ZH] ?? (row.dimensions.sourceType === "unknown" ? "类型未知" : row.dimensions.sourceType)} · 所选范围内首次 {row.dimensions.firstObserved??"采样时间未知"} · 最近 {row.dimensions.lastObserved??"采样时间未知"}</p>}
-                {row.dimensions.originalUrls && <Disclosure summary="原始引用地址与所选轮次"><ul>{row.dimensions.originalUrls.map(url=><li key={url}>{url}</li>)}</ul>{row.dimensions.history?.map(round=><p key={round.roundId}>{roundKindWord(round.kind) ?? "测量轮次"} · {round.citedAnswers} 个引用回答</p>)}{row.dimensions.sourceId&&<Link className="text-accent" to={sourceActionPath({source:row.dimensions.sourceId})}>查看来源与行动</Link>}{row.dimensions.sourceKey&&row.dimensions.originalUrls[0]&&<Link className="block text-accent" to={sourceActionPath({planUrl:row.dimensions.originalUrls[0]})}>将此页面用于方案</Link>}</Disclosure>}
+                {row.dimensions.originalUrls && <Disclosure summary="原始引用地址与所选轮次"><ul>{row.dimensions.originalUrls.map(url=><li key={url}>{url}</li>)}</ul>{row.dimensions.history?.map(round=><p key={round.roundId}>{roundKindWord(round.kind) ?? "测量轮次"} · {round.citedAnswers} 个引用回答</p>)}{row.dimensions.sourceId&&<Link className="text-accent" to={sourceActionPath({source:row.dimensions.sourceId})}>查看来源与行动</Link>}{row.dimensions.sourceKey&&row.dimensions.originalUrls[0]&&<Link className="block text-accent" to={sourceActionPath({planUrl:row.dimensions.originalUrls[0], ...(row.dimensions.sourceId ? {planSource:row.dimensions.sourceId} : {})})}>将此页面用于方案</Link>}</Disclosure>}
                 {row.dimensions.kind === "expression" && <p className="text-caption text-text-2">条件：{row.dimensions.conditionQuote ?? "未陈述"} · 推荐顺位：{row.dimensions.explicitPosition ?? "未明确"}</p>}
                 {row.dimensions.period === "round"
                   ? ` · ${row.dimensions.date ?? "采样时间未知"} · ${row.dimensions.roundLabel ?? (row.dimensions.roundKind === "baseline" ? "基线轮" : "复测轮")}`
@@ -537,8 +526,8 @@ function AnalysisPage({
             <Button
               size="sm"
               variant="secondary"
-              disabled={!page}
-              onClick={() => setPage(null)}
+              disabled={resultsLocked || !activePage}
+              onClick={() => { if (!resultsLocked) setPage(null); }}
             >
               首批数据
             </Button>
@@ -546,13 +535,15 @@ function AnalysisPage({
               <Button
                 size="sm"
                 variant="secondary"
-                onClick={() =>
+                disabled={resultsLocked}
+                onClick={() => { if (!resultsLocked)
                   setPage({
+                    identity: dataIdentity!,
                     offset: data.page.nextOffset!,
                     reference: data.selection.reference,
                     digest: data.digest,
-                  })
-                }
+                  });
+                }}
               >
                 下一批数据
               </Button>
@@ -567,10 +558,12 @@ function AnalysisPage({
                 expectedDigest: data.digest,
               }}
               groupLabel="导出所选数据"
+              disabled={resultsLocked}
             />
           )}
         </>
       )}
+      </fieldset>
       {relationshipUrl && <SourceRelationship geoId={geoId} target={{kind:"page",value:relationshipUrl}} canEdit={!project.access || project.access.abilities.includes('edit')} onChanged={refresh}/> }
       {members &&
         ("rowKey" in members ? (

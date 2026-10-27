@@ -1,7 +1,7 @@
 import { PendingFeedbackBoundary } from "@/components/ui/PendingFeedback";
 import { memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from "react";
-import { Outlet, useLocation, useNavigate, useNavigationType, useParams } from "react-router";
-import { FileDown, MessageSquare, MoreHorizontal, Radar } from "lucide-react";
+import { Link, Outlet, useLocation, useNavigate, useNavigationType, useParams } from "react-router";
+import { FileDown, MessageSquare, Radar } from "lucide-react";
 import { webErrorMessage, WebApiError } from "@/lib/apiClient";
 import { stepAllowanceWait } from "@/lib/allowanceWait";
 import {
@@ -18,6 +18,8 @@ import {
   type GeoStartAnswer,
   type GeoStepKey,
 } from "@/lib/geoClient";
+import { GeoAnalysisWorkbench } from "@/components/geo/GeoAnalysisWorkbench";
+import { GEO_ANALYSIS_OPTIONS, geoAnalysisDescriptor, geoAnalysisSearch } from "@/components/geo/geoAnalysisMode";
 import { GeoConversationPane } from "@/components/geo/GeoConversationPane";
 import { geoChatPath } from "@/lib/geoLocation";
 import { useProjectStore } from "@/lib/projects";
@@ -31,8 +33,7 @@ import { GeoSignalsWorkbench } from "@/components/geo/GeoSignalsWorkbench";
 import { getGeoSignalRunRecord, geoSignalResultHref } from "@/lib/geoSignalsClient";
 import type { ProgrammeRun } from "@/lib/programmeRuns";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { IconButton } from "@/components/ui/IconButton";
-import { Menu, type MenuEntry } from "@/components/ui/Menu";
+import { type MenuEntry } from "@/components/ui/Menu";
 import { Tag } from "@/components/ui/Tag";
 import { Note } from "@/components/ui/Note";
 import type { ToolbarProps } from "@/components/ui/Toolbar";
@@ -459,7 +460,8 @@ function GeoBand({
   const watched = monitoring.state.kind === "ready" ? monitoring.state.data : null;
   const now = bandNow(project, watched?.next ?? null, undefined, watched?.measurement ?? null);
   const destination = (next: GeoTabKey, view?: string, step?: string, section?: string) => {
-    const kept = new URLSearchParams(params);
+    const kept = new URLSearchParams(geoAnalysisSearch(params.toString(), null));
+    kept.delete("questionMode");
     const nextView = view ?? (next === tab && step === undefined ? params.get("view") ?? undefined : undefined);
     if (!nextView) kept.delete("view");
     // Only an addressed conversation travels in the address: the project's own is where every open begins, and a copy of its id turned
@@ -484,6 +486,8 @@ function GeoBand({
           : selectedStep === "questions" ? { label: "加问", onClick: ask(`请再补几个值得测量的问题，覆盖${product}现有问句池里还没有问到的情形。`) }
             : selectedStep === "sources" ? { label: "选目标档", onClick: () => navigate(destination("plan", undefined, "sources", "targets")) }
               : selectedStep === "content" ? { label: "让 AI 写下一批", onClick: ask("请为现在还没有稿件的问题群写下一批稿件，先写讲错最严重、离目标最远的。") } : null;
+  const analysis = !onChat && !snapshotId ? geoAnalysisDescriptor(location.search) : null;
+  const changeAnalysis = (descriptor: Parameters<typeof geoAnalysisSearch>[1]) => navigate({ pathname: location.pathname, search: geoAnalysisSearch(location.search, descriptor), hash: location.hash });
   const controls = onChat ? undefined : toolbar;
   const relatedViews: Array<{ value: GeoTabKey; label: string }> = selectedStep === "diagnosis"
     ? [{ value: "visibility", label: "可见度" }, { value: "accuracy", label: "准确与安全" }]
@@ -493,46 +497,44 @@ function GeoBand({
     ...(controls ?? {}),
     views: undefined,
     summary: controls?.summary,
-    filters: [
-      ...(!onChat && relatedViews.length > 1 ? [{ kind: "select" as const, label: "分析视图", value: tab, pinned: true,
+    navigation: [
+      ...(!onChat && !snapshotId ? [{ kind: "select" as const, label: "数据分析", value: analysis?.viewId ?? null, allLabel: "当前业务", options: GEO_ANALYSIS_OPTIONS, onChange: (value: string | null) => changeAnalysis(value ? { ...analysis, viewId: value as NonNullable<typeof analysis>["viewId"] } : null) }] : []),
+      ...(!onChat && !analysis && relatedViews.length > 1 ? [{ kind: "select" as const, label: "分析视图", value: tab, pinned: true,
         options: relatedViews, onChange: (next: string | null) => { if (next) navigate(destination(next as GeoTabKey, undefined, selectedStep ?? undefined)); } }] : []),
+      ...(controls?.navigation ?? []),
       ...(controls?.views ? [{ kind: "select" as const, label: controls.views.label,
         value: controls.views.value, options: controls.views.items.map((item) => ({ value: item.value, label: item.label })),
         onChange: (next: string | null) => { if (next) controls.views?.onChange(next); } }] : []),
-      ...(controls?.filters ?? []),
     ],
+    filters: controls?.filters,
     // The range is shown wherever it narrows what is read — every view's analysis and 方案's strategy — so a range carried in the
     // address never applies unsaid; 行动's monitoring view reads none.
-    actions: <>{!onChat && !(tab === "actions" && selectedStep === "monitoring") && <Button variant="text" size="sm" onClick={() => setScopeOpen(true)}>分析范围{geoReadScopeQuery(api.scope) ? " · 已筛选" : ""}</Button>}{controls?.actions}{!onChat && continues && <Button variant="text" size="sm" onClick={continues.onClick}>{continues.label}</Button>}</>,
+    scopeAction: !onChat && (analysis || !(tab === "actions" && selectedStep === "monitoring")) ? {id:"analysis-scope",label:`分析范围${geoReadScopeQuery(api.scope) ? " · 已筛选" : ""}`,onSelect:()=>setScopeOpen(true)} : undefined,
+    actionPlan: !controls?.actions && !onChat && !analysis && continues
+      ? {...controls?.actionPlan, ...(controls?.actionPlan?.primary
+        ? {secondary:[{id:"continue-step",label:continues.label,onSelect:continues.onClick},...(controls.actionPlan.secondary??[])]}
+        : {primary:{id:"continue-step",label:continues.label,onSelect:continues.onClick}})} : controls?.actionPlan,
+    // Journey downloads own their stateful producer. Preserve it while the scope action remains separately declared.
+    actions: controls?.actions ? <>{controls.actions}{!onChat && !analysis && continues && <Button variant="text" size="sm" onClick={continues.onClick}>{continues.label}</Button>}</> : undefined,
   };
 
   return (
     <PageShell<GeoTabKey>
       title={project.name}
+      back={tab !== "overview" || onChat ? <Link className="text-ui text-accent" to={destination("overview")}>项目总览</Link> : undefined}
       steps={{ label: "循证 GEO 进度", steps, activeSteps: selectedStep ? [selectedStep] : [], trailing: now, visible: true, showState: true }}
       documentTitle={GEO_MONITORING_TABS.includes(tab) ? `${project.name} · ${GEO_MONITORING_TITLE}` : undefined}
       width={onChat ? "full" : "wide"}
       contentClassName={onChat ? "flex min-h-96 flex-col" : undefined}
       meta={<Tag title={now ?? undefined}>{`${paused ? "已暂停 · " : ""}${week ? `第 ${week} 周` : coverageText(project.coverageDays, project.startedAt ?? project.createdAt ?? null)}`}</Tag>}
-      actions={(
-        <>
-          {paused && can("edit") && <Button variant="secondary" onClick={() => setPaused(false)}>继续</Button>}
-          <Button variant="text" onClick={() => navigate(destination("overview"))}>项目总览</Button>
-          {can("run") && <Button variant="secondary" loading={busy === "weekly"} onClick={startWeekly}>
-            <FileDown size={16} aria-hidden="true" />
-            周报
-          </Button>}
-          {!onChat && (canConverse || readOnlyChat) && <Button variant="secondary" loading={busy === "conversation"} onClick={openChat}>
-            <MessageSquare size={16} aria-hidden="true" />
-            对话
-          </Button>}
-          {/* The header's 「⋯」 is the header's icon button, 36 beside the two
-            * 36 px buttons (spec §8.3) — the menu's own trigger is a row's 28. */}
-          <Menu label="更多操作" items={menu}>
-            <IconButton icon={MoreHorizontal} label="更多操作" className="data-[state=open]:bg-surface-2 data-[state=open]:text-text" />
-          </Menu>
-        </>
-      )}
+      actionPlan={{
+        ...(!onChat && (canConverse || readOnlyChat) ? { primary: { id: "conversation", label: "对话", icon: MessageSquare, loading: busy === "conversation", onSelect: openChat } } : {}),
+        secondary: [
+          ...(can("run") ? [{ id: "weekly", label: "周报", icon: FileDown, loading: busy === "weekly", onSelect: startWeekly }] : []),
+          ...(paused && can("edit") ? [{ id: "resume", label: "继续", onSelect: () => setPaused(false) }] : []),
+        ],
+        overflow: menu,
+      }}
       toolbar={bandToolbar}
     >
       {selectionStale ? <Note action={<Button variant="secondary" size="sm" onClick={() => api.refreshScope?.()}>读取最新结果</Button>}>
@@ -549,9 +551,9 @@ function GeoBand({
         <Suspense fallback={<TabSkeleton rows={4} />}><Outlet context={api} /></Suspense>
       ) : (
         <>
-          {project.signalsSupported && <GeoSignalsWorkbench geoId={geoId} project={project} step={api.step} />}
+          {!analysis && project.signalsSupported && <GeoSignalsWorkbench geoId={geoId} project={project} step={api.step} />}
           {api.scopePending && (api.scopeError ? <LoadError message={api.scopeError} onRetry={reload} /> : <TabSkeleton />)}
-          <div hidden={api.scopePending || project.signalsSupported && params.has("signal")}><PendingFeedbackBoundary mode={api.scopePending || project.signalsSupported && params.has("signal") ? "inactive" : "active"}><GeoTab api={api} /></PendingFeedbackBoundary></div>
+          <div hidden={api.scopePending || !analysis && project.signalsSupported && params.has("signal")}><PendingFeedbackBoundary mode={api.scopePending || !analysis && project.signalsSupported && params.has("signal") ? "inactive" : "active"}>{analysis ? <GeoAnalysisMainArea api={api} /> : <GeoTab api={api} />}</PendingFeedbackBoundary></div>
         </>
       )}
       {scopeOpen && <GeoScopeDialog geoId={geoId} project={project} initial={api.scope?.selectionRef && project.scope ? { ...project.scope, selectionRef: api.scope.selectionRef } : api.scope} onClose={() => setScopeOpen(false)} onApply={next => {
@@ -630,4 +632,17 @@ const GeoTab = memo(function GeoTab({ api }: { api: GeoFrameApi }) {
         : <Tab geoId={api.geoId} project={api.project} />}
     </>
   );
+});
+
+/** The analysis owns its controls; memoization prevents toolbar publication from remounting/rerendering its producer. */
+const GeoAnalysisMainArea = memo(function GeoAnalysisMainArea({ api }: { api: GeoFrameApi }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const analysis = geoAnalysisDescriptor(location.search);
+  if (!analysis) return null;
+  const change = (descriptor: Parameters<typeof geoAnalysisSearch>[1]) => navigate({ pathname: location.pathname, search: geoAnalysisSearch(location.search, descriptor), hash: location.hash });
+  return <section data-geo-main-area="analysis" className="flex flex-col gap-4">
+    <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-section font-semibold">{GEO_ANALYSIS_OPTIONS.find(item => item.value === analysis.viewId)?.label}</h2><Button variant="text" onClick={() => change(null)}>返回{GEO_TABS.find(item => item.key === api.tab)?.label}</Button></div>
+    <GeoAnalysisWorkbench geoId={api.geoId} project={api.project} mainArea={{ descriptor: analysis, onChange: change }} />
+  </section>;
 });

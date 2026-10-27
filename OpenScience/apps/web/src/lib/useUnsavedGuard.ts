@@ -1,6 +1,44 @@
 import { useCallback, useEffect, useState, useId, useSyncExternalStore, useRef, useLayoutEffect } from "react";
 
-const routeGuards = new Map<string, { busy: boolean; confirming: boolean }>();
+export interface UnsavedRouteOptions {
+  /** Changes while a project proof is pending require a fresh discard decision. */
+  draftKey?: string;
+  /** Optional mode boundary for editors whose main area changes without changing pathname. */
+  samePathChange?(fromSearch: string, toSearch: string): boolean;
+  /** Clear unsaved data on a host-confirmed route exit; never navigate from this callback. */
+  onRouteDiscard?(): void;
+}
+const routeGuards = new Map<string, { busy: boolean; confirming: boolean; options?: UnsavedRouteOptions; acknowledge: () => void }>();
+export function dirtyRouteShouldBlock(from: {pathname: string; search: string}, to: {pathname: string; search: string}): boolean {
+  if (dirtyRouteState() === 'clean') return false;
+  return from.pathname !== to.pathname || [...routeGuards.values()].some(guard => guard.options?.samePathChange?.(from.search, to.search));
+}
+export function discardDirtyRoutes() {
+  for (const guard of routeGuards.values()) { guard.acknowledge(); guard.options?.onRouteDiscard?.(); }
+  routeGuards.clear(); notifyRouteGuards();
+}
+export const dirtyExitSnapshot = () => JSON.stringify([...routeGuards.entries()].map(([id, guard]) => [id, guard.busy, guard.options?.draftKey]));
+let projectExit: { resolve: (allow: boolean) => void } | null = null;
+export function resolveProjectExit(allow: boolean) {
+  if (allow && dirtyRouteState() !== "dirty" && dirtyRouteState() !== "clean") return;
+  const pending = projectExit; projectExit = null; pending?.resolve(allow); notifyRouteGuards();
+}
+/** Project identity does not live in the URL, so store mutations need the same explicit exit decision. */
+export function requestProjectExit(signal?: AbortSignal): Promise<boolean> {
+  if (signal?.aborted || dirtyRouteState() === "local-confirm") return Promise.resolve(false);
+  if (dirtyRouteState() === "clean") return Promise.resolve(true);
+  resolveProjectExit(false);
+  return new Promise(resolve => {
+    const abort = () => resolveProjectExit(false);
+    projectExit = { resolve: allow => { signal?.removeEventListener("abort", abort); resolve(allow); } };
+    signal?.addEventListener("abort", abort, { once: true });
+    notifyRouteGuards();
+  });
+}
+export function useProjectExitPending() {
+  return useSyncExternalStore(listener => { routeListeners.add(listener); return () => { routeListeners.delete(listener); }; }, () => projectExit !== null, () => false);
+}
+
 const routeListeners = new Set<() => void>();
 const notifyRouteGuards = () => routeListeners.forEach(listener => listener());
 export const dirtyRouteState = () => [...routeGuards.values()].some(guard => guard.confirming) ? "local-confirm" : [...routeGuards.values()].some(guard => guard.busy) ? "busy" : routeGuards.size ? "dirty" : "clean";
@@ -13,23 +51,23 @@ export function useDirtyRouteState() {
 }
 
 /** One guard for modal exits and browser unload; route integrations call requestClose too. */
-export function useUnsavedGuard(dirty: boolean, onClose: () => void, busy = false) {
+export function useUnsavedGuard(dirty: boolean, onClose: () => void, busy = false, options?: UnsavedRouteOptions) {
   const id = useId();
   const [confirming, setConfirming] = useState(false);
   const acknowledged = useRef(false);
   useLayoutEffect(() => {
-    if (!dirty) { acknowledged.current = false; return; }
+    if (!dirty && !busy) { acknowledged.current = false; return; }
     if (acknowledged.current) return;
-    routeGuards.set(id, { busy, confirming });
+    routeGuards.set(id, { busy, confirming, options, acknowledge: () => { acknowledged.current = true; } });
     notifyRouteGuards();
     return () => { routeGuards.delete(id); notifyRouteGuards(); };
-  }, [dirty, busy, confirming, id]);
+  }, [dirty, busy, confirming, id, options]);
   useEffect(() => {
-    if (!dirty) return;
+    if (!dirty && !busy) return;
     const unload = (event: BeforeUnloadEvent) => { if (acknowledged.current) return; event.preventDefault(); event.returnValue = ""; };
     window.addEventListener("beforeunload", unload);
     return () => window.removeEventListener("beforeunload", unload);
-  }, [dirty]);
+  }, [dirty, busy]);
   const requestClose = useCallback(() => {
     if (busy) return;
     if (dirty && !acknowledged.current) setConfirming(true); else onClose();

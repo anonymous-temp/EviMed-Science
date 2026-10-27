@@ -15,10 +15,9 @@ import {
   type DuplicateGroup, type KnowledgePage, type SourceRecord,
 } from "@/lib/sourceClient";
 import { toast } from "@/lib/toast";
-import { Button, buttonClasses } from "@/components/ui/Button";
+import { buttonClasses } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Drawer } from "@/components/ui/Drawer";
-import { Menu } from "@/components/ui/Menu";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
@@ -237,15 +236,11 @@ function SourceReader({ sourceId }: { sourceId: string }) {
           items: [{ value: "content", label: "内容" }, { value: "original", label: "原文" }],
         } : undefined}
         meta={source ? readerMeta(source) : undefined}
-        actions={source && (
-          <>
-            <Button disabled={!isUsable(source)} onClick={() => prepareConversation()}>
-              <MessageSquare size={16} aria-hidden="true" />在对话中使用
-            </Button>
-            <Button variant="secondary" disabled={!path || source.payload.status === "missing"} onClick={() => void download()}>下载</Button>
-            <Menu label={`“${source.display.title}”的操作`} items={menu} />
-          </>
-        )}
+        actionPlan={source ? {
+          primary: { id: "conversation", label: "在对话中使用", icon: MessageSquare, disabled: !isUsable(source), onSelect: () => prepareConversation() },
+          secondary: [{ id: "download", label: "下载", disabled: !path || source.payload.status === "missing", onSelect: () => void download() }],
+          overflowLabel: `“${source.display.title}”的操作`, overflow: menu,
+        } : undefined}
       >
         {/* The columns' own box: the height the window leaves under the header, so each column scrolls by itself. */}
         <div ref={bodyRef} data-reader-layout={source ? (twoColumns ? "columns" : "tabs") : undefined}

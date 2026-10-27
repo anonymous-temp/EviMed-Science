@@ -26,7 +26,7 @@ import { EmptyState } from "@/components/cards/EmptyState";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/ui/Drawer";
 import { List, ListRow } from "@/components/ui/ListRow";
-import { Menu, type MenuEntry } from "@/components/ui/Menu";
+import type { MenuEntry } from "@/components/ui/Menu";
 import { Textarea } from "@/components/ui/Input";
 import { ShowMore } from "@/components/ui/ShowMore";
 import {
@@ -210,6 +210,10 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
   ] : [];
   const more: MenuEntry[] = [...forReaders, ...(forReaders.length > 0 && forOwner.length > 0 ? ["separator" as const] : []), ...forOwner];
   const searchable = !!zone && !bare && (items.length > 0 || !!query);
+  const followAction = zone?.canFollow ? { id: "follow", label: zone.following ? "取消关注" : "关注", loading: busy, onSelect: () => void act(async (current) => {
+    const updated = await followEvidenceZone(zone);
+    if (current()) setZone(updated);
+  }) } : undefined;
   return (
     <PageShell
       title={zone?.title ?? "证据专区"}
@@ -228,46 +232,16 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
           />
         )
       }
-      actions={
-        zone && (
-          <>
-            {zone.canFollow && (
-              <Button
-                variant="secondary"
-                loading={busy}
-                onClick={() =>
-                  void act(async (current) => {
-                    const updated = await followEvidenceZone(zone);
-                    if (current()) setZone(updated);
-                  })
-                }
-              >
-                {zone.following ? "取消关注" : "关注"}
-              </Button>
-            )}
-            {askable && (
-              <Button
-                loading={busy}
-                onClick={() =>
-                  void act(async () => {
-                    const current = capture();
-                    const prepared = await prepareEvidenceResearch(zone);
-                    if (!current()) return;
-                    navigate("/app/chat", {
-                      state: {
-                        runtimeUiIntent: newRuntimeUiIntent(prepared.draft),
-                      },
-                    });
-                  })
-                }
-              >
-                问这个专区
-              </Button>
-            )}
-            {more.length > 0 && <Menu label="更多操作" items={more} />}
-          </>
-        )
-      }
+      actionPlan={zone ? {
+        primary: askable ? { id: "ask", label: "问这个专区", loading: busy, onSelect: () => void act(async () => {
+          const current = capture();
+          const prepared = await prepareEvidenceResearch(zone);
+          if (!current()) return;
+          navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(prepared.draft) } });
+        }) } : followAction,
+        secondary: askable && followAction ? [followAction] : [],
+        overflowLabel: "更多操作", overflow: more,
+      } : undefined}
       // The list's controls, over the list: a live search and the count after it, and the owner's way to add to it.
       toolbar={zone && !bare ? {
         label: "专区证据筛选",

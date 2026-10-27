@@ -1,4 +1,7 @@
-import { GeoAnalysisWorkbench } from "../GeoAnalysisWorkbench";
+import { GeoAnalysisEntry } from "../GeoAnalysisEntry";
+import { Link } from "react-router";
+import { geoOverviewFirstUse } from "../geoFirstUse";
+import { buttonClasses } from "@/components/ui/Button";
 import { useMemo } from "react";
 import { Radar } from "lucide-react";
 import type { GeoMonitoring, GeoProject } from "@/lib/geoClient";
@@ -11,7 +14,7 @@ import { GeoSparkline } from "../GeoSparkline";
 import { formatGeoValue } from "../GeoCellText";
 import { NeedsYou } from "../NeedsYou";
 import { LoadError } from "@/components/cards/LoadError";
-import { nextMeasurement } from "../geoBand";
+import { measurementPause, nextMeasurement } from "../geoBand";
 import { readFailure, useGeoDiagnosis, useGeoMonitoring, useGeoStrategy, type GeoLoadResult } from "../geoProjectData";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Tag } from "@/components/ui/Tag";
@@ -59,6 +62,7 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
   const strategy = useGeoStrategy(geoId);
   const diag = diagnosis.state.kind === "ready" ? diagnosis.state.data : null;
   const watch = monitoring.state.kind === "ready" ? monitoring.state.data : null;
+  const pause = measurementPause(watch?.measurement);
   const plan = strategy.state.kind === "ready" ? strategy.state.data : null;
   // The open errors and the rivals are the diagnosis's: when it did not come, the band says so instead of reading as none.
   const diagnosisFailed = readFailure(diagnosis);
@@ -74,10 +78,18 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
   const cells = tiles.length + 1;
   const ranked = ranking.length > 0;
 
+  if (geoOverviewFirstUse(project, diagnosis.state, monitoring.state, strategy.state)) return <div data-geo-tab="overview" data-geo-first-use="" className="flex flex-col gap-4">
+    <h2 className="text-section font-semibold">从现有资料和问题开始</h2>
+    <p className="text-ui text-text-2">{pause?.paused ? "还没有采样记录。现在可以核对产品依据、整理现有问句；测量恢复后再开始诊断。" : "还没有采样记录。先核对产品依据，或导入已有问句；确认采样口径后再开始诊断。"}</p>
+    {pause && <p role="status" className="text-ui text-text-2">{pause.sentence}</p>}
+    <div className="flex flex-wrap gap-2"><Link className={buttonClasses({variant:"secondary"})} to={path(geoTabPath(geoId,"evidence"))}>查看产品依据</Link><Link className={buttonClasses({variant:"secondary"})} to={path(geoTabPath(geoId,"questions"))}>整理问题</Link></div>
+    <GeoAnalysisEntry geoId={geoId} project={project} />
+  </div>;
+
   return (
     <div data-geo-tab="overview" className="flex flex-col gap-6">
       <GeoComparison geoId={geoId} view={project} />
-      <GeoAnalysisWorkbench geoId={geoId} project={project} />
+      {pause && <p role="status" className="text-ui text-text-2">{pause.sentence}</p>}
       {/* The sentence names the open errors, so it is written once they are counted: a 「没有待办」 that turns into
           「还有 11 条严重讲错」 a moment later is worse than a held line. */}
       {diagnosis.state.kind === "loading" ? (
@@ -158,6 +170,7 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
       </div>
 
       <Week geoId={geoId} project={project} />
+      <GeoAnalysisEntry geoId={geoId} project={project} />
     </div>
   );
 }

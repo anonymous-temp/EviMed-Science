@@ -142,7 +142,7 @@ per-project workspace + JSONL provenance.
 
 - UI baseline language is **Simplified Chinese** (code/comments stay English); technical identifiers
   (URLs, enum values, model/provider ids) stay as-is. The maintained design authority is
-  `docs/FRONTEND_DESIGN_SYSTEM.md` **v3.1**; `DESIGN.md` holds the engineering rules and the component
+  `docs/FRONTEND_DESIGN_SYSTEM.md` **v3.2**; `DESIGN.md` holds the engineering rules and the component
   adoption map; component JSDoc plus `/__gallery` and the composition fixtures own each implemented
   contract; product scope stays in the linked module plans. Chinese reading copies are dated snapshots
   or link indexes, not a second normative specification.
@@ -156,12 +156,15 @@ per-project workspace + JSONL provenance.
   fails on a stale artifact and `apps/web/src/app/designTokens.test.ts` regenerates and compares, so
   editing a consumer instead of the table is a red test. Contrast is recomputed at build time and a
   shortfall fails the build. The shell conforms to the kernel, not the other way around. Token
-  **3.0.0** implements specification **3.1**; the earlier main 2.2.0 and warm-brand 2.3.0 reads are
-  historical baselines. This brand and status reinterpretation is a major version, compatible
-  additions are minor, and within-role tuning is patch. The specification, `DESIGN.md`, this file, the
-  token package and release metadata, the generated consumers, the brand assets and the consumer
-  pins/readbacks reach the reviewed change together; publishing, merging and deploying remain separate
-  stages with their own receipts.
+  **3.0.0** is the implemented token set and the current specification is **3.2**: DS22 has scoped
+  local implementation and evidence, and the remaining route, state, native-runtime and accessibility
+  acceptance is recorded in `../docs/superpowers/plans/2026-10-27-page-composition-v3.2.md`. The
+  earlier main 2.2.0 and warm-brand 2.3.0 reads are historical baselines. This brand and status
+  reinterpretation is a major version, compatible additions are minor, and within-role tuning is
+  patch. For a token release the specification, `DESIGN.md`, this file, the token package and release
+  metadata, the generated consumers, the brand assets and the consumer pins/readbacks reach the
+  reviewed change together; a composition-only specification revision does not require a token
+  version change; publishing, merging and deploying remain separate stages with their own receipts.
 - Brand is **warm paper, terracotta actions (`#a34427`) and an ink EviMed mark** (owner, 2026-10-26;
   the 循证蓝 `#0a5dc1` palette retired): the independent `brand-ink` role is near-black in the light
   theme and paper ink in the dark, so an accent change never recolours the logo, and the native shell
@@ -201,7 +204,8 @@ per-project workspace + JSONL provenance.
   is theirs and not provenance. A static tag is not a button, and a row predicts whether it filters,
   configures or opens a destination.
 - **Page structure** (one-object and drawer restrictions qualified by the October 20 workbench ruling
-  below; 2026-10-07 plan §9.4, `DESIGN.md` 「页面结构」): a page serves one coherent task — a list of
+  below; 2026-10-07 plan §9.4, `DESIGN.md` 「页面结构」): a page serves one coherent current task and explicit mode under DS22 (no default stacking of
+  complete workbenches) — a list of
   one kind of object, with a data page (the memory dashboard 总览, the knowledge base's reader and graph) and a
   connected workbench (the related inputs, configuration, progress and results of one task, in the
   main area) as the named exceptions (`DESIGN.md` rule 1); short record detail opens in a drawer, long
@@ -359,3 +363,10 @@ The owner supplied a detailed review and asked that decisions use its recommenda
 ### Design v3.1 implementation evidence (2026-10-26)
 
 Read [the execution ledger](../docs/superpowers/plans/2026-10-26-design-system-v3-execution.md) for DS01–DS21 / AT01–AT50 proof boundaries. Preserve the supported native theme/focus lifecycle; do not patch private upstream APIs. Native diagnostics use the public locale group `command.section.commands` (高级命令与诊断); command IDs remain upstream identities. Layout budgets are not widened in code: a measured, view-specific change is a `budgetOverride` with a `budgetNote` in `scripts/ops/page-templates.json`, and raw metrics and default budgets stay visible. Deployment follows the release procedure and its own receipts.
+
+
+## Owner review adopted 2026-10-27: page composition v3.2
+
+The canonical `docs/FRONTEND_DESIGN_SYSTEM.md` DS22.1–DS22.8 and AT51–AT58 own composition and complexity: explicit current-task modes, scoped action ownership and header defaults, distinct workflow/view/filter controls, adaptive filters, parent-level shared first-use state, contextual import/edit, meaningful grouping and whole-page state/width verification. Apply those rules through existing PageShell, Toolbar, StepRail and DocumentExport components; preserve all eight workflow steps, actual permissions, drafts, valid results and the native composer. Token package 3.0.0 remains unchanged.
+
+These are adoption targets until the coordinating execution ledger records implementation and verification. The owner authorized affected-page implementation, commit and branch push; deployment remains unauthorized. Preserve the dated v3.1 audit and its seven OPEN acceptance items separately. Do not substitute a cosmetic classifier pass, arbitrary budget relaxation or a universal five-second claim for task and behavioral evidence. The specification owns detailed rules; this entry is an authority pointer, not a parallel specification.

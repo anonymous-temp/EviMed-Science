@@ -5,6 +5,8 @@ import { getGeoQuestions, type GeoProject, type GeoQuestions } from '@/lib/geoCl
 import { fetchWebMe, WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT, webErrorMessage } from '@/lib/apiClient';
 import { mapQuestionRows, readQuestionWorkbook, type QuestionWorkbook, type QuestionMapping } from '@/lib/geoQuestionImport';
 import { getGeoDiagnosisProgress, importGeoQuestions, previewGeoQuestions, recoverGeoDiagnosis, startGeoDiagnosis, type GeoDiagnosisProgress, type GeoImportInput, type GeoImportPreview, type GeoMeasurementContract, type GeoQuestionImportRow } from '@/lib/geoQuestionWorkbenchClient';
+import { useUnsavedGuard } from '@/lib/useUnsavedGuard';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Button } from '@/components/ui/Button';
 import { Input, Textarea, inputClasses } from '@/components/ui/Input';
 import { Note } from '@/components/ui/Note';
@@ -42,6 +44,7 @@ const jobFailure = (code: string) => knownErrorCodeMessage(code) ?? JOB_FAILURES
 export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId: string; project: GeoProject; data: GeoQuestions; onSaved: (version: number) => void }) {
   const [params, setParams] = useSearchParams();
   const editRevision = useRef(0);
+  const replacementGeneration = useRef(0);
   const working = useRef(false);
   const identityGeneration = useRef(0);
   const canEdit = !project.access || project.access.abilities.includes('edit');
@@ -49,6 +52,10 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
   const [identityVersion, setIdentityVersion] = useState(0);
   const [storageScope, setStorageScope] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const editingMode = params.get("questionMode") === "import" || params.get("questionMode") === "edit";
+  const setMode = useCallback((mode: "import" | "edit" | null) => setParams(previous => { const next = new URLSearchParams(previous); if (mode) next.set("questionMode", mode); else next.delete("questionMode"); return next; }, { replace: true }), [setParams]);
+  const currentMode = useRef(params.get("questionMode")); currentMode.current = params.get("questionMode");
+  const setModeRef = useRef(setMode); setModeRef.current = setMode;
   const [book, setBook] = useState<QuestionWorkbook | null>(null);
   const [sheet, setSheet] = useState(0);
   const [mapping, setMapping] = useState<QuestionMapping>({});
@@ -62,15 +69,41 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
   const [error, setError] = useState('');
   const [saved, setSaved] = useState<number | null>(null);
   const pendingImport = useRef<(GeoImportInput & { requestKey: string }) | null>(null);
+  const [recoverableImport, setRecoverableImport] = useState<(GeoImportInput & { requestKey: string }) | null>(null);
+  const afterDiscard = useRef<(() => void) | null>(null);
+  const clearDraft = useCallback(() => {
+    replacementGeneration.current++;
+    // An operation already sent to the server remains available for idempotent reconciliation.
+    if (storageScope) {
+      const retained = pendingImport.current ?? recoverableImport;
+      if (!retained) localStorage.removeItem(storageScope);
+      else localStorage.setItem(storageScope, JSON.stringify({input:retained, viewClosed:true}));
+    }
+    setEntries([]); setBook(null); setMapping({}); setSheet(0); setBlank(0); setPreview(null);
+    setContract(data.contract ?? initialContract); editRevision.current = 0;
+    setEditing(false);
+  }, [storageScope, data.contract, recoverableImport]);
+  const discardDraft = () => { clearDraft(); const next = afterDiscard.current; afterDiscard.current = null; if (next) next(); else setMode(null); };
+  const guardOptions = useMemo(() => ({
+    samePathChange: (from: string, to: string) => {
+      const current = new URLSearchParams(from), next = new URLSearchParams(to);
+      return ['analysis', 'questionMode', 'questionVersion'].some(key => current.get(key) !== next.get(key))
+        || (current.get('view') !== next.get('view') && next.get('view') === 'journey');
+    },
+    onRouteDiscard: clearDraft,
+  }), [clearDraft]);
+  const guard = useUnsavedGuard(editingMode && (rows.length > 0 || book !== null || editRevision.current > 0), discardDraft, busy, guardOptions);
+
   useEffect(() => {
-    const reset = () => { invalidateIdentity(identityGeneration); setStorageScope(null); pendingImport.current = null; setEntries([]); setPreview(null); setEditing(false); setSaved(null); };
+    const reset = () => { invalidateIdentity(identityGeneration); setStorageScope(null); pendingImport.current = null; setRecoverableImport(null); afterDiscard.current = null; setEntries([]); setPreview(null); setEditing(false); setSaved(null); };
     const started = () => { reset(); setIdentityVersion(value => value + 1); };
     window.addEventListener(WEB_SESSION_ENDED_EVENT, reset); window.addEventListener(WEB_SESSION_STARTED_EVENT, started);
     return () => { window.removeEventListener(WEB_SESSION_ENDED_EVENT, reset); window.removeEventListener(WEB_SESSION_STARTED_EVENT, started); };
   }, []);
   useEffect(() => {
-    setStorageScope(null); pendingImport.current = null; setEntries([]); setPreview(null); setEditing(false);
+    setStorageScope(null); pendingImport.current = null; setRecoverableImport(null); afterDiscard.current = null; setEntries([]); setPreview(null); setEditing(false);
     let live = true; const generation = ++identityGeneration.current;
+    const arrival = {revision:editRevision.current,replacement:replacementGeneration.current,mode:currentMode.current};
     void fetchWebMe().then(me => {
       if (!live || generation !== identityGeneration.current || !me?.user?.id) return;
       const scoped = `geo-question-import:${me.tenant?.id ?? me.user.tenantId ?? me.user.id}:${me.user.id}:${project.projectId}:${geoId}`;
@@ -86,7 +119,13 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
             if (!checked.requestKey) throw new Error('Missing request identity');
             // Canonical validation checks the cache; send the exact original payload for idempotency.
             const original = input as GeoImportInput & { requestKey: string };
-            pendingImport.current = original; setEntries(entriesOf(original.rows)); setContract(original.contract); setPreview(checked as GeoImportPreview); setEditing(true);
+            if (working.current || arrival.revision !== editRevision.current || arrival.replacement !== replacementGeneration.current || arrival.mode !== currentMode.current) {
+              setRecoverableImport(original);
+              return;
+            }
+            pendingImport.current = original; setEntries(entriesOf(original.rows)); setContract(original.contract); setPreview(checked as GeoImportPreview);
+            const closed = 'viewClosed' in held && held.viewClosed === true;
+            setEditing(!closed); setModeRef.current(closed ? null : "import");
           } catch {
             localStorage.setItem(`${scoped}:invalid`, raw); localStorage.removeItem(scoped);
             setError('上次保存记录损坏，已隔离。请重新导入原表后核对预览。');
@@ -113,12 +152,16 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
     setEntries(previous => previous.map(entry => entry.key === rowKey ? { key: rowKey, row: { ...entry.row, ...patch } } : entry)); changed();
   }, [changed]);
   const shown = useShowMore(entries, { first: ROWS_SHOWN, step: ROWS_SHOWN, resetKey: entries[0]?.key ?? '' });
-  const editExisting = () => { if (working.current || !editableNow.current || pendingImport.current) return; void act(async () => {
+  const editExisting = () => {
+    if (editingMode || working.current || !editableNow.current || pendingImport.current) return;
+    const replacement = ++replacementGeneration.current;
+    currentMode.current = "edit"; setMode("edit");
+    void act(async () => {
     if (!data.contract) throw new Error('这个历史题库不支持原表编辑，请导入完整原题创建新的采样版本。');
     if (data.version == null) throw new Error('请先选择一个问句版本再编辑。');
     const generation = identityGeneration.current, revision = editRevision.current;
     const complete = data.selection ? await getGeoQuestions(geoId, data.version) : data;
-    if (!editableNow.current || generation !== identityGeneration.current || revision !== editRevision.current) return;
+    if (!editableNow.current || generation !== identityGeneration.current || revision !== editRevision.current || replacement !== replacementGeneration.current || currentMode.current !== "edit") return;
     setBook(null); setContract(complete.contract ?? initialContract);
     const originals = complete.groups.flatMap(group => group.questions.map(question => ({ group, question })));
     originals.sort((a, b) => (a.question.originalRowIndex ?? Number.MAX_SAFE_INTEGER) - (b.question.originalRowIndex ?? Number.MAX_SAFE_INTEGER));
@@ -142,16 +185,34 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
     await getGeoDiagnosisProgress(geoId, result.roundId);
     if (generation === identityGeneration.current) selectRound(result.roundId);
   }); };
-  return <Section title="问句整理与诊断" level="sub">
+  return <Section title={editingMode ? "导入与编辑问句" : "问句整理与诊断"} level="sub">
+    {guard.confirming && <ConfirmDialog title="离开问句编辑？" body={pendingImport.current ? "当前编辑视图会关闭。已提交但未确认的保存请求将保留，用于核查结果。" : "尚未保存的原题、映射和采样口径会丢失。"} confirmLabel="放弃修改" onConfirm={() => { guard.markSaved(); guard.discard(); }} onCancel={() => { afterDiscard.current = null; guard.keepEditing(); }} />}
+    {recoverableImport && <p role="status" data-layout-exception="geo-pending-save" className="text-ui text-text-2">发现上次尚未确认的保存记录。当前草稿已保留；核查该记录前不能提交新的保存。</p>}
     <div className="flex flex-wrap items-center gap-2">
       {/* The step's actions are the block's own, not the page's primary (the header's, DESIGN.md T3): secondary. */}
-      {canEdit && <Button variant="secondary" size="sm" disabled={busy || !!pendingImport.current} onClick={() => { setEditing(true); setSaved(null); }}>导入问句</Button>}
-      {canEdit && data.groups.length > 0 && data.version != null && data.contract != null && <Button size="sm" variant="text" disabled={busy || !!pendingImport.current} onClick={editExisting}>编辑为新版本</Button>}
+      {canEdit && recoverableImport && <Button variant="secondary" size="sm" disabled={busy} onClick={() => {
+        const restore = () => {
+          const original = recoverableImport; pendingImport.current = original; setRecoverableImport(null);
+          if (storageScope) localStorage.setItem(storageScope, JSON.stringify({input:original,viewClosed:false}));
+          setRows(original.rows); setContract(original.contract); setBook(null); setMapping({});
+          setPreview(previewGeoQuestionImport(original) as GeoImportPreview); setEditing(true); setMode("import");
+        };
+        if (editingMode && (rows.length > 0 || book !== null || editRevision.current > 0)) { afterDiscard.current = restore; guard.requestClose(); }
+        else restore();
+      }}>继续核查上次保存</Button>}
+      {!editingMode && canEdit && pendingImport.current && <Button variant="secondary" size="sm" onClick={() => {
+        const pending = pendingImport.current!;
+        if (storageScope) localStorage.setItem(storageScope, JSON.stringify({input:pending, viewClosed:false}));
+        setRows(pending.rows); setContract(pending.contract);
+        setPreview(previewGeoQuestionImport(pending) as GeoImportPreview); setEditing(true); setMode("import");
+      }}>继续核查上次保存</Button>}
+      {!editingMode && canEdit && <Button variant="secondary" size="sm" disabled={busy || !!pendingImport.current} onClick={() => { if (working.current || !editableNow.current || pendingImport.current) return; setMode("import"); setEditing(true); setSaved(null); }}>导入问句</Button>}
+      {!editingMode && canEdit && data.groups.length > 0 && data.version != null && data.contract != null && <Button size="sm" variant="text" disabled={busy || !!pendingImport.current} onClick={editExisting}>编辑为新版本</Button>}
       {version != null && <AskAi project={target} label="建议分类" draft={`/geo-insight 请读取第 ${version} 版完整原题，仅建议测量池、人群、阶段与分类状态。保留原题、编号、客户分组与原标签，输出带原编号的可导入表格，建议不覆盖客户原分类；用户采用后另存新版本。`} />}{version != null && <AskAi project={target} label="检查覆盖" draft={`/geo-insight 请检查第 ${version} 版问句覆盖，读取该版本原题、已有资料和旅程人群，指出具体缺口与依据，不编造配额。保留原分类，建议另列，输出可编辑的新版本问句表，不自动采样。`} />}
       {version != null && activeContract != null && canRun && <Button variant="secondary" size="sm" disabled={busy || !storageScope} onClick={start}>{busy ? '正在处理' : `启动第 ${version} 版诊断`}</Button>}
     </div>
-    {version != null && <Note className="my-3" result={['第 ', { n: version }, ` 版 · ${activeContract?.samplingMode === 'recurring' ? '重复采样' : '单次采样'} · ${(activeContract?.engines ?? contract.engines).map(engineName).join('、')}。单次结果描述本次回答，不代表稳定概率。`]} action={canEdit && data.contract ? <Button size="sm" variant="text" disabled={busy || !!pendingImport.current} onClick={editExisting}>调整口径</Button> : undefined} />}
-    {editing && canEdit && <div className="my-4 flex flex-col gap-4">
+    {!editingMode && version != null && <Note className="my-3" result={['第 ', { n: version }, ` 版 · ${activeContract?.samplingMode === 'recurring' ? '重复采样' : '单次采样'} · ${(activeContract?.engines ?? contract.engines).map(engineName).join('、')}。单次结果描述本次回答，不代表稳定概率。`]} action={canEdit && data.contract ? <Button size="sm" variant="text" disabled={busy || !!pendingImport.current} onClick={editExisting}>调整口径</Button> : undefined} />}
+    {editingMode && canEdit && <div className="my-4 flex flex-col gap-4">
       <Input type="file" label="选择 Excel / CSV（首行为列名，最多 400 题、10 MB）" accept=".xlsx,.xls,.csv" disabled={busy || !!pendingImport.current} onChange={event => { const file = event.target.files?.[0]; if (file) loadFile(file); }} />
       {book && <>
         <label className="text-ui text-text">工作表<select disabled={busy || !!pendingImport.current} aria-label="工作表" className={inputClasses()} value={sheet} onChange={event => { setSheet(Number(event.target.value)); setRows([]); setMapping({}); changed(); }}>{book.sheets.map((item, index) => <option key={index} value={index}>{item.name}</option>)}</select></label>
@@ -164,12 +225,12 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
         <div className="max-h-96 overflow-auto"><table className="w-full text-caption"><thead><tr>{['原编号 / 客户分类 / 原标签', '原题（完整文本）', '平台补充分类', '参与测量'].map(title => <th key={title} className="p-2 text-left">{title}</th>)}</tr></thead><tbody>{shown.visible.map((entry, index) => <QuestionRow key={entry.key} entry={entry} index={index} disabled={busy || !!pendingImport.current} onChange={updateRow} />)}</tbody></table></div>
         <ShowMore remaining={shown.remaining} unit="题" onMore={shown.more} />
         <Button size="sm" disabled={busy} onClick={() => { void act(async () => { const revision = editRevision.current, generation = identityGeneration.current; const result = await previewGeoQuestions(geoId, { rows, contract }); if (revision === editRevision.current && generation === identityGeneration.current && editableNow.current) setPreview(result); }); }}>核对导入预览</Button>
-        {preview && <div className="flex flex-col gap-3"><p className="text-ui text-text">实际 {preview.actualRows} 题 · 测量 {preview.measuredRows} 题 · 计划 {preview.plannedCalls} 次调用 · 疑似重复 {preview.duplicateCandidates.length} 组（全部保留）</p>{preview.duplicateCandidates.map((item, index) => <p key={index} className="text-caption text-text-2">疑似重复行：{item.rowIndexes.map(row => row + 1).join('、')}</p>)}<Button disabled={busy || !storageScope || preview.plannedCalls > 5000} onClick={() => { void act(async () => { if (!editableNow.current) throw new Error('你在这个项目里只有查看权限。'); if (!storageScope) throw new Error('请等待账户确认后再保存。'); const candidate = pendingImport.current ?? { rows, contract, requestKey: key() }; localStorage.setItem(storageScope, JSON.stringify({ input: candidate, preview })); pendingImport.current = candidate; const generation = identityGeneration.current; const result = await importGeoQuestions(geoId, pendingImport.current); if (!editableNow.current || generation !== identityGeneration.current) return; localStorage.removeItem(storageScope); pendingImport.current = null; setSaved(result.version); setEditing(false); onSaved(result.version); }); }}>保存为新版本</Button></div>}
+        {preview && <div className="flex flex-col gap-3"><p className="text-ui text-text">实际 {preview.actualRows} 题 · 测量 {preview.measuredRows} 题 · 计划 {preview.plannedCalls} 次调用 · 疑似重复 {preview.duplicateCandidates.length} 组（全部保留）</p>{preview.duplicateCandidates.map((item, index) => <p key={index} className="text-caption text-text-2">疑似重复行：{item.rowIndexes.map(row => row + 1).join('、')}</p>)}<Button disabled={busy || !storageScope || !!recoverableImport || preview.plannedCalls > 5000} onClick={() => { void act(async () => { if (!editableNow.current) throw new Error('你在这个项目里只有查看权限。'); if (!storageScope) throw new Error('请等待账户确认后再保存。'); if (recoverableImport) throw new Error('请先核查上次尚未确认的保存记录。'); const candidate = pendingImport.current ?? { rows, contract, requestKey: key() }; localStorage.setItem(storageScope, JSON.stringify({ input: candidate, preview })); pendingImport.current = candidate; const generation = identityGeneration.current; const result = await importGeoQuestions(geoId, pendingImport.current); if (!editableNow.current || generation !== identityGeneration.current) return; localStorage.removeItem(storageScope); pendingImport.current = null; setSaved(result.version); guard.markSaved(); setMode(null); setEditing(false); onSaved(result.version); }); }}>保存为新版本</Button></div>}
       </>}
-      <Button size="sm" variant="text" disabled={busy} onClick={() => setEditing(false)}>收起整理</Button>
+      <Button size="sm" variant="text" disabled={busy} onClick={guard.requestClose}>返回问题列表</Button>
     </div>}
     {error && <p role="alert" className="my-3 text-ui text-error">{error}</p>}
-    {round && storageScope && <DiagnosisProgress storageScope={storageScope} key={round} geoId={geoId} round={round} canRun={canRun} onRound={selectRound} />}
+    {!editingMode && round && storageScope && <DiagnosisProgress storageScope={storageScope} key={round} geoId={geoId} round={round} canRun={canRun} onRound={selectRound} />}
   </Section>;
 }
 
