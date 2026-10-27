@@ -161,6 +161,56 @@ describe("the lead story, in an issue with fewer than three things to show", () 
   });
 });
 
+describe("AI 一分钟 opens the issue, and a day's safety lane shows three rows (owner, 2026-10-27)", () => {
+  const minute = "今天与临床相关的 AI 进展有 3 条。";
+  const headings = () => screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent);
+
+  it("is the first section under the issue's header, before 先看三件事, the safety lane and the lanes; it is not at the end any more", () => {
+    show(issue({ aiMinute: minute, lead: lead({ event: null }), safety: items("safety", 2) }));
+    const names = headings();
+    expect(names[0]).toBe("AI 一分钟");
+    expect(names.indexOf("先看三件事")).toBe(1);
+    expect(names.indexOf("AI 一分钟")).toBeLessThan(names.findIndex((name) => name?.startsWith("安全警示")));
+    expect(names.filter((name) => name === "AI 一分钟")).toHaveLength(1);
+    const section = screen.getByRole("region", { name: "AI 一分钟" });
+    expect(section.querySelector("[data-prose]")).toHaveTextContent(minute);
+    expect(screen.getByRole("banner").compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(section.compareDocumentPosition(screen.getByRole("region", { name: "先看三件事" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("is before the lead's headline where there are fewer than three things, and the sections keep their distance from it", () => {
+    show(issue({ aiMinute: minute, lead: lead({ event: null }), safety: [], sections: [lane("evidence", "临床证据", 1)] }));
+    const section = screen.getByRole("region", { name: "AI 一分钟" });
+    expect(section.compareDocumentPosition(screen.getByRole("region", { name: "头条" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("region", { name: "头条" })).toHaveClass("mt-8");
+  });
+
+  it("is not drawn without a minute, and the first section then sits where it did", () => {
+    show(issue({ aiMinute: null }));
+    expect(screen.queryByRole("heading", { name: "AI 一分钟" })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "先看三件事" })).toHaveClass("mt-5");
+  });
+
+  it("shows a day's first three safety alerts, the count of all of them, and the rest behind 「展开其余 N 条」", async () => {
+    show(issue({ safety: items("safety", 7) }));
+    expect(screen.getByRole("heading", { name: "安全警示 7" })).toBeInTheDocument();
+    expect(within(screen.getByRole("list", { name: "安全警示" })).getAllByRole("listitem").map((row) => row.querySelector("[data-row-title]")?.textContent))
+      .toEqual(["safety 第 1 条", "safety 第 2 条", "safety 第 3 条"]);
+    await userEvent.click(screen.getByRole("button", { name: "展开其余 4 条" }));
+    expect(within(screen.getByRole("list", { name: "安全警示" })).getAllByRole("listitem")).toHaveLength(7);
+    expect(screen.queryByRole("button", { name: /展开其余 4 条/ })).not.toBeInTheDocument();
+  });
+
+  it("shows three or fewer whole, and keeps the week's own limit", () => {
+    show(issue({ safety: items("safety", 3) }));
+    expect(within(screen.getByRole("list", { name: "安全警示" })).getAllByRole("listitem")).toHaveLength(3);
+    expect(screen.queryByRole("button", { name: /展开其余/ })).not.toBeInTheDocument();
+    cleanup();
+    show(issue({ safety: items("safety", 7) }), { weekly: true, laneLimit: 5 });
+    expect(within(screen.getByRole("list", { name: "安全警示" })).getAllByRole("listitem")).toHaveLength(5);
+  });
+});
+
 describe("先看三件事", () => {
   const scored = (id: string, score: number | null, summary = `${id} 的导读`) => frontierItem({ id, title: `${id} 标题`, summary, score });
   const lanes = (...lists: Array<[string, ReturnType<typeof scored>[]]>) => lists.map(([key, list]) => ({ lane: key, laneLabel: key, items: list }));

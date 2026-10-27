@@ -229,9 +229,9 @@ export function dailyControls(state: DailyState, { weekly = false, onDay, beside
 
 /**
  * 日报 (plan 2026-09-23 §6.2; research B §8 #28): the day, how many items and
- * how long they take to read, 「复制」, 「分类 ▾」 and 「往期 ▾」; the lead story; the
- * safety alerts first, in red; one section per lane that has anything; the AI
- * minute; 「前一日 / 后一日」. Every row is a fixed number column and then its
+ * how long they take to read, 「复制」, 「分类 ▾」 and 「往期 ▾」; the AI minute (first,
+ * since 2026-10-27); the lead story; the safety alerts, in red, three rows of them
+ * on a day; one section per lane that has anything; 「前一日 / 后一日」. Every row is a fixed number column and then its
  * title, so all the titles of the issue start on one line — the source's name
  * is the grey line under the summary, never a block before the title.
  *
@@ -297,7 +297,10 @@ export function DailyIssue({ state, onDay, weekly = false, laneLimit, expansion 
     ) : body;
 }
 
-/** What follows an issue's header: its three things (or its lead), the safety alerts, the lanes, the reader's own follows, the AI minute and the way to the issues beside it. */
+/** Rows of the safety lane a day shows before 「展开其余 N 条」. */
+const DAILY_SAFETY_ROWS = 3;
+
+/** What follows an issue's header: the AI minute, its three things (or its lead), the safety alerts, the lanes, the reader's own follows and the way to the issues beside it. */
 function IssueBody({ issue, state, weekly, laneLimit, expansion, onDay }: { issue: FrontierDaily; state: DailyState; weekly: boolean; laneLimit?: number; expansion?: DigestExpansion; onDay: (day: string) => void }) {
   const origin = useFrontierOrigin();
   const { previous, next } = neighbours(issue, state.index ?? []);
@@ -305,12 +308,22 @@ function IssueBody({ issue, state, weekly, laneLimit, expansion, onDay }: { issu
   // 先看三件事: the issue's lead and the two items its lanes score highest, each as a title and its 导读; the lanes below skip them. A week keeps
   // its headline and its lanes, and a day with fewer than three to show keeps its lead as it was.
   const { things, sections } = issueParts(issue, weekly);
+  // 「AI 一分钟」 opens the issue (owner, 2026-10-27: the day in one paragraph first, then its three things); what follows it stands a
+  // section's distance below, and the first section under the header a smaller one.
+  const gap = issue.aiMinute ? "mt-8" : "mt-5";
   return (
     <>
-      {things && <TopThings things={things} />}
+      {issue.aiMinute && (
+        <section aria-labelledby="daily-ai-minute" className="mt-5">
+          <h3 id="daily-ai-minute" className="text-body font-semibold text-text">AI 一分钟</h3>
+          <p data-prose="" className="mt-1 max-w-measure text-ui text-text-2">{issue.aiMinute}</p>
+        </section>
+      )}
+
+      {things && <TopThings things={things} className={gap} />}
 
       {!things && issue.lead && (
-        <section aria-label="头条" className="mt-5">
+        <section aria-label="头条" className={gap}>
           {/* Feed and digest headlines share the same addressed reader. */}
           <h3 className="max-w-measure-body text-title font-semibold text-text"><ArticleLink item={issue.lead.item}>{issue.lead.item.title}</ArticleLink></h3>
           <p className="mt-1 text-caption text-text-3">{issue.lead.item.source.name}</p>
@@ -328,18 +341,13 @@ function IssueBody({ issue, state, weekly, laneLimit, expansion, onDay }: { issu
         </section>
       )}
 
-      {issue.safety.length > 0 && <DailySection key={`${issue.day}-safety-alerts`} expansion={expansion} expansionId={`digest:${weekly ? "week" : "day"}:${issue.day}:safety-alerts`} id="safety-alerts" title="安全警示" items={issue.safety} safety limit={laneLimit} />}
+      {/* A day shows the first three alerts and the rest behind 「展开其余 N 条」 (owner, 2026-10-27: a day of PMDA notices was a wall of
+        * red); a week keeps its lane limit. */}
+      {issue.safety.length > 0 && <DailySection key={`${issue.day}-safety-alerts`} expansion={expansion} expansionId={`digest:${weekly ? "week" : "day"}:${issue.day}:safety-alerts`} id="safety-alerts" title="安全警示" items={issue.safety} safety limit={laneLimit ?? DAILY_SAFETY_ROWS} />}
       {sections.map((section) => <DailySection key={`${issue.day}-${section.lane}`} expansion={expansion} expansionId={`digest:${weekly ? "week" : "day"}:${issue.day}:${section.lane}`} id={section.lane} title={section.laneLabel || "其他"} items={section.items} limit={laneLimit} />)}
 
       {issue.followedQueries && issue.followedQueries.length > 0 && <FollowedQueries follows={issue.followedQueries} />}
       {issue.followedZones && issue.followedZones.length > 0 && <FollowedZones zones={issue.followedZones} />}
-
-      {issue.aiMinute && (
-        <section aria-labelledby="daily-ai-minute" className="mt-8">
-          <h3 id="daily-ai-minute" className="text-body font-semibold text-text">AI 一分钟</h3>
-          <p data-prose="" className="mt-1 max-w-measure text-ui text-text-2">{issue.aiMinute}</p>
-        </section>
-      )}
 
       {(previous || next) && (
         <nav aria-label={weekly ? "周报翻页" : "日报翻页"} className="mt-8 flex items-center justify-between">
@@ -395,10 +403,10 @@ function DailyArchive({ index, current, onDay, more }: { index: FrontierDailySum
  * nothing more — not a lane row, whose source and 详情 would be the same item drawn twice: the lanes below skip these three — and, for
  * the lead, the way to its event after its sentence. Numbered like the lanes' rows, since the order is the issue's.
  */
-function TopThings({ things }: { things: TopThing[] }) {
+function TopThings({ things, className }: { things: TopThing[]; className: string }) {
   const origin = useFrontierOrigin();
   return (
-    <section aria-labelledby="daily-top-things" className="mt-5">
+    <section aria-labelledby="daily-top-things" className={className}>
       <h3 id="daily-top-things" className="flex items-baseline gap-2">
         <span className="text-body font-semibold text-text">先看三件事</span>
       </h3>
