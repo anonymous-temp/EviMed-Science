@@ -27,7 +27,10 @@ import { migrateUsageLedger } from "./usagePersistence.mjs";
  * A finished run is one the usage ledger holds a settled kernel request for (`evimed_usage.model_requests`, purpose `kernel`):
  * the ledger is the one record of an account's research that survives its projects, and a request the model answered and the
  * platform priced is work, where a run record in a project folder could be written by nothing. The background purposes
- * (learning, titles, memory extraction, reviews) are the platform's own and do not make an account active.
+ * (learning, titles, memory extraction, reviews) are the platform's own and do not make an account active. A scheduled, LoopX or
+ * acceptance-driver run is `kernel` too: the ledger row carries no marker of an automated run (its purpose is the run's platform route,
+ * `usagePurposeOfRun`, and `automated` is a field of the file-based run ledger, which this count does not join), so such runs still count
+ * towards `minFinishedRuns`; the account's age floor and the keepers' fortnight are what bound a harness that makes accounts.
  *
  * @module capsuleShareTrust
  */

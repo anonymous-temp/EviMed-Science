@@ -288,11 +288,17 @@ test("a person's general method that passed the promotion gates is published as 
   // What was written down about it names no account, project, run or method of its author.
   const everything = JSON.stringify([(await documents.list(PUBLISHER, "preferences", { limit: 100 })).items, (await documents.list(other, "fact", { limit: 100 })).items]);
   for (const secret of [person, "private-project", "private-run", "method:learned:send-the-table-with-its-question"]) assert.equal(everything.includes(secret), false, secret);
+  // Nor does any earlier revision of the record: the ledger saves every write whole, and the write that let go of the account deleted the ones before it.
+  const revisions = (await database.query("SELECT id,revision,payload FROM evimed_product.revisions WHERE user_id=$1 AND kind='preferences' AND payload->>'recordType'='official-promoted'", [PUBLISHER])).rows;
+  assert.ok(revisions.length >= 1);
+  for (const secret of [person, "private-project", "private-run", "method:learned:send-the-table-with-its-question"]) assert.equal(JSON.stringify(revisions).includes(secret), false, `revisions: ${secret}`);
 
   // An operator withdraws it (what should never have been promoted, 2026-10-27): the next tick publishes the pack again, and as it was the last
   // method, the pack is withdrawn and taken off the shelf, marked as the platform's doing.
   const { withdrawPromoted } = await import("../src/officialPromotion.mjs");
-  assert.equal((await withdrawPromoted(documents, PUBLISHER, promoted.key)).withdrawn, true);
+  const withdrawn = await withdrawPromoted(documents, PUBLISHER, promoted.key);
+  assert.equal(withdrawn.withdrawn, true);
+  assert.deepEqual((await documents.history(PUBLISHER, "preferences", /** @type {string} */ (withdrawn.id))).map((entry) => entry.payload.status), ["rejected"], "the withdrawal keeps no earlier revision of the method");
   await promotion.tick();
   assert.equal((await documents.get(PUBLISHER, "preferences", "official-pack:shared-practices")).payload.status, "withdrawn");
   official.settled.clear();
