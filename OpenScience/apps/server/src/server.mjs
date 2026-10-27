@@ -69,7 +69,6 @@ import { createVcrDocumentAdapter } from "./vcrDocumentExport.mjs";
 import { RuntimeControllerClient } from "./runtimeControllerClient.mjs";
 import { composeEvolution } from "./evolutionMode.mjs";
 import { createRsiOnlineRuntime, createRsiSourceInvalidation } from "./rsiOnlineRuntime.mjs";
-import { createRsiServingAdapters } from "./rsiServingAdapters.mjs";
 import { createEvaluationIsolation } from "./evaluationIsolation.mjs";
 import { EVOLUTION_GATEWAY_PATH } from "./evolutionGateway.mjs";
 import { heavyWorkAdmission, heavyWorkBlockerCount } from "./heavyWorkAdmission.mjs";
@@ -6438,9 +6437,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     if (rsiOnline || !productDocuments || !productJobs || !productDatabase) return rsiOnline;
     if (!rsiInitialization) rsiInitialization = (async () => {
       const report = (/** @type {string} */ code) => process.stderr.write(`rsi: ${code}\n`);
-      // Opt-in: without the deployment file no serving adapter or importer exists and module policy reads keep their own path.
-      const servingAdapters = evolution && config.rsiOnlineConfigFile ? createRsiServingAdapters({ config, service: evolution.service, documents: productDocuments,
-        database: productDatabase, supply: evolution.supply, store, runtimeManager, sourceChanges, report }) : null;
+      // Opt-in: without the deployment file no serving adapter or importer exists and module policy reads keep their own path. The adapters
+      // (and the source-graph reader and lockfile parser behind their dependency closure) are loaded only for a deployment that opted in.
+      const servingAdapters = evolution && config.rsiOnlineConfigFile ? (await import("./rsiServingAdapters.mjs")).createRsiServingAdapters({ config, service: evolution.service,
+        documents: productDocuments, database: productDatabase, supply: evolution.supply, store, runtimeManager, sourceChanges, report }) : null;
       const online = await (overrides.rsiOnlineRuntimeFactory ?? createRsiOnlineRuntime)({ config, store, documents: productDocuments, jobs: productJobs, database: productDatabase,
         agentRuns, assertModelAccess: assertVcrCloudAccess, usageLedger, servingAdapters,
         canRun: () => maintenanceService ? maintenanceService.claimingAllowed() : !productDatabase, report });
