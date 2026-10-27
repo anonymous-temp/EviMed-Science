@@ -11,6 +11,7 @@
 import { createHash, generateKeyPairSync } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { digest, confirmationDecision, signedEvaluatorReceipt } from '../campaign_runner.mjs';
 import { FRONTIER_DAYS_SCHEMA, evaluateFrontierDays, frontierCampaignConsumerIdentity } from '../frontier_campaign.mjs';
 import { evaluatorReceiptPayload, signEnvelope } from '../evaluator.mjs';
@@ -28,7 +29,10 @@ export const BENIGN_DEADLINE = '2026-10-31T16:00:00.000Z';
 export const BENIGN_CLOCK_START = '2026-10-26T01:00:00.000Z';
 /** The pinned numpy / scipy / rfc8785 the statistics process imports. */
 export const STATISTICS_PYTHON = process.env.RSI_TEST_PYTHON ?? 'python3';
-export const STATISTICS_MODULE_PATH = '/tmp/rsi-python';
+// Where `pnpm test:rsi`'s CI step installs them (`pip install --target ../.evimed-local/toolchains/rsi-python`, relative to
+// OpenScience/), not a path one machine happened to have: /tmp/rsi-python passed here and failed every statistics case on CI.
+export const STATISTICS_MODULE_PATH = process.env.RSI_TEST_PYTHONPATH
+  ?? fileURLToPath(new URL('../../../../.evimed-local/toolchains/rsi-python', import.meta.url));
 
 /** mulberry32: a small deterministic generator, so a fixture is the same bytes on every run. @param {number} seed */
 export function seededRandom(seed) {
