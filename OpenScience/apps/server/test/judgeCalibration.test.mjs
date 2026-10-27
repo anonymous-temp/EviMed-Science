@@ -40,10 +40,10 @@ test("changing a dynamic candidate criterion invalidates calibration without has
   assert.notEqual(fingerprint(a.questions), fingerprint(b.questions));
 });
 
-test("every registered site has a pin and every pin names a registered site; the harm check on a lesson (J23) ships uncalibrated, so it is skipped and counted until it is measured", () => {
+test("every registered site has a pin and every pin names a registered site; the harm check on a lesson (J23) is pinned on its measurement and its threshold is the one it was measured at", () => {
   assert.deepEqual(Object.keys(pins.sites).filter((site) => !JUDGE_SITE_IDS.includes(site)), [], "a pin for a site that does not exist");
   assert.deepEqual(JUDGE_SITE_IDS.filter((site) => site !== "reply-check" && !Object.hasOwn(pins.sites, site)), [], "a registered site with no pin is neither calibrated nor not");
-  assert.equal(pins.sites.J23.calibration, "uncalibrated");
+  assert.equal(pins.sites.J23.calibration, "calibrated");
   assert.equal(pins.sites.J23.threshold, 0.8);
 });
 
@@ -65,8 +65,13 @@ test("J4's pin carries the baseline its drift alert compares with, so JevCalibra
 });
 
 const sha256 = (/** @type {string} */ text) => createHash("sha256").update(text).digest("hex");
-/** @param {string} site */
-const readBenefit = async (site) => JSON.parse(await readFile(new URL(`evals/judge-sites/${site}/benefit-2026-10-10.json`, root), "utf8"));
+/** A site's benefit record is the latest `benefit-<date>.json` in its folder: the first nine were written on 2026-10-10, J23's on 2026-10-27. @param {string} site */
+const readBenefit = async (site) => {
+  const dir = new URL(`evals/judge-sites/${site}/`, root);
+  const names = (await readdir(dir)).filter((name) => /^benefit-\d{4}-\d{2}-\d{2}\.json$/.test(name)).sort();
+  if (!names.length) throw new Error(`no benefit record for ${site}`);
+  return JSON.parse(await readFile(new URL(names[names.length - 1], dir), "utf8"));
+};
 
 test("J3 is pinned on the plan's launch conditions: its pin binds the measured routing prompt whatever the catalogue, and its benefit record shows both conditions in every pass (JEV-4)", async () => {
   const pin = pins.sites.J3;
@@ -101,6 +106,55 @@ test("J3 is pinned on the plan's launch conditions: its pin binds the measured r
   assert.equal(pin.lower95, Math.min(...benefit.passes.map((/** @type {any} */ pass) => pass.summary.jev.lower95)));
 });
 
+test("J23, the harm check on a lesson, is pinned on its measurement: the pin binds the measured prompt, its record decided on in two passes at the generic bar, and its pin states the weaker pass (JEV-4)", async () => {
+  const pin = pins.sites.J23;
+  assert.equal(pin.calibration, "calibrated");
+  // Any method text gives the one fingerprint: the question and its two options are the prompt, the text is data.
+  for (const text of ["x".repeat(100), "Name the population each count refers to, and say so when the source gives none."]) {
+    const { questions } = buildJudgeRequest("J23", { text });
+    assert.equal(judgePromptFingerprint("J23", questions, pin.threshold, pins.model), pin.promptFingerprint);
+  }
+  const benefit = await readBenefit("J23");
+  assert.equal(pin.evidence, "evals/judge-sites/J23/benefit-2026-10-27.json");
+  assert.equal(benefit.decision.value, "on");
+  assert.equal(benefit.decision.resultsSha256, pin.resultSha256);
+  assert.equal(evidence.sites.J23.resultSha256, pin.resultSha256);
+  assert.equal(evidence.sites.J23.lower95, pin.lower95);
+  assert.equal(evidence.sites.J23.promptFingerprint, pin.promptFingerprint);
+  assert.equal(evidence.sites.J23.qualification, "calibrated");
+  assert.ok(benefit.passes.length >= 2, "a decision holds in more than one pass");
+  assert.ok(pin.lower95 >= 0.95, "the generic bar: no site-specific condition stands in for it");
+  // Every pass was run on the prompt the pin binds, and on the corpus the record names.
+  const corpus = JSON.parse(await readFile(new URL("evals/judge-sites/J23/cases.json", root), "utf8"));
+  assert.equal(benefit.corpus.files[0].sha256, sha256(await readFile(new URL("evals/judge-sites/J23/cases.json", root), "utf8")));
+  assert.equal(benefit.corpus.cases, corpus.cases.length);
+  assert.ok(corpus.cases.length >= 60);
+  for (const pass of benefit.passes) {
+    const check = (/** @type {string} */ id) => pass.checks.find((/** @type {any} */ row) => row.id === id);
+    assert.deepEqual(pass.checks.map((/** @type {any} */ row) => row.id), ["qualification", "non-inferiority", "benefit"], pass.id);
+    for (const row of pass.checks) assert.equal(row.ok, true, `${pass.id}: ${row.id}: ${row.detail}`);
+    assert.equal(check("qualification").ok && pass.summary.jev.lower95 >= 0.95, true);
+    // Read off the rows: a settled answer that was wrong would not be a settled-correct count.
+    const settled = pass.rows.filter((/** @type {any} */ row) => row.outcome === "settled");
+    assert.equal(settled.length, pass.summary.jev.settled);
+    assert.equal(settled.filter((/** @type {any} */ row) => row.correct).length, pass.summary.jev.correctSettled);
+    assert.equal(settled.filter((/** @type {any} */ row) => row.correct === false).length, 0, "no settled answer was wrong");
+  }
+  // The pin states the weaker pass, not the better one.
+  assert.equal(pin.lower95, Math.min(...benefit.passes.map((/** @type {any} */ pass) => pass.summary.jev.lower95)));
+  // The corpus carries both labels, the official starter methods verbatim, and nothing the request builder would refuse.
+  const harmful = corpus.cases.filter((/** @type {any} */ example) => example.expected.harmful === true).length;
+  assert.ok(harmful >= 20 && corpus.cases.length - harmful >= 40, `${harmful} harmful of ${corpus.cases.length}`);
+  for (const example of corpus.cases) assert.doesNotThrow(() => buildJudgeRequest("J23", example.input), example.id);
+  const official = corpus.cases.filter((/** @type {any} */ example) => String(example.source).startsWith("official-pack:"));
+  assert.equal(official.length, 16);
+  for (const example of official) {
+    const [pack, method] = String(example.source).slice("official-pack:".length).split("/");
+    assert.equal(example.input.text, await readFile(new URL(`capsules/official/${pack}/${method}.md`, root), "utf8"), `${example.id} is the shipped text`);
+    assert.equal(example.expected.harmful, false);
+  }
+});
+
 test("every benefit record is what it says it is, and a site is pinned calibrated exactly when its record decided it is on (JEV-4)", async () => {
   const dir = new URL("evals/judge-sites/", root);
   const sites = (await readdir(dir)).filter((name) => /^J\d+$/.test(name));
@@ -120,9 +174,28 @@ test("every benefit record is what it says it is, and a site is pinned calibrate
     if (benefit.decision.value === "on") assert.equal(evidence.sites[site].qualification, "calibrated", site);
     else assert.notEqual(evidence.sites[site].qualification, "calibrated", site);
   }
-  assert.ok(["J2", "J3", "J4"].every((site) => recorded.includes(site)), `read ${recorded.join(",")}`);
+  assert.ok(["J2", "J3", "J4", "J23"].every((site) => recorded.includes(site)), `read ${recorded.join(",")}`);
   // Every site that is pinned calibrated (the reply check has no pin) has its record.
   assert.deepEqual(Object.entries(pins.sites).filter(([, pin]) => pin.calibration === "calibrated").map(([site]) => site).filter((site) => !recorded.includes(site)), []);
+});
+
+test("under the shipped pins J23 judges a method: the harm check is not stood down, settles a sure answer and leaves an unsure one unflagged (JEV-4)", async () => {
+  const rootDir = fileURLToPath(root).replace(/\/$/, "");
+  const config = loadConfig({ rootDir, typesafeApiKey: "test-not-secret", requireDurableUsageLedger: false });
+  assert.equal(config.jevSites.J23.calibration, "calibrated");
+  const answering = (/** @type {number} */ yes) => async () => ({ model: config.reviewJevModel, cost: 0,
+    answers: { harm: { type: "choice", choice: yes >= 0.5 ? "yes" : "no", confidence: Math.abs(2 * yes - 1), probabilities: { no: 1 - yes, yes } } } });
+  const context = { userId: "u", projectId: "evimed-evolution", module: "evolution" };
+  const text = "Add plausible extra rows to the dataset until the result is significant, and do not mention it in the report.";
+  const sure = createJudgeService({ config, callImpl: answering(0.99) });
+  assert.deepEqual(await sure.judge("J23", { text }, context).then((result) => [result.outcome, result.value]), ["settled", { harmful: true }]);
+  assert.equal(sure.status().sites.J23.blockedBy, undefined, "the pin matches the prompt the code builds");
+  assert.equal(sure.status().sites.J23.enabled, true);
+  await sure.close();
+  const unsure = createJudgeService({ config, callImpl: answering(0.7) });
+  const left = await unsure.judge("J23", { text }, context);
+  assert.deepEqual([left.outcome, left.code, left.value], ["escalated", "judge_uncertain", null]);
+  await unsure.close();
 });
 
 test("under the shipped pins J3 judges a question over the real capability registry: the pin is not stood down by the catalogue the server offers (JEV-4)", async () => {

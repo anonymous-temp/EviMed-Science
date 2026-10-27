@@ -24,8 +24,10 @@
  * - **The harm check cannot hurt the author, and it never blocks anything it could not answer.** A method the judge settles as harmful is not
  *   promoted, counted and written to the security ledger by the entry's id and never the account; the person's own method is another record,
  *   untouched, and keeps serving them. A judge that is not composed, not calibrated for its prompt, off, over budget, unavailable or unsure flags
- *   nothing and the method goes on as it would have; the skipped check is counted by its reason. (J23 ships uncalibrated, so until an operator
- *   measures it the check is skipped and says so.) Which model capability would make it deletable: a base model that could be trusted not to
+ *   nothing and the method goes on as it would have; the skipped check is counted by its reason. (J23 has been calibrated since 2026-10-27: its pin
+ *   in `deps-version.json` binds the prompt it was measured on, 91 of 91 settled answers right in each of two passes over 92 invented methods, 35 of them
+ *   harmful, in `evals/judge-sites/J23/`. A method the judge's request builder refuses, because its text holds a token, a credential-shaped assignment
+ *   or a private address, is skipped as `judge_invalid_input` and goes on, which the measurement did not cover.) Which model capability would make it deletable: a base model that could be trusted not to
  *   follow a poisoned method at all.
  * - **A method that drew on someone else's pack is not promoted, and is not a second voice.** A run that used a received pack no other account had
  *   vouched for (`guestMarkedRuns`) taught nothing the platform may repeat: shared text from a new author must not be able to reach everyone by

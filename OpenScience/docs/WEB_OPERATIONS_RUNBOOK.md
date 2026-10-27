@@ -1248,7 +1248,7 @@ record per method body; harm shown by the same sequential test a learned method'
 <official:pack:method> <body hash>` gives a stopped body back, counted from nothing. A person's general method can join the pack 「大家的做法」 after the
 promotion gates (`OPEN_SCIENCE_OFFICIAL_PROMOTION_ENABLED` on, `…_PER_DAY` 3; it needs the learning loop, the official packs and a review provider that is not DeepSeek, and
 asks nothing of a model otherwise): `open_science_official_promotion_total{state}`, `…_rejected_total{reason}`, `…_activated_total`, `…_harm_checks_total{outcome}`,
-`…_harm_check_skipped_total{reason}` (J23 ships uncalibrated, so the harm check reads `skipped` until it is calibrated), `…_reviewer_configured`. No notice names an account.
+`…_harm_check_skipped_total{reason}` (J23 is calibrated, pinned in `deps-version.json` on `evals/judge-sites/J23/benefit-2026-10-27.json`: 91 of 91 settled answers right in two passes over 92 invented methods, lower95 0.968, so the harm check answers `clear`, `flagged` or `uncertain`, and reads `skipped` only for the reasons the counter names; its pin carries no drift baseline, because the path it stands beside is no check), `…_reviewer_configured`. No notice names an account.
 The capability-handbook arm is gone: the start deletes any `capability-handbook` / `handbook-candidate` method record and `evolution-handbook-*` record left in
 a database, cancels the arm's queued jobs and says it in one stderr line `handbook arm retired: …`; `handbook arm: N platform handbook tool(s) are still
 published` means the evolution module still serves handbook tools, which it retires through its own review.

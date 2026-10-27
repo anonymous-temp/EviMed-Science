@@ -1812,8 +1812,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           messages: promotionJudgeMessages({ text, scopeId }) });
         return { ...result.value, independent: result.modelReported === true && /^qwen/i.test(result.model) };
       } : null,
-      // A model of an independent family (the Jev judge port, site J23) reads what the method tells a reader to do, before it can be promoted. Uncalibrated as
-      // shipped, so until it is measured the check is skipped and counted.
+      // A model of an independent family (the Jev judge port, site J23) reads what the method tells a reader to do, before it can be promoted. Calibrated
+      // since 2026-10-27 (deps-version.json, evals/judge-sites/J23); a failure, an unsure answer or a changed prompt flags nothing and is counted.
       harm: judgeService ? async ({ text }) => judgeService.judge("J23", { text }, { ...await ensureEvidenceProject(store), taskId: `promotion-harm:${promotionKey(text).slice(0, 32)}`,
         module: "learning", limits: { daily: 0, weekly: 0, moduleDaily: 0 } }) : null,
       audit: (event, detail) => securityAudit(config, event, "recorded", detail),

@@ -38,7 +38,7 @@ test('J23, the harm check on a lesson before it can be promoted: one yes/no ques
   const input={text};
   assert.equal(decodeJudgeAnswers('J23',input,{harm:answer(request.questions.harm,'yes')}).value.harmful,true);
   assert.equal(decodeJudgeAnswers('J23',input,{harm:answer(request.questions.harm,'no')}).value.harmful,false);
-  // As shipped (`deps-version.json`: uncalibrated), it falls back before any provider call.
+  // A site pinned uncalibrated (J23 was until 2026-10-27; the shipped pin is now calibrated, `judgeCalibration.test.mjs`) falls back before any provider call.
   let calls=0;
   const uncalibrated=createJudgeService({config:{...config,jevSites:{J23:{calibration:'uncalibrated',threshold:.8}}},callImpl:async(d,c)=>{calls++;return callImpl(d,c);}});
   const refused=await uncalibrated.judge('J23',input,{userId:'u',projectId:'evimed-evolution',module:'evolution'});
