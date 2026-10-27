@@ -1,3 +1,4 @@
+import { assertSessionGeneration, sessionGeneration, StaleSessionError } from "./sessionLifecycle";
 import { knownErrorCodeMessage } from "@evimed/domain";
 import type { SourceMaterialsLedger, SourceMaterialsResult } from "@/lib/sourceMaterials";
 import { invokeCommand, type WebMe } from "./apiClient";
@@ -250,7 +251,7 @@ export function listSourceUnderstandingHistory(id: string, cursor?: string | nul
  * while the understanding still runs, so the page never says what the
  * pipeline is doing behind that.
  */
-export type SourceRecord = ProductRecord<SourcePayload> & { projectId: string; readable?: boolean; display: SourceDisplay };
+export type SourceRecord = ProductRecord<SourcePayload> & { projectId: string; personal?: boolean; readable?: boolean; display: SourceDisplay };
 /**
  * Where the list's search matched inside a document's own text (N-16): the page it is on (null where the document has no
  * pages), one line of text around the match, and its offsets in the document's parsed text.
@@ -281,7 +282,7 @@ export interface SourceUse {
   lastUsedAt: string;
 }
 /** Whose documents a list is of: one project's, or the account's shared documents (every project reads them). */
-export type SourceScope = { kind: "project"; projectId: string } | { kind: "shared" };
+export type SourceScope = { kind: "project"; projectId: string } | { kind: "shared" } | { kind: "all" };
 /** What the page filters by, in the words a row says (`SOURCE_STATES`). */
 export type SourceListState = "reading" | "ready" | "attention";
 export interface OpenListEntry {
@@ -312,7 +313,7 @@ export interface SourceListOptions {
 export function listSources(scope: string | SourceScope, { status = "", state, kind, q = "", cursor, limit }: SourceListOptions = {}) {
   const query = new URLSearchParams();
   if (typeof scope === "string") query.set("projectId", scope);
-  else if (scope.kind === "shared") query.set("scope", "shared");
+  else if (scope.kind !== "project") query.set("scope", scope.kind);
   else query.set("projectId", scope.projectId);
   if (state) query.set("state", state);
   else if (status) query.set("status", status);
@@ -324,12 +325,12 @@ export function listSources(scope: string | SourceScope, { status = "", state, k
 }
 
 /** 「添加网页链接」: the control plane reads the page and keeps a snapshot of it in the project's knowledge base. */
-export function addSourceLink(projectId: string, url: string) {
-  return productRequest<{ source: SourceRecord; duplicate: boolean; changed: boolean }>("/sources/links", "POST", { projectId, url });
+export function addSourceLink(projectId: string | null, url: string) {
+  return productRequest<{ source: SourceRecord; duplicate: boolean; changed: boolean }>(projectId ? "/sources/links" : "/library/links", "POST", { ...(projectId ? { projectId } : {}), url });
 }
 /** 「新建笔记」: a Markdown document the researcher writes. */
-export function addSourceNote(projectId: string, input: { title: string; body: string }) {
-  return productRequest<{ source: SourceRecord; duplicate: boolean }>("/sources/notes", "POST", { projectId, ...input });
+export function addSourceNote(projectId: string | null, input: { title: string; body: string }) {
+  return productRequest<{ source: SourceRecord; duplicate: boolean }>(projectId ? "/sources/notes" : "/library/notes", "POST", { ...(projectId ? { projectId } : {}), ...input });
 }
 /** What a note's editor opens with. */
 export function getSourceNote(id: string) {
@@ -648,4 +649,19 @@ export function knowledgePagesOffered(me: WebMe | null): boolean {
 /** 「重新整理」: ask for a round now. The page language is the browser's, which the control plane has already recorded. */
 export function requestKnowledgeCompile(projectId: string) {
   return productRequest<KnowledgeStatus>("/knowledge-pages/compile", "POST", { projectId });
+}
+
+export function copySourceToProject(source: SourceRecord, projectId: string) {
+  return productRequest<{ source: SourceRecord; duplicate: boolean }>(`/library/${encodeURIComponent(source.id)}/projects`, "POST", { projectId, expectedRevision: source.revision });
+}
+export function getOpenListStatus() {
+ return productRequest<{ state: "ready" | "unconfigured" | "storage_missing" | "permission_denied" | "unavailable" }>("/sources/openlist/status");
+}
+export async function uploadPersonalFile(file: File, isCurrent?: () => boolean) {
+ const owner = sessionGeneration();
+ const current = () => { assertSessionGeneration(owner); if (isCurrent && !isCurrent()) throw new StaleSessionError(); };
+ current();
+ const data = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(",")[1]); reader.onerror = () => reject(reader.error); reader.readAsDataURL(file); });
+ current();
+ return productRequest<{ source: SourceRecord; duplicate: boolean }>("/library/uploads", "POST", { filename: file.name, data, encoding: "base64" });
 }

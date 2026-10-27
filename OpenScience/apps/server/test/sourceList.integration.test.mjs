@@ -190,3 +190,25 @@ test("a link's title and address are kept on its source, and the same bytes read
   await assert.rejects(sources.register(owner, input({ sha256: "f".repeat(64), link: { url: "", site: "x", fetchedAt: "now" } })), { code: "source_payload_invalid" });
   await assert.rejects(sources.register(owner, input({ sha256: "d".repeat(64), title: "x".repeat(301) })), { code: "source_payload_invalid" });
 });
+
+test("all inventory is account owned, paged in SQL, and excludes background projects while keeping personal storage", durable, async t => {
+  const { sources, database, owner, stranger, add } = await fixture(t);
+  for (const id of ["evimed-library", "evimed-sources", "evimed-learning"]) {
+    await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,$2,$2,1048576)", [owner, id]);
+  }
+  await add(owner, "default", "project.pdf");
+  await add(owner, "study", "study.pdf");
+  await add(owner, "evimed-library", "personal.pdf");
+  await add(owner, "evimed-sources", "internal.pdf");
+  await add(owner, "evimed-learning", "lesson.pdf");
+  await add(stranger, "default", "private.pdf");
+  const first = await sources.list(owner, { all: true, limit: 2 });
+  assert.equal(first.counts.all, 3);
+  assert.equal(first.items.length, 2);
+  const second = await sources.list(owner, { all: true, limit: 2, cursor: first.nextCursor });
+  assert.deepEqual(new Set([...names(first), ...names(second)]), new Set(["project.pdf", "study.pdf", "personal.pdf"]));
+  assert.equal(second.nextCursor, null);
+  assert.equal((await sources.list(owner, { shared: true })).counts.all, 0);
+  assert.equal((await sources.list(owner, { all: true, q: "personal" })).counts.all, 1);
+  assert.equal((await sources.list(owner, { all: true, status: "queued" })).counts.all, 3);
+});

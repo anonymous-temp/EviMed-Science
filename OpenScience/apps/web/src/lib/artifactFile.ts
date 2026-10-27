@@ -3,9 +3,10 @@
 // in `pnpm dev`.
 // Paths are root-relative; `root` picks the tree ("workspace" = the active
 // session folder, default; "base" = the folder all session workspaces live under).
+import { productRequest } from "./productClient";
 import type { ClaimVerification } from "./claimCitations";
 import type { FileRoot } from "@ai4s/shared";
-import { hasWebApi, invokeCommand, webFileDownloadUrl } from "./apiClient";
+import { hasWebApi, invokeCommand, webFileDownloadUrl, webApiBase } from "./apiClient";
 
 export type { FileRoot };
 
@@ -143,4 +144,16 @@ export function base64ToBytes(b64: string): ArrayBuffer {
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return bytes.buffer;
+}
+
+/** A source-bound immutable original; no workspace or runtime project is selected. */
+export function sourceFileUrl(sourceId: string, mode: "read" | "preview" | "download"): string {
+ const root = webApiBase.endsWith("/api") ? webApiBase : `${webApiBase}/api`;
+ return `${root}/sources/${encodeURIComponent(sourceId)}/file?mode=${mode}`;
+}
+export function readSourceFile(sourceId: string): Promise<ArtifactFile> {
+ return productRequest<ArtifactFile>(`/sources/${encodeURIComponent(sourceId)}/file?mode=read`);
+}
+export function downloadSourceFile(sourceId: string, filename: string): void {
+ downloadUrl(sourceFileUrl(sourceId, "download"), filename);
 }

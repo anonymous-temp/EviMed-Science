@@ -500,3 +500,15 @@ test("an imported file and a synced file register under the same connector-resol
     "the family id must not depend on how the browser spelled the path");
   assert.equal(registered.input.path, "openlist/paper.pdf");
 });
+
+
+test("all inventory and passage search require account authentication without a project", async t => {
+  const queries = [];
+  const { calls, base, headers } = await fixture(t, { passages: { find: async request => { queries.push(request); return null; } } });
+  const response = await fetch(`${base}/api/sources?scope=all&q=body`, { headers });
+  assert.equal(response.status, 200);
+  assert.deepEqual(queries, [{ userId: "owner", projectId: null, shared: false, all: true, q: "body" }]);
+  const listed = calls.find(call => call.method === "list");
+  assert.equal(listed.options.all, true); assert.equal(listed.options.projectId, null);
+  assert.ok(!calls.some(call => call.method === "requireProject"));
+});

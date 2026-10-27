@@ -61,6 +61,9 @@ describe("where a document's original is", () => {
     expect(originalPathOf(source())).toBe("knowledge-base/共识.pdf");
     expect(originalPathOf(source({ outputs: { artifactPath: "knowledge-base/.evimed-derived/src_one/index.md" } }, { origin: "drive" }))).toBe("knowledge-base/.evimed-derived/src_one/index.md");
     expect(originalPathOf(source({ paths: [], outputs: {} }, { origin: "drive" }))).toBeNull();
+    const captured = "knowledge-base/.evimed-revisions/research/paper.pdf";
+    expect(originalPathOf(source({ paths: [captured], outputs: { artifactPath: "knowledge-base/.evimed-derived/src_one/index.md" } }, { origin: "drive" }))).toBe(captured);
+    expect(originalPathOf(source({ paths: ["/remote/paper.pdf"], outputs: { artifactPath: "knowledge-base/.evimed-derived/src_one/index.md" } }, { origin: "drive" }))).toBe("knowledge-base/.evimed-derived/src_one/index.md");
     expect(isEditableNote(source({}, { kind: "note", origin: "note" }))).toBe(true);
     expect(isEditableNote(source({}, { kind: "note", origin: "upload" }))).toBe(false);
     expect(isEditableNote(source())).toBe(false);

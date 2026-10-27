@@ -11,7 +11,7 @@ import type { SourceScope } from "@/lib/sourceClient";
 import { useVcrFeature } from "@/lib/vcrClient";
 
 /** The name of the scope that holds the account's shared documents. */
-export const SHARED_SCOPE_NAME = "所有项目共享";
+export const SHARED_SCOPE_NAME = "跨项目可用";
 
 /**
  * Whose documents the knowledge base lists, as the header's scope menu (`ScopeMenu`, R19): a project's, grouped as the sidebar groups
@@ -35,30 +35,32 @@ export function useKnowledgeScope(scope: SourceScope, onChange: (scope: SourceSc
   // A draft study (nobody has spoken in it yet) is not a place documents are filed; it is left out like the sidebar leaves it out.
   const { studies: vcrIds, drafts: vcrDrafts } = useVcrProjects(vcrOn, projectsKey);
   const groups = useMemo(() => {
-    const own = projects.filter((project) => !geoIds.has(project.id) && !vcrIds.has(project.id));
-    const studies = projects.filter((project) => vcrIds.has(project.id) && !vcrDrafts.has(project.id));
-    const communication = projects.filter((project) => geoIds.has(project.id));
+    const visible = projects.filter(project => !project.id.startsWith("evimed-library"));
+    const own = visible.filter((project) => !geoIds.has(project.id) && !vcrIds.has(project.id));
+    const studies = visible.filter((project) => vcrIds.has(project.id) && !vcrDrafts.has(project.id));
+    const communication = visible.filter((project) => geoIds.has(project.id));
     const choices = (list: typeof projects, icon: ScopeChoice["icon"]): ScopeChoice[] => list.map((project) => ({ id: project.id, label: labelOf(labels, project), icon }));
     const kinds: Array<[string | undefined, ScopeChoice[]]> = [
       ["我的项目", choices(own, FolderOpen)], ["虚拟临床研究", choices(studies, UsersRound)], ["循证 GEO", choices(communication, Radar)],
     ];
     return [
+      { choices: [{ id: "@all", label: "我的资料", icon: Library }] },
       ...kinds.filter(([, list]) => list.length > 0).map(([heading, list]): ScopeGroup => ({ heading, choices: list })),
       { choices: [{ id: SHARED_SCOPE, label: SHARED_SCOPE_NAME, icon: Library }] },
     ];
   }, [projects, labels, geoIds, vcrIds, vcrDrafts]);
   // A scope whose project is not in the list (still loading, or deleted elsewhere) is named for what the tab is in.
-  const chosen = scope.kind === "shared" ? SHARED_SCOPE : projects.some((project) => project.id === scope.projectId) ? scope.projectId : null;
+  const chosen = scope.kind === "all" ? "@all" : scope.kind === "shared" ? SHARED_SCOPE : projects.some((project) => project.id === scope.projectId) ? scope.projectId : null;
   const withFallback = useMemo((): ScopeGroup[] => (chosen === null && scope.kind === "project"
     ? [{ choices: [{ id: scope.projectId, label: "当前项目", icon: FolderOpen }] }, ...groups]
     : groups), [chosen, scope, groups]);
   return {
     label: "范围",
     groups: withFallback,
-    value: scope.kind === "shared" ? SHARED_SCOPE : scope.projectId,
+    value: scope.kind === "all" ? "@all" : scope.kind === "shared" ? SHARED_SCOPE : scope.projectId,
     onChange: (id) => {
       if (id === null) return;
-      onChange(id === SHARED_SCOPE ? { kind: "shared" } : { kind: "project", projectId: id });
+      onChange(id === "@all" ? { kind: "all" } : id === SHARED_SCOPE ? { kind: "shared" } : { kind: "project", projectId: id });
     },
   };
 }

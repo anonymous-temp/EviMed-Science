@@ -84,3 +84,68 @@ test("OpenList captures historical originals through HTTP and preserves old byte
     assert.equal(await readFile(path.join(ctx.project.baseDir, oldPath), "utf8"), "first original");
   } finally { await ctx.close(); await new Promise(resolve => provider.close(resolve)); }
 });
+
+test("source-bound OpenList files serve captured PDF and Office originals before parsing and after different parsed text", { skip: !databaseUrl, timeout: 30_000 }, async () => {
+  let bytes = Buffer.alloc(0); let name = "paper.pdf";
+  const provider = createServer(async (req, res) => {
+    if (req.url.startsWith("/p/")) { res.end(bytes); return; }
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    const row = { name, size: bytes.length, modified: "2026-10-27T00:00:00Z", hash_info: { sha256 }, is_dir: false };
+    const data = req.url.endsWith("/link") ? { url: "https://unused.invalid/file" } : row;
+    res.setHeader("content-type", "application/json"); res.end(JSON.stringify({ code: 200, data }));
+  });
+  await new Promise(resolve => provider.listen(0, "127.0.0.1", resolve));
+  const parsed = "Parsed index text differs from every preserved original.";
+  const ctx = await signedIn({ openListUrl: `http://127.0.0.1:${provider.address().port}`, openListToken: "test-only",
+    documentParserFetch: async () => new Response(JSON.stringify({ code: 200, message: "success", uuid: "test", timestamp: 1,
+      elapsed_ms: 1, data: { title: "Parsed document", content: parsed, pages: [{ index: 1, start: 0, end: parsed.length, status: "ok" }] } }), { status: 200 }) });
+  const assertOriginal = async source => {
+    for (const mode of ["read", "preview", "download"]) {
+      const response = await fetch(`${ctx.base}/api/sources/${source.id}/file?mode=${mode}`, { headers: ctx.headers });
+      assert.equal(response.status, 200); assert.equal(response.headers.get("x-evimed-source-file"), "original");
+      if (mode === "read") {
+        const file = (await response.json()).data;
+        assert.equal(file.path, source.payload.paths[0]); assert.equal(file.representation, "original"); assert.equal(file.encoding, "base64");
+        assert.deepEqual(Buffer.from(file.data, "base64"), bytes);
+      } else assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes);
+    }
+  };
+  try {
+    let last = null;
+    const xlsx = await readFile(new URL("./fixtures/materials/supplement.xlsx", import.meta.url));
+    for (const sample of [{ name: "paper.pdf", bytes: Buffer.from("%PDF-1.4\nCaptured original PDF\n%%EOF\n") }, { name: "supplement.xlsx", bytes: xlsx }]) {
+      name = sample.name; bytes = sample.bytes;
+      const imported = await fetch(`${ctx.base}/api/sources/openlist/import`, { method: "POST", headers: ctx.headers,
+        body: JSON.stringify({ projectId: ctx.project.id, path: `/${name}` }) });
+      assert.equal(imported.status, 201); const source = (await imported.json()).data.source;
+      assert.match(source.payload.paths[0], /^knowledge-base\/\.evimed-revisions\//); assert.equal(source.payload.outputs?.artifactPath, undefined);
+      await assertOriginal(source);
+      const current = await ctx.app.sourceService.get(ctx.user.id, source.id);
+      await ctx.app.sourceService.override(ctx.user.id, source.id, { expectedRevision: current.revision,
+        docType: current.payload.docType, depth: "index_only", reason: "Original-file regression fixture." });
+      let settled;
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        await ctx.app.sourceWorker.tick(); settled = await ctx.app.sourceService.get(ctx.user.id, source.id);
+        if (settled.payload.status === "complete") break;
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      assert.equal(settled.payload.status, "complete");
+      assert.notEqual(settled.payload.outputs.artifactPath, settled.payload.paths[0]);
+      assert.ok((await readFile(path.join(ctx.project.baseDir, settled.payload.outputs.artifactPath), "utf8")).includes(parsed));
+      await assertOriginal(settled); last = settled;
+    }
+    // An old manifest with only a remote locator has no captured-original pointer.
+    const legacy = await ctx.app.sourceService.documents.put(ctx.user.id, "source", last.id,
+      { ...last.payload, paths: ["openlist/legacy/supplement.xlsx"] }, { projectId: ctx.project.id, expectedRevision: last.revision });
+    const parsedBytes = await readFile(path.join(ctx.project.baseDir, legacy.payload.outputs.artifactPath));
+    for (const mode of ["read", "preview", "download"]) {
+      const response = await fetch(`${ctx.base}/api/sources/${legacy.id}/file?mode=${mode}`, { headers: ctx.headers });
+      assert.equal(response.status, 200); assert.equal(response.headers.get("x-evimed-source-file"), "parsed-text");
+      if (mode === "read") {
+        const file = (await response.json()).data; assert.equal(file.representation, "parsed-text");
+        assert.equal(file.path, legacy.payload.outputs.artifactPath); assert.equal(file.encoding, "utf8");
+        assert.equal(file.data, parsedBytes.toString("utf8")); assert.notEqual(file.mime, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      } else assert.deepEqual(Buffer.from(await response.arrayBuffer()), parsedBytes);
+    }
+  } finally { await ctx.close(); await new Promise(resolve => provider.close(resolve)); }
+});

@@ -12,7 +12,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
  * Variants: centered bounded form.
  * States: busy retains reachable fields; dirty exits request discard confirmation.
  * Hit area: shared IconButton and caller footer controls.
- * Keyboard: top layer traps Tab; Escape requests close; opener regains focus.
+ * Keyboard: an eligible data-autofocus control takes initial focus before the first field; top layer traps Tab; Escape requests close; opener regains focus.
  * Long content: body scrolls independently of the footer and summary.
  * Theme: semantic surface, text and error roles in both themes.
  * Responsive: viewport padding bounds the panel on narrow screens.
@@ -28,7 +28,9 @@ export function FormDialog({ title, children, onClose, busy = false, dirty = fal
   useEffect(() => {
     const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const unregister = registerFocusLayer(panel.current);
-    const field = focusableIn(panel.current).find(element => element.matches("input,textarea,select"));
+    const controls = focusableIn(panel.current);
+    const field = controls.find(element => element.hasAttribute("data-autofocus"))
+      ?? controls.find(element => element.matches("input,textarea,select"));
     (field ?? panel.current)?.focus();
     const key = (event: KeyboardEvent) => {
       if (!ownsKeyboard(panel.current, event)) return;

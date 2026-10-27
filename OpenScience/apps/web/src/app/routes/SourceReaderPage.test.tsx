@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
   getSource: vi.fn(), getSourceUnderstanding: vi.fn(), getSourceMaterials: vi.fn(), getSourceFamily: vi.fn(), getSourceUses: vi.fn(), getSourceDependents: vi.fn(),
   retrySource: vi.fn(), removeSource: vi.fn(), refetchSource: vi.fn(), getSourceNote: vi.fn(), saveSourceNote: vi.fn(),
   listDuplicateCandidates: vi.fn(), decideDuplicateGroup: vi.fn(), addToLibrary: vi.fn(), removeFromLibrary: vi.fn(),
-  downloadArtifact: vi.fn(), toastSuccess: vi.fn(), toastError: vi.fn(), getKnowledgePage: vi.fn(), getKnowledgeStatus: vi.fn(),
+  downloadSourceFile: vi.fn(), downloadArtifact: vi.fn(), toastSuccess: vi.fn(), toastError: vi.fn(), getKnowledgePage: vi.fn(), getKnowledgeStatus: vi.fn(),
 }));
 const context = vi.hoisted(() => ({ projectId: "default" }));
 /** The width the page's own box reports, and the observers told when it changes: jsdom lays nothing out. */
@@ -27,13 +27,13 @@ vi.mock("@/lib/sourceClient", async (importOriginal) => ({ ...(await importOrigi
   ["getSource", "getSourceUnderstanding", "getSourceMaterials", "getSourceFamily", "getSourceUses", "retrySource", "removeSource", "refetchSource", "getSourceNote", "saveSourceNote",
     "listDuplicateCandidates", "decideDuplicateGroup", "addToLibrary", "removeFromLibrary", "getKnowledgePage", "getKnowledgeStatus"].map((name) => [name, (mocks as Record<string, unknown>)[name]])) }));
 vi.mock("@/lib/knowledgeBaseClient", async (importOriginal) => ({ ...(await importOriginal<object>()), getSourceDependents: mocks.getSourceDependents }));
-vi.mock("@/lib/artifactFile", async (importOriginal) => ({ ...(await importOriginal<object>()), downloadArtifact: mocks.downloadArtifact }));
+vi.mock("@/lib/artifactFile", async (importOriginal) => ({ ...(await importOriginal<object>()), downloadArtifact: mocks.downloadArtifact, downloadSourceFile: mocks.downloadSourceFile }));
 vi.mock("@/lib/toast", () => ({ toast: { success: mocks.toastSuccess, error: mocks.toastError } }));
 vi.mock("@/lib/apiClient", async (importOriginal) => ({ ...(await importOriginal<object>()), hasWebApi: true, getWebProjectId: () => context.projectId }));
 // The preview is the file viewer's own business: the page has to give it the right file, in the right project, on the right page.
 vi.mock("@/components/inspector/FilePreviewInspector", () => ({
-  FilePreviewInspector: ({ data, embedded, page }: { data: { path: string; projectId?: string; root?: string }; embedded?: boolean; page?: number }) => (
-    <div data-testid="preview" data-embedded={String(Boolean(embedded))}>预览：{data.path}（{data.root}，项目 {data.projectId}{page ? `，第 ${page} 页` : ""}）</div>
+  FilePreviewInspector: ({ data, embedded, page, sourceFileId }: { sourceFileId?: string; data: { path: string; projectId?: string; root?: string }; embedded?: boolean; page?: number }) => (
+    <div data-source-file={sourceFileId} data-testid="preview" data-embedded={String(Boolean(embedded))}>预览：{data.path}（{data.root}，项目 {data.projectId}{page ? `，第 ${page} 页` : ""}）</div>
   ),
 }));
 // What a dataset was understood to mean has its own panel and its own tests.
@@ -119,7 +119,7 @@ function Table() {
     { path: "/app/chat", element: <Probe /> },
   ]);
 }
-const readerAt = (id = "src_guideline", search = "") => `/app/files/${id}${search}`;
+const readerAt = (id = "src_guideline", search = "?scope=default") => `/app/files/${id}${search}`;
 function renderReader(entry = readerAt()) {
   return render(<MemoryRouter initialEntries={[entry]}><Table /></MemoryRouter>);
 }
@@ -219,7 +219,7 @@ describe("a document's page", () => {
     it("has the row's four actions in its own 「⋯」, from the same menu", async () => {
       renderReader();
       await userEvent.click(await screen.findByRole("button", { name: `“${guideline.display.title}”的操作` }));
-      expect((await screen.findAllByRole("menuitem")).map((item) => item.textContent)).toEqual(["重新读取", "设为所有项目可用", "删除"]);
+      expect((await screen.findAllByRole("menuitem")).map((item) => item.textContent)).toEqual(["添加到项目", "重新读取", "设为所有项目可用", "删除"]);
     });
 
     it("offers to take a shared document back to this project, and to settle a suspected duplicate when it is in one", async () => {
@@ -227,7 +227,7 @@ describe("a document's page", () => {
       mocks.listDuplicateCandidates.mockResolvedValue({ items: [{ kind: "version-family", groupKey: "g1", label: "同一份资料的两个版本", members: [], sourceIds: ["src_guideline", "src_other"], decision: null }], scanned: 2, truncated: false });
       renderReader();
       await userEvent.click(await screen.findByRole("button", { name: `“${guideline.display.title}”的操作` }));
-      await waitFor(() => expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["重新读取", "改为仅本项目", "处理疑似重复", "删除"]));
+      await waitFor(() => expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["添加到项目", "重新读取", "改为仅本项目", "处理疑似重复", "删除"]));
       expect(within(document.querySelector("header")!).getByText(/所有项目可用/)).toBeInTheDocument();
       await userEvent.click(screen.getByRole("menuitem", { name: "处理疑似重复" }));
       expect(await screen.findByRole("dialog", { name: "疑似重复" })).toBeInTheDocument();
@@ -307,9 +307,13 @@ describe("a document's page", () => {
     });
 
     it("uses a document opened from the shared scope in the project the tab is in", async () => {
-      mocks.getSource.mockResolvedValue({ ...sheet, projectId: "paper-1" });
+      mocks.getSource.mockResolvedValue({ ...sheet, projectId: "paper-1", display: { ...sheet.display, shared: true } });
       renderReader(readerAt("src_sheet", "?scope=shared"));
       await userEvent.click(await screen.findByRole("button", { name: "在对话中使用" }));
+      expect(selectSpy).not.toHaveBeenCalled();
+      await userEvent.click(screen.getByRole("combobox", { name: "目标项目" }));
+      await userEvent.click(screen.getByRole("button", { name: "我的研究" }));
+      await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "在对话中使用" }));
       await waitFor(() => expect(selectSpy).toHaveBeenCalledWith("default", expect.any(Function)));
     });
 
@@ -319,6 +323,19 @@ describe("a document's page", () => {
       expect(await screen.findByRole("button", { name: "在对话中使用" })).toBeDisabled();
       expect(await screen.findByText("正在读取")).toBeInTheDocument();
     });
+  });
+
+  it("reads and downloads personal originals without selecting the hidden storage project", async () => {
+    mocks.getSource.mockResolvedValue({ ...guideline, personal: true, projectId: "evimed-library" });
+    renderReader("/app/files/src_guideline");
+    const preview = await screen.findByTestId("preview");
+    expect(preview).toHaveAttribute("data-source-file", "src_guideline");
+    expect(preview).not.toHaveTextContent("evimed-library");
+    await userEvent.click(screen.getByRole("button", { name: "下载" }));
+    expect(mocks.downloadSourceFile).toHaveBeenCalled(); expect(mocks.downloadArtifact).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "在对话中使用" }));
+    expect(screen.getByRole("dialog", { name: "选择对话项目" })).toBeInTheDocument(); expect(selectSpy).not.toHaveBeenCalled();
+    expect(screen.queryByText("evimed-library")).toBeNull();
   });
 
   describe("two columns or two tabs, by the page's own width", () => {
@@ -365,13 +382,13 @@ describe("a document's page", () => {
       renderReader();
       resize(700);
       await userEvent.click(await screen.findByRole("button", { name: "第 5 页" }));
-      expect(addressOf()).toBe("/app/files/src_guideline?tab=original&page=5");
+      expect(addressOf()).toBe("/app/files/src_guideline?scope=default&tab=original&page=5");
       expect(screen.getByRole("tab", { name: "原文", selected: true })).toBeInTheDocument();
       const preview = await screen.findByTestId("preview");
       expect(preview).toHaveTextContent("预览：knowledge-base/src_guideline.pdf（base，项目 default，第 5 页）");
       expect(preview).toHaveAttribute("data-embedded", "true");
       await userEvent.click(screen.getByRole("tab", { name: "内容" }));
-      expect(addressOf()).toBe("/app/files/src_guideline?tab=content&page=5");
+      expect(addressOf()).toBe("/app/files/src_guideline?scope=default&tab=content&page=5");
     });
 
     it("opens at the tab and the page the address names", async () => {
@@ -386,7 +403,7 @@ describe("a document's page", () => {
       await screen.findByRole("heading", { level: 1, name: guideline.display.title });
       resize(TWO_COLUMN_MIN_WIDTH + 200);
       await userEvent.click(await screen.findByRole("button", { name: "第 6 页" }));
-      expect(addressOf()).toBe("/app/files/src_guideline?page=6");
+      expect(addressOf()).toBe("/app/files/src_guideline?scope=default&page=6");
       expect(await within(columnOf("original")!).findByTestId("preview")).toHaveTextContent("第 6 页");
       expect(within(columnOf("points")!).getByText(/一线经验治疗推荐铋剂四联方案/)).toBeInTheDocument();
     });
@@ -432,7 +449,7 @@ describe("a document's page", () => {
       expect(within(columnOf("points")!).getByRole("button", { name: "第 4 页" })).toBeInTheDocument();
       // The long summary and the earlier versions are folded, and an earlier version is a page of its own.
       expect(within(columnOf("points")!).getByText("完整摘要").closest("details")).not.toHaveAttribute("open");
-      expect(within(columnOf("points")!).getByRole("link", { name: "第 1 版 · 2019-12-01" })).toHaveAttribute("href", "/app/files/src_guideline_v1");
+      expect(within(columnOf("points")!).getByRole("link", { name: "第 1 版 · 2019-12-01" })).toHaveAttribute("href", "/app/files/src_guideline_v1?scope=default");
     });
 
     it("show only what the reading has: no row for a study slot it left unknown, and not more than eight points", async () => {
@@ -680,7 +697,7 @@ describe("a document's page", () => {
       renderReader();
       await screen.findByRole("heading", { level: 1, name: guideline.display.title });
       resize(TWO_COLUMN_MIN_WIDTH);
-      expect(await within(columnOf("points")!).findByRole("link", { name: "打开最新版本" })).toHaveAttribute("href", "/app/files/src_guideline_v2");
+      expect(await within(columnOf("points")!).findByRole("link", { name: "打开最新版本" })).toHaveAttribute("href", "/app/files/src_guideline_v2?scope=default");
       expect(text()).not.toContain("以前的版本");
     });
   });
@@ -767,7 +784,7 @@ describe("a document's page", () => {
       await userEvent.click(within(column).getByRole("button", { name: "保存" }));
       await waitFor(() => expect(mocks.saveSourceNote).toHaveBeenCalledWith("src_note", { title: "10月3日组会记录", body: "增加：敏感性分析另行报告。" }));
       expect(mocks.toastSuccess).toHaveBeenCalledWith("已保存，正在重新读取");
-      await waitFor(() => expect(addressOf()).toBe("/app/files/src_note_2"));
+      await waitFor(() => expect(addressOf()).toBe("/app/files/src_note_2?scope=default"));
       await userEvent.click(await screen.findByRole("tab", { name: "内容" }));
       expect(await screen.findByText("增加：敏感性分析另行报告。")).toBeInTheDocument();
       expect(screen.queryByText("确定 C1–C3 三类比较分开合并。")).not.toBeInTheDocument();
@@ -796,7 +813,7 @@ describe("a document's page", () => {
       renderReader(readerAt(current.id));
       await userEvent.click(await screen.findByText("以前的版本（2）"));
       expect(await screen.findByText(/第 1 版.*内容相同/)).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: /第 2 版/ })).toHaveAttribute("href", "/app/files/src_note_b");
+      expect(screen.getByRole("link", { name: /第 2 版/ })).toHaveAttribute("href", "/app/files/src_note_b?scope=default");
       expect(screen.queryByRole("link", { name: "打开最新版本" })).not.toBeInTheDocument();
     });
 
@@ -832,7 +849,7 @@ describe("a document's page", () => {
       mocks.getSourceUnderstanding.mockResolvedValue({ current: null });
       mocks.getSourceNote.mockResolvedValue({ title: "Note", body: "# Saved heading\n\n| Item | Value |\n| --- | --- |\n| A | 3 |" });
       resize(700);
-      renderReader(readerAt("src_note") + "?tab=content");
+      renderReader(readerAt("src_note") + "&tab=content");
       expect(await screen.findByRole("heading", { name: "Saved heading" })).toBeInTheDocument();
       expect(await screen.findByRole("table")).toBeInTheDocument();
     });

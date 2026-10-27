@@ -47,16 +47,16 @@ describe("the knowledge base's scope menu", () => {
     render(<Menu scope={{ kind: "project", projectId: "default" }} onChange={onChange} />);
     await userEvent.click(screen.getByRole("button", { name: "范围：我的研究" }));
     const menu = await screen.findByRole("menu", { name: "范围" });
-    expect([...menu.querySelectorAll("[role^=menuitem]")].map((item) => item.textContent)).toEqual(["我的研究", "波立维 · 9月29日", "波立维 · 10月1日", "所有项目共享"]);
+    expect([...menu.querySelectorAll("[role^=menuitem]")].map((item) => item.textContent)).toEqual(["我的资料", "我的研究", "波立维 · 9月29日", "波立维 · 10月1日", "跨项目可用"]);
     expect(within(menu).getByText("我的项目")).toBeInTheDocument();
     expect(within(menu).getByText("循证 GEO")).toBeInTheDocument();
-    await userEvent.click(within(menu).getByRole("menuitemradio", { name: "所有项目共享" }));
+    await userEvent.click(within(menu).getByRole("menuitemradio", { name: "跨项目可用" }));
     expect(onChange).toHaveBeenCalledWith({ kind: "shared" });
   });
 
   it("says which scope is chosen when it is the shared one, and still names a project the list does not hold", async () => {
     const { unmount } = render(<Menu scope={{ kind: "shared" }} onChange={() => undefined} />);
-    expect(screen.getByRole("button", { name: "范围：所有项目共享" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "范围：跨项目可用" })).toBeInTheDocument();
     unmount();
     render(<Menu scope={{ kind: "project", projectId: "gone" }} onChange={() => undefined} />);
     expect(screen.getByRole("button", { name: "范围：当前项目" })).toBeInTheDocument();

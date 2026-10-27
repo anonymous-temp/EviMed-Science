@@ -1,3 +1,5 @@
+import { sourceOriginOf } from "@evimed/domain";
+import { getOpenListStatus } from "./openListStatus.mjs";
 import { projectSourceManifestRecord } from "./sourceService.mjs";
 import { openListSourceInput } from "./openListSourceConnector.mjs";
 import { attachmentDisposition, HttpError, readJson, sendJson } from "./security.mjs";
@@ -29,12 +31,12 @@ async function bodyOf(req, limit, allowed) {
  * `composition` counts what a project's library is made of by year and keyword (`GET /api/sources/composition?projectId=`,
  * `sourceComposition.mjs`); absent, there is nothing to count.
  * @param {{store:any,service:any,openList?:any,knowledge?:any,uses?:{list:(user:any,sourceId:string)=>Promise<any[]>}|null,
- *   passages?:{find:(request:{userId:string,projectId:string|null,shared:boolean,q:string})=>Promise<any>}|null,
+ *   passages?:{find:(request:{userId:string,projectId:string|null,shared:boolean,all?:boolean,q:string})=>Promise<any>}|null,
  *   dependents?:((request:{user:any,project:any,source:any})=>Promise<any>)|null,
  *   vault?:{export:(userId:string,project:any)=>Promise<{bytes:Uint8Array,filename:string,mimeType:string}>}|null,
  *   outputs?:((project:any)=>Promise<any[]>)|null,
- *   composition?:((userId:string,project:any)=>Promise<any>)|null,maxJsonBytes:number}} dependencies */
-export function createSourceRoutes({ store, service, openList = null, knowledge = null, uses = null, passages = null, dependents = null, vault = null, outputs = null, composition = null, maxJsonBytes }) {
+ *   composition?:((userId:string,project:any)=>Promise<any>)|null,file?:{read:(user:any,project:any,rel:string)=>Promise<any>,serve:(req:any,res:any,user:any,project:any,rel:string,download:boolean)=>Promise<any>}|null,maxJsonBytes:number}} dependencies */
+export function createSourceRoutes({ store, service, openList = null, knowledge = null, uses = null, passages = null, dependents = null, vault = null, outputs = null, composition = null, file: sourceFile = null, maxJsonBytes }) {
   // The composition builds one OpenList connector for the browser's namespace and
   // shares this SourceService instance with the ingestion worker. Handing the
   // connector to the service here is what lets the leased folder sync page the
@@ -62,6 +64,7 @@ export function createSourceRoutes({ store, service, openList = null, knowledge 
       : value?.source?.kind === "source" ? { ...value, source: projectSourceManifestRecord(value.source) }
       : Array.isArray(value?.items) ? { ...value, items: value.items.map(item => item?.kind === "source" ? projectSourceManifestRecord(item) : item) } : value;
     const reply = (value, status = 200) => { sendJson(res, status, { data: project(value) }); return true; };
+    if (url.pathname === "/api/sources/openlist/status" && method === "GET") return reply(await getOpenListStatus(openList, user.id));
     if (url.pathname === "/api/sources/openlist" && method === "GET") {
       if (!openList) throw new HttpError(503, "openlist_unavailable", "OpenList is not configured for this deployment.");
       const projectId = url.searchParams.get("projectId");
@@ -175,10 +178,11 @@ export function createSourceRoutes({ store, service, openList = null, knowledge 
     if (parts.length === 0 && method === "GET") {
       // `scope=shared`: the documents the account made available to every project, which belong to no one project.
       const scope = url.searchParams.get("scope");
-      if (scope != null && scope !== "shared") throw new HttpError(400, "source_payload_invalid", "source scope is invalid.");
+      if (scope != null && scope !== "shared" && scope !== "all") throw new HttpError(400, "source_payload_invalid", "source scope is invalid.");
       const shared = scope === "shared";
+      const all = scope === "all";
       const projectId = url.searchParams.get("projectId");
-      if (!shared) {
+      if (!shared && !all) {
         if (!projectId) throw new HttpError(400, "project_required", "A project is required.");
         await store.requireProject(user, projectId);
       }
@@ -187,10 +191,10 @@ export function createSourceRoutes({ store, service, openList = null, knowledge 
       // the index is no failure of the list.
       const query = url.searchParams.get("q");
       const body = passages && query?.trim()
-        ? await passages.find({ userId: user.id, projectId: shared ? null : projectId, shared, q: query }).catch(() => null) : null;
+        ? await passages.find({ userId: user.id, projectId: shared || all ? null : projectId, shared, ...(all ? { all: true } : {}), q: query }).catch(() => null) : null;
       const page = await service.list(user.id, {
-        projectId: shared ? null : projectId,
-        shared,
+        projectId: shared || all ? null : projectId,
+        shared, ...(all ? { all: true } : {}),
         ...(body?.shas?.length ? { bodyShas: body.shas } : {}),
         status: url.searchParams.get("status"),
         // What the page says about a document (`SOURCE_STATES`), when asked by that.
@@ -215,6 +219,22 @@ export function createSourceRoutes({ store, service, openList = null, knowledge 
     const [sourceId, action] = parts;
     const source = await service.get(user.id, sourceId, { includeDeleted: method === "DELETE" });
     const sourceProject = await store.requireProject(user, source.projectId);
+    if (action === "file" && method === "GET" && parts.length === 2) {
+      if ([...url.searchParams.keys()].some(key => key !== "mode")) throw new HttpError(400, "source_payload_invalid", "Source file requests accept only a mode.");
+      const mode = url.searchParams.get("mode") ?? "read";
+      if (!["read", "preview", "download"].includes(mode)) throw new HttpError(400, "source_payload_invalid", "Invalid source file mode.");
+      if (!sourceFile) throw new HttpError(503, "source_state_unavailable", "Source files are unavailable.");
+      const origin = sourceOriginOf({ connectorType: source.payload.connector?.type, path: source.payload.paths?.[0] });
+      const captured = source.payload.paths?.[0];
+      const original = origin !== "drive" || typeof captured === "string" && captured.startsWith("knowledge-base/.evimed-revisions/");
+      const rel = original ? captured : source.payload.outputs?.artifactPath;
+      if (typeof rel !== "string" || !rel) throw new HttpError(404, "file_not_found", "The preserved original is unavailable.");
+      const representation = original ? "original" : "parsed-text";
+      res.setHeader("X-EviMed-Source-File", representation);
+      if (mode === "read") return reply({ ...await sourceFile.read(user, sourceProject, rel), representation });
+      await sourceFile.serve(req, res, user, sourceProject, rel, mode === "download");
+      return true;
+    }
     if (action === "locate" && method === "POST" && parts.length === 2) {
       const input = await bodyOf(req, maxJsonBytes, ["quote"]);
       return reply(await locateSourceQuote(service, user.id, source, input.quote));

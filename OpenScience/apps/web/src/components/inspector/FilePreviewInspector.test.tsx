@@ -7,6 +7,8 @@ import { readArtifact, readClaimVerification } from "@/lib/artifactFile";
 
 // The markdown tests below carry inline `content`, so they never hit
 // readArtifact — this mock only feeds the binary-file test.
+const readSourceFile = vi.fn();
+const downloadSourceFile = vi.fn();
 const probeLargeFile = vi.fn();
 const downloadArtifact = vi.fn();
 const downloadInlineArtifact = vi.fn();
@@ -22,6 +24,9 @@ vi.mock("@/lib/artifactFile", async (importOriginal) => {
   const mod = await importOriginal<typeof import("@/lib/artifactFile")>();
   return {
     ...mod,
+    readSourceFile: (...args: unknown[]) => readSourceFile(...args),
+    downloadSourceFile: (...args: unknown[]) => downloadSourceFile(...args),
+    sourceFileUrl: (id: string) => `/api/sources/${id}/file?mode=preview`,
     readArtifact: vi.fn(async () => ({
       path: "data/blob.bin",
       mime: "application/octet-stream",
@@ -295,4 +300,29 @@ describe("PreviewError", () => {
     expect(screen.getByText(/available in the desktop app/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /用本地应用打开/ })).not.toBeInTheDocument();
   });
+});
+
+describe("source-bound originals", () => {
+ it("previews a personal PDF without a runtime project or arbitrary file path", async () => {
+  const { previewUrl } = await import("@/lib/artifactFile"); vi.mocked(previewUrl).mockClear();
+  render(<FilePreviewInspector sourceFileId="src_personal" data={{ variant: "file", path: "knowledge-base/paper.pdf", filename: "paper.pdf", artifact: "report" }} onClose={() => {}} />);
+  expect(await screen.findByTitle("PDF 预览")).toHaveAttribute("src", "/api/sources/src_personal/file?mode=preview");
+  expect(previewUrl).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByRole("button", { name: "下载文件" })); expect(downloadSourceFile).toHaveBeenCalledWith("src_personal", "paper.pdf");
+ });
+ it("renders immutable personal Markdown without workspace matrix or edit requests", async () => {
+  vi.mocked(readArtifact).mockClear(); vi.mocked(readClaimVerification).mockClear();
+  readSourceFile.mockResolvedValueOnce({ encoding: "utf8", data: "# Personal text", mime: "text/markdown", path: "report.md", size: 15 });
+  render(<FilePreviewInspector embedded sourceFileId="src_text" data={{ variant: "file", path: "knowledge-base/report.md", filename: "report.md", artifact: "report" }} onClose={() => {}} />);
+  expect(await screen.findByRole("heading", { name: "Personal text" })).toBeInTheDocument();
+  expect(readSourceFile).toHaveBeenCalledWith("src_text"); expect(readArtifact).not.toHaveBeenCalled(); expect(readClaimVerification).not.toHaveBeenCalled();
+ });
+ it("reads personal text with the source adapter and keeps large files away from the runtime probe", async () => {
+  vi.mocked(readArtifact).mockClear(); probeLargeFile.mockClear();
+  readSourceFile.mockRejectedValueOnce(new Error("file too large"));
+  render(<FilePreviewInspector sourceFileId="src_large" data={{ variant: "file", path: "knowledge-base/large.txt", filename: "large.txt", artifact: "report" }} onClose={() => {}} />);
+  expect(await screen.findByText("文件过大，无法预览")).toBeInTheDocument();
+  expect(readSourceFile).toHaveBeenCalledWith("src_large"); expect(readArtifact).not.toHaveBeenCalled();
+  expect(screen.queryByRole("button", { name: "轻量检查文件" })).toBeNull(); expect(probeLargeFile).not.toHaveBeenCalled();
+ });
 });

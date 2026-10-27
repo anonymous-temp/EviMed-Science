@@ -1,10 +1,12 @@
+import { SourceProjectDialog } from "@/components/sources/SourceProjectDialog";
+import { useKnowledgeScope } from "@/components/sources/useKnowledgeScope";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { ChevronLeft, FileQuestion, MessageSquare } from "lucide-react";
-import { getWebProjectId, WebApiError, webErrorMessage } from "@/lib/apiClient";
-import { downloadArtifact } from "@/lib/artifactFile";
+import { WebApiError, webErrorMessage } from "@/lib/apiClient";
+import { downloadArtifact, downloadSourceFile } from "@/lib/artifactFile";
 import { parseFailureMessage } from "@/lib/errorText";
-import { listPath, readListState, readReaderView, readerPath, SHARED_SCOPE, type ReaderTab } from "@/lib/knowledgeNav";
+import { listPath, readListState, readReaderView, readerPath, type ReaderTab } from "@/lib/knowledgeNav";
 import { productErrorMessage } from "@/lib/productClient";
 import { useProjectStore } from "@/lib/projects";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
@@ -63,13 +65,15 @@ export function SourceReaderPage() {
 
 function SourceReader({ sourceId }: { sourceId: string }) {
   useProjectStore((state) => state.currentId);
-  const currentProjectId = getWebProjectId();
+
   const navigate = useNavigate();
   const select = useProjectStore((state) => state.select);
   const [params, setParams] = useSearchParams();
   const listState = useMemo(() => readListState(params), [params]);
   const view = useMemo(() => readReaderView(params), [params]);
   const back = listPath(listState);
+  const destinations = useKnowledgeScope({ kind: "all" }, () => {}).groups.filter(group => group.heading === "我的项目").flatMap(group => group.choices);
+  const [projectDialog, setProjectDialog] = useState<{ conversation: boolean; draft?: string } | null>(null);
 
   const [loaded, setLoaded] = useState<Loaded>({ phase: "loading" });
   const [busy, setBusy] = useState(false);
@@ -167,7 +171,9 @@ function SourceReader({ sourceId }: { sourceId: string }) {
   // the composer unsent, naming the document by its title and its file.
   const prepareConversation = (excerpt?: ConversationExcerpt) => {
     if (!source) return;
-    const target = listState.scope === SHARED_SCOPE ? currentProjectId : source.projectId;
+    const draft = excerpt ? `请结合“${source.display.title}”的这段原文继续讨论：\n\n${excerpt.text}` : conversationDraft(source);
+    if (source.personal || listState.scope === "shared" || listState.scope === null) { setProjectDialog({ conversation: true, draft }); return; }
+    const target = source.projectId;
     const page = isKnowledgePage(source) ? knowledgePage : null;
     void select(target, () => {
       navigate("/app/chat", { flushSync: true, state: { runtimeUiIntent: {
@@ -183,7 +189,7 @@ function SourceReader({ sourceId }: { sourceId: string }) {
   const filename = path ? path.slice(path.lastIndexOf("/") + 1) : "";
   const download = async () => {
     if (!source || !path) return;
-    try { await downloadArtifact(path, "base", filename, source.projectId); }
+    try { if (source.personal) downloadSourceFile(source.id, filename); else await downloadArtifact(path, "base", filename, source.projectId); }
     catch (failure) { toast.error(`无法下载 ${filename}：${parseFailureMessage(failure, "该文件")}`); }
   };
 
@@ -205,7 +211,7 @@ function SourceReader({ sourceId }: { sourceId: string }) {
   const title = source?.display.title ?? "资料";
   const tab: ReaderTab = view.tab ?? (source && isEditableNote(source) ? "original" : "content");
   const menu = source ? sourceMenuItems(source, {
-    duplicate: group !== null, busy, onRetry: readAgain, onShare: toggleShared, onDuplicates: () => setDuplicatesOpen(true), onDelete: () => setDeleting(true),
+    duplicate: group !== null, busy, onRetry: readAgain, onShare: toggleShared, onDuplicates: () => setDuplicatesOpen(true), onDelete: () => setDeleting(true), onAddToProject: () => setProjectDialog({ conversation: false }),
   }).filter((item) => source.payload.publication?.current !== false || item === "separator" || !("label" in item) || item.label !== "重新读取") : [];
 
   const start = Number(params.get("start")), end = Number(params.get("end")), sha = params.get("sha") ?? "";
@@ -271,6 +277,11 @@ function SourceReader({ sourceId }: { sourceId: string }) {
           )}
         </div>
       </PageShell>
+      {source && projectDialog && <SourceProjectDialog sources={[source]} options={destinations} conversation={projectDialog.conversation} onClose={() => setProjectDialog(null)} onDone={(projectId, sources) => {
+        const pending = projectDialog; setProjectDialog(null);
+        if (pending.conversation) void select(projectId, () => navigate("/app/chat", { flushSync: true, state: { runtimeUiIntent: { ...newRuntimeUiIntent(pending.draft ?? conversationDraft(source)), references: sources.map(item => ({ id: item.id, title: item.display.title })) } } })).catch(failure => toast.error(webErrorMessage(failure)));
+        else toast.success("已添加到项目");
+      }} />}
       {source && duplicatesOpen && (
         <Drawer title="疑似重复" onClose={() => setDuplicatesOpen(false)}>
           <DuplicateGroups groups={group ? [group] : []} busy={busy} onDecide={decide} />

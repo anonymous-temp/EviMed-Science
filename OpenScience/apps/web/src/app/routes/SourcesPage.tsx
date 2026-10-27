@@ -1,3 +1,4 @@
+import { SourceProjectDialog } from "@/components/sources/SourceProjectDialog";
 import { WebApiError } from "@/lib/apiClient";
 import { sessionGeneration, StaleSessionError } from "@/lib/sessionLifecycle";
 import { Combobox } from "@/components/ui/Combobox";
@@ -12,7 +13,7 @@ import { downloadKnowledgeVault, getSourceComposition, listProjectOutputs, vault
 import { projectLabels } from "@/lib/projectNames";
 import { useProjectStore } from "@/lib/projects";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
-import { addToLibrary, decideDuplicateGroup, knowledgePagesOffered, listDuplicateCandidates, listSources, openListOffered, refetchSource, removeFromLibrary,
+import { addToLibrary, decideDuplicateGroup, knowledgePagesOffered, listDuplicateCandidates, listSources, uploadPersonalFile, refetchSource, removeFromLibrary,
   removeSource, requestKnowledgeCompile, retrySource, type DuplicateGroup, type SourceCounts, type SourceKind, type SourcePassage, type SourceRecord, type SourceScope } from "@/lib/sourceClient";
 import { productErrorMessage } from "@/lib/productClient";
 import { pickFiles, uploadFilesToWorkspace } from "@/lib/backend";
@@ -34,7 +35,7 @@ import { LoadError } from "@/components/cards/LoadError";
 import { FilesSkeleton } from "@/components/cards/Skeletons";
 import { PageShell } from "@/components/layout/PageShell";
 import { AddLinkDialog, NewNoteDialog } from "@/components/sources/AddEntryDialogs";
-import { DriveImportDrawerBody } from "@/components/sources/DriveImport";
+import { LibraryDriveImport } from "@/components/sources/LibraryDriveImport";
 import { DuplicateGroups } from "@/components/sources/DuplicateGroups";
 import { KnowledgeGraphView } from "@/components/sources/KnowledgeGraphView";
 import { useKnowledgeScope } from "@/components/sources/useKnowledgeScope";
@@ -126,7 +127,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   const scope = useMemo(() => scopeOf(listState, currentProjectId), [listState, currentProjectId]);
   const kind = listState.kind;
   // The compiled files are a project's; the shared documents are one list, whatever the address says of a tab.
-  const tab = scope.kind === "shared" ? "sources" : tabOf(listState);
+  const tab = scope.kind !== "project" ? "sources" : tabOf(listState);
   const update = useCallback((patch: Partial<KnowledgeListState>) => {
     setParams((current) => {
       const next = { ...readListState(current), ...patch };
@@ -135,7 +136,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   }, [setParams]);
   // A project's types and files are its own: the documents' type is let go when the scope changes, the pages' tab is kept (the
   // pages of the other project are what the researcher came to see), and a focus on a mark of the old project's graph is dropped.
-  const setScope = (next: SourceScope) => update({ scope: scopeParam(next, currentProjectId), ...(tab === "sources" || next.kind === "shared" ? { kind: null, view: null } : {}), focus: null, depth: null });
+  const setScope = (next: SourceScope) => update({ scope: scopeParam(next, currentProjectId), ...(tab === "sources" || next.kind !== "project" ? { kind: null, view: null } : {}), focus: null, depth: null });
   const scopeMenu = useKnowledgeScope(scope, setScope);
   // What is typed is the box's own until the researcher stops; the address follows, and an address changed from outside
   // (the back button between two lists) moves the box.
@@ -177,13 +178,13 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   // 从网盘导入 is offered only when there is a drive to open: OpenList configured and a storage mounted under its tenant
   // root (`/api/me` `features.openList`). An entry that led to a drive with nothing in it answered every browse with an
   // error (audit I3-4). Off until `/api/me` says so, and when it cannot.
-  const [driveOffered, setDriveOffered] = useState(false);
+
   // Where the project's pages stand, and 「重新整理」, only where the deployment compiles them (`features.knowledgePages`).
   const [pagesOffered, setPagesOffered] = useState(false);
   const [compileAsking, setCompileAsking] = useState(false);
   useEffect(() => {
     let active = true;
-    fetchWebMe().then((me) => { if (active) { setDriveOffered(openListOffered(me)); setPagesOffered(knowledgePagesOffered(me)); } }).catch(() => { /* not offered */ });
+    fetchWebMe().then((me) => { if (active) { setPagesOffered(knowledgePagesOffered(me)); } }).catch(() => { /* not offered */ });
     return () => { active = false; };
   }, []);
 
@@ -237,9 +238,11 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
     );
     return () => { active = false; };
   }, [scopeProjectId, documentCount]);
-  // Where a new document goes: the project the page lists, or — in the shared scope, which belongs to no project —
-  // the project the tab is in.
-  const addProjectId = scopeProjectId ?? currentProjectId;
+  // Account views create personal material unless the person explicitly chooses a project.
+  const addProjectId = scopeProjectId;
+  const destinationOptions = scopeMenu.groups.flatMap(group => group.choices).filter(choice => projects.some(project => project.id === choice.id) && choice.id !== "evimed-library");
+  const conversationDestinations = scopeMenu.groups.filter(group => group.heading === "我的项目").flatMap(group => group.choices);
+  const [targetDialog, setTargetDialog] = useState<{ sources: SourceRecord[]; conversation: boolean } | null>(null);
   const projectNames = useMemo(() => projectLabels(projects), [projects]);
 
   // The compiled files are the 知识页 tab's: the documents' list leaves them out where there is a tab for them. They are the newest
@@ -413,7 +416,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
     else await addToLibrary(source.id);
   });
 
-  /** Something was added: show where it landed. The shared scope holds nothing new, so the page moves to the project. */
+  /** A personal addition from the shared subset returns to the complete owned list. */
   const added = () => {
     if (shared) update({ scope: null, kind: null });
     else void load(true);
@@ -432,7 +435,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
         toast.error(`没有上传：${refused.map((file) => `${file.name}（${file.reason}）`).join("、")}。${KNOWLEDGE_BASE_UPLOAD_HINT}`);
       }
       const names: string[] = [];
-      const targetProject = dialog === "upload" ? uploadProject ?? addProjectId : addProjectId;
+      const targetProject = dialog === "upload" ? uploadProject === "@personal" ? null : uploadProject ?? addProjectId : addProjectId;
       if (accepted.length > 0 && dialog !== "upload") { setUploadProject(targetProject); setDialog("upload"); }
       const pending = accepted.map((file, index) => ({ id: `${Date.now()}-${index}`, name: file.name, state: "transferring" as const }));
       setUploadItems(pending);
@@ -441,7 +444,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
         if (!valid()) return;
         const entry = pending[index];
         try {
-          const saved = await uploadFilesToWorkspace([accepted[index]], KNOWLEDGE_ROOT, "base", targetProject, valid);
+          const saved = targetProject ? await uploadFilesToWorkspace([accepted[index]], KNOWLEDGE_ROOT, "base", targetProject, valid) : [(await uploadPersonalFile(accepted[index], valid)).source.id];
           if (!valid()) return;
           names.push(...saved);
           setUploadItems(current => current.map(item => item.id === entry.id ? { ...item, state: "transferred" } : item));
@@ -453,7 +456,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
       if (names.length > 0) {
         // The row says 「正在读取」 until the document can be used; the toast says only what happened.
         toast.success(`已上传 ${names.length} 个文件`);
-        if (targetProject !== addProjectId) setScope({ kind: "project", projectId: targetProject });
+        if (targetProject !== addProjectId) setScope(targetProject ? { kind: "project", projectId: targetProject } : { kind: "all" });
         else added();
       }
     } catch (failure) {
@@ -464,12 +467,11 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   };
   const { dragging, dropProps } = useFileDrop({ disabled: !hasWebApi || uploading, onDrop: (files) => void uploadFiles(files) });
 
-  const onLinkAdded = () => { setDialog(null); toast.success("已添加，正在读取"); added(); };
-  // A note just written opens on its own page, where its editor is; the list it came from is the way back (the shared
-  // scope holds nothing new, so a note written from it was filed in the project the tab is in).
+  const onLinkAdded = (source: SourceRecord) => { setDialog(null); toast.success("已添加，正在读取"); if (source.personal && scope.kind !== "all") setScope({ kind: "all" }); else if (!source.personal && source.projectId !== scopeProjectId) setScope({ kind: "project", projectId: source.projectId }); else added(); };
+  // A new note opens with its actual destination preserved as the return scope.
   const onNoteAdded = (source: SourceRecord) => {
     setDialog(null);
-    navigate(readerPath(source.id, shared ? { scope: null, kind: null, q: "" } : listState));
+    navigate(readerPath(source.id, source.personal ? { ...listState, scope: null } : { ...listState, scope: source.projectId }));
   };
 
   // A document's own page, and what the list keeps of its place as the page is followed: how far it was scrolled and
@@ -492,6 +494,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
   const openSelected = async () => {
     const references = [...selected.values()].map(source => ({ id: source.id, title: source.display.title }));
     if (!references.length) return;
+    if (!scopeProjectId) { setTargetDialog({ sources: [...selected.values()], conversation: true }); return; }
     keepPlace();
     try {
       await selectProject(scopeProjectId ?? currentProjectId, () => {
@@ -503,7 +506,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
 
   // The compiled files: the tree is read for the project once the tabs are there, so 知识页 can say how many pages it holds before it
   // is opened, and the tab's body and the count are one read.
-  const pagesTabs = !shared && (pagesOffered || (counts?.wiki ?? 0) > 0 || tab !== "sources");
+  const pagesTabs = scopeProjectId !== null && (pagesOffered || (counts?.wiki ?? 0) > 0 || tab !== "sources");
   const { tree, failed: treeFailed, retry: retryTree } = useKnowledgeTree(scopeProjectId, pagesTabs, knowledgeRound);
   const pageCount = tree ? groupRows(tree.pages).reduce((sum, group) => sum + group.rows.length, 0) : 0;
   const line = pagesOffered ? statusLine(knowledge) : null;
@@ -545,6 +548,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
     onShare: () => toggleShared(source),
     onDuplicates: () => setDuplicatesFor(source.id),
     onDelete: () => setDeleting(source),
+    onAddToProject: () => setTargetDialog({ sources: [source], conversation: false }),
   });
 
   const addMenu = (label = "添加") => (
@@ -552,7 +556,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
       { label: "上传文件", icon: FileUp, onSelect: () => { setUploadItems([]); setUploadProject(addProjectId); setDialog("upload"); } },
       { label: "添加网页链接", icon: Globe, onSelect: () => setDialog("link") },
       { label: "新建笔记", icon: StickyNote, onSelect: () => setDialog("note") },
-      ...(driveOffered ? [{ label: "从网盘导入", icon: Cloud, onSelect: () => setConnecting(true) }] : []),
+      { label: "从网盘导入", icon: Cloud, onSelect: () => setConnecting(true) },
     ]}>
       <Button disabled={!hasWebApi || uploading} loading={uploading}>{!uploading && <Plus size={16} aria-hidden="true" />}{label}</Button>
     </Menu>
@@ -579,7 +583,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
       <List label="资料">
         {items.map((source) => (
           <SourceRow key={source.id} source={source} showShared={!shared} {...rowActions(source)}
-            projectName={shared ? projectNames.get(source.projectId) ?? null : null}
+            projectName={source.personal ? "个人资料" : scope.kind !== "project" ? projectNames.get(source.projectId) ?? null : null}
             to={readerLink(source)} onOpen={keepPlace}
             selected={selected.has(source.id)} onSelect={() => toggleSelected(source)}
             passages={passages[source.id]} query={search}
@@ -665,10 +669,10 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
       <PageShell
         title="知识库"
         scope={scopeMenu}
-        meta={pagesOffered && !shared ? <KnowledgeStatusDot status={knowledge} asking={compileAsking} onCompile={() => void compileNow()} /> : undefined}
+        meta={pagesOffered && !!scopeProjectId ? <KnowledgeStatusDot status={knowledge} asking={compileAsking} onCompile={() => void compileNow()} /> : undefined}
         actions={<>
           {!firstRun && addMenu()}
-          {!shared && !firstRun && (
+          {!!scopeProjectId && !firstRun && (
             <Menu label="更多" items={[
               { label: "在记忆总览中查看", onSelect: () => navigate("/app/memory/overview") },
               ...(pagesOffered && line?.canCompile ? [{ label: compileAsking ? "正在重新整理" : "重新整理知识页", icon: RefreshCw, disabled: compileAsking, onSelect: () => void compileNow() }] : []),
@@ -676,7 +680,7 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
             ]} />
           )}
         </>}
-        activity={compiling && !shared && knowledge ? {
+        activity={compiling && !!scopeProjectId && knowledge ? {
           label: "整理知识页", phase: [knowledge.pages > 0 ? `已有 ${knowledge.pages} 页` : "", knowledge.typedPages.kg > 0 ? `${knowledge.typedPages.kg} 个实体` : ""].filter(Boolean).join("，") || undefined,
           startedAt: knowledge.stage?.startedAt ?? null, ...(knowledge.state === "queued" ? { waiting: "资料有更新，稍后会自动开始" } : {}),
         } : undefined}
@@ -699,25 +703,31 @@ function KnowledgeBase({ currentProjectId }: { currentProjectId: string }) {
           <KnowledgeGraphView projectId={scopeProjectId} kind={listState.graph === "kg" ? "kg" : "wiki"} listState={listState} version={knowledgeRound} onChange={update} empty={recipe} />
         )}
       </PageShell>
-      {connecting && driveOffered && (
+      {connecting && (
         <Drawer title="从网盘导入" onClose={() => setConnecting(false)} widthClassName="max-w-2xl">
-          <DriveImportDrawerBody projectId={addProjectId} refreshToken={folderRefresh}
-            onImported={() => { added(); }} onFolderRegistered={() => setFolderRefresh((value) => value + 1)} />
+          <LibraryDriveImport projectId={addProjectId} destinations={destinationOptions} refreshToken={folderRefresh}
+            onImported={() => { added(); }} onFolderRegistered={() => setFolderRefresh((value) => value + 1)}
+            onUpload={() => { setConnecting(false); setUploadItems([]); setUploadProject(addProjectId); setDialog("upload"); }} />
         </Drawer>
       )}
       {/* What a batch did is shown in the dialog that ran it, and goes with it: the next one opens empty. */}
       {dialog === "upload" && <FormDialog title="上传资料" onClose={() => { setDialog(null); setUploadItems([]); }} busy={uploading}>
-        <div className="flex flex-col gap-4"><Combobox clearable={false} label="保存到项目" value={uploadProject ?? addProjectId} options={scopeMenu.groups.flatMap(group => group.choices).filter(choice => projects.some(project => project.id === choice.id))} onChange={id => { if (id) setUploadProject(id); }} disabled={uploading} />
-        <FileDrop label="选择资料文件" hint={<>{KNOWLEDGE_BASE_UPLOAD_HINT}传输完成后，资料列表会分别显示读取和可搜索状态。同名文件会成为这份资料的新版本，旧版本仍可查看；内容相同的文件不会重复添加。</>} accept={KNOWLEDGE_BASE_ACCEPT} disabled={uploading} onFiles={files => void uploadFiles(files)} items={uploadItems} />
+        <div className="flex flex-col gap-4"><Combobox clearable={false} label="保存位置" value={uploadProject ?? addProjectId ?? "@personal"} options={[{ id: "@personal", label: "个人资料" }, ...destinationOptions]} onChange={id => { if (id) setUploadProject(id); }} disabled={uploading} />
+        <FileDrop initialFocus label="选择资料文件" hint={<>{!uploadProject && !addProjectId || uploadProject === "@personal" ? "个人资料可在自己的项目中使用；添加到项目会保存独立版本。循证 GEO 仍按项目资料权限使用。" : "先保存到所选项目；可再设为跨项目可用。"}{KNOWLEDGE_BASE_UPLOAD_HINT}传输完成后，资料列表会分别显示读取和可搜索状态。同名文件会成为这份资料的新版本，旧版本仍可查看；内容相同的文件不会重复添加。</>} accept={KNOWLEDGE_BASE_ACCEPT} disabled={uploading} onFiles={files => void uploadFiles(files)} items={uploadItems} />
         </div>
       </FormDialog>}
-      {dialog === "link" && <AddLinkDialog projectId={addProjectId} onClose={() => setDialog(null)} onAdded={onLinkAdded} />}
-      {dialog === "note" && <NewNoteDialog projectId={addProjectId} onClose={() => setDialog(null)} onAdded={onNoteAdded} />}
+      {dialog === "link" && <AddLinkDialog destinations={destinationOptions} projectId={addProjectId} onClose={() => setDialog(null)} onAdded={onLinkAdded} />}
+      {dialog === "note" && <NewNoteDialog destinations={destinationOptions} projectId={addProjectId} onClose={() => setDialog(null)} onAdded={onNoteAdded} />}
       {duplicatesFor && (
         <Drawer title="疑似重复" onClose={() => setDuplicatesFor(null)}>
           <DuplicateGroups groups={duplicateOpen} busy={busy} onDecide={decide} />
         </Drawer>
       )}
+      {targetDialog && <SourceProjectDialog {...targetDialog} options={conversationDestinations} onClose={() => setTargetDialog(null)} onDone={(projectId, sources) => {
+        const conversation = targetDialog.conversation; setTargetDialog(null); added();
+        if (conversation) void selectProject(projectId, () => navigate("/app/chat", { flushSync: true, state: { runtimeUiIntent: { ...newRuntimeUiIntent("请根据所选资料回答我的问题，引用时标出处。\n\n我的问题："), references: sources.map(source => ({ id: source.id, title: source.display.title })) } } })).catch(failure => toast.error(webErrorMessage(failure)));
+        else toast.success("已添加到项目");
+      }} />}
       {deleting && <ConfirmDialog title="删除这份资料？" body="删除后不再用于回答。"
         confirmLabel="删除" onCancel={() => setDeleting(null)}
         onConfirm={() => void mutate(async () => { await removeSource(deleting.id, deleting.revision); setSelected((previous) => { const next = new Map(previous); next.delete(deleting.id); return next; }); })} />}
