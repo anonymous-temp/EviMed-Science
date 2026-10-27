@@ -86,9 +86,36 @@ test('competing campaign imports serialize surface admission with no partial sec
  const original=f.options.verificationOptions
  f.options.verificationOptions=async envelope=>({...await original(envelope),expectedIdentity:envelope===second?{id:'bundle-2',campaignId:'campaign-2'}:{id:'bundle',campaignId:'campaign'}})
  const importer=new RsiCampaignImporter(f.options)
- const results=await Promise.allSettled([importer.importBundle(f.envelope),importer.importBundle(second)])
- assert.equal(results.filter(r=>r.status==='fulfilled').length,1)
+ const results=await Promise.all([importer.importBundle(f.envelope),importer.importBundle(second)])
+ // The loser is not refused for good: its surface is busy, so it waits, and it left nothing behind.
+ assert.deepEqual(results.map(r=>r.state).sort(),['exposed','waiting']);assert.equal(results.find(r=>r.state==='waiting').reason,'campaign_surface_busy')
  const rows=await database.query("SELECT payload FROM evimed_product.documents WHERE user_id=$1",[owner]);assert.equal(rows.rowCount,1);assert.equal(f.publications(),1)
+}))
+test('a replayed campaign is refused for good, a busy surface only waits, and a finished campaign frees the surface and the cheap absence check',skip,()=>withDatabase(async(database,owner)=>{
+ const f=await fixture(database,owner),surface=f.target.surface
+ const sign2=(manifest)=>signRsiCampaignBundle({manifest,files:f.files,keyId:'publisher',signer:bytes=>sign(null,bytes,privateKey)})
+ // The shared fixture installs one operation; this test needs two campaigns in turn, each with its own installed record.
+ const installed=new Map()
+ f.options.adapters.policy={inspect:async input=>installed.get(`${input.operationId}:${input.phase}`)??null,
+  publish:async input=>{installed.set(`${input.operationId}:${input.phase}`,{operationId:input.operationId,phase:input.phase,candidateDigest:rsiDigest(input.files),revision:'candidate',installed:true})},
+  rollback:async input=>({...input,installed:true})}
+ const original=f.options.verificationOptions
+ const identities=new Map()
+ f.options.verificationOptions=async envelope=>({...await original(envelope),expectedIdentity:identities.get(envelope)??{id:'bundle',campaignId:'campaign'}})
+ const importer=new RsiCampaignImporter(f.options)
+ assert.equal(await importer.hasCampaign(surface),false,'nothing was ever admitted')
+ assert.equal((await importer.importBundle(f.envelope)).state,'exposed')
+ assert.equal(await importer.hasCampaign(surface),true,'an exposed campaign holds the surface')
+ const second=await sign2({...f.manifest,id:'bundle-2',campaignId:'campaign-2'});identities.set(second,{id:'bundle-2',campaignId:'campaign-2'})
+ const busy=await importer.importBundle(second);assert.deepEqual([busy.state,busy.reason],['waiting','campaign_surface_busy'])
+ const replay=await sign2({...f.manifest,id:'bundle-3'});identities.set(replay,{id:'bundle-3',campaignId:'campaign'})
+ await assert.rejects(importer.importBundle(replay),{code:'campaign_replayed'})
+ // The first campaign ends (the fuse stops it and it is rolled back): the surface is free, the absence check is cheap again, and the waiting bundle imports.
+ const row=await database.query("SELECT payload FROM evimed_product.documents WHERE user_id=$1 AND payload->>'recordType'='rsi-campaign-import'",[owner])
+ await importer.observe('bundle',{trusted:true,id:'e-1',operationId:row.rows[0].payload.operationId,candidateDigest:rsiDigest(f.files),arm:'shadow',revision:'candidate',day:'2026-10-26',outcome:'critical',criticalCode:'corrupt-bytes'})
+ assert.equal(await importer.hasCampaign(surface),false,'a stopped or rolled-back journal no longer counts')
+ assert.equal((await importer.importBundle(second)).state,'exposed')
+ assert.equal(await importer.hasCampaign(surface),true)
 }))
 test('selection rechecks live generation, expiry, binding and returns current incumbent after stop',skip,()=>withDatabase(async(database,owner)=>{
  const f=await fixture(database,owner)

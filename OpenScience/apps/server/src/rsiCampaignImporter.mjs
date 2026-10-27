@@ -16,6 +16,9 @@ const RECENT_WITNESSES = 32
 // hide it from selection.
 const SELECTION_ORDER = "CASE payload->>'state' WHEN 'staged' THEN 0 WHEN 'exposed' THEN 0 WHEN 'consumer-observed' THEN 0 WHEN 'broadly-active' THEN 0 WHEN 'stopped' THEN 1 ELSE 2 END, updated_at DESC"
 
+/** A journal that still holds its surface: not stopped, rolled back or rejected. @param {string} state */
+const ACTIVE_STATE = state => !['stopped', 'rolled-back', 'rejected'].includes(state)
+
 /** Deployment callbacks are authority, never manifest-supplied attestations.
  * publish/inspect/rollback must be idempotent under operationId and return installed identity.
  * All publishers of these surfaces MUST use pg_advisory_xact_lock(hashtext(`rsi-activation:${owner}`)).
@@ -67,7 +70,10 @@ export class RsiCampaignImporter {
       const current=await this.currentTarget(m.surface,client)
       if(rsiCompatibilityIssues(m.target,current).length) conflict('campaign_target_changed')
       const siblings=await client.query("SELECT payload FROM evimed_product.documents WHERE user_id=$1 AND kind='knowledge' AND payload->>'recordType'='rsi-campaign-import' AND deleted_at IS NULL",[this.owner])
-      if(siblings.rows.some(({payload})=>payload.campaignId===m.campaignId || payload.surface===m.surface && !['stopped','rolled-back','rejected'].includes(payload.state))) conflict('campaign_replay_or_surface_busy')
+      // Two different refusals: a campaign already decided can never import again (terminal), while a surface with an active campaign is only
+      // busy, and this bundle waits for it to end (or for its own expiry).
+      if(siblings.rows.some(({payload})=>payload.campaignId===m.campaignId)) conflict('campaign_replayed')
+      if(siblings.rows.some(({payload})=>payload.surface===m.surface && ACTIVE_STATE(payload.state))) return {state:'waiting',reason:'campaign_surface_busy'}
       const admissionRow={surface:m.surface,evidenceReferences:{procedureDigest:m.verdict.procedureDigest,consumerDigest:m.verdict.consumerDigest},authenticatedAdmissionIdentity:options.authenticatedAdmissionIdentity??null}
       if(!await this.admitted(admissionRow))return {state:'rejected',issues:['campaign_trust_revoked']}
       return this.write(client,{authenticatedAdmissionIdentity:options.authenticatedAdmissionIdentity??null,recordType:'rsi-campaign-import',id:m.id,campaignId:m.campaignId,envelopeDigest,bundleDigest:verified.bundleDigest,candidateDigest:m.verdict.candidateDigest,qualificationDigest:m.verdict.qualificationDigest,evidenceReferences:Object.fromEntries(['registrationDigest','datasetDigest','measurementDigest','consumerDigest','evaluatorDigest','procedureDigest','corpusDigest'].map(name=>[name,m.verdict[name]])),surface:m.surface,kind:m.kind,target:m.target,expiresAt:m.expiresAt,previousRevision:m.target.baselineRevision,operationId:`rsi-${rsiDigest([this.owner,m.id,verified.bundleDigest])}`,phase:policy.mode==='shadow'?'stage':'activate',mode:policy.mode,cohortPercent:policy.cohortPercent??0,policy:{minExecutions:policy.minExecutions??null,minDays:policy.minDays??null,maxErrors:policy.maxErrors??null,allowExpansion:policy.allowExpansion===true,afterShadow:policy.afterShadow??null,cohortSteps:steps??null},stageIndex:0,stageHistory:[],state:'staged',observations:{candidateExecutions:0,controlExecutions:0,errors:0,days:[],witnessCount:0,witnessChain:null,recentWitnessIds:[]},stagedAt:this.now()},0)
@@ -231,11 +237,12 @@ export class RsiCampaignImporter {
     })
     return stopped?.state==='stopped'?this.rollback(stopped.id):stopped
   }
-  /** Cheap absence check preserves the native policy path when no bundle was ever admitted.
-   * This ignores configuration intentionally: an existing revoked journal must still reconcile.
+  /** Cheap absence check preserves the native policy path when no campaign holds the surface now: a stopped, rolled-back or rejected
+   * journal selects nothing but the incumbent, so a history of finished campaigns costs a read nothing.
+   * This ignores configuration intentionally: an active journal whose trust was revoked must still reconcile (`select` stops it).
    * @param {string} surface */
   async hasCampaign(surface) {
-    const result=await this.database.query("SELECT 1 FROM evimed_product.documents WHERE user_id=$1 AND kind='knowledge' AND payload->>'recordType'='rsi-campaign-import' AND payload->>'surface'=$2 AND deleted_at IS NULL LIMIT 1",[this.owner,surface])
+    const result=await this.database.query("SELECT 1 FROM evimed_product.documents WHERE user_id=$1 AND kind='knowledge' AND payload->>'recordType'='rsi-campaign-import' AND payload->>'surface'=$2 AND coalesce(payload->>'state','') NOT IN ('stopped','rolled-back','rejected') AND deleted_at IS NULL LIMIT 1",[this.owner,surface])
     return result.rows.length > 0
   }
 }
