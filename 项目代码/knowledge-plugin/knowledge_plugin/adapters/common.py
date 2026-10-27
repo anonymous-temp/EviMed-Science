@@ -45,7 +45,7 @@ from typing import Any, Iterable
 from urllib.parse import parse_qsl, quote, urlencode, urljoin, urlsplit, urlunsplit
 
 from dateutil import tz as dateutil_tz
-from selectolax.parser import HTMLParser
+from selectolax.parser import HTMLParser, Node
 
 from ..model import NOTICE_UPDATE_KINDS, SUMMARY_MAX, TITLE_MAX, FetchError, FetchResult, NormalizedEntry
 
@@ -77,6 +77,31 @@ def load_json(result: FetchResult, upstream: str) -> Any:
 # ---------------------------------------------------------------------------------------------
 # Text
 # ---------------------------------------------------------------------------------------------
+
+def decompose_all(nodes: Iterable[Node]) -> int:
+    """Take every node of one ``css()`` result out of its tree, each subtree once; returns how many were listed.
+
+    ``css()`` lists a node and the nodes inside it side by side (in the order of the selectors, not of the document).
+    ``decompose()`` of the outer one frees the inner ones, and ``decompose()`` of an inner one afterwards frees it a second
+    time: lexbor's allocator then hands the same memory to two later allocations. A text inserted in front of a block
+    shows up four times, and ``Node.text()`` can walk a cycle for ever, appending to its result some 35 MB a second until
+    the container is killed. A 丁香园消化时间 article of 2026-10-26 (17 ``<svg>``, some inside others, and 3 ``<iframe>``) did
+    that to the knowledge plugin once a minute for hours (393 restarts by the time it was found). So the nodes that sit
+    inside another listed node are worked out first, while every parent pointer is still good, and only the outermost ones
+    are decomposed. Every ``decompose()`` of a ``css()`` result goes through here.
+    """
+    listed = {node.mem_id: node for node in nodes}
+    outermost = []
+    for node in listed.values():
+        parent = node.parent
+        while parent is not None and parent.mem_id not in listed:
+            parent = parent.parent
+        if parent is None:
+            outermost.append(node)
+    for node in outermost:
+        node.decompose()
+    return len(listed)
+
 
 _WS = re.compile(r"[ \t\r\f\v\u00a0\u2000-\u200a\u202f\u205f\u3000]+")
 _MANY_NEWLINES = re.compile(r"\n\s*\n+")
@@ -115,8 +140,7 @@ def clean_markup(value: Any, *, keep_paragraphs: bool = False) -> str:
         text = _JATS_TAG.sub(lambda m: f"<{m.group(1)}{_JATS_HTML.get(m.group(2).lower(), 'span')}", text)
     if _TAGGY.search(text) or "&" in text:
         tree = HTMLParser(f"<div>{text}</div>")
-        for node in tree.css(",".join(_DROP_TAGS)):
-            node.decompose()
+        decompose_all(tree.css(",".join(_DROP_TAGS)))
         if keep_paragraphs:
             for node in tree.css(",".join(_BLOCK_TAGS)):
                 node.insert_before("\n")

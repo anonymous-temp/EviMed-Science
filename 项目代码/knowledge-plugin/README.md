@@ -156,6 +156,10 @@ in `discovery_daily` and `/v1/health` `discovery` (`today`, `history` of 14 days
 - **A source whose pages never read is `degraded`.** When at least 90 % of the last 20 page reads of a source's entries failed
   (and at least 10 were made) its health is `degraded` although its feed polls cleanly (`policy.text_failing`, from each poll and
   the hourly re-check); it clears itself when newer pages read. A page that failed but whose feed text stood in is neither.
+- **Markup is taken out of a parsed page once.** `adapters/common.decompose_all` decomposes only the outermost of the nodes a
+  `css()` lists; selectolax freed a node twice when an `<svg>` or `<noscript>` held another one, which left lexbor's tree
+  looping (`Node.text()` appended about 35 MB a second) or empty (the text of the whole page gone). No code calls
+  `decompose()` on a `css()` result any other way (`tests/test_markup_decompose.py`).
 - **One failing platform never holds the other five of the six-platform monitor** (`social/crawl.py`): a crawl that fails
   records the attempt for that term and platform and parks the platform for three hours (doubled for every failure in a row, at
   most twelve), so the round robin goes on to the platforms it has not asked; a busy answer from GEO parks nobody, and a

@@ -46,7 +46,7 @@ import trafilatura
 from selectolax.parser import HTMLParser
 
 from ..adapters.base import decode_body
-from ..adapters.common import clean_markup, looks_truncated
+from ..adapters.common import clean_markup, decompose_all, looks_truncated
 from ..model import BODY_TEXT_MAX
 from .common import Attempt, Trace, get
 
@@ -98,8 +98,7 @@ def container_text(html_text: str) -> str:
     line."""
     tree = HTMLParser(html_text)
     for selector in _REMOVE:
-        for node in tree.css(selector):
-            node.decompose()
+        decompose_all(tree.css(selector))
     best = ""
     for tier in (_BODY_CONTAINERS, _GENERIC_CONTAINERS):
         for selector in tier:

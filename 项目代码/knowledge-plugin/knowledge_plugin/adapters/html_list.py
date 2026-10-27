@@ -66,6 +66,7 @@ from .common import (
     PMID_IN_URL,
     absolute_url,
     clean_markup,
+    decompose_all,
     dig,
     guess_language,
     host_allowed,
@@ -171,8 +172,7 @@ def _html_items(text: str, config: dict) -> list[dict[str, Any]]:
         blocks = _XML_SCRIPT.findall(text) or [text]
         text = "\n".join(chunk for block in blocks for chunk in _CDATA.findall(block))
     tree = HTMLParser(text)
-    for hidden in tree.css('script, style, noscript, template'):
-        hidden.decompose()
+    decompose_all(tree.css('script, style, noscript, template'))
     items = []
     for node in tree.css(selectors["item"]):
         title, date = _select(node, selectors.get("title")), _select(node, selectors.get("date"))
