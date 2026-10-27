@@ -8,7 +8,7 @@ export interface UnsavedRouteOptions {
   /** Clear unsaved data on a host-confirmed route exit; never navigate from this callback. */
   onRouteDiscard?(): void;
 }
-const routeGuards = new Map<string, { busy: boolean; confirming: boolean; options?: UnsavedRouteOptions; acknowledge: () => void }>();
+const routeGuards = new Map<string, { dirty: boolean; busy: boolean; confirming: boolean; options?: UnsavedRouteOptions; acknowledge: () => void }>();
 export function dirtyRouteShouldBlock(from: {pathname: string; search: string}, to: {pathname: string; search: string}): boolean {
   if (dirtyRouteState() === 'clean') return false;
   return from.pathname !== to.pathname || [...routeGuards.values()].some(guard => guard.options?.samePathChange?.(from.search, to.search));
@@ -20,7 +20,8 @@ export function discardDirtyRoutes() {
 export const dirtyExitSnapshot = () => JSON.stringify([...routeGuards.entries()].map(([id, guard]) => [id, guard.busy, guard.options?.draftKey]));
 let projectExit: { resolve: (allow: boolean) => void } | null = null;
 export function resolveProjectExit(allow: boolean) {
-  if (allow && dirtyRouteState() !== "dirty" && dirtyRouteState() !== "clean") return;
+  // A save over unsaved work, or a dialog already asking, must settle first; a request alone ("pending") does not hold the person here.
+  if (allow && (dirtyRouteState() === "busy" || dirtyRouteState() === "local-confirm")) return;
   const pending = projectExit; projectExit = null; pending?.resolve(allow); notifyRouteGuards();
 }
 /** Project identity does not live in the URL, so store mutations need the same explicit exit decision. */
@@ -41,7 +42,17 @@ export function useProjectExitPending() {
 
 const routeListeners = new Set<() => void>();
 const notifyRouteGuards = () => routeListeners.forEach(listener => listener());
-export const dirtyRouteState = () => [...routeGuards.values()].some(guard => guard.confirming) ? "local-confirm" : [...routeGuards.values()].some(guard => guard.busy) ? "busy" : routeGuards.size ? "dirty" : "clean";
+/**
+ * "local-confirm": a dialog of the page's own is asking. "busy": a save is running over unsaved work, and leaving waits for it.
+ * "dirty": unsaved work. "pending": only a request is running and nothing is unsaved — leaving is the person's call, and the
+ * dialog says a request is running rather than that changes are unsaved. "clean": nothing to protect.
+ */
+export type DirtyRouteState = "local-confirm" | "busy" | "dirty" | "pending" | "clean";
+export const dirtyRouteState = (): DirtyRouteState => {
+  const guards = [...routeGuards.values()];
+  return guards.some(guard => guard.confirming) ? "local-confirm" : guards.some(guard => guard.dirty && guard.busy) ? "busy"
+    : guards.some(guard => guard.dirty) ? "dirty" : guards.length ? "pending" : "clean";
+};
 export function useDirtyRouteState() {
   return useSyncExternalStore(
     listener => { routeListeners.add(listener); return () => { routeListeners.delete(listener); }; },
@@ -58,7 +69,7 @@ export function useUnsavedGuard(dirty: boolean, onClose: () => void, busy = fals
   useLayoutEffect(() => {
     if (!dirty && !busy) { acknowledged.current = false; return; }
     if (acknowledged.current) return;
-    routeGuards.set(id, { busy, confirming, options, acknowledge: () => { acknowledged.current = true; } });
+    routeGuards.set(id, { dirty, busy, confirming, options, acknowledge: () => { acknowledged.current = true; } });
     notifyRouteGuards();
     return () => { routeGuards.delete(id); notifyRouteGuards(); };
   }, [dirty, busy, confirming, id, options]);

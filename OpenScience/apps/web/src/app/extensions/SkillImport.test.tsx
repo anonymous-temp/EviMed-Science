@@ -260,6 +260,24 @@ it("protects a transfer upload in flight from project switching until it settles
 });
 
 
+it("keeps 暂停迁移 reachable while a project switch is asked about during a running migration", async () => {
+  const current = deferred<typeof partialTransfer>(); api.confirmPersonalSkillTransfer.mockReturnValueOnce(current.promise);
+  const user = await previewTransfer(); await user.click(screen.getByRole("button", { name: "确认迁移" }));
+  await waitFor(() => expect(api.confirmPersonalSkillTransfer).toHaveBeenCalledTimes(1));
+  let switching!: Promise<void>;
+  await act(async () => { switching = useProjectStore.getState().select("another-project"); });
+  const dialog = screen.getByRole("alertdialog");
+  expect(dialog).toHaveTextContent("请求仍在进行中");
+  await user.click(within(dialog).getByRole("button", { name: "取消" }));
+  await switching;
+  expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "暂停迁移" })).toBeEnabled();
+  await user.click(screen.getByRole("button", { name: "暂停迁移" }));
+  expect(screen.getByRole("status")).toHaveTextContent("正在暂停，当前请求仍在核对。");
+  await act(async () => current.resolve(partialTransfer));
+  expect(useProjectStore.getState().currentId).toBe("project-one");
+});
+
 it("returns from a paused migration and resumes the authenticated journal with the original intent", async () => {
   const current = deferred<typeof partialTransfer>();
   api.confirmPersonalSkillTransfer.mockReturnValueOnce(current.promise).mockResolvedValueOnce({ ...partialTransfer, status: "complete" });

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider, useNavigate, useLocation } from "react-router";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { useUnsavedGuard } from "@/lib/useUnsavedGuard";
+import { requestProjectExit, useUnsavedGuard } from "@/lib/useUnsavedGuard";
 import { UnsavedRouteGuard } from "./UnsavedRouteGuard";
 
 const NativeRequest = globalThis.Request;
@@ -147,4 +147,62 @@ it('keeps an asynchronous save protected and allows a mode transition after savi
  fireEvent.click(screen.getByRole('button',{name:'Analysis mode'}));
  await waitFor(()=>expect(router.state.location.search).toContain('analysis=V26'));
  expect(screen.queryByRole('alertdialog')).toBeNull();expect(screen.getByRole('textbox',{name:'Original rows'})).toHaveValue('Original draft');
+});
+
+
+// A guard that exists only because a request is running holds nothing unsaved: its dialog says so, can be dismissed, and leaving is
+// the person's call (a request cannot be undone by staying, and a long one must not hold the whole app).
+describe("a request that is running while nothing is unsaved", () => {
+  function Requesting() { const [running, setRunning] = useState(true); useUnsavedGuard(false, () => undefined, running); return <><UnsavedRouteGuard /><h1>Working</h1><button onClick={() => setRunning(false)}>Request settles</button></>; }
+  const routed = () => createMemoryRouter([{ path: "/work", element: <Requesting /> }, { path: "/next", element: <h1>Next</h1> }], { initialEntries: ["/work"] });
+
+  it("says a request is running, not that changes are unsaved, and lets the person stay or leave", async () => {
+    const router = routed(); render(<RouterProvider router={router} />);
+    await act(() => router.navigate("/next"));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("页面还在处理请求");
+    expect(dialog).not.toHaveTextContent("未保存");
+    expect(screen.getByRole("button", { name: "仍然离开" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "仍然离开" })).not.toHaveAttribute("aria-disabled", "true");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/work");
+    await act(() => router.navigate("/next"));
+    fireEvent.click(await screen.findByRole("button", { name: "仍然离开" }));
+    expect(await screen.findByRole("heading", { name: "Next" })).toBeInTheDocument();
+  });
+
+  it("stays the same kind of dialog when the request settles under it, and still lets the person leave", async () => {
+    const router = routed(); render(<RouterProvider router={router} />);
+    await act(() => router.navigate("/next"));
+    await screen.findByRole("alertdialog");
+    fireEvent.click(screen.getByRole("button", { name: "Request settles" }));
+    await waitFor(() => expect(screen.getByRole("alertdialog")).toHaveTextContent("页面还在处理请求"));
+    expect(screen.getByRole("alertdialog")).not.toHaveTextContent("未保存");
+    fireEvent.click(screen.getByRole("button", { name: "仍然离开" }));
+    expect(await screen.findByRole("heading", { name: "Next" })).toBeInTheDocument();
+  });
+
+  it("asks the same plain question before a project switch, and the switch goes ahead when the person agrees", async () => {
+    const router = routed(); render(<RouterProvider router={router} />);
+    let answer!: Promise<boolean>;
+    await act(async () => { answer = requestProjectExit(); });
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("页面还在处理请求");
+    expect(dialog).not.toHaveTextContent("放弃未保存");
+    fireEvent.click(screen.getByRole("button", { name: "仍然切换" }));
+    await expect(answer).resolves.toBe(true);
+    await act(async () => { answer = requestProjectExit(); });
+    fireEvent.click(await screen.findByRole("button", { name: "取消" }));
+    await expect(answer).resolves.toBe(false);
+  });
+
+  it("still makes leaving wait for a save that runs over unsaved work", async () => {
+    function Saving() { useUnsavedGuard(true, () => undefined, true); return <UnsavedRouteGuard />; }
+    const router = createMemoryRouter([{ path: "/edit", element: <Saving /> }, { path: "/next", element: <h1>Next</h1> }], { initialEntries: ["/edit"] });
+    render(<RouterProvider router={router} />);
+    await act(() => router.navigate("/next"));
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent("未保存");
+    expect(screen.getByRole("button", { name: "放弃修改并离开" })).toHaveAttribute("aria-busy", "true");
+  });
 });
