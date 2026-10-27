@@ -247,10 +247,12 @@ function TopicOverview({ topic }: { topic: FrontierTopicSummary }) {
     <section aria-label="AI 概览">
       <h2 className="mb-3 text-caption text-accent">AI 概览</h2>
       <p data-prose="" className="max-w-measure-body whitespace-pre-line break-words text-reading text-text">
+        {/* A citation is an inline link like the source line's: an inline-block one measured as a control of its own (the
+            post-release walk of 2026-10-27 read this page at 10 kinds, one past its budget). */}
         {parts.map((part, index) => (typeof part === "string" ? part : (
           <sup key={index} className="text-caption leading-none">
             <Link to={articlePath(part.itemId)} state={state} onClick={rememberFrontierPosition} aria-label={part.title}
-              className="inline-block rounded px-px leading-none tabular-nums text-link hover:underline">[{part.n}]</Link>
+              className="rounded px-px leading-none tabular-nums text-link hover:underline">[{part.n}]</Link>
           </sup>
         )))}
       </p>

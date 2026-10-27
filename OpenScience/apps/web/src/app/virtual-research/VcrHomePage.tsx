@@ -186,7 +186,8 @@ export function VcrHomePage() {
                     <EmptyState
                       icon={UsersRound}
                       title="研究结果会保留在这里"
-                      description={(
+                      // The four tasks above are the way in, so the sentence is the reason this state has no button of its own.
+                      reason={(
                         <>
                           <p>从上方任务或首页对话开始。AI 会读取资料、调用计算，并把可复用的人群、患者与方案保存在研究中。</p>
                         </>
