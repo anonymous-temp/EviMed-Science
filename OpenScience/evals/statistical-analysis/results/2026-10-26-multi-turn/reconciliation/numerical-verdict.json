@@ -69,37 +69,37 @@
   "inputs": [
     {
       "role": "bindings",
-      "path": "/private/tmp/esa/final/reconciliation-1793025058614/independent-bindings.json",
+      "path": "independent-bindings.json",
       "sha256": "b7e51cdb266037a93f59b66cc36e748a44b4199c2869d289dd11d7aa501773b3",
       "bytes": 2294
     },
     {
       "role": "judge",
-      "path": "/Users/wangzeyuan/.codex/worktrees/research-tools-data-analysis-20261026/EviMedScience/OpenScience/evals/statistical-analysis/live/judge.py",
+      "path": "evals/statistical-analysis/live/judge.py",
       "sha256": "12648930769065382a9dc07e3b9b68e2a7ac73ff9ad34fa2a7baeb550046739b",
       "bytes": 9692
     },
     {
       "role": "fixture-manifest",
-      "path": "/Users/wangzeyuan/.codex/worktrees/research-tools-data-analysis-20261026/EviMedScience/OpenScience/evals/statistical-analysis/live/fixture-sources.json",
+      "path": "evals/statistical-analysis/live/fixture-sources.json",
       "sha256": "5120794224a067edd8deb630e911416f653b005556257389f8aa0317cb6424a5",
       "bytes": 1244
     },
     {
       "role": "results",
-      "path": "/private/tmp/esa/final/reconciliation-1793025058614/turn-0/workspace/deliverables/statistical-review/verification-results.json",
+      "path": "turn-0/workspace/deliverables/statistical-review/verification-results.json",
       "sha256": "9930a867bcbcaf5535291bbde9cab6d409d5e63c1badfa9358ea3877c21f7919",
       "bytes": 30433
     },
     {
       "role": "predictions",
-      "path": "/private/tmp/esa/final/reconciliation-1793025058614/turn-0/workspace/data/prior-predictions.csv",
+      "path": "turn-0/workspace/data/prior-predictions.csv",
       "sha256": "f268e889335908395d94011d126052f6adf3767e7799f5d147454e2060972f79",
       "bytes": 31322
     },
     {
       "role": "fixture",
-      "path": "/Users/wangzeyuan/.codex/worktrees/research-tools-data-analysis-20261026/EviMedScience/OpenScience/evals/statistical-analysis/live/fixtures/breast-cancer.csv",
+      "path": "evals/statistical-analysis/live/fixtures/breast-cancer.csv",
       "sha256": "30c0edd07dac8c886b9ad11627caed4eb92d91756aaeddd23921bdafc2582971",
       "bytes": 123562
     }

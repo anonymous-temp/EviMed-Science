@@ -97,6 +97,14 @@ def test_cli_prediction_uses_frozen_source_and_records_exact_bytes(tmp_path, mon
     assert before['passed']
     assert {'numpy', 'scipy', 'scikit-learn'} <= set(before['versions'])
     assert {'bindings', 'judge', 'fixture', 'results', 'predictions'} <= {item['role'] for item in before['inputs']}
+    # No receipt names the machine that ran the judge: paths are relative to the run or to OpenScience.
+    paths = {item['role']: item['path'] for item in before['inputs']}
+    assert paths['bindings'] == 'bindings.json'
+    assert paths['results'] == 'turn-0/workspace/results.json'
+    assert paths['predictions'] == 'turn-0/workspace/predictions.csv'
+    assert paths['judge'] == 'evals/statistical-analysis/live/judge.py'
+    assert paths['fixture'].startswith('evals/statistical-analysis/live/fixtures/')
+    assert not any(Path(item['path']).is_absolute() for item in before['inputs'])
     result.write_text('{"auc":1, "n":2}\n')
     subprocess.run(command, check=True)
     after = json.loads(out.read_text())

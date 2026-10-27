@@ -286,79 +286,79 @@
   "inputs": [
     {
       "role": "bindings",
-      "path": "/private/tmp/esa/candidate/continuity-1793022976134/independent-bindings.json",
+      "path": "independent-bindings.json",
       "sha256": "70c6ba132868e5cc344d0962647007beb3e47f0f155bcd37e81ffedc50c180bb",
       "bytes": 10128
     },
     {
       "role": "judge",
-      "path": "/Users/wangzeyuan/.codex/worktrees/research-tools-data-analysis-20261026/EviMedScience/OpenScience/evals/statistical-analysis/live/judge.py",
+      "path": "evals/statistical-analysis/live/judge.py",
       "sha256": "12648930769065382a9dc07e3b9b68e2a7ac73ff9ad34fa2a7baeb550046739b",
       "bytes": 9692
     },
     {
       "role": "fixture-manifest",
-      "path": "/Users/wangzeyuan/.codex/worktrees/research-tools-data-analysis-20261026/EviMedScience/OpenScience/evals/statistical-analysis/live/fixture-sources.json",
+      "path": "evals/statistical-analysis/live/fixture-sources.json",
       "sha256": "5120794224a067edd8deb630e911416f653b005556257389f8aa0317cb6424a5",
       "bytes": 1244
     },
     {
       "role": "results",
-      "path": "/private/tmp/esa/candidate/continuity-1793022976134/turn-0/workspace/deliverables/statistical-analysis-report/analysis-results.json",
+      "path": "turn-0/workspace/deliverables/statistical-analysis-report/analysis-results.json",
       "sha256": "b7a6255e602895a8fe6a40c7bdf4946ac3415561c3ba47f378ab757b6c22fada",
       "bytes": 9540
     },
     {
       "role": "fixture",
-      "path": "/Users/wangzeyuan/.codex/worktrees/research-tools-data-analysis-20261026/EviMedScience/OpenScience/evals/statistical-analysis/live/fixtures/cohort.csv",
+      "path": "evals/statistical-analysis/live/fixtures/cohort.csv",
       "sha256": "2318b4fc60b2c8c1cd0c78ec1e44600fbe5880240da208132585ca1d98fda90d",
       "bytes": 1685
     },
     {
       "role": "results",
-      "path": "/private/tmp/esa/candidate/continuity-1793022976134/turn-1/workspace/deliverables/statistical-analysis-report/analysis-results-cm.json",
+      "path": "turn-1/workspace/deliverables/statistical-analysis-report/analysis-results-cm.json",
       "sha256": "9ca21c0430290fe563c29af2308c52f4141328fd1a83218336fae6ac3e6402d9",
       "bytes": 11679
     },
     {
       "role": "fixture",
-      "path": "/Users/wangzeyuan/.codex/worktrees/research-tools-data-analysis-20261026/EviMedScience/OpenScience/evals/statistical-analysis/live/fixtures/cohort.csv",
+      "path": "evals/statistical-analysis/live/fixtures/cohort.csv",
       "sha256": "2318b4fc60b2c8c1cd0c78ec1e44600fbe5880240da208132585ca1d98fda90d",
       "bytes": 1685
     },
     {
       "role": "results",
-      "path": "/private/tmp/esa/candidate/continuity-1793022976134/turn-2/workspace/deliverables/statistical-analysis-report/analysis-results-cm.json",
+      "path": "turn-2/workspace/deliverables/statistical-analysis-report/analysis-results-cm.json",
       "sha256": "b2cfc3833acbf7a171082b68de057b9ba770c03b8bcd5557428a7b0f61629182",
       "bytes": 11872
     },
     {
       "role": "fixture",
-      "path": "/Users/wangzeyuan/.codex/worktrees/research-tools-data-analysis-20261026/EviMedScience/OpenScience/evals/statistical-analysis/live/fixtures/cohort.csv",
+      "path": "evals/statistical-analysis/live/fixtures/cohort.csv",
       "sha256": "2318b4fc60b2c8c1cd0c78ec1e44600fbe5880240da208132585ca1d98fda90d",
       "bytes": 1685
     },
     {
       "role": "fixture",
-      "path": "/Users/wangzeyuan/.codex/worktrees/research-tools-data-analysis-20261026/EviMedScience/OpenScience/evals/statistical-analysis/live/fixtures/supplement.csv",
+      "path": "evals/statistical-analysis/live/fixtures/supplement.csv",
       "sha256": "8aa7cd5358a8e3c6c57f8875bcdff6d5c2b79e93e2ea9db917f213b2c20866ae",
       "bytes": 455
     },
     {
       "role": "results",
-      "path": "/private/tmp/esa/candidate/continuity-1793022976134/turn-3/workspace/deliverables/statistical-analysis-report/analysis-results-cm.json",
+      "path": "turn-3/workspace/deliverables/statistical-analysis-report/analysis-results-cm.json",
       "sha256": "b2cfc3833acbf7a171082b68de057b9ba770c03b8bcd5557428a7b0f61629182",
       "bytes": 11872
     },
     {
       "role": "fixture",
-      "path": "/Users/wangzeyuan/.codex/worktrees/research-tools-data-analysis-20261026/EviMedScience/OpenScience/evals/statistical-analysis/live/fixtures/cohort.csv",
+      "path": "evals/statistical-analysis/live/fixtures/cohort.csv",
       "sha256": "2318b4fc60b2c8c1cd0c78ec1e44600fbe5880240da208132585ca1d98fda90d",
       "bytes": 1685
     },
     {
       "role": "fixture",
-      "path": "/Users/wangzeyuan/.codex/worktrees/research-tools-data-analysis-20261026/EviMedScience/OpenScience/evals/statistical-analysis/live/fixtures/supplement.csv",
+      "path": "evals/statistical-analysis/live/fixtures/supplement.csv",
       "sha256": "8aa7cd5358a8e3c6c57f8875bcdff6d5c2b79e93e2ea9db917f213b2c20866ae",
       "bytes": 455
     }

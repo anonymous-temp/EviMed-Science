@@ -99,15 +99,30 @@ preserved in the archive. No statistic was changed to satisfy the checker.
 ## Reproduction and limits
 
 `acceptance.json` records run IDs, routes, durations, tool counts, cleanup,
-source digests and archive SHA-256. Extract `captured-workspaces.tar.gz` to recover
-the raw run records, replies, manifests and workspace snapshots under
-`captured/<captureDirectory>/`. Full reasoning-bearing transcripts are retained
-only in local acceptance evidence; the archive's raw run records include tool
-names, statuses and bounded inputs/outputs. Evaluator bindings and verdicts are
-plain JSON in each case folder; replay with `live/judge.py` after extraction.
-Bindings never entered the Agent workspace. The model replay receipt separately
-records its inputs and numerical-library versions. The artifact archive's 334
-text files were scanned for credential patterns; none were found.
+source digests and the archive's SHA-256. The raw captured workspaces (run
+records, replies, manifests and workspace snapshots under
+`captured/<captureDirectory>/`) are **not in the repository**: the archive holds
+two joblib model pickles and machine-specific details, so it was moved out of the
+tree. It is `captured-workspaces.tar.gz` (2,397,838 bytes, SHA-256
+`3392d211630aafde50cd67a3aee07d5dfc7845456687f2af3563a21c1026780a`) in the
+maintainer's gitignored local evidence store,
+`.evimed-local/acceptance/statistical-analysis-20261026/`. Evaluator bindings
+and verdicts are plain JSON in each case folder; replay with `live/judge.py`
+after extracting the archive from that store. Full reasoning-bearing
+transcripts are retained only in local acceptance evidence; the archive's raw run
+records include tool names, statuses and bounded inputs/outputs. Bindings never
+entered the Agent workspace. The model replay receipt separately records its inputs and
+numerical-library versions. The archive's 334 text files were scanned for
+credential patterns; none were found.
+
+Path strings in the five `numerical-verdict.json` files were edited once, after
+the fact, and nothing else in them: the absolute prefix of the machine that ran
+the judge was removed, so a receipt's `path` is now relative to the captured run
+directory (`turn-N/workspace/...`, `independent-bindings.json`) or to the
+`OpenScience/` directory (`evals/statistical-analysis/live/...`). The recorded
+SHA-256 and byte counts are unchanged, and `live/judge.py` now writes paths in
+this form. `acceptance.json`'s `sourceDigests` are the digests of the sources as
+they were run; the skill and helpers have changed since.
 
 Final focused verification: **179 Python tests**, **11 driver tests**, and
 the statistical capability/domain contracts. The deployment-configuration

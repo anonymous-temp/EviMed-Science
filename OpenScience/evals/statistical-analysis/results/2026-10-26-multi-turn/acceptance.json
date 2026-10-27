@@ -184,7 +184,8 @@
   "executedTurns": 11,
   "boundNumericalValues": 83,
   "archive": {
-    "path": "captured-workspaces.tar.gz",
+    "path": ".evimed-local/acceptance/statistical-analysis-20261026/captured-workspaces.tar.gz",
+    "location": "the maintainer's local evidence store (gitignored); not in this repository",
     "sha256": "3392d211630aafde50cd67a3aee07d5dfc7845456687f2af3563a21c1026780a",
     "bytes": 2397838
   },

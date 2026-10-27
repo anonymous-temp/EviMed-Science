@@ -129,11 +129,20 @@ def main():
     parser.add_argument('--out', required=True)
     args = parser.parse_args()
     root = Path(args.artifacts).resolve()
+    repository = Path(__file__).resolve().parents[3]
     inputs = []
+
+    def shown(file):
+        # A receipt names a file relative to the captured run or to the OpenScience
+        # directory, never to the machine that happened to run the judge.
+        for base in (root, repository):
+            if file.is_relative_to(base):
+                return file.relative_to(base).as_posix()
+        return file.name
 
     def receipt(file, role):
         payload = file.read_bytes()
-        inputs.append({'role': role, 'path': str(file), 'sha256': hashlib.sha256(payload).hexdigest(), 'bytes': len(payload)})
+        inputs.append({'role': role, 'path': shown(file), 'sha256': hashlib.sha256(payload).hexdigest(), 'bytes': len(payload)})
         return payload
 
     spec = json.loads(receipt(Path(args.bindings).resolve(), 'bindings'))
