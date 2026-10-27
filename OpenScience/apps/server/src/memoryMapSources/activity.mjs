@@ -17,6 +17,11 @@
 import { methodEvents, recordEvents } from "../memoryTimeline.mjs";
 import { excerpt, nodeId } from "./common.mjs";
 
+/** A memory file's words on one line: a list marker at the start of a line is the file's layout, not what was remembered. @param {unknown} text */
+function unlisted(text) {
+  return String(text ?? "").split("\n").map((line) => line.replace(/^\s*(?:[-*+]|\d{1,3}[.)])\s+/u, "")).join("\n");
+}
+
 /**
  * The timeline's events of a set of memories, as the map lists them.
  * @param {readonly any[]} records
@@ -26,7 +31,10 @@ export function memoryEventsOf(records) {
   const byId = new Map(records.map((record) => [record.id, record]));
   // A native memory is a file and its `summary` is the file's name, not what changed: its events say the words the file held (the
   // rule the timeline's own read of a native account had, before that read was deleted with its route).
-  return records.flatMap((record) => recordEvents(record.uri ? { ...record, summary: "" } : record, byId).map((event) => ({
+  return records.flatMap((record) => recordEvents(record.uri ? {
+    ...record, summary: "", value: unlisted(record.value),
+    revisions: (record.revisions ?? []).map((/** @type {any} */ revision) => ({ ...revision, value: unlisted(revision.value) })),
+  } : record, byId).map((event) => ({
     id: event.id, at: event.at, type: /** @type {const} */ ("memory"), change: event.change,
     ref: nodeId("memory", record.id), text: excerpt(event.after ?? "", 80),
   })));

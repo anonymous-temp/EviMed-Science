@@ -146,7 +146,8 @@ export function growthOption({ growth, events, timeZone, palette, formatDay, sel
               type: "rect", shape: { x: x - width / 2 + 1, y: y - height / 2 + 1, width: Math.max(1, width - 2), height: Math.max(1, height - 2), r: 2 },
               style: { fill: palette.heat[api.value(3) as number], ...(chosen[api.value(0) as number] ? { stroke: palette.text, lineWidth: 1.5 } : {}) },
             },
-            ...(count > 0 ? [{ type: "text", style: { text: String(count), x, y, textAlign: "center", textVerticalAlign: "middle", fill: palette.text, fontSize: 11 } }] : []),
+            ...(count > 0 ? [{ type: "text", style: { text: String(count), x, y, textAlign: "center", textVerticalAlign: "middle",
+              fill: (api.value(3) as number) >= 4 ? palette.onHeat : palette.text, fontSize: 11 } }] : []),
           ],
         };
       },

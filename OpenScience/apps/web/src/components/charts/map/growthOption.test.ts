@@ -104,6 +104,17 @@ describe("the growth strip", () => {
     expect(framed).toContain(TEST_PALETTE.text);
   });
 
+  it("prints a count on the two darkest steps in the light ink, every other count in the body colour", () => {
+    const events = [...Array.from({ length: 20 }, () => event("noted", "2026-09-01")), ...Array.from({ length: 5 }, () => event("noted", "2026-09-15")),
+      ...Array.from({ length: 8 }, () => event("noted", "2026-09-22"))];
+    const built = input(events);
+    expect(built.growth.shape).toBe("weeks");
+    const svg = draw(growthOption(built));
+    const fills = (count: number) => [...svg.matchAll(/<text[^>]*fill="([^"]+)"[^>]*>([^<]+)<\/text>/gu)].filter((match) => match[2] === String(count)).map((match) => match[1]);
+    expect(fills(20)).toEqual([TEST_PALETTE.onHeat]);
+    expect(fills(5)).toEqual([TEST_PALETTE.text]);
+  });
+
   it("steps a count by its share of the busiest, none being the lightest", () => {
     expect([0, 1, 5, 10, 20].map((total) => heatStep(total, 20))).toEqual([0, 1, 2, 3, 5]);
     expect(heatStep(3, 0)).toBe(0);

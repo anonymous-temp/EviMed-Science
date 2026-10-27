@@ -16,6 +16,8 @@ export interface MapPalette {
   grid: string;
   /** Six steps of one hue, empty to busiest. */
   heat: readonly [string, string, string, string, string, string];
+  /** The number printed on the two darkest steps, which the body colour does not read on (`HeatGrid`'s rule: white from step 4). */
+  onHeat: string;
 }
 
 /** Read from the live document: build the option again whenever the scheme changes. */
@@ -30,11 +32,12 @@ export function mapPalette(): MapPalette {
     surface: resolvedColor("var(--surface)"),
     grid: resolvedColor("var(--chart-grid)"),
     heat: [0, 1, 2, 3, 4, 5].map((step) => resolvedColor(`var(--heat-${step})`)) as unknown as MapPalette["heat"],
+    onHeat: resolvedColor("var(--accent-fg)"),
   };
 }
 
 /** Plain strings for a test, which has no stylesheet to read. */
 export const TEST_PALETTE: MapPalette = {
   current: "#blue", check: "#amber", replaced: "#grey", line: "#line", text: "#text", textFaint: "#faint", surface: "#surface", grid: "#grid",
-  heat: ["#h0", "#h1", "#h2", "#h3", "#h4", "#h5"],
+  heat: ["#h0", "#h1", "#h2", "#h3", "#h4", "#h5"], onHeat: "#onheat",
 };

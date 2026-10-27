@@ -255,6 +255,10 @@ test("the calendar counts the documents added by day in the researcher's zone, a
   const memories = memoryEventsOf([record({ id: "a", scope: "project", scopeId: "prj_a", kind: "decision" })]);
   assert.deepEqual(memories.map((event) => [event.ref, event.type, event.change]), [["memory:a", "memory", "created"]]);
   assert.deepEqual(Object.keys(memories[0]).sort(), ["at", "change", "id", "ref", "text", "type"]);
+  // A native memory is a Markdown file: its event says the words, not the list it was laid out as.
+  const native = memoryEventsOf([record({ id: "n", uri: "viking://user/u/memories/x.md", value: "- 安全性表格还缺注射部位反应的数据\n  * 向数据组要\n2. 下周一前" })]);
+  assert.equal(native[0].text, "安全性表格还缺注射部位反应的数据 向数据组要 下周一前");
+  assert.equal(memoryEventsOf([record({ id: "m", uri: "viking://user/u/memories/y.md", value: "-1 是下限，3-5 次" })])[0].text, "-1 是下限，3-5 次", "a minus sign is no list marker");
 });
 
 test("the topics source serves the grouping as it stands and never groups: members are marks, and the status says if it is due", async () => {
