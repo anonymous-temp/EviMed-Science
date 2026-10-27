@@ -190,6 +190,8 @@ class ProbeRefusalTests(unittest.TestCase):
         self.assertTrue(windowed.retryable)
         # An outage with no code of its own is still worth one more try.
         self.assertTrue(refused(503, "").retryable)
+        self.assertFalse(refused(502, "geo_probe_result_unavailable").retryable)
+        self.assertFalse(refused(502, "geo_probe_response_invalid").retryable)
 
     def test_the_closed_vocabularies_are_enforced_before_the_call(self):
         for arguments, code in (
@@ -198,6 +200,7 @@ class ProbeRefusalTests(unittest.TestCase):
             ({"op": "ask", "question": "x" * 2_001}, "geo_probe_question_invalid"),
             ({"op": "ask", "question": "q", "providers": ["chatgpt"]}, "geo_probe_provider_invalid"),
             ({"op": "ask", "question": "q", "deep": 2}, "geo_probe_flag_invalid"),
+            ({"op": "ask", "question": "q", "newChat": 0}, "geo_probe_flag_invalid"),
             ({"op": "screenshot"}, "geo_probe_screenshot_name_invalid"),
         ):
             with mock.patch.dict("os.environ", {"EVIMED_GEO_PROBE_GATEWAY_URL": GATEWAY}):

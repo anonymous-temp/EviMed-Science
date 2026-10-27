@@ -86,6 +86,7 @@ The image: `docker build --build-arg PYTHON_BASE_IMAGE=… --build-arg PIP_INDEX
 | `KNOWLEDGE_PLUGIN_DAJIALA_KEY_FILE` | unset | WeChat official accounts through Dajiala (its `key` query parameter, added by the transport); unset = no WeChat |
 | `KNOWLEDGE_PLUGIN_DAJIALA_DAILY_CNY` | `90` | the day's cap at Dajiala's own `cost_money`; reached = WeChat waits until the next day |
 | `KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_URL` | unset | the GEO module's six-platform crawler (production: the platform's `OPEN_SCIENCE_GEO_SOCIAL_URL`); unset = no monitoring |
+| `KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_KEY_FILE` / `KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_ALLOW_PLAINTEXT` | unset / `false` | rotating Bearer key file for `/api/jobs`; explicitly enable plaintext only for an approved HTTP collector endpoint |
 | `KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_DAILY` / `KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_TIMEOUT_S` | `120` / `150` | crawler requests a day, spread evenly; one request's deadline |
 | `KNOWLEDGE_PLUGIN_MEDIA_DIR` / `KNOWLEDGE_PLUGIN_MEDIA_CAP_MB` | unset / `3072` | the media store's writable volume and its cap (least recently served evicted first); unset = no images stored |
 | `KNOWLEDGE_PLUGIN_SOCIAL_REGISTRY` | `social-sources.json` beside the registry | the social sources' registry file |
@@ -320,3 +321,11 @@ QuoteMedia ticker streams are media sources; distributors and truncated excerpts
 on `KNOWLEDGE_PLUGIN_TEST_DATABASE_URL` (default `postgresql://postgres@127.0.0.1:55433`) and are
 skipped when no server answers. Adapters are tested against recorded real responses in
 `tests/fixtures/` (`tests/adapters/`, `tests/enrich/`).
+
+The asynchronous social collector reads its Bearer key for every HTTP request. In Compose, set
+`KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_KEY_HOST_FILE` to a separate copy readable by UID 10002 (for example,
+owned by 10002 with mode 0600). The control plane's `OPEN_SCIENCE_GEO_SOCIAL_API_KEY_HOST_FILE`
+remains owner-only for its own process; do not weaken that file's permissions to share it across users.
+Both services use the same provider credential, but mount independently owned files. Set
+`KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_ALLOW_PLAINTEXT=true` only when intentionally using the approved HTTP
+collector endpoint. A submitted job is polled under its original deadline; a poll failure never re-POSTs it.

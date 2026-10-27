@@ -409,7 +409,7 @@ TOOL_DEFINITIONS = [
                     "items": {"type": "string", "enum": ["deepseek", "doubao", "kimi", "qianwen", "yuanbao"]},
                 },
                 "deep": {"type": "integer", "enum": [0, 1]},
-                "newChat": {"type": "integer", "enum": [0, 1]},
+                "newChat": {"type": "integer", "enum": [1]},
                 "name": {"type": "string", "minLength": 1, "maxLength": 160},
             },
             ("op",),

@@ -762,7 +762,7 @@ async function askJob(deps, state, upstream, job, counts, timeoutMs) {
     }
     state.retriable.delete(job.id);
   }
-  const sanityInput = { rawStatus: row.status === "ok" ? "ok" : (rawStatus || "failed"), answer: row.answer };
+  const sanityInput = { rawStatus: row.status === "ok" ? "ok" : (rawStatus === "ok" ? "failed" : rawStatus || "failed"), answer: row.answer };
   let verdict = classifyProbeAnswer(sanityInput);
   if (deps.judgeService) {
     try {
@@ -868,7 +868,7 @@ async function busy(deps, state, job, counts) {
  */
 async function retryOrFail(deps, job, status, snapshotId, counts, errorCode = status) {
   const now = (deps.now ?? (() => new Date()))();
-  if (job.samplingMode !== "one_shot" && job.attempts < GEO_JOB_MAX_ATTEMPTS) {
+  if (errorCode !== "geo_probe_result_unavailable" && job.samplingMode !== "one_shot" && job.attempts < GEO_JOB_MAX_ATTEMPTS) {
     await deps.store.requeueJob(job.id, { now, runAfter: new Date(now.getTime() + RETRY_DELAY_MS * job.attempts), errorCode });
     counts.retried += 1;
     return;

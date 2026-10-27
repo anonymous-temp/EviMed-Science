@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-strategy",
-  "version": "sha256:7867a7ac280e02ccc9c216b0007fe94126604423c9c0cdb96f76d84f9ef33093",
+  "version": "sha256:2e135389f33bd025a12ae92e1cc33afe88c7c05b81f49da48f197b380bd4d13b",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 29,
@@ -1119,7 +1119,6 @@
           "newChat": {
             "type": "integer",
             "enum": [
-              0,
               1
             ]
           },

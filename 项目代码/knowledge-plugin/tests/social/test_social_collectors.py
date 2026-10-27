@@ -269,6 +269,20 @@ def crawl_row(platform="xhs", name="xiaohongshu"):
             "config": {"url": "https://www.xiaohongshu.com/", "crawl_platform": platform, "platform": name}}
 
 
+def job_transport(handler):
+    """Wrap existing collector behavior fixtures in the upgraded terminal job envelope."""
+    def handle(request):
+        assert request.url.path == "/api/jobs" and request.method == "POST"
+        assert request.headers["authorization"] == "Bearer fake-crawler-key"
+        response = handler(request)
+        if response.status_code != 200:
+            return response
+        body = json.loads(request.content)
+        return httpx.Response(202, json={"job_id": "a" * 32, "job_status": "done", "query": body["query"],
+                                       "platforms": [body["platform"]], "result": json.loads(response.content)})
+    return httpx.MockTransport(handle)
+
+
 async def test_crawl_monitors_the_watch_list_one_request_at_a_time_and_keeps_no_author(social_settings, pool, tmp_path):
     registry = tmp_path / "social-sources.json"
     registry.write_text(json.dumps({"sources": [], "watch_list": [{"term": "司美格鲁肽", "why": "GLP-1"}, {"term": "流感", "why": "季节"}]}))
@@ -287,11 +301,11 @@ async def test_crawl_monitors_the_watch_list_one_request_at_a_time_and_keeps_no_
              "comments": [{"content": "我也是", "author": "另一人"}], "publish_time": int((NOW - timedelta(hours=5)).timestamp())},
             {"post_id": "p2", "title": "无地址的帖子"}]})
 
-    collector = SocialCollector(settings, pool, FakeFetcher(), clock=lambda: NOW, crawl_transport=httpx.MockTransport(answer))
+    collector = SocialCollector(settings, pool, FakeFetcher(), clock=lambda: NOW, crawl_transport=job_transport(answer))
     first = (await collector.tick())["crawl"]
     assert first == {"term": "司美格鲁肽", "platform": "xhs", "posts": 1, "new": 1}
     assert requests[0] == {"query": "司美格鲁肽", "platform": "xhs", "sort_type": "latest", "page": 1, "minimum_detail_posts": 5,
-                           "minimum_comments_per_post": 0, "include_provider_raw": False}
+                           "minimum_comments_per_post": 0, "collect_comments": False, "include_provider_raw": False}
     (row,) = await entries(pool, "social-xiaohongshu")
     assert row["channel"] == "social" and row["platform"] == "xiaohongshu" and row["author"] is None
     assert len(row["summary"]) <= 300 and "某用户" not in json.dumps(row, default=str) and "我也是" not in json.dumps(row, default=str)
@@ -319,7 +333,7 @@ async def six_platform_monitor(social_settings, pool, tmp_path, handler, *, term
     registry.write_text(json.dumps({"sources": [], "watch_list": [{"term": term, "why": "test"} for term in terms]}))
     settings = replace(social_settings, social_registry_path=str(registry))
     await sync(pool, [crawl_row(platform, name) for platform, name in CRAWL_PLATFORMS])
-    return SocialCollector(settings, pool, FakeFetcher(), clock=lambda: NOW, crawl_transport=httpx.MockTransport(handler))
+    return SocialCollector(settings, pool, FakeFetcher(), clock=lambda: NOW, crawl_transport=job_transport(handler))
 
 
 def collected(request: httpx.Request, *, post_id="p"):

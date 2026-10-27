@@ -2738,7 +2738,7 @@ export async function geoReadiness({ config, geo, database }) {
   }
   const warnings = [];
   if (!geo.worker) warnings.push("geo_worker_missing");
-  if (!String(config.geoSocialUrl ?? "").trim()) warnings.push("geo_social_unconfigured");
+  if (!geo.social?.configured) warnings.push("geo_social_unconfigured");
   if (!geoMarketConfigured(config)) warnings.push("geo_market_unconfigured");
   return {
     required: true, enabled: true, audience: config.geoAudience, engines: config.geoEngines,

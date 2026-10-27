@@ -677,8 +677,8 @@ function scopeMetrics(items, ctx) {
     'M-05': positions.length
       ? measured(positionSum / positions.length, { numerator: positionSum, denominator: positions.length })
       : unmeasurable('not_mentioned'),
-    'M-06': { ...rate(right, adjudicated, 'not_adjudicated'), assessment },
-    'M-07': adjudicated ? measured(wrongTexts.size, { numerator: wrongTexts.size }) : unmeasurable('not_adjudicated'),
+    'M-06': { ...rate(right, adjudicated, items.length ? 'not_adjudicated' : 'no_snapshots'), assessment },
+    'M-07': adjudicated ? measured(wrongTexts.size, { numerator: wrongTexts.size }) : unmeasurable(items.length ? 'not_adjudicated' : 'no_snapshots'),
     'M-08': !ctx.owned.registered
       ? unmeasurable('owned_not_registered')
       : untraceable

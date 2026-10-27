@@ -89,6 +89,8 @@ def _validated(arguments: dict) -> dict:
             value = arguments[flag]
             if value not in (0, 1, True, False):
                 raise GeoProbeError("geo_probe_flag_invalid", "%s must be 0 or 1." % flag)
+            if flag == "newChat" and not value:
+                raise GeoProbeError("geo_probe_flag_invalid", "newChat must be 1: each question needs a fresh chat.")
             payload[flag] = int(bool(value))
     return payload
 
@@ -123,7 +125,7 @@ def _post(payload: dict) -> dict:
             # 429 here is the probe being busy with another question. It is the
             # ordinary case in a batch, not an incident. A module that is not open to
             # this account is a 503 that retrying cannot change.
-            retryable=error.code in (409, 429, 502, 503, 504) and detail != "geo_probe_disabled",
+            retryable=error.code in (409, 429, 502, 503, 504) and detail not in ("geo_probe_disabled", "geo_probe_result_unavailable", "geo_probe_response_invalid"),
         ) from error
     except (urllib.error.URLError, TimeoutError, OSError) as error:
         raise GeoProbeError("geo_probe_unavailable", "The GEO probe gateway is unreachable.", retryable=True) from error

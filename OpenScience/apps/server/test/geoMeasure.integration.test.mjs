@@ -1781,3 +1781,41 @@ test("a wrong statement no single source can be pinned on gets its default dispo
     await h.probe.close();
   }
 });
+
+test("an accepted asynchronous result failure ends a recurring job without submitting it again", options, async () => {
+  await reset();
+  await seed("geo_async", { engines: ["deepseek"] });
+  const h = await harness();
+  let asks = 0;
+  const upstream = {
+    providers: async () => ({ providers: [{ provider: "deepseek", ready: true }], ready: ["deepseek"] }),
+    ask: async () => { asks++; throw Object.assign(new Error("accepted result unavailable"), { code: "geo_probe_result_unavailable" }); },
+  };
+  try {
+    const round = await enqueueRound(h.deps, { geoProjectId: "geo_async", kind: "sentinel", questionIds: ["geo_async_q1"] });
+    await tickProbe({ ...h.deps, upstream: /** @type {any} */ (upstream), maxAsks: 1 });
+    const [job] = await rows("SELECT status, error_code FROM evimed_geo.probe_jobs WHERE round_id = $1", [round.roundId]);
+    assert.deepEqual({ ...job }, { status: "failed", error_code: "geo_probe_result_unavailable" });
+    h.clock.advance(10 * 60_000);
+    await tickProbe({ ...h.deps, upstream: /** @type {any} */ (upstream), maxAsks: 1 });
+    assert.equal(asks, 1);
+  } finally { await h.probe.close(); }
+});
+
+test("a collector inclusion fallback cannot be rescued by raw ok status into a measured answer", options, async () => {
+  await reset();
+  await seed("geo_fallback", { engines: ["deepseek"] });
+  const h = await harness();
+  const upstream = {
+    providers: async () => ({ providers: [{ provider: "deepseek", ready: true }], ready: ["deepseek"] }),
+    ask: async () => ({ results: [{ status: "failed", inDenominator: false, answer: "", answerDigest: "", error: "consumer_answer_unavailable" }],
+      raw: [{ provider: "deepseek", status: "ok", source: "geo_fallback", answer: A_RIGHT }], integrity: { transport: "tls", signed: false, responseDigest: "test" } }),
+  };
+  try {
+    await enqueueRound(h.deps, { geoProjectId: "geo_fallback", kind: "sentinel", questionIds: ["geo_fallback_q1"] });
+    await tickProbe({ ...h.deps, upstream: /** @type {any} */ (upstream), maxAsks: 1 });
+    const [snapshot] = await rows("SELECT status, answer_text FROM evimed_geo.snapshots");
+    assert.equal(snapshot.status, "failed");
+    assert.equal(snapshot.answer_text, null);
+  } finally { await h.probe.close(); }
+});

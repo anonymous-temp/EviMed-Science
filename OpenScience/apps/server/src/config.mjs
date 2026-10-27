@@ -858,6 +858,9 @@ function geoSettings(overrides) {
     throw new Error(`OPEN_SCIENCE_GEO_ENGINES must be distinct values of ${GEO_ENGINES.join(", ")}, got ${JSON.stringify(engines.join(","))}.`);
   }
   const inclusionEngines = [...new Set(list("geoInclusionEngines", "OPEN_SCIENCE_GEO_INCLUSION_ENGINES", "").map((engine) => engine.toLowerCase()))];
+  // A path only: the social client reads the key anew for every job request.
+  const socialKeyFile = String(read("geoSocialApiKeyFile", "OPEN_SCIENCE_GEO_SOCIAL_API_KEY_FILE", "")).trim();
+  if (socialKeyFile && !path.isAbsolute(socialKeyFile)) throw new Error("OPEN_SCIENCE_GEO_SOCIAL_API_KEY_FILE must be an absolute path.");
   if (inclusionEngines.some((engine) => !GEO_ENGINES.includes(engine))) {
     throw new Error(`OPEN_SCIENCE_GEO_INCLUSION_ENGINES must be values of ${GEO_ENGINES.join(", ")}, got ${JSON.stringify(inclusionEngines.join(","))}.`);
   }
@@ -916,6 +919,8 @@ function geoSettings(overrides) {
     // with `geo_probe_gateway_rate_limited` (429), which reaches the operator's ledger by its code. 12 is the social channel's.
     geoProbeCallsPerMinute: integer("geoProbeCallsPerMinute", "OPEN_SCIENCE_GEO_PROBE_CALLS_PER_MINUTE", 12, 1, 600),
     geoSocialUrl: origin("geoSocialUrl", "OPEN_SCIENCE_GEO_SOCIAL_URL"),
+    geoSocialApiKeyFile: socialKeyFile,
+    geoSocialAllowPlaintext: overrides.geoSocialAllowPlaintext ?? boolEnv("OPEN_SCIENCE_GEO_SOCIAL_ALLOW_PLAINTEXT", false),
     geoSocialTimeoutMs: integer("geoSocialTimeoutMs", "OPEN_SCIENCE_GEO_SOCIAL_TIMEOUT_MS", 140_000, 5_000,
       MCP_TOOL_CALL_TIMEOUT_MS - GATEWAY_RESPONSE_MARGIN_MS - 10_000),
     // Engines measured through the marketplace's inclusion check instead of the

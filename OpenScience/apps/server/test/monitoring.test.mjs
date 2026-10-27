@@ -257,7 +257,7 @@ test("the GEO module's two external services are probed at the paths the platfor
     assert.deepEqual([written.geoProbe, written.geoSocial], [1, 1]);
     assert.deepEqual(JSON.parse(await readFile(path.join(tmp, "targets", "external.json"), "utf8")), [
       { targets: ["http://203.0.113.9:9999/providers"], labels: { probe: "geo-probe" } },
-      { targets: ["http://203.0.113.9:9966/health"], labels: { probe: "geo-social" } },
+      { targets: ["http://203.0.113.9:9966/health/ready"], labels: { probe: "geo-social" } },
     ]);
     assert.equal((await lstat(path.join(tmp, "targets", "external.json"))).mode & 0o777, 0o644);
     // A probe host under a path is asked beneath it, as geoProbeGateway.mjs asks it.

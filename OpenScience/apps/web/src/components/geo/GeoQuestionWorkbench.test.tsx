@@ -7,6 +7,8 @@ import { geoProject } from './__fixtures__/geoTabs';
 import type { GeoQuestions } from '@/lib/geoClient';
 import type { GeoDiagnosisProgress } from '@/lib/geoQuestionWorkbenchClient';
 const identity = vi.hoisted(() => ({ fetchWebMe: vi.fn() }));
+const monitoring = vi.hoisted(() => ({ useGeoMonitoring: vi.fn(), reload: vi.fn() }));
+vi.mock('./geoProjectData', () => ({ useGeoMonitoring: monitoring.useGeoMonitoring }));
 vi.mock('@/lib/apiClient', async original => ({ ...(await original<typeof import('@/lib/apiClient')>()), fetchWebMe: identity.fetchWebMe }));
 const client = vi.hoisted(() => ({ getGeoDiagnosisProgress: vi.fn(), previewGeoQuestions: vi.fn(), importGeoQuestions: vi.fn(), startGeoDiagnosis: vi.fn(), recoverGeoDiagnosis: vi.fn() }));
 vi.mock('@/lib/geoQuestionWorkbenchClient', () => client);
@@ -19,7 +21,41 @@ const progress = (patch: Partial<GeoDiagnosisProgress> = {}): GeoDiagnosisProgre
 ], ...patch });
 function Address() { const location = useLocation(); return <output>{location.search}</output>; }
 function show(path = '/questions', viewer = false) { return render(<MemoryRouter initialEntries={[path]}><GeoQuestionWorkbench geoId="g1" project={geoProject({}, viewer ? { access: { roles: ['viewer'], abilities: ['read'], owner: false } } : {})} data={data} onSaved={vi.fn()} /><Address /></MemoryRouter>); }
-beforeEach(() => { sessionStorage.clear(); localStorage.clear(); identity.fetchWebMe.mockReset(); identity.fetchWebMe.mockResolvedValue({ user: { id: 'u1' }, tenant: { id: 't1' } }); Object.values(client).forEach(fn => fn.mockReset()); client.getGeoDiagnosisProgress.mockResolvedValue(progress()); client.startGeoDiagnosis.mockResolvedValue({ roundId: 'r1', setVersion: 3 }); client.recoverGeoDiagnosis.mockResolvedValue({ roundId: 'r2', setVersion: 3 }); });
+beforeEach(() => { monitoring.reload.mockReset(); monitoring.useGeoMonitoring.mockReturnValue({ state: { kind: 'ready', data: { measurement: { state: 'measuring', since: null, engines: [] } } }, reload: monitoring.reload }); sessionStorage.clear(); localStorage.clear(); identity.fetchWebMe.mockReset(); identity.fetchWebMe.mockResolvedValue({ user: { id: 'u1' }, tenant: { id: 't1' } }); Object.values(client).forEach(fn => fn.mockReset()); client.getGeoDiagnosisProgress.mockResolvedValue(progress()); client.startGeoDiagnosis.mockResolvedValue({ roundId: 'r1', setVersion: 3 }); client.recoverGeoDiagnosis.mockResolvedValue({ roundId: 'r2', setVersion: 3 }); });
+it('uses shared monitoring for platform pauses and keeps the saved engine selected through unknown and failed reads', async () => {
+  monitoring.useGeoMonitoring.mockReturnValue({ state: { kind: 'ready', data: { measurement: { state: 'measuring', since: null, engines: ['kimi'] } } }, reload: monitoring.reload });
+  const view = show();
+  await userEvent.click(screen.getByRole('button', { name: '导入问句' }));
+  expect(monitoring.useGeoMonitoring).toHaveBeenCalledWith('g1');
+  expect(screen.getByRole('checkbox', { name: 'Kimi · 暂停测量' })).toBeChecked();
+  expect(screen.queryByRole('checkbox', { name: /百度/ })).toBeNull();
+  monitoring.useGeoMonitoring.mockReturnValue({ state: { kind: 'ready', data: {} }, reload: monitoring.reload });
+  view.rerender(<MemoryRouter><GeoQuestionWorkbench geoId="g1" project={geoProject()} data={data} onSaved={vi.fn()} /></MemoryRouter>);
+  expect(screen.getByText('测量状态未知，已选平台保留。')).toBeVisible();
+  expect(screen.getByRole('checkbox', { name: 'Kimi' })).toBeChecked();
+  monitoring.useGeoMonitoring.mockReturnValue({ state: { kind: 'error', message: '暂时无法读取测量状态。' }, reload: monitoring.reload });
+  view.rerender(<MemoryRouter><GeoQuestionWorkbench geoId="g1" project={geoProject()} data={data} onSaved={vi.fn()} /></MemoryRouter>);
+  expect(screen.getByText('暂时无法读取测量状态。')).toBeVisible();
+  await userEvent.click(screen.getByRole('button', { name: '重试测量状态' }));
+  expect(monitoring.reload).toHaveBeenCalledOnce();
+  expect(screen.getByRole('checkbox', { name: 'Kimi' })).toBeChecked();
+});
+
+it('states a global measurement pause without removing the selected platform', async () => {
+  monitoring.useGeoMonitoring.mockReturnValue({ state: { kind: 'ready', data: { measurement: { state: 'paused', since: null, engines: ['kimi'] } } }, reload: monitoring.reload });
+  show();
+  await userEvent.click(screen.getByRole('button', { name: '导入问句' }));
+  expect(screen.getByText('AI 回答测量暂停中，已选平台保留。')).toBeVisible();
+  expect(screen.getByRole('checkbox', { name: 'Kimi · 暂停测量' })).toBeChecked();
+});
+
+it('treats optional platform support separately from health and retains a previously selected platform', async () => {
+  monitoring.useGeoMonitoring.mockReturnValue({ state: { kind: 'ready', data: {} }, reload: monitoring.reload });
+  render(<MemoryRouter><GeoQuestionWorkbench geoId="g1" project={{ ...geoProject(), availableEngines: [] }} data={{ ...data, contract: { ...contract, engines: ['baidu'] } }} onSaved={vi.fn()} /></MemoryRouter>);
+  await userEvent.click(screen.getByRole('button', { name: '导入问句' }));
+  expect(screen.getByText('测量状态未知，已选平台保留。')).toBeVisible();
+  expect(screen.getByRole('checkbox', { name: '百度' })).toBeChecked();
+});
 it('opens import on an empty set, preserves quoted CSV duplicates and saves only after preview', async () => {
   show();
   // The step's actions are its block's, not the page's primary (the header's, DESIGN.md T3; the fixture walk of b559d4b7e).

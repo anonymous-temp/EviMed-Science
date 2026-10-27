@@ -28,7 +28,7 @@ export async function geoProjectPath(projectId: string, tab: string | null): Pro
 /**
  * 循证 GEO's options in the conversation frame.
  *
- * When the conversation on screen is bound to a GEO capability, the shell
+ * When the conversation has an explicit GEO scope or a GEO capability, the shell
  * finds the GEO project the tab's project is (a GEO project is an ordinary
  * project plus a GEO row) and tells the frame what to draw beside the chip:
  * 覆盖周期, AI 引擎 and the single-step starters. A change the reader makes
@@ -56,8 +56,9 @@ export function useFrameGeoOptions({
   enabled: boolean;
   post: (payload: FrameGeoOptions | { sessionId: string | null; clear: true }) => void;
 }) {
-  const found = useRef<{ sessionId: string; project: GeoProjectSummary | GeoProject | null } | null>(null);
-  const geo = Boolean(capabilityId && GEO_CAPABILITY_IDS.includes(capabilityId));
+  const found = useRef<{ scopeKey: string; sessionId: string; project: GeoProjectSummary | GeoProject | null } | null>(null);
+  const scopeKey = JSON.stringify([projectId, geoId ?? null, sessionId]);
+  const geo = Boolean(geoId || (capabilityId && GEO_CAPABILITY_IDS.includes(capabilityId)));
   const [revision, setRevision] = useState(0);
   useEffect(() => {
     if (!enabled || !geo) return undefined;
@@ -67,12 +68,16 @@ export function useFrameGeoOptions({
   }, [enabled, geo]);
 
   useEffect(() => {
-    if (!enabled || !sessionId) return undefined;
+    if (!enabled || !sessionId) { found.current = null; return undefined; }
     if (!geo) {
       if (found.current) post({ sessionId, clear: true });
       found.current = null;
       return undefined;
     }
+    // Refreshes keep the current conversation's confirmed settings writable;
+    // a changed project, GEO scope or session immediately drops that authority.
+    if (found.current?.scopeKey !== scopeKey) found.current = null;
+    const refreshing = found.current;
     let live = true;
     let discovery: ReturnType<typeof setTimeout> | undefined;
     const controlName = useProjectStore.getState().projects.find((project) => project.id === projectId)?.name;
@@ -85,23 +90,27 @@ export function useFrameGeoOptions({
     ])
       .then(([project, { frameGeoOptions }]) => {
         if (!live) return;
+        // A read begun before a successful edit cannot reset its saved options.
+        if (project && refreshing && found.current !== refreshing) return;
         if (project && !geoId) rememberGeoProject(project as GeoProjectSummary, controlName);
         // A first GEO turn may create its project after the capability chip appears.
-        else discovery = setTimeout(() => setRevision((value) => value + 1), 10_000);
-        found.current = { sessionId, project };
+        else if (!project) discovery = setTimeout(() => setRevision((value) => value + 1), 10_000);
+        found.current = { scopeKey, sessionId, project };
         post(frameGeoOptions(sessionId, project));
       })
       // The builders' chunk would not load: the chip draws nothing extra.
       .catch(() => {});
     return () => { live = false; clearTimeout(discovery); };
-  }, [enabled, geo, projectId, geoId, sessionId, post, revision]);
+  }, [enabled, geo, projectId, geoId, sessionId, scopeKey, post, revision]);
 
   return useCallback((change: { sessionId?: unknown; coverageDays?: unknown; engines?: unknown }) => {
     const current = found.current;
     const project = current?.project;
     if (!current || !project || (change.sessionId != null && change.sessionId !== current.sessionId)) return;
+    const sameConversation = () => found.current?.scopeKey === current.scopeKey && found.current?.project?.id === project.id;
     // Loaded already: `found` is set only after the builders arrived.
     void builders().then(({ frameGeoOptions, isCoverageOption, offeredEngines }) => {
+      if (!sameConversation()) return;
       const patch: { coverageDays?: number; engines?: string[] } = {};
       if (typeof change.coverageDays === "number" && isCoverageOption(change.coverageDays)) patch.coverageDays = change.coverageDays;
       if (Array.isArray(change.engines)) {
@@ -112,13 +121,15 @@ export function useFrameGeoOptions({
       if (patch.coverageDays === undefined && patch.engines === undefined) return;
       void patchGeoProject(project.id, patch).then(
         () => {
-          const next = { ...project, ...patch };
-          if (found.current === current) found.current = { ...current, project: next };
+          if (!sameConversation()) return;
+          const next = { ...project, ...found.current?.project, ...patch };
+          found.current = { ...current, project: next };
           post(frameGeoOptions(current.sessionId, next));
         },
         (error: unknown) => {
+          if (!sameConversation()) return;
           toast.error(webErrorMessage(error, { fallback: "没有改成功，请稍后重试。" }));
-          post(frameGeoOptions(current.sessionId, project));
+          post(frameGeoOptions(current.sessionId, found.current?.project ?? project));
         },
       );
     }, () => {});

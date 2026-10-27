@@ -122,6 +122,11 @@ function stepsWorking(project: GeoProject): boolean {
  * The compact workflow menu maps canonical steps to result destinations; one toolbar
  * holds result navigation and the active result's controls. Data and member abilities
  * remain shared, while SessionFrameHost places its resident conversation over the pane.
+ * Anatomy: project header, eight-step rail and result pane. Variants: results/conversation.
+ * States: loading, retry, empty and preserved partial results. Hit area: shared controls.
+ * Keyboard: links/buttons retain native behavior. Long content: header truncation and wrapped results.
+ * Theme: semantic tokens. Responsive: PageShell and native frame own their layouts.
+ * Verification: GeoProjectPage.test.tsx covers host navigation and first actions; native input remains kernel-owned.
  */
 export function GeoProjectLayout() {
   const { geoId = "" } = useParams();
@@ -427,6 +432,11 @@ function GeoBand({
   }, [geoId]);
 
   const paused = project.status === "paused";
+  const watched = monitoring.state.kind === "ready" ? monitoring.state.data : null;
+  // Only a confirmed empty project changes the first action; historical partial work keeps its exports.
+  const unstarted = Boolean(watched && Object.values(project.steps).every(step => step.status === "none" && !step.requested && !step.runId && !step.roundId && !step.summary)
+    && project.overview.week.length === 0 && project.overview.metrics.every(metric => metric.cell.value == null && !(metric.cell.denominator || metric.cell.numerator) && metric.trend.length === 0)
+    && !watched.series.some(series => series.points.length > 0) && !watched.byEngine.some(engine => engine.points.length > 0));
   const setPaused = (pause: boolean) => {
     void patchGeoProject(geoId, { status: pause ? "paused" : "active" })
       .then(() => { toast.success(pause ? "已暂停，测量和投放都停下了。" : "已继续。"); reload(); })
@@ -436,6 +446,7 @@ function GeoBand({
     ...(can("edit") ? [{ label: "重命名", onSelect: () => onPanel("rename") }] : []),
     // The engines, the window, the budget, who speaks for the product and the members: one drawer, not four entries.
     { label: "项目设置", onSelect: () => onPanel("settings") },
+    ...(can("run") && unstarted ? [{ label: "导出周报", onSelect: startWeekly }] : []),
     ...(can("run") ? [{ label: "导出提案资料包", onSelect: startProposal }] : []),
     // What the programme did in the background, read-only — the steps are in no conversation list.
     { label: "AI 运行", onSelect: () => onPanel("runs") },
@@ -456,7 +467,6 @@ function GeoBand({
   };
 
   const week = weekOf(project.startedAt ?? project.createdAt ?? null);
-  const watched = monitoring.state.kind === "ready" ? monitoring.state.data : null;
   const now = bandNow(project, watched?.next ?? null, undefined, watched?.measurement ?? null);
   const destination = (next: GeoTabKey, view?: string, step?: string, section?: string) => {
     const kept = new URLSearchParams(params);
@@ -513,18 +523,18 @@ function GeoBand({
       documentTitle={GEO_MONITORING_TABS.includes(tab) ? `${project.name} · ${GEO_MONITORING_TITLE}` : undefined}
       width={onChat ? "full" : "wide"}
       contentClassName={onChat ? "flex min-h-96 flex-col" : undefined}
-      meta={<Tag title={now ?? undefined}>{`${paused ? "已暂停 · " : ""}${week ? `第 ${week} 周` : coverageText(project.coverageDays, project.startedAt ?? project.createdAt ?? null)}`}</Tag>}
+      meta={<Tag title={week ? "按项目开始日期计算，不代表已经完成测量。" : now ?? undefined}>{`${paused ? "已暂停 · " : ""}${week ? `项目第 ${week} 周` : coverageText(project.coverageDays, project.startedAt ?? project.createdAt ?? null)}`}</Tag>}
       actions={(
         <>
           {paused && can("edit") && <Button variant="secondary" onClick={() => setPaused(false)}>继续</Button>}
           <Button variant="text" onClick={() => navigate(destination("overview"))}>项目总览</Button>
-          {can("run") && <Button variant="secondary" loading={busy === "weekly"} onClick={startWeekly}>
+          {can("run") && !unstarted && <Button variant="secondary" loading={busy === "weekly"} onClick={startWeekly}>
             <FileDown size={16} aria-hidden="true" />
             周报
           </Button>}
-          {!onChat && (canConverse || readOnlyChat) && <Button variant="secondary" loading={busy === "conversation"} onClick={openChat}>
+          {!onChat && (canConverse || readOnlyChat) && <Button variant={unstarted && canConverse ? "primary" : "secondary"} loading={busy === "conversation"} onClick={openChat}>
             <MessageSquare size={16} aria-hidden="true" />
-            对话
+            {unstarted && canConverse ? "开始项目" : "对话"}
           </Button>}
           {/* The header's 「⋯」 is the header's icon button, 36 beside the two
             * 36 px buttons (spec §8.3) — the menu's own trigger is a row's 28. */}

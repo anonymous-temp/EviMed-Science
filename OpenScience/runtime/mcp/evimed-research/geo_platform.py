@@ -77,7 +77,7 @@ ACTION_KEY_MAX = 240
 WRITE_MAX_ITEMS = 200
 SOCIAL_MAX_LIMIT = 50
 SOCIAL_DEFAULT_LIMIT = 20
-SOCIAL_MAX_QUERY = 100
+SOCIAL_MAX_QUERY = 256
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 # Reads and writes answer within ten seconds; a social crawl within the
 # channel's own timeout (at most 140 s), under the kernel's 180 s ceiling.
@@ -250,20 +250,22 @@ def tool_definitions():
         {
             "name": "social_posts_search",
             "description": (
-                "Collect how real people phrase a health question on one Chinese social platform "
+                "Collect how real people phrase a health question on selected Chinese social platforms "
                 "(xhs 小红书, douyin 抖音, zhihu 知乎, weibo 微博, bilibili B站, wechat_channels 视频号): excerpts with "
-                "the post's link, engagement and collection time. One platform per call — a crawl takes 30–120 s; "
-                "call again for each platform you need. A status other than collected means no signal (无信号), never zero."
+                "the post's link, engagement and collection time. Select platform or platforms (up to six); "
+                "one asynchronous job returns per-platform completeness. Partial results are usable excerpts, not full coverage; failures mean no signal (无信号), never zero."
             ),
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "query": {"type": "string", "minLength": 1, "maxLength": SOCIAL_MAX_QUERY},
                     "platform": {"type": "string", "enum": list(SOCIAL_PLATFORMS)},
+                    "platforms": {"type": "array", "items": {"type": "string", "enum": list(SOCIAL_PLATFORMS)}, "minItems": 1, "maxItems": 6, "uniqueItems": True},
                     "sort": {"type": "string", "enum": list(SOCIAL_SORTS), "default": "hot"},
                     "limit": {"type": "integer", "minimum": 1, "maximum": SOCIAL_MAX_LIMIT, "default": SOCIAL_DEFAULT_LIMIT},
                 },
-                "required": ["query", "platform"],
+                "required": ["query"],
+                "oneOf": [{"type": "object", "required": ["platform"]}, {"type": "object", "required": ["platforms"]}],
                 "additionalProperties": False,
             },
         },
@@ -507,12 +509,14 @@ def social_search(arguments: dict) -> dict:
     if not text or len(text) > SOCIAL_MAX_QUERY:
         raise GeoPlatformError("social_posts_query_invalid", "query must be text of 1 to %d characters." % SOCIAL_MAX_QUERY)
     payload = {"query": text}
-    # One platform per call: the crawler serves one request at a time and a
-    # crawl takes 30–120 s, so a call is one platform under the 180 s ceiling.
-    platform = arguments.get("platform")
-    if platform not in SOCIAL_PLATFORMS:
-        raise GeoPlatformError("social_posts_platform_invalid", "platform must be one of: %s." % ", ".join(SOCIAL_PLATFORMS))
-    payload["platforms"] = [platform]
+    if "platform" in arguments and "platforms" in arguments:
+        raise GeoPlatformError("social_posts_platform_invalid", "Choose platform or platforms, not both.")
+    platforms = arguments.get("platforms") if "platforms" in arguments else [arguments.get("platform")]
+    if (not isinstance(platforms, list) or not 1 <= len(platforms) <= len(SOCIAL_PLATFORMS)
+            or any(not isinstance(value, str) or value not in SOCIAL_PLATFORMS for value in platforms)
+            or len(set(platforms)) != len(platforms)):
+        raise GeoPlatformError("social_posts_platform_invalid", "Select one to six distinct supported platforms.")
+    payload["platforms"] = platforms
     sort = arguments.get("sort")
     if sort is not None:
         if sort not in SOCIAL_SORTS:

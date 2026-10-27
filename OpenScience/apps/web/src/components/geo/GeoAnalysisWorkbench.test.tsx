@@ -25,6 +25,20 @@ it('opens both history views and keeps metric selection on the business timeline
 });
 beforeEach(()=>{navigation.create.mockReset().mockImplementation(async(_geo,target)=>({projectId:'control',sessionId:target.sessionId??'created-session',scope:{kind:'geo',geoProjectId:'geo',sessionId:target.sessionId??'created-session'}}));});
 describe('selected analysis workbench',()=>{
+ it('labels missing observations and unjudged answers without printing an empty fraction, while retaining a measured zero',async()=>{
+  read.mockResolvedValue({view:{viewId:'V01',dimension:'project'},selection:{reference:'gsel_empty'},digest:'empty',columns:[{key:'current',label:'所选实测'}],rows:[
+   {key:'empty',label:'尚无回答',metricId:'M-06',dimensions:{},values:{current:{value:null,state:'no_data',reason:'no_snapshots',numerator:0,denominator:0}}},
+   {key:'unjudged',label:'回答待判定',metricId:'M-06',dimensions:{},values:{current:{value:null,state:'no_data',reason:'not_adjudicated',numerator:0,denominator:0}}},
+   {key:'zero',label:'实测零值',metricId:'M-06',dimensions:{},values:{current:{value:0,state:'known',numerator:0,denominator:8}}},
+  ],page:{total:3,shown:3,nextOffset:null},availability:{status:'ready'}});
+  render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never}/></MemoryRouter>);
+  fireEvent.click(screen.getByText('所选数据分析'));
+  expect(await screen.findAllByText('尚无采样回答')).not.toHaveLength(0);
+  expect(screen.getAllByText('回答尚未判定')).not.toHaveLength(0);
+  expect(screen.queryByText(/0\s*\/\s*0/)).toBeNull();
+  expect(screen.getByText('0 / 8')).toBeVisible();
+  expect(screen.getByText('0%')).toBeVisible();
+ });
  it('retains exact selection through export and shows null distinct from zero',async()=>{
   read.mockResolvedValue({view:{viewId:'V01',metricId:null,dimension:'project'},selection:{reference:'gsel_old'},digest:'digest',columns:[{key:'current',label:'所选实测'},{key:'target',label:'当前目标'}],rows:[{key:'row',label:'品牌',metricId:'M-01S',dimensions:{},values:{current:{value:0,state:'known',metric:null,members:null},target:{value:null,state:'no_data',metric:null,members:null}}}],page:{total:1,shown:1,nextOffset:null},availability:{status:'ready'}});
   render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never}/></MemoryRouter>);

@@ -811,6 +811,8 @@ services:
       OPEN_SCIENCE_GEO_SOURCE_WATCH_PROJECTS_PER_TICK:
       OPEN_SCIENCE_GEO_PROBE_CALLS_PER_MINUTE:
       OPEN_SCIENCE_GEO_SOCIAL_URL:
+      OPEN_SCIENCE_GEO_SOCIAL_API_KEY_FILE: /run/secrets/geo-social-api-key
+      OPEN_SCIENCE_GEO_SOCIAL_ALLOW_PLAINTEXT:
       OPEN_SCIENCE_GEO_SOCIAL_TIMEOUT_MS:
       OPEN_SCIENCE_GEO_INCLUSION_ENGINES:
       OPEN_SCIENCE_GEO_INCLUSION_MAX_HOLD_HOURS:
@@ -1353,6 +1355,11 @@ services:
       - type: bind
         source: ${OPEN_SCIENCE_TYPESAFE_API_KEY_HOST_FILE:-/dev/null}
         target: /run/secrets/typesafe-api-key
+        read_only: true
+      # Social collector credential belongs only to the control plane.
+      - type: bind
+        source: ${OPEN_SCIENCE_GEO_SOCIAL_API_KEY_HOST_FILE:-/dev/null}
+        target: /run/secrets/geo-social-api-key
         read_only: true
       # The media marketplace's key (owner-only, like the others). Optional: a
       # deployment without one binds /dev/null and no order leaves the host.

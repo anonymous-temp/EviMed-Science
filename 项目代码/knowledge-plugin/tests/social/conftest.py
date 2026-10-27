@@ -22,7 +22,10 @@ def social_settings(settings, tmp_path):
     socialdata.write_text("fake-socialdata-key\n")
     dajiala = tmp_path / "dajiala.api-key"
     dajiala.write_text("fake-dajiala-key\n")
+    crawler = tmp_path / "crawler.api-key"
+    crawler.write_text("fake-crawler-key\n")
+    crawler.chmod(0o600)
     media = tmp_path / "media"
     media.mkdir()
     return replace(settings, socialdata_key_file=str(socialdata), dajiala_key_file=str(dajiala), media_dir=str(media),
-                   social_crawl_url="http://crawler.test:9966")
+                   social_crawl_url="http://crawler.test:9966", social_crawl_key_file=str(crawler), social_crawl_allow_plaintext=True)

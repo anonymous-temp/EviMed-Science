@@ -2380,6 +2380,23 @@ describe("conversation project history across global home", () => {
 
 
 describe("exact GEO scope in the existing native frame",()=>{
+  it("sends GEO starters for the authorized ordinary primary without a specialist binding or global project discovery",async()=>{
+    const scope={kind:"geo" as const,geoProjectId:"geo-shared",sessionId:"shared-root"};
+    nativeGeo.start.mockResolvedValue({running:true});nativeGeo.status.mockResolvedValue({running:true});nativeGeo.runs.mockResolvedValue([]);nativeGeo.checks.mockResolvedValue([]);nativeGeo.capability.mockResolvedValue(null);
+    geo.listGeoProjects.mockClear();geo.getGeoProject.mockResolvedValue({id:"geo-shared",projectId:"same-id",sessionId:"shared-root",product:{brandName:"Scoped brand"},engines:["kimi"],coverageDays:90});
+    const view=render(<MemoryRouter initialEntries={["/app/geo/geo-shared/chat/shared-root"]}><RuntimeUiFrame projectId="same-id" scope={scope} sessionId="shared-root" origin={mocks.profile.uiOrigin}/></MemoryRouter>);
+    await waitFor(()=>expect(view.container.querySelector("iframe")).not.toBeNull());
+    const frame=view.container.querySelector("iframe")!,post=vi.spyOn(frame.contentWindow!,"postMessage");
+    emit(frame,{type:"evimed.runtime-ui.booted",seq:1,projectId:"same-id"});
+    emit(frame,{type:"evimed.runtime-ui.ready",seq:2,projectId:"same-id"});
+    await waitFor(()=>expect(post.mock.calls.map(call=>call[0]).some(data=>data.type==="evimed.runtime-ui.navigate")).toBe(true));
+    const command=post.mock.calls.map(call=>call[0]).find(data=>data.type==="evimed.runtime-ui.navigate");
+    emit(frame,{type:"evimed.runtime-ui.ack",seq:3,projectId:"same-id",requestId:command.requestId,ok:true,sessionId:"shared-root"});
+    await waitFor(()=>expect(post.mock.calls.map(call=>call[0]).some(data=>data.type==="evimed.runtime-ui.geo"&&data.sessionId==="shared-root"&&data.starters?.length===6)).toBe(true));
+    expect(geo.listGeoProjects).not.toHaveBeenCalled();
+    expect(nativeGeo.capability).toHaveBeenCalledWith(scope);
+    expect(post.mock.calls.map(call=>call[0]).filter(data=>data.type==="evimed.runtime-ui.capability").at(-1)).toMatchObject({capabilityId:null});
+  });
   it("uses module start/status and signs the exact root without owned-project requests",async()=>{
     const scope={kind:"geo" as const,geoProjectId:"geo-shared",sessionId:"shared-root"};
     nativeGeo.start.mockResolvedValue({running:true});nativeGeo.status.mockResolvedValue({running:true});nativeGeo.runs.mockResolvedValue([]);nativeGeo.checks.mockResolvedValue([]);nativeGeo.capability.mockResolvedValue(null);

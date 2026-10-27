@@ -2622,6 +2622,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   if (config.geoEnabled && productDatabase) {
     const geoStore = new GeoStore({ database: productDatabase, entityVocabulary });
     const social = createSocialCrawlClient({ baseUrl: config.geoSocialUrl, timeoutMs: config.geoSocialTimeoutMs,
+      apiKeyFile: config.geoSocialApiKeyFile, allowPlaintext: config.geoSocialAllowPlaintext,
       fetchImpl: overrides.geoSocialFetch ?? globalThis.fetch });
     // The project's product zone and its cards (geoCards.mjs): the evidence zones the frontier composes, or one of its own where
     // the frontier is off — the zone service needs nothing of the feed.

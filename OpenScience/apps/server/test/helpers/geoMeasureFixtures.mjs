@@ -66,7 +66,7 @@ export async function startFakeProbe(script) {
         status: reply.rawStatus ?? "ok",
         answer: reply.answer ?? "",
         search_results: reply.searchResults ?? [],
-        screenshot_url: reply.screenshot === null ? "" : `http://127.0.0.1/screenshots/${reply.screenshot ?? "shot-1.png"}`,
+        screenshot_url: reply.screenshot === null ? "" : `http://${req.headers.host}/screenshots/${reply.screenshot ?? "shot-1.png"}`,
         latency_ms: reply.latencyMs ?? 1200,
         ...(reply.error ? { error: reply.error } : {}),
       }] });

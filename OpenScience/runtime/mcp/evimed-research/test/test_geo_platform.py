@@ -88,9 +88,10 @@ class GeoToolDefinitionTests(unittest.TestCase):
         self.assertEqual(definitions["geo_read"]["inputSchema"]["properties"]["what"]["enum"], list(geo_platform.READ_WHATS))
         self.assertEqual(definitions["geo_write"]["inputSchema"]["properties"]["what"]["enum"], list(geo_platform.WRITE_WHATS))
         social = definitions["social_posts_search"]["inputSchema"]
-        self.assertEqual(social["required"], ["query", "platform"])
+        self.assertEqual(social["required"], ["query"])
+        self.assertEqual(social["properties"]["platforms"]["maxItems"], 6)
         self.assertEqual(social["properties"]["platform"]["enum"], list(geo_platform.SOCIAL_PLATFORMS))
-        self.assertIn("One platform per call", definitions["social_posts_search"]["description"])
+        self.assertIn("one asynchronous job", definitions["social_posts_search"]["description"])
         self.assertIn("never zero", definitions["social_posts_search"]["description"])
 
     def test_the_actions_read_says_it_is_lean_and_how_to_read_one_whole(self):
@@ -566,6 +567,16 @@ class SocialPostsTests(_GatewayCase):
         self.assertEqual(result["data"]["posts"], [post])
         self.assertEqual(_Gateway.seen[0]["path"], "/internal/geo/v1/social")
         self.assertEqual(_Gateway.seen[0]["body"], {"query": "二甲双胍", "platforms": ["xhs"], "limit": 5})
+
+    def test_multiple_platforms_share_one_call_and_invalid_selections_never_cross_boundary(self):
+        _Gateway.answers["social"] = (200, {"data": {"status": "partial_collected", "platforms": [], "posts": []}})
+        result = self.server.call_tool("social_posts_search", {"query": "q" * 256, "platforms": ["xhs", "zhihu"]})
+        self.assertEqual(result["status"], "warning")
+        self.assertEqual(_Gateway.seen[0]["body"]["platforms"], ["xhs", "zhihu"])
+        for selection in ({"platform": "xhs", "platforms": ["xhs"]}, {"platforms": []}, {"platforms": ["xhs", "xhs"]}, {"platforms": ["unknown"]}):
+            result = self.server.call_tool("social_posts_search", {"query": "q", **selection})
+            self.assertEqual(result["status"], "error")
+        self.assertEqual(len(_Gateway.seen), 1)
 
     def test_a_channel_that_did_not_answer_is_no_signal_never_zero(self):
         _Gateway.answers["social"] = (200, {"data": {"status": "request_failed", "platforms": [{"platform": "xhs", "status": "request_failed", "posts": 0}],
