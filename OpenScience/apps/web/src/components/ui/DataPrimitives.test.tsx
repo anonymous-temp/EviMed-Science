@@ -94,6 +94,45 @@ describe("StatTile", () => {
     expect(screen.getByRole("group", { name: "提及率" })).not.toHaveTextContent(/未知|观测/);
   });
 
+  // 2026-10-27, the memory section's clickability grammar: a tile that is a door to a list is pressed as a whole, the figure stays ink, and the mark at
+  // its end says where it goes (› here, ↗ out of the section).
+  it("is pressed as a whole when it is a door: one link named for its number, an ink figure, a mark at its end, no link in the figure", async () => {
+    const onOpen = vi.fn();
+    render(
+      <MemoryRouter>
+        <StatBand label="五个数字" columns={3} separate>
+          <StatTile whole label="关于你" reading={measurement(23, "", "示例")} to="/app/memory?tab=self" note="近 30 天 +11" />
+          <StatTile whole leaves label="知识" reading={measurement(14, "", "示例")} to="/app/files" />
+          <StatTile whole label="收到的" reading={measurement(6, "", "示例")} onOpen={onOpen} />
+        </StatBand>
+      </MemoryRouter>,
+    );
+    const about = screen.getByRole("link", { name: "关于你 23，查看" });
+    expect(about).toHaveAttribute("href", "/app/memory?tab=self");
+    expect(about).toHaveTextContent("近 30 天 +11");
+    expect(about).toHaveClass("hover:bg-surface-2");
+    expect(about.querySelector("[data-stat-value]")).toHaveClass("text-text");
+    expect(about.querySelector("[data-stat-value]")).not.toHaveClass("text-accent");
+    expect(about.querySelector("a, button")).toBeNull();
+    expect(about.querySelector("svg.lucide-chevron-right")).not.toBeNull();
+    expect(screen.getByRole("link", { name: "知识 14，查看" }).querySelector("svg.lucide-arrow-up-right")).not.toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "收到的 6，查看" }));
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it("draws a band of separate tiles as cards of one frame, and a tile that is not a door as it always was", () => {
+    const { container } = render(
+      <StatBand label="三个数字" columns={3} separate>
+        <StatTile label="记忆" reading={measurement(7, "", "示例")} />
+      </StatBand>,
+    );
+    const grid = container.querySelector("section > div")!;
+    // No hairline between cells: each tile is a card of the frame every card of a data page has.
+    expect(grid.className).not.toMatch(/border-l|border-t/);
+    expect(grid.className).toContain("[&>*]:rounded-card");
+    expect(screen.getByRole("group", { name: "记忆" })).toBeInTheDocument();
+  });
+
   it("has a skeleton of its own, and says a missing number in words", () => {
     const { container, rerender } = render(<StatTile label="引用命中率" reading={{ kind: "loading" }} />);
     expect(container.querySelector(".animate-pulse")).not.toBeNull();

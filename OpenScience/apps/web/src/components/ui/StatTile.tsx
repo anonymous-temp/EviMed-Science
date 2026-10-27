@@ -1,4 +1,5 @@
 import { useId, type ReactNode } from "react";
+import { ArrowUpRight, ChevronRight } from "lucide-react";
 import { Link } from "react-router";
 import { cn } from "@/lib/cn";
 import { formatDateTime } from "@/lib/format";
@@ -38,6 +39,13 @@ export interface StatTileProps {
   to?: string;
   /** Or: opens it in place (a drawer, the list narrowed). */
   onOpen?: () => void;
+  /**
+   * The whole tile is the target, not only its figure: hover `surface-2`, a focus ring, and a trailing mark — › opens here, ↗ (`leaves`)
+   * goes out of the page's own section. For a band of tiles that are each a door to a list (memory's 总览); the figure stays ink.
+   */
+  whole?: boolean;
+  /** `whole`: the tile leaves the section it is in, so its mark is ↗. */
+  leaves?: boolean;
   /** The band's leading metric: the 40 px rung. */
   lead?: boolean;
   /** `safety`: the number itself is a clinical count, and is red. */
@@ -64,6 +72,8 @@ export function StatTile({
   chart,
   to,
   onOpen,
+  whole = false,
+  leaves = false,
   lead = false,
   tone = "default",
   dense = false,
@@ -83,6 +93,29 @@ export function StatTile({
   const value = measured ? renderMeasured?.(measured) ?? measured.value.toLocaleString("zh-CN") : reading.kind === "unmeasured" ? reading.reason : "读取失败";
   const unit = measured?.unit;
   const opens = !placeholder && (to !== undefined || onOpen !== undefined);
+  if (whole && opens) {
+    const Mark = leaves ? ArrowUpRight : ChevronRight;
+    const text = typeof value === "string" || typeof value === "number" ? `${label} ${value}，查看` : label;
+    const body = (
+      <>
+        <span className="block truncate pr-5 text-caption text-text-3">{label}</span>
+        {measured && <span className="sr-only">范围：{measured.scope}</span>}
+        <span data-stat-value className={cn("mt-1.5 flex flex-wrap items-baseline gap-x-2 text-metric font-semibold tabular-nums text-text", dense && !lead && "max-sm:mt-1 max-sm:text-heading")}>
+          {value}
+          {unit != null && <span className="text-ui font-normal text-text-3">{unit}</span>}
+        </span>
+        {(delta != null || note != null) && (
+          <span className="mt-1 flex flex-wrap items-center gap-x-1.5 text-caption text-text-3">{delta}{note}</span>
+        )}
+        <Mark aria-hidden="true" size={16} className="absolute right-3 top-4 text-text-3" />
+      </>
+    );
+    // `-outline-offset-2`: the band clips what a ring would draw outside the tile.
+    const frame = cn("relative flex min-w-0 flex-col p-4 text-left hover:bg-surface-2 focus-visible:-outline-offset-2", dense && "max-sm:p-3", className);
+    return to !== undefined
+      ? <Link to={to} aria-label={text} className={frame}>{body}</Link>
+      : <button type="button" onClick={onOpen} aria-label={text} className={frame}>{body}</button>;
+  }
   const tile = (
     <div role="group" aria-label={label} className={cn("flex min-w-0 flex-col p-4", dense && "max-sm:p-3", className)}>
       <p className="truncate text-caption text-text-3">{label}</p>
@@ -185,6 +218,7 @@ export function StatBand({
   footnote,
   columns = 6,
   dense = false,
+  separate = false,
   className,
   children,
 }: {
@@ -195,10 +229,25 @@ export function StatBand({
   columns?: 2 | 3 | 4 | 5 | 6;
   /** On a phone, two tiles to a row instead of one (pair it with `StatTile dense`). */
   dense?: boolean;
+  /**
+   * Each tile is a card of its own, a gap between them, and not a band's cell with a hairline: for tiles that are each a door to a list. The cards'
+   * frame is the same box every card of a data page has, so the page spends no kind of border on the hairlines between cells.
+   */
+  separate?: boolean;
   className?: string;
   children: ReactNode;
 }) {
   const footnoteId = useId();
+  if (separate) {
+    return (
+      <section aria-label={label} aria-describedby={footnote != null ? footnoteId : undefined} className={className}>
+        <div className={cn("grid gap-3", dense ? "grid-cols-2" : "grid-cols-1", BAND_COLUMNS[columns], "[&>*]:overflow-hidden [&>*]:rounded-card [&>*]:border [&>*]:border-border [&>*]:bg-surface")}>
+          {children}
+        </div>
+        {footnote != null && <p id={footnoteId} data-note="" className="mt-2 text-caption text-text-3">{footnote}</p>}
+      </section>
+    );
+  }
   return (
     <section aria-label={label} aria-describedby={footnote != null ? footnoteId : undefined} className={className}>
       {/* Every tile's left and top line, 1 px out of its box: a divider wherever two tiles meet, at any wrap, and none on the band's

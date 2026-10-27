@@ -73,6 +73,7 @@ function Works({ works, timeZone }: { works: ProjectOverviewData["works"]; timeZ
                 <ListRow
                   key={`${row.runId}:${row.path}`}
                   to={workPath(row.runId, row.path)}
+                  leaves
                   title={<span className="line-clamp-2 max-w-measure">{memoryExcerpt(row.title, 120)}</span>}
                   meta={<span className="max-w-measure break-all">{row.name}</span>}
                   trailing={<span>{dayOfWork(row.at, timeZone)}</span>}
