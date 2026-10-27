@@ -219,15 +219,18 @@ describe("a card", () => {
     expect(within(screen.getByRole("listitem").querySelector(".w-14") as HTMLElement).getByText("00:30")).toBeInTheDocument();
   });
 
-  it("in a day group, an item whose source gave only the day says 「当天」 in the column and on a phone, never a clock, and keeps its dot (owner, 2026-10-27)", () => {
+  it("in a day group, an item whose source gave only the day says 「当天」 in the column and on a phone, never a clock, and keeps its dot (owner, 2026-10-27)", async () => {
     renderCard(frontierItem({ datePrecision: "day", timelineAt: "2026-09-22T01:05:00.000Z", selected: true }), { markSelected: true, grouped: true });
     const item = screen.getByRole("listitem");
     const column = item.querySelector(".w-14") as HTMLElement;
     expect(column).not.toBeNull();
     expect(column.querySelector("time")).toBeNull();
     const said = within(column).getByText("当天");
-    expect(said).toHaveAttribute("title", "来源只给出了日期");
     expect(said).toHaveClass("text-caption", "text-text-3");
+    // Why there is no hour is the tooltip's, not a native title (the shell has none): it stays in the document for a screen reader.
+    expect(said).not.toHaveAttribute("title");
+    await userEvent.hover(said);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("来源只给出了日期");
     expect(column.querySelector(".bg-accent")).not.toBeNull();
     expect(item).not.toHaveTextContent("09:05");
     expect(item.querySelector(".sm\\:hidden .tabular-nums")).toBeNull();

@@ -117,7 +117,7 @@ describe("an item whose source gave a day and no hour", () => {
   });
 
   it("says 「当天」, and why there is no hour, where the clock would be — and nothing for an item that has one", () => {
-    expect(dayOnlyClock(day())).toEqual({ text: "当天", title: "来源只给出了日期" });
+    expect(dayOnlyClock(day())).toEqual({ text: "当天", hint: "来源只给出了日期" });
     expect(dayOnlyClock(frontierItem({ datePrecision: "instant" }))).toBeNull();
     expect(dayOnlyClock(frontierItem({ datePrecision: "inferred" }))).toBeNull();
   });

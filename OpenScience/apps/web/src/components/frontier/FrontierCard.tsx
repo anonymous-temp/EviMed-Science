@@ -10,6 +10,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { ScorePill } from "@/components/ui/Score";
 import { Tag } from "@/components/ui/Tag";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { openItemConversation } from "./frontierAsk";
 import { FrontierHideStrip } from "./FrontierHideStrip";
 import type { FrontierHideStripControls } from "./useFrontierHide";
@@ -172,10 +173,10 @@ export function FrontierCard({ item, grouped = false, markSelected = false, onSt
       {grouped && (
         <div className="mt-3 hidden h-6 w-14 shrink-0 items-center justify-between pr-2 sm:flex">
           {/* A day with no hour (the source gave only the date) says 「当天」 where the clock would be (owner, 2026-10-27: an empty
-            * column with a dot read as a fault); the hover says why. */}
+            * column with a dot read as a fault); the hover says why (the Tooltip primitive: the shell has no native titles). */}
           {itemClock(item)
             ? <time dateTime={item.timelineAt} className="text-caption tabular-nums text-text-3">{itemClock(item)}</time>
-            : dayOnly && <span title={dayOnly.title} className="text-caption text-text-3">{dayOnly.text}</span>}
+            : dayOnly && <Tooltip content={dayOnly.hint}><span className="text-caption text-text-3">{dayOnly.text}</span></Tooltip>}
           <span aria-hidden="true" className={cn("h-1.5 w-1.5 shrink-0 rounded-full", item.selected ? "bg-accent" : "bg-border-control")} />
         </div>
       )}
@@ -195,7 +196,7 @@ export function FrontierCard({ item, grouped = false, markSelected = false, onSt
             <span>{who}</span>
             {when && <> · <time dateTime={item.timelineAt} className="tabular-nums">{when}</time></>}
             {grouped && itemClock(item) && <span className="sm:hidden"> · <span className="tabular-nums">{itemClock(item)}</span></span>}
-            {grouped && dayOnly && <span className="sm:hidden"> · <span title={dayOnly.title}>{dayOnly.text}</span></span>}
+            {grouped && dayOnly && <span className="sm:hidden"> · <span>{dayOnly.text}</span></span>}
           </span>
           {markSelected && item.selected && <span className="sr-only">精选</span>}
           {item.source.platformProduced && <Tag>EviMed 出品</Tag>}

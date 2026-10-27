@@ -294,10 +294,10 @@ export function itemClock(item: Pick<FrontierItem, "timelineAt" | "datePrecision
 
 /**
  * What the clock column says for an item `itemClock` gives no hour (owner, 2026-10-27: a row with only the dot read as a fault): 「当天」,
- * the day the group is headed with, and on hover why there is no hour. Null for an item that has one.
+ * the day the group is headed with, and as the tooltip's words why there is no hour. Null for an item that has one.
  */
-export function dayOnlyClock(item: Pick<FrontierItem, "datePrecision">): { text: string; title: string } | null {
-  return item.datePrecision === "day" ? { text: "当天", title: "来源只给出了日期" } : null;
+export function dayOnlyClock(item: Pick<FrontierItem, "datePrecision">): { text: string; hint: string } | null {
+  return item.datePrecision === "day" ? { text: "当天", hint: "来源只给出了日期" } : null;
 }
 
 /**
