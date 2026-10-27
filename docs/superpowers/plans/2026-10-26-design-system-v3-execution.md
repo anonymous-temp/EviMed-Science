@@ -44,6 +44,19 @@ Execute these from the handoff branch. Retain existing failed evidence; create a
 | OPEN-06 / P2 | Web lint passes with **14 existing layout warnings**; these have not been eliminated in this checkpoint. | Review the named warnings in the lint receipt page by page. Move controls into the appropriate existing slots or document a measured, task-specific exception; do not disable the rule or increase the global baseline. | Each warning is removed or has a reviewed semantic exception with a rendered test. |
 | OPEN-07 / release acceptance boundary | Local fixtures and the numerical suite do not establish production-data correctness, paid-model end-to-end outcomes or field performance. | In a separately authorized release/acceptance task, execute representative ordinary work, GEO and VCR journeys against the intended runtime/data, then measure relevant performance on representative devices. Preserve source/claim/provenance and partial-result semantics. | Named user journeys and performance measurements have real receipts. This item does not authorize deployment or paid production activity now. |
 
+### Status after integration and release (2026-10-27, integrator)
+
+Integrated with PR #17 and 前沿动态 rounds 4–5 on `int/1026`, live as `evimed-fd515cda2980-1` (2026-10-27 00:10Z); the next line is `int/1027`.
+
+- **OPEN-01 closed.** The header 「对话」 opens the project's primary conversation; the fixture restores the pointer it needs. Fixture walk passes it at both widths.
+- **OPEN-02 closed on the fixture, re-walk pending on production.** Fixture walk of `52671987c`: 143 views, 0 failures, 0 axe violations, after three walk carve-outs were removed for measured `budgetOverride` rows. The production walk of `evimed-fd515cda2980-1` (real data, throwaway account): 92 views, 7 failures — the congress list took 13.9 s (and so two pages it names), 「AI 概览」 citations as a tenth control kind, the empty study list without its reason (desktop and phone), and the conversation frame's cold start; each fixed on `int/1027` (`a1207c07b`, `df2d4d836`), to be walked again after that release.
+- **OPEN-03 closed.** Linux battery on the merge: server 9,121 pass / 0 fail (3,319 database skips run in the product-state and solo-database steps, green but the two local-Docker extension cases), web 5,802/5,802, packages, ops, MCP 1,028, build. CI's one failure (the inbox selection case hard-coding a budget of eight) is fixed in `103991a78`.
+- **OPEN-04 open.** Physical assistive technology is not available to the integrator; the emulated probes stand.
+- **OPEN-05 closed for this repository.** Production serves `/manifest.json?v=16c9bc0c` with theme and background `#f7f5ef` and versioned icons (`evimed-192.png?v=47bb46c1` …); an installed PWA picks them up from the changed URLs. External Vue consumers adopt token 3.0.0 in their own release.
+- **OPEN-06 closed.** Web lint: 0 warnings.
+- **OPEN-07 partly closed.** The release walk covered ordinary, GEO and VCR journeys on production data with a throwaway account; paid-model end-to-end outcomes were not re-run (owner: no further live campaigns for this round).
+
+
 ## Evidence receipts retained locally
 
 The coordinator's `implementation-2026-10-26/` artifact set contains the following. These local filenames are evidence pointers, not bundled production assets.
