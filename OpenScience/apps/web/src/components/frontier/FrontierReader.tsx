@@ -232,9 +232,11 @@ const AI_LABEL = "text-caption text-accent";
  * 「AI 导读」: one paragraph, answer first, a size above the 要点 (18 at every width, at 1.8) — the first thing read, and plainly not the
  * article.
  */
-export function ReaderLead({ text, className }: { text: string; className?: string }) {
+export function ReaderLead({ text, className, named = false }: { text: string; className?: string; named?: boolean }) {
+  // `named`: the toolbar's 「AI 导读」 tab already names this view right above it (owner, 2026-10-27: the same words twice read as
+  // two things), so the heading is for a screen reader only.
   return (
-    <Block label="AI 导读" labelClassName={AI_LABEL} className={className}>
+    <Block label="AI 导读" labelClassName={named ? "sr-only" : AI_LABEL} className={className}>
       <p data-prose="" className="max-w-measure-body whitespace-pre-line break-words text-pretty text-reading-lg text-text">{text}</p>
     </Block>
   );

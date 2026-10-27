@@ -205,7 +205,7 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
         data-reader-view={textView ? "text" : "written"} className={cn("min-w-0 [&>:first-child]:mt-0", !wide && "pb-20")}>
         <ReaderSourceAction item={item} className="mt-3" />
         <ReaderSameEvent item={item} className="mt-3" />
-        {showWritten && item.lead && <ReaderLead text={item.lead} className="mt-6" />}
+        {showWritten && item.lead && <ReaderLead text={item.lead} named={Boolean(toolbar?.views)} className="mt-6" />}
         {showWritten && item.brief && <ReaderBrief brief={item.brief} item={item} className="mt-8" />}
         {showText && !wide && outline.length > 0 && <div className="mt-6"><ReaderOutline entries={outline} layout="folded" /></div>}
         {showText && (item.body && textKind
