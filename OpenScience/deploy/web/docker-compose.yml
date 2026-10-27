@@ -524,6 +524,8 @@ services:
       OPEN_SCIENCE_KNOWLEDGE_PAGES_TASK_TIMEOUT_MS:
       OPEN_SCIENCE_KNOWLEDGE_GRAPH_ENABLED:
       OPEN_SCIENCE_KNOWLEDGE_SOURCE_SYNC_RECONCILE_MS:
+      # Whether a project's Compile also reads the account's personal library (off: the project's own materials only).
+      OPEN_SCIENCE_KNOWLEDGE_PAGES_INCLUDE_LIBRARY:
       # Whether each readable document's summary and key claims are still written into the capsule's `sources` layer.
       OPEN_SCIENCE_DOCUMENT_MEMORY_ENABLED:
       # What the internal source-understanding runs may spend (CNY; 0 = no cap).
