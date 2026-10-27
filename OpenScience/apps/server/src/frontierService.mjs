@@ -2057,7 +2057,9 @@ export class FrontierService {
     const listId = await this.#serve(user, "congress", `congress:${read.congress.id}`, served);
     return { congress: { ...read.congress,
       specialtyLabel: read.congress.specialty && Object.hasOwn(this.vocabulary.specialties, read.congress.specialty) ? this.vocabulary.specialties[read.congress.specialty] : null },
-    itemCount: days.reduce((sum, day) => sum + day.items.length, 0), days, listId };
+    // `itemCount` is what the congress holds, as its list line says it (owner, 2026-10-27: the hub said 400 where the list said 624);
+    // `listedCount` is how many of them the days list, the newest, before this reader's own 不感兴趣 take some away.
+    itemCount: read.itemCount, listedCount: read.listedCount, days, listId };
   }
 
   /** Persist only the exact visible versions acknowledged by the reader; newer reports remain unseen.

@@ -2093,7 +2093,10 @@ export interface FrontierCongressRecap {
 }
 export interface FrontierCongressHub {
   congress: Omit<FrontierCongress, "itemCount" | "status"> & { status: FrontierCongressStatus | "later" | "past"; sourceUrl: string | null; abstractsAt: string | null };
+  /** What the congress holds: the same number the congress list says (「ESMO 2026 · 收录 624 条」). */
   itemCount: number;
+  /** How many of them the days list, the newest; fewer than `itemCount` where the hub is capped (「显示最新 400 条」). Equal where a server says none. */
+  listedCount: number;
   days: Array<{ day: string; recap: FrontierCongressRecap | null; items: Array<{ item: FrontierItem; caveat: string | null }> }>;
   listId: string | null;
 }
@@ -2182,6 +2185,7 @@ export function parseFrontierCongressHub(value: unknown): FrontierCongressHub | 
   return {
     congress: { ...congress, status: oneOf(header?.status, [...FRONTIER_CONGRESS_STATUSES, "later", "past"] as const, "recent"), sourceUrl: safeLink(header?.sourceUrl), abstractsAt: day(header?.abstractsAt) },
     itemCount: count(raw.itemCount),
+    listedCount: raw.listedCount === undefined || raw.listedCount === null ? count(raw.itemCount) : Math.min(count(raw.listedCount), count(raw.itemCount)),
     days: (Array.isArray(raw.days) ? raw.days : []).flatMap((entry): FrontierCongressHub["days"] => {
       const row = record(entry);
       const when = day(row?.day);

@@ -729,3 +729,21 @@ describe("an item's genre and 「AI 要点」 (ct-write 2026-10-24)", () => {
     });
   });
 });
+
+describe("a congress hub's counts (owner, 2026-10-27)", () => {
+  const hub = (over: Record<string, unknown>) => ({
+    congress: { id: "esmo-2026", code: "ESMO 2026", name: "欧洲肿瘤内科学会年会", nameEn: "ESMO", start: "2026-10-23", end: "2026-10-27", status: "ongoing" },
+    days: [], listId: "l1", ...over,
+  });
+
+  it("reads what the congress holds and how many of them the days list", async () => {
+    const { parseFrontierCongressHub } = await import("./frontierClient");
+    expect(parseFrontierCongressHub(hub({ itemCount: 624, listedCount: 400 }))).toMatchObject({ itemCount: 624, listedCount: 400 });
+  });
+
+  it("takes the two as one number from a server that sends only the count, and never lists more than it holds", async () => {
+    const { parseFrontierCongressHub } = await import("./frontierClient");
+    expect(parseFrontierCongressHub(hub({ itemCount: 57 }))).toMatchObject({ itemCount: 57, listedCount: 57 });
+    expect(parseFrontierCongressHub(hub({ itemCount: 5, listedCount: 9 }))).toMatchObject({ itemCount: 5, listedCount: 5 });
+  });
+});

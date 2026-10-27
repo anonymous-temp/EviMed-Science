@@ -1744,9 +1744,14 @@ describe("追踪", () => {
     client.listFrontierCongresses.mockResolvedValue([congress()]);
     renderPage("/app/frontier?view=hot");
     const link = await screen.findByRole("link", { name: /ESMO 2026/ });
-    expect(link).toHaveTextContent("ESMO 2026进行中·57 条");
+    expect(link).toHaveTextContent(/^会议专题ESMO 2026 · .+进行中每日 AI 速递 · 收录 57 条$/);
     expect(link).toHaveAttribute("href", "/app/frontier/congress/esmo-2026");
-    expect(await screen.findByRole("list", { name: "热榜" })).toBeInTheDocument();
+    const ranking = await screen.findByRole("list", { name: "热榜" });
+    expect(link.compareDocumentPosition(ranking) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The ranking is headed 「医学热点」 with its count.
+    const section = ranking.closest("section")!;
+    expect(within(section).getByRole("heading", { level: 2, name: "医学热点" })).toBeInTheDocument();
+    expect(section).toHaveTextContent("医学热点1");
   });
 
   it("reads an unknown segment in the address as 审批", async () => {

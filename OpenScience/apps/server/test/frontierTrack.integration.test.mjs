@@ -282,6 +282,28 @@ test("a congress's items are those that name it by the calendar's words or by it
   assert.equal(await instance.congress("no-such-congress"), null);
 });
 
+test("a hub capped at its item limit says how many items the congress holds, as the list does, and how many of them it lists (owner, 2026-10-27)", options, async () => {
+  // Five items on five days; the hub lists the newest three. It used to report the three it read where the list reported the five.
+  for (let n = 0; n < 5; n += 1) await item({ text: `cap${n}`, publishedAt: `2026-10-2${1 + n}T04:00:00Z`, title: `ESMO 2026 result ${n}` });
+  const capped = new FrontierTrack({ database, now: () => NOW, timeZone: "Asia/Shanghai", hubItemLimit: 3 });
+  const hub = await capped.congress("esmo-2026");
+  assert.ok(hub);
+  assert.equal(hub.itemCount, 5, "what the congress holds");
+  assert.equal(hub.listedCount, 3, "what its days list");
+  assert.deepEqual(hub.days.map((entry) => entry.day), ["2026-10-25", "2026-10-24", "2026-10-23"], "the newest days");
+  assert.equal(hub.days.reduce((sum, entry) => sum + entry.items.length, 0), 3);
+  assert.equal((await capped.congresses()).find((congress) => congress.id === "esmo-2026")?.itemCount, hub.itemCount, "the list line and the hub say one number");
+  // Under its limit a hub lists what it holds.
+  const whole = await track().congress("esmo-2026");
+  assert.deepEqual([whole?.itemCount, whole?.listedCount], [5, 5]);
+  // The reader's service passes both through, and the count is not the reader's own (a hidden card is still the congress's item).
+  const service = serviceFor();
+  service.trackReader = capped;
+  const served = await service.trackCongress(reader, "esmo-2026");
+  assert.deepEqual([served.itemCount, served.listedCount], [5, 3]);
+  assert.equal(served.days.reduce((sum, entry) => sum + entry.items.length, 0), 3);
+});
+
 test("an item with no publication moment is dated by when it became visible, and the window is cut by instants before days are read", options, async () => {
   const undated = await item({ text: "u1", publishedAt: "2026-10-24T04:00:00Z", title: "Late-breaking result at ESMO 2026" });
   await database.query("UPDATE evimed_frontier.items SET published_at = NULL WHERE id = $1", [undated.id]);
