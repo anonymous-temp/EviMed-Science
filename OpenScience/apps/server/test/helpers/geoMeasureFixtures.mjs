@@ -2,6 +2,7 @@
 // speaks the upstream contract over real HTTP (GET /providers, POST /ask,
 // GET /screenshots/<name>), a model that answers the judge from a script, and
 // the rows of a GEO project seeded straight into the evimed_geo tables.
+import { randomBytes } from "node:crypto";
 import http from "node:http";
 
 /** A tiny PNG: the signature and a tail, which is all the store checks. */
@@ -13,12 +14,21 @@ export const FAKE_PNG = Buffer.concat([Buffer.from("89504e470d0a1a0a", "hex"), B
 
 /**
  * Start a fake probe host on 127.0.0.1.
- * @param {{ ask: (request: { question: string, engine: string, nth: number }) => FakeReply, providers?: () => Record<string, string> }} script
+ *
+ * By default it answers in the request, as the host's first contract did. With `async` it speaks the asynchronous one: `POST /ask`
+ * answers 202 with a request id, `GET /runs/<id>` says `running` while the task is held and the finished job once it is not (`hold`:
+ * every task is held until `release` is called; otherwise none is). `source` is the row's source (`browser`, or the paid fallback).
+ * `tasks` lists the accepted tasks; `runReads` counts the reads of `/runs`; `forget` makes the host lose a task (a 404).
+ * @param {{ ask: (request: { question: string, engine: string, nth: number }) => FakeReply, providers?: () => Record<string, any>,
+ *   async?: { hold?: boolean, source?: string } }} script
  *   `nth` counts the asks of that question on that engine, from 1.
  */
 export async function startFakeProbe(script) {
   /** @type {Array<{ question: string, engine: string, body: any }>} */
   const asks = [];
+  /** @type {Map<string, { id: string, question: string, engine: string, row: any, held: boolean, forgotten: boolean }>} */
+  const tasks = new Map();
+  const runReads = { count: 0 };
   const providerCalls = { count: 0 };
   const screenshotCalls = { count: 0 };
   /** @type {Map<string, number>} */
@@ -43,6 +53,19 @@ export async function startFakeProbe(script) {
       res.end(FAKE_PNG);
       return;
     }
+    if (req.method === "GET" && url.pathname.startsWith("/runs/")) {
+      runReads.count += 1;
+      const task = tasks.get(url.pathname.slice("/runs/".length));
+      if (!task || task.forgotten) {
+        send(404, { error: "no such run" });
+        return;
+      }
+      const envelope = { request_id: task.id, question: task.question, providers: [task.engine], deep: 0, new_chat: 1 };
+      send(200, task.held
+        ? { ...envelope, job_status: "running" }
+        : { ...envelope, job_status: "done", result: { request_id: task.id, question: task.question, results: [{ ...task.row, request_id: task.id }] } });
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/ask") {
       const chunks = [];
       for await (const chunk of req) chunks.push(chunk);
@@ -61,15 +84,23 @@ export async function startFakeProbe(script) {
         send(reply.status, { error: "busy" });
         return;
       }
-      send(200, { results: [{
+      const row = {
         provider: engine,
         status: reply.rawStatus ?? "ok",
         answer: reply.answer ?? "",
         search_results: reply.searchResults ?? [],
-        screenshot_url: reply.screenshot === null ? "" : `http://${req.headers.host}/screenshots/${reply.screenshot ?? "shot-1.png"}`,
+        // The host names its own screenshot by its bind address, which carries no port: the address it is reached at is another origin.
+        screenshot_url: reply.screenshot === null ? "" : `http://127.0.0.1/screenshots/${reply.screenshot ?? "shot-1.png"}`,
         latency_ms: reply.latencyMs ?? 1200,
         ...(reply.error ? { error: reply.error } : {}),
-      }] });
+      };
+      if (script.async) {
+        const id = randomBytes(16).toString("hex");
+        tasks.set(id, { id, question: body.question, engine, row: { ...row, source: script.async.source ?? "browser" }, held: script.async.hold === true, forgotten: false });
+        send(202, { request_id: id, job_status: "queued" });
+        return;
+      }
+      send(200, { results: [row] });
       return;
     }
     send(404, { error: "not found" });
@@ -81,6 +112,12 @@ export async function startFakeProbe(script) {
     asks,
     providerCalls,
     screenshotCalls,
+    tasks,
+    runReads,
+    /** Let a held task (or every one) finish. @param {string} [id] */
+    release: (id) => { for (const task of tasks.values()) if (!id || task.id === id) task.held = false; },
+    /** Make the host lose a task: its reads answer 404. @param {string} id */
+    forget: (id) => { const task = tasks.get(id); if (task) task.forgotten = true; },
     get maxInFlight() { return maxInFlight; },
     close: () => new Promise((resolve) => server.close(() => resolve(undefined))),
   };

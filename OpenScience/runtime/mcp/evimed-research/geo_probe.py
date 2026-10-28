@@ -18,14 +18,20 @@ every one of those `measurement: "failed"`; this client refuses to flatten them
 into an empty result on the way through.
 
 The runtime never learns the probe host, never composes an upstream path, and
-never holds a probe credential. It names one of three operations and the server
+never holds a probe credential. It names one of four operations and the server
 builds the request.
+
+An ask can take longer than a tool call may wait (five engines measured 487 s).
+The server then answers `pending` with the probe's request id instead of an
+error: the task is accepted and paid for, so the question must not be asked
+again, and `op=result` with that id reads the answers once they exist.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 
@@ -33,8 +39,11 @@ import public_sources
 
 MAX_QUESTION = 2_000
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
-OPERATIONS = ("providers", "ask", "screenshot")
+OPERATIONS = ("providers", "ask", "result", "screenshot")
 PROVIDERS = ("deepseek", "doubao", "kimi", "qianwen", "yuanbao")
+REQUEST_ID = re.compile(r"[a-f0-9]{32}")
+# The `error` of an answer the probe took from its paid third-party fallback because the engine's own page gave nothing.
+CONSUMER_ANSWER_UNAVAILABLE = "consumer_answer_unavailable"
 
 
 class GeoProbeError(Exception):
@@ -69,6 +78,11 @@ def _validated(arguments: dict) -> dict:
         if not name:
             raise GeoProbeError("geo_probe_screenshot_name_invalid", "name is required for op=screenshot.")
         return {"op": op, "name": name}
+    if op == "result":
+        request_id = str(arguments.get("requestId") or "").strip().lower()
+        if not REQUEST_ID.fullmatch(request_id):
+            raise GeoProbeError("geo_probe_request_id_invalid", "requestId is required for op=result: the id a pending ask returned.")
+        return {"op": op, "requestId": request_id}
 
     question = str(arguments.get("question") or "").strip()
     if not question or len(question) > MAX_QUESTION:
@@ -144,6 +158,21 @@ def probe(arguments: dict) -> dict:
     data = parsed.get("data") or {}
     warnings = list(parsed.get("warnings") or [])
 
+    if data.get("status") == "pending" or parsed.get("measurement") == "pending":
+        request_id = data.get("requestId")
+        return {
+            # "warning", like any job still running: the answer is not here yet, and it is not a failure either.
+            "status": "warning",
+            "summary": "The probe is still answering this question (request %s). It is not a result yet and not a failure." % request_id,
+            "data": data,
+            "warnings": warnings,
+            "next_actions": [
+                "Do not ask the question again: it is already being measured, and a second ask is a second measurement and a second charge.",
+                "Go on with work that does not need this answer. Read it later with op=result and requestId=%s; a read waits for the answer for a while, so do not loop on it." % request_id,
+                "If a few reads still return pending, say the measurement is pending and continue without it. Never present an estimate as a measurement.",
+            ],
+        }
+
     if payload["op"] == "providers":
         ready = data.get("ready") or []
         rows = data.get("providers") or []
@@ -176,6 +205,9 @@ def probe(arguments: dict) -> dict:
     results = data.get("results") or []
     measured = [row for row in results if row.get("inDenominator")]
     failed = [row for row in results if not row.get("inDenominator")]
+    # An engine answered from the probe's paid fallback is failed, but asking it again only buys the fallback again.
+    fallback = [row for row in failed if row.get("error") == CONSUMER_ANSWER_UNAVAILABLE]
+    retryable = [row for row in failed if row.get("error") != CONSUMER_ANSWER_UNAVAILABLE]
     surface = data.get("surface") or {}
     return {
         # A round where nothing was measured is a failure even though the call
@@ -189,13 +221,19 @@ def probe(arguments: dict) -> dict:
         "data": data,
         "warnings": warnings + ([
             "Failed: %s. A failed probe is not a measurement — retry it, and keep it out of the denominator and out of any cache." % ", ".join(
-                "%s (%s)" % (row.get("provider"), row.get("error")) for row in failed
+                "%s (%s)" % (row.get("provider"), row.get("error")) for row in retryable
             ),
-        ] if failed else []),
+        ] if retryable else []) + ([
+            "No consumer answer: %s. The engine's own page gave nothing and the probe's third-party fallback answered instead. That is not a consumer "
+            "answer and stays out of the denominator; do not ask these again, each ask triggers the paid fallback again." % ", ".join(
+                str(row.get("provider")) for row in fallback
+            ),
+        ] if fallback else []),
         "next_actions": [
             "Record the surface (%s, %s) beside every number taken from this round; the same question in a different mode is a different measurement." % (
                 surface.get("mode", "?"), surface.get("session", "?"),
             ),
-            "Retry any failed vendor before computing a rate; a denominator that silently shrank overstates visibility.",
+            *(["Retry any failed vendor before computing a rate; a denominator that silently shrank overstates visibility."] if retryable else []),
+            *(["Say in the report that these engines could not be measured; do not retry them."] if fallback and not retryable else []),
         ],
     }

@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MCP_TOOL_CALL_TIMEOUT_MS, SOCKET_PLUGIN_SWITCHES } from "./dshProfilePatch.mjs";
 import { readReleaseManifestFile, validateReleaseManifest } from "./releaseManifest.mjs";
-import { EVIDENCE_PUBLIC_BASE_PATHS, GENE_EXPRESSION_LIMITS, GEO_DEFAULT_ENGINES, GEO_ENGINES, METHOD_UNUSED_RETIRE_LOADS, SIMULATED_START_CREDITS, VCR_MIN_CELL_SIZE } from "@evimed/domain";
+import { EVIDENCE_PUBLIC_BASE_PATHS, GENE_EXPRESSION_LIMITS, GEO_DEFAULT_ENGINES, GEO_ENGINES, GEO_SOCIAL_PLATFORMS, METHOD_UNUSED_RETIRE_LOADS, SIMULATED_START_CREDITS, VCR_MIN_CELL_SIZE } from "@evimed/domain";
 import { MAX_MOUNTED_CAPSULE_METHOD_BYTES } from "./capsuleMethods.mjs";
 import { researchBillingSettings } from "./researchBillingConfig.mjs";
 import { validateEvolutionConfiguration } from "./evolutionConfiguration.mjs";
@@ -931,11 +931,25 @@ function geoSettings(overrides) {
     // use the tool for the one question a person asks about; this is the ceiling of a loop, not of a run. A call over it is refused
     // with `geo_probe_gateway_rate_limited` (429), which reaches the operator's ledger by its code. 12 is the social channel's.
     geoProbeCallsPerMinute: integer("geoProbeCallsPerMinute", "OPEN_SCIENCE_GEO_PROBE_CALLS_PER_MINUTE", 12, 1, 600),
+    // How long a probe task the host accepted may stay unfinished before the measurement queue gives up on it, counted from the host
+    // accepting it. The host answers a question in about five minutes; this is the margin for one that queues, restarts or cannot be
+    // reached while a task runs. Past it the job fails as `accepted_result_unavailable` and is never asked again, so a task that
+    // finishes late costs nothing twice. Counted as `open_science_geo_probe_tasks_total{outcome="accepted_result_unavailable"}`.
+    geoProbeTaskMaxAgeMinutes: integer("geoProbeTaskMaxAgeMinutes", "OPEN_SCIENCE_GEO_PROBE_TASK_MAX_AGE_MINUTES", 45, 5, 1_440),
+    // How long the gateway keeps the record of a task it accepted for a runtime (the ask, not the answer), so an interactive ask that
+    // outlives the tool's deadline can be read later by its request id. The host's own retention of finished tasks bounds what a later
+    // read can still find. Counted as `open_science_geo_probe_tasks_total{outcome="pending"}`.
+    geoProbeResultKeepHours: integer("geoProbeResultKeepHours", "OPEN_SCIENCE_GEO_PROBE_RESULT_KEEP_HOURS", 24, 1, 168),
     geoSocialUrl: origin("geoSocialUrl", "OPEN_SCIENCE_GEO_SOCIAL_URL"),
     geoSocialApiKeyFile: socialKeyFile,
     geoSocialAllowPlaintext: overrides.geoSocialAllowPlaintext ?? boolEnv("OPEN_SCIENCE_GEO_SOCIAL_ALLOW_PLAINTEXT", false),
     geoSocialTimeoutMs: integer("geoSocialTimeoutMs", "OPEN_SCIENCE_GEO_SOCIAL_TIMEOUT_MS", 140_000, 5_000,
       MCP_TOOL_CALL_TIMEOUT_MS - GATEWAY_RESPONSE_MARGIN_MS - 10_000),
+    // Platforms one social search may name. The collector serves a job's platforms one at a time, measured 30-120 s each, and a call waits one
+    // deadline (the timeout above, 140 s by default): at the median two platforms are what fits, so a call naming more is refused by name
+    // (`social_posts_platform_invalid`, counted with the gateway's refusals) and asks the rest in another call. A job that does overrun is
+    // not lost: it is answered `pending` with its id and read on. 1 to the vocabulary's size, for a collector measured faster or slower.
+    geoSocialMaxPlatforms: integer("geoSocialMaxPlatforms", "OPEN_SCIENCE_GEO_SOCIAL_MAX_PLATFORMS", 2, 1, GEO_SOCIAL_PLATFORMS.length),
     // Engines measured through the marketplace's inclusion check instead of the
     // probe (spec §7.4) — only `baidu` (文心) is meant to be here.
     geoInclusionEngines: inclusionEngines,

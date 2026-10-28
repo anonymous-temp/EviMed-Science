@@ -396,12 +396,14 @@ TOOL_DEFINITIONS = [
             "Ask the consumer LLM front-ends (DeepSeek, Doubao, Kimi, Qianwen, Yuanbao) a question the way a patient would, "
             "and record what they answer. This is a measurement with a denominator, not a retrieval: a vendor that failed to "
             "answer is not a vendor that did not mention the product, and a vendor that is not logged in was never asked. "
-            "Use op=providers before a batch, op=ask per question, op=screenshot to retrieve the evidence image by name."
+            "Use op=providers before a batch, op=ask per question, op=screenshot to retrieve the evidence image by name. "
+            "An ask still being answered returns pending with a requestId: read it later with op=result, never ask again."
         ),
         "inputSchema": object_schema(
             {
-                "op": {"type": "string", "enum": ["providers", "ask", "screenshot"]},
+                "op": {"type": "string", "enum": ["providers", "ask", "result", "screenshot"]},
                 "question": {"type": "string", "minLength": 1, "maxLength": 2000},
+                "requestId": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
                 "providers": {
                     "type": "array",
                     "minItems": 1,

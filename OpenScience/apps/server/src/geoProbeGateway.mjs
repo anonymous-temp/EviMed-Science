@@ -11,9 +11,9 @@
 // boundary to admit it would have traded eighty sources' safety for one
 // source's convenience.
 //
-// What the runtime may ask for is a closed vocabulary of three operations. It
-// never composes an upstream path and never names the probe host, exactly as
-// it never names a bibliographic host.
+// What the runtime may ask for is a closed vocabulary of four operations
+// (providers, ask, result, screenshot). It never composes an upstream path and
+// never names the probe host, exactly as it never names a bibliographic host.
 //
 // Who may ask is the GEO gateway's admission (2026-10-10, Q-8): the runtime's
 // token names the account and the project, and the module has to be on and open
@@ -30,6 +30,14 @@
 //   POST /ask -> HTTP 202 with request_id; GET /runs/<id> reads the result
 //   Referenced screenshots use bounded, DNS-pinned public HTTPS downloads.
 // Legacy synchronous responses and same-origin screenshot paths remain readable.
+// The contract this client speaks names no cancel (and no priority flag or fallback switch): an abandoned task runs to its end on the host.
+//
+// A task is accepted before it is answered, and a five-engine task measured 487 s
+// against the runtime tool's 150 s ceiling. So acceptance is a fact of its own:
+// the moment the host takes a task its request id is recorded (the interactive
+// gateway in `evimed_geo.probe_requests`, the measurement queue on the job's
+// `external_ref`), a task that outlives the caller's deadline is `pending` and not
+// an error, and it is read later by id (`op: "result"`) and never asked again.
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { nodeWebTransport, validatedWebUrl } from "./webReadNetwork.mjs";
@@ -38,12 +46,13 @@ const gatewayPath = "/internal/geo-probe/v1";
 
 // Closed vocabularies. A runtime that asks for anything outside them is asking
 // for something this deployment does not do, and gets told so.
-const allowedOperations = new Set(["providers", "ask", "screenshot"]);
+const allowedOperations = new Set(["providers", "ask", "result", "screenshot"]);
 const allowedProviders = new Set(["deepseek", "doubao", "yuanbao", "qianwen", "kimi"]);
 // `(?![\s\S])` rather than `$`: in JavaScript `$` matches before a trailing
 // newline, so "run-1.png\n" satisfied the pattern and went straight into a URL
 // path. The test that caught it is in geoProbeGateway.test.mjs.
 const screenshotName = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.(?:png|jpg|jpeg|webp)(?![\s\S])/;
+const requestIdPattern = /^[a-f0-9]{32}(?![\s\S])/i;
 
 /** Calls one project's runtime may make to the probe in a minute, unless the deployment sets another (`OPEN_SCIENCE_GEO_PROBE_CALLS_PER_MINUTE`). */
 export const GEO_PROBE_CALLS_PER_MINUTE = 12;
@@ -54,15 +63,18 @@ const maxJsonResponseBytes = 8 * 1024 * 1024;
 const maxScreenshotBytes = 8 * 1024 * 1024;
 
 class GeoProbeGatewayError extends Error {
-  constructor(status, code, message) {
+  /** @param {number} status @param {string} code @param {string} message @param {string | null} [requestId] the host's id of the task this is about, once one was accepted */
+  constructor(status, code, message, requestId = null) {
     super(message);
     this.status = status;
     this.code = code;
+    this.requestId = requestId;
   }
 }
 
-function gatewayError(status, code, message) {
-  return new GeoProbeGatewayError(status, code, message);
+/** @param {number} status @param {string} code @param {string} message @param {string | null} [requestId] */
+function gatewayError(status, code, message, requestId = null) {
+  return new GeoProbeGatewayError(status, code, message, requestId);
 }
 
 function sendJson(res, status, payload) {
@@ -121,7 +133,17 @@ function validatedRequest(body) {
   }
   if (op === "providers") return { op };
   if (op === "screenshot") return { op, name: validatedScreenshotName(body.name) };
+  if (op === "result") return { op, requestId: validatedRequestId(body.requestId) };
   return { op, ...validatedAsk(body) };
+}
+
+/** The probe host's task id: 32 hex characters, the form it hands out. @param {unknown} value @returns {string} */
+function validatedRequestId(value) {
+  const id = typeof value === "string" ? value : "";
+  if (!requestIdPattern.test(id)) {
+    throw gatewayError(400, "geo_probe_request_id_invalid", "The GEO probe request id is missing or malformed.");
+  }
+  return id.toLowerCase();
 }
 
 /** A screenshot name the probe may be asked for.
@@ -334,8 +356,9 @@ function normalizeAnswer(row, provider, requireBrowser = false) {
   const citations = sourceAccepted && Array.isArray(row?.search_results) ? row.search_results : [];
   const screenshotUrl = String(row?.screenshot_url ?? "").trim();
   // Only the file name crosses back. The runtime asks for a screenshot by name
-  // through this gateway; it never learns a host it could reach directly.
-  const shot = screenshotUrl ? screenshotUrl.split("/").pop() ?? "" : "";
+  // through this gateway; it never learns a host it could reach directly. The
+  // name is the path's last segment: a pre-signed URL carries a query after it.
+  const shot = screenshotFileName(screenshotUrl);
   return {
     provider,
     // "ok" from the probe means a vendor answered. Anything else is a failed
@@ -352,8 +375,30 @@ function normalizeAnswer(row, provider, requireBrowser = false) {
     })),
     screenshotName: screenshotName.test(shot) ? shot : null,
     latencyMs: Number.isFinite(Number(row?.latency_ms)) ? Number(row.latency_ms) : null,
-    error: !sourceAccepted ? "consumer_answer_unavailable" : status === "ok" ? null : String(row?.error ?? "").slice(0, 400) || "the probe returned no answer",
+    error: !sourceAccepted ? CONSUMER_ANSWER_UNAVAILABLE : status === "ok" ? null : String(row?.error ?? "").slice(0, 400) || "the probe returned no answer",
   };
+}
+
+/**
+ * The `error` of a row the host answered from somewhere other than the consumer page (its paid third-party fallback): not a consumer
+ * answer, and asking again only triggers the fallback again, so it is never retried and never read as a login page or an empty shell.
+ */
+export const CONSUMER_ANSWER_UNAVAILABLE = "consumer_answer_unavailable";
+
+/** The file name a screenshot reference ends in: the last segment of its path, query and fragment left out. Relative references are read as paths on the probe host. @param {string} reference */
+function screenshotFileName(reference) {
+  if (!reference) return "";
+  try {
+    return new URL(reference, "http://probe.invalid/").pathname.split("/").pop() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+/** The addresses a host names itself by: its bind address, loopback, or any private or link-local one. @param {string} hostname */
+function isOwnAddress(hostname) {
+  const host = String(hostname ?? "").toLowerCase().replace(/^\[(.*)\]$/, "$1");
+  return host === "0.0.0.0" || host === "::" || isPrivateHost(host);
 }
 
 function normalizeProviders(payload) {
@@ -389,39 +434,104 @@ function originDirectory(origin) {
   return origin.pathname.endsWith("/") ? origin : new URL(`${origin.pathname}/`, origin);
 }
 
+/** Job states of an accepted task that are not an answer yet, and the ones that are. */
+const TASK_UNFINISHED = ["queued", "waiting", "running"];
+const TASK_FINISHED = ["done", "partial", "failed"];
+
 /**
- * The probe host as a client: the three operations of the upstream contract,
- * one request each, with the transport rules this module enforces (the origin
- * check, the signature, the size limits, the error codes that say whether a
- * failure is a reason to wait). The runtime's gateway below and the control
- * plane's own measurement queue (`geoProbeQueue.mjs`) both reach the probe
- * through it, so there is one account of what an answer from the probe is.
+ * The failures of reading an accepted task that say the host could not be reached just now, not that the task is gone or that what it
+ * returned cannot be trusted: the task is read again later. Any other failure of a read (a host that has no such task, a reply that
+ * disagrees with the ask) is final for that task, and it is never submitted again either way.
+ */
+export const GEO_PROBE_POLL_TRANSIENT_CODES = Object.freeze(["geo_probe_rate_limited", "geo_probe_busy", "geo_probe_unavailable",
+  "geo_probe_upstream_error", "geo_probe_timeout"]);
+const POLL_TRANSIENT = new Set(GEO_PROBE_POLL_TRANSIENT_CODES);
+
+/**
+ * The outcomes of a probe task, counted by whoever meets them (`onTask`; `open_science_geo_probe_tasks_total{outcome}`):
+ * - `accepted`: the host took a task (HTTP 202, or a 200 that carries a job).
+ * - `completed` / `partial` / `failed`: the task finished as done, partial or failed, and its result was read.
+ * - `pending`: an interactive ask outlived its deadline; the task is kept for a later read by its id.
+ * - `accepted_result_unavailable`: the task was accepted and its result cannot be established (unreadable, contradicting its ask, or
+ *   still unfinished when the queue's age limit passed); it is never submitted again.
+ * - `resubmit_prevented`: a queue job whose lease lapsed while it held an accepted task, which lease recovery would have asked again.
+ * - `capacity_wait`: the queue found no idle slot on the host for an engine and asked nothing.
+ */
+export const GEO_PROBE_TASK_OUTCOMES = Object.freeze(["accepted", "completed", "partial", "failed", "pending", "accepted_result_unavailable",
+  "resubmit_prevented", "capacity_wait"]);
+
+/** Whether a reply is a job envelope: what the host answers an accepted ask with, even on a 200. @param {any} body */
+function isJobEnvelope(body) {
+  return typeof body?.request_id === "string" && typeof body?.job_status === "string";
+}
+
+/** @typedef {{ pending: true, requestId: string, jobStatus: string }} GeoProbePending  an accepted task that has not finished */
+/** @typedef {{ question: string, surface: { mode: string, session: string }, results: any[], raw: any[], integrity: Record<string, any> }} GeoProbeAnswers */
+
+/**
+ * The probe host as a client: the operations of the upstream contract, with
+ * the transport rules this module enforces (the origin check, the signature,
+ * the size limits, the error codes that say whether a failure is a reason to
+ * wait). The runtime's gateway below and the control plane's own measurement
+ * queue (`geoProbeQueue.mjs`) both reach the probe through it, so there is one
+ * account of what an answer from the probe is.
  *
  * Every method throws a `GeoProbeGatewayError` (`status`, `code`) on failure
  * and never reads a failure as an empty result. The caller passes its own
  * `signal`; an abort whose reason is a `TimeoutError` reads `geo_probe_timeout`.
  *
+ * Acceptance is a fact of its own. Once the host has taken a task, nothing here
+ * submits that question again; a failure after it carries the task's id
+ * (`error.requestId`), and the id is handed to `onAccepted` at once.
+ *
  * - `providers({ signal })` → `{ providers: [{ provider, state, ready }], ready: string[], integrity }`
- * - `ask({ question, providers | provider, deep, newChat, signal })` →
+ * - `ask({ question, providers | provider, deep, newChat, signal, onAccepted? })` →
  *   `{ question, surface, results, raw, integrity }`. `results` are the
  *   normalized answers the gateway hands a run; `raw` are the upstream's own
  *   result rows in the same order — their status word and per-citation
  *   fields, which the measurement queue reads and a run is never shown.
+ *   `onAccepted({ requestId, question, providers, deep, newChat })` is awaited the moment the host accepts the task and before
+ *   anything is waited for; if it throws the ask ends with that error. A task that is not finished when the caller's deadline passes
+ *   throws `geo_probe_result_pending` (202, with `requestId`).
+ * - `submit(...)`: the same ask, but it returns `{ pending: true, requestId, jobStatus }` as soon as the task is accepted (and
+ *   `onAccepted` has run) instead of waiting: the caller reads the task itself. A host that answers in the request itself, or whose
+ *   acceptance already carries the finished job, returns the answers.
+ * - `read({ requestId, question, providers, deep, newChat, wait?, signal })` → the same result as `ask` for an accepted task, or
+ *   `{ pending: true, requestId, jobStatus }` while it is unfinished (with `wait` it polls until the signal's deadline first). The
+ *   ask's own fields are given back so the reply is checked against what was asked. A single read that cannot reach the host throws
+ *   one of `GEO_PROBE_POLL_TRANSIENT_CODES`: the caller reads again later.
  * - `screenshot({ name, signal })` → `{ name, contentType, bytes: Buffer, sha256 }`
  *
- * @param {Record<string, any>} config @param {{ fetchImpl?: typeof fetch, pollIntervalMs?: number, screenshotTransport?: import("./webReadNetwork.mjs").WebTransport }} [options]
+ * The contract this client speaks names no cancel, so an abandoned task runs to its end on the host and its result stays readable.
+ *
+ * @param {Record<string, any>} config
+ * @param {{ fetchImpl?: typeof fetch, pollIntervalMs?: number, screenshotTransport?: import("./webReadNetwork.mjs").WebTransport,
+ *   onTask?: (outcome: string) => void }} [options]  `onTask` hears each task outcome (`GEO_PROBE_TASK_OUTCOMES`)
  */
-export function probeUpstream(config, { fetchImpl = fetch, pollIntervalMs = 1_000, screenshotTransport = nodeWebTransport() } = {}) {
+export function probeUpstream(config, { fetchImpl = fetch, pollIntervalMs = 1_000, screenshotTransport = nodeWebTransport(), onTask = () => {} } = {}) {
   /** @type {Map<string, { url: URL, until: number }>} */
   const screenshots = new Map();
   // The queue has a longer night-batch deadline than the attended MCP gateway.
   // A caller-owned deadline must not be shortened to the runtime tool's ceiling.
   const signalFor = (signal) => signal ?? AbortSignal.timeout(Math.max(1_000, Number(config.geoProbeTimeoutMs) || 360_000));
-  const resultUnavailable = () => gatewayError(502, "geo_probe_result_unavailable", "The accepted GEO probe task could not be read. Delivery is unknown; do not submit the question again automatically.");
   const secret = () => String(config.geoProbeSigningSecret ?? "");
+  /** @param {string} outcome */
+  const count = (outcome) => {
+    try { onTask(outcome); } catch { /* a counter never fails a probe */ }
+  };
+  /** @param {string | null} [requestId] */
+  const resultUnavailable = (requestId = null) => gatewayError(502, "geo_probe_result_unavailable",
+    "The accepted GEO probe task could not be read. Delivery is unknown; do not submit the question again automatically.", requestId);
+  /** @param {string} requestId */
+  const pendingError = (requestId) => gatewayError(202, "geo_probe_result_pending",
+    "The accepted GEO probe task has not finished. Read it later by its request id; do not ask the question again.", requestId);
+  /** @param {AbortSignal} signal */
+  const timedOut = (signal) => signal.aborted && /** @type {any} */ (signal.reason)?.name === "TimeoutError";
+  /** The body the ask was sent with: the same bytes whenever the same ask is made again. @param {{ question: string, providers: string[], deep: 0 | 1, newChat: 0 | 1 }} spec */
+  const askPayload = ({ question, providers, deep, newChat }) => JSON.stringify({ question, providers, deep, new_chat: newChat });
 
   /**
-   * GET /providers or POST /ask: the parsed JSON object and the digests.
+   * GET /providers, GET /runs/<id> or POST /ask: the parsed JSON object and the digests.
    * @param {string} op @param {string | null} payload @param {AbortSignal | undefined} signal
    */
   async function exchange(op, payload, signal) {
@@ -462,8 +572,11 @@ export function probeUpstream(config, { fetchImpl = fetch, pollIntervalMs = 1_00
       body = JSON.parse(text);
       if (body == null || typeof body !== "object") throw new Error("not an object");
     } catch (error) {
-      // Acceptance precedes parsing. Even an unreadable 202 may have spent the ask.
-      if (op === "ask" && upstream.status === 202) throw resultUnavailable();
+      // Acceptance precedes parsing. Even an unreadable 202 may have spent the ask, and it names no task to read later.
+      if (op === "ask" && upstream.status === 202) {
+        count("accepted_result_unavailable");
+        throw resultUnavailable();
+      }
       if (error instanceof GeoProbeGatewayError) throw error;
       throw gatewayError(502, "geo_probe_response_invalid", "The GEO probe returned a malformed response.");
     }
@@ -471,6 +584,206 @@ export function probeUpstream(config, { fetchImpl = fetch, pollIntervalMs = 1_00
     // difference between "this number is wrong" and "this number is wrong and
     // here is the record that proves it changed".
     return { body, httpStatus: upstream.status, responseDigest: sha256(text), requestDigest: bodyDigest, transport: origin.protocol === "http:" ? "plaintext" : "tls" };
+  }
+
+  /**
+   * Put the ask to the host. A task it accepts — a 202, or a 200 that carries a job — has an id; a synchronous host answers the ask
+   * itself, and `requestId` is null.
+   * @param {{ question: string, providers: string[], deep: 0 | 1, newChat: 0 | 1 }} spec @param {AbortSignal} signal
+   */
+  async function put(spec, signal) {
+    const sent = await exchange("ask", askPayload(spec), signal);
+    if (sent.httpStatus !== 202 && !isJobEnvelope(sent.body)) return { sent, requestId: null };
+    const requestId = sent.body.request_id;
+    if (typeof requestId !== "string" || !requestIdPattern.test(requestId)) {
+      count("accepted_result_unavailable");
+      throw resultUnavailable();
+    }
+    count("accepted");
+    return { sent, requestId };
+  }
+
+  /**
+   * A job reply, checked against the ask it answers. `null` while the task is unfinished; the job once it has finished; otherwise the
+   * reply is not this ask's and the task's result cannot be established.
+   * @param {any} job @param {string} requestId @param {{ question: string, providers: string[], deep: 0 | 1, newChat: 0 | 1 }} spec
+   */
+  function checkedJob(job, requestId, spec) {
+    const { question, providers, deep, newChat } = spec;
+    if (job.request_id !== requestId || (job.deep != null && job.deep !== deep) || (job.new_chat != null && job.new_chat !== newChat) || (job.question != null && job.question !== question)
+      || (job.providers != null && (!Array.isArray(job.providers) || job.providers.length !== providers.length
+        || job.providers.some((p) => !providers.includes(p))))) {
+      throw resultUnavailable(requestId);
+    }
+    if (TASK_UNFINISHED.includes(job.job_status)) return null;
+    if (!TASK_FINISHED.includes(job.job_status) || !job.result || !Array.isArray(job.result.results)) throw resultUnavailable(requestId);
+    if (job.result.request_id !== requestId || (job.result.question != null && job.result.question !== question)) throw resultUnavailable(requestId);
+    return job;
+  }
+
+  /**
+   * Read an accepted task: once (`wait: false`), or until it finishes or the signal's deadline passes (`wait: true`). `first` is a job
+   * the ask itself came back with. A deadline with the task unfinished is `geo_probe_result_pending`; a caller's own cancellation, a
+   * host with no such task or a reply that disagrees with the ask is `geo_probe_result_unavailable`.
+   * @param {{ requestId: string, spec: { question: string, providers: string[], deep: 0 | 1, newChat: 0 | 1 }, signal: AbortSignal, wait: boolean,
+   *   first: Awaited<ReturnType<typeof exchange>> | null, delayFirst: boolean }} task
+   * @returns {Promise<{ pending: true, jobStatus: string } | { pending: false, job: any, reply: Awaited<ReturnType<typeof exchange>> }>}
+   */
+  async function collect({ requestId, spec, signal, wait, first, delayFirst }) {
+    let transientFailures = 0;
+    let reply = first;
+    let pause = delayFirst;
+    for (;;) {
+      if (reply === null) {
+        try {
+          if (wait && pause) await delay(Math.max(1, pollIntervalMs), undefined, { signal });
+          reply = await exchange(`runs/${requestId}`, null, signal);
+          transientFailures = 0;
+        } catch (error) {
+          const code = String(/** @type {any} */ (error)?.code ?? "");
+          if (signal.aborted) {
+            // The deadline passed with the task unfinished: it is still the host's, and its id is the way back to it.
+            if (!timedOut(signal)) throw resultUnavailable(requestId);
+            if (wait) throw pendingError(requestId);
+            throw error;
+          }
+          if (POLL_TRANSIENT.has(code)) {
+            if (!wait) throw error;
+            if (++transientFailures < 3) { pause = true; continue; }
+            // The host could not be reached three times running; the task is not known to be lost.
+            throw pendingError(requestId);
+          }
+          throw resultUnavailable(requestId);
+        }
+      }
+      const job = checkedJob(reply.body, requestId, spec);
+      if (job === null) {
+        if (!wait) return { pending: true, jobStatus: String(reply.body.job_status) };
+        reply = null;
+        pause = true;
+        continue;
+      }
+      return { pending: false, job, reply: { ...reply, body: job.result } };
+    }
+  }
+
+  /** What a task's id and failure add to the counters: a task whose deadline passed, or whose result cannot be established. @param {unknown} error */
+  const accountedFor = (error) => {
+    const code = /** @type {any} */ (error)?.code;
+    if (code === "geo_probe_result_pending") count("pending");
+    else if (code === "geo_probe_result_unavailable") count("accepted_result_unavailable");
+    return error;
+  };
+
+  /**
+   * The file a screenshot reference stands for, as the name this client serves it by. The probe host names its own screenshots, often
+   * by its bind address (no port, 0.0.0.0, loopback) and not the address it is reached at: a reference to the host itself is the name
+   * on the configured origin, and nothing from the reference but its name is ever requested. A public HTTPS address elsewhere (object
+   * storage) is fetched by a DNS-pinned public download under an opaque name. Anything else is no screenshot, and says why.
+   * @param {any} row @param {string | null} name the file name the reference ends in, when it is a valid one
+   * @returns {{ name: string | null, warning?: string }}
+   */
+  function screenshotReference(row, name) {
+    const reference = String(row?.screenshot_url ?? "").trim();
+    if (!reference) return { name: null };
+    if (!name) return { name: null, warning: "screenshot_unavailable:name_invalid" };
+    const probe = probeOrigin(config);
+    let url;
+    try {
+      url = new URL(reference, originDirectory(probe));
+    } catch {
+      return { name: null, warning: "screenshot_unavailable:url_invalid" };
+    }
+    if (url.origin === probe.origin || url.hostname === probe.hostname || isOwnAddress(url.hostname)) return { name };
+    try {
+      validatedWebUrl(url.href);
+      if (url.protocol !== "https:") throw new Error("not TLS");
+    } catch {
+      return { name: null, warning: "screenshot_unavailable:foreign_origin" };
+    }
+    const remote = `remote-${sha256(url.href)}.${name.split(".").pop()}`;
+    for (const [key, saved] of screenshots) if (saved.until < Date.now()) screenshots.delete(key);
+    if (screenshots.size >= 1_000) screenshots.delete(screenshots.keys().next().value);
+    screenshots.set(remote, { url, until: Date.now() + 3_600_000 });
+    return { name: remote };
+  }
+
+  /**
+   * A finished reply as the answers a caller is handed. `requestId` is null for a synchronous host.
+   * @param {{ spec: { question: string, providers: string[], deep: 0 | 1, newChat: 0 | 1 }, requestId: string | null, requestDigest: string,
+   *   reply: Awaited<ReturnType<typeof exchange>> }} finished
+   */
+  function answersOf({ spec, requestId, requestDigest, reply }) {
+    const { question, providers, deep, newChat } = spec;
+    try {
+      const { body, responseDigest, transport } = reply;
+      const rows = Array.isArray(body?.results) ? body.results : [body];
+      // Fail closed on foreign or duplicate provider rows; missing vendors remain explicit failures.
+      const invalidResult = () => requestId ? resultUnavailable(requestId) : gatewayError(502, "geo_probe_response_invalid", "The GEO probe returned inconsistent results.");
+      const surfaceMatches = (value) => (value.deep == null || value.deep === deep) && (value.new_chat == null || value.new_chat === newChat);
+      if (!surfaceMatches(body)) throw invalidResult();
+      const seen = new Set();
+      for (const row of rows) {
+        if (row == null || typeof row !== "object" || Array.isArray(row)) throw invalidResult();
+        const provider = row?.provider ?? (rows.length === 1 && providers.length === 1 ? providers[0] : null);
+        if (!providers.includes(provider) || seen.has(provider) || !surfaceMatches(row)
+          || (row.question != null && row.question !== question) || (requestId && row.request_id != null && row.request_id !== requestId)) throw invalidResult();
+        seen.add(provider);
+      }
+      const ordered = providers.map((provider) => rows.find((r) => r.provider === provider || (!r.provider && providers.length === 1)) ?? { provider, status: "failed", error: "missing_provider_result" });
+      const results = ordered.map((row, index) => {
+        const answer = normalizeAnswer(row, providers[index], requestId != null);
+        const shot = screenshotReference(row, answer.screenshotName);
+        answer.screenshotName = shot.name;
+        // A reference that could not be served is said, not dropped: the answer stands without its picture.
+        if (shot.warning) answer.warnings = [shot.warning];
+        return answer;
+      });
+      return {
+        question,
+        // The probe surface is part of the finding, not diagnostics: an answer
+        // from a fresh chat in deep mode is a different claim about the
+        // vendor than one from a warm chat in fast mode, and a report that
+        // omits which it was cannot be reproduced by a client with a phone.
+        surface: { mode: deep === 1 ? "deep" : "default", session: newChat === 1 ? "new_chat" : "continued" },
+        results,
+        raw: ordered,
+        integrity: { responseDigest, requestDigest, signed: Boolean(secret()), transport, ...(requestId ? { upstreamRequestId: requestId } : {}) },
+      };
+    } catch (error) {
+      if (requestId) throw resultUnavailable(requestId);
+      throw error;
+    }
+  }
+
+  /** A finished task's answers, counted by how it finished. */
+  function finish(spec, requestId, requestDigest, read) {
+    const answers = answersOf({ spec, requestId, requestDigest, reply: read.reply });
+    count(read.job.job_status === "done" ? "completed" : read.job.job_status);
+    return answers;
+  }
+
+  /**
+   * The ask, put to the host and (unless `detach`) waited for. The task's id is handed to `onAccepted` first.
+   * @param {Record<string, any>} request @param {boolean} detach
+   * @returns {Promise<GeoProbeAnswers | GeoProbePending>}
+   */
+  async function putAndRead(request, detach) {
+    const spec = validatedAsk(request);
+    const signal = signalFor(request.signal);
+    const { sent, requestId } = await put(spec, signal);
+    if (requestId === null) return answersOf({ spec, requestId: null, requestDigest: sent.requestDigest, reply: sent });
+    try {
+      // The id is on record before anything is waited for: whatever happens to this call, the task is not lost and not asked again.
+      await request.onAccepted?.({ requestId, ...spec });
+      const first = isJobEnvelope(sent.body) ? sent : null;
+      if (detach && first === null) return { pending: true, requestId, jobStatus: "queued" };
+      const read = await collect({ requestId, spec, signal, wait: !detach, first, delayFirst: true });
+      if (read.pending) return { pending: true, requestId, jobStatus: read.jobStatus };
+      return finish(spec, requestId, sent.requestDigest, read);
+    } catch (error) {
+      throw accountedFor(error);
+    }
   }
 
   return {
@@ -485,94 +798,42 @@ export function probeUpstream(config, { fetchImpl = fetch, pollIntervalMs = 1_00
       };
     },
 
-    /** @param {{ question?: unknown, provider?: unknown, providers?: unknown, deep?: unknown, newChat?: unknown, signal?: AbortSignal }} request */
-    async ask(request) {
-      const { question, providers, deep, newChat } = validatedAsk(request);
-      const payload = JSON.stringify({ question, providers, deep, new_chat: newChat });
+    /**
+     * @param {{ question?: unknown, provider?: unknown, providers?: unknown, deep?: unknown, newChat?: unknown, signal?: AbortSignal,
+     *   onAccepted?: (task: { requestId: string, question: string, providers: string[], deep: 0 | 1, newChat: 0 | 1 }) => unknown }} request
+     * @returns {Promise<GeoProbeAnswers>}
+     */
+    ask(request) {
+      return /** @type {Promise<GeoProbeAnswers>} */ (putAndRead(request, false));
+    },
+
+    /**
+     * @param {Parameters<ReturnType<typeof probeUpstream>["ask"]>[0]} request
+     * @returns {Promise<GeoProbeAnswers | GeoProbePending>}
+     */
+    submit(request) {
+      return putAndRead(request, true);
+    },
+
+    /**
+     * An accepted task's state or answers, by its id.
+     * @param {{ requestId: unknown, question?: unknown, provider?: unknown, providers?: unknown, deep?: unknown, newChat?: unknown, wait?: boolean, signal?: AbortSignal }} request
+     * @returns {Promise<GeoProbeAnswers | GeoProbePending>}
+     */
+    async read(request) {
+      const requestId = validatedRequestId(request.requestId);
+      const spec = validatedAsk(request);
       const signal = signalFor(request.signal);
-      const submitted = await exchange("ask", payload, signal);
-      let reply = submitted;
-      let upstreamRequestId = null;
-      if (submitted.httpStatus === 202) {
-        upstreamRequestId = submitted.body.request_id;
-        if (typeof upstreamRequestId !== "string" || !/^[a-f0-9]{32}$/i.test(upstreamRequestId)) {
-          throw resultUnavailable();
-        }
-        let transientFailures = 0;
-        for (;;) {
-          try {
-            await delay(Math.max(1, pollIntervalMs), undefined, { signal });
-            reply = await exchange(`runs/${upstreamRequestId}`, null, signal);
-            transientFailures = 0;
-          } catch (error) {
-            const code = String(/** @type {any} */ (error)?.code ?? "");
-            if (!signal.aborted && ["geo_probe_rate_limited", "geo_probe_busy", "geo_probe_unavailable", "geo_probe_upstream_error"].includes(code) && ++transientFailures < 3) continue;
-            throw resultUnavailable();
-          }
-          const job = reply.body;
-          if (job.request_id !== upstreamRequestId || (job.deep != null && job.deep !== deep) || (job.new_chat != null && job.new_chat !== newChat) || (job.question != null && job.question !== question)
-            || (job.providers != null && (!Array.isArray(job.providers) || job.providers.length !== providers.length
-              || job.providers.some((p) => !providers.includes(p))))) {
-            throw resultUnavailable();
-          }
-          if (["queued", "waiting", "running"].includes(job.job_status)) continue;
-          if (!["done", "partial", "failed"].includes(job.job_status) || !job.result || !Array.isArray(job.result.results)) throw resultUnavailable();
-          if (job.result.request_id !== upstreamRequestId || (job.result.question != null && job.result.question !== question)) {
-            throw resultUnavailable();
-          }
-          reply = { ...reply, body: job.result };
-          break;
-        }
-      }
       try {
-        const { body, responseDigest, transport } = reply;
-        const requestDigest = submitted.requestDigest;
-        const rows = Array.isArray(body?.results) ? body.results : [body];
-        // Fail closed on foreign or duplicate provider rows; missing vendors remain explicit failures.
-        const invalidResult = () => upstreamRequestId ? resultUnavailable() : gatewayError(502, "geo_probe_response_invalid", "The GEO probe returned inconsistent results.");
-        const surfaceMatches = (value) => (value.deep == null || value.deep === deep) && (value.new_chat == null || value.new_chat === newChat);
-        if (!surfaceMatches(body)) throw invalidResult();
-        const seen = new Set();
-        for (const row of rows) {
-          if (row == null || typeof row !== "object" || Array.isArray(row)) throw invalidResult();
-          const provider = row?.provider ?? (rows.length === 1 && providers.length === 1 ? providers[0] : null);
-          if (!providers.includes(provider) || seen.has(provider) || !surfaceMatches(row)
-            || (row.question != null && row.question !== question) || (upstreamRequestId && row.request_id != null && row.request_id !== upstreamRequestId)) throw invalidResult();
-          seen.add(provider);
-        }
-        const ordered = providers.map((provider) => rows.find((r) => r.provider === provider || (!r.provider && providers.length === 1)) ?? { provider, status: "failed", error: "missing_provider_result" });
-        const results = ordered.map((row, index) => {
-          const answer = normalizeAnswer(row, providers[index], upstreamRequestId != null);
-          if (answer.screenshotName && row.screenshot_url) {
-            try {
-              const url = new URL(row.screenshot_url);
-              if (url.origin !== probeOrigin(config).origin) {
-                validatedWebUrl(url.href);
-                if (url.protocol !== "https:") throw new Error("not TLS");
-                const name = `remote-${sha256(url.href)}.${answer.screenshotName.split(".").pop()}`;
-                for (const [key, saved] of screenshots) if (saved.until < Date.now()) screenshots.delete(key);
-                if (screenshots.size >= 1_000) screenshots.delete(screenshots.keys().next().value);
-                screenshots.set(name, { url, until: Date.now() + 3_600_000 });
-                answer.screenshotName = name;
-              }
-            } catch { answer.screenshotName = null; }
-          }
-          return answer;
-        });
-        return {
-          question,
-          // The probe surface is part of the finding, not diagnostics: an answer
-          // from a fresh chat in deep mode is a different claim about the
-          // vendor than one from a warm chat in fast mode, and a report that
-          // omits which it was cannot be reproduced by a client with a phone.
-          surface: { mode: deep === 1 ? "deep" : "default", session: newChat === 1 ? "new_chat" : "continued" },
-          results,
-          raw: ordered,
-          integrity: { responseDigest, requestDigest, signed: Boolean(secret()), transport, ...(upstreamRequestId ? { upstreamRequestId } : {}) },
-        };
+        const read = await collect({ requestId, spec, signal, wait: request.wait === true, first: null, delayFirst: false });
+        if (read.pending) return { pending: true, requestId, jobStatus: read.jobStatus };
+        return finish(spec, requestId, sha256(askPayload(spec)), read);
       } catch (error) {
-        if (upstreamRequestId) throw resultUnavailable();
-        throw error;
+        if (/** @type {any} */ (error)?.code === "geo_probe_result_pending") {
+          count("pending");
+          return { pending: true, requestId, jobStatus: "running" };
+        }
+        throw accountedFor(error);
       }
     },
 
@@ -611,13 +872,24 @@ export function probeUpstream(config, { fetchImpl = fetch, pollIntervalMs = 1_00
 }
 
 /**
+ * The interactive gateway's record of the tasks it accepted, so one that outlives the tool's deadline can be read later by its id:
+ * `record` on acceptance, `lookup` for the account and project that asked (another account's or project's id is not found).
+ * `GeoProbeRequests` (`geoProbeRequests.mjs`) is the durable one.
+ * @typedef {{ record: (task: { requestId: string, userId: string, projectId: string, question: string, providers: string[], deep: 0 | 1, newChat: 0 | 1 }) => Promise<unknown>,
+ *   lookup: (key: { requestId: string, userId: string, projectId: string }) => Promise<null | { requestId: string, question: string, providers: string[], deep: 0 | 1, newChat: 0 | 1, acceptedAt: string }> }} GeoProbeRequestLedger
+ */
+
+/**
  * @param {Record<string, any>} config
  * @param {any} runtimeManager
- * @param {{ fetchImpl?: typeof fetch, geo?: { service?: { allows: (user: { id: string }) => boolean } } | null }} [dependencies]
- *   `geo` is the composed module or null when it is off (what the GEO gateway is given)
+ * @param {{ fetchImpl?: typeof fetch, geo?: { service?: { allows: (user: { id: string }) => boolean } } | null, requests?: GeoProbeRequestLedger | null,
+ *   onProbeTask?: (outcome: string) => void, pollIntervalMs?: number }} [dependencies]
+ *   `geo` is the composed module or null when it is off (what the GEO gateway is given); `requests` is where accepted tasks are recorded
+ *   (without it a task that outlives the deadline cannot be read later, and the ask answers as an unreadable one); `onProbeTask` hears each task outcome;
+ *   `pollIntervalMs` is how often an accepted task is read while its ask waits.
  */
-export function createGeoProbeGatewayHandler(config, runtimeManager, { fetchImpl = fetch, geo = null } = {}) {
-  const upstream = probeUpstream(config, { fetchImpl });
+export function createGeoProbeGatewayHandler(config, runtimeManager, { fetchImpl = fetch, geo = null, requests = null, onProbeTask = () => {}, pollIntervalMs = 1_000 } = {}) {
+  const upstream = probeUpstream(config, { fetchImpl, onTask: onProbeTask, pollIntervalMs });
   /** @type {Map<string, { until: number, count: number }>} */
   const windows = new Map();
   return async function geoProbeGatewayHandler(req, res, onFailure) {
@@ -704,32 +976,90 @@ export function createGeoProbeGatewayHandler(config, runtimeManager, { fetchImpl
         return;
       }
 
-      const answer = await upstream.ask({ ...request, signal: controller.signal });
-      const { results, integrity } = answer;
-      sendJson(res, 200, {
-        data: {
-          question: answer.question,
-          surface: answer.surface,
-          results,
-          inDenominator: results.filter((row) => row.inDenominator).map((row) => row.provider),
-        },
-        measurement: results.some((row) => row.inDenominator) ? "ok" : "failed",
-        integrity,
-        warnings: [
-          ...(results.some((row) => !row.inDenominator)
-            ? ["A failed probe is not a measurement: it must be retried, and must not enter the denominator or be cached as a result."]
-            : []),
-          ...(integrity.transport === "plaintext" && !integrity.signed
-            ? ["This measurement crossed an unauthenticated plaintext hop. The response digest is recorded, but nothing prevented it from being altered in transit."]
-            : []),
-        ],
-      });
+      const owner = { userId: String(identity?.userId ?? ""), projectId: String(identity?.projectId ?? "") };
+
+      if (request.op === "result") {
+        // Only the account and project that asked can read a task: another one's id is no more found than one never accepted.
+        const task = await requests?.lookup({ requestId: request.requestId, ...owner }) ?? null;
+        if (!task) {
+          throw gatewayError(404, "geo_probe_request_unknown", "This project has no accepted GEO probe task with that request id (or its record has expired). "
+            + "Do not ask the question again to find out: that is a new measurement and a new charge.");
+        }
+        const read = await upstream.read({ requestId: task.requestId, question: task.question, providers: task.providers, deep: task.deep, newChat: task.newChat,
+          wait: true, signal: controller.signal });
+        if ("pending" in read) return sendPending(res, task);
+        return sendAnswer(res, read);
+      }
+
+      // The task is on record the moment the host accepts it (`onAccepted`), before anything is waited for.
+      let accepted = null;
+      let answer;
+      try {
+        answer = await upstream.ask({ ...request, signal: controller.signal, onAccepted: async (task) => {
+          try {
+            await requests?.record({ ...task, ...owner });
+            if (requests) accepted = { ...task, acceptedAt: new Date().toISOString() };
+          } catch { accepted = null; /* the ask goes on; if it outlives its deadline it can only be reported as unreadable */ }
+        } });
+      } catch (error) {
+        if (/** @type {any} */ (error)?.code === "geo_probe_result_pending") {
+          // Not an error: the host has the task and is still working. The contract names no cancel, so an abandoned task runs to
+          // its end and stays readable by its id (`op: "result"`) for the record's retention.
+          if (accepted) return sendPending(res, accepted);
+          throw gatewayError(502, "geo_probe_result_unavailable", "The accepted GEO probe task did not finish in time and could not be recorded for a later read. "
+            + "Delivery is unknown; do not submit the question again automatically.");
+        }
+        throw error;
+      }
+      sendAnswer(res, answer);
     } catch (error) {
       sendError(res, error, onFailure);
     } finally {
       clearTimeout(timeout);
     }
   };
+}
+
+/**
+ * A task the host has accepted and is still working on: not an error and not yet a measurement.
+ * @param {any} res @param {{ requestId: string, question: string, providers: string[], acceptedAt: string }} task
+ */
+function sendPending(res, task) {
+  sendJson(res, 202, {
+    data: { status: "pending", requestId: task.requestId, question: task.question, providers: task.providers, acceptedAt: task.acceptedAt },
+    measurement: "pending",
+    warnings: ["The probe is still working on this question. It is not a measurement yet and not a failure: read it later with op=result and this request id. "
+      + "Asking the question again starts a second measurement and a second charge."],
+  });
+}
+
+/** @param {any} res @param {{ question: string, surface: unknown, results: any[], integrity: any }} answer */
+function sendAnswer(res, answer) {
+  const { results, integrity } = answer;
+  sendJson(res, 200, {
+    data: {
+      question: answer.question,
+      surface: answer.surface,
+      results,
+      inDenominator: results.filter((row) => row.inDenominator).map((row) => row.provider),
+    },
+    measurement: results.some((row) => row.inDenominator) ? "ok" : "failed",
+    integrity,
+    warnings: [
+      ...(results.some((row) => !row.inDenominator && row.error !== CONSUMER_ANSWER_UNAVAILABLE)
+        ? ["A failed probe is not a measurement: it must be retried, and must not enter the denominator or be cached as a result."]
+        : []),
+      // The host answered from its paid third-party fallback because the consumer page gave nothing. That is not this engine's
+      // answer, and asking again only buys the fallback again.
+      ...(results.some((row) => row.error === CONSUMER_ANSWER_UNAVAILABLE)
+        ? ["An engine whose consumer page gave no answer was answered by a third-party fallback instead. That is not a consumer answer and is kept out of the denominator; "
+          + "do not ask that engine again, since each ask triggers the paid fallback again."]
+        : []),
+      ...(integrity.transport === "plaintext" && !integrity.signed
+        ? ["This measurement crossed an unauthenticated plaintext hop. The response digest is recorded, but nothing prevented it from being altered in transit."]
+        : []),
+    ],
+  });
 }
 
 /** Verify a signature produced by signedHeaders. Exported for the probe host's

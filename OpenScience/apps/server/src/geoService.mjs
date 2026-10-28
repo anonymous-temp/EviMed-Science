@@ -59,6 +59,7 @@ import { answersCiting, countsOf, pagesCited, roundAnswers, sentenceSource, tall
 import { geoSourceFromRow, questionGroupFromRow, questionFromRow } from "./geoStore.mjs";
 import { nextWeeklySlot, programSteps, wantedSteps } from "./geoOrchestrator.mjs";
 import { GEO_PROBE_ENGINES } from "./geoProbeQueue.mjs";
+import { GEO_PROBE_TASK_OUTCOMES } from "./geoProbeGateway.mjs";
 import { HttpError } from "./security.mjs";
 import { GEO_ORDER_ARTICLE_LIVE_STATES, ORDER_SELECT, mapOrder, orderCancellable, projectMoney } from "./geoMarketStore.mjs";
 import { mediaMarketConfigured } from "./mediaMarketClient.mjs";
@@ -2753,7 +2754,7 @@ export async function geoReadiness({ config, geo, database }) {
  * Everything the metrics endpoint shows about the module, read once per scrape.
  * @param {{ service: GeoService, social?: any, worker?: any, cards?: any, questionBank?: any, valueUpkeep?: { metrics?: () => Record<string, number> } | null,
  *   importDelivery?: { counters?: { imported: number, failed: number } } | null,
- *   measureState?: { checkTotals?: Record<string, number>, inclusionTotals?: Record<string, number> } | null }} geo
+ *   measureState?: { checkTotals?: Record<string, number>, inclusionTotals?: Record<string, number>, probeTotals?: Record<string, number> } | null }} geo
  */
 export async function geoMetricsSnapshot(geo) {
   let tables = null;
@@ -2762,7 +2763,7 @@ export async function geoMetricsSnapshot(geo) {
     const [what, outcome] = key.split("\u0000");
     return { what, outcome, value };
   }), social: geo.social?.status?.() ?? null, worker: geo.worker?.status?.() ?? null,
-    cards: geo.cards?.metrics?.() ?? null, checks: geo.measureState?.checkTotals ?? null, inclusion: geo.measureState?.inclusionTotals ?? null,
+    cards: geo.cards?.metrics?.() ?? null, checks: geo.measureState?.checkTotals ?? null, inclusion: geo.measureState?.inclusionTotals ?? null, probeTasks: geo.measureState?.probeTotals ?? null,
     questionBank: geo.questionBank?.metrics?.() ?? null, valueUpkeep: geo.valueUpkeep?.metrics?.() ?? null,
     imports: geo.importDelivery?.counters ? { ...geo.importDelivery.counters } : null };
 }
@@ -2838,6 +2839,14 @@ export function geoMetricFamilies(enabled, snapshot) {
   if (snapshot.inclusion && Object.keys(snapshot.inclusion).length) {
     add("inclusion_total", "What the inclusion-check channel did since this process started (expired: a check still pending at OPEN_SCIENCE_GEO_INCLUSION_MAX_HOLD_HOURS, its job failed so its round can close).", "counter",
       Object.entries(snapshot.inclusion).map(([event, value]) => ({ labels: { event }, value: Number(value) })));
+  }
+  // The probe's tasks (geoProbeGateway.mjs `GEO_PROBE_TASK_OUTCOMES`), the interactive gateway's and the measurement queue's together. An
+  // accepted task is paid for whether or not anyone reads its answer: `accepted` against `completed`, `partial` and `failed` is how many
+  // are still out, `pending` an ask that outlived its tool deadline and was left to be read by its id, `accepted_result_unavailable` a
+  // task whose result could not be established (never submitted again), `resubmit_prevented` a lapsed lease that would have asked again.
+  if (snapshot.probeTasks) {
+    add("probe_tasks_total", "Probe tasks by outcome since this process started: accepted by the host; finished as completed, partial or failed; pending (an interactive ask left to be read later by its id); accepted_result_unavailable (accepted, result never established, never submitted again); resubmit_prevented (a lapsed lease under an accepted task, read instead of asked again); capacity_wait (an engine with no idle slot, nothing asked).", "counter",
+      GEO_PROBE_TASK_OUTCOMES.map((outcome) => ({ labels: { outcome }, value: Number(/** @type {Record<string, number>} */ (snapshot.probeTasks)[outcome] ?? 0) })));
   }
   const social = snapshot.social;
   if (social?.counters) {

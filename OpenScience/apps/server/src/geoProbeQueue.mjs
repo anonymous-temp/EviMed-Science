@@ -6,13 +6,26 @@
  *
  * Hidden knowledge:
  *
- * - **One ask at a time, across every process.** The probe host drives
- *   logged-in browser tabs and serves one request at a time (it answers 409
- *   when busy). `tickProbe` asks only while holding the Postgres advisory lock
+ * - **One submitter at a time, across every process.** The probe host drives
+ *   logged-in browser tabs (it answers 409 when busy). `tickProbe` submits and
+ *   reads only while holding the Postgres advisory lock
  *   `hashtext('evimed_geo_probe')` (`GeoMeasureStore.withProbeLock`); a second
- *   worker finds it held and asks nothing. One question × one engine × a fresh
+ *   worker finds it held and does nothing. One question × one engine × a fresh
  *   chat per request, `deep=0` — five engines bundled in one request are atomic
  *   and a timeout loses all five (the owner's `probe_client.py`).
+ * - **Acceptance is recorded, never waited for under the lock.** The host takes
+ *   an ask as a task (HTTP 202 and a request id) and answers it minutes later (a
+ *   five-engine task measured 487 s). The moment it accepts, the id goes onto the
+ *   job (`external_ref`), the lock is released and the task is read on later
+ *   ticks, like an inclusion check, until it finishes or is older than
+ *   `OPEN_SCIENCE_GEO_PROBE_TASK_MAX_AGE_MINUTES`. A job holding a task is never
+ *   asked again, by retry, by lease recovery or by a restart: past the age limit
+ *   it fails as `accepted_result_unavailable`. A task accepted and not finished
+ *   is not a host failure and does not count toward the host-down breaker. One task
+ *   is in flight per engine, and none is submitted to an engine the host reports
+ *   with no idle slot (`/providers`), so the queue neither spends nor stacks asks
+ *   the host cannot start. (The contract this client speaks names no priority flag and no
+ *   fallback switch, so none is sent; an interactive ask from a runtime is not queued behind this.)
  * - **Always a fresh request.** There is no answer cache: every job is a new
  *   ask. A replayed answer would copy the last one ten times and make every
  *   stability, noise and re-measure verdict false (geo-skills decision 13).
@@ -52,7 +65,7 @@
  *   project asks at most `OPEN_SCIENCE_GEO_WEEKLY_ASK_CAP` times a week
  *   (Monday 00:00 in the zone); past it its jobs wait for next week.
  * - **Leases survive a crash**: a job is leased for the ask's timeout plus a
- *   minute; an expired lease is re-queued.
+ *   minute; an expired lease is re-queued, unless the job holds an accepted task.
  * - **Baidu is measured through the vendor's inclusion check** (package C's
  *   `GeoInclusionClient`) until the probe host has a Baidu tab: submit, poll,
  *   a snapshot with `surface.mode = 'inclusion'` and no answer text, and a
@@ -65,7 +78,8 @@
  */
 
 import { GEO_METRICS, geoConstant } from "@evimed/domain";
-import { GEO_PROBE_ALLOWED_PROVIDERS, GEO_UNDELIVERED_FAILURE_CODES, probeUpstream } from "./geoProbeGateway.mjs";
+import { CONSUMER_ANSWER_UNAVAILABLE, GEO_PROBE_ALLOWED_PROVIDERS, GEO_PROBE_POLL_TRANSIENT_CODES, GEO_UNDELIVERED_FAILURE_CODES, GeoProbeGatewayError,
+  probeUpstream } from "./geoProbeGateway.mjs";
 import { citationRows } from "./geoParse.mjs";
 import { classifyProbeAnswer, classifyProbeAnswerWithJudge, isRetriableRawStatus } from "./geoSanity.mjs";
 import { storeGeoScreenshot } from "./geoScreenshots.mjs";
@@ -130,9 +144,31 @@ export const GEO_INCLUSION_MAX_HOLD_HOURS = 6;
 const INCLUSION_HOLD_MS = 30 * 60_000;
 const INCLUSION_POLL_MS = 60_000;
 const INCLUSION_PER_TICK = 5;
+/**
+ * How long a probe task the host accepted may stay unfinished before its job is given up (`OPEN_SCIENCE_GEO_PROBE_TASK_MAX_AGE_MINUTES`),
+ * counted from the host accepting it. The host's own ceiling is about five minutes a question; this is the margin for a host that
+ * queues, restarts or is unreachable while a task runs. Past it the job fails as `accepted_result_unavailable` and is never asked
+ * again (`open_science_geo_probe_tasks_total{outcome="accepted_result_unavailable"}`).
+ */
+export const GEO_PROBE_TASK_MAX_AGE_MINUTES = 45;
+/** How often a held probe task is read: often while an answer is expected, then less; and how many a tick reads. */
+const PROBE_POLL_MS = 10_000;
+const PROBE_POLL_LATE_MS = 30_000;
+const PROBE_POLL_LATE_AFTER_MS = 180_000;
+const PROBE_POLLS_PER_TICK = 20;
+/** A read of one held task, and the host's idle-slot check before a submission. */
+const PROBE_READ_TIMEOUT_MS = 30_000;
+const CAPACITY_CHECK_TIMEOUT_MS = 15_000;
+/** How soon an engine the host reported with no idle slot is looked at again. */
+const CAPACITY_RECHECK_MS = 15_000;
 const DEFAULT_SURFACE = Object.freeze({ mode: "web", deep: false, newChat: true, city: null });
 
 const BUSY_CODES = new Set(["geo_probe_busy", "geo_probe_rate_limited"]);
+/**
+ * Failures of a job whose task the host accepted (or answered from its fallback): the ask may have been paid for, so it is never asked
+ * again by a retry. (`geo_probe_result_unavailable` is the client's, `accepted_result_unavailable` the queue's own after the age limit.)
+ */
+const NEVER_ASKED_AGAIN = new Set(["geo_probe_result_unavailable", "accepted_result_unavailable", CONSUMER_ANSWER_UNAVAILABLE]);
 const CONFIG_CODES = new Set(["geo_probe_unconfigured", "geo_probe_endpoint_invalid", "geo_probe_plaintext_forbidden"]);
 /** The codes of an ask that never reached the provider (`GEO_UNDELIVERED_FAILURE_CODES`): a one-shot cell failed with one of them cost nothing. */
 const UNDELIVERED_CODES = new Set(GEO_UNDELIVERED_FAILURE_CODES);
@@ -351,6 +387,8 @@ export class GeoProbeBreaker {
  * @property {any} judge
  * @property {Record<string, number>} checkTotals   what the judge's three checks and the link checks found, since this process started (counted, never decided on)
  * @property {Record<string, number>} inclusionTotals   what the inclusion channel did, since this process started (submitted, polled, done, failed, expired)
+ * @property {Record<string, number>} probeTotals   the probe tasks' outcomes since this process started (`GEO_PROBE_TASK_OUTCOMES`), the interactive gateway's included
+ * @property {Map<string, number>} capacityWait   engine → until when (epoch ms) the host was last found with no idle slot for it
  * @property {any} upstream
  * @property {Set<string>} alerted
  * @property {Map<string, { refusals: number, at: number }>} notifyRetry   error id → the inbox's refusals of its notice in a row, and when it is tried next
@@ -384,6 +422,8 @@ export function geoMeasureState(key) {
     judge: null,
     checkTotals: {},
     inclusionTotals: {},
+    probeTotals: {},
+    capacityWait: new Map(),
     upstream: null,
     alerted: new Set(),
     notifyRetry: new Map(),
@@ -391,6 +431,14 @@ export function geoMeasureState(key) {
   };
   if (key) states.set(key, state);
   return state;
+}
+
+/**
+ * Count one probe task outcome (`open_science_geo_probe_tasks_total{outcome}`). A state that does not exist yet counts nothing.
+ * @param {{ probeTotals?: Record<string, number> } | null | undefined} state @param {string} outcome
+ */
+export function countProbeTask(state, outcome) {
+  if (state?.probeTotals) state.probeTotals[outcome] = (state.probeTotals[outcome] ?? 0) + 1;
 }
 
 /**
@@ -556,6 +604,7 @@ export async function enqueueRound(deps, { geoProjectId, kind, questionIds = nul
  * @property {{ night: number, cap: number }} held
  * @property {number} roundsFinished
  * @property {{ submitted: number, polled: number, done: number, failed: number, expired: number }} inclusion
+ * @property {{ held: number, polled: number, finished: number, expired: number, capacityWait: number }} tasks   the probe tasks this tick took (held: accepted and left to be read later), read, saw finish, gave up on, and found no idle slot for
  * @property {string | null} probe  why the probe asked nothing: locked, unconfigured, busy_backoff, host_paused, misconfigured
  */
 
@@ -573,7 +622,7 @@ export async function tickProbe(deps) {
   const counts = {
     asked: 0, valid: 0, refusal: 0, suspect: 0, failed: 0, busy: 0, retried: 0, screenshotsStored: 0,
     paused: [], tripped: [], resumed: [], held: { night: 0, cap: 0 }, roundsFinished: 0,
-    inclusion: { submitted: 0, polled: 0, done: 0, failed: 0, expired: 0 }, probe: null,
+    inclusion: { submitted: 0, polled: 0, done: 0, failed: 0, expired: 0 }, tasks: { held: 0, polled: 0, finished: 0, expired: 0, capacityWait: 0 }, probe: null,
   };
   const inclusionEngines = measurableEngines(deps).filter((engine) => !GEO_PROBE_ENGINES.includes(engine));
   if (deps.inclusion && inclusionEngines.length) {
@@ -589,7 +638,7 @@ export async function tickProbe(deps) {
   if (!configured) {
     counts.probe = "unconfigured";
   } else {
-    const upstream = deps.upstream ?? (state.upstream ??= probeUpstream(config, { fetchImpl: deps.fetchImpl }));
+    const upstream = deps.upstream ?? (state.upstream ??= probeUpstream(config, { fetchImpl: deps.fetchImpl, onTask: (outcome) => countProbeTask(state, outcome) }));
     const lock = await store.withProbeLock(() => probePass(deps, state, upstream, counts));
     if (!lock.acquired) counts.probe = "locked";
   }
@@ -610,6 +659,8 @@ async function probePass(deps, state, upstream, counts) {
     state.breaker.seed(await store.recentProbeStatuses([...GEO_PROBE_ENGINES], state.breaker.threshold), start.getTime());
     state.seeded = true;
   }
+  // The tasks the host accepted earlier are read before anything new is submitted; a host that is not answering is not read.
+  if (state.hostPausedUntil <= start.getTime()) await heldPass(deps, state, upstream, counts);
   if (state.hostPausedUntil > start.getTime()) {
     counts.probe = "host_paused";
     return;
@@ -649,8 +700,12 @@ async function probePass(deps, state, upstream, counts) {
       weekStart: zonedWeekStart(at, zoneOf(config)),
       weeklyCap: Math.max(0, Number(config.geoWeeklyAskCap ?? 1_500) || 0),
     };
+    // An engine is given no job while it has a task in flight (one at a time per engine) or the host just reported it with no idle slot.
+    const holding = await store.enginesHoldingTasks([...GEO_PROBE_ENGINES]);
+    const waiting = [...state.capacityWait].filter(([, until]) => until > at.getTime()).map(([engine]) => engine);
     const job = await store.leaseNextJob({
-      ...window, owner: state.owner, leaseUntil: new Date(at.getTime() + timeoutMs + SCREENSHOT_TIMEOUT_MS + LEASE_MARGIN_MS), paused: state.breaker.paused(),
+      ...window, owner: state.owner, leaseUntil: new Date(at.getTime() + timeoutMs + SCREENSHOT_TIMEOUT_MS + LEASE_MARGIN_MS),
+      paused: [...state.breaker.paused(), ...holding, ...waiting],
     });
     if (!job) {
       counts.held = await store.heldJobs(window);
@@ -682,7 +737,8 @@ export async function engineAnswers(upstream, engine, timeoutMs) {
 }
 
 /**
- * Ask one leased job and record what came back.
+ * Ask one leased job. The host accepts an ask as a task: its request id goes onto the job at once (`external_ref`) and the job is left
+ * to be read on later ticks (`heldPass`); a host that answers in the request itself is settled here.
  * @param {GeoMeasureDeps} deps @param {GeoMeasureState} state @param {ReturnType<typeof probeUpstream>} upstream
  * @param {ReturnType<typeof import("./geoMeasureStore.mjs").jobRow>} job @param {GeoProbeCounts} counts @param {number} timeoutMs
  * @returns {Promise<"next" | "stop">}
@@ -696,11 +752,21 @@ async function askJob(deps, state, upstream, job, counts, timeoutMs) {
     return "next";
   }
   const oneShot = job.samplingMode === "one_shot";
+  // Nothing is spent on an engine the host has no idle slot for: the job goes back, its attempt refunded, and the engine is looked at again soon.
+  if (!(await engineHasCapacity(upstream, job.engine))) {
+    const at = now();
+    state.capacityWait.set(job.engine, at.getTime() + CAPACITY_RECHECK_MS);
+    await store.requeueJob(job.id, { now: at, refundAttempt: true, runAfter: new Date(at.getTime() + CAPACITY_RECHECK_MS) });
+    counts.tasks.capacityWait += 1;
+    countProbeTask(state, "capacity_wait");
+    return "next";
+  }
   const askedAt = now();
-  /** @type {Awaited<ReturnType<ReturnType<typeof probeUpstream>["ask"]>>} */
+  /** @type {Awaited<ReturnType<ReturnType<typeof probeUpstream>["submit"]>>} */
   let answer;
   try {
-    answer = await upstream.ask({ question: question.text, providers: [job.engine], deep: 0, newChat: 1, signal: AbortSignal.timeout(timeoutMs) });
+    answer = await upstream.submit({ question: question.text, providers: [job.engine], deep: 0, newChat: 1, signal: AbortSignal.timeout(timeoutMs),
+      onAccepted: ({ requestId }) => holdAcceptedTask(deps, job, requestId, now) });
   } catch (error) {
     const code = String(/** @type {any} */ (error)?.code ?? "geo_probe_failed");
     // A busy or misconfigured probe never put the ask to the engine: the job waits without spending an attempt, a one-shot one
@@ -732,6 +798,11 @@ async function askJob(deps, state, upstream, job, counts, timeoutMs) {
     // request may have been delivered says so instead, and is never retried automatically.
     const reason = deliveryUnknown ? "delivery_unknown_no_automatic_retry" : code;
     await retryOrFail(deps, job, oneShot ? reason : "failed", snapshotId, counts, reason);
+    // A task the host accepted and could not be established is not the host failing to answer: it did answer, with a task.
+    if (code === "geo_probe_result_unavailable") {
+      state.hostFailures = 0;
+      return "next";
+    }
     state.hostFailures += 1;
     if (state.hostFailures >= GEO_PROBE_BREAK_AFTER) {
       state.hostPausedUntil = now().getTime() + GEO_PROBE_RECHECK_MS;
@@ -745,7 +816,69 @@ async function askJob(deps, state, upstream, job, counts, timeoutMs) {
   }
   state.hostFailures = 0;
   state.busy = { until: 0, backoffMs: 0, consecutive: 0 };
+  if ("pending" in answer) {
+    // The host took the task; its id is on the job (`holdAcceptedTask`). It is read on later ticks, and this one goes on.
+    counts.tasks.held += 1;
+    return "next";
+  }
+  return settleAnswer(deps, state, upstream, job, answer, counts, askedAt);
+}
 
+/**
+ * Whether the host can start an ask for this engine now: false only when its pool is reported with no idle slot and some busy ones.
+ * An engine the host does not list, a host that does not report pools, and a failure of the check itself all read as "ask": the ask
+ * is how those are learned and classified.
+ * @param {{ providers?: Function }} upstream @param {string} engine
+ */
+async function engineHasCapacity(upstream, engine) {
+  if (typeof upstream.providers !== "function") return true;
+  try {
+    const { providers } = await upstream.providers({ signal: AbortSignal.timeout(CAPACITY_CHECK_TIMEOUT_MS) });
+    return providers.find((/** @type {{ provider: string }} */ row) => row.provider === engine)?.state !== "busy";
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Put the accepted task's request id on the job, before anything is waited for: from here a restart, a lapsed lease or a retry reads the
+ * task and never submits it again. The job is left leased (`external_ref` set) and due to be read soon. If the write cannot be made the
+ * ask ends as an accepted task whose result cannot be established, which is never asked again either.
+ * @param {GeoMeasureDeps} deps @param {{ id: string }} job @param {string} requestId @param {() => Date} now
+ */
+async function holdAcceptedTask(deps, job, requestId, now) {
+  const at = now();
+  const horizonMs = taskMaxAgeMs(deps.config) + 10 * 60_000;
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await deps.store.holdJob(job.id, requestId, { now: at, leaseUntil: new Date(at.getTime() + horizonMs), runAfter: new Date(at.getTime() + PROBE_POLL_MS) });
+      return;
+    } catch {
+      if (attempt >= 3) {
+        throw new GeoProbeGatewayError(502, "geo_probe_result_unavailable",
+          "The accepted GEO probe task could not be recorded on its job. Delivery is unknown; it is not submitted again.", requestId);
+      }
+    }
+  }
+}
+
+/** The age limit of a held probe task, in milliseconds. @param {Record<string, any>} config */
+function taskMaxAgeMs(config) {
+  const minutes = Number(config.geoProbeTaskMaxAgeMinutes);
+  return (Number.isFinite(minutes) && minutes > 0 ? minutes : GEO_PROBE_TASK_MAX_AGE_MINUTES) * 60_000;
+}
+
+/**
+ * Record what an answered ask came back with and settle its job: retry it, or finish it.
+ * @param {GeoMeasureDeps} deps @param {GeoMeasureState} state @param {ReturnType<typeof probeUpstream>} upstream
+ * @param {ReturnType<typeof import("./geoMeasureStore.mjs").jobRow>} job @param {import("./geoProbeGateway.mjs").GeoProbeAnswers} answer
+ * @param {GeoProbeCounts} counts @param {Date} askedAt when the ask was made
+ * @returns {Promise<"next" | "stop">}
+ */
+async function settleAnswer(deps, state, upstream, job, answer, counts, askedAt) {
+  const { store, config } = deps;
+  const now = deps.now ?? (() => new Date());
+  const oneShot = job.samplingMode === "one_shot";
   // A reply without a result row is a probe that said nothing: not a measurement.
   const row = answer.results[0] ?? { status: "failed", answer: "", answerTruncated: false, answerDigest: null, screenshotName: null, latencyMs: null,
     error: "the probe returned no result" };
@@ -762,6 +895,9 @@ async function askJob(deps, state, upstream, job, counts, timeoutMs) {
     }
     state.retriable.delete(job.id);
   }
+  // The host answered from its paid third-party fallback because the consumer page gave nothing: not a consumer answer, asked again it
+  // would only trigger the fallback again, and not evidence of a login page or an empty shell either.
+  const fallback = row.error === CONSUMER_ANSWER_UNAVAILABLE;
   const sanityInput = { rawStatus: row.status === "ok" ? "ok" : (rawStatus === "ok" ? "failed" : rawStatus || "failed"), answer: row.answer };
   let verdict = classifyProbeAnswer(sanityInput);
   if (deps.judgeService) {
@@ -780,6 +916,8 @@ async function askJob(deps, state, upstream, job, counts, timeoutMs) {
   if (verdict.reason) warnings.push(`sanity:${verdict.reason}${verdict.marker ? `:${verdict.marker}` : ""}`);
   if (row.answerTruncated) warnings.push("answer_truncated");
   if (row.error) warnings.push(`probe_error:${String(row.error).slice(0, 200)}`);
+  // A screenshot the client could not serve is said: the answer stands without its picture.
+  if (Array.isArray(row.warnings)) warnings.push(...row.warnings.map((/** @type {unknown} */ warning) => String(warning).slice(0, 200)));
   if (answer.integrity.transport === "plaintext" && !answer.integrity.signed) warnings.push("plaintext_unsigned");
   let screenshotSha256 = null;
   if (row.screenshotName) {
@@ -804,7 +942,7 @@ async function askJob(deps, state, upstream, job, counts, timeoutMs) {
   counts[/** @type {"valid" | "refusal" | "suspect" | "failed"} */ (verdict.status)] += 1;
   state.retriable.delete(job.id);
 
-  if (state.breaker.record(job.engine, verdict.status, now().getTime())) {
+  if (!fallback && state.breaker.record(job.engine, verdict.status, now().getTime())) {
     counts.tripped.push(job.engine);
     await alert(deps, state, {
       kind: "geo_probe_engine_paused", engine: job.engine,
@@ -823,8 +961,93 @@ async function askJob(deps, state, upstream, job, counts, timeoutMs) {
       idempotencyKey: `geo:probe_suspect:${job.engine}:${now().toISOString().slice(0, 13)}`,
     });
   }
-  await retryOrFail(deps, job, verdict.status, snapshotId, counts);
+  await retryOrFail(deps, job, verdict.status, snapshotId, counts, fallback ? CONSUMER_ANSWER_UNAVAILABLE : verdict.status);
   return "next";
+}
+
+/**
+ * The probe tasks the host accepted earlier and has not yet been read to their end: each is read once (no waiting), and its job is
+ * settled when the task has finished, held again while it has not, and given up only when the task is older than the age limit or the
+ * host has no such task / answered something that is not this ask's. A task is never submitted again, and an unreadable host is not a
+ * failed host: reads that cannot reach it only hold the job again.
+ * @param {GeoMeasureDeps} deps @param {GeoMeasureState} state @param {ReturnType<typeof probeUpstream>} upstream @param {GeoProbeCounts} counts
+ */
+async function heldPass(deps, state, upstream, counts) {
+  const { store } = deps;
+  const now = deps.now ?? (() => new Date());
+  const maxAgeMs = taskMaxAgeMs(deps.config);
+  /** Hold the job on its task again, to be read after the pause the task's age asks for. @param {{ id: string, externalRef: string | null, submittedAt: string | null }} job @param {Date} at */
+  const holdAgain = async (job, at) => {
+    const age = job.submittedAt ? at.getTime() - Date.parse(job.submittedAt) : 0;
+    await store.holdJob(job.id, /** @type {string} */ (job.externalRef), {
+      now: at, leaseUntil: new Date(at.getTime() + Math.max(0, maxAgeMs - age) + 10 * 60_000),
+      runAfter: new Date(at.getTime() + (age < PROBE_POLL_LATE_AFTER_MS ? PROBE_POLL_MS : PROBE_POLL_LATE_MS)),
+    });
+  };
+  for (const job of await store.heldJobsToPoll({ now: now(), engines: [...GEO_PROBE_ENGINES], limit: PROBE_POLLS_PER_TICK })) {
+    const at = now();
+    // A lease that lapsed under a held task is what recovery used to answer by asking again; the task is read instead.
+    if (job.leaseUntil && Date.parse(job.leaseUntil) < at.getTime()) countProbeTask(state, "resubmit_prevented");
+    const [question] = await store.questions(job.geoProjectId, { ids: [job.questionId] });
+    if (!question) {
+      await store.finishJob(job.id, { now: at, status: "skipped", errorCode: "question_missing" });
+      continue;
+    }
+    const askedAt = job.submittedAt ? new Date(job.submittedAt) : at;
+    const expired = Boolean(job.submittedAt) && at.getTime() - Date.parse(/** @type {string} */ (job.submittedAt)) >= maxAgeMs;
+    /** @type {Awaited<ReturnType<ReturnType<typeof probeUpstream>["read"]>>} */
+    let read;
+    try {
+      read = await upstream.read({ requestId: job.externalRef, question: question.text, providers: [job.engine], deep: 0, newChat: 1, wait: false,
+        signal: AbortSignal.timeout(PROBE_READ_TIMEOUT_MS) });
+      counts.tasks.polled += 1;
+    } catch (error) {
+      const code = String(/** @type {any} */ (error)?.code ?? "geo_probe_failed");
+      const unreachable = GEO_PROBE_POLL_TRANSIENT_CODES.includes(code);
+      if (unreachable && !expired) {
+        await holdAgain(job, at);
+        continue;
+      }
+      // Final: the age limit passed while the host could not be read (counted here), or the host has no such task or answered something
+      // that is not this ask's (the client has counted it).
+      await abandonTask(deps, state, job, askedAt, unreachable ? "accepted_result_unavailable" : code, counts, unreachable);
+      continue;
+    }
+    if ("pending" in read) {
+      if (expired) await abandonTask(deps, state, job, askedAt, "accepted_result_unavailable", counts, true);
+      else await holdAgain(job, at);
+      continue;
+    }
+    state.hostFailures = 0;
+    counts.tasks.finished += 1;
+    await settleAnswer(deps, state, upstream, job, read, counts, askedAt);
+  }
+}
+
+/**
+ * Give up on an accepted task: a failed snapshot says so, and the job fails with the task's reason and is not asked again (a one-shot cell
+ * says its delivery is unknown, like any failure after the send). `limit`: the queue's age limit was reached, which is counted here; the
+ * client counts every other task it could not establish.
+ * @param {GeoMeasureDeps} deps @param {GeoMeasureState} state
+ * @param {ReturnType<typeof import("./geoMeasureStore.mjs").jobRow>} job @param {Date} askedAt @param {string} code @param {GeoProbeCounts} counts @param {boolean} limit
+ */
+async function abandonTask(deps, state, job, askedAt, code, counts, limit) {
+  const { store } = deps;
+  const now = (deps.now ?? (() => new Date()))();
+  const oneShot = job.samplingMode === "one_shot";
+  const snapshotId = randomId("gs_");
+  await store.insertSnapshot({
+    id: snapshotId, userId: job.userId, roundId: job.roundId, geoProjectId: job.geoProjectId, questionId: job.questionId, engine: job.engine,
+    askedAt, status: "failed", answerText: null, answerSha256: null, citations: [], screenshotSha256: null,
+    surface: { ...DEFAULT_SURFACE }, latencyMs: now.getTime() - askedAt.getTime(),
+    warnings: [`probe_error:${code}`, "accepted_task_not_read", ...(oneShot ? ["delivery_unknown_no_automatic_retry"] : [])], probeJobId: job.id,
+  });
+  counts.asked += 1;
+  counts.failed += 1;
+  counts.tasks.expired += 1;
+  if (limit) countProbeTask(state, "accepted_result_unavailable");
+  // Not the engine breaker's business (the task may be fine), not the host breaker's (the host took it), and never a retry.
+  await store.finishJob(job.id, { now, status: "failed", snapshotId, errorCode: oneShot ? "delivery_unknown_no_automatic_retry" : "accepted_result_unavailable" });
 }
 
 /** @param {number} attempt */
@@ -868,7 +1091,7 @@ async function busy(deps, state, job, counts) {
  */
 async function retryOrFail(deps, job, status, snapshotId, counts, errorCode = status) {
   const now = (deps.now ?? (() => new Date()))();
-  if (errorCode !== "geo_probe_result_unavailable" && job.samplingMode !== "one_shot" && job.attempts < GEO_JOB_MAX_ATTEMPTS) {
+  if (!NEVER_ASKED_AGAIN.has(errorCode) && job.samplingMode !== "one_shot" && job.attempts < GEO_JOB_MAX_ATTEMPTS) {
     await deps.store.requeueJob(job.id, { now, runAfter: new Date(now.getTime() + RETRY_DELAY_MS * job.attempts), errorCode });
     counts.retried += 1;
     return;
@@ -902,7 +1125,7 @@ async function inclusionPass(deps, state, engines, counts) {
     return true;
   };
 
-  for (const job of await store.inclusionJobsToPoll({ now: start, engines, limit: 20 })) {
+  for (const job of await store.heldJobsToPoll({ now: start, engines, limit: 20 })) {
     const at = now();
     /** @type {any} */
     let result;
@@ -911,14 +1134,14 @@ async function inclusionPass(deps, state, engines, counts) {
       counts.inclusion.polled += 1;
     } catch {
       if (await heldTooLong(job, at)) continue;
-      await store.holdInclusionJob(job.id, /** @type {string} */ (job.externalRef), {
+      await store.holdJob(job.id, /** @type {string} */ (job.externalRef), {
         now: at, leaseUntil: new Date(at.getTime() + INCLUSION_HOLD_MS), runAfter: new Date(at.getTime() + 5 * INCLUSION_POLL_MS),
       });
       continue;
     }
     if (result.status === "pending") {
       if (await heldTooLong(job, at)) continue;
-      await store.holdInclusionJob(job.id, /** @type {string} */ (job.externalRef), {
+      await store.holdJob(job.id, /** @type {string} */ (job.externalRef), {
         now: at, leaseUntil: new Date(at.getTime() + INCLUSION_HOLD_MS), runAfter: new Date(at.getTime() + INCLUSION_POLL_MS),
       });
       continue;
@@ -973,7 +1196,7 @@ async function inclusionPass(deps, state, engines, counts) {
       .map((value) => String(value ?? "").trim()).filter(Boolean).slice(0, 5);
     try {
       const { requestId } = await inclusion.submit({ engine: job.engine, keywords, question: question.text, thirdId: job.id });
-      await store.holdInclusionJob(job.id, requestId, { now: at, leaseUntil: new Date(at.getTime() + INCLUSION_HOLD_MS), runAfter: new Date(at.getTime() + INCLUSION_POLL_MS) });
+      await store.holdJob(job.id, requestId, { now: at, leaseUntil: new Date(at.getTime() + INCLUSION_HOLD_MS), runAfter: new Date(at.getTime() + INCLUSION_POLL_MS) });
       counts.inclusion.submitted += 1;
     } catch (error) {
       const code = String(/** @type {any} */ (error)?.code ?? "inclusion_failed");

@@ -258,6 +258,10 @@ const operatorLevers = {
   // The probe gateway's window (2026-10-10, Q-8): a limit that never arrived would leave the default in force while the operator
   // believes theirs applies, on a channel that drives the platform's logged-in vendor accounts.
   OPEN_SCIENCE_GEO_PROBE_CALLS_PER_MINUTE: ["open-science-web"],
+  // The probe tasks' two limits (2026-10-28): the age after which the queue gives up on a task the host accepted, and how long the gateway keeps
+  // the record of one it accepted for a runtime. A limit that never arrived leaves the default in force while the operator believes theirs applies.
+  OPEN_SCIENCE_GEO_PROBE_TASK_MAX_AGE_MINUTES: ["open-science-web"],
+  OPEN_SCIENCE_GEO_PROBE_RESULT_KEEP_HOURS: ["open-science-web"],
   // The inclusion check's age limit (2026-10-10, Q-7): a job held past it is failed so its round can close; a limit that never
   // arrived would hold the round for ever, whatever the operator set.
   OPEN_SCIENCE_GEO_INCLUSION_MAX_HOLD_HOURS: ["open-science-web"],

@@ -21,7 +21,7 @@ import { preserveGeoAssessment, geoAssessmentId } from "./geoLearningSignals.mjs
  *   `red_flag_hits`, `safety_terms_hit` (M-11, M-12), `metrics.variant`,
  *   `rival`, `reason` (a cell's variant, competitor and not-measurable reason),
  *   `snapshots.probe_job_id` (which job — so which repeat — asked),
- *   `probe_jobs.external_ref` (the inclusion channel's request id),
+ *   `probe_jobs.external_ref` (the request id of the task the inclusion vendor or the probe host accepted),
  *   `errors.notified_at` (an urgent error is notified exactly once), and
  *   `facts.registry_key`, `reparsed_at` and `judge_extract` (which names and
  *   owned sources a row was counted under, when it was counted again, and the
@@ -32,9 +32,10 @@ import { preserveGeoAssessment, geoAssessmentId } from "./geoLearningSignals.mjs
  *   the work and releases it in `finally` (a dropped connection releases it
  *   too). A second process gets `{ acquired: false }` and asks nothing.
  * - **Leases survive crashes.** A job is leased with an owner and an expiry;
- *   an expired lease goes back to the queue, except an inclusion job that
- *   already holds a vendor request id, which is polled rather than resubmitted
- *   (each submission costs the platform's account).
+ *   an expired lease goes back to the queue, except a job that already holds
+ *   a task a vendor or the probe host accepted (its request id in
+ *   `external_ref`), which is polled rather than resubmitted (each submission
+ *   costs the platform's account).
  * - **Every read is scoped by the GEO project**, and every row written carries
  *   the project's `user_id`.
  *
@@ -516,8 +517,8 @@ export class GeoMeasureStore {
   }
 
   /**
-   * Leases whose holder died go back to the queue. An inclusion job that holds
-   * a vendor request id keeps its lease and is polled instead.
+   * Leases whose holder died go back to the queue. A job that holds the request id of an accepted task (an inclusion vendor's or the
+   * probe host's) keeps its lease and is polled instead: the task is paid for, and asking again would pay twice.
    * @param {Date} now
    */
   async recoverExpiredLeases(now) {
@@ -591,10 +592,10 @@ export class GeoMeasureStore {
   }
 
   /**
-   * Inclusion jobs that hold a vendor request and are due to be polled.
+   * Jobs that hold an accepted task (the inclusion vendor's, or the probe host's) and are due to be polled.
    * @param {{ now: Date, engines: string[], limit: number }} options
    */
-  async inclusionJobsToPoll({ now, engines, limit }) {
+  async heldJobsToPoll({ now, engines, limit }) {
     const result = await this.query(`SELECT j.*, r.surface->'measurementContract' AS measurement_contract FROM evimed_geo.probe_jobs j JOIN evimed_geo.rounds r ON r.id=j.round_id WHERE j.status = 'leased' AND j.external_ref IS NOT NULL
       AND j.engine = ANY($2::text[]) AND (j.run_after IS NULL OR j.run_after <= $1) ORDER BY j.run_after NULLS FIRST, j.id LIMIT $3`,
     [now.toISOString(), engines, limit]);
@@ -602,11 +603,23 @@ export class GeoMeasureStore {
   }
 
   /**
-   * Hold the job on the vendor's request. `submitted_at` is when the request was first held: a hold of the same request keeps it
-   * (a job held before the column existed starts counting at its next hold).
+   * The engines that have a job holding an accepted task: the probe queue keeps one task in flight per engine, so none of these is
+   * given another job until the task has been read to its end.
+   * @param {string[]} engines
+   * @returns {Promise<string[]>}
+   */
+  async enginesHoldingTasks(engines) {
+    const result = await this.query(`SELECT DISTINCT engine FROM evimed_geo.probe_jobs WHERE status = 'leased' AND external_ref IS NOT NULL AND engine = ANY($1::text[])`,
+      [engines]);
+    return result.rows.map((row) => String(row.engine));
+  }
+
+  /**
+   * Hold the job on the request id of the task that was accepted for it. `submitted_at` is when the request was first held: a hold of
+   * the same request keeps it (a job held before the column existed starts counting at its next hold).
    * @param {string} jobId @param {string} externalRef @param {{ now: Date, leaseUntil: Date, runAfter: Date }} at
    */
-  async holdInclusionJob(jobId, externalRef, { now, leaseUntil, runAfter }) {
+  async holdJob(jobId, externalRef, { now, leaseUntil, runAfter }) {
     await this.query(`UPDATE evimed_geo.probe_jobs SET external_ref = $2, lease_until = $3, run_after = $4, updated_at = $5,
         submitted_at = CASE WHEN external_ref IS DISTINCT FROM $2 OR submitted_at IS NULL THEN $5::timestamptz ELSE submitted_at END
       WHERE id = $1`,

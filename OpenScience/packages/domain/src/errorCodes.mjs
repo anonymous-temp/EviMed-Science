@@ -284,6 +284,10 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "geo_response_invalid",
   "geo_response_too_large",
   "social_posts_unconfigured",
+  // A job the run asked to read on that is not there (aged out, or never this project's) or whose record could not be read: the
+  // run searches again or goes on without it.
+  "social_posts_job_unknown",
+  "social_posts_job_unavailable",
   // 「虚拟临床研究」's runtime tools (vcr_platform.py → vcrGateway.mjs) not
   // answering, read exactly like GEO's: the module off or not open to this
   // account, a conversation outside a study, an outage. The run records that
@@ -440,6 +444,10 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   // that stayed silent.
   "geo_probe_disabled",
   "geo_probe_gateway_rate_limited",
+  // A task the host accepted whose answers could not be read afterwards (it is paid for and is never asked a second time), and a read of a
+  // request id this project never had accepted or whose record has expired: limitations the report states, never a vendor that stayed silent.
+  "geo_probe_result_unavailable",
+  "geo_probe_request_unknown",
   // The private evidence API is not configured for this deployment. It is host
   // configuration, like the Unpaywall case above, and the keyless public
   // sources are what the tool falls back to — failing a run over it would
@@ -681,6 +689,8 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "social_posts_platform_invalid",
   "social_posts_sort_invalid",
   "social_posts_limit_invalid",
+  "social_posts_request_invalid",
+  "social_posts_job_invalid",
   // And 「虚拟临床研究」's, on the same line: a `what` outside the vocabulary, a
   // filter or payload the gateway cannot read, a simulate action that is not
   // start or status. A single invalid item of a write is again not one of
@@ -816,6 +826,7 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "geo_probe_screenshot_name_invalid",
   "geo_probe_request_invalid",
   "geo_probe_request_too_large",
+  "geo_probe_request_id_invalid",
 ]);
 
 /**

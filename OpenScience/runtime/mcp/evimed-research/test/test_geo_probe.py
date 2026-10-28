@@ -134,6 +134,118 @@ class ProbeResultTests(unittest.TestCase):
         self.assertEqual(result["status"], "success")
 
 
+REQUEST_ID = "4606654b1e144e1d81d9de6c91e5099a"
+
+
+class PendingTaskTests(unittest.TestCase):
+    """An ask the probe is still answering is neither a result nor a failure, and is never asked a second time."""
+
+    PENDING = {
+        "data": {"status": "pending", "requestId": REQUEST_ID, "question": "q", "providers": ["deepseek", "kimi"], "acceptedAt": "2026-10-28T01:00:00.000Z"},
+        "measurement": "pending",
+        "warnings": ["The probe is still working on this question."],
+    }
+
+    def test_a_pending_ask_hands_back_its_id_and_says_to_read_it_not_to_ask_again(self):
+        result, _ = run({"op": "ask", "question": "q", "providers": ["deepseek", "kimi"]}, self.PENDING)
+        # Not an error: the task is accepted and paid for.
+        self.assertEqual(result["status"], "warning")
+        self.assertNotIn("error", result)
+        self.assertEqual(result["data"]["requestId"], REQUEST_ID)
+        actions = " ".join(result["next_actions"])
+        self.assertIn("op=result", actions)
+        self.assertIn(REQUEST_ID, actions)
+        self.assertIn("Do not ask the question again", actions)
+        # The run is not told to retry or to loop.
+        self.assertNotIn("Retry", actions)
+        self.assertIn("do not loop", actions)
+
+    def test_reading_a_task_sends_only_its_id_and_a_finished_one_reads_like_an_ask(self):
+        result, opener = run(
+            {"op": "result", "requestId": REQUEST_ID.upper()},
+            {
+                "data": {
+                    "surface": {"mode": "default", "session": "new_chat"},
+                    "results": [{"provider": "deepseek", "inDenominator": True}],
+                    "inDenominator": ["deepseek"],
+                },
+                "measurement": "ok",
+            },
+        )
+        self.assertEqual(json.loads(opener.request.data), {"op": "result", "requestId": REQUEST_ID})
+        self.assertEqual(result["status"], "success")
+        # Still unfinished: the same pending answer, not a failure.
+        again, _ = run({"op": "result", "requestId": REQUEST_ID}, self.PENDING)
+        self.assertEqual(again["status"], "warning")
+        self.assertEqual(again["data"]["status"], "pending")
+
+    def test_a_malformed_request_id_is_refused_before_the_call(self):
+        for arguments in ({"op": "result"}, {"op": "result", "requestId": "not-an-id"}, {"op": "result", "requestId": REQUEST_ID + "0"}):
+            with mock.patch.dict("os.environ", {"EVIMED_GEO_PROBE_GATEWAY_URL": GATEWAY}):
+                with self.assertRaises(geo_probe.GeoProbeError) as caught:
+                    geo_probe.probe(arguments)
+            self.assertEqual(caught.exception.code, "geo_probe_request_id_invalid", arguments)
+
+    def test_a_task_the_project_never_accepted_is_not_retryable(self):
+        def opener(request, timeout=None):  # noqa: ARG001
+            raise urllib.error.HTTPError(GATEWAY, 404, "unknown", {}, io.BytesIO(b'{"code":"geo_probe_request_unknown"}'))
+
+        with mock.patch.dict("os.environ", {"EVIMED_GEO_PROBE_GATEWAY_URL": GATEWAY}), \
+             mock.patch.object(geo_probe.public_sources, "_gateway_settings", lambda: ("secret", "token")), \
+             mock.patch.object(geo_probe.public_sources, "_OPENER", mock.Mock(open=opener)):
+            with self.assertRaises(geo_probe.GeoProbeError) as caught:
+                geo_probe.probe({"op": "result", "requestId": REQUEST_ID})
+        self.assertEqual(caught.exception.code, "geo_probe_request_unknown")
+        self.assertFalse(caught.exception.retryable)
+
+
+class FallbackAnswerTests(unittest.TestCase):
+    """An engine answered from the probe's paid fallback is failed, and asking it again only buys the fallback again."""
+
+    def test_a_fallback_row_is_a_failure_the_run_is_told_not_to_retry(self):
+        result, _ = run(
+            {"op": "ask", "question": "q", "providers": ["deepseek", "kimi"]},
+            {
+                "data": {
+                    "surface": {"mode": "default", "session": "new_chat"},
+                    "results": [
+                        {"provider": "deepseek", "inDenominator": True},
+                        {"provider": "kimi", "inDenominator": False, "error": "consumer_answer_unavailable"},
+                    ],
+                    "inDenominator": ["deepseek"],
+                },
+                "measurement": "ok",
+            },
+        )
+        self.assertEqual(result["status"], "warning")
+        text = " ".join(result["warnings"] + result["next_actions"])
+        self.assertIn("kimi", text)
+        self.assertIn("do not ask these again", text)
+        self.assertNotIn("Retry any failed vendor", text)
+        self.assertNotIn("retry it", text)
+
+    def test_a_row_that_failed_for_another_reason_is_still_retried(self):
+        result, _ = run(
+            {"op": "ask", "question": "q", "providers": ["deepseek", "kimi"]},
+            {
+                "data": {
+                    "surface": {"mode": "default", "session": "new_chat"},
+                    "results": [
+                        {"provider": "deepseek", "inDenominator": False, "error": "consumer_answer_unavailable"},
+                        {"provider": "kimi", "inDenominator": False, "error": "服务繁忙"},
+                    ],
+                    "inDenominator": [],
+                },
+                "measurement": "failed",
+            },
+        )
+        self.assertEqual(result["status"], "error")
+        text = " ".join(result["warnings"])
+        self.assertIn("kimi (服务繁忙)", text)
+        self.assertNotIn("deepseek (consumer_answer_unavailable)", text)
+        self.assertTrue(any("Retry any failed vendor" in a for a in result["next_actions"]))
+
+
 class ProbeRefusalTests(unittest.TestCase):
     def test_an_unconfigured_deployment_says_the_channel_is_absent(self):
         with mock.patch.dict("os.environ", {}, clear=True):
@@ -220,6 +332,12 @@ class ProbeToolRegistrationTests(unittest.TestCase):
         # Raising this file's copy of GeoProbeError produces a different class
         # object, sails past server.py's except clause, and the test fails for a
         # reason that has nothing to do with the dispatch it is checking.
+        # The pending state is published in the schema: the op and the id a run reads a task by.
+        schema = server.TOOLS["geo_visibility_probe"]["inputSchema"]["properties"]
+        self.assertIn("result", schema["op"]["enum"])
+        self.assertEqual(schema["requestId"]["pattern"], "^[a-f0-9]{32}$")
+        self.assertIn("never ask again", server.TOOLS["geo_visibility_probe"]["description"])
+
         busy = server.geo_probe.GeoProbeError("geo_probe_busy", "busy", True)
         with mock.patch.object(server.geo_probe, "probe", side_effect=busy):
             result = server.call_tool("geo_visibility_probe", {"op": "ask", "question": "q"})
