@@ -17,8 +17,9 @@ const MATERIAL_STATUS: Record<ResearchState["materials"][number]["state"], { lab
 /**
  * Anatomy: the research's own materials — datasets and documents from the knowledge base — and the three ways in.
  * Variants: empty (a recipe), loading, failed, populated.
- * States: each material says when it is still being read or cannot be used; the database entry appears only where the
- * deployment offers it.
+ * States: each material says when it is still being read or cannot be used, and a table imported from the researcher's
+ * database says when only part of it came over (the import's own confirmation says how much); the database entry appears
+ * only where the deployment offers it.
  * Hit area: shared Button and IconButton controls.
  * Keyboard: native links and buttons.
  * Long content: names truncate visually and keep their accessible names.
@@ -57,6 +58,7 @@ export function ResearchDataPanel({ materials, loading, error, busy, databaseAva
           <FileText size={16} className="shrink-0 text-text-3" aria-hidden="true" />
           <Link to={`/app/files/${encodeURIComponent(item.sourceId)}`} className="min-w-0 flex-1 truncate text-ui text-accent underline">{item.name}</Link>
           {status && <Tag tone={status.tone}>{status.label}</Tag>}
+          {item.import?.partial && <Tag tone="warn">部分导入</Tag>}
           <IconButton icon={X} label={`移除 ${item.name}`} size="sm" disabled={busy} onClick={() => onRemove(item.sourceId)} />
         </li>;
       })}</ul> : null}

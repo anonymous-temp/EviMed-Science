@@ -9,7 +9,7 @@ const identity = vi.hoisted(() => ({ projectId: "project-a" }));
 const skillMocks = vi.hoisted(() => ({ listPlatformSkills: vi.fn() }));
 vi.mock("@/lib/skillLibraryClient", () => skillMocks);
 const dbMocks = vi.hoisted(() => ({ researchDatabaseStatus: vi.fn(), listResearchDatabases: vi.fn(), listResearchDatabaseTables: vi.fn(), saveResearchDatabase: vi.fn(), snapshotResearchDatabase: vi.fn(), removeResearchDatabase: vi.fn() }));
-vi.mock("@/lib/researchDatabaseClient", () => ({ ...dbMocks, RESEARCH_DATABASE_ROW_LIMIT: 20000, RESEARCH_DATABASE_COLUMN_LIMIT: 64 }));
+vi.mock("@/lib/researchDatabaseClient", () => dbMocks);
 const mocks = vi.hoisted(() => ({ listAgendas: vi.fn(), listWebAgentRuns: vi.fn(), steerWebAgentRun: vi.fn(), listEpisodes: vi.fn(), getResearchState: vi.fn(), addAgendaMaterials: vi.fn(), removeAgendaMaterial: vi.fn(), cancelEpisode: vi.fn(), followUpAgenda: vi.fn(), runAgendaNow: vi.fn(), pickFiles: vi.fn(), uploadFilesToWorkspace: vi.fn(), sha256Hex: vi.fn(), partition: vi.fn() }));
 vi.mock("@/lib/autopilotClient", () => mocks);
 vi.mock("@/lib/apiClient", async (original) => ({ ...(await original<object>()), getWebProjectId: () => identity.projectId, listWebAgentRuns: mocks.listWebAgentRuns, steerWebAgentRun: mocks.steerWebAgentRun }));

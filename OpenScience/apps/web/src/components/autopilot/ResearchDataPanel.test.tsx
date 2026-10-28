@@ -25,6 +25,22 @@ describe("ResearchDataPanel", () => {
     expect(input.onRemove).toHaveBeenCalledWith("src/ready");
   });
 
+  it("marks a table imported from a database as partial when only part of it came over, and says nothing of a whole one", () => {
+    const table = { fromDatabase: true as const, truncated: false, rowCount: 1200, totalRows: 1200, totalRowsExact: true, withheldCells: 0, droppedColumnCount: 0 };
+    const input = { ...props(), materials: [
+      { sourceId: "src-cut", name: "cohort-1a2b3c4d.csv", addedAt: "", state: "ready" as const, import: { ...table, partial: true, truncated: true, rowCount: 20000, totalRows: 52340 } },
+      { sourceId: "src-columns", name: "labs-5e6f7a8b.csv", addedAt: "", state: "ready" as const, import: { ...table, partial: true, droppedColumnCount: 2 } },
+      { sourceId: "src-whole", name: "small-9c0d1e2f.csv", addedAt: "", state: "ready" as const, import: { ...table, partial: false } },
+      { sourceId: "src-plain", name: "方案.pdf", addedAt: "", state: "ready" as const },
+    ] };
+    draw(input);
+    const rows = within(screen.getByRole("list", { name: "已加入的资料" })).getAllByRole("listitem");
+    expect(within(rows[0]).getByText("部分导入")).toBeInTheDocument();
+    expect(within(rows[1]).getByText("部分导入")).toBeInTheDocument();
+    expect(rows[2].querySelector("[data-tag]")).toBeNull();
+    expect(rows[3].querySelector("[data-tag]")).toBeNull();
+  });
+
   it("is a recipe when empty and offers the database only where it exists", async () => {
     const input = { ...props(), materials: [] }; const view = draw(input);
     expect(screen.getByText(/还没有资料/)).toBeInTheDocument();
