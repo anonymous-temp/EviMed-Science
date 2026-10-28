@@ -73,6 +73,10 @@ COPY capability-skills /opt/evimed/capability-skills
 COPY packages/domain /opt/evimed/socket/node_modules/@evimed/domain
 COPY packages/harness-port /opt/evimed/socket/node_modules/@evimed/harness-port
 COPY packages/design-tokens /opt/evimed/socket/node_modules/@evimed/design-tokens
+# The full build copies the personal-skill validator into the socket tree (2026-10-02), and the line above this one wipes that
+# tree: every delta since dropped it, and the control plane's isolated skill validation (skillValidationController.mjs runs
+# this file in a disposable container of this image) failed until a hand hotfix put it back (2026-10-28).
+COPY scripts/runtime/validate-personal-skill.mjs /opt/evimed/socket/scripts/validate-personal-skill.mjs
 
 RUN set -eux; \
   node /opt/evimed/socket/scripts/build-client.mjs; \

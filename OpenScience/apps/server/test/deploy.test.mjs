@@ -2634,6 +2634,18 @@ test("every workspace package the runtime's frame bundle imports is packed into 
   }
 });
 
+test("the delta puts back everything the full build copies into the socket tree it wipes", async () => {
+  // Dockerfile.delta removes /opt/evimed/socket and copies packages/socket over it, so a file the full build adds there from
+  // elsewhere is lost on every delta unless the delta copies it too (the personal-skill validator, missing 2026-10-02 → 10-28).
+  const full = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8");
+  const delta = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile.delta"), "utf8");
+  const intoSocket = (text) => new Set([...text.matchAll(/^COPY (?:--[a-z]+=\S+ )*(\S+) (\/opt\/evimed\/socket\/\S*)$/gm)].map((match) => `${match[1]} ${match[2]}`));
+  const wanted = intoSocket(full);
+  assert.ok(wanted.has("scripts/runtime/validate-personal-skill.mjs /opt/evimed/socket/scripts/validate-personal-skill.mjs"), "the scan found nothing to compare");
+  const present = intoSocket(delta);
+  assert.deepEqual([...wanted].filter((line) => !present.has(line)).sort(), []);
+});
+
 test("receipt counter endpoint is a service overlay shared only with the runtime controller", async () => {
   const base = YAML.parse(await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8"));
   const overlay = YAML.parse(await readFile(path.join(repoRoot, "deploy/web/docker-compose.receipt.yml"), "utf8"));
