@@ -103,7 +103,7 @@ import { personalSkillRuntimeIdentity } from "./personalSkillRuntimeIdentity.mjs
 import { removePrivateExtensionFiles } from "./extensionPrivateCleanup.mjs";
 import { createServer } from "node:http";
 import { spawnSync } from "node:child_process";
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { once } from "node:events";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
@@ -322,6 +322,9 @@ import { runUsageKeys } from "./runUsage.mjs";
 import { inspectAutopilotDispatch, reclaimUnsentAutopilotRuntime } from "./autopilotDispatchRecovery.mjs";
 import { createAutopilotRunScope, episodeContextBlock, episodePlacementCounts, episodeVisibleText, noteEpisodePlacement } from "./autopilotEpisodeScope.mjs";
 import { createAutopilotRoutes } from "./autopilotRoutes.mjs";
+import { researchDbCredentialsForTest } from "./researchDbCredentials.mjs";
+import { createResearchDbRoutes } from "./researchDbRoutes.mjs";
+import { ResearchDbStaging } from "./researchDbStaging.mjs";
 import { cancelScheduledRun } from "./autopilotRunCancellation.mjs";
 import { AutopilotWorker } from "./autopilotWorker.mjs";
 import { AutopilotPlanner, autopilotPlannerMetricFamily } from "./autopilotNextAction.mjs";
@@ -2091,15 +2094,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    * the registration, or null outside `knowledge-base/`.
    * `meta` is the title and link a registered page or note carries; `register: false` keeps the bytes in the knowledge base's
    * folder without making them a source (the original HTML beside a page's text snapshot).
-   * @param {{ config: any, user: any, project: any }} ctx @param {{ root: string, rel: string, buffer: Buffer, meta?: Record<string, any>, register?: boolean }} file
+   * @param {{ config: any, user: any, project: any }} ctx @param {{ root: string, rel: string, buffer: Buffer, meta?: Record<string, any>, register?: boolean, createAlias?: boolean }} file
    */
-  const writeProjectUpload = async (ctx, { root, rel, buffer, meta = undefined, register = true }) => {
+  const writeProjectUpload = async (ctx, { root, rel, buffer, meta = undefined, register = true, createAlias = true }) => {
     if (buffer.length > config.maxFileBytes) throw new HttpError(413, "file_too_large", "file is too large.");
     const base = root === "base" ? ctx.project.baseDir : ctx.project.workspaceDir;
     const knowledge = knowledgeBaseUploads.covers(root, rel);
     if (knowledge && register && sourceService && !sourceService.publicationActive()) {
       return sourceService.withRegistrationLocks([`publication:${ctx.user.id}:${ctx.project.id}:${meta?.logicalPath ?? rel}`],
-        () => writeProjectUpload(ctx, { root, rel, buffer, meta, register }));
+        () => writeProjectUpload(ctx, { root, rel, buffer, meta, register, createAlias }));
     }
     // Publish immutable bytes first. Every source reader follows the ledger's paths; a later
     // edit or a failed registration cannot overwrite the bytes of an earlier source.
@@ -2155,7 +2158,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const registered = knowledge && register ? await knowledgeBaseUploads.register(ctx, rel, buffer, meta) : null;
     // Workspace browsing keeps the requested filename as a convenience alias. Source readers
     // and the parser use only the immutable path committed above, including historical versions.
-    if (registered && logicalPath !== rel) {
+    if (createAlias && registered && logicalPath !== rel) {
       await sourceService.afterPublication(async () => {
         const alias = resolveScopedPath(base, logicalPath);
         await withProjectStorageMutation(ctx.project, async () => {
@@ -2373,6 +2376,49 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await stopRunForUser(project, run);
       return true;
     } });
+  // Production has no configured research database key manager or controlled
+  // data path. Only isolated tests may instantiate this connector.
+  const researchDbCredentials = researchDbCredentialsForTest({ environment: process.env.NODE_ENV, testOnly: overrides.researchDbTestOnly,
+    database: productDatabase, testKey: overrides.researchDbTestKey });
+  const researchDbStaging = researchDbCredentials && productDatabase ? new ResearchDbStaging({ database: productDatabase, store,
+    report: code => { void securityAudit(config, 'research_db.staging', 'failed', { code }).catch(() => {}); } }) : null;
+  let researchDbCleanupTimer = null;
+  let researchDbCleanupRun = Promise.resolve();
+  const researchDbRoutes = createResearchDbRoutes({ store, credentials: researchDbCredentials, agenda: autopilotService,
+    policy: config.researchDbAllow, maxJsonBytes: config.maxJsonBytes, open: overrides.researchDbOpen ?? undefined,
+    publish: sourceService && productDatabase && researchDbCredentials && researchDbStaging && autopilotService ? async ({ user, project, connectionId, agendaId, requestId, fingerprint, snapshot }) => {
+      const rel = `knowledge-base/research-database-${randomUUID()}.json`;
+      const capturedAt = new Date().toISOString();
+      const bytes = Buffer.from(JSON.stringify({ kind: 'postgresql-table-snapshot', capturedAt, ...snapshot }, null, 2));
+      const sha256 = createHash('sha256').update(bytes).digest('hex');
+      const stagePath = `knowledge-base/.evimed-revisions/${sha256}/${path.posix.basename(rel)}`;
+      const stageId = await researchDbStaging.reserve(user.id, project.id, stagePath);
+      return sourceService.withRegistrationLocks([`publication:${user.id}:${project.id}:${rel}`], async () => {
+        const current = await store.requireProject(user, project.id);
+        const locked = await productDatabase.query('SELECT id FROM evimed_control.projects WHERE user_id=$1 AND id=$2 FOR SHARE', [user.id, current.id]);
+        if (!locked.rows.length || current.userId !== user.id) throw new HttpError(404, 'project_not_found', 'Project not found.');
+        await productDatabase.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`research-db-snapshot:${JSON.stringify([user.id, current.id, requestId])}`]);
+        const previous = await researchDbCredentials.snapshotResult(user.id, current.id, requestId, fingerprint, productDatabase);
+        await researchDbStaging.lock(user.id, current.id, stageId, stagePath);
+        if (previous) { await researchDbStaging.complete(user.id, current.id, stageId); return previous; }
+        await researchDbCredentials.open(user.id, current.id, connectionId, productDatabase, true);
+        const question = await autopilotService.get(user.id, agendaId);
+        if (question.projectId !== current.id) throw new HttpError(404, 'autopilot_material_not_found', 'The research question was not found.');
+        autopilotService.assertNotArchived(question);
+        // A failed COMMIT can mean the server committed but its acknowledgment
+        // was lost. Never remove bytes from that ambiguous outcome here: the
+        // durable staging sweep checks the source ledger before deletion.
+        const saved = await writeProjectUpload({ config, user, project: current }, { root: 'base', rel, buffer: bytes,
+          meta: { title: 'PostgreSQL table snapshot' }, createAlias: false });
+        if (!saved?.source?.id) throw new HttpError(503, 'research_db_unavailable', 'The database snapshot could not be published.');
+        await autopilotService.addMaterials(user.id, question.id, { sourceIds: [saved.source.id] });
+        const result = { sourceId: saved.source.id, capturedAt, rowCount: snapshot.rows.length, truncated: snapshot.truncated,
+          oversizedValuesWithheld: snapshot.oversizedValuesWithheld };
+        await researchDbCredentials.recordSnapshot(user.id, current.id, requestId, fingerprint, result);
+        await researchDbStaging.complete(user.id, current.id, stageId);
+        return result;
+      });
+    } : null });
   // 「前沿动态」 (frontierService.mjs): composed only when switched on and a
   // product database exists; otherwise its routes answer 404
   // `frontier_not_enabled` and nothing of it runs. Its model calls are billed
@@ -7061,6 +7107,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (knowledgePageRoutes && await knowledgePageRoutes(req, res)) return;
       if (await personalLibraryRoutes(req, res)) return;
       if (await library.routes(req, res)) return;
+      if (await researchDbRoutes(req, res)) return;
       if (await autopilotRoutes(req, res)) return;
       if (await evidenceTopicRequestRoutes(req, res)) return;
       if (await evidenceProgrammeRoutes(req, res)) return;
@@ -9470,6 +9517,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       }
       await connectorCredentials?.migrate();
       await maintenanceService?.initialize();
+      if (researchDbStaging) {
+        await researchDbStaging.migrate();
+        if (!maintenanceService || maintenanceService.claimingAllowed()) await researchDbStaging.recover();
+        researchDbCleanupTimer = setInterval(() => {
+          if (maintenanceService && !maintenanceService.claimingAllowed()) return;
+          researchDbCleanupRun = researchDbCleanupRun.then(() => researchDbStaging.recover()).catch(() => {
+            void securityAudit(config, 'research_db.staging', 'failed', { code: 'research_db_staging_cleanup_failed' }).catch(() => {});
+          });
+        }, 60000);
+        researchDbCleanupTimer.unref();
+      }
       await retryCapsuleCleanup();
       await runStartupRuntimeCleanup();
       const address = await new Promise((resolve, reject) => {
@@ -9494,6 +9552,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       rsiOnline?.worker.stop();
       if (capsuleCleanupTimer) clearInterval(capsuleCleanupTimer);
       await capsuleCleanupRun;
+      if (researchDbCleanupTimer) clearInterval(researchDbCleanupTimer);
+      await researchDbCleanupRun;
       // The pass that publishes the official packs at start writes into the database and the data directory: let it end first.
       await officialPacks?.idle();
       await pluginApplyWorker?.close();

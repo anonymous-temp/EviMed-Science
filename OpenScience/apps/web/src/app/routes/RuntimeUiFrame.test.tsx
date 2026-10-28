@@ -86,7 +86,7 @@ function PathProbe() {
  * What a task's page does for the frame: an empty pane at a place, and a request for the frame over it. The test sets where the
  * pane is and which conversation it wants (none, for an execution a bounded runtime is still running) before it navigates there.
  */
-const taskPane = { sessionId: "session-exec" as string | null, rect: { left: 300, top: 60, width: 700, height: 500 } };
+const taskPane = { onSessionAcknowledged: undefined as undefined | ((requestId: string, sessionId: string) => void), sessionId: "session-exec" as string | null, rect: { left: 300, top: 60, width: 700, height: 500 } };
 function TaskPaneProbe() {
   const { sessionId: geoSession } = useParams();
   const heldSession = geoSession ?? taskPane.sessionId;
@@ -94,7 +94,7 @@ function TaskPaneProbe() {
   useLayoutEffect(() => {
     const pane = element.current!;
     pane.getBoundingClientRect = () => ({ ...taskPane.rect, x: taskPane.rect.left, y: taskPane.rect.top, right: taskPane.rect.left + taskPane.rect.width, bottom: taskPane.rect.top + taskPane.rect.height, toJSON: () => ({}) }) as DOMRect;
-    return heldSession ? registerTaskPane({ element: pane, projectId: mocks.projectId, sessionId: heldSession }) : undefined;
+    return heldSession ? registerTaskPane({ element: pane, projectId: mocks.projectId, sessionId: heldSession, onSessionAcknowledged: taskPane.onSessionAcknowledged }) : undefined;
   }, [heldSession]);
   return <div ref={element} data-testid="task-pane">task bar and pane</div>;
 }
@@ -113,6 +113,7 @@ function mount(state: unknown = null, path = "/app/chat") {
     <Route path="/app/files" element={<div>knowledge base</div>} />
     <Route path="/app/autopilot" element={<div>scheduled tasks</div>} />
     <Route path="/app/autopilot/:taskId" element={<TaskPaneProbe />} />
+    <Route path="/app/active-research" element={<TaskPaneProbe />} />
     <Route path="/app/geo/:geoId/chat/:sessionId?" element={<TaskPaneProbe />} />
     <Route path="/app/runs/:runId/files/*" element={<div>run file reader</div>} />
   </Routes></MemoryRouter>);
@@ -2239,6 +2240,24 @@ describe("the frame over a task's pane", () => {
     await act(async () => { await Promise.resolve(); });
     expect(screen.getByTestId("path")).toHaveTextContent("/app/autopilot/agenda-one");
     expect(screen.getByTestId("state")).toHaveTextContent("null");
+  });
+
+  it("passes a created pane session acknowledgement to its owner without changing the page address", async () => {
+    const acknowledged = vi.fn(); taskPane.onSessionAcknowledged = acknowledged;
+    try {
+      const intent = { kind: "create", projectId: "default", requestId: "research-create", sessionId: "session-exec", draft: "/loopx " };
+      const { container } = mount({ runtimeUiIntent: intent }, "/app/active-research");
+      await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+      const frame = container.querySelector("iframe")!; const post = vi.spyOn(frame.contentWindow!, "postMessage");
+      emit(frame, { type: "evimed.runtime-ui.ready" });
+      await waitFor(() => expect(navigations(post)).toHaveLength(1));
+      const request = navigations(post)[0]; expect(request.intent.kind).toBe("create");
+      emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: "stale-request", ok: true, sessionId: "wrong" });
+      expect(acknowledged).not.toHaveBeenCalled();
+      emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: request.requestId, ok: true, sessionId: "actual-session" });
+      expect(acknowledged).toHaveBeenCalledWith("research-create", "actual-session");
+      expect(screen.getByTestId("path")).toHaveTextContent("/app/active-research");
+    } finally { taskPane.onSessionAcknowledged = undefined; }
   });
 
   it("follows the pane when it moves or changes size, with the same document", async () => {

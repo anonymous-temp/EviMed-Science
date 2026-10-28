@@ -2494,6 +2494,7 @@ export function loadConfig(overrides = {}) {
     evimedDisabledTools: String(
       overrides.evimedDisabledTools ?? process.env.EVIMED_DISABLED_TOOLS ?? "",
     ).split(",").map((name) => name.trim()).filter(Boolean).join(","),
+    researchDbAllow: String(overrides.researchDbAllow ?? ""),
     pharmacyReferenceDb: configuredPharmacyReferenceDb
       ? (path.isAbsolute(configuredPharmacyReferenceDb)
         ? configuredPharmacyReferenceDb

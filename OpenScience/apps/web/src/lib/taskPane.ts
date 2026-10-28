@@ -21,6 +21,8 @@ export interface TaskPaneRequest {
   projectId: string;
   /** The conversation the pane shows: the execution's, or the study's own. */
   sessionId: string;
+  /** A page creating a native session can consume the exact acknowledged request and actual session. */
+  onSessionAcknowledged?: (requestId: string, sessionId: string) => void;
   scope?: GeoConversationScope;
   /**
    * Whether the person owns the module project the scoped conversation is in. A member acts in the owner's runtime through the module's
@@ -36,7 +38,7 @@ export interface TaskPaneRequest {
  * (`/app/virtual-research/:studyId/chat`) and GEO's addressed conversation (`/app/geo/:geoId/chat/:sessionId`). Read from the address alone, on every navigation, as the chat surface is.
  */
 export function isPanePath(pathname: string): boolean {
-  return isTaskPath(pathname) || isStudyChatPath(pathname) || geoIdFromChatPath(pathname) !== null;
+  return pathname === "/app/active-research" || pathname === "/app/active-research/" || isTaskPath(pathname) || isStudyChatPath(pathname) || geoIdFromChatPath(pathname) !== null;
 }
 
 let current: TaskPaneRequest | null = null;
