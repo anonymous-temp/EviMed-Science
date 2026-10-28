@@ -14,6 +14,8 @@ import {
   clinicalCheckTier,
   clinicalEvidenceAdvisoryNotes,
   clinicalEvidenceCheckIds,
+  numberedReferenceNumbers,
+  referenceListBounds,
   reportLanguage,
 } from "@evimed/domain/clinical-evidence";
 import { deepResearchPackage, englishDeepResearchPackage } from "./fixtures/clinicalEvidencePackage.mjs";
@@ -1672,6 +1674,139 @@ test("the practical section keeps its audits under every name it is written with
     assert.equal(result.valid, false, heading);
     assert.match(result.blockingIssues.join("\n"), /practical advice must rest on measured evidence/, heading);
   }
+});
+
+/** An English review with a synthesized cross-source claim in its body: two
+ *  distinct preserved sources, each quoted, and a confidence label. */
+function englishPackageWithSynthesizedClaim() {
+  const input = englishDeepResearchPackage();
+  const [first, second] = input.matrix.claims;
+  const source = (item) => ({
+    sourceUrl: item.sourceUrl,
+    sourceTitle: item.sourceTitle,
+    artifactPath: item.artifactPath,
+    accessLevel: item.accessLevel,
+    supportQuote: item.supportQuote,
+  });
+  input.matrix.claims.push({
+    claimId: "CLM-019",
+    claimType: "synthesized",
+    claim: "Two independent sources agree on a safety-first, stratified assessment.",
+    confidence: "moderate",
+    applicability: "Prehospital stratification of acute chest pressure.",
+    uncertainty: "The synthesis is limited by the number of included sources.",
+    referenceNumber: 1,
+    referenceNumbers: [1, 2],
+    supportingSources: [source(first), source(second)],
+  });
+  input.reportText = input.reportText.replace(
+    "## Discussion",
+    `Two independent sources agree on a safety-first, stratified assessment. [1](${first.sourceUrl}) <!-- claim:CLM-019 -->\n\n## Discussion`,
+  );
+  return input;
+}
+
+test("a GRADE outline's headings are not taken for the reference list", () => {
+  // `References?` had no word boundary and matched case-insensitively anywhere
+  // in a heading, so 「## Values and preferences」 — a GRADE section — was read as
+  // the reference list: every claim citing a source "had no entry in it" and
+  // each synthesized claim failed the blocking `synthesized-claim` check
+  // (2026-10-28). The English name is now the whole heading.
+  const control = validateClinicalEvidencePackage(englishPackageWithSynthesizedClaim());
+  assert.equal(control.valid, true, control.issues.join("\n"));
+
+  const grade = englishPackageWithSynthesizedClaim();
+  grade.reportText = grade.reportText
+    .replace("## Diagnosis and differential", "## Certainty of the evidence")
+    .replace("## Evidence synthesis and clinical implications", "## Values and preferences\nPatients weigh the risk of a missed diagnosis against the burden of assessment. [1](https://www.cochrane.org/evidence/1) <!-- claim:CLM-001 -->");
+  const result = validateClinicalEvidencePackage(grade);
+  assert.equal(result.valid, true, result.issues.join("\n"));
+  assert.equal(result.findings.some((finding) => finding.check === "synthesized-claim"), false);
+  assert.ok(result.claimIds.includes("CLM-019"));
+  const listed = [...numberedReferenceNumbers(grade.reportText)].sort((a, b) => a - b);
+  assert.deepEqual(listed, [...numberedReferenceNumbers(englishDeepResearchPackage().reportText)].sort((a, b) => a - b));
+  assert.ok(listed.length >= 4, "the real list is the one read");
+  const bounds = referenceListBounds(grade.reportText);
+  assert.equal(grade.reportText.slice(bounds.headingStart, bounds.headingEnd).trim(), "## References");
+
+  // The lookalike headings of other outlines: a diagnostic review's reference
+  // standard, a cross-referenced appendix, a reader's own selected references.
+  for (const heading of ["Reference standard and index test", "Cross-references", "Selected references on mechanism", "Preferences of patients"]) {
+    const outline = englishPackageWithSynthesizedClaim();
+    outline.reportText = outline.reportText.replace("## Diagnosis and differential", `## ${heading}`);
+    assert.equal(validateClinicalEvidencePackage(outline).valid, true, heading);
+    assert.deepEqual([...numberedReferenceNumbers(outline.reportText)], [...numberedReferenceNumbers(control && englishDeepResearchPackage().reportText)], heading);
+  }
+
+  // The names the list does go by are still found.
+  for (const heading of ["References", "6. References", "**References**", "References (numbered)", "References:", "Reference list", "参考文献"]) {
+    const named = englishDeepResearchPackage();
+    named.reportText = named.reportText.replace("## References", `## ${heading}`);
+    assert.ok(numberedReferenceNumbers(named.reportText).size >= 4, heading);
+    assert.ok(referenceListBounds(named.reportText), heading);
+  }
+});
+
+test("a requested heading that holds a practice-points word does not stand in for the practice points", () => {
+  // The skill asks for «Practice points» and tells the run to keep the other
+  // practice-points words out of its headings — but an outline the person
+  // dictated may head a section 「Practical management」, and `reportSection`
+  // audited the first matching heading only. The real practice points then
+  // skipped the derived-result ban, the action-line anchors and the safety rules
+  // (2026-10-28). Every matching section is read now.
+  const derivedClaim = {
+    claimId: "CLM-101",
+    claimType: "derived",
+    claim: "With the opening frequency and headspace given, about 78% of the borneol remains at 6 months.",
+    method: "Taking the reported room-temperature vapour pressure and the 730-day loss curve of a sealed system as inputs, "
+      + "a first-order loss ln(C/C0) = -k·t is solved for k and evaluated at 6 months, giving 78% remaining.",
+    assumptions: "Constant 20 °C, two openings a day, unchanged headspace, and a matrix that does not change the loss path.",
+    sensitivity: "Doubling the opening frequency lowers the remainder to about 61%; at 30 °C it falls by about 9 percentage points more.",
+    applicability: "Only for dripping pills of this kind in sealed glass bottles, not blister packs.",
+    uncertainty: "The input curve comes from a sealed system; after opening the boundary conditions differ, so this is an order-of-magnitude estimate.",
+    derivedFrom: ["CLM-001", "CLM-002"],
+  };
+  const build = (outlineHeading) => {
+    const input = englishDeepResearchPackage();
+    input.matrix.claims.push(derivedClaim);
+    input.reportText = input.reportText
+      .replace("## Diagnosis and differential", `## ${outlineHeading}`)
+      .replace(
+        "## Practice points\n",
+        "## Practice points\n(derived) By the estimate about 78% remains after 6 months, so replace the bottle then. <!-- claim:CLM-101 -->\n"
+          + "4. Keep the patient at rest while waiting for the ambulance.\n",
+      );
+    return input;
+  };
+  const checks = (input) => [...new Set(validateClinicalEvidencePackage(input).findings
+    .filter((finding) => finding.tier === "safety")
+    .map((finding) => finding.check))].sort();
+
+  // The control and the incident read the same: the practice points are audited
+  // whether or not an earlier heading holds the word.
+  assert.deepEqual(checks(build("Diagnosis and differential")), ["practical-claim-anchor", "practical-derived-claim"]);
+  assert.deepEqual(checks(build("Practical management")), ["practical-claim-anchor", "practical-derived-claim"]);
+
+  // The outline's own section is read too: advice a reader may act on holds the
+  // same line, wherever the person put it.
+  const outline = build("Practical management");
+  outline.reportText = outline.reportText.replace(
+    "## Practical management\n",
+    "## Practical management\n1. Review the patient again after the first assessment.\n",
+  );
+  const unanchored = validateClinicalEvidencePackage(outline);
+  assert.match(unanchored.issues.join("\n"), /Every numbered practical-action item must cite at least one evidence-matrix claim/);
+
+  // A notice names the line of the report, whichever section it is in.
+  const triggered = build("Practical management");
+  triggered.reportText = triggered.reportText.replace(
+    "## Practice points\n",
+    "## Practice points\n4. 含服硝酸甘油后仍不缓解者，拨打 120。 <!-- claim:CLM-001 -->\n",
+  );
+  const lineOf = triggered.reportText.split("\n").findIndex((line) => line.startsWith("4. 含服硝酸甘油")) + 1;
+  const notice = validateClinicalEvidencePackage(triggered).issues.find((issue) => /^临床实践要点第 \d+ 行把/.test(issue));
+  assert.ok(notice, "the conditioned trigger is found in the second practical section");
+  assert.match(notice, new RegExp(`^临床实践要点第 ${lineOf} 行把`));
 });
 
 test("an English report's practice points are audited exactly as 临床实践要点 is", () => {

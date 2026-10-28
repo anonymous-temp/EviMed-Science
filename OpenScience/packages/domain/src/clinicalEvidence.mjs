@@ -95,7 +95,22 @@ const practicalHeadingEnLinePattern = new RegExp(`(?:^|\\n)##\\s+[^\\n]*(?:${pra
 const methodsSectionHeading = "检索|方法|Methods?|\\bSearch\\b";
 const abstractSectionHeading = "摘要|Abstract";
 const conclusionSectionHeading = "结论|Conclusions?";
-const referencesSectionHeading = "参考文献|参考来源|References?";
+// The reference list's heading. The Chinese names match anywhere in a heading, as
+// they always did. The English one is anchored to the whole heading: a bare
+// `References?` matched inside "p-references", so a GRADE outline's 「Values and
+// preferences」 section was read as the reference list, every claim citing a
+// source "had no entry in it", and each synthesized claim failed the blocking
+// check (2026-10-28). It matches `References`, `References list`, a number or
+// emphasis in front, and a qualifier after a bracket, colon or dash — and not
+// "Reference standard" (QUADAS-2), "Cross-references" or "Selected references".
+// Written with a lookbehind so the same string serves a heading line (`## …`) and a
+// heading's own text.
+const referencesHeadingEn = "(?<=(?:^|\\n)(?:##[ \\t]+)?(?:[0-9]{1,2}[.)][ \\t]+)?(?:\\*\\*|__)?)References?(?:[ \\t]+list)?(?=(?:\\*\\*|__)?[ \\t]*(?:[(（:：/—–-][^\\n]*)?(?:\\n|$))";
+const referencesSectionHeading = `参考文献|参考来源|${referencesHeadingEn}`;
+/** A heading's own text (no `##`) names the reference list. */
+const referencesHeadingNamePattern = new RegExp(referencesSectionHeading, "i");
+/** A level-two heading line that names the reference list. */
+const referencesHeadingLinePattern = new RegExp(`(?:^|\\n)##\\s+[^\\n]*(?:${referencesSectionHeading})[^\\n]*$`, "im");
 // The headings a manuscript has whatever its subject, in either language. A
 // level-two section outside this vocabulary is a topic section — 「## 机制」,
 // 「## Assessment」 — and a review whose body is made of them follows the
@@ -747,7 +762,7 @@ function appraisalSections(reportText) {
     const heading = /^##\s+(.+)$/.exec(line);
     if (heading) {
       const name = heading[1];
-      if (/参考文献|参考来源|References?/i.test(name)) current = null;
+      if (referencesHeadingNamePattern.test(name)) current = null;
       else if (/资料|材料|方法|Methods/i.test(name)) current = "methods";
       else if (/结果|讨论|Results?|Discussion/i.test(name)) current = "body";
       else if (/局限|结论|临床实践要点|Limitations?|Conclusion/i.test(name) || practicalHeadingEnPattern.test(name)) current = "tail";
@@ -883,7 +898,7 @@ const bareCitationNumberList = /^\s*\d{1,3}(?:\s*[,，、\-–—]\s*\d{1,3})*\s
 const bracketSpanPattern = /\[([^[\]\n]{1,200})\]/g;
 // Every reference heading. One literal for the closure check and for
 // `referenceListBounds`, so the two cut the list at the same line.
-const referenceHeadingPattern = /(?:^|\n)##\s+[^\n]*(?:参考文献|参考来源|References?)[^\n]*/gi;
+const referenceHeadingPattern = new RegExp(`(?:^|\\n)##\\s+[^\\n]*(?:${referencesSectionHeading})[^\\n]*`, "gi");
 // A bibliographic identifier occupying the citation slot resolves to nothing a
 // reader can follow and to no claim. Identifiers in running prose or in
 // （full-width parens） are untouched — a trial registration named in a sentence
@@ -1507,7 +1522,7 @@ function claimSourceTuples(claim) {
  */
 function regulatoryArticleIssues(reportText, claims, successfulArtifacts) {
   const text = String(reportText ?? "");
-  const referencesAt = text.search(/(?:^|\n)##\s+[^\n]*(?:参考文献|参考来源|References?)[^\n]*$/im);
+  const referencesAt = text.search(referencesHeadingLinePattern);
   const body = referencesAt < 0 ? text : text.slice(0, referencesAt);
   const byReference = new Map();
   const byId = new Map();
@@ -2907,7 +2922,7 @@ function referenceYear(text) {
  *  @param {unknown} reportText @returns {string[]} */
 export function citationIntegrityIssues(reportText) {
   const text = String(reportText ?? "");
-  const section = reportSection(text, "参考文献|参考来源|References?");
+  const section = reportSection(text, referencesSectionHeading);
   const prose = section ? text.slice(0, text.indexOf(section)) : text;
 
   const entries = new Map();
@@ -2996,7 +3011,7 @@ const sourceIdentifier = /\b(?:10\.\d{4,9}\/\S+|pmid:?\s*\d+|https?:\/\/\S+)/i;
 // would find it. Two production reports were marked unverified for that.
 /** @param {unknown} reportText @returns {Set<number>} */
 export function numberedReferenceNumbers(reportText) {
-  const references = reportSection(reportText, "参考文献|参考来源|References?");
+  const references = reportSection(reportText, referencesSectionHeading);
   const numbers = new Set();
   for (const line of references.split("\n")) {
     const match = /^\s*(\d+)[.、]\s+\S/.exec(line);
@@ -3007,7 +3022,7 @@ export function numberedReferenceNumbers(reportText) {
 
 /** @param {unknown} reportText @returns {number} */
 export function numberedReferenceCount(reportText) {
-  const references = reportSection(reportText, "参考文献|参考来源|References?");
+  const references = reportSection(reportText, referencesSectionHeading);
   const entries = references.split("\n").filter((line) => /^\s*\d+[.、]\s+\S/.test(line));
   const distinct = new Set();
   let counted = 0;
@@ -3041,7 +3056,7 @@ function recordIdentifiersInReport(reportText) {
   const found = new Set();
   // Only the analysis body. Article numbers like BMJ's e004216 are letters and
   // digits too, and the reference list is exactly where they belong.
-  const text = withoutReportSections(String(reportText ?? ""), "参考文献|参考来源|References?");
+  const text = withoutReportSections(String(reportText ?? ""), referencesSectionHeading);
   for (const match of text.matchAll(/([A-Za-z]{1,6})[-_]?(\d{6,})/g)) {
     const [whole, scheme] = match;
     if (bibliographicIdentifierScheme.test(scheme)) continue;
@@ -3065,6 +3080,41 @@ function reportSection(reportText, headingPattern) {
     new RegExp(`(?:^|\\n)##\\s+[^\\n]*(?:${headingPattern})[^\\n]*\\n([\\s\\S]*?)(?=\\n##\\s+|$)`, "i"),
   );
   return match?.[1] ?? "";
+}
+
+/** Every section whose heading matches — not the first only — as the report's own
+ *  lines: the matching sections' bodies stay where they are and every other line is
+ *  blank, so a line number in the result is a line number of the report and the text
+ *  is as long as the report is.
+ *
+ *  A requested outline may carry a heading that holds a practice-points word
+ *  (「## Practical management」) before the section the skill names
+ *  (「## Practice points」). Reading the first heading only audited the outline's
+ *  section and left the real practice points without the derived-result ban, the
+ *  action-line anchors and the pharmacist's rules (2026-10-28); every section the
+ *  expression finds is advice a reader may act on, so every one is read.
+ *  @param {unknown} reportText @param {string} headingPattern
+ *  @returns {{ text: string, lines: Set<number>, sections: number }}
+ */
+function reportSectionsInPlace(reportText, headingPattern) {
+  const source = String(reportText ?? "");
+  const rows = source.split("\n").map(() => "");
+  const original = source.split("\n");
+  /** @type {Set<number>} */
+  const lines = new Set();
+  let sections = 0;
+  const pattern = new RegExp(`(?:^|\\n)##\\s+[^\\n]*(?:${headingPattern})[^\\n]*\\n([\\s\\S]*?)(?=\\n##\\s+|$)`, "gi");
+  for (const match of source.matchAll(pattern)) {
+    sections += 1;
+    const bodyStart = match.index + match[0].length - match[1].length;
+    const first = source.slice(0, bodyStart).split("\n").length - 1;
+    const count = match[1].split("\n").length;
+    for (let at = first; at < first + count && at < rows.length; at += 1) {
+      rows[at] = original[at];
+      lines.add(at + 1);
+    }
+  }
+  return { text: rows.join("\n"), lines, sections };
 }
 
 /** Whether a review is organised by topic: no Results and no Discussion
@@ -4075,7 +4125,8 @@ export function validateClinicalEvidencePackage({
   // accept a conclusion heading. The same holds in English: no practice-points
   // name contains "Conclusion", and "Conclusion" contains none of them.
   issues.region("practical-section");
-  const practicalSection = reportSection(reportText, practicalSectionHeading);
+  const practicalSections = reportSectionsInPlace(reportText, practicalSectionHeading);
+  const practicalSection = practicalSections.text;
   if (!practicalHeadingLinePattern.test(reportText ?? "")) {
     issues.push(
       "The academic report is missing the safety-first practical-answer section. "
@@ -4126,7 +4177,7 @@ export function validateClinicalEvidencePackage({
   // Presence is required of every report above; here only the order matters.
   issues.region("reference-list-order");
   const practicalHeading = String(reportText ?? "").search(practicalHeadingLinePattern);
-  const referencesHeading = String(reportText ?? "").search(/(?:^|\n)##\s+[^\n]*(?:参考文献|参考来源|References?)[^\n]*$/im);
+  const referencesHeading = String(reportText ?? "").search(referencesHeadingLinePattern);
   if (referencesHeading < 0 || (practicalHeading >= 0 && referencesHeading < practicalHeading)) {
     issues.push("The numbered reference list must follow the safety-first practical-answer section.");
   }
@@ -4330,7 +4381,7 @@ export function validateClinicalEvidencePackage({
   }
 
   const reportForNumericAudit = withoutReportSections(
-    withoutReportSections(reportText, "参考文献|参考来源|References?"),
+    withoutReportSections(reportText, referencesSectionHeading),
     methodsSectionHeading,
   );
   for (const [lineIndex, rawLine] of reportForNumericAudit.split("\n").entries()) {
@@ -4419,15 +4470,11 @@ export function validateClinicalEvidencePackage({
   if (practicalActionLines.some((line) => !hasClaimMarker(line))) {
     issues.push("Every practical-action step or bullet must cite at least one evidence-matrix claim.");
   }
-  // The practical section's first line inside the report, so the notice names
-  // the line the author will find rather than an offset into a section.
-  const practicalOffset = practical ? String(reportText ?? "").indexOf(practical) : -1;
-  const practicalFirstLine = practicalOffset >= 0
-    ? String(reportText ?? "").slice(0, practicalOffset).split("\n").length
-    : 1;
+  // `practical` holds the report's own lines (everything outside the practical
+  // sections blank), so a line number here is the line the author will find.
   for (const trigger of issues.from(medicationConditionedEmergencyTriggers, practical)) {
     issues.push(
-      `临床实践要点第 ${practicalFirstLine + trigger.line - 1} 行把「${trigger.span}」写成了呼叫急救的触发条件：「${trigger.sentence}」。`
+      `临床实践要点第 ${trigger.line} 行把「${trigger.span}」写成了呼叫急救的触发条件：「${trigger.sentence}」。`
       + "急救的触发条件不得以自救用药的疗效为条件（含药不缓解、服药后无效、观察 N 分钟无效均不可）——"
       + "本节唯一允许的口径是「无论服药与否、无论是否缓解，出现上述征象即刻呼叫 120」。"
       + "同一节里已经写着「服药不是等待的理由，应在服药的同时呼叫急救」，这一条与它互斥，读者无法同时执行。"
@@ -4468,7 +4515,6 @@ export function validateClinicalEvidencePackage({
   // The practical section's line range, so a mispaired anchor there is
   // blocking: that section is already the one place the gate refuses derived
   // claims and requires a marker on every action line.
-  const practicalLastLine = practical ? practicalFirstLine + practical.split("\n").length - 1 : 0;
   for (const finding of issues.from(citationClosureFindings, reportText, claimsById)) {
     if (finding.clause === "A") {
       issues.push(language === "en"
@@ -4494,7 +4540,7 @@ export function validateClinicalEvidencePackage({
         : `${finding.claimId}，但该行只引用了 [${finding.cited.join(", ") || "无"}]，`
           + `而 ${finding.claimId} 的 referenceNumber 是 ${finding.allowed.join(", ")}。`
           + "把该行改引正确的编号，或换成真正支持这句话的 claim；同一 claim 在别处已正确配对不豁免这一行。";
-      issues.push(finding.line >= practicalFirstLine && finding.line <= practicalLastLine
+      issues.push(practicalSections.lines.has(finding.line)
         ? `The practical section's report line ${finding.line} anchors claim ${detail}`
         : `Report line ${finding.line} anchors claim ${detail}`);
     }
@@ -4682,7 +4728,7 @@ export function clinicalEvidenceAdvisoryNotes(reportText) {
   /** @type {string[]} */
   const notes = [];
   const body = withoutReportSections(
-    withoutReportSections(report, "参考文献|参考来源|References?"),
+    withoutReportSections(report, referencesSectionHeading),
     methodsSectionHeading,
   );
   // Read and named in the report's own language (2026-10-28): an English
@@ -4806,7 +4852,7 @@ function appraisalSymmetryNotes(report, names) {
  * @returns {Record<string, number>}
  */
 export function reportSectionShares(reportText) {
-  const body = withoutReportSections(String(reportText ?? ""), "参考文献|参考来源|References?");
+  const body = withoutReportSections(String(reportText ?? ""), referencesSectionHeading);
   /** @type {[string, number][]} */
   const sections = [];
   let heading = "";
