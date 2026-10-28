@@ -411,6 +411,16 @@ test("slot locks and in-flight temporaries of the platform's own state are left 
   assert.deepEqual(names.filter((name) => /specialist-slots|\.tmp|tmpdir/.test(name) && !name.startsWith(ws)), []);
 });
 
+test("an account's library views are derived and left out; its library records and workspaces are not", async (t) => {
+  const f = await fixture(t);
+  await put(f.data, "users/u/library-views/p/src_0123/index.md", "a copy made for project p\n");
+  await put(f.data, "users/u/library-viewsx/kept.txt", "not the views directory\n");
+  const archive = archiveOf(await backup(f));
+  const names = Object.keys(await members(archive));
+  assert.deepEqual(names.filter((name) => name === "users/u/library-views" || name.startsWith("users/u/library-views/")), []);
+  assert.ok(names.includes("users/u/library-viewsx/kept.txt") && names.some((name) => name.startsWith(ws)));
+});
+
 for (const mutation of ["unknown-kind", "changed-is-not-a-file", "vanished-is-an-entry", "vanished-without-parent", "extra-key", "duplicate"]) {
   test(`restore refuses a tampered changed record: ${mutation}`, async (t) => {
     const f = await fixture(t);
