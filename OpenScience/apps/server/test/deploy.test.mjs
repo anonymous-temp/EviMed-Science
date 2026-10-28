@@ -2631,6 +2631,18 @@ test("every workspace package the runtime's frame bundle imports is packed into 
   }
 });
 
+test("both runtime Dockerfiles ship the personal-skill validator where the control plane runs it", async () => {
+  // The delta build removes /opt/evimed/socket and copied only packages/socket back, so every delta-built image lacked
+  // the validator and every personal skill was refused (found 2026-10-28 on production).
+  const { skillValidationPlan } = await import("../src/skillValidationController.mjs");
+  const entry = "/opt/evimed/socket/scripts/validate-personal-skill.mjs";
+  for (const dockerfile of ["deploy/runtime-dsh/Dockerfile", "deploy/runtime-dsh/Dockerfile.delta"]) {
+    const text = await readFile(path.join(repoRoot, dockerfile), "utf8");
+    assert.match(text, new RegExp(`^COPY scripts/runtime/validate-personal-skill\\.mjs ${entry.replaceAll(".", "\\.")}$`, "m"), `${dockerfile} does not ship the validator`);
+  }
+  assert.equal(typeof skillValidationPlan, "function");
+});
+
 test("receipt counter endpoint is a service overlay shared only with the runtime controller", async () => {
   const base = YAML.parse(await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8"));
   const overlay = YAML.parse(await readFile(path.join(repoRoot, "deploy/web/docker-compose.receipt.yml"), "utf8"));

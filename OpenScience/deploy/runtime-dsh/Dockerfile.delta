@@ -73,6 +73,10 @@ COPY capability-skills /opt/evimed/capability-skills
 COPY packages/domain /opt/evimed/socket/node_modules/@evimed/domain
 COPY packages/harness-port /opt/evimed/socket/node_modules/@evimed/harness-port
 COPY packages/design-tokens /opt/evimed/socket/node_modules/@evimed/design-tokens
+# The personal-skill validator the control plane runs in a disposable container (skillValidationController.mjs). The full
+# Dockerfile copies it beside the socket; the delta removes /opt/evimed/socket above, so it must copy it again or every skill
+# a person writes is refused as "the native skill format is invalid" (production, 2026-10-02..10-28).
+COPY scripts/runtime/validate-personal-skill.mjs /opt/evimed/socket/scripts/validate-personal-skill.mjs
 
 RUN set -eux; \
   node /opt/evimed/socket/scripts/build-client.mjs; \
