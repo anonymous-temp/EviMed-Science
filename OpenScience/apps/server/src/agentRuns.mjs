@@ -97,6 +97,7 @@ import { METHOD_MOUNT_REASONS, clinicalSafetyCautionHits, isResearcherOwnedWork,
 // claim's structured GRADE certainty is read against (S6, 2026-09-18). A line
 // of its own for the same reason as the one above.
 import { sourceTypeOfSidecar, sourceTypeSidecarPath } from "@evimed/domain";
+import { PACKAGE_SOURCE_ARTIFACT_LIMIT } from "@evimed/domain/clinical-evidence";
 // The manifest's `citedSourcesRecorded`, one implementation for both sides
 // (2026-09-28): it used to be written out here, where the run never saw it.
 import {
@@ -2515,7 +2516,7 @@ async function openWorkspaceText(project, relative) {
  * comparison), so a count on a run row and the marks in its report cannot
  * disagree.
  *
- * Reads each matrix and at most 48 preserved sources it quotes, like the gate.
+ * Reads each matrix and at most `PACKAGE_SOURCE_ARTIFACT_LIMIT` preserved sources it quotes, like the gate.
  * `previousKey` makes an unchanged set of matrices free: the caller polls, and
  * re-reading every source on every poll would be most of the monitor's work.
  *
@@ -2549,7 +2550,7 @@ async function matrixClaimSummary(project, relativePaths, previousKey = null) {
     ]).filter((value) => typeof value === "string" && value.startsWith(".evimed-sources/"));
     /** @type {Record<string, string>} */
     const sourceArtifacts = {};
-    for (const artifactPath of [...new Set(named)].slice(0, 48)) {
+    for (const artifactPath of [...new Set(named)].slice(0, PACKAGE_SOURCE_ARTIFACT_LIMIT)) {
       let relative;
       try { relative = normalizeWorkspaceRelativePath(artifactPath, "source artifact path"); } catch { continue; }
       const source = await openWorkspaceText(project, relative);
@@ -3272,10 +3273,10 @@ async function specialistCompletionOutcome(
       sourceGapFindings.push(runNotice(code, text, { severity: "must-fix", ...(file ? { file } : {}) }));
     };
     let provenanceGap = false;
-    if (sourcePaths.length > 48) {
-      gap(`The package names ${sourcePaths.length} source artifacts; the first 48 were read. Cite one canonical path per distinct document rather than every companion file.`, "specialist_evidence_traceability_failed");
+    if (sourcePaths.length > PACKAGE_SOURCE_ARTIFACT_LIMIT) {
+      gap(`The package names ${sourcePaths.length} source artifacts; the first ${PACKAGE_SOURCE_ARTIFACT_LIMIT} were read. Cite one canonical path per distinct document rather than every companion file.`, "specialist_evidence_traceability_failed");
     }
-    for (const rawPath of sourcePaths.slice(0, 48)) {
+    for (const rawPath of sourcePaths.slice(0, PACKAGE_SOURCE_ARTIFACT_LIMIT)) {
       let relative;
       try {
         relative = normalizeWorkspaceRelativePath(rawPath, "source artifact path");

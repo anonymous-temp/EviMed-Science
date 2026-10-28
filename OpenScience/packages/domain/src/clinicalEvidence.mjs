@@ -461,6 +461,15 @@ export const clinicalEvidenceCheckIds = Object.freeze([
  * own record (the evidence ledger), not a file the model types.
  * @type {Readonly<Record<string, 'blocking' | 'safety'>>}
  */
+/**
+ * How many distinct preserved sources of one package the control plane reads back (the completion check, the run's claim
+ * count, `claim_verification`). It was 48: a comprehensive review the owner asked for cited 55 documents on the live check
+ * of 2026-10-28, one canonical file each, and the eight past the 48th were reported as unreadable — the review delivered
+ * `unverified` for quotes that were all verbatim. A limit protects the reads (each file is one bounded read); 400 covers a
+ * review of a few hundred references.
+ */
+export const PACKAGE_SOURCE_ARTIFACT_LIMIT = 400;
+
 export const CLINICAL_CHECK_TIERS = Object.freeze({
   "report-present": "blocking",
   "matrix-present": "blocking",
@@ -1148,9 +1157,14 @@ function referenceIdentityFindings(reportText, claims) {
     const claimId = String(claim.claimId ?? "");
     const claimed = referenceIdentifiers([claim.identifier, claim.sourceUrl].filter((part) => typeof part === "string").join(" "));
     const listed = referenceIdentifiers(entry);
-    if (claimed.size && listed.size) {
-      if ([...claimed].some((identifier) => listed.has(identifier))) continue;
-      findings.push({ claimId, number, expected: [...claimed].sort().join(" / "), entry: excerpt(entry) });
+    // Identifiers disagree only within a kind: a PMCID and a DOI of one paper are not a mismatch. A claim naming its full text
+    // by PMCID beside an entry carrying the paper's DOI was reported as a different source (live check, 2026-10-28); with no
+    // kind in common the title decides, as it does when neither side carries an identifier.
+    const kinds = new Set([...listed].map((identifier) => identifier.split(":")[0]));
+    const comparable = [...claimed].filter((identifier) => kinds.has(identifier.split(":")[0]));
+    if (comparable.length) {
+      if (comparable.some((identifier) => listed.has(identifier))) continue;
+      findings.push({ claimId, number, expected: comparable.sort().join(" / "), entry: excerpt(entry) });
       continue;
     }
     const title = comparableTitle(claim.sourceTitle);
@@ -4339,10 +4353,11 @@ export function validateClinicalEvidencePackage({
     issues.region("report-number-unsupported");
     const supportedNumbers = new Set(referencedIds.flatMap((claimId) => {
       const claim = claimsById.get(claimId);
+      const support = claimEvidenceText(claim);
       // Arabic numbers in support match by value; conclusoryQuantities resolves
       // conclusory Chinese and English numerals in the support to the same
       // canonical value symmetrically, so 15 / 十五 / "fifteen trials" agree.
-      return [...supportNumericTokens(claimEvidenceText(claim)), ...conclusoryQuantities(claimEvidenceText(claim))];
+      return [...supportNumericTokens(support), ...conclusoryQuantities(support)];
     }));
     const unsupportedNumbers = [...reportNumbers].filter((token) => !supportedNumbers.has(token));
     if (unsupportedNumbers.length) {
