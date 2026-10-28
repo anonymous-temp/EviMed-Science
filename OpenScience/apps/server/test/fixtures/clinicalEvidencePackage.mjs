@@ -132,3 +132,75 @@ export function deepResearchPackage() {
     sourceArtifacts,
   };
 }
+
+/** The same package written in English, as a run writes it for a person who
+ *  asked for an English review (2026-10-28): English headings, a structured
+ *  English abstract (Objective / Methods / Results / Conclusions) and its
+ *  practical answer under `## Practice points`. Keep it valid like the Chinese
+ *  one: the language cases derive their broken variants from it, and a finding
+ *  on the clean package would be a finding on every English report.
+ */
+export function englishDeepResearchPackage() {
+  const base = deepResearchPackage();
+  const claims = base.matrix.claims.map((item) => ({
+    ...item,
+    claim: "This bounded clinical statement is supported by the checked evidence.",
+  }));
+  const sources = new Map(claims.map((item) => [item.referenceNumber, item]));
+  const claimLines = claims.map((item) => (
+    `${item.claim} [${item.referenceNumber}](${item.sourceUrl}) <!-- claim:${item.claimId} -->`
+  ));
+  const reportText = [
+    "# Differentiating and managing acute chest pressure",
+    "",
+    "## Abstract",
+    "**Objective:** To appraise how acute chest pressure should be differentiated and managed before and on arrival at hospital.",
+    "**Methods:** Guidelines, diagnostic studies, systematic reviews and official sources were searched and matched to each claim.",
+    "**Results:** The evidence supports a safety-first, stratified assessment in which no single symptom settles the cause.",
+    "**Conclusions:** Assessment comes before attribution, and the response to a medicine is not a diagnostic test.",
+    "",
+    "## Clinical question and analytical framework",
+    claimLines.slice(0, 3).join("\n\n"),
+    "",
+    "## Search and methods",
+    "Evidence was identified with reproducible concept combinations covering symptom phenotype, acute coronary events, non-cardiac chest discomfort, early stratification, diagnostic pathways, prehospital management and the limits of medication. Sources were screened against prespecified eligibility criteria and stratified by directness, population, care setting, methodological quality and recency.",
+    claimLines.slice(3, 6).join("\n\n"),
+    "",
+    "## Results",
+    "The included evidence supports a safety-first, stratified analytical pathway: the symptom description shifts the prior judgement but cannot assign a cause on its own, and urgency is decided by the course of symptoms, vital signs, the electrocardiogram, biomarkers and the clinical context together.",
+    claimLines.slice(6, 10).join("\n\n"),
+    "",
+    "## Diagnosis and differential",
+    "Diagnostic reasoning about chest pressure separates the timely exclusion of dangerous causes from the later confirmation of common ones. Location, character, triggers and accompanying features adjust the likelihood but do not replace standardised assessment.",
+    claimLines.slice(10, 13).join("\n\n"),
+    "",
+    "## Evidence synthesis and clinical implications",
+    "Across sources, the decisive point is not the number of conclusions but what each conclusion rests on, whom the evidence applies to, which variables could change it, and which questions the evidence does not answer directly.",
+    claimLines.slice(13, 15).join("\n\n"),
+    "",
+    "## Discussion",
+    "The evidence forms a body that points one way at different levels. Guidelines provide decision pathways and principles of risk control, diagnostic studies describe the performance limits of testing strategies, and systematic evidence summarises the overall credibility of intervention studies.",
+    "Clinical reasoning also separates population evidence from individual decisions: an association at population level cannot assign the cause in one patient, and diagnostic thresholds depend on the assay platform, the time from onset and the care setting.",
+    claimLines.slice(15, 18).join("\n\n"),
+    "",
+    "## Limitations and uncertainty",
+    "The included sources differ in methodological quality and risk of bias, and several diagnostic conclusions are indirect for the case mix and the assay platform. Differences between health systems, jurisdictions and prehospital resources limit how directly public advice applies.",
+    "",
+    "## Conclusions",
+    "A sound conclusion first answers the question of danger and the order of decisions, then the differential diagnosis and the evidence on medicines, and finally states which questions still require examination in person.",
+    "",
+    "## Practice points",
+    `1. Treat time-sensitive chest pain as an emergency and seek standardised assessment. [1](${sources.get(1).sourceUrl}) <!-- claim:CLM-001 -->`,
+    `2. Do not rule out a dangerous cause from the symptom description or from how the pain responds to a medicine. [2](${sources.get(2).sourceUrl}) <!-- claim:CLM-002 -->`,
+    `3. Let further differentiation and treatment follow the examination, the individual background and the applicable guideline. [3](${sources.get(3).sourceUrl}) <!-- claim:CLM-003 -->`,
+    "",
+    "## References",
+    ...base.reportText.slice(base.reportText.indexOf("## 参考文献\n") + "## 参考文献\n".length).split("\n"),
+  ].join("\n");
+  return {
+    ...base,
+    reportText,
+    matrix: { schemaVersion: 1, claims },
+    briefText: "Write an English review: how should acute chest pressure be differentiated and managed before hospital?",
+  };
+}

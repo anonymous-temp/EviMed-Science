@@ -9,8 +9,14 @@ import {
   validateClinicalEvidencePackage as validatePackage,
 } from "../src/clinicalEvidenceQuality.mjs";
 import { GATE_CHECK_IDS, runGate, workspaceLayout } from "@evimed/domain";
-import { CLINICAL_CHECK_TIERS, clinicalCheckTier, clinicalEvidenceCheckIds } from "@evimed/domain/clinical-evidence";
-import { deepResearchPackage } from "./fixtures/clinicalEvidencePackage.mjs";
+import {
+  CLINICAL_CHECK_TIERS,
+  clinicalCheckTier,
+  clinicalEvidenceAdvisoryNotes,
+  clinicalEvidenceCheckIds,
+  reportLanguage,
+} from "@evimed/domain/clinical-evidence";
+import { deepResearchPackage, englishDeepResearchPackage } from "./fixtures/clinicalEvidencePackage.mjs";
 
 /** The validator's DETECTION view. These cases are about what each check finds
  *  and whether its sentence is one a package could be delivered with; what a
@@ -924,6 +930,179 @@ test("untranslated source prose is rejected; names, statistics and short quotati
   );
 });
 
+// --- The report's language (2026-10-28) -------------------------------------
+// A production run asked for "a high-quality English review, final text in
+// English" and delivered English prose under Chinese headings, Chinese abstract
+// labels and partly Chinese bullets and tables, because the gate told it on
+// every English paragraph to restate the passage in Chinese and named only
+// Chinese sections. The report's language is now read from its characters, and
+// both language rules and every section name follow it.
+
+/** The production shape: the English fixture with Chinese headings, abstract
+ *  labels, a list item and a table, the way the run delivered it. */
+function mixedLanguagePackage() {
+  const input = englishDeepResearchPackage();
+  input.reportText = input.reportText
+    .replace("## Abstract", "## 摘要")
+    .replace("**Objective:**", "**目的**：")
+    .replace("## Results\n", "## Results\n- 症状描述不能单独完成病因归类。\n| 研究 | Design |\n|---|---|\n| Trial A | randomised |\n")
+    .replace("## Discussion", "## 讨论")
+    .replace("## Practice points", "## 临床实践要点");
+  return input;
+}
+
+test("the report's language is read from its characters, outside the reference list, code, tables and comments", () => {
+  assert.equal(reportLanguage(validPackage().reportText), "zh");
+  assert.equal(reportLanguage(deepResearchPackage().reportText), "zh");
+  assert.equal(reportLanguage(englishDeepResearchPackage().reportText), "en");
+  // The apparatus a Chinese report carries in the sources' language — an
+  // English table, a search string in a code block, the English reference list
+  // the fixture already has — does not make it English.
+  const apparatus = deepResearchPackage().reportText.replace(
+    "## 结果\n",
+    "## 结果\n| Study | Design | Population | Outcome |\n|---|---|---|---|\n"
+      + "| A multicentre randomised controlled trial of sublingual nitroglycerin | randomised | adults with acute chest pain | major adverse cardiovascular events |\n"
+      + "```\n(\"acute chest pain\"[tiab] OR \"chest discomfort\"[tiab]) AND (\"nitroglycerin\"[MeSH] OR \"prehospital\"[tiab])\n```\n",
+  );
+  assert.equal(reportLanguage(apparatus), "zh");
+  // Chinese headings and labels over English prose do not make an English
+  // report Chinese: that is the defect, and it has to be read as English to be
+  // named.
+  assert.equal(reportLanguage(mixedLanguagePackage().reportText), "en");
+  assert.equal(reportLanguage(""), "zh", "no letters at all is the platform's default language");
+});
+
+test("an English report is held to English: its prose is its own, and no advice names a Chinese section", () => {
+  const clean = validateClinicalEvidencePackage(englishDeepResearchPackage());
+  assert.equal(clean.valid, true, clean.issues.join("\n"));
+
+  // The sentence that is untranslated source prose in a Chinese report is this
+  // report's own prose.
+  const prose = englishDeepResearchPackage();
+  prose.reportText = prose.reportText.replace(
+    "## Discussion\n",
+    "## Discussion\nthe relief of chest pain by nitroglycerin should not be used as a diagnostic factor in the evaluation of undifferentiated chest pain\n",
+  );
+  const proseResult = validateClinicalEvidencePackage(prose);
+  assert.equal(proseResult.valid, true, proseResult.issues.join("\n"));
+
+  // Broken every way that draws section advice. Each finding names the section
+  // in English, so none of them carries a Han character — the run is never
+  // handed a Chinese heading to copy into an English report.
+  const broken = englishDeepResearchPackage();
+  broken.reportText = broken.reportText
+    .replace(/^# .*$/m, "")
+    .replace("## Limitations and uncertainty", "## Caveats")
+    .replace("## Discussion\n", "## Commentary\n")
+    .replace("## Practice points", "## Key points")
+    .replace("## Search and methods\n", "## Search and methods\nRisk of bias was assessed with RoB 2. A Transport error interrupted one database.\n")
+    .replace("## Conclusions\n", "## Conclusions\nThe hospital KPI is not the clinical question [13].\n")
+    .replace(/\n12\. (.*)$/, "\n12. $1\n14. Author group. A source nobody cites. Journal. https://www.acc.org/evidence/unused");
+  const result = validateClinicalEvidencePackage(broken);
+  const checks = new Set(result.findings.map((finding) => finding.check));
+  for (const check of ["report-sections", "practical-section", "deep-research-sections", "operational-failure-prose", "appraisal-declaration", "manuscript-register", "citation-closure"]) {
+    assert.ok(checks.has(check), `${check} did not fire, so this case no longer tests its wording: ${result.issues.join("\n")}`);
+  }
+  for (const finding of result.findings) {
+    assert.doesNotMatch(finding.text, /\p{Script=Han}/u, `${finding.check} names something in Chinese to an English report: ${finding.text}`);
+  }
+  const said = result.issues.join("\n");
+  assert.match(said, /The academic title must be present: .* written in English like the rest of the report\./);
+  assert.match(said, /missing a required section matching ## Limitations/);
+  assert.match(said, /missing a required academic section matching ## Discussion/);
+  assert.match(said, /Head it with one of: Practice points \/ Clinical practice points \/ Key points for practice \/ Implications for practice \/ Practical answer \/ Practical — /);
+  assert.match(said, /limitation of the evidence in Limitations if it matters/);
+  assert.match(said, /^The Methods declare RoB 2, but no passage of the Results or Discussion uses it/m);
+  assert.match(said, /^Reference \[14\] is never cited in the body/m);
+  assert.match(said, /^Citation \[13\] in the body has no entry in the reference list/m);
+  // The English appraisal notice degrades exactly as the Chinese one does.
+  assert.deepEqual(result.blockingIssues.filter((issue) => /^The Methods declare /.test(issue)), []);
+});
+
+test("an English report carrying Chinese headings, labels, list items or table cells is told to write in one language", () => {
+  const input = mixedLanguagePackage();
+  const lines = input.reportText.split("\n");
+  /** @param {string} text */
+  const lineOf = (text) => lines.findIndex((line) => line.includes(text)) + 1;
+  const result = validateClinicalEvidencePackage(input);
+  const said = result.findings.filter((finding) => /^The report is written in English/.test(finding.text));
+  // Four lines named, in report order, and the rest counted rather than listed
+  // one notice each: a report whose every heading is Chinese is one defect.
+  assert.deepEqual(
+    said.slice(0, 4).map((finding) => Number(/line (\d+) carries Chinese text/.exec(finding.text)?.[1])),
+    [lineOf("## 摘要"), lineOf("**目的**"), lineOf("- 症状描述"), lineOf("| 研究 |")],
+  );
+  assert.equal(said.length, 5, said.map((finding) => finding.text).join("\n"));
+  assert.equal(said[4].text, `The report is written in English, and 2 more lines carry Chinese text (lines ${lineOf("## 讨论")}, ${lineOf("## 临床实践要点")}). Write the whole deliverable in one language.`);
+  assert.match(said[0].text, /Write the whole deliverable in one language, the one the person asked for/);
+  for (const finding of said) {
+    assert.equal(finding.check, "manuscript-register");
+    assert.equal(finding.tier, "advisory", "a notice, never a withholding");
+  }
+  // And the English prose is not called untranslated anywhere.
+  assert.doesNotMatch(result.issues.join("\n"), /untranslated source prose/);
+
+  // What an English report may carry: a name glossed in its original script, a
+  // quotation, a Chinese search string in its methods, and a Chinese title in
+  // its reference list.
+  const allowed = englishDeepResearchPackage();
+  allowed.reportText = allowed.reportText
+    .replace("## Discussion\n", "## Discussion\nCompound Danshen dripping pill (复方丹参滴丸) carries the label indication “气滞血瘀型冠心病心绞痛”.\n")
+    .replace("## Search and methods\n", "## Search and methods\nCNKI and Wanfang were searched with the terms 胸痛 AND 硝酸甘油.\n")
+    .replace("1. Author group. Verified clinical source 1.", "1. 张三, 李四. 急性胸痛的院前处置. Author group. Verified clinical source 1.");
+  const allowedResult = validateClinicalEvidencePackage(allowed);
+  assert.equal(allowedResult.valid, true, allowedResult.issues.join("\n"));
+});
+
+test("a Chinese report keeps the untranslated-prose rule, and says it holds because the report is Chinese", () => {
+  const input = validPackage();
+  input.reportText = input.reportText.replace(
+    "## 药物角色\n",
+    "## 药物角色\nthe relief of chest pain by nitroglycerin should not be used as a diagnostic factor in the evaluation of undifferentiated chest pain\n",
+  );
+  const issues = validateClinicalEvidencePackage(input).issues;
+  const finding = issues.find((issue) => /consecutive words of untranslated source prose/.test(issue));
+  assert.ok(finding, issues.join("\n"));
+  assert.match(finding, /This report is written in Chinese/);
+  assert.match(finding, /If the person asked for the report in another language, write the whole of it in that language instead\./);
+  assert.doesNotMatch(finding, /The body states each finding in Chinese/, "no longer a rule for every report");
+  assert.equal(issues.some((issue) => /^The report is written in English/.test(issue)), false);
+
+  // Section advice to a Chinese report still names Chinese sections.
+  const failed = validPackage();
+  failed.reportText = failed.reportText.replace("## 药物角色\n", "## 药物角色\n检索中出现 Transport error。\n");
+  assert.match(validateClinicalEvidencePackage(failed).issues.join("\n"), /limitation of the evidence in 局限性 if it matters/);
+});
+
+test("an English structured abstract is read by the abstract checks as a Chinese one is", () => {
+  // Objective lists three questions and Conclusions answers two: the note a
+  // Chinese 目的 / 结论 pair draws, said with the English names.
+  const drifted = englishDeepResearchPackage();
+  drifted.reportText = drifted.reportText
+    .replace(
+      /\*\*Objective:\*\* .*$/m,
+      "**Objective:** (1) to compare two sublingual preparations in the same setting; (2) to appraise genotype-related differences in response; (3) to define the safety boundary of self-treatment.",
+    )
+    .replace("## Conclusions\n", "## Conclusions\n(1) The two preparations are set out on fixed dimensions. (2) Differences in response were measured, and their extrapolation is limited.\n");
+  const notes = clinicalEvidenceAdvisoryNotes(drifted.reportText);
+  assert.ok(notes.some((note) => /the Abstract's Objective lists 3 research questions and the Conclusions give 2 numbered answers/.test(note)), notes.join("\n"));
+  for (const note of notes) assert.doesNotMatch(note, /\p{Script=Han}/u);
+  // An abstract with no Objective label but a Background is read from there.
+  const background = englishDeepResearchPackage();
+  background.reportText = drifted.reportText.replace("**Objective:**", "**Background:**");
+  assert.ok(clinicalEvidenceAdvisoryNotes(background.reportText).some((note) => /lists 3 research questions/.test(note)));
+  // The clean fixture's abstract draws nothing.
+  assert.deepEqual(clinicalEvidenceAdvisoryNotes(englishDeepResearchPackage().reportText), []);
+
+  // The abstract's **Methods** field declares instruments the way 资料与方法 does.
+  const declared = englishDeepResearchPackage();
+  declared.reportText = declared.reportText.replace("**Methods:** Guidelines", "**Methods:** Risk of bias was assessed with RoB 2. Guidelines");
+  const result = validateClinicalEvidencePackage(declared);
+  const appraisal = result.findings.filter((finding) => finding.check === "appraisal-declaration");
+  assert.equal(appraisal.length, 1, result.issues.join("\n"));
+  assert.match(appraisal[0].text, /^The Methods declare RoB 2, but no passage of the Results or Discussion uses it to give a rating/);
+});
+
 test("absent evidence may be written as a gap but never as a counter-finding", () => {
   // 未检索到直接证据 is insufficient evidence to judge. Summarised into 无效 or
   // 不推荐使用 it states a negative finding the report never made — and the
@@ -1476,7 +1655,12 @@ test("the practical section keeps its audits under every name it is written with
   // failed to match — it would have been absent, and a section that is absent
   // has nothing in it to audit. The derived-result ban is the check to watch,
   // because it is the one that stops an estimate being read as an instruction.
-  for (const heading of ["## 安全优先的实际处置", "## 临床实践要点", "## 临床要点"]) {
+  // The English names are the same section (2026-10-28), in any case.
+  for (const heading of [
+    "## 安全优先的实际处置", "## 临床实践要点", "## 临床要点",
+    "## Practice points", "## Clinical practice points", "## Key points for practice",
+    "## Implications for practice", "## Practical answer", "## PRACTICE POINTS",
+  ]) {
     const input = packageWithDerivedClaim();
     input.reportText = input.reportText
       .replace(" <!-- claim:CLM-101 -->\n", "\n")
@@ -1488,6 +1672,48 @@ test("the practical section keeps its audits under every name it is written with
     assert.equal(result.valid, false, heading);
     assert.match(result.blockingIssues.join("\n"), /practical advice must rest on measured evidence/, heading);
   }
+});
+
+test("an English report's practice points are audited exactly as 临床实践要点 is", () => {
+  // Before 2026-10-28 only `Practical` was an English name for this section, so
+  // `## Practice points` — what an English review calls it — located nothing:
+  // the derived-result ban and the action-line anchors, both safety, ran over an
+  // empty string and the report was told only that the section was missing.
+  const derived = englishDeepResearchPackage();
+  derived.matrix.claims.push({
+    claimId: "CLM-101",
+    claimType: "derived",
+    claim: "With the opening frequency and headspace given, about 78% of the borneol remains at 6 months.",
+    method: "Taking the reported room-temperature vapour pressure and the 730-day loss curve of a sealed system as inputs, "
+      + "a first-order loss ln(C/C0) = -k·t is solved for k and evaluated at 6 months, giving 78% remaining.",
+    assumptions: "Constant 20 °C, two openings a day, unchanged headspace, and a matrix that does not change the loss path.",
+    sensitivity: "Doubling the opening frequency lowers the remainder to about 61%; at 30 °C it falls by about 9 percentage points more.",
+    applicability: "Only for dripping pills of this kind in sealed glass bottles, not blister packs.",
+    uncertainty: "The input curve comes from a sealed system; after opening the boundary conditions differ, so this is an order-of-magnitude estimate.",
+    derivedFrom: ["CLM-001", "CLM-002"],
+  });
+  derived.reportText = derived.reportText.replace(
+    "## Practice points\n",
+    "## Practice points\n(derived) By the estimate about 78% remains after 6 months, so replace the bottle then. <!-- claim:CLM-101 -->\n"
+      + "4. Keep the patient at rest while waiting for the ambulance.\n",
+  );
+  const result = validateClinicalEvidencePackage(derived);
+  const safety = result.findings.filter((finding) => finding.tier === "safety");
+  assert.deepEqual(
+    [...new Set(safety.map((finding) => finding.check))].sort(),
+    ["practical-claim-anchor", "practical-derived-claim"],
+    result.issues.join("\n"),
+  );
+  assert.match(result.issues.join("\n"), /practical advice must rest on measured evidence/);
+  assert.match(result.issues.join("\n"), /Every numbered practical-action item must cite at least one evidence-matrix claim/);
+
+  // Control: under a heading outside the vocabulary the section is not found,
+  // so the same two lines are audited by nothing — which is why the locator is
+  // the safety fix, and why the advice names the English headings to use.
+  const unlisted = { ...derived, reportText: derived.reportText.replace("## Practice points", "## Key points") };
+  const control = validateClinicalEvidencePackage(unlisted);
+  assert.deepEqual(control.findings.filter((finding) => finding.tier === "safety").map((finding) => finding.text), []);
+  assert.match(control.issues.join("\n"), /missing the safety-first practical-answer section\. Head it with one of: Practice points \//);
 });
 
 test("refuses a derivation that never reaches measured evidence", () => {
@@ -1854,6 +2080,67 @@ test("the section that satisfies the practical-answer requirement is the section
     validateClinicalEvidencePackage(deepResearchPackage()).issues
       .filter((issue) => /practical-answer section/.test(issue)),
     [],
+  );
+});
+
+test("a review organised by the person's outline is not asked for Results or Discussion headings", () => {
+  // The production request set its own outline — mechanism, phenotype,
+  // assessment, management, research agenda — and an IMRaD heading demanded on
+  // top of it asks the run to give that outline up. A topic-organised review
+  // owes a methods statement in any form (a subsection will do), limitations,
+  // conclusions, practice points and references, in either language.
+  const english = englishDeepResearchPackage();
+  english.reportText = english.reportText
+    .replace("## Clinical question and analytical framework", "## Mechanism")
+    .replace("## Search and methods", "## Introduction\nThis review follows the outline the request set out.\n### Search strategy")
+    .replace("## Results", "## Phenotype")
+    .replace("## Diagnosis and differential", "## Assessment")
+    .replace("## Evidence synthesis and clinical implications", "## Management")
+    .replace("## Discussion", "## Research agenda");
+  const englishResult = validateClinicalEvidencePackage(english);
+  assert.equal(englishResult.valid, true, englishResult.issues.join("\n"));
+
+  const chinese = deepResearchPackage();
+  chinese.reportText = chinese.reportText
+    .replace("## 临床问题与分析框架", "## 机制")
+    .replace("## 检索与方法", "## 引言\n本综述按委托提出的提纲组织。\n### 检索策略")
+    .replace("## 结果", "## 表型")
+    .replace("## 诊断与鉴别", "## 评估")
+    .replace("## 证据综合与临床含义", "## 处理")
+    .replace("## 讨论", "## 研究议程");
+  const chineseResult = validateClinicalEvidencePackage(chinese);
+  assert.equal(chineseResult.valid, true, chineseResult.issues.join("\n"));
+
+  // The methods statement is still owed, and named in the report's language.
+  const noMethods = { ...english, reportText: english.reportText.replace("### Search strategy\n", "") };
+  assert.deepEqual(
+    validateClinicalEvidencePackage(noMethods).findings.map((finding) => `${finding.check}: ${finding.text}`),
+    ["deep-research-sections: The deep-research report is missing a required academic section matching ## Methods: a heading or subsection containing Methods or Search."],
+  );
+
+  // An instrument applied in a topic section was applied: the topic sections
+  // are the body of such a review. Declared and never applied, it is still named.
+  const unapplied = { ...english, reportText: english.reportText.replace("**Methods:** Guidelines", "**Methods:** Risk of bias was assessed with RoB 2. Guidelines") };
+  assert.match(
+    validateClinicalEvidencePackage(unapplied).issues.join("\n"),
+    /^The Methods declare RoB 2, but no passage of the body sections uses it to give a rating/m,
+  );
+  const appraised = { ...english };
+  appraised.reportText = english.reportText
+    .replace("**Methods:** Guidelines", "**Methods:** Risk of bias was assessed with RoB 2. Guidelines")
+    .replace("## Assessment\n", "## Assessment\nBy RoB 2, the largest trial carried a high risk of bias from its open design [4]. <!-- claim:CLM-004 -->\n");
+  assert.equal(
+    validateClinicalEvidencePackage(appraised).findings.filter((finding) => finding.check === "appraisal-declaration").length,
+    0,
+  );
+
+  // Control: an IMRaD report that dropped its Discussion is still told, so the
+  // exemption is the outline, not the deletion of a heading.
+  const imrad = englishDeepResearchPackage();
+  imrad.reportText = imrad.reportText.replace("## Discussion", "## Commentary");
+  assert.match(
+    validateClinicalEvidencePackage(imrad).issues.join("\n"),
+    /The deep-research report is missing a required academic section matching ## Discussion: a level-two heading that contains Discussion\./,
   );
 });
 
@@ -2877,7 +3164,7 @@ test("every finding names the check that raised it", () => {
   // rather than a quiet reattribution to whichever rule ran before it.
   /** @param {RegExp} pattern @returns {string | null | undefined} */
   const checkFor = (pattern) => findings.find((entry) => pattern.test(entry.text))?.check;
-  assert.equal(checkFor(/^The academic title must be present\.$/), "report-sections");
+  assert.equal(checkFor(/^The academic title must be present: .* written in Chinese like the rest of the report\.$/), "report-sections");
   assert.equal(checkFor(/^claims\[0\]\.claimId must match CLM-NNN\.$/), "claim-schema");
   assert.equal(checkFor(/^claims\[0\]\.artifactPath is "notes\.md"/), "claim-artifact-path");
   assert.equal(checkFor(/^claims\[1\]\.supportQuote was not found in its preserved source artifact\.$/), "claim-quote-verbatim");
