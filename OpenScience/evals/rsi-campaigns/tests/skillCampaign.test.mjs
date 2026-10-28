@@ -141,3 +141,16 @@ test('the improver writes content-addressed candidates, each reserved, begun and
   assert.deepEqual(calls.map((c) => c[0]), ['reserve', 'begin', 'settle', 'reserve', 'begin', 'settle']);
   assert.ok(calls.filter((c) => c[0] === 'settle').every((c) => c[2] === 'success' && c[3] > 0));
 });
+
+test('the assembler builds a manifest and inputs the runner and evaluator take as they are', async () => {
+  const { buildSkillCampaign } = await import('../skill_assemble.mjs');
+  const base = await skillFixture();
+  const sources = Object.values(base.inputs.sources);
+  const candidates = { model: 'qwen3.8-max', candidates: [GOOD, WEAK].map((c) => ({ arm: c.arm, digest: c.skill.digest, chars: c.skill.chars, title: c.skill.title })) };
+  const built = await buildSkillCampaign({ development: sources[0], confirmation: sources[1], candidates, failureCalculators: [2, 3], month: '2026-10', idPrefix: 'rehearsal-', now: '2026-10-26T00:00:00Z' });
+  assert.equal(built.supply.developmentChoice.frozen.arm, GOOD.arm);
+  assert.ok(built.supply.confirmation.sliceGroups >= 25);
+  const { completed } = await runToVerdict({ manifest: built.manifest, inputs: built.inputs }, { dir: nextDir() });
+  assert.equal(completed.status, 'completed');
+  assert.equal(completed.qualification, 'qualified');
+});
