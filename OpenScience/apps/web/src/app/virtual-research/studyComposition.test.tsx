@@ -1,15 +1,16 @@
 import { screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { forgetStudies } from "@/components/vcr/useStudy";
 import { fixture, installVcrServer, STUDY_ID } from "@/components/vcr/__fixtures__/serverFixtures";
-import { compositionFacts } from "@/test/compositionFixtures";
+import { compositionFacts, precedes } from "@/test/compositionFixtures";
 import { expectComposed } from "@/test/expectComposed";
 import { drawStudy } from "./studyPageHarness";
 
 /**
  * The 虚拟临床研究 pages, composed (R19, plan §3 S10; audit D §4 S9): the real study page (T3 the module page) at each of its tabs
- * and in its conversation view, and the real list (T1), rendered from the server's own fixtures and read in document order with the
- * same assertions every page of the framework answers to (`expectComposed`, `compositionFacts`):
+ * and in its conversation view, the real list (T2, a list with a preview beside it: its header and its toolbar are its column's, not
+ * the shell's) and the libraries beside it (T1), rendered from the server's own fixtures and read in document order with the same
+ * assertions every page of the framework answers to (`expectComposed`, `compositionFacts`):
  *
  *  - the header holds one primary action; the page-level toolbar comes before the body; no tag is a control;
  *  - **one band, the same on every tab**: the tab row — which is the study's step bar — and the toolbar's row, sticky, with the same
@@ -91,13 +92,41 @@ describe("T3 — a study, at each of its tabs", () => {
   });
 });
 
-describe("T1 — the list of studies", () => {
-  it("has the views, the filters and the search in the one toolbar above the list", async () => {
+describe("T2 — the list of studies, with a preview beside it", () => {
+  /** The page's own width as `MasterDetail` measures it (jsdom has no layout). */
+  let rect: { mockRestore(): void };
+  beforeEach(() => {
+    rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return { width: this.hasAttribute("data-master-detail") ? 1100 : 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON: () => ({}) };
+    });
+  });
+  afterEach(() => rect.mockRestore());
+
+  it("has the views, the filters and the search in the one toolbar over the list, in the list's column; no tab list, no step rail", async () => {
     const { container } = drawStudy("/app/virtual-research");
-    await screen.findByRole("list", { name: "研究" });
-    const facts = expectComposed(container, { toolbar: true, tablists: 0, stepRail: false });
+    const rows = await screen.findByRole("list", { name: "研究" });
+    const facts = compositionFacts(container);
+    const column = screen.getByRole("region", { name: "研究列表" });
+    expect(container.querySelector("[data-master-detail]")).toHaveAttribute("data-master-detail", "split");
+    expect(facts.tablists).toHaveLength(0);
+    expect(facts.stepRails).toHaveLength(0);
+    expect(facts.clickableTags).toEqual([]);
     expect(facts.toolbars).toHaveLength(1);
     expect(facts.toolbars[0]).toContainElement(screen.getByRole("searchbox", { name: "搜索研究" }));
+    expect(column).toContainElement(facts.toolbars[0]);
+    expect(precedes(facts.toolbars[0], rows)).toBe(true);
+    // The header is the list column's, with the page's one solid button; the preview's ways on are secondary.
+    expect(column).toContainElement(facts.header);
+    expect(precedes(facts.header!, facts.toolbars[0])).toBe(true);
     expect(facts.headerPrimaryActions).toHaveLength(1);
+    expect(container.querySelectorAll(".bg-accent")).toHaveLength(1);
+  });
+
+  it("is a page of its own for the other three views: the shell's band over a body, with its one toolbar", async () => {
+    const { container } = drawStudy("/app/virtual-research?tab=models");
+    await screen.findByRole("list", { name: "保存的模型与参数" });
+    const facts = expectComposed(container, { toolbar: true, tablists: 0, stepRail: false });
+    expect(facts.toolbars).toHaveLength(1);
+    expect(container.querySelector("[data-master-detail]")).toBeNull();
   });
 });

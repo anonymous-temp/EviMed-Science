@@ -60,18 +60,17 @@ function Bar({ className }: { className: string }) {
   return <div className={cn("rounded bg-surface-2", className)} />;
 }
 
-/** The home list's first paint: rows shaped like the studies they stand in for. */
+/** The home list's first paint: rows shaped like the studies they stand in for — a name, a line under it and a time. */
 export function VcrListSkeleton() {
   return (
     <PendingFeedback><div className="animate-pulse" aria-hidden="true" data-vcr-loading="home">
-      {["w-2/5", "w-1/3", "w-1/2"].map((width) => (
-        <div key={width} className="flex items-start gap-6 border-b border-border px-2 py-5">
+      {["w-4/5", "w-3/5", "w-2/3"].map((width) => (
+        <div key={width} className="flex items-start gap-3 px-2 py-3">
           <div className="flex flex-1 flex-col gap-2">
             <Bar className={`h-4 ${width}`} />
-            <Bar className="h-3 w-1/3" />
-            <Bar className="h-3 w-3/5" />
+            <Bar className="h-3 w-1/2" />
           </div>
-          <Bar className="h-4 w-24" />
+          <Bar className="h-3 w-12" />
         </div>
       ))}
     </div></PendingFeedback>

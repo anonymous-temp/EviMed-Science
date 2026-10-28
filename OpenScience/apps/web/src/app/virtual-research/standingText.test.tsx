@@ -1,5 +1,6 @@
 import { screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { forgetStudies } from "@/components/vcr/useStudy";
 import { fixture, installVcrServer, STUDY_ID } from "@/components/vcr/__fixtures__/serverFixtures";
 import { drawStudy, standingBlocks } from "./studyPageHarness";
@@ -104,5 +105,31 @@ describe("the list", () => {
     drawStudy("/app/virtual-research");
     await screen.findByText("研究结果会保留在这里");
     expect(blocks()).toEqual([]);
+  });
+  describe("beside its preview", () => {
+    let rect: { mockRestore(): void };
+    beforeEach(() => {
+      rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+        return { width: this.hasAttribute("data-master-detail") ? 1100 : 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON: () => ({}) };
+      });
+    });
+    afterEach(() => rect.mockRestore());
+
+    it("the pane's recipe stands nothing of its own: the four ways to start are rows", async () => {
+      installVcrServer(network.productRequest);
+      drawStudy("/app/virtual-research");
+      await screen.findByRole("list", { name: "研究" });
+      expect(blocks()).toEqual([]);
+    });
+
+    it("a chosen study's preview stands one block of text — the finding the study wrote — and every other sentence is a note, a row or a fact", async () => {
+      installVcrServer(network.productRequest);
+      drawStudy("/app/virtual-research");
+      await userEvent.click(await screen.findByRole("link", { name: /EV-201 二线/ }));
+      await screen.findByRole("heading", { level: 2, name: /EV-201 二线/ });
+      const standing = blocks();
+      expect(standing, standing.join("\n")).toHaveLength(1);
+      expect(standing[0]).toMatch(/已模拟 3 个方案/);
+    });
   });
 });

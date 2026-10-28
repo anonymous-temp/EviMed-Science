@@ -1,4 +1,5 @@
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { forgetStudies } from "@/components/vcr/useStudy";
 import { fixture, installVcrServer, STUDY_ID } from "@/components/vcr/__fixtures__/serverFixtures";
@@ -48,6 +49,21 @@ describe("nothing that looks pressed is inert", () => {
     drawStudy("/app/virtual-research");
     await screen.findByRole("list", { name: "研究" });
     expect(inertLookalikes(document.body).map(describeEach)).toEqual([]);
+  });
+
+  it("the list of studies with one chosen beside its preview: the open row is a row, and the steps' marks are marks", async () => {
+    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return { width: this.hasAttribute("data-master-detail") ? 1100 : 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON: () => ({}) };
+    });
+    try {
+      drawStudy("/app/virtual-research");
+      await userEvent.click(await screen.findByRole("link", { name: /EV-201 二线/ }));
+      await screen.findByRole("list", { name: "七步进度" });
+      expect(screen.getByRole("link", { name: /EV-201 二线/ })).toHaveAttribute("aria-current", "true");
+      expect(inertLookalikes(document.body).map(describeEach)).toEqual([]);
+    } finally {
+      rect.mockRestore();
+    }
   });
 
   it("the rule sees one: a card with a selected ground that does nothing", () => {
