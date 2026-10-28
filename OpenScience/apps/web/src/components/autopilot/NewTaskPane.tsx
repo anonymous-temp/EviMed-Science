@@ -71,7 +71,7 @@ export function NewTaskPane({ projectId, available = true, recommendation, intro
         {intro && <p className="mt-0.5 text-caption text-text-3">{FIRST_RUN_SENTENCE}</p>}
       </header>}
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto w-full max-w-measure space-y-6 px-6 py-6">
+      <div className="w-full max-w-measure space-y-6 px-6 py-6">
         {examples && <section aria-label="从示例开始" className="space-y-2">
           <h2 className="text-caption text-text-3">从示例开始</h2>
           <fieldset disabled={locked} className="min-w-0">
