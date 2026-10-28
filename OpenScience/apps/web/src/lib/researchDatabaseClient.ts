@@ -1,7 +1,10 @@
 import { productRequest } from "./productClient";
 
-/** A stored connection reference. The service never returns its credentials. */
-export interface ResearchDatabaseRef { id: string; createdAt: string }
+/**
+ * A stored connection reference. The service never returns its credentials; `label` is the non-secret name of where it points (host and
+ * database name, `host/dbname`) when the service gives one, so two saved connections can be told apart.
+ */
+export interface ResearchDatabaseRef { id: string; createdAt: string; label?: string }
 /** One readable table and its importable columns; `estimatedRows` is null until the database has measured it. */
 export interface ResearchDatabaseTable { schema: string; table: string; estimatedRows: number | null; columns: Array<{ name: string; type: string }> }
 export interface ResearchDatabaseSnapshot { sourceId: string; capturedAt: string; rowCount: number; columns?: number; truncated: boolean; oversizedValuesWithheld: boolean }

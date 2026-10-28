@@ -66,6 +66,49 @@ describe("research database dialog", () => {
     await waitFor(() => expect(mocks.snapshotResearchDatabase).toHaveBeenCalledTimes(2));
     expect(mocks.snapshotResearchDatabase.mock.calls[0]).toEqual(mocks.snapshotResearchDatabase.mock.calls[1]);
   });
+  it.each([400, 403, 409, 429])("forgets the request id after a definite %s and does not tell the person to wonder whether it happened", async status => {
+    const user = userEvent.setup(); mocks.listResearchDatabases.mockResolvedValue(saved);
+    mocks.snapshotResearchDatabase.mockRejectedValueOnce(new WebApiError("refused", { status, code: "research_db_selection_invalid" })).mockResolvedValueOnce({ sourceId: "src-one", rowCount: 1, truncated: false, oversizedValuesWithheld: false });
+    const first = show(); await pickCohort(user);
+    await user.click(screen.getByRole("button", { name: "导入到本研究" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("暂不支持导入");
+    expect(alert).not.toHaveTextContent("如果不确定");
+    expect(screen.queryByText(/上次导入还没有确认结果/)).not.toBeInTheDocument();
+    expect(sessionStorage.getItem("evimed.research-db.snapshot.p1.a1")).toBeNull();
+    // Nothing is left to carry over a reload, and the next attempt is a new request.
+    first.view.unmount(); show(); await pickCohort(user);
+    expect(screen.queryByText(/上次导入还没有确认结果/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "导入到本研究" }));
+    await waitFor(() => expect(mocks.snapshotResearchDatabase).toHaveBeenCalledTimes(2));
+    expect(mocks.snapshotResearchDatabase.mock.calls[1][1].requestId).not.toBe(mocks.snapshotResearchDatabase.mock.calls[0][1].requestId);
+  });
+  it("forgets a saved-connection request the same way after a definite refusal, and keeps it after a failure that may have been carried out", async () => {
+    const user = userEvent.setup();
+    mocks.saveResearchDatabase.mockRejectedValueOnce(new WebApiError("invalid", { status: 400, code: "research_db_invalid" })).mockRejectedValueOnce(new WebApiError("down", { status: 502 }));
+    show();
+    await user.type(await screen.findByRole("textbox", { name: "主机地址" }), "db.example.org"); await user.type(screen.getByRole("textbox", { name: "数据库名" }), "research");
+    await user.type(screen.getByRole("textbox", { name: "用户名" }), "reader"); await user.type(screen.getByLabelText("密码"), "password-for-test");
+    await user.click(screen.getByRole("button", { name: "保存并连接" }));
+    expect(await screen.findByRole("alert")).not.toHaveTextContent("如果不确定");
+    expect(screen.queryByText(/上次保存的连接还没有确认结果/)).not.toBeInTheDocument();
+    expect(sessionStorage.getItem("evimed.research-db.save.p1")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "保存并连接" }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("如果不确定是否已保存"));
+    expect(screen.getByText(/上次保存的连接还没有确认结果/)).toBeInTheDocument();
+    expect(sessionStorage.getItem("evimed.research-db.save.p1")).toBe(mocks.saveResearchDatabase.mock.calls[1][0].requestId);
+  });
+  it("tells saved connections apart by the label the service gives them, and falls back to their number", async () => {
+    mocks.listResearchDatabases.mockResolvedValue({ items: [
+      { id: "conn-two", createdAt: "2026-10-28T03:00:00Z", label: "db.example.org/research" },
+      { id: "conn-one", createdAt: "2026-10-28T02:00:00Z" },
+    ] });
+    show();
+    const options = within(await screen.findByLabelText("数据库连接")).getAllByRole("option").map(option => option.textContent ?? "");
+    expect(options[0]).toMatch(/^db\.example\.org\/research · 保存于 /);
+    expect(options[1]).toMatch(/^连接 1 · 保存于 /);
+    expect(options.join(" ")).not.toMatch(/password|username/i);
+  });
   it("keeps a failed import's request id across a remount without storing what was asked", async () => {
     const user = userEvent.setup(); mocks.listResearchDatabases.mockResolvedValue(saved);
     mocks.snapshotResearchDatabase.mockRejectedValue(new Error("network"));

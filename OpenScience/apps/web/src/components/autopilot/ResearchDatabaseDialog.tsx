@@ -67,18 +67,31 @@ export function ResearchDatabaseDialog({ projectId, agendaId, onClose, onCapture
     } catch (caught) { if (alive.current && request === tableReads.current) setTablesError(describe(caught)); }
   }, [projectId]);
   useEffect(() => { if (selected) void loadTables(selected); else { setTables(null); setTablesError(null); } }, [selected, loadTables]);
-  async function act(operation: () => Promise<void>, uncertainty: string) {
+  /**
+   * Runs one request. A failure the server answered as a refusal of this request (a 4xx other than a timeout: invalid, forbidden, too
+   * many, in conflict) did not happen, so nothing is left to confirm: the request id goes (`forget`) and the message does not say
+   * "if you are unsure". Any other failure — a network error, a 5xx, a timeout — may have been carried out, and keeps both.
+   */
+  async function act(operation: () => Promise<void>, uncertainty: string, forget?: () => void) {
     if (lock.current) return; lock.current = true; setBusy(true); setError(null); setNotice(null);
-    try { await operation(); } catch (caught) { if (alive.current) setError(`${describe(caught)}${uncertainty}`); }
+    try { await operation(); } catch (caught) {
+      if (alive.current) {
+        const refused = caught instanceof WebApiError && caught.status >= 400 && caught.status < 500 && caught.status !== 408;
+        if (refused) forget?.();
+        setError(`${describe(caught)}${refused ? "" : uncertainty}`);
+      }
+    }
     finally { lock.current = false; if (alive.current) setBusy(false); }
   }
+  const forgetSave = () => { saveRequest.current = null; persistRequest(saveKey, null); setSavePending(false); };
+  const forgetSnapshot = () => { snapshotRequest.current = null; persistRequest(snapshotKey, null); setSnapshotPending(false); };
   const create = () => void act(async () => {
     saveRequest.current ??= crypto.randomUUID(); persistRequest(saveKey, saveRequest.current); setSavePending(true);
     const result = await saveResearchDatabase({ projectId, requestId: saveRequest.current, host: host.trim(), port: Number(port), database: database.trim(), username: username.trim(), password });
     if (!alive.current) return;
-    saveRequest.current = null; persistRequest(saveKey, null); setSavePending(false); setPassword(""); setHost(""); setDatabase(""); setUsername(""); setAdding(false);
+    forgetSave(); setPassword(""); setHost(""); setDatabase(""); setUsername(""); setAdding(false);
     await load(); if (alive.current) { setSelected(result.id); setNotice("连接已保存，正在读取数据库里的表。"); }
-  }, "如果不确定是否已保存，请先看上方的连接列表。");
+  }, "如果不确定是否已保存，请先看上方的连接列表。", forgetSave);
   const chosen = tables?.items.find(item => tableKey(item) === table) ?? null;
   const picked = columns ?? chosen?.columns.map(column => column.name) ?? [];
   const everyColumn = !!chosen && picked.length === chosen.columns.length;
@@ -87,10 +100,10 @@ export function ResearchDatabaseDialog({ projectId, agendaId, onClose, onCapture
     snapshotRequest.current ??= crypto.randomUUID(); persistRequest(snapshotKey, snapshotRequest.current); setSnapshotPending(true);
     const result = await snapshotResearchDatabase(selected, { projectId, requestId: snapshotRequest.current, agendaId, schema: chosen.schema, table: chosen.table, columns: requested });
     if (!alive.current) return;
-    snapshotRequest.current = null; persistRequest(snapshotKey, null); setSnapshotPending(false);
+    forgetSnapshot();
     setNotice(`已导入 ${chosen.table}：${formatNumber(result.rowCount)} 行${result.columns ? ` × ${result.columns} 列` : ""}${result.truncated ? `（表更大，导入了前 ${formatNumber(result.rowCount)} 行）` : ""}，已加入本研究。`);
     onCaptured();
-  }, "如果不确定是否已导入，请先看研究资料列表。"); };
+  }, "如果不确定是否已导入，请先看研究资料列表。", forgetSnapshot); };
   const revoke = () => void act(async () => { await removeResearchDatabase(selected, projectId); if (alive.current) { setSelected(""); await load(); setNotice("连接已移除，导入过的数据仍在知识库。"); } }, "请重新查看连接列表。");
   const toggle = (name: string) => setColumns(picked.includes(name) ? picked.filter(item => item !== name) : [...picked, name]);
   const showForm = adding || (connections !== null && connections.length === 0);
@@ -99,10 +112,10 @@ export function ResearchDatabaseDialog({ projectId, agendaId, onClose, onCapture
     {notice && <p role="status" className="text-ui text-text">{notice}</p>}
     {!storageAvailable && <p role="status" className="text-ui text-text">浏览器不能暂存这次提交，刷新或关闭后，请先看连接和研究资料，再决定是否重新提交。</p>}
     {connections === null ? <Button variant="secondary" disabled={busy} onClick={() => void load()}>重新读取</Button> : <fieldset disabled={busy} className="min-w-0 space-y-4">
-      {savePending && <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-ui text-text">上次保存的连接还没有确认结果，原样再提交一次不会重复保存。</p><Button variant="text" disabled={busy} onClick={() => { saveRequest.current = null; persistRequest(saveKey, null); setSavePending(false); }}>重新填写连接</Button></div>}
-      {snapshotPending && <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-ui text-text">上次导入还没有确认结果，原样再导入一次不会重复。</p><Button variant="text" disabled={busy} onClick={() => { snapshotRequest.current = null; persistRequest(snapshotKey, null); setSnapshotPending(false); }}>重新开始导入</Button></div>}
+      {savePending && <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-ui text-text">上次保存的连接还没有确认结果，原样再提交一次不会重复保存。</p><Button variant="text" disabled={busy} onClick={forgetSave}>重新填写连接</Button></div>}
+      {snapshotPending && <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-ui text-text">上次导入还没有确认结果，原样再导入一次不会重复。</p><Button variant="text" disabled={busy} onClick={forgetSnapshot}>重新开始导入</Button></div>}
       {connections.length > 0 && !adding && <div className="flex flex-wrap items-end gap-2">
-        <div className="min-w-0 flex-1"><Select label="数据库连接" value={selected} onChange={event => setSelected(event.target.value)}>{connections.map((item, index) => <option key={item.id} value={item.id}>连接 {connections.length - index} · 保存于 {savedAt(item.createdAt)}</option>)}</Select></div>
+        <div className="min-w-0 flex-1"><Select label="数据库连接" value={selected} onChange={event => setSelected(event.target.value)}>{connections.map((item, index) => <option key={item.id} value={item.id}>{item.label?.trim() || `连接 ${connections.length - index}`} · 保存于 {savedAt(item.createdAt)}</option>)}</Select></div>
         <Button variant="text" disabled={busy} onClick={() => setAdding(true)}>添加连接</Button>
       </div>}
       {showForm && <div className="space-y-3">
