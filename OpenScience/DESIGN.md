@@ -1076,3 +1076,22 @@ Last updated: 2026-10-26. This replaces the VCR seven-step, method-catalogue and
 Last updated: 2026-10-26. The [execution ledger](../docs/superpowers/plans/2026-10-26-design-system-v3-execution.md) maps all 21 DS groups and 50 AT scenarios to proof families and unresolved boundaries. Numerical validation is local: the R 4.3.3 suite passed 222/222 across 34 methods with all 158 exact dependency locks. This does not establish production scientific acceptance. Web, server and browser results are recorded in the ledger, not here.
 
 The supported public native locale groups advanced commands under `command.section.commands` (高级命令与诊断). `loopx-init` remains its real command identifier. Theme-body focus lifecycle and identity with the optional theme off use supported seams; there is no private upstream command patch. Actual composer Enter, simulated composition events, reload without resubmission, stream selection/upward reading and theme on/off have local native-fixture evidence. Real hardware IME, screen readers, physical touch, LoopX execution absent from this fixture, external Vue adoption and installed production caches remain explicit boundaries.
+
+## 主动科研 observatory (owner, 2026-10-28)
+
+The owner asked that the process picture of 主动科研 be the page's core and land like a mission-control screen
+(「炫酷和科幻和赛博朋克一些，用户一看就有很好的冲击感」). It is the page's one brand moment, and an explicit exception to
+“flat, no glow, no shimmer” for that one surface only:
+
+- **A fixed dark scene in both themes** (`components/autopilot/ResearchObservatory.css`, named in `designTokens.test.ts`'s
+  exceptions): the research queue on top, then the status line, six counters, the research line (规划 → 检索 → 阅读 → 分析 →
+  核对 → 撰写 → 交付, the orchestrator above the stage of its last call and each delegated member below its own), the live
+  operations feed with the selected operation's input and result, and what the run handed over. Its neon colours are content;
+  every text colour on the scene is at least 5.5:1 on its ground. The page around it keeps the token roles.
+- **Truthful, not decorative.** A stage lights only when a call was observed in it (closed vocabulary: the tool's name, the
+  server's own phase label first), a count is never lower than the run's stored aggregate, and a count nothing reported reads
+  “—”, never 0. Members move to the stage of their last call; nothing is animated that did not happen.
+- **Motion has an off switch.** Flowing track, packets, rings, ripples, the sweep and blinking cursors stop under reduced
+  motion; positions still change, without travel. Under 760 px the line keeps its size and scrolls sideways.
+- **No back office on the page.** Tool names, route reasons, ledger caveats and “what was not observed” sentences stay out;
+  operations are named in the reader's words (`callLabel`), and a missing observation is simply absent.

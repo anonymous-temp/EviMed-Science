@@ -1,210 +1,272 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { TURN_END_KINDS } from "@evimed/domain";
-import { Activity, Clock3, FileText, GitBranch, Wrench } from "lucide-react";
-import { Button } from "@/components/ui/Button";
-import { List } from "@/components/ui/ListRow";
-import { EviMedMark } from "@/components/brand/EviMedMark";
+import { useEffect, useRef, useState } from "react";
 import "./ResearchObservatory.css";
+import { EVIMED_MARK_PATH } from "@/components/brand/EviMedMark";
 import { listWebAgentRuns, type WebAgentRun } from "@/lib/apiClient";
 import { safeWorkspacePath } from "@/lib/claimCitations";
-import { useRunEvents, type RunStreamEvent } from "@/lib/runEvents";
-import { currentPhaseLabel, DELIVERABLE_STATUS_LABEL, foldRunEvents } from "@/lib/runProgress";
-import { formatClock, formatDay, formatDuration, formatLingdou } from "@/lib/format";
+import { formatApproxCount, formatClock, formatDuration, formatLingdou } from "@/lib/format";
+import { DELIVERABLE_STATUS_LABEL } from "@/lib/runProgress";
+import { ROOT_AGENT, rootStage, STAGES, stageCounts, useResearchObservation, type ObservedAgent, type ObservedCall, type Observation, type StageKey } from "@/lib/researchObservation";
 
-const stateLabel: Record<string, string> = { running: "进行中", succeeded: "已完成", failed: "未完成", canceled: "已取消", idle: "等待中", done: "已完成", completed: "已完成", error: "出错", interrupted: "已中断", aborted: "已中止", blocked: "受阻" };
-const str = (value: unknown): string | undefined => typeof value === "string" && value.trim() ? value.trim() : undefined;
-const obj = (value: unknown): Record<string, unknown> | null => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
-const number = (value: unknown): number | null => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
-const status = (value: unknown) => { const kind = str(value) ?? ""; return stateLabel[kind] ?? (TURN_END_KINDS.includes(kind) && kind !== "unknown" ? "已结束" : "状态未知"); };
-const dateTime = (value: string | null | undefined) => value ? [formatDay(value), formatClock(value)].filter(Boolean).join(" ") || "未知" : "未知";
-const duration = (ms: number | null) => formatDuration(ms) || "未知";
+const RUN_WORD: Record<string, string> = { running: "进行中", succeeded: "已完成", failed: "未完成", canceled: "已停止", cancelled: "已停止" };
+const AGENT_WORD: Record<ObservedAgent["state"], string> = { running: "工作中", idle: "待命", done: "已完成", failed: "未完成", canceled: "已停止", unknown: "待命" };
+const SAFE_RUN = /^[A-Za-z0-9_-]{1,160}$/;
+const number = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null);
+const obj = (value: unknown): Record<string, unknown> | null => (value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null);
 
-type Child = { id: string; label?: string; state?: string; at?: string; parent?: string; observedAt?: string; ambiguous?: boolean; confirmedState?: string };
-type ToolActivity = { id: string; name: string; description?: string; state: string; time: string; child?: string; input?: unknown; output?: unknown; seq: number };
+/** 228:28:33 — hours keep counting past a day, the way a long study is read. */
+export function elapsedClock(ms: number | null): string {
+  if (ms === null || !Number.isFinite(ms) || ms < 0) return "--:--:--";
+  const total = Math.floor(ms / 1000);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`;
+}
 
-function eventText(value: unknown): string | null {
+function payloadText(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   if (typeof value === "string") return value;
   try { return JSON.stringify(value, null, 2) ?? null; } catch { return null; }
 }
 
-function EventContent({ title, value }: { title: string; value: unknown }) {
-  const text = eventText(value);
-  if (text === null) return <div><h5 className="text-caption font-semibold">{title}</h5><p className="mt-1 text-caption text-text-3">尚未收到</p></div>;
-  const long = text.length > 600;
-  return <div><h5 className="text-caption font-semibold">{title}</h5><pre className="mt-1 overflow-auto whitespace-pre-wrap break-words rounded bg-surface-2 p-3 text-caption text-text-2">{long ? `${text.slice(0, 600)}…` : text || "（空）"}</pre>{long && <details className="mt-2 text-caption text-text-2"><summary className="cursor-pointer">展开完整内容</summary><pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded bg-surface-2 p-3">{text}</pre></details>}</div>;
+function useReducedMotion() {
+  const query = typeof window !== "undefined" && typeof window.matchMedia === "function" ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+  const [reduced, setReduced] = useState(() => query?.matches ?? false);
+  useEffect(() => {
+    if (!query) return undefined;
+    const change = () => setReduced(query.matches);
+    query.addEventListener?.("change", change);
+    return () => query.removeEventListener?.("change", change);
+  }, [query]);
+  return reduced;
 }
 
-/** Only facts published by the run are represented; a missing field stays unknown. */
-export function observeResearch(events: readonly RunStreamEvent[], run: WebAgentRun | null) {
-  const fold = foldRunEvents(events);
-  const children = new Map<string, Child>();
-  const tools = new Map<string, ToolActivity>();
-  const mergeChild = (next: Child, fromProgress = false) => {
-    const old = children.get(next.id);
-    const before = old?.observedAt ? Date.parse(old.observedAt) : NaN;
-    const after = next.observedAt ? Date.parse(next.observedAt) : NaN;
-    const stale = !!old && (Number.isFinite(before) && Number.isFinite(after) ? after < before : ["done", "completed", "failed", "error", "canceled"].includes(old.state ?? "") && next.state === "running");
-    // The pump republishes replayed lifecycle events with the replay time. Once an aggregate has confirmed a
-    // state, a conflicting lifecycle event cannot safely override it until another aggregate settles the conflict.
-    const category = (value?: string) => ["done", "completed", "succeeded"].includes(value ?? "") ? "completed" : ["failed", "error"].includes(value ?? "") ? "failed" : ["running", "idle", "canceled"].includes(value ?? "") || (TURN_END_KINDS.includes(value ?? "") && value !== "unknown") ? value : null;
-    const conflict = !fromProgress && !stale && !!next.state && (!!old?.ambiguous || (!!old?.confirmedState && !!category(next.state) && category(next.state) !== category(old.confirmedState)));
-    children.set(next.id, { ...old, ...next, label: next.label ?? old?.label, parent: next.parent ?? old?.parent,
-      state: stale ? old?.state : conflict ? "unknown" : next.state ?? old?.state,
-      confirmedState: stale ? old?.confirmedState : fromProgress ? next.state ?? old?.confirmedState : old?.confirmedState,
-      ambiguous: stale ? old?.ambiguous : conflict || (!fromProgress && old?.ambiguous),
-      at: stale ? old?.at : next.at ?? old?.at, observedAt: stale ? old?.observedAt : next.observedAt ?? old?.observedAt });
-  };
-  const addProgress = (progress: unknown, receivedAt?: string) => {
-    const p = obj(progress);
-    const deliverables = Array.isArray(p?.deliverables) ? p.deliverables.map(obj).filter(Boolean) : [];
-    for (const value of Array.isArray(p?.children) ? p.children : []) {
-      const child = obj(value); const id = str(child?.childSessionId);
-      if (!id) continue;
-      const item = deliverables.find((d) => str(d?.id) === str(child?.deliverableId));
-      mergeChild({ id, label: str(item?.title), state: str(child?.state), at: str(child?.lastActivityAt), observedAt: str(p?.updatedAt) ?? receivedAt }, true);
-    }
-  };
-  addProgress(run?.progress);
-  for (const frame of events) {
-    if (frame.type === "run/progress") addProgress(frame.progress ?? frame, frame.time);
-    if (frame.type === "subagent/update") {
-      const id = str(frame.childSessionId); if (!id) continue;
-      mergeChild({ id, label: str(frame.label), state: str(frame.status), at: frame.time, observedAt: frame.time });
-    }
-    if (frame.type !== "run/event") continue;
-    const event = obj(frame.event); if (!event) continue;
-    if (event.type === "subagent/started") {
-      const id = str(event.childSessionId); if (!id) continue;
-      mergeChild({ id, label: str(event.label), state: "running", at: frame.time, parent: str(event.parentSessionId), observedAt: frame.time });
-    }
-    if (event.type !== "tool/call" && event.type !== "tool/result") continue;
-    const call = str(event.callId); if (!call) continue;
-    const session = str(frame.sessionId) ?? ""; const key = `${session}:${call}`; const old = tools.get(key);
-    tools.set(key, { id: key, name: str(event.tool) ?? old?.name ?? "工具", description: str(event.narration) ?? old?.description,
-      state: event.type === "tool/call" ? "已调用，结果未知" : event.status === "completed" ? "已完成" : event.status === "error" ? "出错" : "状态未知",
-      time: frame.time, child: frame.child === true ? session : undefined, input: event.type === "tool/call" ? event.input : old?.input, output: event.type === "tool/result" ? event.output : old?.output, seq: frame.seq });
-  }
-  return { fold, children: [...children.values()], tools: [...tools.values()].sort((a, b) => b.seq - a.seq), gap: events.some((event) => event.type === "stream/gap") || (events.length > 0 && events[0].seq > 1) };
+async function readRun(runId: string): Promise<WebAgentRun | null> {
+  const runs = await listWebAgentRuns();
+  return runs.find(item => item.id === runId) ?? (await listWebAgentRuns({ archived: true })).find(item => item.id === runId) ?? null;
 }
 
 /**
- * Anatomy: observed delegation scene, activity, selected input/output and usage.
- * Variants: a selected run or an empty selection.
- * States: loading, connected, unavailable, partial event history and terminal runs.
- * Hit area: shared Button controls.
- * Keyboard: agent and activity choices use native buttons; long output uses disclosure.
- * Long content: input and output wrap and can be expanded.
- * Theme: fixed scientific canvas from design tokens; surrounding surfaces follow the theme.
- * Responsive: the canvas and details stack on narrow screens.
- * Verification: ResearchObservatory.test.tsx; live runtime and assistive-technology checks remain separate.
+ * Anatomy: the research observatory — a status line, six live counters, the research line (seven stages, the
+ * orchestrator above it and every delegated session below it, each standing at the stage of its last call), the
+ * live operations feed with the selected operation's input and output, and what the run has handed over.
+ * Variants: no selection; a run that is starting, running or ended.
+ * States: connecting, live, reconnecting, ended; a count nothing has reported reads “—”, never 0.
+ * Hit area: native buttons for the members, operations and files.
+ * Keyboard: every member, operation and file is a button; the picture itself is described by its label.
+ * Long content: inputs and outputs scroll inside their panel; titles truncate with the full text kept.
+ * Theme: a fixed dark scene in both themes (the owner's observatory, 2026-10-28); the page around it follows the theme.
+ * Motion: flows, pulses and rings stop under reduced motion; positions still change, without travel.
+ * Responsive: the picture scales with its width; the feed and the inspector stack under 1024 px.
+ * Verification: ResearchObservatory.test.tsx, researchObservation.test.ts.
  */
-export function ResearchObservatory({ runId, onOpenFile }: { runId: string | null; onOpenFile?: (path: string, runId: string) => void }) {
-  if (!runId) return <section aria-label="研究执行" className="rounded-card bg-surface-2 p-5 text-ui text-text-2">选择一次研究执行，查看实时进展。</section>;
-  return <ObservatoryRun key={runId} runId={runId} onOpenFile={onOpenFile} />;
+export function ResearchObservatory({ runId, title, onOpenFile }: { runId: string | null; title?: string; onOpenFile?: (path: string, runId: string) => void }) {
+  if (!runId) return <section aria-label="研究观测" className="obs obs-empty" data-observatory="empty">
+    <div className="obs-empty-body"><p className="obs-empty-title">等待研究启动</p><p className="obs-empty-text">选择一项研究，或立即执行一次，这里会实时显示研究过程。</p></div>
+  </section>;
+  return <ObservatoryRun key={runId} runId={runId} title={title} onOpenFile={onOpenFile} />;
 }
 
-function ObservatoryRun({ runId, onOpenFile }: { runId: string; onOpenFile?: (path: string, runId: string) => void }) {
-  const stream = useRunEvents(runId);
+function ObservatoryRun({ runId, title, onOpenFile }: { runId: string; title?: string; onOpenFile?: (path: string, runId: string) => void }) {
   const [run, setRun] = useState<WebAgentRun | null>(null);
-  const [recordState, setRecordState] = useState<"loading" | "loaded" | "unavailable">("loading");
-  const [now, setNow] = useState(Date.now());
-  const [selectedAgent, setSelectedAgent] = useState<string>("all");
-  const [selectedTool, setSelectedTool] = useState<string | null>(null);
-  const scene = useRef<HTMLDivElement>(null);
-  const recordGeneration = useRef(0);
-  const [edges, setEdges] = useState<Array<{ id: string; path: string; active: boolean }>>([]);
+  const [recordRead, setRecordRead] = useState<"loading" | "loaded" | "unavailable">("loading");
+  const { model, connected } = useResearchObservation(runId, run?.progress ?? null);
+  const state = model.state ?? run?.status ?? null;
+  const ended = !!state && state !== "running";
+  // Only the latest read lands: an initial read that answers after the terminal refresh must not put back a running record.
+  const reads = useRef(0);
   useEffect(() => {
-    let active = true; const request = ++recordGeneration.current;
-    const read = async () => {
-      const runs = await listWebAgentRuns();
-      return runs.find(item => item.id === runId) ?? (await listWebAgentRuns({ archived: true })).find(item => item.id === runId) ?? null;
-    };
-    void read().then((record) => { if (active && request === recordGeneration.current) { setRun(record); setRecordState("loaded"); } }).catch(() => { if (active && request === recordGeneration.current) setRecordState("unavailable"); });
+    let active = true; const request = ++reads.current;
+    void readRun(runId).then(record => { if (active && request === reads.current) { setRun(record); setRecordRead("loaded"); } }).catch(() => { if (active && request === reads.current) setRecordRead("unavailable"); });
     return () => { active = false; };
   }, [runId]);
-  const observed = useMemo(() => observeResearch(stream.events, run), [stream.events, run]);
-  const currentState = observed.fold.state ?? run?.status;
+  // The record carries the run's totals and files once it ends: read it again when the stream says so.
   useEffect(() => {
-    if (currentState !== "running") return undefined;
+    if (!model.state || model.state === "running") return undefined;
+    let active = true; const request = ++reads.current;
+    void readRun(runId).then(record => { if (active && request === reads.current && record) { setRun(record); setRecordRead("loaded"); } }).catch(() => {});
+    return () => { active = false; };
+  }, [runId, model.state]);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (state !== "running") return undefined;
     const timer = setInterval(() => { if (!document.hidden) setNow(Date.now()); }, 1000);
     return () => clearInterval(timer);
-  }, [currentState]);
-  useEffect(() => {
-    if (!observed.fold.state || observed.fold.state === "running") return undefined;
-    let active = true; const request = ++recordGeneration.current;
-    const read = async () => {
-      const runs = await listWebAgentRuns();
-      return runs.find(item => item.id === runId) ?? (await listWebAgentRuns({ archived: true })).find(item => item.id === runId) ?? null;
-    };
-    void read().then((record) => { if (active && request === recordGeneration.current) { setRun(record); setRecordState("loaded"); } }).catch(() => { if (active && request === recordGeneration.current) setRecordState("unavailable"); });
-    return () => { active = false; };
-  }, [runId, observed.fold.state]);
-  const rawProgress = [...stream.events].reverse().find((event) => event.type === "run/progress");
-  const liveRaw = obj(rawProgress?.progress ?? rawProgress);
-  const liveAt = Date.parse(str(liveRaw?.updatedAt) ?? rawProgress?.time ?? "");
-  const savedAt = Date.parse(run?.progress?.updatedAt ?? "");
-  const savedIsNewer = Number.isFinite(savedAt) && (!Number.isFinite(liveAt) || savedAt > liveAt);
-  const progress = savedIsNewer ? run?.progress ?? null : observed.fold.progress ?? run?.progress ?? null;
-  const runState = observed.fold.state ?? run?.status;
-  const started = progress?.startedAt ?? run?.startedAt;
-  const startedMs = started ? Date.parse(started) : NaN;
-  const elapsed = run?.durationMs != null ? number(run.durationMs) : Number.isFinite(startedMs) && run?.finishedAt && Number.isFinite(Date.parse(run.finishedAt)) ? Date.parse(run.finishedAt) - startedMs : Number.isFinite(startedMs) && runState === "running" ? now - startedMs : null;
-  // Read the raw aggregate to avoid turning absent token fields into zero.
-  const rawUsage = (savedIsNewer ? obj(run?.progress?.usage) : obj(liveRaw?.usage)) ?? obj(run?.usage) ?? obj(run?.progress?.usage);
-  const input = number(rawUsage?.inputTokens); const output = number(rawUsage?.outputTokens); const cached = number(rawUsage?.cachedInputTokens); const requests = number(rawUsage?.requests); const cost = number(rawUsage?.costCny);
-  const files = [...new Set([...(run?.outputFiles ?? []), ...(run?.presentedFiles ?? []), ...(run?.artifacts ?? []), ...(run?.unverifiedArtifacts ?? [])])].filter(path => safeWorkspacePath(path) && /^[A-Za-z0-9_-]{1,160}$/.test(runId));
-  const phase = currentPhaseLabel(progress);
-  useLayoutEffect(() => {
-    const element = scene.current;
-    if (!element) return undefined;
-    const measure = () => {
-      const bounds = element.getBoundingClientRect();
-      const nodes = new Map(Array.from(element.querySelectorAll<HTMLElement>("[data-research-agent]"), node => [node.dataset.researchAgent, node]));
-      const next = observed.children.flatMap(child => {
-        if (!child.parent) return [];
-        const parent = nodes.get(child.parent), target = nodes.get(child.id);
-        if (!parent || !target) return [];
-        const a = parent.getBoundingClientRect(), b = target.getBoundingClientRect();
-        const x1 = a.left - bounds.left + a.width / 2, y1 = a.bottom - bounds.top;
-        const x2 = b.left - bounds.left + b.width / 2, y2 = b.top - bounds.top;
-        const middle = (y1 + y2) / 2;
-        return [{ id: child.id, path: `M ${x1} ${y1} C ${x1} ${middle}, ${x2} ${middle}, ${x2} ${y2}`, active: child.state === "running" }];
-      });
-      setEdges(old => JSON.stringify(old) === JSON.stringify(next) ? old : next);
-    };
-    measure();
-    const observer = new ResizeObserver(measure); observer.observe(element);
-    for (const node of element.querySelectorAll("[data-research-agent]")) observer.observe(node);
-    return () => observer.disconnect();
-  }, [observed.children, run?.sessionId]);
-  const visibleTools = observed.tools.filter((tool) => selectedAgent === "all" || (selectedAgent === "root" ? !tool.child : tool.child === selectedAgent));
-  const selectedActivity = visibleTools.find((tool) => tool.id === selectedTool) ?? visibleTools[0];
-  const selectAgent = (id: string) => { setSelectedAgent(id); setSelectedTool(null); };
-  const agentName = (id: string) => id === run?.sessionId ? "EviMed 主理" : observed.children.find((child) => child.id === id)?.label ?? "上游任务";
-  return <section aria-label="研究执行" className="overflow-hidden rounded-card bg-surface-2 text-text">
-    <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border p-5">
-      <div><div className="flex items-center gap-2 text-caption text-text-3"><Activity size={16} aria-hidden="true" />研究执行</div><h3 className="mt-2 text-heading font-semibold">{run?.title || run?.question || "研究进行情况"}</h3><p className="mt-1 text-ui text-text-2">{phase ?? (runState ? status(runState) : "等待执行信息")}</p></div>
-      <div className="text-right text-caption text-text-3"><p>{stream.connected ? "实时连接中" : recordState === "loading" && stream.events.length === 0 ? "正在连接" : runState && ["succeeded", "failed", "canceled"].includes(runState) ? "执行已结束" : "连接中断或暂不可用"}</p><p className="mt-1">{runState ? status(runState) : "状态未知"}</p></div>
-    </div>
-    {observed.gap && <p role="status" className="border-b border-border px-5 py-3 text-ui text-text">部分早期事件已不可用，以下仅展示收到的记录。</p>}
-    {recordState === "unavailable" && <p role="status" className="border-b border-border px-5 py-3 text-ui text-text">执行记录暂不可用，仍可查看已收到的实时事件。</p>}
-    <div className="grid gap-5 p-5 lg:grid-cols-3">
-      <div className="space-y-4 lg:col-span-2">
-        <div><div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-ui font-semibold">协作执行</h4><Button variant="text" size="sm" aria-pressed={selectedAgent === "all"} onClick={() => selectAgent("all")}>全部动态</Button></div><div ref={scene} className="research-scene mt-3 rounded-card" aria-label="协作关系">
-          <div className="research-scene-label">EviMed · 研究执行现场</div>
-          <svg className="research-wires" aria-hidden="true">{edges.map(edge => <path key={edge.id} d={edge.path} className={edge.active ? "research-wire active" : "research-wire"} />)}</svg>
-          <div className="research-director"><Button variant="secondary" data-research-agent={run?.sessionId ?? "root"} aria-label="查看 EviMed 总指挥" aria-pressed={selectedAgent === "root"} className="research-node research-root h-auto min-w-0 flex-col items-start whitespace-normal text-left" onClick={() => selectAgent("root")}><span className="flex items-center gap-2 text-ui font-semibold"><EviMedMark className="research-mark h-6 w-6" />EviMed 主理</span><span className="research-node-meta mt-2 text-caption">{runState ? status(runState) : "状态未知"}{phase ? ` · ${phase}` : ""}</span></Button></div>
-          <div className="research-children grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{observed.children.map((child, index) => <Button key={child.id} variant="secondary" data-research-agent={child.id} aria-label={`查看 ${child.label || `协作任务 ${index + 1}`}`} aria-pressed={selectedAgent === child.id} className="research-node h-auto w-full min-w-0 flex-col items-start whitespace-normal text-left" onClick={() => selectAgent(child.id)}><span className="flex items-center gap-2 text-ui font-semibold"><GitBranch size={16} aria-hidden="true" />{child.label || `协作任务 ${index + 1}`}{child.state === "running" && <span className="research-live" aria-hidden="true" />}</span><span className="research-node-meta mt-2 text-caption">{status(child.state)}{child.at ? ` · ${dateTime(child.at)}` : ""}</span>{child.parent && <span className="research-node-meta mt-1 text-caption">由 {agentName(child.parent)} 发起</span>}</Button>)}</div>
-        </div>{observed.children.length === 0 && <p className="mt-3 text-caption text-text-3">尚未收到协作任务记录</p>}</div>
-        {progress && progress.deliverables.length > 0 && <div><h4 className="text-ui font-semibold">研究任务</h4><List divided className="mt-2">{progress.deliverables.map(item => <li key={item.id} className="flex items-center justify-between gap-3 py-2 text-ui"><span className="min-w-0 break-words">{item.title}</span><span className="shrink-0 text-caption text-text-3">{DELIVERABLE_STATUS_LABEL[item.status]}</span></li>)}</List></div>}
-        <div><h4 className="text-ui font-semibold">执行动态</h4><p className="mt-1 text-caption text-text">仅显示当前可获取的近期事件，较早记录可能不可用。</p>{visibleTools.length ? <List divided className="mt-3">{visibleTools.slice(0, 12).map((tool) => <li key={tool.id} className="flex items-start gap-3 py-3 text-ui"><Wrench size={16} className="mt-0.5 shrink-0 text-text-3" aria-hidden="true" /><div className="min-w-0 flex-1"><Button variant="text" size="sm" aria-pressed={selectedActivity?.id === tool.id} className="h-auto max-w-full justify-start whitespace-normal px-0 text-left" onClick={() => setSelectedTool(tool.id)}><span className="break-words">{tool.description || tool.name}</span></Button><p className="mt-1 text-caption text-text-3">{tool.child ? observed.children.find((child) => child.id === tool.child)?.label || "协作任务" : "EviMed 主理"} · {tool.state}</p></div><time className="shrink-0 text-caption text-text-3">{dateTime(tool.time)}</time></li>)}</List> : <p className="mt-3 text-caption text-text-3">尚未收到工具活动记录</p>}
-          {selectedActivity && <section aria-label="工具过程与结果" className="mt-3 space-y-4 rounded-card bg-surface p-4"><div><h5 className="text-ui font-semibold">{selectedActivity.name}</h5><p className="mt-1 text-caption text-text-3">{selectedActivity.state} · {dateTime(selectedActivity.time)}</p></div><EventContent title="输入" value={selectedActivity.input} /><EventContent title="输出" value={selectedActivity.output} /></section>}
+  }, [state]);
+
+  const progress = model.progress;
+  const started = progress?.startedAt ?? run?.startedAt ?? null;
+  const startedMs = started ? Date.parse(started) : Number.NaN;
+  const finishedMs = run?.finishedAt ? Date.parse(run.finishedAt) : Number.NaN;
+  const elapsed = number(run?.durationMs) ?? (Number.isFinite(startedMs) && Number.isFinite(finishedMs) ? finishedMs - startedMs
+    : Number.isFinite(startedMs) && state === "running" ? Math.max(0, now - startedMs) : null);
+  // The raw aggregate, so an absent token count stays unknown rather than zero.
+  const usage = obj((progress as { usage?: unknown } | null)?.usage) ?? obj(run?.usage) ?? obj(run?.progress?.usage);
+  const tokensIn = number(usage?.inputTokens), tokensOut = number(usage?.outputTokens), requests = number(usage?.requests), cost = number(usage?.costCny);
+  const files = SAFE_RUN.test(runId) ? [...new Set([...(run?.outputFiles ?? []), ...(run?.presentedFiles ?? []), ...(run?.artifacts ?? []), ...(run?.unverifiedArtifacts ?? [])])].filter(path => safeWorkspacePath(path)) : [];
+  const counts = stageCounts(model);
+  const toolTotal = Math.max(model.callCount, Object.values(progress?.phaseCounts ?? {}).reduce((sum, value) => sum + value, 0));
+  const included = progress && (progress.sources.included > 0 || progress.sources.searched > 0) ? progress.sources : null;
+  const claims = progress && progress.claims.total > 0 ? progress.claims : null;
+  const live = state === "running";
+  const status = live ? (connected ? "实时" : "重新连接") : state ? RUN_WORD[state] ?? "已结束" : recordRead === "loading" || !connected ? "连接中" : "等待开始";
+  const heading = title || run?.title || run?.question || "研究进行中";
+
+  return <section aria-label="研究观测" className="obs" data-observatory={live ? "live" : ended ? "ended" : "waiting"}>
+    <div className="obs-frame" aria-hidden="true"><span /><span /><span /><span /></div>
+    <header className="obs-head">
+      <div className="obs-head-main">
+        <span className={live ? "obs-live on" : "obs-live"}><i aria-hidden="true" />{live ? "LIVE" : ended ? "END" : "SYNC"}</span>
+        <div className="min-w-0"><p className="obs-kicker">研究观测舱</p><h3 className="obs-title">{heading}</h3></div>
+      </div>
+      <div className="obs-head-side"><span className="obs-clock" aria-label={`运行时长 ${formatDuration(elapsed) || "未开始"}`}>{elapsedClock(elapsed)}</span><span className={`obs-status s-${live ? "live" : state ?? "wait"}`} role="status">{status}</span></div>
+    </header>
+    <dl className="obs-hud">
+      <Metric label="模型调用" value={requests === null ? "—" : formatApproxCount(requests)} sub="次" />
+      <Metric label="Token 吞吐" value={tokensIn === null && tokensOut === null ? "—" : formatApproxCount((tokensIn ?? 0) + (tokensOut ?? 0))} sub={tokensIn === null ? "" : `输入 ${formatApproxCount(tokensIn)} · 输出 ${formatApproxCount(tokensOut ?? 0)}`} />
+      <Metric label="研究操作" value={toolTotal ? formatApproxCount(toolTotal) : "—"} sub="次" />
+      <Metric label="文献纳入" value={included ? formatApproxCount(included.included) : "—"} sub={included ? `检索 ${formatApproxCount(included.searched)} · 全文 ${formatApproxCount(included.fullText)}` : ""} />
+      <Metric label="结论核对" value={claims ? `${claims.verified}/${claims.total}` : "—"} sub={claims ? "条已核对" : ""} />
+      <Metric label="消耗" value={cost === null ? "—" : (formatLingdou(cost) || "—").replace(" 灵豆", "")} sub={cost === null ? "" : "灵豆"} />
+    </dl>
+    <ResearchLine model={model} counts={counts} live={live} />
+    {model.thought && live && <p className="obs-thought" aria-live="off"><span className="obs-thought-tag">思考</span><span className="obs-thought-text">{model.thought}</span><i aria-hidden="true" /></p>}
+    {progress && progress.deliverables.length > 0 && <ul className="obs-tasks" aria-label="研究任务">{progress.deliverables.map(item => <li key={item.id} className={`t-${item.status}`}><span className="min-w-0 truncate">{item.title}</span><b>{DELIVERABLE_STATUS_LABEL[item.status]}</b></li>)}</ul>}
+    <OperationsFeed model={model} live={live} />
+    {files.length > 0 && <div className="obs-files"><p className="obs-section-label">产出 · {files.length}</p><ul aria-label="研究产出">{files.map(file => <li key={file}>
+      {onOpenFile ? <button type="button" className="obs-file" onClick={() => onOpenFile(file, runId)}>{file.split("/").pop() || file}</button> : <span className="obs-file">{file.split("/").pop() || file}</span>}
+    </li>)}</ul></div>}
+  </section>;
+}
+
+function Metric({ label, value, sub }: { label: string; value: string; sub: string }) {
+  return <div className="obs-metric"><dt>{label}</dt><dd><span className="obs-metric-value">{value}</span>{sub && <span className="obs-metric-sub">{sub}</span>}</dd></div>;
+}
+
+const VIEW_W = 1200;
+const LINE_Y = 196;
+const stageX = (index: number) => 96 + index * ((VIEW_W - 192) / (STAGES.length - 1));
+const clipLabel = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}…` : text);
+const HEX = (r: number) => Array.from({ length: 6 }, (_, i) => { const a = (Math.PI / 3) * i + Math.PI / 6; return `${(r * Math.cos(a)).toFixed(1)},${(r * Math.sin(a)).toFixed(1)}`; }).join(" ");
+
+/**
+ * The research line: seven stages on a track, the orchestrator above the stage of its last call and each delegated
+ * session below its own. A stage that has been reached lights; the stage someone is working at turns.
+ */
+function ResearchLine({ model, counts, live }: { model: Observation; counts: Record<StageKey, number>; live: boolean }) {
+  const reduced = useReducedMotion();
+  const current = rootStage(model);
+  const children = [...model.agents.values()].filter(agent => !agent.root);
+  const busy = new Set<StageKey>();
+  if (live && current) busy.add(current);
+  for (const child of children) if (child.state === "running" && child.stage) busy.add(child.stage);
+  const furthest = STAGES.reduce((last, stage, index) => (counts[stage.key] > 0 ? index : last), -1);
+  const rootX = stageX(Math.max(0, STAGES.findIndex(stage => stage.key === current)));
+  const recent = (agent: string) => model.calls.filter(call => call.agent === agent).slice(0, 4);
+  // Members at one stage stand side by side under it.
+  const slots = new Map<StageKey | "none", number>();
+  const placed = children.slice(0, 12).map(child => {
+    const key = child.stage ?? "none"; const slot = slots.get(key) ?? 0; slots.set(key, slot + 1);
+    const index = child.stage ? STAGES.findIndex(stage => stage.key === child.stage) : 0;
+    // Two rows under a stage: the first member straight below it, the next two on the second row either side, then
+    // further out on the first row — a stage is 168 px wide, so members of neighbouring stages never touch.
+    const [row, offset] = slot === 0 ? [0, 0] : slot <= 2 ? [1, slot === 1 ? 58 : -58] : [(slot - 3) % 2, (slot % 2 ? 1 : -1) * 116];
+    return { child, x: Math.min(VIEW_W - 50, Math.max(50, stageX(index) + offset)), y: 300 + row * 54 };
+  });
+  const summary = [current && live ? `正在${STAGES.find(stage => stage.key === current)?.label}` : null,
+    ...STAGES.filter(stage => counts[stage.key] > 0).map(stage => `${stage.label} ${counts[stage.key]} 次`),
+    children.length ? `协作成员 ${children.length} 位` : null].filter(Boolean).join("，");
+  const track = `M ${stageX(0)} ${LINE_Y} L ${stageX(STAGES.length - 1)} ${LINE_Y}`;
+  return <div className="obs-scene">
+    <div className="obs-floor" aria-hidden="true" />
+    {live && <div className="obs-sweep" aria-hidden="true" />}
+    <svg viewBox={`0 0 ${VIEW_W} 410`} className="obs-svg" role="img" aria-label={`研究流程：${summary || "等待第一个操作"}`} preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <filter id="obs-glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
+        <linearGradient id="obs-track-lit" x1="0" x2="1"><stop offset="0" className="obs-stop-a" /><stop offset="1" className="obs-stop-b" /></linearGradient>
+      </defs>
+      <path d={track} className="obs-track" />
+      {furthest >= 0 && <path d={`M ${stageX(0)} ${LINE_Y} L ${stageX(furthest)} ${LINE_Y}`} className={live ? "obs-track-lit flow" : "obs-track-lit"} />}
+      {furthest > 0 && live && !reduced && [0, 1, 2, 3, 4].map(i => <circle key={i} r={i % 2 ? 2.4 : 3.4} className={i % 2 ? "obs-packet alt" : "obs-packet"}><animateMotion dur={`${2.4 + i * 0.55}s`} begin={`${i * 0.7}s`} repeatCount="indefinite" path={`M ${stageX(0)} ${LINE_Y} L ${stageX(furthest)} ${LINE_Y}`} /></circle>)}
+      {STAGES.map((stage, index) => {
+        const x = stageX(index); const count = counts[stage.key];
+        const mode = busy.has(stage.key) ? "busy" : count > 0 ? "done" : "idle";
+        return <g key={stage.key} className={`obs-stage m-${mode}`} transform={`translate(${x} ${LINE_Y})`}>
+          {mode === "busy" && <circle r="50" className="obs-ring" />}
+          {mode === "busy" && live && !reduced && <circle r="36" className="obs-ripple" />}
+          <polygon points={HEX(36)} className="obs-hex" filter={mode === "busy" ? "url(#obs-glow)" : undefined} />
+          <polygon points={HEX(28)} className="obs-hex-in" />
+          <text y="7" className="obs-count">{count > 0 ? formatApproxCount(count) : "·"}</text>
+          <text y="66" className="obs-stage-label">{stage.label}</text>
+          <text y="84" className="obs-stage-code">{String(index + 1).padStart(2, "0")} {stage.code}</text>
+        </g>;
+      })}
+      <g className={live ? "obs-agent obs-root on" : "obs-agent obs-root"} style={{ transform: `translate(${rootX}px, 64px)` }}>
+        <line x1="0" y1="28" x2="0" y2={LINE_Y - 64 - 38} className={live && current ? "obs-beam flow" : "obs-beam"} />
+        {!reduced && live && recent(ROOT_AGENT).map((call, i) => <circle key={call.id} r="3.5" className={`obs-pulse p-${call.state}`} style={{ animationDelay: `${i * 0.18}s`, ["--travel" as string]: `${LINE_Y - 64 - 66}px` }} cy="30" />)}
+        {live && !reduced && <circle r="34" className="obs-ring obs-ring-root" />}
+        <polygon points={HEX(26)} className="obs-core" filter="url(#obs-glow)" />
+        <path d={EVIMED_MARK_PATH} transform="translate(-11 -11) scale(0.69)" className="obs-mark" />
+        <text y="-36" className="obs-agent-label">主研究员</text>
+      </g>
+      {placed.map(({ child, x, y }) => <g key={child.id} className={`obs-agent obs-child s-${child.state}`} style={{ transform: `translate(${x}px, ${y}px)` }}>
+        <line x1="0" y1="-18" x2="0" y2={-(y - LINE_Y - 38)} className={child.state === "running" ? "obs-beam child flow" : "obs-beam child"} />
+        {!reduced && child.state === "running" && recent(child.id).map((call, i) => <circle key={call.id} r="3" className={`obs-pulse up p-${call.state}`} style={{ animationDelay: `${i * 0.2}s`, ["--travel" as string]: `${-(y - LINE_Y - 56)}px` }} cy="-20" />)}
+        <polygon points={HEX(17)} className="obs-node" />
+        <text y="5" className="obs-node-count">{child.calls || "·"}</text>
+        <text y="38" className="obs-agent-label small">{clipLabel(child.label || "协作成员", 5)}</text>
+      </g>)}
+    </svg>
+  </div>;
+}
+
+function OperationsFeed({ model, live }: { model: Observation; live: boolean }) {
+  const [agent, setAgent] = useState<string>("all");
+  const [selected, setSelected] = useState<string | null>(null);
+  const members = [...model.agents.values()].filter(item => !item.root);
+  const visible = model.calls.filter(call => agent === "all" || call.agent === agent);
+  const chosen = visible.find(call => call.id === selected) ?? visible[0] ?? null;
+  const memberName = (id: string) => id === ROOT_AGENT ? "主研究员" : model.agents.get(id)?.label || "协作成员";
+  return <div className="obs-feed-grid">
+    <section aria-label="实时动态" className="obs-panel">
+      <div className="obs-panel-head">
+        <p className="obs-section-label">实时动态{live && <span className="obs-blink" aria-hidden="true">▍</span>}</p>
+        <div className="obs-chips" role="group" aria-label="按成员查看">
+          <button type="button" aria-pressed={agent === "all"} onClick={() => { setAgent("all"); setSelected(null); }}>全部</button>
+          <button type="button" aria-pressed={agent === ROOT_AGENT} onClick={() => { setAgent(ROOT_AGENT); setSelected(null); }}>主研究员</button>
+          {members.map(member => <button key={member.id} type="button" aria-pressed={agent === member.id} onClick={() => { setAgent(member.id); setSelected(null); }} aria-label={`${member.label || "协作成员"} · ${AGENT_WORD[member.state]}`}>
+            <i className={`obs-dot s-${member.state}`} aria-hidden="true" />{(member.label || "协作成员").slice(0, 10)}
+          </button>)}
         </div>
       </div>
-      <aside className="space-y-5 rounded-card bg-surface p-4"><div><h4 className="flex items-center gap-2 text-ui font-semibold"><Clock3 size={16} aria-hidden="true" />执行详情</h4><dl className="mt-3 space-y-2 text-caption"><div className="flex justify-between gap-3"><dt className="text-text-3">开始时间</dt><dd>{dateTime(started)}</dd></div><div className="flex justify-between gap-3"><dt className="text-text-3">已用时间</dt><dd>{duration(elapsed)}</dd></div><div className="flex justify-between gap-3"><dt className="text-text-3">输入 / 输出 token</dt><dd>{input === null ? "未知" : input.toLocaleString()} / {output === null ? "未知" : output.toLocaleString()}</dd></div><div className="flex justify-between gap-3"><dt className="text-text-3">缓存输入 token</dt><dd>{cached === null ? "未知" : cached.toLocaleString()}</dd></div><div className="flex justify-between gap-3"><dt className="text-text-3">模型调用</dt><dd>{requests === null ? "未知" : requests.toLocaleString()}</dd></div><div className="flex justify-between gap-3"><dt className="text-text-3">已记录消耗</dt><dd>{cost === null ? "未知" : formatLingdou(cost)}</dd></div></dl></div>
-        <div><h4 className="flex items-center gap-2 text-ui font-semibold"><FileText size={16} aria-hidden="true" />研究文件</h4>{files.length ? <ul className="mt-2 space-y-1">{files.map((file) => <li key={file}>{onOpenFile ? <Button variant="text" size="sm" className="max-w-full justify-start" onClick={() => onOpenFile(file, runId)}><span className="truncate">{file.split("/").pop() || file}</span></Button> : <span className="block break-all text-caption text-text-2">{file.split("/").pop() || file}</span>}</li>)}</ul> : <p className="mt-2 text-caption text-text-3">暂无可展示的文件记录</p>}</div>
-      </aside>
-    </div>
+      {visible.length ? <ol className="obs-log">{visible.slice(0, 40).map(call => <li key={call.id}>
+        <button type="button" className={`obs-line c-${call.state}`} aria-pressed={chosen?.id === call.id} onClick={() => setSelected(call.id)}>
+          <time className="obs-line-time">{formatClock(call.at) || "--:--"}</time>
+          <span className={`obs-tag g-${call.stage ?? "none"}`}>{call.stage ? STAGES.find(stage => stage.key === call.stage)?.label : "操作"}</span>
+          <span className="obs-line-text"><b>{call.label}</b>{call.detail && <span> {call.detail}</span>}</span>
+          <span className="obs-line-who">{memberName(call.agent)}</span>
+          <span className="obs-line-state">{call.state === "running" ? "…" : call.state === "error" ? "✕" : "✓"}{call.durationMs !== undefined && call.state !== "running" ? ` ${formatDuration(call.durationMs)}` : ""}</span>
+        </button>
+      </li>)}</ol> : <p className="obs-quiet">{live ? "等待第一个研究操作" : "这次执行没有研究操作"}</p>}
+    </section>
+    <Inspector call={chosen} who={chosen ? memberName(chosen.agent) : ""} />
+  </div>;
+}
+
+function Inspector({ call, who }: { call: ObservedCall | null; who: string }) {
+  if (!call) return <section aria-label="操作详情" className="obs-panel obs-inspector"><p className="obs-section-label">操作详情</p><p className="obs-quiet">选择一条动态查看输入与结果</p></section>;
+  const input = payloadText(call.input); const output = payloadText(call.output);
+  return <section aria-label="操作详情" className="obs-panel obs-inspector">
+    <p className="obs-section-label">操作详情</p>
+    <p className="obs-inspect-title">{call.label}</p>
+    <p className="obs-inspect-meta">{who} · {call.state === "running" ? "进行中" : call.state === "error" ? "未成功" : "已完成"}{call.durationMs !== undefined ? ` · ${formatDuration(call.durationMs)}` : ""}</p>
+    <Payload title="输入" text={input} pending="—" />
+    <Payload title="结果" text={output} pending={call.state === "running" ? "等待结果" : "—"} />
   </section>;
+}
+
+function Payload({ title, text, pending }: { title: string; text: string | null; pending: string }) {
+  const long = text !== null && text.length > 1200;
+  return <div className="obs-payload"><p className="obs-payload-title">{title}</p>
+    {text === null ? <p className="obs-quiet">{pending}</p> : <pre>{long ? `${text.slice(0, 1200)}…` : text || "（空）"}</pre>}
+    {long && <details><summary>展开全部</summary><pre>{text}</pre></details>}
+  </div>;
 }

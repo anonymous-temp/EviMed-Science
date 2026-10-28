@@ -12,33 +12,34 @@ const materials: ResearchState["materials"] = [
   { sourceId: "src-unavailable", name: "不可用", addedAt: "", state: "unavailable" },
 ];
 const props = () => ({ materials, loading: false, error: null, busy: false, onUpload: vi.fn(), onPick: vi.fn(), onDatabase: vi.fn(), onRemove: vi.fn(), onRetry: vi.fn() });
-const draw = (input: ReturnType<typeof props>) => render(<MemoryRouter><ResearchDataPanel {...input} /></MemoryRouter>);
+const draw = (input: ReturnType<typeof props> & { databaseAvailable?: boolean }) => render(<MemoryRouter><ResearchDataPanel {...input} /></MemoryRouter>);
 
 describe("ResearchDataPanel", () => {
-  it("shows the actual associated materials and their distinct availability without claiming use", async () => {
+  it("lists the research's materials, labelling only those that are not ready", async () => {
     const input = props(); draw(input);
-    expect(screen.getByText("已关联的资料可供研究使用，关联不代表已经阅读。")).toBeInTheDocument();
-    const rows = within(screen.getByRole("list", { name: "已关联资料" })).getAllByRole("listitem");
+    const rows = within(screen.getByRole("list", { name: "已加入的资料" })).getAllByRole("listitem");
     expect(within(rows[0]).getByRole("link", { name: "方案.pdf" })).toHaveAttribute("href", "/app/files/src%2Fready");
-    ["可使用", "正在读取", "需要处理", "无法使用"].forEach((status, index) => expect(within(rows[index]).getByText(status)).toBeInTheDocument());
+    expect(rows[0].querySelector("[data-tag]")).toBeNull();
+    ["正在读取", "需要处理", "无法使用"].forEach((status, index) => expect(within(rows[index + 1]).getByText(status)).toBeInTheDocument());
     await userEvent.click(within(rows[0]).getByRole("button", { name: "移除 方案.pdf" }));
     expect(input.onRemove).toHaveBeenCalledWith("src/ready");
   });
 
-  it("supports literature-only research and exposes real entry points", async () => {
-    const input = { ...props(), materials: [] }; draw(input);
-    expect(screen.getByText(/只用公开文献/)).toBeInTheDocument();
+  it("is a recipe when empty and offers the database only where it exists", async () => {
+    const input = { ...props(), materials: [] }; const view = draw(input);
+    expect(screen.getByText(/还没有资料/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "上传资料" }));
     await userEvent.click(screen.getByRole("button", { name: "从知识库选择" }));
-    expect(input.onUpload).toHaveBeenCalledOnce(); expect(input.onPick).toHaveBeenCalledOnce();
-    expect(screen.getByRole("link", { name: "管理数据源" })).toHaveAttribute("href", "/app/account?tab=connectors");
-    expect(screen.getByRole("link", { name: "查找公开文献（PubMed）" })).toHaveAttribute("href", "https://pubmed.ncbi.nlm.nih.gov/");
+    await userEvent.click(screen.getByRole("button", { name: "从数据库导入" }));
+    expect(input.onUpload).toHaveBeenCalledOnce(); expect(input.onPick).toHaveBeenCalledOnce(); expect(input.onDatabase).toHaveBeenCalledOnce();
+    view.rerender(<MemoryRouter><ResearchDataPanel {...input} databaseAvailable={false} /></MemoryRouter>);
+    expect(screen.queryByRole("button", { name: "从数据库导入" })).not.toBeInTheDocument();
   });
 
-  it("distinguishes loading and failed reads and disables mutations while busy", async () => {
+  it("distinguishes loading and failed reads and disables changes while busy", async () => {
     const input = { ...props(), loading: true, busy: true }; const view = draw(input);
-    expect(screen.getByRole("status")).toHaveTextContent("正在加载研究资料");
-    expect(screen.queryByText(/尚未关联资料/)).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("正在载入");
+    expect(screen.queryByText(/还没有资料/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "上传资料" })).toBeDisabled();
     view.rerender(<MemoryRouter><ResearchDataPanel {...input} loading={false} error="资料加载失败" /></MemoryRouter>);
     expect(screen.getByText("资料加载失败")).toBeInTheDocument();

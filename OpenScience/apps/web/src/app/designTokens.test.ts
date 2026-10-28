@@ -60,6 +60,7 @@ const ALLOWED: Record<string, string> = {
   "index.css": "the token file itself",
   "components/inspector/OfficePreview.tsx": "styles for a rendered Office document inside its own shadow root",
   "components/inspector/AnomalyMapView.tsx": "a data map drawn on a fixed dark scientific canvas",
+  "components/autopilot/ResearchObservatory.css": "主动科研's observatory and its queue: a fixed dark scene in both themes, its colours content (owner, 2026-10-28)",
   "components/inspector/FitsView.tsx": "an astronomy image well, fixed dark",
   "components/inspector/MeshView.tsx": "WebGL scene background handed to the renderer",
   "components/inspector/QCodeView.tsx": "a label colour handed to the circuit renderer",
