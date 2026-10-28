@@ -1,7 +1,7 @@
 """Six Chinese platforms through the GEO module's crawler, for monitoring (contract 1.5.0, channel ``social``).
 
 ``POST {KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_URL}/api/jobs`` and fixed-path job polling with the request the platform's ``socialCrawlClient.mjs`` sends:
-one platform, newest first, five detailed posts, collect_comments=false, no provider raw answer. What is read:
+``platforms: [one name]``, newest first, five detailed posts, collect_comments=false, no provider raw answer. What is read:
 
 - **A standing watch list** (``watch_list`` in ``registry/social-sources.json``): about forty medical topics and drug
   classes the public talks about and the feed covers, each with the reason it is there. Every (term, platform) pair is
@@ -10,7 +10,13 @@ one platform, newest first, five detailed posts, collect_comments=false, no prov
   (contract rule 6), so the watch list is all there is.
 - **Pacing.** ``KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_DAILY`` requests a day (120), spread evenly (one every twelve minutes),
   one at a time. The crawler is the GEO module's and serves one request at a time: a busy answer (429/503) is GEO's, and
-  the monitor waits at least ten minutes before it asks again — never a retry inside those ten minutes.
+  the monitor waits at least ten minutes before it asks again — never a retry inside those ten minutes. (An accepted
+  job's *poll* that meets a busy answer or a dropped connection is asked again at once, twice at most, inside the one
+  deadline: the job is running there and must not be lost to one blip; the crawl is never submitted again.)
+- **Partial is a read.** A platform that kept posts but is short of what was asked (a failed comments stage, fewer posts than
+  the five asked for) is recorded as a read that worked, with ``partial`` in its detail; its failure streak does not grow.
+  A read with nothing usable and something wrong is a failure of that platform; a read with nothing and nothing wrong is
+  empty.
 - **One failing platform never holds the other five.** A request that failed for a reason of its own (an HTTP 500, a
   timeout, an answer that is not JSON) records the attempt for that term × platform and parks that platform for a few
   hours (``park_for``: three hours, doubled by every failure in a row, at most twelve), so the round robin moves on to the

@@ -566,8 +566,14 @@ class SocialCollector:
             state.pop("parked", None)
         await self._save_crawl_state(state)
         status = str((answer.get("meta") or {}).get("collection_status") or "")
-        await self._finish(row, now, outcome="http-error" if status == "partial_collected" else "ok" if candidates else "empty", result=result, host=None,
-                           detail=f"term={term[:40]} status={status[:20]}", next_at=now + pace)
+        # A read that kept usable posts is a read that worked: a stage short of what was asked (a failed comments stage, fewer posts
+        # than the five asked for) is said in the detail, and never counts as the platform failing (its failure streak, its last
+        # success). A read that gave nothing usable and had something go wrong never gets here (`CrawlClient.crawl` raises).
+        partial = status == "partial_collected"
+        if partial:
+            self.counters["crawl_partial"] += 1
+        await self._finish(row, now, outcome="ok" if candidates else "empty", result=result, host=None,
+                           detail=f"{'partial ' if partial else ''}term={term[:40]} status={status[:20]}", next_at=now + pace)
         return {"term": term, "platform": platform, "posts": len(candidates), "new": result.new}
 
     async def _save_crawl_state(self, state: dict) -> None:
