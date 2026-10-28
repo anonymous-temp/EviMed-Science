@@ -327,3 +327,14 @@ it.each(['explicit','selected','empty'] as const)('preserves the original %s sou
  expect(address.searchParams.get('selectionRef')).toBe('gsel_exact_plan');expect(address.searchParams.get('session')).toBe('s1');
  expect(address.searchParams.get('strategyVersion')).toBe('7');expect(address.searchParams.get('targetVersion')).toBe('3');
 });
+
+
+it('clears the platform the analysis scope set in the cited view — the filter shows it, so clearing it must — and leaves the rest of the address',async()=>{
+ renderTab(geoProject(),'/app/geo/geo_1/sources?selectionRef=gsel_keep&engines=deepseek&questionVersion=3&session=s1');
+ await screen.findByLabelText('搜索信源');
+ await userEvent.click(within(toolbar()).getByRole('button',{name:'清除筛选'}));
+ const params=new URLSearchParams(screen.getByTestId('search').textContent!);
+ expect(params.has('engines')).toBe(false);expect(params.has('selectionRef')).toBe(false);
+ expect(params.get('questionVersion')).toBe('3');expect(params.get('session')).toBe('s1');
+ expect(within(toolbar()).queryByRole('button',{name:'清除筛选'})).toBeNull();
+});

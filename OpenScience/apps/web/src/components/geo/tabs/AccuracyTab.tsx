@@ -191,7 +191,7 @@ function Accuracy({
   const [clusterParam, setClusterParam] = useGeoSearchParam(GEO_CLUSTER_FILTER_PARAM);
   const [showParam, setShowParam] = useGeoSearchParam("show");
   const [viewParam, setViewParam] = useGeoSearchParam(GEO_VIEW_PARAM);
-  const resetFilters = useGeoFilterReset([GEO_ENGINE_PARAM, TYPE_PARAM, TRACE_PARAM, GEO_CLUSTER_FILTER_PARAM]);
+  const resetFilters = useGeoFilterReset([GEO_ENGINE_PARAM, TYPE_PARAM, TRACE_PARAM, GEO_CLUSTER_FILTER_PARAM, "show"]);
   const [query, setQuery] = useState("");
   const drawer = useGeoDrawerAddress();
   const handoff = useCorrectionHandoff(geoId, project);
@@ -210,7 +210,9 @@ function Accuracy({
     { value: "all", label: "全部", count: sizes.all },
   ];
   const wanted = ERROR_SHOWS.find((key) => key === showParam);
-  const show: ErrorShow = wanted && showOptions.some((option) => option.value === wanted) ? wanted : counts.severe > 0 ? "severe" : "all";
+  // What 处置状态 shows when nothing is chosen: it is the chips' neutral value, so the page opens with nothing counted as narrowed.
+  const defaultShow: ErrorShow = counts.severe > 0 ? "severe" : "all";
+  const show: ErrorShow = wanted && showOptions.some((option) => option.value === wanted) ? wanted : defaultShow;
 
   const engines = diagnosis.selection?.engines ?? project.engines;
   const engine = engineParam && engines.includes(engineParam) ? engineParam : null;
@@ -248,7 +250,7 @@ function Accuracy({
   useGeoToolbar(hasErrors ? {
     navigation: [{ kind: "chips", label: "视图", options: VIEW_OPTIONS, value: view, onChange: (value) => setViewParam(value === "claims" ? null : value) }],
     filters: [
-      { kind: "chips", label: "处置状态", options: showOptions, value: show, onChange: (value) => setShowParam(value) },
+      { kind: "chips", label: "处置状态", options: showOptions, value: show, neutral: defaultShow, onChange: (value) => setShowParam(value) },
       ...(engines.length > 1 ? [{
         kind: "select" as const,
         label: "引擎",

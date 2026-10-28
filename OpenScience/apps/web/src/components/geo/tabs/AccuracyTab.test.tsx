@@ -240,6 +240,33 @@ describe("准确与安全: the list is by claim", () => {
     expect(within(status).getByRole("button", { name: /^全部/ })).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("counts nothing as narrowed where the page opens, so 清除筛选 is not on screen until a choice is made, and it returns 处置状态 to the opening choice", async () => {
+    client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
+    renderTab();
+    await screen.findByRole("heading", { name: "讲错清单，按严重度排序" });
+    const toolbar = () => document.querySelector("[data-toolbar]") as HTMLElement;
+    // 全部 is what this page opens on, not a choice: it must not stand as an applied filter that nothing clears.
+    expect(within(toolbar()).queryByRole("button", { name: "清除筛选" })).toBeNull();
+    await userEvent.click(within(within(toolbar()).getByRole("group", { name: "处置状态" })).getByRole("button", { name: /处置中/ }));
+    expect(screen.getByTestId("search")).toHaveTextContent("show=acting");
+    await userEvent.click(within(toolbar()).getByRole("button", { name: "清除筛选" }));
+    expect(screen.getByTestId("search")).not.toHaveTextContent("show=");
+    expect(within(within(toolbar()).getByRole("group", { name: "处置状态" })).getByRole("button", { name: /^全部/ })).toHaveAttribute("aria-pressed", "true");
+    expect(within(toolbar()).queryByRole("button", { name: "清除筛选" })).toBeNull();
+  });
+
+  it("lets go of a platform that the analysis scope set: the filter shows it, so clearing the filter clears it, and the saved selection it came with", async () => {
+    renderTab(geoProject(), "/app/geo/geo_1/accuracy?show=all&engines=kimi&selectionRef=gsel_keep&session=s1");
+    await findClaim("fp_b");
+    const toolbar = document.querySelector("[data-toolbar]") as HTMLElement;
+    await userEvent.click(within(toolbar).getByRole("button", { name: "清除筛选" }));
+    const query = new URLSearchParams(screen.getByTestId("search").textContent ?? "");
+    expect(query.has("engines")).toBe(false);
+    expect(query.has("selectionRef")).toBe(false);
+    expect(query.get("session")).toBe("s1");
+    expect(within(document.querySelector("[data-toolbar]") as HTMLElement).queryByRole("button", { name: "清除筛选" })).toBeNull();
+  });
+
   it("says the sentence in body text and the grade in the badge: red is the badge alone", async () => {
     renderTab();
     const told = await findClaim("fp_b");
@@ -346,7 +373,12 @@ describe("准确与安全: the band's toolbar", () => {
     await userEvent.click(within(document.querySelector("[data-toolbar]") as HTMLElement).getByRole("button", { name: "清除筛选" }));
     const search = screen.getByTestId("search").textContent ?? "";
     for (const name of ["engine=", "type=", "trace=", "cluster="]) expect(search).not.toContain(name);
-    expect(search).toContain("show=all");
+    // 处置状态 is one of the narrowings the toolbar counts, so it goes back to where the page opens (the grave ones) with the rest.
+    expect(search).not.toContain("show=");
+    const status = within(document.querySelector("[data-toolbar]") as HTMLElement).getByRole("group", { name: "处置状态" });
+    expect(within(status).getByRole("button", { name: /严重/ })).toHaveAttribute("aria-pressed", "true");
+    expect(claimKeys()).toEqual(["fp_b", "fp_a"]);
+    await userEvent.click(within(status).getByRole("button", { name: /^全部/ }));
     await userEvent.click(screen.getByRole("button", { name: "显示更多 · 还有 1 条说法" }));
     expect(claimKeys()).toEqual(["fp_b", "fp_a", "fp_c", "fp_d"]);
   });

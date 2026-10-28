@@ -117,13 +117,23 @@ export function useGeoSearchChange(): (changes: Readonly<Record<string, string |
   }, [setParams]);
 }
 
-/** Reset result-list queries without releasing a saved selection, canonical scope, version or business destination. */
+/**
+ * Reset result-list queries without releasing a saved selection, canonical scope, version or business destination — except for the
+ * one case where the scope is what the filter shows. A filter that reads its value from the scope (`engines=kimi` shows the 引擎
+ * filter as Kimi, see {@link useGeoSearchParam}) is not neutral until that value goes too, so its 「清除筛选」 lets go of the single
+ * scope value it displays, together with the saved selection that value described (as choosing another value does). A scope the
+ * filter does not show — several values, or a filter this page does not have — is left alone.
+ */
 export function useGeoFilterReset(names: readonly string[]): () => void {
   const [, setParams] = useSearchParams();
   const key = names.join('\u0000');
   return useCallback(() => setParams(previous => {
     const copy = new URLSearchParams(previous);
-    for (const name of key.split('\u0000')) copy.delete(name);
+    for (const name of key.split('\u0000')) {
+      const canonical = SCOPE_ALIASES[name];
+      const shownFromScope = canonical && !copy.has(name) && copy.getAll(canonical).flatMap(value => value.split(",")).length === 1;
+      if (shownFromScope) setParameter(copy, name, null); else copy.delete(name);
+    }
     return copy;
   }, { replace: true }), [key, setParams]);
 }

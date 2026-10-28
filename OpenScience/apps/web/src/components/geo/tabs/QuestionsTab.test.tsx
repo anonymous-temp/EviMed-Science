@@ -380,3 +380,17 @@ it('lists the questions for a view-only member who follows a copied ?questionMod
   expect(screen.queryByLabelText(/选择 Excel/)).toBeNull();
   expect(screen.queryByRole('button', { name: '导入问句' })).toBeNull();
 });
+
+
+it('clears the pool the analysis scope set: the pool filter shows it, so 清除筛选 returns the list to every pool',async()=>{
+ renderTab(geoProject(),'/app/geo/geo_1/questions?view=all&pools=P2&selectionRef=gsel_keep&questionVersion=2&session=s1');
+ const toolbar=await screen.findByLabelText('搜索问题').then(()=>document.querySelector('[data-toolbar]') as HTMLElement);
+ const pressedPool=()=>within(within(document.querySelector('[data-toolbar]') as HTMLElement).getByRole('group',{name:'问句池'})).getAllByRole('button').find(button=>button.getAttribute('aria-pressed')==='true');
+ expect(pressedPool()).not.toHaveTextContent('全部');
+ await userEvent.click(within(toolbar).getByRole('button',{name:'清除筛选'}));
+ const params=new URLSearchParams(screen.getByTestId('search').textContent!);
+ expect(params.has('pools')).toBe(false);expect(params.has('pool')).toBe(false);expect(params.has('selectionRef')).toBe(false);
+ expect(params.get('view')).toBe('all');expect(params.get('questionVersion')).toBe('2');expect(params.get('session')).toBe('s1');
+ expect(within(document.querySelector('[data-toolbar]') as HTMLElement).queryByRole('button',{name:'清除筛选'})).toBeNull();
+ expect(pressedPool()).toHaveTextContent('全部');
+});

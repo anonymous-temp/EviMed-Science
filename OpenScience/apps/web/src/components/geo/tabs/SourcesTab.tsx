@@ -273,7 +273,8 @@ function SourceList({
   };
   // Pressing the sorted column again turns it over; another column starts from the most.
   const sortBy = (key: string) => change({ sourceSort: key, sourceOrder: sort.key === key && sort.descending ? "asc" : "desc" });
-  const clearFilters = useGeoFilterReset([GEO_ENGINE_PARAM, "only", KIND_PARAM, GEO_CLUSTER_FILTER_PARAM, "sourceSearch"]);
+  // The engine, 只看 and type filters belong to the cited view: in the other a scope value they would show is not this page's to release.
+  const clearFilters = useGeoFilterReset(view === "cited" ? [GEO_ENGINE_PARAM, "only", KIND_PARAM, GEO_CLUSTER_FILTER_PARAM, "sourceSearch"] : [GEO_CLUSTER_FILTER_PARAM, "sourceSearch"]);
   const narrowed = (view === "cited" && (current !== "all" || only !== null || kind !== null)) || cluster !== null;
   const summary = view === "cited"
     ? `${needle ? "匹配 " : ""}${rows.length.toLocaleString("zh-CN")} 个信源`
