@@ -59,11 +59,11 @@ const sentence = async () => {
   await waitFor(() => expect(document.querySelector("[data-headline]")).not.toBeNull());
   return document.querySelector<HTMLElement>("[data-headline]")!;
 };
-const band = () => screen.getByRole("region", { name: "记忆胶囊的五个数字" });
+const band = () => screen.getByRole("region", { name: "记忆胶囊的四个数字" });
 const tile = (label: string) => within(band()).getByRole("link", { name: new RegExp(`^${label} `, "u") });
 const tileValue = (label: string) => tile(label).querySelector("[data-stat-value]")!.textContent;
 async function ready() {
-  await waitFor(() => expect(within(band()).queryAllByRole("link")).toHaveLength(5), { timeout: 4_000 });
+  await waitFor(() => expect(within(band()).queryAllByRole("link")).toHaveLength(4), { timeout: 4_000 });
 }
 /** A capsule with `count` memories about the person, relations between them and a topic grouping, for the panel that waits for enough to see. */
 function manyMemories(count: number, relations: number): MemoryMap {
@@ -95,17 +95,18 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe("总览 as a data page", () => {
-  it("is five tiles, each a whole link to the list it counts, and the knowledge base's the one that leaves", async () => {
+  it("is four tiles, each a whole link to the list it counts, and the knowledge base's the one that leaves — and none for 项目", async () => {
     open();
     await ready();
+    // 关于你 counts what its list draws: the four memories about the person and the three that carry a project (the capsule's seven).
     expect(within(band()).getAllByRole("link").map((link) => [link.getAttribute("aria-label"), link.getAttribute("href")])).toEqual([
-      ["关于你 4，查看", "/app/memory?tab=self"], ["项目 2，查看", "/app/memory?tab=project"], ["做法 2，查看", "/app/memory?tab=methods"],
+      ["关于你 7，查看", "/app/memory?tab=self"], ["做法 2，查看", "/app/memory?tab=methods"],
       ["收到的 1，查看", "/app/memory?tab=received"], ["知识 39，查看", "/app/files"],
     ]);
-    expect(tile("项目")).toHaveTextContent("3 条记忆");
+    expect(within(band()).queryByRole("link", { name: /^项目 / })).toBeNull();
     expect(tile("收到的")).toHaveTextContent("共 2 个");
     // The last thirty days from 2026-10-12 are counted from 2026-09-13: every note and both methods are inside.
-    expect(tile("关于你")).toHaveTextContent("近 30 天 +4");
+    expect(tile("关于你")).toHaveTextContent("近 30 天 +7");
     expect(tile("做法")).toHaveTextContent("近 30 天 +2");
   });
 
@@ -113,21 +114,25 @@ describe("总览 as a data page", () => {
     open();
     await ready();
     const text = await sentence();
-    expect(text).toHaveTextContent("记住了 4 条关于你的事、2 个项目的 3 条记忆，学会了 2 种做法；最近一次在10月8日。");
+    expect(text).toHaveTextContent("记住了 7 条关于你的事，学会了 2 种做法；最近一次在10月8日。");
     expect(within(text).getAllByRole("link").map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
-      ["4", "/app/memory?tab=self"], ["2", "/app/memory?tab=project"], ["3", "/app/memory?tab=project"], ["2", "/app/memory?tab=methods"],
+      ["7", "/app/memory?tab=self"], ["2", "/app/memory?tab=methods"],
     ]);
     // The headline's numbers are the tiles': nothing on the page counts the received packs as something remembered.
-    expect([tileValue("关于你"), tileValue("项目"), tileValue("做法")]).toEqual(["4", "2", "2"]);
+    expect([tileValue("关于你"), tileValue("做法")]).toEqual(["7", "2"]);
     for (const link of within(text).getAllByRole("link")) expect(link).toHaveClass("underline");
   });
 
-  it("has the five tabs and no 地图 among them, the numbers of the lists on the tabs that have one", async () => {
+  it("has the left column's four sections and no 地图 or 项目 among them, the numbers of the lists on the sections that have one, and 总览 in force", async () => {
     open();
     await ready();
-    const tabs = within(screen.getByRole("tablist", { name: "记忆" })).getAllByRole("tab");
-    expect(tabs.map((tab) => tab.textContent)).toEqual(["总览", "关于你4", "项目", "做法2", "收到的1"]);
-    expect(screen.queryByRole("tab", { name: "地图" })).toBeNull();
+    const links = within(screen.getByRole("navigation", { name: "记忆" })).getAllByRole("link");
+    expect(links.map((link) => link.textContent)).toEqual(["总览", "关于你7", "做法2", "收到的1"]);
+    expect(links.map((link) => link.getAttribute("aria-current"))).toEqual(["page", null, null, null]);
+    expect(screen.queryByRole("link", { name: "地图" })).toBeNull();
+    // Links to places, not a tab list.
+    expect(screen.queryByRole("tablist", { name: "记忆" })).toBeNull();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("总览");
   });
 
   it("draws the changes as a chart and, behind it, a table of the same changes whose rows open the drawer of what they are", async () => {
@@ -178,7 +183,7 @@ describe("总览 as a data page", () => {
     await waitFor(() => expect(count()).toBeLessThan(before));
     expect(within(screen.getByRole("heading", { name: "变化" }).closest("section")!).getByText("近 30 天")).toBeInTheDocument();
     // The numbers are the capsule's, whatever the range: the tiles and the sentence did not move.
-    expect(tileValue("关于你")).toBe("4");
+    expect(tileValue("关于你")).toBe("7");
   });
 
   it("selects the week of a weekly cell in the address, shows it as a mark that lets go, and narrows the table to it", async () => {
@@ -283,8 +288,8 @@ describe("a part that could not be read", () => {
     reads.listAllMethods.mockRejectedValue(new Error("down"));
     open();
     await waitFor(() => expect(within(band()).getAllByText("暂时读不到")).toHaveLength(1));
-    expect(tileValue("关于你")).toBe("4");
-    expect(await sentence()).toHaveTextContent("记住了 4 条关于你的事、2 个项目的 3 条记忆；最近一次在10月8日。");
+    expect(tileValue("关于你")).toBe("7");
+    expect(await sentence()).toHaveTextContent("记住了 7 条关于你的事；最近一次在10月8日。");
     expect(within(band()).queryByRole("link", { name: /^做法 / })).toBeNull();
   });
 
@@ -293,7 +298,7 @@ describe("a part that could not be read", () => {
     open();
     expect(await screen.findByText("有一部分记忆没有读到，对应的数字先不显示。")).toBeInTheDocument();
     await waitFor(() => expect(within(band()).getAllByText("暂时读不到").length).toBeGreaterThan(0));
-    expect(tileValue("关于你")).toBe("4");
+    expect(tileValue("关于你")).toBe("7");
     expect(within(band()).queryByRole("link", { name: /^知识 / })).toBeNull();
     expect(screen.queryByRole("list", { name: "最近变化" })).toBeNull();
   });

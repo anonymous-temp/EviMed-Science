@@ -11,7 +11,7 @@ import type { NotePart } from "@/components/ui/Note";
 /**
  * What the dashboard of 记忆胶囊 draws, decided before any component is asked (the way `mapModel.ts` does for the relation graph).
  *
- * The page is one picture of one capsule: five numbers (关于你, 项目, 做法, 收到的, 知识), what the capsule gained and lost over time, the
+ * The page is one picture of one capsule: four numbers (关于你, 做法, 收到的, 知识), what the capsule gained and lost over time, the
  * relations and topics when there is enough to see, and the table of changes behind the chart. Every function here is a plain function
  * of what a read returned, so every number on the page can be tested, and nothing here invents one: a part whose read failed is not
  * readable (`readable`) and has no number at all, and the headline names only the parts that were read.
@@ -25,7 +25,7 @@ export type OverviewDoc = Pick<MemoryMap, "summary" | "facets" | "nodes" | "edge
  * a learned method is among the first to be folded into a group, so a number made of the map's method marks would say 0 of an account that has
  * them. The methods are their own read (the list the 做法 tab reads), the packs received another.
  */
-export type ReadPart = "memories" | "projects" | "knowledge" | "growth";
+export type ReadPart = "memories" | "knowledge" | "growth";
 
 /**
  * The map's sources each part is made of. A source that failed is named in `missing`, and a part that needs it was not read: it says so,
@@ -33,7 +33,6 @@ export type ReadPart = "memories" | "projects" | "knowledge" | "growth";
  */
 const READ_FROM: Readonly<Record<ReadPart, readonly string[]>> = {
   memories: ["records", "native-memory", "capsule-notes"],
-  projects: ["records", "native-memory", "capsule-notes", "documents"],
   knowledge: ["documents"],
   growth: ["records", "native-memory", "capsule-notes", "documents"],
 };
@@ -69,23 +68,15 @@ export function aboutYouCount(doc: Pick<OverviewDoc, "nodes" | "facets">): numbe
   return doc.nodes.filter((node) => node.type === "memory" && node.state !== "replaced" && isAboutYou(node)).length;
 }
 
-/** 项目: how many projects hold something and how many memories those hold. */
-export interface ProjectTotals {
-  count: number;
-  memories: number;
-}
-
 /**
- * 项目: each project with something in the capsule — its memories and documents; the memories that name no project the account has are one
- * more, 「未归入项目」. A memory of a project is any memory that is not about the person (`isAboutYou`), so 关于你's memories and the projects'
- * are the whole of the capsule's memories, and the headline's numbers are the tiles'.
+ * 关于你 as the list of that name draws it: the memories about the person and, after them, the ones that carry a project (its own group,
+ * 「项目记忆」). A person has one capsule and a project is a label on a memory, so the tile, the sentence and the list count the same
+ * memories. A memory of a project is any memory that is not about the person (`isAboutYou`): the ones that name a project, and the ones that
+ * name none the account still has.
  */
-export function projectTotals(doc: Pick<OverviewDoc, "facets" | "summary">): ProjectTotals {
-  const aboutYou = (doc.facets.aboutYou ?? []).reduce((sum, kind) => sum + kind.count, 0);
+export function rememberedCount(doc: Pick<OverviewDoc, "nodes" | "facets" | "summary">): number {
   const named = doc.facets.projects.reduce((sum, project) => sum + project.memories, 0);
-  const other = Math.max(0, doc.summary.memories - aboutYou - named);
-  const holding = doc.facets.projects.filter((project) => project.memories + project.documents > 0).length;
-  return { count: holding + (other > 0 ? 1 : 0), memories: doc.facets.projects.reduce((sum, project) => sum + project.memories, 0) + other };
+  return Math.max(doc.summary.memories, aboutYouCount(doc) + named);
 }
 
 /** 知识: the documents, counted by the knowledge base (`facets.documentTypes`: whole, compiled pages left out, not the page of marks). */
@@ -351,35 +342,24 @@ export function lookTableRows(rows: readonly LookRow[], query: string): ChangeRo
 
 /** What the headline says, each number only when its part was read. `null`: that read failed or the part is empty, and the sentence leaves it out. */
 export interface HeadlineFacts {
-  /** 关于你. */
+  /** 关于你, a project's memories included (`rememberedCount`). */
   about: number | null;
-  projects: number | null;
-  projectMemories: number | null;
   methods: number | null;
   /** The latest day anything changed, said as a list says it (「10月24日」); null when unknown. */
   last: string | null;
 }
 
 /** Where each number of the headline leads: the list it counts. */
-export interface HeadlineLinks { about: string; projects: string; methods: string }
+export interface HeadlineLinks { about: string; methods: string }
 
 /**
- * The one sentence over the page: what the capsule holds, each number a link to the list it counts, and when it last changed. 「记住了 23 条关于你的事、
- * 4 个项目的 21 条记忆，学会了 8 种做法；最近一次在10月24日。」 A clause whose part could not be read or holds nothing is left out — never a 「0」 —
- * and received packs are never counted as memories. `null` when nothing is left to say: an account with nothing has a recipe, not a sentence of zeros.
+ * The one sentence over the page: what the capsule holds, each number a link to the list it counts, and when it last changed. 「记住了 23 条关于你的事，
+ * 学会了 8 种做法；最近一次在10月24日。」 A clause whose part could not be read or holds nothing is left out — never a 「0」 — and received packs
+ * are never counted as memories. `null` when nothing is left to say: an account with nothing has a recipe, not a sentence of zeros.
  */
 export function overviewHeadline(facts: HeadlineFacts, links: HeadlineLinks): NotePart[] | null {
-  const remembered: NotePart[][] = [];
-  if (facts.about) remembered.push([{ n: facts.about, to: links.about, label: `${facts.about} 条关于你的事，看全部` }, " 条关于你的事"]);
-  if (facts.projects && facts.projectMemories) {
-    remembered.push([{ n: facts.projects, to: links.projects, label: `${facts.projects} 个项目，看全部` }, " 个项目的 ", { n: facts.projectMemories, to: links.projects, label: `${facts.projectMemories} 条项目记忆，看全部` }, " 条记忆"]);
-  }
   const clauses: NotePart[][] = [];
-  if (remembered.length > 0) {
-    const first: NotePart[] = ["记住了 "];
-    remembered.forEach((clause, index) => { if (index > 0) first.push("、"); first.push(...clause); });
-    clauses.push(first);
-  }
+  if (facts.about) clauses.push(["记住了 ", { n: facts.about, to: links.about, label: `${facts.about} 条关于你的事，看全部` }, " 条关于你的事"]);
   if (facts.methods) clauses.push(["学会了 ", { n: facts.methods, to: links.methods, label: `${facts.methods} 种做法，看全部` }, " 种做法"]);
   if (clauses.length === 0) return null;
   const parts: NotePart[] = [];

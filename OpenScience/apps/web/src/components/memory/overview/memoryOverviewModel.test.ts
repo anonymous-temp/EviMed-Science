@@ -4,7 +4,7 @@ import type { MapDay, MapEvent, MapNode } from "@/lib/memoryMapClient";
 import type { WebMethod } from "@/lib/methodsClient";
 import {
   aboutYouCount, changeEvents, changeRows, defaultExplore, exploreOffered, growthOf, knowledgeCount, lastChangeDay, lookTableRows, narrowChanges, needsLook, overviewHeadline,
-  projectTotals, rangeFrom, readable, receivedCounts, recentCount, relationCount, withinRange, type ChangeEvent, type OverviewDoc,
+  rangeFrom, readable, receivedCounts, recentCount, relationCount, rememberedCount, withinRange, type ChangeEvent, type OverviewDoc,
 } from "./memoryOverviewModel";
 
 const memory = (id: string, over: Partial<MapNode> = {}): MapNode => ({
@@ -38,7 +38,6 @@ describe("a part that could not be read is not a part with nothing in it", () =>
     expect(readable(doc({ missing: ["native-memory"] }), "memories")).toBe(false);
     expect(readable(doc({ missing: ["native-memory"] }), "knowledge")).toBe(true);
     expect(readable(doc({ missing: ["documents"] }), "knowledge")).toBe(false);
-    expect(readable(doc({ missing: ["documents"] }), "projects")).toBe(false);
     expect(readable(doc({ missing: ["documents"] }), "growth")).toBe(false);
     // The learned methods are their own read, not the map's: a failed methods source of the map costs the chart nothing.
     expect(readable(doc({ missing: ["methods", "topics", "knowledge-graph", "runs"] }), "growth")).toBe(true);
@@ -53,13 +52,14 @@ describe("the numbers of the tiles", () => {
     expect(aboutYouCount({ nodes, facets: { projects: [], topics: [] } })).toBe(2);
   });
 
-  it("counts the projects that hold something and their memories, the memories that name no project the account has being one more project", () => {
+  it("counts 关于你 as its list draws it: the memories about the person and the ones that carry a project, the ones that name no project the account has included", () => {
     const facets = { ...doc().facets, aboutYou: [{ id: "preference", label: "偏好", count: 4 }], projects: [
       { id: "p1", name: "房颤", kind: "own", memories: 3, documents: 5 }, { id: "p2", name: "空项目", kind: "own", memories: 0, documents: 0 }, { id: "p3", name: "只有资料", kind: "own", memories: 0, documents: 2 },
     ] };
-    // 10 memories: 4 about the person, 3 in a project, 3 in none the account has.
-    expect(projectTotals({ facets, summary: { ...doc().summary, memories: 10 } })).toEqual({ count: 3, memories: 6 });
-    expect(projectTotals({ facets, summary: { ...doc().summary, memories: 7 } })).toEqual({ count: 2, memories: 3 });
+    // 10 memories: 4 about the person, 3 in a project, 3 in none the account has — all of them are in the list.
+    expect(rememberedCount({ nodes: [], facets, summary: { ...doc().summary, memories: 10 } })).toBe(10);
+    // The summary can be behind the facets (a source that was folded): never fewer than the facets name.
+    expect(rememberedCount({ nodes: [], facets, summary: { ...doc().summary, memories: 5 } })).toBe(7);
   });
 
   it("counts the documents by the knowledge base's own count, and from the summary for an older control plane", () => {
@@ -191,21 +191,20 @@ describe("the table behind the charts", () => {
 });
 
 describe("the sentence over the page", () => {
-  const links = { about: "/a", projects: "/p", methods: "/m" };
+  const links = { about: "/a", methods: "/m" };
   const text = (parts: ReturnType<typeof overviewHeadline>) => parts?.map((part) => (typeof part === "string" ? part : String(part.n))).join("");
 
   it("says what was remembered and learned, each number a link to the list it counts, and when it last changed", () => {
-    const parts = overviewHeadline({ about: 23, projects: 4, projectMemories: 19, methods: 8, last: "10月24日" }, links)!;
-    expect(text(parts)).toBe("记住了 23 条关于你的事、4 个项目的 19 条记忆，学会了 8 种做法；最近一次在10月24日。");
-    expect(parts.filter((part) => typeof part !== "string").map((part) => [(part as { n: number }).n, (part as { to: string }).to])).toEqual([[23, "/a"], [4, "/p"], [19, "/p"], [8, "/m"]]);
+    const parts = overviewHeadline({ about: 23, methods: 8, last: "10月24日" }, links)!;
+    expect(text(parts)).toBe("记住了 23 条关于你的事，学会了 8 种做法；最近一次在10月24日。");
+    expect(parts.filter((part) => typeof part !== "string").map((part) => [(part as { n: number }).n, (part as { to: string }).to])).toEqual([[23, "/a"], [8, "/m"]]);
   });
 
   it("leaves out a clause whose part could not be read or holds nothing — never a 「0」 — and says nothing for a capsule that is empty", () => {
-    expect(text(overviewHeadline({ about: null, projects: 4, projectMemories: 19, methods: null, last: null }, links))).toBe("记住了 4 个项目的 19 条记忆。");
-    expect(text(overviewHeadline({ about: 0, projects: 0, projectMemories: 0, methods: 3, last: "10月1日" }, links))).toBe("学会了 3 种做法；最近一次在10月1日。");
-    expect(text(overviewHeadline({ about: 10, projects: null, projectMemories: null, methods: 0, last: null }, links))).toBe("记住了 10 条关于你的事。");
-    expect(overviewHeadline({ about: 0, projects: 0, projectMemories: 0, methods: 0, last: null }, links)).toBeNull();
-    expect(overviewHeadline({ about: null, projects: null, projectMemories: null, methods: null, last: null }, links)).toBeNull();
+    expect(text(overviewHeadline({ about: null, methods: 3, last: "10月1日" }, links))).toBe("学会了 3 种做法；最近一次在10月1日。");
+    expect(text(overviewHeadline({ about: 10, methods: 0, last: null }, links))).toBe("记住了 10 条关于你的事。");
+    expect(overviewHeadline({ about: 0, methods: 0, last: null }, links)).toBeNull();
+    expect(overviewHeadline({ about: null, methods: null, last: null }, links)).toBeNull();
   });
 });
 

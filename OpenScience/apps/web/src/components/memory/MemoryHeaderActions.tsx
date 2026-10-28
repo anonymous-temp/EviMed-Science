@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { ShareDrawer, type ShareTab } from "@/app/routes/CapsuleTransferPanel";
 import { LoadError } from "@/components/cards/LoadError";
 import { RunsSkeleton } from "@/components/cards/Skeletons";
@@ -9,7 +8,7 @@ import { fetchMyCapsule } from "@/lib/memoryClient";
 import { useProjectLabels } from "@/lib/projectNames";
 import { ForgottenDrawer } from "./ForgottenDrawer";
 import { ImportDialog } from "./ImportDialog";
-import { MemoryControls } from "./MemoryControls";
+import type { MemoryFrameControls } from "./MemoryFrame";
 import { RememberDialog } from "./RememberDialog";
 
 /**
@@ -32,43 +31,39 @@ function ForgottenHost({ onClose, onChanged }: { onClose: () => void; onChanged:
   );
 }
 
-/** The drawers the header's actions open: sharing and importing (on the tab named), the forgotten list, the one-line 「记住这一条」 and 「从其他 AI 导入」. */
+/** The drawers the capsule's controls open: sharing and importing (on the tab named), the forgotten list, the one-line 「记住这一条」 and 「从其他 AI 导入」. */
 export type HeaderDrawer = { kind: "share"; tab: ShareTab } | { kind: "forgotten" } | { kind: "remember" } | { kind: "import" };
 
 /**
- * The capsule's header actions on a page that is not the memory lists — the overview and the map (T0.7): the 记忆 switch, the one 「⋯」
- * (分享与导入 · 已忘记的内容 · 本项目不使用记忆 · 重置记忆) and, for an account whose memory takes words typed on the page, 「记住这一条」.
- * They are the lists' own `MemoryControls` and drawers, so the verbs that make a capsule a capsule are the same wherever the researcher
- * lands; what the page does not read for itself (the forgotten list) is read when its drawer opens.
+ * The capsule's controls on a page that does not hold the memory lists — the overview: what each of the switch's, the 「⋯」's and the
+ * button's actions does is open one of `HeaderDrawer`'s drawers (or, for the reset, read the page again). They are the lists' own
+ * `MemoryControls` and drawers (`MemoryFrame` draws the controls, `MemoryHeaderDrawers` the drawers), so the verbs that make a capsule a
+ * capsule are the same wherever the researcher lands; what the page does not read for itself (the forgotten list) is read when its drawer opens.
  *
- * `onChanged` is what the page does when a switch, a reset, an import or a restore changed what it draws: it reads again. A page whose own
- * card opens one of the drawers (the overview's 收到的: 「导入一个胶囊」) holds which is open (`drawer`, `onDrawer`); the others leave it to this.
+ * `onChanged` is what the page does when a reset, an import or a restore changed what it draws: it reads again.
  */
-export function MemoryHeaderActions({ projectId, onChanged, drawer: held, onDrawer }: {
-  /** The project 「本项目不使用记忆」 acts on, and where 「记住这一条」 files a memory; see `MemoryControls`. */
-  projectId?: string | null;
+export function headerControls({ onChanged, onDrawer }: { onChanged: () => void; onDrawer: (next: HeaderDrawer | null) => void }): MemoryFrameControls {
+  return {
+    onReset: onChanged,
+    onShare: () => onDrawer({ kind: "share", tab: "export" }),
+    onForgotten: () => onDrawer({ kind: "forgotten" }),
+    onRemember: () => onDrawer({ kind: "remember" }),
+    onImport: () => onDrawer({ kind: "import" }),
+  };
+}
+
+/** The drawer the page's controls (or one of its own cards: the overview's 收到的 「导入一个胶囊」) opened, if any. */
+export function MemoryHeaderDrawers({ drawer, onDrawer, onChanged }: {
+  drawer: HeaderDrawer | null;
+  onDrawer: (next: HeaderDrawer | null) => void;
   onChanged: () => void;
-  drawer?: HeaderDrawer | null;
-  onDrawer?: (next: HeaderDrawer | null) => void;
 }) {
-  const [own, setOwn] = useState<HeaderDrawer | null>(null);
-  const drawer = onDrawer ? held ?? null : own;
-  const setDrawer = onDrawer ?? setOwn;
   return (
     <>
-      <MemoryControls
-        projectId={projectId}
-        onReset={onChanged}
-        onSettingsChanged={onChanged}
-        onShare={() => setDrawer({ kind: "share", tab: "export" })}
-        onForgotten={() => setDrawer({ kind: "forgotten" })}
-        onRemember={() => setDrawer({ kind: "remember" })}
-        onImport={() => setDrawer({ kind: "import" })}
-      />
-      {drawer?.kind === "remember" && <RememberDialog projectId={projectId ?? null} onClose={() => setDrawer(null)} onAsked={onChanged} />}
-      {drawer?.kind === "import" && <ImportDialog onClose={() => setDrawer(null)} onSaved={onChanged} />}
-      {drawer?.kind === "share" && <ShareDrawer initialTab={drawer.tab} onClose={() => setDrawer(null)} onImported={onChanged} />}
-      {drawer?.kind === "forgotten" && <ForgottenHost onClose={() => setDrawer(null)} onChanged={onChanged} />}
+      {drawer?.kind === "remember" && <RememberDialog onClose={() => onDrawer(null)} onAsked={onChanged} />}
+      {drawer?.kind === "import" && <ImportDialog onClose={() => onDrawer(null)} onSaved={onChanged} />}
+      {drawer?.kind === "share" && <ShareDrawer initialTab={drawer.tab} onClose={() => onDrawer(null)} onImported={onChanged} />}
+      {drawer?.kind === "forgotten" && <ForgottenHost onClose={() => onDrawer(null)} onChanged={onChanged} />}
     </>
   );
 }

@@ -13,9 +13,9 @@ import { Textarea } from "@/components/ui/Input";
  * A text the memory refuses (a key, an ID number, a phone number) is said here in the registry's own sentence, with the words
  * still in the box so the person can take the part that is not refused.
  */
-export function RememberDialog({ projectId, onClose, onAsked }: {
-  /** The project the words belong to, when the page is showing one; the account's own otherwise. */
-  projectId: string | null;
+export function RememberDialog({ projectId = null, onClose, onAsked }: {
+  /** The project the words belong to, when the caller names one; the account's own otherwise (what the memory page asks). */
+  projectId?: string | null;
   onClose: () => void;
   /** The words were accepted: the page reads its list again to show them as 正在记住. */
   onAsked: () => void;

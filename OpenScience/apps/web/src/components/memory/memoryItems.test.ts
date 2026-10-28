@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { WebStructuredMemory } from "@/lib/apiClient";
 import type { OwnCapsuleEntry } from "@/lib/memoryClient";
-import {
-  OTHER_PROJECT, factItems, factsOfProject, matches, practiceItems, projectChoices, projectScopeGroups,
-} from "./memoryItems";
+import { factItems, matches, practiceItems } from "./memoryItems";
 
 /** A structured memory with only the fields the lists read. */
 const record = (overrides: Record<string, unknown> = {}): WebStructuredMemory => ({
@@ -62,53 +60,5 @@ describe("the practices a list shows", () => {
     const all = [method()];
     expect(practiceItems(all, { query: "标记" })).toHaveLength(1);
     expect(practiceItems(all, { query: "没有" })).toEqual([]);
-  });
-});
-
-describe("the projects the 项目 tab can show", () => {
-  const projects = [{ id: "p1", name: "疳证 Meta" }, { id: "p2", name: "信尔美" }, { id: "v1", name: "糖尿病研究" }, { id: "g1", name: "波立维" }];
-  const sets = { vcr: new Set(["v1"]), geo: new Set(["g1"]) };
-
-  it("lists the researcher's own first, then the studies, then the 循证 GEO projects, each with its kind", () => {
-    expect(projectChoices(projects, sets, []).map((choice) => [choice.name, choice.kind])).toEqual([
-      ["疳证 Meta", "own"], ["信尔美", "own"], ["糖尿病研究", "vcr"], ["波立维", "geo"],
-    ]);
-  });
-
-  it("groups the choices for the header's menu: the researcher's own with no heading, then each module's under its name, and 「未归入项目」 last", () => {
-    const orphan = factItems([record({ id: "x", kind: "project_fact", scope: "project", scopeId: "deleted" })], []);
-    const groups = projectScopeGroups(projectChoices(projects, sets, orphan));
-    expect(groups.map((group) => [group.heading ?? null, group.choices.map((choice) => choice.label)])).toEqual([
-      [null, ["疳证 Meta", "信尔美"]], ["虚拟临床研究", ["糖尿病研究"]], ["循证 GEO", ["波立维"]], [null, ["未归入项目"]],
-    ]);
-    expect(groups.at(-1)?.choices[0]?.id).toBe(OTHER_PROJECT);
-    expect(projectScopeGroups([])).toEqual([]);
-  });
-
-  it("tells two projects of one name apart, and keeps the id the choice is made by", () => {
-    const year = new Date().getFullYear();
-    const twins = [
-      { id: "g1", name: "波立维", createdAt: new Date(year, 8, 29, 9, 0).toISOString() },
-      { id: "g2", name: "波立维", createdAt: new Date(year, 9, 1, 9, 0).toISOString() },
-    ];
-    const choices = projectChoices(twins, { vcr: new Set(), geo: new Set(["g1", "g2"]) }, []);
-    expect(choices.map((choice) => [choice.id, choice.name])).toEqual([["g1", "波立维 · 9月29日"], ["g2", "波立维 · 10月1日"]]);
-  });
-
-  it("lists a project with no facts too, and a 「未归入项目」 only when some fact names no project the account still has", () => {
-    expect(projectChoices(projects, sets, factItems([record({ id: "x", kind: "project_fact", scope: "project", scopeId: "p1" })], [])).map((choice) => choice.id)).not.toContain(OTHER_PROJECT);
-    const orphan = factItems([record({ id: "x", kind: "project_fact", scope: "project", scopeId: "deleted" })], []);
-    expect(projectChoices(projects, sets, orphan).at(-1)).toEqual({ id: OTHER_PROJECT, name: "未归入项目", kind: "own" });
-  });
-
-  it("gives a project its own facts, and 「未归入项目」 the ones no project holds", () => {
-    const facts = factItems([
-      record({ id: "a", kind: "project_fact", scope: "project", scopeId: "p1" }), record({ id: "b", kind: "project_fact", scope: "project", scopeId: "deleted" }),
-      record({ id: "c", kind: "decision", scope: "user" }), record({ id: "d", kind: "preference" }),
-    ], []);
-    const known = new Set(projects.map((project) => project.id));
-    expect(factsOfProject(facts, "p1", known).map((item) => item.key)).toEqual(["record:a"]);
-    expect(factsOfProject(facts, OTHER_PROJECT, known).map((item) => item.key).sort()).toEqual(["record:b", "record:c"]);
-    expect(factsOfProject(facts, "p2", known)).toEqual([]);
   });
 });
