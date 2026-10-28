@@ -1612,6 +1612,9 @@ test("the refusals a page is walked to meet are not failures, and any other refu
   assert.deepEqual(unexpectedRefusals("frontier-daily", ["404 /api/frontier/dailies/2026-10-10", "404 /api/frontier/dailies", "404 /api/me", "500 /api/frontier/dailies/2026-10-10"]), ["404 /api/frontier/dailies", "404 /api/me", "500 /api/frontier/dailies/2026-10-10"]);
   assert.deepEqual(unexpectedRefusals("extensions-skill-missing", ["404 /api/skills/impeccable-audit-missing", "500 /api/skills"]), ["500 /api/skills"]);
   assert.deepEqual(unexpectedRefusals("memory-shared-missing", ["404 /api/capsules/shares/x", "410 /api/capsules/shares/x", "403 /api/capsules"]), ["403 /api/capsules"]);
+  // The kernel's frame of a conversation that opens on landing is refused because the walk starts no runtime; nothing else on that page, and not on any other page.
+  assert.deepEqual(unexpectedRefusals("autopilot", ["503 /api/runtime-ui/frames", "503 /api/agendas", "500 /api/runtime-ui/frames"]), ["503 /api/agendas", "500 /api/runtime-ui/frames"]);
+  assert.deepEqual(unexpectedRefusals("geo", ["503 /api/runtime-ui/frames"]), ["503 /api/runtime-ui/frames"]);
   // A page with no expected refusal keeps all of them, and a refusal that is not the API's was never a refusal of the page.
   assert.deepEqual(unexpectedRefusals("memory", ["404 /api/memory"]), ["404 /api/memory"]);
   assert.deepEqual(pageFindings("extensions-skill-missing", "desktop", clean(), unexpectedRefusals("extensions-skill-missing", ["404 /api/skills/x"])).failures, []);
@@ -3146,6 +3149,10 @@ test("rendered load probe distinguishes the actual retry alert from honest empty
   assert.equal(result.failed, true); assert.match(result.message, /研究暂时无法读取/);
   assert.equal(inPage(page(node("div", { attrs: { "data-empty": "" }, text: "日报尚未发布" })), routeLoadProbe).failed, false);
   assert.equal(inPage(page(node("div", { attrs: { role: "alert" }, style: { display: "none" } }, [node("button", { text: "重试" })])), routeLoadProbe).failed, false);
+  // The kernel frame's container is not the route's read: the walk starts no runtime, and a page that opens a conversation on landing shows its error.
+  const frame = node("div", { attrs: { "data-session-surface": "" } }, [node("div", { attrs: { role: "alert" } }, [node("span", { text: "运行时出现问题，稍后重试。" }), node("button", { text: "重试" })])]);
+  assert.equal(inPage(page(frame), routeLoadProbe).failed, false);
+  assert.equal(inPage(page(node("div", {}, [frame, alert])), routeLoadProbe).failed, true);
 });
 
 test("a retry navigation failure retains the original error and remains a failed read", async () => {

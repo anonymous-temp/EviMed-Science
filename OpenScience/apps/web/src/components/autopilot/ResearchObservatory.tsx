@@ -55,7 +55,7 @@ async function readRun(runId: string): Promise<WebAgentRun | null> {
  * Long content: inputs and outputs scroll inside their panel; titles truncate with the full text kept.
  * Theme: a fixed dark scene in both themes (the owner's observatory, 2026-10-28); the page around it follows the theme.
  * Motion: flows, pulses and rings stop under reduced motion; positions still change, without travel.
- * Responsive: the picture scales with its width; the feed and the inspector stack under 1024 px.
+ * Responsive: the picture scales with its width, and under 760 px it keeps its size and scrolls sideways (the scene is a tab stop then); the feed and the inspector stack under 1024 px.
  * Verification: ResearchObservatory.test.tsx, researchObservation.test.ts.
  */
 export function ResearchObservatory({ runId, title, onOpenFile }: { runId: string | null; title?: string; onOpenFile?: (path: string, runId: string) => void }) {
@@ -67,12 +67,10 @@ export function ResearchObservatory({ runId, title, onOpenFile }: { runId: strin
 function StandbyObservatory() {
   const idle = emptyObservation();
   return <section aria-label="研究观测" className="obs" data-observatory="empty">
-    <div className="obs-frame" aria-hidden="true"><span /><span /><span /><span /></div>
     <header className="obs-head"><div className="obs-head-main"><span className="obs-live"><i aria-hidden="true" />STANDBY</span>
-      <div className="min-w-0"><p className="obs-kicker">研究观测舱</p><h3 className="obs-title">等待研究启动</h3></div></div>
+      <div className="min-w-0"><p className="obs-kicker">研究观测舱</p><h2 className="obs-title">等待研究启动</h2></div></div>
       <span className="obs-clock" aria-hidden="true">{elapsedClock(null)}</span></header>
     <ResearchLine model={idle} counts={stageCounts(idle)} live={false} />
-    <p className="obs-empty-text">选择一项研究，或立即执行一次，这里会实时显示研究过程。</p>
   </section>;
 }
 
@@ -122,11 +120,10 @@ function ObservatoryRun({ runId, title, onOpenFile }: { runId: string; title?: s
   const heading = title || run?.title || run?.question || "研究进行中";
 
   return <section aria-label="研究观测" className="obs" data-observatory={live ? "live" : ended ? "ended" : "waiting"}>
-    <div className="obs-frame" aria-hidden="true"><span /><span /><span /><span /></div>
     <header className="obs-head">
       <div className="obs-head-main">
         <span className={live ? "obs-live on" : "obs-live"}><i aria-hidden="true" />{live ? "LIVE" : ended ? "END" : "SYNC"}</span>
-        <div className="min-w-0"><p className="obs-kicker">研究观测舱</p><h3 className="obs-title">{heading}</h3></div>
+        <div className="min-w-0"><p className="obs-kicker">研究观测舱</p><h2 className="obs-title">{heading}</h2></div>
       </div>
       <div className="obs-head-side"><span className="obs-clock" aria-label={`运行时长 ${formatDuration(elapsed) || "未开始"}`}>{elapsedClock(elapsed)}</span><span className={`obs-status s-${live ? "live" : state ?? "wait"}`} role="status">{status}</span></div>
     </header>
@@ -186,7 +183,9 @@ function ResearchLine({ model, counts, live }: { model: Observation; counts: Rec
     ...STAGES.filter(stage => counts[stage.key] > 0).map(stage => `${stage.label} ${counts[stage.key]} 次`),
     children.length ? `协作成员 ${children.length} 位` : null].filter(Boolean).join("，");
   const track = `M ${stageX(0)} ${LINE_Y} L ${stageX(STAGES.length - 1)} ${LINE_Y}`;
-  return <div className="obs-scene">
+  // Under 760 px the picture scrolls sideways, and a region that scrolls must be reachable by the keyboard.
+  // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- the scrollable picture is a tab stop so that it can be scrolled without a pointer.
+  return <div className="obs-scene" role="group" aria-label="研究流程图，窄屏可左右滑动" tabIndex={0}>
     <div className="obs-floor" aria-hidden="true" />
     {live && <div className="obs-sweep" aria-hidden="true" />}
     <svg viewBox={`0 0 ${VIEW_W} 410`} className="obs-svg" role="img" aria-label={`研究流程：${summary || "等待第一个操作"}`} preserveAspectRatio="xMidYMid meet">

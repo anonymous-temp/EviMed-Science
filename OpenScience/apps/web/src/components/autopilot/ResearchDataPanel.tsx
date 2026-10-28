@@ -40,7 +40,7 @@ export function ResearchDataPanel({ materials, loading, error, busy, databaseAva
 }) {
   return <section aria-label="研究资料" className="space-y-3">
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <h3 className="text-body font-semibold text-text">研究资料</h3>
+      <h3 className="text-ui font-semibold text-text">研究资料</h3>
       <div className="flex flex-wrap gap-1">
         <Button variant="secondary" size="sm" disabled={busy} onClick={onUpload}>上传资料</Button>
         <Button variant="secondary" size="sm" disabled={busy} onClick={onPick}>从知识库选择</Button>

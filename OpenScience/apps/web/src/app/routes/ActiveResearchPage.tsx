@@ -386,7 +386,7 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
         <ResearchDataPanel materials={progress?.agendaId === selectedId ? progress.materials : []} loading={!progress && !progressError} error={progressError} busy={busy} databaseAvailable={databaseAvailable} onUpload={upload} onPick={() => setPicking(true)} onDatabase={() => setDatabaseOpen(true)} onRemove={sourceId => void operation(() => removeAgendaMaterial(selected.id, sourceId))} onRetry={() => void loadProgress()} />
       </div>
       <section aria-label="执行记录" className="space-y-2">
-        <h3 className="text-body font-semibold text-text">执行记录</h3>
+        <h3 className="text-ui font-semibold text-text">执行记录</h3>
         {historyError && <LoadError message={historyError} onRetry={() => void loadHistory()} />}
         {!history && !historyError ? <p role="status" className="text-ui text-text-3">正在载入</p> : ownEpisodes.length === 0 ? (history ? <p className="text-ui text-text-3">还没有执行过</p> : null)
           : <List divided>{ownEpisodes.map(item => {
@@ -437,7 +437,7 @@ function ResultsPanel({ progress, files }: { progress: ResearchState | null; fil
   const found = progress?.found ?? [];
   const open = progress?.unresolved.length ?? 0;
   return <section aria-label="研究成果" className="space-y-3">
-    <div className="flex items-baseline justify-between gap-2"><h3 className="text-body font-semibold text-text">研究成果</h3>{open > 0 && <span className="text-caption text-text-3">{open} 个问题待解决</span>}</div>
+    <div className="flex items-baseline justify-between gap-2"><h3 className="text-ui font-semibold text-text">研究成果</h3>{open > 0 && <span className="text-caption text-text-3">{open} 个问题待解决</span>}</div>
     {found.length === 0 && files.length === 0 ? <p className="text-ui text-text">执行完成后，研究发现和产出文件会出现在这里。</p> : <>
       {found.length > 0 && <ul className="space-y-2" aria-label="研究发现">{found.map(item => <li key={`${item.date}:${item.statement}`} className="flex items-start gap-2 text-ui text-text">
         <Tag tone={FOUND_TAG[item.check].tone}>{FOUND_TAG[item.check].label}</Tag><span className="min-w-0 flex-1 leading-relaxed">{item.statement}</span>
@@ -464,7 +464,7 @@ function GoalWorkbench({ goal, round, projectId, busy, onRound, onOpenConversati
     <div className="grid gap-6 lg:grid-cols-2">
       <ResultsPanel progress={null} files={files} />
       <section aria-label="推进记录" className="space-y-2">
-        <h3 className="text-body font-semibold text-text">推进记录</h3>
+        <h3 className="text-ui font-semibold text-text">推进记录</h3>
         <List divided>{goal.rounds.map((run, index) => <ListRow key={run.id} title={`第 ${goal.rounds.length - index} 轮 · ${run.status === "running" ? "进行中" : run.status === "succeeded" ? "已完成" : run.status === "failed" ? "未完成" : "已结束"}`}
           trailing={<span className="text-caption text-text-3">{at(run.startedAt)}</span>} selected={round?.id === run.id} onOpen={busy ? undefined : () => onRound(run.id)} />)}</List>
       </section>
@@ -483,7 +483,7 @@ function NativeResearchPane({ projectId, sessionId, onAcknowledged, onClose }: {
     return withdraw;
   }, [projectId, sessionId, onAcknowledged]);
   return <section aria-label="长期研究对话" className="space-y-2">
-    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-body font-semibold text-text">长期研究对话</h2><Button variant="secondary" onClick={onClose}>收起对话</Button></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-ui font-semibold text-text">长期研究对话</h2><Button variant="secondary" onClick={onClose}>收起对话</Button></div>
     <p className="text-ui text-text">写下研究目标后发送，AI 会一轮轮推进，直到目标完成。</p>
     <div ref={pane} role="region" aria-label="原生研究对话" className="relative min-h-screen" />
   </section>;

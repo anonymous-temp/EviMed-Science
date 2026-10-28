@@ -1003,6 +1003,9 @@ export const EXPECTED_REFUSALS = {
   "memory-shared-missing": [400, 404, 410],
 };
 
+/** The pages that open a conversation of the kernel as they land. */
+const LANDING_CONVERSATION_PAGES = new Set(["autopilot"]);
+
 /**
  * `<status> <path>` of the responses a page drew, without the refusals it was walked to meet (`EXPECTED_REFUSALS`).
  * @param {string} name the report's page name @param {string[]} httpErrors
@@ -1015,7 +1018,10 @@ export function unexpectedRefusals(name, httpErrors) {
     return httpErrors.filter((entry) => !/^404 \/api\/frontier\/dailies\/\d{4}-\d{2}-\d{2}$/.test(entry));
   }
   const allowed = EXPECTED_REFUSALS[/** @type {keyof typeof EXPECTED_REFUSALS} */ (budgetKey(name))] ?? [];
-  return httpErrors.filter((entry) => !(allowed.includes(Number(entry.split(" ")[0])) && / \/api\//.test(entry)));
+  // A page that opens a conversation on landing asks for the kernel's frame, and the walk starts no runtime: that one call is refused by
+  // design (定时任务 opens its first task beside the list, owner 2026-10-28); any other refusal on the page still fails it.
+  const frame = LANDING_CONVERSATION_PAGES.has(budgetKey(name)) ? /^503 \/api\/runtime-ui\/frames(?:[/?#]|$)/ : null;
+  return httpErrors.filter((entry) => !(allowed.includes(Number(entry.split(" ")[0])) && / \/api\//.test(entry)) && !frame?.test(entry));
 }
 
 /** Replace a tab, keeping its authenticated context and reinstalling its observers. */
@@ -1057,10 +1063,14 @@ export function assertWalkAuthenticated(url) {
   if (/\/(?:login|auth)(?:[/?#]|$)/.test(new URL(url).pathname)) throw new Error(`walk_auth_redirect: ${new URL(url).pathname}`);
 }
 
-/** A visible failed read is not a successfully loaded module without its chrome. */
+/**
+ * A visible failed read is not a successfully loaded module without its chrome. The kernel's own frame is not one of the route's reads: a
+ * page that opens a conversation on landing (定时任务 opens its first task beside the list, owner 2026-10-28) holds the frame's container
+ * (`data-session-surface`), and the walk starts no runtime, so what that container says about the runtime is not the page's load.
+ */
 export function routeLoadProbe() {
   const visible = (el) => { const box = el.getBoundingClientRect(); const style = getComputedStyle(el); return box.width > 0 && box.height > 0 && style.visibility !== "hidden" && style.display !== "none"; };
-  const alerts = [...document.querySelectorAll("main [role='alert'], main [data-inline-alert='error']")].filter(visible);
+  const alerts = [...document.querySelectorAll("main [role='alert'], main [data-inline-alert='error']")].filter((el) => visible(el) && !el.closest("[data-session-surface]"));
   const failed = alerts.find((el) => [...el.querySelectorAll("button")].some((button) => visible(button) && button.textContent?.trim() === "重试"));
   return { failed: Boolean(failed), message: failed?.textContent?.replace(/\s+/g, " ").trim().slice(0, 160) ?? null };
 }
@@ -1969,7 +1979,9 @@ export function familyFindings(pages) {
       modules.set(key, [...(modules.get(key) ?? []), { view, name, c, row }]);
     }
     if (viewport === "desktop" && c.title) {
-      const key = `${row.family}${study}`;
+      // A master-detail page (T2) draws its title at the list column's edge, a page of the shell (T1, T4) in the shell's column: the edge is
+      // compared among the pages of one template (the owner's split pages, 2026-10-28; the study home's library views are T1 beside it).
+      const key = `${row.family}${study}${row.template === "T2" ? " (master-detail)" : ""}`;
       families.set(key, [...(families.get(key) ?? []), { view, left: c.title.left }]);
     }
   }
@@ -2488,7 +2500,7 @@ export function knowledgeGraphFindings(name, read) {
 
 /** The first mark of the knowledge graph's list: a link to the file the mark is. */
 export function firstKnowledgeMarkProbe() {
-  const link = [...document.querySelectorAll("main ul[aria-label] > li a[data-row-title]")].find((el) => el.getBoundingClientRect().width > 0);
+  const link = [...document.querySelectorAll("main [data-knowledge-graph] ul[aria-label] > li a[data-row-title]")].find((el) => el.getBoundingClientRect().width > 0);
   if (!link) return 0;
   link.click();
   return 1;
@@ -2496,7 +2508,7 @@ export function firstKnowledgeMarkProbe() {
 
 /** How many marks the knowledge graph's list shows that open a file. */
 export function knowledgeMarkRowsProbe() {
-  return [...document.querySelectorAll("main ul[aria-label] > li a[data-row-title]")].filter((el) => el.getBoundingClientRect().width > 0).length;
+  return [...document.querySelectorAll("main [data-knowledge-graph] ul[aria-label] > li a[data-row-title]")].filter((el) => el.getBoundingClientRect().width > 0).length;
 }
 
 /** What a knowledge page's reader shows. */

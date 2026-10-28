@@ -29,7 +29,7 @@ export function KnowledgeViews({ view, state, pagesOffered }: { view: KnowledgeV
           key={entry.id}
           to={listPath(stateForView(state, entry.id))}
           aria-current={entry.id === view ? "page" : undefined}
-          className={buttonClasses({ variant: "text", size: "sm", className: cn("px-2", entry.id === view ? "font-semibold text-text hover:text-text" : "") })}
+          className={buttonClasses({ variant: "text", size: "sm", className: cn("px-2 first:pl-0", entry.id === view ? "text-text underline underline-offset-4 hover:text-text" : "") })}
         >
           {entry.label}
         </Link>
@@ -56,7 +56,7 @@ export function ProjectList({ groups, chosen, hrefFor }: { groups: ProjectGroups
     <div data-project-list="">
       {kinds.map((kind) => (
         <section key={kind.heading} aria-label={kind.heading}>
-          {kinds.length > 1 && <h3 className="px-2 pb-1 pt-3 text-caption text-text-3">{kind.heading}</h3>}
+          {kinds.length > 1 && <h2 className="px-2 pb-1 pt-3 text-caption text-text-3">{kind.heading}</h2>}
           <List label={kind.heading}>{kind.choices.map(row)}</List>
         </section>
       ))}

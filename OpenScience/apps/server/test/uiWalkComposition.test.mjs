@@ -171,6 +171,14 @@ function moduleTabs(counts, { tops = [100, 100, 100], heights = [124, 124, 124],
   }) }]));
 }
 
+test("the title edge is compared among the pages of one template: a master-detail home draws it at its list column's edge", () => {
+  const page = (left) => ({ composition: good({ title: { text: "虚拟临床研究", ...box(26, 32, left) } }) });
+  // The study home is T2 (the list column's edge), its library views T1 (the shell's column): two groups, each one edge.
+  assert.deepEqual(familyFindings({ "virtual-research@desktop": page(248), "virtual-research-precedents@desktop": page(296), "virtual-research-definitions@desktop": page(296) }), []);
+  const edge = familyFindings({ "virtual-research@desktop": page(248), "virtual-research-precedents@desktop": page(296), "virtual-research-definitions@desktop": page(248) });
+  assert.deepEqual(edge.map((entry) => entry.rule), ["left-edge"], "two library views that disagree are still named");
+});
+
 test("a module's tabs show the same steps and stand at the same height, and the pages of a family start their title on one left edge", () => {
   assert.deepEqual(familyFindings(moduleTabs([8, 8, 8])), []);
   const steps = familyFindings(moduleTabs([8, 7, 8]));
