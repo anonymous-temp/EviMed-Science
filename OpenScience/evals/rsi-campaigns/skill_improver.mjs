@@ -29,6 +29,8 @@ const ceilCny = (value) => Math.ceil(value * 1e8 - 1e-6) / 1e8;
 export const IMPROVER_ANGLES = Object.freeze([
   'Write the skill around the failure classes you see: for each class, the concrete step the assistant skipped or got wrong, and what to do instead.',
   'Write a short, general calculation discipline that would have prevented these failures, without naming individual cases.',
+  'Write a short PROCESS skill (under 2500 characters). Do not restate any scoring table, cutoff, coefficient or unit-conversion factor from memory: earlier skills that did so introduced errors. Say how to work instead: find the standard published version of the named calculator (or use the exact calculation tool), check each criterion against a quoted phrase of the note, state the unit the question asks for (a percentage stays a percentage), and keep the arithmetic in a tool.',
+  'Write a very short checklist skill (under 1200 characters) that only adds verification steps after the assistant has computed its answer: re-read the question for the requested unit, scale and sign; recount every scored criterion against the note; recompute with a tool. No tables, no formulas, no factors.',
 ]);
 
 /** A candidate as the campaign registers it: its text, digest, size and arm id. @param {{title:string, description:string, instructions:string}} skill */
@@ -42,11 +44,12 @@ export function candidateRecord(skill) {
  * The improver's messages. Failures are records the lab holds; no gold of a confirmation row can reach here.
  * @param {Array<{calculator:string, question:string, answer:string|null, gold:string}>} failures @param {number} angle
  */
-export function improverMessages(failures, angle) {
+export function improverMessages(failures, angle, feedback = null) {
   const cases = failures.map((f, index) => `### Case ${index + 1} — ${f.calculator}\nQuestion (abridged): ${f.question.slice(0, 1200)}\nAssistant's final answer: ${f.answer ?? '(none)'}\nCorrect value: ${f.gold}`).join('\n\n');
+  const previous = feedback ? `\n\nEarlier skills were tried on similar questions and made the assistant WORSE (accuracy fell by about 10 points). Where they changed an answer:\n${feedback.map((f) => `- ${f.calculator}: without the skill ${f.baseline}, with the skill ${f.candidate}, correct ${f.gold}`).join('\n')}\nThe earlier skills restated scoring tables and conversion factors in detail; several of those details were wrong or differed from the standard convention.` : '';
   return [
     { role: 'system', content: 'You improve an AI research assistant by writing a skill: a short instruction document it loads when a task matches. You never see the assistant\'s code. You write in English, concretely, without mentioning any benchmark, test or case number.' },
-    { role: 'user', content: `The assistant answers clinical calculator questions about a patient note (scores, formulas, unit conversions, dates). Below are questions it answered wrongly, with its final answer and the correct value.\n\n${cases}\n\n${IMPROVER_ANGLES[angle]}\n\nReturn JSON with: title (under 60 characters), description (one sentence saying when to use the skill), instructions (Markdown, under ${MAX_SKILL_CHARS} characters).` },
+    { role: 'user', content: `The assistant answers clinical calculator questions about a patient note (scores, formulas, unit conversions, dates). Below are questions it answered wrongly, with its final answer and the correct value.\n\n${cases}${previous}\n\n${IMPROVER_ANGLES[angle]}\n\nReturn JSON with: title (under 60 characters), description (one sentence saying when to use the skill), instructions (Markdown, under ${MAX_SKILL_CHARS} characters).` },
   ];
 }
 
@@ -73,7 +76,7 @@ async function callQwen({ key, messages, model, fetchImpl = globalThis.fetch }) 
  * Write k candidates, each under a reserved, begun and settled budget record.
  * @param {{failures:any[], k:number, key:string, budget:any, campaignId:string, model?:string, now?:()=>string, fetchImpl?:typeof fetch}} input
  */
-export async function improveSkills({ failures, k, key, budget, campaignId, model = SKILL_IMPROVER_MODEL, now = () => new Date().toISOString(), fetchImpl }) {
+export async function improveSkills({ failures, k, key, budget, campaignId, model = SKILL_IMPROVER_MODEL, now = () => new Date().toISOString(), fetchImpl, angles = null, feedback = null }) {
   const list = priceListAt(now());
   const price = (usage) => {
     const priced = priceUsage({ resourceType: 'model', model, cacheHit: usage.cacheHit, cacheMiss: usage.cacheMiss, output: usage.output, peak: true }, list);
@@ -81,8 +84,9 @@ export async function improveSkills({ failures, k, key, budget, campaignId, mode
     return priced.cost;
   };
   const candidates = [], spend = [];
-  for (let angle = 0; angle < k; angle += 1) {
-    const messages = improverMessages(failures, angle % IMPROVER_ANGLES.length);
+  const chosen = angles ?? Array.from({ length: k }, (_, index) => index % IMPROVER_ANGLES.length);
+  for (const angle of chosen) {
+    const messages = improverMessages(failures, angle, feedback);
     const upper = ceilCny(price({ cacheHit: 0, cacheMiss: JSON.stringify(messages).length, output: MAX_OUTPUT_TOKENS }));
     const stageKey = `skill-improver:${sha(JSON.stringify([campaignId, angle, model, sha(JSON.stringify(messages))])).slice(0, 16)}`;
     const grant = await budget.reserve({ campaignId, stageKey, amountCny: upper });
@@ -106,7 +110,8 @@ export async function improveSkills({ failures, k, key, budget, campaignId, mode
 }
 
 async function main() {
-  const { values } = parseArgs({ options: { failures: { type: 'string' }, credential: { type: 'string' }, config: { type: 'string' }, campaign: { type: 'string' }, out: { type: 'string' }, k: { type: 'string', default: '2' } } });
+  const { values } = parseArgs({ options: { failures: { type: 'string' }, credential: { type: 'string' }, config: { type: 'string' }, campaign: { type: 'string' }, out: { type: 'string' }, k: { type: 'string', default: '2' },
+    angles: { type: 'string' }, feedback: { type: 'string' } } });
   for (const name of ['failures', 'credential', 'config', 'campaign', 'out']) if (!values[name]) throw new Error(`--${name} is required`);
   const failures = JSON.parse(await readFile(values.failures, 'utf8'));
   const key = (await readFile(values.credential, 'utf8')).trim();
@@ -118,7 +123,9 @@ async function main() {
   const database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 2, databaseConnectionTimeoutMs: 5000 });
   try {
     const budget = new RsiCampaignBudget({ database, configuration });
-    const result = await improveSkills({ failures, k: Number(values.k), key, budget, campaignId: values.campaign, model: configuration.providers?.qwenMax?.model ?? SKILL_IMPROVER_MODEL });
+    const angles = values.angles ? values.angles.split(',').map(Number) : null;
+    const feedback = values.feedback ? JSON.parse(await readFile(values.feedback, 'utf8')) : null;
+    const result = await improveSkills({ failures, k: Number(values.k), key, budget, campaignId: values.campaign, model: configuration.providers?.qwenMax?.model ?? SKILL_IMPROVER_MODEL, angles, feedback });
     await writeFile(values.out, `${JSON.stringify(result, null, 2)}\n`);
     console.log(JSON.stringify({ candidates: result.candidates.map((c) => ({ arm: c.arm, chars: c.chars, title: c.title })), spend: result.spend }));
   } finally { await database.close(); }

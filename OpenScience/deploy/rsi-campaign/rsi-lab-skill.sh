@@ -5,6 +5,7 @@
 #
 #   rsi-lab-skill.sh <YYYY-MM> improve   the improver (Qwen, lab key, lab budget) reads inbox/skill-<month>/failures.json
 #                                        and writes candidates.json to the outbox, for the operator to run as arms
+#   rsi-lab-skill.sh <YYYY-MM> improve2  a second development round with the first round's failures as feedback (inbox feedback.json)
 #   rsi-lab-skill.sh <YYYY-MM> run       assemble -> run -> evaluator receipt -> statistics -> signed report
 #                                        (waits up to six hours for development.json, confirmation.json, candidates.json,
 #                                        registration.json and their .sha256 files in the inbox)
@@ -40,7 +41,15 @@ if [ "$COMMAND" = improve ]; then
     --credential /run/rsi-credentials/dashscope.key --config /run/rsi-lab/config.json --campaign "capability-skill-medcalc-$MONTH" --out "$C/candidates.json" || exit 5
   cp -f "$RUN/candidates.json" "$OUTBOX/$NAME/candidates.json"; log "candidates: $(cat "$RUN/improve.out")"; exit 0
 fi
-[ "$COMMAND" = run ] || { echo "command is improve or run" >&2; exit 2; }
+# A second development round: the improver also reads what the first candidates broke (inbox feedback.json) and writes
+# process-only skills (angles 2 and 3). Still development data only; the confirmation pool is never read.
+if [ "$COMMAND" = improve2 ]; then
+  verify failures.json feedback.json || { log "failures.json/feedback.json missing or checksum mismatch"; exit 3; }
+  step improve2 lab rsi-lab-net "${CRED[@]}" "$IMAGE" evals/rsi-campaigns/skill_improver.mjs --failures "$IN/failures.json" --feedback "$IN/feedback.json" --angles 2,3 \
+    --credential /run/rsi-credentials/dashscope.key --config /run/rsi-lab/config.json --campaign "capability-skill-medcalc-$MONTH" --out "$C/candidates2.json" || exit 5
+  cp -f "$RUN/candidates2.json" "$OUTBOX/$NAME/candidates2.json"; log "candidates2: $(cat "$RUN/improve2.out")"; exit 0
+fi
+[ "$COMMAND" = run ] || { echo "command is improve, improve2 or run" >&2; exit 2; }
 if ! done_step inputs; then
   for _ in $(seq 1 72); do verify development.json confirmation.json candidates.json registration.json && break; sleep 300; done
   verify development.json confirmation.json candidates.json registration.json || { log "inputs missing"; exit 3; }
