@@ -108,6 +108,25 @@ test('a piece the run works on itself reads in progress, not 「待开始」, fo
   assert.equal(workingDeliverable(null), '');
 });
 
+test('a piece the run left planned is in progress only while its turn is under way', () => {
+  const piece = { deliverables: [{ id: 'evidence', status: 'planned', attempts: 0 }] };
+  // The ledger status stays `running` while the finished turn is delivered; the phase says the model is no longer at work.
+  assert.equal(workingDeliverable({ runId: 'run-1', state: 'running', phase: 'running', progress: piece }), 'evidence');
+  assert.equal(workingDeliverable({ runId: 'run-1', state: 'running', progress: piece }), 'evidence', 'with no phase sent the status alone decides');
+  for (const phase of ['reserved', 'dispatched', 'delivering', 'repairing']) {
+    assert.equal(workingDeliverable({ runId: 'run-1', state: 'running', phase, progress: piece }), '', `${phase} is not the model at work`);
+  }
+  for (const state of ['queued', 'delivering', 'dispatched', 'reserved', 'repairing', 'succeeded', 'failed', 'canceled']) {
+    assert.equal(workingDeliverable({ runId: 'run-1', state, progress: piece }), '', `a run whose state is ${state} works on nothing`);
+  }
+  // The card says so: the skipped piece reads 待开始 once the run is delivering, 进行中 while it works.
+  const args = { action: 'write', deliverables: [{ id: 'evidence', title: '综述' }] };
+  const result = ok({ deliverables: [{ id: 'evidence', title: '综述', status: 'planned' }] });
+  const statusOf = (/** @type {any} */ live) => planView(settled('evimed_plan', args, result), live, kit()).deliverables.map((/** @type {any} */ item) => item.status);
+  assert.deepEqual(statusOf({ runId: 'run-1', state: 'running', phase: 'running', progress: piece }), ['进行中']);
+  assert.deepEqual(statusOf({ runId: 'run-1', state: 'running', phase: 'delivering', progress: piece }), ['待开始']);
+});
+
 test('a plan still streaming shows what is written so far, and a refused one says so in Chinese', () => {
   const writing = planView(running('evimed_plan', '{"action":"write","deliverables":[{"id":"evidence","title":"老年房颤'), null, kit());
   assert.equal(writing.kind, 'writing');

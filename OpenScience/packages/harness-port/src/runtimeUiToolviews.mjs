@@ -177,13 +177,20 @@ export function liveChild(live, match) {
  * 34 minutes and 206 tool calls on 2026-10-27 under a card that said the work had not begun. While
  * the run works and no piece is delegated, submitted or under repair, the first piece still
  * planned is the one being worked on.
+ *
+ * "Works" is the model's turn being under way: the ledger status is `running` and the phase, when
+ * the shell sends one, is `running` too. A run that has not started (`reserved`, `dispatched`), whose
+ * turn has ended and is being delivered (`delivering`, a ledger status that still reads `running`),
+ * or that is waiting for a repair (`repairing`) is working on no planned piece, so a piece it left
+ * planned is not drawn as in progress for the rest of the run.
  * @param {any} live
  * @returns {string}
  */
 export function workingDeliverable(live) {
-  // Inside the function: a body reaches the frame as its listed functions' source, so a module constant would not.
-  const active = ['reserved', 'dispatched', 'queued', 'running', 'delivering', 'repairing'];
-  if (!live || !active.includes(String(live.state ?? ''))) return '';
+  if (!live) return '';
+  const state = String(live.state ?? '');
+  const phase = typeof live.phase === 'string' ? live.phase : '';
+  if ((phase || state) !== 'running' || (state && state !== 'running')) return '';
   const list = live.progress && Array.isArray(live.progress.deliverables) ? live.progress.deliverables : [];
   if (list.some((/** @type {any} */ entry) => entry && ['queued', 'delegated', 'submitted', 'rejected'].includes(entry.status))) return '';
   const next = list.find((/** @type {any} */ entry) => entry && entry.status === 'planned');
