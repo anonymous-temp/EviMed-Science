@@ -32,6 +32,52 @@ it("keeps a real selected scope reachable alongside a list action at narrow widt
   expect(continueWork).toHaveBeenCalledOnce();
 });
 
+it("draws the open step's action as the toolbar's own quiet text button: never a primary, and the same 28 px as the row", async () => {
+  const onSelect = vi.fn();
+  render(<Toolbar inBand scopeAction={{ label: "分析范围", onSelect: () => {} }} contextAction={{ label: "加问", onSelect }}
+    search={{ label: "搜索问题", value: "", onChange: () => {} }} summary="24 个问题群" />);
+  const action = screen.getByRole("button", { name: "加问" });
+  expect(action).toHaveAttribute("data-toolbar-context");
+  expect(action).toHaveClass("h-sm", "bg-transparent");
+  expect(action).not.toHaveClass("bg-accent");
+  // It ends the row, after the count, where the step's action was before it was made quiet.
+  const row = action.parentElement!;
+  expect(row.lastElementChild).toBe(action);
+  await userEvent.click(action);
+  expect(onSelect).toHaveBeenCalledOnce();
+});
+
+describe("a `nowrap` band at a phone's width", () => {
+  const navigation: NonNullable<ToolbarProps["navigation"]> = [{ kind: "chips", label: "视图", options: [{ value: "a", label: "按说法" }, { value: "b", label: "按引擎" }], value: "a", onChange: () => {} }];
+  const props = { inBand: true, navigation, scopeAction: { label: "分析范围", onSelect: () => {} }, summary: "共 17 条讲错 · 已读取 17 条，归为 8 条说法",
+    search: { label: "搜索说法", value: "", onChange: () => {} }, contextAction: { label: "加问", onSelect: () => {} } } satisfies ToolbarProps;
+
+  it("is one line that scrolls sideways, with the search, the whole count and the step's action at its end", () => {
+    narrow();
+    const { container } = render(<Toolbar {...props} nowrap />);
+    const row = container.querySelector("[data-toolbar] > div") as HTMLElement;
+    expect(row).toHaveClass("flex-nowrap", "overflow-x-auto");
+    expect(row).not.toHaveClass("flex-wrap");
+    // The count is said whole (it never shrinks to nothing in a row that scrolls), the search keeps one width, the scope does not wrap.
+    expect(screen.getByText(props.summary)).toHaveClass("shrink-0", "whitespace-nowrap");
+    expect(screen.getByText(props.summary)).not.toHaveClass("truncate");
+    expect(screen.getByRole("searchbox", { name: "搜索说法" }).parentElement?.parentElement).toHaveClass("w-44", "flex-none");
+    expect(screen.getByRole("button", { name: "分析范围" })).toHaveClass("shrink-0", "whitespace-nowrap");
+    expect(row.lastElementChild?.lastElementChild).toBe(screen.getByRole("button", { name: "加问" }));
+  });
+
+  it("wraps as a band always did without it, and at a wide width", () => {
+    narrow();
+    const { container, unmount } = render(<Toolbar {...props} />);
+    expect(container.querySelector("[data-toolbar] > div")).toHaveClass("flex-wrap");
+    unmount();
+    vi.restoreAllMocks();
+    const wide = render(<Toolbar {...props} nowrap />);
+    expect(wide.container.querySelector("[data-toolbar] > div")).toHaveClass("flex-wrap");
+    expect(wide.container.querySelector("[data-toolbar] > div")).not.toHaveClass("overflow-x-auto");
+  });
+});
+
 function Page({ onSelect = vi.fn() }: { onSelect?: (value: string | null) => void }) {
   const [lane, setLane] = useState<string | null>(null);
   const [window, setWindow] = useState("now");

@@ -580,6 +580,13 @@ page framework — the components above, `PageShell`'s slots, `layoutRules.test.
    own ground scrolls to it, 12 px under the band — never `scrollIntoView`, which also scrolls the app
    shell and carried the sidebar and the band off the screen — and the blocks a tab is promised are data
    (`GEO_TAB_SECTIONS`), which `pageComposition.test.tsx` renders against.
+   What stands over and in the band is the same on every tab too (the fixture walk of 2026-10-28 measured the band 10 to 36 px
+   taller on the tabs that had more): the way back is on every tab — 项目总览 from a step, 循证 GEO from the overview — as a block link, not an
+   inline one (which is a kind of control of its own); the open step's own action (加问, 选目标档, 让 AI 写下一批) is the toolbar's
+   `contextAction`, a quiet 28 px text button at the row's end and never a primary — the page's one primary is the header's 「对话」,
+   and a header button is exactly 36 px for a one-line label (`HeaderActions`), the look of every other 36 px button; and at a phone's
+   width the band's row, whose view and scope choices cannot fold into 「筛选」, is one line that scrolls sideways (`Toolbar`
+   `nowrap`), ending in the search, the count and the action.
 10. **Starting work never takes the person away.** The button starts the work; the page's
     `ActivityStrip` says what is happening and how far, and the page updates itself when it ends. The
     conversation is a view of the same page, not another place.

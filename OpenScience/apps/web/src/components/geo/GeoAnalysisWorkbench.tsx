@@ -351,7 +351,8 @@ function AnalysisPage({
             : []),
         ]}
         search={["V17","V18","V19","V20","V22"].includes(view.viewId)?{label:"搜索引用来源",value:searchText,maxLength:300,onChange:value=>{setSearchText(value);applySearch(value,SEARCH_DEBOUNCE_MS);},onClear:()=>{setSearchText("");applySearch("",0);}}:undefined}
-        actionPlan={data && mayConverse ? {primary:{id:"explain-analysis",label:"在对话中解释",loading:busy,disabled:resultsLocked,onSelect:()=>void explain()}} : undefined}
+        // The analysis's own action: the toolbar's quiet button, in the band or in the card, never a primary below the header.
+        contextAction={data && mayConverse ? {id:"explain-analysis",label:"在对话中解释",loading:busy,disabled:resultsLocked,onSelect:()=>void explain()} : undefined}
       />
       {!!data?.availability?.reasons?.length && (
         <Note

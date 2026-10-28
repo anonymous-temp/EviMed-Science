@@ -241,8 +241,13 @@ describe("the GEO project page, as a module page (T3) and its overview as a data
     await waitFor(() => expect(container.querySelector("[data-geo-tab]")).not.toBeNull(), { timeout: 4000 });
     // The tab's own read has landed when its page-level toolbar (where it has one) is drawn; settle the layout effects.
     // Only an addressed conversation travels in the address (139e27a5b): the project's own, which this page holds, does not.
-    if (key === "overview") expect(screen.queryByRole("link", { name: "项目总览" })).not.toBeInTheDocument();
-    else expect(await screen.findByRole("link", { name: "项目总览" })).toHaveAttribute("href", "/app/geo/geo_masi");
+    // The way back is on every tab, so the band stands at the same place on each (the walk's module-chrome): the project's overview
+    // from a step, the project list from the overview — a block link, not an inline one (which is a kind of control of its own).
+    if (key === "overview") {
+      expect(screen.queryByRole("link", { name: "项目总览" })).not.toBeInTheDocument();
+      expect(await screen.findByRole("link", { name: "循证 GEO" })).toHaveAttribute("href", "/app/geo");
+    } else expect(await screen.findByRole("link", { name: "项目总览" })).toHaveAttribute("href", "/app/geo/geo_masi");
+    expect(document.querySelector("[data-page-header]")?.previousElementSibling?.querySelector("a")).toHaveClass("inline-block");
     expect(screen.queryByRole("button", { name: /^查看：/ })).not.toBeInTheDocument();
     const facts = expectComposed(container, { stepRail: true, tablists: 0 });
     expect(facts.stepRails).toHaveLength(1);

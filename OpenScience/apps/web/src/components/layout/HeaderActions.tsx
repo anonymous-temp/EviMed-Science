@@ -24,7 +24,7 @@ export interface PageActionPlan {
  * Anatomy: Priority action group plus separately bounded preference; labeled overflow shares all collapsed actions.
  * Variants: Read-only plans omit primary; actions are native buttons or router links.
  * States: Owner supplies disabled/loading; Button guards busy activation.
- * Hit area: Shared Button control height and Menu rows.
+ * Hit area: Shared Button control height and Menu rows. A one-line label is exactly the control height (36): the 22 px line and a 7 px pad made it 38, a kind of control of its own beside every other 36 px button (the walk's control budget); a label that wraps grows the button.
  * Keyboard: Native button/link behavior and Menu traversal/focus return.
  * Long content: Labels wrap inside available width rather than widening the page.
  * Theme: Shared semantic Button/Menu roles.
@@ -39,8 +39,8 @@ export function HeaderActions({ plan, density }: { plan: PageActionPlan; /** Par
   const visible = compact ? [] : plan.secondary?.slice(0, 2) ?? [];
   const overflow = [...(plan.secondary?.slice(compact ? 0 : 2) ?? []), ...(plan.overflow ?? [])];
   const renderAction = (action: PageAction, primary = false) => action.to !== undefined
-    ? <ActionLink key={action.id} to={action.to} state={action.state} inert={action.disabled || action.loading} aria-disabled={action.disabled || action.loading || undefined} aria-busy={action.loading || undefined} onClick={action.onSelect} onAuxClick={event => { if (action.disabled || action.loading) event.preventDefault(); }} className={buttonClasses({ variant: primary ? action.destructive ? 'danger' : 'primary' : 'secondary', destructive: action.destructive, className: 'min-w-0 shrink max-w-xs whitespace-normal h-auto min-h-control py-2 text-center' })}>{action.loading && <Loader2 size={16} aria-hidden="true" className="shrink-0 animate-spin" />}{action.icon && <action.icon size={16} aria-hidden="true" className="shrink-0" />}{action.label}</ActionLink>
-    : <Button key={action.id} variant={primary ? action.destructive ? 'danger' : 'primary' : 'secondary'} loading={action.loading} disabled={action.disabled} destructive={action.destructive} onClick={action.onSelect} className="h-auto min-h-control min-w-0 shrink max-w-xs whitespace-normal py-2">{action.icon && <action.icon size={16} aria-hidden="true" className="shrink-0" />}{action.label}</Button>;
+    ? <ActionLink key={action.id} to={action.to} state={action.state} inert={action.disabled || action.loading} aria-disabled={action.disabled || action.loading || undefined} aria-busy={action.loading || undefined} onClick={action.onSelect} onAuxClick={event => { if (action.disabled || action.loading) event.preventDefault(); }} className={buttonClasses({ variant: primary ? action.destructive ? 'danger' : 'primary' : 'secondary', destructive: action.destructive, className: 'min-w-0 shrink max-w-xs whitespace-normal h-auto min-h-control py-1.5 text-center' })}>{action.loading && <Loader2 size={16} aria-hidden="true" className="shrink-0 animate-spin" />}{action.icon && <action.icon size={16} aria-hidden="true" className="shrink-0" />}{action.label}</ActionLink>
+    : <Button key={action.id} variant={primary ? action.destructive ? 'danger' : 'primary' : 'secondary'} loading={action.loading} disabled={action.disabled} destructive={action.destructive} onClick={action.onSelect} className="h-auto min-h-control min-w-0 shrink max-w-xs whitespace-normal py-1.5">{action.icon && <action.icon size={16} aria-hidden="true" className="shrink-0" />}{action.label}</Button>;
   const items: MenuEntry[] = overflow.map(action => {
     if (action === 'separator' || 'heading' in action) return action;
     return { ...action, onSelect: () => action.onSelect?.() };

@@ -1025,7 +1025,13 @@ it('declares analysis scope separately from its frequent step action and keeps n
  await screen.findByTestId('questions-tab');
  const toolbar=document.querySelector('[data-toolbar]') as HTMLElement;
  expect(toolbar.querySelector('[data-toolbar-scope]')).toHaveTextContent('分析范围 · 已筛选');
- expect(within(toolbar).getByRole('button',{name:'加问'}).closest('[data-header-actions]')).toBeInTheDocument();
+ // The step's action is the toolbar's own quiet button beside what it acts on; the page's one primary is the header's 「对话」
+ // (DESIGN.md 「页面结构」 rule 3: the fixture walk of df17091ad read a solid 「加问」 at 156 px as a second one).
+ const step=within(toolbar).getByRole('button',{name:'加问'});
+ expect(step).toHaveAttribute('data-toolbar-context');
+ expect(step).not.toHaveClass('bg-accent');
+ expect(toolbar.querySelectorAll('.bg-accent')).toHaveLength(0);
+ expect(within(document.querySelector('[data-page-header]') as HTMLElement).getByRole('button',{name:'对话'})).toHaveClass('bg-accent');
  expect(screen.getByRole('button',{name:'对话'}).querySelector('svg')).toBeInTheDocument();
  expect(screen.getByRole('button',{name:'周报'}).querySelector('svg')).toBeInTheDocument();
  await userEvent.click(screen.getByRole('button',{name:'更多操作'}));

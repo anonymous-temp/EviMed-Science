@@ -524,18 +524,22 @@ function GeoBand({
     // The range is shown wherever it narrows what is read — every view's analysis and 方案's strategy — so a range carried in the
     // address never applies unsaid; 行动's monitoring view reads none.
     scopeAction: !onChat && (analysis || !(tab === "actions" && selectedStep === "monitoring")) ? {id:"analysis-scope",label:`分析范围${geoReadScopeQuery(api.scope) ? " · 已筛选" : ""}`,onSelect:()=>setScopeOpen(true)} : undefined,
-    actionPlan: !controls?.actions && !onChat && !analysis && continues
-      ? {...controls?.actionPlan, ...(controls?.actionPlan?.primary
-        ? {secondary:[{id:"continue-step",label:continues.label,onSelect:continues.onClick},...(controls.actionPlan.secondary??[])]}
-        : {primary:{id:"continue-step",label:continues.label,onSelect:continues.onClick}})} : controls?.actionPlan,
-    // Journey downloads own their stateful producer. Preserve it while the scope action remains separately declared.
-    actions: controls?.actions ? <>{controls.actions}{!onChat && !analysis && continues && <Button variant="text" size="sm" onClick={continues.onClick}>{continues.label}</Button>}</> : undefined,
+    // The open step's own action is the toolbar's, beside what it acts on, and a quiet text button: the page's one primary is the
+    // header's 「对话」 (DESIGN.md 「页面结构」 rule 3; the fixture walk of df17091ad read “加问” as a second one at 156 px). A tab's own
+    // `actionPlan` or `actions` (the journey's downloads) stay as the tab declared them.
+    // Its view and scope choices cannot fold into 「筛选」, so on a phone the row scrolls: the band is one line, the same on every tab.
+    nowrap: true,
+    contextAction: !onChat && !analysis && continues ? { id: "continue-step", label: continues.label, onSelect: continues.onClick } : undefined,
   };
 
   return (
     <PageShell<GeoTabKey>
       title={project.name}
-      back={tab !== "overview" || onChat ? <Link className="text-ui text-accent" to={destination("overview")}>项目总览</Link> : undefined}
+      // The way back is on every tab, so the band stands at the same place on each (the walk's module-chrome): 项目总览 from a step's
+      // tab and the conversation, the project list from the overview. A block link — an inline one is a kind of control of its own.
+      back={tab !== "overview" || onChat
+        ? <Link className="inline-block text-ui text-accent" to={destination("overview")}>项目总览</Link>
+        : <Link className="inline-block text-ui text-accent" to="/app/geo">循证 GEO</Link>}
       steps={{ label: "循证 GEO 进度", steps, activeSteps: selectedStep ? [selectedStep] : [], trailing: now, visible: true, showState: true }}
       documentTitle={GEO_MONITORING_TABS.includes(tab) ? `${project.name} · ${GEO_MONITORING_TITLE}` : undefined}
       width={onChat ? "full" : "wide"}

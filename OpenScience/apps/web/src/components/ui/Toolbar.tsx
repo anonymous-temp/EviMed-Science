@@ -223,6 +223,12 @@ export interface ToolbarProps {
   actionPlan?: PageActionPlan;
   /** The actual selected analysis scope and its configuration action; never a query filter or preference. */
   scopeAction?: { id?: string; label: string; onSelect(): void; disabled?: boolean };
+  /**
+   * The open step's own action (「加问」, 「选目标档」): a quiet text button at the row's end, in the toolbar's own 28 px — never a
+   * primary. The page's one primary is the header's (DESIGN.md 「页面结构」 rule 3), and a solid button here made the band 10 px
+   * taller on the tabs that had one and a kind of control of its own on every page.
+   */
+  contextAction?: { id?: string; label: string; onSelect(): void; disabled?: boolean; loading?: boolean };
   /** Lets go of every filter and the search; its chip shows only while one is on. */
   onClear?: () => void;
   /** Lets go of every filter (not the search): the folded panel's 「重置」. Default `onClear`. */
@@ -244,6 +250,12 @@ export interface ToolbarProps {
   inBand?: boolean;
   /** With `views`: one row at every width, with a filter button that holds the `folded` filters (see the module note). */
   oneRow?: boolean;
+  /**
+   * In the band, at a phone's width: the row stays one line and scrolls sideways when what it holds does not fit, ending in the
+   * search, the count whole and the open step's action — instead of wrapping to a second line. For a band whose controls cannot fold
+   * into 「筛选」 (a module's view and scope choices), so the band is as tall on every tab as on the one with the fewest controls.
+   */
+  nowrap?: boolean;
   /** `oneRow`: the page's own applied things, said as tokens before 「筛选」. */
   tokens?: readonly ToolbarToken[];
   /** `oneRow`: the first section of the phone's 「筛选」 sheet (关注's followed things); `close` closes the sheet. */
@@ -329,20 +341,26 @@ function panelText(panel: ToolbarPanel): string {
 const END_FADE = "linear-gradient(to right, black calc(100% - 2rem), transparent)";
 const FADED: CSSProperties = { maskImage: END_FADE, WebkitMaskImage: END_FADE };
 
-/** A row of every chip of a dimension that scrolls sideways when its room is short: it gives way to the rest of the row. */
-function ScrollChips({ filter }: { filter: AnyChips }) {
-  const list = useRef<HTMLDivElement>(null);
+/** Whether a row that scrolls sideways still has something past its end (the fade says so), read from the layout. */
+function useScrollAhead(list: RefObject<HTMLDivElement | null>, enabled: boolean, watch: unknown): boolean {
   const [ahead, setAhead] = useState(false);
   useLayoutEffect(() => {
     const element = list.current;
-    if (!element) return undefined;
+    if (!enabled || !element) { setAhead(false); return undefined; }
     const measure = () => setAhead(element.scrollWidth - element.clientWidth - element.scrollLeft > 1);
     measure();
     element.addEventListener("scroll", measure, { passive: true });
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
     observer?.observe(element);
     return () => { element.removeEventListener("scroll", measure); observer?.disconnect(); };
-  }, [filter.options.length]);
+  }, [list, enabled, watch]);
+  return ahead;
+}
+
+/** A row of every chip of a dimension that scrolls sideways when its room is short: it gives way to the rest of the row. */
+function ScrollChips({ filter }: { filter: AnyChips }) {
+  const list = useRef<HTMLDivElement>(null);
+  const ahead = useScrollAhead(list, true, filter.options.length);
   return (
     <div ref={list} role="group" aria-label={filter.label} style={ahead ? FADED : undefined}
       className="flex min-w-24 flex-initial items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -644,8 +662,10 @@ function Inline({ filter }: { filter: ToolbarFilter }) {
  * list): the arrow keys move through them, Enter takes the one marked or, with none marked, searches the words now; Escape closes
  * the list first and empties the box after.
  */
-function SearchBox({ search, inputRef, focusOnMount = false, shortcut = false, onEscapeEmpty }: {
+function SearchBox({ search, inputRef, focusOnMount = false, shortcut = false, onEscapeEmpty, className }: {
   search: ToolbarSearch;
+  /** The wrapper's own width where the row does not give it the room that is left (a phone's one-line band). */
+  className?: string;
   inputRef?: RefObject<HTMLInputElement | null>;
   /** Opened over a phone's row by a press on its icon: the cursor in it at once, the keyboard up. */
   focusOnMount?: boolean;
@@ -707,7 +727,7 @@ function SearchBox({ search, inputRef, focusOnMount = false, shortcut = false, o
     "aria-activedescendant": open && active >= 0 ? `${listId}-${active}` : undefined,
   } : {};
   return (
-    <div className="relative flex min-w-0 flex-1 sm:w-56 sm:flex-none">
+    <div className={cn("relative flex min-w-0 flex-1 sm:w-56 sm:flex-none", className)}>
       <SearchInput
         ref={input}
         size="sm"
@@ -871,17 +891,20 @@ function BandSummary({ text, className }: { text: string; className: string }) {
  * Keyboard: Child keyboard behavior; composition-safe search; scoped / shortcut.
  * Long content: Overflow chips fold or scroll; applied tokens collapse with counts.
  * Theme: Shared semantic controls; no additional palette.
- * Responsive: Available width below 960px selects compact oneRow layout; other rows fold below 640px. Narrow filter sheet; measured band overflow folds filters; oneRow has phone search overlay.
+ * Responsive: Available width below 960px selects compact oneRow layout; other rows fold below 640px; a `nowrap` band's own row is one scrolling line on a phone. Narrow filter sheet; measured band overflow folds filters; oneRow has phone search overlay.
  * Verification: Toolbar.test.tsx and Composition.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
  */
-export function Toolbar({ label = "筛选与操作", views, filters: declared = [], navigation = [], actionPlan, scopeAction, onClear, onReset, search, summary, actions, selection, className, inBand = false,
-  oneRow = false, tokens: given = [], sheetLead, resultCount, searchShortcut = false }: ToolbarProps) {
+export function Toolbar({ label = "筛选与操作", views, filters: declared = [], navigation = [], actionPlan, scopeAction, contextAction, onClear, onReset, search, summary, actions, selection, className, inBand = false,
+  oneRow = false, nowrap = false, tokens: given = [], sheetLead, resultCount, searchShortcut = false }: ToolbarProps) {
   const viewportNarrow = useNarrow();
   const row = useRef<HTMLDivElement>(null);
   const root = useRef<HTMLDivElement>(null);
   const containerNarrow = useContainerNarrow(root, oneRow ? 960 : 640);
   const narrow = viewportNarrow || containerNarrow;
-  const scopeControl = scopeAction && <Button data-toolbar-scope="" size="sm" variant="text" disabled={scopeAction.disabled} onClick={scopeAction.onSelect} className="h-auto min-h-sm min-w-0 shrink whitespace-normal text-left">{scopeAction.label}</Button>;
+  // `nowrap`: the band's own row (no views) at a phone's width is one line that scrolls sideways (see `end`): nothing in it wraps.
+  const oneLine = inBand && narrow && nowrap && !views;
+  const scopeControl = scopeAction && <Button data-toolbar-scope="" size="sm" variant="text" disabled={scopeAction.disabled} onClick={scopeAction.onSelect} className={oneLine ? "shrink-0 whitespace-nowrap" : "h-auto min-h-sm min-w-0 shrink whitespace-normal text-left"}>{scopeAction.label}</Button>;
+  const contextControl = contextAction && <Button data-toolbar-context="" size="sm" variant="text" loading={contextAction.loading} disabled={contextAction.disabled} onClick={contextAction.onSelect} className="min-w-0 shrink-0">{contextAction.label}</Button>;
   const searchInput = useRef<HTMLInputElement>(null);
   const [foldOpen, setFoldOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -907,7 +930,9 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
   const searching = Boolean(search?.value);
   const reset = onReset ?? onClear ?? (() => filters.forEach((filter) => (filter.kind === "panel" ? clearPanel(filter) : clearGroup(filter))));
   const shrinkSummary = inBand && summary != null;
-  const summaryClass = cn("text-caption tabular-nums text-text-3 sm:shrink-0", search || shrinkSummary ? "min-w-0 truncate max-sm:flex-1 sm:flex-none" : "shrink-0");
+  const oneLineAhead = useScrollAhead(row, oneLine, `${navigation.length}|${declaredKey}|${typeof summary === "string" ? summary : ""}|${Boolean(search)}`);
+  const summaryClass = oneLine ? "shrink-0 whitespace-nowrap text-caption tabular-nums text-text-3"
+    : cn("text-caption tabular-nums text-text-3 sm:shrink-0", search || shrinkSummary ? "min-w-0 truncate max-sm:flex-1 sm:flex-none" : "shrink-0");
 
   const hasSearch = Boolean(search);
   useEffect(() => {
@@ -962,6 +987,7 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
               {trigger}
               {summary != null && (typeof summary === "string" ? <BandSummary text={summary} className={summaryClass} /> : <span className={summaryClass}>{summary}</span>)}
               {selection}
+              {contextControl}
               {actionPlan ? <div data-toolbar-actions="" className="min-w-0 max-w-md"><HeaderActions plan={actionPlan} density="compact" /></div> : actions}
               {search && <SearchBox search={search} inputRef={searchInput} shortcut={searchShortcut} />}
             </>
@@ -990,7 +1016,7 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
             </div>
           )}
         </div>
-        {(scopeControl || actionPlan || actions) && <div data-toolbar-actions="" className="flex min-w-0 max-w-full items-center justify-between gap-2 py-2">{scopeControl}{actionPlan ? <HeaderActions plan={actionPlan} /> : actions}</div>}
+        {(scopeControl || contextControl || actionPlan || actions) && <div data-toolbar-actions="" className="flex min-w-0 max-w-full items-center justify-between gap-2 py-2">{scopeControl}{contextControl}{actionPlan ? <HeaderActions plan={actionPlan} /> : actions}</div>}
         {second && (
           // One line, only while something narrows the list or a pinned control has to stay in sight: it scrolls sideways rather than wrap.
           <div data-toolbar-row="" className="-ml-3 flex min-h-11 flex-nowrap items-center gap-1 overflow-x-auto py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -1021,15 +1047,18 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
       {onClear && (active > 0 || searching || given.length > 0) && <FilterChip className="shrink-0" onClick={onClear}>清除筛选</FilterChip>}
     </>
   );
-  const searchBox = search && <SearchBox search={search} inputRef={searchInput} shortcut={searchShortcut} />;
+  const searchBox = search && <SearchBox search={search} inputRef={searchInput} shortcut={searchShortcut} className={oneLine ? "w-44 flex-none" : undefined} />;
   // On a phone the search takes what the row has left, in the same row: it used to take a row of its own, and a module's band was
-  // 36 px taller on the tabs with a search than on the others (the walk's module-chrome, 循证 GEO at 390 px, r19-guards2).
-  const end = (search || summary != null || actions || actionPlan || (selection && !narrow)) && (
-    <div className={cn("ml-auto flex min-w-0 items-center gap-2", (search || shrinkSummary) && "max-sm:flex-1")}>
+  // 36 px taller on the tabs with a search than on the others (the walk's module-chrome, 循证 GEO at 390 px, r19-guards2). A band's row
+  // is one line at a phone's width whatever a tab holds (`oneLine`): it scrolls sideways, as a row of chips does, and ends with the
+  // controls a tab brings, so the band is the same height on every tab and nothing a tab declared is left out.
+  const end = (search || summary != null || actions || actionPlan || contextControl || (selection && !narrow)) && (
+    <div className={cn("ml-auto flex items-center gap-2", oneLine ? "shrink-0 pl-1" : cn("min-w-0", (search || shrinkSummary) && "max-sm:flex-1"))}>
       {searchBox}
       {/* In the band or beside a search, the count gives way before the mobile controls do; its full text remains accessible. */}
-      {summary != null && (shrinkSummary && typeof summary === "string" ? <BandSummary text={summary} className={summaryClass} /> : <span className={summaryClass}>{summary}</span>)}
+      {summary != null && (shrinkSummary && typeof summary === "string" && !oneLine ? <BandSummary text={summary} className={summaryClass} /> : <span className={summaryClass}>{summary}</span>)}
       {!narrow && selection}
+      {contextControl}
       {actionPlan ? <HeaderActions plan={actionPlan} /> : actions}
     </div>
   );
@@ -1044,7 +1073,8 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
         )} />
       ) : (
         // A chip's text is 12 px in from its ground: the row steps out by that much so the text stands on the page's left edge.
-        <div ref={row} className="-ml-3 flex min-h-sm flex-wrap items-center gap-x-1 gap-y-2">
+        <div ref={row} style={oneLineAhead ? FADED : undefined}
+          className={cn("-ml-3 flex min-h-sm items-center gap-x-1", oneLine ? "flex-nowrap overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" : "flex-wrap gap-y-2")}>
           {controls}
           {end}
         </div>
