@@ -91,7 +91,7 @@
       "id": "clinical-evidence-synthesis",
       "visibility": "public",
       "evalHarness": "evals/clinical-review-quality",
-      "briefCount": 3,
+      "briefCount": 4,
       "realDelivery": {
         "status": "accepted",
         "evidence": "evals/clinical-review-quality/results/2026-09-28-review-001-empa-kidney-report-family/run.json",

@@ -9,6 +9,13 @@ import { normalizeWorkspacePath } from "./workspaceLayout.mjs";
 import { isPlatformCardAddress, platformCardCitationMessage, platformCardCitationsByLine } from "./citedSources.mjs";
 import { deriveMarkdownStructure } from "./sourceMaterials.mjs";
 import { locateQuoteInText } from "./sourceMaterialsLocate.mjs";
+import {
+  englishConditionedEmergencyTriggers,
+  englishEmergencyDispatchPattern,
+  englishExclusiveSafetyPattern,
+  ruleLanguages,
+  rulesNotChecked,
+} from "./clinicalSafetyLanguage.mjs";
 
 const claimFields = Object.freeze([
   "claimId",
@@ -66,6 +73,12 @@ const operationalFailurePattern = /(?:Transport error|Runtime configuration boot
 // Open-language register is judged after delivery by J4, never by preflight.
 const runtimeLeakagePattern = /(?:clinical-evidence-synthesis|\bmcp__evimed__[a-z_]+\b|\bevimed_[a-z_]+\b|\.evimed-sources\/)/i;
 const emergencyCallClaimPattern = /(?:(?:呼叫|拨打).{0,16}(?:急救|120|999)|(?:急救|120|999).{0,16}(?:呼叫|拨打))/i;
+/** A claim that tells the reader to call for emergency help, in either language (the English phrases are the rules file's).
+ *  @param {unknown} claim @returns {boolean} */
+function isEmergencyCallClaim(claim) {
+  const text = String(claim ?? "");
+  return emergencyCallClaimPattern.test(text) || englishEmergencyDispatchPattern.test(text);
+}
 const emergencyCallSupportPattern = /(?:call.{0,16}(?:999|emergency|ambulance)|(?:999|emergency|ambulance).{0,16}call|呼叫|拨打|急救)/i;
 // Generic (non-drug-specific) safety rule. Drug- and scenario-specific rules
 // live in clinical-safety-rules.json so pharmacists can maintain them as data.
@@ -439,6 +452,15 @@ export const clinicalEvidenceCheckIds = Object.freeze([
 ]);
 
 /**
+ * How many distinct preserved sources of one package the control plane reads back (the completion check, the run's claim
+ * count, `claim_verification`). It was 48: a comprehensive review the owner asked for cited 55 documents on the live check
+ * of 2026-10-28, one canonical file each, and the eight past the 48th were reported as unreadable — the review delivered
+ * `unverified` for quotes that were all verbatim. A limit protects the reads (each file is one bounded read); 400 covers a
+ * review of a few hundred references.
+ */
+export const PACKAGE_SOURCE_ARTIFACT_LIMIT = 400;
+
+/**
  * What a finding of each check does to a package (2026-09-17).
  *
  * Until now the rule was "everything blocks unless its sentence is on a
@@ -476,15 +498,6 @@ export const clinicalEvidenceCheckIds = Object.freeze([
  * own record (the evidence ledger), not a file the model types.
  * @type {Readonly<Record<string, 'blocking' | 'safety'>>}
  */
-/**
- * How many distinct preserved sources of one package the control plane reads back (the completion check, the run's claim
- * count, `claim_verification`). It was 48: a comprehensive review the owner asked for cited 55 documents on the live check
- * of 2026-10-28, one canonical file each, and the eight past the 48th were reported as unreadable — the review delivered
- * `unverified` for quotes that were all verbatim. A limit protects the reads (each file is one bounded read); 400 covers a
- * review of a few hundred references.
- */
-export const PACKAGE_SOURCE_ARTIFACT_LIMIT = 400;
-
 export const CLINICAL_CHECK_TIERS = Object.freeze({
   "report-present": "blocking",
   "matrix-present": "blocking",
@@ -535,11 +548,18 @@ function lastClauseBoundary(passage) {
 }
 
 /** Every emergency-call sentence in the practical section whose trigger is how
- *  a self-administered medicine performed.
+ *  a self-administered medicine performed. An English report is read by the
+ *  English wording (closed phrase lists in the rules file), a Chinese one by
+ *  the morphology below; neither reads the other's prose.
  *  @param {any} practical
+ *  @param {"zh" | "en"} [language]
  *  @returns {{ line: number, span: string, sentence: string }[]}
  */
-function medicationConditionedEmergencyTriggers(practical) {
+function medicationConditionedEmergencyTriggers(practical, language = "zh") {
+  if (language === "en") {
+    return englishConditionedEmergencyTriggers(normalizedPracticalText(practical))
+      .map((trigger) => ({ ...trigger, sentence: excerpt(trigger.sentence) }));
+  }
   const found = [];
   for (const [lineIndex, rawLine] of normalizedPracticalText(practical).split("\n").entries()) {
     let medicationStated = false;
@@ -1907,9 +1927,17 @@ const hiddenClaimMarkerPattern = /<!--\s*claim:(CLM-[0-9]{3,6})\s*-->/g;
  *  Nullable here because that is what the JSON may literally contain;
  *  `loadClinicalSafetyRules` is what refuses a rule that leaves a required one
  *  out, so everything downstream of the load may treat them as present.
+ *
+ *  A rule is written in Chinese (its own `pattern`), and may carry an English
+ *  wording as closed phrase lists (`en`, see `clinicalSafetyLanguage.mjs`) or
+ *  declare `languages: ["zh", "en"]` when its one pattern reads both. `zh` says
+ *  whether the pattern above is the rule's Chinese wording; `english` is the
+ *  English one, `"same"` for the rule's own pattern, null for none.
  *  @returns {{ id: string, kind: string, message: string, pattern: RegExp | null,
- *    triggerPattern: RegExp | null, substitutions: { find: RegExp, replace: string }[] }} */
+ *    triggerPattern: RegExp | null, substitutions: { find: RegExp, replace: string }[],
+ *    zh: boolean, english: { pattern: RegExp, triggerPattern: RegExp | null } | "same" | null }} */
 export function compileClinicalSafetyRule(rule) {
+  const languages = ruleLanguages(rule);
   return {
     id: rule.id,
     kind: rule.kind,
@@ -1919,6 +1947,8 @@ export function compileClinicalSafetyRule(rule) {
     substitutions: Array.isArray(rule.reportSubstitutions)
       ? rule.reportSubstitutions.map((entry) => ({ find: new RegExp(entry.find, entry.flags ?? "g"), replace: String(entry.replace ?? "") }))
       : [],
+    zh: languages.zh,
+    english: languages.en,
   };
 }
 
@@ -1955,6 +1985,8 @@ export function validateLoadedSafetyRules(rules) {
       !rule.message && "message",
       !rule.pattern && "pattern",
       rule.kind === "practical_required_when_report_matches" && !rule.triggerPattern && "triggerPattern",
+      // An English wording of a rule that fires on an absence needs its own trigger: the Chinese one cannot see English prose.
+      rule.kind === "practical_required_when_report_matches" && rule.english && rule.english !== "same" && !rule.english.triggerPattern && "en.triggerPhrases",
     ].filter(Boolean);
     if (missing.length) {
       throw new Error(`clinical-safety-rules.json: rule "${rule.id || "(unnamed)"}" is missing ${missing.join(", ")}.`);
@@ -1962,7 +1994,7 @@ export function validateLoadedSafetyRules(rules) {
   }
 }
 
-/** @type {readonly { id: string, kind: string, message: string, pattern: RegExp, triggerPattern: RegExp | null, substitutions: { find: RegExp, replace: string }[] }[]} */
+/** @type {readonly { id: string, kind: string, message: string, pattern: RegExp, triggerPattern: RegExp | null, substitutions: { find: RegExp, replace: string }[], zh: boolean, english: { pattern: RegExp, triggerPattern: RegExp | null } | "same" | null }[]} */
 const clinicalSafetyRules = /** @type {any} */ (loadClinicalSafetyRules());
 
 /**
@@ -2006,12 +2038,18 @@ checkedBy(evaluateClinicalSafetyRules, "clinical-safety-rules");
  * practical section: the only line it can point at is where its trigger matched
  * the report, and `where: "trigger"` says so rather than letting the number be
  * read as the offending line.
- * @param {{ reportText?: unknown, practical?: unknown, question?: unknown }} input
+ * @param {{ reportText?: unknown, practical?: unknown, question?: unknown, language?: "zh" | "en" }} input `language` is the report's own (`reportLanguage`) unless a caller that already knows it says so
  * @returns {{ ruleId: string, message: string, line: number | null, where: string, match: string | null }[]}
  */
-export function clinicalSafetyRuleHits({ reportText, practical, question }) {
+export function clinicalSafetyRuleHits({ reportText, practical, question, language = undefined }) {
   const report = String(reportText ?? "");
   const practicalText = String(practical ?? "");
+  // The rule that applies is the one in the report's own language. A rule has no
+  // wording in a language it was never written for, and then it is not checked
+  // (`clinicalSafetyRulesNotChecked`), which is different from passing: the
+  // Chinese trigger 速效救心丸 found the gloss of an English report's
+  // "Suxiao Jiuxin Wan (速效救心丸)" and then asked for a Chinese sentence.
+  const reportIn = language ?? reportLanguage(report);
   /** @type {{ ruleId: string, message: string, line: number | null, where: string, match: string | null }[]} */
   const found = [];
   /** A rule's pattern may carry `g`, and `.test()` on a global regex advances
@@ -2026,31 +2064,54 @@ export function clinicalSafetyRuleHits({ reportText, practical, question }) {
     const located = firstMatchingLine(text, new RegExp(pattern.source, pattern.flags.replace(/[gy]/g, "")));
     return { line: located?.line ?? null, where, match: located?.match ?? null };
   };
-  for (const rule of clinicalSafetyRules) {
-    if (rule.kind === "report_forbidden") {
+  for (const compiled of clinicalSafetyRules) {
+    /** @type {{ pattern: RegExp, triggerPattern: RegExp | null, substitutions: { find: RegExp, replace: string }[] } | null} */
+    let rule;
+    if (reportIn === "en") {
+      rule = compiled.english === "same" ? compiled : compiled.english ? { ...compiled.english, substitutions: [] } : null;
+    } else {
+      rule = compiled.zh ? compiled : null;
+    }
+    if (rule === null) continue;
+    const { id, kind, message } = compiled;
+    if (kind === "report_forbidden") {
       let text = report;
       for (const substitution of rule.substitutions) text = text.replace(substitution.find, substitution.replace);
       // Located in the substituted text because that is the text that was
       // tested. The substitutions replace in place and introduce no newlines,
       // so the number still indexes the report as the author wrote it.
-      if (rule.pattern.test(text)) found.push({ ruleId: rule.id, message: rule.message, ...locate(text, rule.pattern, "report") });
-    } else if (rule.kind === "practical_forbidden") {
-      if (rule.pattern.test(practicalText)) found.push({ ruleId: rule.id, message: rule.message, ...locate(practicalText, rule.pattern, "practical") });
-    } else if (rule.kind === "entity_requires_question_mention") {
+      if (rule.pattern.test(text)) found.push({ ruleId: id, message, ...locate(text, rule.pattern, "report") });
+    } else if (kind === "practical_forbidden") {
+      if (rule.pattern.test(practicalText)) found.push({ ruleId: id, message, ...locate(practicalText, rule.pattern, "practical") });
+    } else if (kind === "entity_requires_question_mention") {
       if (nonEmpty(question) && !rule.pattern.test(String(question)) && rule.pattern.test(report)) {
-        found.push({ ruleId: rule.id, message: rule.message, ...locate(report, rule.pattern, "report") });
+        found.push({ ruleId: id, message, ...locate(report, rule.pattern, "report") });
       }
-    } else if (rule.kind === "practical_required_when_report_matches") {
+    } else if (kind === "practical_required_when_report_matches") {
       // `triggerPattern` is required for this kind and checked at load.
       const trigger = /** @type {RegExp} */ (rule.triggerPattern);
       if (trigger.test(report) && !rule.pattern.test(practicalText)) {
-        found.push({ ruleId: rule.id, message: rule.message, ...locate(report, trigger, "trigger") });
+        found.push({ ruleId: id, message, ...locate(report, trigger, "trigger") });
       }
     }
   }
   return found;
 }
 checkedBy(clinicalSafetyRuleHits, "clinical-safety-rules");
+
+/**
+ * The rules this report was not checked against: those with no wording in the
+ * report's language. "Not checked" is not "passed" — a report of a language a
+ * rule was never written for gets no verdict from it, and says so. The rules
+ * file is the pharmacist's: a rule added in Chinese alone shows up here for
+ * every English report until its English wording is written.
+ * @param {unknown} reportText
+ * @param {"zh" | "en"} [language] the report's own (`reportLanguage`) unless given
+ * @returns {string[]} rule ids
+ */
+export function clinicalSafetyRulesNotChecked(reportText, language = undefined) {
+  return rulesNotChecked(clinicalSafetyRulesData.rules, language ?? reportLanguage(reportText));
+}
 
 /** @param {unknown} value @param {number} [minimum] @returns {boolean} */
 function nonEmpty(value, minimum = 1) {
@@ -3653,7 +3714,7 @@ function validateSynthesizedClaim(
     }
   }
   if (
-    emergencyCallClaimPattern.test(value.claim ?? "")
+    isEmergencyCallClaim(value.claim)
     && !sources.some((source) => emergencyCallSupportPattern.test(source?.supportQuote ?? ""))
   ) {
     issues.push(`${label}.emergency-call action is not present in its direct support.`);
@@ -3856,7 +3917,7 @@ function auditClaimEvidence(value, label, context) {
   issues.region("claim-support-quote");
   if (!validSupportingPassage(value.supportQuote)) issues.push(`${label}.supportQuote must contain a direct supporting passage.`);
   issues.region("claim-emergency-support");
-  if (emergencyCallClaimPattern.test(value.claim ?? "")
+  if (isEmergencyCallClaim(value.claim)
     && !emergencyCallSupportPattern.test(value.supportQuote ?? "")) {
     issues.push(`${label}.emergency-call action is not present in its direct support.`);
   }
@@ -4271,7 +4332,7 @@ export function validateClinicalEvidencePackage({
     issues.pushAttributed({ text: found.message, line: found.line });
   }
   issues.region("exclusive-safety");
-  if (exclusiveSafetyPattern.test(reportText ?? "")) {
+  if ((language === "en" ? englishExclusiveSafetyPattern : exclusiveSafetyPattern).test(reportText ?? "")) {
     issues.push("The report must not turn a bounded recommendation into an unsupported exclusive safety claim.");
   }
 
@@ -4472,9 +4533,14 @@ export function validateClinicalEvidencePackage({
   }
   // `practical` holds the report's own lines (everything outside the practical
   // sections blank), so a line number here is the line the author will find.
-  for (const trigger of issues.from(medicationConditionedEmergencyTriggers, practical)) {
-    issues.push(
-      `临床实践要点第 ${trigger.line} 行把「${trigger.span}」写成了呼叫急救的触发条件：「${trigger.sentence}」。`
+  for (const trigger of issues.from(medicationConditionedEmergencyTriggers, practical, language)) {
+    issues.push(language === "en"
+      ? `Practice points, report line ${trigger.line}, makes calling emergency services conditional on how the medicine performed (“${trigger.span}”): “${trigger.sentence}”. `
+        + "An emergency call is triggered by symptoms and signs, never by whether a self-administered medicine worked — not relieved after the dose, no effect, "
+        + "or waiting a set time to see all count. The one wording this section may use is: call emergency services whether or not the medicine was taken and "
+        + "whether or not it helped. If the same section says that taking a medicine is not a reason to wait, this line contradicts it, and a reader cannot follow both. "
+        + "If a source (guideline text) really gives the condition, restate it under Results as the source words it, with its citation, and keep the practice point unconditional."
+      : `临床实践要点第 ${trigger.line} 行把「${trigger.span}」写成了呼叫急救的触发条件：「${trigger.sentence}」。`
       + "急救的触发条件不得以自救用药的疗效为条件（含药不缓解、服药后无效、观察 N 分钟无效均不可）——"
       + "本节唯一允许的口径是「无论服药与否、无论是否缓解，出现上述征象即刻呼叫 120」。"
       + "同一节里已经写着「服药不是等待的理由，应在服药的同时呼叫急救」，这一条与它互斥，读者无法同时执行。"
@@ -4735,6 +4801,14 @@ export function clinicalEvidenceAdvisoryNotes(reportText) {
   // report's Abstract, Objective and Conclusions are the same fields.
   const language = reportLanguage(report);
   const names = sectionNames(language);
+
+  // A safety rule with no wording in this report's language did not look at it. Said, not passed over.
+  const unchecked = clinicalSafetyRulesNotChecked(report, language);
+  if (unchecked.length) {
+    notes.push(language === "en"
+      ? `clinical-evidence-report.md: the clinical safety rule${unchecked.length > 1 ? "s" : ""} ${unchecked.join(", ")} ${unchecked.length > 1 ? "have" : "has"} no English wording yet, so this English report was not checked against ${unchecked.length > 1 ? "them" : "it"}. Read the practice points against the medicine rules yourself.`
+      : `clinical-evidence-report.md: 临床安全规则 ${unchecked.join("、")} 没有适用于本报告语言的写法，本报告未按这些规则检查。`);
+  }
 
   // 摘要 目的 lists the research questions and 结论 answers them one for one;
   // when both are enumerated the counts are comparable. Only then — a prose

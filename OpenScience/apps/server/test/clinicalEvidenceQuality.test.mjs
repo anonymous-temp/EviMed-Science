@@ -1801,12 +1801,73 @@ test("a requested heading that holds a practice-points word does not stand in fo
   const triggered = build("Practical management");
   triggered.reportText = triggered.reportText.replace(
     "## Practice points\n",
-    "## Practice points\n4. 含服硝酸甘油后仍不缓解者，拨打 120。 <!-- claim:CLM-001 -->\n",
+    "## Practice points\n4. Call emergency services if the pain persists after nitroglycerin. <!-- claim:CLM-001 -->\n",
   );
-  const lineOf = triggered.reportText.split("\n").findIndex((line) => line.startsWith("4. 含服硝酸甘油")) + 1;
-  const notice = validateClinicalEvidencePackage(triggered).issues.find((issue) => /^临床实践要点第 \d+ 行把/.test(issue));
+  const lineOf = triggered.reportText.split("\n").findIndex((line) => line.startsWith("4. Call emergency services")) + 1;
+  const notice = validateClinicalEvidencePackage(triggered).issues.find((issue) => /^Practice points, report line \d+,/.test(issue));
   assert.ok(notice, "the conditioned trigger is found in the second practical section");
-  assert.match(notice, new RegExp(`^临床实践要点第 ${lineOf} 行把`));
+  assert.match(notice, new RegExp(`^Practice points, report line ${lineOf},`));
+});
+
+/** The English review with the medicine named in its Results (and glossed in Chinese, as an English report on a Chinese medicine
+ *  often does) and the given lines at the top of its practice points. */
+function englishPackageNamingTheMedicine(practiceLines, { gloss = true } = {}) {
+  const input = englishDeepResearchPackage();
+  input.briefText = "Write an English review: what do guidelines advise for acute chest pressure, including Suxiao Jiuxin Wan?";
+  input.reportText = input.reportText
+    .replace("## Discussion", `The included statements mention Suxiao Jiuxin Wan${gloss ? " (速效救心丸)" : ""} and sublingual nitroglycerin.\n\n## Discussion`)
+    .replace("## Practice points\n", `## Practice points\n${practiceLines}\n`);
+  return input;
+}
+
+test("the safety checks read an English report: a conditioned call, an exclusive claim, the medicine rules, an unsupported call claim", () => {
+  const checksOf = (input) => validateClinicalEvidencePackage(input).findings.filter((finding) => finding.tier === "safety").map((finding) => finding.check);
+  const required = "4. Suxiao Jiuxin Wan must not delay calling emergency services; call at the same time. <!-- claim:CLM-001 -->";
+
+  // The control: the required sentence in English, the Chinese gloss of the name beside it, nothing else to say.
+  const clean = validateClinicalEvidencePackage(englishPackageNamingTheMedicine(required));
+  assert.deepEqual(clean.findings.filter((finding) => finding.tier === "safety"), [], clean.issues.join("\n"));
+  // Without a gloss it reads the same.
+  assert.deepEqual(checksOf(englishPackageNamingTheMedicine(required, { gloss: false })), []);
+
+  // Missed before: the call made conditional on the medicine, said in English. Named by the report's line, in English.
+  const conditioned = englishPackageNamingTheMedicine(`${required}\n5. Call emergency services if pain persists after nitroglycerin. <!-- claim:CLM-001 -->`);
+  const found = validateClinicalEvidencePackage(conditioned).findings.filter((finding) => finding.check === "emergency-trigger-conditioned");
+  assert.equal(found.length, 1);
+  assert.equal(found[0].tier, "safety");
+  const conditionedLine = conditioned.reportText.split("\n").findIndex((line) => line.startsWith("5. Call emergency services")) + 1;
+  assert.match(found[0].text, new RegExp(`^Practice points, report line ${conditionedLine}, makes calling emergency services conditional`));
+  assert.match(found[0].text, /“persists”/);
+  assert.match(found[0].text, /never by whether a self-administered medicine worked/);
+  // The unconditional wording is the compliant one.
+  assert.deepEqual(checksOf(englishPackageNamingTheMedicine(`${required}\n5. Call emergency services whether or not nitroglycerin helps. <!-- claim:CLM-001 -->`)), []);
+
+  // The required sentence missing: the English rule fires (the Chinese one would have asked for a Chinese sentence).
+  const missing = validateClinicalEvidencePackage(englishPackageNamingTheMedicine("4. Keep the patient at rest. <!-- claim:CLM-001 -->"));
+  assert.deepEqual(missing.findings.filter((finding) => finding.tier === "safety").map((finding) => finding.check), ["clinical-safety-rules"]);
+  assert.match(missing.issues.join("\n"), /must explicitly state that Suxiao Jiuxin Wan must not delay emergency care/);
+  assert.equal(missing.issueChecks.find((entry) => entry.check === "clinical-safety-rules") !== undefined, true);
+  // A Chinese sentence in an English report is not the English one.
+  assert.deepEqual(
+    checksOf(englishPackageNamingTheMedicine("4. 速效救心丸不应延误急救，应同时拨打 120。 <!-- claim:CLM-001 -->")),
+    ["clinical-safety-rules"],
+  );
+
+  // The medicine rules.
+  const diagnostic = englishPackageNamingTheMedicine(`${required}\n5. Relief after nitroglycerin means the pain is cardiac, so you can stay at home. <!-- claim:CLM-001 -->`);
+  const rulesFired = validateClinicalEvidencePackage(diagnostic).findings.filter((finding) => finding.check === "clinical-safety-rules");
+  assert.equal(rulesFired.length, 1);
+  assert.match(rulesFired[0].text, /Medication response must not be presented as a way to diagnose/);
+
+  // An exclusive safety claim.
+  const exclusive = englishPackageNamingTheMedicine(required);
+  exclusive.reportText = exclusive.reportText.replace("## Discussion", "Immediate stenting is the only safe treatment option for these patients.\n\n## Discussion");
+  assert.deepEqual(checksOf(exclusive), ["exclusive-safety"]);
+
+  // A claim that tells the reader to call for help needs a source passage that says so, in English as in Chinese.
+  const claim = englishPackageNamingTheMedicine(required);
+  claim.matrix.claims[0].claim = "Patients should call emergency services at once.";
+  assert.ok(validateClinicalEvidencePackage(claim).findings.some((finding) => finding.check === "claim-emergency-support"));
 });
 
 test("an English report's practice points are audited exactly as 临床实践要点 is", () => {
