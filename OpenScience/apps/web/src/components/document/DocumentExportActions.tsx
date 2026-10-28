@@ -9,20 +9,24 @@ const FORMATS: Array<[DocumentFormat, string]> = [['docx', 'Word'], ['pdf', 'PDF
 
 /**
  * Component: DocumentExportActions; owner: H; rules: DS22/AT52–AT54.
- * Anatomy: Labeled format menu, visible conversion status, cancellation and error.
+ * Anatomy: Labeled format menu, visible conversion status, cancellation, the finished files' download actions and error.
  * Variants: Three report formats; five selected GEO table formats.
  * States: Independent records preserve retry/download/poll state; source generation discards stale replies.
  * Hit area: Shared Button trigger and Menu rows.
  * Keyboard: Menu arrows, Escape and trigger focus return.
  * Long content: Shared menu labels and wrapping status text.
  * Theme: Semantic surface, text and error roles.
- * Responsive: One export trigger; ongoing state remains outside disclosure.
+ * Responsive: One export trigger; ongoing state and finished files remain outside disclosure.
  * Verification: DocumentExportActions.test.tsx; DS22.2/AT52; caller owns exportability.
  */
 export function DocumentExportActions({ source, initialId, groupLabel = '导出报告', extraItems = [], disabled = false, projectId }: { source: DocumentSource; initialId?: string | null; groupLabel?: string; extraItems?: readonly MenuEntry[]; disabled?: boolean; projectId?: string }) {
   const [records, setRecords] = useState<Record<string, DocumentExport>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The conversions this person started here, and which of their files they have already taken: a finished one is said, with its
+  // download, outside the menu — it used to turn into a menu item with nothing on the page to say it was ready.
+  const [started, setStarted] = useState<Record<string, true>>({});
+  const [taken, setTaken] = useState<Record<string, true>>({});
   const generation = useRef(0);
   const intent = useRef<string | null>(null);
   const disabledRef = useRef(disabled);
@@ -32,7 +36,7 @@ export function DocumentExportActions({ source, initialId, groupLabel = '导出�
   useEffect(() => {
     const current = ++generation.current;
     intent.current = null;
-    setRecords({}); setBusy(false); setError(null);
+    setRecords({}); setStarted({}); setTaken({}); setBusy(false); setError(null);
     if (initialId) void getDocumentExport(initialId).then(value => {
       if (generation.current === current) setRecords({ [value.id]: value });
     }).catch(failure => { if (generation.current === current) setError(productErrorMessage(failure)); });
@@ -64,11 +68,13 @@ export function DocumentExportActions({ source, initialId, groupLabel = '导出�
     const current = generation.current;
     setBusy(true); setError(null);
     try {
-      if (record?.formats[format]?.state === 'ready') await downloadDocumentExport(record.id, format);
-      else {
+      if (record?.formats[format]?.state === 'ready') {
+        await downloadDocumentExport(record.id, format);
+        if (generation.current === current) setTaken(previous => ({ ...previous, [`${record.id}:${format}`]: true }));
+      } else {
         const next = record?.formats[format]?.state === 'failed' && record.formats[format]?.code !== 'document_renderer_changed'
           ? await retryDocumentFormat(record.id, format) : selected ? await requestDocumentExport(source, [format]) : projectId ? await requestDocumentExport(source, undefined, projectId) : await requestDocumentExport(source);
-        if (generation.current === current) setRecords(previous => ({ ...previous, [next.id]: next }));
+        if (generation.current === current) { setRecords(previous => ({ ...previous, [next.id]: next })); setStarted(previous => ({ ...previous, [next.id]: true })); }
       }
     } catch (failure) { if (generation.current === current) setError(productErrorMessage(failure)); }
     finally { if (generation.current === current) { intent.current = null; setBusy(false); } }
@@ -88,6 +94,11 @@ export function DocumentExportActions({ source, initialId, groupLabel = '导出�
     finally { if (generation.current === current) { intent.current = null; setBusy(false); } }
   }
   const formats: Array<[DocumentFormat, string]> = selected ? [...FORMATS, ['csv', 'CSV'], ['xlsx', 'Excel']] : FORMATS;
+  // Said once the work stops: while a conversion runs its progress is the one status, and nothing is "ready" that was not asked for here.
+  const ready = pendingIds.length ? [] : formats.flatMap(([format, label]) => {
+    const record = Object.values(records).reverse().find(entry => started[entry.id] && entry.formats[format]?.state === 'ready');
+    return record && !taken[`${record.id}:${format}`] ? [{ format, label }] : [];
+  });
   return <div className="flex flex-wrap items-center gap-2" aria-label={groupLabel}>
     <Menu label={groupLabel} items={[...formats.map(([format, label]) => {
       const record = recordFor(format);
@@ -99,6 +110,7 @@ export function DocumentExportActions({ source, initialId, groupLabel = '导出�
       };
     }), ...(extraItems.length ? ['separator' as const, ...extraItems.map(item => item === 'separator' || 'heading' in item ? item : { ...item, disabled: disabled || item.disabled, onSelect: () => { if (!disabledRef.current) item.onSelect(); } })] : [])]}><Button size="sm" variant="text" loading={busy} disabled={disabled}>{groupLabel}</Button></Menu>
     {pendingIds.length > 0 && <><span role="status" className="text-caption text-text-3">正在准备文件</span><Button size="sm" variant="text" disabled={disabled || busy} onClick={() => void cancel()}>取消</Button></>}
+    {ready.length > 0 && <><span role="status" className="text-caption text-text-2">文件已就绪</span>{ready.map(({ format, label }) => <Button key={format} size="sm" variant="text" disabled={disabled || busy} onClick={() => void choose(format)}>{`下载 ${label}`}</Button>)}</>}
     {error && <span role="alert" className="text-caption text-error">{error}</span>}
   </div>;
 }

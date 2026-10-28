@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DocumentExportActions } from './DocumentExportActions';
 import { getDocumentExport, requestDocumentExport, retryDocumentFormat, downloadDocumentExport } from '@/lib/documentExport';
 vi.mock('@/lib/documentExport', () => ({ getDocumentExport: vi.fn(), requestDocumentExport: vi.fn(), retryDocumentFormat: vi.fn(), cancelDocumentExport: vi.fn(), downloadDocumentExport: vi.fn() }));
@@ -106,4 +106,52 @@ it('ignores a stale conversion after the source changes and preserves the new ex
   await waitFor(() => expect(screen.getByRole('button', { name: '导出报告' })).not.toHaveAttribute('aria-busy', 'true'));
   fireEvent.click(await format('导出 PDF'));
   await waitFor(() => expect(requestDocumentExport).toHaveBeenLastCalledWith({ artifactId: 'new.md' }));
+});
+
+
+describe('a finished conversion is said outside the menu', () => {
+  const queued = { id: 'dex_wait', state: 'queued' as const, formats: { docx: { state: 'queued' as const }, pdf: { state: 'queued' as const }, html: { state: 'queued' as const } } };
+  const done = { id: 'dex_wait', state: 'ready' as const, formats: { docx: { state: 'ready' as const }, pdf: { state: 'ready' as const }, html: { state: 'ready' as const } } };
+  beforeEach(() => { vi.resetAllMocks(); vi.useFakeTimers({ shouldAdvanceTime: true }); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('replaces 正在准备文件 with a visible 文件已就绪 and its downloads when polling finds the files ready', async () => {
+    vi.mocked(requestDocumentExport).mockResolvedValue(queued);
+    vi.mocked(getDocumentExport).mockResolvedValue(done);
+    render(<DocumentExportActions source={{ artifactId: 'report.md' }} />);
+    fireEvent.click(await format('导出 Word'));
+    expect(await screen.findByRole('status')).toHaveTextContent('正在准备文件');
+    expect(screen.getByRole('button', { name: '取消' })).toBeEnabled();
+    expect(screen.queryByText('文件已就绪')).toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
+    const status = await screen.findByRole('status');
+    expect(status).toHaveTextContent('文件已就绪');
+    expect(screen.queryByText('正在准备文件')).toBeNull();
+    // The way to the file is on the page, not behind the format menu: one named download for each file that is ready.
+    for (const label of ['Word', 'PDF', 'HTML']) expect(screen.getByRole('button', { name: `下载 ${label}` })).toBeEnabled();
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('downloads from there, and lets go of the file it handed over', async () => {
+    vi.mocked(requestDocumentExport).mockResolvedValue(done);
+    render(<DocumentExportActions source={{ artifactId: 'report.md' }} />);
+    fireEvent.click(await format('导出 Word'));
+    const word = await screen.findByRole('button', { name: '下载 Word' });
+    expect(screen.getByRole('status')).toHaveTextContent('文件已就绪');
+    fireEvent.click(word);
+    await waitFor(() => expect(downloadDocumentExport).toHaveBeenCalledWith('dex_wait', 'docx'));
+    await waitFor(() => expect(screen.queryByRole('button', { name: '下载 Word' })).toBeNull());
+    expect(screen.getByRole('button', { name: '下载 PDF' })).toBeVisible();
+    // The menu still carries every format with its own action.
+    openFormats();
+    expect(within(await screen.findByRole('menu')).getByRole('menuitem', { name: '下载 Word' })).toBeVisible();
+  });
+
+  it('says nothing is ready for an export that was only looked up: it is in the menu, as before', async () => {
+    vi.mocked(getDocumentExport).mockResolvedValue(partial);
+    render(<DocumentExportActions source={{ artifactId: 'report.md' }} initialId="dex_one" />);
+    await format('下载 Word');
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByRole('button', { name: '下载 Word' })).toBeNull();
+  });
 });
