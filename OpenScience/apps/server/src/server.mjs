@@ -269,7 +269,8 @@ import { createKnowledgeBaseEntries } from "./knowledgeBaseEntries.mjs";
 import { verifySourceMetadata } from "./sourceMetadata.mjs";
 // Knowledge-base search (2026-09-20): the index, its embedder and its gateway.
 import { KB_RERANK_INSTRUCT, KnowledgeBaseIndex } from "./kbIndex.mjs";
-import { createLibrary } from "./libraryService.mjs";
+import { createLibrary, libraryProjectDeleted } from "./libraryService.mjs";
+import { assertOrdinaryProject } from "./libraryScope.mjs";
 import { KbEmbedder } from "./kbEmbedding.mjs";
 import { nativeInputText } from "@evimed/harness-port";
 import { KB_SEARCH_GATEWAY_PATH, createKbSearchGatewayHandler } from "./kbSearchGateway.mjs";
@@ -1941,6 +1942,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         event.sourceRetired !== false ? geoValueSourceReplaced(geo?.store, event) : null,
         // The pages that quote the document that was replaced are labelled and queued for a recompile.
         event.sourceRetired !== false ? knowledgePages?.noteSourcesChanged(event.userId, event.projectId, [{ sourceId: event.replaced.sourceId, reason: "changed" }], { strict: true }) : null,
+        // The new version applies where the old one did (the library entry is carried to the new bytes), so a replacement never
+        // narrows or drops what the person chose.
+        libraryService?.carryOver(event.userId, event),
         // The engine's copy follows: the document that was replaced goes, the one that replaces it is pushed when it is read.
         event.sourceRetired !== false ? sourceSync?.note(event.userId, event.projectId, event.replaced.sourceId) : null,
       ]);
@@ -1950,6 +1954,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // A page's older version going is the page being rewritten, not a document the pages quote.
     afterRemove: async event => {
       if (KnowledgePageService.isPage(event.source)) return;
+      // A document whose last holder this was has lost its library entry in the deletion's own transaction; its copy and the
+      // projects' directories follow now, and a failure is reported and left to the convergence pass.
+      await libraryService?.syncCopies({ userId: event.userId })
+        .catch((/** @type {any} */ error) => securityAudit(config, "library.sync", "failed", { code: error?.code ?? "library_sync_failed" }).catch(() => {}));
       void sourceSync?.note(event.userId, event.projectId, event.sourceId);
       await knowledgePages?.noteSourcesChanged(event.userId, event.projectId, [{ sourceId: event.sourceId, reason: "removed" }]);
     },
@@ -2335,17 +2343,27 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }) : null;
   // The personal library: an account's documents across projects, read-only
   // in every run, searched beside the project's own (plan §3.2 #4–5).
+  // Where a document may apply — the projects its library record lists — is one rule: an ordinary project of the account
+  // (`assertOrdinaryProject`). A 循证 GEO project or a 虚拟临床研究 study the account owns is not one, and neither is a
+  // platform project. The geo and vcr stores are composed further down and read only when a request arrives.
+  const libraryProjectRule = {
+    store,
+    internalProject: (/** @type {any} */ user, /** @type {string} */ id) => isInternalProjectOf(config, user.id, id),
+    moduleProject: async (/** @type {any} */ user, /** @type {string} */ id) => Boolean(await geo?.store.projectByControlProject(user.id, id))
+      || (await vcr?.store.studyByControlProject(user.id, id))?.userId === user.id,
+  };
   const library = createLibrary({ config, store, documents: productDocuments, sources: sourceService, capsules: capsuleService,
-    kbIndex, report: (code) => process.stderr.write(`personal library: ${code}\n`) });
+    kbIndex, report: (code) => process.stderr.write(`personal library: ${code}\n`),
+    projectGuard: async (userId, projectId) => {
+      const owner = await store.userById(userId);
+      if (!owner) throw new HttpError(404, "user_not_found", "User not found.");
+      await assertOrdinaryProject(libraryProjectRule, owner, projectId);
+    } });
   libraryService = library.service;
   const personalLibraryWrite = createPersonalLibraryWriter({ sources: sourceService, library: () => libraryService,
     write: ({ user, project, rel, buffer, meta, register }) => writeProjectUpload({ config, user, project }, { root: "base", rel, buffer, meta, register }) });
   const personalLibraryRoutes = createPersonalLibraryRoutes({ store, sources: sourceService, knowledge: knowledgeEntries,
-    write: personalLibraryWrite, readFile: (project, rel) => readFileNoFollow(project.baseDir, resolveScopedPath(project.baseDir, rel)),
-    maxJsonBytes: config.maxJsonBytes, maxFileBytes: config.maxFileBytes, internalProject: (user, id) => isInternalProjectOf(config, user.id, id),
-    // A 循证 GEO project or a 虚拟临床研究 study the account owns is not a place a document is copied to.
-    moduleProject: async (user, id) => Boolean(await geo?.store.projectByControlProject(user.id, id))
-      || (await vcr?.store.studyByControlProject(user.id, id))?.userId === user.id });
+    write: personalLibraryWrite, maxJsonBytes: config.maxJsonBytes, maxFileBytes: config.maxFileBytes });
   // The one entity vocabulary (entityVocabulary.mjs, plan §4.2): the frontier's glossary and entity keys, read by
   // the pipeline, the evidence zones, autopilot agendas, GEO products and VCR studies. It follows the frontier
   // module: off, every answer is empty and no table is read.
@@ -2841,7 +2859,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           const readable = async candidate => {
             if (shared) return knowledge.acceptSource(candidate);
             const source = await sourceService.get(project.userId, candidate.id).catch(() => null);
-            return Boolean(source && source.deletedAt == null && (source.projectId === project.id || (await sourceService.isShared(project.userId, source)) === true));
+            return Boolean(source && source.deletedAt == null && await sourceService.appliesTo(project.userId, source, project.id));
           };
           if (action === "sources") {
             const items = []; let cursor = null;
@@ -3892,6 +3910,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // And whether a project is a 「循证 GEO」 project decides whether its runtime mounts the GEO method pack (`RuntimeManager.geoSkillsFor`).
   // Null where the module is off: no GEO project exists there, and no runtime carries the pack.
   runtimeManager.geoProjectOf = geo ? async (userId, projectId) => Boolean(await geo.store.projectByControlProject(userId, projectId)) : null;
+  // Each project mounts its own directory of the personal library (`libraryService.ensureProjectView`), brought to the entries that
+  // apply to it at every launch. Null where there is no product store, and no library.
+  runtimeManager.libraryViews = libraryService ? { ensure: (userId, projectId) => libraryService.ensureProjectView(userId, projectId) } : null;
   // And the other source of mountable methods. Without this assignment
   // `materializeCapsuleMethods` writes only capsule entries, which is what the
   // deployment did until 2026-09-10: approving a learned method changed nothing
@@ -4807,7 +4828,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }) : null;
   // A dispatch's context. A shared GEO project's conversation reads its sources through the project's own knowledge context.
   const prepareOwnedResearchContext = createResearchDispatchContext({ config, sourceService, researchSessions,
-    knowledgeContext: { forProject: project => sharedKnowledgeContext?.forProject(project) ?? null } });
+    knowledgeContext: { forProject: project => sharedKnowledgeContext?.forProject(project) ?? null },
+    // What the dispatch says the library holds is what the project's directory holds, so the directory is there before it counts.
+    libraryViews: libraryService ? { ensure: (userId, projectId) => libraryService.ensureProjectView(userId, projectId, { onlyIfMissing: true }) } : null });
   // The route of an input typed in the kernel's own window, frozen when the prompt is prepared: the capsule plugin's run policy reads it (the
   // capability and the attendance proof), and the adoption of the turn files the run under it. Composed whatever the learning switch says: it is
   // the request's identity, and a 循证 GEO selection is admitted only with its frozen route (`nativeInputRoute.mjs`).
@@ -4879,8 +4902,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       config, documents: productDocuments, jobs: productJobs, sources: sourceService, store, entries: knowledgeEntries,
       resources: openVikingResources, engine: openVikingEngine, sourceSync,
       // A page may cite a document of the account's library; its read-only copy there is the text the compile was given.
-      libraryText: async (userId, sourceId) => (libraryService && /^src_[a-f0-9]{32}$/.test(sourceId)
-        ? libraryService.readCopyText(userId, sourceId) : null),
+      // Read as the project reads it: an entry that does not apply to the project is not a document there.
+      libraryText: async (userId, sourceId, projectId) => (libraryService && /^src_[a-f0-9]{32}$/.test(sourceId)
+        ? libraryService.readCopyText(userId, sourceId, { projectId }) : null),
+      libraryAppliesWhole: async (userId, projectId) => (libraryService ? libraryService.appliesWhole(userId, projectId) : false),
       report: code => { void securityAudit(config, "knowledge.pages", "failed", { code }).catch(() => {}); },
     });
     knowledgePageRoutes = createKnowledgePageRoutes({ store, service: knowledgePages, sources: sourceService, maxJsonBytes: config.maxJsonBytes });
@@ -7661,10 +7686,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         }
         const ids = requestedSourceScope(body.sourceIds, body.sourceScopeMode);
         if (ids?.length && !sourceService) throw new HttpError(503, "product_state_unavailable", "Source storage is temporarily unavailable.");
-        // Each is a document of this account, in this project or shared with it: the ones `kb_search` can see.
+        // Each is a document of this account that applies to this project — it holds it, or the library puts it here: the ones
+        // `kb_search` can see.
         for (const id of ids ?? []) {
           const source = await sourceService.get(ctx.user.id, id).catch(() => null);
-          const readable = source && (source.projectId === ctx.project.id || (await sourceService.isShared(ctx.user.id, source)) === true);
+          const readable = source && source.deletedAt == null && await sourceService.appliesTo(ctx.user.id, source, ctx.project.id);
           if (!readable) throw new HttpError(404, "source_not_found", "This document is not in the knowledge base.");
         }
         sendJson(res, 200, { data: await researchSessions.setSourceScope(ctx.project, sessionId, ids, ids === null ? "project" : "selected") });
@@ -8440,6 +8466,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               }
               if (client) { await documentExportService?.cancelProject(user.id, project.id, client); await resultReplays?.cancelProject(user.id, project.id, client); }
               if (client) await withdrawProjectDerivedMemory(client, user.id, project.id);
+              // The project's id leaves every library entry's list, and an entry only this project's documents held goes with
+              // them: a project made later under the same id inherits nothing.
+              if (client) await libraryProjectDeleted(client, user.id, project.id);
               // A GEO project's rows go with it, whether or not the module is
               // on today (its money rows stay; geoStore.mjs).
               if (client) geoScreenshots = (await deleteGeoProjectRows(client, user.id, project.id)).screenshots;
@@ -8457,6 +8486,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               }
             },
           });
+          // The project's directory of the library goes, and the other projects' directories follow the entries the deletion released.
+          // After the commit: a failure here is the convergence pass's to repair, never a reason the project is still there.
+          await libraryService?.dropProjectView(user.id, projectId)
+            .then(() => libraryService?.syncCopies({ userId: user.id }))
+            .catch((/** @type {any} */ error) => securityAudit(config, "library.sync", "failed", { code: error?.code ?? "library_sync_failed" }).catch(() => {}));
           // What the engine held of the project — its documents' copies, its wiki, its graph — is owed a removal (openVikingSourceSync.forgetProject).
           void sourceSync?.forgetProject(user.id, projectId);
           recordMethodsRetired("project_deleted", methodsStopped);

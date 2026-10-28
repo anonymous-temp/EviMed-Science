@@ -3244,6 +3244,15 @@ export function loadConfig(overrides = {}) {
     runtimeContextWindow: Number(overrides.runtimeContextWindow
       ?? process.env.OPEN_SCIENCE_RUNTIME_CONTEXT_WINDOW
       ?? overrides.runMaxTokens ?? process.env.OPEN_SCIENCE_RUN_MAX_TOKENS ?? 400_000),
+    // What the kernel reserves for one answer of the model, out of the context window above.
+    //
+    // DSH 0.2.1 compacts when the next request would pass contextWindow - maxTokens - 65,536, and its DeepSeek adapter
+    // reserves 256,000 when nothing says otherwise: against the 400,000 window that left about 78,000 tokens of input, and a
+    // 19-minute review run on the live check of 2026-10-28 compacted nine times, dropping the history it was reasoning
+    // over (production's 34-minute run compacted too). 65,536 covers a model turn with long thinking and a long file
+    // written in one call, and puts the trigger near 270,000.
+    runtimeMaxOutputTokens: Number(overrides.runtimeMaxOutputTokens
+      ?? process.env.OPEN_SCIENCE_RUNTIME_MAX_OUTPUT_TOKENS ?? 65_536),
     requireInbox: overrides.requireInbox ?? boolEnv("OPEN_SCIENCE_REQUIRE_INBOX", production),
     // How long a run may produce no new message and no new tool call before it
     // is treated as stalled. A ledger of start/dispatch/finish cannot tell a
@@ -3512,7 +3521,12 @@ export function loadConfig(overrides = {}) {
     // asking for four more; a gate of ours, and the account's own caps already bound the cost). The caps count what this account's compile tasks used, as the engine
     // reports it when each ends (CNY; 0 = no cap): a round is not started past them, and a task is asked to stop after
     // `knowledgePagesTaskTimeoutMs`. `knowledgeGraphEnabled` off compiles the wiki only.
-    // Explicit operator opt-in: ordinary projects compile only their own inputs.
+    // Explicit operator opt-in: ordinary projects compile only their own inputs. With it on, the account's library root joins a
+    // project's compile only while EVERY library entry applies to that project (a document can be limited to some projects,
+    // 2026-10-28): the engine reads a compile root whole and holds the account's library under one root, so one entry limited
+    // to other projects keeps the root out of this project's compile, and the project compiles from its own documents. Feeding
+    // the entries that do apply one by one needs the engine to take a single document as a compile source, which has not been
+    // probed.
     knowledgePagesIncludeLibrary: overrides.knowledgePagesIncludeLibrary ?? boolEnv("OPEN_SCIENCE_KNOWLEDGE_PAGES_INCLUDE_LIBRARY", false),
     knowledgePagesMinSources: Math.max(1, Math.min(200, Math.trunc(Number(overrides.knowledgePagesMinSources ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_MIN_SOURCES ?? 1)) || 1)),
     knowledgePagesDebounceMs: Math.max(0, Math.min(86_400_000, Math.trunc(Number(overrides.knowledgePagesDebounceMs ?? process.env.OPEN_SCIENCE_KNOWLEDGE_PAGES_DEBOUNCE_MS ?? 600_000)) || 0)),

@@ -6,7 +6,7 @@ import { createServer } from "node:http";
 import path from "node:path";
 import { SEAMS } from "@evimed/harness-port";
 
-import { CAPABILITY_DISPLAY, capabilityBrief, capabilityListed, errorCodeMessage, isDeniedRuntimeUiHostRoute, isDeniedRuntimeUiMethod, RUNTIME_UI_ANSWERED_HOST_ROUTES, RUNTIME_UI_ANSWERED_METHODS, RUNTIME_UI_WORKSPACE_PATH_METHODS, runtimeUiMethodFromPath, runtimeUiWorkspacePathRefusal } from "@evimed/domain";
+import { CAPABILITY_DISPLAY, capabilityBrief, capabilityListed, errorCodeMessage, isDeniedRuntimeUiHostRoute, isDeniedRuntimeUiMethod, isRuntimeUiSettingsRead, RUNTIME_UI_ANSWERED_HOST_ROUTES, RUNTIME_UI_ANSWERED_METHODS, RUNTIME_UI_SETTINGS_READ, RUNTIME_UI_WORKSPACE_PATH_METHODS, runtimeUiMethodFromPath, runtimeUiSettingsAnswer, runtimeUiWorkspacePathRefusal } from "@evimed/domain";
 import { assertSpendWithinLimits } from "./usageMetering.mjs";
 
 import { assertNoSymlinkPath, HttpError, mimeFor, openScopedFileNoFollow, readBody, readStableFileHandle } from "./security.mjs";
@@ -843,6 +843,35 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       }, installRuntimeUiTransport);
       res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8", "Content-Length": String(Buffer.byteLength(source)), "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
       res.end(req.method === "HEAD" ? undefined : source);
+      return;
+    }
+    // The one settings read a hosted page may make (`RUNTIME_UI_SETTINGS_READ` in `@evimed/domain`, 2026-10-28): the chat's
+    // presentation, which the profile sets to the kernel's folded `standard` view. Forwarded only as the exact call, and
+    // answered only with the projection `runtimeUiSettingsAnswer` returns; an answer it refuses is refused here, so the
+    // kernel's whole configuration document never reaches the page. A delegated frame is not given it: its own policy
+    // decides what it reads, as before. Everything else in `settings/*` falls through to the deny gate below.
+    if (method === RUNTIME_UI_SETTINGS_READ && !scoped) {
+      if (req.method !== "POST") { sendDenied(res, method); return; }
+      const raw = await nativeBody(Math.min(Number(config.maxJsonBytes), 16384));
+      req.__openScienceProxyBody = raw;
+      /** @type {any} */ let call = null;
+      try { call = JSON.parse(raw.toString("utf8")); } catch { /* refused below */ }
+      if (!isRuntimeUiSettingsRead(call)) { sendDenied(res, method); return; }
+      try {
+        await runtimeManager.proxy(req, res, project, frame.suffix, {
+          surface: "ui", uiBasePath: frame.prefix, revalidate, uiAssetPrefix: SHARED_UI_ASSET_PREFIX,
+          transformResponse: async (response) => {
+            const answer = runtimeUiSettingsAnswer(call, response);
+            if (answer === null) throw new HttpError(403, "runtime_ui_method_denied", `${method} answered outside the readable settings.`);
+            return Buffer.from(answer);
+          },
+        });
+      } catch (error) {
+        // The same JSON refusal the deny list gives, not the notice page a thrown error becomes: the caller is the
+        // page's own settings mirror, which keeps the client default on a refusal.
+        if (error instanceof HttpError && error.code === "runtime_ui_method_denied" && !res.headersSent) { sendDenied(res, method); return; }
+        throw error;
+      }
       return;
     }
     if (isDeniedRuntimeUiMethod(method) && !boundWorkspace) {

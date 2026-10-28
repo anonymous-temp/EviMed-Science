@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isTaskPath, taskIdFromPath, taskPath } from "./taskLocation";
+import { isTaskPath, newTaskPath, taskIdFromPath, taskPath } from "./taskLocation";
 
 describe("where a task lives", () => {
   it("is the list with no task, and the task's own page with one", () => {
@@ -35,5 +35,16 @@ describe("where a task lives", () => {
     expect(taskIdFromPath("/app/autopilot")).toBeNull();
     expect(taskIdFromPath("/app/autopilot/%E0%A4%A")).toBeNull();
     expect(taskIdFromPath("/app/autopilot/a%2Fb")).toBeNull();
+  });
+
+  it("is the new-task form at /new, started from an example by its id, and never a task's page", () => {
+    expect(newTaskPath()).toBe("/app/autopilot/new");
+    expect(newTaskPath("industry-daily")).toBe("/app/autopilot/new?example=industry-daily");
+    expect(newTaskPath("a/b")).toBe("/app/autopilot/new");
+    // The frame is never asked for over the form, and nothing reads "new" as the id of a task.
+    expect(isTaskPath("/app/autopilot/new")).toBe(false);
+    expect(isTaskPath("/app/autopilot/new/")).toBe(false);
+    expect(isTaskPath("/app/autopilot/newer")).toBe(true);
+    expect(taskIdFromPath("/app/autopilot/new")).toBeNull();
   });
 });

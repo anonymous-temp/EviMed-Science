@@ -48,6 +48,15 @@ export function createSourceRoutes({ store, service, openList = null, knowledge 
   // A page or a note that was added: the document, whether it was already there, and — for a refresh or a save —
   // whether its content changed. The queued job is the worker's, not the browser's.
   const entryReply = ({ job: _job, ...rest }) => rest;
+  /**
+   * Where a document applies, as a row says it: the ordinary projects that hold it by id and name, what its library record says
+   * and what that makes of it (`SourceService.withApplicability`). A project that cannot be named is named by its id.
+   * @param {any} user @param {any[]} rows rows that have been through `withApplicability`
+   */
+  const namedHolders = async (user, rows) => {
+    const names = new Map((await store.listProjects(user)).map((/** @type {any} */ entry) => [entry.id, entry.name]));
+    return rows.map((row) => ({ ...row, holders: (row.holders ?? []).map((/** @type {string} */ id) => ({ id, name: names.get(id) ?? id })) }));
+  };
   const requireKnowledge = () => {
     if (!knowledge) throw new HttpError(503, "source_state_unavailable", "Adding a page or a note needs the knowledge base's storage.");
     return knowledge;
@@ -176,7 +185,8 @@ export function createSourceRoutes({ store, service, openList = null, knowledge 
     catch { throw new HttpError(400, "source_path_invalid", "Invalid source path."); }
 
     if (parts.length === 0 && method === "GET") {
-      // `scope=shared`: the documents the account made available to every project, which belong to no one project.
+      // `scope=shared`: the documents the account's library holds, one row per file. `scope=all`: every document of the account, one
+      // row per file, with where it lives and where it applies (`SourceService.list`); with a `projectId`, the documents that apply to it.
       const scope = url.searchParams.get("scope");
       if (scope != null && scope !== "shared" && scope !== "all") throw new HttpError(400, "source_payload_invalid", "source scope is invalid.");
       const shared = scope === "shared";
@@ -186,6 +196,8 @@ export function createSourceRoutes({ store, service, openList = null, knowledge 
         if (!projectId) throw new HttpError(400, "project_required", "A project is required.");
         await store.requireProject(user, projectId);
       }
+      // `scope=all` is every document of the account once; with a project it is the documents that apply to that project.
+      if (all && projectId) await store.requireProject(user, projectId);
       // What the box matches inside the documents' own text, before the list is read: the list then includes a document the
       // box matched only there, counts and pages as it does for every other, and says where each match is. Any failure of
       // the index is no failure of the list.
@@ -193,7 +205,7 @@ export function createSourceRoutes({ store, service, openList = null, knowledge 
       const body = passages && query?.trim()
         ? await passages.find({ userId: user.id, projectId: shared || all ? null : projectId, shared, ...(all ? { all: true } : {}), q: query }).catch(() => null) : null;
       const page = await service.list(user.id, {
-        projectId: shared || all ? null : projectId,
+        projectId: shared ? null : all ? projectId || null : projectId,
         shared, ...(all ? { all: true } : {}),
         ...(body?.shas?.length ? { bodyShas: body.shas } : {}),
         status: url.searchParams.get("status"),
@@ -206,6 +218,7 @@ export function createSourceRoutes({ store, service, openList = null, knowledge 
         limit: Number(url.searchParams.get("limit") ?? 50),
         cursor: url.searchParams.get("cursor"),
       });
+      if (all && Array.isArray(page.items)) page.items = await namedHolders(user, page.items);
       if (!body?.bySha) return reply(page);
       /** @type {Record<string, any[]>} */
       const found = {};
@@ -279,8 +292,13 @@ export function createSourceRoutes({ store, service, openList = null, knowledge 
     }
     if (parts.length > 2) throw new HttpError(404, "not_found", "Source route not found.");
     // One document, as the reader page opens it: the row's own `shared` (whether the account library holds the bytes) is a
-    // column of the list query, so a single read asks for it here.
-    if (parts.length === 1 && method === "GET") return reply({ ...source, shared: await service.isShared(user.id, source) });
+    // column of the list query, so a single read asks for it here, with where the document applies (`holders`, `libraryProjects`,
+    // `appliesTo` as the list says them).
+    if (parts.length === 1 && method === "GET") {
+      const [applies] = await service.withApplicability(user.id, [source]);
+      const library = await service.libraryApplicability(user.id, source);
+      return reply({ ...(await namedHolders(user, [applies]))[0], shared: library === null ? null : library.record });
+    }
     if (parts.length === 1 && method === "PATCH") {
       return reply(await service.override(user.id, sourceId,
         await bodyOf(req, maxJsonBytes, ["expectedRevision", "docType", "depth", "reason"])));

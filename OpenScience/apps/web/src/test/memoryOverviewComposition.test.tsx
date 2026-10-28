@@ -36,7 +36,6 @@ vi.mock("@/lib/methodsClient", async () => ({ ...(await vi.importActual<typeof i
 vi.mock("@/lib/memoryMapClient", async () => ({ ...(await vi.importActual<typeof import("@/lib/memoryMapClient")>("@/lib/memoryMapClient")), fetchMemoryMap: reads.map }));
 vi.mock("@/lib/memoryClient", async () => ({
   ...(await vi.importActual<typeof import("@/lib/memoryClient")>("@/lib/memoryClient")), fetchReceivedCapsules: reads.received, fetchMyCapsule: reads.mine,
-  fetchProjectOverview: vi.fn().mockResolvedValue(null),
 }));
 vi.mock("@/lib/apiClient", async () => ({
   ...(await vi.importActual<typeof import("@/lib/apiClient")>("@/lib/apiClient")),
@@ -97,14 +96,14 @@ function draw() {
   );
 }
 const loaded = () => waitFor(() => {
-  expect(document.querySelectorAll("section[aria-label='记忆胶囊的五个数字'] > div > *")).toHaveLength(5);
-  expect(document.querySelectorAll("section[aria-label='记忆胶囊的五个数字'] [aria-hidden='true'].animate-pulse")).toHaveLength(0);
+  expect(document.querySelectorAll("section[aria-label='记忆胶囊的四个数字'] > div > *")).toHaveLength(4);
+  expect(document.querySelectorAll("section[aria-label='记忆胶囊的四个数字'] [aria-hidden='true'].animate-pulse")).toHaveLength(0);
   expect(document.querySelector("[data-headline], [data-empty]")).not.toBeNull();
 }, { timeout: 4_000 });
 
 /** What the walk's probe reads of the drawn page, rebuilt from the same markers (the probe does it in a browser; the judge is the same). */
 function probeRead(root: Element) {
-  const band = root.querySelector("section[aria-label='记忆胶囊的五个数字']");
+  const band = root.querySelector("section[aria-label='记忆胶囊的四个数字']");
   const tiles = [...(band?.querySelectorAll(":scope > div > *") ?? [])].map((element) => {
     const value = element.querySelector("[data-stat-value]");
     const number = value ? Number((value.textContent ?? "").replace(/[,\s]/g, "")) : Number.NaN;
@@ -115,7 +114,7 @@ function probeRead(root: Element) {
   const list = root.querySelector("ul[aria-label='最近变化'], ul[aria-label='需要看一眼的记忆']");
   return {
     headline: root.querySelector("[data-headline]")?.textContent?.replace(/\s+/g, " ").trim() ?? null,
-    tabs: [...root.querySelectorAll("[role='tablist'][aria-label='记忆'] [role='tab']")].map((tab) => tab.textContent ?? ""),
+    tabs: [...root.querySelectorAll("nav[aria-label='记忆'] a")].map((link) => link.textContent ?? ""),
     canvases: root.querySelectorAll("[data-chart]").length, tiles,
     rows: list ? list.querySelectorAll(":scope > li [data-overview-row]").length : 0,
     recipe: root.querySelectorAll("[data-empty]").length, recipeButtons: root.querySelectorAll("[data-empty] button").length,
@@ -138,23 +137,24 @@ function withGraph() {
   };
 }
 
-const ACCOUNTS: Array<[string, () => void, number]> = [
+/** `[name, arrange, tablists, toolbars]`: the relations card's own switch is a tab list and a toolbar of its block's. */
+const ACCOUNTS: Array<[string, () => void, number, number]> = [
   ["the owner's first day", () => {
     reads.map.mockResolvedValue(ownerFirstDay());
     reads.methods.mockResolvedValue([]);
     reads.received.mockResolvedValue([]);
-  }, 1],
+  }, 0, 1],
   ["an account that has lived a while", () => {
     reads.map.mockResolvedValue(livedIn());
     reads.methods.mockResolvedValue([learned("m1", "证据矩阵先行", "2026-09-24T02:00:00.000Z"), learned("m2", "先写方法学限制", "2026-10-02T02:00:00.000Z")]);
     reads.received.mockResolvedValue([receivedPack("a"), receivedPack("b", { enabled: true })]);
-  }, 1],
+  }, 0, 1],
   ["an account with enough to draw the relations", () => {
     reads.map.mockResolvedValue(withGraph());
     reads.methods.mockResolvedValue([learned("m1", "证据矩阵先行", "2026-09-24T02:00:00.000Z")]);
     reads.received.mockResolvedValue([receivedPack("a", { enabled: true })]);
-  // The band's tab list and the relations card's own switch: a block's own view switch is its block's.
-  }, 2],
+  // The page has no tab list (the left column's navigation is links); the relations card's own switch is its block's.
+  }, 1, 2],
 ];
 
 beforeEach(() => {
@@ -164,7 +164,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.clearAllMocks(); });
 
-describe.each(ACCOUNTS)("总览 of %s", (_name, arrange, tablists) => {
+describe.each(ACCOUNTS)("总览 of %s", (_name, arrange, tablists, toolbars) => {
   beforeEach(arrange);
 
   it("is a data page of the framework with its band, its one toolbar row and its sentence over its body, in order", async () => {
@@ -172,7 +172,7 @@ describe.each(ACCOUNTS)("总览 of %s", (_name, arrange, tablists) => {
     await loaded();
     expect(entry).toMatchObject({ template: "T4", budget: "data" });
     const facts = expectComposed(container, { tablists });
-    expect(facts.toolbars).toHaveLength(tablists);
+    expect(facts.toolbars).toHaveLength(toolbars);
     expect(facts.chrome).not.toBeNull();
   });
 

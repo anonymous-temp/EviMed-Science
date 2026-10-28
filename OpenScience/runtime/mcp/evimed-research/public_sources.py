@@ -40,7 +40,13 @@ MAX_ABSTRACT_CHARS = 4000
 # source was inspected beyond title-only metadata"). NCBI accepts up to 200 ids
 # per efetch GET; a request for more is split into batches of that size.
 PUBMED_EFETCH_BATCH = 200
-MAX_PUBMED_ABSTRACT_PMIDS = 200
+MAX_PUBMED_ABSTRACT_PMIDS = 60
+# How much abstract text one `pmids` answer carries inline. Every abstract is preserved on disk whatever this says; past the
+# budget an item names its preserved file instead of carrying the text. Two batches of 24 and 16 abstracts came back at about
+# 50,000 characters each on the live check of 2026-10-28: the kernel cut both answers and spilled them to a file, the cut text
+# was no longer JSON, and the control plane could not read which files had been preserved — 65 claims quoting real abstracts
+# were reported as quoting nothing. An answer that stays well under that size is never cut.
+PUBMED_INLINE_ABSTRACT_BUDGET = 12_000
 _PMID_PATTERN = re.compile(r"^\s*(?:PMID\s*:?\s*)?(\d{1,9})\s*$", re.I)
 _RXNORM_RESOLVE_LIMIT = 10
 # The most identifiers one `identifier_resolve` call links (the NCBI ID converter's own bound).
@@ -1119,7 +1125,17 @@ def _filter_bibliographic_title_result(result, required_concepts):
     return result
 
 
-def _evimed_evidence_records(query, limit):
+# What an EviMed index record may weigh in the merged default of literature_search: one record's abstract
+# is up to 12,000 characters and its AI summary 4,000 more, so a dozen of them were ~190K characters of context.
+COMPACT_ABSTRACT_CHARS = 800
+
+
+def _compact_text(value, limit=COMPACT_ABSTRACT_CHARS):
+    text = str(value or "")
+    return text if len(text) <= limit else text[:limit] + "\u2026"
+
+
+def _evimed_evidence_records(query, limit, compact=False):
     data, endpoint = _evimed_post("search/api/evidence", {"query": query[:512]})
     records = _list(data.get("paper"))
     items, sources = [], []
@@ -1137,7 +1153,10 @@ def _evimed_evidence_records(query, limit):
             "authors": record.get("authors") or record.get("author") or record.get("authorList"),
             "doi": record.get("doi"),
             "pmid": record.get("pmid"),
-            "summary": str(record.get("summary") or record.get("answer") or "")[:4000],
+            "summary": (
+                _compact_text(record.get("summary") or record.get("answer"))
+                if compact else str(record.get("summary") or record.get("answer") or "")[:4000]
+            ),
             "sourceType": "paper",
         }
         items.append({key: value for key, value in item.items() if value not in (None, "", [])})
@@ -1154,7 +1173,9 @@ def _evimed_evidence_records(query, limit):
     }
 
 
-def _evimed_literature_records(arguments):
+def _evimed_literature_records(arguments, compact=False):
+    """The EviMed index's literature records. `compact` is the merged default of literature_search: abstracts cut to
+    COMPACT_ABSTRACT_CHARS, no AI summary, and the record's own DOI/PMID when it carries them (what the merge matches on)."""
     limit = min(arguments.get("limit", 10), 100)
     body = {"query": arguments["query"][:512], "count": _evimed_candidate_limit(arguments, limit)}
     field_map = {
@@ -1191,15 +1212,19 @@ def _evimed_literature_records(arguments):
             "title": title,
             "url": record_url,
             "authors": record.get("authors"),
-            "abstract": str(record.get("abstract") or "")[:12000],
+            "abstract": _compact_text(record.get("abstract")) if compact else str(record.get("abstract") or "")[:12000],
             "journal": record.get("journal"),
             "year": record.get("year"),
             "impactFactor": record.get("impactFactor"),
             "studyType": record.get("studyType"),
             "language": record.get("language"),
-            "aiSummary": str(record.get("aiSummary") or "")[:4000],
+            "aiSummary": None if compact else str(record.get("aiSummary") or "")[:4000],
             "coreJournals": record.get("coreJournals"),
         }
+        if compact:
+            for key in ("doi", "pmid"):
+                if isinstance(record.get(key), (str, int)) and str(record.get(key)).strip():
+                    item[key] = str(record.get(key)).strip()
         items.append({key: value for key, value in item.items() if value not in (None, "", [])})
         sources.append(_source(item["id"], title, record_url, "evimed-literature"))
     return {
@@ -1619,36 +1644,14 @@ def _literature(arguments, left_out):
         paging_note = "offset pages PubMed's own result list; the EviMed index was not asked."
     else:
         paging_note = None
+    if "internal" in databases and "pubmed" in databases:
+        # The default, and the same as asking for both by name.
+        return _literature_merged(arguments, left_out, query, limit)
     if "internal" in databases:
-        try:
-            result = _evimed_literature_records(arguments)
-            if result.get("data", {}).get("items") or "pubmed" not in databases:
-                return result
-            evimed_warning = _evimed_empty_warning("literature", result)
-        except PublicSourceError as error:
-            legacy_error = None
-            if isinstance(error, SourceNotConfigured):
-                # Nobody configured it. The legacy endpoint is the same API
-                # behind the same key, so it would only be refused the same way:
-                # go straight to what is available and say what was left out.
-                left_out.append(error)
-                evimed_warning = "%s PubMed records are returned instead." % error
-            else:
-                try:
-                    legacy = _evimed_evidence_records(query, limit)
-                    if legacy.get("data", {}).get("items"):
-                        legacy["warnings"].insert(0, "The documented EviMed literature endpoint was unavailable: %s" % error)
-                        return legacy
-                except PublicSourceError as fallback_error:
-                    legacy_error = fallback_error
-                # Both rungs failed, and only the first one used to be reported. A
-                # run was told "EviMed was unavailable" and could not tell that the
-                # fallback had failed too, which is what decides whether the gap is
-                # worth retrying.
-                evimed_warning = "EviMed evidence search was unavailable: %s%s" % (
-                    error,
-                    (" The legacy endpoint also failed: %s" % legacy_error) if legacy_error is not None else "",
-                )
+        # The EviMed index alone, with its whole payload; PubMed only when the index cannot answer.
+        result, evimed_warning = _evimed_index_literature(arguments, left_out, query, limit)
+        if result is not None:
+            return result
         fallback = _pubmed(query, limit, arguments.get("dateFrom"), arguments.get("dateTo"))
         fallback = _bibliographic_metadata_only(fallback)
         fallback["warnings"].insert(0, evimed_warning)
@@ -1661,6 +1664,144 @@ def _literature(arguments, left_out):
     if paging_note:
         result["warnings"].append(paging_note)
     return result
+
+
+def _evimed_index_literature(arguments, left_out, query, limit, compact=False):
+    """Ask the EviMed index for literature: `(result, None)` when it answered, else `(None, why)`.
+
+    The documented endpoint first, then the legacy evidence endpoint when it failed for a reason other than
+    nobody having configured it. A documented answer with no records still comes back as `(result, why)`,
+    so a caller that wants the empty answer itself (the index alone) and one that goes on to PubMed (the
+    merged default) both have it.
+    """
+    try:
+        result = _evimed_literature_records(arguments, compact=compact)
+        return result, (None if result.get("data", {}).get("items") else _evimed_empty_warning("literature", result))
+    except PublicSourceError as error:
+        legacy_error = None
+        if isinstance(error, SourceNotConfigured):
+            # Nobody configured it. The legacy endpoint is the same API
+            # behind the same key, so it would only be refused the same way:
+            # go straight to what is available and say what was left out.
+            left_out.append(error)
+            return None, "%s PubMed records are returned instead." % error
+        try:
+            legacy = _evimed_evidence_records(query, limit, compact=compact)
+            if legacy.get("data", {}).get("items"):
+                legacy["warnings"].insert(0, "The documented EviMed literature endpoint was unavailable: %s" % error)
+                return legacy, None
+        except PublicSourceError as fallback_error:
+            legacy_error = fallback_error
+        # Both rungs failed, and only the first one used to be reported. A
+        # run was told "EviMed was unavailable" and could not tell that the
+        # fallback had failed too, which is what decides whether the gap is
+        # worth retrying.
+        return None, "EviMed evidence search was unavailable: %s%s" % (
+            error,
+            (" The legacy endpoint also failed: %s" % legacy_error) if legacy_error is not None else "",
+        )
+
+
+def _title_key(title):
+    """A title as the merge compares it: case, punctuation and spacing do not tell two records apart."""
+    return re.sub(r"[\W_]+", "", str(title or "").casefold())
+
+
+_PUBMED_URL_PMID_RE = re.compile(r"pubmed\.ncbi\.nlm\.nih\.gov/(\d{1,9})(?:[/?#]|$)", re.IGNORECASE)
+_DOI_URL_PREFIX_RE = re.compile(r"^(?:https?://(?:dx\.)?doi\.org/|doi:\s*)", re.IGNORECASE)
+
+
+def _record_identity(item):
+    """`(doi, pmid, title key)` of a literature item, each empty when it has none.
+
+    The EviMed index carries a PubMed link and rarely a DOI, so the PMID is read from the link as well.
+    """
+    item = _dict(item)
+    doi = _DOI_URL_PREFIX_RE.sub("", str(item.get("doi") or "").strip()).casefold()
+    pmid = str(item.get("pmid") or "").strip()
+    if not pmid:
+        match = _PUBMED_URL_PMID_RE.search(str(item.get("url") or ""))
+        pmid = match.group(1) if match else ""
+    return doi, pmid, _title_key(item.get("title"))
+
+
+def _same_record(left, right):
+    """The same publication: DOI when both have one, else PMID when both have one, else the normalised title."""
+    for index in (0, 1):
+        if left[index] and right[index]:
+            return left[index] == right[index]
+    return bool(left[2]) and left[2] == right[2]
+
+
+def _literature_merged(arguments, left_out, query, limit):
+    """The default of literature_search: PubMed's Best Match list, then what only the EviMed index adds.
+
+    Measured on a 34-minute clinical review (2026-10-28): the old default asked PubMed only when the EviMed
+    index returned nothing, the index's loosely ranked records were what the run got, and each of them
+    carried up to 16,000 characters of abstract and AI summary. PubMed leads now, the index's records follow
+    without the ones PubMed already returned, and an index record is compact. Either side failing returns
+    the other with the reason; both failing is PubMed's error.
+    """
+    pubmed, pubmed_error = None, None
+    try:
+        pubmed = _pubmed(query, limit, arguments.get("dateFrom"), arguments.get("dateTo"))
+    except PublicSourceError as error:
+        pubmed_error = error
+    index, index_note = _evimed_index_literature(arguments, left_out, query, limit, compact=True)
+    index_items = _list(_dict(_dict(index).get("data")).get("items")) if index is not None else []
+    if pubmed_error is not None:
+        if not index_items:
+            raise pubmed_error
+        if isinstance(pubmed_error, SourceNotConfigured):
+            left_out.append(pubmed_error)
+        index["warnings"] = [
+            "PubMed was unavailable: %s Only the EviMed index's records are returned." % pubmed_error,
+            _COMPACT_INDEX_WARNING,
+            *_list(index.get("warnings")),
+        ]
+        return index
+    result = _filter_bibliographic_title_result(
+        _bibliographic_metadata_only(pubmed), arguments.get("requiredTitleConcepts")
+    )
+    if not index_items:
+        if index_note:
+            result["warnings"].insert(0, index_note)
+        return result
+    pubmed_items = _list(_dict(result.get("data")).get("items"))
+    held = [_record_identity(item) for item in pubmed_items]
+    kept, dropped = [], 0
+    for item in index_items:
+        identity = _record_identity(item)
+        if any(_same_record(identity, other) for other in held):
+            dropped += 1
+        else:
+            kept.append(item)
+    kept_ids = {str(item.get("id")) for item in kept if isinstance(item, dict)}
+    result["data"] = {**_dict(result.get("data")), "items": pubmed_items + kept}
+    if index["data"].get("excludedByRequiredConcepts"):
+        result["data"]["excludedByRequiredConcepts"] = index["data"]["excludedByRequiredConcepts"]
+    result["sources"] = _list(result.get("sources")) + [
+        source for source in _list(index.get("sources")) if str(_dict(source).get("id")) in kept_ids
+    ]
+    result["summary"] = "Retrieved %d PubMed records and %d more from the EviMed index." % (len(pubmed_items), len(kept))
+    result["warnings"] = [
+        "%d records from PubMed (Best Match, listed first) and %d from the EviMed index; %d index records already returned by PubMed were dropped as duplicates."
+        % (len(pubmed_items), len(kept), dropped),
+        _COMPACT_INDEX_WARNING,
+        *result["warnings"],
+        *(warning_text for warning_text in _list(index.get("warnings")) if warning_text not in result["warnings"]),
+    ]
+    result["next_actions"] = result["next_actions"] + [
+        action for action in _list(index.get("next_actions")) if action not in result["next_actions"]
+    ]
+    return result
+
+
+_COMPACT_INDEX_WARNING = (
+    "EviMed index records here are compact: the abstract is cut to %d characters and the AI summary is left out. "
+    "Read a record whole from its url, or fetch the abstracts of the PubMed records you keep with literature_search pmids=[...] "
+    "(preserved and quotable); databases: [\"internal\"] returns the index's full payload." % COMPACT_ABSTRACT_CHARS
+)
 
 
 def guideline(arguments):
@@ -2550,7 +2691,8 @@ def pubmed_abstracts(pmids):
     base = _base("EVIMED_PUBMED_BASE_URL", "https://eutils.ncbi.nlm.nih.gov/entrez/eutils")
     records = _pubmed_efetch_records(base, requested)
     items, sources, artifact_sha256s = [], [], {}
-    missing, without_abstract, unpreserved = [], [], []
+    missing, without_abstract, unpreserved, not_inline = [], [], [], []
+    inline_budget = PUBMED_INLINE_ABSTRACT_BUDGET
     for pmid in requested:
         record = records.get(pmid)
         if record is None:
@@ -2573,9 +2715,18 @@ def pubmed_abstracts(pmids):
         }
         source = _source("PMID:%s" % pmid, record["title"], record_url, "pubmed")
         if abstract:
-            item["abstract"] = abstract[:MAX_ABSTRACT_CHARS]
-            if len(abstract) > MAX_ABSTRACT_CHARS:
-                item["abstractTruncated"] = True
+            inline = abstract[:MAX_ABSTRACT_CHARS]
+            if inline_budget >= len(inline):
+                inline_budget -= len(inline)
+                item["abstract"] = inline
+                if len(abstract) > MAX_ABSTRACT_CHARS:
+                    item["abstractTruncated"] = True
+            else:
+                # Past the budget the item stays small: its abstract is in its preserved file (read it there), and the MeSH
+                # headings, the largest field after the abstract, are left to that file too.
+                item["abstractInline"] = False
+                item.pop("meshHeadings", None)
+                not_inline.append(pmid)
             captured = _preserve_pubmed_abstract(record)
             if captured:
                 item["artifactPath"] = captured["path"]
@@ -2595,6 +2746,10 @@ def pubmed_abstracts(pmids):
         warnings.append("PubMed has no abstract for PMID %s; screen those by full text or leave them out." % ", ".join(without_abstract))
     if unpreserved:
         warnings.append("The abstract of PMID %s could not be preserved, so it cannot carry a claim." % ", ".join(unpreserved))
+    notes = []
+    if not_inline:
+        notes.append("%d abstract(s) are not carried in this answer, to keep it whole: PMID %s. Each is preserved at its artifactPath — read it there (or grep across .evimed-sources/pubmed/) and quote from that file."
+                     % (len(not_inline), ", ".join(not_inline)))
     result = {
         "status": "warning" if warnings else "success",
         "summary": "Fetched %d PubMed abstract(s) for %d requested id(s); %d preserved as quotable sources."
@@ -2605,7 +2760,8 @@ def pubmed_abstracts(pmids):
     }
     if warnings:
         result["warnings"] = warnings
-        result["next_actions"] = ["Quote an abstract only through its artifactPath, and read the full text before claiming what the abstract does not state."]
+    if warnings or notes:
+        result["next_actions"] = notes + ["Quote an abstract only through its artifactPath, and read the full text before claiming what the abstract does not state."]
     return result
 
 

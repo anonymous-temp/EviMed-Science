@@ -148,32 +148,6 @@ export function ensureMyCapsule() {
  * view are the map's own document.
  */
 
-/**
- * One project, read from above (the 项目 tab's top): the card its memories were written under, what its conversations did, and the
- * files they delivered by month. Every list is empty when the control plane could not read the run ledger, and the card stands.
- */
-export interface ProjectOverview {
-  projectId: string;
-  /** This project's own switch (「本项目不使用记忆」). */
-  paused: boolean;
-  /**
-   * The slots the project holds, in the order the card reads (`PROJECT_CARD_SLOTS`, then the extras of other kinds of work); a
-   * slot nobody stated is absent. `label` is the researcher's word for the slot, or null for an extra that has none (its text
-   * is then the sentence the memory states).
-   */
-  card: Array<{ slot: string; label?: string | null; recordId: string; text: string; updatedAt: string | null }>;
-  /** The capabilities that answered the researcher's own conversations in it, the most used first, by their product name. */
-  capabilities: Array<{ id: string; title: string; count: number }>;
-  /** Delivered files, newest month first (`month` is YYYY-MM in the researcher's zone). */
-  works: Array<{ month: string; items: Array<{ runId: string; title: string; path: string; name: string; at: string }> }>;
-  timeZone: string;
-}
-
-export function fetchProjectOverview(projectId: string, timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone) {
-  const query = new URLSearchParams(timeZone ? { timeZone } : {});
-  return productRequest<ProjectOverview>(`/memory/projects/${encodeURIComponent(projectId)}/overview?${query.toString()}`);
-}
-
 /** What a memory rests on, as recorded: a knowledge-base document (`src_…`), a published work, an evidence card. */
 export interface MemorySourceLink {
   type: "knowledge_source" | "doi" | "evidence_card" | "frontier_item" | string;

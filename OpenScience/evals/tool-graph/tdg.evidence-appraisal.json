@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "evidence-appraisal",
-  "version": "sha256:46248a8a438b1e1e2bd43c1027ea5b3e923b3b7e348cc83a9b8ac707a897aa49",
+  "version": "sha256:b278b794511e2136e92b6c15e06712bd0340d66c53393c6a0f9711c822b36c6f",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 32,
@@ -1125,7 +1125,7 @@
     {
       "name": "mcp__evimed__literature_search",
       "source": "mcp",
-      "description": "Search the biomedical and scientific literature (PubMed and the other configured sources) through the EviMed evidence adapter. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Supply `pmids` instead to fetch the abstracts, publication types and MeSH headings of PubMed records you have screened in (up to 200); each abstract is preserved and quotable. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
+      "description": "Search the biomedical and scientific literature (PubMed and the other configured sources) through the EviMed evidence adapter. By default the answer leads with PubMed's Best Match records and adds the EviMed index's records that PubMed did not return (up to `limit` from each; an index record is compact — abstract cut to 800 characters, no AI summary); `databases` [\"pubmed\"] asks PubMed alone and [\"internal\"] asks the EviMed index alone with its full abstracts and AI summaries. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Supply `pmids` instead to fetch the abstracts, publication types and MeSH headings of PubMed records you have screened in (up to 60); each abstract is preserved and quotable, and past about 12,000 characters an item names its preserved file instead of carrying the text. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1137,7 +1137,7 @@
           "pmids": {
             "type": "array",
             "minItems": 1,
-            "maxItems": 200,
+            "maxItems": 60,
             "items": {
               "type": "string",
               "pattern": "^\\s*(?:PMID\\s*:?\\s*)?\\d{1,9}\\s*$"
@@ -1263,7 +1263,8 @@
                 "pubmed",
                 "crossref"
               ]
-            }
+            },
+            "description": "Default (omit it): PubMed first, then the EviMed index's extra records, compact. [\"pubmed\"]: PubMed only. [\"internal\"]: the EviMed index only, full abstracts and AI summaries. [\"crossref\"]: Crossref."
           }
         },
         "additionalProperties": false
@@ -1298,7 +1299,7 @@
     {
       "name": "mcp__evimed__open_access_full_text",
       "source": "mcp",
-      "description": "Resolve a PMCID, PMID or DOI through Europe PMC and preserve the open-access full text (publisher JATS XML, else the open-access PDF) with its tables as cells, its PMC version and its license. data.contentLevel says what the text is; an abstract is never full text. supplements=true also fetches the article's supplementary files, checks each against the md5 the article declares and preserves them (up to ~150 s; a cut-short archive keeps the files that arrived whole). intake=true hands the text and supplements to the project's knowledge base. Refusals, timeouts and no-supplement answers are named in data.outcome and data.supplementaryFiles.",
+      "description": "Resolve a PMCID, PMID or DOI through Europe PMC and preserve the open-access full text (publisher JATS XML, else the open-access PDF) with its tables as cells, its PMC version and its license. When Europe PMC is unavailable (an error status or no answer in time) NCBI PMC serves the same JATS instead and the result says so (data.route ncbi-pmc-xml, data.fallbackFrom); a refusal such as not open access is never retried elsewhere. data.contentLevel says what the text is; an abstract is never full text. supplements=true also fetches the article's supplementary files, checks each against the md5 the article declares and preserves them (up to ~150 s; a cut-short archive keeps the files that arrived whole). intake=true hands the text and supplements to the project's knowledge base. Refusals, timeouts and no-supplement answers are named in data.outcome and data.supplementaryFiles.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1414,7 +1415,7 @@
     {
       "name": "mcp__evimed__web_read",
       "source": "mcp",
-      "description": "Read one public web page or online document (HTML, PDF, office file) through the platform gateway and preserve it in the workspace as a snapshot with a sha256 receipt. The page itself can be the primary source: an official site, documentation, a release note, a policy text. Long text comes in pages: pass page=N for the next one (nextPage says whether there is one). Pages from regulators, guideline bodies and trial registries are marked official.",
+      "description": "Read one public web page or online document (HTML, PDF, office file) through the platform gateway and preserve it in the workspace as a snapshot with a sha256 receipt. The page itself can be the primary source: an official site, documentation, a release note, a policy text. A long page returns its opening and an outline of the saved file (read sections of it by line range); page=N pages through the text. Pages from regulators, guideline bodies and trial registries are marked official.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1426,7 +1427,8 @@
           "page": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 1000
+            "maximum": 1000,
+            "description": "Default 1. A long page's page 1 is its opening and an outline; page N returns the N-th 12,000-character slice of the text."
           }
         },
         "additionalProperties": false,

@@ -1,7 +1,7 @@
 import { workspaceLayout } from "@evimed/domain";
 import { sourceReadable } from "./sourceService.mjs";
 
-/** Resolve only the selected documents, including shared ones, under the current account and project. */
+/** Resolve only the selected documents, including those the library puts in this project, under the current account and project. */
 export async function sourceConversationContext(sourceService, project, session, includeUnrestricted = false, { includeLibrary = true, acceptSource = null, current = null, sourcePath = null } = {}) {
   if (!session?.sourceScope) return includeUnrestricted
     ? "The researcher currently applies no document selection to this conversation. The knowledge base of this project is available under the usual access rules. This current scope replaces any document selection stated in earlier turns."
@@ -13,7 +13,7 @@ export async function sourceConversationContext(sourceService, project, session,
       throw error;
     });
     if (!source || source.deletedAt || (source.payload?.status && !sourceReadable(source.payload))
-      || (source.projectId !== project.id && (!includeLibrary || !(await sourceService.isShared(project.userId, source))))) continue;
+      || (source.projectId !== project.id && (!includeLibrary || !(await sourceService.appliesTo(project.userId, source, project.id))))) continue;
     if (acceptSource && await acceptSource(source) !== true) continue;
     const artifact = sourcePath ? sourcePath(source) : source.payload?.outputs?.artifactPath;
     const path = source.projectId === project.id

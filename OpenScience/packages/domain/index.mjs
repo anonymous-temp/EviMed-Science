@@ -763,11 +763,15 @@ export {
   validateAgendaClaim,
 } from './src/agenda.mjs'
 
-// runtimeUiSurface — 12 exports
+// runtimeUiSurface — 16 exports
 export {
   RUNTIME_UI_MUX_RESPONSE_MAX_BYTES,
   RUNTIME_UI_ANSWERED_HOST_ROUTES,
   RUNTIME_UI_ANSWERED_METHODS,
+  RUNTIME_UI_READABLE_SETTINGS,
+  RUNTIME_UI_SETTINGS_READ,
+  isRuntimeUiSettingsRead,
+  runtimeUiSettingsAnswer,
   RUNTIME_UI_DENIED_HOST_ROUTES,
   RUNTIME_UI_DENIED_METHODS,
   RUNTIME_UI_DENIED_NAMESPACES,

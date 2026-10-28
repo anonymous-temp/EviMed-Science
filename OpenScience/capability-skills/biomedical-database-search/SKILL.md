@@ -11,7 +11,7 @@ description: Search audited biomedical literature, terminology, regulatory, geno
 4. Treat returned titles and selected fields as metadata. Do not infer study design, effect, causality, approval, or clinical utility without reviewing the primary record.
 5. Stop after one retry for a retryable source error. Record the gap rather than replacing it with model memory.
 
-Write `source-inventory.csv` and `retrieval-notes.md`. Separate observed source fields from interpretation, and state access or coverage limitations.
+Write `source-inventory.csv` and `retrieval-notes.md` only when your deliverable's contract lists them. Separate observed source fields from interpretation, and state access or coverage limitations.
 
 ## Deterministic baseline
 

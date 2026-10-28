@@ -251,7 +251,22 @@ export function listSourceUnderstandingHistory(id: string, cursor?: string | nul
  * while the understanding still runs, so the page never says what the
  * pipeline is doing behind that.
  */
-export type SourceRecord = ProductRecord<SourcePayload> & { projectId: string; personal?: boolean; readable?: boolean; display: SourceDisplay };
+export type SourceRecord = ProductRecord<SourcePayload> & {
+  projectId: string; personal?: boolean; readable?: boolean; display: SourceDisplay;
+} & SourceApplicability;
+/**
+ * Where a document takes effect, as the list of the whole library (`scope=all`, one row per file) and a single read say it. `holders`
+ * are the ordinary projects that hold the file — fixed, never taken away; `libraryProjects` is what the document's own choice says
+ * (`"all"`, a list of project ids, or null for a document nobody has chosen for: it is used only where it is held); `appliesTo` is what
+ * that makes of it. `viaLibrary` is set on a list asked for one project's documents, for a file that project does not hold itself.
+ * A row from another list (a project's own, a page's) carries none of them.
+ */
+export interface SourceApplicability {
+  holders?: Array<{ id: string; name: string }>;
+  libraryProjects?: "all" | string[] | null;
+  appliesTo?: "all" | string[];
+  viaLibrary?: boolean;
+}
 /**
  * Where the list's search matched inside a document's own text (N-16): the page it is on (null where the document has no
  * pages), one line of text around the match, and its offsets in the document's parsed text.
@@ -281,8 +296,8 @@ export interface SourceUse {
   firstUsedAt: string;
   lastUsedAt: string;
 }
-/** Whose documents a list is of: one project's, or the account's shared documents (every project reads them). */
-export type SourceScope = { kind: "project"; projectId: string } | { kind: "shared" } | { kind: "all" };
+/** Whose documents a list is of: one project's, or every document of the account, once each (`all`, which says where each applies). */
+export type SourceScope = { kind: "project"; projectId: string } | { kind: "all" };
 /** What the page filters by, in the words a row says (`SOURCE_STATES`). */
 export type SourceListState = "reading" | "ready" | "attention";
 export interface OpenListEntry {
@@ -469,14 +484,13 @@ export function importOpenListSource(projectId: string, path: string) {
 }
 
 /**
- * 「所有项目可用」: a document made available to every project of the account (the personal library, `/api/library`).
- * Which documents are is the list's own answer (`display.shared`, and the shared scope), so the page reads no second list.
+ * 「生效项目」: where a document takes effect — `"all"` (every project, those made later too) or a list of the account's ordinary
+ * projects (`PUT /api/library/:sourceId`). The projects that hold the file always keep it, whatever is said here. The answer is
+ * the document's entry, whose `libraryProjects` and `appliesTo` are what the list now says. No revision is sent: the choice is
+ * the person's latest word, and a second window's earlier choice is replaced by it.
  */
-export function addToLibrary(sourceId: string) {
-  return productRequest<{ sourceId: string; status: string }>("/library", "POST", { sourceId });
-}
-export function removeFromLibrary(sourceId: string) {
-  return productRequest<{ sourceId: string; removed: true }>(`/library/${encodeURIComponent(sourceId)}`, "DELETE");
+export function setSourceProjects(sourceId: string, projects: "all" | string[]) {
+  return productRequest<{ libraryProjects: "all" | string[]; appliesTo: "all" | string[] }>(`/library/${encodeURIComponent(sourceId)}`, "PUT", { projects });
 }
 
 /* ------------------------------------------------------- knowledge pages -- */
@@ -651,9 +665,6 @@ export function requestKnowledgeCompile(projectId: string) {
   return productRequest<KnowledgeStatus>("/knowledge-pages/compile", "POST", { projectId });
 }
 
-export function copySourceToProject(source: SourceRecord, projectId: string) {
-  return productRequest<{ source: SourceRecord; duplicate: boolean }>(`/library/${encodeURIComponent(source.id)}/projects`, "POST", { projectId, expectedRevision: source.revision });
-}
 export function getOpenListStatus() {
  return productRequest<{ state: "ready" | "unconfigured" | "storage_missing" | "permission_denied" | "unavailable" }>("/sources/openlist/status");
 }

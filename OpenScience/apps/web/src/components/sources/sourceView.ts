@@ -59,24 +59,17 @@ export function originalPathOf(source: SourceRecord): string | null {
   return source.payload.paths[0] ?? null;
 }
 
-/**
- * What the person needs to know about where a new material is kept (the 「保存位置」 hint): personal materials are used in their own
- * projects, a copy in a project is a version of its own, and a shared 循证 GEO project does not read personal materials, so
- * what it needs is saved into it.
- */
-export function destinationHint(personal: boolean): string {
-  return personal ? "个人资料可在自己的项目中使用；添加到项目会保存独立版本。多人共享的循证 GEO 项目不读个人资料，需要时请直接保存到那个项目。"
-    : "先保存到所选项目；可再设为跨项目可用。";
-}
+/** The place a new material goes unless the person picks a project: the account's own storage, which every project reads. */
+export const PERSONAL_DESTINATION = "我的资料（所有项目可用）";
 
 /**
- * Whether 「添加到项目」 can copy this document: the copy is made from the original the platform kept, so a compiled page, a
- * cloud-drive document that was only read (no original captured) and a document whose original was removed have nothing to copy.
- * The same rule the control plane applies, so the action is offered only where it can work.
+ * What the person needs to know about where a new material is kept (the 「保存位置」 hint): the account's own materials are read by every
+ * project (and each document's 「生效项目」 narrows that), one saved into a project starts out there alone, and a shared 循证 GEO project
+ * does not read the account's materials, so what it needs is saved into it.
  */
-export function canCopyToProject(source: SourceRecord): boolean {
-  const original = source.payload.paths[0];
-  return source.payload.status !== "missing" && typeof original === "string" && original.startsWith("knowledge-base/") && !/^knowledge-base\/(?:wiki|kg)\//.test(original);
+export function destinationHint(personal: boolean): string {
+  return personal ? "放进我的资料，所有项目都能用；也可以改选一个项目，只放在那个项目里。多人共享的循证 GEO 项目不读我的资料，需要时请直接保存到那个项目。"
+    : "先保存到所选项目；之后可以在资料的“生效项目”里，让其他项目也用它。";
 }
 
 /** A note the researcher wrote here: its original is its editor, and saving it makes the next version. */
@@ -107,9 +100,10 @@ export function conversationDraft(source: SourceRecord): string {
 
 /**
  * The line under a row's title: what it is, how long, where it came from. 「指南 · 18 页 · 上传」,
- * 「网页 · nmpa.gov.cn · 链接」, 「数据表 · 对话产出 · 所有项目可用」. Pages when the parse found them, else the size.
+ * 「网页 · nmpa.gov.cn · 链接」, 「数据表 · 对话产出」. Pages when the parse found them, else the size. Where the document takes
+ * effect is its own control after this line (`AppliesTo`), not a word in it.
  */
-export function metaLine(source: SourceRecord, { showShared = true }: { showShared?: boolean } = {}): string {
+export function metaLine(source: SourceRecord): string {
   const { display } = source;
   const length = display.pages ? `${display.pages} 页` : display.site ? "" : humanSize(display.size);
   return [
@@ -117,14 +111,12 @@ export function metaLine(source: SourceRecord, { showShared = true }: { showShar
     display.site ?? "",
     length,
     (ORIGIN_LABEL[display.origin] ?? "上传") === display.typeShort ? "" : (ORIGIN_LABEL[display.origin] ?? "上传"),
-    showShared && display.shared ? "所有项目可用" : "",
   ].filter(Boolean).join(" · ");
 }
 
 /**
  * The grey line after a document page's title: what it is, how big, how long, where it came from and the day it
- * arrived — 「指南 · 3.1 MB · 38 页 · 上传 · 10月5日」. A saved page names its site; a document the account made
- * available to every project says so.
+ * arrived — 「指南 · 3.1 MB · 38 页 · 上传 · 10月5日」. A saved page names its site.
  */
 export function readerMeta(source: SourceRecord): string {
   const { display } = source;
@@ -134,7 +126,6 @@ export function readerMeta(source: SourceRecord): string {
     humanSize(display.size),
     display.pages ? `${display.pages} 页` : "",
     (ORIGIN_LABEL[display.origin] ?? "上传") === display.typeShort ? "" : (ORIGIN_LABEL[display.origin] ?? "上传"),
-    display.shared ? "所有项目可用" : "",
     formatDay(source.createdAt),
   ].filter(Boolean).join(" · ");
 }

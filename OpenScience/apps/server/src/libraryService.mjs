@@ -3,6 +3,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { sourceFileFormat, sourceOriginOf } from "@evimed/domain";
 import { DOCUMENT_MEMORY_LAYER, SOURCE_PUBLICATION_RECORD_TYPE, withdrawDerivedMemory } from "./derivedMemory.mjs";
+import { LIBRARY_PROJECT_ID } from "./internalProjects.mjs";
+import { LIBRARY_ALL_PROJECTS, effectiveProjects, libraryRecordCovers, libraryRecordProjects, libraryViewsRoot, ordinaryHolderProjects, parseLibraryProjects } from "./libraryScope.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
 import { HttpError, assertNoSymlinkPath, readJson, safeId, sendJson, writeFileAtomicNoFollow } from "./security.mjs";
 import { sourceIndexDocument, sourceParserRevision, sourceReadable } from "./sourceService.mjs";
@@ -21,11 +23,15 @@ import { sourceIndexDocument, sourceParserRevision, sourceReadable } from "./sou
  *   of its directory) and every project that holds the document (`projects`).
  * - The library keeps its own copy: `<dataDir>/users/<user>/library/<sourceId>/index.md`,
  *   the same Markdown a project's knowledge base holds, written from the frozen
- *   capture. The runtime mounts the directory read-only at /workspace/library.
- *   The copy is why deleting a project does not empty the library: the entry
- *   turns `detached`, its copy stays readable, and the index documents it is
- *   searched through are held for it (`heldIndexKeys`). What goes with the
- *   project is only what lived in the project — the understanding a capsule
+ *   capture. It is the master: what a runtime mounts read-only at /workspace/library
+ *   is its project's view of it (below). The copy is why an entry whose source is
+ *   gone stays readable: it turns `detached`, and the index documents it is
+ *   searched through are held for it (`heldIndexKeys`). Since 2026-10-28 that
+ *   no longer follows from deleting documents — an entry goes with the last
+ *   document that holds its bytes, a deleted project's or a deleted source's
+ *   (`SourceService.remove`, `libraryProjectDeleted`) — and is what an entry written
+ *   earlier, or a source that went another way, can still be. What goes with a
+ *   project is what lived in the project — the understanding a capsule
  *   publication reads.
  * - The records are account-level `preferences` product documents
  *   (`recordType: "library-item"`): every change is a revision, a removal can
@@ -41,6 +47,13 @@ import { sourceIndexDocument, sourceParserRevision, sourceReadable } from "./sou
  *   the document's project: it is recalled there and nowhere else, and the
  *   capsule page does not list it (2026-09-24).
  *   Every entry is a capsule revision the capsule's own undo takes back.
+ * - Which projects an entry applies to is the record's `projects` (2026-10-28): `"all"` — also what a record written before
+ *   the field existed means — or a list of ordinary projects of the account (`libraryScope.mjs` holds the rule and the
+ *   one check every scope asks). The account's own `library/` directory is the master the copies are made from and is
+ *   never mounted: each project that has a runtime gets `library-views/<projectId>/<sourceId>/index.md`, real copies of
+ *   exactly the entries that apply to it, and that directory is what /workspace/library is. A change to a record,
+ *   a deleted record, a replaced document and a deleted project all bring the views to the new truth before the call answers
+ *   (a narrowing removes first and writes after), and the convergence pass repairs whatever a failure left behind.
  */
 
 const RECORD_KIND = "preferences";
@@ -80,15 +93,21 @@ export const DOCUMENT_MEMORY_MAX_ENTRIES = 12;
  */
 export const PUBLICATION_RULE = 2;
 
+/** @param {"all" | string[]} left @param {"all" | string[]} right */
+function sameProjects(left, right) {
+  if (left === LIBRARY_ALL_PROJECTS || right === LIBRARY_ALL_PROJECTS) return left === right;
+  return left.length === right.length && left.every((id) => right.includes(id));
+}
+
 /** @param {string} value */
 function digest(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
 /**
- * The host directory of an account's personal library. The runtime mounts it
- * read-only at /workspace/library — `runtimeManager`'s `personalLibraryDir`
- * names the same directory, and the two must agree.
+ * The host directory of an account's personal library: the master the projects' directories are made from. It is never
+ * mounted into a runtime — what a runtime mounts at /workspace/library is its own project's directory
+ * (`projectLibraryViewDir`, `libraryScope.mjs`).
  * @param {{ dataDir: string }} config @param {string} userId
  */
 export function userLibraryDir(config, userId) {
@@ -163,7 +182,11 @@ function entryStatus(record, source) {
 
 /** The browser's view of one entry (`GET /api/library`): `projects` are the
  * projects holding the document and `sourceIds` their sources, so a project's
- * source card can tell whether its document is in the library.
+ * source card can tell whether its document is in the library. `libraryProjects`
+ * is what the record says (`"all"` or a list of project ids) and `appliesTo` what
+ * that makes of the document: `"all"`, or every project it is read in — the ones
+ * holding it and the ones the record names. `revision` is what a change is
+ * sent back against (`expectedRevision`).
  * @param {any} record @param {any[]} candidates the live sources holding the document */
 function entryView(record, candidates) {
   const payload = record.payload;
@@ -171,6 +194,9 @@ function entryView(record, candidates) {
   const described = source ? describeLibrarySource(source) : payload.snapshot ?? {};
   return {
     sourceId: payload.sourceId,
+    revision: record.revision,
+    libraryProjects: libraryRecordProjects(payload),
+    appliesTo: effectiveProjects({ holders: ordinaryHolderProjects(candidates.map((candidate) => candidate.projectId)), record: payload }),
     title: String(described.title ?? payload.sourceId),
     ...(described.authors?.length ? { authors: described.authors } : {}),
     ...(described.doi ? { doi: described.doi, doiStatus: described.doiStatus } : {}),
@@ -257,9 +283,13 @@ export class LibraryService {
 
   /**
    * @param {{ documents: any, sources: any, capsules?: any, libraryDir: (userId: string) => string,
+   *   viewsDir?: ((userId: string) => string) | null, projectGuard?: ((userId: string, projectId: string) => Promise<unknown>) | null,
    *   maxItems?: number, now?: () => Date, report?: (code: string) => void }} options
+   *   `viewsDir`: where the account's per-project views are kept (`libraryViewsRoot`); without it no view is written and none
+   *   is removed (a deployment that never mounts one). `projectGuard`: throws unless the project may be named in a record's list
+   *   (`assertOrdinaryProject`); without it a list is refused rather than taken on trust.
    */
-  constructor({ documents, sources, capsules = null, libraryDir, maxItems = 1000, now = () => new Date(), report = () => {} }) {
+  constructor({ documents, sources, capsules = null, libraryDir, viewsDir = null, projectGuard = null, maxItems = 1000, now = () => new Date(), report = () => {} }) {
     if (!documents?.database || !sources || typeof libraryDir !== "function") {
       throw new TypeError("The personal library needs the product database, the source service and its directory rule.");
     }
@@ -269,11 +299,13 @@ export class LibraryService {
     this.sources = sources;
     this.capsules = capsules;
     this.libraryDir = libraryDir;
+    this.viewsDir = viewsDir;
+    this.projectGuard = projectGuard;
     this.maxItems = maxItems;
     this.now = now;
     this.report = report;
     this.lastError = null;
-    this.counters = { added: 0, removed: 0, copiesWritten: 0, copiesRemoved: 0, copyFailures: 0, published: 0 };
+    this.counters = { added: 0, removed: 0, copiesWritten: 0, copiesRemoved: 0, copyFailures: 0, published: 0, viewsWritten: 0, viewsRemoved: 0, viewFailures: 0 };
   }
 
   /** Every entry of an account, newest first. @param {string} userId */
@@ -285,13 +317,15 @@ export class LibraryService {
     return { items, maxItems: this.maxItems };
   }
 
-  /** Read only a current authorized library copy; leftover files do not grant membership.
-   * @param {string} userId @param {string} sourceId @returns {Promise<string | null>} */
-  async readCopyText(userId, sourceId) {
+  /** Read only a current authorized library copy; leftover files do not grant membership. With a `projectId` the copy is
+   *  read as that project would: a document the record does not put in it answers null, as one that is not there.
+   * @param {string} userId @param {string} sourceId @param {{ projectId?: string | null }} [options] @returns {Promise<string | null>} */
+  async readCopyText(userId, sourceId, { projectId = null } = {}) {
     const work = async () => {
       let record;
       try { record = await this.#requireEntry(userId, sourceId); }
       catch (error) { if (/** @type {any} */ (error)?.status === 404) return null; throw error; }
+      if (projectId !== null && !libraryRecordCovers(record.payload, projectId)) return null;
       if (!record.payload.copy) return null;
       const dir = await this.#root(userId);
       const file = path.join(dir, librarySourceId(record.payload.sourceId), COPY_FILE);
@@ -307,17 +341,46 @@ export class LibraryService {
   /**
    * Add a project's source to the library; adding a document the library
    * already holds (from this project or another) answers with that entry.
-   * @param {string} userId @param {unknown} sourceId
+   * `projects` says where it applies (default `"all"` for a new entry); named for an
+   * entry that already exists, it is a change (`setProjects`).
+   * @param {string} userId @param {unknown} sourceId @param {{ projects?: "all" | string[] }} [options]
    * @returns {Promise<{ item: ReturnType<typeof entryView>, created: boolean }>}
    */
-  async add(userId, sourceId) {
-    const work = () => this.addCurrent(userId, sourceId);
+  async add(userId, sourceId, { projects } = {}) {
+    if (projects !== undefined) await this.#guardProjects(userId, projects);
+    const work = () => this.addCurrent(userId, sourceId, { projects });
     return typeof this.sources.withRegistrationLocks === "function"
       ? this.sources.withRegistrationLocks([`library:${userId}`], work) : work();
   }
 
-  /** @param {string} userId @param {unknown} sourceId @param {{personal?:boolean}} [options] */
-  async addCurrent(userId, sourceId, { personal = false } = {}) {
+  /**
+   * Say where a document applies, creating its entry when it has none (`PUT /api/library/:sourceId`).
+   * @param {string} userId @param {unknown} sourceId @param {unknown} projects `"all"` or a list of project ids
+   * @param {{ expectedRevision?: unknown }} [options] the revision the caller read; a changed entry refuses with 409
+   * @returns {Promise<{ item: ReturnType<typeof entryView>, created: boolean }>}
+   */
+  async setProjects(userId, sourceId, projects, { expectedRevision } = {}) {
+    const parsed = parseLibraryProjects(projects);
+    if (expectedRevision !== undefined && (!Number.isSafeInteger(expectedRevision) || /** @type {number} */ (expectedRevision) < 1)) {
+      throw new HttpError(400, "library_payload_invalid", "expectedRevision is the revision of the entry you read.");
+    }
+    await this.#guardProjects(userId, parsed);
+    const work = () => this.addCurrent(userId, sourceId, { projects: parsed, expectedRevision: /** @type {number | undefined} */ (expectedRevision) });
+    return typeof this.sources.withRegistrationLocks === "function"
+      ? this.sources.withRegistrationLocks([`library:${userId}`], work) : work();
+  }
+
+  /** A list names only projects a document may be sent to; "all" names none. @param {string} userId @param {unknown} projects */
+  async #guardProjects(userId, projects) {
+    const parsed = parseLibraryProjects(projects);
+    if (parsed === LIBRARY_ALL_PROJECTS || !parsed.length) return;
+    if (typeof this.projectGuard !== "function") throw new HttpError(503, "library_unavailable", "The personal library cannot check projects on this deployment.");
+    for (const id of parsed) await this.projectGuard(userId, id);
+  }
+
+  /** @param {string} userId @param {unknown} sourceId
+   * @param {{personal?:boolean, projects?: "all" | string[], expectedRevision?: number}} [options] */
+  async addCurrent(userId, sourceId, { personal = false, projects, expectedRevision } = {}) {
     const source = await this.documents.get(userId, "source", librarySourceId(sourceId));
     if (!source) throw new HttpError(404, "library_source_invalid", "The source is unavailable.");
     // A knowledge page quotes the documents of its own project; in another project those documents are not there to check it against.
@@ -334,7 +397,8 @@ export class LibraryService {
         throw new HttpError(409, "library_full", `The personal library holds at most ${this.maxItems} documents.`);
       }
       const payload = {
-        recordType: LIBRARY_RECORD_TYPE, explicitRetention: !personal, personalSourceIds: personal ? [source.id] : [], sourceId: source.id, sha256, addedAt: this.now().toISOString(),
+        recordType: LIBRARY_RECORD_TYPE, projects: projects ?? LIBRARY_ALL_PROJECTS,
+        explicitRetention: !personal, personalSourceIds: personal ? [source.id] : [], sourceId: source.id, sha256, addedAt: this.now().toISOString(),
         source: { id: source.id, projectId: source.projectId }, snapshot: describeLibrarySource(source), copy: null,
         // A document removed and added back keeps what it already published,
         // so publishing it again adds nothing twice.
@@ -356,8 +420,15 @@ export class LibraryService {
         if (!record) throw error;
       }
     }
-    if (!created && (personal || record.payload.explicitRetention === false)) {
+    if (!created && expectedRevision !== undefined && record.revision !== expectedRevision) {
+      throw new HttpError(409, "product_revision_conflict", "The library entry changed; reload before changing it.");
+    }
+    if (!created && (personal || record.payload.explicitRetention === false || (projects !== undefined && !sameProjects(libraryRecordProjects(record.payload), projects)))) {
+      // A narrowing leaves the views before the record says so: a failure then costs a project a document it should
+      // have, which the next pass restores, never a project a document it should not.
+      if (projects !== undefined) await this.#withdrawFromViews(userId, record.payload.sourceId, { ...record.payload, projects });
       record = await this.documents.put(userId, RECORD_KIND, id, { ...record.payload,
+        ...(projects !== undefined ? { projects } : {}),
         explicitRetention: personal ? record.payload.explicitRetention !== false : true,
         personalSourceIds: personal ? [...new Set([...(record.payload.personalSourceIds ?? []), source.id])] : record.payload.personalSourceIds ?? [],
       }, { expectedRevision: record.revision });
@@ -366,6 +437,8 @@ export class LibraryService {
     // project leaves the entry reading the copy it already reads.
     const candidates = (await this.#liveSources(userId, [sha256])).get(sha256) ?? [source];
     record = await this.#refresh(userId, record, candidates);
+    // What an entry applies to is what each project's directory holds: the answer waits for them.
+    await this.#convergeViews(userId, { strict: true });
     return { item: entryView(record, candidates), created };
   }
 
@@ -387,7 +460,11 @@ export class LibraryService {
         await this.documents.put(userId, RECORD_KIND, record.id, { ...record.payload, personalSourceIds: remaining }, { expectedRevision: record.revision });
         return { sourceId, removed: false };
       }
-    } else {
+    }
+    // Out of every project's directory before the record goes: a failure here leaves the entry in place and the call
+    // repeatable, where a record removed first would leave copies nothing names and nothing could be asked to remove.
+    await this.#withdrawFromViews(userId, record.payload.sourceId, { ...record.payload, projects: [] });
+    if (!personal) {
       record.payload.explicitUnshared = true;
       const saved = await this.documents.put(userId, RECORD_KIND, record.id, record.payload, { expectedRevision: record.revision });
       record.revision = saved.revision;
@@ -402,12 +479,29 @@ export class LibraryService {
   }
 
   /**
-   * The library's documents as the knowledge-base search scopes them: the
-   * copy's own description and index key, and the path a run reads it at.
+   * The library's documents as one project's knowledge-base search scopes them: the entries that apply to that project (a
+   * record that names it, or says "all"), each with the copy's own description and index key and the path a run reads it at.
+   * The project is required: a caller that wanted the whole account's library says so by asking for `accountScope`, and a
+   * call that forgot its project gets an error rather than every document the account keeps.
+   * @param {string} userId @param {string} projectId
+   */
+  async searchScope(userId, projectId) {
+    if (typeof projectId !== "string" || !projectId) throw new TypeError("The library's search scope is a project's: name the project.");
+    return this.#scopeOf((await this.#records(userId)).filter((record) => libraryRecordCovers(record.payload, projectId)));
+  }
+
+  /**
+   * Every entry of the account whatever it applies to, for what works on the account's library as a whole and never reads
+   * it on a project's behalf: the engine's copy of it, the page that lists it. Not a scope a run may be given.
    * @param {string} userId
    */
-  async searchScope(userId) {
-    return (await this.#records(userId)).map((record) => {
+  async accountScope(userId) {
+    return this.#scopeOf(await this.#records(userId));
+  }
+
+  /** @param {any[]} records */
+  #scopeOf(records) {
+    return records.map((record) => {
       const payload = record.payload;
       const snapshot = payload.snapshot ?? {};
       return {
@@ -477,6 +571,8 @@ export class LibraryService {
         if (named.has(name) || !SOURCE_ID.test(name)) continue;
         await this.#removeCopy(owner, name).then(() => { totals.removed += 1; }, (error) => { totals.failed += 1; this.#failed(error); });
       }
+      // The projects' directories follow the records and the copies just brought up to date.
+      await this.#convergeViews(owner, { records }).catch(() => { totals.failed += 1; });
       };
       if (typeof this.sources.withRegistrationLocks === "function") await this.sources.withRegistrationLocks([`library:${owner}`], work);
       else await work();
@@ -500,15 +596,103 @@ export class LibraryService {
     try {
       const source = await this.documents.get(userId, "source", librarySourceId(sourceId));
       const sha256 = String(source?.payload.fingerprint?.sha256 ?? "");
-      if (!SHA256.test(sha256)) return null;
-      const record = await this.documents.get(userId, RECORD_KIND, `library:${sha256}`);
-      if (!record) return null;
-      return await this.#refresh(userId, record, (await this.#liveSources(userId, [sha256])).get(sha256) ?? [], null, strict);
+      const record = SHA256.test(sha256) ? await this.documents.get(userId, RECORD_KIND, `library:${sha256}`) : null;
+      const refreshed = record
+        ? await this.#refresh(userId, record, (await this.#liveSources(userId, [sha256])).get(sha256) ?? [], null, strict) : null;
+      // A document that is gone, or a copy just rewritten, reaches the projects' directories here too: this is the call
+      // every source's lifecycle makes, and the one that sees a removal.
+      await this.#convergeViews(userId, { strict });
+      return refreshed;
     } catch (error) {
       this.#failed(error);
       if (strict) throw error;
       return null;
     }
+  }
+
+  /**
+   * A project's directory of the library, made and brought to the entries that apply to it, before a runtime of the project
+   * is started over it (`RuntimeManager`). Either the directory is right or there is none: a directory that could not be
+   * brought right is removed, and only a directory that can be neither is an error — a runtime is never mounted over a view
+   * that may still show a document it must not.
+   * With `onlyIfMissing` a directory that is already there is taken as current — every change to a record and the convergence
+   * pass keep the directories that exist right; this is for the caller that only needs one to exist (a dispatch counting what a
+   * project's library holds), where a launch asks for the full pass.
+   * @param {string} userId @param {string} projectId @param {{ onlyIfMissing?: boolean }} [options]
+   * @returns {Promise<string | null>} the directory, or null where views are not kept
+   */
+  async ensureProjectView(userId, projectId, { onlyIfMissing = false } = {}) {
+    const dir = this.viewsDir?.(userId);
+    if (!dir) return null;
+    const view = path.join(dir, safeId(projectId, "project id"));
+    // Not under the account's library lock: a dispatch only asks whether the directory is there, and waiting behind a pass that
+    // is copying documents would be the price of a question with an answer on disk.
+    if (onlyIfMissing && await fs.lstat(view).then((stat) => stat.isDirectory() && !stat.isSymbolicLink(), () => false)) return view;
+    const work = async () => {
+      try {
+        await this.#convergeViews(userId, { strict: true, only: [projectId] });
+      } catch (error) {
+        await this.dropProjectView(userId, projectId);
+        this.#failed(error);
+        return null;
+      }
+      return view;
+    };
+    return typeof this.sources.withRegistrationLocks === "function"
+      ? this.sources.withRegistrationLocks([`library:${userId}`], work) : work();
+  }
+
+  /** A project's directory removed, for a project that is gone (its records' lists were pruned in the deletion's transaction).
+   *  Removing what is not there is not an error. @param {string} userId @param {string} projectId */
+  async dropProjectView(userId, projectId) {
+    if (!this.viewsDir) return;
+    const root = await this.#viewRoot(userId);
+    const target = path.join(root, safeId(projectId, "project id"));
+    await assertNoSymlinkPath(root, target, { allowMissingTail: true });
+    await fs.rm(target, { recursive: true, force: true });
+  }
+
+  /**
+   * A new version of a document inherits where the old one applied (`afterReplace`): the replacement's entry is made with the
+   * old record's `projects`, and the old record goes once no project holds those bytes as a current document any more. An
+   * entry the new bytes already have is left as it is — a scope someone set is never widened by a replacement. Safe to run
+   * again: what is done is not done twice.
+   * @param {string} userId @param {{ projectId: string, replaced: { sourceId: string, sha256: string }, by: { sourceId: string } }} event
+   */
+  async carryOver(userId, { projectId, replaced, by }) {
+    // Personal storage carries its own entries (`createPersonalLibraryWriter`).
+    if (projectId === LIBRARY_PROJECT_ID || !SHA256.test(String(replaced?.sha256))) return { carried: false, released: false };
+    const work = async () => {
+      const old = await this.documents.get(userId, RECORD_KIND, `library:${replaced.sha256}`);
+      if (!old || old.payload.recordType !== LIBRARY_RECORD_TYPE) return { carried: false, released: false };
+      const fresh = await this.documents.get(userId, "source", by.sourceId).catch(() => null);
+      const freshSha = String(fresh?.payload.fingerprint?.sha256 ?? "");
+      if (!fresh || !SHA256.test(freshSha) || freshSha === replaced.sha256) return { carried: false, released: false };
+      let carried = false;
+      if (!await this.documents.get(userId, RECORD_KIND, `library:${freshSha}`)) {
+        await this.addCurrent(userId, fresh.id, { projects: libraryRecordProjects(old.payload) });
+        carried = true;
+      }
+      // The old entry stays while another project still holds the old bytes as a current document.
+      const holders = ((await this.#liveSources(userId, [replaced.sha256])).get(replaced.sha256) ?? [])
+        .filter((candidate) => candidate.payload.publication?.current !== false);
+      let released = false;
+      if (!holders.length) {
+        await this.removeCurrent(userId, old.payload.sourceId);
+        released = true;
+      }
+      return { carried, released };
+    };
+    return typeof this.sources.withRegistrationLocks === "function"
+      ? this.sources.withRegistrationLocks([`library:${userId}`], work) : work();
+  }
+
+  /**
+   * Whether every entry of the library applies to a project — what a compile that reads the library as a whole may rely on.
+   * @param {string} userId @param {string} projectId
+   */
+  async appliesWhole(userId, projectId) {
+    return (await this.#records(userId)).every((record) => libraryRecordCovers(record.payload, projectId));
   }
 
   /**
@@ -803,6 +987,102 @@ export class LibraryService {
     return new Set(entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name));
   }
 
+  /** The directory that holds the account's per-project views, checked to have no link on its way (like the master).
+   *  @param {string} userId */
+  async #viewRoot(userId) {
+    const dir = this.viewsDir?.(userId);
+    if (!dir) throw new TypeError("This library keeps no per-project views.");
+    await assertNoSymlinkPath(path.dirname(path.dirname(dir)), dir, { allowMissingTail: true });
+    return dir;
+  }
+
+  /** The projects that have a directory now: the ones a runtime may be mounted over. @param {string} userId @returns {Promise<string[]>} */
+  async #viewProjects(userId) {
+    const root = await this.#viewRoot(userId);
+    const entries = await fs.readdir(root, { withFileTypes: true }).catch((error) => {
+      if (error?.code === "ENOENT") return [];
+      throw error;
+    });
+    // Only a directory with a project's name is a view; anything else beside them is left alone and never mounted.
+    return entries.filter((entry) => entry.isDirectory() && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(entry.name)).map((entry) => entry.name);
+  }
+
+  /**
+   * Bring the projects' directories to the records: for each directory (and each project named), exactly the entries that
+   * apply to the project and have a copy, every file a real copy of the master, and nothing else. Every project is tried
+   * whatever another one did; the first failure is the answer when `strict`, otherwise it is only counted.
+   * @param {string} userId @param {{ strict?: boolean, only?: string[] | null, records?: any[] | null }} [options]
+   *   `only`: just these projects, made if they are not there; otherwise every directory that exists
+   */
+  async #convergeViews(userId, { strict = false, only = null, records = null } = {}) {
+    if (!this.viewsDir) return;
+    /** @type {unknown} */
+    let failure = null;
+    try {
+      const root = await this.#viewRoot(userId);
+      const wanted = records ?? await this.#records(userId);
+      const present = await this.#presentCopies(userId);
+      for (const projectId of only ?? await this.#viewProjects(userId)) {
+        try { await this.#convergeView(userId, root, projectId, wanted, present); }
+        catch (error) { failure ??= error; this.counters.viewFailures += 1; this.#failed(error); }
+      }
+    } catch (error) {
+      failure ??= error;
+      this.counters.viewFailures += 1;
+      this.#failed(error);
+    }
+    if (failure && strict) throw failure;
+  }
+
+  /** @param {string} userId @param {string} root @param {string} projectId @param {any[]} records @param {Set<string>} present */
+  async #convergeView(userId, root, projectId, records, present) {
+    const view = path.join(root, safeId(projectId, "project id"));
+    await assertNoSymlinkPath(root, view, { allowMissingTail: true });
+    await fs.mkdir(view, { recursive: true, mode: 0o700 });
+    await assertNoSymlinkPath(root, view);
+    const master = await this.#root(userId);
+    /** @type {Set<string>} */
+    const wanted = new Set();
+    for (const record of records) {
+      const name = record.payload.sourceId;
+      if (SOURCE_ID.test(name) && record.payload.copy && present.has(name) && libraryRecordCovers(record.payload, projectId)) wanted.add(name);
+    }
+    for (const entry of await fs.readdir(view, { withFileTypes: true })) {
+      if (entry.isDirectory() && wanted.has(entry.name)) continue;
+      await fs.rm(path.join(view, entry.name), { recursive: true, force: true });
+      this.counters.viewsRemoved += 1;
+    }
+    for (const name of wanted) {
+      const from = path.join(master, name, COPY_FILE);
+      const to = path.join(view, name, COPY_FILE);
+      await assertNoSymlinkPath(master, from);
+      const source = await fs.lstat(from);
+      const current = await fs.lstat(to).catch(() => null);
+      // The view's file takes the master's modification time, so "the same copy" is a size and a time to compare.
+      if (current?.isFile() && current.size === source.size && Math.abs(current.mtimeMs - source.mtimeMs) < 1) continue;
+      await writeFileAtomicNoFollow(view, to, await fs.readFile(from), { mode: 0o600 });
+      await fs.utimes(to, source.atime, source.mtime);
+      this.counters.viewsWritten += 1;
+    }
+  }
+
+  /**
+   * Take one entry's copy out of every project's directory that a record (as it is about to be) does not put it in.
+   * Throws when it cannot: a narrowing that did not reach the directories must not be taken as made.
+   * @param {string} userId @param {string} sourceId @param {any} next the record's payload after the change
+   */
+  async #withdrawFromViews(userId, sourceId, next) {
+    if (!this.viewsDir || !SOURCE_ID.test(String(sourceId))) return;
+    const root = await this.#viewRoot(userId);
+    for (const projectId of await this.#viewProjects(userId)) {
+      if (libraryRecordCovers(next, projectId)) continue;
+      const target = path.join(root, projectId, sourceId);
+      await assertNoSymlinkPath(root, target, { allowMissingTail: true });
+      await fs.rm(target, { recursive: true, force: true });
+      this.counters.viewsRemoved += 1;
+    }
+  }
+
   /** @param {unknown} error */
   #failed(error) {
     this.lastError = typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "library_copy_failed";
@@ -810,11 +1090,38 @@ export class LibraryService {
   }
 }
 
-/** @param {any} req @param {number} limit */
-async function addBody(req, limit) {
+/**
+ * What a project's deletion does to the library's records, in the deletion's own transaction (2026-10-28): the project's id
+ * leaves every record's list — so a project made later under the same name inherits nothing — and a record that only the
+ * project's own documents held goes with them, exactly as it does when its last document is deleted by hand. A record that
+ * says "all" or has no list is not the project's to change, and stays while any other document holds its bytes. Each change
+ * is a revision, so a removal can be restored. The copies and the directories follow at the next convergence pass.
+ * @param {{ query: (sql: string, values: unknown[]) => Promise<any> }} client @param {string} userId @param {string} projectId
+ * @returns {Promise<{ pruned: number, released: number }>}
+ */
+export async function libraryProjectDeleted(client, userId, projectId) {
+  const pruned = await client.query(`WITH changed AS (UPDATE evimed_product.documents SET
+      payload=jsonb_set(payload,'{projects}',(payload->'projects')-$2::text),updated_at=clock_timestamp(),revision=revision+1
+      WHERE user_id=$1 AND kind='preferences' AND deleted_at IS NULL AND payload->>'recordType'='library-item'
+        AND jsonb_typeof(payload->'projects')='array' AND payload->'projects' ? $2::text
+      RETURNING user_id,kind,id,revision,payload,deleted_at)
+    INSERT INTO evimed_product.revisions(user_id,kind,id,revision,payload,deleted_at) SELECT * FROM changed`, [userId, projectId]);
+  const released = await client.query(`WITH removed AS (UPDATE evimed_product.documents l SET deleted_at=clock_timestamp(),updated_at=clock_timestamp(),revision=revision+1
+      WHERE l.user_id=$1 AND l.kind='preferences' AND l.deleted_at IS NULL AND l.payload->>'recordType'='library-item'
+        AND EXISTS (SELECT 1 FROM evimed_product.documents s WHERE s.user_id=l.user_id AND s.kind='source' AND s.deleted_at IS NULL AND s.project_id=$2::text
+          AND l.id='library:'||(s.payload->'fingerprint'->>'sha256'))
+        AND NOT EXISTS (SELECT 1 FROM evimed_product.documents s WHERE s.user_id=l.user_id AND s.kind='source' AND s.deleted_at IS NULL AND s.project_id<>$2::text
+          AND coalesce(s.payload->'publication'->>'current','true') <> 'false' AND l.id='library:'||(s.payload->'fingerprint'->>'sha256'))
+      RETURNING user_id,kind,id,revision,payload,deleted_at)
+    INSERT INTO evimed_product.revisions(user_id,kind,id,revision,payload,deleted_at) SELECT * FROM removed`, [userId, projectId]);
+  return { pruned: pruned.rowCount ?? 0, released: released.rowCount ?? 0 };
+}
+
+/** @param {any} req @param {number} limit @param {string[]} fields @param {string} sentence */
+async function bodyOf(req, limit, fields, sentence) {
   const value = await readJson(req, limit);
-  if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).some((key) => key !== "sourceId")) {
-    throw new HttpError(400, "library_payload_invalid", "Send { sourceId } and nothing else.");
+  if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).some((key) => !fields.includes(key))) {
+    throw new HttpError(400, "library_payload_invalid", sentence);
   }
   return value;
 }
@@ -823,8 +1130,13 @@ async function addBody(req, limit) {
  * The personal library's routes (account-authenticated):
  *
  *   GET    /api/library                                  → { items: [...], maxItems }
- *   POST   /api/library                { sourceId }      → 201 the new entry, 200 the entry it already was
+ *   POST   /api/library                { sourceId, projects? }  → 201 the new entry, 200 the entry it already was
+ *   PUT    /api/library/:sourceId      { projects, expectedRevision? } → 201 the entry made, 200 the entry changed
  *   DELETE /api/library/:sourceId                        → { sourceId, removed: true }
+ *
+ * `projects` is `"all"` or a list of ordinary project ids of the account (`libraryScope.mjs`); an entry answers with
+ * `libraryProjects` (what it says), `appliesTo` (where the document is read) and `revision`. DELETE returns the document to
+ * the project that holds it and nowhere else.
  *
  * The per-document 「放进胶囊」 route is gone (2026-09-20): a document's
  * understanding reaches the capsule when it is understood, not when somebody
@@ -847,11 +1159,19 @@ export function createLibraryRoutes({ store, service, maxJsonBytes }) {
       return true;
     }
     if (url.pathname === "/api/library" && method === "POST") {
-      const { item, created } = await service.add(user.id, (await addBody(req, maxJsonBytes)).sourceId);
+      const body = await bodyOf(req, maxJsonBytes, ["sourceId", "projects"], "Send { sourceId, projects? } and nothing else.");
+      const { item, created } = await service.add(user.id, body.sourceId, "projects" in body ? { projects: parseLibraryProjects(body.projects) } : {});
       sendJson(res, created ? 201 : 200, { data: item });
       return true;
     }
     const match = /^\/api\/library\/(src_[a-f0-9]{32})$/.exec(url.pathname);
+    if (match && method === "PUT") {
+      const body = await bodyOf(req, maxJsonBytes, ["projects", "expectedRevision"], "Send { projects, expectedRevision? } and nothing else.");
+      if (!("projects" in body)) throw new HttpError(400, "library_projects_invalid", 'Send "all" or a list of project ids.');
+      const { item, created } = await service.setProjects(user.id, match[1], body.projects, { expectedRevision: body.expectedRevision });
+      sendJson(res, created ? 201 : 200, { data: item });
+      return true;
+    }
     if (match && method === "DELETE") {
       sendJson(res, 200, { data: await service.remove(user.id, match[1]) });
       return true;
@@ -863,11 +1183,13 @@ export function createLibraryRoutes({ store, service, maxJsonBytes }) {
 /**
  * The library as the server composes it: the service (null without a product
  * database), its routes, and the index it joins.
- * @param {{ config: any, store: any, documents: any, sources: any, capsules?: any, kbIndex?: any, report?: (code: string) => void }} dependencies
+ * @param {{ config: any, store: any, documents: any, sources: any, capsules?: any, kbIndex?: any, projectGuard?: ((userId: string, projectId: string) => Promise<unknown>) | null, report?: (code: string) => void }} dependencies
+ *   `projectGuard`: which projects a record may name (`assertOrdinaryProject`, composed where the GEO and study stores are)
  */
-export function createLibrary({ config, store, documents, sources, capsules = null, kbIndex = null, report = () => {} }) {
+export function createLibrary({ config, store, documents, sources, capsules = null, kbIndex = null, projectGuard = null, report = () => {} }) {
   const service = documents?.database && sources ? new LibraryService({ documents, sources, capsules,
-    libraryDir: (userId) => userLibraryDir(config, userId), maxItems: config.libraryMaxItems, report }) : null;
+    libraryDir: (userId) => userLibraryDir(config, userId), viewsDir: (userId) => libraryViewsRoot(config, userId), projectGuard,
+    maxItems: config.libraryMaxItems, report }) : null;
   kbIndex?.useLibrary(service);
   return { service, routes: createLibraryRoutes({ store, service, maxJsonBytes: config.maxJsonBytes }) };
 }

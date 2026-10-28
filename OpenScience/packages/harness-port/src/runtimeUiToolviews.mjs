@@ -170,6 +170,27 @@ export function liveChild(live, match) {
 }
 
 /**
+ * The deliverable the run is working on in its own session, or '' when none is.
+ *
+ * A deliverable leaves `planned` only when it is delegated or submitted, so one the root works on
+ * itself -- the common case since delegation became on demand -- read 「待开始」 for the whole run:
+ * 34 minutes and 206 tool calls on 2026-10-27 under a card that said the work had not begun. While
+ * the run works and no piece is delegated, submitted or under repair, the first piece still
+ * planned is the one being worked on.
+ * @param {any} live
+ * @returns {string}
+ */
+export function workingDeliverable(live) {
+  // Inside the function: a body reaches the frame as its listed functions' source, so a module constant would not.
+  const active = ['reserved', 'dispatched', 'queued', 'running', 'delivering', 'repairing'];
+  if (!live || !active.includes(String(live.state ?? ''))) return '';
+  const list = live.progress && Array.isArray(live.progress.deliverables) ? live.progress.deliverables : [];
+  if (list.some((/** @type {any} */ entry) => entry && ['queued', 'delegated', 'submitted', 'rejected'].includes(entry.status))) return '';
+  const next = list.find((/** @type {any} */ entry) => entry && entry.status === 'planned');
+  return next && typeof next.id === 'string' ? next.id : '';
+}
+
+/**
  * The plan call: what the run will hand back, and where each piece stands.
  *
  * Statuses come from the live run only. The plan's own result is a snapshot
@@ -185,11 +206,12 @@ export function planView(block, live, kit, known = new Map()) {
   const args = call.args ?? {};
   const action = typeof args.action === 'string' ? args.action : kit.partialArgField(call.argsRaw, 'action');
   const statusWords = toolviewText().status;
+  const working = workingDeliverable(live);
   /** @param {any} item */
   const row = (item) => {
     const id = String(item?.id ?? '');
     const liveItem = liveDeliverable(live, id);
-    const status = liveItem?.status;
+    const status = id && id === working ? 'delegated' : liveItem?.status;
     return {
       id,
       title: String(item?.title || liveItem?.title || known.get(id) || id),
@@ -632,5 +654,5 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
 export const BODY = Object.freeze({
   name: 'toolviews',
   inject,
-  parts: Object.freeze([frameStyles, mainViewSession, toolviewText, refusalOf, liveRunFor, liveDeliverable, liveChild, planView, delegateView, gateRefusal, toolSubjectText, toolSubjectHost, toolResultCount, toolLineView, taskCardView, childLinkFor, apply]),
+  parts: Object.freeze([frameStyles, mainViewSession, toolviewText, refusalOf, liveRunFor, liveDeliverable, liveChild, workingDeliverable, planView, delegateView, gateRefusal, toolSubjectText, toolSubjectHost, toolResultCount, toolLineView, taskCardView, childLinkFor, apply]),
 });

@@ -487,7 +487,7 @@ bordered pill or bordered `<button>` outside it:
 | `FactList` | the one key / value `dl`, eight rows and then 「全部 N 项」 |
 | `ChartGrid` | charts by rows; a row's cells share a height and its spans fill it, so a grid has no hole |
 | `Outline` + `useOutline` | a long page's contents: a sticky column from 1024 px, a folded 「目录 · N 节」 below, or the bare list (`inline`) in a column that already sticks (the frontier reader's 「本文目录」); read off the headings the page rendered |
-| `MasterDetail` | a list column (320–360 px) and one record; below the room for both, the record is a `Drawer` — or, for a conversation, replaces the list |
+| `MasterDetail` | a list column (300–400 px) and one record; the split is decided by the page's own room (`listWidth` + `detailMin`, the page's choice: a preview needs ~520–560 px, a conversation 640); below it, the record is a `Drawer` — or, for a conversation or a form, replaces the list |
 | `ScopeMenu` | whose things the page shows (a project, a kind of project, everyone's), in the header after the title or as a chip in a toolbar |
 | `StateScreen` | a whole page's failure or wrong address: an icon, one sentence, one action, 「回到原处」 |
 | `InlineAlert` | a persistent, scoped message with its recovery action (`error` · `warning` · `info`); a string child announces once, by event and entity identity. The place for a failure that outlives a toast: `LoadError`, `DataTable` and the field-adjacent mutation errors use it |
@@ -519,7 +519,7 @@ pages after every release.
    `<section>`, a list of rows, a table, a chart) and fails a page that stacks more kinds than its
    budget (`shapes` in `scripts/ops/page-templates.json`, the one table of the pages the walk visits, their template and budgets); groups of one shape — a group per use, a group per day — are
    one kind. **The one exception is a data page** — the 记忆总览 (`/app/memory/overview`: the capsule as one data page — a toolbar of the range, only what needs a look and the search; a
-   sentence whose numbers each open the list they count; five tiles that are each a door to a list; 「变化」, what it gained and lost over time; 「关系与主题」 when there is
+   sentence whose numbers each open the list they count; four tiles (关于你 — the memories that carry a project included —, 做法, 收到的, 知识) that are each a door to a list; 「变化」, what it gained and lost over time; 「关系与主题」 when there is
    enough to see; and the table behind the charts, 「最近变化」, whose rows open the same drawers the marks do — held to two kinds of section and five size × weight pairs) and the knowledge base's graph
    view, the owner's formal requirement of 2026-10-12 that memory and knowledge be shown and not only listed: one
    shared selection narrowing the chart, the panel and the table together, and every mark and row opening the record's own drawer or the document's own page — so its shapes
@@ -540,7 +540,11 @@ pages after every release.
      with the list as a column inside the page (`/app/autopilot/:taskId`);
    - a **document** — a frontier article, a knowledge-base source, a compiled wiki page, a report, an event, a file the
      assistant made (a spreadsheet, a deck, a script, shown by the kernel's own preview) — opens on a page of
-     its own that has an address (`/app/files/:sourceId`), and going back restores the list as it was.
+     its own that has an address, and going back restores the list as it was; the knowledge base reads its
+     source in the pane beside its list where the page has room (`/app/files/:sourceId`, one route with the list).
+   - a **project of a module home** — a 循证 GEO project, a 虚拟临床研究 study — is previewed in the pane beside the
+     list (`?project=` / `?study=`, written by a press; the first one shown, not written, when none is chosen) and
+     opens its workspace from there (owner, 2026-10-28: no stacked pages).
    A drawer never holds a conversation and never holds a second input box (the kernel's composer is
    the only one).
 3. **The header is the title, the scope and at most one primary button** — and a search box. Two
@@ -605,8 +609,8 @@ fills them. `compositionFixtures.tsx` holds a sample of each, `pageComposition.t
 
 | Template | For | Slots, top to bottom | One kind of body | A record opens |
 |---|---|---|---|---|
-| T1 列表页 | 前沿动态, 知识库, 记忆 (关于你 / 项目 / 做法), 收件箱, 科研工具, 插件与技能, the GEO and study homes | header · `toolbar` (views at the left; filters, search, count at the right) · `List` / `DataTable` · `ShowMore` | a list or a table | a drawer (a record), a page (a document), the main area (a conversation) |
-| T2 主从页 | 定时任务, 方法库, 假设卡 | header · `MasterDetail` (list 320–360 px, the record beside it; below 1024 px a `Drawer`, or the page swaps for a conversation) | a list and one record | the right-hand column |
+| T1 列表页 | 前沿动态, 收件箱, 科研工具, 插件与技能, the study home's library views | header · `toolbar` (views at the left; filters, search, count at the right) · `List` / `DataTable` · `ShowMore` | a list or a table | a drawer (a record), a page (a document), the main area (a conversation) |
+| T2 主从页 | 定时任务, 知识库, 记忆胶囊 (a navigation column beside its sections), the 循证 GEO and 虚拟临床研究 homes, 方法库, 假设卡 | `MasterDetail`: the list column carries the page's header (title, the one primary button) and at most one toolbar; the record, preview or form beside it; below the room for both, a `Drawer`, or the page swaps for a conversation or a form | a list and one record | the right-hand column |
 | T3 模块页 | 循证 GEO (including its addressed answer); VCR uses the conversation/result variant below | header (the primary action is 「下一步：…」; while working, a chip) · `steps` on every GEO tab · `activity` while working · `tabs` · `toolbar` · one tab's body | one kind per tab: a T1 list, a T2 split, a T4 chart grid, a settings panel | as T1 |
 | T4 数据页 | 记忆总览, GEO 总览 / 可见度, 研究的对照 / 试验, 知识图谱 | header · `toolbar` · `headline` · `StatBand` (only the numbers that exist) · `ChartGrid` (full rows) · the table behind the charts | charts and one table | a drawer; a mark is a row |
 | T5 阅读页 | a knowledge-base document, a report, an evidence card, an event | back · document title · the primary action · `Outline` (from four sections) · the text · one 「来源与核对」 fold | a document; a long list is a table with a toolbar | — |
@@ -634,7 +638,7 @@ warning; `layoutLint.test.ts` holds each number. Two more are counts that only f
 |---|---|---|
 | every page | one `PageShell`; at most one primary action in the header; a sentence is a `Note`, `Headline`, `EmptyState` or heading | a hand-drawn `<h1>`, back arrow or search box; a grey sentence with no action or number; a `Tag` that is pressed or sits in a control; a status word drawn as a button; a switch to an empty place that says nothing and offers no next step (the walk's `zero-count`; see the v3.1 rules below for what may stay) |
 | T1 | the toolbar above the list, views and filters in one row | a second tab list in the body; chips under the list; a hand-written `ul divide-y` (`List`, `ListRow`) |
-| T2 | the record in the right-hand column on a wide page | a record in a drawer beside a list that has room; a conversation in a drawer |
+| T2 | the record in the right-hand column on a wide page; with no record, the column holds what starts one (the new-task form beside the examples, a module home's recipe) — the page stays split; creating is a form in the main area (`/…/new`), editing may be a dialog; a preview's actions are secondary, the one solid button is the list header's | a record in a drawer beside a list that has room; a conversation in a drawer; an empty state that collapses the page into one stacked column; a project picker above the list (a project is a label on a row, chosen per row) |
 | T3 | GEO: `StepRail` on every tab with the same steps; VCR: six result destinations without a step rail; the toolbar row reserved on a tab without one | the rail on one tab only; a button that carries the person to the conversation; two kinds of object in one tab; the primary action in the body |
 | T4 | a `Headline` whose numbers open what they count; a `ChartGrid` whose rows are full; legend and replay controls in the card's header | a placeholder tile; a hole in the grid; a control under the canvas it controls |
 | T5 | an `Outline` from four sections; the serif title | a page of many screens with no contents; the action under the title |

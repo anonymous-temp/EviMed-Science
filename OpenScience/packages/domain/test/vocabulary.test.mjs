@@ -749,10 +749,14 @@ test("the open-vocabulary prose patterns are frozen at their current count", asy
   // 80 since the J4 migration: the open register and evidence-access prose
   // patterns moved to an advisory post-delivery judge. Closed tool/path names
   // remain deterministic; clinical safety expressions are unchanged.
+  // 76 since 2026-10-28, and no pattern went: four of the eighty were this scan
+  // reading the slashes of a section list in a message — 「摘要 / 引言 / 资料与方法
+  // / 结果 …」 — as regex literals, and that list is now built from the report's
+  // own section names in either language.
   assert.equal(
     prose.length,
-    80,
-    `open-vocabulary prose patterns moved from 80 to ${prose.length}. `
+    76,
+    `open-vocabulary prose patterns moved from 76 to ${prose.length}. `
       + "Adding one is frozen (principle #5): put medicine/scenario rules in clinical-safety-rules.json, "
       + "write an eval case, or hand the judgement to the reviewer. "
       + "Removing them is the direction of travel — lower this number and say which rule moved where.",

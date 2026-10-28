@@ -10,17 +10,17 @@ import { OpenVikingClient } from "../src/openVikingClient.mjs";
 import { databaseUrl, signedIn } from "./helpers/knowledgeBaseApp.mjs";
 import { createOpenVikingStub } from "./helpers/openVikingResourcesStub.mjs";
 
-test("personal text reaches a frozen project copy, project-only fixture Compile, mirrored graph and checked citations", {
+test("personal storage is indexed and never compiled; a project's own document reaches project-only fixture Compile, a mirrored graph and checked citations", {
   skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured", timeout: 90_000,
 }, async t => {
   const requests = [];
-  let copiedId = null;
+  let projectSourceId = null;
   let targetRoots = null;
   const engine = createOpenVikingStub({ compile: (request, stub) => {
     requests.push(request);
     assert.deepEqual(request.from, [targetRoots.sources]);
-    assert.equal(stub.list(request.from[0]).length, 1, "only the explicitly copied project document is an input");
-    const uri = `${targetRoots.sources}/${copiedId}.md`;
+    assert.equal(stub.list(request.from[0]).length, 1, "only the project's own document is an input");
+    const uri = `${targetRoots.sources}/${projectSourceId}.md`;
     assert.ok(stub.text(uri).includes("64 seconds"));
     assert.ok(!stub.text(uri).includes("120 seconds"));
     if (request.skill.endsWith("/llm-wiki")) {
@@ -96,12 +96,14 @@ test("personal text reaches a frozen project copy, project-only fixture Compile,
   assert.equal((await api("/api/knowledge-pages/compile", "POST", { projectId: LIBRARY_PROJECT_ID })).status, 400);
   assert.equal(requests.length, 0, "personal intake and indexing never Compile storage");
 
-  const copied = await api(`/api/library/${personal.id}/projects`, "POST", { projectId: project.id, expectedRevision: personal.revision });
-  assert.equal(copied.status, 201); copiedId = copied.data.source.id;
-  const provenance = copied.data.source.payload.copiedFrom;
-  assert.deepEqual([provenance.sourceId, provenance.projectId, provenance.revision, provenance.sha256],
-    [personal.id, LIBRARY_PROJECT_ID, personal.revision, personal.payload.fingerprint.sha256]);
-  const projectSource = await textOnly(copied.data.source);
+  // The same text held by the project on its own: a project's compile reads the project's documents, never the library's.
+  const held = await fetch(`${ctx.base}/api/files/upload`, { method: "POST", headers: ctx.headers,
+    body: JSON.stringify({ root: "base", path: "knowledge-base/protocol.txt", encoding: "base64",
+      data: Buffer.from("Aster protocol sends a heartbeat every 64 seconds.\n").toString("base64") }) });
+  assert.equal(held.status, 200);
+  const heldSource = (await held.json()).data.source; projectSourceId = heldSource.id;
+  assert.notEqual(projectSourceId, personal.id);
+  const projectSource = await textOnly(heldSource);
   const revised = await api("/api/library/uploads", "POST", { filename: "protocol.txt", data: "Aster protocol sends a heartbeat every 120 seconds.\n" });
   assert.equal(revised.status, 201); await textOnly(revised.data.source);
   assert.ok((await readFile(path.join(project.baseDir, projectSource.payload.paths[0]), "utf8")).includes("64 seconds"));
@@ -127,15 +129,14 @@ test("personal text reaches a frozen project copy, project-only fixture Compile,
   const tree = await api(`/api/knowledge-pages/tree?projectId=${project.id}`); assert.equal(tree.status, 200);
   const wiki = tree.data.pages.find(page => page.tree === "wiki" && page.path === "concept/Aster.md"); assert.ok(wiki);
   const page = await api(`/api/knowledge-pages/page?sourceId=${wiki.sourceId}`); assert.equal(page.status, 200);
-  assert.deepEqual(page.data.sources.map(source => [source.sourceId, source.available]), [[copiedId, true]]);
-  assert.deepEqual(page.data.links.filter(link => link.kind === "source" && !link.inSourceList).map(link => [link.sourceId, link.status]), [[copiedId, "present"], [copiedId, "absent"]]);
+  assert.deepEqual(page.data.sources.map(source => [source.sourceId, source.available]), [[projectSourceId, true]]);
+  assert.deepEqual(page.data.links.filter(link => link.kind === "source" && !link.inSourceList).map(link => [link.sourceId, link.status]), [[projectSourceId, "present"], [projectSourceId, "absent"]]);
   assert.deepEqual([page.data.quotations.present, page.data.quotations.absent], [1, 1], "the UI's verification and warning labels have checked and absent quotation evidence");
   assert.ok(Number.isFinite(Date.parse(page.data.quotations.checkedAt)));
   assert.equal(await readFile(path.join(project.baseDir, "knowledge-base/wiki/concept/Aster.md"), "utf8"), page.data.markdown);
   const graph = await api(`/api/knowledge-pages/graph?projectId=${project.id}&kind=kg`); assert.equal(graph.status, 200);
   assert.deepEqual(graph.data.nodes.map(node => node.id).sort(), ["aster", "heartbeat"]);
-  assert.deepEqual(graph.data.links.map(link => [link.source, link.target, link.evidence[0].sourceId]), [["aster", "heartbeat", copiedId]]);
-  assert.equal((await app.sourceService.get(user.id, copiedId)).payload.copiedFrom.revision, personal.revision);
+  assert.deepEqual(graph.data.links.map(link => [link.source, link.target, link.evidence[0].sourceId]), [["aster", "heartbeat", projectSourceId]]);
   assert.equal((await app.store.database.query("SELECT id FROM evimed_product.jobs WHERE user_id=$1 AND project_id=$2 AND kind='wiki-compile'", [user.id, LIBRARY_PROJECT_ID])).rowCount, 0);
   assert.equal(paidCalls, 0, "no real model or DeepSeek web-tool request was made");
 });

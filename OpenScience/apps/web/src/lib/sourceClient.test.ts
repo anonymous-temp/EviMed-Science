@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { copySourceToProject, getOpenListStatus, type SourceRecord, addSourceLink, addSourceNote, getSourceNote, listSources, refetchSource, saveSourceNote, saveToKnowledgeBase, getSourceUnderstanding, listSourceUnderstandingHistory, getKnowledgePageAt, saveKnowledgePage } from "./sourceClient";
+import { setSourceProjects, getOpenListStatus, addSourceLink, addSourceNote, getSourceNote, listSources, refetchSource, saveSourceNote, saveToKnowledgeBase, getSourceUnderstanding, listSourceUnderstandingHistory, getKnowledgePageAt, saveKnowledgePage } from "./sourceClient";
 
 const request = vi.hoisted(() => vi.fn());
 const command = vi.hoisted(() => vi.fn());
@@ -41,10 +41,10 @@ describe("the knowledge base's list", () => {
     expect(request).toHaveBeenLastCalledWith("/sources?projectId=project-one&status=failed");
   });
 
-  it("lists the shared documents without naming a project", async () => {
+  it("lists every document of the account once each, without naming a project", async () => {
     request.mockResolvedValue({ items: [], nextCursor: null, counts: {} });
-    await listSources({ kind: "shared" }, { kind: "table" });
-    expect(request).toHaveBeenLastCalledWith("/sources?scope=shared&kind=table");
+    await listSources({ kind: "all" }, { kind: "table" });
+    expect(request).toHaveBeenLastCalledWith("/sources?scope=all&kind=table");
   });
 });
 
@@ -101,9 +101,10 @@ describe("personal library contracts", () => {
  });
 });
 
-it("binds a project copy to the displayed immutable source revision", async () => {
- const source = { id: "src_one", revision: 7 } as SourceRecord;
- await copySourceToProject(source, "project-one");
- expect(request).toHaveBeenLastCalledWith("/library/src_one/projects", "POST", { projectId: "project-one", expectedRevision: 7 });
+it("says where a document takes effect with one PUT: every project, or a list", async () => {
+ await setSourceProjects("src_one", "all");
+ expect(request).toHaveBeenLastCalledWith("/library/src_one", "PUT", { projects: "all" });
+ await setSourceProjects("src_one", ["project-one", "project-two"]);
+ expect(request).toHaveBeenLastCalledWith("/library/src_one", "PUT", { projects: ["project-one", "project-two"] });
  await getOpenListStatus(); expect(request).toHaveBeenLastCalledWith("/sources/openlist/status");
 });

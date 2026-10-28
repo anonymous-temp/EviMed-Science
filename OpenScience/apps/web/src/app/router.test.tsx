@@ -132,10 +132,11 @@ describe("every address people already have still arrives", () => {
 });
 
 describe("知识库's addresses", () => {
-  it("has the list at /app/files and one document at /app/files/:sourceId, which is a page and not a drawer", () => {
+  it("has the list and one document on one route, /app/files/:sourceId?, so choosing a document never remounts the list", () => {
     const leaf = (path: string) => matchRoutes(routes, path)?.at(-1);
-    expect(leaf("/app/files")?.route.path).toBe("files");
-    expect(leaf("/app/files/src_1a2b")?.route.path).toBe("files/:sourceId");
+    expect(leaf("/app/files")?.route.path).toBe("files/:sourceId?");
+    expect(leaf("/app/files/src_1a2b")?.route.path).toBe("files/:sourceId?");
+    expect(leaf("/app/files/open")?.route.path).toBe("files/open");
     expect(leaf("/app/files/src_1a2b")?.params).toEqual({ sourceId: "src_1a2b" });
     // An id with a slash in it is not a second path segment.
     expect(leaf("/app/files/a/b")?.route.path).toBe("*");

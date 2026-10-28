@@ -212,7 +212,7 @@ export function kbBrowseGatewayProviderUrl(config) {
  * @param {any} runtimeManager
  * @param {{ resources: any, sources?: any, library?: any, titleOf?: (source: any) => unknown, evaluationIsolation?: any, budgetMs?: number, sourceScope?: any, compiledScope?: any, contextFor?: any }} dependencies
  *   `resources`: the `OpenVikingResources` of this deployment; `sources`: the source service (`get(userId, id)`) and
- *   `titleOf`: the title a source record is shown by; `library`: the account library (`searchScope(userId)`), or null;
+ *   `titleOf`: the title a source record is shown by; `library`: the account library (`searchScope(userId, projectId)`, the entries that apply to the project), or null;
  *   `budgetMs`: twenty seconds everywhere but in a test that would otherwise wait them out
  */
 export function createKbBrowseGatewayHandler(config, runtimeManager, { resources: rawResources, sources = null, library = null, titleOf = () => null, evaluationIsolation = null, budgetMs = answerBudgetMs, sourceScope = null, compiledScope = null, contextFor = null }) {
@@ -240,7 +240,7 @@ export function createKbBrowseGatewayHandler(config, runtimeManager, { resources
     }
     if (!identity.context && library && wanted.some((id) => !titles.has(id))) {
       try {
-        for (const entry of await library.searchScope(identity.userId)) {
+        for (const entry of await library.searchScope(identity.userId, identity.projectId)) {
           const title = String(entry?.title ?? "").trim();
           if (title && wanted.includes(entry.sourceId) && !titles.has(entry.sourceId)) titles.set(entry.sourceId, title);
         }
@@ -343,7 +343,9 @@ export function createKbBrowseGatewayHandler(config, runtimeManager, { resources
       if (root === "library") {
         if (!library) return false;
         if (!libraryIds) {
-          try { libraryIds = new Set((await library.searchScope(userId)).map((/** @type {any} */ entry) => entry.sourceId)); }
+          // Only what applies to this project: the engine holds the account's whole library under one root, and this check is
+          // what keeps a document limited to another project from being listed, read or searched from here.
+          try { libraryIds = new Set((await library.searchScope(userId, projectId)).map((/** @type {any} */ entry) => entry.sourceId)); }
           catch { throw gatewayError(503, "kb_browse_unavailable", UNAVAILABLE); }
         }
         allowed = libraryIds.has(id);

@@ -54,8 +54,20 @@ export const CLAIM_BATCH_LIMIT = 60
 /** The claim-id shape the gate accepts. */
 const CLAIM_ID = /^CLM-(\d{3,6})$/
 
-/** The heading a rebuilt reference list gets when the report had none. */
-const DEFAULT_REFERENCE_HEADING = '## 参考文献'
+/**
+ * The heading a rebuilt reference list gets when the report had none: in the report's own language. It was always
+ * `## 参考文献`, so an English review the person asked for in English ended under a Chinese heading (2026-10-27).
+ * Chinese when CJK characters outnumber Latin letters in the prose (comments and code left out) -- a property of
+ * the characters, not a reading of the words.
+ * @param {string} prose
+ * @returns {string}
+ */
+export function defaultReferenceHeading(prose) {
+  const text = String(prose ?? '').replace(/<!--[\s\S]*?-->/g, ' ').replace(/```[\s\S]*?```/g, ' ').replace(/`[^`\n]*`/g, ' ')
+  const cjk = (text.match(/[\u3400-\u9fff\uf900-\ufaff]/g) ?? []).length
+  const latin = (text.match(/[A-Za-z]/g) ?? []).length
+  return cjk >= latin ? '## 参考文献' : '## References'
+}
 
 /**
  * A matrix read from disk: `{ claims: [...] }` with every other root field
@@ -314,7 +326,7 @@ export function renderClinicalReport({ reportText, matrix = null }) {
     // Offsets moved with the rewritten citations before the list; the list
     // holds none of them, so it is found again rather than recomputed.
     const proseBounds = referenceListBounds(prose)
-    const heading = bounds ? text.slice(bounds.headingStart, bounds.headingEnd) : DEFAULT_REFERENCE_HEADING
+    const heading = bounds ? text.slice(bounds.headingStart, bounds.headingEnd) : defaultReferenceHeading(prose)
     const section = [heading, '', ...preface, ...(preface.length ? [''] : []), ...lines, ''].join('\n')
     if (proseBounds) {
       const tail = prose.slice(proseBounds.end)

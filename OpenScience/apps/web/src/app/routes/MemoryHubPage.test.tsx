@@ -18,15 +18,12 @@ const fetchReceivedCapsules = vi.fn();
 const enableReceivedCapsule = vi.fn();
 const disableCapsule = vi.fn();
 const previewCapsuleExport = vi.fn();
-const fetchProjectOverview = vi.fn();
 const archiveMemoryRecord = vi.fn();
 const restoreCapsuleEntry = vi.fn();
 const listAllMethods = vi.fn();
 const methodVersions = vi.fn();
 const methodSources = vi.fn();
 const rollbackMethod = vi.fn();
-const geo = vi.hoisted(() => ({ feature: "off" as "on" | "off", projects: [] as { projectId: string }[] }));
-const vcr = vi.hoisted(() => ({ feature: "off" as "on" | "off", studies: [] as { projectId: string }[] }));
 const map = vi.hoisted(() => ({ feature: "off" as "on" | "off" | "loading" }));
 
 vi.mock("@/lib/apiClient", async () => {
@@ -52,7 +49,6 @@ vi.mock("@/lib/memoryClient", async () => {
     disableCapsule: (...args: unknown[]) => disableCapsule(...args),
     archiveMemoryRecord: (...args: unknown[]) => archiveMemoryRecord(...args),
     restoreCapsuleEntry: (...args: unknown[]) => restoreCapsuleEntry(...args),
-    fetchProjectOverview: (...args: unknown[]) => fetchProjectOverview(...args),
   };
 });
 vi.mock("@/lib/productClient", async () => ({
@@ -69,17 +65,6 @@ vi.mock("@/lib/methodsClient", async () => {
     rollbackMethod: (...args: unknown[]) => rollbackMethod(...args),
   };
 });
-// Which projects belong to a module is the sidebar's own source of truth: the two module readers.
-vi.mock("@/lib/geoClient", async () => ({
-  ...(await vi.importActual<typeof import("@/lib/geoClient")>("@/lib/geoClient")),
-  useGeoFeature: () => geo.feature,
-  listGeoProjects: () => Promise.resolve(geo.projects),
-}));
-vi.mock("@/lib/vcrClient", async () => ({
-  ...(await vi.importActual<typeof import("@/lib/vcrClient")>("@/lib/vcrClient")),
-  useVcrFeature: () => vcr.feature,
-  getVcrHome: () => Promise.resolve({ studies: vcr.studies }),
-}));
 vi.mock("@/lib/memoryMapFeature", () => ({ useMemoryMapFeature: () => map.feature }));
 vi.mock("@/components/memory/useMemoryWritePrompt", () => ({ useMemoryWritePrompt: () => {} }));
 vi.mock("./CapsuleTransferPanel", () => ({
@@ -151,10 +136,18 @@ function openInHistory(search = "") {
   );
 }
 const where = () => screen.getByTestId("where").textContent;
+/** The left column's links, as the frame draws them: places, not a tab list. */
+const nav = () => screen.getByRole("navigation", { name: "记忆" });
+const navLinks = () => within(nav()).getAllByRole("link");
+/** The page's own width as the frame measures it (jsdom has no layout): 0 until a test gives it room. */
+let room = 0;
 
 describe("记忆胶囊", () => {
   beforeEach(() => {
-    geo.feature = "off"; geo.projects = []; vcr.feature = "off"; vcr.studies = []; map.feature = "off";
+    map.feature = "off";
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return { width: this.hasAttribute("data-memory-frame") ? room : 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON: () => ({}) };
+    });
     useProjectStore.setState({ projects: [{ id: "prj_1", name: "疳证 Meta 文献检索" }, { id: "prj_2", name: "信尔美" }], currentId: "prj_1" });
     fetchMemoryProfile.mockResolvedValue({
       records: [
@@ -185,8 +178,6 @@ describe("记忆胶囊", () => {
     ] });
     methodSources.mockResolvedValue({ items: [{ projectId: "prj_1", sessionId: "ses_5", title: "儿童疳证中医药新证据", at: "2026-09-22T08:00:00Z" }] });
     searchMemories.mockResolvedValue({ items: [], query: "", semantic: 0, conversations: {}, usage: {} });
-    // Most tests are about the memories; the overview above them has tests of its own and is unreadable by default.
-    fetchProjectOverview.mockRejectedValue(new Error("not read"));
     fetchReceivedCapsules.mockResolvedValue([
       pack(),
       pack({ id: "cap_official_1", title: "日常文稿", enabled: true, importedAt: null, official: { packId: "everyday-documents" }, card: { author: "EviMed 证据中心", summary: "写信、写总结、改文字时的通用做法" } }),
@@ -194,35 +185,47 @@ describe("记忆胶囊", () => {
     ]);
     previewCapsuleExport.mockResolvedValue({ entries: [] });
   });
-  afterEach(() => { cleanup(); vi.clearAllMocks(); useProjectStore.setState({ projects: [], currentId: "default" }); });
+  afterEach(() => { cleanup(); vi.clearAllMocks(); vi.restoreAllMocks(); room = 0; useProjectStore.setState({ projects: [], currentId: "default" }); });
 
-  it("is one page: a title with nothing under it, the memory switch and one 「⋯」 in the header, and no account name", async () => {
+  it("is one page: the section's heading on the right, the title, the memory switch, the navigation and the two actions in the left column, and no account name", async () => {
+    room = 1200;
     open();
-    const heading = await screen.findByRole("heading", { name: "记忆胶囊", level: 1 });
+    const heading = await screen.findByRole("heading", { name: "关于你", level: 1 });
     const [banner] = screen.getAllByRole("banner");
     expect(banner).toContainElement(heading);
-    expect(await within(banner).findByRole("switch", { name: "记忆" })).toHaveAttribute("aria-checked", "true");
-    expect(within(banner).getByRole("button", { name: "记忆设置" })).toBeInTheDocument();
+    // The header of the section holds its heading and nothing of the capsule's controls.
+    expect(within(banner).queryByRole("switch")).toBeNull();
+    expect(within(banner).queryByRole("button", { name: "记忆设置" })).toBeNull();
+    const column = document.querySelector<HTMLElement>("[data-memory-nav]")!;
+    expect(column).toHaveAttribute("data-memory-nav", "column");
+    expect(column).toHaveTextContent("记忆胶囊");
+    expect(await within(column).findByRole("switch", { name: "记忆" })).toHaveAttribute("aria-checked", "true");
+    expect(within(column).getByRole("button", { name: "记住这一条" })).toHaveClass("bg-surface-2");
+    expect(within(column).getByRole("button", { name: "记忆设置" })).toBeInTheDocument();
+    // Top to bottom: the switch, the navigation, then the button and the menu at the foot.
+    const order = [within(column).getByRole("switch"), nav(), within(column).getByRole("button", { name: "记住这一条" }), within(column).getByRole("button", { name: "记忆设置" })];
+    for (const [before, after] of order.slice(1).map((item, index) => [order[index]!, item] as const)) expect(precedes(before, after)).toBe(true);
     expect(within(banner).queryByLabelText("记忆持有人")).toBeNull();
     for (const gone of ["最近变化", "记下的内容", "EviMed 眼中的你", "方法学习", "能力经验", "查看做法", "效果待观察", "完成对照评估", "推断"]) {
       expect(screen.queryByText(gone)).toBeNull();
     }
   });
 
-  it("keeps sharing, the import from another assistant, forgotten content, this project and the reset in the header's 「⋯」, in that order — the map is a tab, not a menu item", async () => {
+  it("keeps sharing, the import from another assistant, forgotten content, the current project and the reset in the 「⋯」, in that order, and the project item names the project the shell is in", async () => {
     const user = userEvent.setup();
     open();
     await screen.findByRole("switch", { name: "记忆" });
     await user.click(screen.getByRole("button", { name: "记忆设置" }));
     const menu = await screen.findByRole("menu", { name: "记忆设置" });
-    expect([...menu.querySelectorAll("[role^=menuitem]")].map((item) => item.textContent)).toEqual(["分享与导入", "从其他 AI 导入", "已忘记的内容", "本项目不使用记忆", "重置记忆"]);
-    const project = within(menu).getByRole("menuitemcheckbox", { name: "本项目不使用记忆" });
+    expect([...menu.querySelectorAll("[role^=menuitem]")].map((item) => item.textContent)).toEqual(
+      ["分享与导入", "从其他 AI 导入", "已忘记的内容", "当前项目（疳证 Meta 文献检索）不使用记忆", "重置记忆"]);
+    const project = within(menu).getByRole("menuitemcheckbox", { name: "当前项目（疳证 Meta 文献检索）不使用记忆" });
     expect(project).toHaveAttribute("aria-checked", "false");
     await user.click(project);
     await waitFor(() => expect(updateMemorySettings).toHaveBeenCalledWith({ pausedProjects: ["prj_1"] }));
   });
 
-  it("has the overview first and the four lists after it, and no 地图 among them", async () => {
+  it("has the overview first and the three lists after it, as links with the one in force marked, and no 地图 or 项目 among them", async () => {
     map.feature = "on";
     render(
       <MemoryRouter initialEntries={["/app/memory?tab=self"]}>
@@ -233,10 +236,14 @@ describe("记忆胶囊", () => {
       </MemoryRouter>,
     );
     await screen.findByRole("switch", { name: "记忆" });
-    const tabs = screen.getByRole("tablist", { name: "记忆" });
-    expect(within(tabs).getAllByRole("tab").map((item) => item.textContent?.replace(/\d+$/u, ""))).toEqual(["总览", "关于你", "项目", "做法", "收到的"]);
-    expect(within(tabs).getByRole("tab", { name: /^关于你/ })).toHaveAttribute("aria-selected", "true");
-    expect(screen.queryByRole("tab", { name: "地图" })).toBeNull();
+    expect(navLinks().map((item) => item.textContent?.replace(/\d+$/u, ""))).toEqual(["总览", "关于你", "做法", "收到的"]);
+    expect(navLinks().map((item) => item.getAttribute("aria-current"))).toEqual([null, "page", null, null]);
+    expect(navLinks().map((item) => item.getAttribute("href"))).toEqual(["/app/memory/overview", "/app/memory?tab=self", "/app/memory?tab=methods", "/app/memory?tab=received"]);
+    // Places, not a tab list: nothing in the page is a tab.
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.queryByRole("tab")).toBeNull();
+    expect(screen.queryByRole("link", { name: "地图" })).toBeNull();
+    expect(screen.queryByRole("link", { name: /^项目/ })).toBeNull();
   });
 
   it("opens the overview on the unqualified memory landing address", async () => {
@@ -259,13 +266,13 @@ describe("记忆胶囊", () => {
         </Routes>
       </MemoryRouter>,
     );
-    await user.click(await screen.findByRole("tab", { name: "总览" }));
+    await user.click(await screen.findByRole("link", { name: "总览" }));
     expect(await screen.findByText("总览页")).toBeInTheDocument();
     cleanup();
     map.feature = "off";
     open();
     await screen.findByRole("switch", { name: "记忆" });
-    expect(screen.queryByRole("tab", { name: "总览" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "总览" })).toBeNull();
   });
 
   it("asks before the reset deletes anything, and says exactly what it clears and what it leaves", async () => {
@@ -293,17 +300,16 @@ describe("记忆胶囊", () => {
     await waitFor(() => expect(updateMemorySettings).toHaveBeenCalledWith({ learningPaused: true, recallPaused: true }));
   });
 
-  it("has its tabs in the sticky band and the search box in the one toolbar row under them, and each tab is one list", async () => {
+  it("has the search box in the one toolbar row of the sticky band, the navigation outside it, and each section is one list", async () => {
     open();
     await screen.findByRole("button", { name: /药学背景/ });
-    const tabs = screen.getByRole("tablist", { name: "记忆" });
-    // 成长 is not a tab: what happened each week is the map's 「时间」 view.
-    expect(within(tabs).getAllByRole("tab").map((item) => item.textContent)).toEqual(["关于你4", "项目1", "做法1", "收到的2"]);
+    // 关于你 counts what its list holds: the four about the person and the two that carry a project.
+    expect(navLinks().map((item) => item.textContent)).toEqual(["关于你6", "做法1", "收到的2"]);
     const search = screen.getByRole("searchbox", { name: "搜索记忆" });
     const band = document.querySelector("[data-page-chrome]")!;
-    expect(band).toContainElement(tabs);
     expect(band.querySelector("[data-toolbar]")).toContainElement(search);
-    expect(tabs.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(band).not.toContainElement(nav());
+    expect(screen.queryByRole("tablist")).toBeNull();
     expect(screen.queryByRole("group", { name: "筛选记忆" })).toBeNull();
   });
 
@@ -319,18 +325,16 @@ describe("记忆胶囊", () => {
     expect(within(drawer).getByRole("button", { name: "不要" })).toBeInTheDocument();
   });
 
-  it("opens on the first tab that has something in it, once: an empty 关于你 gives way to 项目, then 做法", async () => {
-    const user = userEvent.setup();
+  it("opens on 关于你 for an account with only a project's memories: it is a row of that list, under 项目记忆, naming its project", async () => {
     // Nothing about the person yet; the shell's own project has facts.
     fetchMemoryProfile.mockResolvedValue({ records: [record({ id: "rec_3", kind: "project_fact", scope: "project", scopeId: "prj_1", key: "project.fact.scope", value: "纳入范围覆盖疳证与小儿厌食症。", summary: "纳入范围覆盖疳证与小儿厌食症。" })], groups: {}, activeCount: 1, pendingCount: 0, episodeCount: 0, conversations: {}, usage: {} });
     fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [], forgotten: [] });
     open();
-    expect(await screen.findByRole("button", { name: /纳入范围覆盖疳证/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /项目/ })).toHaveAttribute("aria-selected", "true");
-    // Only once: going back to the empty tab is the researcher's own choice and stays.
-    await user.click(screen.getByRole("tab", { name: /关于你/ }));
-    expect(await screen.findByText("还没有关于你的记忆")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /关于你/ })).toHaveAttribute("aria-selected", "true");
+    const row = await screen.findByRole("button", { name: /纳入范围覆盖疳证/ });
+    expect(screen.getByRole("link", { name: /关于你/ })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent("项目记忆");
+    expect(row.closest("li")).toHaveTextContent("疳证 Meta 文献检索");
+    expect(screen.queryByText("还没有关于你的记忆")).toBeNull();
   });
 
   describe("each read is drawn as it arrives (the walk's memory page that took 30 s on the owner's data)", () => {
@@ -338,22 +342,22 @@ describe("记忆胶囊", () => {
       let release: (methods: unknown[]) => void = () => {};
       listAllMethods.mockImplementation(() => new Promise((resolve) => { release = resolve; }));
       open();
-      // The memories are in: their tab is open and listed, and the slowest read has not been waited for.
+      // The memories are in: their list is open and listed, and the slowest read has not been waited for.
       expect(await screen.findByRole("button", { name: /药学背景/ })).toBeInTheDocument();
-      expect(screen.getByRole("tab", { name: /关于你/ })).toHaveAttribute("aria-selected", "true");
+      expect(screen.getByRole("link", { name: /关于你/ })).toHaveAttribute("aria-current", "page");
       // 做法 is still being read: it has no number, which is not a zero.
-      expect(screen.getByRole("tab", { name: "做法" })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "做法" })).toBeInTheDocument();
       expect(screen.queryByText("没有读到全部记忆。")).toBeNull();
       await act(async () => { release([method]); });
-      expect(await screen.findByRole("tab", { name: /做法\s*[1-9]/ })).toBeInTheDocument();
+      expect(await screen.findByRole("link", { name: /做法\s*[1-9]/ })).toBeInTheDocument();
     });
 
-    it("keeps the list under the tab that is waiting for its own reads, and never lands on a tab before it can tell which holds something", async () => {
+    it("keeps the list under the section that is waiting for its own reads, and never lands on a list before it can tell which holds something", async () => {
       let release: (profile: unknown) => void = () => {};
       fetchMemoryProfile.mockImplementation(() => new Promise((resolve) => { release = resolve; }));
       open();
       // Everything but the profile is in, and the profile decides whether 关于你 holds anything: nothing is drawn under the tabs yet.
-      expect(await screen.findByRole("tab", { name: /做法/ })).toBeInTheDocument();
+      expect(await screen.findByRole("link", { name: /做法/ })).toBeInTheDocument();
       expect(screen.queryByText("还没有关于你的记忆")).toBeNull();
       expect(screen.queryByRole("button", { name: /药学背景/ })).toBeNull();
       await act(async () => { release({ records: [record()], groups: {}, activeCount: 1, pendingCount: 0, episodeCount: 0, conversations: {}, usage: {} }); });
@@ -367,25 +371,17 @@ describe("记忆胶囊", () => {
     });
   });
 
-  it("opens on the project that has facts when the shell's own has none", async () => {
-    fetchMemoryProfile.mockResolvedValue({ records: [record({ id: "rec_6", kind: "project_fact", scope: "project", scopeId: "prj_2", key: "project.fact.product", value: "信尔美为处方药，需冷链。", summary: "信尔美为处方药，需冷链。" })], groups: {}, activeCount: 1, pendingCount: 0, episodeCount: 0, conversations: {}, usage: {} });
-    fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [], forgotten: [] });
-    open();
-    expect(await screen.findByRole("button", { name: /信尔美为处方药/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "项目：信尔美" })).toBeInTheDocument();
-  });
-
   it("opens on 做法 when only what was learned is there, and stays on 关于你 when a read failed rather than guess it empty", async () => {
     fetchMemoryProfile.mockResolvedValue({ records: [], groups: {}, activeCount: 0, pendingCount: 0, episodeCount: 0, conversations: {}, usage: {} });
     fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [], forgotten: [] });
     const first = open();
     expect(await screen.findByRole("button", { name: /提交前给成品做最后把关/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /做法/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("link", { name: /做法/ })).toHaveAttribute("aria-current", "page");
     first.unmount();
     fetchMemoryProfile.mockRejectedValue(new Error("down"));
     open();
     expect(await screen.findByText("没有读到全部记忆。")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /关于你/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("link", { name: /关于你/ })).toHaveAttribute("aria-current", "page");
   });
 
   it("an address that names a tab is obeyed, and a tab the researcher clicked before the data came is not moved", async () => {
@@ -394,32 +390,34 @@ describe("记忆胶囊", () => {
     fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [], forgotten: [] });
     const named = open("?tab=methods");
     expect(await screen.findByRole("button", { name: /提交前给成品做最后把关/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /做法/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("link", { name: /做法/ })).toHaveAttribute("aria-current", "page");
     named.unmount();
     open("?tab=self");
     expect(await screen.findByText("还没有关于你的记忆")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /关于你/ })).toHaveAttribute("aria-selected", "true");
-    await user.click(screen.getByRole("tab", { name: /项目/ }));
-    expect(screen.getByRole("tab", { name: /项目/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("link", { name: /关于你/ })).toHaveAttribute("aria-current", "page");
+    await user.click(screen.getByRole("link", { name: /做法/ }));
+    expect(await screen.findByRole("button", { name: /提交前给成品做最后把关/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /做法/ })).toHaveAttribute("aria-current", "page");
   });
 
   it("starts on 关于你: facts about the person under small headers by kind, newest first, as bare sentences", async () => {
     open();
     await screen.findByRole("button", { name: /药学背景/ });
-    expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["背景", "偏好", "工作与写作习惯"]);
+    expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["背景", "偏好", "工作与写作习惯", "项目记忆"]);
     const texts = (name: string) => within(screen.getByRole("list", { name })).getAllByRole("listitem").map((item) => item.textContent);
     expect(texts("背景")).toEqual(["药学背景，关注老年人用药安全与抗栓治疗。"]);
     expect(texts("偏好")).toEqual(["偏好结论先行的回答。"]);
     // How they work and write is about them, from either store: a habit the platform noticed and a note of their own capsule.
     expect(texts("工作与写作习惯").sort()).toEqual(["先看一手研究再看综述。", "引用写到页码。"].sort());
-    // Nothing on a row but its sentence: no origin, no 推断, no hover icons, no menu. A run summary and a forgotten memory are not rows.
-    for (const row of screen.getAllByRole("listitem")) {
+    // A project's memories are the last group, and each row says whose it is in plain words after its sentence.
+    expect(texts("项目记忆")).toEqual(["纳入范围覆盖疳证与小儿厌食症。疳证 Meta 文献检索", "信尔美为处方药，需冷链。信尔美"]);
+    // Nothing on a row but its sentence (and its project's name): no origin, no 推断, no hover icons, no menu. A run summary and a forgotten memory are not rows.
+    for (const row of within(document.querySelector<HTMLElement>("[data-page-body]")!).getAllByRole("listitem")) {
       expect(within(row).queryByRole("button", { name: /编辑|忘记|更多/ })).toBeNull();
       expect(within(row).queryByRole("link")).toBeNull();
     }
     expect(screen.queryByText("做过的一次研究")).toBeNull();
     expect(screen.queryByText("已忘记的一条")).toBeNull();
-    expect(screen.queryByText("信尔美为处方药，需冷链。")).toBeNull();
   });
 
   it("opens a fact in a drawer on the right and never navigates: the words it rests on, and the link to the conversation only in there", async () => {
@@ -438,7 +436,7 @@ describe("记忆胶囊", () => {
     expect(within(drawer).getByRole("button", { name: "编辑" })).toBeInTheDocument();
     expect(within(drawer).getByRole("button", { name: "忘记" })).toBeInTheDocument();
     // The list is still there behind it.
-    expect(screen.getByRole("tablist", { name: "记忆" })).toBeInTheDocument();
+    expect(nav()).toBeInTheDocument();
     await user.click(within(drawer).getByRole("button", { name: "关闭" }));
     expect(screen.queryByRole("dialog")).toBeNull();
   });
@@ -464,49 +462,40 @@ describe("记忆胶囊", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
-  it("项目 lists one project's facts at a time, the one the shell is in to begin with, and the dropdown changes it", async () => {
+  it("names the project of a project-labelled memory in plain text on its row, opens it like any other, and its drawer names the project", async () => {
     const user = userEvent.setup();
     open();
-    await user.click(await screen.findByRole("tab", { name: /^项目/ }));
-    expect(screen.getByText("纳入范围覆盖疳证与小儿厌食症。")).toBeInTheDocument();
-    expect(screen.queryByText("信尔美为处方药，需冷链。")).toBeNull();
-    // A project's fact needs no label of its own: the dropdown says whose it is.
-    expect(within(screen.getByRole("list", { name: "项目的记忆" })).queryByText("疳证 Meta 文献检索")).toBeNull();
-    // The project is the header's scope, beside the title, and only on this tab.
-    const header = screen.getAllByRole("banner")[0]!;
-    await user.click(within(header).getByRole("button", { name: "项目：疳证 Meta 文献检索" }));
-    const menu = await screen.findByRole("menu", { name: "项目" });
-    expect([...menu.querySelectorAll("[role^=menuitem]")].map((item) => item.textContent)).toEqual(["疳证 Meta 文献检索", "信尔美"]);
-    await user.click(within(menu).getByRole("menuitemradio", { name: "信尔美" }));
-    expect(screen.getByText("信尔美为处方药，需冷链。")).toBeInTheDocument();
-    expect(screen.queryByText("纳入范围覆盖疳证与小儿厌食症。")).toBeNull();
-    // The drawer of a project's fact names the project.
+    const group = await screen.findByRole("list", { name: "项目记忆" });
+    const rows = within(group).getAllByRole("listitem");
+    expect(rows.map((row) => within(row).getByText(/^(疳证 Meta 文献检索|信尔美)$/).textContent)).toEqual(["疳证 Meta 文献检索", "信尔美"]);
+    // The name is a quiet label: no link, no chip, no second target — the row is the one button.
+    for (const row of rows) {
+      expect(within(row).queryByRole("link")).toBeNull();
+      expect(within(row).getAllByRole("button")).toHaveLength(1);
+      expect(within(row).getByText(/^(疳证 Meta 文献检索|信尔美)$/)).toHaveClass("text-caption", "text-text-3");
+      expect(within(row).getByText(/^(疳证 Meta 文献检索|信尔美)$/).closest("[data-tag]")).toBeNull();
+    }
+    // The other projects' memories are not hidden: there is no project to choose, and no dropdown.
+    expect(screen.queryByRole("button", { name: /^项目：/ })).toBeNull();
     await user.click(screen.getByRole("button", { name: /信尔美为处方药/ }));
     expect(await screen.findByText(/^信尔美 · \d+月\d+日$/)).toBeInTheDocument();
   });
 
-  it("lists the studies of 虚拟临床研究 and the projects of 循证 GEO in a group of their own in the dropdown", async () => {
-    const user = userEvent.setup();
-    geo.feature = "on"; geo.projects = [{ projectId: "prj_geo" }];
-    vcr.feature = "on"; vcr.studies = [{ projectId: "prj_vcr" }];
-    useProjectStore.setState({ projects: [{ id: "prj_1", name: "疳证 Meta 文献检索" }, { id: "prj_vcr", name: "糖尿病研究" }, { id: "prj_geo", name: "波立维" }, { id: "prj_2", name: "信尔美" }] });
+  it("calls the memories of a project the account no longer has 未归入项目", async () => {
+    fetchMemoryProfile.mockResolvedValue({
+      records: [record({ id: "rec_orphan", kind: "project_fact", scope: "project", scopeId: "prj_gone", key: "project.fact.gone", value: "已删除项目里的一条。", summary: "已删除项目里的一条。" })],
+      groups: {}, activeCount: 1, pendingCount: 0, conversations: {}, usage: {},
+    });
     open();
-    await user.click(await screen.findByRole("tab", { name: /^项目/ }));
-    await user.click(screen.getByRole("button", { name: "项目：疳证 Meta 文献检索" }));
-    const menu = await screen.findByRole("menu", { name: "项目" });
-    // The researcher's own first; each module's group has its heading, which is not an entry and cannot be chosen.
-    await waitFor(() => expect([...menu.querySelectorAll("[role^=menuitem]")].map((item) => item.textContent)).toEqual(
-      ["疳证 Meta 文献检索", "信尔美", "糖尿病研究", "波立维"]));
-    expect(within(menu).getByText("虚拟临床研究")).toBeInTheDocument();
-    expect(within(menu).getByText("循证 GEO")).toBeInTheDocument();
-    expect(within(menu).queryByRole("menuitemradio", { name: "虚拟临床研究" })).toBeNull();
-    expect(within(menu).getByRole("menuitemradio", { name: "波立维" })).not.toBeDisabled();
+    const row = (await screen.findByRole("button", { name: /已删除项目里的一条/ })).closest("li")!;
+    expect(within(row).getByText("未归入项目")).toBeInTheDocument();
   });
 
   it("做法 is the learned methods in force; a method still waiting is not shown", async () => {
     const user = userEvent.setup();
     open();
-    await user.click(await screen.findByRole("tab", { name: /^做法/ }));
+    await user.click(await screen.findByRole("link", { name: /^做法/ }));
+    expect(await screen.findByRole("list", { name: "所有研究都会用的做法" })).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["所有研究都会用"]);
     const every = within(screen.getByRole("list", { name: "所有研究都会用的做法" }));
     expect(every.getAllByRole("listitem").map((item) => item.textContent)).toEqual(["提交前给成品做最后把关先留改动前的副本，再逐项确认每道检查真的能报错。"]);
@@ -540,31 +529,89 @@ describe("记忆胶囊", () => {
     await waitFor(() => expect(rollbackMethod).toHaveBeenCalledWith(expect.objectContaining({ id: method.id, revision: 2 }), 1));
   });
 
-  // R19 (plan §3 S10): the page held to the framework's assertions, on each of its tabs.
-  describe("composed as a list page of the framework", () => {
-    it.each(["self", "project", "methods"])("%s: the tabs are the one row of views in the sticky band, the search is the one toolbar under them, and the list is the body", async (tab) => {
+  // R19 (plan §3 S10): the page held to the framework's assertions, on each of its sections.
+  describe("composed as a page of the framework, beside a left column", () => {
+    it.each(["self", "methods"])("%s: the search is the one toolbar in the sticky band, the list is the body, and there is no tab list at all", async (tab) => {
       const { container } = open(`?tab=${tab}`);
       await screen.findByRole("switch", { name: "记忆" });
-      await screen.findByRole("tab", { name: new RegExp(`^${{ self: "关于你", project: "项目", methods: "做法" }[tab]}`, "u") });
-      const facts = expectComposed(container, { tablists: 1, toolbar: true });
+      await screen.findByRole("link", { name: new RegExp(`^${{ self: "关于你", methods: "做法" }[tab]}`, "u") });
+      const facts = expectComposed(container, { tablists: 0, toolbar: true });
       expect(facts.toolbars).toHaveLength(1);
-      expect(facts.chrome!.contains(facts.tablists[0]!)).toBe(true);
       expect(facts.chrome!.contains(facts.toolbars[0]!)).toBe(true);
-      expect(precedes(facts.tablists[0]!, facts.toolbars[0]!)).toBe(true);
       expect(facts.toolbars[0]).toContainElement(screen.getByRole("searchbox", { name: "搜索记忆" }));
       expect(facts.body!.querySelector("input[type=search]")).toBeNull();
-      // The project is the header's, on the one tab that is about a project.
-      const header = facts.header!;
-      expect(within(header).queryByRole("button", { name: /^项目：/u }) !== null).toBe(tab === "project");
+      // The navigation is the frame's, outside the page's band and header; the page's own heading is the section's.
+      expect(facts.chrome!.contains(nav())).toBe(false);
+      expect(facts.header!.contains(nav())).toBe(false);
+      expect(within(facts.header!).getByRole("heading", { level: 1 })).toHaveTextContent(tab === "self" ? "关于你" : "做法");
     });
 
-    it("is the same column and the same band as the map, so the title and the tabs do not move between them", async () => {
+    it("received: one toolbar with its one action, and no search", async () => {
+      const { container } = open("?tab=received");
+      await screen.findByRole("list", { name: "收到的胶囊" });
+      const facts = expectComposed(container, { tablists: 0, toolbar: true });
+      expect(facts.toolbars).toHaveLength(1);
+      expect(within(facts.toolbars[0]!).getByRole("button", { name: "分享与导入" })).toBeInTheDocument();
+    });
+
+    it("is the same column as the overview, so the heading does not move between them", async () => {
       const { container } = open();
       await screen.findByRole("switch", { name: "记忆" });
-      // `page` (1040): the map was `wide` (1200) and the title and the tabs stepped 80 px sideways between the two pages.
+      // `page` (1040): the same column the overview's data page sits in.
       expect(container.querySelector("[data-page-header]")!.parentElement).toHaveClass("max-w-page");
       expect(container.querySelector("[data-page-header]")!.parentElement).not.toHaveClass("max-w-wide");
-      expect(screen.getByRole("tablist", { name: "记忆" }).closest("[data-page-chrome]")).not.toBeNull();
+    });
+  });
+
+  describe("the left column", () => {
+    it("stands beside the section when the page has room for both: its own scroll, its own place, the section's scroll is the page's", async () => {
+      room = 1100;
+      const { container } = open();
+      await screen.findByRole("switch", { name: "记忆" });
+      const frame = container.querySelector("[data-memory-frame]")!;
+      expect(frame).toHaveAttribute("data-memory-frame", "split");
+      const column = frame.querySelector<HTMLElement>("[data-memory-nav]")!;
+      expect(column).toHaveAttribute("data-memory-nav", "column");
+      expect(column).toHaveClass("overflow-y-auto", "w-60", "shrink-0");
+      expect(frame.querySelector("[data-page-body]")!.closest(".overflow-y-auto")).not.toBe(column);
+      expect(precedes(column, frame.querySelector("[data-page-header]")!)).toBe(true);
+    });
+
+    it("folds into one row above the section when the page has not room for both, with the same controls once", async () => {
+      room = 700;
+      const { container } = open();
+      await screen.findByRole("switch", { name: "记忆" });
+      const frame = container.querySelector("[data-memory-frame]")!;
+      expect(frame).toHaveAttribute("data-memory-frame", "folded");
+      const row = frame.querySelector<HTMLElement>("[data-memory-nav]")!;
+      expect(row).toHaveAttribute("data-memory-nav", "row");
+      expect(row).not.toHaveClass("w-60");
+      expect(precedes(row, frame.querySelector("[data-page-header]")!)).toBe(true);
+      // One set of controls, wherever they stand.
+      expect(screen.getAllByRole("switch", { name: "记忆" })).toHaveLength(1);
+      expect(screen.getAllByRole("button", { name: "记住这一条" })).toHaveLength(1);
+      expect(screen.getAllByRole("button", { name: "记忆设置" })).toHaveLength(1);
+      expect(row).toContainElement(screen.getByRole("switch", { name: "记忆" }));
+      expect(row).toContainElement(nav());
+      expect(navLinks().map((link) => link.getAttribute("aria-current"))).toEqual(["page", null, null]);
+    });
+
+    it.each([["self", "关于你"], ["methods", "做法"], ["received", "收到的"]])("is on every list, with %s in force", async (tab, name) => {
+      open(`?tab=${tab}`);
+      await screen.findByRole("switch", { name: "记忆" });
+      expect(screen.getByRole("link", { name: new RegExp(`^${name}`, "u") })).toHaveAttribute("aria-current", "page");
+      expect(navLinks().filter((link) => link.hasAttribute("aria-current"))).toHaveLength(1);
+      expect(screen.getByRole("button", { name: "记住这一条" })).toBeInTheDocument();
+    });
+
+    it("moves between the lists by links, and a link leaves the search and the open row behind", async () => {
+      const user = userEvent.setup();
+      openInHistory(`?q=${encodeURIComponent("背景")}&open=${encodeURIComponent("record:rec_1")}`);
+      await screen.findByRole("dialog", { name: "背景" });
+      await user.click(screen.getByRole("link", { name: /^做法/ }));
+      expect(where()).toBe("/app/memory?tab=methods");
+      expect(await screen.findByRole("searchbox", { name: "搜索记忆" })).toHaveValue("");
+      expect(screen.queryByRole("dialog")).toBeNull();
     });
   });
 
@@ -600,14 +647,45 @@ describe("记忆胶囊", () => {
       openOld("loading");
       expect(await screen.findByTestId("where")).toHaveTextContent("/app/memory?tab=growth");
       expect(screen.queryByText("总览页")).toBeNull();
-      expect(screen.queryByRole("tab", { name: "关于你" })).toBeNull();
+      expect(screen.queryByRole("link", { name: "关于你" })).toBeNull();
     });
 
     it("sends it to the first list where the deployment draws no map, and never leaves a tab that is not there", async () => {
       openOld("off");
-      expect(await screen.findByRole("tab", { name: /关于你/ })).toHaveAttribute("aria-selected", "true");
+      expect(await screen.findByRole("link", { name: /关于你/ })).toHaveAttribute("aria-current", "page");
       expect(screen.getByTestId("where")).toHaveTextContent("/app/memory?tab=self");
-      expect(screen.queryByRole("tab", { name: "成长" })).toBeNull();
+      expect(screen.queryByRole("link", { name: "成长" })).toBeNull();
+    });
+  });
+
+  describe("项目 is not a section any more", () => {
+    function openOld(search: string) {
+      return render(
+        <MemoryRouter initialEntries={[`/app/memory${search}`]}>
+          <Routes><Route path="/app/memory" element={<><MemoryHubPage /><Where /></>} /></Routes>
+        </MemoryRouter>,
+      );
+    }
+    function Where() {
+      const location = useLocation();
+      return <p data-testid="where">{location.pathname}{location.search}</p>;
+    }
+
+    it.each(["?tab=project", "?tab=project&project=prj_2"])("sends %s to 关于你, in place, without the project", async (search) => {
+      openOld(search);
+      expect(await screen.findByRole("button", { name: /药学背景/ })).toBeInTheDocument();
+      expect(screen.getByTestId("where")).toHaveTextContent(/^\/app\/memory\?tab=self$/);
+      expect(screen.getByRole("link", { name: /^关于你/ })).toHaveAttribute("aria-current", "page");
+      // The project's memories are there, under their own group.
+      expect(within(screen.getByRole("list", { name: "项目记忆" })).getAllByRole("listitem")).toHaveLength(2);
+    });
+
+    it("keeps the row an old link opened, and the search", async () => {
+      openOld(`?tab=project&project=prj_2&open=${encodeURIComponent("record:rec_6")}&q=${encodeURIComponent("冷链")}`);
+      const drawer = await screen.findByRole("dialog", { name: "项目事实" });
+      expect(within(drawer).getByText("信尔美为处方药，需冷链。")).toBeInTheDocument();
+      expect(screen.getByTestId("where")).toHaveTextContent("/app/memory?tab=self&open=record%3Arec_6&q=%E5%86%B7%E9%93%BE");
+      expect(screen.getByRole("searchbox", { name: "搜索记忆" })).toHaveValue("冷链");
     });
   });
 
@@ -688,13 +766,13 @@ describe("记忆胶囊", () => {
     expect(await screen.findByRole("dialog", { name: "分享与导入" })).toBeInTheDocument();
   });
 
-  it("carries no number on a tab with nothing in it", async () => {
+  it("carries no number on a list with nothing in it", async () => {
     fetchMemoryProfile.mockResolvedValue({ records: [], groups: {}, activeCount: 0, pendingCount: 0, conversations: {}, usage: {} });
     fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [], forgotten: [] });
     listAllMethods.mockResolvedValue([]);
     open();
     await screen.findByText("还没有关于你的记忆");
-    expect(within(screen.getByRole("tablist", { name: "记忆" })).getAllByRole("tab").map((item) => item.textContent)).toEqual(["关于你", "项目", "做法", "收到的2"]);
+    expect(navLinks().map((item) => item.textContent)).toEqual(["关于你", "做法", "收到的2"]);
   });
 
   it("says what will appear on a tab that is empty, and nothing is a 「还没有记忆」 for a tab that could not be read", async () => {
@@ -707,14 +785,14 @@ describe("记忆胶囊", () => {
     expect(screen.getByText("你在对话里说过的偏好、背景和写作习惯会出现在这里。")).toBeInTheDocument();
     // An empty list is a recipe: what will be here, and the one thing to do — a verb and its object.
     expect(screen.getByRole("button", { name: "在对话里说说你自己" })).toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: /^做法/ }));
+    await user.click(screen.getByRole("link", { name: /^做法/ }));
     expect(screen.getByText("还没有学到的做法")).toBeInTheDocument();
     // A practice is learned and never typed: there is no button, and the sentence says why instead.
     expect(document.querySelector("[data-empty][data-reason]")).not.toBeNull();
     expect(document.querySelector("[data-empty] button")).toBeNull();
-    await user.click(screen.getByRole("tab", { name: /^项目/ }));
-    expect(screen.getByText("这个项目还没有记忆")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "在对话里说说这个项目" })).toBeInTheDocument();
+    // There is no 「这个项目还没有记忆」: a project is a label, and an empty capsule has the one recipe.
+    expect(screen.queryByText("这个项目还没有记忆")).toBeNull();
+    expect(screen.queryByRole("button", { name: "在对话里说说这个项目" })).toBeNull();
   });
 
   it("says one thing when any read fails, with 重试, keeps the lists that did read, and shows nothing as empty that did not", async () => {
@@ -724,7 +802,7 @@ describe("记忆胶囊", () => {
     // The facts read; the methods did not: one line, and the tab that needs them says nothing of 「还没有」.
     expect(await screen.findByRole("note")).toHaveTextContent("没有读到全部记忆。");
     expect(await screen.findByRole("button", { name: /药学背景/ })).toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: /^做法/ }));
+    await user.click(screen.getByRole("link", { name: /^做法/ }));
     expect(screen.queryByText("还没有学到的做法")).toBeNull();
     await user.click(screen.getByRole("button", { name: "重试" }));
     await waitFor(() => expect(screen.queryByRole("note")).toBeNull());
@@ -744,53 +822,50 @@ describe("记忆胶囊", () => {
   it("opens the tab a link asks for: the skills page's ?tab=methods, and the old /app/capsules redirect", async () => {
     open("?tab=methods");
     expect(await screen.findByRole("button", { name: /提交前给成品做最后把关/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /^做法/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("link", { name: /^做法/ })).toHaveAttribute("aria-current", "page");
     cleanup();
     open("?tab=capsules");
     expect(await screen.findByRole("button", { name: /药学背景/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /^关于你/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("link", { name: /^关于你/ })).toHaveAttribute("aria-current", "page");
   });
 
-  it("opens the memory an inbox notice names, in its drawer, on the tab it belongs to", async () => {
+  it("opens the memory an inbox notice names, in its drawer, on the list it belongs to: a project's memory is a row of 关于你", async () => {
     open("?record=rec_6");
     const drawer = await screen.findByRole("dialog", { name: "项目事实" });
     expect(within(drawer).getByText("信尔美为处方药，需冷链。")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /^项目/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("link", { name: /^关于你/ })).toHaveAttribute("aria-current", "page");
   });
 
   it("opens the learned method a skill-catalogue link names, in its drawer, and says when it is not in the list", async () => {
     open(`?method=${encodeURIComponent(method.id)}`);
     const drawer = await screen.findByRole("dialog", { name: "提交前给成品做最后把关" });
     expect(within(drawer).getByText(/先复制一份/)).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /^做法/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("link", { name: /^做法/ })).toHaveAttribute("aria-current", "page");
     cleanup();
     open("?method=method%3Amissing");
     expect(await screen.findByText("当前列表中没有找到这条做法。")).toBeInTheDocument();
   });
 
   // A08: the page keeps its place in its address, and Back finds it.
-  it("keeps the tab, the project and the search in the address, and a tab pushes where a filter replaces", async () => {
+  it("keeps the list and the search in the address, and a link pushes where a filter replaces", async () => {
     const user = userEvent.setup();
     openInHistory();
-    await user.click(await screen.findByRole("tab", { name: /^项目/ }));
-    expect(where()).toBe("/app/memory?tab=project");
-    await user.click(screen.getByRole("button", { name: "项目：疳证 Meta 文献检索" }));
-    await user.click(within(await screen.findByRole("menu", { name: "项目" })).getByRole("menuitemradio", { name: "信尔美" }));
-    expect(where()).toBe("/app/memory?tab=project&project=prj_2");
-    await user.type(screen.getByRole("searchbox", { name: "搜索记忆" }), "冷链");
-    await waitFor(() => expect(where()).toBe("/app/memory?tab=project&project=prj_2&q=%E5%86%B7%E9%93%BE"));
-    // Choosing the project and typing replaced the entry; the tab pushed one: a single Back leaves for the page before it.
+    await user.click(await screen.findByRole("link", { name: /^做法/ }));
+    expect(where()).toBe("/app/memory?tab=methods");
+    await user.type(screen.getByRole("searchbox", { name: "搜索记忆" }), "把关");
+    await waitFor(() => expect(where()).toBe("/app/memory?tab=methods&q=%E6%8A%8A%E5%85%B3"));
+    // Typing replaced the entry; the link pushed one: a single Back leaves for the page before it.
     await act(async () => { await router.navigate!(-1); });
     expect(where()).toBe("/app/memory");
-    expect(screen.getByRole("tab", { name: /^关于你/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("link", { name: /^关于你/ })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("searchbox", { name: "搜索记忆" })).toHaveValue("");
   });
 
-  it("opens the page on the tab, project, search and row its address names", async () => {
-    openInHistory(`?tab=project&project=prj_2&open=${encodeURIComponent("record:rec_6")}&q=${encodeURIComponent("冷链")}`);
+  it("opens the page on the list, search and row its address names", async () => {
+    openInHistory(`?tab=self&open=${encodeURIComponent("record:rec_6")}&q=${encodeURIComponent("冷链")}`);
     const drawer = await screen.findByRole("dialog", { name: "项目事实" });
     expect(within(drawer).getByText("信尔美为处方药，需冷链。")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /^项目/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("link", { name: /^关于你/ })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("searchbox", { name: "搜索记忆" })).toHaveValue("冷链");
   });
 
@@ -834,7 +909,8 @@ describe("记忆胶囊", () => {
   it("comes back to the place in the list the reader had scrolled to after a visit elsewhere", async () => {
     const { container } = openInHistory();
     await screen.findByRole("button", { name: /药学背景/ });
-    const scroller = () => container.querySelector<HTMLElement>(".overflow-y-auto")!;
+    // The section's own scroll (the page's), not the left column's.
+    const scroller = () => container.querySelector("[data-page-body]")!.closest<HTMLElement>(".overflow-y-auto")!;
     scroller().scrollTop = 180;
     fireEvent.scroll(scroller());
     await act(async () => { await router.navigate!("/away"); });
@@ -844,128 +920,10 @@ describe("记忆胶囊", () => {
     expect(scroller().scrollTop).toBe(180);
   });
 
-  it("keeps the notice's deep links working: the record's tab, project and row land in the address", async () => {
+  it("keeps the notice's deep links working: the record's list and row land in the address", async () => {
     openInHistory("?record=rec_6");
     await screen.findByRole("dialog", { name: "项目事实" });
-    expect(where()).toBe("/app/memory?tab=project&project=prj_2&open=record%3Arec_6");
-  });
-
-  describe("the top of 项目", () => {
-    const overview = (patch: Record<string, unknown> = {}) => ({
-      projectId: "prj_1", paused: false, timeZone: "Asia/Shanghai",
-      card: [
-        { slot: "field", label: "领域", recordId: "rec_f", text: "心血管", updatedAt: "2026-09-13T02:00:00Z" },
-        { slot: "population", label: "人群", recordId: "rec_3", text: "75 岁以上非瓣膜性房颤患者", updatedAt: "2026-09-13T02:00:00Z" },
-        { slot: "outcome", label: "结局", recordId: "rec_o", text: "大出血", updatedAt: "2026-09-13T02:00:00Z" },
-      ],
-      capabilities: [{ id: "statistical-analysis", title: "统计分析", count: 6 }, { id: "meta-analysis", title: "自动化 Meta 分析", count: 2 }],
-      works: [
-        { month: "2026-10", items: [{ runId: "run_9", title: "阿司匹林二级预防", path: "deliverables/clinical-evidence/report.md", name: "report.md", at: "2026-10-10T02:30:00.000Z" }] },
-        { month: "2025-12", items: [{ runId: "run_1", title: "旧研究", path: "deliverables/old/report.docx", name: "report.docx", at: "2025-12-20T02:30:00.000Z" }] },
-      ],
-      ...patch,
-    });
-
-    it("shows the card, what the project did and what it delivered above its memories, for the project the dropdown names", async () => {
-      fetchProjectOverview.mockImplementation(async (id: string) => overview({ projectId: id }));
-      const user = userEvent.setup();
-      open("?tab=project");
-      const card = await screen.findByRole("list", { name: "项目卡" });
-      await waitFor(() => expect(fetchProjectOverview).toHaveBeenCalledWith("prj_1"));
-      // Only what was stated, under the names a researcher uses for it.
-      expect(within(card).getAllByRole("listitem").map((row) => row.textContent)).toEqual([
-        "领域心血管", "人群75 岁以上非瓣膜性房颤患者", "结局大出血",
-      ].map((text) => expect.stringContaining(text)));
-      expect(screen.getByRole("heading", { name: "项目卡" })).toBeInTheDocument();
-      // A ranking is a table with a bar in the row; the numbers are the bar's labels.
-      const table = screen.getByRole("table", { name: "这个项目做过" });
-      expect(within(table).getAllByRole("row").slice(1).map((row) => row.textContent)).toEqual(["统计分析6", "自动化 Meta 分析2"]);
-      expect(within(table).getAllByRole("img").map((bar) => bar.getAttribute("aria-label"))).toEqual(["统计分析 6", "自动化 Meta 分析 2"]);
-      // The works, by month, each a link to the file; the file's name and the day are all it says of itself.
-      expect(screen.getByRole("heading", { name: "10月" })).toBeInTheDocument();
-      expect(screen.getByRole("heading", { name: "2025年12月" })).toBeInTheDocument();
-      const work = screen.getByRole("link", { name: /阿司匹林二级预防/ });
-      expect(work).toHaveAttribute("href", "/app/runs/run_9/files/deliverables/clinical-evidence/report.md");
-      expect(within(work.closest("li")!).getByText("report.md")).toBeInTheDocument();
-      expect(within(work.closest("li")!).getByText("10月10日")).toBeInTheDocument();
-      // And the memories under it, with a name of their own now that something sits above them.
-      expect(screen.getByRole("heading", { name: "记忆" })).toBeInTheDocument();
-      expect(screen.getByText("纳入范围覆盖疳证与小儿厌食症。")).toBeInTheDocument();
-      expect(document.body.textContent).not.toMatch(/已交付|用过|次运行|token|置信/);
-      // The dropdown moves the whole of it to the other project.
-      await user.click(screen.getByRole("button", { name: "项目：疳证 Meta 文献检索" }));
-      await user.click(within(await screen.findByRole("menu", { name: "项目" })).getByRole("menuitemradio", { name: "信尔美" }));
-      await waitFor(() => expect(fetchProjectOverview).toHaveBeenCalledWith("prj_2"));
-    });
-
-    it("pauses the project the 项目 tab shows, not the one the shell is in", async () => {
-      // The shell is in prj_1; the tab was asked for prj_2.
-      fetchProjectOverview.mockResolvedValue(overview({ paused: false }));
-      const user = userEvent.setup();
-      open("?tab=project&project=prj_2");
-      await waitFor(() => expect(fetchProjectOverview).toHaveBeenCalledWith("prj_2"));
-      await user.click(await screen.findByRole("button", { name: "记忆设置" }));
-      await user.click(await screen.findByRole("menuitemcheckbox", { name: "本项目不使用记忆" }));
-      await waitFor(() => expect(updateMemorySettings).toHaveBeenCalledWith({ pausedProjects: ["prj_2"] }));
-    });
-
-    it("opens the memory a slot was written from in the drawer, and does not offer one the page does not hold", async () => {
-      fetchProjectOverview.mockResolvedValue(overview());
-      const user = userEvent.setup();
-      openInHistory("?tab=project");
-      const card = await screen.findByRole("list", { name: "项目卡" });
-      // rec_f and rec_o are not memories this page holds (a stale card is a row without a door, not a silent button).
-      expect(within(card).queryByRole("button", { name: /心血管/ })).toBeNull();
-      await user.click(within(card).getByRole("button", { name: /75 岁以上非瓣膜性房颤患者/ }));
-      expect(await screen.findByRole("dialog", { name: "项目事实" })).toBeInTheDocument();
-      expect(where()).toContain("open=record%3Arec_3");
-    });
-
-    it("says so, in one line, when the project has memory switched off", async () => {
-      fetchProjectOverview.mockResolvedValue(overview({ paused: true, card: [], capabilities: [], works: [] }));
-      open("?tab=project");
-      expect(await screen.findByText("本项目已暂停记忆")).toBeInTheDocument();
-      cleanup();
-      fetchProjectOverview.mockResolvedValue(overview({ paused: false }));
-      open("?tab=project");
-      await screen.findByRole("list", { name: "项目卡" });
-      expect(screen.queryByText("本项目已暂停记忆")).toBeNull();
-    });
-
-    it("reads the overview again when the project's switch is changed in the header", async () => {
-      fetchProjectOverview.mockResolvedValue(overview({ paused: false }));
-      const user = userEvent.setup();
-      open("?tab=project");
-      await screen.findByRole("list", { name: "项目卡" });
-      const before = fetchProjectOverview.mock.calls.length;
-      fetchProjectOverview.mockResolvedValue(overview({ paused: true }));
-      await user.click(await screen.findByRole("button", { name: "记忆设置" }));
-      await user.click(await screen.findByRole("menuitemcheckbox", { name: "本项目不使用记忆" }));
-      expect(await screen.findByText("本项目已暂停记忆")).toBeInTheDocument();
-      expect(fetchProjectOverview.mock.calls.length).toBeGreaterThan(before);
-    });
-
-    it("leaves the memories alone when the overview cannot be read, says in one line that a project with memories has no card, and steps aside for a search", async () => {
-      const user = userEvent.setup();
-      open("?tab=project");
-      expect(await screen.findByText("纳入范围覆盖疳证与小儿厌食症。")).toBeInTheDocument();
-      expect(screen.queryByRole("heading", { name: "项目卡" })).toBeNull();
-      expect(screen.queryByRole("heading", { name: "记忆" })).toBeNull();
-      cleanup();
-      fetchProjectOverview.mockResolvedValue(overview({ card: [], capabilities: [], works: [] }));
-      open("?tab=project");
-      expect(await screen.findByText("纳入范围覆盖疳证与小儿厌食症。")).toBeInTheDocument();
-      // One quiet line where the card would be, never a grid of empty labels; the memories keep their own name beneath it.
-      expect(await screen.findByText("还没有记下这个项目的目标、资料和进展。")).toBeInTheDocument();
-      expect(screen.queryByRole("list", { name: "项目卡" })).toBeNull();
-      expect(screen.getByRole("heading", { name: "记忆" })).toBeInTheDocument();
-      cleanup();
-      fetchProjectOverview.mockResolvedValue(overview());
-      open("?tab=project");
-      await screen.findByRole("list", { name: "项目卡" });
-      await user.type(screen.getByRole("searchbox", { name: "搜索记忆" }), "疳证");
-      await waitFor(() => expect(screen.queryByRole("list", { name: "项目卡" })).toBeNull());
-    });
+    expect(where()).toBe("/app/memory?tab=self&open=record%3Arec_6");
   });
 
   it("does not write when it is read: the capsule is made when 分享与导入 opens", async () => {
@@ -977,12 +935,12 @@ describe("记忆胶囊", () => {
   });
 
   describe("收到的", () => {
-    it("is a tab of its own that counts the packs in force, and lists every pack as a row with its own switch", async () => {
+    it("is a list of its own that counts the packs in force, and lists every pack as a row with its own switch", async () => {
       open("?tab=received");
       const list = await screen.findByRole("list", { name: "收到的胶囊" });
-      const tab = within(screen.getByRole("tablist", { name: "记忆" })).getByRole("tab", { name: /收到的/ });
-      expect(tab).toHaveAttribute("aria-selected", "true");
-      expect(tab.textContent).toBe("收到的2");
+      const link = within(nav()).getByRole("link", { name: /收到的/ });
+      expect(link).toHaveAttribute("aria-current", "page");
+      expect(link.textContent).toBe("收到的2");
       // A person's own pack first, the platform's starter packs after it; one switch each, named after its pack.
       expect(within(list).getAllByRole("listitem").map((row) => within(row).getByRole("switch").getAttribute("aria-label"))).toEqual([
         "启用“李主任的工作方式”", "启用“日常文稿”", "启用“文献检索与引用”",
@@ -1049,19 +1007,5 @@ describe("记忆胶囊", () => {
       expect(await screen.findByText("没有读到全部记忆。")).toBeInTheDocument();
       expect(screen.queryByRole("list", { name: "收到的胶囊" })).toBeNull();
     });
-  });
-
-  it("names the bucket of memories that belong to no project 「未归入项目」 in the project chooser", async () => {
-    fetchMemoryProfile.mockResolvedValue({
-      records: [record({ id: "rec_orphan", kind: "project_fact", scope: "project", scopeId: "prj_gone", key: "project.fact.gone", value: "已删除项目里的一条。", summary: "已删除项目里的一条。" })],
-      groups: {}, activeCount: 1, pendingCount: 0, conversations: {}, usage: {},
-    });
-    const user = userEvent.setup();
-    open("?tab=project");
-    // The orphaned memory is the one thing the account has under a project, so the chooser names where it is.
-    await user.click(await screen.findByRole("button", { name: /^项目：/ }));
-    const menu = await screen.findByRole("menu", { name: "项目" });
-    expect(within(menu).getByRole("menuitemradio", { name: "未归入项目" })).toBeInTheDocument();
-    expect(within(menu).queryByRole("menuitemradio", { name: "其他" })).toBeNull();
   });
 });

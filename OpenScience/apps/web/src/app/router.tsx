@@ -24,7 +24,6 @@ const FrontierArticlePage = lazy(() => import("./routes/FrontierArticlePage").th
 const GlobalHomeRoute = lazy(() => import("./routes/SessionRoute").then((m) => ({ default: m.GlobalHomeRoute })));
 const SessionRoute = lazy(() => import("./routes/SessionRoute").then((m) => ({ default: m.SessionRoute })));
 const KnowledgePage = lazy(() => import("./routes/KnowledgePage").then((m) => ({ default: m.KnowledgePage })));
-const SourceReaderPage = lazy(() => import("./routes/SourceReaderPage").then((m) => ({ default: m.SourceReaderPage })));
 const KnowledgeOpenPage = lazy(() => import("./routes/KnowledgeOpenPage").then((m) => ({ default: m.KnowledgeOpenPage })));
 const GalleryPage = lazy(() => import("./routes/GalleryPage").then((m) => ({ default: m.GalleryPage })));
 const AutopilotPage = lazy(() => import("./routes/AutopilotPage").then((m) => ({ default: m.AutopilotPage })));
@@ -130,13 +129,13 @@ export const routes: RouteObject[] = [
         // tabs land (`open-artifact`, contract C9) and where a claim's preserved
         // source opens with its quotation marked.
         { path: "runs/:runId/files/*", element: <RunFilePage /> },
-        // 「知识库」: the list, with its scope, type and search in the address, and one document on a page of its own
-        // (`files/:sourceId`) — the original beside what it says. A link by `?source=<id>` is answered by the list, which
-        // sends it to the document's page.
-        { path: "files", element: <KnowledgePage /> },
+        // 「知识库」: every document once, each saying where it takes effect, with the chosen one read in the pane beside
+        // the list (`files/:sourceId`), or on a page of its own where there is no room for both. A link by `?source=<id>` is
+        // answered by the list.
         // A compiled file named by its place (a mark of the memory map, a link from outside): it goes to the document's page.
         { path: "files/open", element: <KnowledgeOpenPage /> },
-        { path: "files/:sourceId", element: <SourceReaderPage /> },
+        // One route for the list and a document in its pane, so choosing another document does not remount the list.
+        { path: "files/:sourceId?", element: <KnowledgePage /> },
         // 「定时任务」: the list at `/app/autopilot`, one task and its conversation at `/app/autopilot/:taskId`. One route, with or
         // without the id, so opening a task from the list is not a remount (the kernel's frame is placed over the task's pane
         // by `SessionFrameHost`). `?task=` and `?digest=` are the old addresses and are resolved by the page.

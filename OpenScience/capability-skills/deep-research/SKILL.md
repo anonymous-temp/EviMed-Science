@@ -9,7 +9,7 @@ Use this skill when a question requires more than a short factual answer or a si
 
 ## Workflow
 
-1. Decompose the question into four to six answerable subquestions.
+1. Decompose the question into the answerable subquestions it needs; when the request gives an outline, decompose each of its sections.
 2. Define the evidence hierarchy and inclusion criteria before searching.
 3. Run at least two query variants for each major subquestion when the topic permits.
 4. Search more than one source class. For biomedical work, combine literature indexes, guideline sources, and authoritative regulatory or public-health documents.
@@ -45,11 +45,11 @@ Run retrieval as an explicit search → read → refine → re-search loop:
 3. Refine the query from what was read: add newly found synonyms, drug class names, and population or outcome terms, and drop terms that returned only irrelevant records.
 4. Re-search with the refined queries and deduplicate against earlier result sets.
 
-Stop when two consecutive refined queries add no new relevant sources, or after three refinement iterations, whichever comes first; then report what the loop covered and what it could not reach.
+Stop a subquestion when two consecutive refined queries add no new relevant sources, or after three refinement iterations, whichever comes first; then report what the loop covered and what it could not reach.
 
 ## Quality rules
 
-- Use 15–30 relevant sources for broad scientific questions when the evidence base permits.
+- Let the number of sources follow the scope: dozens to a few hundred for a comprehensive review.
 - Inspect at least three to five pivotal sources in full and more for clinical questions with heterogeneous evidence.
 - Every material factual claim must resolve to a source actually inspected at the required access level.
 - Cross-check high-consequence conclusions against more than one independent source.

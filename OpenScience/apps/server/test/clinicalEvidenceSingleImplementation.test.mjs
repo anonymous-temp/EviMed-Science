@@ -33,7 +33,7 @@ import path from "node:path";
 import { validateClinicalEvidencePackage } from "../src/clinicalEvidenceQuality.mjs";
 import { runGate } from "@evimed/domain";
 import * as domainGate from "@evimed/domain/clinical-evidence";
-import { deepResearchPackage } from "./fixtures/clinicalEvidencePackage.mjs";
+import { deepResearchPackage, englishDeepResearchPackage } from "./fixtures/clinicalEvidencePackage.mjs";
 
 // The run-side entry: what `evimed_submit_deliverable` calls, with what it
 // passes. The brief is the control plane's copy, and the source texts are the
@@ -1143,6 +1143,29 @@ test("the practical answer is found under its old and its manuscript name", asyn
     assert.equal(gate.valid, true, `${heading}: ${gate.issues.join("\n")}`);
     assert.equal(preflight.ok, true, `${heading}: ${JSON.stringify(preflight.issues)}`);
   }
+});
+
+test("an English report is read in English on both sides", async () => {
+  // A person who asks for an English review gets one (2026-10-28). The run
+  // used to be told, on every English paragraph, to restate it in Chinese, and
+  // its practice points were not found at all; both sides now read the report's
+  // language from the report and say the same words about it.
+  const { gate, preflight } = await verdicts(englishDeepResearchPackage(), "an English report");
+  assert.equal(gate.valid, true, gate.issues.join("\n"));
+  assert.equal(preflight.ok, true, JSON.stringify(preflight.issues));
+  assert.deepEqual(preflight.said, [], "nothing to say about a clean English report, on the run side either");
+
+  // The production shape: English prose under Chinese headings and labels. Said
+  // on both sides, with the same line numbers, and withheld on neither.
+  const mixed = englishDeepResearchPackage();
+  mixed.reportText = mixed.reportText.replace("## Abstract", "## 摘要").replace("**Objective:**", "**目的**：");
+  const line = mixed.reportText.split("\n").findIndex((text) => text === "## 摘要") + 1;
+  const named = await verdicts(mixed, "English prose under Chinese headings");
+  const expected = new RegExp(`^The report is written in English; line ${line} carries Chinese text: ## 摘要\\.`);
+  assert.ok(named.gate.issues.some((issue) => expected.test(issue)), named.gate.issues.join("\n"));
+  assert.ok(named.preflight.said.some((issue) => expected.test(issue)), named.preflight.said.join("\n"));
+  assert.equal(named.preflight.ok, true, JSON.stringify(named.preflight.issues));
+  assert.doesNotMatch([...named.gate.issues, ...named.preflight.said].join("\n"), /untranslated source prose/);
 });
 
 test("both entries resolve to one implementation, and no second copy survives", async () => {

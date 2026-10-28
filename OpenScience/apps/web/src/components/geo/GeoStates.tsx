@@ -23,20 +23,33 @@ function Bar({ className }: { className: string }) {
   return <div className={`rounded bg-surface-2 ${className}`} />;
 }
 
-/** The home list's first paint: rows shaped like the projects they stand in for. */
+/** The home list's first paint: rows shaped like the projects they stand in for — a name, a line under it and one number. */
 export function GeoListSkeleton() {
   return (
     <PendingFeedback><div className="animate-pulse" aria-hidden="true">
-      {["w-1/3", "w-1/4", "w-2/5"].map((width) => (
-        <div key={width} className="flex h-16 items-center gap-6 border-b border-border px-2">
+      {["w-2/3", "w-1/2", "w-3/5"].map((width) => (
+        <div key={width} className="flex h-16 items-center gap-3 px-2">
           <div className="flex flex-1 flex-col gap-2">
             <Bar className={`h-3.5 ${width}`} />
-            <Bar className="h-3 w-1/5" />
+            <Bar className="h-3 w-1/3" />
           </div>
-          <Bar className="h-4 w-40" />
-          <Bar className="h-4 w-16" />
+          <Bar className="h-4 w-10" />
         </div>
       ))}
+    </div></PendingFeedback>
+  );
+}
+
+/** The preview's first paint, beside the list: a name, the two figures and the steps. */
+export function GeoPreviewSkeleton() {
+  return (
+    <PendingFeedback><div className="animate-pulse space-y-6" aria-hidden="true">
+      <Bar className="h-6 w-1/3" />
+      <div className="grid grid-cols-2 gap-3">
+        <Bar className="h-28 rounded-card" />
+        <Bar className="h-28 rounded-card" />
+      </div>
+      <Bar className="h-20 rounded-card" />
     </div></PendingFeedback>
   );
 }

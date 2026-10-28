@@ -32,6 +32,15 @@ PARSE_TIMEOUT_SECONDS = 150
 # Below this, a PDF has effectively no text layer and is a scan.
 MIN_PDF_TEXT_CHARS = 2_000
 EUROPE_PMC_API = "https://www.ebi.ac.uk/europepmc/webservices/rest"
+# NCBI's own copy of the PMC open-access subset, asked only when Europe PMC cannot answer (5xx, no answer in time):
+# E-utilities `efetch db=pmc` serves the same JATS. The base is the one `literature_search` reads, so one setting
+# moves every E-utilities call.
+NCBI_EUTILS_ENV = "EVIMED_PUBMED_BASE_URL"
+NCBI_EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+NCBI_PMC_ARTICLES = "https://pmc.ncbi.nlm.nih.gov/articles"
+# Europe PMC may have spent the whole budget on a timeout, which is exactly when the NCBI route is wanted: below
+# this much time left it gets a budget of its own.
+NCBI_ROUTE_SECONDS = 30.0
 USER_AGENT = "EviMed-Research/1.2 open-access-fulltext"
 # One time budget per call, inside the 180 s the kernel allows a tool call. A
 # call that fetches the supplementary files gets the most: Europe PMC builds
@@ -57,8 +66,8 @@ class FullTextError(Exception):
         self.not_configured = not_configured
 
 
-def _request_bytes(url: str, accept: str, *, deadline=None, per_attempt: float = 60) -> bytes:
-    """One Europe PMC body inside the call's deadline (`source_transport`).
+def _request_bytes(url: str, accept, *, deadline=None, per_attempt: float = 60, scope: str = "Europe PMC") -> bytes:
+    """One body (Europe PMC's, or NCBI's when `scope` says so) inside the call's deadline (`source_transport`).
 
     A refusal, an expired budget and an unreachable source are the three failure
     names, not "retrieval failed": `FullTextError.code` is `source_access_denied`,
@@ -67,7 +76,8 @@ def _request_bytes(url: str, accept: str, *, deadline=None, per_attempt: float =
     deadline = deadline or transport.Deadline(DEADLINE_SECONDS)
     try:
         return transport.fetch(
-            url, (accept,), deadline=deadline, scope="Europe PMC", max_bytes=MAX_RESPONSE_BYTES, per_attempt=per_attempt,
+            url, (accept,) if isinstance(accept, str) else tuple(accept), deadline=deadline, scope=scope,
+            max_bytes=MAX_RESPONSE_BYTES, per_attempt=per_attempt,
         ).body
     except public_sources.SourceNotConfigured as error:
         raise FullTextError(error.code, str(error), False, not_configured=error) from error
@@ -77,13 +87,15 @@ def _request_bytes(url: str, accept: str, *, deadline=None, per_attempt: float =
         raise FullTextError("full_text_too_large", "The open-access full text exceeds the managed size limit.") from error
 
 
-def _request_json(url: str, *, deadline=None) -> dict:
+def _request_json(url: str, *, deadline=None, scope: str = "Europe PMC", strict: bool = True) -> dict:
+    accepted = ("application/json", "text/json") if scope != "Europe PMC" else "application/json"
     try:
-        value = json.loads(_request_bytes(url, "application/json", deadline=deadline, per_attempt=25).decode("utf-8"))
+        # NCBI's JSON can carry literal control characters inside strings (`strict=False`, as `_ncbi_get_json` reads it).
+        value = json.loads(_request_bytes(url, accepted, deadline=deadline, per_attempt=25, scope=scope).decode("utf-8"), strict=strict)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise FullTextError("full_text_upstream_invalid", "Europe PMC returned an invalid metadata response.", True) from error
+        raise FullTextError("full_text_upstream_invalid", "%s returned an invalid metadata response." % scope, True) from error
     if not isinstance(value, dict):
-        raise FullTextError("full_text_upstream_invalid", "Europe PMC returned an invalid metadata response.", True)
+        raise FullTextError("full_text_upstream_invalid", "%s returned an invalid metadata response." % scope, True)
     return value
 
 
@@ -104,6 +116,7 @@ def _resolve(identifier: str, *, deadline=None) -> dict:
 
     clean = identifier.strip()
     pmid = re.fullmatch(r"(?:PMID\s*:\s*)?(\d{5,12})", clean, re.I)
+    doi = ""
     if pmid:
         query = "EXT_ID:%s" % pmid.group(1)
     else:
@@ -120,7 +133,13 @@ def _resolve(identifier: str, *, deadline=None) -> dict:
         EUROPE_PMC_API,
         urllib.parse.urlencode({"query": query, "format": "json", "resultType": "core", "pageSize": 5}),
     )
-    response = _request_json(url, deadline=deadline)
+    try:
+        response = _request_json(url, deadline=deadline)
+    except FullTextError as europe_failure:
+        if not _europe_pmc_unavailable(europe_failure):
+            raise
+        # Europe PMC cannot say which PMC article this is: NCBI can, and `fetch` then goes to NCBI for the text too.
+        return _ncbi_resolve(pmid.group(1) if pmid else "", doi, europe_failure, deadline)
     results = response.get("resultList", {}).get("result", [])
     if not isinstance(results, list):
         results = []
@@ -140,6 +159,124 @@ def _resolve(identifier: str, *, deadline=None) -> dict:
         "full_text_not_available",
         "No Europe PMC record was found for this identifier.",
     )
+
+
+def _europe_pmc_unavailable(error: FullTextError) -> bool:
+    """Europe PMC could not answer (an error status, no connection, no answer in time), as against refusing.
+
+    A refusal (`denied`: not open access, a policy) and a missing record are answers, and another route would
+    not change them; only "could not answer" is a reason to ask NCBI for the same open-access article.
+    """
+    source = error.source_error
+    return source is not None and source.state in ("unavailable", "timeout")
+
+
+def _both_failed(europe: FullTextError, ncbi: FullTextError) -> FullTextError:
+    """Both routes failed: the Europe PMC error's code, retry hint and next actions, with what NCBI said as well."""
+    combined = FullTextError(
+        europe.code,
+        "%s NCBI PMC was asked next and did not serve it either: %s" % (str(europe).rstrip(), str(ncbi)),
+        europe.retryable, not_configured=europe.not_configured, source_error=europe.source_error,
+    )
+    combined.also_tried_ncbi = True  # the open-access PDF route says so when it takes over
+    return combined
+
+
+def _ncbi_deadline(deadline):
+    if deadline is not None and deadline.remaining() >= NCBI_ROUTE_SECONDS:
+        return deadline
+    return transport.Deadline(NCBI_ROUTE_SECONDS)
+
+
+def _ncbi_url(path: str, params: dict) -> str:
+    try:
+        base = public_sources._base(NCBI_EUTILS_ENV, NCBI_EUTILS)  # noqa: SLF001 - the one E-utilities base
+    except public_sources.PublicSourceError as error:
+        raise FullTextError(error.code, str(error)) from error
+    return public_sources._url(base, path, public_sources._ncbi_params(params))  # noqa: SLF001 - the tool name and the key, when there is one
+
+
+def _ncbi_resolve(pmid: str, doi: str, europe: FullTextError, deadline) -> dict:
+    """A PMID or a DOI to the PMC article NCBI holds for it, as a record `fetch` reads like Europe PMC's.
+
+    Only PubMed knows a DOI exactly (`esearch db=pubmed <doi>[doi]`). PMC's own search does not: its `[doi]` is
+    no field there, so it matches every article that mentions the DOI, a citing paper first as often as the
+    paper itself (measured 2026-10-28: 10.3389/fphys.2018.01776 -> PMC6454835 and PMC6454469, the second only a
+    citation). ESummary then names the article's PMCID and DOI. `_europePmcError` tells `fetch` that Europe PMC
+    is down, so it goes straight to NCBI for the text instead of asking Europe PMC again.
+    """
+    ncbi_deadline = _ncbi_deadline(deadline)
+    scope = "NCBI PubMed"
+    try:
+        candidates = [pmid] if pmid else []
+        if not pmid:
+            found = _request_json(
+                _ncbi_url("esearch.fcgi", {"db": "pubmed", "term": "%s[doi]" % doi, "retmax": 3, "retmode": "json"}),
+                deadline=ncbi_deadline, scope=scope, strict=False,
+            )
+            ids = (found.get("esearchresult") or {}).get("idlist") if isinstance(found.get("esearchresult"), dict) else None
+            candidates = [str(value) for value in ids or [] if str(value).isdigit()]
+        records = {}
+        if candidates:
+            summary = _request_json(
+                _ncbi_url("esummary.fcgi", {"db": "pubmed", "id": ",".join(candidates), "retmode": "json"}),
+                deadline=ncbi_deadline, scope=scope, strict=False,
+            )
+            result = summary.get("result") if isinstance(summary.get("result"), dict) else {}
+            records = {key: value for key, value in result.items() if key in candidates and isinstance(value, dict) and not value.get("error")}
+    except FullTextError as ncbi_failure:
+        raise _both_failed(europe, ncbi_failure) from ncbi_failure
+    chosen = None
+    for key in candidates:
+        record = records.get(key)
+        if record is None:
+            continue
+        ids = {str(item.get("idtype") or ""): str(item.get("value") or "") for item in record.get("articleids") or [] if isinstance(item, dict)}
+        if pmid or ids.get("doi", "").casefold() == doi.casefold():
+            chosen = (key, record, ids)
+            break
+    if chosen is None:
+        if doi:
+            # PubMed holds no record of this DOI: nothing is known of a PMC copy, and the DOI is still good for the PDF route.
+            return {"pmcid": "", "doi": doi, "id": "", "title": "", "_europePmcError": europe}
+        raise FullTextError("full_text_not_available", "No PubMed or PMC record was found for PMID %s." % pmid)
+    key, record, ids = chosen
+    return {
+        "pmcid": _normalize_pmcid(ids.get("pmc", "")) or "",
+        "id": _normalize_pmcid(ids.get("pmc", "")) or key,
+        "pmid": key,
+        "doi": ids.get("doi", "") or doi,
+        "title": str(record.get("title") or "").strip(),
+        # The record's own MEDLINE publication types, in the shape Europe PMC's record carries them.
+        "pubTypeList": {"pubType": [str(value) for value in record.get("pubtype") or [] if str(value).strip()]},
+        "_europePmcError": europe,
+    }
+
+
+def _ncbi_full_text(pmcid: str, deadline) -> bytes:
+    """The JATS NCBI serves for one PMCID (`efetch db=pmc`), checked to be an article with a body.
+
+    NCBI answers HTTP 200 whatever it holds: an `<error>` element for a PMCID it does not have, and for an article
+    outside the open-access subset the front matter alone, with no `<body>`. Neither is a text to read, and neither
+    is a failure worth retrying.
+    """
+    url = _ncbi_url("efetch.fcgi", {"db": "pmc", "id": pmcid[3:], "retmode": "xml"})
+    payload = _request_bytes(url, ("text/xml", "application/xml"), deadline=_ncbi_deadline(deadline), scope="NCBI PMC")
+    try:
+        root = ET.fromstring(payload)
+    except ET.ParseError as error:
+        raise FullTextError("full_text_xml_invalid", "NCBI PMC returned malformed full-text XML.", True) from error
+    article = next((node for node in root.iter() if _tag(node) == "article"), None)
+    if article is None:
+        detail = next((_text(node) for node in root.iter() if _tag(node) == "error" and _text(node)), "")
+        raise FullTextError("full_text_not_available", "NCBI PMC holds no article %s%s." % (pmcid, (" (%s)" % detail) if detail else ""))
+    if not any(_tag(node) == "body" for node in article.iter()):
+        denied = source_outcome.denied(
+            "NCBI PMC lists %s without its text: it serves an article body only for the open-access subset." % pmcid,
+            scope="NCBI PMC", reason="not_open_access", retryable=False,
+        )
+        raise FullTextError(denied.code, str(denied), False, source_error=denied)
+    return payload
 
 
 def _publication_types(metadata: dict) -> list[str]:
@@ -497,7 +634,7 @@ def _append_content(lines: list[str], node: ET.Element, level: int, tables: list
             _append_content(lines, child, level, tables)
 
 
-def _render_markdown(xml_payload: bytes, metadata: dict) -> tuple[str, dict]:
+def _render_markdown(xml_payload: bytes, metadata: dict, primary_source: str | None = None) -> tuple[str, dict]:
     try:
         root = ET.fromstring(xml_payload)
     except ET.ParseError as error:
@@ -511,7 +648,7 @@ def _render_markdown(xml_payload: bytes, metadata: dict) -> tuple[str, dict]:
         "",
         "- PMCID: " + pmcid,
         "- DOI: " + (_article_id(article, "doi") or "not supplied"),
-        "- Primary source: https://europepmc.org/articles/%s" % pmcid,
+        "- Primary source: %s" % (primary_source or "https://europepmc.org/articles/%s" % pmcid),
         "",
     ]
     abstract = next((node for node in article.iter() if _tag(node) == "abstract"), None)
@@ -692,8 +829,9 @@ def _fetch_open_access_pdf(metadata: dict, workspace: Path, *, intake: bool = Fa
             "route": "europe-pmc-xml", "code": xml_failure.code, "message": str(xml_failure),
             **({"state": xml_failure.source_error.state, "reason": xml_failure.source_error.reason} if xml_failure.source_error is not None else {}),
         }
-        summary = "Europe PMC would not serve the publisher's XML (%s); " % (
-            xml_failure.source_error.reason.replace("_", " ") if xml_failure.source_error is not None and xml_failure.source_error.reason else xml_failure.code
+        summary = "Europe PMC would not serve the publisher's XML (%s)%s; " % (
+            xml_failure.source_error.reason.replace("_", " ") if xml_failure.source_error is not None and xml_failure.source_error.reason else xml_failure.code,
+            " and neither would NCBI PMC" if getattr(xml_failure, "also_tried_ncbi", False) else "",
         ) + "the open-access PDF was read instead."
     if changed:
         summary += " The bytes differ from the version preserved earlier; both are kept."
@@ -962,19 +1100,35 @@ def fetch(arguments: dict) -> dict:
         workspace = _workspace()
         if not re.fullmatch(r"PMC\d{3,12}", pmcid):
             return _fetch_open_access_pdf(metadata, workspace, intake=with_intake, deadline=deadline)
-        url = "%s/%s/fullTextXML" % (EUROPE_PMC_API, pmcid)
-        try:
-            xml_payload = _request_bytes(url, "application/xml", deadline=deadline)
-        except FullTextError as failure:
-            # A PMCID only means Europe PMC indexes the record, not that it may
-            # serve the text: subscription articles have one and refuse the XML.
-            # Those are exactly the records worth trying the open-access route
-            # for, so a refusal here is a reason to continue, not to stop.
-            failure = _explain_xml_failure(failure, metadata, pmcid, deadline)
-            if metadata.get("doi"):
-                return _fetch_open_access_pdf(metadata, workspace, intake=with_intake, deadline=deadline, xml_failure=failure)
-            raise failure
-        markdown, details = _render_markdown(xml_payload, {**metadata, "pmcid": pmcid})
+        # Europe PMC first. When it cannot answer (an error status, no answer in time), NCBI serves the same
+        # open-access article; `_europePmcError` is set when the lookup above already found Europe PMC down.
+        route, europe_error, xml_payload = "europe-pmc-xml", metadata.get("_europePmcError"), None
+        if europe_error is None:
+            url = "%s/%s/fullTextXML" % (EUROPE_PMC_API, pmcid)
+            try:
+                xml_payload = _request_bytes(url, "application/xml", deadline=deadline)
+            except FullTextError as failure:
+                # A PMCID only means Europe PMC indexes the record, not that it may
+                # serve the text: subscription articles have one and refuse the XML.
+                # Those are exactly the records worth trying the open-access route
+                # for, so a refusal here is a reason to continue, not to stop.
+                europe_error = _explain_xml_failure(failure, metadata, pmcid, deadline)
+                if not _europe_pmc_unavailable(europe_error):
+                    if metadata.get("doi"):
+                        return _fetch_open_access_pdf(metadata, workspace, intake=with_intake, deadline=deadline, xml_failure=europe_error)
+                    raise europe_error
+        if xml_payload is None:
+            try:
+                xml_payload = _ncbi_full_text(pmcid, deadline)
+                route = "ncbi-pmc-xml"
+            except FullTextError as ncbi_failure:
+                failure = _both_failed(europe_error, ncbi_failure)
+                if metadata.get("doi"):
+                    return _fetch_open_access_pdf(metadata, workspace, intake=with_intake, deadline=deadline, xml_failure=failure)
+                raise failure from ncbi_failure
+        by_ncbi = route == "ncbi-pmc-xml"
+        primary_url = ("%s/%s/" % (NCBI_PMC_ARTICLES, pmcid)) if by_ncbi else "https://europepmc.org/articles/%s" % pmcid
+        markdown, details = _render_markdown(xml_payload, {**metadata, "pmcid": pmcid}, primary_url)
         tables = details.pop("_tables", [])
         version, license_info = _version_facts(xml_payload)
         relative_root = Path(".evimed-sources") / pmcid
@@ -985,8 +1139,10 @@ def fetch(arguments: dict) -> dict:
         if tables_payload is not None:
             capture_artifacts["tables.json"] = tables_payload
         artifacts = _with_sidecar(capture_artifacts, {
-            "id": pmcid, "title": details["title"], "url": "https://europepmc.org/articles/%s" % pmcid,
+            "id": pmcid, "title": details["title"], "url": primary_url,
             "publicationTypes": _publication_types(metadata), "articleType": details.get("articleType"),
+            # Said only when it is not the usual route, so a capture Europe PMC served keeps the bytes it always had.
+            **({"route": route} if by_ncbi else {}),
         })
         try:
             paths = preserve(workspace, relative_root, artifacts)
@@ -1015,7 +1171,7 @@ def fetch(arguments: dict) -> dict:
         failures, warnings = list(extra["failures"]), list(extra["warnings"])
         data = {
             **details,
-            "route": "europe-pmc-xml",
+            "route": route,
             # What the text is: the whole article as the publisher's XML, never an abstract.
             "contentLevel": "full_text_xml",
             "markdownPath": markdown_relative,
@@ -1030,6 +1186,11 @@ def fetch(arguments: dict) -> dict:
             "supplementaryFiles": extra["section"],
             **_reading_map(markdown, markdown_relative),
         }
+        if by_ncbi:
+            data["fallbackFrom"] = {
+                "route": "europe-pmc-xml", "code": europe_error.code, "message": str(europe_error),
+                **({"state": europe_error.source_error.state, "reason": europe_error.source_error.reason} if europe_error.source_error is not None else {}),
+            }
         if tables and tables_payload is None:
             data["tables"]["outcome"] = source_outcome.truncated(
                 kept=0, limit=MAX_TABLES_JSON_BYTES, unit="bytes of tables.json",
@@ -1044,14 +1205,20 @@ def fetch(arguments: dict) -> dict:
         source = {
             "id": pmcid,
             "title": details["title"],
-            "url": "https://europepmc.org/articles/%s" % pmcid,
-            "source": "europe-pmc-fulltext",
+            "url": primary_url,
+            "source": "ncbi-pmc-fulltext" if by_ncbi else "europe-pmc-fulltext",
             "retrievedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "evidenceAccess": "full_text",
         }
         summary = "Retrieved the complete open-access article into the managed workspace."
+        if by_ncbi:
+            reason = europe_error.source_error.reason.replace("_", " ") if europe_error.source_error is not None and europe_error.source_error.reason else europe_error.code
+            summary = (
+                "Europe PMC was unavailable (%s); NCBI PMC served the complete open-access article instead, "
+                "now in the managed workspace. Its supplementary files come from Europe PMC only." % reason
+            )
         if changed:
-            summary += " Europe PMC now serves different text than the version preserved earlier; both are kept."
+            summary += " %s now serves different text than the version preserved earlier; both are kept." % ("NCBI PMC" if by_ncbi else "Europe PMC")
         result = {
             "status": "warning" if warnings else "success",
             "summary": summary,

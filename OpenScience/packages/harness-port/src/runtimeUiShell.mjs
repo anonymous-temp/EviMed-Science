@@ -404,12 +404,11 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   // A link in an answer opens in the reader's own browser tab (owner, 2026-10-27), as the 依据 popover's and the reply check's
   // already do. The kernel's chat decides this itself: ui-chat 0.2.1-rc.2 keeps a `linkOpening` preference (`sidebar` |
   // `new-tab`, default `sidebar`) in its `ui-chat` settings namespace, and on `sidebar` a plain click opens the sidebar
-  // browser. The preference's row is hidden here and its host read and write are out of reach of a hosted page (the proxy denies
-  // the `settings` namespace, and the form client keeps a non-loopback page's settings in the page only), so the default
-  // cannot be seeded from the profile. This is the narrow adapter: a capture listener on the document, so it runs before the
-  // chat's own delegated handler, that answers only what `answerLinkToOpen` selects. The managed browser stays a tool and a
-  // tab; only the chat's links stop opening it. Delete when the kernel lets a hosted client keep `ui-chat.linkOpening`
-  // (then set it to `new-tab` in the profile and remove this listener and the function above).
+  // browser. Since 2026-10-28 the hosted profile sets `ui-chat` to `linkOpening: new-tab` (and `transcriptView: standard`),
+  // and the proxy lets the page read that one namespace (`RUNTIME_UI_READABLE_SETTINGS`, writes still refused). The new-tab
+  // half was not observable on a kernel without the hosted managed browser, so this capture listener stays as the narrow
+  // adapter: on the document, so it runs before the chat's own delegated handler, answering only what `answerLinkToOpen`
+  // selects. Delete it and the function above once a hosted kernel shows the preference opening answer links in a new tab.
   if (doc && typeof doc.addEventListener === 'function' && typeof target.open === 'function') {
     /** @param {any} event */
     const openAnswerLink = (event) => {

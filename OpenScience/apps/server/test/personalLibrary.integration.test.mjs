@@ -5,7 +5,7 @@ import { databaseUrl, signedIn, ingestCorpus } from "./helpers/knowledgeBaseApp.
 
 const durable = { skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured", timeout: 30_000 };
 
-test("personal intake and snapshots preserve ownership, independent retention, revisions and explicit unshare", durable, async t => {
+test("personal intake preserves ownership, independent retention and explicit unshare", durable, async t => {
   const ctx = await signedIn(); t.after(ctx.close);
   const headers = { ...ctx.headers }; delete headers["x-open-science-project"];
   const api = async (route, method = "GET", body) => {
@@ -22,20 +22,17 @@ test("personal intake and snapshots preserve ownership, independent retention, r
   const note = await api("/api/library/notes", "POST", { title: "Draft", body: "version A" });
   assert.equal(note.status, 201);
   const noteId = note.data.source.id;
-  const getNote = await api(`/api/sources/${noteId}`);
-  const copy = await api(`/api/library/${noteId}/projects`, "POST", { projectId: ctx.project.id, expectedRevision: getNote.data.revision });
-  assert.equal(copy.status, 201);
-  const storedCopy = await ctx.app.sourceService.get(ctx.user.id, copy.data.source.id);
-  assert.equal(storedCopy.payload.copiedFrom.sourceId, noteId);
-  const repeated = await api(`/api/library/${noteId}/projects`, "POST", { projectId: ctx.project.id, expectedRevision: getNote.data.revision });
-  assert.equal(repeated.data.source.id, copy.data.source.id); assert.equal(repeated.data.duplicate, true);
-  assert.equal((await api(`/api/library/${noteId}/projects`, "POST", { projectId: "evimed-library", expectedRevision: getNote.data.revision })).status, 400);
-  assert.equal((await api(`/api/library/${noteId}/projects`, "POST", { projectId: ctx.project.id, expectedRevision: 999 })).status, 409);
-  await api("/api/library", "POST", { sourceId: copy.data.source.id });
+  // A project holds the same text on its own and the person keeps it in the library too: it is retained independently of the personal note.
+  const held = await api("/api/sources/notes", "POST", { projectId: ctx.project.id, title: "Draft", body: "version A" });
+  assert.equal(held.status, 201);
+  assert.equal((await api("/api/library", "POST", { sourceId: held.data.source.id })).status, 200);
+  // There is no route that copies a document into a project: where it applies is its own list (`PUT /api/library/:sourceId`).
+  const gone = await api(`/api/library/${noteId}/projects`, "POST", { projectId: ctx.project.id, expectedRevision: 1 });
+  assert.deepEqual([gone.status, gone.code], [404, "not_found"]);
   const edited = await api(`/api/sources/${noteId}/note`, "PUT", { title: "Draft", body: "version B" });
   assert.equal(edited.status, 200);
   let library = await api("/api/library");
-  assert.equal(library.data.items.length, 3, "explicit project copy retains A alongside personal B");
+  assert.equal(library.data.items.length, 3, "the project-held A stays retained alongside personal B");
   await api(`/api/library/${edited.data.source.id}`, "DELETE");
   const again = await api(`/api/sources/${edited.data.source.id}/note`, "PUT", { title: "Draft", body: "version C" });
   assert.equal(again.status, 200);
@@ -74,48 +71,6 @@ test("all body search uses owned indexed sources without sharing them to other p
   assert.equal(shared, null);
   const other = await ctx.app.kbIndex.passages({ userId: ctx.user.id, projectId: "missing-project", shared: false, q: "达比加群" });
   assert.equal(other, null);
-});
-
-test("A-B-A creates a separately frozen copy and never changes its earlier snapshot provenance", durable, async t => {
-  const ctx = await signedIn(); t.after(ctx.close);
-  const api = async (route, method, body) => {
-    const response = await fetch(`${ctx.base}${route}`, { method, headers: ctx.headers, body: JSON.stringify(body) });
-    assert.ok(response.ok, await response.clone().text()); return (await response.json()).data;
-  };
-  const original = await api("/api/library/notes", "POST", { title: "Stable", body: "A" });
-  const first = await api(`/api/library/${original.source.id}/projects`, "POST", { projectId: ctx.project.id, expectedRevision: original.source.revision });
-  const b = await api(`/api/sources/${original.source.id}/note`, "PUT", { title: "Stable", body: "B" });
-  const a = await api(`/api/sources/${b.source.id}/note`, "PUT", { title: "Stable", body: "A" });
-  assert.equal(a.source.id, original.source.id);
-  const stale = await fetch(`${ctx.base}/api/library/${a.source.id}/projects`, { method: "POST", headers: ctx.headers,
-    body: JSON.stringify({ projectId: ctx.project.id, expectedRevision: original.source.revision }) });
-  assert.equal(stale.status, 409, "a stale click must not copy revived A");
-  const second = await api(`/api/library/${a.source.id}/projects`, "POST", { projectId: ctx.project.id, expectedRevision: a.source.revision });
-  assert.notEqual(second.source.id, first.source.id);
-  const previous = await ctx.app.sourceService.get(ctx.user.id, first.source.id);
-  assert.equal(previous.payload.copiedFrom.revision, original.source.revision);
-  assert.equal(second.source.payload.copiedFrom.revision, a.source.revision);
-});
-
-test("a copy chosen on a row the platform's reading has moved on since is still current, and copying that version again finds one snapshot", durable, async t => {
-  const ctx = await signedIn(); t.after(ctx.close);
-  const api = async (route, method, body) => {
-    const response = await fetch(`${ctx.base}${route}`, { method, headers: ctx.headers, body: JSON.stringify(body) });
-    assert.ok(response.ok, await response.clone().text()); return (await response.json()).data;
-  };
-  const note = await api("/api/library/notes", "POST", { title: "Reading", body: "stays the same" });
-  const chosen = note.source.revision;
-  // What background reading does to a fresh upload: records move the revision and leave the bytes and the version alone.
-  const stored = await ctx.app.sourceService.get(ctx.user.id, note.source.id);
-  const moved = await ctx.app.sourceService.documents.put(ctx.user.id, "source", stored.id, { ...stored.payload, updatedAt: new Date().toISOString() },
-    { expectedRevision: stored.revision, projectId: stored.projectId });
-  assert.ok(moved.revision > chosen, "the record moved on");
-  const first = await api(`/api/library/${note.source.id}/projects`, "POST", { projectId: ctx.project.id, expectedRevision: chosen });
-  const again = await api(`/api/library/${note.source.id}/projects`, "POST", { projectId: ctx.project.id, expectedRevision: moved.revision });
-  assert.equal(again.source.id, first.source.id); assert.equal(again.duplicate, true);
-  const stale = await fetch(`${ctx.base}/api/library/${note.source.id}/projects`, { method: "POST", headers: ctx.headers,
-    body: JSON.stringify({ projectId: ctx.project.id, expectedRevision: moved.revision + 50 }) });
-  assert.equal(stale.status, 409);
 });
 
 test("personal links use the public reader without a project and preserve an explicit unshare on refetch", durable, async t => {
@@ -194,27 +149,6 @@ test("an explicit unshare remains effective beyond the first hundred historical 
   await upload("B");
   const response = await fetch(`${ctx.base}/api/library`, { headers: ctx.headers });
   assert.equal((await response.json()).data.items.length, 0);
-});
-
-
-test("opposite project copies and concurrent edits settle without a lock cycle", durable, async t => {
-  const ctx = await signedIn(); t.after(ctx.close);
-  await ctx.app.store.createProject(await ctx.app.store.userById(ctx.user.id), "second", "Second");
-  const request = async (route, method, body) => {
-    const response = await fetch(`${ctx.base}${route}`, { method, headers: ctx.headers, body: JSON.stringify(body) });
-    return { status: response.status, ...(await response.json()) };
-  };
-  const one = await request("/api/sources/notes", "POST", { projectId: ctx.project.id, title: "One", body: "original one" });
-  const two = await request("/api/sources/notes", "POST", { projectId: "second", title: "Two", body: "original two" });
-  const results = await Promise.all([
-    request(`/api/library/${one.data.source.id}/projects`, "POST", { projectId: "second", expectedRevision: one.data.source.revision }),
-    request(`/api/library/${two.data.source.id}/projects`, "POST", { projectId: ctx.project.id, expectedRevision: two.data.source.revision }),
-    request(`/api/sources/${one.data.source.id}/note`, "PUT", { title: "One", body: "edited one" }),
-    request(`/api/sources/${two.data.source.id}/note`, "PUT", { title: "Two", body: "edited two" }),
-  ]);
-  assert.ok(results.slice(0, 2).every(result => [201, 409].includes(result.status)), JSON.stringify(results));
-  assert.ok(results.slice(2).every(result => result.status === 200), JSON.stringify(results));
-  for (const result of results.slice(0, 2)) if (result.status === 201) assert.equal(result.data.source.payload.copiedFrom.revision, 1);
 });
 
 

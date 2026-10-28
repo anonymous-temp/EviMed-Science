@@ -97,6 +97,7 @@ import { METHOD_MOUNT_REASONS, clinicalSafetyCautionHits, isResearcherOwnedWork,
 // claim's structured GRADE certainty is read against (S6, 2026-09-18). A line
 // of its own for the same reason as the one above.
 import { sourceTypeOfSidecar, sourceTypeSidecarPath } from "@evimed/domain";
+import { PACKAGE_SOURCE_ARTIFACT_LIMIT } from "@evimed/domain/clinical-evidence";
 // The manifest's `citedSourcesRecorded`, one implementation for both sides
 // (2026-09-28): it used to be written out here, where the run never saw it.
 import {
@@ -870,7 +871,12 @@ function foldEvents(events) {
       const id = safeStoredId(event.id, "id");
       const current = runs.get(id);
       if (!current) throw corrupt("Agent run ledger contains a notice for an unknown run.");
-      const added = describedQualityNotices(event.qualityNotices);
+      const described = describedQualityNotices(event.qualityNotices);
+      // A notice the run already carries is not carried twice. A cycle that kept failing the same way appended the same
+      // notice every 15 s -- 70 identical rows on one run of 2026-10-27 -- and each fold filled the run's notices toward
+      // their cap with copies, crowding out the ones that said something. Read here as well as refused at the append, so
+      // a ledger written before the refusal folds clean.
+      const added = described.filter(notice => !current.qualityNotices.some(held => held.code === notice.code && held.text === notice.text));
       // What the run is called and what it asked, when either was learned
       // after the start (C3). Fields on this event rather than a kind of their
       // own, so a control plane older than them reads the ledger and ignores
@@ -899,7 +905,7 @@ function foldEvents(events) {
           ? "unchecked"
           : current.verification,
         qualityNotices: [...current.qualityNotices, ...added].slice(0, maxQualityNotices),
-        ...(added.some(notice => notice.code === "run_stall_observed") ? { lastStallAt: event.at } : {}),
+        ...(described.some(notice => notice.code === "run_stall_observed") ? { lastStallAt: event.at } : {}),
       }));
       continue;
     }
@@ -2510,7 +2516,7 @@ async function openWorkspaceText(project, relative) {
  * comparison), so a count on a run row and the marks in its report cannot
  * disagree.
  *
- * Reads each matrix and at most 48 preserved sources it quotes, like the gate.
+ * Reads each matrix and at most `PACKAGE_SOURCE_ARTIFACT_LIMIT` preserved sources it quotes, like the gate.
  * `previousKey` makes an unchanged set of matrices free: the caller polls, and
  * re-reading every source on every poll would be most of the monitor's work.
  *
@@ -2544,7 +2550,7 @@ async function matrixClaimSummary(project, relativePaths, previousKey = null) {
     ]).filter((value) => typeof value === "string" && value.startsWith(".evimed-sources/"));
     /** @type {Record<string, string>} */
     const sourceArtifacts = {};
-    for (const artifactPath of [...new Set(named)].slice(0, 48)) {
+    for (const artifactPath of [...new Set(named)].slice(0, PACKAGE_SOURCE_ARTIFACT_LIMIT)) {
       let relative;
       try { relative = normalizeWorkspaceRelativePath(artifactPath, "source artifact path"); } catch { continue; }
       const source = await openWorkspaceText(project, relative);
@@ -3267,10 +3273,10 @@ async function specialistCompletionOutcome(
       sourceGapFindings.push(runNotice(code, text, { severity: "must-fix", ...(file ? { file } : {}) }));
     };
     let provenanceGap = false;
-    if (sourcePaths.length > 48) {
-      gap(`The package names ${sourcePaths.length} source artifacts; the first 48 were read. Cite one canonical path per distinct document rather than every companion file.`, "specialist_evidence_traceability_failed");
+    if (sourcePaths.length > PACKAGE_SOURCE_ARTIFACT_LIMIT) {
+      gap(`The package names ${sourcePaths.length} source artifacts; the first ${PACKAGE_SOURCE_ARTIFACT_LIMIT} were read. Cite one canonical path per distinct document rather than every companion file.`, "specialist_evidence_traceability_failed");
     }
-    for (const rawPath of sourcePaths.slice(0, 48)) {
+    for (const rawPath of sourcePaths.slice(0, PACKAGE_SOURCE_ARTIFACT_LIMIT)) {
       let relative;
       try {
         relative = normalizeWorkspaceRelativePath(rawPath, "source artifact path");
@@ -5285,11 +5291,17 @@ export class AgentRunStore {
       const events = parseEvents(await readLedgerText(project, this.maxBytes));
       const current = foldEvents(events).get(runId);
       if (!current) return null;
+      // Only what the run does not already carry (see the fold): an unchanged notice is not a new event. A stall is the
+      // exception -- its event's time is what `lastStallAt` reads, so a run that stalls again must say so again.
+      const fresh = normalized.filter(notice => notice.code === "run_stall_observed"
+        || !current.qualityNotices.some(held => held.code === notice.code && held.text === notice.text));
+      const marks = unchecked && current.verification === null;
+      if (fresh.length === 0 && !marks) return current;
       const event = {
         event: "notice",
         id: runId,
         at: this.now().toISOString(),
-        qualityNotices: normalized,
+        qualityNotices: fresh,
         ...(unchecked ? { verification: "unchecked" } : {}),
       };
       const text = serializeNext(events, event, this.maxBytes);

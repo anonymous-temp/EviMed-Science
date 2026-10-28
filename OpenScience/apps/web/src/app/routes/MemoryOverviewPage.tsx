@@ -10,17 +10,16 @@ import { MapDrawer } from "@/components/memory/map/MapDrawer";
 import { derivedTopics, narrowMap } from "@/components/memory/map/mapModel";
 import { useMemoryMap } from "@/components/memory/map/useMemoryMap";
 import { MemoryFrame, memoryTabAddress } from "@/components/memory/MemoryFrame";
-import { MemoryHeaderActions, type HeaderDrawer } from "@/components/memory/MemoryHeaderActions";
+import { headerControls, MemoryHeaderDrawers, type HeaderDrawer } from "@/components/memory/MemoryHeaderActions";
 import { ChangeChart } from "@/components/memory/overview/ChangeChart";
 import { ChangesTable } from "@/components/memory/overview/ChangesTable";
 import { ExplorePanel } from "@/components/memory/overview/ExplorePanel";
 import {
-  aboutYouCount, changeEvents, changeRows, defaultExplore, exploreOffered, growthOf, knowledgeCount, lastChangeDay, lookTableRows, narrowChanges, needsLook,
-  overviewHeadline, projectTotals, RANGE_OPTIONS, rangeFrom, rangeWords, readable, receivedCounts, recentCount, withinRange,
+  changeEvents, changeRows, defaultExplore, exploreOffered, growthOf, knowledgeCount, lastChangeDay, lookTableRows, narrowChanges, needsLook,
+  overviewHeadline, RANGE_OPTIONS, rangeFrom, rangeWords, readable, receivedCounts, recentCount, rememberedCount, withinRange,
   type ChangeRow,
 } from "@/components/memory/overview/memoryOverviewModel";
 import { useOverviewSelection } from "@/components/memory/overview/useOverviewSelection";
-import { OTHER_PROJECT } from "@/components/memory/memoryItems";
 import { PackDrawer } from "@/components/memory/ReceivedTab";
 import { useMemoryWritePrompt } from "@/components/memory/useMemoryWritePrompt";
 import { Button } from "@/components/ui/Button";
@@ -41,21 +40,21 @@ import { useNarrow } from "@/lib/useMediaQuery";
 
 /** Where each number of the headline and each tile leads: the list it counts. */
 const SELF = memoryTabAddress("self");
-const PROJECT = memoryTabAddress("project");
 const METHODS = memoryTabAddress("methods");
 const RECEIVED = memoryTabAddress("received");
 
 /**
- * 「总览」: the capsule as one data page (DESIGN.md template T4), where `/app/memory` lands. Under the tabs, one toolbar row — the range, only what
- * needs a look, and the search — that narrows everything below it together; then one sentence whose numbers each open the list they count; five
- * tiles that are each a door to a list (关于你, 项目, 做法, 收到的, and 知识 in the knowledge base); 「变化」, what the capsule gained and lost over
- * time; 「关系与主题」 when there is enough to see; and the table behind the charts, 「最近变化」, whose rows open the same drawers the marks do.
+ * 「总览」: the capsule as one data page (DESIGN.md template T4), where `/app/memory` lands, beside the memory frame's left column. In the band,
+ * one toolbar row — the range, only what needs a look, and the search — that narrows everything below it together; then one sentence whose numbers
+ * each open the list they count; four tiles that are each a door to a list (关于你, 做法, 收到的, and 知识 in the knowledge base); 「变化」, what the
+ * capsule gained and lost over time; 「关系与主题」 when there is enough to see; and the table behind the charts, 「最近变化」, whose rows open the
+ * same drawers the marks do. There is no 项目 tile since 2026-10-28: a project is a label on a memory, and its memories are counted in 关于你.
  *
  * The map was a tab of its own until 2026-10-27: it was a dashboard, and a dashboard that is not the landing is a page nobody finds. Its relation
  * graph and topics are the lower panel here, its time, activity and dimension views are gone (the chart and the table say what happened), and
  * `/app/memory/map` goes to this page with what it can carry over (`MemoryMapRedirect`).
  *
- * Every part reads and fails on its own: the map's document answers for the memories, the projects and the documents (and says which of its
+ * Every part reads and fails on its own: the map's document answers for the memories and the documents (and says which of its
  * sources failed, so a number whose source failed says so instead of drawing zero), the learned methods and the packs received each have a read of
  * their own. The sentence names only what was read. An account with no memory and no learned method has no sentence, no chart and no table: one
  * recipe with one button, under the tiles.
@@ -93,11 +92,10 @@ function Overview() {
 
   // ---- what each part is, from what was read ----
   const memoriesRead = doc ? readable(doc, "memories") : false;
-  const projectsRead = doc ? readable(doc, "projects") : false;
   const knowledgeRead = doc ? readable(doc, "knowledge") : false;
   const growthRead = doc ? readable(doc, "growth") : false;
-  const about = doc && memoriesRead ? aboutYouCount(doc) : null;
-  const projects = doc && projectsRead && memoriesRead ? projectTotals(doc) : null;
+  // 关于你 as its list draws it: the person's memories and, after them, the ones that carry a project.
+  const about = doc && memoriesRead ? rememberedCount(doc) : null;
   const methodCount = learned.data ? learned.data.length : null;
   const documents = doc && knowledgeRead ? knowledgeCount(doc) : null;
   const packs = received.data ? receivedCounts(received.data) : null;
@@ -125,13 +123,13 @@ function Overview() {
     return changeRows(shown, { projectName, formatDay: (day) => formatDay(day) });
   }, [selection.look, selection.q, look, memoryIds, shown, projectName]);
 
-  const empty = doc !== null && memoriesRead && about === 0 && (projects?.memories ?? 0) === 0 && methodCount === 0;
+  const empty = doc !== null && memoriesRead && about === 0 && methodCount === 0;
 
   // ---- the headline ----
   const headline = overviewHeadline({
-    about, projects: projects ? projects.count : null, projectMemories: projects ? projects.memories : null, methods: methodCount,
+    about, methods: methodCount,
     last: (() => { const day = lastChangeDay(events); return day ? formatDay(day) : null; })(),
-  }, { about: SELF, projects: PROJECT, methods: METHODS });
+  }, { about: SELF, methods: METHODS });
 
   // ---- the mark a press on the graph or the drawer opens ----
   const open = useCallback((target: ChangeRow["target"]) => {
@@ -149,8 +147,8 @@ function Overview() {
     else if (node.type === "entity" || node.type === "page") {
       const address = knowledgeNodeAddress(node.id, doc?.scope.projectId ?? selection.project);
       if (address) navigate(address);
-    } else if (node.type === "project") navigate(node.projectId && node.projectId !== OTHER_PROJECT ? `${PROJECT}&project=${encodeURIComponent(node.projectId)}` : PROJECT);
-    else if (node.type === "cluster") navigate(node.projectId ? `${PROJECT}&project=${encodeURIComponent(node.projectId)}` : SELF);
+    // A project's memories are the last group of 关于你.
+    } else if (node.type === "project" || node.type === "cluster") navigate(SELF);
   }, [drawer, navigate, doc, selection.project]);
   /** 「这条关联不对」: the line stays out of this person's map; the toast takes it back. */
   const hideEdge = useCallback(async (edge: MapEdge) => {
@@ -197,14 +195,10 @@ function Overview() {
   const note = (value: number) => (value > 0 ? `近 30 天 +${value}` : undefined);
 
   const tiles = (
-    <StatBand label="记忆胶囊的五个数字" columns={5} separate dense>
+    <StatBand label="记忆胶囊的四个数字" columns={4} separate dense>
       <StatTile
         whole dense label="关于你" reading={reading(about, loadingMap, failed, retry)} to={SELF}
-        note={about !== null && growthRead ? note(recent((event) => event.lane === "noted" && event.about)) : undefined}
-      />
-      <StatTile
-        whole dense label="项目" reading={reading(projects ? projects.count : null, loadingMap, failed, retry)} to={PROJECT}
-        note={projects && projects.memories > 0 ? `${projects.memories} 条记忆` : undefined}
+        note={about !== null && growthRead ? note(recent((event) => event.lane === "noted")) : undefined}
       />
       <StatTile
         whole dense label="做法" reading={reading(methodCount, !learned.data && !learned.failed, learned.failed, learned.reload)} to={METHODS}
@@ -259,8 +253,8 @@ function Overview() {
   const tabCounts = { self: about ?? undefined, methods: methodCount ?? undefined, received: packs?.enabled };
   return (
     <MemoryFrame
-      tab="overview" overview documentTitle="记忆胶囊总览" counts={tabCounts} toolbar={toolbar}
-      actions={<MemoryHeaderActions onChanged={reloadAll} drawer={header} onDrawer={setHeader} />}
+      tab="overview" overview counts={tabCounts} toolbar={toolbar}
+      controls={headerControls({ onChanged: reloadAll, onDrawer: setHeader })}
       headline={headline ? { parts: headline, id: "memory-overview-headline" } : undefined}
     >
       <div className="space-y-6">
@@ -284,6 +278,7 @@ function Overview() {
         />
       )}
       {pack && <PackDrawer pack={pack} onClose={drawer.close} />}
+      <MemoryHeaderDrawers drawer={header} onDrawer={setHeader} onChanged={reloadAll} />
     </MemoryFrame>
   );
 }

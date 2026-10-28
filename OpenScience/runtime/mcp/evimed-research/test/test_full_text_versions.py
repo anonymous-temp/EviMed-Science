@@ -329,13 +329,14 @@ class IntakeTests(Workspace):
 class RefusalTests(Workspace):
     """Recorded 2026-10-04: `fullTextXML` answers HTTP 500, not 403 or 404, for a non-open-access article and for a PMCID that does not exist."""
 
-    def fetch_refused(self, metadata, *, lookup=None, pdf=None):
+    def fetch_refused(self, metadata, *, lookup=None, pdf=None, answers=3):
         failure = wire.through_gateway("europepmc__fulltextxml_500.json")
         patches = [mock.patch.object(fulltext, "_resolve", return_value=dict(metadata))]
         for patch in patches:
             patch.start()
             self.addCleanup(patch.stop)
-        door = mock.Mock(side_effect=[failure] * 3)
+        # Three tries at Europe PMC; `answers=6` lets the NCBI route that follows an unavailable Europe PMC fail the same way.
+        door = mock.Mock(side_effect=[failure] * answers)
         with mock.patch.object(public_sources, "_open_remote", door), mock.patch.object(public_sources, "_ncbi_pace"), \
                 mock.patch.object(transport.time, "sleep"), \
                 mock.patch.object(fulltext, "_request_json", return_value=lookup or {"resultList": {"result": []}}), \
@@ -356,9 +357,13 @@ class RefusalTests(Workspace):
         self.assertEqual((result["status"], result["error"]["code"]), ("error", "full_text_not_available"))
 
     def test_an_open_access_article_that_answers_500_is_the_source_being_down(self):
-        result, _pdf, _door = self.fetch_refused({"pmcid": "PMC6454835", "doi": ""}, lookup={"resultList": {"result": [{"pmcid": "PMC6454835", "isOpenAccess": "Y"}]}})
+        # Europe PMC failed three times, so NCBI PMC was asked next (three tries) and failed the same way.
+        result, _pdf, door = self.fetch_refused({"pmcid": "PMC6454835", "doi": ""}, lookup={"resultList": {"result": [{"pmcid": "PMC6454835", "isOpenAccess": "Y"}]}}, answers=6)
         self.assertEqual(result["error"]["code"], "source_unavailable")
         self.assertIs(result["error"]["retryable"], True)
+        self.assertIn("NCBI PMC was asked next", result["error"]["message"])
+        asked = [call.args[0] for call in door.call_args_list]
+        self.assertEqual([("eutils.ncbi.nlm.nih.gov" in url) for url in asked], [False] * 3 + [True] * 3)
 
     def test_a_refusal_with_a_doi_goes_on_to_the_open_access_pdf_and_says_why(self):
         sentinel = {"status": "success", "data": {}, "sources": [], "artifacts": []}
