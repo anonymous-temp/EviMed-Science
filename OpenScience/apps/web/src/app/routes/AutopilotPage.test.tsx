@@ -597,7 +597,8 @@ describe("scheduled tasks", () => {
     it("offers retry on a list failure", async () => {
       mocks.listAgendas.mockRejectedValueOnce(new Error("offline")); render("/app/autopilot");
       expect(await screen.findByRole("note")).toHaveTextContent("定时任务暂不可用"); await userEvent.click(screen.getByRole("button", { name: /重试/ }));
-      expect(await screen.findByText("心衰证据追踪")).toBeInTheDocument();
+      // The list's row, whatever the pane beside it has drawn by then (its heading carries the same title once it opens the first task).
+      expect(await screen.findByRole("link", { name: "心衰证据追踪" })).toBeInTheDocument();
     });
     it("draws no search box over nothing; the column offers the examples instead of a sentence about there being none", async () => {
       mocks.listAgendas.mockResolvedValue({ items: [] }); render("/app/autopilot");
