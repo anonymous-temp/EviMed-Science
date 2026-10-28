@@ -448,6 +448,11 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   // request id this project never had accepted or whose record has expired: limitations the report states, never a vendor that stayed silent.
   "geo_probe_result_unavailable",
   "geo_probe_request_unknown",
+  // A task still running when the call's deadline passed (its request id comes back to be read on), and a screenshot whose name has
+  // expired or is not one the probe host gave: the answer stands without it.
+  "geo_probe_result_pending",
+  "geo_probe_screenshot_expired",
+  "geo_probe_screenshot_invalid",
   // The private evidence API is not configured for this deployment. It is host
   // configuration, like the Unpaywall case above, and the keyless public
   // sources are what the tool falls back to — failing a run over it would
