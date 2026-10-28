@@ -40,7 +40,13 @@ MAX_ABSTRACT_CHARS = 4000
 # source was inspected beyond title-only metadata"). NCBI accepts up to 200 ids
 # per efetch GET; a request for more is split into batches of that size.
 PUBMED_EFETCH_BATCH = 200
-MAX_PUBMED_ABSTRACT_PMIDS = 200
+MAX_PUBMED_ABSTRACT_PMIDS = 60
+# How much abstract text one `pmids` answer carries inline. Every abstract is preserved on disk whatever this says; past the
+# budget an item names its preserved file instead of carrying the text. Two batches of 24 and 16 abstracts came back at about
+# 50,000 characters each on the live check of 2026-10-28: the kernel cut both answers and spilled them to a file, the cut text
+# was no longer JSON, and the control plane could not read which files had been preserved — 65 claims quoting real abstracts
+# were reported as quoting nothing. An answer that stays well under that size is never cut.
+PUBMED_INLINE_ABSTRACT_BUDGET = 12_000
 _PMID_PATTERN = re.compile(r"^\s*(?:PMID\s*:?\s*)?(\d{1,9})\s*$", re.I)
 _RXNORM_RESOLVE_LIMIT = 10
 # The most identifiers one `identifier_resolve` call links (the NCBI ID converter's own bound).
@@ -2685,7 +2691,8 @@ def pubmed_abstracts(pmids):
     base = _base("EVIMED_PUBMED_BASE_URL", "https://eutils.ncbi.nlm.nih.gov/entrez/eutils")
     records = _pubmed_efetch_records(base, requested)
     items, sources, artifact_sha256s = [], [], {}
-    missing, without_abstract, unpreserved = [], [], []
+    missing, without_abstract, unpreserved, not_inline = [], [], [], []
+    inline_budget = PUBMED_INLINE_ABSTRACT_BUDGET
     for pmid in requested:
         record = records.get(pmid)
         if record is None:
@@ -2708,9 +2715,18 @@ def pubmed_abstracts(pmids):
         }
         source = _source("PMID:%s" % pmid, record["title"], record_url, "pubmed")
         if abstract:
-            item["abstract"] = abstract[:MAX_ABSTRACT_CHARS]
-            if len(abstract) > MAX_ABSTRACT_CHARS:
-                item["abstractTruncated"] = True
+            inline = abstract[:MAX_ABSTRACT_CHARS]
+            if inline_budget >= len(inline):
+                inline_budget -= len(inline)
+                item["abstract"] = inline
+                if len(abstract) > MAX_ABSTRACT_CHARS:
+                    item["abstractTruncated"] = True
+            else:
+                # Past the budget the item stays small: its abstract is in its preserved file (read it there), and the MeSH
+                # headings, the largest field after the abstract, are left to that file too.
+                item["abstractInline"] = False
+                item.pop("meshHeadings", None)
+                not_inline.append(pmid)
             captured = _preserve_pubmed_abstract(record)
             if captured:
                 item["artifactPath"] = captured["path"]
@@ -2730,6 +2746,10 @@ def pubmed_abstracts(pmids):
         warnings.append("PubMed has no abstract for PMID %s; screen those by full text or leave them out." % ", ".join(without_abstract))
     if unpreserved:
         warnings.append("The abstract of PMID %s could not be preserved, so it cannot carry a claim." % ", ".join(unpreserved))
+    notes = []
+    if not_inline:
+        notes.append("%d abstract(s) are not carried in this answer, to keep it whole: PMID %s. Each is preserved at its artifactPath — read it there (or grep across .evimed-sources/pubmed/) and quote from that file."
+                     % (len(not_inline), ", ".join(not_inline)))
     result = {
         "status": "warning" if warnings else "success",
         "summary": "Fetched %d PubMed abstract(s) for %d requested id(s); %d preserved as quotable sources."
@@ -2740,7 +2760,8 @@ def pubmed_abstracts(pmids):
     }
     if warnings:
         result["warnings"] = warnings
-        result["next_actions"] = ["Quote an abstract only through its artifactPath, and read the full text before claiming what the abstract does not state."]
+    if warnings or notes:
+        result["next_actions"] = notes + ["Quote an abstract only through its artifactPath, and read the full text before claiming what the abstract does not state."]
     return result
 
 

@@ -76,6 +76,7 @@ export const HOSTED_PERMISSION_PRESET_DESCRIPTION = "只能读写本项目的工
  * @property {string} model                  the certified model id
  * @property {string} [reasoningEffort]      off | low | high | max; initial default for unconfigured sessions
  * @property {number} contextWindow
+ * @property {number} [maxOutputTokens]    what the kernel reserves for one model answer; the compaction trigger is contextWindow - this - 65,536
  * @property {string} sessionsDir            absolute path inside the container
  * @property {string} mcpServerPath          absolute path to the MCP server entrypoint
  * @property {Record<string, string>} mcpEnvironment
@@ -203,6 +204,9 @@ export function renderProfilePatch(input) {
     `    apiKeyEnv: ${yamlScalar(WORKLOAD_TOKEN_REF)}`,
     "    thinking: enabled",
     `    reasoningEffort: ${yamlScalar(input.reasoningEffort || "high")}`,
+    // The adapter reserves 256,000 output tokens per request unless told, and 0.2.1 compacts at
+    // contextWindow - maxTokens - 65,536: about 78,000 tokens of input on a 400,000 window (live check, 2026-10-28).
+    `    maxTokens: ${Math.max(1024, Math.trunc(Number(input.maxOutputTokens) || 65_536))}`,
     "    models:",
     `      - id: ${yamlScalar(input.model)}`,
     // Shown by a name, never by its id (owner ruling 8, 2026-10-10): the kernel's /model popup lists this entry, and an entry

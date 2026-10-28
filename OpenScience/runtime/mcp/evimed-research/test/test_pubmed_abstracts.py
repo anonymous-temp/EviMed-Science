@@ -113,6 +113,23 @@ class PubmedAbstractTests(unittest.TestCase):
         self.assertIn("99999999", warnings)
         self.assertIn("no abstract for PMID 11111111", warnings)
 
+    def test_past_the_inline_budget_an_abstract_is_named_by_its_preserved_file(self):
+        # An answer too large is cut by the kernel and stops being JSON, and then no file in it reads as preserved
+        # (live check 2026-10-28): past the budget the item carries its path and the text stays on disk.
+        with mock.patch.object(sources, "PUBMED_INLINE_ABSTRACT_BUDGET", 10), \
+             mock.patch.object(sources, "_get_text", return_value=EFETCH_XML):
+            result = sources.literature({"pmids": ["30221597"]})
+        item = result["data"]["items"][0]
+        self.assertNotIn("abstract", item)
+        self.assertNotIn("meshHeadings", item)
+        self.assertIs(item["abstractInline"], False)
+        self.assertEqual(item["evidenceLevel"], "abstract")
+        path = item["artifactPath"]
+        self.assertIn("RESULTS: The rate of the composite", (self.workspace / path).read_text("utf-8"))
+        self.assertEqual(result["artifacts"], [path])
+        self.assertIn(path, result["data"]["artifactSha256s"])
+        self.assertTrue(any("30221597" in action and "artifactPath" in action for action in result["next_actions"]))
+
     def test_fetching_the_same_record_again_reuses_its_capture(self):
         with mock.patch.object(sources, "_get_text", return_value=EFETCH_XML):
             first = sources.literature({"pmids": ["30221597"]})

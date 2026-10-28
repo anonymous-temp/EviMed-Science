@@ -2115,7 +2115,7 @@ test("a review organised by the person's outline is not asked for Results or Dis
   const noMethods = { ...english, reportText: english.reportText.replace("### Search strategy\n", "") };
   assert.deepEqual(
     validateClinicalEvidencePackage(noMethods).findings.map((finding) => `${finding.check}: ${finding.text}`),
-    ["deep-research-sections: The deep-research report is missing a required academic section matching ## Methods: a heading or subsection containing Methods or Search."],
+    ["deep-research-sections: The deep-research report is missing a required academic section matching ## Methods: a heading or subsection containing Methods or Search. Describe only what this run actually did — the sources it searched, the dates, the queries as sent, the counts — never a step it did not take."],
   );
 
   // An instrument applied in a topic section was applied: the topic sections

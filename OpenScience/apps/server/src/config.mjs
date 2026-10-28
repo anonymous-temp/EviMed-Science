@@ -3225,6 +3225,15 @@ export function loadConfig(overrides = {}) {
     runtimeContextWindow: Number(overrides.runtimeContextWindow
       ?? process.env.OPEN_SCIENCE_RUNTIME_CONTEXT_WINDOW
       ?? overrides.runMaxTokens ?? process.env.OPEN_SCIENCE_RUN_MAX_TOKENS ?? 400_000),
+    // What the kernel reserves for one answer of the model, out of the context window above.
+    //
+    // DSH 0.2.1 compacts when the next request would pass contextWindow - maxTokens - 65,536, and its DeepSeek adapter
+    // reserves 256,000 when nothing says otherwise: against the 400,000 window that left about 78,000 tokens of input, and a
+    // 19-minute review run on the live check of 2026-10-28 compacted nine times, dropping the history it was reasoning
+    // over (production's 34-minute run compacted too). 65,536 covers a model turn with long thinking and a long file
+    // written in one call, and puts the trigger near 270,000.
+    runtimeMaxOutputTokens: Number(overrides.runtimeMaxOutputTokens
+      ?? process.env.OPEN_SCIENCE_RUNTIME_MAX_OUTPUT_TOKENS ?? 65_536),
     requireInbox: overrides.requireInbox ?? boolEnv("OPEN_SCIENCE_REQUIRE_INBOX", production),
     // How long a run may produce no new message and no new tool call before it
     // is treated as stalled. A ledger of start/dispatch/finish cannot tell a

@@ -4102,7 +4102,12 @@ export function validateClinicalEvidencePackage({
   for (const section of deepResearchSections) {
     if (section.pattern.test(reportText ?? "")) continue;
     const [name, shape] = section[language];
-    issues.push(`The deep-research report is missing a required academic section matching ## ${name}: ${shape}.`);
+    // A methods section written to answer this notice described steps the run never took ("reference lists were mined",
+    // "English-only") on the live check of 2026-10-28: the notice says that only what was done may be reported.
+    const honest = section === deepResearchSections[0]
+      ? " Describe only what this run actually did — the sources it searched, the dates, the queries as sent, the counts — never a step it did not take."
+      : "";
+    issues.push(`The deep-research report is missing a required academic section matching ## ${name}: ${shape}.${honest}`);
   }
   // Presence is required of every report above; here only the order matters.
   issues.region("reference-list-order");
@@ -4327,7 +4332,7 @@ export function validateClinicalEvidencePackage({
     issues.region("report-number-unanchored");
     if (!referencedIds.length) {
       issues.push(
-        `Report line ${lineIndex + 1} numeric facts ${[...reportNumbers].join(", ")} have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.`,
+        `Report line ${lineIndex + 1} numeric facts ${[...reportNumbers].join(", ")} have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them — never by deleting a sourced number or writing it out in words; only a number no source states is corrected or removed.`,
       );
       continue;
     }
@@ -4342,7 +4347,7 @@ export function validateClinicalEvidencePackage({
     const unsupportedNumbers = [...reportNumbers].filter((token) => !supportedNumbers.has(token));
     if (unsupportedNumbers.length) {
       issues.push(
-        `Report line ${lineIndex + 1} numeric facts ${unsupportedNumbers.join(", ")} are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.`,
+        `Report line ${lineIndex + 1} numeric facts ${unsupportedNumbers.join(", ")} are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them — never by deleting a sourced number or writing it out in words; only a number no source states is corrected or removed.`,
       );
     }
   }

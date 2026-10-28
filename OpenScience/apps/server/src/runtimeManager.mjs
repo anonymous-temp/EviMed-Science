@@ -2203,6 +2203,7 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
     // send anyway; the gateway is the one that decides.
     reasoningEffort: String(config.deepseekReasoningEffort ?? "high"),
     contextWindow: Number(config.runtimeContextWindow) || Number(config.runMaxTokens) || 400_000,
+    maxOutputTokens: Number(config.runtimeMaxOutputTokens) || 65_536,
     sessionsDir: "/runtime/dsh-home/sessions",
     mcpServerPath: "/opt/evimed/mcp/evimed-research/server.py",
     mcpEnvironment: evimedMcpEnvironment(config, project, plan, { workloadTokenPath: workloadTokenPath }),

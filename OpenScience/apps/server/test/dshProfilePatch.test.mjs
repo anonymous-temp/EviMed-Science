@@ -594,3 +594,13 @@ test('the native thinking selector remains visible while provider settings stay 
   assert.equal(HOSTED_DISABLED_BROWSER_PANELS.includes('ui-model-selection'), false);
   assert.equal(HOSTED_DISABLED_BROWSER_PANELS.includes('ui-settings-models'), true);
 });
+
+test("the kernel reserves a bounded answer, so compaction leaves the run most of its window (live check 2026-10-28)", () => {
+  // DSH 0.2.1 compacts at contextWindow - maxTokens - 65,536 and the DeepSeek adapter reserves 256,000 when told nothing:
+  // on a 400,000 window that is ~78,000 tokens of input, and a 19-minute review compacted nine times.
+  const deepseek = (patch) => YAML.parse(patch).find((row) => row.id === "llm-deepseek").config;
+  assert.equal(deepseek(renderProfilePatch(input)).maxTokens, 65536);
+  assert.equal(deepseek(renderProfilePatch({ ...input, maxOutputTokens: 32768 })).maxTokens, 32768);
+  const trigger = 400_000 - deepseek(renderProfilePatch(input)).maxTokens - 65_536;
+  assert.ok(trigger > 250_000, `compaction would fire at ${trigger} tokens`);
+});

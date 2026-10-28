@@ -29,6 +29,7 @@
     apiKeyEnv: 'EVIMED_WORKLOAD_TOKEN'
     thinking: enabled
     reasoningEffort: high
+    maxTokens: 65536
     models:
       - id: 'deepseek-flash'
         name: 'DeepSeek'
