@@ -273,4 +273,16 @@ describe("active research workspace", () => {
     renderPage(); expect(await screen.findByText("执行记录暂不可用")).toBeInTheDocument();
     expect(screen.queryByText("还没有执行过")).not.toBeInTheDocument();
   });
+  it("starts from an empty project with one recipe and the two ways to begin", async () => {
+    const user = userEvent.setup();
+    mocks.listAgendas.mockResolvedValue({ items: [], nextCursor: null, available: true });
+    mocks.listEpisodes.mockResolvedValue({ items: [], nextCursor: null });
+    renderPage();
+    expect(await screen.findByRole("heading", { name: "让 AI 持续为你做研究" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("研究队列")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "新建长期研究" })).toBeEnabled());
+    expect(screen.getAllByRole("button", { name: "新建定时研究" })).toHaveLength(1);
+    await user.click(screen.getByRole("button", { name: "新建长期研究" }));
+    expect(screen.getByTestId("native-pane")).toHaveTextContent(/^project-a:/);
+  });
 });

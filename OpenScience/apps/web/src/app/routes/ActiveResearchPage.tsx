@@ -343,7 +343,8 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
     <Button variant="secondary" disabled={!available} onClick={() => setEditor(true)}>新建定时研究</Button>
   </>;
 
-  return <PageShell title="主动科研" width="wide" actions={startButtons}><div className="space-y-6">
+  // With nothing yet the empty state carries the two ways to start; the header does not repeat them.
+  return <PageShell title="主动科研" width="wide" actions={nothing && !nativeSession ? undefined : startButtons}><div className="space-y-6">
     {nativeUncertain && <p role="status" className="text-ui text-text">上次新建的长期研究可能已经创建，请先在对话列表里看一眼，再决定是否重新新建。</p>}
     {longFeature === "error" && <LoadError message="长期研究暂时无法使用。" onRetry={() => void loadLongFeature()} />}
     {longFeature === "disabled" && <p className="text-ui text-text">长期研究暂未开通，定时研究可以正常使用。</p>}

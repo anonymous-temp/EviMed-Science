@@ -5,7 +5,7 @@ import { listWebAgentRuns, type WebAgentRun } from "@/lib/apiClient";
 import { safeWorkspacePath } from "@/lib/claimCitations";
 import { formatApproxCount, formatClock, formatDuration, formatLingdou } from "@/lib/format";
 import { DELIVERABLE_STATUS_LABEL } from "@/lib/runProgress";
-import { ROOT_AGENT, rootStage, STAGES, stageCounts, useResearchObservation, type ObservedAgent, type ObservedCall, type Observation, type StageKey } from "@/lib/researchObservation";
+import { emptyObservation, ROOT_AGENT, rootStage, STAGES, stageCounts, useResearchObservation, type ObservedAgent, type ObservedCall, type Observation, type StageKey } from "@/lib/researchObservation";
 
 const RUN_WORD: Record<string, string> = { running: "进行中", succeeded: "已完成", failed: "未完成", canceled: "已停止", cancelled: "已停止" };
 const AGENT_WORD: Record<ObservedAgent["state"], string> = { running: "工作中", idle: "待命", done: "已完成", failed: "未完成", canceled: "已停止", unknown: "待命" };
@@ -59,10 +59,21 @@ async function readRun(runId: string): Promise<WebAgentRun | null> {
  * Verification: ResearchObservatory.test.tsx, researchObservation.test.ts.
  */
 export function ResearchObservatory({ runId, title, onOpenFile }: { runId: string | null; title?: string; onOpenFile?: (path: string, runId: string) => void }) {
-  if (!runId) return <section aria-label="研究观测" className="obs obs-empty" data-observatory="empty">
-    <div className="obs-empty-body"><p className="obs-empty-title">等待研究启动</p><p className="obs-empty-text">选择一项研究，或立即执行一次，这里会实时显示研究过程。</p></div>
-  </section>;
+  if (!runId) return <StandbyObservatory />;
   return <ObservatoryRun key={runId} runId={runId} title={title} onOpenFile={onOpenFile} />;
+}
+
+/** No run to watch: the console stands by with its research line dark, so the page still shows what will happen here. */
+function StandbyObservatory() {
+  const idle = emptyObservation();
+  return <section aria-label="研究观测" className="obs" data-observatory="empty">
+    <div className="obs-frame" aria-hidden="true"><span /><span /><span /><span /></div>
+    <header className="obs-head"><div className="obs-head-main"><span className="obs-live"><i aria-hidden="true" />STANDBY</span>
+      <div className="min-w-0"><p className="obs-kicker">研究观测舱</p><h3 className="obs-title">等待研究启动</h3></div></div>
+      <span className="obs-clock" aria-hidden="true">{elapsedClock(null)}</span></header>
+    <ResearchLine model={idle} counts={stageCounts(idle)} live={false} />
+    <p className="obs-empty-text">选择一项研究，或立即执行一次，这里会实时显示研究过程。</p>
+  </section>;
 }
 
 function ObservatoryRun({ runId, title, onOpenFile }: { runId: string; title?: string; onOpenFile?: (path: string, runId: string) => void }) {
