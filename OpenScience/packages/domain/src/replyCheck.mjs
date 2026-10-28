@@ -77,8 +77,9 @@ const SENTENCE_END = /(?<=[。！？!?；;])|(?<=\.)(?=\s)|\n+/u
  * the list 「under 参考文献 / References」 — and reading replies with the
  * report's finder found no list in the first cited reply on production
  * (2026-09-23, `参考文献：`), so its check judged nothing and said so as done.
+ * The Latin words are whole words: 「Values and preferences」 and 「Resources」 are not the list (2026-10-28, the gate's same fix).
  */
-const REPLY_REFERENCE_HEADING = /^[ \t]*(?:#{1,6}[ \t]+[^\n]*(?:参考文献|参考来源|参考资料|References?|Sources?)[^\n]*|(?:\*\*|__)?[ \t]*(?:参考文献|参考来源|参考资料|来源|References?|Sources?)[ \t]*(?:\*\*|__)?[ \t]*[:：]?[ \t]*(?:\*\*|__)?[ \t]*)$/gimu
+const REPLY_REFERENCE_HEADING = /^[ \t]*(?:#{1,6}[ \t]+[^\n]*(?:参考文献|参考来源|参考资料|\bReferences?\b|\bSources?\b)[^\n]*|(?:\*\*|__)?[ \t]*(?:参考文献|参考来源|参考资料|来源|References?|Sources?)[ \t]*(?:\*\*|__)?[ \t]*[:：]?[ \t]*(?:\*\*|__)?[ \t]*)$/gimu
 const URL = /https?:\/\/[^\s)>\]，。]+/g
 
 /**
