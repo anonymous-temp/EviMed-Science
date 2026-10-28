@@ -6,6 +6,7 @@ import { fetchWebMe, WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT, webErro
 import { mapQuestionRows, readQuestionWorkbook, type QuestionWorkbook, type QuestionMapping } from '@/lib/geoQuestionImport';
 import { getGeoDiagnosisProgress, importGeoQuestions, previewGeoQuestions, recoverGeoDiagnosis, startGeoDiagnosis, type GeoDiagnosisProgress, type GeoImportInput, type GeoImportPreview, type GeoMeasurementContract, type GeoQuestionImportRow } from '@/lib/geoQuestionWorkbenchClient';
 import { useUnsavedGuard } from '@/lib/useUnsavedGuard';
+import { useModeFocus } from '@/lib/useModeFocus';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Button } from '@/components/ui/Button';
 import { Input, Textarea, inputClasses } from '@/components/ui/Input';
@@ -15,6 +16,7 @@ import { AskAi } from './AskAi';
 import { ShowMore, useShowMore } from './tabs/showMore';
 import { engineName, GEO_DEFAULT_ENGINES } from './geoText';
 import { answerPath } from './tabs/geoTabText';
+import { geoCanEditQuestions, geoQuestionMode, type GeoQuestionMode } from './geoQuestionMode';
 
 const initialContract: GeoMeasurementContract = { samplingMode: 'one_shot', repeats: 1, engines: [...GEO_DEFAULT_ENGINES], metricIds: ['M-01S', 'M-06', 'M-08'], reportPresentation: 'summary', sourceBasis: 'answers_and_project_sources' };
 // eslint-disable-next-line no-restricted-syntax -- Parser validation messages are owned Chinese text; HTTP refusals still use webErrorMessage.
@@ -47,12 +49,12 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
   const replacementGeneration = useRef(0);
   const working = useRef(false);
   const identityGeneration = useRef(0);
-  const canEdit = !project.access || project.access.abilities.includes('edit');
+  const canEdit = geoCanEditQuestions(project);
   const editableNow = useRef(canEdit); editableNow.current = canEdit;
   const [identityVersion, setIdentityVersion] = useState(0);
   const [storageScope, setStorageScope] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
-  const editingMode = params.get("questionMode") === "import" || params.get("questionMode") === "edit";
+  const editingMode = geoQuestionMode(params, canEdit) !== null;
   const setMode = useCallback((mode: "import" | "edit" | null) => setParams(previous => { const next = new URLSearchParams(previous); if (mode) next.set("questionMode", mode); else next.delete("questionMode"); return next; }, { replace: true }), [setParams]);
   const currentMode = useRef(params.get("questionMode")); currentMode.current = params.get("questionMode");
   const setModeRef = useRef(setMode); setModeRef.current = setMode;
@@ -135,6 +137,17 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
     }).catch(() => { if (live) setError('账户或上次保存记录无法读取，请刷新后重试。'); });
     return () => { live = false; invalidateIdentity(identityGeneration); };
   }, [geoId, project.projectId, identityVersion, canEdit]);
+  // Importing and editing replace the list, and the buttons that open them unmount: focus lands on the mode's heading when the person
+  // opened it, and returns to the control they used when the list does (a restored draft opens the mode without asking for focus).
+  const heading = useRef<HTMLHeadingElement>(null), entry = useRef<GeoQuestionMode | null>(null);
+  useModeFocus(editingMode, {
+    enter: () => entry.current ? heading.current : null,
+    exit: () => {
+      const origin = entry.current; entry.current = null;
+      const block = heading.current?.closest('section');
+      return block?.querySelector<HTMLElement>(`[data-question-entry="${origin ?? 'import'}"]`) ?? block?.querySelector<HTMLElement>('[data-question-entry]');
+    },
+  });
   const pendingStart = useRef<{ version: number; requestKey: string } | null>(null);
   useEffect(() => { pendingStart.current = null; }, [storageScope]);
   const canRun = !project.access || project.access.abilities.includes('run');
@@ -154,6 +167,7 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
   const shown = useShowMore(entries, { first: ROWS_SHOWN, step: ROWS_SHOWN, resetKey: entries[0]?.key ?? '' });
   const editExisting = () => {
     if (editingMode || working.current || !editableNow.current || pendingImport.current) return;
+    entry.current = 'edit';
     const replacement = ++replacementGeneration.current;
     currentMode.current = "edit"; setMode("edit");
     void act(async () => {
@@ -185,7 +199,7 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
     await getGeoDiagnosisProgress(geoId, result.roundId);
     if (generation === identityGeneration.current) selectRound(result.roundId);
   }); };
-  return <Section title={editingMode ? "导入与编辑问句" : "问句整理与诊断"} level="sub">
+  return <Section title={editingMode ? "导入与编辑问句" : "问句整理与诊断"} level="sub" headingRef={heading}>
     {guard.confirming && <ConfirmDialog title="离开问句编辑？" body={pendingImport.current ? "当前编辑视图会关闭。已提交但未确认的保存请求将保留，用于核查结果。" : "尚未保存的原题、映射和采样口径会丢失。"} confirmLabel="放弃修改" onConfirm={() => { guard.markSaved(); guard.discard(); }} onCancel={() => { afterDiscard.current = null; guard.keepEditing(); }} />}
     {recoverableImport && <p role="status" data-layout-exception="geo-pending-save" className="text-ui text-text-2">发现上次尚未确认的保存记录。当前草稿已保留；核查该记录前不能提交新的保存。</p>}
     <div className="flex flex-wrap items-center gap-2">
@@ -195,7 +209,7 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
           const original = recoverableImport; pendingImport.current = original; setRecoverableImport(null);
           if (storageScope) localStorage.setItem(storageScope, JSON.stringify({input:original,viewClosed:false}));
           setRows(original.rows); setContract(original.contract); setBook(null); setMapping({});
-          setPreview(previewGeoQuestionImport(original) as GeoImportPreview); setEditing(true); setMode("import");
+          setPreview(previewGeoQuestionImport(original) as GeoImportPreview); setEditing(true); entry.current = 'import'; setMode("import");
         };
         if (editingMode && (rows.length > 0 || book !== null || editRevision.current > 0)) { afterDiscard.current = restore; guard.requestClose(); }
         else restore();
@@ -204,14 +218,15 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
         const pending = pendingImport.current!;
         if (storageScope) localStorage.setItem(storageScope, JSON.stringify({input:pending, viewClosed:false}));
         setRows(pending.rows); setContract(pending.contract);
-        setPreview(previewGeoQuestionImport(pending) as GeoImportPreview); setEditing(true); setMode("import");
+        setPreview(previewGeoQuestionImport(pending) as GeoImportPreview); setEditing(true); entry.current = 'import'; setMode("import");
       }}>继续核查上次保存</Button>}
-      {!editingMode && canEdit && <Button variant="secondary" size="sm" disabled={busy || !!pendingImport.current} onClick={() => { if (working.current || !editableNow.current || pendingImport.current) return; setMode("import"); setEditing(true); setSaved(null); }}>导入问句</Button>}
-      {!editingMode && canEdit && data.groups.length > 0 && data.version != null && data.contract != null && <Button size="sm" variant="text" disabled={busy || !!pendingImport.current} onClick={editExisting}>编辑为新版本</Button>}
+      {!editingMode && canEdit && <Button data-question-entry="import" variant="secondary" size="sm" disabled={busy || !!pendingImport.current} onClick={() => { if (working.current || !editableNow.current || pendingImport.current) return; entry.current = 'import'; setMode("import"); setEditing(true); setSaved(null); }}>导入问句</Button>}
+      {!editingMode && canEdit && data.groups.length > 0 && data.version != null && data.contract != null && <Button data-question-entry="edit" size="sm" variant="text" disabled={busy || !!pendingImport.current} onClick={editExisting}>编辑为新版本</Button>}
       {version != null && <AskAi project={target} label="建议分类" draft={`/geo-insight 请读取第 ${version} 版完整原题，仅建议测量池、人群、阶段与分类状态。保留原题、编号、客户分组与原标签，输出带原编号的可导入表格，建议不覆盖客户原分类；用户采用后另存新版本。`} />}{version != null && <AskAi project={target} label="检查覆盖" draft={`/geo-insight 请检查第 ${version} 版问句覆盖，读取该版本原题、已有资料和旅程人群，指出具体缺口与依据，不编造配额。保留原分类，建议另列，输出可编辑的新版本问句表，不自动采样。`} />}
-      {version != null && activeContract != null && canRun && <Button variant="secondary" size="sm" disabled={busy || !storageScope} onClick={start}>{busy ? '正在处理' : `启动第 ${version} 版诊断`}</Button>}
+      {/* Starting sampling belongs to the saved version and its terms (the note below the row); while a new one is being written the button would start the old one. */}
+      {!editingMode && version != null && activeContract != null && canRun && <Button variant="secondary" size="sm" disabled={busy || !storageScope} onClick={start}>{busy ? '正在处理' : `启动第 ${version} 版诊断`}</Button>}
     </div>
-    {!editingMode && version != null && <Note className="my-3" result={['第 ', { n: version }, ` 版 · ${activeContract?.samplingMode === 'recurring' ? '重复采样' : '单次采样'} · ${(activeContract?.engines ?? contract.engines).map(engineName).join('、')}。单次结果描述本次回答，不代表稳定概率。`]} action={canEdit && data.contract ? <Button size="sm" variant="text" disabled={busy || !!pendingImport.current} onClick={editExisting}>调整口径</Button> : undefined} />}
+    {!editingMode && version != null && <Note className="my-3" result={['第 ', { n: version }, ` 版 · ${activeContract?.samplingMode === 'recurring' ? '重复采样' : '单次采样'} · ${(activeContract?.engines ?? contract.engines).map(engineName).join('、')}。单次结果描述本次回答，不代表稳定概率。`]} action={canEdit && data.contract ? <Button data-question-entry="edit" size="sm" variant="text" disabled={busy || !!pendingImport.current} onClick={editExisting}>调整口径</Button> : undefined} />}
     {editingMode && canEdit && <div className="my-4 flex flex-col gap-4">
       <Input type="file" label="选择 Excel / CSV（首行为列名，最多 400 题、10 MB）" accept=".xlsx,.xls,.csv" disabled={busy || !!pendingImport.current} onChange={event => { const file = event.target.files?.[0]; if (file) loadFile(file); }} />
       {book && <>

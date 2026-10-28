@@ -382,3 +382,51 @@ it.each(['import','edit'] as const)('does not replace a current %s draft when sl
  client.importGeoQuestions.mockResolvedValueOnce({version:4});await userEvent.click(screen.getByRole('button',{name:'保存为新版本'}));
  await waitFor(()=>expect(client.importGeoQuestions).toHaveBeenCalledWith('g1',oldInput));
 });
+
+
+// A version being written is not the version that gets measured: starting is offered where its terms are, not in the middle of an edit.
+it('offers no 启动诊断 while a set is being imported or edited — it would start the old saved version', async () => {
+  const user = userEvent.setup();
+  show();
+  await waitFor(() => expect(screen.getByRole('button', { name: '启动第 3 版诊断' })).toBeEnabled());
+  await user.click(screen.getByRole('button', { name: '导入问句' }));
+  expect(screen.queryByRole('button', { name: /启动第 \d+ 版诊断/ })).toBeNull();
+  await user.click(screen.getByRole('button', { name: '返回问题列表' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: '启动第 3 版诊断' })).toBeEnabled());
+  expect(client.startGeoDiagnosis).not.toHaveBeenCalled();
+});
+
+it('offers no 启动诊断 on a deep link into the mode either', () => {
+  show('/questions?questionMode=edit');
+  expect(screen.queryByRole('button', { name: /启动第 \d+ 版诊断/ })).toBeNull();
+  expect(client.startGeoDiagnosis).not.toHaveBeenCalled();
+});
+
+it('moves focus to the mode heading when 导入问句 or 编辑为新版本 opens it, and back to the control used when the list returns', async () => {
+  const user = userEvent.setup();
+  const original: GeoQuestions = { ...data, groups: [{ id: 'g', name: 'G', pool: null, typicalQuestion: '', journeyStage: null, audience: null, weight: null, isControl: false, signal: null, questions: [{ id: 'q', text: 'One original', kind: 'client', platform: null, sourceUrl: null, isMeasured: true, originalId: '1', originalGroup: null, clientTags: [], collectedAt: null, classificationStatus: 'unclassified', originalRowIndex: 0 }] }] } as unknown as GeoQuestions;
+  render(<MemoryRouter><GeoQuestionWorkbench geoId="g1" project={geoProject()} data={original} onSaved={vi.fn()} /></MemoryRouter>);
+  await user.click(screen.getByRole('button', { name: '导入问句' }));
+  expect(await screen.findByRole('heading', { name: '导入与编辑问句' })).toHaveFocus();
+  await user.click(screen.getByRole('button', { name: '返回问题列表' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: '导入问句' })).toHaveFocus());
+  await user.click(screen.getByRole('button', { name: '编辑为新版本' }));
+  expect(await screen.findByRole('heading', { name: '导入与编辑问句' })).toHaveFocus();
+  await user.click(screen.getByRole('button', { name: '返回问题列表' }));
+  // The loaded rows are an edit in progress: leaving them is asked about once, and the answer returns to the list.
+  await user.click(await screen.findByRole('button', { name: '放弃修改' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: '编辑为新版本' })).toHaveFocus());
+});
+
+it('does not take focus when the page opens already in the mode', async () => {
+  show('/questions?questionMode=import');
+  await screen.findByRole('heading', { name: '导入与编辑问句' });
+  expect(screen.getByRole('heading', { name: '导入与编辑问句' })).not.toHaveFocus();
+});
+
+it('shows a view-only member the list, not the mode, for a copied ?questionMode= address', () => {
+  show('/questions?questionMode=import', true);
+  expect(screen.getByRole('heading', { name: '问句整理与诊断' })).toBeVisible();
+  expect(screen.queryByRole('heading', { name: '导入与编辑问句' })).toBeNull();
+  expect(screen.queryByLabelText(/选择 Excel/)).toBeNull();
+});

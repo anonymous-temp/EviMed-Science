@@ -1,6 +1,7 @@
 import { GeoAnalysisEntry } from "../GeoAnalysisEntry";
 import { AskAi } from "../AskAi";
 import { GeoQuestionWorkbench } from "../GeoQuestionWorkbench";
+import { geoCanEditQuestions, geoQuestionMode } from "../geoQuestionMode";
 import { useGeoPath } from "../useGeoPath";
 import { useGeoDestinationPath } from "../useGeoPath";
 import { useMemo } from "react";
@@ -91,7 +92,8 @@ export function QuestionsTab({ geoId, project }: { geoId: string; project: GeoPr
     copy.delete("selectionRef"); copy.delete("groupIds"); copy.delete("cluster");
     return copy;
   }, { replace: true });
-  const editingMode = params.get("questionMode") === "import" || params.get("questionMode") === "edit";
+  // A view-only member reads the list: the mode in a copied address is not theirs to be in.
+  const editingMode = geoQuestionMode(params, geoCanEditQuestions(project)) !== null;
   const view = geoQuestionsView(params.get(GEO_VIEW_PARAM));
   const switcher = {
     kind: "chips" as const,

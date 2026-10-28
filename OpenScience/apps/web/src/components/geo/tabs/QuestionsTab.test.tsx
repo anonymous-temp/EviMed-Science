@@ -371,3 +371,12 @@ it('treats the current question version as visible navigation rather than a rese
  expect(screen.getByRole('button',{name:/问句版本：第 2 版/})).toBeVisible();
  const params=new URLSearchParams(screen.getByTestId('search').textContent!);expect(params.get('questionVersion')).toBe('2');expect(params.get('engines')).toBe('kimi');
 });
+
+
+it('lists the questions for a view-only member who follows a copied ?questionMode= address, instead of an empty tab', async () => {
+  const viewer = geoProject({}, { access: { roles: ['viewer'], abilities: ['read'], owner: false } });
+  renderTab(viewer, '/app/geo/geo_1/questions?view=all&questionMode=import&questionVersion=2');
+  expect(await screen.findByLabelText('搜索问题')).toBeVisible();
+  expect(screen.queryByLabelText(/选择 Excel/)).toBeNull();
+  expect(screen.queryByRole('button', { name: '导入问句' })).toBeNull();
+});

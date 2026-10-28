@@ -1,4 +1,4 @@
-import { createContext, useContext, useId, type ReactNode } from "react";
+import { createContext, useContext, useId, type ReactNode, type Ref } from "react";
 import { cn } from "@/lib/cn";
 
 type HeadingLevel = 2 | 3 | 4 | 5 | 6;
@@ -76,8 +76,10 @@ export function BlockHeading({ className, children }: { className?: string; chil
  * Responsive: Wrapping header and min-width-zero title.
  * Verification: DataPrimitives.test.tsx and Composition.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
  */
-export function Section({ title, count, toolbar, level = "section", compact = false, className, children }: {
+export function Section({ title, count, toolbar, level = "section", compact = false, className, headingRef, children }: {
   title: string;
+  /** A heading that can take focus (`tabIndex={-1}`, no ring): where focus lands when the block changes mode (`useModeFocus`). */
+  headingRef?: Ref<HTMLHeadingElement>;
   /** A grey count at the heading's end: 12, or 「3 / 12」. */
   count?: number | string;
   /** The controls of this block alone, at the heading's far end. */
@@ -94,7 +96,7 @@ export function Section({ title, count, toolbar, level = "section", compact = fa
     <section aria-labelledby={headingId} className={cn(level === "sub" || compact ? "mt-6 first:mt-0" : "mt-8 first:mt-0", className)}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="flex min-w-0 items-baseline gap-2">
-          <Heading id={headingId} className={cn("min-w-0 font-semibold", compact ? "text-ui text-text-2" : level === "sub" ? "text-ui text-text" : "text-section text-text")}>{title}</Heading>
+          <Heading id={headingId} ref={headingRef} tabIndex={headingRef ? -1 : undefined} className={cn("min-w-0 font-semibold", headingRef && "outline-none", compact ? "text-ui text-text-2" : level === "sub" ? "text-ui text-text" : "text-section text-text")}>{title}</Heading>
           {count !== undefined && <span className="shrink-0 text-caption tabular-nums text-text-3">{count}</span>}
         </div>
         {toolbar}
