@@ -102,3 +102,11 @@ test("the prose shape is one row per paragraph and a count per phrase asked for"
   assert.deepEqual(shape.phrases, { 此外: 2, 综上所述: 1 }, "counted over the text, lists included; absent and malformed phrases dropped");
   assert.equal(shape.truncated, 0);
 });
+
+test("a reference list rebuilt for a report that had none is headed in the report's language", async () => {
+  const { defaultReferenceHeading } = await import("../src/claimTools.mjs");
+  assert.equal(defaultReferenceHeading("# Coagulation in CKD\n\n## Introduction\n\nPlatelet adhesion is impaired [1]. <!-- claim:CLM-001 -->\n"), "## References");
+  assert.equal(defaultReferenceHeading("# 慢性肾脏病的凝血\n\n## 引言\n\n血小板黏附受损，PT 与 APTT 区分度差 [1]。<!-- claim:CLM-001 -->\n"), "## 参考文献");
+  // Hidden markers and code are not the report's language.
+  assert.equal(defaultReferenceHeading("## 结果\n\n甲。<!-- claim:CLM-001 claim marker comment in English words -->\n```\nconst some = englishCode()\n```\n"), "## 参考文献");
+});

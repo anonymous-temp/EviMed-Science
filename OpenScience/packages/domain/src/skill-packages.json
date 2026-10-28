@@ -123,7 +123,7 @@
       "name": "biomedical-database-search",
       "origin": "capability-skill",
       "source": {"kind":"release"},
-      "digest": "sha256:f449fba1ad5499529bf864d349daf5afa7e9e6d99b323b88a79d9a0fb23979f4",
+      "digest": "sha256:3452df714224cbe3fc3e1fae3d3e822c39b814bfa53c47caa5f0132dc3426d63",
       "digestAlgorithm": "release-directory-v1"
     },
     {
@@ -141,7 +141,7 @@
       "name": "deep-research",
       "origin": "capability-skill",
       "source": {"kind":"release"},
-      "digest": "sha256:f724f36aad77701cf7d1d4cc64a606ec27bbca1cab304de06a2a08d49fc922e2",
+      "digest": "sha256:c4edb94d2a38f4a884e7a7a777373756e2f47bbe7df009aa0bd19e54548eb9f2",
       "digestAlgorithm": "release-directory-v1"
     },
     {
@@ -160,7 +160,7 @@
       "origin": "capability-skill",
       "source": {"kind":"release"},
       "licence": {"id":"MIT","basis":"declared"},
-      "digest": "sha256:7d1f69c4ab647299cd12ce66fa53cf92851114e6d0b6a4ed07e1edbfc127daaa",
+      "digest": "sha256:e698afb353e838431d27c4ad65aaecb224835f5b2b878957aa5cb00bfd839a58",
       "digestAlgorithm": "release-directory-v1"
     },
     {
@@ -260,11 +260,11 @@
       "id": "capability/clinical-evidence-synthesis",
       "name": "clinical-evidence-synthesis",
       "origin": "capability",
-      "version": "2.17.1",
+      "version": "3.0.0",
       "source": {"kind":"release"},
-      "digest": "sha256:4fab994da1acee68bdba1f61d8b72e4ec43a6d3f630ef7eb4531d41d26b06896",
+      "digest": "sha256:dded8238b5a3142468f2863182c775d6520598f0696c1bc184bb08fef1a98dd2",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"951379c1e5d43d2bf761d30f980fb98c30aea4a76c0ebdbd31d52763ccf9ab49"}],
+      "references": [{"path":"capability.yaml","sha256":"c5ab22f4a58543bc9b0885b6f48a5a7565b59a28a542eead46755520d4cdf042"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"clinical_trial_snapshot","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
