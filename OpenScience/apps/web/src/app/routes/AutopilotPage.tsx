@@ -422,6 +422,9 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
   const origin = (location.state as { from?: unknown } | null)?.from;
   const cameFrom = typeof origin === "string" && origin.startsWith(TASKS_PATH) ? origin : null;
   const openDraft = (item?: Recommendation) => {
+    // A form that is saving (or has created its task and not yet enabled it) is not made again: an unedited example is not "dirty",
+    // so nothing else would stop 新建 from remounting it between `createAgenda` and `startAgenda`.
+    if (draft.locked) return;
     const go = () => { setFresh(count => count + 1); navigate(newTaskPath(item?.id), { replace: creating, state: { from: creating ? cameFrom : selectedId ? taskPath(selectedId, { search: searchNow.current }) : null } }); };
     // An example over a form with an edit asks what discarding it asks; the form is made again for the example.
     if (draft.dirty) setReplacing({ example: item, go }); else go();
@@ -469,7 +472,7 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
 
   // With no task the list column says what a first one can be (the examples fill the form beside it); a deployment that cannot schedule
   // says that instead, where the list is the page (beside the list the pane says it).
-  const list = ({ split }: MasterDetailState) => <TaskList agendas={agendas} available={available} episodes={episodes} selectedId={selectedId} search={search} onSearch={onSearch} projectName={projectName} error={error}
+  const list = ({ split }: MasterDetailState) => <TaskList agendas={agendas} available={available} createLocked={creating && draft.locked} episodes={episodes} selectedId={selectedId} search={search} onSearch={onSearch} projectName={projectName} error={error}
     onRetry={() => void load()} onCreate={() => { if (available && !(creating && !example)) openDraft(); }} busy={busy} actions={rowActions} singleColumn={!split}
     actionNotice={actionError && !selected ? <div role="alert" className="px-2 text-ui text-error">{actionError}{retry && <Button variant="text" disabled={busy} onClick={() => void operate(retry)}>重试操作</Button>}</div> : undefined}
     empty={!none ? undefined : available ? <TaskExamples selectedId={example?.id} locked={draft.locked} onChoose={openDraft} /> : split ? undefined : unavailable} />;

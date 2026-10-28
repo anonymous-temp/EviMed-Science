@@ -7,6 +7,7 @@ import { WebApiError } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import { useTaskPane } from "@/lib/taskPane";
 import { RECOMMENDATIONS } from "@/components/autopilot/taskPresentation";
+import { UnsavedRouteGuard } from "@/app/layout/UnsavedRouteGuard";
 import { AutopilotPage } from "./AutopilotPage";
 
 // A data router builds a `Request` with an abort signal, and jsdom's signal is not the one the platform's `Request` accepts.
@@ -44,7 +45,7 @@ function Location() { const loc = useLocation(); return <p data-testid="location
 function Pane() { const pane = useTaskPane(); return <p data-testid="pane">{pane ? `${pane.projectId}:${pane.sessionId}` : "none"}</p>; }
 function render(path = "/app/autopilot/agenda-one") {
   const router = createMemoryRouter([
-    { path: "/app/autopilot/:taskId?", element: <><AutopilotPage /><Location /><Pane /></> },
+    { path: "/app/autopilot/:taskId?", element: <><UnsavedRouteGuard /><AutopilotPage /><Location /><Pane /></> },
     { path: "/app/chat/:sessionId", element: <Location /> }, { path: "/app/runs", element: <Location /> },
     { path: "/app/runs/:runId/files/*", element: <Location /> },
   ], { initialEntries: [path] });
@@ -372,6 +373,44 @@ describe("scheduled tasks", () => {
       await waitFor(() => expect(mocks.startAgenda).toHaveBeenCalledWith(agenda.id, agenda.revision));
       await waitFor(() => expect(here()).toBe("/app/autopilot/agenda-one"));
       expect(screen.queryByLabelText("任务指令")).not.toBeInTheDocument();
+    });
+    it("ignores 新建 while an unedited example is being created, so the activation that follows still runs", async () => {
+      // An example the person has not touched is not an edit, so nothing but the lock stops 新建 from making the form again mid-save.
+      let resolveCreate!: (value: unknown) => void;
+      mocks.createAgenda.mockImplementationOnce(() => new Promise(resolve => { resolveCreate = resolve; }));
+      render(`/app/autopilot/new?example=${RECOMMENDATIONS[0].id}`);
+      await userEvent.click(await within(task()).findByRole("button", { name: "创建并启用" }));
+      await waitFor(() => expect(mocks.createAgenda).toHaveBeenCalledTimes(1));
+      const create = screen.getByRole("button", { name: "新建" });
+      await waitFor(() => expect(create).toBeDisabled());
+      await userEvent.click(create);
+      expect(here()).toBe(`/app/autopilot/new?example=${RECOMMENDATIONS[0].id}`);
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+      // The list's rows are not what the form is locked against: only the form itself is.
+      expect(mocks.startAgenda).not.toHaveBeenCalled();
+      await act(async () => { resolveCreate(agenda); });
+      await waitFor(() => expect(mocks.startAgenda).toHaveBeenCalledWith(agenda.id, agenda.revision));
+      await waitFor(() => expect(here()).toBe("/app/autopilot/agenda-one"));
+      expect(mocks.createAgenda).toHaveBeenCalledTimes(1);
+      // The task is made and opened: 新建 is a button again.
+      expect(screen.getByRole("button", { name: "新建" })).toBeEnabled();
+    });
+    it("ignores an example pressed in the list column while the form is saving", async () => {
+      let resolveCreate!: (value: unknown) => void;
+      mocks.createAgenda.mockImplementationOnce(() => new Promise(resolve => { resolveCreate = resolve; }));
+      mocks.listAgendas.mockResolvedValue({ items: [] });
+      render("/app/autopilot");
+      await waitFor(() => expect(here()).toBe("/app/autopilot/new"));
+      await userEvent.click(within(list()).getByRole("button", { name: RECOMMENDATIONS[1].title }));
+      await waitFor(() => expect(here()).toBe(`/app/autopilot/new?example=${RECOMMENDATIONS[1].id}`));
+      await userEvent.click(within(task()).getByRole("button", { name: "创建并启用" }));
+      await waitFor(() => expect(mocks.createAgenda).toHaveBeenCalledTimes(1));
+      const other = within(list()).getByRole("button", { name: RECOMMENDATIONS[2].title });
+      expect(other).toBeDisabled();
+      await userEvent.click(other);
+      expect(here()).toBe(`/app/autopilot/new?example=${RECOMMENDATIONS[1].id}`);
+      await act(async () => { resolveCreate(agenda); });
+      await waitFor(() => expect(mocks.startAgenda).toHaveBeenCalledWith(agenda.id, agenda.revision));
     });
     it("keeps templates locked after partial creation and retries the same activation", async () => {
       mocks.startAgenda.mockRejectedValueOnce(new Error("offline"));
@@ -1235,6 +1274,19 @@ describe("scheduled tasks", () => {
       await userEvent.click(within(task()).getByRole("button", { name: "取消" }));
       await userEvent.click(within(await screen.findByRole("alertdialog", { name: "放弃未保存的修改？" })).getByRole("button", { name: "放弃修改" }));
       await waitFor(() => expect(here()).toBe("/app/autopilot/agenda-one"));
+      // The shell's route guard is mounted in this router: the discard was the person's one answer, and no second question follows it.
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("任务指令")).not.toBeInTheDocument();
+    });
+    it("asks once, through the shell's route guard, before a link leaves an edited form", async () => {
+      render("/app/autopilot/new");
+      await userEvent.type(await within(task()).findByLabelText("任务指令"), "没写完");
+      await userEvent.click(screen.getByRole("link", { name: "心衰证据追踪" }));
+      expect(await screen.findAllByRole("alertdialog")).toHaveLength(1);
+      expect(here()).toBe("/app/autopilot/new");
+      await userEvent.click(screen.getByRole("button", { name: "放弃修改并离开" }));
+      await waitFor(() => expect(here()).toBe("/app/autopilot/agenda-one"));
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
     });
     it("creates and enables a weekly task without altering its raw prompt, then opens it", async () => {
       render("/app/autopilot"); await userEvent.click(await screen.findByRole("button", { name: "新建" }));

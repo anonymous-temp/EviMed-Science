@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 import type { AgendaRecord } from "@/lib/autopilotClient";
 import { TaskList } from "./TaskList";
 
@@ -45,5 +46,19 @@ describe("what the list says with no task", () => {
     render(<MemoryRouter><TaskList {...props} agendas={[task]} search="无此任务" empty={<p>从示例开始</p>} /></MemoryRouter>);
     expect(screen.getByText("没有匹配的任务")).toBeInTheDocument();
     expect(screen.queryByText("从示例开始")).not.toBeInTheDocument();
+  });
+});
+
+describe("新建 while the form is saving", () => {
+  it("is disabled and presses nothing, and is a button again once the form is free", async () => {
+    const create = vi.fn();
+    const props = { agendas: [], episodes: [], selectedId: null, search: "", onSearch: noop, error: null, onRetry: noop, onCreate: create, busy: false, actions, singleColumn: false };
+    const view = render(<MemoryRouter><TaskList {...props} createLocked /></MemoryRouter>);
+    expect(screen.getByRole("button", { name: "新建" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "新建" }));
+    expect(create).not.toHaveBeenCalled();
+    view.rerender(<MemoryRouter><TaskList {...props} createLocked={false} /></MemoryRouter>);
+    await userEvent.click(screen.getByRole("button", { name: "新建" }));
+    expect(create).toHaveBeenCalledTimes(1);
   });
 });

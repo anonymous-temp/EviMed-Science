@@ -93,6 +93,7 @@ export function useUnsavedGuard(dirty: boolean, onClose: () => void, busy = fals
     notifyRouteGuards();
     setConfirming(false);
   }, [id]);
-  // The local dialog is the person's decision to discard: what `onClose` then does to the address (a mode parameter going) is not asked again.
-  return { markSaved, requestClose, confirming, keepEditing: () => setConfirming(false), discard: () => { if (!busy) { acknowledged.current = true; routeGuards.delete(id); notifyRouteGuards(); setConfirming(false); onClose(); } } };
+  // The local dialog is the person's decision to discard: it leaves the registry (`markSaved`) before `onClose` moves the address, so the
+  // route guard reads a clean page and the dialog's own `confirming` state is no longer what it asks about.
+  return { markSaved, requestClose, confirming, keepEditing: () => setConfirming(false), discard: () => { if (!busy) { markSaved(); onClose(); } } };
 }

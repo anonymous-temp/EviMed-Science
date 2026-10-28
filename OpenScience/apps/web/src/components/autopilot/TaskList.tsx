@@ -32,9 +32,11 @@ export interface TaskRowActions {
  * box and the groups 即将执行 / 已暂停 / 已完成, a group with nothing in it not drawn — and, with no task at all, the examples to start one from. A row is the task's name and one line — when it runs next and how often, that it is running,
  * why it stopped — and its 「⋯」, always visible. It is a link: it opens the task's page, and the open task's row is marked.
  */
-export function TaskList({ agendas, available = true, episodes, selectedId, search, onSearch, projectName, error, onRetry, onCreate, busy, actions, singleColumn, empty, actionNotice }: {
+export function TaskList({ agendas, available = true, createLocked = false, episodes, selectedId, search, onSearch, projectName, error, onRetry, onCreate, busy, actions, singleColumn, empty, actionNotice }: {
   agendas: AgendaRecord[] | null;
   available?: boolean;
+  /** The new-task form is saving: 新建 would make it again and lose the activation that has not run yet, so it waits. */
+  createLocked?: boolean;
   actionNotice?: ReactNode;
   /** The project's newest executions: which tasks are running now. */
   episodes: readonly EpisodeRecord[];
@@ -90,7 +92,7 @@ export function TaskList({ agendas, available = true, episodes, selectedId, sear
       title="定时任务"
       documentTitle={false}
       scope={<span className="block max-w-56 truncate text-caption text-text-3"><span>当前项目</span>{projectName ? <><span> · </span><span>{projectName}</span></> : null}</span>}
-      actions={<IconButton icon={Plus} label="新建" disabled={!available} onClick={onCreate} />}
+      actions={<IconButton icon={Plus} label="新建" disabled={!available || createLocked} onClick={onCreate} />}
       className={cn("shrink-0 pb-3 pt-5", inset && "px-4")}
     />
     {/* A search box over nothing to search is not drawn. */}
