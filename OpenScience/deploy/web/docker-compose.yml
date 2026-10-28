@@ -1139,6 +1139,7 @@ services:
       OPEN_SCIENCE_KB_INDEX_RECONCILE_MS: ${OPEN_SCIENCE_KB_INDEX_RECONCILE_MS:-60000}
       OPEN_SCIENCE_KB_EMBEDDING_TIMEOUT_MS: ${OPEN_SCIENCE_KB_EMBEDDING_TIMEOUT_MS:-30000}
       OPEN_SCIENCE_LIBRARY_MAX_ITEMS: ${OPEN_SCIENCE_LIBRARY_MAX_ITEMS:-1000}
+      OPEN_SCIENCE_LIBRARY_VIEW_MAX_BYTES: ${OPEN_SCIENCE_LIBRARY_VIEW_MAX_BYTES:-536870912}
       # The GEO probe channel: what the consumer LLM front-ends actually answer.
       # Empty disables it and `geo_visibility_probe` refuses with a stated
       # reason, which is the right answer for a deployment that cannot measure

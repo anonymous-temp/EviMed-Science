@@ -481,3 +481,75 @@ test("the all list is every document once, with the projects that hold it and wh
     assert.deepEqual(plain.libraryProjects, ["papers-c"], "the same bytes are the same document, whichever project's copy is read");
   } finally { await context.close(); }
 });
+
+test("a project put away after it was chosen stays on the entry, and the dialog's question about a project's deletion is answered from the real ledger", { skip }, async () => {
+  const context = await signedIn({ kbSmallLibraryTokens: 150_000 });
+  try {
+    const { app, user, base, headers } = context;
+    const call = api(base, headers);
+    const owner = await app.store.userById(user.id);
+    for (const id of ["papers-a", "papers-b", "papers-old", "papers-other"]) await app.store.createProject(owner, id, id);
+    const [inA] = await ingestCorpus(context, { names: [GUIDELINE], projectId: "papers-a" });
+    const [kept] = await ingestCorpus(context, { names: ["肾功能与抗凝.pdf"], projectId: "papers-a" });
+    const route = `/api/library/${inA.id}`;
+    assert.equal((await call(route, { method: "PUT", body: { projects: ["papers-old", "papers-b"] } })).status, 201);
+    assert.equal((await call("/api/projects/papers-old/archive", { method: "POST", body: { archived: true } })).status, 200);
+
+    // Saving the list back is not refused for the project that was put away since; a newly named archived one still is.
+    const saved = await call(route, { method: "PUT", body: { projects: ["papers-old", "papers-b", "papers-other"] } });
+    assert.equal(saved.status, 200, JSON.stringify(saved.body));
+    assert.deepEqual(saved.body.data.libraryProjects, ["papers-old", "papers-b", "papers-other"]);
+    await app.store.createProject(owner, "papers-older", "older");
+    assert.equal((await call("/api/projects/papers-older/archive", { method: "POST", body: { archived: true } })).status, 200);
+    const refused = await call(route, { method: "PUT", body: { projects: ["papers-old", "papers-older"] } });
+    assert.deepEqual([refused.status, refused.body.code], [400, "library_project_invalid"]);
+    assert.deepEqual((await call("/api/library")).body.data.items[0].libraryProjects, ["papers-old", "papers-b", "papers-other"], "the refused change changed nothing");
+
+    // What deleting papers-a would take from the others: the document only it holds, which was sent to b and other (and the archived one).
+    await call(`/api/library/${kept.id}`, { method: "PUT", body: { projects: ["papers-a"] } });
+    const loss = await call("/api/library/project-loss?projectId=papers-a");
+    assert.equal(loss.status, 200);
+    assert.deepEqual(loss.body.data.items.map((item) => [item.sourceId, item.projects]), [[inA.id, ["papers-old", "papers-b", "papers-other"]]],
+      "the document sent only to its own project costs no one anything");
+    assert.deepEqual((await call("/api/library/project-loss?projectId=papers-b")).body.data.items, []);
+    assert.equal((await call("/api/library/project-loss?projectId=nobody")).status, 404);
+    assert.equal((await call("/api/library/project-loss")).status, 400);
+  } finally { await context.close(); }
+});
+
+test("deleting a file from the knowledge base removes every project's copy of it, its library entry and every directory's copy — one request", { skip }, async () => {
+  const context = await signedIn({ kbSmallLibraryTokens: 150_000 });
+  try {
+    const { app, user, base, headers, dataDir } = context;
+    const call = api(base, headers);
+    const owner = await app.store.userById(user.id);
+    for (const id of ["papers-a", "papers-b", "papers-c"]) await app.store.createProject(owner, id, id);
+    const [inA] = await ingestCorpus(context, { names: [GUIDELINE], projectId: "papers-a" });
+    const [inB] = await ingestCorpus(context, { names: [GUIDELINE], projectId: "papers-b" });
+    const [other] = await ingestCorpus(context, { names: ["肾功能与抗凝.pdf"], projectId: "papers-a" });
+    assert.notEqual(inA.id, inB.id);
+    await call(`/api/library/${inA.id}`, { method: "PUT", body: { projects: ["papers-c"] } });
+    await launch(app, user.id, ["papers-a", "papers-b", "papers-c"]);
+    assert.deepEqual(await viewOf(dataDir, user.id, "papers-c"), [inA.id]);
+    const listed = (await call("/api/sources?scope=all")).body.data;
+    const row = listed.items.find((item) => item.payload.fingerprint.sha256 === inA.payload.fingerprint.sha256);
+    assert.deepEqual(row.holders.map((holder) => holder.id).sort(), ["papers-a", "papers-b"]);
+
+    const deleted = await call(`/api/sources/${row.id}`, { method: "DELETE", body: { expectedRevision: row.revision, everywhere: true } });
+    assert.equal(deleted.status, 200, JSON.stringify(deleted.body));
+    assert.deepEqual(deleted.body.data.copies.map((copy) => copy.id).sort(), [inA.id, inB.id].sort());
+    for (const id of [inA.id, inB.id]) assert.equal(await app.sourceService.documents.get(user.id, "source", id), null, id);
+    assert.ok(await app.sourceService.documents.get(user.id, "source", other.id), "another document is kept");
+    assert.deepEqual((await call("/api/library")).body.data.items, [], "the entry went with the last copy");
+    assert.deepEqual(await viewOf(dataDir, user.id, "papers-c"), [], "so did the copy in the project it had been sent to");
+    await assert.rejects(access(path.join(userLibraryDir({ dataDir }, user.id), inA.id)), { code: "ENOENT" });
+    const after = (await call("/api/sources?scope=all")).body.data;
+    assert.deepEqual(after.items.map((item) => item.id), [other.id], "the list no longer shows the file from another project's copy");
+    // A one-source delete is still a one-source delete.
+    const [again] = await ingestCorpus(context, { names: ["出血处理共识.pdf"], projectId: "papers-a" });
+    const [again2] = await ingestCorpus(context, { names: ["出血处理共识.pdf"], projectId: "papers-b" });
+    const single = await call(`/api/sources/${again.id}`, { method: "DELETE", body: { expectedRevision: (await app.sourceService.get(user.id, again.id)).revision } });
+    assert.equal(single.status, 200);
+    assert.ok(await app.sourceService.documents.get(user.id, "source", again2.id), "the other project's copy stays");
+  } finally { await context.close(); }
+});

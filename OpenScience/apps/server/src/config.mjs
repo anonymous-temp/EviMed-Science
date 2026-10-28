@@ -3043,6 +3043,10 @@ export function loadConfig(overrides = {}) {
     // the account mounts), its listing and the search scope it adds to every
     // project; past it the researcher is told to remove one first.
     libraryMaxItems: Number(overrides.libraryMaxItems ?? process.env.OPEN_SCIENCE_LIBRARY_MAX_ITEMS ?? 1_000),
+    // What an account's projects may hold of the library together. Each project that has a runtime gets its own real copy of the
+    // entries that apply to it (`libraryService.mjs`), so the library costs the disk once per project: a project whose
+    // directory does not exist yet and whose copy would pass this gets none, and its runtime starts without /workspace/library.
+    libraryViewMaxBytes: Number(overrides.libraryViewMaxBytes ?? process.env.OPEN_SCIENCE_LIBRARY_VIEW_MAX_BYTES ?? 512 * 1024 * 1024),
     autopilotEnabled: overrides.autopilotEnabled ?? boolEnv("OPEN_SCIENCE_AUTOPILOT_ENABLED", production),
     autopilotPollMs: Number(overrides.autopilotPollMs ?? process.env.OPEN_SCIENCE_AUTOPILOT_POLL_MS ?? 1_000),
     autopilotLeaseMs: Number(overrides.autopilotLeaseMs ?? process.env.OPEN_SCIENCE_AUTOPILOT_LEASE_MS ?? 300_000),

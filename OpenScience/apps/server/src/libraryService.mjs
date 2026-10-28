@@ -54,6 +54,15 @@ import { sourceIndexDocument, sourceParserRevision, sourceReadable } from "./sou
  *   exactly the entries that apply to it, and that directory is what /workspace/library is. A change to a record,
  *   a deleted record, a replaced document and a deleted project all bring the views to the new truth before the call answers
  *   (a narrowing removes first and writes after), and the convergence pass repairs whatever a failure left behind.
+ * - A view is a real copy, not a link, and what that costs is counted (2026-10-28). The first design linked a view's file to
+ *   the master (`fs.link`); it cannot ship: `scripts/ops/backup-archive.mjs` refuses to back up a hard-linked data file outside a
+ *   workspace (the whole backup fails, not the one file) and `openScopedFileNoFollow` refuses a file whose `nlink` is above 1
+ *   (the AgentBay push of the view goes through it), both on purpose — "a workspace has no legitimate hardlinks". So a project's
+ *   view costs the bytes of the entries that apply to it, and the account's views together are held to `viewMaxBytes`
+ *   (`OPEN_SCIENCE_LIBRARY_VIEW_MAX_BYTES`): a project whose directory does not exist yet and whose view would pass it gets none
+ *   (`library_views_over_budget`, counted), exactly like a view that could not be brought right — its runtime starts without
+ *   /workspace/library, and `kb_search` / `kb_browse`, which read the records, are untouched. Views that exist keep following
+ *   the records.
  */
 
 const RECORD_KIND = "preferences";
@@ -284,16 +293,18 @@ export class LibraryService {
   /**
    * @param {{ documents: any, sources: any, capsules?: any, libraryDir: (userId: string) => string,
    *   viewsDir?: ((userId: string) => string) | null, projectGuard?: ((userId: string, projectId: string) => Promise<unknown>) | null,
-   *   maxItems?: number, now?: () => Date, report?: (code: string) => void }} options
+   *   maxItems?: number, viewMaxBytes?: number, now?: () => Date, report?: (code: string) => void }} options
    *   `viewsDir`: where the account's per-project views are kept (`libraryViewsRoot`); without it no view is written and none
    *   is removed (a deployment that never mounts one). `projectGuard`: throws unless the project may be named in a record's list
-   *   (`assertOrdinaryProject`); without it a list is refused rather than taken on trust.
+   *   (`assertOrdinaryProject`); without it a list is refused rather than taken on trust. `viewMaxBytes`: the most all of an
+   *   account's views may hold together before a project that has none yet is given none (default: no limit).
    */
-  constructor({ documents, sources, capsules = null, libraryDir, viewsDir = null, projectGuard = null, maxItems = 1000, now = () => new Date(), report = () => {} }) {
+  constructor({ documents, sources, capsules = null, libraryDir, viewsDir = null, projectGuard = null, maxItems = 1000, viewMaxBytes = Infinity, now = () => new Date(), report = () => {} }) {
     if (!documents?.database || !sources || typeof libraryDir !== "function") {
       throw new TypeError("The personal library needs the product database, the source service and its directory rule.");
     }
     if (!Number.isSafeInteger(maxItems) || maxItems < 1 || maxItems > 100_000) throw new TypeError("The library size limit must be a positive integer.");
+    if (!(viewMaxBytes > 0)) throw new TypeError("The limit on the projects' directories must be positive.");
     this.documents = documents;
     this.database = documents.database;
     this.sources = sources;
@@ -302,10 +313,11 @@ export class LibraryService {
     this.viewsDir = viewsDir;
     this.projectGuard = projectGuard;
     this.maxItems = maxItems;
+    this.viewMaxBytes = viewMaxBytes;
     this.now = now;
     this.report = report;
     this.lastError = null;
-    this.counters = { added: 0, removed: 0, copiesWritten: 0, copiesRemoved: 0, copyFailures: 0, published: 0, viewsWritten: 0, viewsRemoved: 0, viewFailures: 0 };
+    this.counters = { added: 0, removed: 0, copiesWritten: 0, copiesRemoved: 0, copyFailures: 0, published: 0, viewsWritten: 0, viewsRemoved: 0, viewFailures: 0, viewsOverBudget: 0, carriesRefused: 0 };
   }
 
   /** Every entry of an account, newest first. @param {string} userId */
@@ -347,8 +359,10 @@ export class LibraryService {
    * @returns {Promise<{ item: ReturnType<typeof entryView>, created: boolean }>}
    */
   async add(userId, sourceId, { projects } = {}) {
-    if (projects !== undefined) await this.#guardProjects(userId, projects);
-    const work = () => this.addCurrent(userId, sourceId, { projects });
+    // The shape is refused here, before anything is read; which projects may be named is asked under the lock, where the
+    // record's own list is known (`addCurrent`).
+    const parsed = projects === undefined ? undefined : parseLibraryProjects(projects);
+    const work = () => this.addCurrent(userId, sourceId, { projects: parsed, guard: true });
     return typeof this.sources.withRegistrationLocks === "function"
       ? this.sources.withRegistrationLocks([`library:${userId}`], work) : work();
   }
@@ -364,23 +378,34 @@ export class LibraryService {
     if (expectedRevision !== undefined && (!Number.isSafeInteger(expectedRevision) || /** @type {number} */ (expectedRevision) < 1)) {
       throw new HttpError(400, "library_payload_invalid", "expectedRevision is the revision of the entry you read.");
     }
-    await this.#guardProjects(userId, parsed);
-    const work = () => this.addCurrent(userId, sourceId, { projects: parsed, expectedRevision: /** @type {number | undefined} */ (expectedRevision) });
+    const work = () => this.addCurrent(userId, sourceId, { projects: parsed, guard: true, expectedRevision: /** @type {number | undefined} */ (expectedRevision) });
     return typeof this.sources.withRegistrationLocks === "function"
       ? this.sources.withRegistrationLocks([`library:${userId}`], work) : work();
   }
 
-  /** A list names only projects a document may be sent to; "all" names none. @param {string} userId @param {unknown} projects */
-  async #guardProjects(userId, projects) {
+  /**
+   * A list names only projects a document may be sent to; "all" names none. A project the record already lists is not asked
+   * about again: one that has become unusable since (archived) stays on the record — nothing here took it away — and a later
+   * save that sends the list back is not refused for it. Only a project that is newly named must pass.
+   * @param {string} userId @param {unknown} projects @param {readonly string[]} [kept] the list the record has now
+   */
+  async #guardProjects(userId, projects, kept = []) {
     const parsed = parseLibraryProjects(projects);
     if (parsed === LIBRARY_ALL_PROJECTS || !parsed.length) return;
+    const named = parsed.filter((id) => !kept.includes(id));
+    if (!named.length) return;
     if (typeof this.projectGuard !== "function") throw new HttpError(503, "library_unavailable", "The personal library cannot check projects on this deployment.");
-    for (const id of parsed) await this.projectGuard(userId, id);
+    for (const id of named) await this.projectGuard(userId, id);
   }
 
-  /** @param {string} userId @param {unknown} sourceId
-   * @param {{personal?:boolean, projects?: "all" | string[], expectedRevision?: number}} [options] */
-  async addCurrent(userId, sourceId, { personal = false, projects, expectedRevision } = {}) {
+  /**
+   * @param {string} userId @param {unknown} sourceId
+   * @param {{personal?:boolean, projects?: "all" | string[], expectedRevision?: number, guard?: boolean, replacing?: boolean}} [options]
+   *   `guard`: the projects are a person's choice and each newly named one must pass the project rule (a replacement carries
+   *   what was chosen and asks nothing). `replacing`: this entry takes the place of one the caller releases in the same breath
+   *   (`carryOver`), so it does not count against the library's size.
+   */
+  async addCurrent(userId, sourceId, { personal = false, projects, expectedRevision, guard = false, replacing = false } = {}) {
     const source = await this.documents.get(userId, "source", librarySourceId(sourceId));
     if (!source) throw new HttpError(404, "library_source_invalid", "The source is unavailable.");
     // A knowledge page quotes the documents of its own project; in another project those documents are not there to check it against.
@@ -391,9 +416,13 @@ export class LibraryService {
     if (!SHA256.test(sha256)) throw new HttpError(409, "library_source_invalid", "The source has no content digest.");
     const id = `library:${sha256}`;
     let record = await this.documents.get(userId, RECORD_KIND, id, { includeDeleted: true });
+    if (guard && projects !== undefined) {
+      const listed = record && !record.deletedAt ? libraryRecordProjects(record.payload) : [];
+      await this.#guardProjects(userId, projects, listed === LIBRARY_ALL_PROJECTS ? [] : listed);
+    }
     let created = false;
     if (!record || record.deletedAt) {
-      if (await this.#count(userId) >= this.maxItems) {
+      if (!replacing && await this.#count(userId) >= this.maxItems) {
         throw new HttpError(409, "library_full", `The personal library holds at most ${this.maxItems} documents.`);
       }
       const payload = {
@@ -426,6 +455,11 @@ export class LibraryService {
     if (!created && (personal || record.payload.explicitRetention === false || (projects !== undefined && !sameProjects(libraryRecordProjects(record.payload), projects)))) {
       // A narrowing leaves the views before the record says so: a failure then costs a project a document it should
       // have, which the next pass restores, never a project a document it should not.
+      // Known gap, AgentBay only: its session holds the project's view as a Context pushed when the session is created
+      // (`AgentBayRuntimeProvider.pushProject`, `upload: false` and no push for a session it re-attaches to), so what is
+      // removed here reaches the project's next session and not one that is running. Fixing it is a re-push and a delete
+      // in the remote Context, i.e. plumbing in the provider, and is not done here. The Docker runtimes mount the directory
+      // itself, so for them the answer below is already true.
       if (projects !== undefined) await this.#withdrawFromViews(userId, record.payload.sourceId, { ...record.payload, projects });
       record = await this.documents.put(userId, RECORD_KIND, id, { ...record.payload,
         ...(projects !== undefined ? { projects } : {}),
@@ -630,6 +664,7 @@ export class LibraryService {
     if (onlyIfMissing && await fs.lstat(view).then((stat) => stat.isDirectory() && !stat.isSymbolicLink(), () => false)) return view;
     const work = async () => {
       try {
+        await this.#assertViewRoom(userId, projectId);
         await this.#convergeViews(userId, { strict: true, only: [projectId] });
       } catch (error) {
         await this.dropProjectView(userId, projectId);
@@ -640,6 +675,48 @@ export class LibraryService {
     };
     return typeof this.sources.withRegistrationLocks === "function"
       ? this.sources.withRegistrationLocks([`library:${userId}`], work) : work();
+  }
+
+  /**
+   * Whether the account's views have room for one more: a project whose directory does not exist yet is given one only if the
+   * entries that apply to it fit under `viewMaxBytes` beside the views the account already has. A directory that exists is
+   * not asked — it follows the records, and what it can grow to is the library's own size. Throws `library_views_over_budget`.
+   * @param {string} userId @param {string} projectId
+   */
+  async #assertViewRoom(userId, projectId) {
+    if (!Number.isFinite(this.viewMaxBytes)) return;
+    const root = await this.#viewRoot(userId);
+    const target = path.join(root, safeId(projectId, "project id"));
+    if (await fs.lstat(target).then(() => true, () => false)) return;
+    const master = await this.#root(userId);
+    const present = await this.#presentCopies(userId);
+    let needed = 0;
+    for (const record of await this.#records(userId)) {
+      const name = record.payload.sourceId;
+      if (!SOURCE_ID.test(name) || !record.payload.copy || !present.has(name) || !libraryRecordCovers(record.payload, projectId)) continue;
+      needed += (await fs.lstat(path.join(master, name, COPY_FILE)).catch(() => null))?.size ?? 0;
+    }
+    if (await this.viewBytes(userId) + needed > this.viewMaxBytes) {
+      this.counters.viewsOverBudget += 1;
+      throw new HttpError(413, "library_views_over_budget", "The projects' copies of the library would pass the limit; this project gets none.");
+    }
+  }
+
+  /** What the account's project directories hold together, in bytes: every view is a real copy, so this is what the
+   *  library costs the disk beyond its master. @param {string} userId */
+  async viewBytes(userId) {
+    if (!this.viewsDir) return 0;
+    const root = await this.#viewRoot(userId);
+    let total = 0;
+    for (const projectId of await this.#viewProjects(userId)) {
+      const view = path.join(root, projectId);
+      const entries = await fs.readdir(view, { withFileTypes: true }).catch(() => []);
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        total += (await fs.lstat(path.join(view, entry.name, COPY_FILE)).catch(() => null))?.size ?? 0;
+      }
+    }
+    return total;
   }
 
   /** A project's directory removed, for a project that is gone (its records' lists were pruned in the deletion's transaction).
@@ -668,23 +745,62 @@ export class LibraryService {
       const fresh = await this.documents.get(userId, "source", by.sourceId).catch(() => null);
       const freshSha = String(fresh?.payload.fingerprint?.sha256 ?? "");
       if (!fresh || !SHA256.test(freshSha) || freshSha === replaced.sha256) return { carried: false, released: false };
-      let carried = false;
-      if (!await this.documents.get(userId, RECORD_KIND, `library:${freshSha}`)) {
-        await this.addCurrent(userId, fresh.id, { projects: libraryRecordProjects(old.payload) });
-        carried = true;
-      }
       // The old entry stays while another project still holds the old bytes as a current document.
       const holders = ((await this.#liveSources(userId, [replaced.sha256])).get(replaced.sha256) ?? [])
         .filter((candidate) => candidate.payload.publication?.current !== false);
+      let carried = false;
+      if (!await this.documents.get(userId, RECORD_KIND, `library:${freshSha}`)) {
+        try {
+          // With no holder left the old entry is released just below, so the new one takes its place and the library is no
+          // larger: a replacement at the size limit must still go through. With a holder left it is a second entry, and a
+          // full library may refuse it — then the new version is simply not listed (it still applies where it lives) and
+          // the replacement is done; the job never fails for it, which would repeat for ever.
+          await this.addCurrent(userId, fresh.id, { projects: libraryRecordProjects(old.payload), replacing: holders.length === 0 });
+          carried = true;
+        } catch (error) {
+          if (/** @type {any} */ (error)?.code !== "library_full") throw error;
+          this.counters.carriesRefused += 1;
+          this.#failed(error);
+        }
+      }
       let released = false;
       if (!holders.length) {
         await this.removeCurrent(userId, old.payload.sourceId);
         released = true;
       }
+      // The directories as the records now are: the new entry was converged while the old one still counted (a library at its
+      // limit lists one entry fewer than it holds for that moment), and the release only takes the old one out.
+      if (carried && released) await this.#convergeViews(userId);
       return { carried, released };
     };
     return typeof this.sources.withRegistrationLocks === "function"
       ? this.sources.withRegistrationLocks([`library:${userId}`], work) : work();
+  }
+
+  /**
+   * What deleting a project would take from other projects, for the dialog that asks (`libraryProjectDeleted` is the deletion):
+   * the library entries whose bytes only this project holds — the entry goes with its last holder — and that the person sent
+   * to other projects, each with the projects that lose it (`"all"`, or the list without this project). An entry that nobody
+   * else was given, or that another project or personal storage still holds, costs no other project anything and is not listed.
+   * @param {string} userId @param {string} projectId
+   * @returns {Promise<{ sourceId: string, title: string, projects: "all" | string[] }[]>}
+   */
+  async projectLoss(userId, projectId) {
+    const records = await this.#records(userId);
+    const live = await this.#liveSources(userId, records.map((record) => record.payload.sha256));
+    /** @type {{ sourceId: string, title: string, projects: "all" | string[] }[]} */
+    const lost = [];
+    for (const record of records) {
+      const holders = live.get(record.payload.sha256) ?? [];
+      // The deletion's own condition: a source of this project holds the bytes and no current source of another place does.
+      if (!holders.some((holder) => holder.projectId === projectId)) continue;
+      if (holders.some((holder) => holder.projectId !== projectId && holder.payload.publication?.current !== false)) continue;
+      const projects = libraryRecordProjects(record.payload);
+      const others = projects === LIBRARY_ALL_PROJECTS ? projects : projects.filter((id) => id !== projectId);
+      if (others !== LIBRARY_ALL_PROJECTS && !others.length) continue;
+      lost.push({ sourceId: record.payload.sourceId, title: String(record.payload.snapshot?.title ?? record.payload.sourceId), projects: others });
+    }
+    return lost.sort((left, right) => left.title.localeCompare(right.title));
   }
 
   /**
@@ -1133,6 +1249,8 @@ async function bodyOf(req, limit, fields, sentence) {
  *   POST   /api/library                { sourceId, projects? }  → 201 the new entry, 200 the entry it already was
  *   PUT    /api/library/:sourceId      { projects, expectedRevision? } → 201 the entry made, 200 the entry changed
  *   DELETE /api/library/:sourceId                        → { sourceId, removed: true }
+ *   GET    /api/library/project-loss?projectId=          → { items: [{ sourceId, title, projects }] }: what deleting the
+ *                                                          project would take from other projects (the deletion dialog)
  *
  * `projects` is `"all"` or a list of ordinary project ids of the account (`libraryScope.mjs`); an entry answers with
  * `libraryProjects` (what it says), `appliesTo` (where the document is read) and `revision`. DELETE returns the document to
@@ -1164,6 +1282,13 @@ export function createLibraryRoutes({ store, service, maxJsonBytes }) {
       sendJson(res, created ? 201 : 200, { data: item });
       return true;
     }
+    if (url.pathname === "/api/library/project-loss" && method === "GET") {
+      const projectId = url.searchParams.get("projectId") ?? "";
+      if (!projectId) throw new HttpError(400, "project_required", "A project is required.");
+      await store.requireProject(user, projectId);
+      sendJson(res, 200, { data: { items: await service.projectLoss(user.id, projectId) } });
+      return true;
+    }
     const match = /^\/api\/library\/(src_[a-f0-9]{32})$/.exec(url.pathname);
     if (match && method === "PUT") {
       const body = await bodyOf(req, maxJsonBytes, ["projects", "expectedRevision"], "Send { projects, expectedRevision? } and nothing else.");
@@ -1189,7 +1314,7 @@ export function createLibraryRoutes({ store, service, maxJsonBytes }) {
 export function createLibrary({ config, store, documents, sources, capsules = null, kbIndex = null, projectGuard = null, report = () => {} }) {
   const service = documents?.database && sources ? new LibraryService({ documents, sources, capsules,
     libraryDir: (userId) => userLibraryDir(config, userId), viewsDir: (userId) => libraryViewsRoot(config, userId), projectGuard,
-    maxItems: config.libraryMaxItems, report }) : null;
+    maxItems: config.libraryMaxItems, viewMaxBytes: config.libraryViewMaxBytes, report }) : null;
   kbIndex?.useLibrary(service);
   return { service, routes: createLibraryRoutes({ store, service, maxJsonBytes: config.maxJsonBytes }) };
 }

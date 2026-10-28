@@ -80,7 +80,7 @@ function ledger() {
 }
 
 /** @param {{ rows: Map<string, any>, documents: any, key: (user: string, kind: string, id: string) => string }} store */
-async function fixture(store) {
+async function fixture(store, { known = [...PROJECTS], ...limits } = {}) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "library-applies-"));
   const config = { dataDir };
   const guarded = [];
@@ -92,11 +92,11 @@ async function fixture(store) {
   const service = new LibraryService({ documents: store.documents, sources, libraryDir: (user) => userLibraryDir(config, user), viewsDir: (user) => libraryViewsRoot(config, user),
     projectGuard: async (_user, projectId) => {
       guarded.push(projectId);
-      if (!PROJECTS.includes(projectId)) throw new HttpError(400, "library_project_invalid", "Choose an ordinary project.");
-    } });
+      if (!known.includes(projectId)) throw new HttpError(400, "library_project_invalid", "Choose an ordinary project.");
+    }, ...limits });
   /** The documents a project's directory holds, by source id. @param {string} projectId */
   const viewOf = async (projectId) => (await readdir(projectLibraryViewDir(config, USER, projectId)).catch(() => /** @type {string[]} */ ([]))).sort();
-  return { dataDir, config, service, guarded, viewOf, cleanup: () => rm(dataDir, { recursive: true, force: true }) };
+  return { dataDir, config, service, guarded, known, viewOf, cleanup: () => rm(dataDir, { recursive: true, force: true }) };
 }
 
 test("a record with no `projects` is every record written before the field: it means all projects, and nothing unreadable ever widens one", () => {
@@ -396,4 +396,175 @@ test("the routes: PUT sets where a document applies, POST takes the same field, 
   assert.equal(added.data.libraryProjects, "all", "a new entry applies everywhere unless it is told otherwise");
   await assert.rejects(call("POST", "/api/library", { sourceId: sourceId("a"), projects: ["nope"] }), { code: "library_project_invalid" });
   await assert.rejects(call("POST", "/api/library", { sourceId: sourceId("a"), projects: "none" }), { code: "library_projects_invalid" });
+});
+
+test("a project that was put away stays on the record: a later save that sends the list back is not refused for it, and only a newly named project is asked about", async (t) => {
+  const store = ledger();
+  store.addSource("a", "a");
+  const { service, known, guarded, cleanup } = await fixture(store);
+  t.after(cleanup);
+  const made = await service.setProjects(USER, sourceId("a"), ["b"]);
+  // Project b is archived afterwards: the project rule no longer lets it be named.
+  known.splice(known.indexOf("b"), 1);
+  guarded.length = 0;
+  const kept = await service.setProjects(USER, sourceId("a"), ["b", "c"], { expectedRevision: made.item.revision });
+  assert.deepEqual(kept.item.libraryProjects, ["b", "c"], "b stays, c is new and passes");
+  assert.deepEqual(guarded, ["c"], "only the project that was newly named was asked about");
+  // A project that is new and not usable is still refused, and the record stays as it was.
+  await assert.rejects(service.setProjects(USER, sourceId("a"), ["b", "c", "archived-now"]), { status: 400, code: "library_project_invalid" });
+  await assert.rejects(service.setProjects(USER, sourceId("a"), ["c", "b", "d"]), { status: 400, code: "library_project_invalid" });
+  assert.deepEqual((await service.list(USER)).items[0].libraryProjects, ["b", "c"]);
+  // Taking it away is allowed, and once it is gone from the list it is a new name again.
+  await service.setProjects(USER, sourceId("a"), ["c"]);
+  await assert.rejects(service.setProjects(USER, sourceId("a"), ["b", "c"]), { status: 400, code: "library_project_invalid" });
+  // "all" names no project, so it is never asked.
+  guarded.length = 0;
+  await service.setProjects(USER, sourceId("a"), "all");
+  assert.deepEqual(guarded, []);
+  // The same for POST on an entry that exists: the list it carries is a change, and a project it already has is kept.
+  await service.setProjects(USER, sourceId("a"), ["c"]);
+  known.push("b");
+  await service.setProjects(USER, sourceId("a"), ["b", "c"]);
+  known.splice(known.indexOf("b"), 1);
+  assert.deepEqual((await service.add(USER, sourceId("a"), { projects: ["b", "c"] })).item.libraryProjects, ["b", "c"]);
+});
+
+test("a replacement at the library's size limit is carried over: it takes the old entry's place and is not a new entry", async (t) => {
+  const store = ledger();
+  store.addSource("a", "a");
+  const { service, viewOf, cleanup } = await fixture(store, { maxItems: 1 });
+  t.after(cleanup);
+  await service.ensureProjectView(USER, "b");
+  await service.setProjects(USER, sourceId("a"), ["b"]);
+  await assert.rejects(service.add(USER, (store.addSource("e", "a"), sourceId("e"))), { status: 409, code: "library_full" }, "the library is full");
+
+  store.rows.get(store.key(USER, "source", sourceId("a"))).payload.publication = { current: false };
+  store.addSource("d", "a", "# d\n\nthe new version\n");
+  const event = { projectId: "a", replaced: { sourceId: sourceId("a"), sha256: SHA("a"), version: 1 }, by: { sourceId: sourceId("d") } };
+  assert.deepEqual(await service.carryOver(USER, event), { carried: true, released: true });
+  const { items } = await service.list(USER);
+  assert.deepEqual(items.map((item) => [item.sourceId, item.libraryProjects]), [[sourceId("d"), ["b"]]]);
+  assert.deepEqual(await viewOf("b"), [sourceId("d")]);
+  assert.equal(service.counters.carriesRefused, 0);
+});
+
+test("a replacement that would be a second entry in a full library leaves the new version unlisted and is done: the job does not fail for ever", async (t) => {
+  const store = ledger();
+  store.addSource("a", "a");
+  const { service, cleanup } = await fixture(store, { maxItems: 1 });
+  t.after(cleanup);
+  await service.setProjects(USER, sourceId("a"), ["b"]);
+  // Project c holds the old bytes as a current document too, so the old entry stays and the new bytes would need a second one.
+  store.addSource("h", "c");
+  store.rows.get(store.key(USER, "source", sourceId("h"))).payload.fingerprint.sha256 = SHA("a");
+  store.rows.get(store.key(USER, "source", sourceId("a"))).payload.publication = { current: false };
+  store.addSource("d", "a");
+  const result = await service.carryOver(USER, { projectId: "a", replaced: { sourceId: sourceId("a"), sha256: SHA("a"), version: 1 }, by: { sourceId: sourceId("d") } });
+  assert.deepEqual(result, { carried: false, released: false });
+  assert.equal(service.counters.carriesRefused, 1);
+  assert.equal(service.lastError, "library_full", "said, not swallowed");
+  assert.equal((await service.list(USER)).items.length, 1);
+  // Any other failure is still a failure.
+  service.maxItems = 10;
+  store.addSource("e", "a");
+  store.rows.get(store.key(USER, "source", sourceId("a"))).payload.publication = { current: false };
+  const broken = { ...store.documents, put: async () => { throw new Error("database down"); } };
+  service.documents = broken;
+  await assert.rejects(service.carryOver(USER, { projectId: "a", replaced: { sourceId: sourceId("a"), sha256: SHA("a"), version: 1 }, by: { sourceId: sourceId("e") } }), /database down/);
+});
+
+test("the projects' directories are real copies held to a limit: a project that has none yet and would pass it gets none, and the ones that exist keep following the records", async (t) => {
+  const store = ledger();
+  store.addSource("a", "a", `# a\n\n${"x".repeat(2000)}\n`);
+  store.addSource("b", "a", `# b\n\n${"y".repeat(2000)}\n`);
+  const { service, viewOf, config, cleanup } = await fixture(store);
+  t.after(cleanup);
+  await service.setProjects(USER, sourceId("a"), "all");
+  await service.setProjects(USER, sourceId("b"), "all");
+  assert.equal(await service.viewBytes(USER), 0, "no project has a directory yet");
+  await service.ensureProjectView(USER, "a");
+  const one = await service.viewBytes(USER);
+  assert.ok(one > 4000, `the two documents' text is in the directory (${one} bytes)`);
+  // A real copy, not a link: its own inode, one name.
+  const copy = await stat(path.join(projectLibraryViewDir(config, USER, "a"), sourceId("a"), "index.md"));
+  const master = await stat(path.join(userLibraryDir(config, USER), sourceId("a"), "index.md"));
+  assert.notEqual(copy.ino, master.ino);
+  assert.equal(copy.nlink, 1);
+  assert.equal(master.nlink, 1);
+
+  // The limit has room for one project's copy and no second.
+  service.viewMaxBytes = one + 100;
+  assert.equal(await service.ensureProjectView(USER, "b"), null, "no room: this project's runtime starts without /workspace/library");
+  assert.deepEqual(await viewOf("b"), []);
+  await assert.rejects(stat(projectLibraryViewDir(config, USER, "b")), { code: "ENOENT" }, "and no half-made directory is left");
+  assert.equal(service.counters.viewsOverBudget, 1);
+  assert.equal(service.lastError, "library_views_over_budget");
+  // The directory that exists is not asked again, and still follows the records.
+  assert.equal(await service.ensureProjectView(USER, "a"), projectLibraryViewDir(config, USER, "a"));
+  await service.setProjects(USER, sourceId("b"), ["c"]);
+  assert.deepEqual(await viewOf("a"), [sourceId("a")]);
+  // A project with less to hold fits where a fuller one did not: "c" holds both, "b" only the first.
+  service.viewMaxBytes = Infinity;
+  assert.deepEqual(await service.ensureProjectView(USER, "b").then(() => viewOf("b")), [sourceId("a")]);
+  assert.throws(() => new LibraryService({ documents: store.documents, sources: {}, libraryDir: () => "/x", viewMaxBytes: Number.NaN }), TypeError);
+});
+
+test("deleting a project takes the entries only it holds, and the projects they were sent to lose them: that is what the dialog is told", async (t) => {
+  const store = ledger();
+  const { service, cleanup } = await fixture(store);
+  t.after(cleanup);
+  // Held only by a, sent to b: b loses it.
+  store.addSource("a", "a");
+  await service.setProjects(USER, sourceId("a"), ["b"]);
+  // Held only by a, sent nowhere else: nobody else loses anything.
+  store.addSource("e", "a");
+  await service.setProjects(USER, sourceId("e"), ["a"]);
+  // Held by a and by c too: the entry stays with c.
+  store.addSource("f", "a");
+  store.addSource("3", "c");
+  store.rows.get(store.key(USER, "source", sourceId("3"))).payload.fingerprint.sha256 = SHA("f");
+  await service.setProjects(USER, sourceId("f"), ["b"]);
+  // Held only by a, sent to every project: all lose it.
+  store.addSource("4", "a");
+  await service.setProjects(USER, sourceId("4"), "all");
+  // Held by a, and by personal storage too: the entry stays with the storage.
+  store.addSource("5", "a");
+  store.addSource("6", "evimed-library");
+  store.rows.get(store.key(USER, "source", sourceId("6"))).payload.fingerprint.sha256 = SHA("5");
+  await service.setProjects(USER, sourceId("5"), ["b"]);
+  // Held by a, sent to a and b: only b loses it.
+  store.addSource("7", "a");
+  await service.setProjects(USER, sourceId("7"), ["a", "b"]);
+
+  const lost = await service.projectLoss(USER, "a");
+  assert.deepEqual(lost.map((entry) => [entry.sourceId, entry.projects]), [[sourceId("4"), "all"], [sourceId("7"), ["b"]], [sourceId("a"), ["b"]]]);
+  assert.deepEqual(lost.map((entry) => entry.title), ["Doc 4", "Doc 7", "Doc a"], "by title");
+  assert.deepEqual(await service.projectLoss(USER, "b"), [], "a project that holds nothing costs no one anything");
+  // The old copy of a replaced document is not what keeps an entry: the same as the deletion itself.
+  store.rows.get(store.key(USER, "source", sourceId("3"))).payload.publication = { current: false };
+  assert.ok((await service.projectLoss(USER, "a")).some((entry) => entry.sourceId === sourceId("f")), "c's copy is no longer current, so a's deletion releases it");
+});
+
+test("the deletion dialog's question is a route: it names a project the caller owns, and answers what that project's deletion takes from the others", async (t) => {
+  const store = ledger();
+  store.addSource("a", "a");
+  const { service, cleanup } = await fixture(store);
+  t.after(cleanup);
+  await service.setProjects(USER, sourceId("a"), ["b"]);
+  const owned = new Set(["a", "b"]);
+  const routes = createLibraryRoutes({ store: { ensureSessionUser: async () => ({ user: { id: USER } }), assertCsrf: async () => {},
+    requireProject: async (_user, id) => { if (!owned.has(id)) throw new HttpError(404, "project_not_found", "Project not found."); return { id }; } }, service, maxJsonBytes: 4096 });
+  const call = async (method, url) => {
+    const req = Object.assign(Readable.from([]), { url, method, headers: {} });
+    const res = { status: 0, body: "", writeHead(status) { this.status = status; }, setHeader() {}, end(text) { this.body = text; } };
+    assert.equal(await routes(req, res), true);
+    return { status: res.status, data: res.body ? JSON.parse(res.body).data : null };
+  };
+  const answer = await call("GET", "/api/library/project-loss?projectId=a");
+  assert.equal(answer.status, 200);
+  assert.deepEqual(answer.data.items, [{ sourceId: sourceId("a"), title: "Doc a", projects: ["b"] }]);
+  assert.deepEqual((await call("GET", "/api/library/project-loss?projectId=b")).data.items, []);
+  await assert.rejects(call("GET", "/api/library/project-loss?projectId=elsewhere"), { status: 404, code: "project_not_found" });
+  await assert.rejects(call("GET", "/api/library/project-loss"), { status: 400, code: "project_required" });
+  await assert.rejects(call("POST", "/api/library/project-loss"), { status: 404, code: "not_found" });
 });

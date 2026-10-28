@@ -304,8 +304,12 @@ export function createSourceRoutes({ store, service, openList = null, knowledge 
         await bodyOf(req, maxJsonBytes, ["expectedRevision", "docType", "depth", "reason"])));
     }
     if (parts.length === 1 && method === "DELETE") {
-      const body = await bodyOf(req, maxJsonBytes, ["expectedRevision"]);
-      return reply(await service.remove(user.id, sourceId, { ...body, accountCreatedAt: user.accountCreatedAt }));
+      // `everywhere`: the knowledge base's delete of a file — this source and every other copy the account holds of the same bytes,
+      // in one operation (`removeDocument`). Without it, this one source and nothing else (a project's own copy).
+      const { everywhere = false, ...body } = await bodyOf(req, maxJsonBytes, ["expectedRevision", "everywhere"]);
+      if (typeof everywhere !== "boolean") throw new HttpError(400, "source_payload_invalid", "everywhere is true or false.");
+      const input = { ...body, accountCreatedAt: user.accountCreatedAt };
+      return reply(everywhere ? await service.removeDocument(user.id, sourceId, input) : await service.remove(user.id, sourceId, input));
     }
     if (["retry", "cancel"].includes(action) && method === "POST") {
       const body = await bodyOf(req, maxJsonBytes, ["expectedRevision"]);

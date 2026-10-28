@@ -314,3 +314,67 @@ test("deleting the last document that holds a file's bytes releases its library 
   assert.equal(await live(), false, "the last holder went: an entry nothing holds is released");
   assert.equal((await documents.get(owner, "preferences", id, { includeDeleted: true })).deletedAt !== null, true, "restorable, as every removal is");
 });
+
+test("deleting a document from the all list removes every copy of its bytes the account holds, and its library entry, in one call", durable, async (t) => {
+  const { database, documents, sources, owner, stranger, add } = await fixture(t);
+  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'evimed-library','l',1048576),($1,'third','Third',1048576),($1,'fourth','Fourth',1048576)", [owner]);
+  const copy = async (user, project, of, name = "kept.pdf") => (await sources.register(user, { projectId: project, connector: { type: "upload", id: `${project}-library` },
+    path: `knowledge-base/${name}`, sha256: of.payload.fingerprint.sha256, size: of.payload.fingerprint.size, mimeType: "application/octet-stream", mtime: "2026-09-06T00:00:00.000Z" })).source;
+  const first = await add(owner, "default", "kept.pdf");
+  const inStudy = await copy(owner, "study", first);
+  const inThird = await copy(owner, "third", first);
+  const stored = await copy(owner, "evimed-library", first);
+  const untouched = await add(owner, "default", "untouched.pdf");
+  // The same bytes in another account are that account's document, and nothing of this one's.
+  const theirs = await copy(stranger, "default", first);
+  // A copy that is an older version of its document is not a current copy of the file.
+  const older = await copy(owner, "fourth", first, "older-name.pdf");
+  await documents.put(owner, "source", older.id, { ...older.payload, publication: { current: false } }, { expectedRevision: older.revision, projectId: "fourth" });
+  const sha = first.payload.fingerprint.sha256;
+  await documents.put(owner, "preferences", `library:${sha}`, { recordType: "library-item", sourceId: first.id, sha256: sha, projects: ["third"], addedAt: "2026-10-01T00:00:00.000Z" }, { expectedRevision: 0 });
+  const live = async (user, id) => Boolean(await documents.get(user, "source", id));
+  assert.equal((await sources.list(owner, { all: true })).counts.all, 2, "the row of kept.pdf is one, whichever project holds it");
+
+  const told = [];
+  sources.afterRemove = async (event) => { told.push(event.sourceId); };
+  // A stale row is refused before anything is changed.
+  await assert.rejects(sources.removeDocument(owner, first.id, { expectedRevision: (await sources.get(owner, first.id)).revision + 1 }), { status: 409, code: "source_revision_conflict" });
+  for (const id of [first.id, inStudy.id, inThird.id, stored.id]) assert.equal(await live(owner, id), true, "nothing was removed");
+
+  const result = await sources.removeDocument(owner, first.id, { expectedRevision: (await sources.get(owner, first.id)).revision });
+  assert.equal(result.source.id, first.id);
+  assert.deepEqual(result.copies.map((entry) => entry.id).sort(), [first.id, inStudy.id, inThird.id, stored.id].sort(), "the row's own source and every other current copy");
+  assert.deepEqual(result.copies[0], { id: first.id, projectId: "default" }, "the named source first");
+  for (const id of [first.id, inStudy.id, inThird.id, stored.id]) assert.equal(await live(owner, id), false, id);
+  assert.equal(await live(owner, untouched.id), true, "another document is not touched");
+  assert.equal(await live(stranger, theirs.id), true, "nor another account's copy of the same bytes");
+  assert.equal(await live(owner, older.id), true, "nor a historical version, which is not a document of the list");
+  assert.equal(await documents.get(owner, "preferences", `library:${sha}`), null, "the entry the person chose projects for goes with the last copy");
+  assert.deepEqual(told.sort(), [first.id, inStudy.id, inThird.id, stored.id].sort(), "each removal was told, so what rests on each copy is labelled");
+  assert.equal((await sources.list(owner, { all: true })).counts.all, 1);
+
+  // Repeating the call (the client's retry) is the removal already made: nothing new, nothing refused.
+  const again = await sources.removeDocument(owner, first.id, { expectedRevision: first.revision });
+  assert.deepEqual(again.copies.map((entry) => entry.id), [first.id]);
+  await assert.rejects(sources.removeDocument(owner, "src_" + "0".repeat(32), { expectedRevision: 1 }), { status: 404, code: "source_not_found" });
+});
+
+test("a part-way failure leaves the call repeatable: the copies that remain are removed on the repeat", durable, async (t) => {
+  const { documents, sources, owner, add } = await fixture(t);
+  const first = await add(owner, "default", "kept.pdf");
+  const other = (await sources.register(owner, { projectId: "study", connector: { type: "upload", id: "study-library" }, path: "knowledge-base/kept.pdf",
+    sha256: first.payload.fingerprint.sha256, size: first.payload.fingerprint.size, mimeType: "application/octet-stream", mtime: "2026-09-06T00:00:00.000Z" })).source;
+  const original = sources.remove.bind(sources);
+  let failed = false;
+  sources.remove = async (...args) => {
+    if (args[1] === other.id && !failed) { failed = true; throw new Error("database down"); }
+    return original(...args);
+  };
+  const revision = (await sources.get(owner, first.id)).revision;
+  await assert.rejects(sources.removeDocument(owner, first.id, { expectedRevision: revision }), /database down/);
+  assert.equal(await documents.get(owner, "source", first.id), null, "the named source went first");
+  assert.ok(await documents.get(owner, "source", other.id), "the other copy is still there");
+  const repeated = await sources.removeDocument(owner, first.id, { expectedRevision: revision });
+  assert.deepEqual(repeated.copies.map((entry) => entry.id).sort(), [first.id, other.id].sort());
+  assert.equal(await documents.get(owner, "source", other.id), null);
+});

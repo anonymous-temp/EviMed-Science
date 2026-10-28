@@ -2072,6 +2072,52 @@ export class SourceService {
     return removed;
   }
 
+  /**
+   * Remove a document: this source and every other current copy the account holds of the same bytes — the same file in other
+   * projects and in personal storage — which is what the knowledge base's one row per file stands for. The library entry of
+   * those bytes goes with the last copy (`#remove`), so nothing is left that another project could still read or cite.
+   *
+   * The named source is removed first, against the revision the caller read: a stale row is refused before anything is
+   * changed. The other copies are read fresh (the row never showed their revisions). Each removal is its own transaction, so a
+   * failure part-way leaves some copies removed and the call repeatable — the named source, already removed, is taken as it is,
+   * and the copies that remain are removed on the repeat. Copies in the platform's own projects and knowledge pages (a page
+   * belongs to its project) are not the account's documents and are left alone; a document with no content digest is its own
+   * and has no other copies.
+   * @param {string} userId @param {string} sourceId @param {{expectedRevision:number,accountCreatedAt?:string}} input
+   * @returns {Promise<{ source: any, copies: { id: string, projectId: string }[] }>} the named source's record, and every copy removed
+   */
+  async removeDocument(userId, sourceId, input) {
+    const database = this.documents.database;
+    if (!database) throw new HttpError(503, "source_state_unavailable", "Source deletion requires durable shared storage.");
+    const target = await this.documents.get(userId, "source", sourceId, { includeDeleted: true });
+    if (!target) throw new HttpError(404, "source_not_found", "The source is unavailable.");
+    const isPage = (/** @type {any} */ row) => sourceOriginOf({ connectorType: row.payload.connector?.type, path: row.payload.paths?.[0] }) === "wiki";
+    const sha256 = target.payload.fingerprint?.sha256;
+    /** @type {{ id: string, revision: number, projectId: string }[]} */
+    let others = [];
+    if (typeof sha256 === "string" && sha256 && !isPage(target)) {
+      await migrateProductStore(database);
+      others = (await database.query(`SELECT s.id, s.revision, s.project_id, s.payload FROM evimed_product.documents s
+          WHERE s.user_id=$1 AND s.kind='source' AND s.deleted_at IS NULL AND s.id<>$2 AND s.payload->'fingerprint'->>'sha256'=$3
+            AND coalesce(s.payload->'publication'->>'current','true') <> 'false' AND ${ownedSourceProjectSql('s', this.measurementAccounts.includes(userId))}
+          ORDER BY s.created_at, s.id`, [userId, sourceId, sha256])).rows
+        .filter((/** @type {any} */ row) => !isPage({ payload: row.payload }))
+        .map((/** @type {any} */ row) => ({ id: row.id, revision: row.revision, projectId: row.project_id }));
+    }
+    const source = await this.remove(userId, sourceId, input);
+    /** @type {{ id: string, projectId: string }[]} */
+    const copies = [{ id: sourceId, projectId: String(target.projectId) }];
+    for (const other of others) {
+      // Read again just before: a copy changed since the list above is removed at the revision it has now, and one that is
+      // already gone (a concurrent delete) is done.
+      const current = await this.documents.get(userId, "source", other.id).catch(() => null);
+      if (!current) continue;
+      await this.remove(userId, other.id, { expectedRevision: current.revision, accountCreatedAt: input.accountCreatedAt });
+      copies.push({ id: other.id, projectId: other.projectId });
+    }
+    return { source, copies };
+  }
+
   /** @param {string} userId @param {string} sourceId @param {{expectedRevision:number,accountCreatedAt?:string}} input */
   async #remove(userId, sourceId, input) {
     const database = this.documents.database;

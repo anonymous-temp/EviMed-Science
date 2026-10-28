@@ -21,6 +21,8 @@ async function fixture(t, { withOpenList = false, connector = null, withKnowledg
     retry: async (userId, id, body) => { calls.push({ method: "retry", userId, id, body }); return { id, status: "queued" }; },
     cancel: async (userId, id, body) => { calls.push({ method: "cancel", userId, id, body }); return { id, status: "canceled" }; },
     remove: async (userId, id, body) => { calls.push({ method: "remove", userId, id, body }); return { id, deletedAt: "now" }; },
+    removeDocument: async (userId, id, body) => { calls.push({ method: "removeDocument", userId, id, body });
+      return { source: { id, kind: "source", projectId: "owned-project", payload: { status: "complete", paths: [], reasons: [] } }, copies: [{ id, projectId: "owned-project" }, { id: "src_other", projectId: "second" }] }; },
     register: async (userId, input) => { calls.push({ method: "register", userId, input }); return { source: { id: "source-openlist" }, job: { id: "job-openlist" } }; },
     getUnderstanding: async (userId, id) => { calls.push({ method: "getUnderstanding", userId, id }); return { sourceId: id, generation: 1, depth: "structured", status: "parsing", current: null }; },
     understandingHistory: async (userId, id, options) => { calls.push({ method: "understandingHistory", userId, id, options }); return { items: [], nextCursor: null }; },
@@ -382,6 +384,27 @@ test("retry, cancel and delete are explicit revision-guarded operations", async 
     method: "DELETE", headers, body: JSON.stringify({ expectedRevision: 2 }),
   })).status, 200);
   assert.deepEqual(calls.filter((call) => call.method !== "get").map((call) => call.method), ["retry", "cancel", "remove"]);
+});
+
+test("a delete names one source, or — with `everywhere` — the file: every copy of its bytes, removed by the server in one operation", async (t) => {
+  const { base, headers, calls } = await fixture(t);
+  const send = (body) => fetch(`${base}/api/sources/source-one`, { method: "DELETE", headers, body: JSON.stringify(body) });
+  assert.equal((await send({ expectedRevision: 2 })).status, 200);
+  assert.equal((await send({ expectedRevision: 2, everywhere: false })).status, 200);
+  const all = await send({ expectedRevision: 2, everywhere: true });
+  assert.equal(all.status, 200);
+  const body = (await all.json()).data;
+  assert.equal(body.source.id, "source-one");
+  assert.deepEqual(body.copies.map((copy) => copy.id), ["source-one", "src_other"], "the answer names every copy that went");
+  assert.deepEqual(calls.filter((call) => call.method === "remove" || call.method === "removeDocument").map((call) => [call.method, call.body.expectedRevision, "everywhere" in call.body]),
+    [["remove", 2, false], ["remove", 2, false], ["removeDocument", 2, false]], "the flag selects the operation and is not passed on to it");
+  assert.equal(calls.find((call) => call.method === "removeDocument").userId, "owner");
+  // Only a boolean, and nothing else is accepted in the body.
+  for (const bad of [{ expectedRevision: 2, everywhere: "yes" }, { expectedRevision: 2, everywhere: 1 }, { expectedRevision: 2, scope: "all" }]) {
+    assert.equal((await send(bad)).status, 400, JSON.stringify(bad));
+  }
+  // Without the CSRF header it is refused like every other mutation.
+  assert.equal((await fetch(`${base}/api/sources/source-one`, { method: "DELETE", headers: { cookie: "fixture=active", "content-type": "application/json" }, body: JSON.stringify({ expectedRevision: 2, everywhere: true }) })).status, 403);
 });
 
 test("OpenList browse and import stay account and project scoped", async (t) => {
