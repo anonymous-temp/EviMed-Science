@@ -209,9 +209,9 @@ const WALK_TABLES = {
       {"view":"virtual-research","route":"/app/virtual-research","pattern":"/app/virtual-research","family":"vcr-home","template":"T2","budget":"data","shapes":2,"rows":true},
       {"view":"virtual-research-precedents","route":"/app/virtual-research?tab=precedents","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","rows":false},
       {"view":"virtual-research-definitions","route":"/app/virtual-research?tab=definitions","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","rows":false},
-      {"view":"files","route":"/app/files","pattern":"/app/files","family":"knowledge","template":"T1","budget":"data","shapes":2,"rows":true},
-      {"view":"knowledge-pages","route":"/app/files?kind=wiki","pattern":"/app/files","family":"knowledge","template":"T1","shapes":2,"rows":true},
-      {"view":"knowledge-graph","route":"/app/files?kind=wiki&view=graph","pattern":"/app/files","family":"knowledge","template":"T4","budget":"data","shapes":3,"rows":true},
+      {"view":"files","route":"/app/files","pattern":"/app/files","family":"knowledge","template":"T2","budget":"data","shapes":2,"rows":true},
+      {"view":"knowledge-pages","route":"/app/files?kind=wiki","pattern":"/app/files","family":"knowledge","template":"T2","shapes":2,"rows":true},
+      {"view":"knowledge-graph","route":"/app/files?kind=wiki&view=graph","pattern":"/app/files","family":"knowledge","template":"T2","budget":"data","shapes":3,"rows":true},
       {"view":"files-reader","discovered":true,"pattern":"/app/files/:sourceId","family":"knowledge-record","template":"T5","budget":"data","rows":false},
       {"view":"memory","route":"/app/memory?tab=self","pattern":"/app/memory","family":"memory","template":"T2","shapes":2,"rows":true},
       {"view":"memory-methods","route":"/app/memory?tab=methods","pattern":"/app/memory","family":"memory","template":"T2","shapes":2,"rows":true},
@@ -2139,7 +2139,7 @@ export function clickNamed([role, name, within = null]) {
   };
   const root = within ? [...document.querySelectorAll(within)].find(visible) : document;
   if (!root) return false;
-  const selector = { button: "button, [role='button']", menuitem: "[role='menuitem']", tab: "[role='tab']", link: "a" }[role] ?? "*";
+  const selector = { button: "button, [role='button']", menuitem: "[role='menuitem']", tab: "[role='tab']", radio: "[role='radio']", link: "a" }[role] ?? "*";
   const label = (el) => (el.getAttribute("aria-label") || el.textContent || "").replace(/\s+/g, " ").trim();
   const target = [...root.querySelectorAll(selector)].find((el) => visible(el) && label(el) === name);
   if (!target) return false;
@@ -2257,8 +2257,8 @@ export function pageProbe([kind, arg]) {
       figures: all("[data-chart]").filter(visible).map((el) => ({ kind: el.getAttribute("data-chart"), named: Boolean(el.querySelector("[role='img'][aria-label]")) })),
       lists: all("main ul[aria-label]").filter(visible).map((el) => ({ label: el.getAttribute("aria-label"), rows: el.querySelectorAll(":scope > li").length })),
       legend: all("[role='group'][aria-label='图例']").some(visible),
-      // A tab says how many it holds once it holds some (资料 12, 知识页 66): the name is what the switch is checked by.
-      views: all("[role='tab']").filter(visible).map(words).map((label) => label.replace(/\s*\d[\d,]*$/, "")),
+      // The four views are links at the head of the list column (no tab list: the page is a master-detail page).
+      views: all("nav[aria-label='知识库的内容'] a").filter(visible).map(words),
       engineAddress: text.includes("viking://"),
       empty: text.includes("还没有整理出页面") || text.includes("内容还少"),
     };
@@ -2370,8 +2370,8 @@ export const MISSING_RECORDS = {
   "extensions-skill-missing": { sentence: "找不到这个技能，它可能已被移除。", back: "回到技能列表", to: "/app/extensions/installed" },
 };
 
-/** The knowledge base's tabs, in the order its band shows them (R19: 资料 · 知识页 · 图谱, one tab list; the graph is a tab and no longer a second switch). */
-export const KNOWLEDGE_VIEWS = Object.freeze(["资料", "知识页", "图谱"]);
+/** The knowledge base's views, in the order the links at the head of its list column show them (2026-10-28: 资料 · 知识页 · 图谱 · 对话产出, links and not a tab list). */
+export const KNOWLEDGE_VIEWS = Object.freeze(["资料", "知识页", "图谱", "对话产出"]);
 
 /**
  * What 总览's first row did, and what the drawer's closing did: the click opens the memory page's own drawer and writes what it opens into the
@@ -2838,17 +2838,21 @@ export function readerProbe() {
   };
   const words = (el) => (el.textContent ?? "").replace(/\s+/g, " ").trim();
   const layout = document.querySelector("[data-reader-layout]");
-  const heading = document.querySelector("main h1");
+  // Beside the list the document is the pane's: its title is the pane's h2 (the page's h1 is the list's), there is no way back above
+  // it (the list is beside it), and the switch of its two views is a radio group in place of the page's tab list.
+  const split = Boolean(document.querySelector("[data-knowledge-layout='split']"));
+  const heading = (split ? document.querySelector("[data-source-reader='pane'] h2") : null) ?? document.querySelector("main h1");
   const back = document.querySelector("nav[aria-label='返回'] a");
-  const tabs = [...document.querySelectorAll("[role='tablist']")].find((el) => el.getAttribute("aria-label") === "资料视图");
+  const tabs = [...document.querySelectorAll("[role='tablist'], [role='radiogroup']")].find((el) => el.getAttribute("aria-label") === "资料视图");
   return {
     path: `${location.pathname}${location.search}`,
+    split,
     layout: layout ? layout.getAttribute("data-reader-layout") : null,
     title: heading ? words(heading) : null,
     back: back ? { text: words(back), href: back.getAttribute("href") } : null,
     dialogs: [...document.querySelectorAll("[role='dialog']")].filter(visible).length,
     columns: [...document.querySelectorAll("[data-reader-column]")].filter(visible).map((el) => el.getAttribute("data-reader-column")),
-    tabs: tabs ? [...tabs.querySelectorAll("[role='tab']")].map(words) : [],
+    tabs: tabs ? [...tabs.querySelectorAll("[role='tab'], [role='radio']")].map(words) : [],
     missing: words(document.body).includes("这份资料不存在或已删除。"),
   };
 }
@@ -2878,7 +2882,9 @@ export function readerFindings(r, expected) {
   }
   const same = (a, b) => String(a ?? "").replace(/\s+/g, " ").trim() === String(b ?? "").replace(/\s+/g, " ").trim();
   if (!same(r.title, expected.title)) notices.push(`${current}: the reader's heading is “${String(r.title ?? "").slice(0, 40)}” and the row it was opened from is “${expected.title.slice(0, 40)}”`);
-  if (!r.back || !same(r.back.text, "知识库")) notices.push(`${current}: the way back on the document's page reads “${r.back?.text ?? "nothing"}” (知识库)`);
+  // Beside the list there is no way back to take: the list is on the page, and is read where it stands.
+  if (r.split) { if (r.back) notices.push(`${current}: a way back (“${r.back.text}”) stands over the document beside the list, which is on the page`); }
+  else if (!r.back || !same(r.back.text, "知识库")) notices.push(`${current}: the way back on the document's page reads “${r.back?.text ?? "nothing"}” (知识库)`);
   else if (r.back.href !== expected.list) notices.push(`${current}: the way back goes to ${r.back.href} and the list was ${expected.list}`);
   if (r.dialogs > 0) notices.push(`${current}: a dialog is open on the document's page (a document is a page, not a drawer)`);
   if (r.layout === "tabs" && !(r.tabs.includes("内容") && r.tabs.includes("原文"))) notices.push(`${current}: the reader is in tabs and its tab strip reads ${r.tabs.join("/") || "nothing"} (内容/原文)`);
@@ -3455,7 +3461,7 @@ async function walkPdfPreview(page, base, route, title) {
   const page1 = await page.evaluate(readerProbe);
   if (!page1 || page1.layout === null) return { failures: [], notices: ["files@desktop: not observable: the PDF's page drew no layout within twelve seconds"], read: page1 };
   // Two tabs when the page has no room for both columns: the original is the second tab.
-  if (page1.layout === "tabs" && !await page.evaluate(clickNamed, ["tab", "原文", null])) return { failures: [], notices: ["files@desktop: the PDF's page has no 原文 tab"], read: page1 };
+  if (page1.layout === "tabs" && !await page.evaluate(clickNamed, ["tab", "原文", null]) && !await page.evaluate(clickNamed, ["radio", "原文", null])) return { failures: [], notices: ["files@desktop: the PDF's page has no 原文 tab"], read: page1 };
   await page.waitForFunction(pdfFrameReady, undefined, { timeout: 8_000 }).catch(() => null);
   const read = await page.evaluate(pdfProbe);
   if (read && read.src === null) return { failures: [], notices: ["files@desktop: the original of the PDF showed no viewer within eight seconds"], read };
@@ -3504,8 +3510,9 @@ async function walkKnowledgeReturn(page, base, route) {
     read.reader = await page.evaluate(readerProbe);
   }
   if (read.reader && read.reader.layout !== null) {
-    // 「知识库」 on the page.
-    if (await page.evaluate(clickNamed, ["link", "知识库", "nav[aria-label='返回']"])) {
+    // Beside the list the list is still on the page: it is read where it stands. Alone, 「知识库」 on the page takes it back.
+    if (read.reader.split) read.back = await page.evaluate(knowledgeProbe, ["state", first.title]);
+    else if (await page.evaluate(clickNamed, ["link", "知识库", "nav[aria-label='返回']"])) {
       await page.waitForTimeout(1_500);
       read.back = await page.evaluate(knowledgeProbe, ["state", first.title]);
     }
@@ -3544,12 +3551,14 @@ export function knowledgeReturnFindings(title, read) {
   notices.push(...reader.notices);
   if (read.reader.layout === null || read.reader.missing) return { failures, notices };
   if (!/[?&]q=/.test(read.reader.path)) notices.push(`${current}: the document's address does not carry the list's search (${read.reader.path})`);
-  for (const [way, back] of [["「知识库」 on the document's page", read.back], ["the browser's Back", read.browserBack]]) {
+  const split = read.reader.split === true;
+  for (const [way, back] of [[split ? "opening the document beside the list" : "「知识库」 on the document's page", read.back], ["the browser's Back", read.browserBack]]) {
     if (!back) {
       notices.push(`${current}: not observable: ${way} was not taken`);
       continue;
     }
-    if (back.path !== filtered.path) notices.push(`${current}: after ${way} the address is ${back.path} and the list was ${filtered.path}`);
+    // Beside the list the address is the document's, by design; only the list's own state is compared there.
+    if (back.path !== filtered.path && !(split && back === read.back)) notices.push(`${current}: after ${way} the address is ${back.path} and the list was ${filtered.path}`);
     if (back.query !== null && back.query.trim() !== filtered.query?.trim()) notices.push(`${current}: after ${way} the search box holds “${String(back.query).slice(0, 30)}” and held “${String(filtered.query ?? "").slice(0, 30)}”`);
     if (!back.listed) notices.push(`${current}: after ${way} the document is not in the list`);
   }

@@ -640,7 +640,7 @@ function probe(kind, arg, search) {
     case "sharedMissing": return wrong ? { title: true, back: true, retry: true } : { title: true, back: true, retry: false };
     case "calculationHistory": return { rows: wrong ? 0 : 2 };
     case "knowledgeGraph": return wrong ? { figures: [{ kind: "knowledge-wiki", named: false }], lists: [], legend: false, views: ["图谱"], engineAddress: true, empty: false }
-      : { figures: [{ kind: "knowledge-wiki", named: true }], lists: [{ label: "页面", rows: 3 }], legend: true, views: ["资料", "知识页", "图谱"], engineAddress: false, empty: false };
+      : { figures: [{ kind: "knowledge-wiki", named: true }], lists: [{ label: "页面", rows: 3 }], legend: true, views: ["资料", "知识页", "图谱", "对话产出"], engineAddress: false, empty: false };
     case "inboxSafety": return wrong ? { heading: 2, bell: 5 } : { heading: 2, bell: 2 };
     case "feishuRows": return { rows: wrong ? 2 : search.includes("notifications") ? 1 : 0 };
     case "connectorRows": return { rows: arg.map((title) => ({ title, found: true, optional: !wrong, configured: false, missing: wrong })) };
@@ -2096,7 +2096,7 @@ test("a document's page is read for its layout, its heading, the way back and wh
   const read = (root, path = "/app/files/src_1") => inPage(root, () => readerProbe(), { path });
   const columns = read(readerPage());
   assert.deepEqual(columns, {
-    path: "/app/files/src_1", layout: "columns", title: "一份指南", back: { text: "知识库", href: "/app/files?q=%E4%B8%80" }, dialogs: 0,
+    path: "/app/files/src_1", split: false, layout: "columns", title: "一份指南", back: { text: "知识库", href: "/app/files?q=%E4%B8%80" }, dialogs: 0,
     columns: ["original", "points"], tabs: [], missing: false,
   });
   const expected = { title: "一份指南", list: "/app/files?q=%E4%B8%80" };
@@ -2115,6 +2115,23 @@ test("a document's page is read for its layout, its heading, the way back and wh
   assert.deepEqual(readerFindings({ ...columns, back: { text: "知识库", href: "/app/files" } }, expected).notices, ["files@desktop: the way back goes to /app/files and the list was /app/files?q=%E4%B8%80"]);
   assert.deepEqual(readerFindings({ ...columns, dialogs: 1 }, expected).notices, ["files@desktop: a dialog is open on the document's page (a document is a page, not a drawer)"]);
   assert.deepEqual(readerFindings({ ...columns, columns: ["original"] }, expected).notices, ["files@desktop: the reader is in two columns and shows original (original/points)"]);
+  // Beside the list (2026-10-28) the document is the pane's: its title is the pane's h2, its two views are a radio group, and there is no way back
+  // over it because the list is on the page.
+  const beside = (extra = []) => node("body", {}, [node("main", {}, [node("div", { attrs: { "data-knowledge-layout": "split" } }, [
+    node("section", { attrs: { "aria-label": "资料列表" } }, [node("header", {}, [node("h1", { text: "知识库" })])]),
+    node("section", { attrs: { "aria-label": "资料阅读" } }, [node("div", { attrs: { "data-source-reader": "pane" } }, [
+      node("header", {}, [node("h2", { text: "一份指南" })]),
+      node("div", { attrs: { "data-reader-layout": "tabs" } }, [
+        node("div", { attrs: { role: "radiogroup", "aria-label": "资料视图" } }, [node("button", { attrs: { role: "radio" }, text: "内容" }), node("button", { attrs: { role: "radio" }, text: "原文" })]),
+        node("div", { attrs: { "data-reader-column": "original" } }), ...extra,
+      ]),
+    ])]),
+  ])])]);
+  const splitRead = read(beside());
+  assert.deepEqual(splitRead, { path: "/app/files/src_1", split: true, layout: "tabs", title: "一份指南", back: null, dialogs: 0, columns: ["original"], tabs: ["内容", "原文"], missing: false });
+  assert.deepEqual(readerFindings(splitRead, expected), { failures: [], notices: [] });
+  assert.deepEqual(readerFindings({ ...splitRead, back: { text: "知识库", href: "/app/files" } }, expected).notices, ["files@desktop: a way back (“知识库”) stands over the document beside the list, which is on the page"]);
+  assert.deepEqual(readerFindings({ ...splitRead, tabs: [] }, expected).notices, ["files@desktop: the reader is in tabs and its tab strip reads nothing (内容/原文)"]);
   assert.equal(inPage(readerPage(), () => readerReady()), true);
   assert.equal(inPage(page(header()), () => readerReady()), false);
 
@@ -2142,6 +2159,16 @@ test("a document's page is read for its layout, its heading, the way back and wh
   ]);
   assert.deepEqual(knowledgeReturnFindings("一份指南", read3({ browserBack: null })).notices, ["files@desktop: not observable: the browser's Back was not taken"]);
   assert.deepEqual(knowledgeReturnFindings("一份指南", read3({ reader: { ...columns, layout: null } })).notices.length, 1);
+  // Beside the list (2026-10-28): the list is on the page as the document opens, so it is read where it stands — in the document's own address —
+  // with the search in the box and the document in the list; the browser's Back still returns to the list's address.
+  const besideRead = (overrides = {}) => read3({ reader: { ...splitRead, path: "/app/files/src_1?q=%E4%B8%80" }, back: state({ path: "/app/files/src_1?q=%E4%B8%80" }), ...overrides });
+  assert.deepEqual(knowledgeReturnFindings("一份指南", besideRead()), { failures: [], notices: [] });
+  assert.deepEqual(knowledgeReturnFindings("一份指南", besideRead({ back: state({ path: "/app/files/src_1?q=%E4%B8%80", query: "", listed: false }) })).notices, [
+    "files@desktop: after opening the document beside the list the search box holds “” and held “一份指南”",
+    "files@desktop: after opening the document beside the list the document is not in the list",
+  ]);
+  assert.deepEqual(knowledgeReturnFindings("一份指南", besideRead({ browserBack: state({ path: "/app/files/src_1?q=%E4%B8%80" }) })).notices,
+    ["files@desktop: after the browser's Back the address is /app/files/src_1?q=%E4%B8%80 and the list was /app/files?q=%E4%B8%80"]);
 });
 
 test("the new-skill drawer names its captions and its switch, names an empty field in place, and sends nothing", () => {
@@ -2963,15 +2990,17 @@ test("the knowledge graph's first mark opens a knowledge page with no engine add
   assert.match(none.notices[0], /not observable/u, "a project with no compiled pages proves nothing");
 });
 
-test("the knowledge base's tabs are read by their names, whatever they count", () => {
-  // 资料 holds twelve documents and 知识页 sixty-six pages on a project that has them (PAGESA's data-rich fixture); the switch is still 资料 · 知识页 · 图谱.
-  const tabs = (labels) => [node("div", { attrs: { role: "tablist" } }, labels.map(([name, count]) => node("button", { attrs: { role: "tab" }, text: `${name}${count ?? ""}` })))];
-  assert.deepEqual(read(tabs([["资料", 12], ["知识页", 66], ["图谱"]]), "knowledgeGraph").views, ["资料", "知识页", "图谱"]);
-  assert.deepEqual(read(tabs([["资料"], ["知识页"], ["图谱"]]), "knowledgeGraph").views, ["资料", "知识页", "图谱"]);
-  assert.deepEqual(read(tabs([["资料", "1,204"], ["知识页", 7], ["图谱"]]), "knowledgeGraph").views, ["资料", "知识页", "图谱"]);
+test("the knowledge base's four views are read from the links at the head of its list column, by their names", () => {
+  // The page is a master-detail page (2026-10-28): 资料 · 知识页 · 图谱 · 对话产出 are links in a navigation, not a tab list, and carry no count.
+  const links = (labels) => [node("nav", { attrs: { "aria-label": "知识库的内容" } }, labels.map((name) => node("a", { attrs: { href: "/app/files" }, text: name })))];
+  assert.deepEqual(read(links(["资料", "知识页", "图谱", "对话产出"]), "knowledgeGraph").views, ["资料", "知识页", "图谱", "对话产出"]);
+  assert.deepEqual(read(links(["资料", "图谱"]), "knowledgeGraph").views, ["资料", "图谱"]);
+  // A tab list is not the views: the page has none.
+  const tabs = [node("div", { attrs: { role: "tablist" } }, ["资料", "知识页", "图谱"].map((name) => node("button", { attrs: { role: "tab" }, text: name })))];
+  assert.deepEqual(read(tabs, "knowledgeGraph").views, []);
 });
 
-test("the knowledge graph's figure has a name, a legend and the same marks as a list, the three tabs of the knowledge base are one tab list, and no engine address is on the page", () => {
+test("the knowledge graph's figure has a name, a legend and the same marks as a list, the four views of the knowledge base are links in one navigation, and no engine address is on the page", () => {
   const ok = { figures: [{ kind: "knowledge-kg", named: true }], lists: [{ label: "实体", rows: 12 }], legend: true, views: [...KNOWLEDGE_VIEWS], engineAddress: false, empty: false };
   assert.deepEqual(probeFindings("knowledge-graph", "desktop", "knowledgeGraph", ok), { failures: [], notices: [] });
   const broken = probeFindings("knowledge-graph", "phone", "knowledgeGraph", { ...ok, figures: [{ kind: "knowledge-kg", named: false }], lists: [], legend: false, views: ["图谱"], engineAddress: true });
@@ -2980,7 +3009,7 @@ test("the knowledge graph's figure has a name, a legend and the same marks as a 
     "knowledge-graph@phone: the graph has no legend saying what its shapes and colours are",
     "knowledge-graph@phone: the graph has no list of the same marks under it",
     "knowledge-graph@phone: a viking:// address is on the page",
-    "knowledge-graph@phone: the view switch reads “图谱” (资料、知识页、图谱)",
+    "knowledge-graph@phone: the view switch reads “图谱” (资料、知识页、图谱、对话产出)",
   ]);
   // A thin graph draws no figure and needs no legend.
   assert.deepEqual(probeFindings("knowledge-graph", "desktop", "knowledgeGraph", { ...ok, figures: [], legend: false }), { failures: [], notices: [] });

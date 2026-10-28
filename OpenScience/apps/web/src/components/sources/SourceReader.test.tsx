@@ -1,22 +1,23 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, useLocation, useRoutes } from "react-router";
+import { MemoryRouter, useLocation, useParams, useRoutes, useSearchParams } from "react-router";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { knownErrorCodeMessage } from "@evimed/domain";
 import { WebApiError } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import type { SourceDisplay, SourceRecord } from "@/lib/sourceClient";
 import type { SourceMaterialsLedger } from "@/lib/sourceMaterials";
-import { TWO_COLUMN_MIN_WIDTH } from "@/components/sources/useReaderBox";
-import knowledgePage from "@/components/sources/knowledgeFixtures/page-analysis-mine.json";
-import knowledgeStatus from "@/components/sources/knowledgeFixtures/status-compiled.json";
-import { readerMeta, ORIGIN_LABEL } from "@/components/sources/sourceView";
-import { SourceReaderPage } from "./SourceReaderPage";
+import { TWO_COLUMN_MIN_WIDTH } from "./useReaderBox";
+import knowledgePage from "./knowledgeFixtures/page-analysis-mine.json";
+import knowledgeStatus from "./knowledgeFixtures/status-compiled.json";
+import { readListState } from "@/lib/knowledgeNav";
+import { readerMeta, ORIGIN_LABEL } from "./sourceView";
+import { SourceReader } from "./SourceReader";
 
 const mocks = vi.hoisted(() => ({
   getSource: vi.fn(), getSourceUnderstanding: vi.fn(), getSourceMaterials: vi.fn(), getSourceFamily: vi.fn(), getSourceUses: vi.fn(), getSourceDependents: vi.fn(),
   retrySource: vi.fn(), removeSource: vi.fn(), refetchSource: vi.fn(), getSourceNote: vi.fn(), saveSourceNote: vi.fn(),
-  listDuplicateCandidates: vi.fn(), decideDuplicateGroup: vi.fn(), addToLibrary: vi.fn(), removeFromLibrary: vi.fn(),
+  listDuplicateCandidates: vi.fn(), decideDuplicateGroup: vi.fn(), setSourceProjects: vi.fn(),
   downloadSourceFile: vi.fn(), downloadArtifact: vi.fn(), toastSuccess: vi.fn(), toastError: vi.fn(), getKnowledgePage: vi.fn(), getKnowledgeStatus: vi.fn(),
 }));
 const context = vi.hoisted(() => ({ projectId: "default" }));
@@ -25,7 +26,7 @@ const layout = vi.hoisted(() => ({ width: 1200, observers: new Set<() => void>()
 
 vi.mock("@/lib/sourceClient", async (importOriginal) => ({ ...(await importOriginal<object>()), ...Object.fromEntries(
   ["getSource", "getSourceUnderstanding", "getSourceMaterials", "getSourceFamily", "getSourceUses", "retrySource", "removeSource", "refetchSource", "getSourceNote", "saveSourceNote",
-    "listDuplicateCandidates", "decideDuplicateGroup", "addToLibrary", "removeFromLibrary", "getKnowledgePage", "getKnowledgeStatus"].map((name) => [name, (mocks as Record<string, unknown>)[name]])) }));
+    "listDuplicateCandidates", "decideDuplicateGroup", "setSourceProjects", "getKnowledgePage", "getKnowledgeStatus"].map((name) => [name, (mocks as Record<string, unknown>)[name]])) }));
 vi.mock("@/lib/knowledgeBaseClient", async (importOriginal) => ({ ...(await importOriginal<object>()), getSourceDependents: mocks.getSourceDependents }));
 vi.mock("@/lib/artifactFile", async (importOriginal) => ({ ...(await importOriginal<object>()), downloadArtifact: mocks.downloadArtifact, downloadSourceFile: mocks.downloadSourceFile }));
 vi.mock("@/lib/toast", () => ({ toast: { success: mocks.toastSuccess, error: mocks.toastError } }));
@@ -112,10 +113,32 @@ function Probe() {
   const location = useLocation();
   return <p data-testid="location" data-search={location.search} data-state={JSON.stringify(location.state ?? null)}>{location.pathname}</p>;
 }
+/** What the knowledge base's page does with the reader where there is no room beside the list: a page of its own, at the address's list. */
+function ReaderRoute() {
+  const { sourceId = "" } = useParams();
+  const [params] = useSearchParams();
+  return <SourceReader key={sourceId} sourceId={sourceId} listState={readListState(params)} mode="page" />;
+}
 function Table() {
   return useRoutes([
     { path: "/app/files", element: <><p>知识库列表</p><Probe /></> },
-    { path: "/app/files/:sourceId", element: <><SourceReaderPage /><Probe /></> },
+    { path: "/app/files/:sourceId", element: <><ReaderRoute /><Probe /></> },
+    { path: "/app/chat", element: <Probe /> },
+  ]);
+}
+/** The reader as the knowledge base's pane holds it, beside the list: the same box, a header of its own and a switch in place of the tab list. */
+function PaneRoute({ backLabel }: { backLabel?: string }) {
+  const { sourceId = "" } = useParams();
+  const [params] = useSearchParams();
+  return <SourceReader key={sourceId} sourceId={sourceId} listState={readListState(params)} mode="pane" backLabel={backLabel} />;
+}
+function renderPane(entry = "/app/files/src_guideline", backLabel?: string) {
+  return render(<MemoryRouter initialEntries={[entry]}><PaneTable backLabel={backLabel} /></MemoryRouter>);
+}
+function PaneTable({ backLabel }: { backLabel?: string }) {
+  return useRoutes([
+    { path: "/app/files", element: <><p>知识库列表</p><Probe /></> },
+    { path: "/app/files/:sourceId", element: <><PaneRoute backLabel={backLabel} /><Probe /></> },
     { path: "/app/chat", element: <Probe /> },
   ]);
 }
@@ -169,8 +192,7 @@ describe("a document's page", () => {
     mocks.retrySource.mockResolvedValue(guideline);
     mocks.removeSource.mockResolvedValue(guideline);
     mocks.refetchSource.mockResolvedValue({ source: webPage, duplicate: true, changed: false });
-    mocks.addToLibrary.mockResolvedValue({});
-    mocks.removeFromLibrary.mockResolvedValue({ sourceId: "src_guideline", removed: true });
+    mocks.setSourceProjects.mockResolvedValue({ libraryProjects: "all", appliesTo: "all" });
     mocks.getSourceNote.mockResolvedValue({ title: "10月3日组会记录", body: "确定 C1–C3 三类比较分开合并。" });
     mocks.saveSourceNote.mockResolvedValue({ source: { ...note, id: "src_note_2" }, duplicate: false, changed: true });
     mocks.downloadArtifact.mockResolvedValue(undefined);
@@ -216,29 +238,77 @@ describe("a document's page", () => {
       expect(JSON.parse(screen.getByTestId("location").getAttribute("data-state")!)).toMatchObject({ kbRestore: true });
     });
 
-    it("has the row's four actions in its own 「⋯」, from the same menu", async () => {
+    it("has the document's own actions in its 「⋯」, from the same menu as the row's — and where it takes effect is not one of them", async () => {
       renderReader();
       await userEvent.click(await screen.findByRole("button", { name: `“${guideline.display.title}”的操作` }));
-      expect((await screen.findAllByRole("menuitem")).map((item) => item.textContent)).toEqual(["添加到项目", "重新读取", "设为所有项目可用", "删除"]);
+      expect((await screen.findAllByRole("menuitem")).map((item) => item.textContent)).toEqual(["重新读取", "删除"]);
     });
 
-    it("offers to take a shared document back to this project, and to settle a suspected duplicate when it is in one", async () => {
-      mocks.getSource.mockResolvedValue({ ...guideline, display: { ...guideline.display, shared: true } });
+    it("offers to settle a suspected duplicate when the document is in one", async () => {
       mocks.listDuplicateCandidates.mockResolvedValue({ items: [{ kind: "version-family", groupKey: "g1", label: "同一份资料的两个版本", members: [], sourceIds: ["src_guideline", "src_other"], decision: null }], scanned: 2, truncated: false });
       renderReader();
       await userEvent.click(await screen.findByRole("button", { name: `“${guideline.display.title}”的操作` }));
-      await waitFor(() => expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["添加到项目", "重新读取", "改为仅本项目", "处理疑似重复", "删除"]));
-      expect(within(document.querySelector("header")!).getByText(/所有项目可用/)).toBeInTheDocument();
+      await waitFor(() => expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["重新读取", "处理疑似重复", "删除"]));
       await userEvent.click(screen.getByRole("menuitem", { name: "处理疑似重复" }));
       expect(await screen.findByRole("dialog", { name: "疑似重复" })).toBeInTheDocument();
     });
 
-    it("shares a document with every project, and takes it back, then reads the document again", async () => {
-      renderReader();
-      await userEvent.click(await screen.findByRole("button", { name: `“${guideline.display.title}”的操作` }));
-      await userEvent.click(await screen.findByRole("menuitem", { name: "设为所有项目可用" }));
-      await waitFor(() => expect(mocks.addToLibrary).toHaveBeenCalledWith("src_guideline"));
-      await waitFor(() => expect(mocks.getSource).toHaveBeenCalledTimes(2));
+    describe("where it takes effect (「生效项目」)", () => {
+      const everywhere = { ...guideline, holders: [{ id: "default", name: "我的研究" }], libraryProjects: "all", appliesTo: "all" } as SourceRecord;
+      const inTwo = { ...guideline, holders: [{ id: "default", name: "我的研究" }], libraryProjects: ["paper-1"], appliesTo: ["default", "paper-1"] } as SourceRecord;
+
+      it("says it after what the document is — 「生效于 所有项目」, or the projects by name, the holders first — and the words are the press that changes it", async () => {
+        mocks.getSource.mockResolvedValue(everywhere);
+        const first = renderReader();
+        const header = (await screen.findByRole("heading", { level: 1, name: guideline.display.title })).closest("header")!;
+        expect(within(header).getByRole("button", { name: `“${guideline.display.title}”的生效项目：所有项目，点击修改` })).toHaveTextContent("所有项目");
+        first.unmount();
+        mocks.getSource.mockResolvedValue(inTwo);
+        renderReader();
+        expect(await screen.findByRole("button", { name: `“${guideline.display.title}”的生效项目：我的研究、疳证 Meta 文献检索，点击修改` })).toHaveTextContent("我的研究、疳证 Meta 文献检索");
+      });
+
+      it("says nothing of it for a record that carries no answer, and not for a compiled page, which is its project's", async () => {
+        renderReader();
+        await screen.findByRole("heading", { level: 1, name: guideline.display.title });
+        expect(screen.queryByText("生效于")).not.toBeInTheDocument();
+      });
+
+      it("opens a dialog with 「所有项目」 and the projects, the holder checked and fixed, and saves what was chosen, then reads the document again", async () => {
+        mocks.getSource.mockResolvedValue({ ...guideline, holders: [{ id: "default", name: "我的研究" }], libraryProjects: null, appliesTo: ["default"] } as SourceRecord);
+        mocks.setSourceProjects.mockResolvedValue({ libraryProjects: ["paper-1"], appliesTo: ["default", "paper-1"] });
+        renderReader();
+        await userEvent.click(await screen.findByRole("button", { name: /的生效项目：我的研究，点击修改/ }));
+        const dialog = await screen.findByRole("dialog", { name: "生效项目" });
+        expect(within(dialog).getByRole("radio", { name: "所有项目" })).not.toBeChecked();
+        expect(within(dialog).getByRole("radio", { name: "选择项目" })).toBeChecked();
+        // The project that holds the file is checked and cannot be let go of; the others are the person's to tick.
+        const held = within(dialog).getByRole("checkbox", { name: /我的研究/ });
+        expect(held).toBeChecked(); expect(held).toBeDisabled();
+        expect(within(dialog).getByRole("button", { name: "保存" })).toBeDisabled();
+        await userEvent.click(within(dialog).getByRole("checkbox", { name: "疳证 Meta 文献检索" }));
+        await userEvent.click(within(dialog).getByRole("button", { name: "保存" }));
+        await waitFor(() => expect(mocks.setSourceProjects).toHaveBeenCalledWith("src_guideline", ["paper-1"]));
+        await waitFor(() => expect(mocks.getSource).toHaveBeenCalledTimes(2));
+        expect(screen.queryByRole("dialog", { name: "生效项目" })).not.toBeInTheDocument();
+        expect(mocks.toastSuccess).toHaveBeenCalledWith("已更新生效项目");
+      });
+
+      it("saves 「所有项目」 as the word, and says a refusal in the registry's sentence, keeping the dialog", async () => {
+        mocks.getSource.mockResolvedValue(inTwo);
+        mocks.setSourceProjects.mockRejectedValueOnce(new WebApiError("no", { status: 400, code: "library_project_invalid" }));
+        renderReader();
+        await userEvent.click(await screen.findByRole("button", { name: /的生效项目：/ }));
+        const dialog = await screen.findByRole("dialog", { name: "生效项目" });
+        await userEvent.click(within(dialog).getByRole("radio", { name: "所有项目" }));
+        await userEvent.click(within(dialog).getByRole("button", { name: "保存" }));
+        expect(await within(dialog).findByRole("alert")).toHaveTextContent(knownErrorCodeMessage("library_project_invalid")!);
+        expect(mocks.setSourceProjects).toHaveBeenLastCalledWith("src_guideline", "all");
+        // The choice is kept, so it can be sent again.
+        expect(within(dialog).getByRole("radio", { name: "所有项目" })).toBeChecked();
+        await userEvent.click(within(dialog).getByRole("button", { name: "保存" }));
+        await waitFor(() => expect(screen.queryByRole("dialog", { name: "生效项目" })).not.toBeInTheDocument());
+      });
     });
 
     it("reads again from the copy the platform holds, and a saved page from its address, saying whether it changed", async () => {
@@ -306,15 +376,39 @@ describe("a document's page", () => {
       expect(intent.references.map((entry: { id: string }) => entry.id)).toEqual([knowledgePage.sourceId, ...knowledgePage.sources.map((entry) => entry.sourceId)]);
     });
 
-    it("uses a document opened from the shared scope in the project the tab is in", async () => {
-      mocks.getSource.mockResolvedValue({ ...sheet, projectId: "paper-1", display: { ...sheet.display, shared: true } });
-      renderReader(readerAt("src_sheet", "?scope=shared"));
+    it("opens the one project it takes effect in without asking, whatever project the sidebar is in", async () => {
+      mocks.getSource.mockResolvedValue({ ...sheet, projectId: "paper-1", holders: [{ id: "paper-1", name: "疳证 Meta 文献检索" }], libraryProjects: null, appliesTo: ["paper-1"] });
+      renderReader(readerAt("src_sheet"));
+      await userEvent.click(await screen.findByRole("button", { name: "在对话中使用" }));
+      await waitFor(() => expect(selectSpy).toHaveBeenCalledWith("paper-1", expect.any(Function)));
+      expect(screen.queryByRole("dialog", { name: "选择对话项目" })).not.toBeInTheDocument();
+    });
+
+    it("asks which project when it takes effect in several, and in none of them is the sidebar's project switched behind the person's back", async () => {
+      mocks.getSource.mockResolvedValue({ ...sheet, projectId: "paper-1", holders: [{ id: "paper-1", name: "疳证 Meta 文献检索" }], libraryProjects: ["default"], appliesTo: ["default", "paper-1"] });
+      renderReader(readerAt("src_sheet"));
       await userEvent.click(await screen.findByRole("button", { name: "在对话中使用" }));
       expect(selectSpy).not.toHaveBeenCalled();
-      await userEvent.click(screen.getByRole("combobox", { name: "目标项目" }));
+      await userEvent.click(screen.getByRole("combobox", { name: "项目" }));
       await userEvent.click(screen.getByRole("button", { name: "我的研究" }));
       await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "在对话中使用" }));
       await waitFor(() => expect(selectSpy).toHaveBeenCalledWith("default", expect.any(Function)));
+    });
+
+    it("asks among every one of the account's own projects for a document that takes effect in all of them", async () => {
+      mocks.getSource.mockResolvedValue({ ...sheet, projectId: "paper-1", holders: [{ id: "paper-1", name: "疳证 Meta 文献检索" }], libraryProjects: "all", appliesTo: "all" });
+      renderReader(readerAt("src_sheet"));
+      await userEvent.click(await screen.findByRole("button", { name: "在对话中使用" }));
+      await userEvent.click(screen.getByRole("combobox", { name: "项目" }));
+      expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["我的研究", "疳证 Meta 文献检索"]);
+    });
+
+    it("says so, and starts no conversation, for a document that takes effect nowhere", async () => {
+      mocks.getSource.mockResolvedValue({ ...sheet, personal: true, projectId: "evimed-library", holders: [], libraryProjects: [], appliesTo: [] });
+      renderReader(readerAt("src_sheet"));
+      await userEvent.click(await screen.findByRole("button", { name: "在对话中使用" }));
+      expect(mocks.toastError).toHaveBeenCalledWith(expect.stringContaining("生效项目"));
+      expect(selectSpy).not.toHaveBeenCalled();
     });
 
     it("is not offered while the document is still being read", async () => {
@@ -326,7 +420,7 @@ describe("a document's page", () => {
   });
 
   it("reads and downloads personal originals without selecting the hidden storage project", async () => {
-    mocks.getSource.mockResolvedValue({ ...guideline, personal: true, projectId: "evimed-library" });
+    mocks.getSource.mockResolvedValue({ ...guideline, personal: true, projectId: "evimed-library", holders: [], libraryProjects: "all", appliesTo: "all" });
     renderReader("/app/files/src_guideline");
     const preview = await screen.findByTestId("preview");
     expect(preview).toHaveAttribute("data-source-file", "src_guideline");
@@ -334,7 +428,7 @@ describe("a document's page", () => {
     await userEvent.click(screen.getByRole("button", { name: "下载" }));
     expect(mocks.downloadSourceFile).toHaveBeenCalled(); expect(mocks.downloadArtifact).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "在对话中使用" }));
-    expect(screen.getByRole("dialog", { name: "选择对话项目" })).toBeInTheDocument(); expect(selectSpy).not.toHaveBeenCalled();
+    expect(await screen.findByRole("dialog", { name: "选择对话项目" })).toBeInTheDocument(); expect(selectSpy).not.toHaveBeenCalled();
     expect(screen.queryByText("evimed-library")).toBeNull();
   });
 
@@ -989,6 +1083,66 @@ describe("a document's page", () => {
       renderReader();
       expect(await screen.findByRole("status", { name: "正在打开资料" })).toBeInTheDocument();
       expect(screen.queryByText("这份资料不存在或已删除。")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("in the pane beside the list", () => {
+    it("names the document with a heading of its own level, and has no tab list: the page beside it is a master-detail page", async () => {
+      mocks.getSource.mockResolvedValue({ ...guideline, holders: [{ id: "default", name: "我的研究" }], libraryProjects: "all", appliesTo: "all" });
+      renderPane();
+      const heading = await screen.findByRole("heading", { level: 2, name: guideline.display.title });
+      expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument();
+      const header = heading.closest("header")!;
+      expect(within(header).getByText("指南 · 2.1 MB · 18 页 · 上传 · 2020-03-05")).toBeInTheDocument();
+      expect(within(header).getByRole("button", { name: /的生效项目：所有项目/ })).toBeInTheDocument();
+      expect(within(header).getByRole("button", { name: "在对话中使用" })).toBeEnabled();
+      expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+      // No way back above it: the list is beside it.
+      expect(screen.queryByRole("navigation", { name: "返回" })).not.toBeInTheDocument();
+    });
+
+    it("switches the document's two views with a radio group over the body where there is no room for two columns, and keeps the choice in the address", async () => {
+      renderPane();
+      await screen.findByRole("heading", { level: 2, name: guideline.display.title });
+      resize(TWO_COLUMN_MIN_WIDTH - 1);
+      expect(document.querySelector("[data-reader-layout]")).toHaveAttribute("data-reader-layout", "tabs");
+      const views = screen.getByRole("radiogroup", { name: "资料视图" });
+      expect(within(views).getByRole("radio", { name: "内容", checked: true })).toBeInTheDocument();
+      await userEvent.click(within(views).getByRole("radio", { name: "原文" }));
+      expect(addressOf()).toContain("tab=original");
+      expect(await screen.findByTestId("preview")).toHaveTextContent("预览：knowledge-base/src_guideline.pdf");
+      expect(columnOf("original")).not.toBeNull();
+      // With room for both the switch is gone: both columns are on screen.
+      resize(TWO_COLUMN_MIN_WIDTH);
+      expect(screen.queryByRole("radiogroup", { name: "资料视图" })).not.toBeInTheDocument();
+      expect(columnOf("points")).not.toBeNull();
+    });
+
+    it("opens a compiled page with the way back to what the pane showed — the project's pages — and a document with none", async () => {
+      const wiki = makeSource(knowledgePage.sourceId, { title: knowledgePage.title, origin: "wiki", kind: "wiki", format: "md", pages: null }, { paths: [`knowledge-base/wiki/${knowledgePage.path}`] });
+      mocks.getSource.mockResolvedValue({ ...wiki, projectId: "paper-1" });
+      mocks.getKnowledgePage.mockResolvedValue(knowledgePage);
+      mocks.getKnowledgeStatus.mockResolvedValue(knowledgeStatus);
+      renderPane(`/app/files/${knowledgePage.sourceId}?scope=paper-1&kind=wiki`, "知识页");
+      const back = await screen.findByRole("link", { name: "知识页" });
+      expect(back).toHaveAttribute("href", "/app/files?scope=paper-1&kind=wiki");
+      // A compiled page is its project's: it says nothing of where it takes effect.
+      expect(screen.queryByText("生效于")).not.toBeInTheDocument();
+    });
+
+    it("uses the document's project's conversation from the pane as it does from a page", async () => {
+      mocks.getSource.mockResolvedValue({ ...guideline, projectId: "paper-1", holders: [{ id: "paper-1", name: "疳证 Meta 文献检索" }], libraryProjects: null, appliesTo: ["paper-1"] });
+      renderPane();
+      await userEvent.click(await screen.findByRole("button", { name: "在对话中使用" }));
+      await waitFor(() => expect(selectSpy).toHaveBeenCalledWith("paper-1", expect.any(Function)));
+    });
+
+    it("deletes from the pane and goes back to the list as it was, with no document chosen", async () => {
+      renderPane("/app/files/src_guideline?kind=literature");
+      await userEvent.click(await screen.findByRole("button", { name: `“${guideline.display.title}”的操作` }));
+      await userEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
+      await userEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "删除" }));
+      await waitFor(() => expect(mocks.removeSource).toHaveBeenCalledWith("src_guideline", 3));
     });
   });
 

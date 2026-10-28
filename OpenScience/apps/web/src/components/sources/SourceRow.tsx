@@ -4,32 +4,29 @@ import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { ListRow } from "@/components/ui/ListRow";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
-import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/cn";
 import { formatDay } from "@/lib/format";
 import { sourceFailureMessage, type SourcePassage, type SourceRecord } from "@/lib/sourceClient";
 import { useOperator } from "@/lib/useOperator";
-import { RETRYABLE, canCopyToProject, highlightParts, isReading, isUsable, kindIcon, metaLine, stateLabel } from "./sourceView";
+import { AppliesTo } from "./AppliesTo";
+import { RETRYABLE, highlightParts, isReading, isUsable, kindIcon, metaLine, stateLabel } from "./sourceView";
 
 /**
- * What one can do to a document, in the order a menu offers it: add it to a project (only where there is an original to copy),
- * read it again, make it available to every project (or only this one), settle a suspected duplicate, delete. The row's 「⋯」
- * and the reader page's carry the same entries, so they cannot disagree.
+ * What one can do to a document, in the order a menu offers it: read it again (a saved page, or one that did not read), settle a suspected
+ * duplicate, delete. Where it takes effect is its own control (`AppliesTo`), not an entry of the menu. The row's 「⋯」 and the reader
+ * page's carry the same entries, so they cannot disagree.
  */
 export function sourceMenuItems(source: SourceRecord, {
-  duplicate, busy, onRetry, onShare, onDuplicates, onDelete, onAddToProject,
+  duplicate, busy, onRetry, onDuplicates, onDelete,
 }: {
   duplicate: boolean; busy: boolean;
-  onRetry: () => void; onShare: () => void; onDuplicates: () => void; onDelete: () => void; onAddToProject?: () => void;
+  onRetry: () => void; onDuplicates?: () => void; onDelete: () => void;
 }): MenuEntry[] {
   const link = source.display.origin === "link";
   const items: MenuEntry[] = [
-    ...(onAddToProject && canCopyToProject(source) ? [{ label: "添加到项目", onSelect: onAddToProject }] : []),
     ...(link || RETRYABLE.includes(source.payload.status) ? [{ label: "重新读取", onSelect: onRetry }] : []),
-    ...(source.display.shared === true ? [{ label: source.personal ? "取消跨项目可用" : "改为仅本项目", onSelect: onShare }] : []),
-    ...(source.display.shared === false && isUsable(source) ? [{ label: "设为所有项目可用", onSelect: onShare }] : []),
-    ...(duplicate ? [{ label: "处理疑似重复", onSelect: onDuplicates }] : []),
+    ...(duplicate && onDuplicates ? [{ label: "处理疑似重复", onSelect: onDuplicates }] : []),
     "separator",
     { label: "删除", onSelect: onDelete, destructive: true },
   ];
@@ -37,27 +34,26 @@ export function sourceMenuItems(source: SourceRecord, {
 }
 
 /**
- * One document, as a list row: what it is called, one line of what it says, and under it what it is, how long, and
- * where it came from; the day it arrived at the end. The whole row is a link to the document's own page (`to`), so it
- * opens in a new tab and keeps its address; `onOpen` runs as it is followed, which is where the list keeps its place.
- * A state is said only while the document cannot be used yet (「正在读取」, a few seconds) or could not be read
+ * One document, as a list row: what it is called, one line of what it says, and under it what it is, how long, where it came from and
+ * where it takes effect (「生效于 所有项目」, which is the press that changes it); the day it arrived at the end. The whole row is a link to
+ * the document's own address (`to`), so it opens in a new tab and keeps its address; `onOpen` runs as it is followed, which is where the
+ * list keeps its place. A state is said only while the document cannot be used yet (「正在读取」, a few seconds) or could not be read
  * (「没能读取 · 重试」), in the line where what it says would be.
  *
  * When the list's search matched inside the document's own text, the matches are under the row, grouped under their
  * document: each is the page it is on and one line around the match, with what was typed marked, and is a link that opens
  * the document at that page (`passageTo`).
  */
-export function SourceRow({ source, busy, duplicate, showShared, projectName, to, onOpen, passages = [], query = "", passageTo, selected, onSelect, onRetry, onShare, onDuplicates, onDelete, onAddToProject }: {
+export function SourceRow({ source, busy, labels, to, onOpen, current = false, passages = [], query = "", passageTo, selected, onSelect, onRetry, onApplies, onDelete }: {
   source: SourceRecord;
   busy: boolean;
-  duplicate: boolean;
-  /** Whether the row says 「所有项目可用」: not in the shared scope, where every row is. */
-  showShared: boolean;
-  /** The project a document of the shared scope belongs to. */
-  projectName: string | null;
-  /** The document's page. */
+  /** The names the account's projects are read by, for saying where the document takes effect. */
+  labels: ReadonlyMap<string, string>;
+  /** The document's address. */
   to: string;
   onOpen?: () => void;
+  /** The document open in the pane beside the list. */
+  current?: boolean;
   selected?: boolean;
   onSelect?: () => void;
   /** Where the search matched inside the document's text, when it did. */
@@ -67,27 +63,26 @@ export function SourceRow({ source, busy, duplicate, showShared, projectName, to
   /** The address of the document opened at a passage. */
   passageTo?: (passage: SourcePassage) => string;
   onRetry: () => void;
-  onShare: () => void;
-  onDuplicates: () => void;
-  onDelete: () => void; onAddToProject?: () => void;
+  onApplies: () => void;
+  onDelete: () => void;
 }) {
   const { display } = source;
   const Icon = kindIcon(display.kind);
-  const menu = sourceMenuItems(source, { duplicate, busy, onRetry, onShare, onDuplicates, onDelete, onAddToProject });
+  const menu = sourceMenuItems(source, { duplicate: false, busy, onRetry, onDelete });
   return (
     <ListRow
       leading={onSelect ? <IconButton icon={selected ? SquareCheck : Square} size="sm" label={`选择“${display.title}”`}
         role="checkbox" aria-checked={selected === true} disabled={!isUsable(source)} onClick={onSelect} className="z-sticky" />
         : <span className="grid h-8 w-8 place-items-center rounded bg-surface-2 text-text-3"><Icon size={16} aria-hidden="true" /></span>}
-      selected={selected}
+      selected={selected || current}
       title={<Tooltip content={display.title} kind="label" whenTruncated><span className="block truncate">{display.title}</span></Tooltip>}
       to={to}
       onOpen={onOpen}
       meta={<>
         <SourceLine source={source} busy={busy} onRetry={onRetry} />
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="min-w-0 truncate">{[metaLine(source, { showShared }), projectName].filter(Boolean).join(" · ")}</span>
-          {duplicate && <Tag>疑似重复</Tag>}
+        <span className="flex min-w-0 flex-wrap items-center gap-x-2">
+          <span className="min-w-0 truncate">{metaLine(source)}</span>
+          <AppliesTo source={source} labels={labels} disabled={busy} onOpen={onApplies} />
         </span>
         {passages.length > 0 && (
           <ul aria-label="正文里的匹配" className="mt-1 space-y-0.5">

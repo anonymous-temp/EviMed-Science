@@ -38,15 +38,16 @@ describe("知识库", () => {
     mocks.getVcrHome.mockResolvedValue({ studies: [] });
   });
 
-  // 2026-10-07 plan §2.3, mockup k01: the title, the scope, a search and the one 「添加」; when empty, one sentence about
-  // what to put in — a place for whatever a researcher hands over, not a library of clinical papers.
-  it("is its title, the scope it lists, a search and one 「添加」, and when empty one sentence — nothing under the title", async () => {
+  // 2026-10-07 plan §2.3, mockup k01: the title, a search and the one 「添加」; when empty, one sentence about what to put in — a place
+  // for whatever a researcher hands over, not a library of clinical papers. (2026-10-28: and no project to choose at the top.)
+  it("is its title, a search and one 「添加」, and when empty one sentence — nothing under the title, and no project to choose", async () => {
     render(<MemoryRouter><KnowledgePage /></MemoryRouter>);
     const heading = screen.getByRole("heading", { level: 1, name: "知识库" });
     expect(heading.closest("header")?.querySelectorAll("p")).toHaveLength(0);
     expect(screen.queryByText(/你放进来的资料/)).not.toBeInTheDocument();
     expect(screen.getByRole("searchbox", { name: "搜索资料和内容" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^范围：/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^范围/ })).not.toBeInTheDocument();
+    expect(mocks.listSources).toHaveBeenCalledWith({ kind: "all" }, { q: "", limit: 50 });
 
     const empty = await screen.findByText("把文献、指南、方案、数据表、网页或笔记放进来，对话里会读它们并标出处。");
     // The empty state is that one sentence and the one button, and the header carries none then: the page has one solid 「添加」
