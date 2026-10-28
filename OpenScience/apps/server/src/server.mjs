@@ -2341,9 +2341,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }) : null;
   // The personal library: an account's documents across projects, read-only
   // in every run, searched beside the project's own (plan §3.2 #4–5).
-  // Where a document may be sent — the projects a copy goes to and the projects a document applies to — is one rule: an
-  // ordinary project of the account (`assertOrdinaryProject`). A 循证 GEO project or a 虚拟临床研究 study the account owns is not
-  // one, and neither is a platform project. The geo and vcr stores are composed further down and read only when a request arrives.
+  // Where a document may apply — the projects its library record lists — is one rule: an ordinary project of the account
+  // (`assertOrdinaryProject`). A 循证 GEO project or a 虚拟临床研究 study the account owns is not one, and neither is a
+  // platform project. The geo and vcr stores are composed further down and read only when a request arrives.
   const libraryProjectRule = {
     store,
     internalProject: (/** @type {any} */ user, /** @type {string} */ id) => isInternalProjectOf(config, user.id, id),
@@ -2361,10 +2361,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const personalLibraryWrite = createPersonalLibraryWriter({ sources: sourceService, library: () => libraryService,
     write: ({ user, project, rel, buffer, meta, register }) => writeProjectUpload({ config, user, project }, { root: "base", rel, buffer, meta, register }) });
   const personalLibraryRoutes = createPersonalLibraryRoutes({ store, sources: sourceService, knowledge: knowledgeEntries,
-    write: personalLibraryWrite, readFile: (project, rel) => readFileNoFollow(project.baseDir, resolveScopedPath(project.baseDir, rel)),
-    maxJsonBytes: config.maxJsonBytes, maxFileBytes: config.maxFileBytes, internalProject: libraryProjectRule.internalProject,
-    // A 循证 GEO project or a 虚拟临床研究 study the account owns is not a place a document is copied to.
-    moduleProject: libraryProjectRule.moduleProject });
+    write: personalLibraryWrite, maxJsonBytes: config.maxJsonBytes, maxFileBytes: config.maxFileBytes });
   // The one entity vocabulary (entityVocabulary.mjs, plan §4.2): the frontier's glossary and entity keys, read by
   // the pipeline, the evidence zones, autopilot agendas, GEO products and VCR studies. It follows the frontier
   // module: off, every answer is empty and no table is read.

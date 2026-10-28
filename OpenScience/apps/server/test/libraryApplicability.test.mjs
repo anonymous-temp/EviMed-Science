@@ -132,7 +132,7 @@ test("the request's `projects` is \"all\" or a list of ids, in the order given a
   }
 });
 
-test("a document may be sent only to an existing, unarchived, ordinary project of the account: every other answer is the same refusal", async () => {
+test("a document may apply only to an existing, unarchived, ordinary project of the account: every other answer is the same refusal", async () => {
   const known = new Map([["a", {}], ["old", { archivedAt: "2026-01-01T00:00:00Z" }], ["geo-1", {}], ["study-1", {}]]);
   const rule = {
     store: { requireProject: async (_user, id) => {
@@ -146,9 +146,6 @@ test("a document may be sent only to an existing, unarchived, ordinary project o
   for (const id of ["evimed-library", "evimed-learning", "eval-paper-x", "nope", "old", "geo-1", "study-1", "", undefined, 7]) {
     await assert.rejects(assertOrdinaryProject(rule, user, id), { status: 400, code: "library_project_invalid" }, String(id));
   }
-  // The copy route keeps the code it always answered with, and may copy into an archived project.
-  await assert.rejects(assertOrdinaryProject(rule, user, "geo-1", { code: "library_payload_invalid" }), { status: 400, code: "library_payload_invalid" });
-  assert.equal((await assertOrdinaryProject(rule, user, "old", { allowArchived: true })).id, "old");
   // A store that fails for another reason is not turned into a refusal.
   await assert.rejects(assertOrdinaryProject({ store: { requireProject: async () => { throw new Error("database down"); } } }, user, "a"), /database down/);
 });

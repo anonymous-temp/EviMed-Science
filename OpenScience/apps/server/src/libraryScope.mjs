@@ -88,9 +88,8 @@ export function parseLibraryProjects(value) {
 }
 
 /**
- * The one rule for where a document may be sent: an existing, unarchived, ordinary project of the account — not a platform
- * project, not a 循证 GEO project, not a 虚拟临床研究 study. The copy route (`POST /api/library/:id/projects`) and the
- * applicability list share it, so the two cannot disagree about what an ordinary project is.
+ * The one rule for where a document may apply: an existing, unarchived, ordinary project of the account — not a platform
+ * project, not a 循证 GEO project, not a 虚拟临床研究 study. Every list of projects a library record may name goes through it.
  *
  * Every refusal is the same 400 (`library_project_invalid`): another account's project and a project that does not exist
  * must not read differently.
@@ -98,13 +97,11 @@ export function parseLibraryProjects(value) {
  * @param {{ store: { requireProject: (user: any, id: string) => Promise<any> }, internalProject?: (user: any, id: string) => boolean,
  *   moduleProject?: (user: any, id: string) => Promise<boolean> }} dependencies
  * @param {any} user @param {unknown} projectId
- * @param {{ code?: string, message?: string, allowArchived?: boolean }} [options] `code`: what a refusal is called (the copy route
- *   keeps `library_payload_invalid`, which its callers already read)
  * @returns {Promise<any>} the project
  */
 export async function assertOrdinaryProject({ store, internalProject = (_user, id) => isInternalProject(id), moduleProject = async () => false },
-  user, projectId, { code = "library_project_invalid", message = "Choose an ordinary project.", allowArchived = false } = {}) {
-  const refuse = () => new HttpError(400, code, message);
+  user, projectId) {
+  const refuse = () => new HttpError(400, "library_project_invalid", "Choose an ordinary project.");
   if (typeof projectId !== "string" || !projectId || internalProject(user, projectId)) throw refuse();
   try { assertClientProject(projectId); } catch { throw refuse(); }
   let project;
@@ -112,8 +109,7 @@ export async function assertOrdinaryProject({ store, internalProject = (_user, i
     if (error instanceof HttpError && [400, 403, 404].includes(error.status)) throw refuse();
     throw error;
   }
-  if (!allowArchived && project.archivedAt) throw refuse();
-  if (await moduleProject(user, project.id)) throw refuse();
+  if (project.archivedAt || await moduleProject(user, project.id)) throw refuse();
   return project;
 }
 
