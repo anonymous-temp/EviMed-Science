@@ -177,5 +177,8 @@ def sidecar(record):
     publication_types = [str(item) for item in (record.get("publicationTypes") or []) if str(item).strip()][:12]
     if publication_types:
         value["publicationTypes"] = publication_types
+    # The way the text was obtained, when a tool says it is not the usual one (`open_access_full_text` through NCBI PMC).
+    if record.get("route"):
+        value["route"] = str(record["route"])[:64]
     payload = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
     return SIDECAR_NAME, payload.encode("utf-8")

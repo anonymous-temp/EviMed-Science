@@ -742,6 +742,9 @@ class AdapterTests(unittest.TestCase):
         calls = []
 
         def fake_get_json(url, **kwargs):
+            if "eutils.ncbi.nlm.nih.gov" in url:
+                # literature_search asks PubMed beside the index by default; here PubMed matches nothing.
+                return {"esearchresult": {"count": "0", "idlist": []}}
             calls.append((url, kwargs))
             return next(value for suffix, value in responses.items() if url.endswith(suffix))
 
