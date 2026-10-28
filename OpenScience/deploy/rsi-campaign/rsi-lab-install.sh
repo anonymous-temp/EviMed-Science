@@ -28,7 +28,7 @@ if [ "$MODE" = lab ]; then
     git -C "$ROOT" archive --format=tar HEAD "${PATHS[@]/#/}" | gzip -n > "$TMP/context.tgz"
   fi
   scp -q "$TMP/context.tgz" "$LAB:/srv/rsi-lab/release/$REV.tgz"
-  scp -q "$HERE/rsi-lab-monthly.sh" "$HERE/systemd/evimed-rsi-campaign.service" "$HERE/systemd/evimed-rsi-campaign.timer" \
+  scp -q "$HERE/rsi-lab-monthly.sh" "$HERE/rsi-lab-skill.sh" "$HERE/systemd/evimed-rsi-campaign.service" "$HERE/systemd/evimed-rsi-campaign.timer" \
     "$ROOT/evals/rsi-campaigns/reports/statistics-v5-qualification.json" "$LAB:/srv/rsi-lab/release/"
   ssh "$LAB" REV="$REV" bash -s <<'REMOTE'
 set -euo pipefail
@@ -37,6 +37,7 @@ docker build -q --network host -t "evimed-rsi-lab:$REV" -f "$REV/deploy/rsi-camp
 echo "evimed-rsi-lab:$REV" > /etc/rsi-lab/image
 install -d -m 0755 /usr/local/lib/evimed-rsi
 install -m 0755 rsi-lab-monthly.sh /usr/local/lib/evimed-rsi/rsi-lab-monthly.sh
+install -m 0755 rsi-lab-skill.sh /usr/local/lib/evimed-rsi/rsi-lab-skill.sh
 install -m 0644 evimed-rsi-campaign.service evimed-rsi-campaign.timer /etc/systemd/system/
 # Owner inputs: the lab configuration, the public trust records, the signers' file paths. Deployment records are 0600 for uid 10001.
 O=/etc/rsi-lab/owner-inputs
@@ -53,6 +54,9 @@ JSON
 cat > $O/evaluator-profile.json <<JSON
 {"publicKeyPath":"/run/rsi-lab/evaluator.pub.pem","publicKeySha256":"$EV","receiptPath":"/srv/rsi-lab/state/current/receipt.json"}
 JSON
+cat > $O/evaluator-profile-skill.json <<JSON
+{"publicKeyPath":"/run/rsi-lab/evaluator.pub.pem","publicKeySha256":"$EV","receiptPath":"/srv/rsi-lab/state/skill-current/receipt.json"}
+JSON
 install -m 0644 statistics-v5-qualification.json $O/statistics-qualification.json
 Q=$(docker run --rm --network none --user 10001:10001 -v $O:/run/rsi-lab:ro "evimed-rsi-lab:$REV" evals/rsi-campaigns/evaluator.mjs qualification /run/rsi-lab/statistics-qualification.json superiority)
 PROCEDURE=$(echo "$Q" | python3 -c 'import json,sys;print(json.load(sys.stdin)["procedureDigest"])') QUALIFICATION=$(echo "$Q" | python3 -c 'import json,sys;print(json.load(sys.stdin)["qualificationDigest"])')
@@ -66,7 +70,7 @@ cat > $O/finalize.json <<JSON
  "evaluator":{"provider":"file","keyId":"rsi-lab-evaluator-2026-10","publicKeySha256":"$EV","path":"/run/rsi-keys/evaluator.pem"},
  "statisticsPython":"/usr/local/bin/python3","statisticsModulePath":"/opt/evimed/rsi-python","closureSettings":{"model":"deepseek-flash","provider":"deepseek"},"closurePins":{}}
 JSON
-chown root:rsi-lab $O/config.json $O/evaluator-profile.json $O/statistics-qualification.json && chmod 0640 $O/config.json $O/evaluator-profile.json && chmod 0644 $O/statistics-qualification.json
+chown root:rsi-lab $O/config.json $O/evaluator-profile.json $O/evaluator-profile-skill.json $O/statistics-qualification.json && chmod 0640 $O/config.json $O/evaluator-profile.json $O/evaluator-profile-skill.json && chmod 0644 $O/statistics-qualification.json
 chown 10001:10001 $O/finalizer-profile.json $O/finalize.json && chmod 0600 $O/finalizer-profile.json $O/finalize.json
 systemctl daemon-reload && systemctl enable --now evimed-rsi-campaign.timer >/dev/null
 # Keep the three newest images and source trees.
