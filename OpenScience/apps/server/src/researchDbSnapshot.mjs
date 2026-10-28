@@ -1,0 +1,143 @@
+import { HttpError } from './security.mjs';
+
+const invalid = () => new HttpError(400, 'research_db_selection_invalid', 'The selected database table or columns are not supported.');
+/** Built-in column types a snapshot reads (bool, int8, int2, int4, text, float4, float8, bpchar, varchar, date, timestamp, timestamptz, numeric, uuid). */
+const types = new Set([16, 20, 21, 23, 25, 700, 701, 1042, 1043, 1082, 1114, 1184, 1700, 2950]);
+const typeOids = [...types];
+/** What one snapshot or one table listing may hold. `bytes` counts the cell text of the kept rows (plus one delimiter per cell). */
+export const RESEARCH_DB_LIMITS = Object.freeze({ rows: 20000, columns: 64, cellBytes: 32768, bytes: 12 * 1024 * 1024, tables: 200 });
+/** @param {unknown} value */
+function identifier(value) {
+  if (typeof value !== 'string' || !value || Buffer.byteLength(value) > 63 || [...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) throw invalid();
+  return `"${value.replaceAll('"', '""')}"`;
+}
+
+/** Run `work` in a bounded read-only transaction on an admissible session, then roll back. The role may not
+ * bypass row security, and the target must not be this platform's own control-plane database.
+ * @template T @param {any} client @param {() => Promise<T>} work @returns {Promise<T>} */
+async function readOnly(client, work) {
+  let opened = false;
+  try {
+    await client.query('BEGIN TRANSACTION READ ONLY'); opened = true;
+    // The limits apply to each statement; a snapshot is read as a series of short FETCH statements.
+    await client.query("SET LOCAL statement_timeout = '5s'");
+    await client.query("SET LOCAL lock_timeout = '2s'");
+    await client.query("SET LOCAL idle_in_transaction_session_timeout = '10s'");
+    await client.query('SET LOCAL search_path = pg_catalog');
+    // Dates and timestamps render the same whatever the remote role or database default is.
+    await client.query("SET LOCAL TimeZone = 'UTC'");
+    await client.query("SET LOCAL DateStyle = 'ISO, YMD'");
+    const role = await client.query('SELECT rolsuper, rolbypassrls FROM pg_catalog.pg_roles WHERE rolname = current_user');
+    if (role.rows.length !== 1 || role.rows[0].rolsuper || role.rows[0].rolbypassrls) throw invalid();
+    const internal = await client.query("SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_namespace WHERE nspname IN ('evimed_control', 'evimed_product', 'evimed_usage')) AS internal");
+    if (internal.rows[0]?.internal !== false) throw invalid();
+    return await work();
+  } finally { if (opened) await client.query('ROLLBACK').catch(() => {}); }
+}
+
+/** Ordinary tables the connected role can read, with their columns of a supported type: no views, no row security, no
+ * system or platform schemas. Never accepts SQL or names; the catalogue is the only input.
+ * @param {any} client @returns {Promise<{tables: {schema:string,table:string,estimatedRows:number|null,columns:{name:string,type:string}[]}[], truncated:boolean}>} */
+export async function listResearchTables(client) {
+  return readOnly(client, async () => {
+    const found = await client.query(`SELECT c.oid, n.nspname, c.relname, c.reltuples
+      FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+      WHERE c.relkind = 'r' AND NOT c.relrowsecurity AND left(n.nspname, 3) <> 'pg_' AND n.nspname <> 'information_schema'
+        AND n.nspname NOT IN ('evimed_control', 'evimed_product', 'evimed_usage')
+        AND pg_catalog.has_schema_privilege(n.oid, 'USAGE') AND pg_catalog.has_table_privilege(c.oid, 'SELECT')
+        AND EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a WHERE a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped AND a.atttypid = ANY($1::oid[]))
+      ORDER BY n.nspname, c.relname LIMIT ${RESEARCH_DB_LIMITS.tables + 1}`, [typeOids]);
+    const kept = found.rows.slice(0, RESEARCH_DB_LIMITS.tables);
+    if (!kept.length) return { tables: [], truncated: false };
+    const attributes = await client.query(`SELECT attrelid, attname, type_name FROM (
+        SELECT attrelid, attname, pg_catalog.format_type(atttypid, atttypmod) AS type_name, attnum,
+          row_number() OVER (PARTITION BY attrelid ORDER BY attnum) AS position
+        FROM pg_catalog.pg_attribute WHERE attrelid = ANY($1::oid[]) AND attnum > 0 AND NOT attisdropped AND atttypid = ANY($2::oid[])) a
+      WHERE position <= ${RESEARCH_DB_LIMITS.columns} ORDER BY attrelid, attnum`, [kept.map(row => Number(row.oid)), typeOids]);
+    /** @type {Map<number, {name:string,type:string}[]>} */
+    const byRelation = new Map();
+    for (const row of attributes.rows) {
+      const list = byRelation.get(Number(row.attrelid)) ?? []; list.push({ name: row.attname, type: row.type_name }); byRelation.set(Number(row.attrelid), list);
+    }
+    return {
+      // `reltuples` is -1 for a table PostgreSQL has not analysed yet: that is "unknown", not zero.
+      tables: kept.map(row => ({ schema: row.nspname, table: row.relname, estimatedRows: Number(row.reltuples) >= 0 ? Math.round(Number(row.reltuples)) : null, columns: byRelation.get(Number(row.oid)) ?? [] })),
+      truncated: found.rows.length > RESEARCH_DB_LIMITS.tables,
+    };
+  });
+}
+
+/** Export a bounded snapshot of selected built-in typed columns of one ordinary table, read as a cursor in short
+ * batches so a table larger than the caps ends as a truncated snapshot and not as a failed read. `columns` empty or
+ * omitted selects every supported column (first 64 by position). Rows are arrays of cell text in column order; a null
+ * and a cell over the cell limit are both `null` (the latter is withheld in the server, never transferred whole).
+ * This function does not accept SQL, expressions, views, RLS policies, custom types or arbitrary functions.
+ * Rows come in the table's physical order: a truncated snapshot is a subset, not a sample.
+ * @param {any} client @param {{schema:string,table:string,columns?:string[]}} request */
+export async function snapshotResearchTable(client, request) {
+  const requested = request?.columns ?? [];
+  if (!request || !Array.isArray(requested) || requested.length > RESEARCH_DB_LIMITS.columns || new Set(requested).size !== requested.length) throw invalid();
+  const schema = identifier(request.schema), table = identifier(request.table), explicit = requested.map(identifier);
+  if (request.schema === 'pg_catalog' || request.schema === 'information_schema' || request.schema.startsWith('pg_')) throw invalid();
+  return readOnly(client, async () => {
+    // Hold the selected relation stable while checking its identity and reading it.
+    await client.query(`LOCK TABLE ONLY ${schema}.${table} IN ACCESS SHARE MODE`);
+    const relation = await client.query(`SELECT c.oid, c.relkind, c.relrowsecurity, pg_catalog.has_table_privilege(c.oid, 'SELECT') AS allowed
+      FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = $1 AND c.relname = $2`, [request.schema, request.table]);
+    const rel = relation.rows[0];
+    if (relation.rows.length !== 1 || rel.relkind !== 'r' || rel.relrowsecurity || !rel.allowed) throw invalid();
+    const metadata = requested.length
+      ? await client.query(`SELECT attname, atttypid, pg_catalog.format_type(atttypid, atttypmod) AS type_name FROM pg_catalog.pg_attribute
+          WHERE attrelid = $1 AND attnum > 0 AND NOT attisdropped AND attname = ANY($2::text[])`, [rel.oid, requested])
+      : await client.query(`SELECT attname, atttypid, pg_catalog.format_type(atttypid, atttypmod) AS type_name FROM pg_catalog.pg_attribute
+          WHERE attrelid = $1 AND attnum > 0 AND NOT attisdropped AND atttypid = ANY($2::oid[]) ORDER BY attnum LIMIT ${RESEARCH_DB_LIMITS.columns}`, [rel.oid, typeOids]);
+    if (!metadata.rows.length || metadata.rows.some(row => !types.has(Number(row.atttypid)))) throw invalid();
+    const names = requested.length ? requested : metadata.rows.map(row => String(row.attname));
+    if (metadata.rows.length !== names.length) throw invalid();
+    const columns = requested.length ? explicit : names.map(identifier);
+    // Values over the cell limit are withheld, not transferred to the server process; a per-row string of 0/1
+    // marks them, so a null stays distinguishable without doubling the width of the result.
+    const cap = RESEARCH_DB_LIMITS.cellBytes;
+    const fields = columns.map(column => `CASE WHEN pg_catalog.octet_length(${column}::text) <= ${cap} THEN ${column}::text ELSE NULL END`);
+    const flags = columns.map(column => `CASE WHEN pg_catalog.octet_length(${column}::text) > ${cap} THEN '1' ELSE '0' END`);
+    await client.query(`DECLARE research_snapshot NO SCROLL CURSOR FOR SELECT ${fields.join(', ')}, pg_catalog.concat(${flags.join(', ')}) FROM ONLY ${schema}.${table} LIMIT ${RESEARCH_DB_LIMITS.rows + 1}`);
+    /** @type {(string|null)[][]} */ const rows = []; let bytes = 0, truncated = false, oversizedValuesWithheld = false, batch = 50;
+    const deadline = Date.now() + 20000;
+    read: for (;;) {
+      const page = await client.query({ text: `FETCH FORWARD ${batch} FROM research_snapshot`, rowMode: 'array' });
+      if (!page.rows.length) break;
+      let pageBytes = 0;
+      for (const values of page.rows) {
+        if (rows.length === RESEARCH_DB_LIMITS.rows) { truncated = true; break read; }
+        const withheld = String(values[names.length] ?? '');
+        const row = names.map((_, index) => withheld[index] === '1' ? null : values[index] ?? null);
+        const size = row.reduce((sum, cell) => sum + (cell === null ? 1 : Buffer.byteLength(cell) + 1), 0);
+        if (bytes + size > RESEARCH_DB_LIMITS.bytes) { truncated = true; break read; }
+        bytes += size; pageBytes += size; rows.push(row); oversizedValuesWithheld ||= withheld.includes('1');
+      }
+      // About a megabyte a batch, so no single response outgrows what the transport admits.
+      batch = Math.max(1, Math.min(2000, Math.floor(1048576 / Math.max(1, pageBytes / page.rows.length))));
+      if (Date.now() > deadline) { truncated = true; break; }
+    }
+    const byName = new Map(metadata.rows.map(item => [item.attname, item]));
+    const columnTypes = names.map(name => ({ name, oid: Number(byName.get(name).atttypid), postgresType: byName.get(name).type_name }));
+    return { schema: request.schema, table: request.table, columns: names, columnTypes, rows, truncated, oversizedValuesWithheld };
+  });
+}
+
+/** The knowledge-base file name of a snapshot: the table's name (letters, digits, `_`, `-`) and the capture time in UTC.
+ * @param {string} table @param {string} capturedAt ISO instant */
+export function researchTableFileName(table, capturedAt) {
+  const name = [...String(table).replace(/[^\p{L}\p{N}_-]+/gu, '_').replace(/^_+|_+$/g, '')].slice(0, 48).join('') || 'table';
+  return `${name}-${capturedAt.slice(0, 19).replace(/[-:]/g, '').replace('T', '-')}.csv`;
+}
+
+/** RFC 4180 CSV with a header row, CRLF line ends and a UTF-8 byte order mark so Excel reads Chinese text correctly.
+ * Nulls and withheld cells are empty cells. Cells are written as they are in the table.
+ * @param {{columns:string[], rows:(string|null)[][]}} snapshot */
+export function researchTableCsv(snapshot) {
+  /** @param {string|null} value */
+  const cell = value => value === null ? '' : /[",\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
+  const lines = [snapshot.columns.map(cell).join(','), ...snapshot.rows.map(row => row.map(cell).join(','))];
+  return Buffer.from(`\uFEFF${lines.join('\r\n')}\r\n`, 'utf8');
+}

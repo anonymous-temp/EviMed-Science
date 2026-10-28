@@ -452,6 +452,9 @@ const operatorLevers = {
   // (the Docker socket resolves a bind source on the host). Without it every PDF
   // or Word record answers that this deployment cannot convert it.
   OPEN_SCIENCE_VCR_DATA_PLANE_HOST_DIR: ["open-science-runtime-controller"],
+  // The research-database connector's egress allowlist (2026-10-28): the connector exists only when this and the keyring file are
+  // both set, so a value that never arrived would leave it off whatever the operator wrote.
+  OPEN_SCIENCE_RESEARCH_DB_ALLOW: ["open-science-web"],
 };
 
 async function composeFiles() {
@@ -1014,4 +1017,18 @@ test("F12e: the plugin reads the platform's own evidence feed by default, at the
   } finally {
     setEvidencePublicBase(served);
   }
+});
+
+test("the research-database keyring is a read-only file mount of the web service alone, and unset means /dev/null and no path", async () => {
+  const file = YAML.parse(await readFile(path.join(deployDir, "docker-compose.yml"), "utf8"), { merge: true });
+  const web = file.services["open-science-web"];
+  assert.equal(web.environment.OPEN_SCIENCE_RESEARCH_DB_KEYRING_FILE, "${OPEN_SCIENCE_RESEARCH_DB_KEYRING_HOST_FILE:+/run/secrets/research-db-keyring}");
+  assert.deepEqual(web.volumes.filter((/** @type {any} */ volume) => volume.target === "/run/secrets/research-db-keyring"),
+    [{ type: "bind", source: "${OPEN_SCIENCE_RESEARCH_DB_KEYRING_HOST_FILE:-/dev/null}", target: "/run/secrets/research-db-keyring", read_only: true }]);
+  for (const [name, service] of Object.entries(file.services)) {
+    if (name === "open-science-web") continue;
+    assert.ok(!JSON.stringify(/** @type {any} */ (service)).includes("research-db-keyring"), `${name} must not hold the research-database keyring`);
+  }
+  const example = await readFile(path.join(deployDir, ".env.example"), "utf8");
+  for (const name of ["OPEN_SCIENCE_RESEARCH_DB_ALLOW", "OPEN_SCIENCE_RESEARCH_DB_KEYRING_HOST_FILE"]) assert.match(example, new RegExp(`^${name}=$`, "m"));
 });

@@ -331,7 +331,7 @@ function SimulatedRechargeButton() {
  * `active` is the conversation surface being on screen in this project:
  * inactive frames keep their document and their lease and send nothing.
  */
-export function RuntimeUiFrame({ projectId, origin, scope, scopeOwner = false, sessionId = null, active = true, mirrorAddress = true, suspended = false, onRelease }: {
+export function RuntimeUiFrame({ projectId, origin, scope, scopeOwner = false, sessionId = null, active = true, mirrorAddress = true, suspended = false, onRelease, onPaneAcknowledged }: {
   projectId: string;
   origin: string;
   scope?: GeoConversationScope;
@@ -349,6 +349,8 @@ export function RuntimeUiFrame({ projectId, origin, scope, scopeOwner = false, s
    * execution of it — so an acknowledged opening must leave the address where it is.
    */
   mirrorAddress?: boolean;
+  /** A non-addressed pane may consume an acknowledged creation and adopt the actual session. */
+  onPaneAcknowledged?: (requestId: string, sessionId: string) => void;
   /** The address does not yet name a conversation and the shell is finding
    *  one: hold the opening request, but let the runtime warm up meanwhile. */
   suspended?: boolean;
@@ -363,6 +365,7 @@ export function RuntimeUiFrame({ projectId, origin, scope, scopeOwner = false, s
   const location = useLocation();
   const navigate = useNavigate();
   const onReleaseRef = useRef(onRelease);
+  const onPaneAcknowledgedRef = useRef(onPaneAcknowledged); onPaneAcknowledgedRef.current = onPaneAcknowledged;
   onReleaseRef.current = onRelease;
   const mirroredSession = useRef<{ sessionId: string; attempt: number } | null>(null);
   const iframe = useRef<HTMLIFrameElement>(null);
@@ -972,6 +975,7 @@ export function RuntimeUiFrame({ projectId, origin, scope, scopeOwner = false, s
         currentRequest.current = null; setPending(false); setNavigated(true);
         mirroredSession.current = { sessionId: message.sessionId, attempt };
         setFrameTask(message.sessionId);
+        if (!mirrorAddress && roomHold.current.active && !roomHold.current.suspended) onPaneAcknowledgedRef.current?.(request.requestId, message.sessionId);
         // Remove only this acknowledged request. A later navigation intent
         // must survive an acknowledgement from the previous operation.
         if (roomHold.current.active && !roomHold.current.suspended && (mirrorAddress || geoIdFromChatPath(location.pathname)) && intent?.requestId === request.requestId) {

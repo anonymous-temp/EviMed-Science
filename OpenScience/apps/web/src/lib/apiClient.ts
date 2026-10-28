@@ -801,6 +801,9 @@ export interface WebRunProgress {
 }
 
 export interface WebAgentRun {
+  /** Present on an adopted automatic LoopX continuation; not a goal lifecycle status. */
+  automated?: boolean;
+  goal?: { id: string; runId: string | null } | null;
   stepActions?: Record<string, import("@evimed/domain").RunAction[]>;
   artifactRoles?: Record<string, import("@evimed/domain").ArtifactRole>;
   availableActions?: import("@evimed/domain").RunAction[];

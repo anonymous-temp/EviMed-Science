@@ -26,6 +26,7 @@ const SessionRoute = lazy(() => import("./routes/SessionRoute").then((m) => ({ d
 const KnowledgePage = lazy(() => import("./routes/KnowledgePage").then((m) => ({ default: m.KnowledgePage })));
 const KnowledgeOpenPage = lazy(() => import("./routes/KnowledgeOpenPage").then((m) => ({ default: m.KnowledgeOpenPage })));
 const GalleryPage = lazy(() => import("./routes/GalleryPage").then((m) => ({ default: m.GalleryPage })));
+const ActiveResearchPage = lazy(() => import("./routes/ActiveResearchPage").then((m) => ({ default: m.ActiveResearchPage })));
 const AutopilotPage = lazy(() => import("./routes/AutopilotPage").then((m) => ({ default: m.AutopilotPage })));
 const VcrCalculationWorkbenchPage = lazy(() => import("./routes/VcrCalculationWorkbenchPage").then((m) => ({ default: m.VcrCalculationWorkbenchPage })));
 const VcrMethodWorkbenchPage = lazy(() => import("./routes/VcrMethodWorkbenchPage").then((m) => ({ default: m.VcrMethodWorkbenchPage })));
@@ -140,6 +141,7 @@ export const routes: RouteObject[] = [
         // without the id, so opening a task from the list is not a remount (the kernel's frame is placed over the task's pane
         // by `SessionFrameHost`). `?task=` and `?digest=` are the old addresses and are resolved by the page.
         { path: "autopilot/:taskId?", element: <AutopilotPage /> },
+        { path: "active-research", element: <ActiveResearchPage /> },
         { path: "memory", element: <MemoryHubPage /> },
         // 「记忆地图」 was a tab until 2026-10-27, and is part of 总览 now: an old address goes there with what it can carry over.
         { path: "memory/map", element: <MemoryMapRedirect /> },

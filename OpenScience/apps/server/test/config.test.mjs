@@ -35,6 +35,24 @@ async function withoutRuntimeEnvironment(run) {
   }
 }
 
+test("the research-database connector reads its allowlist and keyring file from the environment, and is off with neither", () => {
+  const names = ["OPEN_SCIENCE_RESEARCH_DB_ALLOW", "OPEN_SCIENCE_RESEARCH_DB_KEYRING_FILE"];
+  const saved = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  try {
+    for (const name of names) delete process.env[name];
+    const off = loadConfig({ rootDir: repoRoot });
+    assert.equal(off.researchDbAllow, ""); assert.equal(off.researchDbKeyringFile, "");
+    process.env.OPEN_SCIENCE_RESEARCH_DB_ALLOW = " db.example.org:5432=8.8.8.8 ";
+    process.env.OPEN_SCIENCE_RESEARCH_DB_KEYRING_FILE = "/run/secrets/research-db-keyring";
+    const on = loadConfig({ rootDir: repoRoot });
+    assert.equal(on.researchDbAllow, "db.example.org:5432=8.8.8.8"); assert.equal(on.researchDbKeyringFile, "/run/secrets/research-db-keyring");
+    const overridden = loadConfig({ rootDir: repoRoot, researchDbAllow: "other.example.org:5433=1.1.1.1", researchDbKeyringFile: "/tmp/keys" });
+    assert.equal(overridden.researchDbAllow, "other.example.org:5433=1.1.1.1"); assert.equal(overridden.researchDbKeyringFile, "/tmp/keys");
+  } finally {
+    for (const name of names) { if (saved[name] === undefined) delete process.env[name]; else process.env[name] = saved[name]; }
+  }
+});
+
 test("the runtime mode defaults to a real kernel rather than a mock", async () => {
   // It used to default to "opencode" and point at a bundled binary. There is
   // one kernel now and it ships inside the runtime image, so what remains
