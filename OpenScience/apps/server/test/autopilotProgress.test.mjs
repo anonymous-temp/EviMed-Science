@@ -107,6 +107,25 @@ test("the researcher's own messages and the material they added to this question
   assert.match(renderAutopilotProgress(result), /researcherNotes/);
 });
 
+test("a table imported from the researcher's database says in its material entry how much of the table it holds, and where the note that explains it is", () => {
+  const snapshot = { kind: "research-database-snapshot", partial: true, truncated: true, rowCount: 20000, totalRows: 52340, totalRowsExact: true, withheldCells: 3, droppedColumnCount: 2,
+    sidecar: "knowledge-base/databases/.evimed-revisions/" + "a".repeat(64) + "/public.cohort-1a2b3c4d.import.json" };
+  const csv = "knowledge-base/databases/.evimed-revisions/" + "a".repeat(64) + "/public.cohort-1a2b3c4d.csv";
+  const result = buildAutopilotProgress({ ...input, agenda: withMaterial({}, "src_table", "src_plain"),
+    sources: [source("src_table", { payload: { paths: [csv], snapshot } }), source("src_plain")] });
+  assert.deepEqual(result.materials[0].import, { fromDatabase: true, partial: true, truncated: true, rowCount: 20000, totalRows: 52340, totalRowsExact: true, withheldCells: 3,
+    droppedColumnCount: 2, details: ".evimed-knowledge/databases/.evimed-revisions/" + "a".repeat(64) + "/public.cohort-1a2b3c4d.import.json" });
+  assert.equal(result.materials[0].path, ".evimed-knowledge/databases/.evimed-revisions/" + "a".repeat(64) + "/public.cohort-1a2b3c4d.csv");
+  assert.equal("import" in result.materials[1], false, "an ordinary document carries no import note");
+  // What the page reads is the same note; a note that is not one of ours, or points outside the knowledge base, is not passed on.
+  assert.deepEqual(projectResearchState(result).materials[0].import.details.endsWith("public.cohort-1a2b3c4d.import.json"), true);
+  assert.equal("import" in projectResearchState(result).materials[1], false);
+  const odd = buildAutopilotProgress({ ...input, agenda: withMaterial({}, "src_a", "src_b"),
+    sources: [source("src_a", { payload: { snapshot: { kind: "something-else", partial: true } } }), source("src_b", { payload: { snapshot: { ...snapshot, sidecar: "../../etc/passwd", rowCount: "many" } } })] });
+  assert.equal("import" in odd.materials[0], false);
+  assert.equal("details" in odd.materials[1].import, false); assert.equal(odd.materials[1].import.rowCount, null);
+});
+
 test("another question's messages, material and stop never reach this one", () => {
   const other = { id: "other-agenda", projectId: "p", payload: { messages: [{ requestId: "x", note: "别的问题的更正", at: "2026-09-29T01:00:00Z" }], materials: [{ sourceId: "src_a", addedAt: "2026-09-29T01:00:00Z" }],
     plannerStop: { kind: "needs_input", reason: "别的问题缺数据", at: "2026-09-29T02:00:00Z" } } };

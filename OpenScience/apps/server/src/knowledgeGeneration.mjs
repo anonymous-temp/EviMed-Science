@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { canonicalJson, isKnowledgeMirrorPath, normalizeSourcePageMap } from "@evimed/domain";
 import { isCompiledPage, sourceRendition } from "./openVikingSourceSync.mjs";
-import { sourceParserRevision, sourceReadable } from "./sourceService.mjs";
+import { isResearchDatabaseSource, sourceParserRevision, sourceReadable } from "./sourceService.mjs";
 import { projectResourcesRoot } from "./openVikingLayout.mjs";
 import { HttpError } from "./security.mjs";
 
@@ -31,6 +31,8 @@ export async function readKnowledgeSourceInput({ sources, ownerId, projectId, so
   const payload = source?.payload;
   if (!source || source.id !== sourceId || source.kind !== "source" || source.projectId !== projectId || source.deletedAt != null
     || !sourceReadable(payload) || payload.analysis?.generation !== payload.generation) return null;
+  // A table imported from the researcher's own database is not an input of any compile (`isResearchDatabaseSource`).
+  if (isResearchDatabaseSource(source)) return null;
   if (!allowGenerated && (isCompiledPage(source) || isCompiledPage({ payload: { paths: [payload.outputs?.artifactPath] } })
     || (generatedIds ?? (documents ? await readKnowledgeGeneratedIds({ documents, ownerId, projectId }) : new Set())).has(sourceId))) return null;
   if (!positive(source.revision) || !positive(payload.generation) || !positive(payload.version)

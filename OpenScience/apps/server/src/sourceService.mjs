@@ -67,6 +67,18 @@ export function sourceReadable(payload) {
 }
 
 /**
+ * Whether a source is a table imported from the researcher's own database (`knowledge-base/databases/`). It is data the
+ * project's runs read -- `kb_search`, `kb_browse` and the dataset tools -- and it is kept OUT of the knowledge engine and
+ * out of the compiled wiki and graph: rows of a patient table are not for retrieval across the account, and a wiki page
+ * quoting them would carry them to where the table's access rules do not reach. Read off where the file lives, like a
+ * compiled page (`isCompiledPage`), never off its name.
+ * @param {any} source a source record
+ */
+export function isResearchDatabaseSource(source) {
+  return (Array.isArray(source?.payload?.paths) ? source.payload.paths : []).some((/** @type {string} */ file) => sourceOriginOf({ path: file }) === "database");
+}
+
+/**
  * Whether a document's text is in and its understanding has not ended: the one
  * finished state an ingestion job still works on. The job's lease and the
  * source's generation are what fence that work, exactly as while the text was
@@ -543,18 +555,33 @@ function retiredSourceRun(payload) {
 }
 
 /**
+ * What a table imported from the researcher's own database says about how much of the table the file holds
+ * (`researchDbImport.mjs`, `researchDbSourceFacts`): kept on the source as `payload.snapshot`, read by the knowledge base's
+ * page, the study's material entry and the engine's exclusion (`isResearchDatabaseSource`). Bounded, and a plain copy.
+ * @param {unknown} value @returns {Record<string, any>}
+ */
+function snapshotFacts(value) {
+  const facts = /** @type {any} */ (value);
+  if (!facts || typeof facts !== "object" || Array.isArray(facts) || facts.kind !== "research-database-snapshot" || Buffer.byteLength(JSON.stringify(facts)) > 16_384) {
+    throw new HttpError(400, "source_payload_invalid", "Source import facts are invalid.");
+  }
+  return JSON.parse(JSON.stringify(facts));
+}
+
+/**
  * What a link or a note says about its source beyond the bytes: the title the researcher gave a note or the page gave
  * itself, and where a snapshot was read from and when. Stored on the source row, so a row can say 「网页 · nmpa.gov.cn · 链接」
  * and a refresh knows which address to read again; the bytes stay the snapshot's own.
  * @param {Record<string,any>} input
- * @returns {{ title: string | null, link: null | { url: string, finalUrl: string, site: string, fetchedAt: string, rendered: boolean, original: string | null } }}
+ * @returns {{ title: string | null, snapshot: Record<string, any> | null, link: null | { url: string, finalUrl: string, site: string, fetchedAt: string, rendered: boolean, original: string | null } }}
  */
 function registrationFacts(input) {
   const title = input.title == null || input.title === "" ? null : text(input.title, "source title", 300);
-  if (input.link == null) return { title, link: null };
+  const snapshot = input.snapshot == null ? null : snapshotFacts(input.snapshot);
+  if (input.link == null) return { title, link: null, snapshot };
   const link = input.link;
   if (typeof link !== "object" || Array.isArray(link)) throw new HttpError(400, "source_payload_invalid", "Source link is invalid.");
-  return { title, link: {
+  return { title, snapshot, link: {
     url: text(link.url, "link url", 2048),
     finalUrl: text(link.finalUrl ?? link.url, "link final url", 2048),
     site: text(link.site, "link site", 255),
@@ -691,7 +718,7 @@ export class SourceService {
           familyId, version: publicationRevision, generation: tombstone ? Number(tombstone.payload.generation) + 1 : 1,
           ...(tombstone ? { deletion: null } : {}), docType, depth, valueVector: defaultValueVector(docType), reasons: [reason],
           status: "queued", extractorVersion: this.extractorVersion, coverage: null, outputs: {}, override: null,
-          ...(facts.title ? { title: facts.title } : {}), ...(facts.link ? { link: facts.link } : {}), createdAt: now, updatedAt: now,
+          ...(facts.title ? { title: facts.title } : {}), ...(facts.link ? { link: facts.link } : {}), ...(facts.snapshot ? { snapshot: facts.snapshot } : {}), createdAt: now, updatedAt: now,
           publication: { current: true, bindings: { [familyId]: { logicalPath, current: true, publicationRevision } } } };
         exact = await this.documents.put(userId, "source", sourceId, payload,
           { expectedRevision: tombstone?.revision ?? 0, projectId, restoreDeleted: Boolean(tombstone) });
@@ -748,10 +775,11 @@ export class SourceService {
     const stored = source.payload;
     const linkChanged = facts.link && (stored.link?.fetchedAt !== facts.link.fetchedAt || stored.link?.url !== facts.link.url);
     const titleChanged = facts.title && stored.title !== facts.title;
-    if (!linkChanged && !titleChanged) return source;
+    const snapshotChanged = facts.snapshot && JSON.stringify(stored.snapshot ?? null) !== JSON.stringify(facts.snapshot);
+    if (!linkChanged && !titleChanged && !snapshotChanged) return source;
     try {
       return await this.documents.put(userId, "source", source.id, { ...stored,
-        ...(titleChanged ? { title: facts.title } : {}), ...(linkChanged ? { link: facts.link } : {}), updatedAt: this.now().toISOString() },
+        ...(titleChanged ? { title: facts.title } : {}), ...(linkChanged ? { link: facts.link } : {}), ...(snapshotChanged ? { snapshot: facts.snapshot } : {}), updatedAt: this.now().toISOString() },
       { expectedRevision: source.revision, projectId: source.projectId });
     } catch (error) {
       if (!isConflict(error)) throw error;

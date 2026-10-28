@@ -9,7 +9,7 @@ import { compileIdempotencyKey } from "./openVikingResources.mjs";
 import { isCompiledPage } from "./openVikingSourceSync.mjs";
 import { HttpError } from "./security.mjs";
 import { LIBRARY_PROJECT_ID } from "./internalProjects.mjs";
-import { projectSourceManifestRecord, sourceIndexDocument, sourceReadable } from "./sourceService.mjs";
+import { isResearchDatabaseSource, projectSourceManifestRecord, sourceIndexDocument, sourceReadable } from "./sourceService.mjs";
 
 /**
  * 「知识页」: a project's documents compiled into a linked wiki and a knowledge graph by OpenViking's own Compile, and
@@ -260,6 +260,15 @@ export class KnowledgePageService {
   /** Whether a source record is a mirrored file of a compiled tree. @param {any} source */
   static isPage(source) { return isCompiledPage(source); }
 
+  /**
+   * Whether a source record is not a document for the compile to read: a page it wrote itself, or a table imported from the
+   * researcher's own database. Such a table is never pushed to the engine (`OpenVikingSourceSync.pushable`), so the compile
+   * cannot read it; it is also not counted toward the threshold of readable documents, not announced as a change, and not
+   * a text a page's quotation is checked against.
+   * @param {any} source
+   */
+  static isExcluded(source) { return isCompiledPage(source) || isResearchDatabaseSource(source); }
+
   // -------------------------------------------------------------------------------------------------------------------
   // What the project's documents do to the queue
 
@@ -271,7 +280,7 @@ export class KnowledgePageService {
     if (!this.enabled || projectId === LIBRARY_PROJECT_ID) return;
     try {
       const source = await this.sources.get(userId, sourceId);
-      if (!source || source.projectId !== projectId || KnowledgePageService.isPage(source)) return;
+      if (!source || source.projectId !== projectId || KnowledgePageService.isExcluded(source)) return;
       // A document is announced when its text is in and again when its understanding ends: the second says nothing the
       // round that read the text has not already taken in.
       const context = await this.#knowledgeContext(userId, projectId);
@@ -552,7 +561,7 @@ export class KnowledgePageService {
     let cursor = null;
     for (let page = 0; page < SCAN_LIMIT / 100; page += 1) {
       const reply = await this.sources.list(userId, { projectId, state: "ready", limit: 100, cursor });
-      found.push(...reply.items.filter((/** @type {any} */ item) => !KnowledgePageService.isPage(item) && !item.deletedAt));
+      found.push(...reply.items.filter((/** @type {any} */ item) => !KnowledgePageService.isExcluded(item) && !item.deletedAt));
       cursor = reply.nextCursor;
       if (!cursor) break;
     }
@@ -572,7 +581,7 @@ export class KnowledgePageService {
       if (cache.has(id) || !SOURCE_ID.test(id)) continue;
       try {
         const source = await this.sources.get(userId, id).catch(() => null);
-        if (!source || source.projectId !== projectId || source.deletedAt || KnowledgePageService.isPage(source) || context?.kind === "geo-project" && !await context.acceptSource(source)) {
+        if (!source || source.projectId !== projectId || source.deletedAt || KnowledgePageService.isExcluded(source) || context?.kind === "geo-project" && !await context.acceptSource(source)) {
           // Not a document of this project: the account's library may hold it, and its copy there is what the compile read.
           const copy = context?.kind !== "geo-project" && this.libraryText ? await this.libraryText(userId, id, projectId).catch(() => null) : null;
           if (copy) cache.set(id, { title: /^#[ \t]+(.+)$/m.exec(copy)?.[1]?.trim() ?? id, text: copy });

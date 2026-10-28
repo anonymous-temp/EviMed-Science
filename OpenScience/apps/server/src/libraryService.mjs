@@ -7,7 +7,7 @@ import { LIBRARY_PROJECT_ID } from "./internalProjects.mjs";
 import { LIBRARY_ALL_PROJECTS, effectiveProjects, libraryRecordCovers, libraryRecordProjects, libraryViewsRoot, ordinaryHolderProjects, parseLibraryProjects } from "./libraryScope.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
 import { HttpError, assertNoSymlinkPath, readJson, safeId, sendJson, writeFileAtomicNoFollow } from "./security.mjs";
-import { sourceIndexDocument, sourceParserRevision, sourceReadable } from "./sourceService.mjs";
+import { isResearchDatabaseSource, sourceIndexDocument, sourceParserRevision, sourceReadable } from "./sourceService.mjs";
 
 /**
  * The personal library (plan §3.2 #4–5): the documents a researcher keeps
@@ -412,6 +412,9 @@ export class LibraryService {
     if (sourceOriginOf({ connectorType: source.payload.connector?.type, path: source.payload.paths?.[0] }) === "wiki") {
       throw new HttpError(409, "library_source_invalid", "A knowledge page belongs to its project; share the documents it quotes instead.");
     }
+    // A table imported from the researcher's own database stays in its project: the library is pushed to the knowledge engine
+    // and shared across projects, and the table's rows are for that project's runs to read as a file.
+    if (isResearchDatabaseSource(source)) throw new HttpError(409, "library_source_invalid", "A table imported from a database stays in its project.");
     const sha256 = String(source.payload.fingerprint?.sha256 ?? "");
     if (!SHA256.test(sha256)) throw new HttpError(409, "library_source_invalid", "The source has no content digest.");
     const id = `library:${sha256}`;
