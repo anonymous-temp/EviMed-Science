@@ -20,6 +20,8 @@ import { useGeoProjectIds } from "@/components/geo/useGeoProjectIds";
 import { useVcrProjects } from "@/components/vcr/useVcrProjectIds";
 import { announceRunsChanged, relativeTime, runMoment, runTitle } from "@/lib/runPresentation";
 import { chatPath } from "@/lib/runLocation";
+import { getProjectLibraryLoss, type ProjectLibraryLoss } from "@/lib/sourceClient";
+import { projectDeletionNote } from "@/components/sources/deletionNotes";
 import { groupConversations, type Conversation } from "@/lib/conversations";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
@@ -83,6 +85,15 @@ export function ProjectsSection() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busyProjectId, setBusyProjectId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<WebProject | null>(null);
+  // What deleting that project would take from other projects: documents only it holds that were sent to them. Asked when the dialog
+  // opens; a question that cannot be answered costs the sentence, never the deletion.
+  const [libraryLoss, setLibraryLoss] = useState<{ projectId: string; items: ProjectLibraryLoss[] } | null>(null);
+  useEffect(() => {
+    if (!pendingDelete) return undefined;
+    let live = true;
+    void getProjectLibraryLoss(pendingDelete.id).then((answer) => { if (live) setLibraryLoss({ projectId: pendingDelete.id, items: answer.items }); }, () => {});
+    return () => { live = false; };
+  }, [pendingDelete]);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
@@ -317,6 +328,7 @@ export function ProjectsSection() {
         <ConfirmDialog
           title={`删除项目“${labelOf(labels, pendingDelete)}”？`}
           body={`${pendingKind === "own" ? "" : MODULE_DELETE_WARNING[pendingKind]}这个项目的文件、对话与运行环境都会删除，无法恢复；需要留底的话，先导出。`}
+          consequences={libraryLoss?.projectId === pendingDelete.id ? projectDeletionNote(libraryLoss.items, labels) ?? undefined : undefined}
           confirmLabel="删除项目"
           onConfirm={() => void confirmDeleteProject()}
           onCancel={() => setPendingDelete(null)}

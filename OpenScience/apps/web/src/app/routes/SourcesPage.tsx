@@ -11,7 +11,7 @@ import { getWebProjectId, hasWebApi, webErrorMessage } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
 import { useProjectStore } from "@/lib/projects";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
-import { removeSource, refetchSource, retrySource, uploadPersonalFile, type SourceCounts, type SourceKind, type SourceRecord } from "@/lib/sourceClient";
+import { removeDocument, refetchSource, retrySource, uploadPersonalFile, type SourceCounts, type SourceKind, type SourceRecord } from "@/lib/sourceClient";
 import { productErrorMessage } from "@/lib/productClient";
 import { pickFiles, uploadFilesToWorkspace } from "@/lib/backend";
 import { KNOWLEDGE_BASE_ACCEPT, KNOWLEDGE_BASE_UPLOAD_HINT, partitionKnowledgeBaseFiles } from "@/lib/knowledgeBaseFiles";
@@ -19,7 +19,6 @@ import { legacySourceParam, listParams, listPath, readListState, readerPath, rec
 import { useFileDrop } from "@/lib/useFileDrop";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
-import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Drawer } from "@/components/ui/Drawer";
 import type { FilterOption } from "@/components/ui/FilterChips";
 import { List } from "@/components/ui/ListRow";
@@ -34,6 +33,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { AddLinkDialog, NewNoteDialog } from "@/components/sources/AddEntryDialogs";
 import { AppliesToDialog, conversationProjects } from "@/components/sources/AppliesTo";
 import { ConversationProjectDialog } from "@/components/sources/ConversationProjectDialog";
+import { DeleteDocumentDialog } from "@/components/sources/DeleteDocumentDialog";
 import { KnowledgeViews, ProjectList } from "@/components/sources/KnowledgeColumn";
 import { LibraryDriveImport } from "@/components/sources/LibraryDriveImport";
 import { ProjectKnowledge, usePagesOffered } from "@/components/sources/ProjectKnowledge";
@@ -505,13 +505,12 @@ function KnowledgeBase({ sourceId }: { sourceId: string | null }) {
       </FormDialog>}
       {dialog === "link" && <AddLinkDialog destinations={destinationOptions} projectId={destinationProject} onClose={() => setDialog(null)} onAdded={onLinkAdded} />}
       {dialog === "note" && <NewNoteDialog destinations={destinationOptions} projectId={destinationProject} onClose={() => setDialog(null)} onAdded={onNoteAdded} />}
-      {applying && <AppliesToDialog source={applying} projects={groups.own} labels={groups.labels} onClose={() => setApplying(null)} onSaved={applied} />}
+      {applying && <AppliesToDialog source={applying} projects={groups.applicable} labels={groups.labels} onClose={() => setApplying(null)} onSaved={applied} />}
       {choosing && <ConversationProjectDialog options={conversationProjects(choosing.sources, groups)} onClose={() => setChoosing(null)}
         onChoose={(projectId) => { const sources = choosing.sources; setChoosing(null); void startConversation(projectId, sources); }} />}
-      {deleting && <ConfirmDialog title="删除这份资料？" body="删除后不再用于回答。"
-        confirmLabel="删除" onCancel={() => setDeleting(null)}
+      {deleting && <DeleteDocumentDialog source={deleting} labels={groups.labels} onCancel={() => setDeleting(null)}
         onConfirm={() => void mutate(async () => {
-          await removeSource(deleting.id, deleting.revision);
+          await removeDocument(deleting.id, deleting.revision);
           setSelected((previous) => { const next = new Map(previous); next.delete(deleting.id); return next; });
           if (sourceId === deleting.id) navigate(listPath(listState), { replace: true, state: { kbRestore: true } });
         })} />}

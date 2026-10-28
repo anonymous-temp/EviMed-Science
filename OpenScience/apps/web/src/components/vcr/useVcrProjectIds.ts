@@ -17,6 +17,8 @@ export interface VcrProjectSets {
   /** A study project's id → the study's id. */
   studyOf: ReadonlyMap<string, string>;
   calculations: ReadonlyMap<string, string>;
+  /** The projects of studies kept for a task: the list shows them as the account's own, yet they belong to the module all the same. */
+  tasks: ReadonlySet<string>;
 }
 
 /** Drafts this browser has just made: the answer to 「新建研究」 is known before the list is re-read, and a draft must not flash in the sidebar between the two. */
@@ -59,7 +61,7 @@ const DRAFT_WATCH_LIMIT_MS = 5 * 60_000;
  * in its conversation appeared only after a reload. A list that cannot be read costs the icons, never the list.
  */
 export function useVcrProjects(enabled: boolean, projectsKey: string, currentId?: string): VcrProjectSets {
-  const [sets, setSets] = useState<VcrProjectSets>({ studies: NONE, drafts: NONE, studyOf: NO_STUDIES, calculations: NO_STUDIES });
+  const [sets, setSets] = useState<VcrProjectSets>({ studies: NONE, drafts: NONE, studyOf: NO_STUDIES, calculations: NO_STUDIES, tasks: NONE });
   // A hint arrives from outside React: the render it asks for is the one that reads `hinted` again.
   const [, rerender] = useState(0);
   const bump = useCallback(() => rerender((value) => value + 1), []);
@@ -87,7 +89,7 @@ export function useVcrProjects(enabled: boolean, projectsKey: string, currentId?
         for (const projectId of taskProjects) hinted.delete(projectId);
         for (const projectId of studies) hinted.delete(projectId);
         for (const projectId of drafts) hinted.delete(projectId);
-        setSets((previous) => (same(previous, { studies, drafts, studyOf, calculations }) ? previous : { studies, drafts, studyOf, calculations }));
+        setSets((previous) => (same(previous, { studies, drafts, studyOf, calculations, tasks: taskProjects }) ? previous : { studies, drafts, studyOf, calculations, tasks: taskProjects }));
         if (hinted.size !== hints) bump();
       })
       .catch(() => { /* the folders stay folders */ });
@@ -95,7 +97,7 @@ export function useVcrProjects(enabled: boolean, projectsKey: string, currentId?
 
   useEffect(() => {
     if (!enabled) {
-      setSets({ studies: NONE, drafts: NONE, studyOf: NO_STUDIES, calculations: NO_STUDIES });
+      setSets({ studies: NONE, drafts: NONE, studyOf: NO_STUDIES, calculations: NO_STUDIES, tasks: NONE });
       return undefined;
     }
     read();
@@ -136,7 +138,7 @@ export function useVcrProjects(enabled: boolean, projectsKey: string, currentId?
     if (!enabled || !hinted.size) return sets;
     const studyOf = new Map(sets.studyOf);
     for (const [projectId, studyId] of hinted) if (studyId && !studyOf.has(projectId)) studyOf.set(projectId, studyId);
-    return { studies: sets.studies, drafts: new Set([...sets.drafts, ...hinted.keys()]), studyOf, calculations: sets.calculations };
+    return { studies: sets.studies, drafts: new Set([...sets.drafts, ...hinted.keys()]), studyOf, calculations: sets.calculations, tasks: sets.tasks };
     // `hinted` is read when a hint arrives (`rerender`): the memo is keyed by the sets, which `bump` does not change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, sets, hinted.size]);
@@ -145,6 +147,7 @@ export function useVcrProjects(enabled: boolean, projectsKey: string, currentId?
 function same(a: VcrProjectSets, b: VcrProjectSets): boolean {
   return a.studies.size === b.studies.size && a.drafts.size === b.drafts.size
     && [...b.studies].every((id) => a.studies.has(id)) && [...b.drafts].every((id) => a.drafts.has(id))
+    && a.tasks.size === b.tasks.size && [...b.tasks].every((id) => a.tasks.has(id))
     && a.calculations.size === b.calculations.size && [...b.calculations].every(([projectId, studyId]) => a.calculations.get(projectId) === studyId)
     && [...b.studyOf].every(([projectId, studyId]) => a.studyOf.get(projectId) === studyId);
 }

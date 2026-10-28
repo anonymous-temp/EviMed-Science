@@ -16,7 +16,7 @@ import { SourceReader } from "./SourceReader";
 
 const mocks = vi.hoisted(() => ({
   getSource: vi.fn(), getSourceUnderstanding: vi.fn(), getSourceMaterials: vi.fn(), getSourceFamily: vi.fn(), getSourceUses: vi.fn(), getSourceDependents: vi.fn(),
-  retrySource: vi.fn(), removeSource: vi.fn(), refetchSource: vi.fn(), getSourceNote: vi.fn(), saveSourceNote: vi.fn(),
+  retrySource: vi.fn(), removeDocument: vi.fn(), refetchSource: vi.fn(), getSourceNote: vi.fn(), saveSourceNote: vi.fn(),
   listDuplicateCandidates: vi.fn(), decideDuplicateGroup: vi.fn(), setSourceProjects: vi.fn(),
   downloadSourceFile: vi.fn(), downloadArtifact: vi.fn(), toastSuccess: vi.fn(), toastError: vi.fn(), getKnowledgePage: vi.fn(), getKnowledgeStatus: vi.fn(),
 }));
@@ -25,7 +25,7 @@ const context = vi.hoisted(() => ({ projectId: "default" }));
 const layout = vi.hoisted(() => ({ width: 1200, observers: new Set<() => void>() }));
 
 vi.mock("@/lib/sourceClient", async (importOriginal) => ({ ...(await importOriginal<object>()), ...Object.fromEntries(
-  ["getSource", "getSourceUnderstanding", "getSourceMaterials", "getSourceFamily", "getSourceUses", "retrySource", "removeSource", "refetchSource", "getSourceNote", "saveSourceNote",
+  ["getSource", "getSourceUnderstanding", "getSourceMaterials", "getSourceFamily", "getSourceUses", "retrySource", "removeDocument", "refetchSource", "getSourceNote", "saveSourceNote",
     "listDuplicateCandidates", "decideDuplicateGroup", "setSourceProjects", "getKnowledgePage", "getKnowledgeStatus"].map((name) => [name, (mocks as Record<string, unknown>)[name]])) }));
 vi.mock("@/lib/knowledgeBaseClient", async (importOriginal) => ({ ...(await importOriginal<object>()), getSourceDependents: mocks.getSourceDependents }));
 vi.mock("@/lib/artifactFile", async (importOriginal) => ({ ...(await importOriginal<object>()), downloadArtifact: mocks.downloadArtifact, downloadSourceFile: mocks.downloadSourceFile }));
@@ -190,7 +190,7 @@ describe("a document's page", () => {
     mocks.getSourceDependents.mockResolvedValue({ memories: [], methods: [], results: [] });
     mocks.listDuplicateCandidates.mockResolvedValue({ items: [], scanned: 0, truncated: false });
     mocks.retrySource.mockResolvedValue(guideline);
-    mocks.removeSource.mockResolvedValue(guideline);
+    mocks.removeDocument.mockResolvedValue(guideline);
     mocks.refetchSource.mockResolvedValue({ source: webPage, duplicate: true, changed: false });
     mocks.setSourceProjects.mockResolvedValue({ libraryProjects: "all", appliesTo: "all" });
     mocks.getSourceNote.mockResolvedValue({ title: "10月3日组会记录", body: "确定 C1–C3 三类比较分开合并。" });
@@ -332,8 +332,10 @@ describe("a document's page", () => {
       await userEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
       const confirm = await screen.findByRole("alertdialog");
       expect(confirm).toHaveTextContent("删除这份资料？");
+      // What it does is said in the dialog: every copy of the file goes, not only this project's.
+      expect(confirm).toHaveTextContent("这份资料在账户里的所有副本都会删除");
       await userEvent.click(within(confirm).getByRole("button", { name: "删除" }));
-      await waitFor(() => expect(mocks.removeSource).toHaveBeenCalledWith("src_guideline", 3));
+      await waitFor(() => expect(mocks.removeDocument).toHaveBeenCalledWith("src_guideline", 3));
       await waitFor(() => expect(addressOf()).toBe("/app/files?scope=paper-1"));
     });
 
@@ -1142,7 +1144,7 @@ describe("a document's page", () => {
       await userEvent.click(await screen.findByRole("button", { name: `“${guideline.display.title}”的操作` }));
       await userEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
       await userEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "删除" }));
-      await waitFor(() => expect(mocks.removeSource).toHaveBeenCalledWith("src_guideline", 3));
+      await waitFor(() => expect(mocks.removeDocument).toHaveBeenCalledWith("src_guideline", 3));
     });
   });
 

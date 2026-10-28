@@ -82,7 +82,7 @@ export function AppliesTo({ source, labels, disabled, onOpen }: {
  */
 export function AppliesToDialog({ source, projects, labels, onClose, onSaved }: {
   source: SourceRecord;
-  /** The account's own projects: the only ones a document can be sent to. */
+  /** The projects a document can be sent to (`ProjectGroups.applicable`). */
   projects: readonly ProjectChoice[];
   labels: ReadonlyMap<string, string>;
   onClose: () => void;
@@ -93,6 +93,9 @@ export function AppliesToDialog({ source, projects, labels, onClose, onSaved }: 
   const choosable = new Set(projects.map((project) => project.id));
   const initialAll = source.libraryProjects === "all";
   const initialPicked = new Set(Array.isArray(source.libraryProjects) ? source.libraryProjects.filter((id) => choosable.has(id) && !held.has(id)) : []);
+  // Projects the record lists that this dialog does not offer (one put away since): they stay on it. The dialog changes what it shows
+  // and nothing else, and the server does not ask again about a project the record already has.
+  const unlisted = Array.isArray(source.libraryProjects) ? source.libraryProjects.filter((id) => !choosable.has(id) && !held.has(id)) : [];
   const [all, setAll] = useState(initialAll);
   const [picked, setPicked] = useState<ReadonlySet<string>>(initialPicked);
   const [busy, setBusy] = useState(false);
@@ -102,7 +105,7 @@ export function AppliesToDialog({ source, projects, labels, onClose, onSaved }: 
   const save = async (markSaved: () => void) => {
     setBusy(true); setError(null);
     try {
-      const entry = await setSourceProjects(source.id, all ? "all" : [...picked]);
+      const entry = await setSourceProjects(source.id, all ? "all" : [...picked, ...unlisted]);
       markSaved();
       onSaved({ sourceId: source.id, libraryProjects: entry.libraryProjects, appliesTo: entry.appliesTo });
     } catch (failure) { setError(productErrorMessage(failure)); setBusy(false); }

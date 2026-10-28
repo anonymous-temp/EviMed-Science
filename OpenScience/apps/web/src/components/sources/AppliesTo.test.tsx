@@ -12,6 +12,7 @@ vi.mock("@/lib/sourceClient", async (importOriginal) => ({ ...(await importOrigi
 const labels = new Map([["p1", "疳证 Meta"], ["p2", "心衰随访"], ["p3", "药物安全"], ["study", "SGLT2 虚拟研究"], ["geo", "某药 GEO"]]);
 const groups: ProjectGroups = {
   own: [{ id: "p1", label: "疳证 Meta" }, { id: "p2", label: "心衰随访" }, { id: "p3", label: "药物安全" }],
+  applicable: [{ id: "p1", label: "疳证 Meta" }, { id: "p2", label: "心衰随访" }, { id: "p3", label: "药物安全" }],
   studies: [{ id: "study", label: "SGLT2 虚拟研究" }], communication: [{ id: "geo", label: "某药 GEO" }], labels,
 };
 const source = (extra: Partial<SourceRecord> = {}) => ({
@@ -58,7 +59,7 @@ describe("the 「生效项目」 dialog", () => {
   beforeEach(() => { api.setSourceProjects.mockReset(); });
   afterEach(cleanup);
   const open = (document: SourceRecord, onSaved = vi.fn(), onClose = vi.fn()) => {
-    render(<AppliesToDialog source={document} projects={groups.own} labels={labels} onClose={onClose} onSaved={onSaved} />);
+    render(<AppliesToDialog source={document} projects={groups.applicable} labels={labels} onClose={onClose} onSaved={onSaved} />);
     return { onSaved, onClose };
   };
 
@@ -97,6 +98,16 @@ describe("the 「生效项目」 dialog", () => {
     cleanup();
     open(source({ personal: true, holders: [], libraryProjects: [], appliesTo: [] }));
     expect(screen.getAllByRole("checkbox")).toHaveLength(3);
+  });
+
+  it("sends back a project the record lists that the dialog does not offer (put away since), so saving changes only what it shows", async () => {
+    api.setSourceProjects.mockResolvedValue({ libraryProjects: ["old", "p3"], appliesTo: ["p1", "old", "p3"] });
+    open(source({ holders: [{ id: "p1", name: "疳证 Meta" }], libraryProjects: ["old"], appliesTo: ["p1", "old"] }));
+    const dialog = screen.getByRole("dialog", { name: "生效项目" });
+    expect(within(dialog).queryByRole("checkbox", { name: "old" })).not.toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole("checkbox", { name: "药物安全" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "保存" }));
+    expect(api.setSourceProjects).toHaveBeenCalledWith("src_one", ["p3", "old"]);
   });
 
   it("says a refusal in the registry's sentence and stays open with the choice", async () => {

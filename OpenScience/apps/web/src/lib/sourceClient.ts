@@ -375,8 +375,14 @@ export function retrySource(id: string, expectedRevision: number) {
 export function cancelSource(id: string, expectedRevision: number) {
   return productRequest<SourceRecord>(`/sources/${encodeURIComponent(id)}/cancel`, "POST", { expectedRevision });
 }
-export function removeSource(id: string, expectedRevision: number) {
-  return productRequest<SourceRecord>(`/sources/${encodeURIComponent(id)}`, "DELETE", { expectedRevision });
+/**
+ * Delete a document: the file as the knowledge base lists it once, so this row's source and every other copy of the same bytes the
+ * account holds (other projects, personal storage) in one operation the server performs, and the library entry with the last. `copies`
+ * names what went. `expectedRevision` is the row's own.
+ */
+export function removeDocument(id: string, expectedRevision: number) {
+  return productRequest<{ source: SourceRecord; copies: Array<{ id: string; projectId: string }> }>(
+    `/sources/${encodeURIComponent(id)}`, "DELETE", { expectedRevision, everywhere: true });
 }
 export interface SourceFamily {
   sourceId: string;
@@ -491,6 +497,15 @@ export function importOpenListSource(projectId: string, path: string) {
  */
 export function setSourceProjects(sourceId: string, projects: "all" | string[]) {
   return productRequest<{ libraryProjects: "all" | string[]; appliesTo: "all" | string[] }>(`/library/${encodeURIComponent(sourceId)}`, "PUT", { projects });
+}
+
+/**
+ * What deleting a project would take from the account's other projects: the documents only that project holds, which the person had
+ * sent to other projects (`"all"`, or the list without this project) — the library entry goes with its last holder.
+ */
+export interface ProjectLibraryLoss { sourceId: string; title: string; projects: "all" | string[] }
+export function getProjectLibraryLoss(projectId: string) {
+  return productRequest<{ items: ProjectLibraryLoss[] }>(`/library/project-loss?projectId=${encodeURIComponent(projectId)}`);
 }
 
 /* ------------------------------------------------------- knowledge pages -- */

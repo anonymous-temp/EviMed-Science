@@ -15,7 +15,7 @@ import { compositionFacts, precedes } from "@/test/compositionFixtures";
 import { SourcesPage } from "./SourcesPage";
 
 const mocks = vi.hoisted(() => ({
-  listSources: vi.fn(), retrySource: vi.fn(), removeSource: vi.fn(), refetchSource: vi.fn(),
+  listSources: vi.fn(), retrySource: vi.fn(), removeDocument: vi.fn(), refetchSource: vi.fn(),
   addSourceLink: vi.fn(), addSourceNote: vi.fn(), getSourceNote: vi.fn(), saveSourceNote: vi.fn(),
   getSourceUnderstanding: vi.fn(), getOpenListStatus: vi.fn(), uploadPersonalFile: vi.fn(),
   browseOpenList: vi.fn(), importOpenListSource: vi.fn(), listSourceFolders: vi.fn(), registerSourceFolder: vi.fn(), syncSourceFolder: vi.fn(), setSourceFolderStatus: vi.fn(),
@@ -30,7 +30,7 @@ const context = vi.hoisted(() => ({ projectId: "default", features: { openList: 
 // Only the request functions are replaced. `sourceFailureMessage` is a pure projection over the one error dictionary,
 // and a test that stubbed it would prove the page renders a string this file wrote rather than the registry's.
 vi.mock("@/lib/sourceClient", async (importOriginal) => ({ ...(await importOriginal<object>()), ...Object.fromEntries(
-  ["getOpenListStatus", "uploadPersonalFile", "listSources", "retrySource", "removeSource", "refetchSource", "addSourceLink", "addSourceNote", "getSourceNote", "saveSourceNote", "getSourceUnderstanding",
+  ["getOpenListStatus", "uploadPersonalFile", "listSources", "retrySource", "removeDocument", "refetchSource", "addSourceLink", "addSourceNote", "getSourceNote", "saveSourceNote", "getSourceUnderstanding",
     "getSource", "getSourceMaterials", "getSourceFamily", "getSourceUses", "getKnowledgePage", "setSourceProjects",
     "browseOpenList", "importOpenListSource", "listSourceFolders", "registerSourceFolder", "syncSourceFolder", "setSourceFolderStatus",
     "listDuplicateCandidates", "decideDuplicateGroup", "requestKnowledgeCompile",
@@ -181,7 +181,7 @@ describe("知识库", () => {
     mocks.listGeoProjects.mockResolvedValue([{ projectId: "geo-1" }]);
     mocks.getVcrHome.mockResolvedValue({ studies: [{ projectId: "study-1" }] });
     mocks.retrySource.mockResolvedValue(guideline);
-    mocks.removeSource.mockResolvedValue(guideline);
+    mocks.removeDocument.mockResolvedValue(guideline);
     mocks.refetchSource.mockResolvedValue({ source: page, duplicate: true, changed: false });
     mocks.setSourceProjects.mockResolvedValue({ libraryProjects: "all", appliesTo: "all" });
     mocks.addSourceLink.mockResolvedValue({ source: page, duplicate: false, changed: true });
@@ -355,7 +355,7 @@ describe("知识库", () => {
       expect(await screen.findByText(/无法加载资料/)).toBeInTheDocument();
       await userEvent.click(screen.getByRole("button", { name: "重试" }));
       expect(await screen.findByText(guideline.display.title)).toBeInTheDocument();
-      mocks.removeSource.mockRejectedValueOnce(new WebApiError("conflict", { status: 409, code: "source_revision_conflict" }));
+      mocks.removeDocument.mockRejectedValueOnce(new WebApiError("conflict", { status: 409, code: "source_revision_conflict" }));
       await menuOf(guideline.display.title);
       await userEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
       await userEvent.click(await screen.findByRole("button", { name: "删除" }));
@@ -587,7 +587,21 @@ describe("知识库", () => {
       await userEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
       expect(await screen.findByText("删除这份资料？")).toBeInTheDocument();
       await userEvent.click(screen.getByRole("button", { name: "删除" }));
-      await waitFor(() => expect(mocks.removeSource).toHaveBeenCalledWith("src_guideline", 3));
+      await waitFor(() => expect(mocks.removeDocument).toHaveBeenCalledWith("src_guideline", 3));
+    });
+
+    it("says what the delete does before it does it: every copy of the file, in the projects that hold it, and the projects that lose it with it", async () => {
+      const spread = makeSource("src_spread", { title: "送到了两个项目的方案.docx" }, {}, { holders: [{ id: "default", name: "我的研究" }], libraryProjects: ["paper-1"], appliesTo: ["default", "paper-1"] });
+      mocks.listSources.mockResolvedValue(listing([spread]));
+      renderPage();
+      await menuOf(spread.display.title);
+      await userEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
+      const confirm = await screen.findByRole("alertdialog");
+      expect(confirm).toHaveTextContent("“送到了两个项目的方案.docx”");
+      expect(confirm).toHaveTextContent("这份资料在账户里的所有副本都会删除（所在项目：“我的研究”）");
+      expect(confirm).toHaveTextContent("它原先还对“疳证 Meta 文献检索”生效，这些项目也读不到它了。");
+      await userEvent.click(within(confirm).getByRole("button", { name: "删除" }));
+      await waitFor(() => expect(mocks.removeDocument).toHaveBeenCalledWith("src_spread", 3));
     });
   });
 
@@ -779,7 +793,7 @@ describe("知识库", () => {
       await userEvent.click(within(screen.getByRole("region", { name: "资料阅读" })).getByRole("button", { name: `“${guideline.display.title}”的操作` }));
       await userEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
       await userEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "删除" }));
-      await waitFor(() => expect(mocks.removeSource).toHaveBeenCalledWith("src_guideline", 3));
+      await waitFor(() => expect(mocks.removeDocument).toHaveBeenCalledWith("src_guideline", 3));
       await waitFor(() => expect(addressOf()).toBe("/app/files"));
       expect(await screen.findByRole("heading", { level: 2, name: sheet.display.title })).toBeInTheDocument();
     });

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { setSourceProjects, getOpenListStatus, addSourceLink, addSourceNote, getSourceNote, listSources, refetchSource, saveSourceNote, saveToKnowledgeBase, getSourceUnderstanding, listSourceUnderstandingHistory, getKnowledgePageAt, saveKnowledgePage } from "./sourceClient";
+import { removeDocument, getProjectLibraryLoss, setSourceProjects, getOpenListStatus, addSourceLink, addSourceNote, getSourceNote, listSources, refetchSource, saveSourceNote, saveToKnowledgeBase, getSourceUnderstanding, listSourceUnderstandingHistory, getKnowledgePageAt, saveKnowledgePage } from "./sourceClient";
 
 const request = vi.hoisted(() => vi.fn());
 const command = vi.hoisted(() => vi.fn());
@@ -45,6 +45,22 @@ describe("the knowledge base's list", () => {
     request.mockResolvedValue({ items: [], nextCursor: null, counts: {} });
     await listSources({ kind: "all" }, { kind: "table" });
     expect(request).toHaveBeenLastCalledWith("/sources?scope=all&kind=table");
+  });
+});
+
+describe("deleting a document", () => {
+  beforeEach(() => { request.mockReset(); });
+
+  it("asks the server to remove the file everywhere — every copy of the bytes the account holds — in one request", async () => {
+    request.mockResolvedValue({ source: {}, copies: [] });
+    await removeDocument("src/one", 4);
+    expect(request).toHaveBeenLastCalledWith("/sources/src%2Fone", "DELETE", { expectedRevision: 4, everywhere: true });
+  });
+
+  it("asks what deleting a project takes from the others, by the project's id", async () => {
+    request.mockResolvedValue({ items: [] });
+    await getProjectLibraryLoss("paper 1");
+    expect(request).toHaveBeenLastCalledWith("/library/project-loss?projectId=paper%201");
   });
 });
 

@@ -437,6 +437,8 @@ export interface WebProject {
   lastActiveAt?: string | null;
   /** When the project was made, when the control plane keeps it: what tells two projects of one name apart. */
   createdAt?: string | null;
+  /** When the project was put away, or null/absent while it is live: an archived project is no place to send a document to. */
+  archivedAt?: string | null;
 }
 
 export interface WebPluginConfiguration {

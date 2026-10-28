@@ -9,12 +9,11 @@ import { productErrorMessage } from "@/lib/productClient";
 import { useProjectStore } from "@/lib/projects";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import {
-  decideDuplicateGroup, getSource, listDuplicateCandidates, refetchSource, removeSource, retrySource,
+  decideDuplicateGroup, getSource, listDuplicateCandidates, refetchSource, removeDocument, retrySource,
   type DuplicateGroup, type KnowledgePage, type SourceRecord,
 } from "@/lib/sourceClient";
 import { toast } from "@/lib/toast";
 import { Button, buttonClasses } from "@/components/ui/Button";
-import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Drawer } from "@/components/ui/Drawer";
 import { Menu } from "@/components/ui/Menu";
 // eslint-disable-next-line no-restricted-imports -- the switch of the document's own two views (内容 · 原文), inside the pane that holds it: not a view of the page, which a master-detail page has none of
@@ -24,6 +23,7 @@ import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
 import { AppliesTo, AppliesToDialog, appliesView, conversationProjects } from "./AppliesTo";
 import { ConversationProjectDialog } from "./ConversationProjectDialog";
+import { DeleteDocumentDialog } from "./DeleteDocumentDialog";
 import { DuplicateGroups } from "./DuplicateGroups";
 import { KnowledgePageView } from "./KnowledgePageView";
 import { SourceDependents } from "./SourceDependents";
@@ -175,7 +175,7 @@ export function SourceReader({ sourceId, listState, mode, backLabel, refresh = 0
     if (!source) return;
     setBusy(true);
     try {
-      await removeSource(source.id, source.revision);
+      await removeDocument(source.id, source.revision);
       setDeleting(false);
       onRemoved?.(source.id);
       navigate(back, { replace: true, state: { kbRestore: true } });
@@ -317,7 +317,7 @@ export function SourceReader({ sourceId, listState, mode, backLabel, refresh = 0
           onChoose={(chosen) => { const pending = conversation; setConversation(null); openConversation(chosen, pending.draft, pending.excerpt); }} />
       )}
       {source && applying && (
-        <AppliesToDialog source={source} projects={groups.own} labels={groups.labels} onClose={() => setApplying(false)}
+        <AppliesToDialog source={source} projects={groups.applicable} labels={groups.labels} onClose={() => setApplying(false)}
           onSaved={(change) => { setApplying(false); toast.success("已更新生效项目"); void load(true); onApplied?.(change); }} />
       )}
       {source && duplicatesOpen && (
@@ -326,8 +326,7 @@ export function SourceReader({ sourceId, listState, mode, backLabel, refresh = 0
         </Drawer>
       )}
       {source && deleting && (
-        <ConfirmDialog title="删除这份资料？" body="删除后不再用于回答。" confirmLabel="删除"
-          onCancel={() => setDeleting(false)} onConfirm={() => void remove()} />
+        <DeleteDocumentDialog source={source} labels={groups.labels} onCancel={() => setDeleting(false)} onConfirm={() => void remove()} />
       )}
     </>
   );
