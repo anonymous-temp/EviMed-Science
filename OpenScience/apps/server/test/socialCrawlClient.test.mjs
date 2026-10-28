@@ -489,7 +489,7 @@ test("a key file the web user cannot read is not configured, and each reason is 
 test("the URL has its own reasons, and plaintext follows the probe's rule: refused to a public address unless allowed, fine to a private one", () => {
   const status = (options) => createSocialCrawlClient({ apiKey: KEY, ...options }).status();
   assert.equal(status({}).reason, "url_missing");
-  for (const baseUrl of ["social.example", "ftp://social.example", "https://u:p@social.example", "https://social.example/?q=1", "https://social.example/#x"]) {
+  for (const baseUrl of ["social.example", "ftp://social.example", Object.assign(new URL("https://social.example"), { username: "u", password: "p" }).href, "https://social.example/?q=1", "https://social.example/#x"]) {
     assert.equal(status({ baseUrl }).reason, "url_invalid", baseUrl);
   }
   assert.equal(status({ baseUrl: "https://social.example" }).configured, true);

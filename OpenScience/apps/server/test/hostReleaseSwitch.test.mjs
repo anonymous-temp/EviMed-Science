@@ -283,7 +283,7 @@ test("the switch restarts what still reads the previous release through current,
     const tls = JSON.parse(await readFile(path.join(rel, "deploy/web/monitoring/targets/tls.json"), "utf8"));
     assert.deepEqual(tls[0], { targets: ["https://evimed.example.org/api/health"], labels: { probe: "public-tls" } });
     const external = JSON.parse(await readFile(path.join(rel, "deploy/web/monitoring/targets/external.json"), "utf8"));
-    assert.deepEqual(external.map((group) => group.targets), [["http://203.0.113.9:9999/providers"], ["http://203.0.113.9:9966/health"]]);
+    assert.deepEqual(external.map((group) => group.targets), [["http://203.0.113.9:9999/providers"], ["http://203.0.113.9:9966/health/ready"]]);
     // ...and Alertmanager's route to the control plane's alert receiver, the
     // one delivery every alert has (until 2026-09-28 they were all dropped).
     assert.match(result.stdout, /=== alert receiver follows the release ===/);

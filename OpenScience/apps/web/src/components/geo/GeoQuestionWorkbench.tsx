@@ -273,7 +273,7 @@ function ContractFields({ geoId, project, value, onChange, disabled }: { geoId: 
   const measurement = monitoring.state.kind === 'ready' ? monitoring.state.data.measurement : null;
   const engines = [...GEO_DEFAULT_ENGINES, ...GEO_OPTIONAL_ENGINES.filter(engine => value.engines.includes(engine) || project.availableEngines?.includes(engine))];
   return <fieldset disabled={disabled} className="flex flex-col gap-3"><legend className="text-ui font-semibold">这一版本的采样与报告口径</legend>
-    {monitoring.state.kind === 'loading' ? <Note action={null}>正在读取测量状态…</Note>
+    {monitoring.state.kind === 'loading' ? <Note action={null}>正在读取测量状态</Note>
       : monitoring.state.kind === 'error' ? <Note action={<Button variant="text" size="sm" onClick={monitoring.reload}>重试测量状态</Button>}>{monitoring.state.message}</Note>
         : monitoring.state.refreshError ? <Note action={<Button variant="text" size="sm" onClick={monitoring.reload}>重试测量状态</Button>}>测量状态更新失败，仍显示上次状态。{monitoring.state.refreshError}</Note>
           : !measurement ? <Note action={null}>测量状态未知，已选平台保留。</Note>
