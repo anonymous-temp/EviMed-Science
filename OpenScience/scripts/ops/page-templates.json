@@ -10,7 +10,7 @@
   ],
   "templates": {
     "T1": { "name": "list page", "tablist": "allowed", "toolbar": "allowed", "stepRail": "none", "outline": "none", "longViewports": 12 },
-    "T2": { "name": "master-detail page", "tablist": "none", "toolbar": "none", "stepRail": "none", "outline": "none", "longViewports": 12 },
+    "T2": { "name": "master-detail page", "tablist": "none", "toolbar": "allowed", "stepRail": "none", "outline": "none", "longViewports": 12 },
     "T3": { "name": "module page", "tablist": "allowed", "toolbar": "allowed", "stepRail": "every-tab", "outline": "none", "longViewports": 12 },
     "T4": { "name": "data page", "tablist": "allowed", "toolbar": "allowed", "stepRail": "none", "outline": "none", "longViewports": 12 },
     "T5": { "name": "reader page", "tablist": "allowed", "toolbar": "allowed", "stepRail": "none", "outline": "when-long", "orphans": "content", "longViewports": 6 },
