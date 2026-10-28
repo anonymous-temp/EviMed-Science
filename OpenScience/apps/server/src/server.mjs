@@ -325,7 +325,8 @@ import { inspectAutopilotDispatch, reclaimUnsentAutopilotRuntime } from "./autop
 import { createAutopilotRunScope, episodeContextBlock, episodePlacementCounts, episodeVisibleText, noteEpisodePlacement } from "./autopilotEpisodeScope.mjs";
 import { createAutopilotRoutes } from "./autopilotRoutes.mjs";
 import { researchDbCredentialsFromConfig } from "./researchDbCredentials.mjs";
-import { researchTableCsv, researchTableFileName } from "./researchDbSnapshot.mjs";
+import { createResearchDbPublisher } from "./researchDbPublish.mjs";
+import { researchDbMetricFamilies } from "./researchDbMetrics.mjs";
 import { createResearchDbRoutes } from "./researchDbRoutes.mjs";
 import { ResearchDbStaging } from "./researchDbStaging.mjs";
 import { cancelScheduledRun } from "./autopilotRunCancellation.mjs";
@@ -2090,6 +2091,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // What a saved page or a note says about itself beyond its bytes (`knowledgeBaseEntries.mjs`).
         ...(meta?.title ? { title: meta.title } : {}),
         ...(meta?.link ? { link: meta.link } : {}),
+        // How much of a table imported from the researcher's own database the file holds (`researchDbImport.mjs`).
+        ...(meta?.snapshot ? { snapshot: meta.snapshot } : {}),
         ...(meta?.logicalPath ? { logicalPath: meta.logicalPath } : {}),
       });
       await audit(ctx, "source.register", "completed", { target: registered.source.id, duplicate: registered.duplicate });
@@ -2401,47 +2404,22 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // file (`OPEN_SCIENCE_RESEARCH_DB_ALLOW`, `OPEN_SCIENCE_RESEARCH_DB_KEYRING_FILE`), or under the isolated test injection.
   const researchDbCredentials = researchDbCredentialsFromConfig({ environment: process.env.NODE_ENV, testOnly: overrides.researchDbTestOnly,
     database: productDatabase, testKey: overrides.researchDbTestKey, keyringFile: config.researchDbKeyringFile, allow: config.researchDbAllow,
+    maxConnections: config.researchDbLimits.connections,
     report: code => { process.stderr.write(`research database unavailable: ${code}\n`); } });
   const researchDbStaging = researchDbCredentials && productDatabase ? new ResearchDbStaging({ database: productDatabase, store,
     report: code => { void securityAudit(config, 'research_db.staging', 'failed', { code }).catch(() => {}); } }) : null;
   let researchDbCleanupTimer = null;
   let researchDbCleanupRun = Promise.resolve();
+  // The snapshot is a CSV source with a sidecar that says how much of the table it holds (`researchDbPublish.mjs`); it is
+  // written the way an upload is, so the size limit, the project's room and the audit line are the upload's.
+  const researchDbPublish = sourceService && productDatabase && researchDbCredentials && researchDbStaging && autopilotService
+    ? createResearchDbPublisher({ sourceService, database: productDatabase, credentials: researchDbCredentials, staging: researchDbStaging,
+      agenda: autopilotService, store, limits: config.researchDbLimits,
+      write: (ctx, file) => writeProjectUpload({ config, user: ctx.user, project: ctx.project }, file) }) : null;
   const researchDbRoutes = createResearchDbRoutes({ store, credentials: researchDbCredentials, agenda: autopilotService,
-    policy: config.researchDbAllow, maxJsonBytes: config.maxJsonBytes, open: overrides.researchDbOpen ?? undefined,
-    publish: sourceService && productDatabase && researchDbCredentials && researchDbStaging && autopilotService ? async ({ user, project, connectionId, agendaId, requestId, fingerprint, snapshot }) => {
-      // The snapshot is a CSV source (header row, UTF-8 with a byte order mark) named for its table and capture time.
-      const capturedAt = new Date().toISOString();
-      const rel = `knowledge-base/${researchTableFileName(snapshot.table, capturedAt)}`;
-      const bytes = researchTableCsv(snapshot);
-      const sha256 = createHash('sha256').update(bytes).digest('hex');
-      const stagePath = `knowledge-base/.evimed-revisions/${sha256}/${path.posix.basename(rel)}`;
-      const stageId = await researchDbStaging.reserve(user.id, project.id, stagePath);
-      return sourceService.withRegistrationLocks([`publication:${user.id}:${project.id}:${rel}`], async () => {
-        const current = await store.requireProject(user, project.id);
-        const locked = await productDatabase.query('SELECT id FROM evimed_control.projects WHERE user_id=$1 AND id=$2 FOR SHARE', [user.id, current.id]);
-        if (!locked.rows.length || current.userId !== user.id) throw new HttpError(404, 'project_not_found', 'Project not found.');
-        await productDatabase.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`research-db-snapshot:${JSON.stringify([user.id, current.id, requestId])}`]);
-        const previous = await researchDbCredentials.snapshotResult(user.id, current.id, requestId, fingerprint, productDatabase);
-        await researchDbStaging.lock(user.id, current.id, stageId, stagePath);
-        if (previous) { await researchDbStaging.complete(user.id, current.id, stageId); return previous; }
-        await researchDbCredentials.open(user.id, current.id, connectionId, productDatabase, true);
-        const question = await autopilotService.get(user.id, agendaId);
-        if (question.projectId !== current.id) throw new HttpError(404, 'autopilot_material_not_found', 'The research question was not found.');
-        autopilotService.assertNotArchived(question);
-        // A failed COMMIT can mean the server committed but its acknowledgment
-        // was lost. Never remove bytes from that ambiguous outcome here: the
-        // durable staging sweep checks the source ledger before deletion.
-        const saved = await writeProjectUpload({ config, user, project: current }, { root: 'base', rel, buffer: bytes,
-          meta: { title: `${snapshot.schema}.${snapshot.table}` }, createAlias: false });
-        if (!saved?.source?.id) throw new HttpError(503, 'research_db_unavailable', 'The database snapshot could not be published.');
-        await autopilotService.addMaterials(user.id, question.id, { sourceIds: [saved.source.id] });
-        const result = { sourceId: saved.source.id, capturedAt, rowCount: snapshot.rows.length, columns: snapshot.columns.length, truncated: snapshot.truncated,
-          oversizedValuesWithheld: snapshot.oversizedValuesWithheld };
-        await researchDbCredentials.recordSnapshot(user.id, current.id, requestId, fingerprint, result);
-        await researchDbStaging.complete(user.id, current.id, stageId);
-        return result;
-      });
-    } : null });
+    policy: config.researchDbAllow, caDir: config.researchDbCaDir, limits: config.researchDbLimits, maxJsonBytes: config.maxJsonBytes,
+    open: overrides.researchDbOpen ?? undefined, publish: researchDbPublish,
+    audit: (user, project, action, status, details) => audit({ config, user, project }, action, status, details) });
   // 「前沿动态」 (frontierService.mjs): composed only when switched on and a
   // product database exists; otherwise its routes answer 404
   // `frontier_not_enabled` and nothing of it runs. Its model calls are billed
@@ -7189,7 +7167,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (maintenanceService && (await maintenanceService.status()).state !== "open") {
           throw new HttpError(503, "maintenance_active", "The service is temporarily draining for maintenance.");
         }
-        const readiness = await readinessStatus(config, store, runtimeManager, memorySettings, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase, memoryIndexProvider, frontier, review, geo, vcr, credits, judgeService, capsuleService, { engine: openVikingEngine, modelCaller: openVikingModelCaller, nativeMemoryWorker, knowledge: knowledgeStatus });
+        const readiness = await readinessStatus(config, store, runtimeManager, memorySettings, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase, memoryIndexProvider, frontier, review, geo, vcr, credits, judgeService, capsuleService, { engine: openVikingEngine, modelCaller: openVikingModelCaller, nativeMemoryWorker, knowledge: knowledgeStatus }, researchDbRoutes);
         sendJson(res, readiness.ok ? 200 : 503, { data: readiness });
         return;
       }
@@ -7248,6 +7226,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           evolutionLeadSources,
           officialPromotion,
           officialPacks,
+          researchDb: researchDbRoutes,
         });
         return;
       }
@@ -10463,8 +10442,8 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ webVitals = null, judgeService = null, openViking = null, config, store, taskManager, runtimeManager, memorySettings, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memoryIndexProvider = null, runMetrics = null, imMetrics = null, webReader = null, deepseekTools = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null, evolutionLeadSources = null, officialPromotion = null, capsuleService = null, officialPacks = null }) {
-  const readiness = await readinessStatus(config, store, runtimeManager, memorySettings, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memoryIndexProvider, frontier, review, geo, vcr, credits, judgeService, capsuleService, openViking);
+async function operatorMetricsText({ webVitals = null, judgeService = null, openViking = null, config, store, taskManager, runtimeManager, memorySettings, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memoryIndexProvider = null, runMetrics = null, imMetrics = null, webReader = null, deepseekTools = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null, evolutionLeadSources = null, officialPromotion = null, capsuleService = null, officialPacks = null, researchDb = null }) {
+  const readiness = await readinessStatus(config, store, runtimeManager, memorySettings, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memoryIndexProvider, frontier, review, geo, vcr, credits, judgeService, capsuleService, openViking, researchDb);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
   const loadAverage = typeof os.loadavg === "function" ? os.loadavg() : [];
@@ -11113,6 +11092,8 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
   // The NCBI Gene Expression Omnibus workflow's six resource limits and its named downloads (geneExpressionMetrics.mjs;
   // two limits counted by the gateway as bytes arrive, four reported by the runtime's tool). Not 循证 GEO's.
   for (const family of geneExpressionMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
+  // The research-database connector's imports by outcome and its refusals and bitten limits by reason (researchDbMetrics.mjs).
+  for (const family of researchDbMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // Model requests booked uncertain, by why (usageLedger.mjs): a burst is a
   // provider or a caller losing calls, and shows here while it happens.
   const uncertain = usageUncertainMetricFamily();
@@ -11231,7 +11212,7 @@ async function readTailText(rootDir, file, maxBytes) {
   }
 }
 
-async function readinessStatus(config, store, runtimeManager, memorySettings = null, memoryIndexWorker = null, usageLedger = null, notificationService = null, documentParser = null, openList = null, productDatabase = null, memoryIndexProvider = null, frontier = null, review = null, geo = null, vcr = null, credits = null, judgeService = null, capsules = null, openViking = null) {
+async function readinessStatus(config, store, runtimeManager, memorySettings = null, memoryIndexWorker = null, usageLedger = null, notificationService = null, documentParser = null, openList = null, productDatabase = null, memoryIndexProvider = null, frontier = null, review = null, geo = null, vcr = null, credits = null, judgeService = null, capsules = null, openViking = null, researchDb = null) {
   const checks = {
     dataDir: await readinessCheck(async () => readinessDataDir(config)),
     examples: await readinessCheck(async () => readinessExamples(config)),
@@ -11277,6 +11258,9 @@ async function readinessStatus(config, store, runtimeManager, memorySettings = n
     // evimedCreditsService.mjs `creditsReadiness`); a wallet not answering is a
     // warning. Asking is also how a module that came up broken recovers.
     credits: await readinessCheck(async () => creditsReadiness({ config, credits, database: productDatabase })),
+    // The research-database connector: off, or on with whether its keyring holds the key of every saved credential. A
+    // warning on a green check, never red (researchDbRoutes.mjs `readiness`).
+    researchDb: await readinessCheck(async () => (researchDb ? researchDb.readiness() : { required: false, enabled: false })),
     // 虚拟临床研究: red only for its own invariants (vcrService.mjs `vcrReadiness`).
     // A missing engine or data plane is a warning, not a failure — the module
     // runs the T0 journey end to end without either (plan §3.2).

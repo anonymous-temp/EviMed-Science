@@ -879,6 +879,21 @@ services:
       # leaves the connector off, as an unset path does).
       OPEN_SCIENCE_RESEARCH_DB_ALLOW: ${OPEN_SCIENCE_RESEARCH_DB_ALLOW:-}
       OPEN_SCIENCE_RESEARCH_DB_KEYRING_FILE: ${OPEN_SCIENCE_RESEARCH_DB_KEYRING_HOST_FILE:+/run/secrets/research-db-keyring}
+      # Operator-owned CA certificates, one `<host>.pem` per database whose chain does not end in a public authority (a cloud
+      # provider's own root, a self-signed certificate); /dev/null where there are none, which reads as no directory. The
+      # limits below are value-less: unset, the connector's own defaults (researchDbConfig.mjs, each with its reason).
+      OPEN_SCIENCE_RESEARCH_DB_CA_DIR: ${OPEN_SCIENCE_RESEARCH_DB_CA_HOST_DIR:+/run/evimed/research-db-ca}
+      OPEN_SCIENCE_RESEARCH_DB_MAX_ROWS:
+      OPEN_SCIENCE_RESEARCH_DB_MAX_COLUMNS:
+      OPEN_SCIENCE_RESEARCH_DB_MAX_CELL_BYTES:
+      OPEN_SCIENCE_RESEARCH_DB_MAX_BYTES:
+      OPEN_SCIENCE_RESEARCH_DB_MAX_TABLES:
+      OPEN_SCIENCE_RESEARCH_DB_MAX_CONCURRENT:
+      OPEN_SCIENCE_RESEARCH_DB_MAX_PER_USER:
+      OPEN_SCIENCE_RESEARCH_DB_MAX_CONNECTIONS:
+      OPEN_SCIENCE_RESEARCH_DB_CONNECTION_MS:
+      OPEN_SCIENCE_RESEARCH_DB_READ_MS:
+      OPEN_SCIENCE_RESEARCH_DB_WIRE_BYTES:
       OPEN_SCIENCE_VCR_MAX_CONCURRENT_JOBS:
       OPEN_SCIENCE_VCR_JOB_CPU_SECONDS:
       OPEN_SCIENCE_VCR_STUDY_CPU_BUDGET:
@@ -1397,6 +1412,13 @@ services:
         source: ${OPEN_SCIENCE_RESEARCH_DB_KEYRING_HOST_FILE:-/dev/null}
         target: /run/secrets/research-db-keyring
         read_only: true
+      # The research-database CA directory (public certificates only, `<host>.pem`): read-only, owned by the operator.
+      - type: bind
+        source: ${OPEN_SCIENCE_RESEARCH_DB_CA_HOST_DIR:-/dev/null}
+        target: /run/evimed/research-db-ca
+        read_only: true
+        bind:
+          create_host_path: false
       # Root-owned 0644 evidence from import-vcr-method-validation.mjs --install.
       # Never shared with the engine or a project runtime; unset stays unmeasured.
       - type: bind

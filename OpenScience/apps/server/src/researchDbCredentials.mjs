@@ -1,6 +1,8 @@
 import { createCipheriv, createDecipheriv, createHash, hkdfSync, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { HttpError } from './security.mjs';
 import { readResearchDbKeyring } from './researchDbKeyring.mjs';
+import { RESEARCH_DB_LIMIT_DEFAULTS } from './researchDbConfig.mjs';
+import { researchDbHostName } from './researchDbNetwork.mjs';
 
 const invalid = () => new HttpError(400, 'research_db_connection_invalid', 'The database connection is invalid.');
 const unavailable = () => new HttpError(503, 'research_db_connection_unavailable', 'The database connection is unavailable.');
@@ -16,23 +18,23 @@ export function researchDbSnapshotFingerprint(value) {
   return createHash('sha256').update(JSON.stringify([value.connectionId, value.agendaId, value.schema, value.table, value.columns])).digest('hex');
 }
 /** The isolated test injection: only under NODE_ENV=test, with an explicit flag and a fixture key.
- * @param {{environment:string|undefined,testOnly:boolean|undefined,database:any,testKey:unknown}} input */
-export function researchDbCredentialsForTest({ environment, testOnly, database, testKey }) {
+ * @param {{environment:string|undefined,testOnly:boolean|undefined,database:any,testKey:unknown,maxConnections?:number}} input */
+export function researchDbCredentialsForTest({ environment, testOnly, database, testKey, maxConnections = RESEARCH_DB_LIMIT_DEFAULTS.connections }) {
   return environment === 'test' && testOnly === true && database && typeof testKey === 'string' && testKey.length >= 32
-    ? new ResearchDbCredentials(database, { activeId: 'test-v1', keys: { 'test-v1': testKey } }) : null;
+    ? new ResearchDbCredentials(database, { activeId: 'test-v1', keys: { 'test-v1': testKey } }, { maxConnections }) : null;
 }
 /** The connector's credentials for this process. The test injection is the isolated path above; otherwise the
  * connector exists only when the operator configured both an egress allowlist and an independent keyring file and
  * a product database exists. The keyring is never derived from another secret (the model gateway's, for one): a key
  * that protects database passwords has its own custody, rotation and backup. A keyring that cannot be read leaves the
  * connector unavailable and reports its code (never a path or key material) once.
- * @param {{environment:string|undefined,testOnly:boolean|undefined,database:any,testKey:unknown,keyringFile:string,allow:string,report?:(code:string)=>void}} input */
-export function researchDbCredentialsFromConfig({ keyringFile, allow, report = () => {}, ...test }) {
-  const injected = researchDbCredentialsForTest(test);
+ * @param {{environment:string|undefined,testOnly:boolean|undefined,database:any,testKey:unknown,keyringFile:string,allow:string,maxConnections?:number,report?:(code:string)=>void}} input */
+export function researchDbCredentialsFromConfig({ keyringFile, allow, maxConnections = RESEARCH_DB_LIMIT_DEFAULTS.connections, report = () => {}, ...test }) {
+  const injected = researchDbCredentialsForTest({ ...test, maxConnections });
   if (injected) return injected;
   if (!test.database || !keyringFile) return null;
   if (!String(allow ?? '').trim()) { report('research_db_allowlist_missing'); return null; }
-  try { return new ResearchDbCredentials(test.database, readResearchDbKeyring(keyringFile)); }
+  try { return new ResearchDbCredentials(test.database, readResearchDbKeyring(keyringFile), { maxConnections }); }
   catch (error) { report(typeof error?.code === 'string' ? error.code : 'research_db_keyring_unavailable'); return null; }
 }
 /** @param {any} value */
@@ -43,12 +45,15 @@ function validate(value) {
     const item = value[key];
     if (typeof item !== 'string' || !item || Buffer.byteLength(item) > 1024 || [...item].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) throw invalid();
   }
-  return Object.fromEntries(connectionFields.map(key => [key, value[key]]));
+  // The host is matched, resolved and verified in lower case everywhere (`researchDbHostName`); it is kept that way.
+  return /** @type {Record<string, any>} */ ({ ...Object.fromEntries(connectionFields.map(key => [key, value[key]])), host: researchDbHostName(value.host) });
 }
 /** The ciphertext is bound to the account, project and generated connection identity. */
 export class ResearchDbCredentials {
-  /** @param {any} database @param {{activeId:string,keys:Record<string,string>}} keyring */
-  constructor(database, keyring) {
+  /** @param {any} database @param {{activeId:string,keys:Record<string,string>}} keyring
+   * @param {{maxConnections?:number}} [options] `maxConnections`: saved credentials one project keeps (`OPEN_SCIENCE_RESEARCH_DB_MAX_CONNECTIONS`) */
+  constructor(database, keyring, { maxConnections = RESEARCH_DB_LIMIT_DEFAULTS.connections } = {}) {
+    this.maxConnections = maxConnections;
     if (!keyring || !/^[a-zA-Z0-9_-]{1,64}$/.test(keyring.activeId) || !keyring.keys || !Object.hasOwn(keyring.keys, keyring.activeId)) throw unavailable();
     this.database = database;
     this.activeId = keyring.activeId;
@@ -59,22 +64,23 @@ export class ResearchDbCredentials {
     }
   }
   async migrate() {
+    // `label` is the connection's host and database name, kept beside the sealed credential so the list can name a
+    // connection without opening it; it holds no user name or password.
     await this.database.query(`CREATE TABLE IF NOT EXISTS evimed_control.research_db_connections (
-      user_id text NOT NULL, project_id text NOT NULL, id uuid NOT NULL, ciphertext bytea NOT NULL, nonce bytea NOT NULL, tag bytea NOT NULL, key_id text,
+      user_id text NOT NULL, project_id text NOT NULL, id uuid NOT NULL, label text NOT NULL, ciphertext bytea NOT NULL, nonce bytea NOT NULL, tag bytea NOT NULL, key_id text NOT NULL,
       created_at timestamptz NOT NULL DEFAULT clock_timestamp(), PRIMARY KEY (user_id, project_id, id),
       FOREIGN KEY (user_id, project_id) REFERENCES evimed_control.projects(user_id, id) ON DELETE CASCADE);
-      ALTER TABLE evimed_control.research_db_connections ADD COLUMN IF NOT EXISTS key_id text;
       CREATE TABLE IF NOT EXISTS evimed_control.research_db_requests (
         user_id text NOT NULL, project_id text NOT NULL, request_id text NOT NULL, kind text NOT NULL CHECK (kind IN ('save','snapshot')),
         fingerprint text, result jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
         PRIMARY KEY (user_id,project_id,kind,request_id),
         FOREIGN KEY (user_id, project_id) REFERENCES evimed_control.projects(user_id,id) ON DELETE CASCADE)`);
   }
-  /** A missing or legacy NULL key ID is never guessed. A deployment must
-   * retain every referenced version until its rows have been rewrapped. */
+  /** A key ID the keyring does not hold is never guessed. A deployment must retain every referenced version for as long
+   * as a credential sealed under it exists. */
   async assertKeyCoverage() {
     const result = await this.database.query('SELECT DISTINCT key_id FROM evimed_control.research_db_connections');
-    if (result.rows.some(row => typeof row.key_id !== 'string' || !this.keys.has(row.key_id))) {
+    if (result.rows.some(row => !this.keys.has(row.key_id))) {
       throw new HttpError(503, 'research_db_keyring_incomplete', 'Database credential keys need operator attention.');
     }
   }
@@ -111,8 +117,8 @@ export class ResearchDbCredentials {
         return previousId;
       }
       const count = await client.query('SELECT count(*)::integer AS n FROM evimed_control.research_db_connections WHERE user_id=$1 AND project_id=$2', [user, project]);
-      if (Number(count.rows[0]?.n) >= 50) throw new HttpError(409, 'research_db_connection_limit', 'This project already has the maximum number of database connections.');
-      await client.query('INSERT INTO evimed_control.research_db_connections(user_id,project_id,id,ciphertext,nonce,tag,key_id) VALUES($1,$2,$3,$4,$5,$6,$7)', [user, project, id, sealed.ciphertext, sealed.nonce, sealed.tag, sealed.keyId]);
+      if (Number(count.rows[0]?.n) >= this.maxConnections) throw new HttpError(409, 'research_db_connection_limit', 'This project already has the maximum number of database connections.');
+      await client.query('INSERT INTO evimed_control.research_db_connections(user_id,project_id,id,label,ciphertext,nonce,tag,key_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)', [user, project, id, `${value.host}/${value.database}`, sealed.ciphertext, sealed.nonce, sealed.tag, sealed.keyId]);
       await client.query("INSERT INTO evimed_control.research_db_requests(user_id,project_id,kind,request_id,result) VALUES($1,$2,'save',$3,$4::jsonb)", [user, project, requestId, JSON.stringify({ id })]);
       return id;
     });
@@ -136,23 +142,11 @@ export class ResearchDbCredentials {
     if (found.rows.length !== 1) throw new HttpError(404, 'research_db_connection_missing', 'The database connection was not found.');
     return this.unseal(user, project, id, found.rows[0]);
   }
-  /** Rewrap one row under the active version; retaining old keys makes interrupted rotation recoverable.
-   * @param {string} user @param {string} project @param {string} id */
-  async rotate(user, project, id) {
-    if (!/^[a-f0-9-]{36}$/.test(id)) throw invalid();
-    return this.database.transaction(async client => {
-      const found = await client.query('SELECT ciphertext,nonce,tag,key_id FROM evimed_control.research_db_connections WHERE user_id=$1 AND project_id=$2 AND id=$3 FOR UPDATE', [user, project, id]);
-      if (found.rows.length !== 1) throw new HttpError(404, 'research_db_connection_missing', 'The database connection was not found.');
-      if (found.rows[0].key_id === this.activeId) return { rotated: false };
-      const sealed = this.seal(user, project, id, this.unseal(user, project, id, found.rows[0]));
-      await client.query('UPDATE evimed_control.research_db_connections SET ciphertext=$4,nonce=$5,tag=$6,key_id=$7 WHERE user_id=$1 AND project_id=$2 AND id=$3', [user, project, id, sealed.ciphertext, sealed.nonce, sealed.tag, sealed.keyId]);
-      return { rotated: true };
-    });
-  }
-  /** @param {string} user @param {string} project */
+  /** The project's saved connections, newest first: the id, when it was saved and its `label` (host and database name).
+   * @param {string} user @param {string} project */
   async list(user, project) {
-    const result = await this.database.query('SELECT id,created_at FROM evimed_control.research_db_connections WHERE user_id=$1 AND project_id=$2 ORDER BY created_at DESC LIMIT 50', [user, project]);
-    return result.rows.map(row => ({ id: row.id, createdAt: row.created_at }));
+    const result = await this.database.query('SELECT id,label,created_at FROM evimed_control.research_db_connections WHERE user_id=$1 AND project_id=$2 ORDER BY created_at DESC LIMIT $3', [user, project, this.maxConnections]);
+    return result.rows.map(row => ({ id: row.id, label: row.label, createdAt: row.created_at }));
   }
   /** @param {string} user @param {string} project @param {string} id */
   async remove(user, project, id) {

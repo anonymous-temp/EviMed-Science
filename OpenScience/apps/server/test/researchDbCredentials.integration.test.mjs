@@ -26,18 +26,18 @@ test('concurrent saves cannot exceed the visible project connection limit', { sk
     await assert.rejects(store.save(user, project, { ...input, password: 'changed' }, requestIds[winning]), { code: 'research_db_request_conflict' });
     const both = new ResearchDbCredentials(database, { activeId: 'v2', keys: { v1: 'fixture-only independent encryption secret', v2: 'a second independent fixture encryption secret' } });
     const newest = new ResearchDbCredentials(database, { activeId: 'v2', keys: { v2: 'a second independent fixture encryption secret' } });
+    // Rows sealed under v1 open with a keyring that still holds v1, and not with one that has dropped it.
+    assert.deepEqual(await both.open(user, project, ids[0]), input);
     await assert.rejects(newest.open(user, project, ids[0]), { code: 'research_db_connection_unavailable' });
-    await assert.rejects(database.transaction(client => database.withTransactionClient(client, async () => {
-      await both.rotate(user, project, ids[0]); throw new Error('Simulated interrupted rotation');
-    })));
-    assert.deepEqual(await store.open(user, project, ids[0]), input, 'interrupted rotation leaves the old ciphertext readable');
-    assert.deepEqual(await both.rotate(user, project, ids[0]), { rotated: true });
-    assert.deepEqual(await newest.open(user, project, ids[0]), input, 'rewrapped data opens after the old key is removed');
-    assert.deepEqual(await both.open(user, project, ids[1]), input, 'other old-version records remain readable during gradual rotation');
     await both.assertKeyCoverage();
     await assert.rejects(newest.assertKeyCoverage(), { code: 'research_db_keyring_incomplete' });
+    // The list names each connection by host and database, never by what is sealed.
+    const listed = await store.list(user, project);
+    assert.equal(listed.length, 50);
+    assert(listed.every(item => item.label === 'db.example.org/research' && Object.keys(item).sort().join() === 'createdAt,id,label'));
     const before = (await database.query('SELECT ciphertext FROM evimed_control.research_db_connections WHERE user_id=$1 AND id=$2', [user, ids[1]])).rows[0].ciphertext;
-    await database.query('UPDATE evimed_control.research_db_connections SET key_id=NULL WHERE user_id=$1 AND id=$2', [user, ids[1]]);
+    await assert.rejects(database.query('UPDATE evimed_control.research_db_connections SET key_id=NULL WHERE user_id=$1 AND id=$2', [user, ids[1]]), /null value/, 'a credential always names the key that sealed it');
+    await database.query("UPDATE evimed_control.research_db_connections SET key_id='ghost' WHERE user_id=$1 AND id=$2", [user, ids[1]]);
     await assert.rejects(both.assertKeyCoverage(), { code: 'research_db_keyring_incomplete' });
     assert.deepEqual((await database.query('SELECT ciphertext FROM evimed_control.research_db_connections WHERE user_id=$1 AND id=$2', [user, ids[1]])).rows[0].ciphertext, before);
   } finally { await database.query('DELETE FROM evimed_control.users WHERE id=$1', [user]); await database.close(); }

@@ -7,6 +7,7 @@ import { readReleaseManifestFile, validateReleaseManifest } from "./releaseManif
 import { EVIDENCE_PUBLIC_BASE_PATHS, GENE_EXPRESSION_LIMITS, GEO_DEFAULT_ENGINES, GEO_ENGINES, GEO_SOCIAL_PLATFORMS, METHOD_UNUSED_RETIRE_LOADS, SIMULATED_START_CREDITS, VCR_MIN_CELL_SIZE } from "@evimed/domain";
 import { MAX_MOUNTED_CAPSULE_METHOD_BYTES } from "./capsuleMethods.mjs";
 import { researchBillingSettings } from "./researchBillingConfig.mjs";
+import { researchDbSettings } from "./researchDbConfig.mjs";
 import { validateEvolutionConfiguration } from "./evolutionConfiguration.mjs";
 import { REGISTER_JUDGE_MAX_LINES } from "./reportRegisterJudge.mjs";
 import { PINNED } from "./pinnedVersions.mjs";
@@ -2515,9 +2516,9 @@ export function loadConfig(overrides = {}) {
     ).split(",").map((name) => name.trim()).filter(Boolean).join(","),
     // The research-database connector (a project's own PostgreSQL, read as a snapshot) exists only when BOTH are set:
     // the egress allowlist, comma-separated `host:port=IPv4` entries, and the independent keyring file that seals the
-    // saved credentials (`researchDbKeyring.mjs`: owner-only mode, key ids bound to their key material).
-    researchDbAllow: String(overrides.researchDbAllow ?? process.env.OPEN_SCIENCE_RESEARCH_DB_ALLOW ?? "").trim(),
-    researchDbKeyringFile: String(overrides.researchDbKeyringFile ?? process.env.OPEN_SCIENCE_RESEARCH_DB_KEYRING_FILE ?? "").trim(),
+    // saved credentials (`researchDbKeyring.mjs`: owner-only mode, key ids bound to their key material). The operator's
+    // CA directory and every limit, each with its reason, are `researchDbConfig.mjs`.
+    ...researchDbSettings(overrides),
     pharmacyReferenceDb: configuredPharmacyReferenceDb
       ? (path.isAbsolute(configuredPharmacyReferenceDb)
         ? configuredPharmacyReferenceDb

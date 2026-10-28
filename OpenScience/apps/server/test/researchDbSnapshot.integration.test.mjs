@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import pg from 'pg';
-import { listResearchTables, snapshotResearchTable } from '../src/researchDbSnapshot.mjs';
+import { RESEARCH_DB_WITHHELD_CELL, listResearchTables, snapshotResearchTable } from '../src/researchDbSnapshot.mjs';
+import { RESEARCH_DB_LIMIT_DEFAULTS } from '../src/researchDbConfig.mjs';
 
 const url = process.env.OPEN_SCIENCE_TEST_RESEARCH_DB_URL ?? '';
 if (url) {
@@ -26,7 +27,10 @@ test('a real PostgreSQL table is read with a restricted role, bounds and no writ
     const snapshot = await snapshotResearchTable(client, { schema: 'public', table: 'research_db_snapshot_fixture', columns: ['id', 'note', 'seen'] });
     assert.equal(snapshot.rows.length, 20000); assert.equal(snapshot.truncated, true);
     assert.deepEqual(snapshot.columns, ['id', 'note', 'seen']);
-    assert.equal(snapshot.rows[0][1], null); assert.equal(snapshot.oversizedValuesWithheld, true);
+    assert.equal(snapshot.rows[0][1], RESEARCH_DB_WITHHELD_CELL, 'the cell over 32 KB is withheld, with a token that is not empty');
+    assert.equal(snapshot.oversizedValuesWithheld, true); assert.equal(snapshot.withheldCells, 1); assert.deepEqual(snapshot.withheldByColumn, { note: 1 });
+    assert.equal(snapshot.stoppedBy, 'rows'); assert.equal(snapshot.totalRows, 20005, 'a cut snapshot counts the table'); assert.equal(snapshot.totalRowsExact, true);
+    assert.deepEqual(snapshot.droppedColumns, [{ name: 'payload', type: 'jsonb', reason: 'unsupported_type' }], 'the jsonb column is named as left out');
     assert.equal(snapshot.rows[1][1], null);
     assert.equal(snapshot.rows[2][1].length, 32768);
     assert.equal(snapshot.rows[3][1], '第"四", 行'); assert.equal(snapshot.rows[4][1], 'ok');
@@ -35,6 +39,7 @@ test('a real PostgreSQL table is read with a restricted role, bounds and no writ
     // No columns: every supported column in table order; the jsonb column is not supported and is left out.
     const all = await snapshotResearchTable(client, { schema: 'public', table: 'research_db_snapshot_fixture' });
     assert.deepEqual(all.columns, ['id', 'note', 'seen']); assert.equal(all.rows.length, 20000);
+    assert.deepEqual(all.droppedColumns.map(item => item.name), ['payload']);
     assert.deepEqual((await snapshotResearchTable(client, { schema: 'public', table: 'research_db_snapshot_fixture', columns: [] })).columns, ['id', 'note', 'seen']);
     await assert.rejects(snapshotResearchTable(client, { schema: 'public', table: 'research_db_snapshot_fixture', columns: ['id', 'payload'] }), { code: 'research_db_selection_invalid' });
     await assert.rejects(snapshotResearchTable(client, { schema: 'public', table: 'research_db_snapshot_fixture', columns: ['id', 'missing'] }), { code: 'research_db_selection_invalid' });
@@ -79,7 +84,8 @@ test('the table listing offers the ordinary tables a role can read, with their s
     const mine = listing.tables.filter(item => item.schema === schema || item.schema === hidden);
     assert.deepEqual(mine.map(item => item.table), ['never_analysed', 'visits'], 'no view, row-security table, table without privilege, jsonb-only table or closed schema');
     assert.deepEqual(mine[1], { schema, table: 'visits', estimatedRows: 1, columns: [
-      { name: 'id', type: 'integer' }, { name: 'label', type: 'character varying(20)' }, { name: 'weight', type: 'numeric(6,2)' }, { name: 'seen', type: 'date' }] });
+      { name: 'id', type: 'integer' }, { name: 'label', type: 'character varying(20)' }, { name: 'weight', type: 'numeric(6,2)' }, { name: 'seen', type: 'date' }],
+      omittedColumnCount: 0, unsupportedColumns: [{ name: 'extra', type: 'jsonb' }], unsupportedColumnCount: 1 });
     assert.equal(mine[0].estimatedRows, null, 'a table PostgreSQL has not analysed has an unknown row count');
     assert(listing.tables.every(item => !item.schema.startsWith('pg_') && item.schema !== 'information_schema'));
     assert.equal(listing.truncated, false);
@@ -97,9 +103,18 @@ test('the table listing offers the ordinary tables a role can read, with their s
     await admin.query(`DROP TABLE ${schema}.secured, ${schema}.only_json`); await admin.query(`DO $$ BEGIN FOR i IN 1..205 LOOP EXECUTE format('DROP TABLE ${schema}.bulk_%s', i); END LOOP; END $$`);
     await admin.query(`GRANT SELECT ON ${schema}.wide TO ${role}`); await admin.query(`SET ROLE ${role}`);
     const wide = (await listResearchTables(admin)).tables.find(item => item.table === 'wide');
-    assert.equal(wide.columns.length, 64); assert.equal(wide.columns[63].name, 'c63');
+    assert.equal(wide.columns.length, 64); assert.equal(wide.columns[63].name, 'c63'); assert.equal(wide.omittedColumnCount, 6);
     const snapshot = await snapshotResearchTable(admin, { schema, table: 'wide' });
     assert.equal(snapshot.columns.length, 64);
+    assert.deepEqual(snapshot.droppedColumns.map(item => [item.name, item.reason]), Array.from({ length: 6 }, (_, index) => [`c${64 + index}`, 'over_column_limit']));
+    // The limits are the configured ones: a deployment that allows 70 columns reads the whole table.
+    assert.equal((await snapshotResearchTable(admin, { schema, table: 'wide' }, { limits: { ...RESEARCH_DB_LIMIT_DEFAULTS, columns: 70 } })).columns.length, 70);
+    // Many unsupported columns: the first fifty are named and all are counted.
+    await admin.query('RESET ROLE');
+    await admin.query(`CREATE TABLE ${schema}.json_heavy (id integer, ${Array.from({ length: 60 }, (_, index) => `j${index} jsonb`).join(', ')})`);
+    await admin.query(`GRANT SELECT ON ${schema}.json_heavy TO ${role}`); await admin.query(`SET ROLE ${role}`);
+    const heavy = (await listResearchTables(admin)).tables.find(item => item.table === 'json_heavy');
+    assert.equal(heavy.unsupportedColumns.length, 50); assert.equal(heavy.unsupportedColumnCount, 60); assert.deepEqual(heavy.columns, [{ name: 'id', type: 'integer' }]);
   } finally {
     await admin.query('RESET ROLE').catch(() => {});
     await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await admin.query(`DROP SCHEMA IF EXISTS ${hidden} CASCADE`);
@@ -126,4 +141,14 @@ test('a table larger than the 12 MB byte cap ends as a truncated snapshot, not a
     await client.query('DROP TABLE IF EXISTS research_db_bytes_fixture');
     await client.query(`REVOKE USAGE ON SCHEMA public FROM ${role}`).catch(() => {}); await client.query(`DROP ROLE IF EXISTS ${role}`); await client.end();
   }
+});
+
+test('a superuser login is refused for what it is, for a snapshot and for a listing', { skip: !url && 'A disposable external test database is required' }, async () => {
+  const client = new pg.Client({ connectionString: url }); await client.connect();
+  try {
+    const me = await client.query('SELECT rolsuper FROM pg_catalog.pg_roles WHERE rolname = current_user');
+    assert.equal(me.rows[0].rolsuper, true, 'the fixture connects as a superuser');
+    await assert.rejects(listResearchTables(client), { code: 'research_db_login_too_privileged' });
+    await assert.rejects(snapshotResearchTable(client, { schema: 'public', table: 'anything' }), { code: 'research_db_login_too_privileged' });
+  } finally { await client.end(); }
 });

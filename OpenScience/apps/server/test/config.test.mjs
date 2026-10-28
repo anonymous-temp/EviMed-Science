@@ -53,6 +53,46 @@ test("the research-database connector reads its allowlist and keyring file from 
   }
 });
 
+test("every research-database limit has a key, a default that did not change, a range and a reason, and two that cannot both hold are refused", async () => {
+  const { RESEARCH_DB_LIMIT_DEFAULTS, RESEARCH_DB_LIMIT_SPECS, researchDbLimitSettings } = await import("../src/researchDbConfig.mjs");
+  // The defaults are the values the connector shipped with.
+  assert.deepEqual({ ...RESEARCH_DB_LIMIT_DEFAULTS }, { rows: 20_000, columns: 64, cellBytes: 32_768, bytes: 12 * 1024 * 1024, tables: 200, slots: 4, perUser: 1,
+    connections: 50, connectionMs: 30_000, readMs: 20_000, wireBytes: 24 * 1024 * 1024 });
+  assert.equal(RESEARCH_DB_LIMIT_SPECS.length, 11);
+  const names = RESEARCH_DB_LIMIT_SPECS.map((spec) => spec.env);
+  const saved = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  try {
+    for (const name of names) delete process.env[name];
+    assert.deepEqual({ ...loadConfig({ rootDir: repoRoot }).researchDbLimits }, { ...RESEARCH_DB_LIMIT_DEFAULTS });
+    for (const spec of RESEARCH_DB_LIMIT_SPECS) {
+      assert.match(spec.why, /.{40}/, `${spec.env} says why it exists`);
+      assert.ok(spec.env.startsWith("OPEN_SCIENCE_RESEARCH_DB_"));
+      assert.ok(spec.min <= spec.fallback && spec.fallback <= spec.max, `${spec.env}'s default is inside its range`);
+      // A value outside the range, or not a number, is refused by the name of its key; one inside it is taken.
+      assert.throws(() => researchDbLimitSettings({ researchDbLimits: { [spec.key]: spec.max + 1 } }, {}), new RegExp(spec.env), spec.env);
+      assert.throws(() => researchDbLimitSettings({ researchDbLimits: { [spec.key]: spec.min - 1 } }, {}), new RegExp(spec.env), spec.env);
+      assert.throws(() => researchDbLimitSettings({}, { [spec.env]: "not a number" }), new RegExp(spec.env), spec.env);
+      assert.equal(researchDbLimitSettings({}, { [spec.env]: String(spec.fallback) })[spec.key], spec.fallback);
+    }
+    // The config object carries them, and an override wins over the environment.
+    process.env.OPEN_SCIENCE_RESEARCH_DB_MAX_ROWS = "5000";
+    assert.equal(loadConfig({ rootDir: repoRoot }).researchDbLimits.rows, 5000);
+    assert.equal(loadConfig({ rootDir: repoRoot, researchDbLimits: { rows: 7 } }).researchDbLimits.rows, 7);
+    delete process.env.OPEN_SCIENCE_RESEARCH_DB_MAX_ROWS;
+    // Limits that could not both hold are refused when the process starts, not when a snapshot meets them.
+    assert.throws(() => researchDbLimitSettings({ researchDbLimits: { readMs: 28_000, connectionMs: 30_000 } }, {}), /READ_MS/);
+    assert.throws(() => researchDbLimitSettings({ researchDbLimits: { bytes: 20 * 1024 * 1024, wireBytes: 20 * 1024 * 1024 } }, {}), /WIRE_BYTES/);
+    assert.throws(() => researchDbLimitSettings({ researchDbLimits: { slots: 2, perUser: 3 } }, {}), /MAX_PER_USER/);
+    // The operator's CA directory is read like the allowlist.
+    process.env.OPEN_SCIENCE_RESEARCH_DB_CA_DIR = " /run/evimed/research-db-ca ";
+    assert.equal(loadConfig({ rootDir: repoRoot }).researchDbCaDir, "/run/evimed/research-db-ca");
+    delete process.env.OPEN_SCIENCE_RESEARCH_DB_CA_DIR;
+    assert.equal(loadConfig({ rootDir: repoRoot }).researchDbCaDir, "");
+  } finally {
+    for (const name of [...names, "OPEN_SCIENCE_RESEARCH_DB_CA_DIR"]) { if (saved[name] === undefined) delete process.env[name]; else process.env[name] = saved[name]; }
+  }
+});
+
 test("the runtime mode defaults to a real kernel rather than a mock", async () => {
   // It used to default to "opencode" and point at a bundled binary. There is
   // one kernel now and it ships inside the runtime image, so what remains

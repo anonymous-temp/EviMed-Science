@@ -12,7 +12,9 @@ import { ResearchDbStaging } from '../src/researchDbStaging.mjs';
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? '';
 if (url) { const parsed = new URL(url); assert(['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname)); assert.match(parsed.pathname, /evimed_test/); }
-const relative = () => `knowledge-base/.evimed-revisions/${'a'.repeat(64)}/cohort_${randomUUID().slice(0, 8)}-20261028-010203.csv`;
+const folder = `knowledge-base/databases/.evimed-revisions/${'a'.repeat(64)}`;
+const relative = () => `${folder}/public.cohort_${randomUUID().slice(0, 8)}-1a2b3c4d.csv`;
+const sidecarOf = file => file.replace(/\.csv$/, '.import.json');
 test('restart cleanup deletes orphan and temporary bytes but fences live and referenced files', { skip: !url && 'A disposable test database is required', timeout: 30000 }, async () => {
   const db = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 4, databaseConnectionTimeoutMs: 2000 });
   const baseDir = await mkdtemp(path.join(tmpdir(), 'research-stage-'));
@@ -24,10 +26,11 @@ test('restart cleanup deletes orphan and temporary bytes but fences live and ref
     await db.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'stage','development')", [user]);
     await db.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,$2,'stage',1000000)", [user, projectId]);
     await migrateProductStore(db); await service.migrate();
-    for (const bad of [`knowledge-base/.evimed-revisions/${'a'.repeat(64)}/research-database-${randomUUID()}.json`, `knowledge-base/.evimed-revisions/${'a'.repeat(64)}/../cohort-20261028-010203.csv`,
-      `knowledge-base/.evimed-revisions/${'a'.repeat(64)}/.hidden-20261028-010203.csv`, `knowledge-base/.evimed-revisions/${'a'.repeat(64)}/${'x'.repeat(49)}-20261028-010203.csv`,
-      `knowledge-base/.evimed-revisions/${'a'.repeat(64)}/a/b-20261028-010203.csv`]) await assert.rejects(service.reserve(user, projectId, bad), { code: 'research_db_staging_unavailable' });
-    assert.equal(typeof await service.reserve(user, projectId, `knowledge-base/.evimed-revisions/${'a'.repeat(64)}/患者_队列-20261028-010203.csv`), 'string');
+    for (const bad of [`${folder}/research-database-${randomUUID()}.json`, `${folder}/../cohort-1a2b3c4d.csv`, `${folder}/.hidden-1a2b3c4d.csv`,
+      `${folder}/${'x'.repeat(97)}-1a2b3c4d.csv`, `${folder}/a/b-1a2b3c4d.csv`, `${folder}/cohort-20261028-010203.csv`, `${folder}/cohort-1A2B3C4D.csv`,
+      `knowledge-base/.evimed-revisions/${'a'.repeat(64)}/cohort-1a2b3c4d.csv`, `knowledge-base/links/.evimed-revisions/${'a'.repeat(64)}/cohort-1a2b3c4d.csv`,
+      `${folder}/a..b-1a2b3c4d.csv`, `${folder}/cohort-1a2b3c4d.import.json`]) await assert.rejects(service.reserve(user, projectId, bad), { code: 'research_db_staging_unavailable' }, bad);
+    assert.equal(typeof await service.reserve(user, projectId, `${folder}/患者_队列.v2-1a2b3c4d.csv`), 'string');
     await db.query('DELETE FROM evimed_control.research_db_staging WHERE user_id=$1', [user]);
     const orphan = relative(), child = `
       const { ControlPlaneDatabase } = await import(${JSON.stringify(new URL('../src/controlPlaneDatabase.mjs', import.meta.url).href)});
@@ -38,6 +41,9 @@ test('restart cleanup deletes orphan and temporary bytes but fences live and ref
       await service.reserve(process.env.TEST_USER,process.env.TEST_PROJECT,process.env.TEST_PATH);
       const target = path.join(process.env.TEST_ROOT,process.env.TEST_PATH); await fs.mkdir(path.dirname(target),{recursive:true});
       await fs.writeFile(target,'orphan'); await fs.writeFile(path.join(path.dirname(target),'.'+path.basename(target)+'.tmp_fixture'),'partial');
+      const note = target.replace(/\\.csv$/, '.import.json');
+      await fs.writeFile(note,'{}'); await fs.writeFile(path.join(path.dirname(note),'.'+path.basename(note)+'.tmp_fixture'),'partial');
+      await fs.writeFile(path.join(path.dirname(target),'keep-neighbour.csv'),'someone else');
       process.exit(71);`;
     const childResult = spawnSync(process.execPath, ['--input-type=module', '-e', child], { env: { ...process.env, TEST_DB: url,
       TEST_USER: user, TEST_PROJECT: projectId, TEST_PATH: orphan, TEST_ROOT: baseDir }, encoding: 'utf8' });
@@ -46,6 +52,10 @@ test('restart cleanup deletes orphan and temporary bytes but fences live and ref
     await service.recover(0);
     await assert.rejects(readFile(path.join(baseDir, orphan)), { code: 'ENOENT' });
     await assert.rejects(readFile(path.join(path.dirname(path.join(baseDir, orphan)), `.${path.basename(orphan)}.tmp_fixture`)), { code: 'ENOENT' });
+    // The sidecar written beside the CSV goes with it, and so do its temporary files; a neighbour in the same directory stays.
+    await assert.rejects(readFile(path.join(baseDir, sidecarOf(orphan))), { code: 'ENOENT' });
+    await assert.rejects(readFile(path.join(path.dirname(path.join(baseDir, orphan)), `.${path.basename(sidecarOf(orphan))}.tmp_fixture`)), { code: 'ENOENT' });
+    assert.equal(await readFile(path.join(path.dirname(path.join(baseDir, orphan)), 'keep-neighbour.csv'), 'utf8'), 'someone else');
 
     const live = relative(), liveId = await service.reserve(user, projectId, live), liveFile = path.join(baseDir, live);
     await mkdir(path.dirname(liveFile), { recursive: true }); await writeFile(liveFile, 'active');
@@ -72,7 +82,9 @@ test('restart cleanup deletes orphan and temporary bytes but fences live and ref
 
     const retained = relative(), retainedFile = path.join(baseDir, retained);
     await service.reserve(user, projectId, retained); await mkdir(path.dirname(retainedFile), { recursive: true }); await writeFile(retainedFile, 'reference');
+    await writeFile(path.join(baseDir, sidecarOf(retained)), '{"kept":true}');
     await new ProductDocuments(db).put(user, 'source', `src_${'b'.repeat(32)}`, { paths: [retained] }, { expectedRevision: 0, projectId });
     await service.recover(0); assert.equal(await readFile(retainedFile, 'utf8'), 'reference', 'any source reference prevents deletion');
+    assert.equal(await readFile(path.join(baseDir, sidecarOf(retained)), 'utf8'), '{"kept":true}', 'and keeps the sidecar that explains it');
   } finally { await db.query('DELETE FROM evimed_control.users WHERE id=$1', [user]); await db.close(); await rm(baseDir, { recursive: true, force: true }); }
 });

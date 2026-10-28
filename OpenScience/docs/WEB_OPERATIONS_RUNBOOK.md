@@ -1158,6 +1158,50 @@ reports as `data.downloadRoutes`. Counted on
 route to the matrix: it redirects to the file server's `suppl/` directory (no
 matrix there) or answers a reCAPTCHA page.
 
+### The research-database connector: refusals, limits and what an import left out
+
+The connector (`OPEN_SCIENCE_RESEARCH_DB_ALLOW` + `OPEN_SCIENCE_RESEARCH_DB_KEYRING_FILE`) reads one table of a researcher's
+own PostgreSQL into a CSV source of the project. Two counters say how it is doing; both exist from the start at zero.
+
+- `open_science_research_db_imports_total{outcome}`: `complete`, `partial` (the import was made and left something out: a
+  row cap, a cell, a column), `replayed` (a retry answered with the first result) and `refused` (no source).
+- `open_science_research_db_refusals_total{reason}`: why an operation gave nothing -- `busy` (a slot or the person's own
+  import is taken, 429), `network_denied` (the host is not in the allowlist, or its address is not the one allowed),
+  `tls_failed` (the certificate does not verify: the chain, the name or the date), `login_failed` (the server refused the
+  account or the database name), `too_privileged` (a superuser or a role that bypasses row security), `unreachable` (no
+  answer), `materials_full` (the question already holds twenty files and this is a new table), `selection_invalid`,
+  `failed` -- and which limit cut an import that was still made: `truncated` (rows, bytes or time), `cells_withheld` (a cell
+  longer than the cell limit), `columns_dropped` (an unsupported type, or past the column cap). A rising `truncated` is the
+  row limit being too small for the tables people bring, not an outage.
+
+What each failure asks of whom: `tls_failed` is the database administrator's (a renewed certificate) or yours: a database
+whose chain ends in a cloud provider's own root, or a self-signed one, needs its certificate in
+`OPEN_SCIENCE_RESEARCH_DB_CA_HOST_DIR/<host>.pem` (the host in lower case, as the allowlist writes it; a file replaces the
+built-in authorities for that host; restart is not needed, the file is read at each connection). `login_failed` and
+`too_privileged` are the researcher's. `unreachable` is a firewall or a database that is down. `network_denied` is an
+allowlist entry to add or fix: the entry is `host:port=IPv4` and the host is matched in lower case; only the IPv4 answers of
+the name are checked, so a dual-stack database is admitted by its IPv4 address.
+
+The limits (rows, columns, bytes, cell size, tables, concurrent connections, connections per person, saved credentials per
+project, the 30 s end of a connection, the 20 s read, the 24 MB wire) are `OPEN_SCIENCE_RESEARCH_DB_MAX_*` and friends, each
+with its reason in `apps/server/src/researchDbConfig.mjs`. They bound ONE web process: the admission caps (4 connections, 1
+per person) are in memory since 2026-10-29, so two replicas admit twice as many readers of a remote database. The control
+plane's own database is no longer held while a remote database is read.
+
+An import is never silent about what it left out. The source's title carries it (`public.cohort（前 20,000 行，共 52,340
+行）`), `payload.snapshot` has the facts, the study's material entry carries a compact `import`, and the sidecar
+`<name>.import.json` beside the CSV (under `knowledge-base/databases/.evimed-revisions/<sha256>/`) is what a run reads: rows
+exported and in the table, the physical order, every dropped column with its type, and the cells that were withheld, written
+into the CSV as `__evimed_withheld__` (never empty: an empty cell is a NULL). Importing a table again is a new version of the
+same source -- the old version is retired and the question's material points at the new one. A snapshot is not offered to the
+knowledge engine or to the wiki and graph compile, and it cannot be added to the personal library.
+
+`/api/ready` carries a `researchDb` check: green, with `warning: research_db_keyring_incomplete` when the keyring does not hold
+the key of a saved credential (every route then answers that code until the key is restored), never red. Each saving or
+removal of a credential and each import is a line in the project's audit file (`research_db.connection.save`,
+`research_db.connection.remove`, `research_db.import`), with the connection's or the source's id and never a password,
+host or user name.
+
 ### Deleting a project, resetting memory or erasing an account while the memory index is slow
 
 The recall index — the copies of PostgreSQL's records the OpenViking engine holds

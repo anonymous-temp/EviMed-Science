@@ -20,13 +20,14 @@ test('connection credentials are encrypted and bound to their user and project',
   const db = { async query(sql, values) {
     if (sql.startsWith('INSERT INTO evimed_control.research_db_connections')) { stored = values; return { rows: [] }; }
     if (sql.startsWith('SELECT count')) return { rows: [{ n: 0 }] };
-    if (sql.startsWith('SELECT ciphertext')) return { rows: stored ? [{ ciphertext: stored[3], nonce: stored[4], tag: stored[5], key_id: stored[6] }] : [] };
+    if (sql.startsWith('SELECT ciphertext')) return { rows: stored ? [{ ciphertext: stored[4], nonce: stored[5], tag: stored[6], key_id: stored[7] }] : [] };
     return { rows: [] };
   }, async transaction(fn) { return fn(this); } };
   const credentials = new ResearchDbCredentials(db, { activeId: 'v1', keys: { v1: 'test encryption secret with at least 32 bytes' } });
   const connection = { host: 'db.example.org', port: 5432, database: 'research', username: 'reader', password: 'secret-password' };
   const id = await credentials.save('user1', 'project1', connection, 'credential-request-1');
-  assert.equal(stored[3].includes(Buffer.from(connection.password)), false);
+  assert.equal(stored[4].includes(Buffer.from(connection.password)), false);
+  assert.equal(stored[3], 'db.example.org/research', 'the label is the host and the database name, with neither the user name nor the password');
   assert.deepEqual(await credentials.open('user1', 'project1', id), connection);
   await assert.rejects(credentials.open('other', 'project1', id));
   await assert.rejects(credentials.open('user1', 'project2', id));
@@ -54,4 +55,32 @@ test('the configured connector needs a database, an allowlist and a readable key
     assert.equal(researchDbCredentialsFromConfig({ ...base, ...injection, environment: 'production' }).activeId, id);
     assert.equal(researchDbCredentialsFromConfig({ ...base, ...injection, environment: 'production', keyringFile: '' }), null);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a host is kept in lower case, so it is matched, resolved and verified as one name', async () => {
+  let stored;
+  const db = { async query(sql, values) {
+    if (sql.startsWith('INSERT INTO evimed_control.research_db_connections')) { stored = values; return { rows: [] }; }
+    if (sql.startsWith('SELECT count')) return { rows: [{ n: 0 }] };
+    if (sql.startsWith('SELECT ciphertext')) return { rows: stored ? [{ ciphertext: stored[4], nonce: stored[5], tag: stored[6], key_id: stored[7] }] : [] };
+    return { rows: [] };
+  }, async transaction(fn) { return fn(this); } };
+  const credentials = new ResearchDbCredentials(db, { activeId: 'v1', keys: { v1: 'test encryption secret with at least 32 bytes' } });
+  const id = await credentials.save('user1', 'project1', { host: 'DB.Example.ORG', port: 5432, database: 'research', username: 'reader', password: 'secret-password' }, 'credential-request-1');
+  assert.equal(stored[3], 'db.example.org/research');
+  assert.equal((await credentials.open('user1', 'project1', id)).host, 'db.example.org');
+});
+
+test('the number of saved connections a project keeps is the configured one', async () => {
+  let saved = 0;
+  const db = { async query(sql) {
+    if (sql.startsWith('INSERT INTO evimed_control.research_db_connections')) saved += 1;
+    if (sql.startsWith('SELECT count')) return { rows: [{ n: saved }] };
+    return { rows: [] };
+  }, async transaction(fn) { return fn(this); } };
+  const credentials = new ResearchDbCredentials(db, { activeId: 'v1', keys: { v1: 'test encryption secret with at least 32 bytes' } }, { maxConnections: 2 });
+  const connection = { host: 'db.example.org', port: 5432, database: 'research', username: 'reader', password: 'secret-password' };
+  await credentials.save('u', 'p', connection, 'credential-request-1'); await credentials.save('u', 'p', connection, 'credential-request-2');
+  await assert.rejects(credentials.save('u', 'p', connection, 'credential-request-3'), { code: 'research_db_connection_limit' });
+  assert.equal(researchDbCredentialsFromConfig({ environment: 'test', testOnly: true, database: db, testKey: 'independent fixture key with 32 bytes', keyringFile: '', allow: '', maxConnections: 7 }).maxConnections, 7);
 });

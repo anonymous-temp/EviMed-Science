@@ -2,9 +2,12 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { HttpError, openScopedDirectoryNoFollow, resolveScopedPath, withProjectStorageMutation } from './security.mjs';
+import { researchDbSidecarPath } from './researchDbImport.mjs';
 
-// The name `researchTableFileName` writes: the table's letters, digits, `_` and `-`, then the capture time in UTC.
-const shape = /^knowledge-base\/\.evimed-revisions\/[a-f0-9]{64}\/[\p{L}\p{N}_-]{1,48}-\d{8}-\d{6}\.csv$/u;
+// The immutable path the registry gives the CSV of `researchDbLogicalPath`: the databases folder's revision directory (the
+// digest of the bytes) and the file's name -- `<schema>.<table>`'s letters, digits, `_`, `-` and `.` (never a leading dot,
+// never two in a row), then eight hex digits.
+const shape = /^knowledge-base\/databases\/\.evimed-revisions\/[a-f0-9]{64}\/(?!\.)(?!.*\.\.)[\p{L}\p{N}_.-]{1,96}-[a-f0-9]{8}\.csv$/u;
 const invalid = () => new HttpError(503, 'research_db_staging_unavailable', 'The database snapshot staging record is unavailable.');
 
 /** Crash-recoverable markers for files which have not yet committed to the source ledger. */
@@ -14,8 +17,7 @@ export class ResearchDbStaging {
   async migrate() {
     await this.database.query(`CREATE TABLE IF NOT EXISTS evimed_control.research_db_staging (
       user_id text NOT NULL, project_id text NOT NULL, id uuid NOT NULL, path text NOT NULL, created_at timestamptz NOT NULL DEFAULT clock_timestamp(), last_attempt_at timestamptz,
-      PRIMARY KEY (user_id, project_id, id), FOREIGN KEY (user_id,project_id) REFERENCES evimed_control.projects(user_id,id) ON DELETE CASCADE);
-      ALTER TABLE evimed_control.research_db_staging ADD COLUMN IF NOT EXISTS last_attempt_at timestamptz`);
+      PRIMARY KEY (user_id, project_id, id), FOREIGN KEY (user_id,project_id) REFERENCES evimed_control.projects(user_id,id) ON DELETE CASCADE)`);
   }
   /** The marker commits before any file bytes are written. @param {string} user @param {string} project @param {string} relative */
   async reserve(user, project, relative) {
@@ -35,7 +37,8 @@ export class ResearchDbStaging {
     const result = await this.database.query('DELETE FROM evimed_control.research_db_staging WHERE user_id=$1 AND project_id=$2 AND id=$3', [user, project, id]);
     if (result.rowCount !== 1) throw invalid();
   }
-  /** Remove only validated names protected by the marker and project scope. @param {any} project @param {string} relative */
+  /** Remove only validated names protected by the marker and project scope: the CSV, the sidecar the import writes beside
+   * it (`researchDbSidecarPath`) and the temporary files of either. @param {any} project @param {string} relative */
   async removeFiles(project, relative) {
     if (!shape.test(relative)) throw invalid();
     const target = resolveScopedPath(project.baseDir, relative);
@@ -43,9 +46,9 @@ export class ResearchDbStaging {
       let parent;
       try {
         parent = await openScopedDirectoryNoFollow(project.baseDir, path.dirname(target));
-        const basename = path.basename(target);
+        const names = [path.basename(target), path.basename(researchDbSidecarPath(relative))];
         for (const name of await fs.readdir(parent.path)) {
-          if (name !== basename && !name.startsWith(`.${basename}.`)) continue;
+          if (!names.some(basename => name === basename || name.startsWith(`.${basename}.`))) continue;
           await fs.unlink(path.join(parent.path, name)).catch(error => { if (error?.code !== 'ENOENT') throw error; });
         }
       } catch (error) { if (error?.code !== 'ENOENT') throw error; }
