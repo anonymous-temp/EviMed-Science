@@ -73,10 +73,38 @@ export async function buildSkillCampaign({ development, confirmation, candidates
   return { status: 'assembled', manifest, inputs: { registration, target, sources }, supply };
 }
 
+/**
+ * Development only: the registered choice over the development source, recomputed here, when no candidate earned a
+ * confirmation. Nothing is opened: no confirmation corpus exists, no alpha is reserved, the report says why it ended.
+ */
+export function developmentOnly({ development, candidates, failureCalculators, margin = SKILL_CAMPAIGN_REGISTRATION.margin, month }) {
+  const issues = skillArmsIssues(development);
+  if (issues.length) throw new Error(issues[0]);
+  const registration = { failureCalculators: [...new Set(failureCalculators)].sort((a, b) => a - b), margin, selection: { objective: 'failure-slice-gain', tieBreak: 'shorter-skill' },
+    candidates: (candidates.candidates ?? []).map((c) => ({ arm: c.arm, digest: c.digest, chars: c.chars, title: c.title })), improver: { model: candidates.model ?? null, rounds: candidates.rounds ?? null } };
+  const choice = chooseSkillCandidate(development, registration);
+  const slice = new Set(registration.failureCalculators);
+  const sum = (arm) => Math.round(development.runs.filter((run) => run.arm === arm).reduce((total, run) => total + (run.cost ?? 0), 0) * 1e6) / 1e6;
+  return { status: 'development-only', campaignId: `capability-skill-medcalc-${month}`, registration, developmentDigest: rsiDigest(development),
+    supply: { development: { rows: development.rows.length, sliceRows: development.rows.filter((row) => slice.has(Number(row.calculatorId))).length, arms: Object.keys(development.arms),
+      runs: development.runs.length, costCny: Object.fromEntries(Object.keys(development.arms).map((arm) => [arm, sum(arm)])) },
+      developmentChoice: { frozen: choice.frozen, reason: choice.reason, candidates: choice.candidates, scores: Object.fromEntries(Object.entries(choice.scores).map(([arm, s]) => [arm, { overall: s.overall, slice: s.slice }])) },
+      improverSpendCny: Math.round((candidates.spend ?? []).reduce((total, row) => total + (row.cny ?? 0), 0) * 1e6) / 1e6 } };
+}
+
 async function main() {
   const { values } = parseArgs({ options: { development: { type: 'string' }, confirmation: { type: 'string' }, candidates: { type: 'string' }, 'failure-calculators': { type: 'string' },
-    month: { type: 'string' }, 'out-dir': { type: 'string' }, margin: { type: 'string' }, 'id-prefix': { type: 'string' }, now: { type: 'string' } } });
+    month: { type: 'string' }, 'out-dir': { type: 'string' }, margin: { type: 'string' }, 'id-prefix': { type: 'string' }, now: { type: 'string' }, 'development-only': { type: 'boolean' } } });
   const json = async (path) => JSON.parse(await readFile(path, 'utf8'));
+  if (values['development-only']) {
+    const result = developmentOnly({ development: await json(values.development), candidates: await json(values.candidates), failureCalculators: values['failure-calculators'].split(',').map(Number),
+      margin: values.margin ? Number(values.margin) : undefined, month: values.month });
+    await mkdir(values['out-dir'], { recursive: true });
+    await writeFile(join(values['out-dir'], 'development-only.json'), `${JSON.stringify(result, null, 2)}\n`);
+    await writeFile(join(values['out-dir'], 'supply.json'), `${JSON.stringify(result.supply, null, 2)}\n`);
+    console.log(JSON.stringify({ status: result.status, frozen: result.supply.developmentChoice.frozen, reason: result.supply.developmentChoice.reason }));
+    return;
+  }
   const result = await buildSkillCampaign({ development: await json(values.development), confirmation: await json(values.confirmation), candidates: await json(values.candidates),
     failureCalculators: values['failure-calculators'].split(',').map(Number), month: values.month, margin: values.margin ? Number(values.margin) : undefined,
     idPrefix: values['id-prefix'] ?? '', now: values.now ?? new Date().toISOString() });

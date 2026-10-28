@@ -14,6 +14,7 @@ const signed = (value) => (Number.isFinite(value) ? `${value >= 0 ? '+' : ''}${(
 async function main() {
   const [dir, month] = process.argv.slice(2);
   const supply = await read(join(dir, 'supply.json'));
+  const devOnly = await read(join(dir, 'development-only.json'));
   const inputs = await read(join(dir, 'inputs.json'));
   const run = await read(join(dir, 'run', 'resume.json')) ?? await read(join(dir, 'run', 'run.json'));
   const checkpoint = run?.checkpoint ?? (await read(join(dir, 'run', 'report.json')))?.checkpoint ?? null;
@@ -25,8 +26,9 @@ async function main() {
   const base = scores?.baseline, cand = frozen && scores ? scores[frozen.arm] : null;
   const report = {
     type: 'rsi-capability-skill-report-v1', month, campaignId: checkpoint?.campaignId ?? null,
-    status: run?.status ?? 'not-run', qualification: run?.qualification ?? evaluation?.decision ?? null,
-    reason: run?.reason ?? evaluation?.reasons?.[0] ?? null,
+    status: run?.status ?? devOnly?.status ?? 'not-run', qualification: run?.qualification ?? evaluation?.decision ?? (devOnly ? 'not-qualified' : null),
+    reason: run?.reason ?? evaluation?.reasons?.[0] ?? devOnly?.supply?.developmentChoice?.reason ?? null,
+    scoresDevelopment: devOnly?.supply?.developmentChoice?.scores ?? null, improverSpendCny: devOnly?.supply?.improverSpendCny ?? null,
     development: supply?.development ?? null, developmentChoice: supply?.developmentChoice ?? null,
     frozen: frozen ? { arm: frozen.arm, skillDigest: frozen.skillDigest, title: candidate?.title ?? null } : null,
     confirmation: confirmation ? { groups: inputs?.registration?.statistics?.G_target ?? null, sliceGroups: supply?.confirmation?.sliceGroups ?? null,
@@ -41,9 +43,11 @@ async function main() {
     '## 开发期', '',
     `- 开发行 ${report.development?.rows ?? '—'}（失败子集 ${report.development?.sliceRows ?? '—'}），各臂成本 ${JSON.stringify(report.development?.costCny ?? {})} 元`,
     ...(report.developmentChoice?.candidates ?? []).map((c) => `- 候选 ${c.arm}（${c.chars} 字）：总体 ${signed(c.overallDifference)}，失败子集 ${signed(c.sliceDifference)}`),
+    ...(report.scoresDevelopment ? Object.entries(report.scoresDevelopment).map(([arm, s]) => `- ${arm}：总体 ${pct(s.overall)}，失败子集 ${pct(s.slice)}`) : []),
+    ...(report.improverSpendCny !== null && report.improverSpendCny !== undefined ? [`- 改进器花费 ${report.improverSpendCny} 元`] : []),
     `- 冻结：${report.frozen ? `${report.frozen.arm} 「${report.frozen.title ?? ''}」` : '无（' + (report.developmentChoice?.reason ?? '—') + '）'}`, '',
     '## 确认期', '',
-    report.confirmation ? `- ${report.confirmation.groups} 组（失败子集 ${report.confirmation.sliceGroups}），每组每臂重复 ${report.confirmation.repeats} 次` : '- 未进行',
+    report.confirmation ? `- ${report.confirmation.groups} 组（失败子集 ${report.confirmation.sliceGroups}），每组每臂重复 ${report.confirmation.repeats} 次` : '- 未进行：开发期没有改进候选，确认集未开启，本季度 α 未动用',
     ...(report.confirmation?.baseline ? [`- 对照：总体 ${pct(report.confirmation.baseline.overall)}，失败子集 ${pct(report.confirmation.baseline.slice)}`] : []),
     ...(report.confirmation?.candidate ? [`- 候选：总体 ${pct(report.confirmation.candidate.overall)}，失败子集 ${pct(report.confirmation.candidate.slice)}`] : []),
     ...(report.confirmation?.costCny ? [`- 成本：${JSON.stringify(report.confirmation.costCny)} 元`] : []),

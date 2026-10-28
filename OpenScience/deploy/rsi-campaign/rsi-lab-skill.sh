@@ -50,6 +50,19 @@ if [ "$COMMAND" = improve2 ]; then
   cp -f "$RUN/candidates2.json" "$OUTBOX/$NAME/candidates2.json"; log "candidates2: $(cat "$RUN/improve2.out")"; exit 0
 fi
 [ "$COMMAND" = run ] || { echo "command is improve, improve2 or run" >&2; exit 2; }
+# No candidate earned a confirmation (the operator writes mode=development-only): recompute the registered development
+# choice in the lab image, sign the report, open nothing.
+if [ -s "$INBOX/$NAME/mode" ] && grep -qx development-only "$INBOX/$NAME/mode"; then
+  verify development.json candidates.json registration.json || { log "development inputs missing or checksum mismatch"; exit 3; }
+  SLICE=$(python3 -c 'import json,sys;print(",".join(str(x) for x in json.load(open(sys.argv[1]))["failureCalculators"]))' "$INBOX/$NAME/registration.json")
+  step develop lab none "$IMAGE" evals/rsi-campaigns/skill_assemble.mjs --development-only --development "$IN/development.json" --candidates "$IN/candidates.json" \
+    --failure-calculators "$SLICE" --month "$MONTH" --out-dir "$C" || exit 6
+  lab none "$IMAGE" evals/rsi-campaigns/skill_report.mjs "$C" "$MONTH" >> "$RUN/launcher.log" 2>&1 || true
+  [ -s "$RUN/report.json" ] && docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --user 10001:10001 "${KEYS[@]}" \
+    -v "$STATE":/srv/rsi-lab/state "$IMAGE" evals/rsi-campaigns/evaluator.mjs report "$C/report.json" /run/rsi-keys/evaluator.pem "$C/report.signed.json" >> "$RUN/launcher.log" 2>&1 || true
+  cp -f "$RUN/report.md" "$RUN/report.json" "$RUN/report.signed.json" "$RUN/supply.json" "$RUN/development-only.json" "$OUTBOX/$NAME/" 2>/dev/null || true
+  log "report: $(sed -n 3p "$RUN/report.md" 2>/dev/null)"; exit 0
+fi
 if ! done_step inputs; then
   for _ in $(seq 1 72); do verify development.json confirmation.json candidates.json registration.json && break; sleep 300; done
   verify development.json confirmation.json candidates.json registration.json || { log "inputs missing"; exit 3; }

@@ -154,3 +154,16 @@ test('the assembler builds a manifest and inputs the runner and evaluator take a
   assert.equal(completed.status, 'completed');
   assert.equal(completed.qualification, 'qualified');
 });
+
+test('a campaign whose development finds no improving candidate ends there, recomputed, with nothing opened', async () => {
+  const { developmentOnly } = await import('../skill_assemble.mjs');
+  const worse = (arm, inSlice) => (arm === 'baseline' ? 0.9 : inSlice ? 0.1 : 0.9);
+  const base = await skillFixture({ development: { p: worse } });
+  const development = Object.values(base.inputs.sources)[0];
+  const candidates = { model: 'qwen3.8-max', candidates: [GOOD, WEAK].map((c) => ({ arm: c.arm, digest: c.skill.digest, chars: c.skill.chars, title: c.skill.title })), spend: [{ cny: 0.2 }] };
+  const result = developmentOnly({ development, candidates, failureCalculators: [2, 3], month: '2026-11' });
+  assert.equal(result.status, 'development-only');
+  assert.equal(result.supply.developmentChoice.frozen, null);
+  assert.equal(result.supply.developmentChoice.reason, 'campaign_no_improving_candidate');
+  assert.equal(result.supply.improverSpendCny, 0.2);
+});
