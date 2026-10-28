@@ -110,3 +110,17 @@ test("a reference list rebuilt for a report that had none is headed in the repor
   // Hidden markers and code are not the report's language.
   assert.equal(defaultReferenceHeading("## 结果\n\n甲。<!-- claim:CLM-001 claim marker comment in English words -->\n```\nconst some = englishCode()\n```\n"), "## 参考文献");
 });
+
+test("the heading's language is the gate's own decision, not a second threshold", async () => {
+  const { defaultReferenceHeading } = await import("../src/claimTools.mjs");
+  const { reportLanguage } = await import("@evimed/domain/clinical-evidence");
+  // A Chinese report that carries a good deal of English terminology: Han characters are a quarter of its letters, which the
+  // gate (threshold 0.2) reads as Chinese and the old rule here (Han >= Latin) read as English.
+  const dense = `# 表观遗传调控\n\n## 结果\n\n${"该通路通过 methylation of the promoter region reduces transcription in cells. ".repeat(3)}${"染色质重塑".repeat(8)}。[1] <!-- claim:CLM-001 -->\n`;
+  assert.equal(reportLanguage(dense), "zh");
+  assert.equal(defaultReferenceHeading(dense), "## 参考文献");
+  // And the other way round for every shape of prose, whatever the gate decides.
+  for (const prose of [dense, "# Review\n\nSome 中文 terms in an English review of the evidence base for care. [1]\n", "", "| 表 | 值 |\n|---|---|\n| a | 1 |\n"]) {
+    assert.equal(defaultReferenceHeading(prose), reportLanguage(prose) === "en" ? "## References" : "## 参考文献");
+  }
+});
