@@ -24,7 +24,7 @@ import {
   matrixFindings, matrixProbe, matrixRoute, measure, measureStructure, MISSING_RECORDS, ORIGINAL_MIN_WIDTH,
   pageFindings, pageProbe, PAGE_PROBES, pdfFrameReady, pdfPreviewFindings, pdfProbe, pdfSourceTitle, pickVcrStudies, probeFindings,
   readerFindings, readerProbe, readerReady, RETIRED_NAMES, ROUTES, ROW_CLICK_PAGES, rowClickFindings, rowClickShown,
-  rowClickVerdict, rowProbe, sameBox, SECTION_SHAPES_BY_PAGE, skillDrawerFindings, skillDrawerProbe, sourceReaderRoute, structureFindings, tabOrderFindings,
+  rowClickVerdict, rowProbe, sameBox, SECTION_SHAPES_BY_PAGE, skillCreateFindings, skillCreateProbe, skillReturnProbe, sourceReaderRoute, structureFindings, tabOrderFindings,
   OPERATOR_SENTENCES, addressAct, ADDRESS_CASES, addressOpenFindings, addressProbe, addressStateFindings, addressStateHolds, AXE_RULES_PER_NOTICE, AXE_TAGS, axeLoaded, axeNotices,
   axeRun, axeVersionOf, composerFindings, composerProbe, COMPOSER_BOTTOM_PX, loadAxeSource, scanWithAxe,
   asFinding, CAPTURE_MAX_SLICES, CAPTURE_QUALITY, findingText, STEP_TARGETS,
@@ -406,15 +406,15 @@ function queryAll(root, selector) {
 }
 
 /** Run `fn` with `root` (a <body>) installed as the page. */
-function inPage(root, fn, { path = "/app/files" } = {}) {
+function inPage(root, fn, { path = "/app/files", search = "", focus = null } = {}) {
   const saved = Object.fromEntries(["document", "window", "getComputedStyle", "CSS", "location"].map((name) => [name, globalThis[name]]));
   const body = Object.assign(root, { innerText: descendants(root).map((el) => el.text).filter(Boolean).join("\n"), append: () => {} });
   Object.assign(globalThis, {
-    document: { body, createElement: () => ({ style: {}, remove: () => {} }), title: "页面 · EviMed", documentElement: { scrollWidth: 1512, scrollHeight: 945 }, activeElement: null, querySelector: (selector) => queryAll(body, selector)[0] ?? null, querySelectorAll: (selector) => queryAll(body, selector) },
+    document: { body, createElement: () => ({ style: {}, remove: () => {} }), title: "页面 · EviMed", documentElement: { scrollWidth: 1512, scrollHeight: 945 }, activeElement: focus, querySelector: (selector) => queryAll(body, selector)[0] ?? null, querySelectorAll: (selector) => queryAll(body, selector) },
     window: { innerWidth: 1512, innerHeight: 945 },
     getComputedStyle: (el) => el.style,
     CSS: { escape: (value) => value },
-    location: { pathname: path, search: "" },
+    location: { pathname: path, search },
   });
   try { return fn(); } finally { Object.assign(globalThis, saved); }
 }
@@ -912,10 +912,18 @@ function context() {
           const lost = process.env.FAKE_KB === "lost";
           return { path: lost && knowledgeStates++ >= 1 ? "/app/files" : "/app/files?q=" + encodeURIComponent("一份指南"), query: "一份指南", rows: 1, listed: true };
         }
-        if (typeof fn === "function" && fn.name === "skillDrawerProbe") {
+        // FAKE_SKILL=bare: no captions under the fields; FAKE_SKILL=drawer: the old drawer opens instead of the page's mode;
+        // FAKE_SKILL=stuck: 返回技能列表 leaves the mode on screen and focus nowhere.
+        if (typeof fn === "function" && fn.name === "skillCreateProbe") {
           skillProbes += 1;
+          if (process.env.FAKE_SKILL === "drawer") return { section: false, dialogs: 1, address: null };
           const refused = skillProbes % 2 === 0;
-          return { title: true, captions: process.env.FAKE_SKILL === "bare" ? 0 : 2, switchLabel: "保存后在“我的研究”里使用", needName: refused, needHow: refused };
+          return { section: true, dialogs: 0, address: "create", title: true, focused: true, inMain: true, back: true,
+            captions: process.env.FAKE_SKILL === "bare" ? 0 : 2, switchLabel: "保存后在“我的研究”里使用", needName: refused, needPurpose: refused, needHow: refused };
+        }
+        if (typeof fn === "function" && fn.name === "skillReturnProbe") {
+          const stuck = process.env.FAKE_SKILL === "stuck";
+          return { left: !stuck, address: stuck ? "create" : null, list: !stuck, focusReturned: !stuck, confirming: false };
         }
         if (typeof fn === "function" && fn.name === "cleanupProbe") {
           cleanupProbes += 1;
@@ -2114,20 +2122,59 @@ test("a document's page is read for its layout, its heading, the way back and wh
   assert.deepEqual(knowledgeReturnFindings("一份指南", read3({ reader: { ...columns, layout: null } })).notices.length, 1);
 });
 
-test("the new-skill drawer names its captions and its switch, names an empty field in place, and sends nothing", () => {
-  const opened = { title: true, captions: 2, switchLabel: "保存后在“我的研究”里使用", needName: false, needHow: false };
-  const refused = { ...opened, needName: true, needHow: true };
-  assert.deepEqual(skillDrawerFindings(opened, refused, []), []);
-  assert.deepEqual(skillDrawerFindings(null, null, []), ["extensions-installed@desktop: 创建技能 did not open a drawer"]);
-  assert.equal(skillDrawerFindings({ ...opened, captions: 0, switchLabel: null, title: false }, refused, []).length, 3);
-  assert.deepEqual(skillDrawerFindings(opened, opened, []), ["extensions-installed@desktop: 保存 with empty fields does not say 请填写名称 and 请写出这个技能怎么做 in place"]);
-  assert.deepEqual(skillDrawerFindings(opened, refused, ["POST /api/personal-skills"]), ["extensions-installed@desktop: 保存 with empty fields sent a request: POST /api/personal-skills"]);
-  const drawer = node("div", { attrs: { role: "dialog" } }, [
-    node("h2", { text: "新建技能" }), node("p", { attrs: { id: "x-purpose-hint" }, text: "说明" }), node("p", { attrs: { id: "x-instructions-hint" }, text: "步骤" }),
-    node("div", { attrs: { role: "switch", "aria-label": "保存后在“我的研究”里使用" } }), node("p", { text: "请填写名称" }),
+test("the new-skill mode is a section of the main area that takes focus, names an empty field in place, sends nothing and gives the list and focus back", () => {
+  const opened = { section: true, dialogs: 0, address: "create", title: true, focused: true, inMain: true, back: true, captions: 2, switchLabel: "保存后在“我的研究”里使用", needName: false, needPurpose: false, needHow: false };
+  const refused = { ...opened, needName: true, needPurpose: true, needHow: true };
+  const returned = { left: true, address: null, list: true, focusReturned: true, confirming: false };
+  const at = "extensions-installed@desktop";
+  assert.deepEqual(skillCreateFindings(opened, refused, returned, []), []);
+  // Nothing opened, or the old drawer: the failure says what is missing and what opened instead, and never reads further.
+  assert.deepEqual(skillCreateFindings({ section: false, dialogs: 0, address: null }, null, null, []),
+    [`${at}: 创建技能 did not open the creation mode in the main area (no section 新建技能; ?compose=create is not in the address)`]);
+  assert.deepEqual(skillCreateFindings({ section: false, dialogs: 1, address: null }, null, null, []),
+    [`${at}: 创建技能 did not open the creation mode in the main area (no section 新建技能; a dialog opened instead; ?compose=create is not in the address)`]);
+  assert.deepEqual(skillCreateFindings(null, null, null, []).length, 1);
+  // Each part of the mode is its own finding.
+  assert.deepEqual(skillCreateFindings({ ...opened, address: null }, refused, returned, []), [`${at}: the creation mode is not in the address (?compose=create), so a reload or Back would lose it`]);
+  assert.deepEqual(skillCreateFindings({ ...opened, inMain: false }, refused, returned, []), [`${at}: the creation mode is a dialog, not a section of the main area`]);
+  assert.deepEqual(skillCreateFindings({ ...opened, title: false }, refused, returned, []), [`${at}: the creation mode does not title the page 新建技能`]);
+  assert.deepEqual(skillCreateFindings({ ...opened, focused: false }, refused, returned, []), [`${at}: focus did not move into the creation section when it opened`]);
+  assert.equal(skillCreateFindings({ ...opened, captions: 0, switchLabel: null, back: false }, refused, returned, []).length, 3);
+  assert.deepEqual(skillCreateFindings(opened, opened, returned, []), [`${at}: 保存 with empty fields does not say 请填写名称, 请写出什么时候使用这个技能 and 请写出这个技能怎么做 in place`]);
+  assert.deepEqual(skillCreateFindings(opened, refused, returned, ["POST /api/personal-skills"]), [`${at}: 保存 with empty fields sent a request: POST /api/personal-skills`]);
+  // The way back: found, leaving the mode, bringing the list and its menu and focus back, asking nothing of an untouched form.
+  assert.deepEqual(skillCreateFindings(opened, refused, null, []), [`${at}: 返回技能列表 was not found to press`]);
+  assert.equal(skillCreateFindings(opened, refused, { left: false, address: "create", list: false, focusReturned: false, confirming: true }, []).length, 4);
+
+  const hint = (id) => node("p", { attrs: { id }, text: "说明" });
+  const form = node("section", { attrs: { "aria-label": "新建技能" } }, [
+    hint("x-purpose-hint"), hint("x-instructions-hint"), node("div", { attrs: { role: "switch", "aria-label": "保存后在“我的研究”里使用" } }),
+    node("button", { text: "返回技能列表" }), node("p", { text: "请填写名称" }), node("p", { text: "请写出什么时候使用这个技能" }),
   ]);
-  assert.deepEqual(inPage(node("body", {}, [drawer]), () => skillDrawerProbe()), { title: true, captions: 2, switchLabel: "保存后在“我的研究”里使用", needName: true, needHow: false });
-  assert.equal(inPage(page(header()), () => skillDrawerProbe()), null);
+  const main = (...blocks) => node("body", {}, [node("main", {}, [node("h1", { text: "新建技能" }), ...blocks])]);
+  const read = (root, options) => inPage(root, () => skillCreateProbe(), options);
+  assert.deepEqual(read(main(form), { search: "?compose=create", focus: form }), {
+    section: true, dialogs: 0, address: "create", title: true, focused: true, inMain: true, captions: 2, switchLabel: "保存后在“我的研究”里使用", back: true,
+    needName: true, needPurpose: true, needHow: false,
+  });
+  // Focus outside the section, a missing address, a section inside a dialog: each reads as what it is.
+  assert.equal(read(main(form), { search: "?compose=create" }).focused, false);
+  assert.equal(read(main(form)).address, null);
+  const drawn = node("div", { attrs: { role: "dialog" } }, [form]);
+  const inDialog = read(node("body", {}, [node("main", {}, [node("h1", { text: "插件与技能" })]), drawn]), { search: "?compose=create" });
+  assert.equal(inDialog.inMain, false);
+  assert.equal(inDialog.dialogs, 1);
+  assert.equal(inDialog.title, false);
+  // The page without the mode, and a dialog that is not it.
+  assert.deepEqual(read(page(header())), { section: false, dialogs: 0, address: null });
+  assert.deepEqual(read(node("body", {}, [node("main", {}, []), node("div", { attrs: { role: "dialog" } }, [node("p", { text: "x" })])])), { section: false, dialogs: 1, address: null });
+
+  const add = node("button", { text: "添加技能" });
+  const listPage = node("body", {}, [node("main", {}, [node("h1", { text: "插件与技能" }), add])]);
+  assert.deepEqual(inPage(listPage, () => skillReturnProbe(), { focus: add }), { left: true, address: null, list: true, focusReturned: true, confirming: false });
+  assert.deepEqual(inPage(listPage, () => skillReturnProbe()), { left: true, address: null, list: true, focusReturned: false, confirming: false });
+  const stillThere = inPage(node("body", {}, [node("main", {}, [node("h1", { text: "新建技能" }), form])]), () => skillReturnProbe(), { search: "?compose=create" });
+  assert.deepEqual(stillThere, { left: false, address: "create", list: false, focusReturned: false, confirming: false });
 });
 
 test("a start refused for cleanup shows a cover that says so and offers no allowance page; the alert after the wait offers 重试 and the way to what exists", () => {
@@ -2258,14 +2305,20 @@ test("a page that regresses on what R11 fixed fails the walk and names the page 
   assert.ok(after.failures.includes("geo-sources@desktop: clicking the first source opened no drawer (a dialog holding data-geo-source-drawer)"));
   assert.ok(after.failures.includes("autopilot@desktop: the task bar names a time zone by its identifier: Asia/Shanghai"));
   assert.ok((await failures({ FAKE_PDF: "narrow" })).failures.includes("files@desktop: the original of a PDF is 559 px wide on its page (at least 560)"));
-  assert.ok((await failures({ FAKE_SKILL: "bare" })).failures.includes("extensions-installed@desktop: the new-skill drawer has 0 caption(s) under its fields (two)"));
-  // A walk that cannot reach the create drawer has not walked it: a missing menu fails the step, never a notice.
+  assert.ok((await failures({ FAKE_SKILL: "bare" })).failures.includes("extensions-installed@desktop: the creation form has 0 caption(s) under its fields (two)"));
+  // The old drawer opening in place of the page's creation mode is a failure that says what opened.
+  assert.ok((await failures({ FAKE_SKILL: "drawer" })).failures.includes("extensions-installed@desktop: 创建技能 did not open the creation mode in the main area (no section 新建技能; a dialog opened instead; ?compose=create is not in the address)"));
+  // A way back that leaves the mode on screen, the list away and focus nowhere is three findings, not a pass.
+  const stuck = (await failures({ FAKE_SKILL: "stuck" })).failures;
+  assert.ok(stuck.includes("extensions-installed@desktop: 返回技能列表 left the creation mode on screen or in the address"));
+  assert.ok(stuck.includes("extensions-installed@desktop: focus did not return to 添加技能 when the list came back"));
+  // A walk that cannot reach the create mode has not walked it: a missing menu fails the step, never a notice.
   assert.ok((await failures({ FAKE_SKILL_MENU: "missing" })).failures.includes("extensions-installed@desktop: no 「添加技能」 menu to open"));
   assert.ok((await failures({ FAKE_MATRIX: "search" })).failures.includes("evidence-matrix@desktop: searching for CLM-001 leaves 3 row(s) and “显示 3 / 3 条”"));
   assert.ok((await failures({ FAKE_MATRIX: "focus" })).failures.includes("evidence-matrix@phone: Escape does not return focus to the claim's row"));
 });
 
-test("the new-skill drawer's 保存 sends nothing: a write the page tries is refused in the browser and fails the step", async () => {
+test("the new-skill mode's 保存 sends nothing: a write the page tries is refused in the browser and fails the step", async () => {
   const { code, log, report } = await walk({ FAKE_SKILL_WRITE: "1" });
   assert.equal(code, 1);
   assert.deepEqual(log.filter((entry) => entry.aborted), [{ aborted: "POST" }]);

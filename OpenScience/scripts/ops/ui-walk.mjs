@@ -47,11 +47,11 @@
  * stubs itself — fails: the sidebar is one landmark that is inert when closed and not a Tab stop, a region that scrolls sideways is a Tab
  * stop or holds one, the heading levels of GEO's overview and the memory page go down one at a time, a phone's rail and
  * study counts are folded and not cut off, a record that is not there says so and goes back to its list, 关注 is one sentence and one
- * button, the memory page opens on a tab that holds something, a PDF's original opens wide and fit to width, the new-skill drawer
- * names an empty field in place, the evidence matrix opens a dialog from a row and Escape returns the focus. What depends on the
+ * button, the memory page opens on a tab that holds something, a PDF's original opens wide and fit to width, the new-skill mode
+ * of the skills page (a section of the main area since v3.2) names an empty field in place and gives the list and focus back, the evidence matrix opens a dialog from a row and Escape returns the focus. What depends on the
  * account's data or is a measure of taste (more rows on a first screen than the page's ceiling, a headline below 520 px on a phone) is a
  * finding with a rule and a number, which fails unless the baseline accepts it (R19, below). Nothing here writes: the steps that click
- * only open a menu, a drawer, a tab or a row, the new-skill drawer's 保存 is pressed with every request that is not a read refused in the
+ * only open a menu, a drawer, a tab or a row, the new-skill mode's 保存 is pressed with every request that is not a read refused in the
  * browser, and the chat's cleanup cover is the walk's own answer to `start_runtime` (asked for with the chat page; it waits up to
  * 135 s for the shell to give up, which `OPEN_SCIENCE_WALK_CLEANUP_WAIT_MS=0` skips).
  *
@@ -2890,41 +2890,94 @@ export function readerFindings(r, expected) {
   return { failures, notices };
 }
 
-/** What the new-skill drawer shows: its captions, the switch for this project, and the words a refused empty form puts beside its fields. */
-export function skillDrawerProbe() {
+/**
+ * What the new-skill mode shows. Creating a skill is a mode of the page since DS22.6 (v3.2, `?compose=create`): a section of the main
+ * area, titled 新建技能 over the page's own heading, with focus moved into it, and not a drawer over the list. `null` is the page with
+ * no such section; a read that finds a dialog instead says so (`dialogs`), so the finding names what opened.
+ */
+export function skillCreateProbe() {
   const visible = (el) => {
     const box = el.getBoundingClientRect();
     return box.width > 0 && box.height > 0 && (typeof el.checkVisibility !== "function" || el.checkVisibility());
   };
   const words = (el) => (el.textContent ?? "").replace(/\s+/g, " ").trim();
-  const dialog = [...document.querySelectorAll("[role='dialog']")].find(visible);
-  if (!dialog) return null;
-  const text = words(dialog);
+  const dialogs = [...document.querySelectorAll("[role='dialog']")].filter(visible).length;
+  const section = [...document.querySelectorAll("section[aria-label='新建技能']")].find(visible);
+  if (!section) return { section: false, dialogs, address: new URLSearchParams(location.search).get("compose") };
+  const text = words(section);
+  const active = document.activeElement;
   return {
-    title: [...dialog.querySelectorAll("h1, h2, h3")].some((el) => words(el) === "新建技能"),
-    captions: [...dialog.querySelectorAll("p")].filter((el) => visible(el) && (el.id ?? "").endsWith("-hint")).length,
+    section: true,
+    dialogs,
+    // The mode is in the address, so a reload or Back keeps or leaves it as a person expects (`?compose=create`).
+    address: new URLSearchParams(location.search).get("compose"),
+    // The page's own heading names the mode; a section laid over the list under the list's own title would not.
+    title: [...document.querySelectorAll("h1")].some((el) => visible(el) && words(el) === "新建技能"),
+    // Focus is on the section or on a control in it: a keyboard or screen-reader reader is not left at the top of the page.
+    focused: Boolean(active && section.contains(active)),
+    // The form is in the main area: not inside a dialog, and not in the sidebar.
+    inMain: Boolean(section.closest("main")) && !section.closest("[role='dialog']"),
+    captions: [...section.querySelectorAll("p")].filter((el) => visible(el) && (el.id ?? "").endsWith("-hint")).length,
     // A switch whose label is shown carries it as its own text (the `Switch` primitive's `showLabel`); one labelled from outside
     // has it on the attribute or beside it. The parent alone read the whole form (release-11 walk: a present switch went unseen).
-    switchLabel: [...dialog.querySelectorAll("[role='switch']")].flatMap((el) => [el.getAttribute("aria-label") ?? "", words(el), words(el.parentElement ?? el)])
+    switchLabel: [...section.querySelectorAll("[role='switch']")].flatMap((el) => [el.getAttribute("aria-label") ?? "", words(el), words(el.parentElement ?? el)])
       .find((label) => label.startsWith("保存后在")) ?? null,
+    back: [...section.querySelectorAll("button, a")].some((el) => visible(el) && words(el) === "返回技能列表"),
     needName: text.includes("请填写名称"),
+    needPurpose: text.includes("请写出什么时候使用这个技能"),
     needHow: text.includes("请写出这个技能怎么做"),
   };
 }
 
 /**
- * @param {any} opened the drawer as it opened @param {any} refused the drawer after 保存 with every field empty
- * @param {string[]} writes the requests that would have changed the deployment, which the walk refused to send
+ * What the page is after 返回技能列表: the mode left (no section, no `compose` in the address), the list's own header back with its
+ * 添加技能 menu, and focus handed back to the button that opened the mode.
+ */
+export function skillReturnProbe() {
+  const visible = (el) => {
+    const box = el.getBoundingClientRect();
+    return box.width > 0 && box.height > 0 && (typeof el.checkVisibility !== "function" || el.checkVisibility());
+  };
+  const words = (el) => (el.textContent ?? "").replace(/\s+/g, " ").trim();
+  const add = [...document.querySelectorAll("button")].find((el) => visible(el) && words(el) === "添加技能");
+  const active = document.activeElement;
+  return {
+    left: ![...document.querySelectorAll("section[aria-label='新建技能']")].some(visible),
+    address: new URLSearchParams(location.search).get("compose"),
+    list: Boolean(add) && [...document.querySelectorAll("h1")].some((el) => visible(el) && words(el) === "插件与技能"),
+    focusReturned: Boolean(add && active === add),
+    confirming: [...document.querySelectorAll("[role='dialog']")].some(visible),
+  };
+}
+
+/**
+ * @param {any} opened the mode as it opened @param {any} refused the mode after 保存 with every field empty
+ * @param {any} returned the page after 返回技能列表 @param {string[]} writes the requests that would have changed the deployment,
+ * which the walk refused to send
  * @returns {string[]} failures
  */
-export function skillDrawerFindings(opened, refused, writes) {
+export function skillCreateFindings(opened, refused, returned, writes) {
+  const at = "extensions-installed@desktop";
+  if (!opened?.section) {
+    return [`${at}: 创建技能 did not open the creation mode in the main area (no section 新建技能${opened?.dialogs ? `; a dialog opened instead` : ""}${opened?.address === "create" ? "" : "; ?compose=create is not in the address"})`];
+  }
   const failures = [];
-  if (!opened) return ["extensions-installed@desktop: 创建技能 did not open a drawer"];
-  if (!opened.title) failures.push("extensions-installed@desktop: the new-skill drawer is not titled 新建技能");
-  if (opened.captions < 2) failures.push(`extensions-installed@desktop: the new-skill drawer has ${opened.captions} caption(s) under its fields (two)`);
-  if (!opened.switchLabel) failures.push("extensions-installed@desktop: the new-skill drawer has no switch for using the skill in this project");
-  if (refused && !(refused.needName && refused.needHow)) failures.push("extensions-installed@desktop: 保存 with empty fields does not say 请填写名称 and 请写出这个技能怎么做 in place");
-  if (writes.length) failures.push(`extensions-installed@desktop: 保存 with empty fields sent a request: ${writes.join(", ")}`);
+  if (opened.address !== "create") failures.push(`${at}: the creation mode is not in the address (?compose=create), so a reload or Back would lose it`);
+  if (opened.dialogs > 0 || !opened.inMain) failures.push(`${at}: the creation mode is a dialog, not a section of the main area`);
+  if (!opened.title) failures.push(`${at}: the creation mode does not title the page 新建技能`);
+  if (!opened.focused) failures.push(`${at}: focus did not move into the creation section when it opened`);
+  if (opened.captions < 2) failures.push(`${at}: the creation form has ${opened.captions} caption(s) under its fields (two)`);
+  if (!opened.switchLabel) failures.push(`${at}: the creation form has no switch for using the skill in this project`);
+  if (!opened.back) failures.push(`${at}: the creation mode has no 返回技能列表`);
+  if (refused && !(refused.needName && refused.needPurpose && refused.needHow)) failures.push(`${at}: 保存 with empty fields does not say 请填写名称, 请写出什么时候使用这个技能 and 请写出这个技能怎么做 in place`);
+  if (writes.length) failures.push(`${at}: 保存 with empty fields sent a request: ${writes.join(", ")}`);
+  if (!returned) failures.push(`${at}: 返回技能列表 was not found to press`);
+  else {
+    if (!returned.left || returned.address) failures.push(`${at}: 返回技能列表 left the creation mode on screen or in the address`);
+    if (!returned.list) failures.push(`${at}: 返回技能列表 did not bring back the list with its 添加技能 menu`);
+    if (!returned.focusReturned) failures.push(`${at}: focus did not return to 添加技能 when the list came back`);
+    if (returned.confirming) failures.push(`${at}: leaving an untouched creation form asked to discard it`);
+  }
   return failures;
 }
 
@@ -3389,7 +3442,7 @@ const CLEANUP_WALK_WAIT_MS = 135_000;
 export const STEP_TARGETS = {
   "files-pdf": "the original of the knowledge base's first finished PDF, opened on its own page",
   "files-return": "a document opened from a search of the knowledge base, and both ways back to that search",
-  "extensions-create": "the new-skill drawer, opened from the 「添加技能」 menu and saved empty with every write refused",
+  "extensions-create": "the new-skill mode of the page, opened from the 「添加技能」 menu, saved empty with every write refused, and left by its way back",
   "memory-overview-drawer": "the first row of 总览's table of changes, and the drawer it opens",
   "knowledge-graph-mark": "the first mark of the knowledge graph, and the page it opens",
   "evidence-matrix": "a finished package's evidence matrix, and the dialog a row opens",
@@ -3728,12 +3781,13 @@ export async function walkMemoryOverview(page, base, route) {
 }
 
 /**
- * The new-skill drawer: opened from the header's 「添加技能」 menu by 创建技能, it says what its fields
- * are for and offers to use the skill in this project, and 保存 with every field empty names what is missing in place. The save
- * button writes, so every request that is not a read is refused in the browser before it leaves, and the step fails if one was
- * tried. A control the step cannot find fails it: a walk that did not reach the drawer has not walked it.
+ * The new-skill mode: opened from the header's 「添加技能」 menu by 创建技能, it is a section of the main area (`?compose=create`) that
+ * takes focus, says what its fields are for and offers to use the skill in this project; 保存 with every field empty names what is
+ * missing in place; 返回技能列表 brings the list back and focus with it. The save button writes, so every request that is not a read
+ * is refused in the browser before it leaves, and the step fails if one was tried. A control the step cannot find fails it: a walk
+ * that did not reach the mode has not walked it.
  */
-async function walkSkillDrawer(page, base, route) {
+async function walkSkillCreate(page, base, route) {
   await openRoute(page, base, route);
   /** @type {string[]} */ const writes = [];
   const guard = (route) => {
@@ -3747,15 +3801,19 @@ async function walkSkillDrawer(page, base, route) {
     await page.waitForTimeout(500);
     if (!await page.evaluate(clickNamed, ["menuitem", "创建技能"])) return { failures: ["extensions-installed@desktop: the 「添加技能」 menu has no 创建技能"] };
     await page.waitForTimeout(800);
-    const opened = await page.evaluate(skillDrawerProbe);
+    const opened = await page.evaluate(skillCreateProbe);
     let refused = null;
-    if (opened) {
-      await page.evaluate(clickNamed, ["button", "保存", "[role='dialog']"]);
+    let returned = null;
+    if (opened?.section) {
+      await page.evaluate(clickNamed, ["button", "保存", "section[aria-label='新建技能']"]);
       await page.waitForTimeout(600);
-      refused = await page.evaluate(skillDrawerProbe);
-      await page.evaluate(clickNamed, ["button", "取消", "[role='dialog']"]);
+      refused = await page.evaluate(skillCreateProbe);
+      if (await page.evaluate(clickNamed, ["button", "返回技能列表", "section[aria-label='新建技能']"])) {
+        await page.waitForTimeout(600);
+        returned = await page.evaluate(skillReturnProbe);
+      }
     }
-    return { failures: skillDrawerFindings(opened, refused, writes), read: { opened, refused, writes } };
+    return { failures: skillCreateFindings(opened, refused, returned, writes), read: { opened, refused, returned, writes } };
   } finally {
     await page.unroute("**/api/**", guard).catch(() => {});
   }
@@ -4112,7 +4170,7 @@ async function main() {
             if (name === "files" && found.pdfTitle) await recordStep(report, failures, notices, "files-pdf", () => walkPdfPreview(page, base, route, found.pdfTitle));
             // A08 on the knowledge base: a search, a document opened from it, and both ways back (only where there is a document to open).
             if (name === "files" && clicked.rows.length > 0) await recordStep(report, failures, notices, "files-return", () => walkKnowledgeReturn(page, base, route));
-            if (name === "extensions-installed") await recordStep(report, failures, notices, "extensions-create", () => walkSkillDrawer(page, base, route));
+            if (name === "extensions-installed") await recordStep(report, failures, notices, "extensions-create", () => walkSkillCreate(page, base, route));
             if (name === "memory-overview") await recordStep(report, failures, notices, "memory-overview-drawer", () => walkMemoryOverview(page, base, route));
             if (name === "knowledge-graph") await recordStep(report, failures, notices, "knowledge-graph-mark", () => walkKnowledgeGraph(page, base, route));
           }
