@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import { connect as connectSocket } from "node:net";
-import { mkdtemp, mkdir, rm, symlink, writeFile, stat } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -19,7 +19,8 @@ import { GeoNativeFramePolicy, createGeoFrameResolver } from "../src/geoNativeFr
 import { createRuntimeUiServer } from "../src/runtimeUiServer.mjs";
 import { issueRuntimeUiFrame, renewRuntimeUiFrame } from "../src/runtimeUiFrames.mjs";
 import { InMemoryStore, PostgresStore } from "../src/store.mjs";
-import { isDeniedRuntimeUiMethod, RUNTIME_UI_DENIED_METHODS, RUNTIME_UI_DENIED_NAMESPACES } from "@evimed/domain";
+import { isDeniedRuntimeUiMethod, RUNTIME_UI_DENIED_METHODS, RUNTIME_UI_DENIED_NAMESPACES, RUNTIME_UI_READABLE_SETTINGS, RUNTIME_UI_SETTINGS_READ, runtimeUiSettingsAnswer } from "@evimed/domain";
+import { CHAT_PRESENTATION } from "../src/dshProfilePatch.mjs";
 
 const UI_ORIGIN = "https://science.example:8443";
 const SHELL_ORIGIN = "https://science.example";
@@ -1017,6 +1018,127 @@ test("a new project's first open is told there is no default workspace to make, 
     const refused = await fetch(`${f.base}/api/workspace/initializeDefault`, { method: "POST", headers: { Cookie: f.cookie, Origin: UI_ORIGIN }, body });
     assert.equal((await refused.json()).error?.code, "runtime_ui_method_denied", body);
   }
+});
+
+/**
+ * A fake kernel for the settings read: every request it sees is recorded, and it answers with `answer(call)`.
+ * @param {any} f @param {(call: any) => { status?: number, contentType?: string, body: string }} answer
+ */
+function settingsKernel(f, answer) {
+  const seen = [];
+  f.manager.proxy = RuntimeManager.prototype.proxy.bind(f.manager);
+  f.upstream.on("request", (req, res) => {
+    const parts = [];
+    req.on("data", (part) => parts.push(part));
+    req.on("end", () => {
+      const call = JSON.parse(Buffer.concat(parts).toString("utf8") || "null");
+      seen.push({ path: req.url, call });
+      const { status = 200, contentType = "application/json", body } = answer(call);
+      res.writeHead(status, { "content-type": contentType });
+      res.end(body);
+    });
+  });
+  return seen;
+}
+
+/** @param {any} f @param {string} method @param {string} body */
+const postSettings = (f, method, body) => fetch(`${f.base}/api/${method}`, {
+  method: "POST", headers: { Cookie: f.cookie, Origin: UI_ORIGIN, "content-type": "application/json" }, body,
+});
+
+const settingsRead = (rpcId = "r1") => ({ type: "client-request", rpcId, method: RUNTIME_UI_SETTINGS_READ, payload: { args: {} } });
+
+test("the chat's presentation reaches the page through the one settings read, and the rest of the kernel's document does not", { timeout: 5000 }, async (t) => {
+  // A hosted conversation drew the web client's default work details (`detailed`: every step flat while the turn runs)
+  // because the page's only settings read was denied with the namespace (2026-10-28). The kernel's answer is the recorded
+  // one (packages/contracts/dsh/fixtures, a live 0.2.1-rc.2 with the profile's `ui-chat` values in its patch): 21 views,
+  // among them the model provider, the web tools' endpoints, the sandbox and the permission table.
+  const recorded = await readFile(new URL("../../../packages/contracts/dsh/fixtures/settings-describe.json", import.meta.url), "utf8");
+  const views = JSON.parse(recorded).result.value.namespaces;
+  assert.ok(views.length > 1 && views.some((view) => view.ns === "llm-deepseek"), "the recording is the whole document");
+  const f = await fixture(t);
+  const seen = settingsKernel(f, () => ({ body: recorded }));
+  const response = await postSettings(f, RUNTIME_UI_SETTINGS_READ, JSON.stringify(settingsRead("r1")));
+  assert.equal(response.status, 200);
+  const text = await response.text();
+  const answer = JSON.parse(text);
+  assert.deepEqual(answer, {
+    type: "server-response", rpcId: "r1",
+    result: { ok: true, value: { writable: false, hasDocument: false, namespaces: [views.find((view) => view.ns === "ui-chat")] } },
+  });
+  // What the chat adopts is `value`, and it is the profile's.
+  assert.deepEqual(
+    { transcriptView: answer.result.value.namespaces[0].value.transcriptView, linkOpening: answer.result.value.namespaces[0].value.linkOpening },
+    CHAT_PRESENTATION,
+  );
+  for (const leaked of ["llm-deepseek", "bash-sandbox", "permission", "api.deepseek.com", "DEEPSEEK_API_KEY"]) {
+    assert.equal(text.includes(leaked), false, `${leaked} is not the page's to read`);
+  }
+  assert.deepEqual(seen, [{ path: "/api/settings/describe", call: settingsRead("r1") }], "the kernel got the page's call as it was sent");
+  assert.ok(isDeniedRuntimeUiMethod(RUNTIME_UI_SETTINGS_READ), "the namespace stays denied: this is an exception on one transport, not an opening");
+  assert.deepEqual(RUNTIME_UI_READABLE_SETTINGS, ["ui-chat"]);
+});
+
+test("anything but the exact settings read is refused before the kernel, and every settings write stays refused", { timeout: 5000 }, async (t) => {
+  const f = await fixture(t);
+  const seen = settingsKernel(f, () => ({ body: "{}" }));
+  const call = settingsRead();
+  for (const body of ["", "{", "null", JSON.stringify({ ...call, payload: {} }), JSON.stringify({ ...call, payload: { args: { ns: "llm-deepseek" } } }),
+    JSON.stringify({ ...call, rpcId: "" }), JSON.stringify({ ...call, rpcId: "r".repeat(129) }), JSON.stringify({ ...call, method: "settings/mutate" }),
+    JSON.stringify({ ...call, extra: true }), JSON.stringify({ ...call, payload: { args: {}, more: 1 } })]) {
+    const refused = await postSettings(f, RUNTIME_UI_SETTINGS_READ, body);
+    assert.equal(refused.status, 403, body);
+    assert.equal((await refused.json()).error?.code, "runtime_ui_method_denied", body);
+  }
+  const fetched = await fetch(`${f.base}/api/${RUNTIME_UI_SETTINGS_READ}`, { headers: { Cookie: f.cookie, Origin: UI_ORIGIN } });
+  assert.equal(fetched.status, 403, "a GET is not the read");
+  for (const [method, args] of [["settings/mutate", { ns: "ui-chat", ops: [{ op: "set", path: ["transcriptView"], value: "detailed" }] }],
+    ["settings/update", { ns: "ui-chat", patch: { transcriptView: "detailed" } }], ["settings/replace", { ns: "ui-chat", section: {} }], ["settings/openSettingsDocument", {}]]) {
+    const refused = await postSettings(f, method, JSON.stringify({ type: "client-request", rpcId: "w", method, payload: { args } }));
+    assert.equal(refused.status, 403, method);
+    assert.equal((await refused.json()).error?.code, "runtime_ui_method_denied", method);
+  }
+  assert.deepEqual(seen, [], "the kernel was asked nothing");
+});
+
+test("a kernel answer the projection does not recognise is refused, never forwarded", { timeout: 5000 }, async (t) => {
+  const view = { ns: "ui-chat", autoGenerate: false, schema: { uid: 1, refs: {} }, value: { transcriptView: "standard" }, applies: "live", secrets: [], revision: 0 };
+  const document = (namespaces, rpcId = "r1") => JSON.stringify({ type: "server-response", rpcId, result: { ok: true, value: { writable: true, hasDocument: true, namespaces } } });
+  const cases = {
+    failure: { body: JSON.stringify({ type: "server-response", rpcId: "r1", result: { ok: false, error: { code: "gateway/internal", message: "settings service is absent", details: {} } } }) },
+    "another call's answer": { body: document([view], "r2") },
+    "not JSON": { contentType: "text/html", body: document([view]) },
+    "not a success status": { status: 500, body: document([view]) },
+    "no namespace list": { body: JSON.stringify({ type: "server-response", rpcId: "r1", result: { ok: true, value: { writable: true } } }) },
+    "a readable view without its value": { body: document([{ ...view, value: undefined }]) },
+    "a readable view twice": { body: document([view, view]) },
+    "a secret slot of another shape": { body: document([{ ...view, secrets: [{ path: "apiKey", set: true }] }]) },
+  };
+  const f = await fixture(t);
+  let current = "";
+  const seen = settingsKernel(f, () => cases[current]);
+  for (const name of Object.keys(cases)) {
+    current = name;
+    const refused = await postSettings(f, RUNTIME_UI_SETTINGS_READ, JSON.stringify(settingsRead("r1")));
+    assert.equal(refused.status, 403, name);
+    const text = await refused.text();
+    assert.equal(JSON.parse(text).error?.code, "runtime_ui_method_denied", name);
+    assert.equal(text.includes("settings service is absent") || text.includes("standard"), false, name);
+  }
+  assert.equal(seen.length, Object.keys(cases).length, "each was asked of the kernel once and refused on the way back");
+  // A document with no readable namespace is still an answer: the page keeps its own default.
+  assert.equal(runtimeUiSettingsAnswer({ rpcId: "r1" }, { status: 200, contentType: "application/json; charset=utf-8", body: document([{ ...view, ns: "llm-deepseek" }]) }),
+    JSON.stringify({ type: "server-response", rpcId: "r1", result: { ok: true, value: { writable: false, hasDocument: false, namespaces: [] } } }));
+});
+
+test("the multiplexed socket keeps refusing the settings read: the page makes it over HTTP", { timeout: 5000 }, async (t) => {
+  const f = await fixture(t);
+  const c = f.connect({ Origin: SHELL_ORIGIN });
+  assert.equal(await c.opened, 101);
+  c.send({ type: "open", streamId: "s1", endpoint: RUNTIME_UI_SETTINGS_READ, payload: { args: {} } });
+  assert.equal((await c.next()).error?.code, "runtime_ui_method_denied");
+  assert.equal((await c.next()).type, "end");
+  assert.deepEqual(f.received, []);
 });
 
 test("the page's question whether the host has a desktop is answered here, and the routes that would act on a yes stay refused", { timeout: 5000 }, async (t) => {

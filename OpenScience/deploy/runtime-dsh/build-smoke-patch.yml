@@ -82,6 +82,13 @@
 - id: open-in-app
   disabled: true
 
+# The chat's presentation, as the control plane's patch sets it: the folded
+# `standard` work details and links in the reader's own tab.
+- id: ui-chat
+  config:
+    transcriptView: standard
+    linkOpening: new-tab
+
 # The preset every session gets, named the same way the control plane's
 # generated profile patch names it. Since 0.1.7 a preset is a row of the
 # composition (the socket's `presets/evimed-universal.patch.yml`) and there
