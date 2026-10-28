@@ -36,7 +36,7 @@ import {
 import { serveFrontierList, trackFrontierFilter, trackFrontierItemAction, useFrontierListTracking, type FrontierTrackSurface } from "@/lib/frontierTracking";
 import { toast } from "@/lib/toast";
 import { PageShell } from "@/components/layout/PageShell";
-import { frontierToolbar, type FollowChoice, type PageView } from "@/components/frontier/FrontierControls";
+import { frontierHeaderActions, frontierToolbar, type FollowChoice, type PageView } from "@/components/frontier/FrontierControls";
 import { DailyIssue, dailyControls, useFrontierDaily } from "@/components/frontier/DailyView";
 import { FeedList, FEED_PAGE_SIZE, type Listing } from "@/components/frontier/FrontierFeed";
 import { FrontierCard } from "@/components/frontier/FrontierCard";
@@ -897,7 +897,6 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     },
     zones: {
       ...zoneDirectoryControls({ scope: zoneScope, onScope: setZoneScope, query: view === "zones" ? q : "", directory: zones }),
-      onCreate: zones.canCreate ? () => zones.setCreating(!zones.creating) : null,
     },
     onClear: () => { clearFilters(); setDraft(""); },
     onReset: () => setFilters(NO_FILTERS),
@@ -957,6 +956,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   return (
     <div ref={pageRoot} className="h-full min-h-0"><PageShell
       title="前沿动态"
+      actionPlan={frontierHeaderActions(view, zones.canCreate ? () => zones.setCreating(!zones.creating) : null)}
       toolbar={toolbar}
     >
       {ready && params.get("item") && (

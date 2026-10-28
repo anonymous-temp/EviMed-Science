@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { frontierToolbar } from "./FrontierControls";
+import { frontierHeaderActions, frontierToolbar } from "./FrontierControls";
 
 function props(): Parameters<typeof frontierToolbar>[0] {
   return {
@@ -9,7 +9,7 @@ function props(): Parameters<typeof frontierToolbar>[0] {
     search: { label: "搜索", value: "", onChange: vi.fn() }, tag: null, hotTags: { loading: false, tags: [] },
     hot: { window: "week", board: null, windows: false, onWindow: vi.fn() },
     following: { feed: false, token: null, followList: undefined },
-    issue: { filters: [], actions: null }, zones: { filters: [], summary: undefined, onCreate: null },
+    issue: { filters: [], actions: null }, zones: { filters: [], summary: undefined },
     track: { filters: [] }, onClear: vi.fn(), onReset: vi.fn(),
   };
 }
@@ -25,7 +25,7 @@ describe("frontier toolbar composition", () => {
     expect(input.onView).toHaveBeenCalledWith("weekly");
   });
 
-  it("keeps track category navigation apart from agency filtering and exposes permitted creation", () => {
+  it("keeps track category navigation apart from agency filtering and makes permitted creation the page's action", () => {
     const input = props();
     input.view = "track";
     input.track.filters = [
@@ -35,12 +35,14 @@ describe("frontier toolbar composition", () => {
     const toolbar = frontierToolbar(input);
     expect(toolbar.navigation?.map(item => item.label)).toEqual(["追踪类别"]);
     expect(toolbar.filters?.map(item => item.label)).toEqual(["机构"]);
+    // 「新建专区」 is the page's action, in its header, and only on 证据专区 for a reader who may make a zone.
     const create = vi.fn();
-    input.view = "zones";
-    input.zones.onCreate = create;
-    const primary = frontierToolbar(input).actionPlan?.primary;
+    expect(frontierToolbar({ ...input, view: "zones" }).actionPlan).toBeUndefined();
+    const primary = frontierHeaderActions("zones", create)?.primary;
     expect(primary?.label).toBe("新建专区");
     if (primary && "onSelect" in primary) primary.onSelect?.();
     expect(create).toHaveBeenCalledOnce();
+    expect(frontierHeaderActions("zones", null)).toBeUndefined();
+    expect(frontierHeaderActions("all", create)).toBeUndefined();
   });
 });
