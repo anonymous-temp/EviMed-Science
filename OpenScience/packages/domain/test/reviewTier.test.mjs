@@ -105,7 +105,7 @@ test('a reviewer verdict stands only on words of the source; an unreadable sourc
 })
 
 test("a reply's reference list is found under its own heading, not under a heading that only contains the word", () => {
-  const reply = [
+  const answer = [
     "Statins lower LDL [1].",
     "",
     "## References",
@@ -117,6 +117,6 @@ test("a reply's reference list is found under its own heading, not under a headi
     "## Resources",
     "A patient leaflet.",
   ].join("\n")
-  const { references } = replyCitedSentences(reply)
+  const { references } = replyCitedSentences(answer)
   assert.deepEqual(references.map((reference) => reference.number), [1], "「Values and preferences」 and 「Resources」 are not the list")
 })
