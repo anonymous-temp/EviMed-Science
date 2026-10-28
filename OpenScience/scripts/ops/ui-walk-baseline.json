@@ -17,16 +17,6 @@
       "why": "the owner's knowledge base holds no finished PDF, so the original of a PDF is not read on the production walk (the fixture walk reads one); data, not a defect"
     },
     {
-      "view": "memory-project@desktop",
-      "rule": "not-observable",
-      "profiles": [
-        "owner"
-      ],
-      "owner": "controller",
-      "until": "2026-12-01",
-      "why": "the project the production walk opens on 记忆胶囊's 项目 has no memories and no works, so no row is there to open (the fixture walk opens one); data, not a defect"
-    },
-    {
       "view": "chat@desktop",
       "rule": "not-observable",
       "profiles": [
@@ -181,7 +171,7 @@
       ],
       "owner": "controller",
       "until": "2026-12-01",
-      "why": "on the throwaway account the production walk registers (2026-10-25) the overview is its one recipe under five tiles that read zero, so the headline sentence and the tiles have nothing to be compared on; the fixture walk compares them with data"
+      "why": "on the throwaway account the production walk registers (2026-10-25) the overview is its one recipe under four tiles that read zero, so the headline sentence and the tiles have nothing to be compared on; the fixture walk compares them with data"
     },
     {
       "view": "inbox@desktop",
