@@ -87,7 +87,7 @@ const viewsNavigation = (selected: HomeTab, setParams: ReturnType<typeof useSear
  * right, the four ways to start (a press on one opens an unsent draft in the native composer) until a study is chosen, then that
  * study: its question and latest finding, what waits for the reader, the seven steps with where each one is, 打开研究 and its original
  * conversation. A press on a row chooses it (`?study=`, so the choice survives a reload and Back); nothing is chosen for the reader, so
- * the four ways in stay in sight. 开始研究对话 is the list header's one solid button whichever study is chosen.
+ * the four ways in stay in sight, and the preview's 关闭 (or Escape) gives the pane back to them. 开始研究对话 is the list header's one solid button whichever study is chosen.
  *
  * The page's one toolbar stands in the list's column: the view switch, the state chips, the order and the search. Below the room for
  * both (the page's own width, not the window's) the list is the page — the four ways to start above its toolbar, as they always were
@@ -262,7 +262,7 @@ export function VcrHomePage() {
     return (
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-2xl px-6 py-6">
-          {chosen ? <VcrStudyPreview study={chosen} heading /> : entry(true)}
+          {chosen ? <VcrStudyPreview study={chosen} heading onClose={closePreview} /> : entry(true)}
         </div>
       </div>
     );

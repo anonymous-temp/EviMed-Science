@@ -1,9 +1,14 @@
+import { useEffect, useRef } from "react";
 import { Link } from "react-router";
+import { X } from "lucide-react";
 import { VCR_STEP_ACTION_LABELS_ZH, VCR_STEP_STATUS_LABELS_ZH } from "@evimed/domain";
 import { stepAllowanceWait } from "@/lib/allowanceWait";
 import { vcrChatPath } from "@/lib/studyLocation";
 import { VCR_STEP_KEYS, type VcrStep, type VcrStepKey, type VcrStudySummary } from "@/lib/vcrClient";
+import { isComposingKey } from "@/lib/compositionKeys";
+import { isTopFocusLayer } from "@/lib/focusTrap";
 import { buttonClasses } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
 import { FactList, type Fact } from "@/components/ui/FactList";
 import { Note } from "@/components/ui/Note";
 import { RAIL_STATE_WORDS, RailMark, type RailState } from "@/components/ui/ProgressRail";
@@ -72,11 +77,31 @@ export function stepMark(step: VcrStep | undefined): { state: RailState; word: s
   }
 }
 
-export function VcrStudyPreview({ study, heading }: {
+export function VcrStudyPreview({ study, heading, onClose }: {
   study: VcrStudySummary;
   /** Beside the list the preview names the study; in the drawer the drawer's title does. */
   heading: boolean;
+  /**
+   * Beside the list the preview has no drawer to close it: with this it has a 关闭 of its own, and Escape does the same — which gives the
+   * pane back to the four ways to start. (In the drawer the drawer closes, and passes nothing.)
+   */
+  onClose?: () => void;
 }) {
+  const close = useRef(onClose);
+  close.current = onClose;
+  const closable = Boolean(onClose);
+  useEffect(() => {
+    if (!closable) return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || isComposingKey(event) || !isTopFocusLayer(null)) return;
+      // A field keeps its own Escape (the search box clears its words), and a layer over the page (a menu, a dialog) its own.
+      if (event.target instanceof Element && event.target.closest("input, textarea, select, [contenteditable=true], [role=dialog], [role=alertdialog], [role=menu], [role=listbox]")) return;
+      event.preventDefault();
+      close.current?.();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [closable]);
   const needs = study.attention.filter((line) => line.tone === "attention");
   const marks = VCR_STEP_KEYS.map((key) => ({ key, ...stepMark(study.steps[key]) }));
   const done = marks.filter((mark) => mark.state === "done").length;
@@ -102,6 +127,7 @@ export function VcrStudyPreview({ study, heading }: {
           {study.originatingSessionId && (
             <Link to={vcrChatPath(study.id)} className={buttonClasses({ variant: "text" })}>{study.draftText ? "继续未发送的研究问题" : "原研究对话"}</Link>
           )}
+          {onClose && <IconButton icon={X} label="关闭预览" onClick={onClose} />}
         </div>
       </div>
 

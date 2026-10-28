@@ -196,6 +196,41 @@ describe("the 研究 view beside its preview", () => {
     expect(within(pane).queryByRole("link", { name: "原研究对话" })).toBeNull();
   });
 
+  it("gives the pane back to the four ways to start: 关闭预览 and Escape both clear the chosen study, and the address with it", async () => {
+    drawHome("/app/virtual-research?study=std_1");
+    const pane = await screen.findByRole("region", { name: "研究预览" });
+    expect(await within(pane).findByRole("heading", { level: 2, name: EV })).toBeInTheDocument();
+    expect(within(pane).queryByRole("button", { name: "患者匹配" })).toBeNull();
+    await userEvent.click(within(pane).getByRole("button", { name: "关闭预览" }));
+    expect(where()).toBe("/app/virtual-research");
+    expect(within(pane).getByRole("heading", { level: 2, name: "开始研究任务" })).toBeInTheDocument();
+    expect(within(pane).getByRole("button", { name: "患者匹配" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: EV })).not.toHaveAttribute("aria-current");
+    expect(within(pane).queryByRole("button", { name: "关闭预览" })).toBeNull();
+    // A study can be chosen again, and Escape does what the button does.
+    await userEvent.click(screen.getByRole("link", { name: GLP }));
+    expect(where()).toBe("/app/virtual-research?study=std_2");
+    expect(within(pane).getByRole("heading", { level: 2, name: GLP })).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    expect(where()).toBe("/app/virtual-research");
+    expect(within(pane).getByRole("heading", { level: 2, name: "开始研究任务" })).toBeInTheDocument();
+    // With nothing chosen Escape is nobody's: the page stays as it is.
+    await userEvent.keyboard("{Escape}");
+    expect(where()).toBe("/app/virtual-research");
+  });
+
+  it("leaves Escape to a field that has a use for it: the search box clears its words and the study stays chosen", async () => {
+    drawHome("/app/virtual-research?study=std_1");
+    const pane = await screen.findByRole("region", { name: "研究预览" });
+    await within(pane).findByRole("heading", { level: 2, name: EV });
+    const search = screen.getByRole("searchbox", { name: "搜索研究" });
+    await userEvent.type(search, "EV");
+    await userEvent.keyboard("{Escape}");
+    expect(search).toHaveValue("");
+    expect(where()).toBe("/app/virtual-research?study=std_1");
+    expect(within(pane).getByRole("heading", { level: 2, name: EV })).toBeInTheDocument();
+  });
+
   it("opens the study the address names as it loads, and reads one it does not know as none chosen", async () => {
     const first = drawHome("/app/virtual-research?study=std_2");
     await screen.findByRole("list", { name: "研究" });
