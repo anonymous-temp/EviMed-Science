@@ -4,6 +4,7 @@ import { contextPolicyIdentity, sameContextPolicy } from './geoContextItems.mjs'
 import { PLATFORM_SKILLS_RUNTIME_DIR, platformSkillGenerationRoot, verifyPlatformSkillGeneration } from "./platformSkillSupply.mjs";
 import {assertExtensionAssessmentAuthority} from './extensionAssessmentAuthority.mjs';
 import { RUNTIME_YIELDED_CODE, backgroundRuntimeLimit, isInternalProjectOf, isEvolutionProject } from "./internalProjects.mjs";
+import { projectLibraryViewDir } from "./libraryScope.mjs";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Buffer } from "node:buffer";
 import { spawn, spawnSync } from "node:child_process";
@@ -3138,24 +3139,13 @@ export function capsuleMethodsRuntimePath(plan) {
  *  where the source pipeline has always written it, but read-only. */
 export const RUNTIME_KNOWLEDGE_BASE_DIR = `/workspace/${KNOWLEDGE_BASE_DIR}`;
 
-/** Where a runtime sees its account's personal library (plan §3.2 #4). */
+/** Where a runtime sees the library entries that apply to its project (plan §3.2 #4). */
 export const RUNTIME_LIBRARY_DIR = "/workspace/library";
 
-/**
- * The host directory of an account's personal library, shared by every project
- * of the account and read-only in all of them.
- *
- * Derived from the data directory the same way the account's own root is
- * (`<dataDir>/users/<userId>`), because the library is the account's and not a
- * project's. The knowledge-base stream owns the library itself
- * (`libraryService.mjs`, `userLibraryDir`); this is the path the runtime side
- * mounts, and the two must name one directory.
- *
- * @param {Record<string, any>} config @param {string} userId
- */
-export function personalLibraryDir(config, userId) {
-  return path.join(config.dataDir, "users", safeId(String(userId), "user id"), "library");
-}
+// The host directory behind it is `projectLibraryViewDir` (`libraryScope.mjs`), which `libraryService.mjs` writes: a real copy of
+// exactly the entries that apply to the project, kept per project under the account's data directory. It is the project's, no
+// longer the account's — until 2026-10-28 the whole account folder was mounted, so a document limited to one project would have
+// been readable from every other project's workspace.
 
 /** A real directory, not a symlink to one: a mount source the run could have
  *  redirected would be a way out of the project. */
@@ -3181,20 +3171,20 @@ function realDirectory(target) {
  * sources, and `runtimeUploadRelativePath` maps an upload into this view the
  * same way).
  *
- * The library is mounted only once it exists; the knowledge-base stream creates
- * it with the first entry. A launch over a shared, sealed project context
- * (`projectOnly`, a 「循证 GEO」 project's context generation) never gets the
- * account-wide library. Both sides of the controller boundary decide from
+ * The library is the project's own view of it (`projectLibraryViewDir`), mounted when that directory exists; a launch makes it
+ * (`RuntimeManager.ensureLibraryView`), so one made empty is in front of a runtime that is already up when an entry later
+ * applies to the project. A launch over a shared, sealed project context
+ * (`projectOnly`, a 「循证 GEO」 project's context generation) never gets a library. Both sides of the controller boundary decide from
  * the filesystem, the way the capsule methods mount does, so the privileged
  * controller and the API build the same argv from the same facts.
  *
  * @param {Record<string, any>} config @param {Record<string, any>} project
- * @param {{projectOnly?:boolean}} [options] shared launches cannot add an account-wide library
+ * @param {{projectOnly?:boolean}} [options] shared launches cannot add a library
  * @returns {{ knowledgeBase: string | null, library: string | null }}
  */
 export function readOnlyWorkspaceViews(config, project, {projectOnly=false} = {}) {
   const knowledgeBase = project.baseDir ? path.join(project.baseDir, KNOWLEDGE_BASE_DIR) : null;
-  const library = !projectOnly && config.dataDir && project.userId ? personalLibraryDir(config, project.userId) : null;
+  const library = !projectOnly && config.dataDir && project.userId && project.id ? projectLibraryViewDir(config, project.userId, project.id) : null;
   return {
     knowledgeBase: knowledgeBase && realDirectory(knowledgeBase) ? knowledgeBase : null,
     library: library && realDirectory(library) ? library : null,
@@ -3367,6 +3357,9 @@ export class DockerRuntimeProvider {
     // exists, and a project whose first source arrives while its runtime runs
     // must not find it writable then.
     await manager.ensureKnowledgeBaseDir(project);
+    // The same for the project's directory of the library: brought to the entries that apply to it, and made if it is not there, so
+    // an entry that later applies reaches a runtime that is already up. A shared context never mounts one.
+    if (!contextGeneration) await manager.ensureLibraryView(project);
     if (extensionGeneration) await manager.prepareGeneration(project, extensionGeneration);
     const personal = personalSkillGeneration?.reference ? await verifyPersonalSkillGeneration(this.config, project, personalSkillGeneration.reference,
       personalSkillGeneration.identity.baseRuntimeImageDigest) : null;
@@ -3638,6 +3631,8 @@ export class RuntimeManager {
     this.learningService = null;
     /** How close a method is to a question (`methodSimilarity.mjs`), which the mount ranks the library by; assigned by the composition root. @type {{ nearest: Function, pairs: Function } | null} */
     this.methodSimilarity = null;
+    /** The personal library's per-project directories (`LibraryService.ensureProjectView`), assigned by the composition root; a launch asks for its project's. @type {{ ensure: (userId: string, projectId: string) => Promise<unknown> } | null} */
+    this.libraryViews = null;
     /** @type {any} the learning loop's counters (`learningMetrics.mjs`), assigned beside `learningService` */
     this.learningMetrics = null;
     /**
@@ -5454,6 +5449,17 @@ export class RuntimeManager {
     const opened = await openScopedDirectoryNoFollow(project.baseDir, path.join(project.baseDir, KNOWLEDGE_BASE_DIR), { create: true })
       .catch(() => null);
     await opened?.handle.close();
+  }
+
+  /**
+   * The project's directory of the library, made and brought to the entries that apply to it (`LibraryService.ensureProjectView`),
+   * so the launch can mount it read-only (`readOnlyWorkspaceViews`). Without the library (a deployment with no product
+   * store) there is none. A view that could not be brought right is removed there, and the launch goes ahead without it.
+   * @param {Record<string, any>} project
+   */
+  async ensureLibraryView(project) {
+    if (!this.libraryViews || !project?.userId || !project?.id) return;
+    await this.libraryViews.ensure(String(project.userId), String(project.id));
   }
 
   async waitUntilReady(runtime) {

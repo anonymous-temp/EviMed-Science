@@ -157,9 +157,13 @@ test("a project's session: its labels, lifecycle and Contexts, credentials only 
   await writeFile(path.join(project.workspaceDir, "notes.md"), "hello");
   await mkdir(path.join(project.baseDir, "knowledge-base"), { recursive: true });
   await writeFile(path.join(project.baseDir, "knowledge-base", "kb.txt"), "a source");
+  // The account's own library is the master the projects' views are made from; what a session receives is its project's view.
   const library = path.join(dataDir, "users", "alice", "library");
   await mkdir(library, { recursive: true });
-  await writeFile(path.join(library, "book.txt"), "a chapter");
+  await writeFile(path.join(library, "limited-elsewhere.txt"), "applies to another project");
+  const view = path.join(dataDir, "users", "alice", "library-views", "paper1");
+  await mkdir(view, { recursive: true });
+  await writeFile(path.join(view, "book.txt"), "a chapter");
   const outside = path.join(dataDir, "host-only.txt");
   await writeFile(outside, "a file of this host");
   await symlink(outside, path.join(project.workspaceDir, "leak.txt"));
@@ -190,6 +194,7 @@ test("a project's session: its labels, lifecycle and Contexts, credentials only 
   assert.equal(await readFile(fake.sessionFile("s-1", "/workspace/notes.md"), "utf8"), "hello");
   assert.equal(await readFile(fake.sessionFile("s-1", "/workspace/knowledge-base/kb.txt"), "utf8"), "a source");
   assert.equal(await readFile(fake.sessionFile("s-1", "/workspace/library/book.txt"), "utf8"), "a chapter");
+  await assert.rejects(lstat(fake.sessionFile("s-1", "/workspace/library/limited-elsewhere.txt")), { code: "ENOENT" }, "the account's whole library is never what a session gets");
   await assert.rejects(lstat(fake.sessionFile("s-1", "/workspace/leak.txt")), { code: "ENOENT" }, "a link on the host is never followed into a Context");
 
   const credentials = await readFile(fake.sessionFile("s-1", "/runtime/dsh-home/.credentials.yaml"), "utf8");

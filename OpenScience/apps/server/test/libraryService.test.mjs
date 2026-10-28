@@ -76,9 +76,15 @@ test("an entry is bounded to what a capsule entry holds, and a quote to what pro
   assert.equal(entry.provenance[0].excerpt.length, 2_000);
 });
 
-test("the library's directory is the account's, where the runtime mounts it from", () => {
+test("the library's directory is the account's master; a runtime mounts its project's own view of it, never this", async () => {
   assert.equal(userLibraryDir({ dataDir: "/data" }, "user-1"), path.join("/data", "users", "user-1", "library"));
   assert.throws(() => userLibraryDir({ dataDir: "/data" }, "../other"), { code: "invalid_id" });
+  const { projectLibraryViewDir, libraryViewsRoot } = await import("../src/libraryScope.mjs");
+  assert.equal(libraryViewsRoot({ dataDir: "/data" }, "user-1"), path.join("/data", "users", "user-1", "library-views"));
+  assert.equal(projectLibraryViewDir({ dataDir: "/data" }, "user-1", "p1"), path.join("/data", "users", "user-1", "library-views", "p1"));
+  assert.throws(() => projectLibraryViewDir({ dataDir: "/data" }, "user-1", "../other"), { code: "invalid_id" });
+  assert.throws(() => projectLibraryViewDir({ dataDir: "/data" }, "../x", "p1"), { code: "invalid_id" });
+  assert.notEqual(path.dirname(projectLibraryViewDir({ dataDir: "/data" }, "user-1", "p1")), userLibraryDir({ dataDir: "/data" }, "user-1"));
 });
 
 test("a document is described from its record: metadata when parsed, the file name when not", () => {

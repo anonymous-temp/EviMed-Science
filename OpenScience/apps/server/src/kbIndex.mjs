@@ -163,7 +163,7 @@ export class KnowledgeBaseIndex {
    * run may search (`searchScope`), which index documents those copies are
    * searched through (`heldIndexKeys` — kept when no project names them any
    * more), and a convergence pass over its copies (`syncCopies`).
-   * @param {{ searchScope: (userId: string) => Promise<any[]>, heldIndexKeys: (userId: string | null) => Promise<{ userId: string, sha256: string, parserRevision: string, textSha256: string }[]>, syncCopies: (options: { userId?: string | null }) => Promise<any> } | null} library
+   * @param {{ searchScope: (userId: string, projectId: string) => Promise<any[]>, accountScope: (userId: string) => Promise<any[]>, heldIndexKeys: (userId: string | null) => Promise<{ userId: string, sha256: string, parserRevision: string, textSha256: string }[]>, syncCopies: (options: { userId?: string | null }) => Promise<any> } | null} library
    */
   useLibrary(library) { this.library = library; return this; }
 
@@ -498,7 +498,8 @@ export class KnowledgeBaseIndex {
       };
     });
     /** @type {any[]} */
-    const library = includeLibrary && this.library ? (await this.library.searchScope(userId)).map((/** @type {any} */ entry) => ({ ...entry, origin: "library" })) : [];
+    // The library answers for this project: only the entries that apply to it (`libraryScope.mjs`).
+    const library = includeLibrary && this.library ? (await this.library.searchScope(userId, projectId)).map((/** @type {any} */ entry) => ({ ...entry, origin: "library" })) : [];
     const wanted = sourceIds === null ? null : new Set(sourceIds);
     /** @param {{ sourceId: string }} entry */
     const named = (entry) => !wanted || wanted.has(entry.sourceId);
@@ -538,7 +539,8 @@ export class KnowledgeBaseIndex {
     /** @type {{ sha256: string, parserRevision: string, textSha256: string }[]} */
     let documents = [];
     if (shared) {
-      documents = (this.library ? await this.library.searchScope(userId) : [])
+      // The page that lists the account's own library is the account's, not a run's: every entry.
+      documents = (this.library ? await this.library.accountScope(userId) : [])
         .filter((/** @type {any} */ entry) => entry.searchable && entry.sha256 && entry.parserRevision && entry.textSha256);
     } else if (projectId || all) {
       const rows = (await this.database.query(`SELECT id, project_id, payload, revision FROM evimed_product.documents

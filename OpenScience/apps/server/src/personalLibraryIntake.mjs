@@ -1,6 +1,7 @@
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { LIBRARY_PROJECT_ID, assertClientProject, ensureLibraryProject, isInternalProject } from "./internalProjects.mjs";
+import { LIBRARY_PROJECT_ID, ensureLibraryProject, isInternalProject } from "./internalProjects.mjs";
+import { assertOrdinaryProject, libraryRecordProjects } from "./libraryScope.mjs";
 import { projectSourceManifestRecord } from "./sourceService.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
@@ -38,7 +39,14 @@ export function createPersonalLibraryWriter({ sources, library, write }) {
           catch (error) { if (error?.code !== "library_item_not_found") throw error; }
         }
       }
-      if (share) await service.addCurrent(request.user.id, registered.source.id, { personal: true });
+      if (share) {
+        // A new version applies where the one it replaces did (2026-10-28) — unless the new bytes already have an entry of their
+        // own, whose scope is left as someone set it.
+        const had = membership && !membership.deletedAt ? libraryRecordProjects(membership.payload) : null;
+        const entry = had !== null && registered.source.payload.fingerprint?.sha256
+          ? await sources.documents.get(request.user.id, "preferences", `library:${registered.source.payload.fingerprint.sha256}`) : null;
+        await service.addCurrent(request.user.id, registered.source.id, { personal: true, ...(had !== null && !entry ? { projects: had } : {}) });
+      }
       return registered;
     });
   };
@@ -82,7 +90,7 @@ async function chosenVersionIsCurrent(sources, userId, current, chosen) {
 /**
  * Account intake and explicit independent project snapshots.
  * `moduleProject(user, projectId)` says whether an owned project is a 循证 GEO or 虚拟临床研究 project: those are not file
- * destinations, and a copy goes only to an ordinary project.
+ * destinations, and a copy goes only to an ordinary project (`assertOrdinaryProject`).
  * @param {any} dependencies
  */
 export function createPersonalLibraryRoutes({ store, sources, knowledge, write, readFile, maxJsonBytes, maxFileBytes, internalProject = (_user, id) => isInternalProject(id), moduleProject = async () => false }) {
@@ -97,10 +105,10 @@ export function createPersonalLibraryRoutes({ store, sources, knowledge, write, 
     let registered;
     if (copy) {
       const input = await inputBody(req, maxJsonBytes, ["projectId", "expectedRevision"]);
-      if (typeof input.projectId !== "string" || internalProject(user, input.projectId)) throw new HttpError(400, "library_payload_invalid", "Choose an ordinary project.");
-      assertClientProject(input.projectId);
-      const project = await store.requireProject(user, input.projectId);
-      if (await moduleProject(user, project.id)) throw new HttpError(400, "library_payload_invalid", "Choose an ordinary project.");
+      // The one rule for where a document may be sent (`assertOrdinaryProject`), shared with the list of projects a document applies to.
+      // An archived project is still a place to copy to, as it was before the rule was shared; its refusal keeps this route's own code.
+      const project = await assertOrdinaryProject({ store, internalProject, moduleProject }, user, input.projectId,
+        { code: "library_payload_invalid", allowArchived: true });
       const source = await sources.get(user.id, copy[1]);
       if (!await chosenVersionIsCurrent(sources, user.id, source, input.expectedRevision)) throw new HttpError(409, "source_revision_conflict", "The source changed; reload before copying.");
       if (source.payload.publication?.current === false || internalProject(user, source.projectId) && source.projectId !== LIBRARY_PROJECT_ID) {

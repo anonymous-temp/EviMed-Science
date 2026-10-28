@@ -1355,6 +1355,9 @@ const libraryErrorCodes = Object.freeze([
   'library_understanding_missing',
   'library_capsule_unavailable',
   'library_publish_busy',
+  // 「适用的项目」 of a document (2026-10-28): the list is not "all" or ids, or names a project a document cannot be sent to.
+  'library_projects_invalid',
+  'library_project_invalid',
 ])
 
 /**
@@ -2826,6 +2829,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   library_understanding_missing: '这份资料还没有资料理解结果。分析深度为“结构化”或“深度”的资料理解完成后，才能发布到记忆胶囊。',
   library_capsule_unavailable: '账户的主要胶囊是别人分享来的，资料只会写进你自己的胶囊。先把自己的胶囊设为主要胶囊，再发布。',
   library_publish_busy: '资料库正有一次发布到记忆胶囊的操作在进行，等它完成后再试。',
+  library_projects_invalid: '适用项目的选择不完整：选“所有项目”，或勾选具体的项目，刷新页面后再试。',
+  library_project_invalid: '这个项目不能用来放资料：它可能已删除、已归档，或是循证 GEO、虚拟临床研究这类专门的项目。换一个普通项目再试。',
   capsule_export_empty: '还没有可以分享的内容：学到做法，或在对话里说明你的工作方式之后，就可以分享了。',
   capsule_recipient_unknown: '要分享给的账号不在这个平台上，请核对账号名。',
   capsule_password_required: '这个胶囊需要发送者设定的口令才能打开。',

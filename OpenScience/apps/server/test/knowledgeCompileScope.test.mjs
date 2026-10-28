@@ -5,7 +5,7 @@ import { KnowledgePageService } from "../src/knowledgePageService.mjs";
 import { createKnowledgePageRoutes } from "../src/knowledgePageRoutes.mjs";
 import { loadConfig } from "../src/config.mjs";
 
-function fixture({ includeLibrary, projectFailure = false, libraryFailure = false, drift = false } = {}) {
+function fixture({ includeLibrary, projectFailure = false, libraryFailure = false, drift = false, libraryAppliesWhole = true } = {}) {
   const records = new Map();
   const calls = [];
   const source = { id: "src_a", projectId: "p1", payload: { analysis: { textSha256: "a".repeat(64) } } };
@@ -23,7 +23,8 @@ function fixture({ includeLibrary, projectFailure = false, libraryFailure = fals
   const service = new KnowledgePageService({ config: { ovKnowledgeEnabled: true, knowledgePagesMinSources: 1, knowledgePagesDebounceMs: 0,
     ...(includeLibrary === undefined ? {} : { knowledgePagesIncludeLibrary: includeLibrary }) }, documents,
   sources: { list: async (_u, { projectId }) => { assert.equal(projectId, "p1"); return { items: [source] }; }, get: async () => source },
-  jobs: { enqueue: async () => { calls.push(["enqueue"]); return {}; } }, store: { userById: async () => ({ id: "u1" }), requireProject: async (_u, id) => ({ id }) }, resources, sourceSync, entries: {} });
+  jobs: { enqueue: async () => { calls.push(["enqueue"]); return {}; } }, store: { userById: async () => ({ id: "u1" }), requireProject: async (_u, id) => ({ id }) }, resources, sourceSync, entries: {},
+  libraryAppliesWhole: async (userId, projectId) => { calls.push(["libraryScope", userId, projectId]); return libraryAppliesWhole; } });
   return { service, calls, records, run: () => service.runJob({ userId: "u1", projectId: "p1", payload: { projectId: "p1", round: 1 } }) };
 }
 
@@ -68,4 +69,23 @@ test("explicit operator opt-in retains library sync and wiki inputs", async () =
 test("configuration defaults to project inputs and preserves explicit operator choice", () => {
   assert.equal(loadConfig({}).knowledgePagesIncludeLibrary, false);
   assert.equal(loadConfig({ knowledgePagesIncludeLibrary: true }).knowledgePagesIncludeLibrary, true);
+});
+
+test("the library joins a project's compile only while every entry of it applies to that project", async () => {
+  // One entry limited to other projects: the engine reads a root whole, so the root is not offered to this project at all.
+  const limited = fixture({ includeLibrary: true, libraryAppliesWhole: false });
+  await limited.run();
+  assert.deepEqual(limited.calls.find(([kind]) => kind === "compile")[1].from, ["project-sources"]);
+  assert.deepEqual(limited.calls.find(([kind]) => kind === "libraryScope"), ["libraryScope", "u1", "p1"]);
+  assert.equal(limited.calls.some(([kind]) => kind === "libraryRead"), false, "the library is not even listed for this project");
+  // Where the question cannot be answered the answer is no library, never the whole of it.
+  const unknown = fixture({ includeLibrary: true });
+  unknown.service.libraryAppliesWhole = async () => { throw new Error("library unavailable"); };
+  await unknown.run();
+  assert.deepEqual(unknown.calls.find(([kind]) => kind === "compile")[1].from, ["project-sources"]);
+  // And a service built without the question never feeds the library.
+  const absent = fixture({ includeLibrary: true });
+  absent.service.libraryAppliesWhole = null;
+  await absent.run();
+  assert.deepEqual(absent.calls.find(([kind]) => kind === "compile")[1].from, ["project-sources"]);
 });

@@ -8,8 +8,12 @@ test("a selected library, even a small one, names only readable selected documen
     shared: { projectId: "other", display: { title: "Shared paper" } },
     private: { projectId: "other", display: { title: "Do not read" } },
   };
-  const service = { get: async (user, id) => { assert.equal(user, "owner"); return rows[id] ?? null; }, isShared: async (_user, source) => source === rows.shared };
+  const asked = [];
+  const service = { get: async (user, id) => { assert.equal(user, "owner"); return rows[id] ?? null; },
+    appliesTo: async (user, source, projectId) => { asked.push([user, projectId]); return source === rows.shared; } };
   const note = await sourceConversationContext(service, { userId: "owner", id: "p" }, { sourceScope: ["selected", "shared", "private", "deleted"] });
+  // The check is asked for this project, never for the account: a document the library puts in another project is not selectable here.
+  assert.deepEqual(asked, [["owner", "p"], ["owner", "p"]]);
   assert.match(note, /Selected paper/);
   assert.match(note, /library\/shared\/index.md/);
   assert.match(note, /\.evimed-knowledge\/\.evimed-derived\/selected\/index.md/);
@@ -39,7 +43,7 @@ test('project source context excludes library and unproven derived pages before 
     derived: { id: 'derived', projectId: 'p', payload: { metadata: { title: 'Unproven private synthesis' }, outputs: { artifactPath: 'knowledge-base/derived/index.md' } } },
     foreign: { id: 'foreign', projectId: 'other', display: { title: 'Private library title' } },
   };
-  const service = { get: async (_user, id) => rows[id], isShared: async () => { throw new Error('Library must not be consulted'); } };
+  const service = { get: async (_user, id) => rows[id], appliesTo: async () => { throw new Error('Library must not be consulted'); } };
   const note = await sourceConversationContext(service, { userId: 'owner', id: 'p' }, { sourceScope: Object.keys(rows) }, false,
     { includeLibrary: false, acceptSource: async source => source.id === 'local' });
   assert.match(note, /Project source/); assert.match(note, /local\/index.md/);

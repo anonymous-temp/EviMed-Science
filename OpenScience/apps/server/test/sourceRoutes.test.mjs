@@ -13,7 +13,10 @@ async function fixture(t, { withOpenList = false, connector = null, withKnowledg
   const service = {
     list: async (userId, options) => { calls.push({ method: "list", userId, options }); return { items: [], nextCursor: null }; },
     get: async (userId, id) => { calls.push({ method: "get", userId, id }); return { id, projectId: "owned-project", revision: 2 }; },
-    isShared: async (userId, source) => { calls.push({ method: "isShared", userId, id: source.id }); return null; },
+    libraryApplicability: async (userId, source) => { calls.push({ method: "libraryApplicability", userId, id: source.id }); return null; },
+    // Where a document applies, as `SourceService.withApplicability` says it: the holders by id, here only the document's own project.
+    withApplicability: async (userId, items, projectId = null) => { calls.push({ method: "withApplicability", userId, ids: items.map((item) => item.id), projectId });
+      return items.map((item) => ({ ...item, holders: [item.projectId], libraryProjects: null, appliesTo: [item.projectId] })); },
     override: async (userId, id, body) => { calls.push({ method: "override", userId, id, body }); return { id, payload: body }; },
     retry: async (userId, id, body) => { calls.push({ method: "retry", userId, id, body }); return { id, status: "queued" }; },
     cancel: async (userId, id, body) => { calls.push({ method: "cancel", userId, id, body }); return { id, status: "canceled" }; },
@@ -47,6 +50,7 @@ async function fixture(t, { withOpenList = false, connector = null, withKnowledg
       if (id !== "owned-project") throw new HttpError(404, "project_not_found", "Project unavailable.");
       return { id, name: "Owned project" };
     },
+    listProjects: async () => [{ id: "owned-project", name: "Owned project", archivedAt: null }, { id: "second", name: "Second", archivedAt: null }],
   };
   const openList = connector ?? (withOpenList ? {
     list: async (userId, selected, options) => { calls.push({ method: "openList", userId, selected, options }); return { entries: [], nextCursor: null }; },
@@ -189,22 +193,25 @@ test("source routes never expose runtime binding paths or cancellation work item
   assert.equal(body.data.payload.outputs.artifactPath, "knowledge-base/.evimed-derived/source-one/index.md");
 });
 
-test("one document is read with whether the account library holds it, which the reader page needs and a list row already carries", async t => {
+test("one document is read with whether the account library holds it and where it applies, which the reader page needs and a list row already carries", async t => {
   const { base, headers, calls, service } = await fixture(t);
   service.get = async (_userId, id) => ({ id, kind: "source", projectId: "owned-project", revision: 4, createdAt: "2026-10-05T08:00:00Z", updatedAt: "2026-10-05T08:00:00Z", deletedAt: null,
     payload: { paths: ["knowledge-base/guideline.pdf"], status: "complete", docType: "review-guideline", fingerprint: { size: 100, sha256: "a".repeat(64) }, outputs: {} } });
-  service.isShared = async (userId, source) => { calls.push({ method: "isShared", userId, id: source.id }); return true; };
+  service.libraryApplicability = async (userId, source) => { calls.push({ method: "libraryApplicability", userId, id: source.id }); return { record: true, projects: ["second"] }; };
+  service.withApplicability = async (_userId, items) => items.map((item) => ({ ...item, holders: ["owned-project", "second"], libraryProjects: ["second"], appliesTo: ["owned-project", "second"] }));
   const shared = await (await fetch(`${base}/api/sources/src_one`, { headers })).json();
   assert.equal(shared.data.display.shared, true);
-  assert.deepEqual(calls.filter(call => call.method === "isShared"), [{ method: "isShared", userId: "owner", id: "src_one" }]);
-  service.isShared = async () => false;
+  assert.deepEqual(calls.filter(call => call.method === "libraryApplicability"), [{ method: "libraryApplicability", userId: "owner", id: "src_one" }]);
+  assert.deepEqual(shared.data.holders, [{ id: "owned-project", name: "Owned project" }, { id: "second", name: "Second" }], "the holders are named");
+  assert.deepEqual([shared.data.libraryProjects, shared.data.appliesTo], [["second"], ["owned-project", "second"]]);
+  service.libraryApplicability = async () => ({ record: false });
   assert.equal((await (await fetch(`${base}/api/sources/src_one`, { headers })).json()).data.display.shared, false);
   // Nothing to look up (no durable store, no fingerprint): not known, never a guess.
-  service.isShared = async () => null;
+  service.libraryApplicability = async () => null;
   assert.equal((await (await fetch(`${base}/api/sources/src_one`, { headers })).json()).data.display.shared, null);
   // The source's own project is still checked before anything is asked about it.
   service.get = async () => ({ id: "src_other", projectId: "other-project" });
-  service.isShared = async () => { throw new Error("must not be asked for a project the caller does not own"); };
+  service.libraryApplicability = async () => { throw new Error("must not be asked for a project the caller does not own"); };
   assert.equal((await fetch(`${base}/api/sources/src_other`, { headers })).status, 404);
 });
 
@@ -511,4 +518,20 @@ test("all inventory and passage search require account authentication without a 
   const listed = calls.find(call => call.method === "list");
   assert.equal(listed.options.all, true); assert.equal(listed.options.projectId, null);
   assert.ok(!calls.some(call => call.method === "requireProject"));
+});
+
+test("the all list names the projects that hold each document, and asked for a project it is that project's documents", async t => {
+  const { calls, service, base, headers } = await fixture(t);
+  service.list = async (userId, options) => { calls.push({ method: "list", userId, options });
+    return { items: [{ id: "src_one", kind: "source", projectId: "owned-project", payload: { paths: ["knowledge-base/a.pdf"], status: "complete", fingerprint: { sha256: "a".repeat(64) } },
+      holders: ["owned-project", "second", "gone"], libraryProjects: ["second"], appliesTo: ["gone", "owned-project", "second"], viaLibrary: false }], counts: { all: 1 }, nextCursor: null }; };
+  const listed = (await (await fetch(`${base}/api/sources?scope=all`, { headers })).json()).data;
+  assert.deepEqual(listed.items[0].holders, [{ id: "owned-project", name: "Owned project" }, { id: "second", name: "Second" }, { id: "gone", name: "gone" }],
+    "a holder is named by its project; one that cannot be named is named by its id");
+  assert.deepEqual([listed.items[0].libraryProjects, listed.items[0].appliesTo, listed.items[0].viaLibrary], [["second"], ["gone", "owned-project", "second"], false]);
+  assert.equal(calls.filter(call => call.method === "list").at(-1).options.projectId, null);
+  // With a project: its own, checked as the account's before anything is read.
+  assert.equal((await fetch(`${base}/api/sources?scope=all&projectId=owned-project`, { headers })).status, 200);
+  assert.equal(calls.filter(call => call.method === "list").at(-1).options.projectId, "owned-project");
+  assert.equal((await fetch(`${base}/api/sources?scope=all&projectId=other-project`, { headers })).status, 404);
 });

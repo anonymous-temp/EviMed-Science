@@ -280,7 +280,9 @@ export class OpenVikingSourceSync {
   async reconcileLibraryCurrent(userId, { apply = true } = {}) {
     const report = { expected: 0, present: 0, missing: /** @type {string[]} */ ([]), stale: /** @type {string[]} */ ([]), extra: /** @type {string[]} */ ([]), pushed: 0, removed: 0, failed: /** @type {{ sourceId: string, code: string }[]} */ ([]) };
     if (!this.library) return report;
-    const entries = (await this.library.searchScope(userId)).filter((/** @type {any} */ entry) => entry.status === "ready" && entry.textSha256);
+    // The engine holds the account's whole library under one root, whatever each document applies to: what a project may see of
+    // it is decided where the project asks (`kb_browse`), never by what is pushed here.
+    const entries = (await this.library.accountScope(userId)).filter((/** @type {any} */ entry) => entry.status === "ready" && entry.textSha256);
     const expected = new Map(entries.map((/** @type {any} */ entry) => [entry.sourceId, entry]));
     const present = new Map((await this.resources.listSources(userId, this.resources.roots(userId, "-").library)).map((/** @type {any} */ entry) => [entry.sourceId, entry]));
     report.expected = expected.size; report.present = present.size;
