@@ -60,7 +60,8 @@ describe("the daily's switch under 通知", () => {
     await userEvent.click(toggle);
     expect(client.setFrontierDigestSwitch).toHaveBeenCalledWith(false);
     await waitFor(() => expect(screen.getByRole("switch", { name: "前沿日报" })).toHaveAttribute("aria-checked", "false"));
-    expect(screen.getByText("已关闭前沿日报推送")).toBeInTheDocument();
+    // The visible toast, whatever the polite announcer (which repeats it a moment later) holds by then.
+    expect(screen.getAllByText("已关闭前沿日报推送").some((element) => !element.closest("[data-announcer]"))).toBe(true);
     await userEvent.click(screen.getByRole("switch", { name: "前沿日报" }));
     expect(client.setFrontierDigestSwitch).toHaveBeenLastCalledWith(true);
     await waitFor(() => expect(screen.getByRole("switch", { name: "前沿日报" })).toHaveAttribute("aria-checked", "true"));
