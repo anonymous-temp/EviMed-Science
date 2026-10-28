@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-insight",
-  "version": "sha256:3b7b68d51dbd07e26701f428149952f71c10558a395b257e71c3d5a3622da2c5",
+  "version": "sha256:c70be56e57dea4046b00d8de8230af9a627baf99a784d0c0a463d42a82ad2d84",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 38,
@@ -1992,7 +1992,7 @@
     {
       "name": "mcp__evimed__social_posts_search",
       "source": "mcp",
-      "description": "Collect how real people phrase a health question on selected Chinese social platforms (xhs 小红书, douyin 抖音, zhihu 知乎, weibo 微博, bilibili B站, wechat_channels 视频号): excerpts with the post's link, engagement and collection time. Select platform or platforms (up to six); one asynchronous job returns per-platform completeness. Partial results are usable excerpts, not full coverage; failures mean no signal (无信号), never zero.",
+      "description": "Collect how real people phrase a health question on Chinese social platforms (xhs 小红书, douyin 抖音, zhihu 知乎, weibo 微博, bilibili B站, wechat_channels 视频号): excerpts with link, engagement, time. Name one or two platforms (30-120 s each); one asynchronous job. Partial = usable excerpts, not full coverage; failure = no signal (无信号), never zero. pending = still running, with a jobId: do not search again; call with only that jobId to read on.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -2042,22 +2042,32 @@
             "minimum": 1,
             "maximum": 50,
             "default": 20
+          },
+          "jobId": {
+            "type": "string",
+            "pattern": "^[A-Fa-f0-9]{32}$",
+            "description": "The id a pending search returned; alone."
           }
         },
-        "required": [
-          "query"
-        ],
         "oneOf": [
           {
             "type": "object",
             "required": [
+              "query",
               "platform"
             ]
           },
           {
             "type": "object",
             "required": [
+              "query",
               "platforms"
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "jobId"
             ]
           }
         ],

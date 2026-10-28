@@ -159,6 +159,11 @@ test("readiness: off is green and says so; on it is red only for the module's ow
     const noCredential = await geoReadiness({ config: { ...config, geoSocialUrl: "https://social.example", mediaMarketUrl: "https://m", mediaMarketApiKeyFile: keyFile },
       geo: { ...healthy, social: createSocialCrawlClient({ baseUrl: "https://social.example" }), worker: { status: () => ({ running: false }) } }, database: {} });
     assert.deepEqual(noCredential.warnings, ["geo_social_unconfigured"], "an endpoint alone is not an authenticated channel");
+    assert.equal(noCredential.social.reason, "key_missing", "readiness says which part is missing, not only that something is");
+    assert.equal(wired.social.reason, undefined, "a usable channel carries no reason");
+    const insecure = await geoReadiness({ config: { ...config, geoSocialUrl: "http://social.example", mediaMarketUrl: "https://m", mediaMarketApiKeyFile: keyFile },
+      geo: { ...healthy, social: createSocialCrawlClient({ baseUrl: "http://social.example", apiKeyFile: keyFile }), worker: { status: () => ({ running: false }) } }, database: {} });
+    assert.deepEqual([insecure.warnings, insecure.social.reason], [["geo_social_unconfigured"], "plaintext_not_allowed"]);
   } finally { rmSync(keyDir, { recursive: true, force: true }); }
 });
 

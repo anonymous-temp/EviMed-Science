@@ -411,6 +411,7 @@ import { GeoService, geoAudienceAllows, isGeoPlaceholderName, geoMetricFamilies,
 import { createGeoRoutes, geoRoutePattern } from "./geoRoutes.mjs";
 import { GEO_GATEWAY_PATH, createGeoGatewayHandler, geoGatewayRoutePattern } from "./geoGateway.mjs";
 import { createSocialCrawlClient } from "./socialCrawlClient.mjs";
+import { createSocialJobLedger } from "./geoSocialJobs.mjs";
 // The moving parts (packages B, C and F): measurement ticks and rounds, the
 // marketplace's ticks and hooks, the orchestrator, the worker and the notices.
 import { GeoOrchestrator, geoBriefBlock, geoRunId } from "./geoOrchestrator.mjs";
@@ -2638,6 +2639,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const geoStore = new GeoStore({ database: productDatabase, entityVocabulary });
     const social = createSocialCrawlClient({ baseUrl: config.geoSocialUrl, timeoutMs: config.geoSocialTimeoutMs,
       apiKeyFile: config.geoSocialApiKeyFile, allowPlaintext: config.geoSocialAllowPlaintext,
+      jobs: createSocialJobLedger({ store: geoStore }),
       fetchImpl: overrides.geoSocialFetch ?? globalThis.fetch });
     // The project's product zone and its cards (geoCards.mjs): the evidence zones the frontier composes, or one of its own where
     // the frontier is off — the zone service needs nothing of the feed.

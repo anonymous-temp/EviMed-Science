@@ -319,7 +319,8 @@ test("the social search needs a channel, validates its words, and answers within
   const { post } = await serve(t, createGeoGatewayHandler(on, runtimeManager, { geo }));
   const answer = await post("social", { query: "  二甲双胍   饭前 ", platforms: ["xhs"], sort: "latest", limit: 5 });
   assert.equal(answer.status, 200);
-  assert.deepEqual(searched, [{ query: "二甲双胍 饭前", platforms: ["xhs"], sort: "latest", limit: 5 }]);
+  // The token, never the request, names whose search it is: the job ledger and the Idempotency-Key are both under it.
+  assert.deepEqual(searched, [{ query: "二甲双胍 饭前", platforms: ["xhs"], sort: "latest", limit: 5, scope: { userId: "alice", projectId: "p-geo" } }]);
   assert.equal(answer.body.data.status, "collected");
   assert.equal((await post("social", { query: "q".repeat(256), platforms: ["xhs", "douyin", "zhihu", "weibo", "bilibili", "wechat_channels"] })).status, 200);
   assert.equal(searched.at(-1).platforms.length, 6);
@@ -339,6 +340,65 @@ test("the social search needs a channel, validates its words, and answers within
   const { post: slow } = await serve(t, createGeoGatewayHandler({ ...on, geoSocialTimeoutMs: 100 }, runtimeManager, { geo: hanging.geo, budgetMs: 200 }));
   const timedOut = await slow("social", { query: "q", platforms: ["xhs"] });
   assert.deepEqual([timedOut.status, timedOut.body.code], [504, "geo_gateway_timeout"]);
+});
+
+test("a call names at most the deployment's bound of platforms, and says how many and why", async (t) => {
+  const searched = /** @type {any[]} */ ([]);
+  const social = { configured: true, async search(/** @type {any} */ request) { searched.push(request); return { status: "collected", platforms: [], posts: [] }; } };
+  const { geo } = geoDouble(on, { social });
+  const { post } = await serve(t, createGeoGatewayHandler({ ...on, geoSocialMaxPlatforms: 2 }, runtimeManager, { geo }));
+  assert.equal((await post("social", { query: "q", platforms: ["xhs", "zhihu"] })).status, 200);
+  const over = await post("social", { query: "q", platforms: ["xhs", "zhihu", "douyin"] });
+  assert.deepEqual([over.status, over.body.code], [400, "social_posts_platform_invalid"]);
+  assert.match(over.body.error, /At most 2 platforms per call/);
+  assert.match(over.body.error, /another call/);
+  assert.equal(searched.length, 1, "nothing was collected for the refused call");
+  const one = await serve(t, createGeoGatewayHandler({ ...on, geoSocialMaxPlatforms: 1 }, runtimeManager, { geo }));
+  assert.match((await one.post("social", { query: "q", platforms: ["xhs", "zhihu"] })).body.error, /At most 1 platform per call/);
+  // The bound is never above the vocabulary's size, whatever the configuration says.
+  const wide = await serve(t, createGeoGatewayHandler({ ...on, geoSocialMaxPlatforms: 99 }, runtimeManager, { geo }));
+  assert.equal((await wide.post("social", { query: "q", platforms: ["xhs", "douyin", "zhihu", "weibo", "bilibili", "wechat_channels"] })).status, 200);
+});
+
+test("a pending social search is read on through social_job, under the token's user and project, and its refusals keep their names", async (t) => {
+  const reads = /** @type {any[]} */ ([]);
+  const JOB = "a".repeat(32);
+  const social = {
+    configured: true,
+    async search() { return { status: "pending", reason: "pending", jobId: JOB, platforms: [{ platform: "xhs", status: "request_failed", posts: 0, reason: "pending" }], posts: [] }; },
+    async job(/** @type {any} */ request) {
+      reads.push(request);
+      if (request.jobId === "b".repeat(32)) throw Object.assign(new Error("x"), { code: "social_posts_job_unknown" });
+      if (request.jobId === "c".repeat(32)) throw Object.assign(new Error("x"), { code: "social_posts_job_unavailable" });
+      if (request.jobId === "d".repeat(32)) throw Object.assign(new Error("x"), { code: "response_invalid" });
+      return { query: "q", sort: "hot", status: "collected", platforms: [], posts: [{ platform: "xhs", postId: "1" }] };
+    },
+  };
+  const { geo } = geoDouble(on, { social });
+  const { post, failures } = await serve(t, createGeoGatewayHandler(on, runtimeManager, { geo }));
+  const pending = await post("social", { query: "q", platforms: ["xhs"] });
+  assert.deepEqual([pending.status, pending.body.data.status, pending.body.data.jobId], [200, "pending", JOB]);
+  // It reads no project data either: a conversation outside a GEO project reads on its own jobs.
+  const read = await post("social_job", { jobId: JOB }, "token-plain");
+  assert.deepEqual([read.status, read.body.data.status, read.body.data.jobId, read.body.data.posts.length], [200, "collected", JOB, 1]);
+  assert.deepEqual(reads, [{ jobId: JOB, scope: { userId: "alice", projectId: "p-plain" } }], "the scope is the token's");
+  for (const [jobId, status, code] of [["b".repeat(32), 404, "social_posts_job_unknown"], ["c".repeat(32), 503, "social_posts_job_unavailable"], ["d".repeat(32), 503, "geo_gateway_unavailable"]]) {
+    const answer = await post("social_job", { jobId });
+    assert.deepEqual([answer.status, answer.body.code], [status, code], jobId);
+  }
+  assert.ok(failures.some((failure) => failure.code === "social_posts_job_unknown"), "the refusal reaches the ledger of failures by its code");
+  for (const [body, code] of [[{}, "social_posts_job_invalid"], [{ jobId: "../x" }, "social_posts_job_invalid"], [{ jobId: JOB, query: "q" }, "geo_request_invalid"]]) {
+    const bad = await post("social_job", body);
+    assert.deepEqual([bad.status, bad.body.code], [400, code], JSON.stringify(body));
+  }
+  // Its own ceiling and the same channel check as the search.
+  const { geo: withoutChannel } = geoDouble(on);
+  const unconfigured = await serve(t, createGeoGatewayHandler(on, runtimeManager, { geo: withoutChannel }));
+  assert.deepEqual([(await unconfigured.post("social_job", { jobId: JOB })).body.code], ["social_posts_unconfigured"]);
+  assert.equal(geoGatewayRoutePattern("/internal/geo/v1/social_job"), "/internal/geo/v1/social_job");
+  for (let index = 0; index < GEO_GATEWAY_WINDOW_LIMITS.social_job; index += 1) await post("social_job", { jobId: JOB });
+  assert.equal((await post("social_job", { jobId: JOB })).body.code, "geo_gateway_rate_limited");
+  assert.equal((await post("social", { query: "q", platforms: ["xhs"] })).status, 200, "a search has its own ceiling");
 });
 
 test("native import and explicit recovery refusals retain actionable messages without becoming outages", async (t) => {

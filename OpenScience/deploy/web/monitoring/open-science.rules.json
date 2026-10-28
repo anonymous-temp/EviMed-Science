@@ -621,7 +621,7 @@
           },
           "annotations": {
             "summary": "循证 GEO 的社媒爬虫服务已 15 分钟不可用，社媒监测停止",
-            "description": "Monitoring requests the social collector readiness endpoint /health/ready ({{ $labels.instance }}) every two minutes and has received no 2xx response for 15 minutes. Social collection cannot start new jobs until the deployment-owned service recovers. Inspect its readiness dependencies and OPEN_SCIENCE_GEO_SOCIAL_URL. Readiness does not verify the authenticated job API or every platform; auth_failed and partial collection remain separate control-plane outcomes."
+            "description": "监控每两分钟请求一次社媒采集服务的 /health/ready（{{ $labels.instance }}），连续 15 分钟没有得到 2xx 回答。这期间 GEO 的社媒监测（social_posts_search）和前沿动态的六平台监测（小红书、抖音、知乎、微博、哔哩哔哩、视频号）都开不了新的采集任务。采集服务在业主自己的服务器上（OPEN_SCIENCE_GEO_SOCIAL_URL），平台无法自行恢复，请业主检查它的就绪依赖和该地址。就绪检查不验证带密钥的任务接口，也不验证各平台是否可用：密钥被拒（auth_failed）和部分平台没有采到由控制面另外报告，不会触发这条告警。"
           }
         }
       ]

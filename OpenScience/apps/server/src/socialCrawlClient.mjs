@@ -12,13 +12,22 @@
  * excerpt, stated engagement and <=10 comment excerpts. A comment sample is not
  * a comment count. Unknown engagement is omitted, never turned into zero.
  *
- * Internal statuses remain collected/partial_collected/no_results/request_failed.
- * Only an explicit successful empty collection establishes no_results. Usable
- * partial posts survive a failed platform or a deadline; unfinished coverage is
- * request_failed with reason pending, which does not claim an upstream failure.
+ * Internal statuses are collected/partial_collected/no_results/request_failed,
+ * and pending. Only an explicit successful empty collection establishes
+ * no_results. Usable partial posts survive a failed platform or a deadline.
+ *
+ * A job the collector accepted and this call could not see finished (measured
+ * 30-120 s per platform, one platform at a time, against one deadline) is
+ * `pending`, never a failure: it carries the job id, which is recorded against
+ * the asking user and project the moment it is accepted, so `job()` can read it
+ * on, and only for that user and project. The Idempotency-Key is derived from
+ * (user, project, query, platform set, sort, limit, a ten-minute bucket), so a
+ * repeat of the same search joins the running job instead of buying a second
+ * one. A 200 answer to the submit is the collector replaying a job it already
+ * holds for that key; it is accepted like a 202.
  * @module socialCrawlClient
  */
-import { randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
@@ -29,6 +38,11 @@ export const SOCIAL_CRAWL_PATH = "/api/jobs";
 export const SOCIAL_MAX_LIMIT = 50;
 export const SOCIAL_DEFAULT_LIMIT = 20;
 export const SOCIAL_MAX_QUERY_LENGTH = 256;
+/**
+ * Searches repeated inside one bucket join the same job. Ten minutes: the longest a six-platform job took in measurement (30-120 s a
+ * platform, one at a time) is about twelve, and a result older than the bucket is a result nobody should be handed as current.
+ */
+export const SOCIAL_IDEMPOTENCY_BUCKET_MS = 10 * 60 * 1000;
 const MAX_DETAIL_POSTS = 10;
 const COMMENTS_PER_POST = 5;
 const MAX_COMMENTS_KEPT = 10;
@@ -41,6 +55,8 @@ const COLLECTION_STATUSES = new Set(["collected", "partial_collected", "no_resul
 const RETRY_DELAYS_MS = [500, 2_000];
 const MAX_RETRY_AFTER_MS = 30_000;
 const MAX_POLLS = 180;
+/** The most an accepted job's id may take to be stored: the GEO store's own statement timeout. */
+const JOB_RECORD_TIMEOUT_MS = 5_000;
 
 /** @param {string} code */
 const failure = code => Object.assign(new Error("The social collection request could not be completed."), { code });
@@ -130,13 +146,27 @@ export function socialCollectionStatus(platforms) {
   return platforms.length && platforms.every(entry => entry.status === "no_results") ? "no_results" : "request_failed";
 }
 
-/** File metadata only, never contents. @param {string} file */
-function keyFileUsable(file) {
-  if (!file) return false;
+/**
+ * Why a key file cannot serve, by name, or null when it can. Metadata and access only, never contents. `lstat` needs no read
+ * permission, so a root-owned 0600 file passes it while the web process (a different UID) can read nothing: the read access is asked
+ * of the file itself.
+ * @param {string} file @returns {"key_missing" | "key_unreadable" | "key_mode" | "key_invalid" | null}
+ */
+function keyFileProblem(file) {
+  if (!file) return "key_missing";
   try {
     const stat = fs.lstatSync(file);
-    return stat.isFile() && stat.size > 0 && stat.size <= MAX_KEY_BYTES + 2 && (process.platform === "win32" || (stat.mode & 0o077) === 0);
-  } catch { return false; }
+    // Compose binds /dev/null where the deployment names no host file: that is a key nobody provisioned.
+    if (stat.isCharacterDevice()) return "key_missing";
+    if (!stat.isFile() || stat.size === 0 || stat.size > MAX_KEY_BYTES + 2) return "key_invalid";
+    if (process.platform !== "win32" && (stat.mode & 0o077) !== 0) return "key_mode";
+    fs.accessSync(file, fs.constants.R_OK);
+    return null;
+  } catch (error) {
+    const code = /** @type {any} */ (error)?.code;
+    if (code === "ENOENT" || code === "ENOTDIR") return "key_missing";
+    return code === "EACCES" || code === "EPERM" ? "key_unreadable" : "key_invalid";
+  }
 }
 /** @param {unknown} key @returns {key is string} */
 const validKey = key => typeof key === "string" && key.length > 0 && Buffer.byteLength(key) <= MAX_KEY_BYTES && /^[\x21-\x7e]+$/.test(key);
@@ -231,26 +261,87 @@ function retryAfterMs(headers, fallback) {
 }
 
 /**
+ * Whether plaintext to this host stays inside the deployment's own network: loopback, RFC 1918, CGNAT, link-local, an IPv6 loopback,
+ * unique-local or link-local address, `.local`/`.internal`/`.localhost`, or a bare name. The same rule as the probe gateway's
+ * `isPrivateHost` (`geoProbeGateway.mjs`), restated here because a module outside the GEO set may not import one; a test holds the two
+ * equal over the ranges, so the social channel and the probe host cannot disagree about what a private address is.
+ * @param {string} hostname
+ */
+export function plaintextAllowedHost(hostname) {
+  const host = String(hostname ?? "").toLowerCase().replace(/^\[(.*)\]$/, "$1");
+  if (!host) return false;
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return true;
+  if (host.includes(":")) return host === "::1" || /^f[cd][0-9a-f]{2}:/.test(host) || /^fe[89ab][0-9a-f]:/.test(host);
+  const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (ipv4) {
+    const octets = ipv4.slice(1, 5).map(Number);
+    if (octets.some(part => !Number.isInteger(part) || part > 255)) return false;
+    return octets[0] === 127 || octets[0] === 10 || (octets[0] === 169 && octets[1] === 254) || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31)
+      || (octets[0] === 192 && octets[1] === 168) || (octets[0] === 100 && octets[1] >= 64 && octets[1] <= 127);
+  }
+  return !host.includes(".");
+}
+
+/**
+ * The channel's origin, or why there is none. Plaintext http is refused to a public address unless the deployment says so, and
+ * allowed to a private one without that, as the probe gateway does (`plaintextAllowedHost`).
+ * @param {string} baseUrl @param {boolean} allowPlaintext @returns {{ origin: string, reason: "url_missing" | "url_invalid" | "plaintext_not_allowed" | null }}
+ */
+function channelOrigin(baseUrl, allowPlaintext) {
+  const origin = String(baseUrl ?? "").trim().replace(/\/+$/, "");
+  if (!origin) return { origin: "", reason: "url_missing" };
+  let url;
+  try { url = new URL(origin); } catch { return { origin: "", reason: "url_invalid" }; }
+  if (!["https:", "http:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) return { origin: "", reason: "url_invalid" };
+  if (url.protocol === "http:" && !allowPlaintext && !plaintextAllowedHost(url.hostname)) return { origin: "", reason: "plaintext_not_allowed" };
+  return { origin, reason: null };
+}
+
+/** The same search is the same key inside one bucket and a different one outside it, for another person, project or request.
+ * @param {{ scope: { userId: string, projectId: string }, query: string, platforms: readonly string[], sort: string, limit: number, at: number, bucketMs: number }} input */
+export function socialIdempotencyKey({ scope, query, platforms, sort, limit, at, bucketMs }) {
+  const digest = createHash("sha256")
+    .update(JSON.stringify(["geo-social-search/1", scope.userId, scope.projectId, query, [...platforms].sort(), sort, limit, Math.floor(at / bucketMs)]))
+    .digest("hex");
+  return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20, 32)}`;
+}
+
+/** @param {unknown} scope @returns {scope is { userId: string, projectId: string }} */
+const validScope = scope => isObject(scope) && typeof scope.userId === "string" && scope.userId.length > 0 && typeof scope.projectId === "string" && scope.projectId.length > 0;
+
+/**
+ * @typedef {{ record: (entry: { scope: { userId: string, projectId: string }, jobId: string, query: string, platforms: string[], sort: string, limit: number }) => Promise<unknown>,
+ *   find: (scope: { userId: string, projectId: string }, jobId: string) => Promise<{ jobId: string, query: string, platforms: string[], sort: string, limit: number } | null> }} SocialJobLedger
+ */
+
+/**
  * @param {{ baseUrl?: string, apiKey?: string, apiKeyFile?: string, allowPlaintext?: boolean, timeoutMs?: number,
- * fetchImpl?: typeof fetch, now?: () => Date, sleep?: (ms: number) => Promise<unknown>, pollIntervalMs?: number, maxResponseBytes?: number }} options
+ * fetchImpl?: typeof fetch, now?: () => Date, sleep?: (ms: number) => Promise<unknown>, pollIntervalMs?: number, maxResponseBytes?: number,
+ * jobs?: SocialJobLedger | null, idempotencyBucketMs?: number }} options
  */
 export function createSocialCrawlClient({ baseUrl = "", apiKey = "", apiKeyFile = "", allowPlaintext = false, timeoutMs = 120_000,
-  fetchImpl = globalThis.fetch, now = () => new Date(), sleep = ms => delay(ms), pollIntervalMs = 1_000, maxResponseBytes = MAX_RESPONSE_BYTES } = {}) {
-  let origin = String(baseUrl).trim().replace(/\/+$/, "");
-  try {
-    const url = new URL(origin);
-    if (!["https:", ...(allowPlaintext ? ["http:"] : [])].includes(url.protocol) || url.username || url.password || url.search || url.hash) origin = "";
-  } catch { origin = ""; }
-  const configured = () => Boolean(origin) && (apiKeyFile ? keyFileUsable(apiKeyFile) : validKey(apiKey));
-  const counters = { searches: 0, requests: 0, collected: 0, noResults: 0, failed: 0, retried: 0 };
+  fetchImpl = globalThis.fetch, now = () => new Date(), sleep = ms => delay(ms), pollIntervalMs = 1_000, maxResponseBytes = MAX_RESPONSE_BYTES,
+  jobs = null, idempotencyBucketMs = SOCIAL_IDEMPOTENCY_BUCKET_MS } = {}) {
+  const channel = channelOrigin(baseUrl, allowPlaintext);
+  const origin = channel.origin;
+  /** Why the channel cannot serve, by name, or null. Re-read on every call: the key file is rotated and re-mounted under a running process. */
+  const problem = () => channel.reason ?? (apiKeyFile ? keyFileProblem(apiKeyFile) : validKey(apiKey) ? null : "key_missing");
+  const configured = () => problem() === null;
+  // `collected` is a platform whose collection was complete; `partial` one that kept usable posts and says what it lacks; `pending` one
+  // whose job was accepted and not finished when this call stopped waiting; `idempotent_join` a search that was handed a job the
+  // collector already held for its key instead of starting another; `job_unrecorded` an accepted job whose id could not be stored,
+  // which is therefore not offered for reading.
+  const counters = { searches: 0, requests: 0, collected: 0, partial: 0, noResults: 0, failed: 0, pending: 0, retried: 0, idempotent_join: 0, job_reads: 0, job_unrecorded: 0 };
   let lastError = /** @type {string | null} */ (null);
   const budget = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 120_000;
   const responseLimit = Number.isSafeInteger(maxResponseBytes) && maxResponseBytes > 0 ? Math.min(MAX_RESPONSE_BYTES, maxResponseBytes) : MAX_RESPONSE_BYTES;
   const interval = Number.isFinite(pollIntervalMs) && pollIntervalMs > 0 ? pollIntervalMs : 1_000;
+  const bucketMs = Number.isSafeInteger(idempotencyBucketMs) && idempotencyBucketMs > 0 ? idempotencyBucketMs : SOCIAL_IDEMPOTENCY_BUCKET_MS;
 
   /** @param {string} route @param {string} method @param {string | undefined} body @param {string | null} idempotencyKey
-   * @param {AbortSignal} signal @param {Set<string>} keys */
-  async function request(route, method, body, idempotencyKey, signal, keys) {
+   * @param {AbortSignal} signal @param {Set<string>} keys @param {{ status?: number, attempt?: number }} [info] filled with the answer's status
+   *   and the attempt that got it (0 = the first transmission) */
+  async function request(route, method, body, idempotencyKey, signal, keys, info = {}) {
     for (let attempt = 0; ; attempt += 1) {
       signal.throwIfAborted();
       const key = apiKeyFile ? await abortable(() => readKey(apiKeyFile), signal) : apiKey;
@@ -280,7 +371,9 @@ export function createSocialCrawlClient({ baseUrl = "", apiKey = "", apiKeyFile 
         }
         throw failure(response.status === 429 ? "rate_limited" : response.status === 503 ? "unavailable" : "http_error");
       }
-      if (method === "POST" ? response.status !== 202 : response.status !== 200) { void response.body?.cancel().catch(() => {}); throw failure("response_invalid"); }
+      // A submit is answered 202 for a job it started and 200 for one it already held under the key (a replay after a lost answer, or a
+      // repeat of the same search): both are an accepted job. A read is 200.
+      if (method === "POST" ? response.status !== 202 && response.status !== 200 : response.status !== 200) { void response.body?.cancel().catch(() => {}); throw failure("response_invalid"); }
       let raw;
       try { raw = await readBoundedText(response, responseLimit, signal); }
       catch (error) {
@@ -291,82 +384,136 @@ export function createSocialCrawlClient({ baseUrl = "", apiKey = "", apiKeyFile 
         await abortable(() => sleep(RETRY_DELAYS_MS[attempt]), signal);
         continue;
       }
+      info.status = response.status;
+      info.attempt = attempt;
       try { return JSON.parse(raw); } catch { throw failure("response_invalid"); }
     }
   }
 
+  /**
+   * One search from submit (or from a job id already held) to its end or the deadline.
+   * @param {{ query: string, platforms: string[], sort: string, limit: number, scope: { userId: string, projectId: string }, signal?: AbortSignal,
+   *   known?: { jobId: string } | null }} input
+   */
+  async function collect({ query, platforms, sort, limit, scope, signal: callerSignal, known = null }) {
+    counters.searches += known ? 0 : 1;
+    counters.job_reads += known ? 1 : 0;
+    lastError = null;
+    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), budget);
+    const deadline = Date.now() + budget;
+    const signal = callerSignal ? AbortSignal.any([controller.signal, callerSignal]) : controller.signal;
+    const keys = /** @type {Set<string>} */ (new Set());
+    const redact = /** @param {unknown} value */ value => {
+      if (typeof value !== "string") return value;
+      let text = value;
+      for (const key of keys) text = text.split(key).join("[redacted]");
+      return text;
+    };
+    let jobId = known?.jobId ?? null, recorded = Boolean(known), snapshot = null, reason = /** @type {string | null} */ (null), transient = /** @type {string | null} */ (null);
+    /** @type {PlatformCollection[]} */ let rows = [];
+    try {
+      if (!known) {
+        const body = JSON.stringify({ query, platforms, sort_type: sort, page: 1,
+          minimum_detail_posts: Math.max(1, Math.min(MAX_DETAIL_POSTS, Math.ceil(limit / platforms.length))),
+          minimum_comments_per_post: COMMENTS_PER_POST, collect_comments: true, refresh: false, include_provider_raw: false });
+        const idempotencyKey = socialIdempotencyKey({ scope, query, platforms, sort, limit, at: now().getTime(), bucketMs });
+        const answer = {};
+        snapshot = validateJob(await request(SOCIAL_CRAWL_PATH, "POST", body, idempotencyKey, signal, keys, answer), query, platforms, null);
+        jobId = snapshot.job_id;
+        if (answer.status === 200 && answer.attempt === 0) counters.idempotent_join += 1;
+        // Before the first poll: a job paid for is findable even if this call never sees it finish.
+        try {
+          if (!jobs) throw failure("job_ledger_missing");
+          // Not under the call's deadline: a deadline that passes while the id is being written is the very case the id is for.
+          await abortable(() => jobs.record({ scope, jobId: /** @type {string} */ (jobId), query, platforms, sort, limit }), AbortSignal.timeout(JOB_RECORD_TIMEOUT_MS));
+          recorded = true;
+        } catch { counters.job_unrecorded += 1; }
+      } else {
+        snapshot = validateJob(await request(`${SOCIAL_CRAWL_PATH}/${jobId}`, "GET", undefined, null, signal, keys), query, platforms, jobId);
+      }
+      let polls = 0;
+      while (!TERMINAL_STATUSES.has(snapshot.job_status)) {
+        if (Date.now() >= deadline || polls >= MAX_POLLS) throw failure("pending");
+        // Validate an intermediate result before preserving it across an outage.
+        if (snapshot.result != null) rows = jobCollections(snapshot, query, platforms, now().toISOString(), redact, "pending");
+        await abortable(() => sleep(interval), signal);
+        polls += 1;
+        snapshot = validateJob(await request(`${SOCIAL_CRAWL_PATH}/${snapshot.job_id}`, "GET", undefined, null, signal, keys), query, platforms, snapshot.job_id);
+      }
+      rows = jobCollections(snapshot, query, platforms, now().toISOString(), redact, null);
+    } catch (error) {
+      const knownCodes = new Set(["pending", "response_too_large", "response_invalid", "redirect_refused", "auth_failed", "request_failed", "credential_unavailable", "rate_limited", "unavailable", "http_error"]);
+      const code = /** @type {any} */ (error)?.code;
+      reason = callerSignal?.aborted ? "canceled" : controller.signal.aborted ? jobId ? "pending" : "timeout" : knownCodes.has(code) ? code : "request_failed";
+      // A job the collector accepted and this call could not read to its end (an outage between two polls, a busy answer) is still
+      // running there: it is pending, which can be read on, not failed.
+      if (jobId && ["request_failed", "rate_limited", "unavailable"].includes(reason)) { transient = reason; reason = "pending"; }
+      rows = platforms.map(platform => {
+        const previous = rows.find(row => row.platform === platform);
+        return previous?.posts.length || previous?.status === "no_results" ? previous : { platform, status: "request_failed", posts: [], reason: /** @type {string} */ (reason) };
+      });
+    } finally { clearTimeout(timer); }
+    const posts = [];
+    for (let index = 0; posts.length < limit && rows.some(row => index < row.posts.length); index += 1) {
+      for (const row of rows) { if (posts.length < limit && index < row.posts.length) posts.push(row.posts[index]); }
+    }
+    const coverage = rows.map(row => {
+      if (row.status === "request_failed") { if (row.reason === "pending") counters.pending += 1; else counters.failed += 1; }
+      else if (row.status === "partial_collected") counters.partial += 1;
+      else if (row.posts.length) counters.collected += 1;
+      else counters.noResults += 1;
+      return { platform: row.platform, status: row.status, posts: row.posts.length, ...(row.reason ? { reason: row.reason } : {}) };
+    });
+    lastError = transient ?? reason ?? rows.find(row => row.reason)?.reason ?? null;
+    if (reason === "pending") return { status: "pending", platforms: coverage, posts, reason, ...(jobId && recorded ? { jobId } : {}) };
+    const status = socialCollectionStatus(coverage);
+    const incomplete = reason || ["partial", "failed"].includes(snapshot?.job_status) || snapshot?.has_errors === true || snapshot?.result?.has_errors === true
+      || snapshot?.requirements_met === false || snapshot?.result?.requirements_met === false;
+    const finalStatus = incomplete && posts.length ? "partial_collected" : incomplete && status === "no_results" ? "request_failed" : status;
+    const finalReason = reason ?? (finalStatus !== status ? "incomplete_collection" : null);
+    return { status: finalStatus, platforms: coverage, posts, ...(finalReason ? { reason: finalReason } : {}) };
+  }
+
+  const unconfigured = () => Object.assign(new Error("The social channel is not configured."), { code: "social_posts_unconfigured" });
+
   return {
     get configured() { return configured(); },
-    status() { return { configured: configured(), counters: { ...counters }, lastError }; },
+    status() {
+      const reason = problem();
+      return { configured: reason === null, ...(reason ? { reason } : {}), counters: { ...counters }, lastError };
+    },
     async readiness() {
-      if (!configured()) return { configured: false, ready: false };
+      const reason = problem();
+      if (reason) return { configured: false, ready: false, reason };
       const controller = new AbortController(), timer = setTimeout(() => controller.abort(), Math.min(budget, 5_000));
       try { await request("/health/ready", "GET", undefined, null, controller.signal, new Set()); return { configured: true, ready: true }; }
       catch { return { configured: true, ready: false }; }
       finally { clearTimeout(timer); }
     },
-    /** @param {{ query: string, platforms?: string[], sort?: string, limit?: number, signal?: AbortSignal }} input */
-    async search({ query, platforms = [...GEO_SOCIAL_PLATFORMS], sort = "hot", limit = SOCIAL_DEFAULT_LIMIT, signal: callerSignal }) {
-      if (!configured()) throw Object.assign(new Error("The social channel is not configured."), { code: "social_posts_unconfigured" });
+    /** @param {{ query: string, platforms?: string[], sort?: string, limit?: number, scope: { userId: string, projectId: string }, signal?: AbortSignal }} input */
+    async search({ query, platforms = [...GEO_SOCIAL_PLATFORMS], sort = "hot", limit = SOCIAL_DEFAULT_LIMIT, scope, signal }) {
+      if (!configured()) throw unconfigured();
       if (typeof query !== "string" || !query.trim() || [...query].length > SOCIAL_MAX_QUERY_LENGTH || [...query].some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)
         || !Array.isArray(platforms) || !platforms.length || platforms.length > GEO_SOCIAL_PLATFORMS.length || platforms.some(p => !GEO_SOCIAL_PLATFORMS.includes(p))
-        || new Set(platforms).size !== platforms.length || !GEO_SOCIAL_SORTS.includes(sort) || !Number.isSafeInteger(limit) || limit < 1 || limit > SOCIAL_MAX_LIMIT) throw failure("social_posts_request_invalid");
-      counters.searches += 1;
-      lastError = null;
-      const controller = new AbortController(), timer = setTimeout(() => controller.abort(), budget);
-      const deadline = Date.now() + budget;
-      const signal = callerSignal ? AbortSignal.any([controller.signal, callerSignal]) : controller.signal;
-      const keys = new Set();
-      const redact = value => {
-        if (typeof value !== "string") return value;
-        for (const key of keys) value = value.split(key).join("[redacted]");
-        return value;
-      };
-      let accepted = false, snapshot = null, reason = /** @type {string | null} */ (null);
-      /** @type {PlatformCollection[]} */ let rows = [];
-      try {
-        const body = JSON.stringify({ query, platforms, sort_type: sort, page: 1,
-          minimum_detail_posts: Math.max(1, Math.min(MAX_DETAIL_POSTS, Math.ceil(limit / platforms.length))),
-          minimum_comments_per_post: COMMENTS_PER_POST, collect_comments: true, refresh: false, include_provider_raw: false });
-        const idempotencyKey = randomUUID();
-        snapshot = validateJob(await request(SOCIAL_CRAWL_PATH, "POST", body, idempotencyKey, signal, keys), query, platforms, null);
-        accepted = true;
-        let polls = 0;
-        while (!TERMINAL_STATUSES.has(snapshot.job_status)) {
-          if (Date.now() >= deadline || polls >= MAX_POLLS) throw failure("pending");
-          // Validate an intermediate result before preserving it across an outage.
-          if (snapshot.result != null) rows = jobCollections(snapshot, query, platforms, now().toISOString(), redact, "pending");
-          await abortable(() => sleep(interval), signal);
-          polls += 1;
-          snapshot = validateJob(await request(`${SOCIAL_CRAWL_PATH}/${snapshot.job_id}`, "GET", undefined, null, signal, keys), query, platforms, snapshot.job_id);
-        }
-        rows = jobCollections(snapshot, query, platforms, now().toISOString(), redact, null);
-      } catch (error) {
-        const knownCodes = new Set(["pending", "response_too_large", "response_invalid", "redirect_refused", "auth_failed", "request_failed", "credential_unavailable", "rate_limited", "unavailable", "http_error"]);
-        const code = /** @type {any} */ (error)?.code;
-        reason = callerSignal?.aborted ? "canceled" : controller.signal.aborted ? accepted ? "pending" : "timeout" : knownCodes.has(code) ? code : "request_failed";
-        rows = platforms.map(platform => {
-          const previous = rows.find(row => row.platform === platform);
-          return previous?.posts.length || previous?.status === "no_results" ? previous : { platform, status: "request_failed", posts: [], reason };
-        });
-      } finally { clearTimeout(timer); }
-      const posts = [];
-      for (let index = 0; posts.length < limit && rows.some(row => index < row.posts.length); index += 1) {
-        for (const row of rows) { if (posts.length < limit && index < row.posts.length) posts.push(row.posts[index]); }
-      }
-      const coverage = rows.map(row => {
-        if (row.status === "request_failed") counters.failed += 1;
-        else if (row.posts.length) counters.collected += 1;
-        else counters.noResults += 1;
-        return { platform: row.platform, status: row.status, posts: row.posts.length, ...(row.reason ? { reason: row.reason } : {}) };
-      });
-      lastError = reason ?? rows.find(row => row.reason)?.reason ?? null;
-      const status = socialCollectionStatus(coverage);
-      const incomplete = reason || ["partial", "failed"].includes(snapshot?.job_status) || snapshot?.has_errors === true || snapshot?.result?.has_errors === true
-        || snapshot?.requirements_met === false || snapshot?.result?.requirements_met === false;
-      const finalStatus = incomplete && posts.length ? "partial_collected" : incomplete && status === "no_results" ? "request_failed" : status;
-      const finalReason = reason ?? (finalStatus !== status ? "incomplete_collection" : null);
-      return { status: finalStatus, platforms: coverage, posts, ...(finalReason ? { reason: finalReason } : {}) };
+        || new Set(platforms).size !== platforms.length || !GEO_SOCIAL_SORTS.includes(sort) || !Number.isSafeInteger(limit) || limit < 1 || limit > SOCIAL_MAX_LIMIT
+        || !validScope(scope)) throw failure("social_posts_request_invalid");
+      // The request is a function of the set of platforms, not of the order they were named in: the same search must be the same body
+      // under the same key, or the collector would see one key carrying two requests.
+      return collect({ query: query.replace(/ {2,}/g, " ").trim(), platforms: GEO_SOCIAL_PLATFORMS.filter(platform => platforms.includes(platform)), sort, limit, scope, signal });
+    },
+    /**
+     * Read on a job this user and project started, to its end or the deadline. A job id not recorded for them is refused by name,
+     * never looked up at the collector.
+     * @param {{ jobId: string, scope: { userId: string, projectId: string }, signal?: AbortSignal }} input
+     */
+    async job({ jobId, scope, signal }) {
+      if (!configured()) throw unconfigured();
+      if (typeof jobId !== "string" || !JOB_ID.test(jobId) || !validScope(scope)) throw failure("social_posts_job_invalid");
+      let held = null;
+      try { held = jobs ? await jobs.find(scope, jobId) : null; } catch { throw failure("social_posts_job_unavailable"); }
+      if (!held) throw failure("social_posts_job_unknown");
+      return { query: held.query, sort: held.sort,
+        ...(await collect({ query: held.query, platforms: held.platforms, sort: held.sort, limit: held.limit, scope, signal, known: { jobId: held.jobId } })) };
     },
   };
 }

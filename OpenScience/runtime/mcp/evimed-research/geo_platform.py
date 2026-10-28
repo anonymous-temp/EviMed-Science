@@ -78,6 +78,7 @@ WRITE_MAX_ITEMS = 200
 SOCIAL_MAX_LIMIT = 50
 SOCIAL_DEFAULT_LIMIT = 20
 SOCIAL_MAX_QUERY = 256
+JOB_ID = re.compile(r"^[A-Fa-f0-9]{32}$")
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 # Reads and writes answer within ten seconds; a social crawl within the
 # channel's own timeout (at most 140 s), under the kernel's 180 s ceiling.
@@ -98,6 +99,7 @@ NEXT_ACTIONS = {
         "Ask the user whether another, possibly billed, call for these cells is acceptable; "
         "recover with acknowledgeUnknown:true only after they agree."
     ),
+    "social_posts_job_unknown": "That job is not readable (more than a day old, or not this project's): search again, and write 无信号 if it cannot be collected.",
 }
 ID = {"type": "string", "minLength": 1, "maxLength": 80, "pattern": r"^[A-Za-z0-9_-]+$"}
 
@@ -250,10 +252,11 @@ def tool_definitions():
         {
             "name": "social_posts_search",
             "description": (
-                "Collect how real people phrase a health question on selected Chinese social platforms "
+                "Collect how real people phrase a health question on Chinese social platforms "
                 "(xhs 小红书, douyin 抖音, zhihu 知乎, weibo 微博, bilibili B站, wechat_channels 视频号): excerpts with "
-                "the post's link, engagement and collection time. Select platform or platforms (up to six); "
-                "one asynchronous job returns per-platform completeness. Partial results are usable excerpts, not full coverage; failures mean no signal (无信号), never zero."
+                "link, engagement, time. Name one or two platforms (30-120 s each); one asynchronous job. "
+                "Partial = usable excerpts, not full coverage; failure = no signal (无信号), never zero. "
+                "pending = still running, with a jobId: do not search again; call with only that jobId to read on."
             ),
             "inputSchema": {
                 "type": "object",
@@ -263,9 +266,10 @@ def tool_definitions():
                     "platforms": {"type": "array", "items": {"type": "string", "enum": list(SOCIAL_PLATFORMS)}, "minItems": 1, "maxItems": 6, "uniqueItems": True},
                     "sort": {"type": "string", "enum": list(SOCIAL_SORTS), "default": "hot"},
                     "limit": {"type": "integer", "minimum": 1, "maximum": SOCIAL_MAX_LIMIT, "default": SOCIAL_DEFAULT_LIMIT},
+                    "jobId": {"type": "string", "pattern": "^[A-Fa-f0-9]{32}$", "description": "The id a pending search returned; alone."},
                 },
-                "required": ["query"],
-                "oneOf": [{"type": "object", "required": ["platform"]}, {"type": "object", "required": ["platforms"]}],
+                "oneOf": [{"type": "object", "required": ["query", "platform"]}, {"type": "object", "required": ["query", "platforms"]},
+                          {"type": "object", "required": ["jobId"]}],
                 "additionalProperties": False,
             },
         },
@@ -504,6 +508,8 @@ def _issue_line(issue: dict) -> str:
 
 
 def social_search(arguments: dict) -> dict:
+    if "jobId" in arguments:
+        return _social_read_on(arguments)
     query = arguments.get("query")
     text = " ".join(query.split()) if isinstance(query, str) else ""
     if not text or len(text) > SOCIAL_MAX_QUERY:
@@ -515,7 +521,7 @@ def social_search(arguments: dict) -> dict:
     if (not isinstance(platforms, list) or not 1 <= len(platforms) <= len(SOCIAL_PLATFORMS)
             or any(not isinstance(value, str) or value not in SOCIAL_PLATFORMS for value in platforms)
             or len(set(platforms)) != len(platforms)):
-        raise GeoPlatformError("social_posts_platform_invalid", "Select one to six distinct supported platforms.")
+        raise GeoPlatformError("social_posts_platform_invalid", "Select one or a few distinct supported platforms.")
     payload["platforms"] = platforms
     sort = arguments.get("sort")
     if sort is not None:
@@ -527,13 +533,41 @@ def social_search(arguments: dict) -> dict:
         if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= SOCIAL_MAX_LIMIT:
             raise GeoPlatformError("social_posts_limit_invalid", "limit must be an integer between 1 and %d." % SOCIAL_MAX_LIMIT)
         payload["limit"] = limit
-    data = _post("social", payload, SOCIAL_TIMEOUT_SECONDS)
+    return _social_result(_post("social", payload, SOCIAL_TIMEOUT_SECONDS), text)
+
+
+def _social_read_on(arguments: dict) -> dict:
+    """Read on a pending search by its job id, alone: the gateway answers only for a job this project started."""
+    job_id = arguments.get("jobId")
+    if set(arguments) != {"jobId"} or not isinstance(job_id, str) or not JOB_ID.match(job_id):
+        raise GeoPlatformError("social_posts_job_invalid", "Read on with only the 32-character jobId a pending search returned.")
+    data = _post("social_job", {"jobId": job_id}, SOCIAL_TIMEOUT_SECONDS)
+    query = data.get("query")
+    return _social_result(data, " ".join(query.split()) if isinstance(query, str) else "")
+
+
+def _social_result(data: dict, text: str) -> dict:
     posts = [post for post in data.get("posts") or [] if isinstance(post, dict)]
-    status = data.get("status") if data.get("status") in ("collected", "partial_collected", "no_results", "request_failed") else "request_failed"
+    status = (data.get("status") if data.get("status") in ("collected", "partial_collected", "no_results", "request_failed", "pending")
+              else "request_failed")
     body = {"status": status, "query": text, "platforms": data.get("platforms") or [], "posts": posts}
     if status == "collected":
         return {"status": "success", "summary": "Collected %d post(s) for \"%s\"." % (len(posts), text), "data": body,
                 "warnings": [], "next_actions": []}
+    if status == "pending":
+        job_id = data.get("jobId") if isinstance(data.get("jobId"), str) and JOB_ID.match(data["jobId"]) else None
+        if job_id:
+            body["jobId"] = job_id
+        return {
+            "status": "warning",
+            "summary": "The collection for \"%s\" is still running (%d post(s) so far)." % (text, len(posts)),
+            "data": body,
+            "warnings": ["Still running, not failed: a platform marked pending is not collected yet -- do not write it as 无信号 or as nobody asking."],
+            "next_actions": [
+                ("Do not search again. Read on with social_posts_search {\"jobId\": \"%s\"} in a minute." % job_id) if job_id
+                else "Repeat the identical search in a minute: it joins the running job instead of starting another.",
+            ],
+        }
     if status == "partial_collected":
         failed = [entry.get("platform") for entry in body["platforms"] if isinstance(entry, dict) and entry.get("status") == "request_failed"]
         return {
