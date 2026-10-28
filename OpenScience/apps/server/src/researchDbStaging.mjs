@@ -3,7 +3,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { HttpError, openScopedDirectoryNoFollow, resolveScopedPath, withProjectStorageMutation } from './security.mjs';
 
-const shape = /^knowledge-base\/\.evimed-revisions\/[a-f0-9]{64}\/research-database-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.json$/;
+// The name `researchTableFileName` writes: the table's letters, digits, `_` and `-`, then the capture time in UTC.
+const shape = /^knowledge-base\/\.evimed-revisions\/[a-f0-9]{64}\/[\p{L}\p{N}_-]{1,48}-\d{8}-\d{6}\.csv$/u;
 const invalid = () => new HttpError(503, 'research_db_staging_unavailable', 'The database snapshot staging record is unavailable.');
 
 /** Crash-recoverable markers for files which have not yet committed to the source ledger. */

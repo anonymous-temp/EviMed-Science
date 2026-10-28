@@ -7,7 +7,7 @@ import net from 'node:net';
 import test from 'node:test';
 import pg from 'pg';
 import { openResearchDb } from '../src/researchDbTransport.mjs';
-import { snapshotResearchTable } from '../src/researchDbSnapshot.mjs';
+import { listResearchTables, snapshotResearchTable } from '../src/researchDbSnapshot.mjs';
 
 const enabled = process.env.OPEN_SCIENCE_TEST_RESEARCH_TLS === '1';
 const run = (name, args) => execFileSync(name, args, { stdio: 'ignore' });
@@ -48,7 +48,8 @@ test('real TLS verifies the original hostname while the approved address is pinn
     const transport = await openResearchDb(settings, `db.example.org:${port}=8.8.8.8`, { Client: FixtureClient, resolve: resolver });
     try {
       const result = await snapshotResearchTable(transport.client, { schema: 'public', table: 'fixture_table', columns: ['id'] });
-      assert.deepEqual(result.rows, [{ id: { state: 'value', value: '7' } }]);
+      assert.deepEqual(result.rows, [['7']]);
+      assert.deepEqual((await listResearchTables(transport.client)).tables.map(table => `${table.schema}.${table.table}`), ['public.fixture_table']);
     } finally { await transport.close(); }
     await assert.rejects(openResearchDb({ ...settings, host: 'wrong.example.org' }, `wrong.example.org:${port}=8.8.8.8`, { Client: FixtureClient, resolve: resolver }), { code: 'research_db_unavailable' });
   } finally {

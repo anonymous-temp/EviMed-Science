@@ -4,7 +4,6 @@ import { spawnSync } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
-import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { ControlPlaneDatabase } from '../src/controlPlaneDatabase.mjs';
 import { migrateProductStore } from '../src/productPersistence.mjs';
@@ -13,7 +12,7 @@ import { ResearchDbStaging } from '../src/researchDbStaging.mjs';
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? '';
 if (url) { const parsed = new URL(url); assert(['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname)); assert.match(parsed.pathname, /evimed_test/); }
-const relative = () => `knowledge-base/.evimed-revisions/${'a'.repeat(64)}/research-database-${randomUUID()}.json`;
+const relative = () => `knowledge-base/.evimed-revisions/${'a'.repeat(64)}/cohort_${randomUUID().slice(0, 8)}-20261028-010203.csv`;
 test('restart cleanup deletes orphan and temporary bytes but fences live and referenced files', { skip: !url && 'A disposable test database is required', timeout: 30000 }, async () => {
   const db = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 4, databaseConnectionTimeoutMs: 2000 });
   const baseDir = await mkdtemp(path.join(tmpdir(), 'research-stage-'));
@@ -25,9 +24,14 @@ test('restart cleanup deletes orphan and temporary bytes but fences live and ref
     await db.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'stage','development')", [user]);
     await db.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,$2,'stage',1000000)", [user, projectId]);
     await migrateProductStore(db); await service.migrate();
+    for (const bad of [`knowledge-base/.evimed-revisions/${'a'.repeat(64)}/research-database-${randomUUID()}.json`, `knowledge-base/.evimed-revisions/${'a'.repeat(64)}/../cohort-20261028-010203.csv`,
+      `knowledge-base/.evimed-revisions/${'a'.repeat(64)}/.hidden-20261028-010203.csv`, `knowledge-base/.evimed-revisions/${'a'.repeat(64)}/${'x'.repeat(49)}-20261028-010203.csv`,
+      `knowledge-base/.evimed-revisions/${'a'.repeat(64)}/a/b-20261028-010203.csv`]) await assert.rejects(service.reserve(user, projectId, bad), { code: 'research_db_staging_unavailable' });
+    assert.equal(typeof await service.reserve(user, projectId, `knowledge-base/.evimed-revisions/${'a'.repeat(64)}/患者_队列-20261028-010203.csv`), 'string');
+    await db.query('DELETE FROM evimed_control.research_db_staging WHERE user_id=$1', [user]);
     const orphan = relative(), child = `
-      const { ControlPlaneDatabase } = await import(${JSON.stringify(pathToFileURL(path.resolve('apps/server/src/controlPlaneDatabase.mjs')).href)});
-      const { ResearchDbStaging } = await import(${JSON.stringify(pathToFileURL(path.resolve('apps/server/src/researchDbStaging.mjs')).href)});
+      const { ControlPlaneDatabase } = await import(${JSON.stringify(new URL('../src/controlPlaneDatabase.mjs', import.meta.url).href)});
+      const { ResearchDbStaging } = await import(${JSON.stringify(new URL('../src/researchDbStaging.mjs', import.meta.url).href)});
       const fs = await import('node:fs/promises'); const path = await import('node:path');
       const db = new ControlPlaneDatabase({databaseUrl:process.env.TEST_DB,databasePoolMax:1,databaseConnectionTimeoutMs:2000});
       const service = new ResearchDbStaging({database:db,store:{}});

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import pg from 'pg';
@@ -12,16 +13,63 @@ const external = process.env.OPEN_SCIENCE_TEST_RESEARCH_DB_URL ?? '';
 if (external) { const url = new URL(external); assert(['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)); assert.match(url.pathname, /evimed_test/); }
 const options = { skip: !(databaseUrl && external) && 'Two disposable PostgreSQL databases are required', timeout: 60000 };
 
-test('the production route stays unavailable even when the old gateway key and allowlist are configured', options, async () => {
+/** An owner-only keyring file with one fresh key; returns its path and key id. @param {string} dir @param {string} name */
+async function keyringFile(dir, name) {
+  const bytes = randomBytes(32), id = createHash('sha256').update(bytes).digest('hex'), file = path.join(dir, name);
+  await writeFile(file, JSON.stringify({ activeId: id, keys: { [id]: bytes.toString('base64') } }), { mode: 0o600 });
+  return { file, id };
+}
+
+test('in production the connector needs an allowlist and an owner-only keyring file, and a keyring that misses a saved key stops it', options, async () => {
   const previous = process.env.NODE_ENV; process.env.NODE_ENV = 'production';
-  let ctx;
+  const dir = await mkdtemp(path.join(tmpdir(), 'research-db-keyring-app-'));
+  const allow = 'db.example.org:5432=8.8.8.8', apps = [];
+  const start = async (overrides) => { const app = await signedIn({ production: false, modelGatewaySigningSecret: 'unrelated gateway signing fixture secret', ...overrides }); apps.push(app); return app; };
+  const get = (ctx, route) => fetch(`${ctx.base}/api/research-databases${route}${route.includes('?') ? '&' : '?'}projectId=${encodeURIComponent(ctx.project.id)}`, { headers: ctx.headers });
+  const status = async ctx => { const response = await get(ctx, '/status'); assert.equal(response.status, 200); return (await response.json()).data.available; };
+  const unavailable = async (ctx, code = 'research_db_unavailable') => {
+    for (const route of ['', `/${randomUUID()}/tables`]) {
+      const response = await get(ctx, route); assert.equal(response.status, 503, route);
+      assert.equal((await response.json()).code, code);
+    }
+    const response = await fetch(`${ctx.base}/api/research-databases/${randomUUID()}/snapshot`, { method: 'POST', headers: ctx.headers, body: '{}' });
+    assert.equal(response.status, 503); assert.equal((await response.json()).code, code);
+  };
   try {
-    ctx = await signedIn({ production: false, researchDbAllow: 'db.example.org:5432=8.8.8.8',
-      modelGatewaySigningSecret: 'unrelated gateway signing fixture secret', researchDbTestOnly: true, researchDbTestKey: 'test-only fixture encryption secret 12345' });
-    const response = await fetch(`${ctx.base}/api/research-databases?projectId=${encodeURIComponent(ctx.project.id)}`, { headers: ctx.headers });
-    assert.equal(response.status, 503);
-    assert.equal((await response.json()).code, 'research_db_unavailable');
-  } finally { await ctx?.close(); if (previous === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previous; }
+    const good = await keyringFile(dir, 'good.json'), other = await keyringFile(dir, 'other.json'), loose = await keyringFile(dir, 'loose.json');
+    await chmod(loose.file, 0o644);
+    // The old test injection and the gateway signing secret do not enable it, and neither does one half of the configuration.
+    const injected = await start({ researchDbAllow: allow, researchDbTestOnly: true, researchDbTestKey: 'test-only fixture encryption secret 12345' });
+    assert.equal(await status(injected), false); await unavailable(injected);
+    const noKeyring = await start({ researchDbAllow: allow });
+    assert.equal(await status(noKeyring), false); await unavailable(noKeyring);
+    const noAllow = await start({ researchDbKeyringFile: good.file });
+    assert.equal(await status(noAllow), false); await unavailable(noAllow);
+    const wrongMode = await start({ researchDbAllow: allow, researchDbKeyringFile: loose.file });
+    assert.equal(await status(wrongMode), false); await unavailable(wrongMode);
+    const missing = await start({ researchDbAllow: allow, researchDbKeyringFile: path.join(dir, 'absent.json') });
+    assert.equal(await status(missing), false); await unavailable(missing);
+    // Both configured: available, and the saved credential is sealed under the keyring's own key id.
+    const on = await start({ researchDbAllow: allow, researchDbKeyringFile: good.file });
+    assert.equal(await status(on), true);
+    const listed = await get(on, ''); assert.equal(listed.status, 200); assert.deepEqual((await listed.json()).data.items, []);
+    const saved = await fetch(`${on.base}/api/research-databases`, { method: 'POST', headers: on.headers, body: JSON.stringify({
+      projectId: on.project.id, host: 'db.example.org', port: 5432, database: 'research', username: 'reader', password: 'hidden-production-password', requestId: randomUUID() }) });
+    assert.equal(saved.status, 201);
+    const sealed = await on.app.store.database.query('SELECT key_id, ciphertext FROM evimed_control.research_db_connections WHERE user_id=$1', [on.user.id]);
+    assert.deepEqual(sealed.rows.map(row => row.key_id), [good.id]); assert(!sealed.rows[0].ciphertext.includes(Buffer.from('hidden-production-password')));
+    // The status route checks session and project.
+    assert.equal((await fetch(`${on.base}/api/research-databases/status?projectId=no-such-project`, { headers: on.headers })).status, 404);
+    assert.equal((await fetch(`${on.base}/api/research-databases/status?projectId=${encodeURIComponent(on.project.id)}`)).status, 401);
+    // Another keyring that lacks the key of a saved credential refuses every route until the key is restored.
+    const incomplete = await start({ researchDbAllow: allow, researchDbKeyringFile: other.file });
+    assert.equal(await status(incomplete), false); await unavailable(incomplete, 'research_db_keyring_incomplete');
+    assert.equal(await status(on), true, 'the instance whose keyring covers the credential is not affected');
+  } finally {
+    for (const app of apps.reverse()) await app.close();
+    if (previous === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previous;
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test('a project-owned database snapshot is captured, published, attached and fenced against revocation',
@@ -31,6 +79,8 @@ test('a project-owned database snapshot is captured, published, attached and fen
   await admin.query(`CREATE ROLE ${role}`);
   await admin.query('CREATE TABLE research_db_app_fixture (id integer, name text)');
   await admin.query("INSERT INTO research_db_app_fixture VALUES (1, 'Alice')");
+  // The same bytes are the same source, so each snapshot below is taken of a table which has grown.
+  const grow = id => admin.query("INSERT INTO research_db_app_fixture VALUES ($1, '第二, \"行\"')", [id]);
   await admin.query(`GRANT USAGE ON SCHEMA public TO ${role}`);
   await admin.query(`GRANT SELECT ON research_db_app_fixture TO ${role}`);
   let hold = false, entered, resume, crossHold = false, crossEntered, crossResume, crossCount = 0;
@@ -68,8 +118,20 @@ test('a project-owned database snapshot is captured, published, attached and fen
     const otherDelete = await fetch(`${other.base}/api/research-databases/${id}`, { method: 'DELETE', headers: other.headers,
       body: JSON.stringify({ projectId: other.project.id }) });
     assert.equal((await otherDelete.json()).data.removed, false);
+    // Discovery: the saved connection lists the readable tables with their supported columns; another account sees nothing of it.
+    const listed = await fetch(`${ctx.base}/api/research-databases/${id}/tables?projectId=${encodeURIComponent(ctx.project.id)}`, { headers: ctx.headers });
+    assert.equal(listed.status, 200);
+    const listing = (await listed.json()).data;
+    const fixtureTable = listing.tables.find(item => item.table === 'research_db_app_fixture');
+    assert(fixtureTable.estimatedRows === null || Number.isInteger(fixtureTable.estimatedRows));
+    assert.deepEqual({ ...fixtureTable, estimatedRows: 0 }, { schema: 'public', table: 'research_db_app_fixture', estimatedRows: 0,
+      columns: [{ name: 'id', type: 'integer' }, { name: 'name', type: 'text' }] });
+    assert.equal(listing.truncated, false);
+    assert.equal((await fetch(`${other.base}/api/research-databases/${id}/tables?projectId=${encodeURIComponent(other.project.id)}`, { headers: other.headers })).status, 404);
+    assert.equal((await fetch(`${ctx.base}/api/research-databases/${id}/tables?projectId=no-such-project`, { headers: ctx.headers })).status, 404);
+    assert.equal((await fetch(`${ctx.base}/api/research-databases/status?projectId=${encodeURIComponent(ctx.project.id)}`, { headers: ctx.headers }).then(response => response.json())).data.available, true);
     const request = { projectId: ctx.project.id, agendaId: agenda.id, schema: 'public', table: 'research_db_app_fixture', columns: ['id', 'name'], requestId: randomUUID() };
-    const orphanRel = `knowledge-base/.evimed-revisions/${'f'.repeat(64)}/research-database-${randomUUID()}.json`;
+    const orphanRel = `knowledge-base/.evimed-revisions/${'f'.repeat(64)}/orphan_table-20261028-010203.csv`;
     const orphanFile = path.join(ctx.project.baseDir, orphanRel);
     await mkdir(path.dirname(orphanFile), { recursive: true }); await writeFile(orphanFile, 'interrupted staging fixture');
     await ctx.app.store.database.query("INSERT INTO evimed_control.research_db_staging(user_id,project_id,id,path,created_at) VALUES($1,$2,$3,$4,clock_timestamp()-interval '3 minutes')",
@@ -92,6 +154,8 @@ test('a project-owned database snapshot is captured, published, attached and fen
     const rejected = await otherRequest; assert.equal(rejected.status, 429);
     crossResume(); crossHold = false;
     const result = await firstRequest; assert.equal(result.status, 201, JSON.stringify(result));
+    assert.deepEqual(Object.keys(result.body.data).sort(), ['capturedAt', 'columns', 'oversizedValuesWithheld', 'rowCount', 'sourceId', 'truncated']);
+    assert.equal(result.body.data.columns, 2); assert.equal(result.body.data.rowCount, 1); assert.equal(result.body.data.truncated, false);
     const retryOther = await fetch(`http://127.0.0.1:${secondAddress.port}/api/research-databases/${id}/snapshot`, {
       method: 'POST', headers: ctx.headers, body: JSON.stringify(request),
     });
@@ -104,18 +168,21 @@ test('a project-owned database snapshot is captured, published, attached and fen
     assert.equal(retry.status, 200); assert.deepEqual(retry.body.data, result.body.data);
     assert.equal((await call(`/api/research-databases/${id}/snapshot`, { ...request, columns: ['id'] })).status, 409);
     const source = await ctx.app.sourceService.get(ctx.user.id, sourceId);
-    const captured = JSON.parse(await readFile(path.join(ctx.project.baseDir, source.payload.paths[0]), 'utf8'));
-    assert.deepEqual(captured.rows, [{ id: { state: 'value', value: '1' }, name: { state: 'value', value: 'Alice' } }]);
+    assert.match(source.payload.paths[0], /^knowledge-base\/\.evimed-revisions\/[a-f0-9]{64}\/research_db_app_fixture-\d{8}-\d{6}\.csv$/);
+    assert.equal(source.payload.title, 'public.research_db_app_fixture');
+    const captured = await readFile(path.join(ctx.project.baseDir, source.payload.paths[0]), 'utf8');
+    assert.equal(captured, '\uFEFFid,name\r\n1,Alice\r\n');
     assert.deepEqual((await ctx.app.autopilotService.get(ctx.user.id, agenda.id)).payload.materials.map(item => item.sourceId), [sourceId]);
     assert(!JSON.stringify(captured).includes(connection.password));
     const files = async () => {
       const root = path.join(ctx.project.baseDir, 'knowledge-base', '.evimed-revisions');
       const entries = await readdir(root, { recursive: true });
-      return entries.filter(entry => entry.endsWith('.json')).sort();
+      return entries.filter(entry => entry.endsWith('.csv')).sort();
     };
     const beforeFailure = await files();
     const add = ctx.app.autopilotService.addMaterials;
     ctx.app.autopilotService.addMaterials = async () => { throw new Error('Injected association failure'); };
+    await grow(2);
     const failed = await call(`/api/research-databases/${id}/snapshot`, { ...request, requestId: randomUUID() });
     ctx.app.autopilotService.addMaterials = add;
     assert.equal(failed.status, 503);
@@ -144,6 +211,7 @@ test('a project-owned database snapshot is captured, published, attached and fen
       commitClient = db.transactionScope().client;
       return value;
     };
+    await grow(3);
     const uncertainRequest = { ...request, requestId: randomUUID() };
     let uncertain;
     try { uncertain = await call(`/api/research-databases/${id}/snapshot`, uncertainRequest); }
@@ -158,6 +226,7 @@ test('a project-owned database snapshot is captured, published, attached and fen
     await recovery.recover(0);
     assert.deepEqual(await readFile(committedFile), committedBytes, 'recovery retains a source from a committed transaction with a lost acknowledgment');
     await ctx.app.autopilotService.removeMaterial(ctx.user.id, agenda.id, committedSource.id);
+    await grow(4);
     hold = true;
     const pending = call(`/api/research-databases/${id}/snapshot`, { ...request, requestId: randomUUID() });
     await enter;
@@ -170,6 +239,7 @@ test('a project-owned database snapshot is captured, published, attached and fen
     const second = await call('/api/research-databases', { ...connection, requestId: randomUUID() }); assert.equal(second.status, 201);
     const secondId = second.body.data.id;
     hold = false;
+    await grow(5);
     let publishing, continuePublication;
     const inPublication = new Promise(resolve => { publishing = resolve; });
     const publicationRelease = new Promise(resolve => { continuePublication = resolve; });
@@ -184,6 +254,19 @@ test('a project-owned database snapshot is captured, published, attached and fen
     const published = await publishingSnapshot; assert.equal(published.status, 201, JSON.stringify(published));
     assert.equal((await removal).body.data.removed, true);
     assert.equal((await ctx.app.autopilotService.get(ctx.user.id, agenda.id)).payload.materials.length, 2);
+
+    // No `columns` means every supported column; an empty list is the same request, so a retry in either form is one result.
+    const third = await call('/api/research-databases', { ...connection, requestId: randomUUID() }); assert.equal(third.status, 201);
+    await grow(6);
+    const everything = { projectId: ctx.project.id, agendaId: agenda.id, schema: 'public', table: 'research_db_app_fixture', requestId: randomUUID() };
+    const whole = await call(`/api/research-databases/${third.body.data.id}/snapshot`, everything);
+    assert.equal(whole.status, 201, JSON.stringify(whole)); assert.equal(whole.body.data.columns, 2); assert.equal(whole.body.data.rowCount, 6);
+    const again = await call(`/api/research-databases/${third.body.data.id}/snapshot`, { ...everything, columns: [] });
+    assert.equal(again.status, 200); assert.deepEqual(again.body.data, whole.body.data);
+    const wholeSource = await ctx.app.sourceService.get(ctx.user.id, whole.body.data.sourceId);
+    const wholeText = await readFile(path.join(ctx.project.baseDir, wholeSource.payload.paths[0]), 'utf8');
+    assert.equal(wholeText.split('\r\n')[0], '﻿id,name');
+    assert(wholeText.includes('6,"第二, ""行"""\r\n'), 'a comma and quotes in a cell are quoted as RFC 4180 says');
   } finally {
     resume(); await other.close(); await ctx.close();
     await admin.query('DROP TABLE IF EXISTS research_db_app_fixture');

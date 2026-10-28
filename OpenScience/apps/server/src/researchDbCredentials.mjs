@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, hkdfSync, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { HttpError } from './security.mjs';
+import { readResearchDbKeyring } from './researchDbKeyring.mjs';
 
 const invalid = () => new HttpError(400, 'research_db_connection_invalid', 'The database connection is invalid.');
 const unavailable = () => new HttpError(503, 'research_db_connection_unavailable', 'The database connection is unavailable.');
@@ -14,11 +15,25 @@ export function researchDbRequestId(value) {
 export function researchDbSnapshotFingerprint(value) {
   return createHash('sha256').update(JSON.stringify([value.connectionId, value.agendaId, value.schema, value.table, value.columns])).digest('hex');
 }
-/** Production remains disabled until clinical isolation and key management are implemented.
+/** The isolated test injection: only under NODE_ENV=test, with an explicit flag and a fixture key.
  * @param {{environment:string|undefined,testOnly:boolean|undefined,database:any,testKey:unknown}} input */
 export function researchDbCredentialsForTest({ environment, testOnly, database, testKey }) {
   return environment === 'test' && testOnly === true && database && typeof testKey === 'string' && testKey.length >= 32
     ? new ResearchDbCredentials(database, { activeId: 'test-v1', keys: { 'test-v1': testKey } }) : null;
+}
+/** The connector's credentials for this process. The test injection is the isolated path above; otherwise the
+ * connector exists only when the operator configured both an egress allowlist and an independent keyring file and
+ * a product database exists. The keyring is never derived from another secret (the model gateway's, for one): a key
+ * that protects database passwords has its own custody, rotation and backup. A keyring that cannot be read leaves the
+ * connector unavailable and reports its code (never a path or key material) once.
+ * @param {{environment:string|undefined,testOnly:boolean|undefined,database:any,testKey:unknown,keyringFile:string,allow:string,report?:(code:string)=>void}} input */
+export function researchDbCredentialsFromConfig({ keyringFile, allow, report = () => {}, ...test }) {
+  const injected = researchDbCredentialsForTest(test);
+  if (injected) return injected;
+  if (!test.database || !keyringFile) return null;
+  if (!String(allow ?? '').trim()) { report('research_db_allowlist_missing'); return null; }
+  try { return new ResearchDbCredentials(test.database, readResearchDbKeyring(keyringFile)); }
+  catch (error) { report(typeof error?.code === 'string' ? error.code : 'research_db_keyring_unavailable'); return null; }
 }
 /** @param {any} value */
 function validate(value) {

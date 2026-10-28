@@ -22,7 +22,7 @@ test('the connection closes if the server sends too many protocol bytes', async 
   }
   const connection = { host: 'db.example.org', port: 5432, database: 'data', username: 'reader', password: 'secret' };
   const opened = await openResearchDb(connection, 'db.example.org:5432=8.8.8.8', { Client, resolve: async () => [{ family: 4, address: '8.8.8.8' }] });
-  client.connection.stream.emit('data', Buffer.alloc(16 * 1024 * 1024));
+  client.connection.stream.emit('data', Buffer.alloc(24 * 1024 * 1024));
   assert.equal(client.destroyed, undefined);
   client.connection.stream.emit('data', Buffer.alloc(1));
   assert.equal(client.destroyed, true); await opened.close();

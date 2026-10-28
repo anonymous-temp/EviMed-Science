@@ -2494,7 +2494,11 @@ export function loadConfig(overrides = {}) {
     evimedDisabledTools: String(
       overrides.evimedDisabledTools ?? process.env.EVIMED_DISABLED_TOOLS ?? "",
     ).split(",").map((name) => name.trim()).filter(Boolean).join(","),
-    researchDbAllow: String(overrides.researchDbAllow ?? ""),
+    // The research-database connector (a project's own PostgreSQL, read as a snapshot) exists only when BOTH are set:
+    // the egress allowlist, comma-separated `host:port=IPv4` entries, and the independent keyring file that seals the
+    // saved credentials (`researchDbKeyring.mjs`: owner-only mode, key ids bound to their key material).
+    researchDbAllow: String(overrides.researchDbAllow ?? process.env.OPEN_SCIENCE_RESEARCH_DB_ALLOW ?? "").trim(),
+    researchDbKeyringFile: String(overrides.researchDbKeyringFile ?? process.env.OPEN_SCIENCE_RESEARCH_DB_KEYRING_FILE ?? "").trim(),
     pharmacyReferenceDb: configuredPharmacyReferenceDb
       ? (path.isAbsolute(configuredPharmacyReferenceDb)
         ? configuredPharmacyReferenceDb

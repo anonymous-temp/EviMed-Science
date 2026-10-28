@@ -103,7 +103,7 @@ import { personalSkillRuntimeIdentity } from "./personalSkillRuntimeIdentity.mjs
 import { removePrivateExtensionFiles } from "./extensionPrivateCleanup.mjs";
 import { createServer } from "node:http";
 import { spawnSync } from "node:child_process";
-import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { once } from "node:events";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
@@ -322,7 +322,8 @@ import { runUsageKeys } from "./runUsage.mjs";
 import { inspectAutopilotDispatch, reclaimUnsentAutopilotRuntime } from "./autopilotDispatchRecovery.mjs";
 import { createAutopilotRunScope, episodeContextBlock, episodePlacementCounts, episodeVisibleText, noteEpisodePlacement } from "./autopilotEpisodeScope.mjs";
 import { createAutopilotRoutes } from "./autopilotRoutes.mjs";
-import { researchDbCredentialsForTest } from "./researchDbCredentials.mjs";
+import { researchDbCredentialsFromConfig } from "./researchDbCredentials.mjs";
+import { researchTableCsv, researchTableFileName } from "./researchDbSnapshot.mjs";
 import { createResearchDbRoutes } from "./researchDbRoutes.mjs";
 import { ResearchDbStaging } from "./researchDbStaging.mjs";
 import { cancelScheduledRun } from "./autopilotRunCancellation.mjs";
@@ -2376,10 +2377,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await stopRunForUser(project, run);
       return true;
     } });
-  // Production has no configured research database key manager or controlled
-  // data path. Only isolated tests may instantiate this connector.
-  const researchDbCredentials = researchDbCredentialsForTest({ environment: process.env.NODE_ENV, testOnly: overrides.researchDbTestOnly,
-    database: productDatabase, testKey: overrides.researchDbTestKey });
+  // The research-database connector exists when the operator configured an egress allowlist and an independent keyring
+  // file (`OPEN_SCIENCE_RESEARCH_DB_ALLOW`, `OPEN_SCIENCE_RESEARCH_DB_KEYRING_FILE`), or under the isolated test injection.
+  const researchDbCredentials = researchDbCredentialsFromConfig({ environment: process.env.NODE_ENV, testOnly: overrides.researchDbTestOnly,
+    database: productDatabase, testKey: overrides.researchDbTestKey, keyringFile: config.researchDbKeyringFile, allow: config.researchDbAllow,
+    report: code => { process.stderr.write(`research database unavailable: ${code}\n`); } });
   const researchDbStaging = researchDbCredentials && productDatabase ? new ResearchDbStaging({ database: productDatabase, store,
     report: code => { void securityAudit(config, 'research_db.staging', 'failed', { code }).catch(() => {}); } }) : null;
   let researchDbCleanupTimer = null;
@@ -2387,9 +2389,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const researchDbRoutes = createResearchDbRoutes({ store, credentials: researchDbCredentials, agenda: autopilotService,
     policy: config.researchDbAllow, maxJsonBytes: config.maxJsonBytes, open: overrides.researchDbOpen ?? undefined,
     publish: sourceService && productDatabase && researchDbCredentials && researchDbStaging && autopilotService ? async ({ user, project, connectionId, agendaId, requestId, fingerprint, snapshot }) => {
-      const rel = `knowledge-base/research-database-${randomUUID()}.json`;
+      // The snapshot is a CSV source (header row, UTF-8 with a byte order mark) named for its table and capture time.
       const capturedAt = new Date().toISOString();
-      const bytes = Buffer.from(JSON.stringify({ kind: 'postgresql-table-snapshot', capturedAt, ...snapshot }, null, 2));
+      const rel = `knowledge-base/${researchTableFileName(snapshot.table, capturedAt)}`;
+      const bytes = researchTableCsv(snapshot);
       const sha256 = createHash('sha256').update(bytes).digest('hex');
       const stagePath = `knowledge-base/.evimed-revisions/${sha256}/${path.posix.basename(rel)}`;
       const stageId = await researchDbStaging.reserve(user.id, project.id, stagePath);
@@ -2409,10 +2412,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // was lost. Never remove bytes from that ambiguous outcome here: the
         // durable staging sweep checks the source ledger before deletion.
         const saved = await writeProjectUpload({ config, user, project: current }, { root: 'base', rel, buffer: bytes,
-          meta: { title: 'PostgreSQL table snapshot' }, createAlias: false });
+          meta: { title: `${snapshot.schema}.${snapshot.table}` }, createAlias: false });
         if (!saved?.source?.id) throw new HttpError(503, 'research_db_unavailable', 'The database snapshot could not be published.');
         await autopilotService.addMaterials(user.id, question.id, { sourceIds: [saved.source.id] });
-        const result = { sourceId: saved.source.id, capturedAt, rowCount: snapshot.rows.length, truncated: snapshot.truncated,
+        const result = { sourceId: saved.source.id, capturedAt, rowCount: snapshot.rows.length, columns: snapshot.columns.length, truncated: snapshot.truncated,
           oversizedValuesWithheld: snapshot.oversizedValuesWithheld };
         await researchDbCredentials.recordSnapshot(user.id, current.id, requestId, fingerprint, result);
         await researchDbStaging.complete(user.id, current.id, stageId);
@@ -9518,6 +9521,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await connectorCredentials?.migrate();
       await maintenanceService?.initialize();
       if (researchDbStaging) {
+        // The credential tables and the keyring's coverage of what is saved: a gap is reported here, and every route
+        // answers research_db_keyring_incomplete until it is closed.
+        await researchDbRoutes.prepare().catch((error) => {
+          process.stderr.write(`research database not ready: ${typeof error?.code === "string" ? error.code : "research_db_unavailable"}\n`);
+        });
         await researchDbStaging.migrate();
         if (!maintenanceService || maintenanceService.claimingAllowed()) await researchDbStaging.recover();
         researchDbCleanupTimer = setInterval(() => {

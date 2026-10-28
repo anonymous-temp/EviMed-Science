@@ -867,6 +867,12 @@ services:
       # is optional, with job/input identity and output hashes checked always.
       OPEN_SCIENCE_VCR_ENGINE_TOKEN_FILE: /run/secrets/vcr-engine-token
       OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY_FILE: ${OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY_HOST_FILE:+/run/secrets/vcr-engine-receipt-key}
+      # The research-database connector (a project's own PostgreSQL, read as a snapshot): it exists only when BOTH are
+      # set. The allowlist is comma-separated host:port=IPv4 entries (the only addresses the control plane will dial);
+      # the keyring is an owner-only JSON file mounted read-only below (/dev/null where the deployment has none, which
+      # leaves the connector off, as an unset path does).
+      OPEN_SCIENCE_RESEARCH_DB_ALLOW: ${OPEN_SCIENCE_RESEARCH_DB_ALLOW:-}
+      OPEN_SCIENCE_RESEARCH_DB_KEYRING_FILE: ${OPEN_SCIENCE_RESEARCH_DB_KEYRING_HOST_FILE:+/run/secrets/research-db-keyring}
       OPEN_SCIENCE_VCR_MAX_CONCURRENT_JOBS:
       OPEN_SCIENCE_VCR_JOB_CPU_SECONDS:
       OPEN_SCIENCE_VCR_STUDY_CPU_BUDGET:
@@ -1372,6 +1378,12 @@ services:
       - type: bind
         source: ${OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY_HOST_FILE:-/dev/null}
         target: /run/secrets/vcr-engine-receipt-key
+        read_only: true
+      # The research-database keyring (JSON `{activeId, keys}`, 32-byte base64 keys named by their SHA-256): owned by the
+      # web user, mode 0600. It is read by the web service alone and is not derived from any other secret.
+      - type: bind
+        source: ${OPEN_SCIENCE_RESEARCH_DB_KEYRING_HOST_FILE:-/dev/null}
+        target: /run/secrets/research-db-keyring
         read_only: true
       # Root-owned 0644 evidence from import-vcr-method-validation.mjs --install.
       # Never shared with the engine or a project runtime; unset stays unmeasured.
