@@ -221,6 +221,7 @@ import { createDeepSeekTools, deepseekToolMetricFamilies } from "./deepseekTools
 import { geneExpressionMetricFamilies } from "./geneExpressionMetrics.mjs";
 import { TOOL_UNIVERSE_GATEWAY_PATH, createToolUniverseGateway } from "./toolUniverseGateway.mjs";
 import { GEO_PROBE_GATEWAY_PATH, createGeoProbeGatewayHandler } from "./geoProbeGateway.mjs";
+import { GeoProbeRequests } from "./geoProbeRequests.mjs";
 import { MemorySettingsStore, memoryPausedFor } from "./memorySettings.mjs";
 import { migrateMemorySettings } from "./memorySettingsPersistence.mjs";
 import { MemoryIndexProvider, selectedMemoryIndexProvider } from "./memoryIndexProvider.mjs";
@@ -436,7 +437,7 @@ import { deleteVcrProjectRows, deleteVcrUserRows, removeVcrArtifacts } from "./v
 import { GeoMeasureStore } from "./geoMeasureStore.mjs";
 import { createGeoDiagnosisReview } from "./geoDiagnosisReview.mjs";
 import { createGeoLearningSignals } from "./geoLearningSignals.mjs";
-import { enqueueRound as enqueueGeoRound, geoMeasureState, tickProbe as tickGeoProbe } from "./geoProbeQueue.mjs";
+import { countProbeTask, enqueueRound as enqueueGeoRound, geoMeasureState, tickProbe as tickGeoProbe } from "./geoProbeQueue.mjs";
 import { tickParse as tickGeoParse } from "./geoJudge.mjs";
 import { tickMetrics as tickGeoMetrics } from "./geoMetricsJob.mjs";
 import { tickErrors as tickGeoErrors } from "./geoErrors.mjs";
@@ -2624,7 +2625,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    *   articleExists: (project: any, articlePath: string) => Promise<boolean>,
    *   articleRunId: (project: any, deliverableId: string) => Promise<string | null>,
    *   gradedSha256: (project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string | null>,
-   *   cards: GeoCards, members: GeoMembers, refreshCards: (geoProject: any, controlProject: any) => ReturnType<GeoCards["refresh"]>, measureState?: any, questionBank?: ReturnType<typeof createGeoQuestionBank>,
+   *   cards: GeoCards, members: GeoMembers, probeRequests: GeoProbeRequests, refreshCards: (geoProject: any, controlProject: any) => ReturnType<GeoCards["refresh"]>, measureState?: any, questionBank?: ReturnType<typeof createGeoQuestionBank>,
    *   valueUpkeep?: ReturnType<typeof createGeoValueUpkeep>, signals?: GeoSignals, signalDiscovery?: GeoSignalDiscovery, signalResults?: GeoSignalResults,
    *   importDelivery: ReturnType<typeof createGeoDeliveryImport> } | null} */
   let geo = null;
@@ -2661,6 +2662,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       exporter: null,
       cards: geoCards,
       members: geoMembers,
+      // The tasks the probe host accepted for a runtime, so an ask that outlives the tool's deadline is read later by its id.
+      probeRequests: new GeoProbeRequests(productDatabase, { keepHours: config.geoProbeResultKeepHours }),
       refreshCards: (geoProject, controlProject) => geoCards.refresh(geoProject, { readSource: geoSourceReader(controlProject) }),
       importDelivery: createGeoDeliveryImport({ store: geoStore,
         beforeImport: async (project, run) => {
@@ -5775,6 +5778,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     fetchImpl: overrides.geoProbeFetch ?? globalThis.fetch,
     // The module's own admission, as the GEO gateway below is given it.
     geo,
+    // The tasks the host accepts for a runtime are recorded, and every task outcome is counted with the measurement queue's
+    // (`open_science_geo_probe_tasks_total`; the state is set when the module's worker is composed, below).
+    requests: geo?.probeRequests ?? null,
+    onProbeTask: (outcome) => countProbeTask(geo?.measureState, outcome),
   });
   // rt: the same gateways at https://<domain>/runtime-gateway/… for a runtime
   // outside this host (plan §3.1 #5).

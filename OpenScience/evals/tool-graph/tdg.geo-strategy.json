@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-strategy",
-  "version": "sha256:2e135389f33bd025a12ae92e1cc33afe88c7c05b81f49da48f197b380bd4d13b",
+  "version": "sha256:6ecee16b6fdb8d77527c9d3ddd42607915043e6cca73de6a686cc260c8cf1d7c",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 29,
@@ -1077,7 +1077,7 @@
     {
       "name": "mcp__evimed__geo_visibility_probe",
       "source": "mcp",
-      "description": "Ask the consumer LLM front-ends (DeepSeek, Doubao, Kimi, Qianwen, Yuanbao) a question the way a patient would, and record what they answer. This is a measurement with a denominator, not a retrieval: a vendor that failed to answer is not a vendor that did not mention the product, and a vendor that is not logged in was never asked. Use op=providers before a batch, op=ask per question, op=screenshot to retrieve the evidence image by name.",
+      "description": "Ask the consumer LLM front-ends (DeepSeek, Doubao, Kimi, Qianwen, Yuanbao) a question the way a patient would, and record what they answer. This is a measurement with a denominator, not a retrieval: a vendor that failed to answer is not a vendor that did not mention the product, and a vendor that is not logged in was never asked. Use op=providers before a batch, op=ask per question, op=screenshot to retrieve the evidence image by name. An ask still being answered returns pending with a requestId: read it later with op=result, never ask again.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1086,6 +1086,7 @@
             "enum": [
               "providers",
               "ask",
+              "result",
               "screenshot"
             ]
           },
@@ -1093,6 +1094,10 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 2000
+          },
+          "requestId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
           },
           "providers": {
             "type": "array",
