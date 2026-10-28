@@ -21,7 +21,9 @@ export function TaskForm({ projectId, agenda, recommendation, showBudgets = fals
   showBudgets?: boolean;
   disabled?: boolean;
   schedulingAvailable?: boolean;
-  onSaved: (record: AgendaRecord) => void; onRecorded: (record: AgendaRecord) => void; onBusyChange: (busy: boolean) => void; onCancel: () => void;
+  onSaved: (record: AgendaRecord) => void; onRecorded: (record: AgendaRecord) => void; onBusyChange: (busy: boolean) => void;
+  /** Where 取消 goes; a form with nowhere to go back to has no 取消. */
+  onCancel?: () => void;
 }) {
   const [title, setTitle] = useState(agenda?.payload.title ?? recommendation?.title ?? "");
   const [prompt, setPrompt] = useState(agenda?.payload.prompt ?? agenda?.payload.topics.join("\n") ?? recommendation?.prompt ?? "");
@@ -148,6 +150,6 @@ export function TaskForm({ projectId, agenda, recommendation, showBudgets = fals
     <p className="text-caption text-text-3">{[projectName ? `在“${projectName}”运行` : "在当前项目运行", schedule.kind === "weekly" && (schedule.weekdays?.length ?? 0) === 0 ? "请选择星期" : recurrence(schedule),
       validZone ? zoneName(schedule.timeZone) : ""].filter(Boolean).join(" · ")}</p>
     {scheduleValid && <p className="text-ui text-text-2" aria-live="polite">{recovering ? "停止尚未完成；保存内容不会启动任务。" : !canSchedule ? agenda ? "定时执行暂不可用，仍可保存任务内容。" : "定时执行暂不可用，恢复后可以创建任务。" : alreadyCompleted ? "任务已完成，保留原计划不会再次执行。" : nextText ? `${catchingUp ? agenda && !agenda.payload.enabled ? "启用后补跑最近一次" : "计划时间已过，将尽快开始；原计划" : agenda && !agenda.payload.enabled ? "启用后预计开始" : "预计开始"}：${nextText} · ${zoneName(schedule.timeZone)}` : "请调整日期或时间。"}</p>}
-    <div className="flex justify-end gap-2 border-t border-border pt-4"><Button variant="secondary" disabled={saving || disabled} onClick={onCancel}>{conflict ? "关闭编辑" : "取消"}</Button><Button type="submit" loading={saving} disabled={blocked || !valid || !scheduleValid || conflict}>{agenda ? "保存修改" : created ? "重试启用" : "创建并启用"}</Button></div>
+    <div className="flex justify-end gap-2 border-t border-border pt-4">{onCancel && <Button variant="secondary" disabled={saving || disabled} onClick={onCancel}>{conflict ? "关闭编辑" : "取消"}</Button>}<Button type="submit" loading={saving} disabled={blocked || !valid || !scheduleValid || conflict}>{agenda ? "保存修改" : created ? "重试启用" : "创建并启用"}</Button></div>
   </form>;
 }

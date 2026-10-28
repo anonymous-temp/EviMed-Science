@@ -14,7 +14,7 @@ import { FilesSkeleton } from "@/components/cards/Skeletons";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { cn } from "@/lib/cn";
 import { TaskGroup } from "./TaskGroup";
-import { activeAgenda, cancellationPending, cancellationRetryLabel, inFlight, rowLine, TASK_GROUPS, taskGroupOf, lastRunLine } from "./taskPresentation";
+import { activeAgenda, cancellationPending, cancellationRetryLabel, inFlight, rowLine, sortGroup, TASK_GROUPS, taskGroupOf, lastRunLine } from "./taskPresentation";
 
 /** What a row's 「⋯」 does to its task; the page decides how (a confirmation, a request, a dialog). */
 export interface TaskRowActions {
@@ -28,11 +28,11 @@ export interface TaskRowActions {
 /**
  * The tasks of the project, as one column of the page (the whole page when there is no room for a conversation beside it).
  *
- * The header is the page's heading and one quiet 「新建」 icon button; under it, a search box and the groups 即将执行 / 已暂停 / 已完成,
- * a group with nothing in it not drawn. A row is the task's name and one line — when it runs next and how often, that it is running,
+ * The header is the page's heading and one quiet 「新建」 icon button, which opens the new-task form beside the list; under it, a search
+ * box and the groups 即将执行 / 已暂停 / 已完成, a group with nothing in it not drawn — and, with no task at all, the examples to start one from. A row is the task's name and one line — when it runs next and how often, that it is running,
  * why it stopped — and its 「⋯」, always visible. It is a link: it opens the task's page, and the open task's row is marked.
  */
-export function TaskList({ agendas, available = true, episodes, selectedId, search, onSearch, projectName, error, onRetry, onCreate, busy, actions, singleColumn, firstRun, actionNotice }: {
+export function TaskList({ agendas, available = true, episodes, selectedId, search, onSearch, projectName, error, onRetry, onCreate, busy, actions, singleColumn, empty, actionNotice }: {
   agendas: AgendaRecord[] | null;
   available?: boolean;
   actionNotice?: ReactNode;
@@ -50,18 +50,17 @@ export function TaskList({ agendas, available = true, episodes, selectedId, sear
   /** The list is the page: it keeps to the list column's measure instead of the width of its container. */
   singleColumn: boolean;
   /**
-   * What the list says when the project has no task at all: what a scheduled task is and the one button to make the first. Drawn
-   * only where the list is the page; beside a conversation pane the pane says it, and the list stays quiet.
+   * What the list says when the project has no task at all: the examples a first one can start from (`TaskExamples`). Without it
+   * the list says in one line that there is none (the page that cannot make one).
    */
-  firstRun?: ReactNode;
+  empty?: ReactNode;
 }) {
   const needle = search.trim().toLocaleLowerCase();
   const visible = (agendas ?? []).filter(agenda => !agenda.payload.archivedAt
     && `${agenda.payload.title}\n${agenda.payload.prompt ?? agenda.payload.topics.join(" ")}`.toLocaleLowerCase().includes(needle));
   const running = new Set(episodes.filter(inFlight).map(episode => episode.payload.agendaId));
   const now = new Date();
-  const groups = TASK_GROUPS.map(([key, label]) => [!available && key === "upcoming" ? "定时计划" : label, visible.filter(agenda => taskGroupOf(agenda) === key)
-    .sort((a, b) => key === "upcoming" ? (a.payload.nextRunAt ?? "z").localeCompare(b.payload.nextRunAt ?? "z") : a.payload.title.localeCompare(b.payload.title, "zh-CN"))] as const)
+  const groups = TASK_GROUPS.map(([key, label]) => [!available && key === "upcoming" ? "定时计划" : label, sortGroup(key, visible.filter(agenda => taskGroupOf(agenda) === key))] as const)
     .filter(([, items]) => items.length > 0);
   const row = (agenda: AgendaRecord) => {
     const open = agenda.id === selectedId;
@@ -102,7 +101,7 @@ export function TaskList({ agendas, available = true, episodes, selectedId, sear
       {agendas === null ? <FilesSkeleton /> : <>
         {groups.map(([label, items]) => <TaskGroup key={label} label={label}><List>{items.map(row)}</List></TaskGroup>)}
         {visible.length === 0 && !error && (search.trim() ? <p className="px-2 text-ui text-text-3">没有匹配的任务</p>
-          : firstRun !== undefined ? firstRun : <p className="px-2 text-ui text-text-3">还没有定时任务</p>)}
+          : empty ?? <p className="px-2 text-ui text-text-3">还没有定时任务</p>)}
       </>}
     </div>
   </div>;

@@ -228,3 +228,14 @@ it("reports a task's actual draft baseline, keeps failed edits dirty and clears 
   await waitFor(() => expect(saved).toHaveBeenCalledOnce());
   expect(dirty).toHaveBeenLastCalledWith(false);
 });
+
+describe("the form's way out", () => {
+  it("has 取消 where there is somewhere to go back to, and none where there is not", () => {
+    const first = render(<TaskForm projectId="project-one" onSaved={noop} onRecorded={noop} onBusyChange={noop} onCancel={noop} />);
+    expect(screen.getByRole("button", { name: "取消" })).toBeInTheDocument();
+    first.unmount();
+    render(<TaskForm projectId="project-one" onSaved={noop} onRecorded={noop} onBusyChange={noop} />);
+    expect(screen.queryByRole("button", { name: "取消" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "创建并启用" })).toBeInTheDocument();
+  });
+});
