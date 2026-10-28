@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import { useTaskPane } from "@/lib/taskPane";
-import { RECOMMENDATIONS } from "@/components/autopilot/taskPresentation";
+import { RECOMMENDATIONS, zoneName } from "@/components/autopilot/taskPresentation";
 import { UnsavedRouteGuard } from "@/app/layout/UnsavedRouteGuard";
 import { AutopilotPage } from "./AutopilotPage";
 
@@ -138,6 +138,29 @@ describe("scheduled tasks", () => {
       expect(here()).toBe(`/app/autopilot/new?example=${RECOMMENDATIONS[3].id}`);
       expect(within(task()).getByLabelText("任务指令")).toHaveValue(RECOMMENDATIONS[3].prompt);
       expect(within(task()).getByLabelText("重复")).toHaveValue("daily");
+    });
+    // The release walk of 2026-10-28, on an account with no task: four kinds of border, two left edges and two lines standing alone, the zone
+    // said three times. The sentence is the button's own and the zone is its field's.
+    it("says the first-use form's time zone once and its schedule in one sentence beside 创建并启用, with no rule over the buttons and no line of its own", async () => {
+      mocks.listAgendas.mockResolvedValue({ items: [] }); render("/app/autopilot");
+      await screen.findByRole("button", { name: "行业要闻日报" });
+      await waitFor(() => expect(here()).toBe("/app/autopilot/new"));
+      const form = task();
+      const zone = zoneName((within(form).getByLabelText("时区") as HTMLInputElement).value);
+      expect(zone).not.toBe("");
+      expect(form.textContent!.split(zone)).toHaveLength(2);
+      const sentence = within(form).getByRole("button", { name: "创建并启用" }).closest("[data-note]") as HTMLElement;
+      expect(sentence).not.toBeNull();
+      expect(sentence).toHaveTextContent(/^在当前项目运行 · 每天 07:00 · 预计开始：/);
+      expect(within(form).getAllByText(/预计开始/)).toHaveLength(1);
+      expect(within(form).getAllByText(/在当前项目运行/)).toHaveLength(1);
+      expect(sentence.parentElement!.querySelector(".border-t")).toBeNull();
+      expect(sentence.className).not.toContain("border");
+      // The group of examples starts where the column's title does, its rows' ground hanging outside it.
+      const examples = within(list()).getByRole("region", { name: "从示例开始" });
+      expect(list().querySelector(".overflow-y-auto")).toHaveClass("px-4");
+      expect(within(examples).getByRole("heading", { name: "从示例开始" })).not.toHaveClass("px-2");
+      expect(examples.querySelector(".-mx-2")).not.toBeNull();
     });
     it("makes the first task from the first-use form and opens it", async () => {
       mocks.listAgendas.mockResolvedValue({ items: [] }); render("/app/autopilot");

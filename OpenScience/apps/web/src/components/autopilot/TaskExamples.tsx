@@ -9,13 +9,15 @@ import { RECOMMENDATIONS, type Recommendation } from "./taskPresentation";
  *
  * `locked` is a form that is saving or has just made a task: nothing may replace it then, as in the dialog this column replaced.
  */
-export function TaskExamples({ selectedId, locked = false, onChoose }: {
+export function TaskExamples({ selectedId, locked = false, bleed = false, onChoose }: {
   /** The example the form was started from. */
   selectedId?: string | null;
   locked?: boolean;
+  /** The column's title and search stand on the text's edge (`TaskGroup`). */
+  bleed?: boolean;
   onChoose: (item: Recommendation) => void;
 }) {
-  return <TaskGroup label="从示例开始">
+  return <TaskGroup label="从示例开始" bleed={bleed}>
     <fieldset disabled={locked} className="min-w-0">
       <List>{RECOMMENDATIONS.map(item => <ListRow key={item.id} title={item.title} selected={item.id === selectedId}
         titleProps={{ "data-example-id": item.id, "aria-current": item.id === selectedId ? "page" : undefined }}

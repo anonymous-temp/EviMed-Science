@@ -97,13 +97,15 @@ export function TaskList({ agendas, available = true, createLocked = false, epis
     />
     {/* A search box over nothing to search is not drawn. */}
     {(agendas?.length ?? 0) > 0 && <div className={cn("shrink-0 pb-3", inset && "px-4")}><SearchInput label="搜索任务" value={search} onChange={event => onSearch(event.target.value)} onClear={() => onSearch("")} className="w-full" /></div>}
-    <div className={cn("min-h-0 flex-1 space-y-5 overflow-y-auto pb-6", inset && "px-2")}>
+    {/* Beside a conversation the column's blocks stand where its title does (16 px in), so the page has one left edge in every state; the rows'
+        own ground hangs 8 px outside it (`TaskGroup`). Where the list is the page it stands as the page does, and its words are 8 px in. */}
+    <div className={cn("min-h-0 flex-1 space-y-5 overflow-y-auto pb-6", inset && "px-4")}>
       {actionNotice}
-      {error && <LoadError message={error} onRetry={onRetry} className={cn(inset && "mx-2")} />}
+      {error && <LoadError message={error} onRetry={onRetry} />}
       {agendas === null ? <FilesSkeleton /> : <>
-        {groups.map(([label, items]) => <TaskGroup key={label} label={label}><List>{items.map(row)}</List></TaskGroup>)}
-        {visible.length === 0 && !error && (search.trim() ? <p className="px-2 text-ui text-text-3">没有匹配的任务</p>
-          : empty ?? <p className="px-2 text-ui text-text-3">还没有定时任务</p>)}
+        {groups.map(([label, items]) => <TaskGroup key={label} label={label} bleed={inset}><List>{items.map(row)}</List></TaskGroup>)}
+        {visible.length === 0 && !error && (search.trim() ? <p className={cn("text-ui text-text-3", !inset && "px-2")}>没有匹配的任务</p>
+          : empty ?? <p className={cn("text-ui text-text-3", !inset && "px-2")}>还没有定时任务</p>)}
       </>}
     </div>
   </div>;

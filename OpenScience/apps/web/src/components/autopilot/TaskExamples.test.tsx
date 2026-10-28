@@ -16,6 +16,15 @@ describe("the examples in the list column", () => {
     expect(choose).toHaveBeenCalledWith(RECOMMENDATIONS[2]);
   });
 
+  it("stand on the column's text edge when its title does (bleed), the rows' ground hanging 8 px outside, and as a group of their own otherwise", () => {
+    const { container, rerender } = render(<TaskExamples bleed onChoose={vi.fn()} />);
+    expect(screen.getByRole("heading", { name: "从示例开始" })).not.toHaveClass("px-2");
+    expect(container.querySelector("section > .-mx-2 ul")).not.toBeNull();
+    rerender(<TaskExamples onChoose={vi.fn()} />);
+    expect(screen.getByRole("heading", { name: "从示例开始" })).toHaveClass("px-2");
+    expect(container.querySelector(".-mx-2")).toBeNull();
+  });
+
   it("mark the one the form was started from, and are pressed by nobody while the form is saving", async () => {
     const choose = vi.fn();
     const view = render(<TaskExamples selectedId={RECOMMENDATIONS[1].id} onChoose={choose} />);

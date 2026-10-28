@@ -28,13 +28,13 @@ import {
   OPERATOR_SENTENCES, addressAct, ADDRESS_CASES, addressOpenFindings, addressProbe, addressStateFindings, addressStateHolds, AXE_RULES_PER_NOTICE, AXE_TAGS, axeLoaded, axeNotices,
   axeRun, axeVersionOf, composerFindings, composerProbe, COMPOSER_BOTTOM_PX, loadAxeSource, scanWithAxe,
   asFinding, CAPTURE_MAX_SLICES, CAPTURE_QUALITY, findingText, STEP_TARGETS,
-  discoverCalculationHistory, handoffFindings, handoffProbe, HANDOFF_FIELDS, knowledgeGraphFindings, KNOWLEDGE_VIEWS, memoryDrawerFindings, memoryOverviewFindings, MEMORY_OVERVIEW_TILES, navigateForWalk, replaceWalkPage, walkFailureDiagnostics, assertWalkAuthenticated, recoverWalkLoad, routeLoadProbe, memoryRowCoverage, dailyRowCoverage, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
+  discoverCalculationHistory, discoverEmptyTaskProject, PAGE_TEMPLATES, handoffFindings, handoffProbe, HANDOFF_FIELDS, knowledgeGraphFindings, KNOWLEDGE_VIEWS, memoryDrawerFindings, memoryOverviewFindings, MEMORY_OVERVIEW_TILES, navigateForWalk, replaceWalkPage, walkFailureDiagnostics, assertWalkAuthenticated, recoverWalkLoad, routeLoadProbe, memoryRowCoverage, dailyRowCoverage, taskPageFindings, taskPaneReady, TYPE_PAIR_NOTICE, unexpectedRefusals, VCR_TABS_WALK,
 } from "../../../scripts/ops/ui-walk.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 /** The pages the walk finds by an id in a list the deployment answers, so that no static route names them. */
-const DISCOVERED_PAGES = ["calculation-history", "geo-answer", "frontier-item", "frontier-zone", "frontier-evidence", "frontier-author", "frontier-event", "frontier-topic", "frontier-congress", "evidence-matrix", "files-reader"];
+const DISCOVERED_PAGES = ["autopilot-first", "calculation-history", "geo-answer", "frontier-item", "frontier-zone", "frontier-evidence", "frontier-author", "frontier-event", "frontier-topic", "frontier-congress", "evidence-matrix", "files-reader"];
 
 /** The address a page of the walk is opened at, with the fake deployment's ids filled in for the pages it discovers. */
 function routeOf(name) {
@@ -3177,6 +3177,33 @@ test("calculation history discovery requires its real purpose, successful job, c
   assert.equal(await discover({ "https://walk.test/api/vcr/studies/calc/jobs": { jobs: [] } }), null);
   assert.equal(await discover({ "https://walk.test/api/vcr/studies/calc/jobs/job-real/result": {} }), null);
   assert.equal(await discoverCalculationHistory({}, "https://walk.test", [studies[0]]), null);
+});
+
+test("the first-use state of 定时任务 is found in a project of the account that holds no task, and nowhere else", async () => {
+  const base = "https://walk.test";
+  const project = (id, extra = {}) => ({ id, name: id, archivedAt: null, ...extra });
+  const task = (extra = {}) => ({ id: "t", payload: { title: "每周文献", ...extra } });
+  const discover = (answers, failures = []) => discoverEmptyTaskProject({ request: { get: async (url) => {
+    const answer = answers[url.slice(base.length)];
+    if (answer === undefined) return { ok: () => false, status: () => 404, json: async () => ({}) };
+    return { ok: () => true, status: () => 200, json: async () => ({ data: answer }) };
+  } } }, base, failures);
+  const lists = (byProject) => Object.fromEntries(Object.entries(byProject).map(([id, page]) => [`/api/autopilot/agendas?projectId=${id}`, page]));
+  // The fixture's shape: the default project holds the tasks, a study's project none; the production walk's throwaway account has only the default one, empty.
+  assert.equal(await discover({ "/api/projects": [project("default"), project("vcr-ev201")], ...lists({ default: { items: [task()], available: true }, "vcr-ev201": { items: [], available: true } }) }), "vcr-ev201");
+  assert.equal(await discover({ "/api/projects": [project("default")], ...lists({ default: { items: [], available: true } }) }), "default");
+  // A deleted task is not a task; an archived project, a project whose scheduling is not offered and a list that cannot be read are not the page.
+  assert.equal(await discover({ "/api/projects": [project("default")], ...lists({ default: { items: [task({ archivedAt: "2026-10-01T00:00:00Z" })], available: true } }) }), "default");
+  assert.equal(await discover({ "/api/projects": [project("a", { archivedAt: "2026-10-01T00:00:00Z" }), project("b"), project("c")], ...lists({ a: { items: [], available: true }, b: { items: [], available: false } }) }), null);
+  assert.equal(await discover({ "/api/projects": [project("default"), project("other")], ...lists({ default: { items: [task()] }, other: { items: [task()] } }) }), null);
+  assert.equal(await discover({}), null);
+  // A read the deployment fails is a failure of the walk's own, not an account with nothing.
+  const failures = [];
+  assert.equal(await discoverEmptyTaskProject({ request: { get: async () => ({ ok: () => false, status: () => 502, json: async () => ({}) }) } }, base, failures), null);
+  assert.equal(failures.length, 1);
+  // The page is a view of the table with its own template, held to the page's section budget, and it is walked from its own address.
+  assert.ok(PAGE_TEMPLATES.views.some((view) => view.view === "autopilot-first" && view.discovered && view.template === "T2" && view.rows === false));
+  assert.equal(SECTION_SHAPES_BY_PAGE["autopilot-first"], 2);
 });
 
 test("Inbox selection controls get no budget allowance, and selection controls outside one named toolbar fail", () => {

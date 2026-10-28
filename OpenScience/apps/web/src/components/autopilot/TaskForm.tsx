@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { agendaNextOccurrence, agendaDueOccurrence, AGENDA_DEFAULT_BUDGETS, AGENDA_MIN_EPISODE_BUDGET_CNY, SCHEDULED_TASK_DEFAULT_TYPES } from "@evimed/domain";
 import { createAgenda, getAgenda, startAgenda, updateAgenda, type AgendaRecord, type AgendaSchedule } from "@/lib/autopilotClient";
 import { productErrorMessage } from "@/lib/productClient";
@@ -7,6 +7,7 @@ import { MaterialPicker } from "./MaterialPicker";
 import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Input, Textarea, Select } from "@/components/ui/Input";
+import { Note } from "@/components/ui/Note";
 import { cancellationPending, inLingdou, lingdou, recurrence, scheduleOf, revisionConflict, TASK_TYPES, WEEKDAYS, zoneName, type Recommendation } from "./taskPresentation";
 
 /**
@@ -84,6 +85,13 @@ export function TaskForm({ projectId, agenda, recommendation, showBudgets = fals
   const catchingUp = nextRun !== null && Date.parse(nextRun) <= Date.now();
   const nextText = nextRun && validZone ? new Intl.DateTimeFormat("zh-CN", { timeZone: schedule.timeZone, year: "numeric", month: "long", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(nextRun)) : "";
 
+  // When it starts, or why it will not: the state of the schedule as a clause of the sentence beside the buttons. The date stays in one piece
+  // when the sentence wraps (「2026 / 年10月29日」 read as two things).
+  const startsAt = (label: string) => <>{label}：<span className="whitespace-nowrap">{nextText}</span></>;
+  const firstRun: ReactNode = !scheduleValid ? null : recovering ? "停止尚未完成；保存内容不会启动任务。" : !canSchedule ? agenda ? "定时执行暂不可用，仍可保存任务内容。" : "定时执行暂不可用，恢复后可以创建任务。"
+    : alreadyCompleted ? "任务已完成，保留原计划不会再次执行。"
+      : nextText ? startsAt(catchingUp ? agenda && !agenda.payload.enabled ? "启用后补跑最近一次" : "计划时间已过，将尽快开始；原计划" : agenda && !agenda.payload.enabled ? "启用后预计开始" : "预计开始") : "请调整日期或时间。";
+
   const submit = async (event: React.FormEvent) => {
     event.preventDefault(); if (!valid || !scheduleValid || saving || blocked || conflict) return;
     setSaving(true); onBusyChange(true); setError(null);
@@ -135,7 +143,7 @@ export function TaskForm({ projectId, agenda, recommendation, showBudgets = fals
         {pickingMaterials ? <MaterialPicker projectId={projectId} taken={[]} initialChosen={materialIds} busy={saving} onCancel={() => setPickingMaterials(false)} onChoose={ids => { setMaterialIds(ids); setPickingMaterials(false); }} />
           : <div className="flex flex-wrap items-center gap-2"><Button variant="secondary" onClick={() => setPickingMaterials(true)}>从知识库选择</Button>{materialIds.length > 0 && <><span className="text-caption text-text-2">已选择 {materialIds.length} 份资料</span><Button variant="text" onClick={() => setMaterialIds([])}>清除选择</Button></>}</div>}
       </section>}
-      <Disclosure summary={<span>高级设置<span className="ml-2 text-caption text-text-3">{schedule.timeZone}</span></span>} defaultOpen={!validZone || showBudgets}><div className="space-y-4 pt-2">
+      <Disclosure summary="高级设置" defaultOpen={!validZone || showBudgets}><div className="space-y-4 pt-2">
         <Input label="名称" value={title} maxLength={200} placeholder="不填则取指令的开头" onChange={event => setTitle(event.target.value)} />
         <fieldset className="flex flex-wrap gap-3"><legend className="mb-2 text-ui text-text">任务类型</legend>{TASK_TYPES.map(([value, label]) => <label key={value} className="flex items-center gap-1 text-ui text-text"><input type="checkbox" checked={taskTypes.includes(value)} onChange={event => setTaskTypes(event.target.checked ? [...taskTypes, value] : taskTypes.filter(item => item !== value))} />{label}</label>)}</fieldset>
         {showBudgets && <>
@@ -146,10 +154,13 @@ export function TaskForm({ projectId, agenda, recommendation, showBudgets = fals
       </div></Disclosure>
     </fieldset>
     {error && <p role="alert" className="text-ui text-error">{error}</p>}
-    {/* What saving will set up, in one line, changing as the fields do: where it runs, how often, in which zone. */}
-    <p className="text-caption text-text-3">{[projectName ? `在“${projectName}”运行` : "在当前项目运行", schedule.kind === "weekly" && (schedule.weekdays?.length ?? 0) === 0 ? "请选择星期" : recurrence(schedule),
-      validZone ? zoneName(schedule.timeZone) : ""].filter(Boolean).join(" · ")}</p>
-    {scheduleValid && <p className="text-ui text-text-2" aria-live="polite">{recovering ? "停止尚未完成；保存内容不会启动任务。" : !canSchedule ? agenda ? "定时执行暂不可用，仍可保存任务内容。" : "定时执行暂不可用，恢复后可以创建任务。" : alreadyCompleted ? "任务已完成，保留原计划不会再次执行。" : nextText ? `${catchingUp ? agenda && !agenda.payload.enabled ? "启用后补跑最近一次" : "计划时间已过，将尽快开始；原计划" : agenda && !agenda.payload.enabled ? "启用后预计开始" : "预计开始"}：${nextText} · ${zoneName(schedule.timeZone)}` : "请调整日期或时间。"}</p>}
-    <div className="flex justify-end gap-2 border-t border-border pt-4">{onCancel && <Button variant="secondary" disabled={saving || disabled} onClick={onCancel}>{conflict ? "关闭编辑" : "取消"}</Button>}<Button type="submit" loading={saving} disabled={blocked || !valid || !scheduleValid || conflict}>{agenda ? "保存修改" : created ? "重试启用" : "创建并启用"}</Button></div>
+    {/* What pressing the button will do, in one sentence that follows the fields: where the task runs, how often and when it starts. The zone is
+        said once, by its own field above. The sentence is the buttons' own (`Note`), so it stands beside them and not as a line by itself. */}
+    <Note className="gap-y-3 sm:flex-nowrap sm:justify-between" action={<span className="ml-auto flex shrink-0 gap-2">
+      {onCancel && <Button variant="secondary" disabled={saving || disabled} onClick={onCancel}>{conflict ? "关闭编辑" : "取消"}</Button>}
+      <Button type="submit" loading={saving} disabled={blocked || !valid || !scheduleValid || conflict}>{agenda ? "保存修改" : created ? "重试启用" : "创建并启用"}</Button>
+    </span>}>
+      <span aria-live="polite">{projectName ? `在“${projectName}”运行` : "在当前项目运行"} · <span className="whitespace-nowrap">{schedule.kind === "weekly" && (schedule.weekdays?.length ?? 0) === 0 ? "请选择星期" : recurrence(schedule)}</span>{firstRun ? <> · {firstRun}</> : null}</span>
+    </Note>
   </form>;
 }

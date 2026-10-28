@@ -219,6 +219,7 @@ const WALK_TABLES = {
       {"view":"memory-overview","route":"/app/memory/overview","pattern":"/app/memory/overview","family":"memory","template":"T4","budget":"data","shapes":2,"rows":true},
       {"view":"memory-shared-missing","route":"/app/memory/shared/impeccable-audit-missing","pattern":"/app/memory/shared/:token","family":"memory-record","template":"screen","rows":false},
       {"view":"autopilot","route":"/app/autopilot","pattern":"/app/autopilot/:taskId?","family":"autopilot","template":"T2","shapes":2,"rows":true},
+      {"view":"autopilot-first","discovered":true,"pattern":"/app/autopilot/:taskId?","family":"autopilot","template":"T2","shapes":2,"rows":false,"rowsNote":"the first-use state of 定时任务, a project with no task (found from the account's own project list: the production walk's throwaway account has nothing, and so do the fixture's study projects): the examples fill the new-task form beside them and make nothing, and the form is read as it stands"},
       {"view":"active-research","route":"/app/active-research","pattern":"/app/active-research","family":"active-research","template":"T4","budget":"data","rows":false,"rowsNote":"Research rows select an execution in place; the generic walk row click expects navigation, while the selection is exercised by ActiveResearchPage tests."},
       {"view":"inbox","route":"/app/inbox","pattern":"/app/inbox","family":"inbox","template":"T1","shapes":2,"rows":true,"budgetOverride":{"controls":9},"budgetNote":"controls: each message row carries its selection checkbox (design system v3.1, 2026-10-26: select messages and mark them read together; the batch actions are in the toolbar only while something is ticked) — a 16 px native checkbox, one look, the ninth beside the shell's, the tabs, the source and kind chips and the rows; 9 on the fixture walk of 2026-10-26 (int/1026-fix)"},
       {"view":"account","route":"/app/account","pattern":"/app/account","family":"settings","template":"T6","shapes":3,"rows":false,"rowsNote":"a settings page of rows with their own buttons (用户名, 密码 修改, 退出登录, 导出, 删除): no list whose row opens anything, in any account — the click could only ever report a coverage gap (r19-guards2, from the fixture walk)"},
@@ -692,6 +693,26 @@ export async function discoverCalculationHistory(context, base, studies, failure
 }
 
 /**
+ * The first project of the account whose scheduled-task list holds no task: the page 「定时任务」 is in its first-use state there (the
+ * examples in the list column beside the new-task form), a state the account's own default project is not in once it has a task. The
+ * production walk's throwaway account has nothing, so its default project is the answer; the fixture furnishes tasks in its default
+ * project only, and its studies' projects hold none, which is how the first-use page is measured at all (a page that only an account
+ * with no task ever meets failed the release walk on 2026-10-28 while the fixture walk, whose default project had tasks, passed).
+ * A project whose page cannot be read, that is archived, or where scheduling is not available (the page is then its own state) is not it.
+ * @param {any} context @param {string} base @param {string[]} [failures]
+ * @returns {Promise<string | null>}
+ */
+export async function discoverEmptyTaskProject(context, base, failures = []) {
+  const projects = await readData(context, base, "/api/projects", failures);
+  for (const project of (Array.isArray(projects) ? projects : []).slice(0, 12)) {
+    if (typeof project?.id !== "string" || !project.id || project.archivedAt) continue;
+    const page = await readData(context, base, `/api/autopilot/agendas?projectId=${encodeURIComponent(project.id)}`, failures);
+    if (page && page.available !== false && Array.isArray(page.items) && page.items.every((/** @type {any} */ item) => item?.payload?.archivedAt)) return project.id;
+  }
+  return null;
+}
+
+/**
  * The pages whose address holds an id the deployment's own lists name, read from the same GET endpoints the pages use: one GEO
  * project's seven tabs and an answer; the 虚拟临床研究 studies' seven tabs each; the 前沿动态 zone, card, author and event pages.
  * Each is None where the module is off for the account or the list is empty — the home pages are walked either way. A page left out
@@ -730,6 +751,10 @@ async function discoverRoutes(context, base, notices, failures, only = []) {
     routes.push(...VCR_TABS_WALK.map(([name, segment]) => /** @type {[string, string]} */ ([`${name}${suffix}`, `${at}${segment}`])));
   }
   if (primary && !second) skip("vcr-*@2", "the account has one study");
+
+  const emptyProject = await discoverEmptyTaskProject(context, base, failures);
+  if (emptyProject) routes.push(["autopilot-first", `/app/autopilot/new?project=${encodeURIComponent(emptyProject)}`]);
+  else skip("autopilot-first", "every project of the account already holds a scheduled task, or scheduling is not offered");
 
   const article = frontierItemRoute(await readData(context, base, "/api/frontier/items?limit=1", failures));
   if (article) routes.push(["frontier-item", article]);

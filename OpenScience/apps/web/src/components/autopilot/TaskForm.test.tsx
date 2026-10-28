@@ -86,32 +86,41 @@ const task = (schedule: AgendaSchedule) => ({ id: "agenda-one", projectId: "proj
     title: "心衰追踪", prompt: "跟进心衰", topics: ["x"], taskTypes: ["literature-sentinel"], dailyBudgetCny: 11, weeklyBudgetCny: 40, maxEpisodeCny: 7,
     scheduleHour: 7, timeZone: "Asia/Shanghai", schedule, enabled: false, status: "paused", pauseReason: null, outcomes: [] } });
 
+/** The one sentence beside the buttons: where the task runs, how often, and when it starts (the zone is the field's, said once). */
+const sentence = (button = "保存修改") => screen.getByRole("button", { name: button }).closest("[data-note]") as HTMLElement;
+
 describe("the task form's summary line", () => {
 
 
-  it("says above the buttons where the task runs, how often and in which zone, and follows the fields: no cost is said", async () => {
+  it("says in one sentence beside the buttons where the task runs and how often, follows the fields and names no zone and no cost: the zone is said once, by its field", async () => {
     useProjectStore.setState({ projects: [{ id: "project-one", name: "我的研究" } as never] });
     try {
       render(<TaskForm projectId="project-one" agenda={task({ kind: "daily", timeZone: "Asia/Shanghai", time: "07:00" })} onSaved={noop} onRecorded={noop} onBusyChange={noop} onCancel={noop} />);
-      const summary = screen.getByText("在“我的研究”运行 · 每天 07:00 · 中国标准时间");
-      expect(summary.compareDocumentPosition(screen.getByRole("button", { name: "保存修改" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(sentence()).toHaveTextContent(/^在“我的研究”运行 · 每天 07:00 · /);
+      // One sentence and one place: it is the buttons' own, and the page holds no second line about when and where.
+      expect(sentence()).toContainElement(screen.getByRole("button", { name: "保存修改" }));
+      expect(screen.getAllByText(/在“我的研究”运行/)).toHaveLength(1);
+      expect(screen.getAllByText("中国标准时间")).toHaveLength(1);
+      expect(sentence()).not.toHaveTextContent("中国标准时间");
       await userEvent.selectOptions(screen.getByLabelText("重复"), "weekly");
-      expect(screen.getByText(/^在“我的研究”运行 · 每周一 07:00 · /)).toBeInTheDocument();
+      expect(sentence()).toHaveTextContent(/^在“我的研究”运行 · 每周一 07:00 · /);
       await userEvent.click(screen.getByLabelText("周一"));
-      expect(screen.getByText(/^在“我的研究”运行 · 请选择星期 · /)).toBeInTheDocument();
+      expect(sentence()).toHaveTextContent(/^在“我的研究”运行 · 请选择星期/);
       await userEvent.click(screen.getByLabelText("周一")); await userEvent.click(screen.getByLabelText("周五"));
-      expect(screen.getByText("在“我的研究”运行 · 每周一、周五 07:00 · 中国标准时间")).toBeInTheDocument();
+      expect(sentence()).toHaveTextContent(/^在“我的研究”运行 · 每周一、周五 07:00 · /);
       expect(document.body).not.toHaveTextContent(/单次最多|¥/);
     } finally { useProjectStore.setState({ projects: [] }); }
   });
 
-  it("says a one-time task by its day, and leaves out a zone it cannot name", async () => {
+  it("says a one-time task by its day, and a zone only by its field, which names what it cannot", async () => {
     render(<TaskForm projectId="project-one" agenda={task({ kind: "once", timeZone: "Asia/Shanghai", time: "08:30", date: "2031-02-03" })} onSaved={noop} onRecorded={noop} onBusyChange={noop} onCancel={noop} />);
-    expect(screen.getByText("在当前项目运行 · 2031年2月3日 · 仅一次 08:30 · 中国标准时间")).toBeInTheDocument();
-    await userEvent.click(screen.getByText("高级设置"));
+    expect(sentence()).toHaveTextContent(/^在当前项目运行 · 2031年2月3日 · 仅一次 08:30/);
+    expect(screen.getByText("中国标准时间")).toBeInTheDocument();
     const zone = screen.getByLabelText("时区");
     await userEvent.clear(zone); await userEvent.type(zone, "Mars/Base");
-    expect(screen.getByText("在当前项目运行 · 2031年2月3日 · 仅一次 08:30")).toBeInTheDocument();
+    expect(screen.queryByText("中国标准时间")).not.toBeInTheDocument();
+    expect(sentence()).not.toHaveTextContent("Mars");
+    expect(screen.getByText("请输入有效时区，例如 Asia/Shanghai")).toBeInTheDocument();
   });
 
   it("names the project the way every picker does, so a namesake is told apart", () => {
@@ -122,7 +131,7 @@ describe("the task form's summary line", () => {
     ] });
     try {
       render(<TaskForm projectId="project-two" agenda={task({ kind: "daily", timeZone: "Asia/Shanghai", time: "07:00" })} onSaved={noop} onRecorded={noop} onBusyChange={noop} onCancel={noop} />);
-      expect(screen.getByText(/^在“波立维 · 10月1日”运行 · 每天 07:00 · /)).toBeInTheDocument();
+      expect(sentence()).toHaveTextContent(/^在“波立维 · 10月1日”运行 · 每天 07:00 · /);
     } finally { useProjectStore.setState({ projects: [] }); }
   });
 });
@@ -163,11 +172,12 @@ describe("schedule preview and ordinary materials", () => {
     vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date("2026-10-01T02:00:00Z"));
     try {
       render(<TaskForm projectId="project-one" agenda={{ ...task({ kind: "daily", timeZone: "Asia/Shanghai", time: "07:30" }), payload: { ...task({ kind: "daily", timeZone: "Asia/Shanghai", time: "07:30" }).payload, scheduleChangedAt: "2026-10-01T02:00:00Z" } }} onSaved={noop} onRecorded={noop} onBusyChange={noop} onCancel={noop} />);
-      expect(screen.getByText(/预计开始：2026年10月2日周五 07:30 · 中国标准时间/)).toBeInTheDocument();
+      expect(sentence()).toHaveTextContent("预计开始：2026年10月2日周五 07:30");
+      expect(sentence()).not.toHaveTextContent("中国标准时间");
       expect(screen.getByText(/这是开始执行的时间，完成后结果保留在任务对话中/)).toBeInTheDocument();
       expect(screen.getByLabelText("时区")).toBeVisible();
       fireEvent.change(screen.getByLabelText("时间"), { target: { value: "15:30" } });
-      expect(screen.getByText(/预计开始：2026年10月1日周四 15:30/)).toBeInTheDocument();
+      expect(sentence()).toHaveTextContent("预计开始：2026年10月1日周四 15:30");
     } finally { vi.useRealTimers(); }
   });
   it("previews the saved paused schedule's latest missed occurrence, but changed calendars start now", () => {
@@ -175,9 +185,9 @@ describe("schedule preview and ordinary materials", () => {
     try {
       const saved = task({ kind: "daily", timeZone: "Asia/Shanghai", time: "07:30" });
       render(<TaskForm projectId="project-one" agenda={{ ...saved, payload: { ...saved.payload, scheduleChangedAt: "2026-09-01T00:00:00Z", lastScheduledOccurrence: { key: "2026-09-30T07:30@Asia/Shanghai", scheduledAt: "2026-09-29T23:30:00Z", localDate: "2026-09-30" } } }} onSaved={noop} onRecorded={noop} onBusyChange={noop} onCancel={noop} />);
-      expect(screen.getByText(/启用后补跑最近一次：2026年10月1日周四 07:30/)).toBeInTheDocument();
+      expect(sentence()).toHaveTextContent("启用后补跑最近一次：2026年10月1日周四 07:30");
       fireEvent.change(screen.getByLabelText("时间"), { target: { value: "08:30" } });
-      expect(screen.getByText(/启用后预计开始：2026年10月2日周五 08:30/)).toBeInTheDocument();
+      expect(sentence()).toHaveTextContent("启用后预计开始：2026年10月2日周五 08:30");
     } finally { vi.useRealTimers(); }
   });
   it.each([false, true])("does not replay an occurrence already recorded by the saved watermark (legacy=%s)", legacy => {
@@ -185,15 +195,15 @@ describe("schedule preview and ordinary materials", () => {
     try {
       const saved = task({ kind: "daily", timeZone: "Asia/Shanghai", time: "07:00" });
       render(<TaskForm projectId="project-one" agenda={{ ...saved, payload: { ...saved.payload, schedule: legacy ? undefined : saved.payload.schedule, lastScheduledDate: "2026-10-01", ...(legacy ? {} : { lastScheduledOccurrence: { key: "2026-10-01T07:00@Asia/Shanghai", scheduledAt: "2026-09-30T23:00:00Z", localDate: "2026-10-01" } }) } }} onSaved={noop} onRecorded={noop} onBusyChange={noop} onCancel={noop} />);
-      expect(screen.getByText(/启用后预计开始：2026年10月2日周五 07:00/)).toBeInTheDocument();
-      expect(screen.queryByText(/启用后补跑最近一次/)).not.toBeInTheDocument();
+      expect(sentence()).toHaveTextContent("启用后预计开始：2026年10月2日周五 07:00");
+      expect(sentence()).not.toHaveTextContent("启用后补跑最近一次");
     } finally { vi.useRealTimers(); }
   });
   it("does not promise another execution when editing an unchanged completed once-only task", () => {
     const completed = task({ kind: "once", timeZone: "Asia/Shanghai", time: "07:30", date: "2026-01-01" });
     render(<TaskForm projectId="project-one" agenda={{ ...completed, payload: { ...completed.payload, enabled: true, scheduleState: "completed" } }} onSaved={noop} onRecorded={noop} onBusyChange={noop} onCancel={noop} />);
-    expect(screen.getByText("任务已完成，保留原计划不会再次执行。")).toBeInTheDocument();
-    expect(screen.queryByText(/预计开始/)).not.toBeInTheDocument();
+    expect(sentence()).toHaveTextContent("任务已完成，保留原计划不会再次执行。");
+    expect(sentence()).not.toHaveTextContent("预计开始");
   });
   it("saves chosen project materials with the task before activation", async () => {
     sources.mockResolvedValue([{ id: "src_" + "a".repeat(32), payload: { paths: ["knowledge-base/weekly.xlsx"] } }]);

@@ -474,8 +474,8 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
   // says that instead, where the list is the page (beside the list the pane says it).
   const list = ({ split }: MasterDetailState) => <TaskList agendas={agendas} available={available} createLocked={creating && draft.locked} episodes={episodes} selectedId={selectedId} search={search} onSearch={onSearch} projectName={projectName} error={error}
     onRetry={() => void load()} onCreate={() => { if (available && !(creating && !example)) openDraft(); }} busy={busy} actions={rowActions} singleColumn={!split}
-    actionNotice={actionError && !selected ? <div role="alert" className="px-2 text-ui text-error">{actionError}{retry && <Button variant="text" disabled={busy} onClick={() => void operate(retry)}>重试操作</Button>}</div> : undefined}
-    empty={!none ? undefined : available ? <TaskExamples selectedId={example?.id} locked={draft.locked} onChoose={openDraft} /> : split ? undefined : unavailable} />;
+    actionNotice={actionError && !selected ? <div role="alert" className={split ? "text-ui text-error" : "px-2 text-ui text-error"}>{actionError}{retry && <Button variant="text" disabled={busy} onClick={() => void operate(retry)}>重试操作</Button>}</div> : undefined}
+    empty={!none ? undefined : available ? <TaskExamples selectedId={example?.id} locked={draft.locked} bleed={split} onChoose={openDraft} /> : split ? undefined : unavailable} />;
 
   return <MasterDetail list={list} detail={detail} selected={Boolean(taskId)} listLabel="任务列表" detailLabel="任务"
     listWidth={LIST_COLUMN} detailMin={PANE_MIN} narrow="swap" modeAttribute="data-autopilot-layout"
