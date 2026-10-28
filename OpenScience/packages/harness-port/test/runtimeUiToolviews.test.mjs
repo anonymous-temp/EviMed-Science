@@ -12,7 +12,7 @@ import test from 'node:test';
 
 import { MCP_TOOL_NAMES } from '@evimed/domain';
 import {
-  apply, BODY, delegateView, gateRefusal, liveRunFor, planView, refusalOf, taskCardView, toolLineView, toolResultCount, toolSubjectHost,
+  apply, BODY, delegateView, gateRefusal, liveRunFor, planView, workingDeliverable, refusalOf, taskCardView, toolLineView, toolResultCount, toolSubjectHost,
 } from '../src/runtimeUiToolviews.mjs';
 import { fakeCtx, fakeTarget, kernelSlots, kitFor, renderStatic } from './helpers/frameFakes.mjs';
 
@@ -90,6 +90,22 @@ test('a plan is what will be handed back and where each piece stands — no revi
   assert.deepEqual(done.deliverables.map((/** @type {any} */ item) => item.status), ['已完成', '未完成']);
   // A read-back is the run checking itself.
   assert.equal(planView(settled('evimed_plan', { action: 'status' }, ok({ items: [{ id: 'evidence', status: 'accepted' }] })), null, kit()).kind, 'status');
+});
+
+test('a piece the run works on itself reads in progress, not 「待开始」, for as long as the run works', () => {
+  const single = { runId: 'run-1', sessionId: 'session-a', state: 'running', progress: { deliverables: [{ id: 'evidence', status: 'planned', attempts: 0 }] } };
+  const args = { action: 'write', deliverables: [{ id: 'evidence', title: '慢性肾脏病凝血综述' }] };
+  const result = ok({ deliverables: [{ id: 'evidence', title: '慢性肾脏病凝血综述', status: 'planned' }] });
+  assert.equal(workingDeliverable(single), 'evidence');
+  assert.deepEqual(planView(settled('evimed_plan', args, result), single, kit()).deliverables.map((/** @type {any} */ item) => item.status), ['进行中']);
+  // Two pieces, nothing delegated: the first planned one is the one in hand, the second waits.
+  const two = { ...single, progress: { deliverables: [{ id: 'a', status: 'planned' }, { id: 'b', status: 'planned' }] } };
+  assert.equal(workingDeliverable(two), 'a');
+  // A delegated or repaired piece is what the run is on; the planned one after it has not begun.
+  assert.equal(workingDeliverable(LIVE), '');
+  // A run that has ended is working on nothing.
+  assert.equal(workingDeliverable({ ...single, state: 'accepted' }), '');
+  assert.equal(workingDeliverable(null), '');
 });
 
 test('a plan still streaming shows what is written so far, and a refused one says so in Chinese', () => {

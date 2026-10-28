@@ -8647,6 +8647,30 @@ test("only a dispatch a person is waiting on asks the runtime to wait for a free
   }
 });
 
+test('a notice the run already carries is neither written again nor folded twice', async t => {
+  const { runNotice } = await import('../src/runNotices.mjs');
+  const { project, store, polls } = await delegatingRunFixture(t, { manual: true, stallPolls: 0 });
+  let time = Date.parse('2026-10-27T09:26:00Z');
+  store.now = () => new Date(time);
+  const started = await store.start(project, { sessionId: 'ses_deleg' });
+  await polls.parked();
+  const ledger = path.join(project.rootDir, '.openscience', 'runs.jsonl');
+  const notice = runNotice('run_input_attribution_incomplete', 'Some native inputs could not be attributed.');
+  await store.appendQualityNotices(project, started.id, [notice], { unchecked: true });
+  const written = (await readFile(ledger, 'utf8')).split('\n').filter(Boolean).length;
+  for (let cycle = 0; cycle < 5; cycle += 1) {
+    time += 15_000;
+    await store.appendQualityNotices(project, started.id, [notice], { unchecked: true });
+  }
+  assert.equal((await readFile(ledger, 'utf8')).split('\n').filter(Boolean).length, written, 'five unchanged cycles write nothing');
+  // A ledger written before the refusal still folds to one copy.
+  const event = { event: 'notice', id: started.id, at: new Date(time).toISOString(), qualityNotices: [notice], verification: 'unchecked' };
+  await writeFile(ledger, `${await readFile(ledger, 'utf8')}${JSON.stringify(event)}\n${JSON.stringify(event)}\n`);
+  const run = (await store.list(project)).find((item) => item.id === started.id);
+  assert.equal(run.qualityNotices.filter((item) => item.code === 'run_input_attribution_incomplete').length, 1);
+  store.monitors.get(started.id)?.cancel();
+});
+
 test('a stall notice survives workspace-only movement and clears live after authenticated kernel activity', async t => {
   const { runNotice } = await import('../src/runNotices.mjs');
   const { project, store, writeProjection, polls } = await delegatingRunFixture(t, { manual: true, stallPolls: 0 });
