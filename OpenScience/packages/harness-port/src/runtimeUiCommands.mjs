@@ -357,7 +357,8 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     () => geoOptions.value, () => geoOptions.value,
   );
   ctx.effect(() => kit.hub.on('geo', (/** @type {any} */ data) => {
-    setGeoOptions(data && typeof data === 'object' && Array.isArray(data.starters) ? data : null);
+    if (!data || typeof data !== 'object' || data.sessionId !== currentSession()) return;
+    setGeoOptions(Array.isArray(data.starters) ? data : null);
   }), 'evimed-commands: GEO options');
   /**
    * A changed option, shown at once and sent to the shell, which writes it to
@@ -712,17 +713,17 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       const geoState = useGeoOptions();
       const vcrState = useVcrOptions();
       const model = modelOf(id);
-      if (!model) return null;
+      if (!model && !geoState) return null;
       // A module's single steps (循证 GEO's, 虚拟临床研究's single tasks): a short
       // name on the pill, a whole sentence into the composer — never sent.
-      if (model.geo || model.vcr) {
-        const options = model.geo ? geoState : vcrState;
+      if (!model || model.geo || model.vcr) {
+        const options = model?.vcr ? vcrState : geoState;
         const starters = options && Array.isArray(options.starters) ? options.starters : [];
         if (!starters.length) return null;
         return h('div', {
-          'data-evimed-tool-starters': model.id,
+          'data-evimed-tool-starters': model?.id ?? 'geo',
           style: { flexBasis: '100%', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '8px', minWidth: 0 },
-        }, starters.map((/** @type {{ label: string, draft: string, requirement?: string, minimumFields?: string, inputLabel?: string }} */ starter) => model.vcr ? h('div', {
+        }, starters.map((/** @type {{ label: string, draft: string, requirement?: string, minimumFields?: string, inputLabel?: string }} */ starter) => model?.vcr ? h('div', {
           key: starter.label, style: { display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0, width: '100%', textAlign: 'left' },
         }, h('button', { type: 'button', title: starter.draft, style: starterStyle, onClick: () => fill(starter.draft) }, h('span', { style: starterText }, starter.label)),
           h('span', { style: { fontSize: '12px', overflowWrap: 'anywhere' } }, [starter.inputLabel, starter.requirement].filter(Boolean).join(' · ')),
@@ -763,13 +764,14 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
      */
     const HeroTools = () => {
       const id = useTool();
+      const geoState = useGeoOptions();
       const hasToolbar = useToolbar();
       const model = modelOf(id);
-      if (!model) return blankExamples.length ? h(BlankExamples) : null;
+      if (!model && !geoState?.starters?.length) return blankExamples.length ? h(BlankExamples) : null;
       return h('div', {
-        'data-evimed-hero-tools': model.id,
+        'data-evimed-hero-tools': model?.id ?? 'geo',
         style: { width: '100%', maxWidth: 'var(--dsh-composer-card-max-width, 952px)', margin: '8px auto 0', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: '8px', minWidth: 0 },
-      }, hasToolbar ? null : h(ToolChip, { placement: 'hero' }), h(Starters));
+      }, hasToolbar || !model ? null : h(ToolChip, { placement: 'hero' }), h(Starters));
     };
     kit.guarded('hero tools', () => kit.occupy({ slot: 'conversation.hero.agentPreset', priority: -1 }, HeroTools));
   }

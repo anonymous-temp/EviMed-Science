@@ -141,3 +141,14 @@ test("the audience is the module on, and either everyone or an operator or a pre
   assert.equal(geoAudienceAllows({ ...on, geoAudience: "all" }, { id: "reader" }), true);
   assert.equal(geoAudienceAllows({ ...on, geoEnabled: false, geoAudience: "all" }, { id: "ops" }), false);
 });
+
+test("the social collector keeps only a key path and requires an explicit plaintext choice", () => {
+  const base = configUnder({});
+  assert.equal(base.geoSocialApiKeyFile, "");
+  assert.equal(base.geoSocialAllowPlaintext, false);
+  const configured = configUnder({ OPEN_SCIENCE_GEO_SOCIAL_API_KEY_FILE: "/run/secrets/geo-social-api-key", OPEN_SCIENCE_GEO_SOCIAL_ALLOW_PLAINTEXT: "true" });
+  assert.equal(configured.geoSocialApiKeyFile, "/run/secrets/geo-social-api-key");
+  assert.equal(configured.geoSocialAllowPlaintext, true);
+  assert.equal(configured.geoSocialApiKey, undefined, "the configuration never loads the social key");
+  assert.throws(() => configUnder({ OPEN_SCIENCE_GEO_SOCIAL_API_KEY_FILE: "relative/key" }), /OPEN_SCIENCE_GEO_SOCIAL_API_KEY_FILE/);
+});

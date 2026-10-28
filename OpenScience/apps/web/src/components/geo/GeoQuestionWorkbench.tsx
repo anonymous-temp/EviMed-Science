@@ -14,7 +14,8 @@ import { Note } from '@/components/ui/Note';
 import { Section } from '@/components/ui/Section';
 import { AskAi } from './AskAi';
 import { ShowMore, useShowMore } from './tabs/showMore';
-import { engineName, GEO_DEFAULT_ENGINES } from './geoText';
+import { engineName, GEO_DEFAULT_ENGINES, GEO_OPTIONAL_ENGINES } from './geoText';
+import { useGeoMonitoring } from './geoProjectData';
 import { answerPath } from './tabs/geoTabText';
 import { geoCanEditQuestions, geoQuestionMode, type GeoQuestionMode } from './geoQuestionMode';
 
@@ -42,7 +43,13 @@ const JOB_FAILURES: Record<string, string> = {
 };
 const jobFailure = (code: string) => knownErrorCodeMessage(code) ?? JOB_FAILURES[code] ?? '这一项没有取得回答。';
 
-/** Version editing and diagnosis are deliberate writes; viewing or importing never starts sampling. */
+/**
+ * Anatomy: original-question editor, sampling contract and diagnosis progress. Variants: reader/editor.
+ * States: drafts persist through failed writes; monitoring has loading, unknown and retry states.
+ * Hit area: shared controls. Keyboard: native fields and buttons. Long content: original text wraps.
+ * Theme: semantic tokens. Responsive: field groups wrap. Verification: GeoQuestionWorkbench.test.tsx;
+ * host-owned fields, with native conversation behavior tested at its own boundary.
+ */
 export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId: string; project: GeoProject; data: GeoQuestions; onSaved: (version: number) => void }) {
   const [params, setParams] = useSearchParams();
   const editRevision = useRef(0);
@@ -234,7 +241,7 @@ export function GeoQuestionWorkbench({ geoId, project, data, onSaved }: { geoId:
         <div className="grid gap-3 md:grid-cols-2">{(['text', 'originalId', 'originalGroup', 'clientTags', 'pool', 'audience', 'journeyStage', 'kind', 'sourceUrl', 'collectedAt', 'classificationStatus', 'isMeasured'] as const).map((field, index) => <label key={field} className="text-ui text-text">{['原题文本', '原编号', '客户原分类', '客户原标签', '测量池（P1–P4）', '人群（patient / physician 等）', '旅程阶段', '问句性质（client / typical / real / label_safety）', '来源链接', '采集日期', '分类状态（unclassified / suggested / confirmed）', '参与测量（true / false / 1 / 0）'][index]}<select disabled={busy || !!pendingImport.current} className={inputClasses()} value={mapping[field] ?? ''} onChange={event => { setMapping(previous => ({ ...previous, [field]: event.target.value === '' ? undefined : Number(event.target.value) })); changed(); setRows([]); }}><option value="">请选择列</option>{book.sheets[sheet].rows[0]?.map((name, column) => <option key={column} value={column}>{column + 1} · {name || '未命名'}</option>)}</select></label>)}</div>
         <Button variant="secondary" size="sm" disabled={busy || !!pendingImport.current} onClick={() => { void act(async () => { const mapped = mapQuestionRows(book.sheets[sheet].rows, mapping, book.sheets[sheet].typedRows); setRows(mapped.rows); setBlank(mapped.excludedBlankRows); changed(); }); }}>读取映射行</Button>
       </>}
-      <ContractFields value={contract} disabled={busy || !!pendingImport.current} onChange={next => { setContract(next); changed(); }} />
+      <ContractFields geoId={geoId} project={project} value={contract} disabled={busy || !!pendingImport.current} onChange={next => { setContract(next); changed(); }} />
       {rows.length > 0 && <>
         <Note result={[`实际 ${rows.length} 题 · 已排除全空行 `, { n: blank }, " 行。重复原题保留；客户标签与平台分类分列。"]} />
         <div className="max-h-96 overflow-auto"><table className="w-full text-caption"><thead><tr>{['原编号 / 客户分类 / 原标签', '原题（完整文本）', '平台补充分类', '参与测量'].map(title => <th key={title} className="p-2 text-left">{title}</th>)}</tr></thead><tbody>{shown.visible.map((entry, index) => <QuestionRow key={entry.key} entry={entry} index={index} disabled={busy || !!pendingImport.current} onChange={updateRow} />)}</tbody></table></div>
@@ -261,9 +268,17 @@ const QuestionRow = memo(function QuestionRow({ entry, index, disabled, onChange
         </tr>;
 });
 
-function ContractFields({ value, onChange, disabled }: { value: GeoMeasurementContract; onChange: (next: GeoMeasurementContract) => void; disabled: boolean }) {
+function ContractFields({ geoId, project, value, onChange, disabled }: { geoId: string; project: GeoProject; value: GeoMeasurementContract; onChange: (next: GeoMeasurementContract) => void; disabled: boolean }) {
+  const monitoring = useGeoMonitoring(geoId);
+  const measurement = monitoring.state.kind === 'ready' ? monitoring.state.data.measurement : null;
+  const engines = [...GEO_DEFAULT_ENGINES, ...GEO_OPTIONAL_ENGINES.filter(engine => value.engines.includes(engine) || project.availableEngines?.includes(engine))];
   return <fieldset disabled={disabled} className="flex flex-col gap-3"><legend className="text-ui font-semibold">这一版本的采样与报告口径</legend>
-    <div className="flex flex-wrap gap-3">{[...GEO_DEFAULT_ENGINES, 'baidu'].map(engine => <label key={engine} className="text-ui"><input type="checkbox" checked={value.engines.includes(engine)} onChange={event => onChange({ ...value, engines: event.target.checked ? [...value.engines, engine] : value.engines.filter(item => item !== engine) })} /> {engineName(engine)}</label>)}</div>
+    {monitoring.state.kind === 'loading' ? <Note action={null}>正在读取测量状态…</Note>
+      : monitoring.state.kind === 'error' ? <Note action={<Button variant="text" size="sm" onClick={monitoring.reload}>重试测量状态</Button>}>{monitoring.state.message}</Note>
+        : monitoring.state.refreshError ? <Note action={<Button variant="text" size="sm" onClick={monitoring.reload}>重试测量状态</Button>}>测量状态更新失败，仍显示上次状态。{monitoring.state.refreshError}</Note>
+          : !measurement ? <Note action={null}>测量状态未知，已选平台保留。</Note>
+            : measurement.state === 'paused' ? <Note action={null}>AI 回答测量暂停中，已选平台保留。</Note> : null}
+    <div className="flex flex-wrap gap-3">{engines.map(engine => <label key={engine} className="text-ui"><input type="checkbox" checked={value.engines.includes(engine)} onChange={event => onChange({ ...value, engines: event.target.checked ? [...value.engines, engine] : value.engines.filter(item => item !== engine) })} /> {engineName(engine)}{measurement?.engines.includes(engine) ? ' · 暂停测量' : ''}</label>)}</div>
     <label className="text-ui">采样方式<select className={inputClasses()} value={value.samplingMode} onChange={event => onChange({ ...value, samplingMode: event.target.value as GeoMeasurementContract['samplingMode'], repeats: 1 })}><option value="one_shot">单次，每题每平台一次</option><option value="recurring">重复采样</option></select></label>
     {value.samplingMode === 'recurring' && <Input label="每题每平台次数（1–20）" type="number" min={1} max={20} value={value.repeats} onChange={event => onChange({ ...value, repeats: Number(event.target.value) })} />}
     <details><summary>选择报告指标（已选 {value.metricIds.length} 项）</summary><div className="grid gap-2 md:grid-cols-2">{GEO_METRICS.metrics.map((metric: { id: string; name: string }) => <label key={metric.id} className="text-caption"><input type="checkbox" checked={value.metricIds.includes(metric.id)} onChange={event => onChange({ ...value, metricIds: event.target.checked ? [...value.metricIds, metric.id] : value.metricIds.filter(id => id !== metric.id) })} /> {metric.name}</label>)}</div></details>

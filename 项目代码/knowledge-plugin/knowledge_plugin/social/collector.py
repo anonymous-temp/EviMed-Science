@@ -566,7 +566,7 @@ class SocialCollector:
             state.pop("parked", None)
         await self._save_crawl_state(state)
         status = str((answer.get("meta") or {}).get("collection_status") or "")
-        await self._finish(row, now, outcome="ok" if candidates else "empty", result=result, host=None,
+        await self._finish(row, now, outcome="http-error" if status == "partial_collected" else "ok" if candidates else "empty", result=result, host=None,
                            detail=f"term={term[:40]} status={status[:20]}", next_at=now + pace)
         return {"term": term, "platform": platform, "posts": len(candidates), "new": result.new}
 

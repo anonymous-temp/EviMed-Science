@@ -42,6 +42,13 @@ import { engineName, claimConditionsText, GEO_ARTICLE_STATUS_WORDS } from "./geo
 /** How long the source search waits after the last keystroke before it asks for a new analysis. */
 const SEARCH_DEBOUNCE_MS = 300;
 
+/**
+ * Anatomy: selected analysis, controls, chart and member table. Variants: embedded/standalone.
+ * States: loading, empty, retry and partial readings; unknown is distinct from observed zero.
+ * Hit area: shared controls. Keyboard: native buttons and table actions. Long content: wrapped cells.
+ * Theme: semantic tokens. Responsive: scrollable table and wrapping controls.
+ * Verification: GeoAnalysisWorkbench tests cover host-owned selection, labels and export context.
+ */
 export function GeoAnalysisWorkbench({
   geoId,
   project,
@@ -491,8 +498,8 @@ function AnalysisPage({
                   ) : (
                     word
                   )}
-                  {value.reason && value.state !== "known" && <span className="text-caption text-text-3">{analysisReason(value.reason)}</span>}
-                  {(value.denominator ?? value.metric?.denominator) != null && (
+                  {value.reason && value.state !== "known" && word !== analysisReason(value.reason) && <span className="text-caption text-text-3">{analysisReason(value.reason)}</span>}
+                  {(value.denominator ?? value.metric?.denominator ?? 0) > 0 && (
                     <span className="text-caption text-text-3">
                       {value.numerator ?? value.metric?.numerator ?? "—"} /{" "}
                       {value.denominator ?? value.metric?.denominator}
@@ -662,6 +669,8 @@ function sourceObservationWord(value:string):string {
 }
 
 function analysisReason(reason: string): string {
+ if (reason === "no_snapshots") return "尚无采样回答";
+ if (reason === "not_adjudicated") return "回答尚未判定";
  if (reason === "verification_basis_incomplete") return "部分依据缺失，另见待核实结论";
  if (reason === "verification_basis_unavailable") return "核实依据缺失，保持未知";
  return ({frozen_reading_unavailable:"历史冻结读数未保留",not_recorded:"未记录或未估",association_context_unavailable:"关联依据未知",linked_not_verified:"已关联、尚未核实",owned_not_registered:"尚未登记自有信源",group_metric_unavailable:"该问题群没有适用的指标读数",sampling_plan_unknown:"缺少完整采集计划，未引用保持未知",sampling_plan_incomplete:"采集计划缺少重复任务，未引用保持未知",scheduled_observation_missing:"计划中的重复采集尚无回答",sampling_scope_incomplete:"重复回答未完整落入所选范围",citation_completeness_unknown:"采集端未记录完整引用列表",citations_without_links:"引用缺少可核对链接",answer_not_returned:"失败或拒答，无法观察未引用",no_sampling:"未采样，保持未知",comparison_cohort_unknown:"可比问题或采集范围未知",sampling_time_unknown:"采样时间未知",sampling_order_unknown:"采样顺序未知",comparison_not_selected:"请选择对照区间",measurement_method_changed:"测量方法已变化",measurement_contract_changed:"测量约定已变化",comparison_basis_changed:"组成指标或权重已变化",metric_members_changed:"合资格成员已变化",no_common_cohort:"没有共同问题与平台",separate_cohorts:"分别呈现，不排序",previous_metric_absent:"缺少对照读数",insufficient_sample:"样本不足，不排序",rival_history_unknown:"历史登记依据未知",own_brand_not_registered:"该范围未登记本品品牌，通用名独立观测",share_agreement_missing:"该轮未约定此声量指标或登记集合",generic_observation_identity_only:"通用名独立观测"} as Record<string,string>)[reason] ?? "暂无可用读数";

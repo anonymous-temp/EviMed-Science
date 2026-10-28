@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-insight",
-  "version": "sha256:58bbfca812569d4638ffb63689f58fb3d67db9720abfb12c341ed88c1b353f4e",
+  "version": "sha256:43b94540b8072a4454e8dec9f243ce00215ef5c23ebbf103e3d77547306ddb74",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 38,
@@ -1396,7 +1396,6 @@
           "newChat": {
             "type": "integer",
             "enum": [
-              0,
               1
             ]
           },
@@ -1988,14 +1987,14 @@
     {
       "name": "mcp__evimed__social_posts_search",
       "source": "mcp",
-      "description": "Collect how real people phrase a health question on one Chinese social platform (xhs 小红书, douyin 抖音, zhihu 知乎, weibo 微博, bilibili B站, wechat_channels 视频号): excerpts with the post's link, engagement and collection time. One platform per call — a crawl takes 30–120 s; call again for each platform you need. A status other than collected means no signal (无信号), never zero.",
+      "description": "Collect how real people phrase a health question on selected Chinese social platforms (xhs 小红书, douyin 抖音, zhihu 知乎, weibo 微博, bilibili B站, wechat_channels 视频号): excerpts with the post's link, engagement and collection time. Select platform or platforms (up to six); one asynchronous job returns per-platform completeness. Partial results are usable excerpts, not full coverage; failures mean no signal (无信号), never zero.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "query": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 100
+            "maxLength": 256
           },
           "platform": {
             "type": "string",
@@ -2007,6 +2006,23 @@
               "bilibili",
               "wechat_channels"
             ]
+          },
+          "platforms": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "xhs",
+                "douyin",
+                "zhihu",
+                "weibo",
+                "bilibili",
+                "wechat_channels"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 6,
+            "uniqueItems": true
           },
           "sort": {
             "type": "string",
@@ -2024,8 +2040,21 @@
           }
         },
         "required": [
-          "query",
-          "platform"
+          "query"
+        ],
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "platform"
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "platforms"
+            ]
+          }
         ],
         "additionalProperties": false
       },

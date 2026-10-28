@@ -196,7 +196,11 @@ describe("a GEO project's page", () => {
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
     expect(document.querySelectorAll("[data-step-rail]")).toHaveLength(1);
     expect(screen.queryByRole("button", { name: /^查看：/ })).not.toBeInTheDocument();
+    // 项目总览 is the band's back link (v3.2), not a header button.
     expect(screen.queryByRole("button", { name: "项目总览" })).not.toBeInTheDocument();
+    expect(screen.getByText(/^项目第 \d+ 周$/)).toBeVisible();
+    await userEvent.hover(screen.getByText(/^项目第 \d+ 周$/));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("按项目开始日期计算，不代表已经完成测量。");
   });
 
   it("does not offer weekly generation to a read-only member", async () => {
@@ -779,9 +783,10 @@ describe("a GEO project's page", () => {
   });
 
   it("reads as a new project before anything was measured: “—” and a sentence, never a zero", async () => {
+    const steps = Object.fromEntries(Object.keys(GEO_PROJECT.steps).map(step => [step, { status: "none", requested: false, summary: null }]));
     client.getGeoProject.mockResolvedValue({
-      ...GEO_PROJECT, name: "新循证 GEO 项目", steps: {}, budget: null, sessionId: "ses_new",
-      overview: { metrics: [], week: [], steps: {} },
+      ...GEO_PROJECT, name: "新循证 GEO 项目", steps, budget: null, sessionId: "ses_new",
+      overview: { metrics: GEO_PROJECT.overview.metrics.map(metric => ({ ...metric, cell: { ...metric.cell, value: null, numerator: null, denominator: null, status: "not_measurable" }, trend: [] })), week: [], steps },
     });
     client.getGeoDiagnosis.mockResolvedValue({ round: null, rounds: [], byEngine: [], byPool: [], failureModes: {}, errors: [], noise: null, more: [] });
     client.getGeoMonitoring.mockResolvedValue({ series: [], arms: { pilot: [], control: [], netEffect: {} }, byEngine: [], cited: [], newErrors: [], next: null });
@@ -791,6 +796,14 @@ describe("a GEO project's page", () => {
     expect(await screen.findByText(/还没有测过各家 AI 怎么回答这个产品/)).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "品类问题可见率" })).toHaveTextContent("—");
     expect(screen.queryByRole("button", { name: "问 AI" })).not.toBeInTheDocument();
+    const first = screen.getByRole("button", { name: "开始项目" });
+    expect(first).toHaveClass("bg-accent");
+    expect(screen.queryByRole("button", { name: "周报" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "对话" })).not.toBeInTheDocument();
+    await userEvent.click(first);
+    await waitFor(() => expect(client.open).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "ses_new", primarySessionId: "ses_new" })));
+    await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    expect(screen.getByRole("menuitem", { name: "导出周报" })).toBeVisible();
   });
 
   it("starts over on a switch to another project: nothing of the first one is shown, or acted on, while the second is read", async () => {

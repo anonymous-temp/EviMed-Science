@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-content",
-  "version": "sha256:a0addd6b530db194a8b77568882e8b43fdc0db1642df7c30c1bcbb09153f2588",
+  "version": "sha256:c6f20d96ce8f62956ba64f3a6fbf0db0db086c363a223608aa197d8f2af045ee",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 36,
@@ -1396,7 +1396,6 @@
           "newChat": {
             "type": "integer",
             "enum": [
-              0,
               1
             ]
           },

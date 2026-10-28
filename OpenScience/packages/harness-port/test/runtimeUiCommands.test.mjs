@@ -4,6 +4,7 @@
 // references to the knowledge base. The blank conversation itself carries none
 // of them.
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 import test from 'node:test';
 
 import {
@@ -23,6 +24,7 @@ const CATALOGUE = [
 ];
 
 function frame({ commandUi = true, inputTriggers = true } = {}) {
+  let sessionId = 'session-a';
   /** @type {any[]} */
   const sent = [];
   /** @type {any[]} */
@@ -34,8 +36,8 @@ function frame({ commandUi = true, inputTriggers = true } = {}) {
   const ctx = fakeCtx({
     slots: kernelSlots(),
     sessions: {
-      list: { getSnapshot: () => ({ byId: { 'session-a': { id: 'session-a', retainedBy: { mainView: 1 } } } }), subscribe: () => () => {} },
-      scope: (/** @type {string} */ id) => (id === 'session-a' ? { id } : undefined),
+      list: { getSnapshot: () => ({ byId: { [sessionId]: { id: sessionId, retainedBy: { mainView: 1 } } } }), subscribe: () => () => {} },
+      scope: (/** @type {string} */ id) => (id === sessionId ? { id } : undefined),
     },
     conversation: { input: { for: (/** @type {any} */ scope) => ({
       setDraft: (/** @type {string} */ text) => drafts.push([scope.id, text]),
@@ -48,7 +50,9 @@ function frame({ commandUi = true, inputTriggers = true } = {}) {
   const kit = kitFor(ctx, target);
   kit.hub.attach((/** @type {string} */ type, /** @type {any} */ fields) => { sent.push([type, fields]); });
   apply(ctx, {}, target, undefined, kit);
-  return { ctx, target, kit, commands, sources, drafts, sent };
+  return { ctx, target, kit, commands, sources, drafts, sent,
+    switchSession(/** @type {string} */ id) { sessionId = id; kit.hub.deliver('session', { sessionId: id }); },
+  };
 }
 
 test('the slash popup lists the public tools, with category and summary to search by and no duration', () => {
@@ -250,6 +254,42 @@ const GEO_OPTIONS = {
     { label: '持续监测', draft: '持续监测各家 AI 怎么回答我的产品，产品是：' },
   ],
 };
+
+test('an ordinary GEO primary shows six scoped starters that only fill its native draft, without a specialist chip', async () => {
+  const webRequire = createRequire(new URL('../../../apps/web/package.json', import.meta.url));
+  const { JSDOM } = webRequire('jsdom');
+  const dom = new JSDOM('<!doctype html><div id="root"></div>');
+  const host = /** @type {Record<string, any>} */ (/** @type {unknown} */ (globalThis));
+  const saved = { window: host.window, document: host.document, act: host.IS_REACT_ACT_ENVIRONMENT };
+  Object.assign(globalThis, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
+  const React = webRequire('react');
+  const { createRoot } = webRequire('react-dom/client');
+  const root = createRoot(dom.window.document.getElementById('root'));
+  try {
+    const f = frame();
+    const hero = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.hero.agentPreset');
+    f.kit.hub.deliver('capability', { capabilityId: null, sessionId: 'session-a' });
+    f.kit.hub.deliver('geo', GEO_OPTIONS);
+    await React.act(async () => { root.render(React.createElement(hero.component)); });
+    const buttons = [...dom.window.document.querySelectorAll('button')];
+    assert.deepEqual(buttons.map(button => button.textContent), GEO_OPTIONS.starters.map(starter => starter.label));
+    assert.doesNotMatch(dom.window.document.body.innerHTML, /data-evimed-tool-chip|移除|data-evimed-blank-examples/);
+    assert.equal(renderStatic(toolbarChip(f).component), '');
+    for (const button of buttons) await React.act(async () => { button.click(); });
+    assert.deepEqual(f.drafts, GEO_OPTIONS.starters.map(starter => ['session-a', starter.draft]));
+    assert.deepEqual(f.sent.filter(([type]) => type === 'bind-capability'), []);
+    await React.act(async () => { f.kit.hub.deliver('geo', { ...GEO_OPTIONS, sessionId: 'foreign', starters: [{ label: 'Foreign', draft: 'Foreign' }] }); });
+    assert.deepEqual([...dom.window.document.querySelectorAll('button')].map(button => button.textContent), GEO_OPTIONS.starters.map(starter => starter.label));
+    await React.act(async () => { f.switchSession('session-b'); });
+    assert.match(dom.window.document.body.innerHTML, /data-evimed-blank-examples/);
+    await React.act(async () => { f.kit.hub.deliver('geo', GEO_OPTIONS); });
+    assert.match(dom.window.document.body.innerHTML, /data-evimed-blank-examples/, 'late options for the former session remain ignored');
+  } finally {
+    await React.act(async () => { root.unmount(); });
+    Object.assign(globalThis, { window: saved.window, document: saved.document, IS_REACT_ACT_ENVIRONMENT: saved.act });
+    dom.window.close();
+  }
+});
 
 test('a GEO conversation reads 「循证 GEO」 whichever of its capabilities it is bound to, listed or not', () => {
   const geo = FRAME_VOCABULARY.geo;

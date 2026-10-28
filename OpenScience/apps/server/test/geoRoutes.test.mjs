@@ -12,6 +12,7 @@ import { ALL_ERROR_CODES, GEO_MEDIA_MARKET_ERROR_CODES, GEO_ROUTE_ERROR_CODES, k
 import { createGeoRoutes, geoRoutePattern } from "../src/geoRoutes.mjs";
 import { GeoService, geoAudienceAllows, geoMetricFamilies, geoReadiness } from "../src/geoService.mjs";
 import { readFile } from "node:fs/promises";
+import { createSocialCrawlClient } from "../src/socialCrawlClient.mjs";
 
 /** @param {string} method @param {string} url @param {unknown} [body] */
 function request(method, url, body) {
@@ -153,8 +154,11 @@ test("readiness: off is green and says so; on it is red only for the module's ow
     const keyFile = path.join(keyDir, "media-market-api-key");
     writeFileSync(keyFile, "k-123456\n", { mode: 0o600 });
     const wired = await geoReadiness({ config: { ...config, geoSocialUrl: "http://social:9966", mediaMarketUrl: "https://m", mediaMarketApiKeyFile: keyFile },
-      geo: { ...healthy, worker: { status: () => ({ running: false }) } }, database: {} });
+      geo: { ...healthy, social: createSocialCrawlClient({ baseUrl: "https://social.example", apiKeyFile: keyFile }), worker: { status: () => ({ running: false }) } }, database: {} });
     assert.equal(wired.warning, undefined);
+    const noCredential = await geoReadiness({ config: { ...config, geoSocialUrl: "https://social.example", mediaMarketUrl: "https://m", mediaMarketApiKeyFile: keyFile },
+      geo: { ...healthy, social: createSocialCrawlClient({ baseUrl: "https://social.example" }), worker: { status: () => ({ running: false }) } }, database: {} });
+    assert.deepEqual(noCredential.warnings, ["geo_social_unconfigured"], "an endpoint alone is not an authenticated channel");
   } finally { rmSync(keyDir, { recursive: true, force: true }); }
 });
 

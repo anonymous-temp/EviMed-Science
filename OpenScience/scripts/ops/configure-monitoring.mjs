@@ -383,7 +383,7 @@ export function tlsTargetsFromEnv(env) {
 /**
  * The external services this deployment depends on and does not run, as
  * blackbox targets: the GEO module's AI-engine probe host (`GET /providers`)
- * and its social crawler (`GET /health`). Both run on the owner's host, so
+ * and its social crawler (`GET /health/ready`). Both run on the owner's host, so
  * nothing in this stack noticed them go: the probe host refused connections
  * from 2026-10-19 00:50Z and GEO skipped 1,063 probe jobs as `engine_paused`,
  * told only by an inbox notice nobody read; the crawler answered 503 (its
@@ -394,7 +394,7 @@ export function tlsTargetsFromEnv(env) {
  * probe host serves one request at a time and answers 409 while it measures,
  * and one that verifies the platform's signature refuses the unsigned check
  * with 401/403 — each an answer from a live host, so blackbox's
- * `geo_probe_answers` counts them; the crawler is up when /health answers 2xx
+ * `geo_probe_answers` counts them; the crawler is ready when /health/ready answers 2xx
  * (its 503 is its database gone). One check every two minutes, so the probe
  * host's one-at-a-time measurements are barely touched.
  *
@@ -426,7 +426,7 @@ export function serviceTargetsFromEnv(env) {
   const social = origin("OPEN_SCIENCE_GEO_SOCIAL_URL", "geo_social_url_invalid");
   return {
     geoProbe: probe ? [new URL("providers", probe).toString()] : [],
-    geoSocial: social ? [new URL("health", social).toString()] : [],
+    geoSocial: social ? [new URL("health/ready", social).toString()] : [],
   };
 }
 

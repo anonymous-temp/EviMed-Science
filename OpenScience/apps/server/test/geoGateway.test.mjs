@@ -321,11 +321,13 @@ test("the social search needs a channel, validates its words, and answers within
   assert.equal(answer.status, 200);
   assert.deepEqual(searched, [{ query: "二甲双胍 饭前", platforms: ["xhs"], sort: "latest", limit: 5 }]);
   assert.equal(answer.body.data.status, "collected");
+  assert.equal((await post("social", { query: "q".repeat(256), platforms: ["xhs", "douyin", "zhihu", "weibo", "bilibili", "wechat_channels"] })).status, 200);
+  assert.equal(searched.at(-1).platforms.length, 6);
   // It reads no project data, so any conversation of an account the module is open to may ask.
   assert.equal((await post("social", { query: "降糖药", platforms: ["zhihu"] }, "token-plain")).status, 200);
   for (const [body, code] of [
-    [{ query: "" }, "social_posts_query_invalid"], [{ query: "x".repeat(101) }, "social_posts_query_invalid"],
-    [{ query: "q", platforms: ["tiktok"] }, "social_posts_platform_invalid"], [{ query: "q", platforms: ["xhs", "zhihu"] }, "social_posts_platform_invalid"],
+    [{ query: "" }, "social_posts_query_invalid"], [{ query: "x".repeat(257) }, "social_posts_query_invalid"],
+    [{ query: "q", platforms: ["tiktok"] }, "social_posts_platform_invalid"], [{ query: "q", platforms: ["xhs", "xhs"] }, "social_posts_platform_invalid"],
     [{ query: "q" }, "social_posts_platform_invalid"],
     [{ query: "q", platforms: ["xhs"], sort: "random" }, "social_posts_sort_invalid"], [{ query: "q", platforms: ["xhs"], limit: 51 }, "social_posts_limit_invalid"],
   ]) {

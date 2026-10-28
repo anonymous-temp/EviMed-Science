@@ -1,7 +1,7 @@
 """Six Chinese platforms through the GEO module's crawler, for monitoring (contract 1.5.0, channel ``social``).
 
-``POST {KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_URL}/api/crawl`` with the request the platform's ``socialCrawlClient.mjs`` sends:
-one platform, newest first, five detailed posts, no comments asked for, no provider raw answer. What is read:
+``POST {KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_URL}/api/jobs`` and fixed-path job polling with the request the platform's ``socialCrawlClient.mjs`` sends:
+one platform, newest first, five detailed posts, collect_comments=false, no provider raw answer. What is read:
 
 - **A standing watch list** (``watch_list`` in ``registry/social-sources.json``): about forty medical topics and drug
   classes the public talks about and the feed covers, each with the reason it is there. Every (term, platform) pair is

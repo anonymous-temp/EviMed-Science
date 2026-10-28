@@ -281,6 +281,7 @@ const FALLBACK_RULES = {
   OPEN_SCIENCE_EVIMED_API_KEY_FILE: ["deployment", "credential"],
   OPEN_SCIENCE_MATERIALS_PROJECT_API_KEY_FILE: ["deployment", "credential"],
   OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_FILE: ["deployment", "credential"],
+  OPEN_SCIENCE_GEO_SOCIAL_API_KEY_FILE: ["deployment", "credential"],
   OPEN_SCIENCE_DASHSCOPE_API_KEY_FILE: ["deployment", "credential"],
 };
 
@@ -1039,4 +1040,21 @@ test('same-session prompt admission has one bounded configured acceptance deadli
  assert.equal(loadConfig({rootDir:repoRoot}).runtimePromptAdmissionTimeoutMs,30000);
  for(const value of [500,60000])assert.equal(loadConfig({rootDir:repoRoot,runtimePromptAdmissionTimeoutMs:value}).runtimePromptAdmissionTimeoutMs,value);
  for(const value of [0,499,60001,NaN,Infinity])assert.throws(()=>loadConfig({rootDir:repoRoot,runtimePromptAdmissionTimeoutMs:value}),/OPEN_SCIENCE_RUNTIME_PROMPT_ADMISSION_TIMEOUT_MS/);
+});
+
+test("social credential paths stay in web and the runtime receives no social secret mount", async () => {
+  const raw = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
+  const compose = YAML.parse(raw);
+  const serviceEntries = Object.entries(compose.services);
+  const mounted = serviceEntries.filter(([_name, service]) => service.volumes?.some(volume => volume?.target === "/run/secrets/geo-social-api-key"));
+  assert.equal(mounted.length, 1);
+  const [name, service] = mounted[0];
+  assert.equal(name, "open-science-web");
+  assert.equal(service.environment.OPEN_SCIENCE_GEO_SOCIAL_API_KEY_FILE, "/run/secrets/geo-social-api-key");
+  assert.deepEqual(service.volumes.find(volume => volume?.target === "/run/secrets/geo-social-api-key"), {
+    type: "bind", source: "${OPEN_SCIENCE_GEO_SOCIAL_API_KEY_HOST_FILE:-/dev/null}", target: "/run/secrets/geo-social-api-key", read_only: true,
+  });
+  for (const [otherName, other] of serviceEntries.filter(([otherName]) => otherName !== name)) {
+    assert.equal(Object.hasOwn(other.environment ?? {}, "OPEN_SCIENCE_GEO_SOCIAL_API_KEY_FILE"), false, otherName);
+  }
 });
