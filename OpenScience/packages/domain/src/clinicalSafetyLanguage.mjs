@@ -102,17 +102,31 @@ export function compilePhraseVariant(variant, where) {
 /** @typedef {"zh" | "en"} SafetyLanguage */
 
 /**
- * The languages a rule has a wording in, and what each reads. The rule's own
- * pattern is its Chinese wording unless `languages` says it reads both.
+ * The languages a rule declares a wording in, without compiling anything. A
+ * rule's own pattern is its Chinese wording unless `languages` says it reads
+ * both; an English wording is either that declaration or an `en` object.
+ * @param {Record<string, any>} rule
+ * @returns {{ zh: boolean, en: boolean }}
+ */
+export function declaredLanguages(rule) {
+  const declared = Array.isArray(rule.languages) ? rule.languages : ["zh"];
+  return { zh: declared.includes("zh"), en: declared.includes("en") || Boolean(rule.en) };
+}
+
+/**
+ * What a rule reads in each language: `zh` whether its own pattern is its
+ * Chinese wording, `en` the compiled English wording, `"same"` when the rule's
+ * own pattern reads English too, or null for none.
  * @param {Record<string, any>} rule
  * @returns {{ zh: boolean, en: { pattern: RegExp, triggerPattern: RegExp | null } | "same" | null }}
  */
 export function ruleLanguages(rule) {
-  const declared = Array.isArray(rule.languages) ? rule.languages : ["zh"];
-  const english = declared.includes("en")
-    ? "same"
-    : rule.en ? compilePhraseVariant(rule.en, `rule "${rule.id}".en`) : null;
-  return { zh: declared.includes("zh"), en: english };
+  const declared = declaredLanguages(rule);
+  const same = Array.isArray(rule.languages) && rule.languages.includes("en");
+  return {
+    zh: declared.zh,
+    en: same ? "same" : rule.en ? compilePhraseVariant(rule.en, `rule "${rule.id}".en`) : null,
+  };
 }
 
 // --- The generic checks ------------------------------------------------------
@@ -219,17 +233,12 @@ export function englishConditionedEmergencyTriggers(text, vocabulary = englishEm
 }
 
 /**
- * The language of a rule check's report decides which wording of the rule
- * applies. Rules with no wording in `language`, by id.
+ * The rules with no wording in `language`, by id: what a report in that language
+ * was not checked against.
  * @param {readonly Record<string, any>[]} rules the rules as the JSON holds them
  * @param {SafetyLanguage} language
  * @returns {string[]}
  */
 export function rulesNotChecked(rules, language) {
-  return rules
-    .filter((rule) => {
-      const languages = ruleLanguages(rule);
-      return language === "en" ? languages.en === null : !languages.zh;
-    })
-    .map((rule) => String(rule.id));
+  return rules.filter((rule) => !declaredLanguages(rule)[language]).map((rule) => String(rule.id));
 }

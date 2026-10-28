@@ -9,7 +9,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+import rulesData from "../src/clinical-safety-rules.json" with { type: "json" };
 import {
+  clinicalEvidenceAdvisoryNotes,
   clinicalSafetyRuleHits,
   clinicalSafetyRulesNotChecked,
   compileClinicalSafetyRule,
@@ -176,6 +178,29 @@ test("a rule with no wording in the report's language is not checked, and says s
     rulesDocument.rules.map((/** @type {Record<string, any>} */ rule) => [rule.id, Boolean(rule.en) || (rule.languages ?? []).includes("en")]).filter((/** @type {[string, boolean]} */ [, covered]) => !covered),
     [],
   );
+});
+
+test("the report says which pharmacist rule did not look at it", () => {
+  // A rule added in Chinese alone is the realistic case: until its English wording is written, an English report is told it was
+  // not checked against it (an advisory note), and a Chinese report is not told anything.
+  const english = "# Aspirin and bleeding\n\n## Abstract\nOlder adults on aspirin bleed more often than those who are not given it, in the trials reviewed here.\n\n## Conclusions\nThe trials agree.\n";
+  const chinese = "# 阿司匹林与出血\n\n## 摘要\n老年人服用阿司匹林后出血更常见，纳入的试验结果一致。\n\n## 结论\n试验一致。\n";
+  const notes = (/** @type {string} */ text) => clinicalEvidenceAdvisoryNotes(text).filter((note) => /safety rule|临床安全规则/.test(note));
+  assert.deepEqual(notes(english), []);
+  const lone = /** @type {any} */ ({ id: "chinese-only-rule", kind: "practical_forbidden", message: "m", pattern: "甲" });
+  /** @type {any[]} */
+  const shipped = rulesData.rules;
+  shipped.push(lone);
+  try {
+    assert.deepEqual(clinicalSafetyRulesNotChecked(english), ["chinese-only-rule"]);
+    assert.deepEqual(clinicalSafetyRulesNotChecked(chinese), []);
+    const [note] = notes(english);
+    assert.match(note, /^clinical-evidence-report\.md: the clinical safety rule chinese-only-rule has no English wording yet, so this English report was not checked against it\./);
+    assert.deepEqual(notes(chinese), []);
+  } finally {
+    shipped.splice(shipped.indexOf(lone), 1);
+  }
+  assert.deepEqual(notes(english), []);
 });
 
 test("an English wording is refused at load when it cannot work, naming the rule", () => {
