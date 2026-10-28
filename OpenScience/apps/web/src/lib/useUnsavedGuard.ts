@@ -5,13 +5,17 @@ export interface UnsavedRouteOptions {
   draftKey?: string;
   /** Optional mode boundary for editors whose main area changes without changing pathname. */
   samePathChange?(fromSearch: string, toSearch: string): boolean;
+  /** Search parameters that name the editor's mode: a navigation that changes any of them leaves the editor, so it is asked about. */
+  modeParams?: readonly string[];
   /** Clear unsaved data on a host-confirmed route exit; never navigate from this callback. */
   onRouteDiscard?(): void;
 }
 const routeGuards = new Map<string, { dirty: boolean; busy: boolean; confirming: boolean; options?: UnsavedRouteOptions; acknowledge: () => void }>();
 export function dirtyRouteShouldBlock(from: {pathname: string; search: string}, to: {pathname: string; search: string}): boolean {
   if (dirtyRouteState() === 'clean') return false;
-  return from.pathname !== to.pathname || [...routeGuards.values()].some(guard => guard.options?.samePathChange?.(from.search, to.search));
+  if (from.pathname !== to.pathname) return true;
+  const was = new URLSearchParams(from.search), next = new URLSearchParams(to.search);
+  return [...routeGuards.values()].some(guard => guard.options?.samePathChange?.(from.search, to.search) || guard.options?.modeParams?.some(key => was.get(key) !== next.get(key)));
 }
 export function discardDirtyRoutes() {
   for (const guard of routeGuards.values()) { guard.acknowledge(); guard.options?.onRouteDiscard?.(); }
@@ -89,5 +93,6 @@ export function useUnsavedGuard(dirty: boolean, onClose: () => void, busy = fals
     notifyRouteGuards();
     setConfirming(false);
   }, [id]);
-  return { markSaved, requestClose, confirming, keepEditing: () => setConfirming(false), discard: () => { if (!busy) { setConfirming(false); onClose(); } } };
+  // The local dialog is the person's decision to discard: what `onClose` then does to the address (a mode parameter going) is not asked again.
+  return { markSaved, requestClose, confirming, keepEditing: () => setConfirming(false), discard: () => { if (!busy) { acknowledged.current = true; routeGuards.delete(id); notifyRouteGuards(); setConfirming(false); onClose(); } } };
 }

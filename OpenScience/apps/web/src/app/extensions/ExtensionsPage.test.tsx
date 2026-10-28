@@ -393,3 +393,91 @@ it("retains the original project and draft when access proof fails after discard
   await userEvent.click(screen.getByRole("button", { name: "返回技能列表" }));
   expect(screen.getByRole("alertdialog")).toBeInTheDocument();
 });
+
+
+// Creating and importing are modes of the page held in its address, so leaving by a link, Back or the sidebar is asked about while a
+// draft is open, a discarded draft is really closed, and the page's own address can be used to come back to the list.
+async function openDataRoute(path: string) {
+  const router = createMemoryRouter([{ path: "/app/extensions/:tab/:itemId?", element: <><UnsavedRouteGuard /><ExtensionsPage /></> }], { initialEntries: [path] });
+  render(<RouterProvider router={router} />);
+  await screen.findByRole("heading", { name: "插件与技能" });
+  return router;
+}
+async function startCreate() {
+  await userEvent.click(await screen.findByRole("button", { name: "添加技能" }));
+  await userEvent.click(screen.getByRole("menuitem", { name: "创建技能" }));
+}
+
+it("closes a draft that was discarded to leave: the list of the other tab shows, not the form with a spent guard", async () => {
+  const router = await openDataRoute("/app/extensions/discover");
+  await startCreate();
+  await userEvent.type(screen.getByLabelText("名称"), "Draft to drop");
+  await act(() => router.navigate("/app/extensions/installed"));
+  await userEvent.click(screen.getByRole("button", { name: "放弃修改并离开" }));
+  expect(await screen.findByRole("heading", { name: "插件与技能" })).toBeInTheDocument();
+  expect(screen.queryByLabelText("名称")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "添加技能" })).toBeInTheDocument();
+  expect(router.state.location.pathname).toBe("/app/extensions/installed");
+  expect(router.state.location.search).not.toContain("compose");
+});
+
+it("keeps a draft that was kept guarded: Cancel stays on the form, and the next way out asks again", async () => {
+  const router = await openDataRoute("/app/extensions/discover");
+  await startCreate();
+  await userEvent.type(screen.getByLabelText("名称"), "Draft to keep");
+  await act(() => router.navigate("/app/extensions/installed"));
+  await userEvent.click(screen.getByRole("button", { name: "取消" }));
+  expect(screen.getByLabelText("名称")).toHaveValue("Draft to keep");
+  expect(router.state.location.pathname).toBe("/app/extensions/discover");
+  await act(() => router.navigate("/app/extensions/installed"));
+  expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+});
+
+it("lets the page's own address (the sidebar link from /discover) bring the person back to the list, asking first when a draft is open", async () => {
+  const router = await openDataRoute("/app/extensions/discover");
+  await startCreate();
+  await act(() => router.navigate("/app/extensions/discover"));
+  // No draft: nothing to ask, and the list is back.
+  expect(await screen.findByRole("button", { name: "添加技能" })).toBeInTheDocument();
+  expect(screen.queryByLabelText("名称")).not.toBeInTheDocument();
+  await startCreate();
+  await userEvent.type(screen.getByLabelText("名称"), "Draft");
+  await act(() => router.navigate("/app/extensions/discover"));
+  expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+  expect(screen.getByLabelText("名称")).toHaveValue("Draft");
+  await userEvent.click(screen.getByRole("button", { name: "放弃修改并离开" }));
+  expect(await screen.findByRole("button", { name: "添加技能" })).toBeInTheDocument();
+  expect(screen.queryByLabelText("名称")).not.toBeInTheDocument();
+});
+
+it("asks only once when 返回技能列表 is confirmed: the local dialog is the decision, the address change is not asked again", async () => {
+  const router = await openDataRoute("/app/extensions/discover");
+  await startCreate();
+  await userEvent.type(screen.getByLabelText("名称"), "Draft");
+  await userEvent.click(screen.getByRole("button", { name: "返回技能列表" }));
+  await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "放弃修改" }));
+  expect(await screen.findByRole("button", { name: "添加技能" })).toBeInTheDocument();
+  expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  expect(router.state.location.search).not.toContain("compose");
+});
+
+it("opens the form from its address, without taking focus from the page it was linked into", async () => {
+  const router = createMemoryRouter([{ path: "/app/extensions/:tab/:itemId?", element: <><UnsavedRouteGuard /><ExtensionsPage /></> }], { initialEntries: ["/app/extensions/discover?compose=import"] });
+  render(<RouterProvider router={router} />);
+  const form = await screen.findByRole("region", { name: "导入技能" });
+  expect(form).toBeInTheDocument();
+  expect(form).not.toHaveFocus();
+});
+
+it("moves focus into the form when 创建技能 opens it, and back to 添加技能 when the list returns", async () => {
+  await openDataRoute("/app/extensions/discover");
+  await startCreate();
+  expect(await screen.findByRole("region", { name: "新建技能" })).toHaveFocus();
+  await userEvent.click(screen.getByRole("button", { name: "返回技能列表" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "添加技能" })).toHaveFocus());
+  await userEvent.click(screen.getByRole("button", { name: "添加技能" }));
+  await userEvent.click(screen.getByRole("menuitem", { name: "导入技能" }));
+  expect(await screen.findByRole("region", { name: "导入技能" })).toHaveFocus();
+  await userEvent.click(screen.getByRole("button", { name: "返回技能列表" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "添加技能" })).toHaveFocus());
+});

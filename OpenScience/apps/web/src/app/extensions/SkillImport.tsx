@@ -30,7 +30,9 @@ const FILE_INPUT_STYLE = "h-auto p-2 file:mr-3 file:cursor-pointer file:rounded 
  * Responsive: one fluid form column.
  * Verification: SkillImport.test.tsx covers source identity and transfer recovery.
  */
-export function SkillImportForm({ recovery, onBusy, onDone, onCancel, onDirtyChange, cancelLabel = "取消", ordinaryStore, ordinaryRecovery, onInspect }: {
+export function SkillImportForm({ recovery, onBusy, onDone, onCancel, onDirtyChange, cancelLabel = "取消", ordinaryStore, ordinaryRecovery, onInspect, routeMode }: {
+  /** The search parameter that holds this form's mode in the address: leaving it (a link, Back) is asked about while a draft is open. */
+  routeMode?: string;
   /** An unfinished account migration to pick up where it stopped. */
   recovery?: PendingSkillTransfer;
   onInspect: () => void;
@@ -52,7 +54,7 @@ export function SkillImportForm({ recovery, onBusy, onDone, onCancel, onDirtyCha
   const [refused, setRefused] = useState(false), [abandoning, setAbandoning] = useState(false);
   const dirty = !!file || !!title || !!repository || !!commit || !!subdirectory;
   useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
-  const closeGuard = useUnsavedGuard(mode !== "transfer" && dirty, onCancel, busy, { draftKey: JSON.stringify([mode, file?.name, title, repository, commit, subdirectory, unknownImport]) });
+  const closeGuard = useUnsavedGuard(mode !== "transfer" && dirty, onCancel, busy, { draftKey: JSON.stringify([mode, file?.name, title, repository, commit, subdirectory, unknownImport]), ...(routeMode ? { modeParams: [routeMode] } : {}) });
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const setBusy = (value: boolean) => { setBusyState(value); onBusy(value); };
   const importFile = async () => {
@@ -86,7 +88,7 @@ export function SkillImportForm({ recovery, onBusy, onDone, onCancel, onDirtyCha
     } catch (caught) { if (alive.current) { setUnknownImport(true); setRefused(caught instanceof WebApiError && caught.status >= 400 && caught.status < 500); setError(productErrorMessage(caught)); } }
     finally { importingRequest.current = false; if (alive.current) setBusy(false); }
   };
-  if (mode === "transfer") return <SkillTransferImport recovery={recovery} onBusy={onBusy} onClose={() => onDone()} />;
+  if (mode === "transfer") return <SkillTransferImport recovery={recovery} onBusy={onBusy} onClose={() => onDone()} routeMode={routeMode} />;
   if (ordinaryRecovery && !ordinaryStore.owns(ordinaryRecovery)) return <p role="status" className="text-ui text-text-2">正在核对当前账户的导入确认记录。{ordinaryStore.state.phase === "error" && <Button variant="text" onClick={ordinaryStore.reload}>重试核对</Button>}<Button variant="text" onClick={onCancel}>返回技能列表</Button></p>;
   return (
     <><form className="flex flex-col gap-4" onSubmit={event => { event.preventDefault(); void importFile(); }}>
@@ -120,13 +122,13 @@ export function SkillImportForm({ recovery, onBusy, onDone, onCancel, onDirtyCha
 }
 
 /** One confirmed intent survives pauses and transport errors; each receipt is partial until complete. */
-function SkillTransferImport({ onBusy, onClose, recovery }: { recovery?: PendingSkillTransfer; onBusy: (busy: boolean) => void; onClose: () => void }) {
+function SkillTransferImport({ onBusy, onClose, recovery, routeMode }: { recovery?: PendingSkillTransfer; onBusy: (busy: boolean) => void; onClose: () => void; routeMode?: string }) {
   const [format, setFormat] = useState<SkillTransferFormat>("portable"), [file, setFile] = useState<File | null>(null);
   const [upload, setUpload] = useState<SkillTransferUpload | null>(null), [selected, setSelected] = useState<string[]>([]);
   const [preview, setPreview] = useState<SkillTransferPreview | null>(null), [result, setResult] = useState<SkillTransferResult | null>(null);
   const [busy, setBusy] = useState(false), [started, setStarted] = useState(false), [paused, setPaused] = useState(false), [error, setError] = useState<string | null>(null);
   const closeGuard = useUnsavedGuard(result?.status !== "complete" && (!!file || !!recovery || started), onClose, busy,
-    { draftKey: JSON.stringify([format, file?.name, selected, upload?.reference, preview?.reference, result, started, paused]) });
+    { draftKey: JSON.stringify([format, file?.name, selected, upload?.reference, preview?.reference, result, started, paused]), ...(routeMode ? { modeParams: [routeMode] } : {}) });
   useEffect(() => { onBusy(busy); }, [busy, onBusy]);
   const alive = useRef(true), pending = useRef(false), stop = useRef(false), intent = useRef<(SkillTransferIntent & { idempotencyKey: string }) | null>(null);
   useEffect(() => { const stopRef = stop; alive.current = true; return () => { alive.current = false; stopRef.current = true; }; }, []);

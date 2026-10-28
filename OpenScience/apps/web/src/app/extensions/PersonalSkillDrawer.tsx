@@ -15,6 +15,7 @@ import { SkillUpdatePanel } from "@/components/skills/SkillUpdatePanel";
 import { formatClock, formatDay } from "@/lib/format";
 import { productErrorMessage } from "@/lib/productClient";
 import { useProjectStore } from "@/lib/projects";
+import { useModeFocus } from "@/lib/useModeFocus";
 import {
   getPersonalSkill, personalSkillDefaults, personalSkillHistory, personalSkillPortableUrl, personalSkillResourceUrl, personalSkillSupply, projectSkills,
   removePersonalSkill, restorePersonalSkill, savePersonalSkillDefaults, saveProjectSkills, updatePersonalSkill,
@@ -56,6 +57,10 @@ export function PersonalSkillDrawer({ skillId, projectId, onClose, onChanged, on
   const [error, setError] = useState<string | null>(null), [missing, setMissing] = useState(false), [busy, setBusy] = useState(false), [editing, setEditing] = useState(false), [removing, setRemoving] = useState(false), [compared, setCompared] = useState<SkillVersion | null>(null);
   useEffect(() => { onEditingChange?.(editing); return () => onEditingChange?.(false); }, [editing, onEditingChange]);
   const [view, setView] = useState<"content" | "versions">("content");
+  // The drawer is replaced by the editing form (and the form by the drawer): focus goes to the form on the way in and back to 更多操作,
+  // which opened it, on the way out.
+  const editSection = useRef<HTMLElement>(null);
+  useModeFocus(editing, { enter: () => editSection.current, exit: () => document.querySelector<HTMLElement>('[role="dialog"] button[aria-label="更多操作"]') });
   const load = useCallback(async () => {
     const request = ++generation.current;
     try {
@@ -95,7 +100,7 @@ export function PersonalSkillDrawer({ skillId, projectId, onClose, onChanged, on
     ]} />
   );
   if (missing) return <Drawer title="技能" onClose={onClose}><MissingRecord noun="技能" list="回到技能列表" onBack={onClose} /></Drawer>;
-  if (editing && skill) return <section aria-label="编辑技能" className="mx-auto w-full max-w-read">
+  if (editing && skill) return <section ref={editSection} tabIndex={-1} aria-label="编辑技能" className="mx-auto w-full max-w-read outline-none">
     <p className="mb-4 text-ui text-text-2">{skill.payload.title} · {projectName ?? "当前项目"}</p>
     {error && <p role="alert" className="mb-4 text-ui text-error">{error}</p>}
     <SkillEditor cancelLabel="返回技能详情" initial={{ expectedRevision: skill.revision, title: skill.payload.title, description: skill.payload.description, instructions: skill.payload.instructions }} busy={busy} onSave={value => void save(value)} onCancel={() => setEditing(false)} />

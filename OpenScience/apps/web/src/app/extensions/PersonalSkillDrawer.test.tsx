@@ -187,3 +187,15 @@ it("keeps a failed edit in the main area and guards the return to details", asyn
   await userEvent.click(screen.getByRole("button", { name: "放弃修改" }));
   expect(await screen.findByRole("dialog", { name: "检索方案" })).toBeInTheDocument();
 });
+
+
+it("moves focus into the editing form, and back to 更多操作 when the details return", async () => {
+  show();
+  await screen.findByRole("dialog", { name: "检索方案" });
+  await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+  await userEvent.click(screen.getByRole("menuitem", { name: "编辑" }));
+  expect(await screen.findByRole("region", { name: "编辑技能" })).toHaveFocus();
+  await userEvent.click(screen.getByRole("button", { name: "返回技能详情" }));
+  await screen.findByRole("dialog", { name: "检索方案" });
+  await waitFor(() => expect(screen.getByRole("button", { name: "更多操作" })).toHaveFocus());
+});

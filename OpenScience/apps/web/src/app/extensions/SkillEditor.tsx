@@ -24,8 +24,10 @@ const INSTRUCTIONS_EXAMPLE = "适用情况：…\n需要的输入：…\n步骤�
  * Responsive: one fluid column within its host's main-area width.
  * Verification: ExtensionsPage and PersonalSkillDrawer tests cover validation, scope and dirty exits.
  */
-export function SkillEditor({ initial, busy, onSave, onCancel, create, onDirtyChange, cancelLabel = "取消" }: {
+export function SkillEditor({ initial, busy, onSave, onCancel, create, onDirtyChange, cancelLabel = "取消", routeMode }: {
   initial: SkillWrite; busy: boolean; cancelLabel?: string; onDirtyChange?: (dirty: boolean) => void;
+  /** The search parameter that holds this editor's mode in the address: leaving it (a link, Back) is asked about while a draft is open. */
+  routeMode?: string;
   /** `useInProject` is the create form's switch; an edit never turns it on. */
   onSave: (value: SkillWrite, useInProject: boolean) => void; onCancel: () => void;
   create?: { projectName: string };
@@ -34,7 +36,7 @@ export function SkillEditor({ initial, busy, onSave, onCancel, create, onDirtyCh
   const [useInProject, setUseInProject] = useState(true);
   const dirty = JSON.stringify(value) !== JSON.stringify(initial) || (!!create && !useInProject);
   useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
-  const closeGuard = useUnsavedGuard(dirty, onCancel, busy, { draftKey: JSON.stringify([value, useInProject]) });
+  const closeGuard = useUnsavedGuard(dirty, onCancel, busy, { draftKey: JSON.stringify([value, useInProject]), ...(routeMode ? { modeParams: [routeMode] } : {}) });
   const [errors, setErrors] = useState<{ title?: string; description?: string; instructions?: string }>({});
   const titleField = useRef<HTMLInputElement>(null), instructionsField = useRef<HTMLTextAreaElement>(null), purposeField = useRef<HTMLTextAreaElement>(null);
   const base = useId();

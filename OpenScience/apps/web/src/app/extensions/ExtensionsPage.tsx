@@ -21,6 +21,7 @@ import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { useProjectStore } from "@/lib/projects";
 import { subscribeSessionBoundary } from "@/lib/sessionLifecycle";
 import { useNarrow } from "@/lib/useMediaQuery";
+import { useModeFocus } from "@/lib/useModeFocus";
 import { toast } from "@/lib/toast";
 import { createPersonalSkill, listPersonalSkills, listPlatformSkills, projectPlatformSkills, projectSkills, saveProjectPlatformSkills, saveProjectSkills, type PendingSkillTransfer, type PersonalSkill, type PlatformSkill, type SkillWrite } from "@/lib/skillLibraryClient";
 import { CatalogueView, type CatalogueEntry } from "./CatalogueView";
@@ -41,12 +42,15 @@ import { useLoad } from "./useLoad";
 type View = "discover" | "installed";
 type Kind = "all" | "skills" | "plugins";
 type Open = { kind: "platform"; skill: PlatformSkill } | { kind: "create" } | { kind: "import"; recovery?: PendingSkillTransfer; ordinaryRecovery?: OrdinaryImportIntent } | { kind: "item"; id: string };
+/** The drawers: short details that sit over the list. Creating and importing are modes of the page and live in the address. */
+type Panel = Exclude<Open, { kind: "create" } | { kind: "import" }>;
+const COMPOSE = "compose";
 const loadFirstPersonal = () => listPersonalSkills();
 const loadCatalogue = () => extensionCatalogue();
 const loadInstalled = () => allInstalledExtensions(extensionInstallations);
 
 /** Account discovery and project activation share a page, not an implied shared state. */
-function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; projectId: string }) {
+function Extensions({ tab, itemId, projectId, projectSwitched }: { tab: string; itemId?: string; projectId: string; projectSwitched: boolean }) {
   const navigate = useNavigate();
   const narrow = useNarrow();
   const [params, setParams] = useSearchParams();
@@ -57,9 +61,30 @@ function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; 
   const projectName = useProjectStore(state => state.projects.find(project => project.id === projectId)?.name) ?? "当前项目";
   const alive = useRef(true), running = useRef(false);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  const [open, setOpen] = useState<Open | null>(null), [busy, setBusy] = useState<string | null>(null), [, setImportBusy] = useState(false);
+  const [panel, setPanel] = useState<Panel | null>(null), [busy, setBusy] = useState<string | null>(null), [, setImportBusy] = useState(false);
+  const [importArgs, setImportArgs] = useState<{ recovery?: PendingSkillTransfer; ordinaryRecovery?: OrdinaryImportIntent }>({});
   const [actionError, setActionError] = useState<string | null>(null);
-  useEffect(() => subscribeSessionBoundary(() => setOpen(null)), []);
+  // Creating and importing are modes of this page, held in the address (`?compose=`): a link, Back or the sidebar leaves them — asked
+  // about while a draft is open — and a draft that was discarded to leave is closed, instead of staying on screen with its guard spent.
+  const composeParam = params.get(COMPOSE);
+  const compose = !projectSwitched && (composeParam === "create" || composeParam === "import") ? composeParam : null;
+  const composeNow = useRef(compose); composeNow.current = compose;
+  const open: Open | null = compose === "create" ? { kind: "create" } : compose === "import" ? { kind: "import", ...importArgs } : panel;
+  const setOpen = (next: Open | null) => {
+    if (next?.kind === "create" || next?.kind === "import") {
+      setImportArgs(next.kind === "import" ? { recovery: next.recovery, ordinaryRecovery: next.ordinaryRecovery } : {});
+      setPanel(null);
+      setParams(previous => { const copy = new URLSearchParams(previous); copy.set(COMPOSE, next.kind); return copy; }, { replace: true });
+      return;
+    }
+    setPanel(next);
+    if (composeNow.current) setParams(previous => { const copy = new URLSearchParams(previous); copy.delete(COMPOSE); return copy; }, { replace: true });
+  };
+  const setOpenNow = useRef(setOpen); setOpenNow.current = setOpen;
+  useEffect(() => subscribeSessionBoundary(() => setOpenNow.current(null)), []);
+  // 添加技能 is unmounted while a mode is open: focus lands on the mode's section, and returns to the button when the list does.
+  const authoringSection = useRef<HTMLElement>(null), addSkill = useRef<HTMLButtonElement>(null);
+  useModeFocus(compose !== null, { enter: () => authoringSection.current, exit: () => addSkill.current });
   const ordinaryImport = useOrdinaryImportIntent(projectId);
   const platform = useLoad(listPlatformSkills);
   const policy = useLoad(useCallback(() => projectPlatformSkills(projectId), [projectId]));
@@ -89,7 +114,7 @@ function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; 
   // there, so its rows say so and draw no switch (a switch that saves and never takes effect is a dead control).
   const shared = projectChoicesNotApplicable(currentPolicy?.activation, currentPersonal?.activation, currentBuiltin?.activation);
   const root = `/app/extensions/${view}`;
-  const close = () => { setOpen(null); if (itemId) navigate(root, { replace: true }); };
+  const close = () => { if (itemId) { setPanel(null); navigate(root, { replace: true }); } else setOpen(null); };
   const reloadSelections = () => { policy.reload(true); selection.reload(true); builtinPlugins.reload(true); };
   const reloadPersonal = () => { setMore(null); personal.reload(true); reloadSelections(); };
   const setFilter = (key: string, value: string) => {
@@ -140,7 +165,7 @@ function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; 
     keys.current.delete(identity);
     if (alive.current) { installed.reload(true); navigate(`/app/extensions/plugins/${encodeURIComponent(result.installation.id)}`); }
   });
-  const openSkill = (id: string) => { flushSync(() => setOpen(null)); navigate(`/app/extensions/skills/${encodeURIComponent(id)}`); };
+  const openSkill = (id: string) => { flushSync(() => setPanel(null)); navigate(`/app/extensions/skills/${encodeURIComponent(id)}`); };
   // A tool is chosen by opening the conversation that runs it, bound before the conversation exists — what its 科研工具 card does.
   const [opening, setOpening] = useState<string | null>(null);
   const openTool = (agent: CapabilityUi) => {
@@ -152,7 +177,7 @@ function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; 
       .catch(() => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } }))
       .finally(() => { if (alive.current) setOpening(null); });
   };
-  const openExtension = (id: string) => { setOpen(null); navigate(`/app/extensions/plugins/${encodeURIComponent(id)}`); };
+  const openExtension = (id: string) => { setPanel(null); navigate(`/app/extensions/plugins/${encodeURIComponent(id)}`); };
   const entries: CatalogueEntry[] = [];
   // Every skill the runtime carries is listed under its group (owner ruling 2026-10-14): one a project may switch has its
   // switch; one it may not (a standing platform method, one a professional workflow loads, the long task's, the 循证 GEO
@@ -283,9 +308,9 @@ function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; 
     actions={authoring ? undefined : <Menu label="导入与创建" items={[
       { label: "导入技能", icon: Upload, onSelect: () => setOpen({ kind: "import", ordinaryRecovery: ordinaryImport.ready?.intent ?? undefined }) },
       { label: "创建技能", icon: Plus, onSelect: () => setOpen({ kind: "create" }) },
-    ]}><Button>添加技能<ChevronDown size={16} aria-hidden /></Button></Menu>}
+    ]}><Button ref={addSkill}>添加技能<ChevronDown size={16} aria-hidden /></Button></Menu>}
     toolbar={authoring ? undefined : { label: "筛选与搜索", className: "pt-3",
-      views: { label: "插件与技能", value: view, items: [{ value: "discover", label: "发现" }, { value: "installed", label: "已添加" }], onChange: next => { setOpen(null); navigate(`/app/extensions/${next}?${params}`); } },
+      views: { label: "插件与技能", value: view, items: [{ value: "discover", label: "发现" }, { value: "installed", label: "已添加" }], onChange: next => { setPanel(null); const kept = new URLSearchParams(params); kept.delete(COMPOSE); navigate(`/app/extensions/${next}?${kept}`); } },
       filters: [{ kind: "select", label: "类型", allLabel: "全部类型", value: type === "all" ? null : type, options: [{ value: "skills", label: "技能" }, { value: "plugins", label: "插件" }], onChange: next => { const changed = new URLSearchParams(params); changed.set("type", next ?? "all"); changed.delete("group"); setParams(changed, { replace: true }); } },
         { kind: "select", label: "来源", allLabel: "全部来源", value: origin === "all" ? null : origin, options: catalogueOrigins, onChange: next => setFilter("origin", next ?? "all") },
         ...(groups.length > 1 ? [{ kind: "select" as const, label: "分类", allLabel: "全部分类", value: group === "all" ? null : group, options: groups.map(name => ({ value: name, label: name })), onChange: (next: string | null) => setFilter("group", next ?? "all") }] : [])],
@@ -307,8 +332,8 @@ function Extensions({ tab, itemId, projectId }: { tab: string; itemId?: string; 
     {tab === "plugins" && itemId && <ExtensionDrawer key={`${projectId}:${itemId}`} extensionId={itemId} projectId={projectId} onClose={close} onChanged={id => { installed.reload(true); projectPlugins.reload(true); if (id) openExtension(id); }} />}
     {open?.kind === "platform" && <PlatformSkillDrawer key={open.skill.id} skill={open.skill} projectId={projectId} projectName={projectName} onClose={close} onSelectionChanged={reloadSelections}
       onCopied={created => { reloadPersonal(); toast.success("已复制到我的技能"); openSkill(created.id); }} />}
-    {open?.kind === "create" && <section aria-label="新建技能" className="mx-auto w-full max-w-read">{actionError && <p role="alert" className="mb-4 text-ui text-error">{actionError}</p>}<SkillEditor cancelLabel="返回技能列表" initial={{ expectedRevision: 0, title: "", description: "", instructions: "" }} busy={busy === "create"} create={{ projectName }} onSave={(value, useInProject) => void create(value, useInProject)} onCancel={close} /></section>}
-    {open?.kind === "import" && <section aria-label="导入技能" className="mx-auto w-full max-w-read"><SkillImportForm onInspect={() => { flushSync(() => setOpen(null)); navigate("/app/extensions/installed?type=skills&origin=personal"); }} ordinaryStore={ordinaryImport} ordinaryRecovery={open.ordinaryRecovery} cancelLabel="返回技能列表" recovery={open.recovery} onBusy={setImportBusy} onCancel={close} onDone={id => { reloadPersonal(); if (id) openSkill(id); else close(); }} /></section>}
+    {open?.kind === "create" && <section ref={authoringSection} tabIndex={-1} aria-label="新建技能" className="mx-auto w-full max-w-read outline-none">{actionError && <p role="alert" className="mb-4 text-ui text-error">{actionError}</p>}<SkillEditor routeMode={COMPOSE} cancelLabel="返回技能列表" initial={{ expectedRevision: 0, title: "", description: "", instructions: "" }} busy={busy === "create"} create={{ projectName }} onSave={(value, useInProject) => void create(value, useInProject)} onCancel={close} /></section>}
+    {open?.kind === "import" && <section ref={authoringSection} tabIndex={-1} aria-label="导入技能" className="mx-auto w-full max-w-read outline-none"><SkillImportForm routeMode={COMPOSE} onInspect={() => { flushSync(() => setPanel(null)); navigate("/app/extensions/installed?type=skills&origin=personal"); }} ordinaryStore={ordinaryImport} ordinaryRecovery={open.ordinaryRecovery} cancelLabel="返回技能列表" recovery={open.recovery} onBusy={setImportBusy} onCancel={close} onDone={id => { reloadPersonal(); if (id) openSkill(id); else close(); }} /></section>}
     {open?.kind === "item" && <ItemDrawer id={open.id} inventory={inventoryData} citation={citation} projectName={projectName} builtin={currentBuiltin} busy={!!busy} onBuiltin={(id, enabled) => void switchBuiltin(id, enabled)} error={actionError} onClose={close} />}
   </PageShell>;
 }
@@ -343,6 +368,17 @@ function ItemDrawer({ id, inventory, citation, projectName, builtin, busy, onBui
 export function ExtensionsPage() {
   const { tab, itemId } = useParams();
   const projectId = useProjectStore(state => state.currentId);
+  const [params, setParams] = useSearchParams();
+  // A switch of project discards the open draft and starts the page again for the new project: the mode in the address goes with it,
+  // and is not read in the meantime (the project the mode was opened under is the one it belongs to).
+  const composeProject = useRef<string | null>(null);
+  const hasCompose = params.has(COMPOSE);
+  if (!hasCompose) composeProject.current = null; else composeProject.current ??= projectId;
+  const projectSwitched = hasCompose && composeProject.current !== projectId;
+  useEffect(() => {
+    if (!projectSwitched) return;
+    setParams(previous => { const copy = new URLSearchParams(previous); copy.delete(COMPOSE); return copy; }, { replace: true });
+  }, [projectSwitched, setParams]);
   if (!tab || !["discover", "installed", "skills", "plugins"].includes(tab)) return <Navigate to="/app/extensions/discover" replace />;
-  return <Extensions key={projectId} tab={tab} itemId={itemId} projectId={projectId} />;
+  return <Extensions key={projectId} tab={tab} itemId={itemId} projectId={projectId} projectSwitched={projectSwitched} />;
 }
