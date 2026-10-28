@@ -81,7 +81,7 @@ export function NewTaskPane({ projectId, available = true, recommendation, intro
         <TaskForm projectId={projectId} recommendation={recommendation} showBudgets={false} schedulingAvailable={available} disabled={adopting}
           onRecorded={record => { guard.markSaved(); setRecorded(true); onRecorded(record); }} onBusyChange={setSaving} onDirtyChange={setDirty}
           onCancel={onCancel ? guard.requestClose : undefined} onSaved={record => { guard.markSaved(); onSaved(record); }} />
-        <fieldset disabled={locked || !available} className="-mx-2 min-w-0">
+        <fieldset disabled={locked || dirty || !available} className="-mx-2 min-w-0">
           <EvolutionOpportunities projectId={projectId} onAdopted={onAdopted} onBusyChange={setAdopting} />
         </fieldset>
       </div>
