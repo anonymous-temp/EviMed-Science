@@ -27,7 +27,7 @@ import { MaterialPicker } from "@/components/autopilot/MaterialPicker";
 import { ResearchDatabaseDialog } from "@/components/autopilot/ResearchDatabaseDialog";
 import { ResearchDataPanel } from "@/components/autopilot/ResearchDataPanel";
 import { ResearchObservatory } from "@/components/autopilot/ResearchObservatory";
-import { ResearchQueue, type QueueEntry, type QueueMode } from "@/components/autopilot/ResearchQueue";
+import { QUEUE_MODE_WORD, ResearchQueue, type QueueEntry, type QueueMode } from "@/components/autopilot/ResearchQueue";
 import { TaskForm } from "@/components/autopilot/TaskForm";
 import { activeAgenda, inFlight, latestRun, repeatLine, runState, scheduleOf } from "@/components/autopilot/taskPresentation";
 import { Button } from "@/components/ui/Button";
@@ -37,11 +37,31 @@ import { Tag } from "@/components/ui/Tag";
 
 class MaterialInputError extends Error {}
 
+/**
+ * How often the page reads again, each thing at the rate it is worth. The project's executions and the displayed study are read quickly
+ * while one of its executions is on its way and quietly otherwise; the run list is the sidebar's own read of the same ledger (it makes
+ * the server recover runs, total the usage and backfill), so it is read at the sidebar's pace and never faster.
+ */
+const POLL_ACTIVE_MS = 5_000;
+const POLL_IDLE_MS = 30_000;
+const POLL_RUNS_MS = 20_000;
+
+/** Runs `read` every `ms`, except while the document is hidden or an action is under way (`operating`); returns what stops it. */
+function pollEvery(read: () => void, ms: number, operating: { current: boolean }): () => void {
+  const timer = window.setInterval(() => { if (!document.hidden && !operating.current) read(); }, ms);
+  return () => window.clearInterval(timer);
+}
+
 const at = (value: string | null | undefined) => [formatDay(value), formatClock(value)].filter(Boolean).join(" ");
 const SAFE_RUN = /^[A-Za-z0-9_-]{1,160}$/;
 const FOUND_TAG: Record<ResearchState["found"][number]["check"], { label: string; tone: "neutral" | "accent" | "warn" }> = {
   reproduced: { label: "已复现", tone: "accent" }, stands: { label: "复核成立", tone: "neutral" }, refuted: { label: "已推翻", tone: "warn" },
 };
+
+/** A goal round's state as its own record has it: only a round that ran to its end is 已完成, and one that failed or was stopped is not. */
+function roundMode(run: WebAgentRun): QueueMode {
+  return run.status === "running" ? "running" : run.status === "succeeded" ? "done" : run.status === "failed" ? "failed" : "ended";
+}
 
 function agendaMode(agenda: AgendaRecord, episodes: readonly EpisodeRecord[]): QueueMode {
   const live = episodes.find(item => item.payload.agendaId === agenda.id && inFlight(item));
@@ -107,8 +127,13 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
   const loadingProgress = useRef<string | null>(null);
   const mounted = useRef(true);
   const selectedRef = useRef(selectedId); selectedRef.current = selectedId;
+  const episodesRef = useRef(episodes); episodesRef.current = episodes;
 
-  const load = useCallback(async (force = false) => {
+  /**
+   * The project's tasks and executions. The first read pages through every execution, so older running work is not hidden; a `recent`
+   * read (the poll) takes the newest page only and keeps the older ones it already has, since only the newest can have changed.
+   */
+  const load = useCallback(async (force = false, recent = false) => {
     if (loadingTasks.current && !force) return;
     loadingTasks.current = true;
     const request = ++generation.current;
@@ -116,7 +141,7 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
       const [tasks, firstPage] = await Promise.all([listAgendas(projectId), listEpisodes(projectId)]);
       const runs = [...firstPage.items];
       const seenCursors = new Set<string>();
-      let cursor = firstPage.nextCursor;
+      let cursor = recent ? null : firstPage.nextCursor;
       while (cursor) {
         if (seenCursors.has(cursor)) throw new Error("执行记录分页重复，请重试。");
         seenCursors.add(cursor);
@@ -127,6 +152,7 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
       if (!mounted.current || request !== generation.current) return;
       const items = tasks.items.filter(item => item.projectId === projectId && !item.payload.archivedAt);
       const ownRuns = runs.filter(item => item.projectId === projectId);
+      if (recent) ownRuns.push(...episodesRef.current.filter(item => !ownRuns.some(fresh => fresh.id === item.id)));
       for (const [id, optimistic] of optimisticEpisodes.current) {
         const index = ownRuns.findIndex(item => item.id === id);
         if (index < 0) ownRuns.push(optimistic);
@@ -202,12 +228,6 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
     const next = { ...state }; delete next.runtimeUiIntent;
     navigate(location.pathname + location.search, { replace: true, state: next });
   }, [location, navigate]);
-  const hasRunning = episodes.some(inFlight) || (goalRuns ?? []).some(run => run.status === "running" && run.automated === true);
-  useEffect(() => {
-    const timer = window.setInterval(() => { if (!document.hidden && !operating.current) { void load(); void loadGoals(); void loadProgress(); if (!historyBusy) void loadHistory(); } }, hasRunning ? 5_000 : 30_000);
-    return () => window.clearInterval(timer);
-  }, [load, loadGoals, loadProgress, loadHistory, historyBusy, hasRunning]);
-
   const goals = observedResearchGoals(goalRuns ?? []);
   const goal = goals.find(item => item.key === selectedGoal) ?? null;
   const selected = !goal ? agendas?.find(item => item.id === selectedId) ?? null : null;
@@ -217,9 +237,26 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
   const round = goal ? goal.rounds.find(item => item.id === selectedRound) ?? goal.latest : null;
   const liveSteer = runningEpisode?.payload.status === "running" && runningEpisode.payload.interactive === true && !!runningEpisode.payload.runId;
 
+  // The page keeps reading while it is open, each read at its own rate and none while the document is hidden or an action is under way.
+  // The tasks and their newest executions follow whether any execution is on its way; the displayed study (its progress and its
+  // executions) is read only while a study is displayed — a shown goal is read through the run list, not through the study that was
+  // chosen before it; and the run list, the heavy one, is read at the sidebar's pace.
+  const tasksBusy = episodes.some(inFlight);
+  const studyShown = selected !== null;
+  const studyBusy = runningEpisode !== null;
+  const reads = useRef({ tasks: () => {}, runs: () => {}, study: () => {} });
+  reads.current = {
+    tasks: () => void load(false, true),
+    runs: () => void loadGoals(),
+    study: () => { void loadProgress(); if (!historyBusy) void loadHistory(); },
+  };
+  useEffect(() => pollEvery(() => reads.current.tasks(), tasksBusy ? POLL_ACTIVE_MS : POLL_IDLE_MS, operating), [tasksBusy]);
+  useEffect(() => pollEvery(() => reads.current.runs(), POLL_RUNS_MS, operating), []);
+  useEffect(() => (studyShown ? pollEvery(() => reads.current.study(), studyBusy ? POLL_ACTIVE_MS : POLL_IDLE_MS, operating) : undefined), [studyShown, studyBusy, selectedId]);
+
   const queue: QueueEntry[] = [
     ...goals.map(item => ({ key: `goal:${item.key}`, title: goalTitle(item), kind: "长期" as const,
-      mode: (item.latest.status === "running" ? "running" : "done") as QueueMode,
+      mode: roundMode(item.latest),
       meta: item.latest.status === "running" ? `本轮 ${at(item.latest.startedAt)} 开始` : `最近一轮 ${at(item.latest.finishedAt ?? item.latest.startedAt)}` })),
     ...(agendas ?? []).map(item => {
       const last = latestRun(item.id, episodes);
@@ -336,7 +373,10 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
   };
 
   const loaded = agendas !== null;
-  const nothing = loaded && !error && agendas.length === 0 && goals.length === 0;
+  // Nothing is known of the long goals until their list has been read, or when it could not be: the recipe for a first research is not
+  // shown over a read that is still out or that failed, where it would say there is none.
+  const nothing = loaded && !error && agendas.length === 0 && goals.length === 0 && goalRuns !== null && !goalError;
+  const reading = !error && (!loaded || (agendas.length === 0 && goalRuns === null && !goalError));
   const runId = goal ? round?.id ?? null : execution?.payload.runId ?? null;
   const observedTitle = goal ? goalTitle(goal) : selected?.payload.title;
   const startButtons = <>
@@ -357,11 +397,11 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
     {error && <LoadError message={error} onRetry={() => void load()} />}
     {goalError && <LoadError message="长期研究暂时无法载入。" onRetry={() => void loadGoals()} />}
     {!available && <p className="text-ui text-text">定时执行暂不可用，已有成果可以照常查看。</p>}
-    {!loaded && !error && <div role="status" aria-label="正在载入研究" className="h-64 animate-pulse rounded-card bg-surface-2" />}
+    {reading && <div role="status" aria-label="正在载入研究" className="h-64 animate-pulse rounded-card bg-surface-2" />}
     {nothing && !nativeSession && <EmptyState icon={FlaskConical} titleAs="h2" title="让 AI 持续为你做研究"
       description={<><span className="block">长期研究：写下一个研究目标，AI 会检索、阅读、分析、撰写，一轮轮推进直到完成。</span><span className="mt-1 block">定时研究：按你设定的时间自动追踪一个问题，每次执行都会留下成果。</span></>}
       action={<div className="flex flex-wrap justify-center gap-2">{startButtons}</div>} />}
-    {loaded && !nothing && <div>
+    {loaded && !nothing && !reading && <div>
       <ResearchQueue entries={queue} selected={queueSelected} disabled={busy} onSelect={choose} />
       <ResearchObservatory runId={runId} title={observedTitle} onOpenFile={openFile} />
     </div>}
@@ -465,7 +505,7 @@ function GoalWorkbench({ goal, round, projectId, busy, onRound, onOpenConversati
       <ResultsPanel progress={null} files={files} />
       <section aria-label="推进记录" className="space-y-2">
         <h3 className="text-ui font-semibold text-text">推进记录</h3>
-        <List divided>{goal.rounds.map((run, index) => <ListRow key={run.id} title={`第 ${goal.rounds.length - index} 轮 · ${run.status === "running" ? "进行中" : run.status === "succeeded" ? "已完成" : run.status === "failed" ? "未完成" : "已结束"}`}
+        <List divided>{goal.rounds.map((run, index) => <ListRow key={run.id} title={`第 ${goal.rounds.length - index} 轮 · ${QUEUE_MODE_WORD[roundMode(run)]}`}
           trailing={<span className="text-caption text-text-3">{at(run.startedAt)}</span>} selected={round?.id === run.id} onOpen={busy ? undefined : () => onRound(run.id)} />)}</List>
       </section>
     </div>

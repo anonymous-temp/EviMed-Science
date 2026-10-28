@@ -262,7 +262,7 @@ button.obs-file:hover { border-color: var(--obs-cyan); color: var(--obs-cyan); b
 .rq-card.m-done .rq-state i { background: #b8ff5c; }
 .rq-card.m-failed .rq-state { color: #ff5c7a; }
 .rq-card.m-failed .rq-state i { border-radius: 1px; background: #ff5c7a; }
-.rq-card.m-paused .rq-state i { background: transparent; box-shadow: inset 0 0 0 1.5px #7395ad; }
+.rq-card.m-paused .rq-state i, .rq-card.m-ended .rq-state i { background: transparent; box-shadow: inset 0 0 0 1.5px #7395ad; }
 .rq-kind { border: 1px solid #16314a; border-radius: 4px; padding: 0 6px; font-size: 12px; line-height: 18px; color: #9fc0d6; }
 .rq-title { display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: 14px; font-weight: 600; line-height: 1.45; }
 .rq-meta { font: 12px "JetBrains Mono", ui-monospace, monospace; color: #7395ad; }

@@ -1,6 +1,6 @@
 import "./ResearchObservatory.css";
 
-export type QueueMode = "running" | "queued" | "done" | "failed" | "paused" | "waiting";
+export type QueueMode = "running" | "queued" | "done" | "failed" | "paused" | "waiting" | "ended";
 export interface QueueEntry {
   key: string;
   title: string;
@@ -9,7 +9,8 @@ export interface QueueEntry {
   /** 「每天 09:00」, 「最近一轮 10:42」. */
   meta: string;
 }
-const MODE_WORD: Record<QueueMode, string> = { running: "进行中", queued: "排队中", done: "已完成", failed: "未完成", paused: "已暂停", waiting: "待执行" };
+/** The words of a state, for the queue's cards and for the same state wherever else the page names it. */
+export const QUEUE_MODE_WORD: Record<QueueMode, string> = { running: "进行中", queued: "排队中", done: "已完成", failed: "未完成", paused: "已暂停", waiting: "待执行", ended: "已结束" };
 
 /**
  * Anatomy: the research queue over the observatory — every research of the project as a card: its state (a dot, a
@@ -24,7 +25,7 @@ export function ResearchQueue({ entries, selected, disabled, onSelect }: { entri
     <div className="rq-head"><p className="obs-section-label">研究队列</p><p className="rq-count">{running > 0 ? `${running} 项进行中 · ` : ""}共 {entries.length} 项</p></div>
     {entries.length > 0 && <ul className="rq-list">{entries.map((entry, index) => <li key={entry.key}>
       <button type="button" className={`rq-card m-${entry.mode}`} aria-pressed={selected === entry.key} aria-label={entry.title} aria-describedby={`rq-${index}-s rq-${index}-m`} disabled={disabled} onClick={() => onSelect(entry.key)}>
-        <span className="rq-top"><span className="rq-state" id={`rq-${index}-s`}><i aria-hidden="true" />{MODE_WORD[entry.mode]}</span><span className="rq-kind">{entry.kind}</span></span>
+        <span className="rq-top"><span className="rq-state" id={`rq-${index}-s`}><i aria-hidden="true" />{QUEUE_MODE_WORD[entry.mode]}</span><span className="rq-kind">{entry.kind}</span></span>
         <span className="rq-title">{entry.title}</span>
         <span className="rq-meta" id={`rq-${index}-m`}>{entry.meta}</span>
       </button>

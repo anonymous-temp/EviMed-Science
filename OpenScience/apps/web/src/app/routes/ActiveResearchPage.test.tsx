@@ -103,6 +103,100 @@ describe("active research workspace", () => {
     renderPage(); await waitFor(() => expect(screen.getByTestId("observatory")).toHaveTextContent("run-active"));
     expect(mocks.listEpisodes).toHaveBeenCalledWith("project-a", undefined, "next-page");
   });
+  it("says a goal round's real outcome in the queue, as the goal's own record does", async () => {
+    const user = userEvent.setup();
+    const round = (id: string, session: string, status: string) => ({ id, sessionId: session, automated: true, effectiveRouteReason: "loopx-continuation", goal: { id: `goal-${session}`, runId: null }, startedAt: "2026-10-28T01:00:00Z", finishedAt: "2026-10-28T01:30:00Z", status, title: `目标 ${status}` });
+    mocks.listWebAgentRuns.mockResolvedValue([round("r-failed", "s-failed", "failed"), round("r-stopped", "s-stopped", "canceled"), round("r-done", "s-done", "succeeded")]);
+    renderPage(); await screen.findByText("cohort.csv");
+    const queue = within(await screen.findByLabelText("研究队列"));
+    for (const [title, word] of [["目标 failed", "未完成"], ["目标 canceled", "已结束"], ["目标 succeeded", "已完成"]] as const) {
+      const card = queue.getByRole("button", { name: title });
+      expect(card).toHaveTextContent(word);
+      await user.click(card);
+      // The record under the queue names the round with the same word.
+      expect(within(screen.getByLabelText("推进记录")).getByText(new RegExp(`第 1 轮 · ${word}`))).toBeInTheDocument();
+    }
+    expect(queue.getByRole("button", { name: "目标 failed" })).not.toHaveTextContent("已完成");
+  });
+  it("does not show the first-research recipe while the long goals are still being read, or when they could not be read", async () => {
+    mocks.listAgendas.mockResolvedValue({ items: [], nextCursor: null, available: true });
+    mocks.listEpisodes.mockResolvedValue({ items: [], nextCursor: null });
+    let release: (runs: unknown[]) => void = () => {};
+    mocks.listWebAgentRuns.mockReturnValue(new Promise(resolve => { release = resolve; }));
+    const first = renderPage();
+    await waitFor(() => expect(mocks.listAgendas).toHaveBeenCalled());
+    expect(await screen.findByRole("status", { name: "正在载入研究" })).toBeInTheDocument();
+    expect(screen.queryByText("让 AI 持续为你做研究")).not.toBeInTheDocument();
+    await act(async () => { release([]); });
+    expect(await screen.findByText("让 AI 持续为你做研究")).toBeInTheDocument();
+    first.unmount();
+    mocks.listWebAgentRuns.mockReset().mockRejectedValue(new Error("offline"));
+    renderPage();
+    expect(await screen.findByText("长期研究暂时无法载入。")).toBeInTheDocument();
+    expect(screen.queryByText("让 AI 持续为你做研究")).not.toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "正在载入研究" })).not.toBeInTheDocument();
+  });
+  describe("reading again while the page is open", () => {
+    const settle = () => act(async () => { await Promise.resolve(); });
+    // Asynchronously, so each read settles before the next tick (a read still out holds the next one off).
+    const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+    const forget = () => { for (const fn of [mocks.listAgendas, mocks.listEpisodes, mocks.getResearchState, mocks.listWebAgentRuns]) fn.mockClear(); };
+    const projectPages = () => mocks.listEpisodes.mock.calls.filter(call => call[1] === undefined);
+    const ofStudy = (id: string) => mocks.listEpisodes.mock.calls.filter(call => call[1] === id);
+
+    it("reads each thing at its own rate: the tasks and the displayed study every 5 s while an execution runs, the run list every 20 s", async () => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      renderPage(); await screen.findByText("cohort.csv"); await settle(); forget();
+      await advance(5_000);
+      expect(mocks.listAgendas).toHaveBeenCalledTimes(1); expect(projectPages()).toHaveLength(1);
+      expect(mocks.getResearchState).toHaveBeenCalledTimes(1); expect(ofStudy("a")).toHaveLength(1);
+      expect(mocks.listWebAgentRuns).not.toHaveBeenCalled();
+      await advance(15_000);
+      expect(mocks.listAgendas).toHaveBeenCalledTimes(4);
+      expect(mocks.getResearchState).toHaveBeenCalledTimes(4);
+      expect(mocks.listWebAgentRuns).toHaveBeenCalledTimes(1);
+      await advance(20_000);
+      expect(mocks.listWebAgentRuns).toHaveBeenCalledTimes(2);
+    });
+    it("reads quietly, every 30 s, when no execution is on its way — the run list still at 20 s", async () => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      mocks.listEpisodes.mockImplementation(async (_project: string, agendaId?: string) => ({ items: agendaId === "a" ? [] : [finished], nextCursor: null }));
+      renderPage(); await screen.findByLabelText("研究队列"); await settle(); forget();
+      await advance(29_000);
+      expect(mocks.listAgendas).not.toHaveBeenCalled(); expect(mocks.getResearchState).not.toHaveBeenCalled();
+      expect(mocks.listWebAgentRuns).toHaveBeenCalledTimes(1);
+      await advance(1_000);
+      expect(mocks.listAgendas).toHaveBeenCalledTimes(1); expect(mocks.getResearchState).toHaveBeenCalledTimes(1);
+    });
+    it("reads only the newest page of executions, and keeps the older ones the first read gave", async () => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      mocks.listEpisodes.mockImplementation(async (_project: string, agendaId?: string, cursor?: string) => {
+        if (agendaId) return { items: agendaId === "a" ? [running] : [finished], nextCursor: null };
+        return cursor ? { items: [running], nextCursor: null } : { items: [finished], nextCursor: "next-page" };
+      });
+      renderPage(); await waitFor(() => expect(screen.getByTestId("observatory")).toHaveTextContent("run-active")); await settle();
+      expect(mocks.listEpisodes).toHaveBeenCalledWith("project-a", undefined, "next-page");
+      forget();
+      await advance(10_000);
+      expect(projectPages().length).toBeGreaterThan(0);
+      expect(mocks.listEpisodes.mock.calls.filter(call => call[2] !== undefined)).toEqual([]);
+      // The execution that only the older page held is still running on the screen.
+      expect(within(screen.getByLabelText("研究队列")).getByText(/1 项进行中/)).toBeInTheDocument();
+    });
+    it("does not read a study that is not displayed: a shown goal is read through the run list alone", async () => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      mocks.listWebAgentRuns.mockResolvedValue([{ id: "goal-run", sessionId: "goal-session", automated: true, effectiveRouteReason: "loopx-continuation", goal: { id: "goal", runId: null }, startedAt: "2026-10-28T01:00:00Z", status: "running", title: "长期目标" }]);
+      renderPage(); await screen.findByText("cohort.csv");
+      await user.click(within(await screen.findByLabelText("研究队列")).getByRole("button", { name: "长期目标" }));
+      expect(screen.queryByText("cohort.csv")).not.toBeInTheDocument(); await settle(); forget();
+      await advance(40_000);
+      expect(mocks.getResearchState).not.toHaveBeenCalled(); expect(ofStudy("a")).toEqual([]); expect(ofStudy("b")).toEqual([]);
+      expect(mocks.listWebAgentRuns).toHaveBeenCalledTimes(2);
+      // The tasks are still read: the queue shows them beside the goal.
+      expect(mocks.listAgendas).toHaveBeenCalled();
+    });
+  });
   it("selects project sources through the task association API", async () => {
     const user = userEvent.setup(); renderPage(); await screen.findByText("cohort.csv");
     await user.click(screen.getByRole("button", { name: "从知识库选择" }));
