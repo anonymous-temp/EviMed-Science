@@ -1988,6 +1988,35 @@ export const EXTENSION_ERROR_CODES = Object.freeze([
   'skill_platform_not_found', 'skill_platform_not_copyable', 'skill_platform_unreadable',
 ])
 
+/**
+ * What the research-database connector answers with (`apps/server/src/researchDb*.mjs`, 2026-10-29): a project's own
+ * PostgreSQL, read as a snapshot into a CSV source. Each names the one operation it stopped -- saving a credential,
+ * listing tables, importing one -- and never a verdict on a run. The three connection failures are told apart on purpose
+ * (a certificate, a login, a network): they have three different remedies and the person or their database
+ * administrator is the one who applies each. The two keyring codes are the operator's.
+ */
+export const RESEARCH_DB_ERROR_MESSAGES_ZH = Object.freeze({
+  research_db_unavailable: '研究数据库连接暂时不可用，请稍后再试。',
+  research_db_network_denied: '这个数据库地址还没有开通访问，请联系平台管理员开通。',
+  research_db_tls_failed: '数据库的加密连接没有建立：证书不被信任、已过期或与地址不符。请数据库管理员确认证书；如果是云数据库或自签证书，请平台管理员配置它的根证书。',
+  research_db_login_failed: '数据库拒绝了这个账号：请核对用户名、密码和数据库名，以及该账号是否允许从这里连接。',
+  research_db_unreachable: '连不上这个数据库：地址或端口没有响应。请确认数据库在运行，并且防火墙已允许平台访问。',
+  research_db_login_too_privileged: '这个数据库账号权限过高（超级用户或可绕过行级安全），平台不会用它读取数据。请改用一个只读账号。',
+  research_db_selection_invalid: '这张表或这些列暂不支持导入，请换一张表或减少列。',
+  research_db_busy: '另一项数据导入正在进行，请稍后再试。',
+  research_db_connection_invalid: '数据库连接信息不完整或格式不对，请核对后再保存。',
+  research_db_connection_limit: '这个项目保存的数据库连接已达上限，请先删除不再用的连接。',
+  research_db_connection_missing: '没有找到这个数据库连接，可能已被删除。',
+  research_db_connection_revoked: '这次请求保存的连接已被删除，请重新添加。',
+  research_db_connection_unavailable: '这个数据库连接的凭据现在读不出来，请删除后重新添加。',
+  research_db_request_conflict: '这个请求编号已用于另一个不同的请求，请刷新页面后重试。',
+  research_db_request_invalid: '请求缺少有效的编号，请刷新页面后重试。',
+  research_db_payload_invalid: '这次提交的内容不对，请刷新页面后重试。',
+  research_db_staging_unavailable: '数据库快照的暂存记录读不出来，这次导入没有完成，请重试。',
+  research_db_keyring_unavailable: '研究数据库的凭据密钥读不出来，连接功能暂停。请联系平台管理员。',
+  research_db_keyring_incomplete: '研究数据库的凭据密钥缺少已保存连接所用的版本，连接功能暂停。请联系平台管理员补回密钥。',
+})
+
 export const MANAGED_BROWSER_ERROR_CODES = Object.freeze(['managed_browser_invalid','managed_browser_not_found','managed_browser_sequence_conflict','managed_browser_busy','managed_browser_unavailable','managed_browser_action_unknown','managed_browser_page_failed']);
 
 export const ALL_ERROR_CODES = Object.freeze([...new Set([
@@ -2028,6 +2057,7 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...Object.keys(EVIDENCE_CARD_ERROR_MESSAGES_ZH),
   ...Object.keys(EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH),
   ...Object.keys(EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH),
+  ...Object.keys(RESEARCH_DB_ERROR_MESSAGES_ZH),
 ])])
 
 /**
@@ -2123,6 +2153,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   ...EVIDENCE_CARD_ERROR_MESSAGES_ZH,
   ...EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH,
   ...EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH,
+  // The research-database connector's refusals: one operation each, and a connection failure says which of three it is.
+  ...RESEARCH_DB_ERROR_MESSAGES_ZH,
   // Why a data-semantics check could not read a table. The check is reported as
   // not run; the other checks and the analysis go on.
   file_unreadable: '这个数据文件没能读取，对应的数据检查未执行；其他检查和分析不受影响。',
@@ -3266,6 +3298,8 @@ export function errorCodeOutcome(code) {
   if (Object.hasOwn(EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH, text)) return 'upstream'
   // Keeping a card current refuses one operation on one card (a challenge, a switch), never a run.
   if (Object.hasOwn(EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH, text)) return 'upstream'
+  // The research-database connector refuses one listing, one credential or one import, never a run.
+  if (Object.hasOwn(RESEARCH_DB_ERROR_MESSAGES_ZH, text)) return 'upstream'
   if (EXTENSION_ERROR_CODES.includes(text)) return 'upstream'
   if (text === 'managed_browser_busy') return 'capped'
   if (MANAGED_BROWSER_ERROR_CODES.includes(text)) return 'upstream'
@@ -3367,7 +3401,9 @@ const ERROR_CODE_AUDIENCE_TABLE = (() => {
   ])
   // A ceiling the reader can raise or wait out: shown to them, on the run it stopped.
   claim('person', ['runtime_spend_limit_reached'])
-  claim('operator', [...keys(READINESS_ERROR_MESSAGES_ZH), ...keys(EVOLUTION_ERROR_MESSAGES), ...EVIDENCE_PROGRAMME_ERROR_CODES])
+  claim('operator', [...keys(READINESS_ERROR_MESSAGES_ZH), ...keys(EVOLUTION_ERROR_MESSAGES), ...EVIDENCE_PROGRAMME_ERROR_CODES,
+    // The connector's credential keys are the deployment's: the person cannot mend a keyring.
+    'research_db_keyring_unavailable', 'research_db_keyring_incomplete'])
   claim('run', [
     ...RUNTIME_ERROR_CODES, ...RUN_VERDICT_ERROR_CODES, ...SOCKET_TOOL_ERROR_CODES,
     ...repairableEvidencePackageErrorCodes, ...recoverableEvidenceSourceErrorCodes, ...terminalEvidenceSourceErrorCodes,
@@ -3380,7 +3416,7 @@ const ERROR_CODE_AUDIENCE_TABLE = (() => {
     ...GEO_ROUTE_ERROR_CODES, ...GEO_MEDIA_MARKET_ERROR_CODES, ...VCR_ROUTE_ERROR_CODES, ...VCR_MODULE_ERROR_CODES,
     ...EVIMED_CREDITS_ROUTE_ERROR_CODES, ...EVIDENCE_PUBLIC_ERROR_CODES, ...EVIDENCE_FLYWHEEL_ERROR_CODES,
     ...keys(DOCUMENT_EXPORT_ERROR_MESSAGES), ...keys(SOURCE_CHANGE_ERROR_MESSAGES), ...keys(EVIDENCE_CARD_ERROR_MESSAGES_ZH),
-    ...keys(EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH), ...keys(EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH),
+    ...keys(EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH), ...keys(EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH), ...keys(RESEARCH_DB_ERROR_MESSAGES_ZH),
     // What the control plane refused on a page or a ceiling the reader meets: the engine and the map of memory, the holds on
     // a project's runtime, the limits of an account (the gateway's and the independent check's own codes are the run's).
     ...CONTROL_PLANE_ERROR_CODES,

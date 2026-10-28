@@ -154,7 +154,8 @@ export function sourceDocTypeIsDeep(docType) {
  * folders the platform itself writes (a closed list, not a reading of file
  * names): 「添加网页链接」 writes `links/`, 「新建笔记」 `notes/`, 「存入知识库」
  * from a conversation `chat/`, the frontier feed `frontier/` and `evidence/`,
- * and a run's hand-off of what it preserved `open-access/`.
+ * a run's hand-off of what it preserved `open-access/`, and a table imported
+ * from a researcher's own database `databases/`.
  */
 export const SOURCE_FOLDERS = Object.freeze({
   root: 'knowledge-base',
@@ -164,6 +165,8 @@ export const SOURCE_FOLDERS = Object.freeze({
   frontier: 'knowledge-base/frontier',
   evidence: 'knowledge-base/evidence',
   openAccess: 'knowledge-base/open-access',
+  /** A table read from the researcher's own database (`researchDbImport.mjs`): data, kept out of the engine and the compiled wiki. */
+  databases: 'knowledge-base/databases',
   /** The wiki compiled from the project's documents, mirrored file for file from the engine (`knowledgePage.mjs`). */
   wiki: 'knowledge-base/wiki',
   /** The knowledge graph compiled from the same documents: `entities/*.md` and `relations.jsonl`, mirrored the same way. */
@@ -180,10 +183,11 @@ export const SOURCE_ORIGINS = Object.freeze([
   { id: 'note', label: '笔记' },
   { id: 'frontier', label: '前沿动态' },
   { id: 'conversation', label: '对话产出' },
+  { id: 'database', label: '数据库' },
   { id: 'wiki', label: '知识页' },
 ].map((origin) => Object.freeze(origin)))
 
-/** @typedef {'upload' | 'drive' | 'link' | 'note' | 'frontier' | 'conversation' | 'wiki'} SourceOrigin */
+/** @typedef {'upload' | 'drive' | 'link' | 'note' | 'frontier' | 'conversation' | 'database' | 'wiki'} SourceOrigin */
 
 /** @param {unknown} origin */
 export function sourceOriginLabel(origin) {
@@ -205,6 +209,7 @@ export function sourceOriginOf({ connectorType, path }) {
   if (inside(SOURCE_FOLDERS.notes)) return 'note'
   if (inside(SOURCE_FOLDERS.frontier) || inside(SOURCE_FOLDERS.evidence)) return 'frontier'
   if (inside(SOURCE_FOLDERS.chat) || inside(SOURCE_FOLDERS.openAccess)) return 'conversation'
+  if (inside(SOURCE_FOLDERS.databases)) return 'database'
   if (inside(SOURCE_FOLDERS.wiki) || inside(SOURCE_FOLDERS.graph)) return 'wiki'
   return 'upload'
 }

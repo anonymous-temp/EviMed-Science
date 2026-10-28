@@ -116,12 +116,14 @@ test("a document's chip follows its type, and a type nobody knows is a document"
 });
 
 test("where a source came from is read off where it lives", () => {
-  assert.deepEqual(SOURCE_ORIGINS.map((origin) => origin.label), ["上传", "网盘", "链接", "笔记", "前沿动态", "对话产出", "知识页"]);
+  assert.deepEqual(SOURCE_ORIGINS.map((origin) => origin.label), ["上传", "网盘", "链接", "笔记", "前沿动态", "对话产出", "数据库", "知识页"]);
   assert.equal(sourceOriginOf({ connectorType: "upload", path: "knowledge-base/a.pdf" }), "upload");
   assert.equal(sourceOriginOf({ connectorType: "upload", path: "knowledge-base/a/b.pdf" }), "upload");
   assert.equal(sourceOriginOf({ connectorType: "openlist", path: "openlist/docs/a.pdf" }), "drive");
   assert.equal(sourceOriginOf({ path: "knowledge-base/links/x.md" }), "link");
   assert.equal(sourceOriginOf({ path: "knowledge-base/notes/x.md" }), "note");
+  assert.equal(sourceOriginOf({ path: "knowledge-base/databases/public.cohort-1a2b3c4d.csv" }), "database");
+  assert.equal(sourceOriginOf({ path: "knowledge-base/databases-old/x.csv" }), "upload", "a folder that only starts with the same letters is not the databases folder");
   assert.equal(sourceOriginOf({ path: "knowledge-base/frontier/x.pdf" }), "frontier");
   assert.equal(sourceOriginOf({ path: "knowledge-base/evidence/x.md" }), "frontier");
   assert.equal(sourceOriginOf({ path: "knowledge-base/open-access/trial/x.xlsx" }), "conversation");
