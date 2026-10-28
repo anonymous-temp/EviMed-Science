@@ -1767,7 +1767,9 @@ change a run's original status, verification, notices, completion time or usage,
   `expectedReceiptSha256` also checks a previously recorded receipt identity. Inspect this plan, then send the same target
   with `action: "apply"`, `expectedReceiptSha256` and `expectedPlanSha256` set to those exact values. Changed receipt,
   output or preserved-source bytes refuse the stale plan. The plan has no clock expiry. One original clinical matrix,
-  at most 64 files and 48 preserved sources are eligible in one request; existing storage and metadata limits still apply.
+  at most 64 files and `PACKAGE_SOURCE_ARTIFACT_LIMIT` preserved sources are eligible in one request (400 — the bound the
+  delivery gate and delivery capture read as well; the capture paths held a private 48 until 2026-10-28, which refused a
+  55-document review); existing storage and metadata limits still apply.
 - Apply fills missing captures through the normal capture service and reuses existing immutable version identities.
   Existing frozen quotation verdicts are reused. If none was ever persisted, a deterministic verdict over the exact
   preserved sources is recorded with `origin: "capture-repair"`, its time and verifier version; it is not a historical verdict.
