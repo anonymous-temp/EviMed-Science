@@ -168,7 +168,7 @@ class NcbiServesWhenEuropePmcCannot(Workspace):
     def test_a_doi_is_resolved_through_pubmed_and_a_record_for_another_doi_is_not_taken(self):
         def ncbi_json(url):
             if "esearch.fcgi" in url:
-                self.assertEqual((query_of(url)["db"], query_of(url)["term"]), (["pubmed"], ["%s[doi]" % DOI]))
+                self.assertEqual((query_of(url)["db"], query_of(url)["term"]), (["pubmed"], ['"%s"[doi]' % DOI]))
                 return {"esearchresult": {"count": "2", "idlist": ["11111111", "31001148"]}}
             self.assertEqual(query_of(url)["id"], ["11111111,31001148"])
             return summary_payload(esummary("11111111", "10.9999/other", "PMC1111111"), esummary("31001148", DOI.upper(), PMCID))
@@ -178,6 +178,24 @@ class NcbiServesWhenEuropePmcCannot(Workspace):
         self.assertEqual((result["status"], result["data"]["route"], result["data"]["pmcid"]), ("success", "ncbi-pmc-xml", PMCID), result)
         self.assertEqual(len(network.urls("json", "ncbi")), 2)
         self.assertEqual(query_of(network.urls("bytes", "ncbi")[0])["id"], ["6454835"], "the PMC article of the matching DOI, not the first hit")
+
+    def test_a_doi_with_parentheses_reaches_pubmed_quoted(self):
+        # PubMed reads an unquoted ( ) : ; as query syntax, and the DOIs of older journals carry all of them.
+        awkward = "10.1002/(SICI)1097-0258(19980430)17:8<873::AID-SIM779>3.0.CO;2-I"
+        asked = []
+
+        def ncbi_json(url):
+            if "esearch.fcgi" in url:
+                asked.append(query_of(url)["term"][0])
+                return {"esearchresult": {"count": "1", "idlist": ["9595617"]}}
+            return summary_payload(esummary("9595617", awkward, ""))
+
+        Network(self, europe_json=lambda url: europe_down(), ncbi_json=ncbi_json)
+        sentinel = {"status": "success", "data": {}, "sources": [], "artifacts": []}
+        with mock.patch.object(fulltext, "_fetch_open_access_pdf", return_value=sentinel):
+            fulltext.fetch({"identifier": awkward})
+        self.assertEqual(asked, ['"%s"[doi]' % awkward])
+        self.assertEqual(fulltext._doi_term('10.1/a"b'), '"10.1/ab"[doi]')
 
     def test_a_doi_pubmed_does_not_hold_goes_on_to_the_pdf_route_with_that_doi(self):
         Network(self, europe_json=lambda url: europe_down(), ncbi_json=lambda url: {"esearchresult": {"count": "0", "idlist": []}})
@@ -215,15 +233,39 @@ class BothRoutesFail(Workspace):
         self.assertEqual((raised.exception.code, raised.exception.retryable), ("full_text_not_available", False))
         self.assertIn("The following PMCID is not available", str(raised.exception))
 
-    def test_both_failing_says_both_and_keeps_the_europe_pmc_code(self):
-        Network(self, europe_bytes=europe_down(), ncbi_bytes=NO_BODY_XML, europe_json=europe_down())
+    def test_both_failing_says_both_and_keeps_the_europe_pmc_code_when_ncbi_could_not_answer_either(self):
+        Network(self, europe_bytes=europe_down(), ncbi_bytes=ncbi_down(), europe_json=europe_down())
         result = fulltext.fetch({"identifier": PMCID})
         self.assertEqual(result["status"], "error")
         error = result["error"]
         self.assertEqual((error["code"], error["retryable"]), ("source_unavailable", True))
         self.assertIn("Europe PMC answered with an error (HTTP 503)", error["message"])
         self.assertIn("NCBI PMC was asked next and did not serve it either", error["message"])
+        self.assertIn("NCBI PMC answered with an error (HTTP 503)", error["message"])
+        self.assertTrue(any("Retry" in action for action in result["next_actions"]))
+
+    def test_europe_pmc_down_and_ncbi_saying_not_open_access_is_a_final_answer_not_a_reason_to_retry(self):
+        # NCBI answered: the article is listed without its text. Europe PMC coming back cannot change that, and the error
+        # used to carry Europe PMC's retry hint all the same (review of 2026-10-28).
+        Network(self, europe_bytes=europe_down(), ncbi_bytes=NO_BODY_XML, europe_json=europe_down())
+        result = fulltext.fetch({"identifier": PMCID})
+        self.assertEqual(result["status"], "error")
+        error = result["error"]
+        self.assertEqual((error["code"], error["retryable"]), ("source_access_denied", False))
+        self.assertIn("Europe PMC answered with an error (HTTP 503)", error["message"])
+        self.assertIn("NCBI PMC was asked next and did not serve it either", error["message"])
         self.assertIn("without its text", error["message"])
+        self.assertIn("retrying cannot change the result", error["stopReason"])
+        self.assertTrue(any(action.startswith("Do not retry") for action in result["next_actions"]), result["next_actions"])
+        self.assertFalse(any("Retry" in action for action in result["next_actions"]), result["next_actions"])
+
+    def test_a_record_ncbi_does_not_hold_is_final_too(self):
+        combined = fulltext._both_failed(europe_down(), fulltext.FullTextError("full_text_not_available", "NCBI PMC holds no article PMC1.", False))
+        self.assertEqual((combined.code, combined.retryable), ("full_text_not_available", False))
+        self.assertTrue(combined.also_tried_ncbi)
+        # While a malformed answer is not an answer: it keeps the retry hint of the call that could not be answered.
+        malformed = fulltext._both_failed(europe_down(), fulltext.FullTextError("full_text_xml_invalid", "NCBI PMC returned malformed full-text XML.", True))
+        self.assertEqual((malformed.code, malformed.retryable), ("source_unavailable", True))
 
     def test_both_failing_with_a_doi_still_tries_the_open_access_pdf_and_names_both(self):
         Network(self, europe_bytes=europe_down(), ncbi_bytes=ncbi_down(), europe_json=europe_down())

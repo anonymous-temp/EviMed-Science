@@ -19,8 +19,10 @@ text page 1 came from, not of whatever the site serves a minute later.
 A long page does not fill the context on its first read (2026-10-28: a PMC article page came back as ~44,000
 characters in one result). Past `PAGE_CHARS` of text, page 1 carries the first `HEAD_CHARS` of it and an outline of
 the preserved file — every Markdown heading with the line it starts on and how long its section runs — so the run
-reads the sections it needs by line range and checks a quotation with `locate_quote`; `page=N` still returns the
-`PAGE_CHARS` slices. The preserved snapshot is unchanged: it is the quotable record, whatever the result shows.
+reads the sections it needs by line range and checks a quotation with `locate_quote`; `page=2` continues exactly where
+that opening ends and the later pages are `PAGE_CHARS` slices of the rest, so paging through a text returns every
+character once. (Page 2 used to start at `PAGE_CHARS`, so the text between the opening and the first 12,000 characters
+was in no page — 2026-10-28.) The preserved snapshot is unchanged: it is the quotable record, whatever the result shows.
 
 Pages from authorities carry `official: true`. The label is the gateway's,
 from its own table; it says where a page comes from, for an evidence grade,
@@ -173,6 +175,16 @@ def pages_of(text: str, size: int = PAGE_CHARS) -> list[str]:
     return pages
 
 
+def reading_pages(text: str) -> list[str]:
+    """The pages `page=N` returns. A text of at most `PAGE_CHARS` is one page. A longer one opens with its head
+    (`head_of`: what page 1 shows) and continues from the character after it in slices of `PAGE_CHARS`, so the pages
+    are the text with nothing between them missing. A pure function of the text, like `pages_of`."""
+    if len(text) <= PAGE_CHARS:
+        return pages_of(text)
+    head = head_of(text)
+    return [head, *pages_of(text[len(head):].lstrip("\n"))]
+
+
 def head_of(text: str, size: int = HEAD_CHARS) -> str:
     """The first `size` characters of `text`, cut at the last paragraph boundary inside them (else the last line
     boundary, else hard); a boundary in the first half would leave a stub, so it does not count. Text that fits
@@ -296,9 +308,7 @@ def read(arguments: dict) -> dict:
             text = payload["text"]
             snapshot = {
                 "receipt": receipt,
-                "pages": pages_of(text),
-                # The opening of the text itself, for the first result of a long page (the slices re-join long lines).
-                "head": head_of(text),
+                "pages": reading_pages(text),
                 "characters": len(text),
                 "links": [
                     {"text": str(link.get("text") or "")[:160], "url": str(link.get("url") or "")}
@@ -334,10 +344,9 @@ def read(arguments: dict) -> dict:
             "nextPage": page + 1 if page < total else None,
             "content": snapshot["pages"][page - 1],
         }
-        # A long text's first page is its opening and the file's outline, not 12,000 characters of it.
+        # A long text's first page is its opening and the file's outline, not 12,000 characters of it (`reading_pages`).
         long_text = page == 1 and snapshot["characters"] > PAGE_CHARS
         if long_text:
-            data["content"] = snapshot["head"]
             data["outline"] = snapshot["outline"]
             data["fileLines"] = snapshot["fileLines"]
             if snapshot["outlineHeadings"] > len(snapshot["outline"]):
@@ -373,7 +382,7 @@ def read(arguments: dict) -> dict:
             )
             result["next_actions"] = [
                 "Read the sections you need from %s with read (offset and limit from the outline's line numbers) and check a quotation with locate_quote, "
-                "rather than paging through the whole text; page=N still returns the %d-character slices (page 1's remainder after the opening shown here is in the file)."
+                "rather than paging through the whole text; page=2 continues exactly where this opening ends, in slices of up to %d characters."
                 % (snapshot["markdownPath"], PAGE_CHARS),
             ]
         if snapshot["notice"]:

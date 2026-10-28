@@ -172,11 +172,20 @@ def _europe_pmc_unavailable(error: FullTextError) -> bool:
 
 
 def _both_failed(europe: FullTextError, ncbi: FullTextError) -> FullTextError:
-    """Both routes failed: the Europe PMC error's code, retry hint and next actions, with what NCBI said as well."""
+    """Both routes failed, said as one error.
+
+    Europe PMC could not answer, so NCBI was asked, and what NCBI said decides what the run is told. When NCBI could
+    not answer either (an error status, no answer in time), the error is Europe PMC's: its code, its retry hint and
+    its next actions, with NCBI's words added. When NCBI *answered* — the article is not open access, or it holds no
+    such record — that answer is final: the error carries NCBI's code and says not to retry, because Europe PMC coming
+    back would not change it. (It kept Europe PMC's retry hint in both cases until 2026-10-28, so a run was told to
+    ask again for an article that NCBI had said it will not serve.)"""
+    answered = not ncbi.retryable
+    lead = ncbi if answered else europe
     combined = FullTextError(
-        europe.code,
+        lead.code,
         "%s NCBI PMC was asked next and did not serve it either: %s" % (str(europe).rstrip(), str(ncbi)),
-        europe.retryable, not_configured=europe.not_configured, source_error=europe.source_error,
+        lead.retryable, not_configured=lead.not_configured, source_error=lead.source_error,
     )
     combined.also_tried_ncbi = True  # the open-access PDF route says so when it takes over
     return combined
@@ -196,6 +205,13 @@ def _ncbi_url(path: str, params: dict) -> str:
     return public_sources._url(base, path, public_sources._ncbi_params(params))  # noqa: SLF001 - the tool name and the key, when there is one
 
 
+def _doi_term(doi: str) -> str:
+    """A DOI as a PubMed `[doi]` term, quoted: PubMed reads an unquoted `(`, `)`, `:` or `;` as query syntax, and DOIs such as
+    `10.1002/(SICI)1097-0258(19980430)17:8<873::AID-SIM779>3.0.CO;2-I` have all of them. A double quote cannot be quoted
+    inside a quoted term; it is dropped, and the article found is still checked against the whole DOI."""
+    return '"%s"[doi]' % doi.replace('"', "")
+
+
 def _ncbi_resolve(pmid: str, doi: str, europe: FullTextError, deadline) -> dict:
     """A PMID or a DOI to the PMC article NCBI holds for it, as a record `fetch` reads like Europe PMC's.
 
@@ -211,7 +227,7 @@ def _ncbi_resolve(pmid: str, doi: str, europe: FullTextError, deadline) -> dict:
         candidates = [pmid] if pmid else []
         if not pmid:
             found = _request_json(
-                _ncbi_url("esearch.fcgi", {"db": "pubmed", "term": "%s[doi]" % doi, "retmax": 3, "retmode": "json"}),
+                _ncbi_url("esearch.fcgi", {"db": "pubmed", "term": _doi_term(doi), "retmax": 3, "retmode": "json"}),
                 deadline=ncbi_deadline, scope=scope, strict=False,
             )
             ids = (found.get("esearchresult") or {}).get("idlist") if isinstance(found.get("esearchresult"), dict) else None

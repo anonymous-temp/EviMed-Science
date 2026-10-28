@@ -41,12 +41,22 @@ MAX_ABSTRACT_CHARS = 4000
 # per efetch GET; a request for more is split into batches of that size.
 PUBMED_EFETCH_BATCH = 200
 MAX_PUBMED_ABSTRACT_PMIDS = 60
-# How much abstract text one `pmids` answer carries inline. Every abstract is preserved on disk whatever this says; past the
-# budget an item names its preserved file instead of carrying the text. Two batches of 24 and 16 abstracts came back at about
-# 50,000 characters each on the live check of 2026-10-28: the kernel cut both answers and spilled them to a file, the cut text
-# was no longer JSON, and the control plane could not read which files had been preserved — 65 claims quoting real abstracts
-# were reported as quoting nothing. An answer that stays well under that size is never cut.
+# What one `pmids` answer may weigh, as the characters of its JSON: the kernel cuts a tool answer at about 50,000 characters
+# and the cut text is no longer JSON, so the control plane cannot read which files were preserved. Two batches of 24 and 16
+# abstracts came back at about 50,000 characters each on the live check of 2026-10-28 and 65 claims quoting real abstracts
+# were reported as quoting nothing. The first guard budgeted the abstract text alone (12,000 characters), but an item also
+# carries its metadata and, once preserved, its path four times over (item, source, artifacts, digests): about 1,300
+# characters a record, so 60 ids still came to 70,000. The budget below is the whole answer. Every record is shown in its
+# lean form (the path, no abstract text, no MeSH headings) before any record is shown in full, and the records that do not
+# fit even leanly are neither preserved nor listed: the answer names them and the next call asks for them.
+PUBMED_ANSWER_BUDGET = 36_000
+# What the answer weighs besides its records: the summary, warnings and next actions, and the envelope the server adds.
+PUBMED_ANSWER_ENVELOPE = 3_000
+# How much abstract text one answer carries inline, inside that budget. Every abstract that is listed is preserved on disk
+# whatever this says; past it an item names its preserved file instead of carrying the text.
 PUBMED_INLINE_ABSTRACT_BUDGET = 12_000
+# What a record the answer leaves out costs inside it: its PMID in the list that names it.
+_PUBMED_DEFERRED_PMID_CHARS = 12
 _PMID_PATTERN = re.compile(r"^\s*(?:PMID\s*:?\s*)?(\d{1,9})\s*$", re.I)
 _RXNORM_RESOLVE_LIMIT = 10
 # The most identifiers one `identifier_resolve` call links (the NCBI ID converter's own bound).
@@ -2675,9 +2685,71 @@ def _preserve_pubmed_abstract(record):
         return None
 
 
+def _compact_length(value):
+    """The characters a value takes in a tool answer (the server writes compact JSON)."""
+    return len(json.dumps(value, ensure_ascii=False, separators=(",", ":")))
+
+
+def _pubmed_abstract_path_length(pmid):
+    """How long the preserved path of this record's abstract is: a version directory is the 64-character digest of its manifest."""
+    return len(".evimed-sources/pubmed/PMID%s/" % pmid) + 64 + len("/abstract.md")
+
+
+def _pubmed_entry(record, path, inline):
+    """One record as the answer carries it: its item and its source.
+
+    `inline` puts the abstract text (and the MeSH headings) in the item; otherwise an abstract is left to the file at `path`
+    and the item says so. A record without an abstract has no file to read its headings in, so it keeps them."""
+    pmid = record["pmid"]
+    record_url = "https://pubmed.ncbi.nlm.nih.gov/%s/" % urllib.parse.quote(pmid)
+    abstract = " ".join(record["sections"])
+    item = {
+        "id": "PMID:%s" % pmid,
+        "pmid": pmid,
+        "title": record["title"],
+        "journal": record["journal"] or None,
+        "year": record["year"] or None,
+        "doi": record["doi"] or None,
+        "pmcid": record["pmcid"] or None,
+        "url": record_url,
+        "publicationTypes": record["publicationTypes"],
+        "evidenceLevel": "abstract" if abstract else "metadata",
+    }
+    if not abstract:
+        item["meshHeadings"] = record["meshHeadings"]
+    elif inline:
+        item["abstract"] = abstract[:MAX_ABSTRACT_CHARS]
+        if len(abstract) > MAX_ABSTRACT_CHARS:
+            item["abstractTruncated"] = True
+        item["meshHeadings"] = record["meshHeadings"]
+    else:
+        item["abstractInline"] = False
+    source = _source("PMID:%s" % pmid, record["title"], record_url, "pubmed")
+    if path:
+        item["artifactPath"] = path
+        source["artifactPath"] = path
+        source["evidenceAccess"] = "abstract"
+    return {key: value for key, value in item.items() if value not in (None, "", [])}, source
+
+
+def _pubmed_entry_cost(item, source):
+    """What an entry adds to the answer: its item, its source, and the path's two further appearances (artifacts, digests)."""
+    cost = _compact_length(item) + _compact_length(source) + 2
+    path = item.get("artifactPath")
+    if path:
+        cost += (len(path) + 3) + (len(path) + 3 + 64 + 2)
+    return cost
+
+
 def pubmed_abstracts(pmids):
     """`literature_search` with `pmids`: abstracts, publication types and MeSH
-    headings for records a run chose, each abstract preserved as a source."""
+    headings for records a run chose, each abstract preserved as a source.
+
+    The answer is held to `PUBMED_ANSWER_BUDGET` as a whole. Records are shown in
+    full while the budget allows it, then in their lean form (the preserved file
+    carries the text), and a record that does not fit even leanly is left out of
+    the answer and out of the workspace and named in the next action, so the
+    answer never lists a path it did not write and is never cut."""
     values = _list(pmids)
     if not values or len(values) > MAX_PUBMED_ABSTRACT_PMIDS:
         raise PublicSourceError("public_source_pmid_invalid", "Pass between 1 and %d PubMed ids." % MAX_PUBMED_ABSTRACT_PMIDS)
@@ -2690,55 +2762,54 @@ def pubmed_abstracts(pmids):
             requested.append(match.group(1))
     base = _base("EVIMED_PUBMED_BASE_URL", "https://eutils.ncbi.nlm.nih.gov/entrez/eutils")
     records = _pubmed_efetch_records(base, requested)
-    items, sources, artifact_sha256s = [], [], {}
-    missing, without_abstract, unpreserved, not_inline = [], [], [], []
+    missing = [pmid for pmid in requested if pmid not in records]
+    found = [pmid for pmid in requested if pmid in records]
+
+    # Plan before anything is written: each record's lean and full weight, with the path it will have.
+    plan = []
+    for pmid in found:
+        record = records[pmid]
+        has_abstract = bool(" ".join(record["sections"]))
+        placeholder = "x" * _pubmed_abstract_path_length(pmid) if has_abstract else None
+        lean = _pubmed_entry_cost(*_pubmed_entry(record, placeholder, False))
+        full = _pubmed_entry_cost(*_pubmed_entry(record, placeholder, True)) if has_abstract else lean
+        plan.append({"pmid": pmid, "lean": lean, "full": full, "chars": min(len(" ".join(record["sections"])), MAX_ABSTRACT_CHARS)})
+    room = max(0, PUBMED_ANSWER_BUDGET - PUBMED_ANSWER_ENVELOPE)
+    kept, weight = 0, 0
+    while kept < len(plan) and weight + plan[kept]["lean"] + _PUBMED_DEFERRED_PMID_CHARS * (len(plan) - kept - 1) <= room:
+        weight += plan[kept]["lean"]
+        kept += 1
+    deferred = [entry["pmid"] for entry in plan[kept:]]
+    spare = room - weight - _PUBMED_DEFERRED_PMID_CHARS * len(deferred)
     inline_budget = PUBMED_INLINE_ABSTRACT_BUDGET
-    for pmid in requested:
-        record = records.get(pmid)
-        if record is None:
-            missing.append(pmid)
-            continue
-        record_url = "https://pubmed.ncbi.nlm.nih.gov/%s/" % urllib.parse.quote(pmid)
-        abstract = " ".join(record["sections"])
-        item = {
-            "id": "PMID:%s" % pmid,
-            "pmid": pmid,
-            "title": record["title"],
-            "journal": record["journal"] or None,
-            "year": record["year"] or None,
-            "doi": record["doi"] or None,
-            "pmcid": record["pmcid"] or None,
-            "url": record_url,
-            "publicationTypes": record["publicationTypes"],
-            "meshHeadings": record["meshHeadings"],
-            "evidenceLevel": "abstract" if abstract else "metadata",
-        }
-        source = _source("PMID:%s" % pmid, record["title"], record_url, "pubmed")
-        if abstract:
-            inline = abstract[:MAX_ABSTRACT_CHARS]
-            if inline_budget >= len(inline):
-                inline_budget -= len(inline)
-                item["abstract"] = inline
-                if len(abstract) > MAX_ABSTRACT_CHARS:
-                    item["abstractTruncated"] = True
-            else:
-                # Past the budget the item stays small: its abstract is in its preserved file (read it there), and the MeSH
-                # headings, the largest field after the abstract, are left to that file too.
-                item["abstractInline"] = False
-                item.pop("meshHeadings", None)
-                not_inline.append(pmid)
-            captured = _preserve_pubmed_abstract(record)
+    for entry in plan[:kept]:
+        extra = entry["full"] - entry["lean"]
+        entry["inline"] = bool(extra) and entry["chars"] <= inline_budget and extra <= spare
+        if entry["inline"]:
+            inline_budget -= entry["chars"]
+            spare -= extra
+
+    items, sources, artifact_sha256s = [], [], {}
+    without_abstract, unpreserved, not_inline = [], [], []
+    for entry in plan[:kept]:
+        pmid = entry["pmid"]
+        record = records[pmid]
+        captured = _preserve_pubmed_abstract(record) if " ".join(record["sections"]) else None
+        item, source = _pubmed_entry(record, captured["path"] if captured else None, entry["inline"])
+        if not " ".join(record["sections"]):
+            without_abstract.append(pmid)
+        else:
             if captured:
-                item["artifactPath"] = captured["path"]
                 artifact_sha256s[captured["path"]] = captured["sha256"]
-                source["artifactPath"] = captured["path"]
-                source["evidenceAccess"] = "abstract"
             else:
                 unpreserved.append(pmid)
-        else:
-            without_abstract.append(pmid)
-        items.append({key: value for key, value in item.items() if value not in (None, "", [])})
+            if not entry["inline"]:
+                not_inline.append(pmid)
+        items.append(item)
         sources.append(source)
+    # An abstract that is neither in the answer nor in a file is nowhere: it is asked for again, on its own.
+    lost = [pmid for pmid in not_inline if pmid in unpreserved]
+    saved_elsewhere = [pmid for pmid in not_inline if pmid not in unpreserved]
     warnings = []
     if missing:
         warnings.append("PubMed returned no record for PMID %s." % ", ".join(missing))
@@ -2746,15 +2817,25 @@ def pubmed_abstracts(pmids):
         warnings.append("PubMed has no abstract for PMID %s; screen those by full text or leave them out." % ", ".join(without_abstract))
     if unpreserved:
         warnings.append("The abstract of PMID %s could not be preserved, so it cannot carry a claim." % ", ".join(unpreserved))
+    if lost:
+        warnings.append("The abstract of PMID %s is not in this answer either; ask for it again on its own." % ", ".join(lost))
+    if deferred:
+        warnings.append("%d record(s) did not fit one answer and were left out, not preserved: PMID %s." % (len(deferred), ", ".join(deferred)))
     notes = []
-    if not_inline:
+    if saved_elsewhere:
         notes.append("%d abstract(s) are not carried in this answer, to keep it whole: PMID %s. Each is preserved at its artifactPath — read it there (or grep across .evimed-sources/pubmed/) and quote from that file."
-                     % (len(not_inline), ", ".join(not_inline)))
+                     % (len(saved_elsewhere), ", ".join(saved_elsewhere)))
+    if deferred:
+        notes.append("Ask for PMID %s in a following call, at most %d ids at a time; a call that asks for more than one answer holds is answered in part and says so."
+                     % (", ".join(deferred), max(kept, 1)))
+    data = {"items": items, "artifactSha256s": artifact_sha256s, "requested": len(requested)}
+    if deferred:
+        data["deferred"] = deferred
     result = {
         "status": "warning" if warnings else "success",
         "summary": "Fetched %d PubMed abstract(s) for %d requested id(s); %d preserved as quotable sources."
         % (len(items) - len(without_abstract), len(requested), len(artifact_sha256s)),
-        "data": {"items": items, "artifactSha256s": artifact_sha256s, "requested": len(requested)},
+        "data": data,
         "sources": sources,
         "artifacts": list(artifact_sha256s),
     }

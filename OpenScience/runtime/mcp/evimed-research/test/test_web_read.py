@@ -175,17 +175,15 @@ class WebReadTests(GatewayCase):
         first = web_read.read({"url": url})
         self.assertGreater(first["data"]["pages"], 2)
         self.assertEqual(first["data"]["nextPage"], 2)
-        # Page 1 of a long text shows its opening only (see LongPageReadingMapTests); its slice is the old first page.
-        first_slice = web_read.pages_of(text)[0]
-        self.assertTrue(first_slice.startswith(first["data"]["content"]))
-        joined = [first_slice]
+        # Page 1 of a long text shows its opening only (see LongPageReadingMapTests) and page 2 continues where it ends.
+        joined = [first["data"]["content"]]
         for page in range(2, first["data"]["pages"] + 1):
             result = web_read.read({"url": url, "page": page})
             self.assertEqual(result["data"]["markdownPath"], first["data"]["markdownPath"])
             self.assertLessEqual(len(result["data"]["content"]), web_read.PAGE_CHARS)
             joined.append(result["data"]["content"])
         self.assertIsNone(result["data"]["nextPage"])
-        self.assertEqual("\n\n".join(joined), text, "pages are the text, split at paragraph boundaries and nothing lost")
+        self.assertEqual("\n\n".join(joined), text, "pages are the text, split at paragraph boundaries and nothing lost, the opening included")
         self.assertEqual(len(Gateway.requests), 1, "later pages come from the snapshot, not from the site again")
         beyond = web_read.read({"url": url, "page": first["data"]["pages"] + 1})
         self.assertEqual(beyond["error"]["code"], "web_read_page_out_of_range")
@@ -330,7 +328,7 @@ class LongPageReadingMapTests(GatewayCase):
         # What the model is told to do next.
         self.assertEqual(len(result["next_actions"]), 1)
         advice = result["next_actions"][0]
-        for needle in (data["markdownPath"], "read", "offset", "locate_quote", "page=N", str(web_read.PAGE_CHARS)):
+        for needle in (data["markdownPath"], "read", "offset", "locate_quote", "page=2", "where this opening ends", str(web_read.PAGE_CHARS)):
             self.assertIn(needle, advice)
         self.assertIn("first %d" % len(data["content"]), result["summary"])
         self.assertNotIn("warnings", result)
@@ -348,12 +346,33 @@ class LongPageReadingMapTests(GatewayCase):
         self.assertEqual(result["sources"][0]["artifactPath"], path)
         self.assertEqual(result["sources"][0]["id"], "web-page:" + "f" * 16)
         self.assertEqual(data["links"], [{"text": "Next", "url": "https://pmc.example.org/next"}])
-        pages = web_read.pages_of(text)
+        pages = web_read.reading_pages(text)
         self.assertEqual((data["page"], data["pages"], data["nextPage"]), (1, len(pages), 2))
 
-    def test_page_n_still_returns_the_old_slices_without_an_outline(self):
+    def test_page_2_starts_where_the_opening_ended_and_no_text_goes_unreturned(self):
+        # Page 1 showed the opening (as little as ~3,000 characters) while page 2 started at the 12,000th: the text between was
+        # in no page at all, and the run was told page 2 was the continuation (review of 2026-10-28).
         text, first = self.read_long()
-        pages = web_read.pages_of(text)
+        opening = first["data"]["content"]
+        self.assertLess(len(opening), web_read.PAGE_CHARS // 2)
+        second = web_read.read({"url": self.URL, "page": 2})
+        self.assertTrue(text.startswith(opening + "\n\n" + second["data"]["content"][:200]), "page 2 begins right after the opening")
+        contents = [opening, second["data"]["content"]]
+        for page in range(3, first["data"]["pages"] + 1):
+            contents.append(web_read.read({"url": self.URL, "page": page})["data"]["content"])
+        for content in contents[1:]:
+            self.assertLessEqual(len(content), web_read.PAGE_CHARS)
+        collapse = lambda value: "".join(value.split())
+        self.assertEqual(collapse("".join(contents)), collapse(text), "every character of the text is returned by exactly one page")
+        # The gap itself: the first paragraph past the opening is in page 2, not skipped.
+        paragraph = text[len(opening):].lstrip("\n").split("\n\n")[0]
+        self.assertIn(paragraph, second["data"]["content"])
+        self.assertEqual(len(Gateway.requests), 1, "from the snapshot, not the site again")
+
+    def test_page_n_returns_slices_of_the_rest_without_an_outline(self):
+        text, first = self.read_long()
+        pages = web_read.reading_pages(text)
+        self.assertEqual(pages[0], first["data"]["content"])
         second = web_read.read({"url": self.URL, "page": 2})
         self.assertEqual(second["data"]["content"], pages[1])
         self.assertNotIn("outline", second["data"])
