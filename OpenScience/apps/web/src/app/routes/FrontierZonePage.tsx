@@ -3,11 +3,13 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from "reac
 import { CalendarClock, Layers, RotateCw, SearchX } from "lucide-react";
 import { WebApiError, webErrorMessage } from "@/lib/apiClient";
 import {
+  NotTopicZoneError,
   deleteZone,
   fetchZone,
   fetchZoneCards,
   fetchZoneOverview,
   followZone,
+  moduleHasContent,
   updateZone,
   type TopicCard,
   type ZoneDetail,
@@ -29,6 +31,7 @@ import { StateScreen } from "@/components/ui/StateScreen";
 import { FrontierBack, evidenceFromState } from "@/components/frontier/FrontierBack";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { FrontierOffPage } from "@/components/frontier/FrontierStates";
+import { LegacyZoneView } from "@/components/frontier/zone/LegacyZoneView";
 import { ZoneCardBlock } from "@/components/frontier/zone/ZoneCardBlock";
 import { ZoneHeader } from "@/components/frontier/zone/ZoneHeader";
 import { ZoneItemsList, useItemsToolbar, useZoneItems } from "@/components/frontier/zone/ZoneItemsTab";
@@ -37,6 +40,7 @@ import { ZoneRail, railHasContent } from "@/components/frontier/zone/ZoneRail";
 import type { ZoneEditorProps } from "@/components/frontier/zone/zoneEditor";
 import {
   EMPTY_ITEMS_VIEW,
+  itemsHref,
   itemsParams,
   readItemsView,
   zonePath,
@@ -45,6 +49,7 @@ import {
   type ZoneItemsView,
   type ZoneTab,
 } from "@/components/frontier/zone/zoneText";
+import { useZoneCreate } from "@/components/frontier/zone/useZoneCreate";
 import { useZoneFrom } from "@/components/frontier/zone/useZoneFrom";
 import { ZoneEditorDrawer } from "@/components/frontier/ZoneEditorDrawer";
 
@@ -72,6 +77,8 @@ function zoneErrorMessage(error: unknown): string {
 type ZoneState =
   | { kind: "loading" }
   | { kind: "ready"; zone: ZoneDetail }
+  /** A zone of the old kind (a reader's container of result cards, a 循证 GEO product zone): its page is `LegacyZoneView`. */
+  | { kind: "other" }
   | { kind: "not-offered" }
   | { kind: "missing" }
   | { kind: "off" }
@@ -108,7 +115,8 @@ function ZoneLoader({ reference, ready, editor }: { reference: string; ready: bo
       (error: unknown) => {
         if (!active) return;
         const absence = frontierAbsence(error);
-        if (absence === "off") setState({ kind: "off" });
+        if (error instanceof NotTopicZoneError) setState({ kind: "other" });
+        else if (absence === "off") setState({ kind: "off" });
         else if (absence === "not-offered") setState({ kind: "not-offered" });
         else if (error instanceof WebApiError && error.status === 404) setState({ kind: "missing" });
         else setState({ kind: "error", message: zoneErrorMessage(error) });
@@ -123,6 +131,7 @@ function ZoneLoader({ reference, ready, editor }: { reference: string; ready: bo
   const back = from ? <FrontierBack historyBack to={from.to} label={from.label} /> : <FrontierBack to={DIRECTORY} label="证据专区" />;
 
   if (state.kind === "off") return <FrontierOffPage />;
+  if (state.kind === "other") return <LegacyZoneView zoneId={reference} back={back} />;
   if (state.kind === "not-offered") {
     return (
       <StateScreen icon={CalendarClock} title="证据专区还在准备" titleAs="h1" back={{ to: "/app/frontier", label: "回到前沿动态" }}>
@@ -220,10 +229,11 @@ function ZoneBody({ zone, back, editor: Editor, onZone }: {
   const research = () => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(zoneResearchDraft(zone, overview)) } });
 
   const ownUserZone = zone.kind === "user" && zone.canEdit;
+  const canMakeZone = useZoneCreate();
   const more: MenuEntry[] = [
     { label: "深入研究", onSelect: research },
     { label: "复制链接", onSelect: () => void copyLink() },
-    ...(Editor ? [{ label: "以此新建我的专区", onSelect: () => setEditing("create") }] : []),
+    ...(Editor && canMakeZone ? [{ label: "以此新建我的专区", onSelect: () => setEditing("create") }] : []),
     ...(ownUserZone || zone.canDelete ? ["separator" as const] : []),
     ...(ownUserZone ? [{ label: zone.published ? "取消公开" : "公开到平台", disabled: busy, onSelect: togglePublished }] : []),
     ...(zone.canDelete ? [{ label: "删除", destructive: true, onSelect: () => setConfirmDelete(true) }] : []),
@@ -252,7 +262,7 @@ function ZoneBody({ zone, back, editor: Editor, onZone }: {
       width="page"
       back={back}
       actionPlan={{ primary, overflow: more, overflowLabel: "更多操作" }}
-      underTitle={<ZoneHeader zone={zone} path={path} cards={cardCount} />}
+      underTitle={<ZoneHeader zone={zone} path={path} cards={cardCount} linked={tab === "overview"} />}
       tabs={tabs}
       toolbar={tab === "items" ? toolbar : undefined}
       aside={tab === "overview" && wide && rail ? rail : undefined}
@@ -260,7 +270,7 @@ function ZoneBody({ zone, back, editor: Editor, onZone }: {
     >
       {tab === "overview" && (
         <>
-          <OverviewTab state={overviewState} from={from} path={path} onReload={() => { setOverviewState({ kind: "loading" }); setOverviewAttempt((value) => value + 1); }} />
+          <OverviewTab zone={zone} state={overviewState} from={from} path={path} onReload={() => { setOverviewState({ kind: "loading" }); setOverviewAttempt((value) => value + 1); }} />
           {!wide && rail && <div className="mt-10">{rail}</div>}
         </>
       )}
@@ -298,16 +308,26 @@ function ZoneBody({ zone, back, editor: Editor, onZone }: {
 
 /* ------------------------------------------------------------------- overview */
 
-function OverviewTab({ state, from, path, onReload }: { state: OverviewState; from: { to: string; label: string }; path: string; onReload: () => void }) {
+function OverviewTab({ zone, state, from, path, onReload }: { zone: ZoneDetail; state: OverviewState; from: { to: string; label: string }; path: string; onReload: () => void }) {
   if (state.kind === "loading") return <FrontierSkeleton />;
   if (state.kind === "error") return <LoadError message={state.message} onRetry={onReload} />;
-  if (state.overview.modules.length === 0) {
+  // The server always sends the 最新动态 module, empty for a zone with nothing in it yet: what there is to draw is the modules that hold
+  // something, not the modules there are.
+  const modules = state.overview.modules.filter(moduleHasContent);
+  if (modules.length === 0) {
+    // A zone that went quiet or was archived has nothing new to wait for: the way on is what it holds. A new zone is being filled.
+    if (zone.lifecycle !== "active") {
+      return (
+        <EmptyState icon={Layers} title="近期没有新的内容"
+          action={zone.counts.all > 0 ? <Link to={itemsHref(path, { window: "all" })} className={buttonClasses({ variant: "secondary" })}>看全部动态</Link> : undefined} />
+      );
+    }
     return (
       <EmptyState icon={Layers} title="正在为这个专区搜集内容，通常几分钟内出现第一批"
         action={<Button variant="secondary" onClick={onReload}><RotateCw size={16} aria-hidden="true" />重新加载</Button>} />
     );
   }
-  return <ZoneModules modules={state.overview.modules} path={path} from={from} />;
+  return <ZoneModules modules={modules} path={path} from={from} />;
 }
 
 /* ---------------------------------------------------------------------- cards */

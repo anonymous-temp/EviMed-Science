@@ -80,7 +80,10 @@ describe("证据专区 opens in place", () => {
   it("lists 推荐 as specialty, then group, then zones: the week's count, the cards when there are any, the latest item, a star", async () => {
     mount();
     const endocrine = (await screen.findByRole("heading", { name: "内分泌" })).closest("section")!;
-    expect(within(endocrine).getByRole("heading", { name: "肥胖" })).toBeInTheDocument();
+    const group = within(endocrine).getByRole("heading", { name: "肥胖" });
+    // A group is a label in the caption's rung, not a heading size of its own: the page holds four size × weight pairs.
+    expect(group).toHaveClass("text-caption");
+    for (const other of ["font-semibold", "text-ui", "text-section"]) expect(group).not.toHaveClass(other);
     const row = within(endocrine).getByRole("link", { name: "GLP-1 受体激动剂减重" }).closest("li")!;
     expect(row).toHaveTextContent("近 7 天 37 条 · 卡片 2");
     expect(row).toHaveTextContent("最新：司美格鲁肽心血管结局的新分析");
@@ -198,6 +201,15 @@ describe("证据专区 opens in place", () => {
     mount();
     await screen.findByRole("link", { name: "GLP-1 受体激动剂减重" });
     expect(within(document.querySelector("[data-page-header]") as HTMLElement).queryByRole("button", { name: "新建专区" })).toBeNull();
+  });
+
+  it("reads, with nothing to make and no 「新建专区」 anywhere, where the deployment has no zones to list (what the client makes of a directory it does not serve)", async () => {
+    topics.fetchZoneDirectory.mockImplementation(async (view: "recommended") => topicDirectory(view, [], { canCreate: false, userZones: { count: 0, max: 0 } }));
+    mount();
+    expect(await screen.findByText("暂无证据专区")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "新建专区" })).toBeNull();
+    expect(screen.getByRole("heading", { level: 1, name: "前沿动态" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "证据专区" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("ends a search for a group's name with 「新建专区：…」, which opens the editor with the name in it", async () => {

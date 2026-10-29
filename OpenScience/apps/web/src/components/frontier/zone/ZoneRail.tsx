@@ -1,10 +1,11 @@
-import { useId, type ReactNode } from "react";
+import { useId, useRef, type ReactNode } from "react";
 import { Link } from "react-router";
 import { cn } from "@/lib/cn";
 import type { ZoneEntityCount, ZoneSide } from "@/lib/evidenceTopicClient";
 import { filterChipClasses } from "@/components/ui/FilterChips";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { useContainerNarrow } from "@/lib/useContainerNarrow";
 import { congressDates } from "../FrontierTrackView";
 import { itemsHref, weekLabel, weekWindow, zonePath } from "./zoneText";
 
@@ -12,6 +13,13 @@ import { itemsHref, weekLabel, weekWindow, zonePath } from "./zoneText";
 const TOP = 5;
 /** Weeks the chart draws. */
 const WEEKS = 12;
+/**
+ * A bar that opens a week is a target of at least 24 px (WCAG 2.5.8), and the bars stand 2 px apart: twelve of them need 310 px. The
+ * rail beside the page is 248, so there the chart draws the newest nine (232 px), never twelve bars too thin to press.
+ */
+const BAR_MIN_WIDTH = 24;
+const WEEKS_NARROW = 9;
+const FULL_ROW_WIDTH = WEEKS * BAR_MIN_WIDTH + (WEEKS - 1) * 2;
 /** The chart's tallest bar, in px: the height of every small control of the feed, so a bar is one of their looks and not one of its own. */
 const BAR_HEIGHT = 28;
 
@@ -49,28 +57,38 @@ function Names({ label, names, path }: { label: string; names: readonly ZoneEnti
 }
 
 /**
- * 近 12 周动态: one bar per week, oldest at the left, the tallest the zone's busiest week; a bar is a link to the 动态 tab narrowed to
- * that week (its name, the week and its count, says what it opens). The bars are drawn by their counts and say nothing the links do not.
+ * 近 12 周动态: one bar per week, oldest at the left, the tallest the zone's busiest week; a bar of a week that has items is a link to
+ * the 动态 tab narrowed to that week (its name, the week and its count, says what it opens). A week with none is a bar that is not a
+ * link: there is nothing in it to open. The bars are drawn by their counts and say nothing the links do not.
  */
 function Weekly({ weekly, path, now }: { weekly: ZoneSide["weekly"]; path: string; now: number }) {
-  const weeks = weekly.slice(-WEEKS);
+  const row = useRef<HTMLUListElement>(null);
+  const narrow = useContainerNarrow(row, FULL_ROW_WIDTH);
+  const weeks = weekly.slice(-(narrow ? WEEKS_NARROW : WEEKS));
   const top = Math.max(1, ...weeks.map((week) => week.count));
   const total = weeks.reduce((sum, week) => sum + week.count, 0);
+  const bar = (count: number) => (
+    <span aria-hidden="true" data-bar="" className={cn("block w-full rounded-sm bg-border-control transition-colors duration-fast group-hover:bg-accent group-focus-visible:bg-accent", count > 0 && "min-h-0.5")}
+      style={{ height: count > 0 ? Math.max(2, Math.round((count / top) * BAR_HEIGHT)) : 1 }} />
+  );
   return (
     <RailBlock label={`近 ${weeks.length} 周动态`}>
-      <ul aria-label={`近 ${weeks.length} 周每周动态条数，共 ${total} 条`} className="flex items-end gap-0.5" style={{ height: BAR_HEIGHT }}>
+      <ul ref={row} aria-label={`近 ${weeks.length} 周每周动态条数，共 ${total} 条`} className="flex items-end gap-0.5" style={{ height: BAR_HEIGHT }}>
         {weeks.map((week) => {
           const start = week.weekStart.slice(0, 10);
           const name = `${weekLabel(start, now)}，${week.count} 条`;
           return (
-            <li key={week.weekStart} className="flex h-full min-w-0 flex-1 items-end">
-              <Tooltip content={name} kind="label">
-                <Link to={itemsHref(path, { week: start, window: weekWindow(start, now) })} aria-label={name}
-                  className="group flex h-full w-full items-end rounded outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus">
-                  <span aria-hidden="true" data-bar="" className={cn("block w-full rounded-sm bg-border-control transition-colors duration-fast group-hover:bg-accent group-focus-visible:bg-accent", week.count > 0 && "min-h-0.5")}
-                    style={{ height: week.count > 0 ? Math.max(2, Math.round((week.count / top) * BAR_HEIGHT)) : 1 }} />
-                </Link>
-              </Tooltip>
+            <li key={week.weekStart} className="flex h-full min-w-6 flex-1 items-end">
+              {week.count > 0 ? (
+                <Tooltip content={name} kind="label">
+                  <Link to={itemsHref(path, { week: start, window: weekWindow(start, now) })} aria-label={name}
+                    className="group flex h-full w-full items-end rounded outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus">
+                    {bar(week.count)}
+                  </Link>
+                </Tooltip>
+              ) : (
+                <span className="flex h-full w-full items-end"><span className="sr-only">{name}</span>{bar(0)}</span>
+              )}
             </li>
           );
         })}

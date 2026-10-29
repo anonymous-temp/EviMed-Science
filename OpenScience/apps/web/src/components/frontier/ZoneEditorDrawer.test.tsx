@@ -16,7 +16,7 @@ const draftResult = (over: Partial<ZoneDraftResult> = {}): ZoneDraftResult => ({
 });
 const detail = (over: Partial<ZoneDetail> = {}): ZoneDetail => ({
   ...topicZone({ id: "zone_mine", title: "我的 GLP-1 专区", kind: "user", published: false }),
-  revision: 3, definition: topicDefinition, canEdit: true, canDelete: true, band: "normal", overviewAt: null, related: [], ...over,
+  revision: 3, definition: topicDefinition, canEdit: true, canDelete: true, band: "normal", overviewAt: null, related: [], successors: [], lastItemAt: null, ...over,
 });
 
 function mount(props: Partial<ZoneEditorDrawerProps> = {}) {

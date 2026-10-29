@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { Toaster } from "@/components/ui/Toaster";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
-import { parseZoneDetail, type ZoneItemsPage } from "@/lib/evidenceTopicClient";
+import { NotTopicZoneError, parseZoneDetail, type ZoneItemsPage } from "@/lib/evidenceTopicClient";
 import { frontierItem } from "@/components/frontier/__fixtures__/frontierItems";
 import { cardRecord, overview, rawCard, rawItem, rawOverview, rawZone, zone } from "@/components/frontier/zone/__fixtures__/zones";
 import { NOT_IN_UNDO_MS } from "@/components/frontier/zone/ZoneItemsTab";
@@ -18,6 +18,12 @@ const topic = vi.hoisted(() => ({
   followZone: vi.fn(), updateZone: vi.fn(), deleteZone: vi.fn(), zoneItemFeedback: vi.fn(),
 }));
 vi.mock("@/lib/evidenceTopicClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/evidenceTopicClient")>()), ...topic }));
+// A zone of the old kind is read through the old zone client; its page is `LegacyZoneView`.
+const old = vi.hoisted(() => ({ fetchEvidenceZoneDetail: vi.fn(), listZoneEvidence: vi.fn(), followEvidenceZone: vi.fn() }));
+vi.mock("@/lib/evidenceZoneClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/evidenceZoneClient")>()), ...old }));
+// Whether the directory has said this reader may make a zone (it has not been read here: nothing says no).
+const create = vi.hoisted(() => ({ allowed: true }));
+vi.mock("@/components/frontier/zone/useZoneCreate", () => ({ useZoneCreate: () => create.allowed }));
 const frontier = vi.hoisted(() => ({ useFrontierFeature: vi.fn(), starFrontierItem: vi.fn(), unstarFrontierItem: vi.fn(), hideFrontierItem: vi.fn(), unhideFrontierItem: vi.fn() }));
 vi.mock("@/lib/frontierClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/frontierClient")>()), ...frontier }));
 // The project reference on the 证据卡片 tab asks whether the deployment offers it; here it does not.
@@ -62,6 +68,7 @@ const page = (items: ReturnType<typeof rawItem>[], more: Partial<ZoneItemsPage> 
 
 beforeEach(() => {
   vi.clearAllMocks();
+  create.allowed = true;
   wideScreen(false);
   frontier.useFrontierFeature.mockReturnValue("on");
   topic.fetchZone.mockResolvedValue(zone());
@@ -341,14 +348,44 @@ describe("a zone's overview", () => {
     expect(screen.getByRole("heading", { level: 2, name: "最新动态" }).compareDocumentPosition(rail) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("says a new zone is being filled, with a way to look again, instead of an empty page", async () => {
+  it("says a new zone is being filled, with a way to look again, instead of an empty page — the server sends its 最新动态 empty, never no modules", async () => {
     topic.fetchZone.mockResolvedValue(zone({ counts: { week: 0, month: 0, all: 0 }, updatedAt: null }));
-    topic.fetchZoneOverview.mockResolvedValue(overview({ modules: [] }));
+    topic.fetchZoneOverview.mockResolvedValue(overview({ modules: [{ key: "latest", items: [], more: { role: null, window: "30d" } }] }));
     mount();
     expect(await screen.findByText("正在为这个专区搜集内容，通常几分钟内出现第一批")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 2, name: "最新动态" })).toBeNull();
     topic.fetchZoneOverview.mockResolvedValue(overview());
     await userEvent.click(screen.getByRole("button", { name: "重新加载" }));
     expect(await screen.findByRole("heading", { level: 2, name: "最新进展" })).toBeInTheDocument();
+  });
+
+  it("counts a module as content only when it holds something: every kind of module that came empty leaves the page as the empty state", async () => {
+    topic.fetchZoneOverview.mockResolvedValue(overview({ modules: [
+      { key: "cards", cards: [], total: 0 }, { key: "approved-drugs", rows: [] }, { key: "multi-source", events: [] }, { key: "key-updates", items: [], more: null },
+      { key: "latest", items: [], more: { role: null, window: "30d" } },
+    ] }));
+    mount();
+    expect(await screen.findByText("正在为这个专区搜集内容，通常几分钟内出现第一批")).toBeInTheDocument();
+    cleanup();
+    // One module with something in it is a page: the empty ones around it are not drawn.
+    topic.fetchZoneOverview.mockResolvedValue(overview({ modules: [{ key: "key-updates", items: [], more: null }, { key: "latest", items: [rawItem("l1", "肥胖患者用药依从性研究")], more: { role: null, window: "30d" } }] }));
+    mount();
+    expect(await screen.findByRole("heading", { level: 2, name: "最新动态" })).toBeInTheDocument();
+    expect(screen.queryByText("正在为这个专区搜集内容，通常几分钟内出现第一批")).toBeNull();
+  });
+
+  it("does not say a quiet or an archived zone is being filled: it has nothing new, and the way on is what it holds", async () => {
+    topic.fetchZone.mockResolvedValue(zone({ lifecycle: "quiet", lastItemAt: "2026-09-02T08:00:00.000Z" }));
+    topic.fetchZoneOverview.mockResolvedValue(overview({ modules: [{ key: "latest", items: [], more: { role: null, window: "30d" } }] }));
+    mount();
+    expect(await screen.findByText("近期没有新的内容")).toBeInTheDocument();
+    expect(screen.queryByText(/正在为这个专区搜集内容/)).toBeNull();
+    expect(screen.getByRole("link", { name: "看全部动态" })).toHaveAttribute("href", "/app/frontier/zones/s/glp1-obesity?tab=items&window=all");
+    cleanup();
+    topic.fetchZone.mockResolvedValue(zone({ lifecycle: "archived", counts: { week: 0, month: 0, all: 0 } }));
+    mount();
+    expect(await screen.findByText("近期没有新的内容")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "看全部动态" })).toBeNull();
   });
 
   it("says why it could not read the overview and reads again on 重试", async () => {
@@ -371,6 +408,93 @@ describe("a zone's overview", () => {
     mount();
     await screen.findByRole("heading", { level: 2, name: "最新进展" });
     expect(document.body.textContent).not.toMatch(/模型判定|置信度|归入方式|接口未接入|deepseek|token|AI 近况/i);
+  });
+});
+
+describe("a zone that went quiet, was archived, or is not a topic zone", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-29T08:00:00Z"));
+  });
+
+  it("says when a quiet zone last had something, first among the facts, and says the same of one that never had", async () => {
+    topic.fetchZone.mockResolvedValue(zone({ lifecycle: "quiet", lastItemAt: "2026-09-02T08:00:00.000Z" }));
+    mount();
+    await header();
+    const facts = screen.getByText(/截至 10月29日 14:20（北京时间）/).closest("p")!;
+    expect(facts.textContent).toMatch(/^最近更新于 9月2日·内分泌·近 7 天 58/);
+    cleanup();
+    topic.fetchZone.mockResolvedValue(zone({ lifecycle: "quiet", lastItemAt: null }));
+    mount();
+    await header();
+    expect(screen.getByText("近期没有新动态")).toBeInTheDocument();
+    expect(screen.queryByText(/最近更新于/)).toBeNull();
+  });
+
+  it("says an archived zone is no longer updated and, after a merge or a split, links the zones that took over", async () => {
+    topic.fetchZone.mockResolvedValue(zone({
+      lifecycle: "archived", lastItemAt: "2026-05-03T08:00:00.000Z",
+      successors: [{ id: "zone-a", slug: "glp1-weight", title: "GLP-1 受体激动剂减重" }, { id: "zone-b", slug: null, title: "替尔泊肽心血管结局" }],
+    }));
+    mount();
+    await header();
+    const line = screen.getByText(/这个专区不再更新，最后更新于 5月3日。/).closest("p")!;
+    expect(within(line).getByRole("link", { name: "GLP-1 受体激动剂减重" })).toHaveAttribute("href", "/app/frontier/zones/s/glp1-weight");
+    expect(within(line).getByRole("link", { name: "替尔泊肽心血管结局" })).toHaveAttribute("href", "/app/frontier/zones/zone-b");
+    expect(line).toHaveTextContent("现在请看：");
+    cleanup();
+    topic.fetchZone.mockResolvedValue(zone({ lifecycle: "archived" }));
+    mount();
+    await header();
+    expect(screen.getByText("这个专区不再更新。")).toBeInTheDocument();
+    expect(screen.queryByText(/现在请看/)).toBeNull();
+  });
+
+  it("reads a zone whose detail has neither successors nor a last item time as it did, and an active zone says nothing of either", async () => {
+    const raw = rawZone();
+    delete raw.successors;
+    delete raw.lastItemAt;
+    expect(parseZoneDetail(raw)).toMatchObject({ successors: [], lastItemAt: null });
+    expect(parseZoneDetail(rawZone({ successors: [{ id: "", title: "" }, "x", { id: "z", slug: "s", title: "T" }], lastItemAt: 7 }))).toMatchObject({ successors: [{ id: "z", slug: "s", title: "T" }], lastItemAt: null });
+    mount();
+    await header();
+    expect(screen.queryByText(/不再更新|最近更新于|近期没有新动态/)).toBeNull();
+  });
+
+  it("opens a zone of the old kind on its own page — the zone, its cards, no editor of a topic's definition and no 「已不存在」", async () => {
+    topic.fetchZone.mockRejectedValue(new NotTopicZoneError());
+    old.fetchEvidenceZoneDetail.mockResolvedValue({ zone: {
+      id: "ez_result", revision: 2, state: "published", kind: "user", visibility: "platform", canEdit: true, title: "我的研究结果", description: "我把几次分析的结论放在这里",
+      background: null, experts: [], following: false, canFollow: true, canFeedback: true, canResearch: true, evidenceCount: 1, creator: "李研究", createdAt: "2026-10-01T08:00:00.000Z",
+    }, feedback: [] });
+    old.listZoneEvidence.mockResolvedValue({ items: [{ id: "c1", revision: 1, state: "published", canEdit: true, zoneId: "ez_result", title: "替尔泊肽的体重结局", summary: "三项研究合并后体重下降约 12%", claims: [], subtype: null, body: "", creator: null, reviewer: null, reviewedAt: null }], total: 1, nextCursor: null });
+    const editor = vi.fn(() => <div role="dialog" aria-label="编辑专区" />);
+    mount("/app/frontier/zones/ez_result", editor);
+    expect(await screen.findByRole("heading", { level: 1, name: "我的研究结果" })).toBeInTheDocument();
+    expect(screen.getByText("我把几次分析的结论放在这里")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /替尔泊肽的体重结局/ })).toHaveAttribute("href", "/app/frontier/zones/ez_result/evidence/c1");
+    expect(screen.queryByText("这个专区已不存在")).toBeNull();
+    expect(screen.queryByRole("button", { name: "编辑" })).toBeNull();
+    expect(screen.queryByRole("tab")).toBeNull();
+    expect(topic.fetchZoneOverview).not.toHaveBeenCalled();
+    expect(old.listZoneEvidence).toHaveBeenCalledWith("ez_result", "", null, "owned");
+    expect(editor).not.toHaveBeenCalled();
+  });
+
+  it("leaves 以此新建我的专区 out of the ⋯ menu once the directory has said this reader may not make one", async () => {
+    create.allowed = false;
+    const editor = (props: ZoneEditorProps) => <div role="dialog" aria-label="新建专区">{props.mode}</div>;
+    mount("/app/frontier/zones/zone-glp1", editor);
+    await userEvent.click(within(await header()).getByRole("button", { name: "更多操作" }));
+    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["深入研究", "复制链接"]);
+  });
+
+  it("makes the counts of the header links on the overview and plain figures on the other tabs, where the toolbar already holds the window", async () => {
+    mount("/app/frontier/zones/zone-glp1?tab=items");
+    await screen.findByRole("region", { name: "专区动态" });
+    const facts = screen.getByText(/截至 10月29日 14:20（北京时间）/).closest("p")!;
+    expect(facts.textContent).toBe("内分泌·近 7 天 58·近 30 天 247·全部 610 条·截至 10月29日 14:20（北京时间）");
+    expect(within(facts).queryAllByRole("link")).toHaveLength(0);
   });
 });
 

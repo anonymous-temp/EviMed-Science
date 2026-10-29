@@ -14,6 +14,7 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import { openItemConversation } from "./frontierAsk";
 import { FrontierHideStrip } from "./FrontierHideStrip";
 import { newZonePath } from "./zoneLinks";
+import { useZoneCreate } from "./zone/useZoneCreate";
 import type { FrontierHideStripControls } from "./useFrontierHide";
 import {
   CARD_FLAG_KEYS,
@@ -84,6 +85,7 @@ export function useItemActions(item: FrontierItem, { reader = false, onHide, onS
 }): { more: MenuEntry[]; reports: MenuEntry[]; research: () => void; ask: (question: string | null) => void } {
   const navigate = useNavigate();
   const origin = useFrontierOrigin();
+  const canMakeZone = useZoneCreate();
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(itemMarkdown(item));
@@ -103,7 +105,7 @@ export function useItemActions(item: FrontierItem, { reader = false, onHide, onS
   const openEvent = () => { rememberFrontierPosition(); navigate(eventPath(item.event!.id), { state: origin }); };
   const more: MenuEntry[] = [
     ...(reader ? [] : [{ label: "深入研究", onSelect: research }]),
-    { label: "以此新建专区", onSelect: () => { rememberFrontierPosition(); navigate(newZonePath({ fromItemId: item.id })); } },
+    ...(canMakeZone ? [{ label: "以此新建专区", onSelect: () => { rememberFrontierPosition(); navigate(newZonePath({ fromItemId: item.id })); } }] : []),
     ...(onSave ? [{ label: "存入知识库", disabled: saving, onSelect: () => onSave(item) }] : []),
     { label: "复制为 Markdown", onSelect: () => void copy() },
     { label: "不感兴趣", onSelect: () => onHide(item) },
