@@ -43,7 +43,8 @@ async function jsonFetch(url, options = {}, expectOk = true) {
   const response = await fetch(url, options);
   const data = await response.json().catch(() => null);
   if (expectOk && !response.ok) {
-    throw new Error(`${options.method ?? "GET"} ${url} -> ${response.status} ${JSON.stringify(data)}`);
+    // The status and the body ride on the error so a caller can meet one refusal it knows without matching text.
+    throw Object.assign(new Error(`${options.method ?? "GET"} ${url} -> ${response.status} ${JSON.stringify(data)}`), { status: response.status, body: data });
   }
   return { response, data };
 }
@@ -54,6 +55,25 @@ async function command(name, args, headers) {
     headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(args ?? {}),
   });
+}
+
+/**
+ * The transcript of a session whose run has ended. The route does not wake a runtime, and the case's runtime may have
+ * stopped since the run (409 `runtime_not_running`; a batch at --concurrency 3 meets the account's runtime ceiling,
+ * which yields the idle one): that is not a lost case. The runtime is started once and the session read once more;
+ * a second refusal is the answer and this never loops.
+ * @param {string} sessionId @param {Record<string, string>} headers
+ */
+async function sessionTranscript(sessionId, headers) {
+  const url = `${base}/api/runtime/sessions/${encodeURIComponent(sessionId)}/transcript`;
+  try {
+    return await jsonFetch(url, { headers });
+  } catch (error) {
+    if (error?.status !== 409 || error?.body?.code !== "runtime_not_running") throw error;
+    await command("start_runtime", {}, headers);
+    process.stdout.write(`[transcript] ${sessionId}: the runtime was gone; start_runtime, reading the session once more\n`);
+    return jsonFetch(url, { headers });
+  }
 }
 
 async function waitForRun(runId, headers) {
@@ -195,10 +215,7 @@ async function runCase(testCase, outer) {
     body: JSON.stringify({ sessionId, dispatchId, text: testCase.prompt, automated: true }),
   });
   const terminal = await waitForRun(dispatched.data.data.id, context.scopedHeaders);
-  const transcript = await jsonFetch(
-    `${base}/api/runtime/sessions/${encodeURIComponent(sessionId)}/transcript`,
-    { headers: context.scopedHeaders },
-  );
+  const transcript = await sessionTranscript(sessionId, context.scopedHeaders);
   const messages = Array.isArray(transcript.data?.data?.messages) ? transcript.data.data.messages : [];
   const record = {
     schemaVersion: 1,
