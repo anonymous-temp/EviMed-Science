@@ -766,6 +766,9 @@ function memorySharingSettings(overrides, frontierEnabled) {
     // The planner that makes and keeps the platform's zones (the first 30 when there are none, then a weekly pass).
     evidenceZonePlannerEnabled: frontierEnabled && (overrides.evidenceZonePlannerEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_ZONE_PLANNER_ENABLED", true)),
     evidenceZoneSeedCount: integer("evidenceZoneSeedCount", "OPEN_SCIENCE_EVIDENCE_ZONE_SEED_COUNT", 30, 0, 100),
+    // How many times an hour a reader's word on an item of a zone (算 / 不算) may send the item back to the model for a second judgement
+    // (`evidenceZoneMembership.mjs`): a bound on the model spend one reader can cause, not an opinion about the word. 0 judges none again.
+    evidenceZoneFeedbackRejudgesPerHour: integer("evidenceZoneFeedbackRejudgesPerHour", "OPEN_SCIENCE_EVIDENCE_ZONE_FEEDBACK_REJUDGES_PER_HOUR", 20, 0, 1000),
     // Where a zone's evidence cards come from (owner 2026-10-29: the platform writes none; a team interface will supply them).
     // `none` shows no cards; `external` reads the interface once it exists.
     evidenceCardProvider: evidenceCardProvider(overrides.evidenceCardProvider ?? process.env.OPEN_SCIENCE_EVIDENCE_CARD_PROVIDER),

@@ -384,7 +384,7 @@ ${changes.length ? html`<ul>${changes.map((/** @type {any} */ entry) => html`<li
 }
 
 // ---------------------------------------------------------------------------
-// About, metrics, simulations, requests
+// About, metrics, simulations
 // ---------------------------------------------------------------------------
 
 export function aboutPage() {
