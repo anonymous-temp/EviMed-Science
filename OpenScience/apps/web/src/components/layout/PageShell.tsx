@@ -143,6 +143,8 @@ export interface PageTabs<V extends string = string> {
 
 export interface PageShellProps<V extends string = string> {
   title: string;
+  /** Keep a landing page's heading accessible when its body already introduces the task. */
+  headerVisibility?: "visible" | "sr-only";
   /** @deprecated Pages carry no subtitle; ignored. */
   description?: ReactNode;
   /** A grey count or update time after the title. */
@@ -186,6 +188,7 @@ const TOOLBAR_ROW = "min-h-11";
 
 export function PageShell<V extends string = string>({
   title,
+  headerVisibility = "visible",
   meta,
   actions,
   back,
@@ -254,6 +257,7 @@ export function PageShell<V extends string = string>({
       {eyebrow && <div className="mb-2">{eyebrow}</div>}
       <PageHeader
         title={title}
+        className={headerVisibility === "sr-only" ? "sr-only" : undefined}
         meta={meta}
         actions={actions}
         scope={scope && <ScopeMenu {...scope} />}

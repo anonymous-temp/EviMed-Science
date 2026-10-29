@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { MIN_PASSWORD_LENGTH, meetsPasswordMinimum } from "@evimed/domain";
-import { changeWebPassword, fetchWebAuthMethods, webErrorMessage } from "@/lib/apiClient";
+import { changeWebPassword, fetchWebAuthMethods, fetchWebMe, webErrorMessage } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -10,10 +10,9 @@ import { PanelRow } from "@/components/ui/Panel";
  * 「密码」 on the account panel: 修改 opens the form under the row, in place
  * (2026-09-23 plan §5.9).
  *
- * Offered only where a password is the credential: under OIDC the identity
- * provider owns it, and under development auth there is none. The row asks
- * the deployment (`/api/auth/methods`) rather than assuming, so a deployment
- * that switches to OIDC does not keep offering a form the server refuses.
+ * Offered only for the current account's local password. A deployment can
+ * accept local and EviMed accounts together, so its mode alone cannot say
+ * whose password this endpoint owns. Missing account identity offers no action.
  */
 export function PasswordRow() {
   const [offered, setOffered] = useState<boolean | null>(null);
@@ -29,8 +28,8 @@ export function PasswordRow() {
 
   useEffect(() => {
     let active = true;
-    void fetchWebAuthMethods()
-      .then((methods) => { if (active) setOffered(methods.mode === "local"); })
+    void Promise.all([fetchWebAuthMethods(), fetchWebMe()])
+      .then(([methods, me]) => { if (active) setOffered(methods.mode === "local" && me?.user.authType === "local"); })
       .catch(() => { if (active) setOffered(false); });
     return () => { active = false; };
   }, []);

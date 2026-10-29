@@ -154,7 +154,10 @@ export function ListRow({
   chevron,
   columns,
   leading,
+  eyebrow,
   meta,
+  footer,
+  footerLayout = "below",
   trailing,
   actions,
   menu,
@@ -189,8 +192,14 @@ export function ListRow({
   columns?: ReadonlyArray<ListCell>;
   /** Fixed-width content before the title. */
   leading?: ReactNode;
+  /** A source or date before a document's title. */
+  eyebrow?: ReactNode;
   /** The line under the title. */
   meta?: ReactNode;
+  /** Controls below the summary, keeping the reading column at its full width. */
+  footer?: ReactNode;
+  /** Reading rows can use the room beside their prose for controls on a wide screen. */
+  footerLayout?: "below" | "aside";
   /** Right-aligned, always visible: a time, a score, a switch. */
   trailing?: ReactNode;
   /**
@@ -253,9 +262,13 @@ export function ListRow({
       )}
     >
       {leading && <div className="flex shrink-0 items-center self-stretch">{leading}</div>}
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        {heading}
-        {meta && <div className="min-w-0 text-caption text-text-3">{meta}</div>}
+      <div className={cn("flex min-w-0 flex-1 flex-col", footerLayout === "aside" ? "gap-3 xl:flex-row xl:items-start xl:gap-4" : "gap-0.5")}>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          {eyebrow && <div className="mb-1 min-w-0 text-caption text-text-3">{eyebrow}</div>}
+          {heading}
+          {meta && <div className="min-w-0 text-caption text-text-3">{meta}</div>}
+        </div>
+        {footer && <div className={cn("pointer-events-none relative z-sticky min-w-0", footerLayout === "aside" ? "xl:w-36 xl:shrink-0 xl:self-center" : "mt-3", CONTROLS)}>{footer}</div>}
       </div>
       {(trailing || actions || menu) && (
         // Above the stretched title, so a control stays clickable; what is only text lets the press through to the row.

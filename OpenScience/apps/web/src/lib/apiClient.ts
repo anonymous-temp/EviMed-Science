@@ -17,6 +17,8 @@ const PROJECT_KEY = "openScience.projectId";
 const CSRF_HEADER = "X-Open-Science-CSRF";
 export const WEB_SESSION_ENDED_EVENT = "open-science:web-session-ended";
 export const WEB_SESSION_STARTED_EVENT = "open-science:web-session-started";
+/** Cross-tab invalidation signal only; never a stored session or account identity. */
+export const WEB_SESSION_SYNC_STORAGE_KEY = "open-science:web-session-sync";
 let webCsrfToken: string | null = null;
 let webCsrfRefresh: Promise<string | null> | null = null;
 
@@ -1110,13 +1112,37 @@ export interface WebReadiness {
 }
 
 export interface WebAuthMethods {
-  mode: "development" | "local" | "oidc";
+  mode: "development" | "local" | "oidc" | "evimed";
   /** Whether this deployment accepts new accounts. Only ever true for `local`. */
   selfRegistration?: boolean;
   oidc?: {
     label: string;
     startUrl: string;
   };
+  evimed?: {
+    sessionUrl: string;
+    logoutUrl: string;
+    account?: {
+      captchaUrl: string;
+      sendCodeUrl: string;
+      passwordLoginUrl: string;
+      smsLoginUrl: string;
+      registerUrl: string;
+      verifyCodeUrl: string;
+      resetPasswordUrl: string;
+    };
+  };
+}
+
+export interface EvimedCaptcha {
+  canvasSrc: string;
+  blockSrc: string;
+  blockX: number;
+  blockY: number;
+  canvasWidth: number;
+  canvasHeight: number;
+  blockWidth: number;
+  blockHeight: number;
 }
 
 export function getWebProjectId(): string {
@@ -1148,6 +1174,15 @@ function clearWebSessionState(): void {
   }
 }
 
+/** Notify other tabs to forget private caches, without publishing a session or its owner. */
+function signalWebSessionChange(kind: "started" | "ended"): void {
+  if (typeof window === "undefined") return;
+  try {
+    const nonce = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2);
+    window.localStorage.setItem(WEB_SESSION_SYNC_STORAGE_KEY, JSON.stringify({ at: Date.now(), nonce, kind }));
+  } catch { /* A blocked storage area must not prevent signing in or notifying this tab. */ }
+}
+
 /**
  * `deliberate`: the person ended it (signing out, deleting the account), so
  * the login page they land on is not asked to bring them back to the page they
@@ -1155,11 +1190,13 @@ function clearWebSessionState(): void {
  */
 function notifyWebSessionEnded(deliberate = false): void {
   clearWebSessionState();
+  signalWebSessionChange("ended");
   if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(WEB_SESSION_ENDED_EVENT, { detail: { deliberate } }));
 }
 
 function notifyWebSessionStarted(): void {
   invalidateWebMe();
+  signalWebSessionChange("started");
   if (typeof window !== "undefined") window.dispatchEvent(new Event(WEB_SESSION_STARTED_EVENT));
 }
 
@@ -1297,6 +1334,77 @@ export async function loginWeb(username: string, password: string): Promise<void
   });
   await parseApiResponse<{ user: { id: string; name: string }; csrfToken?: string }>(res);
   notifyWebSessionStarted();
+}
+
+/** Exchange the browser's existing EviMed cookie for the hosted session. */
+export async function loginEvimedWeb(): Promise<void> {
+  if (!hasWebApi) throw new BackendUnavailableError("auth.evimed.session");
+  const res = await fetch(apiUrl("/auth/evimed/session"), {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  requireEvimedSession(await parseApiResponse<unknown>(res));
+  notifyWebSessionStarted();
+}
+
+function requireEvimedSession(value: unknown): void {
+  const session = value && typeof value === "object" ? value as Record<string, unknown> : null;
+  const user = session?.user && typeof session.user === "object" ? session.user as Record<string, unknown> : null;
+  if (typeof user?.id !== "string" || !user.id.trim()
+    || typeof session?.csrfToken !== "string" || !session.csrfToken.trim()) {
+    webCsrfToken = null;
+    throw new WebApiError("The account service returned an invalid session.", { status: 502, code: "evimed_account_failed" });
+  }
+}
+
+async function requireEvimedAccountSuccess(path: string, body: Record<string, string>): Promise<void> {
+  if (await evimedAccountRequest<unknown>(path, body) !== true) {
+    throw new WebApiError("The account service returned an invalid result.", { status: 502, code: "evimed_account_failed" });
+  }
+}
+
+/** Account credentials terminate at the control plane, which returns its own session. */
+async function evimedAccountRequest<T>(path: string, body?: Record<string, string>): Promise<T> {
+  if (!hasWebApi) throw new BackendUnavailableError("auth.evimed.account");
+  const res = await fetch(apiUrl(`/auth/evimed/${path}`), {
+    method: body ? "POST" : "GET",
+    credentials: "include",
+    cache: "no-store",
+    ...(body ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}),
+  });
+  return parseApiResponse<T>(res);
+}
+
+export function fetchEvimedCaptcha(phone: string): Promise<EvimedCaptcha> {
+  return evimedAccountRequest(`captcha?phoneNumber=${encodeURIComponent(phone)}`);
+}
+
+export async function sendEvimedCode(purpose: "login" | "register" | "reset", phone: string, xcode?: string): Promise<void> {
+  await requireEvimedAccountSuccess("send-code", { purpose, phone, ...(xcode === undefined ? {} : { xcode }) });
+}
+
+export async function loginEvimedPassword(username: string, password: string): Promise<void> {
+  requireEvimedSession(await evimedAccountRequest("password-login", { username, password }));
+  notifyWebSessionStarted();
+}
+
+export async function loginEvimedSms(phone: string, code: string): Promise<void> {
+  requireEvimedSession(await evimedAccountRequest("sms-login", { phone, code }));
+  notifyWebSessionStarted();
+}
+
+export async function registerEvimedAccount(phone: string, code: string, password: string): Promise<void> {
+  await requireEvimedAccountSuccess("register", { phone, code, password });
+}
+
+export async function verifyEvimedCode(phone: string, code: string): Promise<void> {
+  await requireEvimedAccountSuccess("verify-code", { phone, code });
+}
+
+export async function resetEvimedPassword(phone: string, code: string, password: string): Promise<void> {
+  await requireEvimedAccountSuccess("reset-password", { phone, code, password });
 }
 
 /**
@@ -1439,7 +1547,8 @@ export async function releaseWebRuntimeUiFrame(frameId: string): Promise<void> {
 }
 
 export interface WebMe {
-  user: { id: string; name: string; tenantId?: string };
+  user: { id: string; name: string; tenantId?: string; authType?: "local" | "evimed" | "oidc" | "development" };
+  features?: Record<string, boolean>;
   tenant?: { id: string; model: "individual-account"; role: "owner" };
   /** Whether this deployment offers this account the operations page. The
    *  server decides from an id allowlist; a browser that flips this gains a

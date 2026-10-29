@@ -297,6 +297,58 @@ describe("apiClient", () => {
     expect((ended.mock.calls[0][0] as CustomEvent).detail).toEqual({ deliberate: true });
   });
 
+  it("signals session changes to other tabs using only time, a fresh nonce and the change kind", async () => {
+    const privateName = "private-account-name";
+    const privatePassword = "private-account-password";
+    const privateCsrf = "private-session-csrf";
+    vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(responseJson({ user: { id: privateName, name: privateName }, csrfToken: privateCsrf }))
+      .mockResolvedValueOnce(responseJson(true));
+    const client = await loadClient("https://science.example/api");
+    await client.loginWeb(privateName, privatePassword);
+    const first = JSON.parse(window.localStorage.getItem(client.WEB_SESSION_SYNC_STORAGE_KEY) ?? "null");
+    expect(Object.keys(first).sort()).toEqual(["at", "kind", "nonce"]);
+    expect(first).toEqual({ at: 1_000_000, kind: "started", nonce: expect.any(String) });
+    expect(first.nonce).not.toBe("");
+
+    await client.logoutWeb();
+    const second = JSON.parse(window.localStorage.getItem(client.WEB_SESSION_SYNC_STORAGE_KEY) ?? "null");
+    expect(Object.keys(second).sort()).toEqual(["at", "kind", "nonce"]);
+    expect(second).toEqual({ at: 1_000_000, kind: "ended", nonce: expect.any(String) });
+    expect(second.nonce).not.toBe(first.nonce);
+    for (const secret of [privateName, privatePassword, privateCsrf]) {
+      expect(JSON.stringify([first, second])).not.toContain(secret);
+    }
+  });
+
+  it("keeps successful sign-in and its local event working when the invalidation signal cannot be stored", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(responseJson({ user: { id: "reader" }, csrfToken: "csrf_test" }));
+    const client = await loadClient("https://science.example/api");
+    const started = vi.fn();
+    window.addEventListener(client.WEB_SESSION_STARTED_EVENT, started, { once: true });
+    vi.spyOn(window, "localStorage", "get").mockImplementation(() => { throw new DOMException("Storage blocked", "SecurityError"); });
+    await expect(client.loginWeb("reader", "pass123")).resolves.toBeUndefined();
+    expect(started).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps successful sign-out and its local event working when writing the invalidation signal fails", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(csrfMeResponse())
+      .mockResolvedValueOnce(responseJson(true));
+    const client = await loadClient("https://science.example/api");
+    const setItem = Storage.prototype.setItem;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (this: Storage, key, value) {
+      if (key === client.WEB_SESSION_SYNC_STORAGE_KEY) throw new DOMException("Storage full", "QuotaExceededError");
+      setItem.call(this, key, value);
+    });
+    const ended = vi.fn();
+    window.addEventListener(client.WEB_SESSION_ENDED_EVENT, ended, { once: true });
+    await expect(client.logoutWeb()).resolves.toBeUndefined();
+    expect(ended).toHaveBeenCalledTimes(1);
+    expect((ended.mock.calls[0][0] as CustomEvent).detail).toEqual({ deliberate: true });
+  });
+
   it("logs in to the web API with credentials", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ data: { user: { id: "alice" }, csrfToken: "csrf_login" } }), {
@@ -315,6 +367,63 @@ describe("apiClient", () => {
         body: JSON.stringify({ username: "alice", password: "secret-password", warm: true }),
       }),
     );
+  });
+
+  it("exchanges the existing EviMed cookie for a session and refreshes the cached account", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+    const before = { user: { id: "before", name: "Before" }, project: { id: "default", name: "Default" }, projects: [], csrfToken: "csrf_before" };
+    const after = { ...before, user: { id: "evimed_fixture", name: "Reader" }, csrfToken: "csrf_evimed" };
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(responseJson(before))
+      .mockResolvedValueOnce(responseJson({ user: after.user, csrfToken: after.csrfToken }))
+      .mockResolvedValueOnce(responseJson(after));
+    const client = await loadClient("https://science.example/api");
+    const dispatch = vi.spyOn(window, "dispatchEvent");
+    await client.fetchWebMe();
+
+    await client.loginEvimedWeb();
+
+    expect(fetchMock.mock.calls[1]).toEqual([
+      "https://science.example/api/auth/evimed/session",
+      { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: "{}" },
+    ]);
+    expect(client.getWebApiRequestHeaders()["X-Open-Science-CSRF"]).toBe("csrf_evimed");
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(dispatch.mock.calls[0][0].type).toBe(client.WEB_SESSION_STARTED_EVENT);
+    expect((await client.fetchWebMe())?.user.id).toBe("evimed_fixture");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(window.localStorage.getItem("token")).toBeNull();
+  });
+
+  it.each([
+    [401, "evimed_credential_rejected"],
+    [503, "evimed_introspect_unreachable"],
+  ])("preserves the existing session state when EviMed exchange fails with %s", async (status, code) => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+    const before = { user: { id: "before", name: "Before" }, project: { id: "default", name: "Default" }, projects: [], csrfToken: "csrf_before" };
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(responseJson(before))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: "Exchange failed.", code }), {
+        status, headers: { "Content-Type": "application/json" },
+      }));
+    const client = await loadClient("https://science.example/api");
+    const dispatch = vi.spyOn(window, "dispatchEvent");
+    const cached = await client.fetchWebMe();
+
+    await expect(client.loginEvimedWeb()).rejects.toMatchObject({ name: "WebApiError", status, code });
+
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(client.getWebApiRequestHeaders()["X-Open-Science-CSRF"]).toBe("csrf_before");
+    expect(await client.fetchWebMe()).toBe(cached);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not attempt EviMed exchange without a configured API", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    const client = await loadClient();
+
+    await expect(client.loginEvimedWeb()).rejects.toBeInstanceOf(client.BackendUnavailableError);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("logs out, clears the CSRF token, and resets the selected project", async () => {
@@ -372,6 +481,21 @@ describe("apiClient", () => {
       expect(client.getWebOidcStartUrl(hostile)).toBe("https://science.example/api/auth/oidc/start?returnTo=%2Fapp%2Fchat");
     }
     expect(client.getWebOidcStartUrl()).toBe("https://science.example/api/auth/oidc/start?returnTo=%2Fapp%2Fchat");
+  });
+
+  it("discovers the EviMed session and logout routes", async () => {
+    const methods = {
+      mode: "evimed",
+      evimed: { sessionUrl: "/api/auth/evimed/session", logoutUrl: "/api/auth/evimed/logout" },
+    };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(responseJson(methods));
+    const client = await loadClient("https://science.example/api");
+
+    await expect(client.fetchWebAuthMethods()).resolves.toEqual(methods);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://science.example/api/auth/methods", { credentials: "include" },
+    );
   });
 
   // Contract C4: a project is created from its name, in any language; the

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Tabs } from "./Tabs";
@@ -170,5 +170,79 @@ describe("the open tab of a row wider than its box is whole", () => {
     expect(screen.getByRole("tab", { name: "对照" })).toHaveFocus();
     expect(scrollBy).toHaveBeenCalledWith({ left: 92 });
     expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+});
+
+describe("the optional moving underline", () => {
+  const items = [{ value: "sms", label: "短信登录" }, { value: "password", label: "密码登录" }];
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  function layout() {
+    const boxes: Record<string, [number, number]> = { "短信登录": [24, 80], "密码登录": [104, 168] };
+    let scrollLeft = 0;
+    const resize: Array<() => void> = [];
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(callback: () => void) { resize.push(callback); }
+      observe() {}
+      disconnect() {}
+    });
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const [start, end] = this.getAttribute("role") === "tablist" ? [24, 344] : boxes[this.textContent ?? ""] ?? [0, 0];
+      const left = start - (this.getAttribute("role") === "tab" ? scrollLeft : 0);
+      return { left, right: left + end - start, top: 0, bottom: 40, width: end - start, height: 40, x: left, y: 0, toJSON: () => ({}) };
+    });
+    return { boxes, resize, scrollTo: (left: number) => { scrollLeft = left; } };
+  }
+
+  it("keeps the existing static rule for consumers that do not opt in", () => {
+    render(<Tabs label="登录方式" items={items} value="sms" onChange={() => {}} />);
+    expect(document.querySelector("[data-tab-indicator]")).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "短信登录" })).toHaveClass("border-text", "text-text");
+  });
+
+  it("mounts at the selected tab and moves one underline with keyboard selection", async () => {
+    layout();
+    function LoginTabs() {
+      const [value, setValue] = useState("password");
+      return <Tabs animatedIndicator label="登录方式" items={items} value={value} onChange={setValue} />;
+    }
+    render(<LoginTabs />);
+    const indicator = document.querySelector("[data-tab-indicator]");
+    expect(indicator).toHaveStyle({ width: "64px", transform: "translateX(80px)" });
+    expect(indicator).toHaveClass("duration-base", "ease-standard", "motion-reduce:transition-none");
+    expect(indicator).toHaveAttribute("aria-hidden", "true");
+    screen.getByRole("tab", { name: "密码登录" }).focus();
+    await userEvent.keyboard("{ArrowLeft}");
+    expect(document.querySelectorAll("[data-tab-indicator]")).toHaveLength(1);
+    expect(document.querySelector("[data-tab-indicator]")).toBe(indicator);
+    expect(indicator).toHaveStyle({ width: "56px", transform: "translateX(0px)" });
+    expect(screen.getByRole("tab", { name: "短信登录" })).toHaveFocus();
+    expect(screen.getByRole("tab", { name: "短信登录" })).toHaveClass("border-transparent", "text-accent");
+  });
+
+  it("stays aligned while the row scrolls and remeasures when tab widths change", () => {
+    const geometry = layout();
+    render(<Tabs animatedIndicator label="登录方式" items={items} value="password" onChange={() => {}} />);
+    const list = screen.getByRole("tablist");
+    Object.defineProperty(list, "scrollLeft", { configurable: true, value: 36 });
+    geometry.scrollTo(36);
+    fireEvent.scroll(list);
+    expect(document.querySelector("[data-tab-indicator]")).toHaveStyle({ width: "64px", transform: "translateX(80px)" });
+    geometry.boxes["密码登录"] = [112, 188];
+    act(() => geometry.resize.forEach((resize) => resize()));
+    expect(document.querySelector("[data-tab-indicator]")).toHaveStyle({ width: "76px", transform: "translateX(88px)" });
+  });
+
+  it("hides the rule when the selected view is not a tab, without losing keyboard access", () => {
+    layout();
+    const { rerender } = render(<Tabs animatedIndicator label="登录方式" items={items} value="sms" onChange={() => {}} />);
+    expect(document.querySelector("[data-tab-indicator]")).toBeInTheDocument();
+    rerender(<Tabs animatedIndicator label="登录方式" items={items} value="register" onChange={() => {}} />);
+    expect(document.querySelector("[data-tab-indicator]")).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "短信登录" })).toHaveAttribute("tabindex", "0");
+    expect(screen.getAllByRole("tab").every((tab) => tab.getAttribute("aria-selected") === "false")).toBe(true);
   });
 });

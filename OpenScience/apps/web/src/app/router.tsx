@@ -39,6 +39,7 @@ const AccountPage = lazy(() => import("./routes/AccountPage").then((m) => ({ def
 const SimulatedWalletPage = lazy(() => import("./routes/SimulatedWalletPage").then((m) => ({ default: m.SimulatedWalletPage })));
 const RunFilePage = lazy(() => import("./routes/RunFilePage").then((m) => ({ default: m.RunFilePage })));
 const FrontierPage = lazy(() => import("./routes/FrontierPage").then((m) => ({ default: m.FrontierPage })));
+const EvimedSearchPage = lazy(() => import("./routes/EvimedSearchPage").then((m) => ({ default: m.EvimedSearchPage })));
 const FrontierEventPage = lazy(() => import("./routes/FrontierEventPage").then((m) => ({ default: m.FrontierEventPage })));
 const FrontierTopicPage = lazy(() => import("./routes/FrontierTopicPage").then((m) => ({ default: m.FrontierTopicPage })));
 const FrontierCongressPage = lazy(() => import("./routes/FrontierCongressPage").then((m) => ({ default: m.FrontierCongressPage })));
@@ -94,6 +95,7 @@ export const routes: RouteObject[] = [
         // 「前沿动态」: the feed, and one event of it. Both answer for themselves
         // when the module is off here — a bookmark gets one sentence, not a 404.
         { path: "frontier", element: <FrontierPage /> },
+        { path: "search/:category?", element: <EvimedSearchPage /> },
         { path: "frontier/items/:itemId", element: <FrontierArticlePage /> },
         { path: "frontier/events/:eventId", element: <FrontierEventPage /> },
         { path: "frontier/topics/:topicId", element: <FrontierTopicPage /> },

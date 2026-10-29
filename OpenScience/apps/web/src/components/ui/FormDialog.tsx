@@ -2,9 +2,10 @@ import {useEffect,useId,useRef,type ReactNode} from 'react';
 import {X} from 'lucide-react';
 import {trapTab} from '@/lib/focusTrap';
 import {IconButton} from './IconButton';
+import {cn} from '@/lib/cn';
 
 /** A bounded centered form panel; writes stay visible until their caller settles. */
-export function FormDialog({title,children,onClose,busy=false}:{title:string;children:ReactNode;onClose:()=>void;busy?:boolean}) {
+export function FormDialog({title,children,onClose,busy=false,className}:{title:string;children:ReactNode;onClose:()=>void;busy?:boolean;className?:string}) {
  const panel=useRef<HTMLDivElement>(null),titleId=useId(),close=useRef(onClose),working=useRef(busy);
  close.current=onClose;working.current=busy;
  useEffect(()=>{
@@ -26,7 +27,7 @@ export function FormDialog({title,children,onClose,busy=false}:{title:string;chi
  return <div role="presentation" className="fixed inset-0 z-modal flex items-center justify-center bg-scrim p-4"
   onClick={event=>{if(event.target===event.currentTarget&&!working.current)close.current();}}>
   <div ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={busy||undefined}
-   className="flex max-h-full w-full max-w-xl flex-col rounded-panel border border-border bg-surface shadow-e3 focus:outline-none">
+   className={cn("flex max-h-full w-full max-w-xl flex-col rounded-panel border border-border bg-surface shadow-e3 focus:outline-none",className)}>
    <header className="flex shrink-0 items-center justify-between gap-3 px-6 pb-3 pt-5">
     <h2 id={titleId} className="text-body font-semibold text-text">{title}</h2>
     <IconButton icon={X} label="关闭" disabled={busy} onClick={()=>close.current()}/>

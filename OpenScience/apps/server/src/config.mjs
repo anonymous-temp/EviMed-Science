@@ -2075,6 +2075,11 @@ export function loadConfig(overrides = {}) {
     evimedUserIntrospectUrl: String(
       overrides.evimedUserIntrospectUrl ?? process.env.OPEN_SCIENCE_EVIMED_USER_INTROSPECT_URL ?? "",
     ).trim(),
+    // Empty leaves the team's account forms unavailable. The adapter only calls
+    // fixed paths under this base, on the same origin as identity introspection.
+    evimedAccountApiBaseUrl: String(
+      overrides.evimedAccountApiBaseUrl ?? process.env.OPEN_SCIENCE_EVIMED_ACCOUNT_API_BASE_URL ?? "",
+    ).trim(),
     // One introspection, start to finish. It sits between the shell's page load
     // and the first thing a researcher sees, so it is seconds, not the minute a
     // gateway gets.

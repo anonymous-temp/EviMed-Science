@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS ${schema}.auth_sessions (
 );
 CREATE INDEX IF NOT EXISTS auth_sessions_user_id_idx ON ${schema}.auth_sessions(user_id);
 CREATE INDEX IF NOT EXISTS auth_sessions_expires_at_idx ON ${schema}.auth_sessions(expires_at);
+ALTER TABLE ${schema}.auth_sessions ADD COLUMN IF NOT EXISTS evimed_search_credential text;
 
 CREATE TABLE IF NOT EXISTS ${schema}.projects (
   user_id text NOT NULL REFERENCES ${schema}.users(id) ON DELETE CASCADE,
@@ -175,6 +176,8 @@ ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, updated_at = now()
 DELETE FROM ${schema}.deleted_users WHERE id = 'evimed-evidence-center';
 
 INSERT INTO ${schema}.schema_migrations(version) VALUES (5)
+ON CONFLICT (version) DO NOTHING;
+INSERT INTO ${schema}.schema_migrations(version) VALUES (6)
 ON CONFLICT (version) DO NOTHING;
 `;
 
@@ -458,4 +461,4 @@ export const CONTROL_PLANE_SCHEMA = schema;
  *  credits client (2026-09-28); 3 was the `evimed` account kind (2026-09-26);
  *  2 was the project archive column and the default-name migration
  *  (2026-09-18). */
-export const CONTROL_PLANE_SCHEMA_VERSION = 5;
+export const CONTROL_PLANE_SCHEMA_VERSION = 6;

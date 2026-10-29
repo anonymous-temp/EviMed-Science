@@ -42,7 +42,7 @@ describe("账户", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.fetchWebMe.mockResolvedValue({
-      user: { id: "alice", name: "cdss-access" },
+      user: { id: "alice", name: "cdss-access", authType: "local" },
       project: { id: "default", name: "我的研究" },
       projects: [{ id: "default", name: "我的研究" }],
     });
@@ -107,6 +107,35 @@ describe("账户", () => {
     await screen.findByText("cdss-access");
     await waitFor(() => expect(mocks.fetchWebAuthMethods).toHaveBeenCalled());
     expect(screen.queryByText("密码")).not.toBeInTheDocument();
+  });
+
+  it("keeps local password changes available to a local account in a mixed EviMed deployment", async () => {
+    mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "local", evimed: { account: { passwordLoginUrl: "/fixture/password-login" } } });
+    open();
+    expect(await screen.findByRole("button", { name: "修改" })).toBeInTheDocument();
+  });
+
+  it.each(["evimed", "oidc", "development", undefined])("does not offer a local password change to an account with authType %s", async authType => {
+    mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "local", evimed: { account: { passwordLoginUrl: "/fixture/password-login" } } });
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "reader", name: "Team reader", ...(authType ? { authType } : {}) } });
+    open();
+    await screen.findByText("Team reader");
+    expect(screen.queryByRole("button", { name: "修改" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("form", { name: "修改密码" })).not.toBeInTheDocument();
+    expect(mocks.changeWebPassword).not.toHaveBeenCalled();
+  });
+
+  it("keeps the account page open after a failed sign-out and permits a retry", async () => {
+    mocks.logoutWeb.mockRejectedValueOnce(new Error("Fixture network unavailable"));
+    open();
+    fireEvent.click(await screen.findByRole("button", { name: "退出" }));
+    await waitFor(() => expect(mocks.toastError).toHaveBeenCalledWith(expect.stringContaining("无法退出登录")));
+    expect(screen.queryByText("登录页")).not.toBeInTheDocument();
+    expect(mocks.toastSuccess).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "退出" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "退出" }));
+    expect(await screen.findByText("登录页")).toBeInTheDocument();
+    expect(mocks.logoutWeb).toHaveBeenCalledTimes(2);
   });
 
   it("signs out and leaves for the login page", async () => {

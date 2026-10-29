@@ -1,8 +1,10 @@
 import { HttpError, readJson, sendJson } from "./security.mjs";
 import { EVIMED_LOGOUT_PATH, EVIMED_SESSION_PATH } from "./evimedAuthService.mjs";
+import { EVIMED_ACCOUNT_PATHS, evimedAccountFailureDetail, isEvimedAccountPath } from "./evimedAccountService.mjs";
 
 /**
- * The EviMed shell's two auth calls (fusion plan 2026-09-26 §9.2).
+ * The EviMed shell's session bridge (fusion plan 2026-09-26 §9.2), with the
+ * team's optional, separately configured account-form adapter beside it.
  *
  *   POST /api/auth/evimed/session   the shell's credential → a session of ours
  *   POST /api/auth/evimed/logout    EviMed signed out → revoke that session
@@ -25,7 +27,7 @@ import { EVIMED_LOGOUT_PATH, EVIMED_SESSION_PATH } from "./evimedAuthService.mjs
 
 /** The bounded metric label of an EviMed auth path. @param {string} pathname */
 export function evimedAuthRoutePattern(pathname) {
-  if (pathname === EVIMED_SESSION_PATH || pathname === EVIMED_LOGOUT_PATH) return pathname;
+  if (pathname === EVIMED_SESSION_PATH || pathname === EVIMED_LOGOUT_PATH || isEvimedAccountPath(pathname)) return pathname;
   return "/api/auth/evimed/:action";
 }
 
@@ -33,12 +35,13 @@ export function evimedAuthRoutePattern(pathname) {
  * @param {{
  *   store: any,
  *   service: any,
+ *   accountService?: any,
  *   maxJsonBytes: number,
  *   audit?: (action: string, status: string, details: Record<string, any>) => Promise<any>,
  *   onSignIn?: (userId: string) => void,
  * }} dependencies
  */
-export function createEvimedAuthRoutes({ store, service, maxJsonBytes, audit, onSignIn }) {
+export function createEvimedAuthRoutes({ store, service, accountService, maxJsonBytes, audit, onSignIn }) {
   /** @param {string} action @param {string} status @param {Record<string, any>} details */
   const record = (action, status, details) => audit ? audit(action, status, details) : Promise.resolve();
   /** @param {unknown} error */
@@ -50,6 +53,26 @@ export function createEvimedAuthRoutes({ store, service, maxJsonBytes, audit, on
     if (url.pathname !== "/api/auth/evimed" && !url.pathname.startsWith("/api/auth/evimed/")) return false;
     if (!service?.enabled) {
       throw new HttpError(404, "auth_method_disabled", "EviMed authentication is disabled.");
+    }
+    if (isEvimedAccountPath(url.pathname)) {
+      res.setHeader("Cache-Control", "no-store");
+      if (!accountService?.enabled) throw new HttpError(404, "auth_method_disabled", "EviMed account authentication is disabled.");
+      const expected = url.pathname === EVIMED_ACCOUNT_PATHS.captchaUrl ? "GET" : "POST";
+      if ((req.method ?? "GET").toUpperCase() !== expected) throw new HttpError(405, "method_not_allowed", "The account route does not accept this method.");
+      const action = `auth.evimed.${url.pathname.slice("/api/auth/evimed/".length)}`;
+      try {
+        accountService.assertOrigin(req);
+        const body = expected === "POST" ? await readJson(req, Math.min(maxJsonBytes, 16 * 1024)) : {};
+        const result = await accountService.execute(req, res, url, body);
+        await record(action, "completed", result.userId ? { userId: result.userId } : {});
+        sendJson(res, 200, { data: result.data });
+        if (result.userId) onSignIn?.(result.userId);
+      } catch (error) {
+        const detail = evimedAccountFailureDetail(error);
+        await record(action, "failed", { code: codeOf(error), ...(detail ? { detail } : {}) });
+        throw error;
+      }
+      return true;
     }
     if ((req.method ?? "GET").toUpperCase() !== "POST") {
       throw new HttpError(405, "method_not_allowed", "EviMed authentication accepts POST.");
