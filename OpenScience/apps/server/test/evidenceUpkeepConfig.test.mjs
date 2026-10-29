@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { loadConfig } from "../src/config.mjs";
 import { createEvidenceChangeLog, evidenceChangeLogMetricFamilies } from "../src/evidenceChangeLog.mjs";
 import { createEvidenceChallenges, evidenceChallengeMetricFamilies } from "../src/evidenceChallenges.mjs";
-import { EVIDENCE_UPKEEP_DEFAULTS, createEvidenceUpkeep, evidenceUpkeepMetricFamilies } from "../src/evidenceCurrency.mjs";
+import { EVIDENCE_UPKEEP_DEFAULTS, createEvidenceUpkeep, createEvidenceUpkeepLoop, evidenceUpkeepMetricFamilies } from "../src/evidenceCurrency.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const LEVERS = [
@@ -17,8 +17,6 @@ const LEVERS = [
   ["OPEN_SCIENCE_EVIDENCE_UPKEEP_BATCH", "evidenceUpkeepBatch", 20],
   ["OPEN_SCIENCE_EVIDENCE_UPKEEP_INTERVAL_HOURS", "evidenceUpkeepIntervalHours", 24],
   ["OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY", "evidenceChallengesPerDay", 10],
-  ["OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS", "evidenceRetireAfterChecks", 6],
-  ["OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS", "evidenceRetireAfterDays", 180],
   ["OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY", "evidenceVerifyReadsPerDay", 60],
   ["OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY", "evidenceChallengeDailyBudgetCny", 5],
 ];
@@ -30,22 +28,22 @@ function configUnder(env) {
   try { return /** @type {Record<string, any>} */ (loadConfig({ rootDir: repoRoot })); } finally { process.env = saved; }
 }
 
-test("the defaults are off, a batch of twenty a day, ten challenges a reader, six quiet checks over half a year — and the module's own defaults agree", () => {
+test("the defaults are off, a batch of twenty a day, ten challenges a reader — and the module's own defaults agree", () => {
   const config = configUnder({});
   for (const [, key, expected] of LEVERS) assert.equal(config[key], expected, key);
   assert.deepEqual(
-    [config.evidenceUpkeepBatch, config.evidenceUpkeepIntervalHours, config.evidenceChallengesPerDay, config.evidenceRetireAfterChecks, config.evidenceRetireAfterDays],
-    [EVIDENCE_UPKEEP_DEFAULTS.batch, EVIDENCE_UPKEEP_DEFAULTS.intervalHours, EVIDENCE_UPKEEP_DEFAULTS.challengesPerDay, EVIDENCE_UPKEEP_DEFAULTS.retireAfterChecks, EVIDENCE_UPKEEP_DEFAULTS.retireAfterDays],
+    [config.evidenceUpkeepBatch, config.evidenceUpkeepIntervalHours, config.evidenceChallengesPerDay],
+    [EVIDENCE_UPKEEP_DEFAULTS.batch, EVIDENCE_UPKEEP_DEFAULTS.intervalHours, EVIDENCE_UPKEEP_DEFAULTS.challengesPerDay],
     "the loops fall back to the numbers config.mjs does");
 });
 
 test("every lever is read from the environment, and an empty value reads as unset", () => {
   const config = configUnder({
     OPEN_SCIENCE_EVIDENCE_UPKEEP_ENABLED: "true", OPEN_SCIENCE_EVIDENCE_UPKEEP_BATCH: "5", OPEN_SCIENCE_EVIDENCE_UPKEEP_INTERVAL_HOURS: "6",
-    OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY: "3", OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS: "4", OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS: "30",
+    OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY: "3",
   });
-  assert.deepEqual([config.evidenceUpkeepEnabled, config.evidenceUpkeepBatch, config.evidenceUpkeepIntervalHours, config.evidenceChallengesPerDay, config.evidenceRetireAfterChecks, config.evidenceRetireAfterDays],
-    [true, 5, 6, 3, 4, 30]);
+  assert.deepEqual([config.evidenceUpkeepEnabled, config.evidenceUpkeepBatch, config.evidenceUpkeepIntervalHours, config.evidenceChallengesPerDay],
+    [true, 5, 6, 3]);
   const empty = configUnder({ OPEN_SCIENCE_EVIDENCE_UPKEEP_BATCH: "", OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY: "", OPEN_SCIENCE_EVIDENCE_UPKEEP_ENABLED: "" });
   assert.deepEqual([empty.evidenceUpkeepBatch, empty.evidenceChallengesPerDay, empty.evidenceUpkeepEnabled], [20, 10, false], "an empty value is the default, not 0");
 });
@@ -55,7 +53,6 @@ test("a value outside its range stops the start by the variable's name", () => {
     ["OPEN_SCIENCE_EVIDENCE_UPKEEP_BATCH", "0"], ["OPEN_SCIENCE_EVIDENCE_UPKEEP_BATCH", "201"], ["OPEN_SCIENCE_EVIDENCE_UPKEEP_BATCH", "1.5"],
     ["OPEN_SCIENCE_EVIDENCE_UPKEEP_INTERVAL_HOURS", "0"], ["OPEN_SCIENCE_EVIDENCE_UPKEEP_INTERVAL_HOURS", "721"],
     ["OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY", "0"], ["OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY", "many"],
-    ["OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS", "1"], ["OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS", "6"], ["OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS", "3651"],
     ["OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY", "0"], ["OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY", "1001"],
     ["OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY", "-1"], ["OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY", "1001"], ["OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY", "plenty"],
   ]) assert.throws(() => configUnder({ [name]: value }), new RegExp(name), `${name}=${value}`);
@@ -112,4 +109,34 @@ test("every loop's counter is exported as a metric family, labelled, and nothing
   assert.deepEqual([evidenceUpkeepMetricFamilies(null), evidenceChallengeMetricFamilies(undefined), evidenceChangeLogMetricFamilies(null)], [[], [], []]);
   const logged = evidenceChangeLogMetricFamilies(changeLog.stats())[0].series.map((entry) => entry.labels?.category);
   assert.deepEqual(logged, ["searched_no_change", "new_evidence_conclusion_changed", "new_evidence_conclusion_unchanged", "correction", "withdrawal", "retired"], "one series per category of the closed list");
+});
+
+test("the frontier worker's evidence-upkeep loop asks each of the four loops as often as it needs, and one that fails does not hold up the others", async () => {
+  /** @type {string[]} */ const asked = [];
+  let clock = Date.parse("2026-10-29T00:00:00Z");
+  const reports = /** @type {string[]} */ ([]);
+  const upkeep = /** @type {any} */ ({
+    sourcePollTick: async () => { asked.push("sourceChanges"); },
+    watchTick: async () => { asked.push("watch"); throw Object.assign(new Error("boom"), { code: "evidence_watch_down" }); },
+    downstreamTick: async () => { asked.push("downstream"); },
+  });
+  const challenges = /** @type {any} */ ({ recheckTick: async () => { asked.push("challenges"); } });
+  const loop = createEvidenceUpkeepLoop({ upkeep, challenges, now: () => new Date(clock), report: (code) => reports.push(code) });
+  await loop.tick();
+  assert.deepEqual(asked, ["sourceChanges", "watch", "downstream", "challenges"], "all four on the first tick, the failing one in its place");
+  assert.deepEqual(reports, ["evidence upkeep watch: evidence_watch_down"]);
+  asked.length = 0; clock += 10_000;
+  await loop.tick();
+  assert.deepEqual(asked, [], "nothing is due ten seconds later");
+  clock += 25_000;
+  await loop.tick();
+  assert.deepEqual(asked, ["challenges"], "the challenge re-check is due every thirty seconds, the rest every minute");
+  asked.length = 0; clock += 60_000;
+  await loop.tick();
+  assert.deepEqual(asked, ["sourceChanges", "watch", "downstream", "challenges"]);
+  assert.deepEqual(loop.status(), { ticks: 7, failures: 2, lastError: "evidence_watch_down" });
+  // The worker ticks it with the module's switch alone: a loop with neither half composed has nothing to ask.
+  const idle = createEvidenceUpkeepLoop({});
+  await idle.tick();
+  assert.deepEqual(idle.status(), { ticks: 0, failures: 0, lastError: null });
 });

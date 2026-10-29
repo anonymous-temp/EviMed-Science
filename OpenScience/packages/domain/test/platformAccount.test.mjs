@@ -39,12 +39,10 @@ test("the display name is the publisher's alone: normalised, case-folded, whites
   }
 });
 
-test("its three codes are registered with a Chinese sentence and a class", () => {
+test("its codes are registered with a Chinese sentence and a class", () => {
   for (const code of EVIDENCE_PLATFORM_ERROR_CODES) {
     assert.ok(ALL_ERROR_CODES.includes(code), `${code} is in no registry list`);
     assert.match(/** @type {Record<string, string>} */ (ERROR_CODE_MESSAGES)[code] ?? "", /[一-鿿]/, `${code} has no sentence`);
   }
-  assert.equal(errorCodeOutcome("evidence_upkeep_no_allowance"), "capped", "waiting for an allowance is a ceiling, not a failure");
   assert.equal(errorCodeOutcome("platform_account_protected"), "upstream");
-  assert.ok(/不会替你付/.test(/** @type {Record<string, string>} */ (ERROR_CODE_MESSAGES).evidence_upkeep_no_allowance), "the owner is told the platform will not pay");
 });

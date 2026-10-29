@@ -1049,35 +1049,12 @@ test("an item with nothing but its title gets no summary rather than its title a
   assert.ok(verifyEdit(answer({ summary_zh: "" }), full, fullInput).issues.some((issue) => issue.includes("summary_zh 不能为空")));
 });
 
-test("evidence relevance accepts skip reasons and preserves new/existing question decisions", async () => {
-  const { calls, callModel } = stubModel([
-    () => ({ skip: true, reason: "该来源不回答专区的抗凝问题。" }),
-    () => ({ cardId: null }),
-    () => ({ cardId: "known-card" }),
-    () => ({ skip: true, reason: "" }),
-    () => ({ cardId: "unknown-card" }),
-  ]);
-  const editor = new FrontierEditor(config, { owner, callModel });
-  const input = { zone: "房颤抗凝", description: "卒中预防、出血与适用边界。", background: "Primary-source evidence.",
-    source: { title: "Right Atrial Ectopic Hepatic Tissue", text: "Retained source text.", coverage: "abstract" }, cards: [] };
-  assert.deepEqual(await editor.evidenceTarget(input), { skip: true, reason: "该来源不回答专区的抗凝问题。" });
-  assert.equal(await editor.evidenceTarget(input), null);
-  input.cards.push({ id: "known-card" });
-  assert.equal(await editor.evidenceTarget(input), "known-card");
-  await assert.rejects(editor.evidenceTarget(input), { code: "evidence_target_invalid" });
-  await assert.rejects(editor.evidenceTarget(input), { code: "evidence_target_invalid" });
-  assert.equal(calls[0].purpose, "frontier");
-  assert.equal(calls[0].body.max_tokens, 500);
-  assert.equal(JSON.parse(calls[0].body.messages[1].content).description, input.description);
-  assert.match(calls[0].body.messages[0].content, /Make this decision even when cards is empty/);
-});
-
-test("author gateway preserves DOMException timeout and frozen provider refusal causes without mutating errors", async () => {
+test("the model gateway preserves DOMException timeout and frozen provider refusal causes without mutating errors", async () => {
   const original=new DOMException("Synthetic timeout","AbortError");
   const frozen=Object.freeze(Object.assign(new Error("Synthetic refusal"),{code:"model_gateway_payment_required",upstreamStatus:402}));
   for(const [cause,code,status] of [[original,"frontier_model_timeout",undefined],[frozen,"model_gateway_payment_required",402]]) {
     const editor=new FrontierEditor(config,{owner,callModel:async()=>{throw cause;}});
-    await assert.rejects(editor.evidenceCard({sources:[]}),error=>{
+    await assert.rejects(editor.callJson([],{maxTokens:100,timeoutMs:1000}),error=>{
       assert.equal(error.code,code);assert.equal(error.cause,cause);assert.equal(error.upstreamStatus,status);assert.notEqual(error.name,"TypeError");return true;
     });
     assert.equal(editor.counters.callFailures,1);assert.equal(editor.lastError,code);
@@ -1085,7 +1062,7 @@ test("author gateway preserves DOMException timeout and frozen provider refusal 
   assert.equal(original.code,20);
 });
 
-test("an incomplete author response cannot publish JSON from either final content or its reasoning",async()=>{
+test("an incomplete response cannot supply JSON from either final content or its reasoning",async()=>{
   const previous={title:"Previous card",summary:"Previous summary",body:"Previous body",limitations:"Previous limits",content:null};
   for(const finishReason of ["length","content_filter","tool_calls","unexpected",null]) {
     let calls=0;
@@ -1093,74 +1070,27 @@ test("an incomplete author response cannot publish JSON from either final conten
       calls++;
       return {choices:[{finish_reason:finishReason,message:{content:JSON.stringify(previous),reasoning_content:JSON.stringify(previous)}}]};
     }});
-    await assert.rejects(editor.evidenceCard({previous,sources:[]}),{code:"frontier_model_incomplete"});
+    await assert.rejects(editor.callJson([],{maxTokens:100,timeoutMs:1000}),{code:"frontier_model_incomplete"});
     assert.equal(calls,1);
     assert.equal(editor.lastError,"frontier_model_incomplete");
   }
   const editor=new FrontierEditor(config,{owner,callModel:async()=>({choices:[{finish_reason:"length",message:{content:'{"title":"Unfinished',reasoning_content:JSON.stringify(previous)}}]})});
-  await assert.rejects(editor.evidenceCard({previous,sources:[]}),{code:"frontier_model_incomplete"});
+  await assert.rejects(editor.callJson([],{maxTokens:100,timeoutMs:1000}),{code:"frontier_model_incomplete"});
 });
 
-test("only evidence authors request bounded low thinking under the existing owner and frontier metering",async()=>{
-  const final={title:"Final card",summary:"Final summary",body:"Final body",limitations:"Final limits",content:null};
-  const {calls,callModel}=stubModel([()=>final,()=>({findings:[]}),()=>({skip:true,reason:"Unrelated evidence"}),()=>verdicts(1)]);
+test("every feed operation asks for thinking off under the existing owner and frontier metering",async()=>{
+  const {calls,callModel}=stubModel([()=>verdicts(1)]);
   const editor=new FrontierEditor(config,{owner,callModel});
-  await editor.evidenceCard({sources:[]});
-  await editor.evidenceReview({sources:[]});
-  await editor.evidenceTarget({cards:[],source:{}});
   await editor.screen(batch(1));
-  const author=calls[0];
-  assert.deepEqual(author.body.thinking,{type:"enabled"});
-  assert.equal(author.body.reasoning_effort,"low");
-  assert.equal(author.body.max_tokens,16000);
-  assert.equal(author.purpose,"frontier");
-  assert.equal(author.userId,owner.userId);
-  assert.equal(author.projectId,owner.projectId);
-  assert.deepEqual(author.limits,{daily:0,weekly:0});
-  assert.deepEqual(author.body.response_format,{type:"json_object"});
-  assert.ok(author.signal instanceof AbortSignal);
-  for(const call of calls.slice(1)) {
-    assert.deepEqual(call.body.thinking,{type:"disabled"});
-    assert.equal(call.body.reasoning_effort,undefined);
-  }
-});
-
-test("explicit rewrites retain source and visual context without previous prose or mutating their input",async()=>{
-  const previous={title:"Original title",summary:"Original summary",body:"Original body",limitations:"Original limitations",
-    content:{question:"Original question",answer:"Original answer",population:"Original population",context:"Original context",nextStep:"Original next step",
-      sections:[{title:"Old section",text:"Old prose",sourceIndexes:[1]}],
-      tables:[{title:"Source counts",columns:["Group","Events"],rows:[["Control","10"]],sourceIndexes:[1]}],
-      comparisons:[{title:"Observed events",outcome:"Events",timeframe:"Trial",denominator:100,control:{label:"Control",events:10},intervention:{label:"Intervention",events:5},sourceIndexes:[1]}]},
-    sources:[{sourceIndex:1,title:"Primary trial",url:"https://example.org/trial"}]};
-  const base={previous,zone:{title:"Methods"},sources:[{sourceIndex:1,title:"Primary trial",text:"Retained source",coverage:"abstract"}],
-    readerQuestions:[{origin:"card-comment",text:"Clarify the comparison."}],previousFindings:[{kind:"limitation",text:"Clarify follow-up."}],sourceChecks:[{sourceIndex:1,status:"checked"}]};
-  const final={title:"Final card",summary:"Final summary",body:"Final body",limitations:"Final limits",content:null};
-  for(const flag of [true,false,undefined]) {
-    const input={...structuredClone(base),...(flag===undefined?{}:{rewriteRequested:flag})};
-    const before=structuredClone(input);
-    const {calls,callModel}=stubModel([()=>final]);
-    await new FrontierEditor(config,{owner,callModel}).evidenceCard(input);
-    const sent=JSON.parse(calls[0].body.messages[1].content);
-    assert.deepEqual(input,before,"building the author request must not change caller-owned state");
-    for(const key of ["sources","readerQuestions","previousFindings","sourceChecks","zone"])assert.deepEqual(sent[key],before[key]);
-    if(flag===true)assert.deepEqual(sent.previous,{title:previous.title,content:{question:previous.content.question,tables:previous.content.tables,comparisons:previous.content.comparisons},sources:previous.sources});
-    else assert.deepEqual(sent.previous,before.previous,"ordinary maintenance keeps its prior context");
-  }
-});
-
-test("only final message content supplies evidence JSON; absent finish reason remains compatible",async()=>{
-  const final={title:"Final card",summary:"Final summary",body:"Final body",limitations:"Final limits",content:null};
-  const reasoning={...final,title:"A draft mentioned in reasoning"};
-  for(const ending of [{finish_reason:"stop"},{}]) {
-    const editor=new FrontierEditor(config,{owner,callModel:async()=>({choices:[{...ending,message:{content:JSON.stringify(final),reasoning_content:JSON.stringify(reasoning)}}]})});
-    assert.deepEqual(await editor.evidenceCard({sources:[]}),final);
-  }
-  for(const content of [undefined,'{"title":"Unfinished']) {
-    const editor=new FrontierEditor(config,{owner,callModel:async()=>({choices:[{finish_reason:"stop",message:{content,reasoning_content:JSON.stringify(reasoning)}}]})});
-    await assert.rejects(editor.evidenceCard({sources:[]}),{code:"evidence_author_invalid"});
-  }
-  const reviewer=new FrontierEditor(config,{owner,callModel:async()=>({choices:[{finish_reason:"stop",message:{content:null,reasoning_content:'{"findings":[]}'}}]})});
-  await assert.rejects(reviewer.evidenceReview({sources:[]}),{code:"evidence_review_invalid"});
+  const call=calls[0];
+  assert.deepEqual(call.body.thinking,{type:"disabled"});
+  assert.equal(call.body.reasoning_effort,undefined);
+  assert.equal(call.purpose,"frontier");
+  assert.equal(call.userId,owner.userId);
+  assert.equal(call.projectId,owner.projectId);
+  assert.deepEqual(call.limits,{daily:0,weekly:0});
+  assert.deepEqual(call.body.response_format,{type:"json_object"});
+  assert.ok(call.signal instanceof AbortSignal);
 });
 
 test("pending edits and screen errors preserve provider status and confirmed transport codes",async()=>{

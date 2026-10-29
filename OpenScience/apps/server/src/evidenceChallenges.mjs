@@ -271,8 +271,7 @@ export function createChallengeJudge({ config, usageLedger, fetchImpl = globalTh
  *   receiptsFor?: ((card: any) => Promise<Map<string, any>>) | null,
  * }} options
  *   `judge` is the one model judgement (`createChallengeJudge`); absent, a platform card's challenge stays open. `budget` is the evidence
- *   budget object (`createEvidenceBudget`): `reserveChallenge` is asked before each judgement — the challenges' own day, and the programme's
- *   too when it is on; no slot and no switch of the programme is needed. `receiptsFor` is the composition's
+ *   budget object (`createEvidenceBudget`): `reserveChallenge` is asked before each judgement against the challenges' own day. `receiptsFor` is the composition's
  *   reader of calculation receipts (`EvidenceZoneService.receiptsFor`): the receipts a card's calculated claims name. Absent, such a claim's
  *   receipt reads as unavailable, which leaves its challenge open and never decides it.
  */

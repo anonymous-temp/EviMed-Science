@@ -704,23 +704,11 @@ services:
       OPEN_SCIENCE_KNOWLEDGE_PLUGIN_POLL_MS:
       OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TIMEOUT_MS:
       OPEN_SCIENCE_KNOWLEDGE_PLUGIN_MIN_CONTRACT:
-      # The platform's evidence programme and its public pages (evidence-flywheel
-      # plan 2026-10-05, B7): the programme's switch, its day's model money and
-      # its concurrency, and the two public-page switches. Value-less: unset keeps
-      # config.mjs's defaults — everything off, 30 yuan a day, one slot — so a
+      # The prediction registry and the evidence zones' public pages (evidence-flywheel
+      # plan 2026-10-05): the registry's switch and the two public-page switches.
+      # Value-less: unset keeps config.mjs's defaults — everything off — so a
       # deployment turns each on in .env and nowhere else.
-      OPEN_SCIENCE_EVIDENCE_PROGRAMME_ENABLED:
-      OPEN_SCIENCE_EVIDENCE_RECALCULATION_CARDS_ENABLED:
       OPEN_SCIENCE_PREDICTION_REGISTRY_ENABLED:
-      OPEN_SCIENCE_EVIDENCE_PROGRAMME_DAILY_BUDGET_CNY:
-      OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY:
-      # The programme's own limits (F01/F02): an episode's budget, the least number of distinct readers
-      # before a topic's demand is counted, the original analyses published in a week, and the age
-      # at which an official card's last source check makes it stale.
-      OPEN_SCIENCE_EVIDENCE_PROGRAMME_EPISODE_BUDGET_CNY:
-      OPEN_SCIENCE_EVIDENCE_PROGRAMME_MIN_DEMAND_USERS:
-      OPEN_SCIENCE_EVIDENCE_PROGRAMME_ORIGINAL_ANALYSES_PER_WEEK:
-      OPEN_SCIENCE_EVIDENCE_PROGRAMME_STALE_CARD_DAYS:
       OPEN_SCIENCE_EVIDENCE_PUBLIC_WEB_ENABLED:
       OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE:
       # Where the public pages, their API, the sitemap and the feed are served: /evidence (default) or /evimed-evidence, for a
@@ -742,8 +730,6 @@ services:
       OPEN_SCIENCE_EVIDENCE_UPKEEP_BATCH:
       OPEN_SCIENCE_EVIDENCE_UPKEEP_INTERVAL_HOURS:
       OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY:
-      OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS:
-      OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS:
       # The flywheel's own figures (2026-10-06): the operator route and the scrape's families. Off by default.
       OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED:
       # The community column of an official zone (2026-10-06): the switch (off) and the most cards one column lists.

@@ -1,3 +1,4 @@
+import { canonicalSourceIdentifier } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { retainedSource } from "./evidenceSourceReader.mjs";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
@@ -10,8 +11,10 @@ import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
  * until the platform has read each address it can show ⚠ 「摘录由作者提供，平台未读取原文」 and no more — an
  * author who typed a quotation and a matching excerpt used to get ✓ by that alone. This is the honest way
  * to ✓: `POST /api/frontier/evidence/:cardId/verify-sources`, for the owner of the card and of its zone, has the
- * platform read each source's address through the same reader the editor's upkeep uses (no model call), keeps what it
- * read exactly as the editor keeps it (`retainedSource`), and answers with the card as it now stands, each claim re-verified.
+ * platform read each source's address through the web reader (no model call), keeps what it read as `retainedSource` keeps it, and
+ * answers with the card as it now stands, each claim re-verified. What Europe PMC says of a source as it is read (a retraction, a correction,
+ * an expression of concern) is written to the one source-change record (`sourceChanges.mjs`), which is how a reader's own read of a source
+ * reaches the labels of every card that cites it; the AI editor that used to do so for the platform's cards was deleted on 2026-10-29.
  *
  * Reading is a bounded act on someone else's server, so it is bounded: at most `OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY`
  * reads per account in a rolling day (every attempt counts, the ledger below), and at most `MAX_READS_PER_REQUEST` in one
@@ -23,7 +26,7 @@ import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
  * @module evidenceSourceVerification
  */
 
-/** Sources one request reads at most; the editor's own pass reads eight a tick for the same reason (a request waits on each). */
+/** Sources one request reads at most (a request waits on each). */
 export const MAX_READS_PER_REQUEST = 8;
 /** What the platform did with one source of the card. */
 export const SOURCE_READ_OUTCOMES = Object.freeze(["read", "already_read", "no_address", "restricted", "unreachable", "not_read"]);
@@ -61,13 +64,29 @@ export const sourceIsPlatformRead = (source) => (typeof source?.documentText ===
 
 /**
  * @param {{ database: any, zones: { saveEditorial: (user: any, body: any, zoneId: string | null, cardId: string | null, createCard: boolean, origin: any) => Promise<any> },
- *   readSource: (url: string, options?: any) => Promise<any>, perDay: number, now?: () => Date, report?: (code: string) => void }} dependencies
+ *   readSource: (url: string, options?: any) => Promise<any>, perDay: number, now?: () => Date, report?: (code: string) => void,
+ *   sourceChanges?: { recordPublicationStatus: (identifier: string, status: any) => Promise<unknown> } | null }} dependencies
+ *   `sourceChanges` is told what Europe PMC said of a source read; absent, nothing is recorded.
  */
-export function createEvidenceSourceVerification({ database, zones, readSource, perDay, now = () => new Date(), report = () => {} }) {
+export function createEvidenceSourceVerification({ database, zones, readSource, perDay, now = () => new Date(), report = () => {}, sourceChanges = null }) {
   const requests = new Map(SOURCE_VERIFICATION_OUTCOMES.map((name) => [name, 0]));
   const sourceReads = new Map(SOURCE_READ_OUTCOMES.map((name) => [name, 0]));
   /** @param {Map<string, number>} map @param {string} key @param {number} [by] */
   const bump = (map, key, by = 1) => { map.set(key, (map.get(key) ?? 0) + by); };
+
+  /**
+   * What Europe PMC said of a source as it was read, written to the one source-change record. A clear status is an answered check with
+   * nothing found, a missing one nothing at all; a work with no identifier of the kinds the record holds is not recorded, and a write that
+   * fails is said, never thrown: the read stands either way.
+   * @param {string} url @param {any} result what `readSource` returned
+   */
+  async function noteStatus(url, result) {
+    if (!sourceChanges || result?.publicationStatus === undefined) return;
+    const identifier = canonicalSourceIdentifier(url);
+    if (!identifier) return;
+    try { await sourceChanges.recordPublicationStatus(identifier, result.publicationStatus); }
+    catch { report("evidence_publication_status_not_recorded"); }
+  }
 
   /**
    * @param {{ id: string }} user the owner of the card and of its zone @param {string} cardId
@@ -112,6 +131,7 @@ export function createEvidenceSourceVerification({ database, zones, readSource, 
         const text = String(result?.text ?? "").slice(0, 2_000_000);
         if (!text.trim()) throw Object.assign(new Error("No readable source."), { code: "evidence_source_empty" });
         sources[position] = retainedSource(held[position], result, text, now().toISOString());
+        await noteStatus(held[position].url, result);
         kept += 1;
         attempt = { outcome: "read", code: null };
       } catch (error) {
@@ -131,7 +151,7 @@ export function createEvidenceSourceVerification({ database, zones, readSource, 
     /** @type {any} */
     let evidence = null;
     if (kept) {
-      // The save is the editor's own door for a source's retained text (`origin` owner: the card's own owner, in their own
+      // The save is the writers' own door for a source's retained text (`origin` owner: the card's own owner, in their own
       // zone), at the revision this request read; a card edited in the meantime is a conflict the owner sees, not a lost edit.
       evidence = (await zones.saveEditorial(user, { expectedRevision: card.revision, sources }, card.zone_id, card.id, false, "owner")).evidence;
       bump(requests, "completed");

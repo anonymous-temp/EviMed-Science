@@ -27,7 +27,6 @@ function topic(overrides: Partial<FrontierTopicSummary> = {}): FrontierTopicSumm
     firstSeenAt: ago(5), acceptedAt: ago(4), status: "active", itemCount: 3,
     overview: { text: "长跑比赛中心脏骤停的发生率约为每10万名参赛者0.60例[1]，胸痛时应及时就医[2]，[9]不是引用。",
       refs: [{ n: 1, itemId: "p1", title: "长跑比赛中的心脏骤停", sourceName: "JAMA" }, { n: 2, itemId: "r1", title: "猝死前身体的3个求救信号", sourceName: "健康时报" }] },
-    card: null,
     ...overrides,
   };
 }
@@ -102,12 +101,10 @@ describe("a topic page", () => {
     expect(within(cited).getAllByRole("listitem")).toHaveLength(2);
   });
 
-  it("groups the items 各方报道 · 研究证据 · 背景资料 as the feed's cards, and offers the programme's card when there is one", async () => {
-    client.fetchFrontierTopic.mockResolvedValue(page({ topic: topic({ card: { id: "ec_1", title: "运动会诱发心源性猝死吗？", href: "/app/frontier/zones/ez_hot/evidence/ec_1" } }) }));
+  it("groups the items 各方报道 · 研究证据 · 背景资料 as the feed's cards", async () => {
     renderTopic();
     for (const name of ["各方报道", "研究证据", "背景资料"]) expect(await screen.findByRole("heading", { level: 2, name })).toBeInTheDocument();
     expect(screen.getByRole("list", { name: "研究证据" })).toHaveTextContent("Cardiac Arrest During Long-Distance Running Races");
-    expect(screen.getByRole("link", { name: "查看证据卡片" })).toHaveAttribute("href", "/app/frontier/zones/ez_hot/evidence/ec_1");
   });
 
   it("says a topic with nothing gathered yet in one sentence, its way on a link underlined like the reader's in-text links", async () => {
@@ -182,9 +179,9 @@ describe("热点话题 in 热榜 and 当前热点", () => {
 });
 
 describe("the client's reading of a topic", () => {
-  it("keeps the contract's fields, drops a card that is not the app's own page, and never reads a name field", () => {
-    const parsed = parseFrontierTopic({ ...topic(), subjectNames: ["某人"], card: { id: "ec_1", title: "t", href: "https://evil.example/x" } });
-    expect(parsed?.card).toBeNull();
+  it("keeps the contract's fields, reads no card (the platform writes none) and never reads a name field", () => {
+    const parsed = parseFrontierTopic({ ...topic(), subjectNames: ["某人"], card: { id: "ec_1", title: "t", href: "/app/frontier/zones/x" } });
+    expect(parsed).not.toHaveProperty("card");
     expect(JSON.stringify(parsed)).not.toContain("某人");
     expect(parseFrontierTopic({ id: "BAD", title: "t" })).toBeNull();
     expect(parseFrontierTopic({ ...topic(), peg: { text: "据讣告…", source: { name: "微博热搜", url: "javascript:alert(1)", date: null } } })?.peg?.source.url).toBeNull();

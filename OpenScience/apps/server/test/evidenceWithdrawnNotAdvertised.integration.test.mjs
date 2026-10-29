@@ -1,13 +1,12 @@
 // A withdrawn card is not advertised (evidence-flywheel review fix 3, 2026-10-06), against a real PostgreSQL. A withdrawal sets
 // `withdrawn` on the card and leaves its state published, so every list of published cards had to learn the difference: the public
-// feed, a run's card search, an author's page, a card's related cards and what a zone offers to research from. The card's own page
+// feed, an author's page, a card's related cards and what a zone offers to research from. The card's own page
 // still reads, marked withdrawn, and so does its zone's own list, where the card sits labelled as no longer updated (a documented
 // behaviour of the upkeep, `evidenceUpkeep.integration.test.mjs`).
 import assert from "node:assert/strict";
 import { after, before, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { EvidenceAuthors } from "../src/evidenceAuthors.mjs";
-import { createEvidenceCardSearch } from "../src/evidenceCardSearch.mjs";
 import { createEvidenceFeed } from "../src/evidenceFeed.mjs";
 import { EvidenceZoneService } from "../src/evidenceZoneService.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
@@ -25,7 +24,7 @@ const cardInput = (/** @type {string} */ title, /** @type {any} */ extra = {}) =
   content: { question: "Does warfarin prevent stroke?", answer: "Fewer strokes were seen on warfarin." }, ...extra,
 });
 
-/** @type {any} */ let isolated, db, zones, feed, search, authors;
+/** @type {any} */ let isolated, db, zones, feed, authors;
 before(async () => {
   if (!url) return;
   isolated = await createGeoTestDatabase(url, "withdrawn");
@@ -34,7 +33,6 @@ before(async () => {
   await db.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES('alice','Alice','development'),('bob','Bob','development'),('publisher','Platform publisher','development')");
   zones = new EvidenceZoneService({ database: db, platformPublisherUserId: "publisher" });
   feed = createEvidenceFeed({ database: db, config: { publicUrl: "https://www.evimed.test" } });
-  search = createEvidenceCardSearch({ database: db, entityVocabulary: null });
   authors = new EvidenceAuthors({ database: db, platformPublisherUserId: "publisher" });
 });
 after(async () => { await db?.close(); await isolated?.drop(); });
@@ -46,7 +44,7 @@ const withdraw = async (/** @type {string} */ id) => {
   await db.query("UPDATE evimed_frontier.evidence_zone_meta SET version=version+1 WHERE singleton");
 };
 
-test("a withdrawn card leaves the feed, the card search, the author page and the related cards, and keeps its own page and its place in its zone's list", options, async () => {
+test("a withdrawn card leaves the feed, the author page and the related cards, and keeps its own page and its place in its zone's list", options, async () => {
   const { zone: made } = await zones.saveEditorial(publisher, { title: "Official", description: "d", background: "b", kind: "official" }, null, null, false, "programme");
   const official = (await zones.saveEditorial(publisher, { expectedRevision: made.revision, state: "published" }, made.id, null, false, "programme")).zone;
   const kept = (await zones.saveEditorial(publisher, cardInput("Warfarin kept"), official.id, null, true, "programme")).evidence;
@@ -57,11 +55,9 @@ test("a withdrawn card leaves the feed, the card search, the author page and the
   const next = (await zones.saveEditorial(alice, cardInput("Alice's second", { lineage: { previousCardId: first.id } }), aliceZone.id, null, true, "result")).evidence;
 
   const feedTitles = async () => (await feed.page({})).page.items.map((/** @type {any} */ item) => item.title).sort();
-  const searched = async () => (await search.search(bob, { q: "warfarin", limit: 20 })).cards.map((/** @type {any} */ card) => card.title).sort();
   const authorCards = async () => (await authors.page(bob, await authors.handleFor("alice"))).cards.map((/** @type {any} */ card) => card.title).sort();
   const listed = async () => (await zones.list(bob, new URLSearchParams({ scope: "public" }), official.id)).items.map((/** @type {any} */ card) => card.title).sort();
   assert.deepEqual(await feedTitles(), ["Warfarin kept", "Warfarin withdrawn"]);
-  assert.deepEqual(await searched(), ["Alice's first", "Alice's second", "Warfarin kept", "Warfarin withdrawn"]);
   assert.deepEqual(await listed(), ["Warfarin kept", "Warfarin withdrawn"]);
   assert.equal((await zones.detail(bob, official.id)).zone.evidenceCount, 2);
   assert.deepEqual((await authors.links(bob, first.id)).related.map((/** @type {any} */ card) => card.title), ["Alice's second"]);
@@ -69,7 +65,6 @@ test("a withdrawn card leaves the feed, the card search, the author page and the
   await withdraw(gone.id);
   await withdraw(next.id);
   assert.deepEqual(await feedTitles(), ["Warfarin kept"], "the feed");
-  assert.deepEqual(await searched(), ["Alice's first", "Warfarin kept"], "a run's card search");
   assert.deepEqual(await authorCards(), ["Alice's first"], "the author page's list");
   const page = await authors.page(bob, await authors.handleFor("alice"));
   assert.equal(page.totals.cards, 1, "and its total");

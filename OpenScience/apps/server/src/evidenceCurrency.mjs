@@ -9,10 +9,10 @@
  * feed — an identifier (DOI, PMID, registry number) means the same work, an entity means the same subject — and by the one
  * source-change record (`sourceChanges.mjs`), and when something bears on it the card is labelled first and answered second:
  *
- * - an AI-written card is revised by the editor (the existing flow: `evidenceCard`, `saveEditorial`, review), after which it
- *   is `current` again;
- * - a user's, company's or doctor's card is never rewritten: its producer gets one notice per card and batch of items;
- * - an official synthesis stays labelled for the platform's topic programme, which reads it through `staleOfficialCards`.
+ * - a card is never rewritten by the platform (since 2026-10-29 the platform writes no cards: the AI editor that revised them and the
+ *   topic programme that redid them are gone, and cards come from their producers and the team interface): its producer gets one
+ *   notice per card and batch of items, and the platform's own publisher account, which cannot sign in, gets none.
+ * - the frontier worker ticks the four loops through `createEvidenceUpkeepLoop` (its `evidence-upkeep` loop).
  *
  * Hidden knowledge:
  *
@@ -21,12 +21,12 @@
  *   source and not news. What an identifier match means is stored: `same_work` (the item names a study the card cites — a
  *   correction, a new report of it) against `new_evidence`; only items newer than the platform's last look are considered, so
  *   the item a cited study entered the feed as, long before, is not raised.
- *   Whether a new item changes the card's answer is the editor's judgement (`evidenceTarget`), never a rule here.
+ *   Whether a new item changes the card's answer is its producer's judgement, never a rule here.
  * - **The label is recomputed from what is known, never stepped.** `currencyLabel` is given the source changes, whether
- *   items are pending, and whether the card was retired; so a source change that is later withdrawn, or an item the editor
- *   judged irrelevant, cannot leave a stale label behind.
- * - **A retired card is still watched.** Retirement takes a card out of the editor's rotation, not out of the watch: a new
- *   matching item re-opens it.
+ *   items are pending, and whether the card was retired; so a source change that is later withdrawn, or an item its producer
+ *   marked as read, cannot leave a stale label behind.
+ * - **A retired card is still watched.** A producer's "no longer updated" takes a card out of the notices, not out of the watch:
+ *   a new matching item re-opens it.
  * - **Everything here is a label or a notice.** Nothing withholds a card from its readers and nothing here rewrites a
  *   person's words.
  *
@@ -35,7 +35,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
   PLATFORM_PUBLISHER_USER_ID, SOURCE_CHANGE_NOTICE_KINDS, SOURCE_CURRENCY_LABELS, SOURCE_CURRENCY_LABELS_ZH, currencyLabel,
-  doiOfSourceIdentifier, evidenceConclusionChanged, evidenceNewEvidenceNoticeTitleZh, evidenceUpkeepRoute,
+  doiOfSourceIdentifier, evidenceConclusionChanged, evidenceNewEvidenceNoticeTitleZh,
 } from "@evimed/domain";
 import { identifierKeys, splitKeys } from "@evimed/domain/entity-keys";
 import { HttpError } from "./security.mjs";
@@ -55,8 +55,6 @@ export const EVIDENCE_UPKEEP_LIMITS = Object.freeze({
   entityMatchMin: 2,
   /** Items one match asks for. */
   matchLimit: 20,
-  /** A repeated "searched, nothing new" is one entry of the public log per this many days, not one per check. */
-  noChangeLogGapDays: 30,
   /** How long a loop holds its lease, and how long a card that failed is left alone. */
   leaseMs: 120_000, failureBackoffMs: 600_000,
   /** One page of the source-change feed, and the stale source keys refreshed before it is read. */
@@ -67,7 +65,7 @@ export const EVIDENCE_UPKEEP_LIMITS = Object.freeze({
 
 /** The levers the loops read (`config.mjs`), with the defaults that apply when a deployment sets none. */
 export const EVIDENCE_UPKEEP_DEFAULTS = Object.freeze({
-  batch: 20, intervalHours: 24, retireAfterChecks: 6, retireAfterDays: 180, challengesPerDay: 10,
+  batch: 20, intervalHours: 24, challengesPerDay: 10,
 });
 
 /** @param {unknown} value */
@@ -120,67 +118,12 @@ export function cardIdentifierKeys(card) {
   return [...new Set([...cited, ...stated])].sort();
 }
 
-/**
- * What a zone is about, as keys: its own words resolved through the vocabulary, joined to the entity keys and the identifier
- * keys of the cards it holds. A resolver that cannot answer leaves the zone with its cards' keys alone.
- * @param {{ database: any, service?: any, zone: { id: string, title?: string, description?: string, background?: string } }} input
- * @returns {Promise<{ entityKeys: string[], identifierKeys: string[] }>}
- */
-export async function zoneMatchKeys({ database, service = null, zone }) {
-  const texts = [zone.title, zone.description, zone.background].filter((text) => typeof text === "string" && text.trim());
-  const own = typeof service?.entityKeysFor === "function" && texts.length
-    ? await service.entityKeysFor({ texts, identifiers: [] }).catch(() => []) : [];
-  const cards = (await database.query(
-    `SELECT c.entity_keys,c.source_keys FROM evimed_frontier.evidence_cards c WHERE c.zone_id=$1 AND c.state='published' ORDER BY c.updated_at DESC LIMIT 200`, [zone.id],
-  )).rows;
-  return splitKeys([...(Array.isArray(own) ? own : []), ...cards.flatMap((row) => [...(row.entity_keys ?? []), ...(row.source_keys ?? [])])]);
-}
-
 const CARD_COLUMNS = `c.id,c.zone_id,c.user_id,c.revision,c.title,c.state,c.source_item_id,c.lineage,c.entity_keys,c.producer,c.originality,
   c.currency,c.pending_item_ids,c.currency_detail,c.last_checked_at,c.withdrawn,c.retired_at,c.no_change_checks,c.no_change_since,
   c.source_keys,c.source_keys_revision,c.created_at,
-  c.editorial->'author'->>'kind' AS author_kind,
-  coalesce(c.editorial->>'automationContentHash' IS NOT NULL AND c.editorial->>'automationContentHash'=c.editorial->>'contentHash',false) AS ai_managed,
   (SELECT coalesce(jsonb_agg(jsonb_build_object('url',s->>'url')),'[]'::jsonb) FROM jsonb_array_elements(c.sources) s) AS source_refs,
-  z.kind AS zone_kind,z.user_id AS zone_owner,z.title AS zone_title,
-  coalesce((SELECT a.enabled FROM evimed_frontier.evidence_automation a WHERE a.zone_id=c.zone_id),false) AS automation_enabled`;
+  z.kind AS zone_kind,z.user_id AS zone_owner,z.title AS zone_title`;
 const CARD_FROM = "evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id";
-
-/**
- * Who answers for this card right now: the editor (an AI card, kept by one, in a zone whose upkeep is on), the producer, or
- * the programme. An AI card whose zone's upkeep is off or whose text a person edited is its owner's to answer for — or, in
- * an official zone, waits for the programme.
- * @param {any} row a card row with `CARD_COLUMNS`
- * @returns {'editor' | 'producer_notice' | 'programme'}
- */
-export function cardUpkeepRoute(row) {
-  const official = officialZoneRow(row);
-  const route = evidenceUpkeepRoute({
-    zoneKind: official ? "official" : row.zone_kind, producerKind: row.producer?.kind ?? null,
-    authorKind: row.author_kind === "ai" && row.ai_managed ? "ai" : "human", originality: row.originality, lineage: row.lineage,
-  });
-  if (route === "editor" && !row.automation_enabled) return official ? "programme" : "producer_notice";
-  return route;
-}
-
-/**
- * The official cards the platform's topic programme is to take up: published, in an official zone, labelled as having new
- * evidence or a changed source, and not ones the editor is keeping itself. Newest label first.
- * @param {any} database @param {{ limit?: number }} [options]
- * @returns {Promise<Array<{ cardId: string, zoneId: string, currency: string, pendingItemIds: string[], lastCheckedAt: string | null }>>}
- */
-export async function staleOfficialCards(database, { limit = 20 } = {}) {
-  const size = Math.max(1, Math.min(200, Math.trunc(Number(limit)) || 20));
-  await migrateEvidenceZones(database);
-  const rows = (await database.query(
-    `SELECT ${CARD_COLUMNS} FROM ${CARD_FROM}
-     WHERE c.state='published' AND z.state='published' AND c.withdrawn IS NULL AND c.currency IN ('new_evidence_pending','source_changed')
-       AND (z.kind='official' OR z.user_id=$1) ORDER BY c.updated_at DESC,c.id LIMIT 1000`, [PLATFORM_PUBLISHER_USER_ID],
-  )).rows;
-  return rows.filter((row) => cardUpkeepRoute(row) === "programme").slice(0, size).map((row) => ({
-    cardId: row.id, zoneId: row.zone_id, currency: row.currency, pendingItemIds: row.pending_item_ids ?? [], lastCheckedAt: iso(row.last_checked_at),
-  }));
-}
 
 /**
  * @typedef {{ itemId: string, kind: 'same_work' | 'new_evidence', title: string | null, source: string | null }} PendingItem
@@ -200,7 +143,7 @@ const changeKey = (change) => `${change.identifier ?? ""}|${change.kind}|${chang
  *   sourceChanges?: ReturnType<typeof import("./sourceChanges.mjs").createSourceChanges> | null,
  *   notifications?: { create: (userId: string, input: any) => Promise<any> } | null,
  *   matchItems?: ((query: any) => Promise<any[]>) | null,
- *   levers?: { batch?: number, intervalHours?: number, retireAfterChecks?: number, retireAfterDays?: number, challengesPerDay?: number }, now?: () => Date, workerId?: string, report?: (code: string) => void,
+ *   levers?: { batch?: number, intervalHours?: number, challengesPerDay?: number }, now?: () => Date, workerId?: string, report?: (code: string) => void,
  *   isOperator?: (userId: string) => boolean,
  *   notifyZoneFollowers?: ((event: { zoneId: string, cardId: string, revision: number, kind: 'updated' | 'corrected' | 'withdrawn' }) => Promise<any>) | null,
  *   resultImpacts?: any, knowledgeChange?: any,
@@ -218,8 +161,8 @@ export function createEvidenceUpkeep({
   const L = EVIDENCE_UPKEEP_LIMITS;
   const match = matchItems ?? ((/** @type {any} */ query) => frontierItemsMatching(database, query));
   const counters = {
-    watched: 0, watchFailures: 0, newEvidence: 0, sameWork: 0, sourceChanged: 0, noChange: 0, retired: 0, reopened: 0, followUpsQueued: 0, programmeHeld: 0,
-    noticesSent: 0, noticesSkipped: 0, noticeFailures: 0, followUpsDone: 0, notRelevant: 0, producerEdits: 0,
+    watched: 0, watchFailures: 0, newEvidence: 0, sameWork: 0, sourceChanged: 0, noChange: 0, retired: 0, reopened: 0,
+    noticesSent: 0, noticesSkipped: 0, noticeFailures: 0, producerEdits: 0,
     sourcePolls: 0, sourceCardsMarked: 0, sourceKeysRefreshed: 0, downstreamPages: 0, downstreamAccounts: 0, downstreamFailures: 0,
   };
   /** Cards whose check failed, left alone for a while so one bad card cannot starve the rest. @type {Map<string, number>} */
@@ -277,59 +220,12 @@ export function createEvidenceUpkeep({
   }
 
   /**
-   * Ask the editor to revise a card: its job (the maintenance job of that card, made if there is none) goes back to pending with the
-   * newest matching item as the source to read. Only a card of a zone whose upkeep is on is ever queued; a job that is running is
-   * left alone, and the next pass finds the card still labelled.
-   * @param {any} row @param {{ kind: 'new_evidence' | 'source_change', items?: PendingItem[] }} request
-   */
-  async function queueFollowUp(row, { kind, items = [] }) {
-    const target = items[0] ? (await database.query(
-      "SELECT public_id,canonical_url,title_raw FROM evimed_frontier.items WHERE public_id=$1", [items[0].itemId])).rows[0] ?? null : null;
-    const payload = { managedRevision: row.revision, upkeep: { kind, itemIds: items.map((item) => item.itemId), beforeRevision: row.revision, requestedAt: now().toISOString() } };
-    return database.transaction(async (/** @type {any} */ client) => {
-      const jobs = (await client.query(
-        `SELECT * FROM evimed_frontier.evidence_editorial_jobs WHERE zone_id=$1 AND card_id=$2 ORDER BY updated_at DESC,id FOR UPDATE`, [row.zone_id, row.id])).rows;
-      if (jobs.some((job) => job.state === "running")) return false;
-      if (jobs.length) {
-        await client.query(
-          `UPDATE evimed_frontier.evidence_editorial_jobs SET state='pending',attempts=0,available_at=clock_timestamp(),last_error=NULL,lease_owner=NULL,lease_until=NULL,
-             source_item_id=coalesce($2,source_item_id),source_url=coalesce($3,source_url),source_title=coalesce($4,source_title),
-             payload=(COALESCE(payload,'{}'::jsonb)-'rewriteRevision'-'sourceReadCursor')||$5::jsonb,updated_at=clock_timestamp() WHERE id=$1`,
-          [jobs[0].id, target?.public_id ?? null, target?.canonical_url ?? null, target?.title_raw ?? null, JSON.stringify(payload)],
-        );
-      } else {
-        const identity = `card:${row.id}`;
-        await client.query(
-          `INSERT INTO evimed_frontier.evidence_editorial_jobs(id,zone_id,identity_key,card_id,source_item_id,source_url,source_title,payload)
-           VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb) ON CONFLICT(zone_id,identity_key) DO NOTHING`,
-          [`ej_${sha(JSON.stringify([row.zone_id, identity])).slice(0, 32)}`, row.zone_id, identity, row.id, target?.public_id ?? row.source_item_id ?? null,
-            target?.canonical_url ?? null, target?.title_raw ?? null, JSON.stringify(payload)],
-        );
-      }
-      counters.followUpsQueued += 1;
-      return true;
-    });
-  }
-
-  /**
-   * What happens after a card was labelled, by who answers for it. An editor card is queued; everything else — or an editor card
-   * that could not be queued — is told to its producer; an official synthesis is left for the programme.
+   * What happens after a card was labelled: its producer is told, once per batch (a card of the platform's own publisher account is not).
    * @param {any} row @param {{ kind: 'new_evidence' | 'source_change', items?: PendingItem[], changes?: CardChange[] }} what
    */
   async function answer(row, { kind, items = [], changes = [] }) {
-    const route = cardUpkeepRoute(row);
     const key = sha(JSON.stringify(kind === "new_evidence" ? items.map((item) => item.itemId).sort() : changes.map(changeKey).sort())).slice(0, 24);
-    if (route === "programme") { counters.programmeHeld += 1; return route; }
-    if (route === "editor") {
-      let queued = false;
-      try { queued = await queueFollowUp(row, { kind, items }); } catch (error) { failed("queue", error); }
-      // A source change on a person's own zone is told to them as well: the editor can re-read a retracted source but not repair the card.
-      if (kind === "source_change" && !officialZoneRow(row)) await notifyProducer(row, { kind, changes, key });
-      if (!queued && kind === "new_evidence") await notifyProducer(row, { kind, items, key });
-      return route;
-    }
     await notifyProducer(row, { kind, items, changes, key });
-    return route;
   }
 
   // ----- the card's own check -------------------------------------------------------------------------------------------
@@ -421,53 +317,15 @@ export function createEvidenceUpkeep({
     if (fresh.length) { counters.newEvidence += 1; if (fresh.some((item) => item.kind === "same_work")) counters.sameWork += 1; }
     if (addedChanges.length) counters.sourceChanged += 1;
     if (reopened) counters.reopened += 1;
-    // The card that is already pending and was asked again is not re-queued: its first answer is still under way or was given.
-    const route = cardUpkeepRoute(row);
+    // The card that is already pending and was asked again is not told again: its producer was told of these items once.
     if (addedChanges.length) await answer(row, { kind: "source_change", changes: addedChanges });
     if (fresh.length) await answer({ ...row, retired_at: retiredAt }, { kind: "new_evidence", items: pending });
-    else if (!addedChanges.length && pending.length && route !== "programme") await revisitPending(row, pending);
-    if (quiet) await afterQuietCheck({ ...row, no_change_checks: checks, last_checked_at: at }, route);
+    if (quiet) counters.noChange += 1;
   }
 
   /**
-   * A card still waiting on its items when an editor could not take them (its job failed or was refused), is told to its owner once.
-   * @param {any} row @param {PendingItem[]} pending
-   */
-  async function revisitPending(row, pending) {
-    if (cardUpkeepRoute(row) !== "editor") return;
-    const job = (await database.query(`SELECT state FROM evimed_frontier.evidence_editorial_jobs WHERE zone_id=$1 AND card_id=$2 ORDER BY updated_at DESC LIMIT 1`, [row.zone_id, row.id])).rows[0];
-    if (job && ["failed", "conflict"].includes(job.state))
-      await notifyProducer(row, { kind: "new_evidence", items: pending, key: sha(JSON.stringify(pending.map((item) => item.itemId).sort())).slice(0, 24) });
-  }
-
-  /**
-   * A check that found nothing: for a card the platform keeps, a repeated "searched, no change" is written to the public log
-   * (at most once per `noChangeLogGapDays`) and a card that nobody reads, follows or comments on, after enough such checks over
-   * enough days, is retired.
-   * @param {any} row @param {string} route
-   */
-  async function afterQuietCheck(row, route) {
-    counters.noChange += 1;
-    if (route !== "editor" || row.retired_at) return;
-    const gap = (await database.query(
-      `SELECT 1 FROM evimed_frontier.evidence_change_log WHERE card_id=$1 AND category='searched_no_change' AND trigger='scheduled_check'
-         AND occurred_at>clock_timestamp()-$2*interval '1 day' LIMIT 1`, [row.id, L.noChangeLogGapDays])).rowCount;
-    if (!gap) await changeLog.append({ zoneId: row.zone_id, cardId: row.id, category: "searched_no_change", trigger: "scheduled_check", revisionBefore: row.revision, revisionAfter: row.revision });
-    const since = row.no_change_since ? new Date(row.no_change_since) : null;
-    if (row.no_change_checks < lever.retireAfterChecks || !since || now().getTime() - since.getTime() < lever.retireAfterDays * 86_400_000) return;
-    // Reads of a page are not recorded, so "nobody reads it" is read from what is: a follow of the zone, or a comment, review or
-    // question since the quiet period began.
-    const attended = (await database.query(
-      `SELECT (EXISTS(SELECT 1 FROM evimed_frontier.evidence_zone_follows WHERE zone_id=$1)
-        OR EXISTS(SELECT 1 FROM evimed_frontier.evidence_comments WHERE card_id=$2 AND created_at>=$3)
-        OR EXISTS(SELECT 1 FROM evimed_frontier.evidence_reviews WHERE card_id=$2 AND updated_at>=$3)
-        OR EXISTS(SELECT 1 FROM evimed_frontier.evidence_zone_feedback WHERE zone_id=$1 AND created_at>=$3)) AS attended`, [row.zone_id, row.id, since])).rows[0].attended;
-    if (!attended) await retireCard(row, { by: "inactivity" });
-  }
-
-  /**
-   * Take a card out of the editor's rotation: `no_longer_updated`, with the date of the last check, and one entry in the log.
-   * @param {any} row @param {{ by: 'producer' | 'inactivity' }} options
+   * A producer's "no longer updated": the card is labelled `no_longer_updated`, with the date of the last check, and one entry in the log.
+   * @param {any} row @param {{ by: 'producer' }} options
    */
   async function retireCard(row, { by }) {
     const at = now();
@@ -611,58 +469,10 @@ export function createEvidenceUpkeep({
     } finally { await release("downstream", next); }
   }
 
-  // ----- the editor's side ---------------------------------------------------------------------------------------------
-
   /**
-   * An upkeep job of the editor ended (`outcome`: `revised` — the card was rewritten and reviewed; `not_relevant` — the editor
-   * judged the new items did not bear on it; `paused` — a source's publication status stopped the rewrite; `unchanged` — nothing to
-   * rewrite). The items it was given are handled; a revised card is `current` again with an entry that says whether its conclusion
-   * moved; its zone's followers are told.
-   * @param {{ cardId: string, upkeep: any, outcome: 'revised' | 'not_relevant' | 'paused' | 'unchanged' }} input
-   */
-  async function afterFollowUp({ cardId, upkeep, outcome }) {
-    if (!upkeep || upkeep.kind !== "new_evidence") return;
-    const row = (await database.query(`SELECT ${CARD_COLUMNS} FROM ${CARD_FROM} WHERE c.id=$1`, [cardId])).rows[0];
-    if (!row) return;
-    const itemIds = Array.isArray(upkeep.itemIds) ? upkeep.itemIds : [];
-    const detail = row.currency_detail ?? {};
-    const pending = (Array.isArray(detail.pending) ? detail.pending : []).filter((/** @type {PendingItem} */ item) => !itemIds.includes(item.itemId));
-    const handled = [...new Set([...(Array.isArray(detail.handled) ? detail.handled : []), ...itemIds])].slice(-L.handledItems);
-    const changes = Array.isArray(detail.changes) ? detail.changes : [];
-    const label = currencyLabel({ changes, hasNewEvidence: pending.length > 0, retired: Boolean(row.retired_at) });
-    const sameWork = (Array.isArray(detail.pending) ? detail.pending : []).some((/** @type {PendingItem} */ item) => itemIds.includes(item.itemId) && item.kind === "same_work");
-    let before = null;
-    if (outcome === "revised" && Number.isSafeInteger(upkeep.beforeRevision))
-      before = (await database.query("SELECT snapshot FROM evimed_frontier.evidence_card_revisions WHERE card_id=$1 AND revision=$2", [cardId, upkeep.beforeRevision])).rows[0]?.snapshot ?? null;
-    const after = outcome === "revised" ? (await database.query("SELECT title,summary,content,claims FROM evimed_frontier.evidence_cards WHERE id=$1", [cardId])).rows[0] : null;
-    await database.transaction(async (/** @type {any} */ client) => {
-      await client.query(
-        `UPDATE evimed_frontier.evidence_cards SET currency=$2,pending_item_ids=$3,currency_detail=$4::jsonb,last_checked_at=$5,
-           no_change_checks=CASE WHEN $6 THEN no_change_checks+1 ELSE 0 END,no_change_since=CASE WHEN $6 THEN coalesce(no_change_since,$5) ELSE NULL END WHERE id=$1`,
-        [cardId, label, pending.map((/** @type {PendingItem} */ item) => item.itemId), JSON.stringify({ ...detail, pending, handled }), now(), outcome === "not_relevant" || outcome === "unchanged"],
-      );
-      if (outcome === "revised") {
-        const changed = before && after ? evidenceConclusionChanged(before, after) : false;
-        await changeLog.append({
-          zoneId: row.zone_id, cardId, category: changed ? "new_evidence_conclusion_changed" : "new_evidence_conclusion_unchanged", trigger: "new_evidence",
-          revisionBefore: upkeep.beforeRevision ?? null, revisionAfter: row.revision, facts: { itemCount: itemIds.length, sameWork }, refs: { frontierItemIds: itemIds },
-        }, { client });
-      }
-    });
-    if (outcome === "revised") {
-      counters.followUpsDone += 1;
-      if (notifyZoneFollowers) await notifyZoneFollowers({ zoneId: row.zone_id, cardId, revision: row.revision, kind: "updated" }).catch((error) => failed("followers", error));
-    } else if (outcome === "not_relevant" || outcome === "unchanged") {
-      // The editor looked and the card stands: a quiet check, in the log's words and in the retirement rule's count.
-      counters.notRelevant += 1;
-      await afterQuietCheck({ ...row, currency: label, last_checked_at: now(), no_change_checks: row.no_change_checks + 1, no_change_since: row.no_change_since ?? now() }, cardUpkeepRoute(row));
-    }
-  }
-
-  /**
-   * A published card got a new revision from someone other than the editor: its producer's own edit (or the programme's), which is
-   * an entry of the public log. An edit made while new studies were pending is the producer's answer to them; it names them and
-   * says whether the conclusion moved.
+   * A published card got a new revision from its producer (an edit of their own), which is an entry of the public log; the platform's own
+   * writer (origin `model`: a challenge's amendment, which the challenge's own entry already records) is not the producer. An edit made
+   * while new studies were pending is the producer's answer to them; it names them and says whether the conclusion moved.
    * @param {{ origin: string, zoneId: string, cardId: string, revision: number, state?: string }} event
    */
   async function onCardRevision({ origin, zoneId, cardId, revision, state = "published" }) {
@@ -729,8 +539,7 @@ export function createEvidenceUpkeep({
   }
 
   return {
-    watchTick, sourcePollTick, downstreamTick, afterFollowUp, onCardRevision, setUpkeep, retireCard,
-    staleOfficialCards: (/** @type {{ limit?: number }} */ options = {}) => staleOfficialCards(database, options),
+    watchTick, sourcePollTick, downstreamTick, onCardRevision, setUpkeep, retireCard,
     stats: () => ({ ...counters }),
   };
 }
@@ -749,13 +558,46 @@ export function evidenceUpkeepMetricFamilies(stats) {
     counter("labelled_total", "Cards labelled by what bears on them: new evidence (and, of those, items naming a study the card cites), a changed source, a card re-opened, a card retired.",
       [[{ label: "new_evidence" }, stats.newEvidence], [{ label: "same_work" }, stats.sameWork], [{ label: "source_changed" }, stats.sourceChanged],
         [{ label: "reopened" }, stats.reopened], [{ label: "retired" }, stats.retired], [{ label: "searched_no_change" }, stats.noChange]]),
-    counter("answers_total", "What was done about a labelled card, by who answers for it: a follow-up queued for the editor, an official card held for the topic programme, a notice sent to its producer, a follow-up finished, new items the editor judged not to bear on the card.",
-      [[{ answer: "editor_queued" }, stats.followUpsQueued], [{ answer: "programme_held" }, stats.programmeHeld], [{ answer: "notice_sent" }, stats.noticesSent],
-        [{ answer: "notice_skipped" }, stats.noticesSkipped], [{ answer: "notice_failed" }, stats.noticeFailures], [{ answer: "follow_up_done" }, stats.followUpsDone],
-        [{ answer: "not_relevant" }, stats.notRelevant], [{ answer: "producer_edit_logged" }, stats.producerEdits]]),
+    counter("answers_total", "What was done about a labelled card: a notice sent to its producer, one skipped (the platform's own publisher account cannot sign in), one that failed, and an edit of the producer's own entered in the public log.",
+      [[{ answer: "notice_sent" }, stats.noticesSent], [{ answer: "notice_skipped" }, stats.noticesSkipped], [{ answer: "notice_failed" }, stats.noticeFailures],
+        [{ answer: "producer_edit_logged" }, stats.producerEdits]]),
     counter("source_feed_total", "Source-change feed pages read for cards, cards marked from them, and card source keys refreshed.",
       [[{ what: "pages" }, stats.sourcePolls], [{ what: "cards_marked" }, stats.sourceCardsMarked], [{ what: "keys_refreshed" }, stats.sourceKeysRefreshed]]),
     counter("downstream_total", "Pages of the source-change feed handed to the result impact and memory-label readers, accounts they were asked about, and the asks that failed.",
       [[{ what: "pages" }, stats.downstreamPages], [{ what: "accounts" }, stats.downstreamAccounts], [{ what: "failures" }, stats.downstreamFailures]]),
   ];
+}
+
+/**
+ * The upkeep's four loops as one tick for the frontier worker (its `evidence-upkeep` loop; 2026-10-29, when the AI editor whose tick used to
+ * drive them was deleted): the watch, the source-change poll, the downstream readers and the challenge re-check, each asked as often as it
+ * needs and each leased by itself, so two control planes never run the same pass. A loop that fails is counted and does not hold up the others.
+ * @param {{ upkeep?: ReturnType<typeof createEvidenceUpkeep> | null, challenges?: { recheckTick: () => Promise<unknown> } | null,
+ *   now?: () => Date, report?: (code: string) => void }} options
+ */
+export function createEvidenceUpkeepLoop({ upkeep = null, challenges = null, now = () => new Date(), report = () => {} }) {
+  /** @type {Record<string, number>} When each loop is next due, ms since epoch. */
+  const nextAt = {};
+  const counters = { ticks: 0, failures: 0 };
+  /** @type {string | null} */
+  let lastError = null;
+  /** @type {Array<[string, number, (() => Promise<unknown>) | null]>} */
+  const loops = [
+    ["sourceChanges", 60_000, upkeep ? () => upkeep.sourcePollTick() : null],
+    ["watch", 60_000, upkeep ? () => upkeep.watchTick() : null],
+    ["downstream", 60_000, upkeep ? () => upkeep.downstreamTick() : null],
+    ["challenges", 30_000, challenges ? () => challenges.recheckTick() : null],
+  ];
+  return {
+    async tick() {
+      const at = now().getTime();
+      for (const [name, every, run] of loops) {
+        if (!run || at < (nextAt[name] ?? 0)) continue;
+        nextAt[name] = at + every;
+        try { await run(); counters.ticks += 1; }
+        catch (error) { counters.failures += 1; lastError = codeOf(error); try { report(`evidence upkeep ${name}: ${lastError}`); } catch { /* the report is advice */ } }
+      }
+    },
+    status: () => ({ ...counters, lastError }),
+  };
 }

@@ -4,7 +4,7 @@ import { ControlPlaneDatabase } from '../src/controlPlaneDatabase.mjs';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 import { migrateEvidenceZones } from '../src/evidenceZonePersistence.mjs';
 import { createEvidenceTopicRequests } from '../src/evidencePublicRequests.mjs';
-import { createEvidenceCardSearch } from '../src/evidenceCardSearch.mjs';
+import { rankEvidenceCards } from '../src/evidenceJudgeRanking.mjs';
 import { EvidenceZoneSubscriptions } from '../src/evidenceZoneSubscription.mjs';
 import { ProductDocuments } from '../src/productStore.mjs';
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL;
@@ -54,14 +54,12 @@ test('J13 sends only published subscribed cards, preserves cards, and never reca
     assert.deepEqual(new Set(input.cards.map(c => c.id)), new Set(['ec_aaaaaaaa','ec_bbbbbbbb']));
     return { outcome: 'settled', value: { rankedIds: ['ec_bbbbbbbb','ec_aaaaaaaa'] } };
   } };
-  const search = createEvidenceCardSearch({ database, judgeService });
-  assert.deepEqual((await search.search({ id: 'bob' }, { q: 'stroke', limit: 5 }, { projectId: 'p1' })).cards.map(c => c.id), ['ec_bbbbbbbb','ec_aaaaaaaa']);
   const subscriptions = new EvidenceZoneSubscriptions({ database, documents: new ProductDocuments(database), enabled: true, judgeService });
   await subscriptions.subscribe('bob', 'p1', zone);
   assert.deepEqual((await subscriptions.recall('bob', 'p1', 'stroke prevention')).map(c => c.id), ['ec_bbbbbbbb','ec_aaaaaaaa']);
   assert.deepEqual(await subscriptions.recall('alice', 'p1', 'stroke prevention'), []);
   assert.deepEqual(await subscriptions.recall('bob', 'p2', 'stroke prevention'), []);
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 1);
 });
 
 
@@ -119,8 +117,9 @@ test('actual JudgeService and durable ledger bill J13 to the real project and re
       return Response.json({ model: 'jev-1.13.0', answers, usage: { input_tokens: 100, output_tokens: 5 } });
     } });
   try {
-    const search = createEvidenceCardSearch({ database, judgeService: judge });
-    assert.equal((await search.search({ id: 'bob' }, { q: 'stroke' }, { projectId: 'p1' })).cards.length, 2);
+    const ranked = await rankEvidenceCards([{ id: 'ec_aaaaaaaa', title: 'stroke prevention', summary: 'stroke evidence' }, { id: 'ec_bbbbbbbb', title: 'stroke prevention', summary: 'stroke evidence' }],
+      'stroke', judge, { userId: 'bob', projectId: 'p1', runId: null });
+    assert.equal(ranked.length, 2);
     const billed = (await database.query("SELECT project_id,status FROM evimed_usage.model_requests WHERE operation='J13' AND user_id='bob'")).rows;
     assert.equal(billed.length, 1); assert.equal(billed[0].project_id, 'p1'); assert.equal(billed[0].status, 'settled');
     const requests = createEvidenceTopicRequests({ database, config: { evidenceTopicRequestsPerDay: 1 }, judgeService: judge,

@@ -9,7 +9,6 @@ import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { EvidenceCardFromResult } from "../src/evidenceCardFromResult.mjs";
 import { EvidenceContinuation, evidenceSourceRecord } from "../src/evidenceContinuation.mjs";
 import { EvidenceOrigins } from "../src/evidenceOrigins.mjs";
-import { buildProgrammeCard } from "../src/evidenceProgrammeCard.mjs";
 import { EvidenceZoneService } from "../src/evidenceZoneService.mjs";
 import { EVIDENCE_ZONE_SQL } from "../src/evidenceZonePersistence.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
@@ -94,24 +93,6 @@ test("a source too large to keep whole carries the passages its claims quote, so
   assert.equal(row.sources[0].documentText, undefined, "past what a card keeps whole");
   assert.ok(row.sources[0].excerpt.includes(QUOTES.A) && row.sources[0].excerpt.includes("The trial was open-label."), "both passages are the excerpt");
   assert.deepEqual(answer.evidence.claims.map((/** @type {any} */ claim) => [claim.claimId, claim.verification.mark]), [["CLM-001", "✓"], ["CLM-006", "✓"]]);
-});
-
-test("the programme keeps no whole text of a source with no public address either, only the passages its claims stand on", () => {
-  const text = `Intro. ${QUOTES.A} ${PRIVATE_SECRET}`;
-  const claim = (/** @type {string} */ id, /** @type {string | undefined} */ sourceUrl) => ({ claimId: id, claimType: "direct", claim: "c", artifactPath: "p/a.md", supportQuote: QUOTES.A, ...(sourceUrl ? { sourceUrl } : {}), sourceTitle: "Doc", accessLevel: "full_text" });
-  const build = (/** @type {string | undefined} */ sourceUrl) => buildProgrammeCard({
-    zone: { id: "ez_1", title: "Z" }, question: "q", taskType: "evidence-update", capabilityId: "clinical-evidence-synthesis", decisionId: "d", agenda: { id: "a" }, episode: { id: "e" },
-    runId: "r", resultVersionId: "rv_1", evaluation: { included: [{ claim: claim("C1", sourceUrl), headline: true }], excluded: [] },
-    captured: new Map([["p/a.md", { text, digest: "c".repeat(64), capturedAt: "2026-10-05T00:00:00Z" }]]), model: "m", at: new Date("2026-10-05T00:00:00Z"),
-  });
-  const addressed = /** @type {any} */ (build("https://example.org/doc"));
-  assert.equal(addressed.status, "card");
-  assert.equal(addressed.card.sources[0].documentText, text, "a public source is kept whole, as before");
-  const private_ = /** @type {any} */ (build(undefined));
-  assert.equal(private_.status, "card");
-  assert.equal(private_.card.sources[0].documentText, undefined);
-  assert.equal(JSON.stringify(private_.card.sources[0]).includes(PRIVATE_SECRET), false);
-  assert.equal(private_.card.sources[0].excerpt, QUOTES.A, "the quotations the card stands on");
 });
 
 test("continuing from a card hands the other account citations and addresses and never a source's text, whatever an older row holds", options, async () => {

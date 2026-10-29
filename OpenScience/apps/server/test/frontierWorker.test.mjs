@@ -284,3 +284,29 @@ test("the zone planner (2026-10-29) runs on the owner's money only, at most ever
   await without.tick();
   assert.equal(without.status().zonePlanner, null, "no planner, no loop");
 });
+
+test("the card upkeep runs every tick as the evidence-upkeep loop, set after the worker is built, fails alone, and shows in the status; without it there is no such loop work", async () => {
+  const { ingest, database } = stubs();
+  const time = clock();
+  let ticks = 0;
+  /** @type {string[]} */
+  const reported = [];
+  const worker = new FrontierWorker({ ingest, database, now: time.now, pollMs: 5_000, pluginPollMs: 60_000,
+    report: (loop, code) => reported.push(`${loop}:${code}`) });
+  await worker.tick();
+  assert.equal(worker.status().loops["evidence-upkeep"].runs, 0, "composed without the upkeep, the loop never starts");
+  assert.equal(worker.status().upkeep, null);
+  // The upkeep is composed after the worker (server.mjs): it is set, not passed.
+  worker.upkeep = { tick: async () => { ticks += 1; if (ticks === 2) throw Object.assign(new Error("no"), { code: "evidence_watch_down" }); }, status: () => ({ ticks }) };
+  time.advance(5_000);
+  await worker.tick();
+  time.advance(5_000);
+  await worker.tick();
+  time.advance(5_000);
+  await worker.tick();
+  assert.equal(ticks, 3, "asked on every tick: the upkeep decides for itself which of its loops is due");
+  assert.deepEqual(reported, ["evidence-upkeep:evidence_watch_down"]);
+  assert.equal(worker.status().loops["evidence-upkeep"].failures, 1);
+  assert.deepEqual(worker.status().upkeep, { ticks: 3 });
+  assert.equal("evidence" in worker.status().loops, false, "the AI editor's loop is gone");
+});

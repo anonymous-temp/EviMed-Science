@@ -5,17 +5,13 @@ import {
   prepareEvidenceResearch,
   listZoneEvidence,
   saveEvidenceCard,
-  saveEvidenceMaintenance,
-  refreshEvidenceZone,
   fetchZoneEvidence,
-  fetchEvidenceMaintenance,
   setEvidenceZoneVisibility,
   listOwnUserZones,
   publishResultAsEvidenceCard,
   continueResearchFromCard,
   fetchEvidenceCardLinks,
   fetchEvidenceAuthor,
-  type EvidenceMaintenance,
   type EvidenceZone,
   type EvidenceCard,
 } from "./evidenceZoneClient";
@@ -95,38 +91,6 @@ describe("evidence API scope", () => {
       }),
     );
   });
-  it("binds upkeep settings to the current zone revision", async () => {
-    await saveEvidenceMaintenance({ id: "a/b", revision: 8 } as EvidenceZone, {
-      enabled: true,
-      query: "CKD",
-      sourceTypes: ["journal"],
-      intervalHours: 24,
-      maxCardsPerRun: 2,
-      nextRunAt: null,
-      lastRunAt: null,
-      lastError: null,
-    });
-    expect(request).toHaveBeenCalledWith(
-      "/frontier/zones/a%2Fb/automation",
-      "PUT",
-      {
-        enabled: true,
-        query: "CKD",
-        sourceTypes: ["journal"],
-        intervalHours: 24,
-        maxCardsPerRun: 2,
-        expectedRevision: 8,
-      },
-    );
-  });
-  it("uses the owner-authorized refresh route without unsupported fields", async () => {
-    await refreshEvidenceZone({ id: "zone", revision: 3 } as EvidenceZone);
-    expect(request).toHaveBeenCalledWith(
-      "/frontier/zones/zone/automation",
-      "POST",
-      {},
-    );
-  });
   it("keeps partial source-check metadata separate from successful reading and review metadata", async () => {
     const editorial: NonNullable<EvidenceCard["editorial"]> = {
       author: { kind: "ai", name: "Writer" },
@@ -139,13 +103,6 @@ describe("evidence API scope", () => {
     };
     request.mockResolvedValueOnce({ evidence: { id: "card", editorial } });
     expect((await fetchZoneEvidence("zone", "card")).editorial).toEqual(editorial);
-    const maintenance: EvidenceMaintenance = {
-      automation: { enabled: true, query: "CKD", sourceTypes: ["journal"], intervalHours: 24, maxCardsPerRun: 2, nextRunAt: null, lastRunAt: null, lastError: null },
-      jobs: { pending: 0, running: 0, failed: 0 },
-      recent: [{ id: "job", state: "completed", attempts: 1, lastError: null, updatedAt: "2026-10-02T06:00:00Z", cardId: "card", sourceCheckStatus: "partial" }],
-    };
-    request.mockResolvedValueOnce(maintenance);
-    expect(await fetchEvidenceMaintenance("zone")).toEqual(maintenance);
   });
 });
 describe("the co-creation calls", () => {

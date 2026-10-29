@@ -51,23 +51,10 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.evidence_card_revisions (
  revision integer NOT NULL, snapshot jsonb NOT NULL, recorded_at timestamptz NOT NULL DEFAULT clock_timestamp(),
  PRIMARY KEY(card_id,revision)
 );
-CREATE TABLE IF NOT EXISTS evimed_frontier.evidence_automation (
- zone_id text PRIMARY KEY REFERENCES evimed_frontier.evidence_zones(id) ON DELETE CASCADE,
- discovery_turn boolean NOT NULL DEFAULT true, enabled boolean NOT NULL DEFAULT false, query text NOT NULL DEFAULT '', source_types text[] NOT NULL DEFAULT '{journal,regulator,evidence-body}',
- interval_hours integer NOT NULL DEFAULT 24 CHECK(interval_hours BETWEEN 1 AND 720),
- max_cards_per_run integer NOT NULL DEFAULT 2 CHECK(max_cards_per_run BETWEEN 1 AND 10),
- next_run_at timestamptz NOT NULL DEFAULT clock_timestamp(), last_run_at timestamptz, last_error text,
- updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
-);
-CREATE TABLE IF NOT EXISTS evimed_frontier.evidence_editorial_jobs (
- id text PRIMARY KEY, zone_id text NOT NULL REFERENCES evimed_frontier.evidence_zones(id) ON DELETE CASCADE,
- identity_key text NOT NULL, card_id text REFERENCES evimed_frontier.evidence_cards(id) ON DELETE CASCADE,
- source_item_id text, source_url text, source_title text,
- state text NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','running','completed','failed','conflict')),
- attempts integer NOT NULL DEFAULT 0, lease_owner text, lease_until timestamptz, available_at timestamptz NOT NULL DEFAULT clock_timestamp(),
- last_error text, payload jsonb, updated_at timestamptz NOT NULL DEFAULT clock_timestamp(), UNIQUE(zone_id,identity_key)
-);
-CREATE INDEX IF NOT EXISTS evidence_editorial_jobs_due_idx ON evimed_frontier.evidence_editorial_jobs(state,available_at);
+-- The AI editor's two tables (a zone's automation settings and its editorial job queue) are gone with the editor (2026-10-29: the platform
+-- writes no cards). Dropped on every start, which is idempotent; nothing reads them. The jobs go first: their rows referred to the zones and cards.
+DROP TABLE IF EXISTS evimed_frontier.evidence_editorial_jobs;
+DROP TABLE IF EXISTS evimed_frontier.evidence_automation;
 CREATE INDEX IF NOT EXISTS evidence_cards_zone_idx ON evimed_frontier.evidence_cards(zone_id,updated_at DESC,id);
 ALTER TABLE evimed_frontier.evidence_cards ADD COLUMN IF NOT EXISTS source_item_id text;
 CREATE TABLE IF NOT EXISTS evimed_frontier.evidence_zone_follows (
@@ -125,7 +112,7 @@ UPDATE evimed_frontier.evidence_cards c SET producer=CASE
 UPDATE evimed_frontier.evidence_cards SET originality=CASE WHEN editorial->'author'->>'kind'='ai' THEN 'brief' ELSE 'synthesis' END
   WHERE originality IS NULL;
 -- A programme card with no headline claim carried one neutral sentence as its list line — the same words on every such card, so a zone
--- listed nineteen identical rows (R19, audit D C3). The builder now writes the card's first conclusion (evidenceProgrammeCard.mjs); this
+-- listed nineteen identical rows (R19, audit D C3). The programme's builder (deleted 2026-10-29) wrote the card's first conclusion; this
 -- takes the cards an earlier release wrote to the same line. The sentence is the builder's own code-built string, matched exactly, and
 -- only a card whose first claim is a direct quotation is touched (a synthesis keeps its confidence label, which only the builder adds).
 -- Idempotent: a row that no longer carries the sentence is not selected, and the zones' version moves only when a row changed.

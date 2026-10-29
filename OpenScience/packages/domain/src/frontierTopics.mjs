@@ -7,11 +7,11 @@
  * is that question: written as the question, never as the person; the event is one attributed line (`peg`); what the lead
  * triggers found for it — Chinese reports, primary research, guidelines and statistics — are its items; one overview paragraph
  * places them, citing each by number. The platform does not report the event itself and writes no news of its own: a topic
- * curates and cites, and the deeper answer, when the evidence programme takes the day's strongest topic, is an official evidence
- * card whose every claim is checked against its source (`programme_*`).
+ * curates and cites. (The platform's evidence programme, which until 2026-10-29 answered the day's strongest topic with an official
+ * evidence card, is deleted; the `programme_*` columns of the topics table stay, unread.)
  *
  * The vocabulary here is shared by the lead trigger (`apps/server/src/frontierLeads.mjs`), the topic service, the evidence
- * programme and the reader pages.
+ * reader pages.
  */
 
 /**

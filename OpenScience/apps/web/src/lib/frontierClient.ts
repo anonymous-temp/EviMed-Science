@@ -1952,8 +1952,8 @@ export function markFrontierEventRead(eventId: string, mark: Record<string, stri
 
 /**
  * A hot-event topic (contract §T): the general medical question a public event raised — its title is the question — the event
- * in one attributed line, its field, and, when written, one overview citing the topic's items by number; `card` is the
- * evidence programme's official card for it, when there is one. Never the names of the event's people.
+ * in one attributed line, its field, and, when written, one overview citing the topic's items by number. Never the names of the event's
+ * people.
  */
 export type FrontierTopicSummary = {
   id: string;
@@ -1968,7 +1968,6 @@ export type FrontierTopicSummary = {
   status: "active" | "closed";
   itemCount: number;
   overview: { text: string; refs: Array<{ n: number; itemId: string; title: string; sourceName: string }> } | null;
-  card: { id: string; title: string; href: string } | null;
 };
 
 /** What an item is to a topic: a report on the question, a piece of primary evidence, or background. */
@@ -1987,8 +1986,6 @@ export function parseFrontierTopic(value: unknown): FrontierTopicSummary | null 
   const peg = record(raw.peg);
   const pegSource = record(peg?.source);
   const overview = record(raw.overview);
-  const card = record(raw.card);
-  const href = text(card?.href);
   return {
     id: topicId,
     title,
@@ -2010,8 +2007,6 @@ export function parseFrontierTopic(value: unknown): FrontierTopicSummary | null 
         return n && itemId ? [{ n, itemId, title: text(ref?.title) ?? "", sourceName: text(ref?.sourceName) ?? "" }] : [];
       }),
     } : null,
-    // Only an address inside the app is followed: a card is read on the evidence zone's own page.
-    card: card && text(card.id) && text(card.title) && href && href.startsWith("/app/frontier/zones/") ? { id: String(card.id), title: String(card.title), href } : null,
   };
 }
 

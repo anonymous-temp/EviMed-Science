@@ -4,12 +4,11 @@ import { HttpError, readJson, sendJson } from "./security.mjs";
  * `reads` is the topic zones' read side (`evidenceZoneReads.mjs`): the directory views, a topic zone's detail, overview, 「动态」 and
  * cards. `writes` is the write side (`evidenceZoneWrites.mjs`): drafting, previewing, creating, editing, deleting a reader's zone and a
  * reader's word on an item. Without them every route answers as it did before topic zones. A zone is addressed by its id or its slug.
- * @param {{store:any,service:any,editorial?:any,frontier:any,config:any,maxJsonBytes:number,reads?:any,writes?:any}} options
+ * @param {{store:any,service:any,frontier:any,config:any,maxJsonBytes:number,reads?:any,writes?:any}} options
  */
 export function createEvidenceZoneRoutes({
   store,
   service,
-  editorial=null,
   frontier,
   config,
   maxJsonBytes,
@@ -105,8 +104,6 @@ export function createEvidenceZoneRoutes({
         return reply(await service.save(user, value, zoneId));
       }
     }
-    if(parts.length===3 && parts[2]==="automation" && editorial && ["GET","PUT","POST"].includes(method))
-      return reply(await editorial.automation(user,zoneId,method==="GET"?{}:await body(),method));
     // Who may read a published zone is the owner's own choice, made apart from publishing it.
     if (parts.length === 3 && parts[2] === "visibility" && method === "PUT")
       return reply(await service.setVisibility(user, zoneId, await body()));

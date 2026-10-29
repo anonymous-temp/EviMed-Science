@@ -53,8 +53,7 @@ const articlePath = (id: string) => `/app/frontier/items/${encodeURIComponent(id
  * One hot-event topic (c2-leads 2026-10-25, contract §T): the general medical question a public event raised, as its title; the
  * event in one line with where it was said; the 「AI 概览」 — one paragraph written only from the topic's items, each fact marked
  * with the item it came from, each mark opening that item — then the items themselves, the feed's own cards, grouped 各方报道 ·
- * 研究证据 · 背景资料, and 「查看证据卡片」 when the platform answered the question with an official evidence card. The way back
- * returns to the list where the reader was.
+ * 研究证据 · 背景资料. The way back returns to the list where the reader was.
  */
 export function FrontierTopicPage() {
   const feature = useFrontierFeature();
@@ -140,7 +139,6 @@ function TopicFrame({ title, actions, facts, children }: { title: string; action
 
 function TopicBody({ page, onItem }: { page: FrontierTopicPageData; onItem: (item: FrontierItem) => void }) {
   const { topic, items } = page;
-  const location = useLocation();
   const navigate = useNavigate();
   const update = async (item: FrontierItem, action: "star" | "hide") => {
     try {
@@ -155,11 +153,7 @@ function TopicBody({ page, onItem }: { page: FrontierTopicPageData; onItem: (ite
     <TopicFrame
       title={topic.title}
       actions={(
-        <>
-          {topic.card && <Link to={topic.card.href} state={{ evidenceFrom: { to: `${location.pathname}${location.search}`, label: topic.title } }}
-            className={buttonClasses({ variant: "secondary" })}>查看证据卡片</Link>}
-          <Button variant="secondary" onClick={ask}>就此提问</Button>
-        </>
+        <Button variant="secondary" onClick={ask}>就此提问</Button>
       )}
       facts={(
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-text-3">

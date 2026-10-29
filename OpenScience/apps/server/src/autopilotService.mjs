@@ -515,9 +515,9 @@ function continuationBindingKey(value) {
 /** Persistent proactive-research policy and decision ledger. Episodes remain
  * ordinary ProductJobs and are dispatched through the ordinary AgentRun path. */
 export class AutopilotService {
-  /** @param {{documents:any,jobs:any,enabled?:boolean,usage?:any,accountCaps?:()=>Record<string,any>,notifications?:any,capsules?:any,planner?:{decide:(input:any)=>Promise<any>}|null,evolution?:any,evolutionSignals?:any,entityVocabulary?:{tag:(input:{texts:string[]})=>Promise<string[]|null>,frontierItemsMatching?:(query:any)=>Promise<any[]>}|null,programme?:{owns:(userId:string,projectId:string)=>boolean,assertAdmitted:(userId:string,agenda:any,options?:{episodeId?:string|null})=>Promise<void>}|null,authorizeContinuation?:((userId:string,projectId:string,binding:any)=>Promise<void>)|null,now?:()=>Date,id?:(prefix:string)=>string}} dependencies */
+  /** @param {{documents:any,jobs:any,enabled?:boolean,usage?:any,accountCaps?:()=>Record<string,any>,notifications?:any,capsules?:any,planner?:{decide:(input:any)=>Promise<any>}|null,evolution?:any,evolutionSignals?:any,entityVocabulary?:{tag:(input:{texts:string[]})=>Promise<string[]|null>,frontierItemsMatching?:(query:any)=>Promise<any[]>}|null,authorizeContinuation?:((userId:string,projectId:string,binding:any)=>Promise<void>)|null,now?:()=>Date,id?:(prefix:string)=>string}} dependencies */
   constructor({ documents, jobs, enabled = true, usage = null, accountCaps = () => ({}), notifications = null, capsules = null, planner = null,
-    evolution = null, evolutionSignals = null, entityVocabulary = null, programme = null, authorizeContinuation = null, now = () => new Date(), id = (prefix) => `${prefix}${randomUUID()}` }) {
+    evolution = null, evolutionSignals = null, entityVocabulary = null, authorizeContinuation = null, now = () => new Date(), id = (prefix) => `${prefix}${randomUUID()}` }) {
     if (!documents || !jobs) throw new TypeError("AutopilotService requires product documents and jobs.");
     this.documents = documents;
     this.jobs = jobs;
@@ -533,12 +533,6 @@ export class AutopilotService {
     this.evolutionSignals = evolutionSignals;
     /** The shared entity vocabulary (`entityVocabulary.mjs`): an agenda is tagged with it, and without it carries no keys. */
     this.entityVocabulary = entityVocabulary;
-    /**
-     * The platform's evidence programme (`evidenceProgramme.mjs`), which runs agendas of its own account: it says which
-     * agendas are its own (`owns`: the publisher's, in its internal project), and whether the day's budget and its one slot
-     * admit one more episode (`assertAdmitted`). Absent, or for any other agenda, nothing here changes.
-     */
-    this.programme = programme;
     this.now = now;
     this.id = id;
     this.authorizeContinuation = authorizeContinuation;
@@ -2357,8 +2351,6 @@ export class AutopilotService {
     // the account's (`assertAffordable`): the agenda's ¥3 a day was once compared
     // with everything the account had spent that day (2026-10-04).
     const allowance = existingEpisode ? null : await this.assertAffordable(userId, agenda);
-    // The programme's own agendas are held by its day's budget and its one slot as well, before an episode exists to hold them.
-    if (!existingEpisode && this.programme?.owns(userId, agenda.projectId)) await this.programme.assertAdmitted(userId, agenda, { episodeId });
     // What this episode will do is decided once, from the progress, before the
     // episode exists; a replay of the same request reads the decision back from
     // the episode instead of asking again.
@@ -2552,8 +2544,6 @@ export class AutopilotService {
         context: buildPlannerContext({ agenda, progress, eligible, date, trigger, note, reducedPriority: reduced, stopAllowed, pauseAllowed,
           availableTools, evolutionEnabled: Boolean(this.evolution), frontier }),
         envelopeCny: Number.isFinite(envelopeCny) ? envelopeCny : 0,
-        // The platform's own agenda is the platform's money (purpose `evidence`), never a researcher's `autopilot`.
-        ...(this.programme?.owns(userId, agenda.projectId) ? { purpose: "evidence" } : {}),
       });
       return decision.action === "stop"
         ? { ...base, source: "model", model: decision.model, policyRevisionId: decision.policyRevisionId ?? null, action: "stop", stopKind: decision.stopKind, reason: decision.reason,
@@ -2755,7 +2745,7 @@ export class AutopilotService {
   async noteDispatchRefusal(userId, agendaId, code) {
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const agenda = await this.get(userId, agendaId);
-      if (!this.notifications || this.programme?.owns(userId, agenda.projectId)
+      if (!this.notifications
         || agenda.payload.archivedAt || !agenda.payload.enabled || agenda.payload.status !== "active") return agenda;
       const reason = /^[a-z0-9_]{1,100}$/.test(code) ? code : "autopilot_dispatch_failed";
       const key = `autopilot-refusal:${agenda.id}:${reason}:${Math.floor(this.now().getTime() / DISPATCH_REFUSAL_NOTICE_PERIOD_MS)}`;
@@ -2785,7 +2775,7 @@ export class AutopilotService {
 
   /** The inbox write is retryable after process/storage failure; its own idempotency key covers a lost reply. */
   async flushTaskNotices(userId, agenda) {
-    if (!this.notifications || this.programme?.owns(userId, agenda.projectId)) return agenda;
+    if (!this.notifications) return agenda;
     for (const notice of agenda.payload.taskNotices ?? []) {
       if (notice.status === "sent") continue;
       try { await this.notifications.create(userId, notice.input); }
@@ -2830,16 +2820,15 @@ export class AutopilotService {
       if (digest.projectId !== agenda.projectId || digest.payload.agendaId !== agenda.id) throw new HttpError(409, "autopilot_digest_conflict", "Digest identity belongs to another agenda.");
     }
     // Successful routine results announce their conversation here. Terminal failures and automatic pauses use the durable task notice in recordOutcome.
-    if (this.notifications && input.routine === "succeeded" && !this.programme?.owns(userId, agenda.projectId)) await this.notifications.create(userId, {
+    if (this.notifications && input.routine === "succeeded") await this.notifications.create(userId, {
       noticeType: "notify", title: `${agenda.payload.title} 已完成`, body: "结果在这次任务的对话里", projectId: agenda.projectId,
       source: { type: "digest", id: digest.id }, idempotencyKey: `autopilot-routine:${digest.id}`,
       actions: [{ id: "open", label: "查看结果" }],
     });
-    // The platform's own agendas have no reader to tell: their conclusions become cards, or stay in the internal project.
-    // Nor does a day that found nothing: 「0 条重点发现，0 条待验证线索」 every morning is an inbox item that asks to be
+    // A day that found nothing does not notify: 「0 条重点发现，0 条待验证线索」 every morning is an inbox item that asks to be
     // opened and says nothing (2026-10-07 review). The digest above and the episode stay recorded — the 简报 is where a
     // quiet day is written down — and only the notice is withheld, so a day with a finding or a lead notifies as before.
-    if (this.notifications && !this.programme?.owns(userId, agenda.projectId) && (headlines.length > 0 || leads.length > 0)) await this.notifications.create(userId, {
+    if (this.notifications && (headlines.length > 0 || leads.length > 0)) await this.notifications.create(userId, {
       noticeType: "review", title: `定时任务简报：${agenda.payload.title}`,
       body: `${headlines.length} 条重点发现，${leads.length} 条待验证线索。`, projectId: agenda.projectId,
       source: { type: "digest", id: digest.id }, idempotencyKey: `autopilot-digest:${digest.id}`,

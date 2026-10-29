@@ -81,14 +81,14 @@ test(
     const first = open();
     const capabilities = await migrateFrontier(first, { dimension: 1024 });
     const created = await inventory(first);
-    // 24 feed/reader tables (the monthlies of 2026-10-22 among them), seventeen native evidence/editorial tables (the topic
-    // requests' related links among them), two exposure attribution tables, the tag tree's four (2026-10-23) and what each
+    // 24 feed/reader tables (the monthlies of 2026-10-22 among them), fifteen native evidence tables (the topic
+    // requests' related links among them; the editor's automation and job tables were dropped on 2026-10-29), two exposure attribution tables, the tag tree's four (2026-10-23) and what each
     // reader was served and did (interactions, list_serves; ct-track 2026-10-24), the hot-event topics and their items (c2-base
     // 2026-10-25), a typed follow's matches and the congress recaps (c3-base 2026-10-25), the topic zones' items and changes
     // (2026-10-29), plus the optional vector table. (The topics' sightings are frontierTopics.mjs's own migration, not this one.)
     assert.equal(
       created.tables.length,
-      capabilities.vector ? 56 : 55,
+      capabilities.vector ? 54 : 53,
       created.tables.join(),
     );
     for (const table of [
@@ -129,8 +129,6 @@ test(
       "evidence_zone_feedback",
       "evidence_zone_meta",
       "evidence_card_revisions",
-      "evidence_automation",
-      "evidence_editorial_jobs",
       "evidence_change_log",
       "evidence_challenges",
       "evidence_upkeep_state",

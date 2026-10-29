@@ -17,9 +17,6 @@ export const PRODUCT_KINDS = Object.freeze([
   // version), one document per source identifier. Platform-level: owned by the platform publisher account, holding only
   // public bibliographic facts and never which tenant asked (`sourceChanges.mjs`, plan 2026-10-05 B5).
   "source-change",
-  // What the platform's evidence programme decided on one day, and why: the counts it read, the zones it chose, what became of each
-  // episode. One document per day, owned by the platform publisher in its internal evidence project (`evidenceProgramme.mjs`).
-  "programme-decision",
 ]);
 // Frontier issues, reader notifications and operator rebuilds use the shared
 // durable ledger. Its per-entry queue — thousands of rows a day — lives in
@@ -33,8 +30,6 @@ export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidat
   // produced (`availabilityCollector.mjs`), and the sweep that finds runs the finish hook missed.
   "rsi-incident-export", "rsi-bundle-poll",
   "availability-collect", ...EVOLUTION_JOB_KINDS, ...EXTENSION_JOB_KINDS,
-  // The evidence programme's one decision a day (`evidenceProgramme.mjs`): the topic selector's run, leased like every other job.
-  "evidence-programme",
   // The compile of one project's documents into knowledge pages (`knowledgePageService.mjs`).
   "wiki-compile",
   // One document's copy in OpenViking made to agree with PostgreSQL (`openVikingSourceSync.mjs`).
@@ -198,6 +193,17 @@ CREATE INDEX IF NOT EXISTS product_jobs_owner_idx ON evimed_product.jobs(user_id
 CREATE INDEX IF NOT EXISTS product_jobs_project_fk_idx ON evimed_product.jobs(user_id,project_id);
 CREATE INDEX IF NOT EXISTS product_jobs_queued_time_idx ON evimed_product.jobs(kind,run_after,id) WHERE status='queued';
 CREATE INDEX IF NOT EXISTS product_jobs_running_lease_idx ON evimed_product.jobs(kind,lease_expires_at,id) WHERE status='running';
+DO $programme_retired$
+BEGIN
+  -- The platform's evidence programme (a daily topic decision kept as programme-decision documents and run by evidence-programme jobs) was
+  -- deleted on 2026-10-29 with the platform's own card writing. Its rows go once, here and before any block below rebuilds a kind CHECK from the
+  -- current lists, which no longer name the two kinds: a row of a kind the narrowed CHECK refuses would stop the rebuild.
+  IF NOT EXISTS (SELECT 1 FROM evimed_product.schema_migrations WHERE name='2026-10-29-evidence-programme-retired-v1') THEN
+    DELETE FROM evimed_product.jobs WHERE kind='evidence-programme';
+    DELETE FROM evimed_product.documents WHERE kind='programme-decision';
+    INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-29-evidence-programme-retired-v1') ON CONFLICT DO NOTHING;
+  END IF;
+END $programme_retired$;
 DO $migration$
 DECLARE constraint_name text;
 BEGIN
@@ -354,18 +360,6 @@ END $source_change_kind$;
 CREATE INDEX IF NOT EXISTS product_source_change_seq_idx ON evimed_product.documents (user_id, ((payload->>'seq')::bigint))
   WHERE kind='source-change' AND deleted_at IS NULL;
 INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-05-source-change-kind-v1') ON CONFLICT DO NOTHING;
-DO $programme_decision_kind$
-BEGIN
-  -- Its own block, for the reason the method-trial block gives: the blocks before this one rebuild the
-  -- constraint only when it lacks *their* kind.
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conrelid='evimed_product.documents'::regclass
-      AND c.conname='product_documents_kind_check' AND position('''programme-decision''' in pg_get_constraintdef(c.oid)) > 0) THEN
-    ALTER TABLE evimed_product.documents DROP CONSTRAINT IF EXISTS product_documents_kind_check;
-    ALTER TABLE evimed_product.documents ADD CONSTRAINT product_documents_kind_check
-      CHECK (kind IN (${PRODUCT_KINDS.map(kind => `'${kind}'`).join(",")}));
-  END IF;
-END $programme_decision_kind$;
-INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-05-programme-decision-kind-v1') ON CONFLICT DO NOTHING;
 DO $availability_kind$
 BEGIN
   -- Its own block, for the reason the method-trial block gives: the blocks before
@@ -392,17 +386,6 @@ BEGIN
       CHECK (kind IN (${PRODUCT_JOB_KINDS.map(kind => `'${kind}'`).join(",")}));
   END IF;
 END $evolution_job_kinds$;
-DO $programme_job_kind$
-BEGIN
-  -- The evidence programme's job kind, in its own block for the same reason: the evolution block above rebuilds
-  -- the constraint only when it lacks *its* kinds.
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conrelid='evimed_product.jobs'::regclass
-      AND c.conname='product_jobs_kind_check' AND position('''evidence-programme''' in pg_get_constraintdef(c.oid)) > 0) THEN
-    ALTER TABLE evimed_product.jobs DROP CONSTRAINT IF EXISTS product_jobs_kind_check;
-    ALTER TABLE evimed_product.jobs ADD CONSTRAINT product_jobs_kind_check
-      CHECK (kind IN (${PRODUCT_JOB_KINDS.map(kind => `'${kind}'`).join(",")}));
-  END IF;
-END $programme_job_kind$;
 DO $geo_review_job_kind$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conrelid='evimed_product.jobs'::regclass

@@ -122,8 +122,7 @@ const finite = (value) => {
  * therefore scrubbed rather than trusted: control characters and runs of
  * whitespace collapse, and a subject that is only an identifier is dropped in
  * favour of the line alone.
- * `statementLine` names the line for work that is not a capability's run — the upkeep of an account's own
- * evidence zone, billed to it (`evidenceEditorial.mjs`) — so that it never reads as 「深度研究」.
+ * `statementLine` names the line for work that is not a capability's run, so that it never reads as 「深度研究」.
  * @param {{ capabilityId?: string | null, subject?: string | null, statementLine?: string | null, effectiveAgentId?:string|null, automated?:boolean, startedAt?:string|null, finishedAt?:string|null, accountCreatedAt?:string|null }} run
  * @returns {string}
  */

@@ -8,8 +8,8 @@ const sha = bytes => createHash("sha256").update(bytes).digest("hex");
 
 /** Operator-only orchestration over the normal capture path. Planning never creates a result, job or model request. */
 export class ResultCaptureRepairService {
-  /** @param {{results:any,runs:any,programme?:any}} dependencies */
-  constructor({ results, runs, programme = null }) { this.results = results; this.runs = runs; this.programme = programme; }
+  /** @param {{results:any,runs:any}} dependencies */
+  constructor({ results, runs }) { this.results = results; this.runs = runs; }
 
   /** @param {{userId:string,projectId:string,runId:string,expectedReceiptSha256?:string}} request */
   async prepare(request) {
@@ -52,11 +52,10 @@ export class ResultCaptureRepairService {
   async plan(request) { return (await this.prepare(request)).plan; }
 
   /** Apply exactly the reviewed plan; capture replay and settlement generations are idempotent.
-   * @param {{userId:string,projectId:string,runId:string,expectedReceiptSha256:string,expectedPlanSha256:string,resettle?:boolean,requestedBy?:string}} request */
+   * @param {{userId:string,projectId:string,runId:string,expectedReceiptSha256:string,expectedPlanSha256:string,requestedBy?:string}} request */
   async apply(request) {
     if (!/^[a-f0-9]{64}$/.test(request.expectedPlanSha256 ?? "") || !/^[a-f0-9]{64}$/.test(request.expectedReceiptSha256 ?? "")) throw new HttpError(400, "result_capture_repair_plan_required", "An exact repair plan and receipt digest are required.");
     const prepared = await this.prepare(request);
-    if (request.resettle && !this.programme?.owns(prepared.project.userId, prepared.project.id)) throw new HttpError(403, "result_capture_repair_invalid", "Only a programme-owned capture may request settlement.");
     if (prepared.plan.planSha256 !== request.expectedPlanSha256) throw new HttpError(409, "result_capture_repair_plan_changed", "The repair plan changed.");
     const captured = await captureFinishedRun({ results: this.results, project: prepared.project, run: prepared.run,
       readReceipt: async () => prepared.receipt, unreceipted: false, reviewOrigin: "capture-repair" });
@@ -65,7 +64,6 @@ export class ResultCaptureRepairService {
     }
     const receipt = await this.results.recordCaptureRepair({ userId: request.userId, project: prepared.project, runId: prepared.run.id,
       receiptSha256: prepared.plan.receiptSha256, items: captured.items, requestedBy: request.requestedBy ?? request.userId });
-    const settlement = request.resettle ? await this.programme?.settleCaptureRepair(receipt) : null;
-    return { plan: prepared.plan, receipt, settlement, versions: captured.items.map(item => ({ versionId: item.versionId, digest: item.digest, path: item.path })) };
+    return { plan: prepared.plan, receipt, versions: captured.items.map(item => ({ versionId: item.versionId, digest: item.digest, path: item.path })) };
   }
 }

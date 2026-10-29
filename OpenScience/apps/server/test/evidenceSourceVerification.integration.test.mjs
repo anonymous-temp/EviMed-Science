@@ -1,7 +1,8 @@
 // "✓ means the platform read the source" (evidence-flywheel review fix 2, 2026-10-06), against a real PostgreSQL: a card an author
 // writes over the service's own door carries an excerpt they typed, and its quotation is ⚠ author_excerpt_only until the platform
-// has read the address. The owner's request reads each source through the reader the editor uses, keeps what it read the way
-// the editor keeps it, and the claims re-verify; what cannot be read stays as written and is reported per source.
+// has read the address. The owner's request reads each source through the web reader, keeps what it read as `retainedSource` keeps
+// it, and the claims re-verify; what cannot be read stays as written and is reported per source. What Europe PMC says of a source as it
+// is read goes to the one source-change record.
 import assert from "node:assert/strict";
 import { after, before, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
@@ -76,7 +77,7 @@ test("an author's typed excerpt and matching quotation are ⚠ author_excerpt_on
   assert.equal(statusOf(card, "C2").mark, "⚠");
 });
 
-test("the owner's request reads each address, keeps what it read as the editor keeps it, and the claim re-verifies", options, async () => {
+test("the owner's request reads each address, keeps what it read, and the claim re-verifies", options, async () => {
   const card = await cardFor(await zoneFor(), TYPED, CLAIMS);
   const pages = reader({ "https://example.org/trial": PAGE, "https://example.org/label": "Do not use with severe bleeding.", "https://example.org/private": { code: "web_read_login_required" } });
   const verification = createEvidenceSourceVerification({ database: db, zones: service, readSource: pages.read, perDay: 60 });
@@ -140,4 +141,23 @@ test("only the owner of the card and of its zone may ask, and a withdrawn card i
   await db.query("UPDATE evimed_frontier.evidence_cards SET withdrawn='{\"at\":\"2026-10-06T00:00:00Z\",\"reason\":\"test\"}'::jsonb WHERE id=$1", [card.id]);
   await assert.rejects(verification.verify(alice, card.id), { status: 409, code: "evidence_card_withdrawn" });
   assert.deepEqual(pages.asked, [], "no one else's request, and no withdrawn card, reached the reader");
+});
+
+test("what Europe PMC says of a source as it is read goes to the source-change record, and a record that cannot be written does not undo the read", options, async () => {
+  const card = await cardFor(await zoneFor(), [{ title: "Trial", url: "https://doi.org/10.1000/epmc.retracted", excerpt: "7 of 100 adults on the drug had a stroke" }, { title: "Quiet", url: "https://example.org/quiet", excerpt: "x" }], CLAIMS.slice(0, 1));
+  const status = { kind: "retracted", notices: ["Retraction notice"] };
+  const read = async (/** @type {string} */ address) => ({ text: PAGE, coverage: "abstract", receipt: { sha256: "d".repeat(64), truncated: false },
+    ...(address.includes("doi.org") ? { publicationStatus: status } : {}) });
+  /** @type {any[]} */ const recorded = [];
+  const reports = /** @type {string[]} */ ([]);
+  const verification = createEvidenceSourceVerification({ database: db, zones: service, readSource: read, perDay: 60, report: (code) => reports.push(code),
+    sourceChanges: { recordPublicationStatus: async (identifier, value) => { recorded.push([identifier, value]); } } });
+  const answer = await verification.verify(alice, card.id);
+  assert.deepEqual(answer.sources.map((/** @type {any} */ entry) => entry.status), ["read", "read"]);
+  assert.deepEqual(recorded, [["doi:10.1000/epmc.retracted", status]], "the work with a status and an identifier is recorded; the other has neither");
+  const failing = await cardFor(await zoneFor(), [{ title: "Trial", url: "https://doi.org/10.1000/epmc.other", excerpt: "7 of 100 adults on the drug had a stroke" }], CLAIMS.slice(0, 1));
+  const broken = createEvidenceSourceVerification({ database: db, zones: service, readSource: read, perDay: 60, report: (code) => reports.push(code),
+    sourceChanges: { recordPublicationStatus: async () => { throw new Error("down"); } } });
+  assert.equal((await broken.verify(alice, failing.id)).sources[0].status, "read", "the read stands");
+  assert.deepEqual(reports, ["evidence_publication_status_not_recorded"]);
 });

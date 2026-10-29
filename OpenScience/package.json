@@ -48,8 +48,6 @@
     "check:kernel-cutoff": "node scripts/ops/kernel-install.mjs cutoff --check",
     "check:kernel-candidates": "node scripts/ops/kernel-candidate-check.mjs",
     "check:evidence-connectors": "node scripts/ops/check-evidence-connectors.mjs",
-    "check:evidence-content": "node scripts/ops/import-evidence-content.mjs",
-    "import:evidence": "node scripts/ops/import-evidence-content.mjs",
     "check:research-billing": "node scripts/ops/check-research-billing.mjs",
     "probe:monitoring": "node scripts/ops/configure-monitoring.mjs --probe",
     "configure:backup": "node scripts/ops/configure-backup.mjs",

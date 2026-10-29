@@ -14,7 +14,6 @@ import {
   evidenceChangeSummaryZh,
   evidenceConclusionChanged,
   evidenceNewEvidenceNoticeTitleZh,
-  evidenceUpkeepRoute,
 } from "../index.mjs";
 
 test("the change log's two lists are closed and every member reads in Chinese", () => {
@@ -24,19 +23,7 @@ test("the change log's two lists are closed and every member reads in Chinese", 
   for (const trigger of EVIDENCE_CHANGE_TRIGGERS) assert.match(/** @type {any} */ (EVIDENCE_CHANGE_TRIGGER_LABELS_ZH)[trigger], /[一-鿿]/);
 });
 
-test("who answers is decided by who made the card: the editor for an AI card, the producer for a person's, the programme for an official synthesis", () => {
-  // The platform's own brief in an official zone: the editor keeps it.
-  assert.equal(evidenceUpkeepRoute({ zoneKind: "official", producerKind: "platform", authorKind: "ai", originality: "brief" }), "editor");
-  // An official synthesis, an original analysis, or anything the programme stamped with a run: not the editor's to rewrite.
-  assert.equal(evidenceUpkeepRoute({ zoneKind: "official", producerKind: "platform", authorKind: "ai", originality: "synthesis" }), "programme");
-  assert.equal(evidenceUpkeepRoute({ zoneKind: "official", producerKind: "platform", authorKind: "ai", originality: "brief", lineage: { agendaId: "ag_1" } }), "programme");
-  assert.equal(evidenceUpkeepRoute({ zoneKind: "official", producerKind: "platform", authorKind: "ai", originality: "recalculation" }), "programme");
-  // The owner's own upkeep of their zone is the editor's; their hand-written card is theirs.
-  assert.equal(evidenceUpkeepRoute({ zoneKind: "user", producerKind: "user", authorKind: "ai", originality: "brief" }), "editor");
-  assert.equal(evidenceUpkeepRoute({ zoneKind: "user", producerKind: "user", authorKind: "human", originality: "synthesis" }), "producer_notice");
-  // A product zone is never rewritten, whoever wrote the words.
-  assert.equal(evidenceUpkeepRoute({ zoneKind: "product", producerKind: "enterprise", authorKind: "ai" }), "producer_notice");
-  assert.equal(evidenceUpkeepRoute({ zoneKind: "user", producerKind: "doctor", authorKind: "ai" }), "producer_notice");
+test("a challenge is re-checked by the platform only for the platform's own cards; for everyone else's the producer is told", () => {
   assert.equal(evidenceChallengeRoute({ producerKind: "platform" }), "platform_recheck");
   for (const producerKind of ["user", "enterprise", "doctor", "external", null]) assert.equal(evidenceChallengeRoute({ producerKind }), "producer_notice");
 });
@@ -91,5 +78,5 @@ test("its refusals are registered with a Chinese sentence and are never a verdic
     assert.match(/** @type {Record<string, string>} */ (ERROR_CODE_MESSAGES)[code] ?? "", /[一-鿿]/, `${code} has no sentence`);
     assert.equal(errorCodeOutcome(code), "upstream");
   }
-  assert.match(/** @type {any} */ (ERROR_CODE_MESSAGES).evidence_automation_product_zone, /站内通知/, "the answer says to use the notice instead");
+  assert.equal("evidence_automation_product_zone" in /** @type {any} */ (ERROR_CODE_MESSAGES), false, "the AI editor's refusal went with the editor");
 });

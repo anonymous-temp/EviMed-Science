@@ -287,19 +287,9 @@ const operatorLevers = {
   // The events route's per-reader limit (ct-track 2026-10-24): one that never arrived would leave 300 in force while the operator
   // believes theirs applies.
   OPEN_SCIENCE_FRONTIER_EVENTS_PER_MINUTE: ["open-science-web"],
-  // The platform's evidence programme and its public pages (evidence-flywheel B7, 2026-10-05): the programme's switch, its
-  // day's model money and its slot, and the two public-page switches. A lever that does not arrive leaves the programme off, or
-  // on and spending, or the public pages indexable, with the operator believing otherwise.
-  OPEN_SCIENCE_EVIDENCE_PROGRAMME_ENABLED: ["open-science-web"],
-  // First-hand cards and the prediction registry (flywheel F03, F25): two more switches an operator must see arrive.
-  OPEN_SCIENCE_EVIDENCE_RECALCULATION_CARDS_ENABLED: ["open-science-web"],
+  // The prediction registry and the evidence zones' public pages (evidence-flywheel F25, B7, 2026-10-05): a lever that does not arrive leaves
+  // the registry off, or the public pages indexable, with the operator believing otherwise.
   OPEN_SCIENCE_PREDICTION_REGISTRY_ENABLED: ["open-science-web"],
-  OPEN_SCIENCE_EVIDENCE_PROGRAMME_DAILY_BUDGET_CNY: ["open-science-web"],
-  OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY: ["open-science-web"],
-  OPEN_SCIENCE_EVIDENCE_PROGRAMME_EPISODE_BUDGET_CNY: ["open-science-web"],
-  OPEN_SCIENCE_EVIDENCE_PROGRAMME_MIN_DEMAND_USERS: ["open-science-web"],
-  OPEN_SCIENCE_EVIDENCE_PROGRAMME_ORIGINAL_ANALYSES_PER_WEEK: ["open-science-web"],
-  OPEN_SCIENCE_EVIDENCE_PROGRAMME_STALE_CARD_DAYS: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_PUBLIC_WEB_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH: ["open-science-web"],
@@ -313,8 +303,6 @@ const operatorLevers = {
   OPEN_SCIENCE_EVIDENCE_UPKEEP_BATCH: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_UPKEEP_INTERVAL_HOURS: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY: ["open-science-web"],
-  OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS: ["open-science-web"],
-  OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS: ["open-science-web"],
   // The flywheel's own figures (2026-10-06): a switch that does not arrive leaves the operator route answering 404 while the operator believes it is on.
   OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_COMMUNITY_CARDS_ENABLED: ["open-science-web"],

@@ -8,11 +8,6 @@ knowledge is answered without it. The description is three sentences because
 it rides every request (principle 16) -- what it searches, when it helps, and
 that its results are leads; how to use an answer travels in the answer.
 
-Evidence cards ride beside the items for a keyword query (flywheel F12, 2026-10-05): a published
-card is EviMed's own reading of sources, so a result shows who made it, how many of its claims passed
-the verbatim check, and the primary sources it stands on -- and one instruction, that a run cites those
-sources and never the card (plan §4.3 rule 2). No new tool: the sentence in the description is the cost.
-
 Leads, not evidence (plan 2026-09-21 §4.8). Each item points at a primary
 text -- a paper, a regulator's notice, a guideline, a company release -- with
 the feed's own Chinese title, short digest and reason to read it. The feed's
@@ -93,9 +88,9 @@ def tool_definitions():
             "name": "frontier_search",
             "description": (
                 "Search 前沿动态, EviMed's screened feed of recent medical developments (papers, guidelines, regulatory "
-                "and safety notices, trial and industry news) from the last 24 hours to 30 days, and for a keyword query "
-                "EviMed's own evidence cards. Use it when a question asks what is new or recent, or to read an item named frontier:<id>; settled knowledge does not need it. "
-                "Results are leads, not evidence: read the original through the returned DOI or link and cite that, never this feed or a card."
+                "and safety notices, trial and industry news) from the last 24 hours to 30 days. "
+                "Use it when a question asks what is new or recent, or to read an item named frontier:<id>; settled knowledge does not need it. "
+                "Results are leads, not evidence: read the original through the returned DOI or link and cite that, never this feed."
             ),
             "inputSchema": {
                 "type": "object",
@@ -256,43 +251,6 @@ def _item(entry: dict) -> dict:
     return shown
 
 
-def _card(entry: dict) -> dict:
-    """One evidence card as the model is shown it: an index entry. Absent facts are left out; the primary
-    sources are what a run reads and cites, and the instruction travels with every card."""
-    shown = {"title": entry.get("title")}
-    for key in ("question", "answer"):
-        if entry.get(key):
-            shown[key] = entry[key]
-    zone = entry.get("zone") if isinstance(entry.get("zone"), dict) else {}
-    if zone.get("title"):
-        shown["zone"] = "%s (%s)" % (zone["title"], zone.get("kind") or "zone")
-    producer = entry.get("producer") if isinstance(entry.get("producer"), dict) else None
-    if producer and producer.get("name"):
-        shown["producer"] = {key: producer[key] for key in ("kind", "name", "relation") if producer.get(key)}
-    if entry.get("originality"):
-        shown["originality"] = entry["originality"]
-    claims = entry.get("claims") if isinstance(entry.get("claims"), dict) else {}
-    if isinstance(claims.get("total"), int):
-        shown["claimsVerified"] = "%d of %d" % (int(claims.get("verified") or 0), claims["total"])
-    checked = _minute(entry.get("lastCheckedAt"))
-    if checked:
-        shown["lastCheckedAt"] = checked
-    if entry.get("currency"):
-        shown["currency"] = entry["currency"]
-    sources = []
-    for source in entry.get("primarySources") or []:
-        if not isinstance(source, dict):
-            continue
-        kept = {key: source[key] for key in ("title", "url", "doi", "pmid", "registryIds") if source.get(key)}
-        if kept:
-            sources.append(kept)
-    shown["primarySources"] = sources
-    if isinstance(entry.get("primarySourcesTotal"), int) and entry["primarySourcesTotal"] > len(sources):
-        shown["primarySourcesTotal"] = entry["primarySourcesTotal"]
-    shown["instruction"] = entry.get("instruction") or "EviMed's own index, not evidence: cite the primary sources, never this card."
-    return shown
-
-
 def _topic(entry: dict) -> dict:
     """One hot-event topic as the model is shown it (c2-leads 2026-10-25): an index entry — the general medical question a
     public event raised, its field, the attributed line on the event, its overview and the items it holds. The items are
@@ -397,8 +355,6 @@ def _answer(data: dict) -> dict:
     query = data.get("query") if isinstance(data.get("query"), dict) else {}
     entries = [entry for entry in data.get("items") or [] if isinstance(entry, dict)]
     items = [_item(entry) for entry in entries]
-    card_entries = [entry for entry in data.get("cards") or [] if isinstance(entry, dict)]
-    cards = [_card(entry) for entry in card_entries]
     topics = [_topic(entry) for entry in data.get("topics") or [] if isinstance(entry, dict)]
     scope = _scope(query)
     search_mode = data.get("searchMode")
@@ -414,15 +370,12 @@ def _answer(data: dict) -> dict:
         warnings.append(
             '%d more item(s) matched outside the editors\' picks; call again with mode "all" to see them.' % skipped
         )
-    if data.get("cardsUnavailable"):
-        warnings.append("Evidence cards could not be searched this time; the items are unaffected, and no card matching is not implied.")
     if data.get("topicsUnavailable"):
         warnings.append("Hot-event topics could not be searched this time; the items are unaffected.")
     if not items:
         summary = "No item in 前沿动态%s (%s)." % (subject, scope)
-        if cards or topics:
-            summary = "No item in 前沿动态%s (%s)%s%s." % (subject, scope, "; %d evidence card(s) match" % len(cards) if cards else "",
-                                                         "; %d hot-event topic(s) match" % len(topics) if topics else "")
+        if topics:
+            summary = "No item in 前沿动态%s (%s); %d hot-event topic(s) match." % (subject, scope, len(topics))
         else:
             warnings.append(
                 "An empty feed is not evidence that nothing happened: it holds only what its sources published in the window."
@@ -431,13 +384,12 @@ def _answer(data: dict) -> dict:
                 "Widen the window or the mode, or answer with the literature, guideline and regulatory tools."
             )
     else:
-        summary = "Found %d item(s) in 前沿动态%s (%s%s)%s%s." % (
+        summary = "Found %d item(s) in 前沿动态%s (%s%s)%s." % (
             len(items),
             subject,
             scope,
             "; %s search" % search_mode if query.get("q") and search_mode else "",
             "; more match" if data.get("more") else "",
-            "; %d evidence card(s) match" % len(cards) if cards else "",
         ) + ("" if not topics else " %d hot-event topic(s) match." % len(topics))
         next_actions.append(
             "These are leads: read the original through its url, doi or pmid before relying on an item, and cite that "
@@ -451,17 +403,6 @@ def _answer(data: dict) -> dict:
         )]
         if cautions:
             warnings.append("%d item(s) are retracted or under an expression of concern: do not use them as support." % len(cautions))
-    if cards:
-        next_actions.append(
-            "Evidence cards are EviMed's own index, not evidence: read each card's primarySources and cite those, never the card."
-        )
-        commercial = [entry for entry in card_entries if isinstance(entry.get("producer"), dict)
-                      and entry["producer"].get("relation") not in (None, "none")]
-        if commercial:
-            warnings.append(
-                "%d card(s) come from a producer with a stated commercial or personal relation to the products they discuss: "
-                "treat them as that producer's claim and check the primary sources." % len(commercial)
-            )
     body = {
         "query": query,
         "searchMode": search_mode,
@@ -470,10 +411,6 @@ def _answer(data: dict) -> dict:
         "more": bool(data.get("more")),
         "items": items,
     }
-    if "cards" in data:
-        body["cards"] = cards
-        body["cardCount"] = len(cards)
-        body["cardsMore"] = bool(data.get("cardsMore"))
     if "topics" in data:
         body["topics"] = topics
         body["topicCount"] = len(topics)
@@ -485,7 +422,7 @@ def _answer(data: dict) -> dict:
     if isinstance(skipped, int):
         body["unselectedSkipped"] = skipped
     return {
-        "status": "success" if items or cards or topics else "warning",
+        "status": "success" if items or topics else "warning",
         "summary": summary,
         "data": body,
         "warnings": warnings,

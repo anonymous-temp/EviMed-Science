@@ -49,10 +49,10 @@ function scriptedService({ pages = [{ items: [pageItem()], nextCursor: null, mod
   };
 }
 
-async function withGateway(t, { config = {}, service = scriptedService(), budgetMs, report, cards, topics, zones, evaluationIsolation } = {}) {
+async function withGateway(t, { config = {}, service = scriptedService(), budgetMs, report, topics, zones, evaluationIsolation } = {}) {
   const failures = [];
   const handler = createFrontierGatewayHandler({ frontierEnabled: true, ...config }, runtimeManager,
-    { service, ...(budgetMs ? { budgetMs } : {}), ...(report ? { report } : {}), ...(cards ? { cards } : {}), ...(topics ? { topics } : {}),
+    { service, ...(budgetMs ? { budgetMs } : {}), ...(report ? { report } : {}), ...(topics ? { topics } : {}),
       ...(zones ? { zones } : {}), ...(evaluationIsolation ? { evaluationIsolation } : {}) });
   const server = createServer((req, res) => { void handler(req, res, (failure) => failures.push(failure)); });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -249,82 +249,19 @@ test("the runtime learns the route only when the module is on, at the model gate
   assert.equal(frontierGatewayProviderUrl({ frontierEnabled: true, modelGatewayInternalUrl: "file:///etc/passwd" }), "");
 });
 
-/** An evidence-card search that answers from a script and records what it was asked. */
-function scriptedCards({ cards = [], more = false, fail = null } = {}) {
-  const calls = [];
-  return {
-    calls,
-    async search(user, request) {
-      calls.push({ user, request });
-      if (fail) throw fail;
-      return { cards, more };
-    },
-  };
-}
-const cardEntry = (overrides = {}) => ({ kind: "card", id: "ec_a", title: "A card", primarySources: [{ title: "Trial", url: "https://example.org/trial" }], ...overrides });
-
-test("a keyword query also searches the evidence cards, beside the items and as many as the limit allows up to five", async (t) => {
-  const cards = scriptedCards({ cards: [cardEntry()], more: true });
-  const { call, service } = await withGateway(t, { cards });
-  const answer = await call({ q: "  GLP-1   心衰 ", limit: 3 });
-  assert.equal(answer.status, 200);
-  assert.deepEqual(cards.calls, [{ user: { id: "user-1" }, request: { q: "GLP-1 心衰", limit: 3 } }], "the runtime's token names the account and the question is the page's own");
-  assert.deepEqual(answer.body.data.cards, [cardEntry()]);
-  assert.equal(answer.body.data.cardsMore, true);
-  assert.equal(answer.body.data.items.length, 1, "the items are what they were");
-  assert.equal(service.calls.length > 0, true);
-  await call({ q: "x", limit: 20 });
-  assert.equal(cards.calls[1].request.limit, 5, "an index entry is a pointer, not a reading list");
-});
-
-test("without a query, or narrowed to a lane or a specialty, nothing asks the cards", async (t) => {
-  const cards = scriptedCards({ cards: [cardEntry()] });
-  const { call } = await withGateway(t, { cards });
-  for (const body of [{}, { lane: "safety" }, { q: "x", lane: "safety" }, { q: "x", specialty: "cardiology" }]) {
-    const answer = await call(body);
-    assert.equal(answer.status, 200, JSON.stringify(body));
-    assert.deepEqual(answer.body.data.cards, [], JSON.stringify(body));
-  }
-  assert.equal(cards.calls.length, 0);
-});
-
-test("a card search that fails leaves the items as they were and says the cards could not be read", async (t) => {
-  const reported = [];
-  const cards = scriptedCards({ fail: Object.assign(new Error("connection to 10.0.0.5 refused"), { code: "ECONNREFUSED" }) });
-  const { call } = await withGateway(t, { cards, report: (code) => reported.push(code) });
-  const answer = await call({ q: "GLP-1" });
-  assert.equal(answer.status, 200);
-  assert.equal(answer.body.data.items.length, 1);
-  assert.deepEqual(answer.body.data.cards, []);
-  assert.equal(answer.body.data.cardsUnavailable, true, "not reading as `no card matched`");
-  assert.deepEqual(reported, ["ECONNREFUSED"]);
-  assert.doesNotMatch(JSON.stringify(answer.body), /10\.0\.0\.5/);
-});
-
-test("where no cards are composed the answer is the tool's old answer, key for key", async (t) => {
+test("the answer is the items alone: no card key, since the platform writes no evidence cards and the tool shows none", async (t) => {
   const { call } = await withGateway(t);
   const { body } = await call({ q: "GLP-1" });
   for (const key of ["cards", "cardsMore", "cardsUnavailable"]) assert.equal(key in body.data, false, key);
+  assert.equal(body.data.items.length, 1);
 });
 
-test("an evaluation run, frozen at a date, is not shown cards written since", async (t) => {
-  const cards = scriptedCards({ cards: [cardEntry()] });
-  const evaluationIsolation = { async isEvaluation() { return true; }, async filter(_identity, _gateway, value) { return value; } };
-  const { call } = await withGateway(t, { cards, evaluationIsolation });
-  const answer = await call({ q: "GLP-1" });
-  assert.equal(answer.status, 200);
-  assert.equal("cards" in answer.body.data, false);
-  assert.equal(cards.calls.length, 0);
-});
-
-test('card judging receives the active runtime project and rejects caller-supplied attribution', async t => {
-  const calls = [];
-  const cards = { search: async (user, request, context) => { calls.push({ user, request, context }); return { cards: [], more: false }; } };
-  const { call } = await withGateway(t, { cards });
-  assert.equal((await call({ q: 'stroke' })).status, 200);
-  assert.deepEqual(calls[0].context, { projectId: 'project-1', runId: null });
-  assert.equal((await call({ q: 'stroke', projectId: 'another-tenant' })).status, 400);
-  assert.equal(calls.length, 1);
+test("a caller cannot name the project or the account it is searched for: only the runtime's token does", async (t) => {
+  const { call, service } = await withGateway(t);
+  assert.equal((await call({ q: "stroke" })).status, 200);
+  assert.equal((await call({ q: "stroke", projectId: "another-tenant" })).status, 400);
+  assert.equal((await call({ q: "stroke", userId: "someone-else" })).status, 400);
+  assert.equal(service.calls.length > 0, true);
 });
 
 /** A reader detail as `FrontierService.getItem` serves it: the card, and the 导读, 要点 and text the platform holds. */
@@ -470,14 +407,12 @@ test("an evaluation run is frozen like its searches: what its filter takes out o
 
 // A zone of 证据专区 (ez-api-read 2026-10-29): the id or slug is resolved for the account the token names, and only what the
 // resolver returns reaches the page's list, as a filter on the zone's members.
-test("a zone is resolved for the account and the page's list is read inside it, without the platform-wide cards and topics", async (t) => {
+test("a zone is resolved for the account and the page's list is read inside it, without the platform-wide hot-event topics", async (t) => {
   const resolved = [];
   const zones = { async resolve(user, ref) { resolved.push({ user, ref }); return ref === "glp1-obesity" ? { id: "ez_0123", title: "GLP-1 受体激动剂减重" } : null; } };
-  const cardSearches = [];
-  const cards = { async search(user, request) { cardSearches.push({ user, request }); return { cards: [], more: false }; } };
   const topicSearches = [];
   const topics = { async search(user, request) { topicSearches.push({ user, request }); return { topics: [] }; } };
-  const { call, service } = await withGateway(t, { zones, cards, topics });
+  const { call, service } = await withGateway(t, { zones, topics });
   const inside = await call({ q: "司美格鲁肽", mode: "all", zone: "glp1-obesity" });
   assert.equal(inside.status, 200);
   assert.deepEqual(resolved, [{ user: { id: "user-1" }, ref: "glp1-obesity" }]);
@@ -487,13 +422,13 @@ test("a zone is resolved for the account and the page's list is read inside it, 
   assert.deepEqual(inside.body.data.zone, { id: "ez_0123", title: "GLP-1 受体激动剂减重" });
   assert.equal("cards" in inside.body.data, false);
   assert.equal("topics" in inside.body.data, false);
-  assert.deepEqual([cardSearches, topicSearches], [[], []], "a search inside a zone is about that zone's items");
+  assert.deepEqual(topicSearches, [], "a search inside a zone is about that zone's items");
 
   const outside = await call({ q: "司美格鲁肽", mode: "all" });
   assert.equal(outside.status, 200);
   assert.equal(service.calls[1].zoneId, undefined);
   assert.equal("zone" in outside.body.data, false);
-  assert.equal(cardSearches.length, 1, "without a zone the platform-wide parts ride beside the items as before");
+  assert.equal(topicSearches.length, 1, "without a zone the hot-event topics ride beside the items as before");
 });
 
 test("a zone the account cannot read, or one named wrongly, is refused by name and the list is not read", async (t) => {
