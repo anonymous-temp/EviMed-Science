@@ -12,6 +12,7 @@ import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { NotificationService } from "../src/notificationService.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
 import { TEST_VOCABULARY, insertItem, insertSource } from "./helpers/frontierFixtures.mjs";
+import { createTypedFollow } from "./helpers/typedFollows.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL;
@@ -75,7 +76,7 @@ async function issue(day = "2026-10-26") {
 const told = async () => (await db.query("SELECT title, body FROM evimed_inbox.notifications WHERE user_id = 'alice' ORDER BY created_at DESC")).rows;
 async function follow(label, concept) {
   answer = { kind: "drug", concepts: [concept] };
-  return (await service.createFollow(alice, { kind: "query", label })).follow;
+  return (await createTypedFollow({ db, watch, service, now: () => clock }, alice, label)).follow;
 }
 const drug = (/** @type {string} */ zh, /** @type {string} */ en) => ({ type: "drug", zh: [zh], en: [en] });
 

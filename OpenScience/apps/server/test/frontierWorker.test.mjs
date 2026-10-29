@@ -218,3 +218,36 @@ test("ct-mix: the lead triggers run on the owner's money only, at most every fif
   assert.equal(worker.status().loops.leads.failures, 1);
   assert.deepEqual(worker.status().leads, { configured: true, ticks: 2 });
 });
+
+test("the zone planner (2026-10-29) runs on the owner's money only, at most every ten minutes, is settable after the worker, fails alone, and shows in the status", async () => {
+  const { ingest, database } = stubs();
+  const time = clock();
+  const ticked = [];
+  const zonePlanner = {
+    tick: async (at) => { ticked.push(at instanceof Date); if (ticked.length === 2) throw Object.assign(new Error("no"), { code: "evidence_zone_planner_failed" }); return { seeded: { skipped: "seeded" } }; },
+    status: () => ({ counters: { ticks: ticked.length } }),
+  };
+  /** @type {string[]} */
+  const reported = [];
+  const worker = new FrontierWorker({ ingest, database, now: time.now, pollMs: 5_000, pluginPollMs: 60_000,
+    ensureOwner: async () => ({ userId: "ops", projectId: "evimed-frontier" }), report: (loop, code) => reported.push(`${loop}:${code}`) });
+  assert.ok("zone-planner" in worker.status().loops, "the loop exists before the planner is composed");
+  worker.zonePlanner = zonePlanner;
+  await worker.tick();
+  assert.equal(ticked.length, 0, "no owner yet on the first tick");
+  time.advance(5_000);
+  await worker.tick();
+  assert.deepEqual(ticked, [true], "it is told the time");
+  time.advance(5_000);
+  await worker.tick();
+  assert.equal(ticked.length, 1, "not again within ten minutes");
+  time.advance(10 * 60_000);
+  await worker.tick();
+  assert.equal(ticked.length, 2);
+  assert.deepEqual(reported, ["zone-planner:evidence_zone_planner_failed"]);
+  assert.equal(worker.status().loops["zone-planner"].failures, 1);
+  assert.deepEqual(worker.status().zonePlanner, { counters: { ticks: 2 } });
+  const without = new FrontierWorker({ ingest, database, now: time.now, pollMs: 5_000 });
+  await without.tick();
+  assert.equal(without.status().zonePlanner, null, "no planner, no loop");
+});
