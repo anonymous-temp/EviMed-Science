@@ -13,6 +13,11 @@ vi.mock("@/lib/frontierClient", async (importOriginal) => ({
   ...client,
 }));
 
+// Whether the directory has said this reader may make a zone: nothing has said no here, so the entry stands.
+const zoneCreate = vi.hoisted(() => ({ allowed: true }));
+vi.mock("./zone/useZoneCreate", () => ({ useZoneCreate: () => zoneCreate.allowed }));
+beforeEach(() => { zoneCreate.allowed = true; });
+
 function Probe() {
   const location = useLocation();
   const intent = (location.state as { runtimeUiIntent?: { kind: string; draft?: string; originReference?: { kind: string; id: string } } } | null)?.runtimeUiIntent;
@@ -414,6 +419,14 @@ it("offers 「以此新建专区」 in ⋯, which opens the directory with the e
   expect(screen.queryByRole("menuitem", { name: "整理为证据卡片" })).not.toBeInTheDocument();
   await userEvent.click(await screen.findByRole("menuitem", { name: "以此新建专区" }));
   await waitFor(() => expect(screen.getByTestId("here")).toHaveTextContent("/app/frontier?view=zones&new=1&fromItem=source%2Fitem"));
+});
+
+it("leaves 「以此新建专区」 out of ⋯ once the directory has said this reader may not make a zone, and keeps the rest", async () => {
+  zoneCreate.allowed = false;
+  renderCard(frontierItem({ id: "source/item" }));
+  await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+  expect(await screen.findByRole("menuitem", { name: "复制为 Markdown" })).toBeInTheDocument();
+  expect(screen.queryByRole("menuitem", { name: "以此新建专区" })).not.toBeInTheDocument();
 });
 
 it("opens an event from more actions even when it has only one report", async () => {

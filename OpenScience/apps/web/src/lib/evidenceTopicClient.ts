@@ -80,6 +80,8 @@ export interface ZoneDirectory {
   canCreate: boolean;
   userZones: { count: number; max: number };
 }
+/** A zone that took over from an archived one (a merge or a split), as its page links to it. */
+export interface ZoneSuccessor { id: string; slug: string | null; title: string }
 export interface ZoneDetail extends ZoneSummary {
   revision: number;
   /** The definition, for the zone's owner (and an operator); null for other readers. */
@@ -89,6 +91,10 @@ export interface ZoneDetail extends ZoneSummary {
   band: ZoneBand | null;
   overviewAt: string | null;
   related: ZoneSummary[];
+  /** The zones that took over, where the zone was archived by a merge or a split; none otherwise. */
+  successors: ZoneSuccessor[];
+  /** When the newest item of the zone came out (ISO); null while it has none. A quiet zone says so in its header. */
+  lastItemAt: string | null;
 }
 export interface ZoneProgress {
   text: string;
@@ -228,6 +234,9 @@ export function parseZoneDetail(value: unknown): ZoneDetail | null {
     band,
     overviewAt: optionalText(raw.overviewAt),
     related: summaries(raw.related),
+    successors: list(raw.successors).map((entry) => record(entry)).filter((entry): entry is Raw => entry !== null && !!text(entry.id) && !!text(entry.title))
+      .map((entry) => ({ id: text(entry.id), slug: optionalText(entry.slug), title: text(entry.title) })),
+    lastItemAt: optionalText(raw.lastItemAt),
   };
 }
 
@@ -365,12 +374,42 @@ export function parseZoneDraftResult(value: unknown): ZoneDraftResult {
   };
 }
 
+/** Whether an answer is the topic directory's: 推荐 lists `groups`, the other views `zones`. The old service's list answers `items`. */
+const isTopicDirectory = (raw: Raw) => Array.isArray(raw.groups) || Array.isArray(raw.zones);
+
+/**
+ * Whether this reader may make a zone, as the last directory read said (null before any). 「新建专区」, wherever it is offered, follows
+ * it: a page that is not the directory has no list of its own to ask, and the directory is the one place the server says so.
+ */
+let createAllowed: boolean | null = null;
+const createListeners = new Set<() => void>();
+function recordCreateAllowed(value: boolean): void {
+  if (createAllowed === value) return;
+  createAllowed = value;
+  for (const listener of createListeners) listener();
+}
+export const zoneCreateAllowed = (): boolean | null => createAllowed;
+export function subscribeZoneCreate(listener: () => void): () => void {
+  createListeners.add(listener);
+  return () => { createListeners.delete(listener); };
+}
+/** For tests: nothing has been read yet. */
+export function forgetZoneCreateAllowed(): void { createAllowed = null; }
+
 export async function fetchZoneDirectory(view: ZoneDirectoryView, options: { specialty?: string | null; q?: string } = {}): Promise<ZoneDirectory> {
   const params = new URLSearchParams({ view });
   if (options.specialty) params.set("specialty", options.specialty);
   if (options.q) params.set("q", options.q);
   const raw = record(await productRequest<unknown>(`/frontier/zones?${params.toString()}`)) ?? {};
+  // A deployment without the topic zones answers this address with the old service's list. That is no directory: it lists nothing and
+  // offers nothing to make, instead of a 「新建专区」 whose zone would open on a page the deployment does not serve.
+  if (!isTopicDirectory(raw)) {
+    recordCreateAllowed(false);
+    return { view, groups: [], zones: [], total: 0, canCreate: false, userZones: { count: 0, max: 0 } };
+  }
   const userZones = record(raw.userZones) ?? {};
+  const canCreate = raw.canCreate === true;
+  recordCreateAllowed(canCreate);
   return {
     view: raw.view === "mine" || raw.view === "community" ? raw.view : "recommended",
     groups: list(raw.groups).map((entry) => record(entry)).filter((entry): entry is Raw => entry !== null).map((entry) => {
@@ -383,15 +422,40 @@ export async function fetchZoneDirectory(view: ZoneDirectoryView, options: { spe
     }),
     zones: summaries(raw.zones),
     total: count(raw.total),
-    canCreate: raw.canCreate === true,
+    canCreate,
     userZones: { count: count(userZones.count), max: count(userZones.max) },
   };
 }
 
+/**
+ * A zone that is not a topic zone: a reader's container of research-result cards, or a 循证 GEO product zone. The server answers its
+ * address in the old service's shape (a state, a count of cards and no keywords or counts of items), and its page is the old zone's.
+ */
+export class NotTopicZoneError extends Error {
+  constructor() {
+    super("The zone is not a topic zone.");
+    this.name = "NotTopicZoneError";
+  }
+}
+
+/** A topic zone by its id or its readable name. Throws `NotTopicZoneError` for a zone of the old kind. */
 export async function fetchZone(zoneId: string): Promise<ZoneDetail> {
-  const zone = parseZoneDetail(record(await productRequest<unknown>(`/frontier/zones/${path(zoneId)}`))?.zone);
+  const raw = record(record(await productRequest<unknown>(`/frontier/zones/${path(zoneId)}`))?.zone);
+  if (raw && text(raw.id) && !record(raw.counts)) throw new NotTopicZoneError();
+  const zone = parseZoneDetail(raw);
   if (!zone) throw new WebApiError("The zone was malformed.", { status: 502 });
   return zone;
+}
+
+/** What an overview holds to show: a module the server sent empty (a new zone's 最新动态, the card block of a zone without cards) is not content. */
+export function moduleHasContent(module: ZoneModule): boolean {
+  switch (module.key) {
+    case "progress": return module.progress.text !== "";
+    case "cards": return module.cards.length > 0;
+    case "approved-drugs": return module.rows.length > 0;
+    case "multi-source": return module.events.length > 0;
+    default: return module.items.length > 0;
+  }
 }
 
 export async function fetchZoneOverview(zoneId: string): Promise<ZoneOverview> {

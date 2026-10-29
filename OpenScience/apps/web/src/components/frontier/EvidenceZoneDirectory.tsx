@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/Button";
 import type { FilterOption } from "@/components/ui/FilterChips";
 import { IconButton } from "@/components/ui/IconButton";
 import { List, ListRow } from "@/components/ui/ListRow";
-import { Section } from "@/components/ui/Section";
+import { BlockHeading, Section } from "@/components/ui/Section";
 import type { ToolbarFilter } from "@/components/ui/Toolbar";
 import { cn } from "@/lib/cn";
 import { evidenceErrorMessage } from "@/lib/evidenceZoneClient";
@@ -280,9 +280,12 @@ export function ZoneDirectoryBody({ state, query, from, onCreate, onClearFilters
         <Section key={group.specialty.key} title={group.specialty.label} count={group.sections.reduce((sum, section) => sum + section.zones.length, 0)}>
           {group.sections.map((section) => (
             section.label && group.sections.length > 0 ? (
-              <Section key={section.label} title={section.label} level="sub">
+              // A group inside a specialty is a label over its zones, in the caption's rung: the page already holds the title, the
+              // specialty's heading, the rows and the meta, and a fifth size × weight pair for a name in between is one too many.
+              <div key={section.label} className="mt-6 first:mt-0">
+                <BlockHeading className="mb-1 text-caption text-text-3">{section.label}</BlockHeading>
                 <List divided label={`${section.label}专区`}>{section.zones.map((zone) => row(zone, index++))}</List>
-              </Section>
+              </div>
             ) : (
               <List key="ungrouped" divided label={`${group.specialty.label}专区`}>{section.zones.map((zone) => row(zone, index++))}</List>
             )
