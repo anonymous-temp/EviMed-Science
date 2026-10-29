@@ -529,7 +529,8 @@ async function startRun(item, projectId, result) {
     if (bound.status !== 200) throw new Refused(`session ${sessionId} was not made (${said(bound)})`, bound.code);
     const body = { sessionId, dispatchId, text: item.prompt, automated: true, ...(item.line ? { line: item.line } : {}) };
     const asked = Date.now();
-    const answer = await api("POST", "/api/agent-runs/dispatch", { project: projectId, body, timeoutMs: 10 * 60_000 });
+    // `automated: true` again in the call itself: the repository-wide check reads the dispatch statement, not the line above it.
+    const answer = await api("POST", "/api/agent-runs/dispatch", { project: projectId, body: { ...body, automated: true }, timeoutMs: 10 * 60_000 });
     if (answer.status === 202 && answer.body?.data?.id) {
       const run = answer.body.data;
       Object.assign(result, { sessionId, dispatchId, runId: run.id, dispatchedAt: new Date().toISOString(), dispatchMs: Date.now() - asked });
