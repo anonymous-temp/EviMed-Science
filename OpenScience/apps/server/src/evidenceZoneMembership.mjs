@@ -27,6 +27,21 @@
  *   advice. Empty is a valid answer. A cited item that is later withdrawn or flagged retracted or corrected takes the paragraph
  *   down until the next due pass. Every active zone, a reader's too, is written daily when due; nothing pauses.
  * - **Counts are events.** A zone's numbers count one item per event (`coalesce(event_id, -id)`), by `items.visible_at`.
+ * - **A scan pages by the key it admits by.** An incremental scan admits an item when it became visible or changed since the zone's
+ *   `matched_through`, so it orders, resumes (`after`: key and id) and sets `matched_through` by that one key — the later of
+ *   `visible_at` and `updated_at` — and decides "the page was full" from the SQL page, before the excluded names drop any row. It
+ *   reads up to `ZONE_RECALL.scanPages` pages, and pairs the zone already holds are left out in SQL, so a bulk re-tag of old items
+ *   costs no page and never holds the newest behind it (2026-10-29 review F2).
+ * - **「最新进展」 is looked for where it can be due.** The query takes the zones with three core items in the window and a paragraph
+ *   that is missing, or old enough that the material may have changed, or old enough with a newer item behind it, and the zones whose
+ *   paragraph has lost its material; a zone looked at and found not due waits in `progressWait`, and the waiting are left out of the
+ *   query, so the window moves along instead of filling with the same sixty (review F1).
+ * - **A role is the modules' role.** The stored `zone_items.role` is read from the item's columns by `evidenceZoneRole` — the stored
+ *   genre, else the genre `frontierItemGenre` takes from `source_type`, `evidence_type`, `platform`, `channel`, `flags`, `lane` —
+ *   at every place this file writes or shows one, and rows written before that are read again once per process (review F6).
+ * - **A reader's word is theirs.** `not-in` on a platform zone asks the judge to read the pair again, once per reader and pair and
+ *   at most `ZONE_FEEDBACK.rejudgesPerHour` an hour (the budget is the feed's, shared); `more-like` edits the examples of the
+ *   reader's own zone or an operator's, nobody else's (review F3, F4).
  *
  * Which model capability would make it deletable: none for the recall and the counts; the judge and the writer would fold into the
  * pipeline's own edit once one call could place an item among thousands of zones.
@@ -40,10 +55,12 @@ import {
   EVIDENCE_ZONE_LIMITS,
   EVIDENCE_ZONE_MODULE_RULES,
   EVIDENCE_ZONE_ROLE_LABELS_ZH,
+  FRONTIER_GENRES,
   FRONTIER_TOPIC_LIMITS,
   evidenceZoneBand,
   evidenceZoneIsKeyUpdate,
   evidenceZoneRole,
+  frontierItemGenre,
   normalizeEvidenceZoneDefinition,
 } from "@evimed/domain";
 import { followNamesTsquery } from "./frontierFollowQuery.mjs";
@@ -73,6 +90,8 @@ export const ZONE_TICK = Object.freeze({
 
 /** The recall's numbers. The cosines are starting values from the plan; the judge decides what stands. */
 export const ZONE_RECALL = Object.freeze({
+  /** A zone whose backfill or scan failed (or whose definition cannot be read) is left out of the next queries for this long, so the window reaches the others. */
+  retryMs: 2 * MINUTE,
   /** A scan starts this long before the zone's `matched_through` (an item's tags and keys land a little after it is published). */
   overlapMs: 10 * MINUTE,
   /** A zone is scanned at most this often. */
@@ -80,6 +99,8 @@ export const ZONE_RECALL = Object.freeze({
   /** An incremental scan reads items that became visible, or changed, within this long. */
   lookbackMs: 7 * DAY,
   scanLimit: 200,
+  /** One incremental scan reads at most this many pages of `scanLimit` rows; a scan that stopped on a full page resumes from its key. */
+  scanPages: 4,
   backfillDays: 90,
   backfillMax: 300,
   /** All keywords but one hit, and the item is this near the zone's vector. */
@@ -118,7 +139,20 @@ export const ZONE_PROGRESS = Object.freeze({
   retryDroppedMs: 2 * HOUR,
   retryFailedMs: 30 * MINUTE,
   candidateRows: 150,
+  /** Zones one pass reads from the database to look at; the ones waiting are left out of the query, so the window moves on. */
+  candidateZones: 60,
 });
+
+/** A reader's 「不属于」 on a platform zone asks the judge to read the pair again, at the feedback budget's cost (principle 15). */
+export const ZONE_FEEDBACK = Object.freeze({
+  /** Re-readings one reader may ask for in an hour (drafting's limit is 20 an hour too); config `evidenceZoneFeedbackRejudgesPerHour`. */
+  rejudgesPerHour: 20,
+  /** (zone, definition version, item, reader) triples remembered, so the same reader asking again costs no model call. */
+  memoMax: 5_000,
+});
+
+/** Stored roles are read again, once per process, for the items whose genre column is empty or unknown (the rows written before the role read the same columns the modules do). */
+const ROLE_SWEEP_ROWS = 500;
 
 /** Stats are recomputed for a zone whose rows changed at most this often, and at least this often otherwise (windows drift). */
 const STATS_MIN_AGE_MS = 10 * MINUTE;
@@ -204,6 +238,9 @@ function codeOf(error, fallback = "evidence_zone_membership_failed") {
   const code = /** @type {any} */ (error)?.code;
   return typeof code === "string" && /^[a-z0-9_]{2,80}$/.test(code) ? code : fallback;
 }
+
+/** The item columns an item's role is read from: the stored genre, else what `frontierItemGenre` takes from these; and the safety alert. */
+const ROLE_COLUMNS = "i.genre, i.safety_alert, i.platform, i.channel, i.source_type, i.evidence_type, i.flags, i.lane";
 
 /** A leg's rank for "the strongest leg that offered it". */
 const LEG_ORDER = Object.freeze(["tag", "entity", "words", "vector"]);
@@ -423,7 +460,7 @@ export function shapeZoneStats(row) {
  * @typedef {{ id: string, userId: string, kind: string, title: string, state: string, lifecycle: string, definition: ZoneDefinition,
  *   version: number, backfilledVersion: number, matchedThrough: Date | null, overview: any, overviewAt: Date | null }} MembershipZone
  * @typedef {{ vector: boolean, halfvec: boolean }} MembershipCapabilities
- * @typedef {{ id: string, publicId: string, visibleAt: Date, eventId: string | null, genre: string | null, safetyAlert: boolean,
+ * @typedef {{ id: string, publicId: string, visibleAt: Date, changedAt: Date, eventId: string | null, role: string,
  *   via: "tag" | "entity" | "words" | "vector", partial: boolean, wordsOnly: boolean, weak: number, cosine: number | null }} ZoneCandidate
  */
 
@@ -465,8 +502,17 @@ export class EvidenceZoneMembership {
     this.vectors = new Map();
     /** @type {Set<string>} zones being backfilled or scanned right now (the tick and `afterSave` never do one twice at once) */
     this.busy = new Set();
-    /** @type {Map<string, number>} */
+    /** @type {Map<string, number>} zone id → until when 「最新进展」 does not look at it again; read back into the query that picks the zones */
     this.progressWait = new Map();
+    /** @type {Map<string, number>} zone id → until when a failed backfill or scan is not tried again; read back into the queries that pick the zones */
+    this.recallWait = new Map();
+    /** @type {Map<string, number>} (zone, version, item, reader) → when the judge was asked to read the pair for that reader */
+    this.rejudged = new Map();
+    /** @type {Map<string, number[]>} reader → the times of the re-readings they asked for in the last hour */
+    this.rejudgeTimes = new Map();
+    /** The stored roles' repair: where it got to (zone id, item id), and whether it has been through every row. */
+    this.roleCursor = /** @type {{ zoneId: string, itemId: string } | null} */ (null);
+    this.rolesSwept = false;
     this.lastRetractCheck = 0;
     /** @type {Set<Promise<unknown>>} */
     this.background = new Set();
@@ -487,6 +533,17 @@ export class EvidenceZoneMembership {
   #fail(code) {
     this.counters.failures[code] = (this.counters.failures[code] ?? 0) + 1;
     this.lastError = code;
+  }
+
+  /** The ids of the zones a wait map holds back at `now`; the expired are forgotten. @param {Map<string, number>} waits @param {Date} now @returns {string[]} */
+  #waiting(waits, now) {
+    /** @type {string[]} */
+    const ids = [];
+    for (const [id, until] of waits) {
+      if (until > now.getTime()) ids.push(id);
+      else waits.delete(id);
+    }
+    return ids;
   }
 
   /** @param {string} via @param {string} state @param {number} [by] */
@@ -591,22 +648,52 @@ export class EvidenceZoneMembership {
 
   /**
    * The items that are candidates of a zone in a window, newest or oldest first: found by the three legs of each keyword, completed
-   * by the vector legs where they can run, the excluded names applied. No model.
+   * by the vector legs where they can run, the excluded names applied. No model. See `#recallPage` for the incremental form.
    * @param {{ definition: ZoneDefinition, title: string, id: string | null, version: number }} zone
    * @param {MembershipCapabilities} caps
    * @param {{ from: Date, until: Date, since?: Date | null, order?: "ASC" | "DESC", limit: number, vectorMs?: number }} window
    * @returns {Promise<ZoneCandidate[]>}
    */
-  async recall(zone, caps, { from, until, since = null, order = "DESC", limit, vectorMs = 0 }) {
+  async recall(zone, caps, window) {
+    return (await this.#recallPage(zone, caps, window)).candidates;
+  }
+
+  /**
+   * One page of a recall. With `since` it is an **incremental scan**: a row is admitted when it became visible or changed since then,
+   * and that one key — `changed_at`, the later of `visible_at` and `updated_at` — is what the page is ordered by, what `after` resumes
+   * from (with the row id as tie-break, so a hundred rows changed in one statement are paged, not repeated) and what the scan's
+   * `matched_through` is set to when the page was full. A pair the zone already holds is left out in SQL, so a bulk update of old
+   * items costs no page. "Full" is the SQL page's, counted before the excluded names drop any row: a dropped row is still a row read.
+   * Without `since` (a backfill, a preview) the window is read by `visible_at`, newest or oldest first, and the page is cut at `limit`.
+   * @param {{ definition: ZoneDefinition, title: string, id: string | null, version: number }} zone
+   * @param {MembershipCapabilities} caps
+   * @param {{ from: Date, until: Date, since?: Date | null, after?: { at: Date, id: string } | null, order?: "ASC" | "DESC", limit: number, vectorMs?: number }} window
+   * @returns {Promise<{ candidates: ZoneCandidate[], full: boolean, last: { at: Date, id: string } | null }>}
+   */
+  async #recallPage(zone, caps, { from, until, since = null, after = null, order = "DESC", limit, vectorMs = 0 }) {
     const definition = zone.definition;
     const keywords = await this.#expandedKeywords(definition);
     const k = keywords.length;
-    if (!k) return [];
+    const empty = { candidates: /** @type {ZoneCandidate[]} */ ([]), full: false, last: null };
+    if (!k) return empty;
+    const incremental = since !== null && zone.id !== null;
+    const size = Math.max(1, Math.trunc(limit));
     const scopeText = [zone.title, definition.scope, ...definition.keywords.map((keyword) => keyword.label)].join(" ");
     const vectorKey = zone.id ? `${zone.id}:${zone.version}` : `preview:${createHash("sha256").update(scopeText).digest("hex").slice(0, 24)}`;
     const vector = await this.#vector(vectorKey, scopeText, caps, vectorMs);
+    const changed = "GREATEST(i.visible_at, i.updated_at)";
+    // What an item's role and genre are read from (`frontierItemGenre`): the stored genre, else these columns.
+    /** @param {any[]} list */
+    const binder = (list) => (/** @type {unknown} */ value) => { list.push(value); return `$${list.length}`; };
+    /** The scan's own admission, shared by the two legs. @param {(value: unknown) => string} bind */
+    const scanClauses = (bind) => {
+      if (!incremental || !since) return "";
+      const known = `AND NOT EXISTS (SELECT 1 FROM evimed_frontier.zone_items zk WHERE zk.zone_id = ${bind(zone.id)} AND zk.item_id = i.id)`;
+      const resume = after ? `AND (${changed}, i.id) > (${bind(after.at.toISOString())}::timestamptz, ${bind(after.id)}::bigint)` : "";
+      return `AND (i.visible_at >= ${bind(since.toISOString())}::timestamptz OR i.updated_at >= ${bind(since.toISOString())}::timestamptz) ${known} ${resume}`;
+    };
     const values = /** @type {any[]} */ ([]);
-    const param = (/** @type {unknown} */ value) => { values.push(value); return `$${values.length}`; };
+    const param = binder(values);
     const legs = keywords.map((keyword, index) => {
       const tsquery = followNamesTsquery(keyword.terms);
       return [
@@ -621,18 +708,24 @@ export class EvidenceZoneMembership {
     const accept = vector && k >= 2 ? `(${hits}) >= ${k} OR ((${hits}) = ${k - 1} AND c.cos >= ${ZONE_RECALL.nearCosine})` : `(${hits}) >= ${k}`;
     const fromParam = param(from.toISOString());
     const untilParam = param(until.toISOString());
-    const sinceClause = since ? `AND (i.visible_at >= ${param(since.toISOString())}::timestamptz OR i.updated_at >= ${param(since.toISOString())}::timestamptz)` : "";
     const modelParam = vector ? param(vector.modelKey) : null;
+    const whereScan = scanClauses(param);
+    const direction = incremental || order === "ASC" ? "ASC" : "DESC";
     const rows = (await this.database.query(`SELECT c.* FROM (
-        SELECT i.id::text AS id, i.public_id, i.visible_at, i.event_id::text AS event_id, i.genre, i.safety_alert,
+        SELECT i.id::text AS id, i.public_id, i.visible_at, ${changed} AS changed_at, i.event_id::text AS event_id, ${ROLE_COLUMNS},
           ${needText ? "i.title_raw, i.title_zh, i.summary_zh, i.lead_zh," : ""}
           ${cosine ? `${cosine} AS cos,` : "NULL::float8 AS cos,"}
           ${legs.join(",\n          ")}
         FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
           ${vector ? `LEFT JOIN evimed_frontier.item_vectors v ON v.item_id = i.id AND v.model_key = ${modelParam}` : ""}
-        WHERE i.state = 'published' AND i.visible_at >= ${fromParam}::timestamptz AND i.visible_at < ${untilParam}::timestamptz ${sinceClause}
+        WHERE i.state = 'published' AND i.visible_at >= ${fromParam}::timestamptz AND i.visible_at < ${untilParam}::timestamptz ${whereScan}
       ) c WHERE ${accept}
-      ORDER BY c.visible_at ${order}, c.id::bigint ${order} LIMIT ${Math.max(1, Math.trunc(limit))}`, values)).rows ?? [];
+      ORDER BY ${incremental ? "c.changed_at" : "c.visible_at"} ${direction}, c.id::bigint ${direction} LIMIT ${size}`, values)).rows ?? [];
+    /** @param {Record<string, any>} row */
+    const keyOf = (row) => ({ at: new Date(row.changed_at), id: String(row.id) });
+    let full = incremental && rows.length >= size;
+    /** @type {{ at: Date, id: string } | null} */
+    let last = full ? keyOf(rows[rows.length - 1]) : null;
     /** @type {Map<string, ZoneCandidate>} */
     const found = new Map();
     for (const row of rows) {
@@ -646,28 +739,45 @@ export class EvidenceZoneMembership {
       const cos = row.cos == null ? null : Number(row.cos);
       const verdict = zoneRecallVerdict(perKeyword, cos);
       if (!verdict.candidate || !verdict.via) continue;
-      found.set(String(row.id), { id: String(row.id), publicId: String(row.public_id), visibleAt: new Date(row.visible_at), eventId: row.event_id == null ? null : String(row.event_id),
-        genre: row.genre ?? null, safetyAlert: row.safety_alert === true, via: verdict.via, partial: verdict.partial, wordsOnly: verdict.wordsOnly, weak: verdict.weak, cosine: cos });
+      found.set(String(row.id), { id: String(row.id), publicId: String(row.public_id), visibleAt: new Date(row.visible_at), changedAt: new Date(row.changed_at),
+        eventId: row.event_id == null ? null : String(row.event_id), role: evidenceZoneRole(row),
+        via: verdict.via, partial: verdict.partial, wordsOnly: verdict.wordsOnly, weak: verdict.weak, cosine: cos });
     }
-    // A zone the vocabularies hold at most one keyword of: its nearest items are the other way in.
+    // A zone the vocabularies hold at most one keyword of: its nearest items are the other way in. A backfill takes the nearest by
+    // cosine; a scan takes them in the order of the key it pages by, a page of its own whose fullness counts the same.
     const resolved = keywords.filter((keyword) => keyword.tagIds.length || keyword.entityKeys.length).length;
     if (vector && resolved <= 1) {
-      const nearest = (await this.database.query(`SELECT i.id::text AS id, i.public_id, i.visible_at, i.event_id::text AS event_id, i.genre, i.safety_alert,
-          1 - (v.embedding <=> $1::${vector.type}) AS cos
+      const nearValues = /** @type {any[]} */ ([]);
+      const near = binder(nearValues);
+      const vectorParam = near(vector.literal);
+      const nearestWhere = `v.model_key = ${near(vector.modelKey)} AND i.state = 'published' AND i.visible_at >= ${near(from.toISOString())}::timestamptz AND i.visible_at < ${near(until.toISOString())}::timestamptz
+          ${scanClauses(near)}
+          AND 1 - (v.embedding <=> ${vectorParam}::${vector.type}) >= ${ZONE_RECALL.nearestCosine}`;
+      const nearest = (await this.database.query(`SELECT i.id::text AS id, i.public_id, i.visible_at, ${changed} AS changed_at, i.event_id::text AS event_id, ${ROLE_COLUMNS},
+          1 - (v.embedding <=> ${vectorParam}::${vector.type}) AS cos
         FROM evimed_frontier.item_vectors v JOIN evimed_frontier.items i ON i.id = v.item_id
           JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
-        WHERE v.model_key = $2 AND i.state = 'published' AND i.visible_at >= $3::timestamptz AND i.visible_at < $4::timestamptz
-          ${since ? "AND (i.visible_at >= $5::timestamptz OR i.updated_at >= $5::timestamptz)" : ""}
-          AND 1 - (v.embedding <=> $1::${vector.type}) >= ${ZONE_RECALL.nearestCosine}
-        ORDER BY 1 - (v.embedding <=> $1::${vector.type}) DESC LIMIT ${ZONE_RECALL.nearestLimit}`,
-      [vector.literal, vector.modelKey, from.toISOString(), until.toISOString(), ...(since ? [since.toISOString()] : [])])).rows ?? [];
+        WHERE ${nearestWhere}
+        ORDER BY ${incremental ? `${changed} ASC, i.id ASC` : `1 - (v.embedding <=> ${vectorParam}::${vector.type}) DESC`} LIMIT ${ZONE_RECALL.nearestLimit}`, nearValues)).rows ?? [];
+      if (incremental && nearest.length >= ZONE_RECALL.nearestLimit) {
+        const edge = keyOf(nearest[nearest.length - 1]);
+        // Both legs were read in the same order: the scan can claim only as far as the shorter one got.
+        if (!last || edge.at < last.at || (edge.at.getTime() === last.at.getTime() && Number(edge.id) < Number(last.id))) last = edge;
+        full = true;
+      }
       for (const row of nearest) {
         if (found.has(String(row.id))) continue;
-        found.set(String(row.id), { id: String(row.id), publicId: String(row.public_id), visibleAt: new Date(row.visible_at), eventId: row.event_id == null ? null : String(row.event_id),
-          genre: row.genre ?? null, safetyAlert: row.safety_alert === true, via: "vector", partial: false, wordsOnly: false, weak: 0, cosine: Number(row.cos) });
+        found.set(String(row.id), { id: String(row.id), publicId: String(row.public_id), visibleAt: new Date(row.visible_at), changedAt: new Date(row.changed_at),
+          eventId: row.event_id == null ? null : String(row.event_id), role: evidenceZoneRole(row),
+          via: "vector", partial: false, wordsOnly: false, weak: 0, cosine: Number(row.cos) });
       }
     }
-    return [...found.values()].sort((left, right) => (order === "ASC" ? 1 : -1) * (left.visibleAt.getTime() - right.visibleAt.getTime() || Number(left.id) - Number(right.id))).slice(0, limit);
+    const sign = order === "ASC" ? 1 : -1;
+    const ordered = [...found.values()].sort((left, right) => incremental
+      ? left.changedAt.getTime() - right.changedAt.getTime() || Number(left.id) - Number(right.id)
+      : sign * (left.visibleAt.getTime() - right.visibleAt.getTime() || Number(left.id) - Number(right.id)));
+    // A scan keeps what both legs found (at most a page and the nearest page): cutting it could cut rows its resume key has passed.
+    return { candidates: incremental ? ordered : ordered.slice(0, limit), full, last };
   }
 
   /**
@@ -688,7 +798,7 @@ export class EvidenceZoneMembership {
         : "NOTHING"}
       RETURNING via, (xmax = 0) AS inserted`,
     [zone.id, zone.version, candidates.map((candidate) => candidate.id), candidates.map((candidate) => candidate.via),
-      candidates.map((candidate) => evidenceZoneRole({ genre: candidate.genre, safetyAlert: candidate.safetyAlert })),
+      candidates.map((candidate) => candidate.role),
       candidates.map((candidate) => (candidate.via === "tag" || candidate.via === "entity" ? 1 : candidate.via === "words" ? 0.7 : candidate.cosine ?? 0.5))]);
     let written = 0;
     for (const row of result.rows ?? []) {
@@ -733,13 +843,14 @@ export class EvidenceZoneMembership {
   async #backfillDue(now, caps, only = null) {
     const rows = (await this.database.query(`SELECT ${EvidenceZoneMembership.ZONE_COLUMNS} FROM evimed_frontier.evidence_zones z
       WHERE z.lifecycle IN ('active', 'quiet') AND z.definition IS NOT NULL AND z.definition_version > 0 AND z.backfilled_version < z.definition_version
-        ${only ? "AND z.id = ANY($2::text[])" : ""}
-      ORDER BY z.updated_at DESC, z.id LIMIT $1`, only ? [ZONE_TICK.backfillZones, only] : [ZONE_TICK.backfillZones])).rows ?? [];
+        AND ${only ? "z.id = ANY($2::text[])" : "NOT (z.id = ANY($2::text[]))"}
+      ORDER BY z.updated_at DESC, z.id LIMIT $1`, [ZONE_TICK.backfillZones, only ?? this.#waiting(this.recallWait, now)])).rows ?? [];
     /** @type {string[]} */
     const done = [];
     for (const row of rows) {
       const zone = this.#zone(row);
-      if (!zone || this.busy.has(zone.id)) continue;
+      if (!zone) { this.recallWait.set(String(row.id), now.getTime() + ZONE_RECALL.retryMs); continue; }
+      if (this.busy.has(zone.id)) continue;
       this.busy.add(zone.id);
       try {
         const candidates = await this.recall(zone, caps, { from: new Date(now.getTime() - ZONE_RECALL.backfillDays * DAY), until: now, order: "DESC", limit: ZONE_RECALL.backfillMax });
@@ -753,6 +864,7 @@ export class EvidenceZoneMembership {
         this.changed = true;
       } catch (error) {
         this.#fail(codeOf(error));
+        this.recallWait.set(zone.id, now.getTime() + ZONE_RECALL.retryMs);
       } finally {
         this.busy.delete(zone.id);
       }
@@ -762,33 +874,43 @@ export class EvidenceZoneMembership {
 
   /**
    * The incremental scans due: every zone not looked at for a minute is scanned from ten minutes before where it got to, and the
-   * candidates written `pending`. Each zone fails alone.
+   * candidates written `pending`. A scan reads up to `ZONE_RECALL.scanPages` pages; one that stopped on a full page leaves
+   * `matched_through` at that page's key and the next scan resumes there. Each zone fails alone.
    * @param {Date} now @param {MembershipCapabilities} caps
    */
   async #scanDue(now, caps) {
     const rows = (await this.database.query(`SELECT ${EvidenceZoneMembership.ZONE_COLUMNS} FROM evimed_frontier.evidence_zones z
       WHERE z.lifecycle IN ('active', 'quiet') AND z.definition IS NOT NULL AND z.definition_version > 0 AND z.backfilled_version >= z.definition_version
-        AND (z.matched_through IS NULL OR z.matched_through <= $1::timestamptz)
+        AND (z.matched_through IS NULL OR z.matched_through <= $1::timestamptz) AND NOT (z.id = ANY($3::text[]))
       ORDER BY coalesce(z.matched_through, 'epoch'::timestamptz), z.id LIMIT $2`,
-    [new Date(now.getTime() - ZONE_RECALL.scanEveryMs).toISOString(), ZONE_TICK.scanZones])).rows ?? [];
+    [new Date(now.getTime() - ZONE_RECALL.scanEveryMs).toISOString(), ZONE_TICK.scanZones, this.#waiting(this.recallWait, now)])).rows ?? [];
     let scanned = 0;
     let offered = 0;
     for (const row of rows) {
       const zone = this.#zone(row);
-      if (!zone || this.busy.has(zone.id)) continue;
+      if (!zone) { this.recallWait.set(String(row.id), now.getTime() + ZONE_RECALL.retryMs); continue; }
+      if (this.busy.has(zone.id)) continue;
       this.busy.add(zone.id);
       try {
         const lookback = new Date(now.getTime() - ZONE_RECALL.lookbackMs);
         const since = zone.matchedThrough ? new Date(Math.max(zone.matchedThrough.getTime() - ZONE_RECALL.overlapMs, lookback.getTime())) : lookback;
-        const candidates = await this.recall(zone, caps, { from: lookback, until: now, since, order: "ASC", limit: ZONE_RECALL.scanLimit });
-        offered += await this.#offer(zone, candidates);
-        // A scan that filled its page resumes from its newest candidate; otherwise the zone has been looked at up to now.
-        const through = candidates.length >= ZONE_RECALL.scanLimit ? candidates[candidates.length - 1].visibleAt : now;
+        /** @type {{ at: Date, id: string } | null} */
+        let after = null;
+        let through = now;
+        for (let page = 0; page < ZONE_RECALL.scanPages; page += 1) {
+          const found = await this.#recallPage(zone, caps, { from: lookback, until: now, since, after, order: "ASC", limit: ZONE_RECALL.scanLimit });
+          offered += await this.#offer(zone, found.candidates);
+          // The SQL page was full: there may be more behind it, and the zone has been looked at only as far as its last row's key.
+          if (!found.full || !found.last) { through = now; break; }
+          after = found.last;
+          through = found.last.at;
+        }
         await this.database.query("UPDATE evimed_frontier.evidence_zones SET matched_through = $2::timestamptz WHERE id = $1", [zone.id, through.toISOString()]);
         this.counters.scans += 1;
         scanned += 1;
       } catch (error) {
         this.#fail(codeOf(error));
+        this.recallWait.set(zone.id, now.getTime() + ZONE_RECALL.retryMs);
       } finally {
         this.busy.delete(zone.id);
       }
@@ -876,7 +998,7 @@ export class EvidenceZoneMembership {
       if (zone) zones.set(zone.id, zone);
     }
     const itemIds = batch.map((entry) => entry.itemId);
-    const itemRows = (await this.database.query(`SELECT i.id::text AS id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.lead_zh, i.entities, i.genre, i.safety_alert,
+    const itemRows = (await this.database.query(`SELECT i.id::text AS id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.lead_zh, i.entities, ${ROLE_COLUMNS},
         i.visible_at, s.name AS source_name
       FROM evimed_frontier.items i LEFT JOIN evimed_frontier.sources s ON s.id = i.primary_source_id WHERE i.id = ANY($1::bigint[])`, [itemIds])).rows ?? [];
     const items = new Map(itemRows.map((/** @type {any} */ row) => [String(row.id), row]));
@@ -913,7 +1035,7 @@ export class EvidenceZoneMembership {
       const n = shownItems.length + 1;
       const entities = row.entities && typeof row.entities === "object"
         ? [...(row.entities.drugs ?? []), ...(row.entities.diseases ?? []), ...(row.entities.trials ?? [])].filter((name) => typeof name === "string") : [];
-      shownItems.push({ n, role: EVIDENCE_ZONE_ROLE_LABELS_ZH[evidenceZoneRole({ genre: row.genre, safetyAlert: row.safety_alert })], date: shownDate(row.visible_at, this.timeZone),
+      shownItems.push({ n, role: EVIDENCE_ZONE_ROLE_LABELS_ZH[evidenceZoneRole(row)], date: shownDate(row.visible_at, this.timeZone),
         source: row.source_name ?? "", title: row.title_zh || row.title_raw, lead: row.lead_zh || row.summary_zh || null, entities,
         tags: (tags.get(entry.itemId) ?? []).map((/** @type {{ name: string }} */ tag) => tag.name), zones: asked.map((zone) => /** @type {string} */ (labels.get(zone.zoneId))) });
       entries.push({ n, itemId: entry.itemId, zones: asked.map((zone) => ({ label: /** @type {string} */ (labels.get(zone.zoneId)), id: zone.zoneId, version: zone.version, via: zone.via })) });
@@ -981,6 +1103,36 @@ export class EvidenceZoneMembership {
       WHERE zi.zone_id = u.zone_id AND zi.item_id = u.item_id AND zi.state IN ('pending', 'in')`, [pairs.map((pair) => pair[0]), pairs.map((pair) => pair[1])]);
   }
 
+  // ───────────────────────── roles ─────────────────────────
+
+  /**
+   * Read the stored role again for the items whose genre column is empty or unknown — the rows the role read differently from the
+   * modules before (every item published before 2026-10-24 has no genre, and a row written from the stored column alone said `news`).
+   * Idempotent and bounded: `ROLE_SWEEP_ROWS` rows a tick in key order, once through the table per process, only rows that differ
+   * are written, and the zones they sit in have their counts (which read the stored role) taken again.
+   */
+  async #repairRoles() {
+    if (this.rolesSwept) return { done: true, repaired: 0 };
+    const cursor = this.roleCursor;
+    const rows = (await this.database.query(`SELECT zi.zone_id, zi.item_id::text AS item_id, zi.role, ${ROLE_COLUMNS}
+      FROM evimed_frontier.zone_items zi JOIN evimed_frontier.items i ON i.id = zi.item_id
+      WHERE (i.genre IS NULL OR NOT (i.genre = ANY($2::text[]))) ${cursor ? "AND (zi.zone_id, zi.item_id) > ($3, $4::bigint)" : ""}
+      ORDER BY zi.zone_id, zi.item_id LIMIT $1::integer`,
+    [ROLE_SWEEP_ROWS, [...FRONTIER_GENRES], ...(cursor ? [cursor.zoneId, cursor.itemId] : [])])).rows ?? [];
+    const stale = rows.filter((/** @type {Record<string, any>} */ row) => evidenceZoneRole(row) !== row.role);
+    if (stale.length) {
+      await this.database.query(`UPDATE evimed_frontier.zone_items zi SET role = u.role
+        FROM unnest($1::text[], $2::bigint[], $3::text[]) AS u(zone_id, item_id, role) WHERE zi.zone_id = u.zone_id AND zi.item_id = u.item_id`,
+      [stale.map((/** @type {any} */ row) => row.zone_id), stale.map((/** @type {any} */ row) => row.item_id), stale.map((/** @type {any} */ row) => evidenceZoneRole(row))]);
+      await this.database.query("UPDATE evimed_frontier.evidence_zones SET stats_at = NULL WHERE id = ANY($1::text[]) AND stats IS NOT NULL",
+        [[...new Set(stale.map((/** @type {any} */ row) => String(row.zone_id)))]]);
+      this.changed = true;
+    }
+    if (rows.length < ROLE_SWEEP_ROWS) { this.rolesSwept = true; this.roleCursor = null; }
+    else this.roleCursor = { zoneId: String(rows[rows.length - 1].zone_id), itemId: String(rows[rows.length - 1].item_id) };
+    return { done: this.rolesSwept, repaired: stale.length };
+  }
+
   // ───────────────────────── stats ─────────────────────────
 
   /**
@@ -1045,7 +1197,7 @@ export class EvidenceZoneMembership {
    */
   async progressMaterial(zoneId, now) {
     const window = EVIDENCE_ZONE_MODULE_RULES.progress.windowDays ?? 14;
-    const rows = (await this.database.query(`SELECT i.id::text AS id, i.public_id, i.event_id::text AS event_id, i.genre, i.practice_changing, i.safety_alert, i.flags,
+    const rows = (await this.database.query(`SELECT i.id::text AS id, i.public_id, i.event_id::text AS event_id, ${ROLE_COLUMNS}, i.practice_changing,
         i.selected, i.score_total, i.visible_at, coalesce(nullif(i.title_zh, ''), i.title_raw) AS title, coalesce(i.lead_zh, i.summary_zh) AS lead,
         s.name AS source_name, zi.role
       FROM evimed_frontier.zone_items zi JOIN evimed_frontier.items i ON i.id = zi.item_id AND i.state = 'published'
@@ -1054,7 +1206,8 @@ export class EvidenceZoneMembership {
         AND i.visible_at >= $2::timestamptz AND NOT (i.flags && ARRAY['retracted']::text[])
       ORDER BY i.visible_at DESC, i.id DESC LIMIT $3`,
     [zoneId, new Date(now.getTime() - window * DAY).toISOString(), ZONE_PROGRESS.candidateRows])).rows ?? [];
-    const ordered = orderZoneMaterial(rows);
+    // A key update is read from the item's genre as the modules read it, the stored column or the one its other columns give.
+    const ordered = orderZoneMaterial(rows.map((/** @type {Record<string, any>} */ row) => ({ ...row, genre: frontierItemGenre(row) })));
     /** @type {Date | null} */
     let newestKeyAt = null;
     const refs = ordered.map(({ row, key }, index) => {
@@ -1067,22 +1220,41 @@ export class EvidenceZoneMembership {
   }
 
   /**
-   * Write at most one 「最新进展」 that is due. A zone not due is looked at again in five minutes; a failed or refused write is not
-   * retried at once. A zone that fell under three core items loses its old paragraph without a model call.
+   * Write at most one 「最新进展」 that is due. The zones read are those that can be: three core items in the window and a paragraph
+   * that is missing, or old enough that the material may have changed, or old enough with a newer item behind it (the exact tests
+   * stay in `zoneProgressDue`, which needs the material), and those with a paragraph they no longer have the material for. A zone
+   * looked at and found not due is left out of the next queries for `recheckMs` (a failed or refused write for longer), so the
+   * window moves along the rest instead of coming back to the same zones; a zone with too little never enters it. A zone that fell
+   * under three core items loses its old paragraph without a model call.
    * @param {Date} now
    */
   async #writeProgress(now) {
     if (typeof this.editor?.writeJson !== "function" || !this.editor?.available) { this.counters.overview.skipped += 1; return { written: 0, skipped: "no_editor" }; }
+    const waiting = this.#waiting(this.progressWait, now);
+    const rule = EVIDENCE_ZONE_MODULE_RULES.progress;
+    /** The members the writer's material is taken from, as `progressMaterial` takes them. @param {string} alias */
+    const eligible = (alias) => `((${alias}.state = 'in' AND ${alias}.relevance = 'core') OR ${alias}.state = 'pinned')`;
     const rows = (await this.database.query(`SELECT ${EvidenceZoneMembership.ZONE_COLUMNS} FROM evimed_frontier.evidence_zones z
-      WHERE z.lifecycle = 'active' AND z.definition IS NOT NULL AND z.definition_version > 0
-        AND (z.overview IS NULL OR z.overview_at IS NULL OR z.overview_at <= $1::timestamptz)
-      ORDER BY z.overview_at NULLS FIRST, z.id LIMIT 60`, [new Date(now.getTime() - ZONE_PROGRESS.keyUpdateMinAgeMs).toISOString()])).rows ?? [];
+      LEFT JOIN LATERAL (SELECT count(*)::integer AS n FROM (
+        SELECT 1 FROM evimed_frontier.zone_items zi JOIN evimed_frontier.items i ON i.id = zi.item_id AND i.state = 'published'
+          JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
+        WHERE zi.zone_id = z.id AND ${eligible("zi")} AND i.visible_at >= $2::timestamptz AND NOT (i.flags && ARRAY['retracted']::text[])
+        GROUP BY coalesce(i.event_id, -i.id) LIMIT $3::integer) m) core ON true
+      WHERE z.lifecycle = 'active' AND z.definition IS NOT NULL AND z.definition_version > 0 AND NOT (z.id = ANY($4::text[]))
+        AND CASE WHEN core.n >= $3::integer THEN
+            (z.overview IS NULL OR z.overview_at IS NULL OR z.overview_at <= $5::timestamptz
+              OR (z.overview_at <= $1::timestamptz AND EXISTS (SELECT 1 FROM evimed_frontier.zone_items zk JOIN evimed_frontier.items k ON k.id = zk.item_id AND k.state = 'published'
+                WHERE zk.zone_id = z.id AND ${eligible("zk")} AND k.visible_at > z.overview_at)))
+          ELSE coalesce(z.overview->>'text', '') <> '' AND (z.overview_at IS NULL OR z.overview_at <= $1::timestamptz) END
+      ORDER BY z.overview_at NULLS FIRST, z.id LIMIT $6::integer`,
+    [new Date(now.getTime() - ZONE_PROGRESS.keyUpdateMinAgeMs).toISOString(), new Date(now.getTime() - (rule.windowDays ?? 14) * DAY).toISOString(), rule.minItems,
+      waiting, new Date(now.getTime() - ZONE_PROGRESS.basisChangeMinAgeMs).toISOString(), ZONE_PROGRESS.candidateZones])).rows ?? [];
     let written = 0;
     let looked = 0;
     for (const row of rows) {
       if (written >= ZONE_TICK.progressWrites || looked >= ZONE_TICK.progressChecks) break;
       const zone = this.#zone(row);
-      if (!zone || (this.progressWait.get(zone.id) ?? 0) > now.getTime()) continue;
+      if (!zone) { this.progressWait.set(String(row.id), now.getTime() + ZONE_PROGRESS.retryFailedMs); continue; }
       looked += 1;
       try {
         const { refs, newestKeyAt } = await this.progressMaterial(zone.id, now);
@@ -1201,6 +1373,7 @@ export class EvidenceZoneMembership {
       return { calls: made + rest.calls, written: rest.written };
     });
     await step("takeDown", () => this.#takeDownWithdrawn(now));
+    await step("roles", () => this.#repairRoles());
     await step("stats", () => this.#refreshStats(now));
     await step("progress", () => this.#writeProgress(now));
     if (this.changed) await this.#bumpView();
@@ -1220,6 +1393,7 @@ export class EvidenceZoneMembership {
       WHERE id = $1 AND definition IS NOT NULL`, [zoneId]);
     await this.database.query(`UPDATE evimed_frontier.zone_items SET attempts = 0 WHERE zone_id = $1 AND state IN ('pending', 'in') AND attempts > 0`, [zoneId]);
     this.progressWait.delete(zoneId);
+    this.recallWait.delete(zoneId);
     if (!this.enabled) return;
     this.#later((async () => {
       const caps = await this.ready();
@@ -1271,15 +1445,19 @@ export class EvidenceZoneMembership {
    * A reader says an item does not belong to a zone (`not-in`) or that more like it belong (`more-like`).
    *  - `not-in` on a reader's own zone: excluded at once, and a negative example for the judge.
    *  - `not-in` on a platform zone: the judge reads the pair again with the reader's note and the item is excluded only if it agrees.
-   *  - `more-like`: the item joins the zone's positive examples (the definition version does not move).
+   *    The reading costs the feed's budget, so a reader gets one per (zone, definition version, item) and at most
+   *    `ZONE_FEEDBACK.rejudgesPerHour` an hour; beyond that the word is counted and the model is not asked (`unjudged`).
+   *  - `more-like`: the item joins the zone's positive examples (the definition version does not move) when the zone is the reader's
+   *    own or the reader is an operator; on anyone else's zone it changes nothing (`noted`): a platform zone's examples steer what
+   *    every later judgement of it is shown, and they are not one reader's to edit.
    * @param {string} zoneId @param {string | number} itemRowId @param {"not-in" | "more-like"} kind @param {{ userId: string, isOwner?: boolean }} actor
-   * @returns {Promise<{ accepted: true, outcome: "excluded" | "kept" | "seeded" | "unjudged" }>}
+   * @returns {Promise<{ accepted: true, outcome: "excluded" | "kept" | "seeded" | "noted" | "unjudged" }>}
    */
   async feedback(zoneId, itemRowId, kind, actor) {
     if (kind !== "not-in" && kind !== "more-like") throw new HttpError(400, "evidence_zone_feedback_invalid", "Unknown feedback.");
     const zoneRow = (await this.database.query(`SELECT ${EvidenceZoneMembership.ZONE_COLUMNS} FROM evimed_frontier.evidence_zones z WHERE z.id = $1 AND z.definition IS NOT NULL`, [zoneId])).rows[0];
     const zone = zoneRow ? this.#zone(zoneRow) : null;
-    const item = (await this.database.query("SELECT id::text AS id, public_id, genre, safety_alert FROM evimed_frontier.items WHERE id = $1::bigint AND state = 'published'", [String(itemRowId)])).rows[0];
+    const item = (await this.database.query(`SELECT i.id::text AS id, i.public_id, ${ROLE_COLUMNS} FROM evimed_frontier.items i WHERE i.id = $1::bigint AND i.state = 'published'`, [String(itemRowId)])).rows[0];
     if (!zone || !item) throw new HttpError(404, "evidence_zone_not_found", "No such zone or item.");
     const owns = zone.kind === "user" && zone.userId === actor.userId;
     if (zone.kind === "user" && !owns && actor.isOwner !== true) throw new HttpError(403, "evidence_zone_forbidden", "This zone is not yours.");
@@ -1287,6 +1465,7 @@ export class EvidenceZoneMembership {
     const pair = (await this.database.query("SELECT state FROM evimed_frontier.zone_items WHERE zone_id = $1 AND item_id = $2::bigint", [zoneId, item.id])).rows[0] ?? null;
     if (kind === "more-like") {
       if (!pair || !["in", "pinned"].includes(pair.state)) throw new HttpError(404, "evidence_zone_item_not_found", "That item is not in this zone.");
+      if (!(owns || actor.isOwner === true || this.#isOperator(actor.userId))) { count("noted"); return { accepted: true, outcome: "noted" }; }
       await this.#seed(zoneId, "positive", item.public_id);
       count("seeded");
       return { accepted: true, outcome: "seeded" };
@@ -1295,7 +1474,7 @@ export class EvidenceZoneMembership {
       await this.database.query(`INSERT INTO evimed_frontier.zone_items (zone_id, item_id, state, relevance, via, role, score, decided_by, definition_version, judged_at)
         VALUES ($1, $2::bigint, 'excluded', NULL, 'reader', $3, 0, $4, $5, clock_timestamp())
         ON CONFLICT (zone_id, item_id) DO UPDATE SET state = 'excluded', relevance = NULL, decided_by = EXCLUDED.decided_by, judged_at = clock_timestamp()`,
-      [zoneId, item.id, evidenceZoneRole({ genre: item.genre, safetyAlert: item.safety_alert }), by, zone.version]);
+      [zoneId, item.id, evidenceZoneRole(item), by, zone.version]);
       await this.database.query(`INSERT INTO evimed_frontier.zone_changes (zone_id, kind, actor, detail) VALUES ($1, 'excluded', $2, $3::jsonb)`,
         [zoneId, who, JSON.stringify({ itemId: item.public_id })]);
       await this.#bumpView();
@@ -1309,22 +1488,64 @@ export class EvidenceZoneMembership {
     // A platform zone is not the reader's to edit: the judge reads the pair again, and an operator's pin stands.
     if (!pair || pair.state === "pinned") { count("kept"); return { accepted: true, outcome: "kept" }; }
     if (pair.state === "excluded") { count("excluded"); return { accepted: true, outcome: "excluded" }; }
-    const verdict = await this.#rejudge(zone, item.id, "读者认为这条不属于这个专区。");
+    if (!(await this.#canJudge())) { count("unjudged"); return { accepted: true, outcome: "unjudged" }; }
+    // The memo and the hour's count are taken before the call is awaited, so two requests at once cannot both pass.
+    const taken = this.#takeRejudge(`${zoneId}\u0000${zone.version}\u0000${item.id}\u0000${actor.userId}`, String(actor.userId));
+    if (taken !== "taken") {
+      count(taken);
+      return { accepted: true, outcome: "unjudged" };
+    }
+    const verdict = await this.#rejudge(zone, item, "读者认为这条不属于这个专区。");
     if (verdict === null) { count("unjudged"); return { accepted: true, outcome: "unjudged" }; }
     if (verdict === "out") { await exclude(`model:${EVIDENCE_ZONE_JUDGE_VERSION}`, `reader:${actor.userId}`); count("excluded"); return { accepted: true, outcome: "excluded" }; }
     count("kept");
     return { accepted: true, outcome: "kept" };
   }
 
+  /** Whether a model call can be made now: an editor and a budget. */
+  async #canJudge() {
+    if (!this.editor?.available || typeof this.editor.callJson !== "function") return false;
+    return this.#budgetAllows();
+  }
+
+  /** @param {string} userId */
+  #isOperator(userId) {
+    const operators = Array.isArray(this.config.operatorUsers) ? this.config.operatorUsers : [];
+    return operators.map(String).includes(String(userId));
+  }
+
+  /**
+   * Whether a reader may have the judge read a pair again: not if they asked for this pair under this definition already, and not
+   * beyond their hour's limit. Taking it records both. The memory is the process's: a restart gives the same reader one more reading,
+   * which the hour's limit still bounds.
+   * @param {string} memo (zone, definition version, item, reader) @param {string} reader @returns {"taken" | "repeated" | "limited"}
+   */
+  #takeRejudge(memo, reader) {
+    const at = this.now().getTime();
+    if (this.rejudged.has(memo)) return "repeated";
+    const configured = Number(this.config.evidenceZoneFeedbackRejudgesPerHour);
+    const limit = Number.isFinite(configured) && configured >= 0 ? Math.trunc(configured) : ZONE_FEEDBACK.rejudgesPerHour;
+    const times = (this.rejudgeTimes.get(reader) ?? []).filter((time) => at - time < HOUR);
+    if (times.length >= limit) { this.rejudgeTimes.set(reader, times); return "limited"; }
+    times.push(at);
+    this.rejudgeTimes.set(reader, times);
+    if (this.rejudged.size >= ZONE_FEEDBACK.memoMax) this.rejudged.delete(/** @type {string} */ (this.rejudged.keys().next().value));
+    this.rejudged.set(memo, at);
+    if (this.rejudgeTimes.size > ZONE_FEEDBACK.memoMax) {
+      for (const [id, list] of this.rejudgeTimes) if (!list.some((time) => at - time < HOUR)) this.rejudgeTimes.delete(id);
+    }
+    return "taken";
+  }
+
   /**
    * The judge's second reading of one pair with a reader's note; null when it cannot be read (no editor, budget spent, bad answer).
-   * @param {MembershipZone} zone @param {string} itemId @param {string} note
+   * @param {MembershipZone} zone @param {{ id: string }} subject the item @param {string} note
    * @returns {Promise<"core" | "related" | "out" | null>}
    */
-  async #rejudge(zone, itemId, note) {
-    if (!this.editor?.available || typeof this.editor.callJson !== "function" || !(await this.#budgetAllows())) return null;
-    const row = (await this.database.query(`SELECT i.title_raw, i.title_zh, i.summary_zh, i.lead_zh, i.entities, i.genre, i.safety_alert, i.visible_at, s.name AS source_name
-      FROM evimed_frontier.items i LEFT JOIN evimed_frontier.sources s ON s.id = i.primary_source_id WHERE i.id = $1::bigint`, [itemId])).rows[0];
+  async #rejudge(zone, subject, note) {
+    if (!(await this.#canJudge())) return null;
+    const row = (await this.database.query(`SELECT i.title_raw, i.title_zh, i.summary_zh, i.lead_zh, i.entities, ${ROLE_COLUMNS}, i.visible_at, s.name AS source_name
+      FROM evimed_frontier.items i LEFT JOIN evimed_frontier.sources s ON s.id = i.primary_source_id WHERE i.id = $1::bigint`, [subject.id])).rows[0];
     if (!row) return null;
     const seedIds = [...zone.definition.seeds.positive.slice(-2), ...zone.definition.seeds.negative.slice(-1)];
     const seeds = new Map(((await this.database.query("SELECT public_id, title_raw, title_zh FROM evimed_frontier.items WHERE public_id = ANY($1::text[])", [seedIds])).rows ?? [])
@@ -1333,7 +1554,7 @@ export class EvidenceZoneMembership {
       ? [...(row.entities.drugs ?? []), ...(row.entities.diseases ?? []), ...(row.entities.trials ?? [])].filter((name) => typeof name === "string") : [];
     const input = buildZoneJudgeInput([{ label: "Z1", id: zone.id, title: zone.title, definition: zone.definition,
       positive: zone.definition.seeds.positive.slice(-2).map((id) => seeds.get(id)).filter(Boolean), negative: zone.definition.seeds.negative.slice(-1).map((id) => seeds.get(id)).filter(Boolean) }],
-    [{ n: 1, role: EVIDENCE_ZONE_ROLE_LABELS_ZH[evidenceZoneRole({ genre: row.genre, safetyAlert: row.safety_alert })], date: shownDate(row.visible_at, this.timeZone), source: row.source_name ?? "",
+    [{ n: 1, role: EVIDENCE_ZONE_ROLE_LABELS_ZH[evidenceZoneRole(row)], date: shownDate(row.visible_at, this.timeZone), source: row.source_name ?? "",
       title: row.title_zh || row.title_raw, lead: row.lead_zh || row.summary_zh || null, entities, tags: [], zones: ["Z1"], note }]);
     this.counters.judge.calls += 1;
     try {

@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { after, before, beforeEach, test } from "node:test";
 import { normalizeEvidenceZoneDefinition } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
-import { EvidenceZoneMembership, ZONE_JUDGE } from "../src/evidenceZoneMembership.mjs";
+import { EvidenceZoneMembership, ZONE_JUDGE, ZONE_RECALL, zoneProgressBasis } from "../src/evidenceZoneMembership.mjs";
 import { FrontierEditor } from "../src/frontierEditor.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { FrontierTagStore } from "../src/frontierTags.mjs";
@@ -106,11 +106,11 @@ beforeEach(async () => {
   tags = new FrontierTagStore({ database: db });
 });
 
-/** @param {{ embedder?: any, entities?: any, budget?: any }} [overrides] */
-function makeMembership({ embedder: useEmbedder = null, entities = fakeEntities, budget = async () => ({ state: budgetState }) } = {}) {
+/** @param {{ embedder?: any, entities?: any, budget?: any, config?: Record<string, any> }} [overrides] */
+function makeMembership({ embedder: useEmbedder = null, entities = fakeEntities, budget = async () => ({ state: budgetState }), config = {} } = {}) {
   const editor = new FrontierEditor({ deepseekProviderEnabled: true, deepseekApiKey: "test-key", frontierTimeZone: "Asia/Shanghai" },
     { callModel, owner: { userId: "publisher", projectId: "evimed-frontier" } });
-  return new EvidenceZoneMembership({ database: db, editor, embedder: useEmbedder, tags, entities, budget, config: { kbEmbeddingDimension: TEST_DIMENSION, frontierTimeZone: "Asia/Shanghai" }, now: () => clock });
+  return new EvidenceZoneMembership({ database: db, editor, embedder: useEmbedder, tags, entities, budget, config: { kbEmbeddingDimension: TEST_DIMENSION, frontierTimeZone: "Asia/Shanghai", ...config }, now: () => clock });
 }
 
 /** @param {string} slug @param {string} name @param {Record<string, any>} [more] */
@@ -418,14 +418,24 @@ test("feedback: a reader's own zone excludes at once; a platform zone asks the j
   assert.equal(calls.judge.length, before + 1);
   assert.ok(calls.judge.at(-1).includes("读者提示：读者认为这条不属于这个专区。"));
   assert.equal((await rows("ez_pub")).get("CORE shared item").state, "in");
+  // The same reader asking again about the same pair costs no model call; another reader's word is read.
+  const asked = calls.judge.length;
   judgeRule = () => "out";
-  assert.deepEqual(await membership.feedback("ez_pub", x.id, "not-in", { userId: "bob" }), { accepted: true, outcome: "excluded" });
+  assert.deepEqual(await membership.feedback("ez_pub", x.id, "not-in", { userId: "bob" }), { accepted: true, outcome: "unjudged" });
+  assert.equal(calls.judge.length, asked, "bob has had this pair read already");
+  assert.equal((await rows("ez_pub")).get("CORE shared item").state, "in");
+  assert.deepEqual(await membership.feedback("ez_pub", x.id, "not-in", { userId: "carol" }), { accepted: true, outcome: "excluded" });
   const pub = await rows("ez_pub");
   assert.deepEqual([pub.get("CORE shared item").state, pub.get("CORE shared item").decided_by], ["excluded", "model:zone-judge-1"]);
-  assert.equal((await db.query("SELECT actor FROM evimed_frontier.zone_changes WHERE zone_id = 'ez_pub'")).rows[0].actor, "reader:bob");
+  assert.equal((await db.query("SELECT actor FROM evimed_frontier.zone_changes WHERE zone_id = 'ez_pub'")).rows[0].actor, "reader:carol");
   assert.equal((await zoneRow("ez_pub")).definition.seeds.negative.length, 0, "a reader does not edit a platform zone's examples through a no");
-  // more-like: the item joins the positive examples; the version does not move.
-  assert.deepEqual(await membership.feedback("ez_pub", y.id, "more-like", { userId: "bob" }), { accepted: true, outcome: "seeded" });
+  // more-like: the owner's zone takes the item as a positive example; a platform zone's examples are an operator's, not a reader's.
+  assert.deepEqual(await membership.feedback("ez_pub", y.id, "more-like", { userId: "bob" }), { accepted: true, outcome: "noted" });
+  assert.deepEqual((await zoneRow("ez_pub")).definition.seeds.positive, [], "another reader's word does not steer the judgement of a platform zone");
+  assert.deepEqual(await membership.feedback("ez_mine", y.id, "more-like", { userId: "alice", isOwner: true }), { accepted: true, outcome: "seeded" });
+  assert.deepEqual((await zoneRow("ez_mine")).definition.seeds.positive, [y.publicId]);
+  const operating = makeMembership({ config: { operatorUsers: ["op"] } });
+  assert.deepEqual(await operating.feedback("ez_pub", y.id, "more-like", { userId: "op" }), { accepted: true, outcome: "seeded" });
   assert.deepEqual((await zoneRow("ez_pub")).definition.seeds.positive, [y.publicId]);
   assert.equal((await zoneRow("ez_pub")).definition_version, 1);
   await assert.rejects(membership.feedback("ez_pub", x.id, "more-like", { userId: "bob" }), (/** @type {any} */ error) => error.status === 404, "not in the zone any more");
@@ -710,4 +720,213 @@ test("the metric families carry the zones' counters", options, async () => {
   assert.equal(judge?.series.find((entry) => entry.labels?.outcome === "out")?.value, 1);
   const items = families.find((entry) => entry.name === "open_science_zone_items_total");
   assert.ok(items?.series.some((entry) => entry.labels?.via === "words" && entry.labels?.state === "pending" && entry.value === 2));
+});
+
+// ───────────────────────── the fix round of 2026-10-29 (server review F1, F2, F3, F4, F6) ─────────────────────────
+
+/** Attach existing items to zones as judged members, without the model (the rows a judge would have written). */
+async function attach(/** @type {string[]} */ zoneIds, /** @type {string[]} */ itemIds, { state = "in", relevance = "core", role = "research" } = {}) {
+  await db.query(`INSERT INTO evimed_frontier.zone_items (zone_id, item_id, state, relevance, via, role, score, decided_by, definition_version, judged_at, matched_at)
+    SELECT z, i, $3, $4, 'tag', $5, 1, 'model:zone-judge-1', 1, $6::timestamptz, $6::timestamptz FROM unnest($1::text[]) z, unnest($2::bigint[]) i`,
+  [zoneIds, itemIds, state, relevance, role, hoursAgo(200)]);
+}
+
+/** Items the writer can cite (numbers in the lead) that no zone's keywords match, so the scans leave them alone. @param {number} count @param {number} [hours] */
+async function materialItems(count, hours = 48) {
+  const made = [];
+  for (let index = 0; index < count; index += 1) {
+    made.push(await item(`MATERIAL ${hours} ${index}`, { hours: hours + index, titleZh: `材料研究第${index + 1}项`, lead: "纳入 68 周随访，体重下降 15%" }));
+  }
+  return made;
+}
+
+/** Move many items' instants at once. @param {Array<{ id: string }>} items @param {Date[]} visible @param {Date[]} updated */
+async function setInstants(items, visible, updated) {
+  await db.query(`UPDATE evimed_frontier.items i SET visible_at = u.v, timeline_at = u.v, updated_at = u.u
+    FROM unnest($1::bigint[], $2::timestamptz[], $3::timestamptz[]) AS u(id, v, u) WHERE i.id = u.id`,
+  [items.map((entry) => entry.id), visible.map((at) => at.toISOString()), updated.map((at) => at.toISOString())]);
+}
+
+test("F1: 最新进展 reaches a zone that is due however many zones sit below three core items", options, async () => {
+  const shared = await materialItems(3);
+  const thin = Array.from({ length: 65 }, (_, index) => `ez_a_thin_${String(index).padStart(2, "0")}`);
+  for (const id of thin) await createZone({ id, title: `单薄 ${id}`, backfilled: 1 });
+  await attach(thin.slice(0, 30), shared.slice(0, 2).map((entry) => entry.id));
+  await createZone({ id: "ez_z_due", title: "到期的专区", backfilled: 1 });
+  await attach(["ez_z_due"], shared.map((entry) => entry.id));
+  // A paragraph about material that is gone, in a zone that sorts after every thin one and was written before.
+  await createZone({ id: "ez_z_old", title: "旧段落", backfilled: 1 });
+  await attach(["ez_z_old"], shared.slice(0, 2).map((entry) => entry.id));
+  await db.query(`UPDATE evimed_frontier.evidence_zones SET overview = '{"text":"旧的一段话。","refs":[],"basis":"x","model":"m","version":"zone-progress-1"}'::jsonb, overview_at = $1 WHERE id = 'ez_z_old'`,
+    [hoursAgo(7)]);
+  const membership = makeMembership();
+  for (let round = 0; round < 3; round += 1) { clock = new Date(clock.getTime() + 1_000); await membership.tick(clock); }
+  assert.equal((await zoneRow("ez_z_due")).overview?.text, PROGRESS, "the one zone that can be written is written, with 65 thin zones ahead of it");
+  assert.equal(calls.progress.length, 1, "and no thin zone cost a model call");
+  assert.equal((await zoneRow("ez_z_old")).overview?.text, "", "the paragraph about material that is gone comes down");
+  assert.equal((await zoneRow("ez_a_thin_00")).overview, null);
+});
+
+test("F1: zones whose material did not change do not hold back one with a key update behind them", options, async () => {
+  const shared = await materialItems(3);
+  const basis = zoneProgressBasis(shared.map((entry) => ({ itemId: entry.publicId })));
+  const calm = Array.from({ length: 65 }, (_, index) => `ez_b_calm_${String(index).padStart(2, "0")}`);
+  for (const id of calm) await createZone({ id, title: `平静 ${id}`, backfilled: 1 });
+  await attach(calm, shared.map((entry) => entry.id));
+  const written = JSON.stringify({ text: PROGRESS, refs: [{ n: 1, itemId: shared[0].publicId }], basis, model: "m", version: "zone-progress-1" });
+  await db.query("UPDATE evimed_frontier.evidence_zones SET overview = $1::jsonb, overview_at = $2 WHERE id = ANY($3::text[])", [written, hoursAgo(30), calm]);
+  await createZone({ id: "ez_b_key", title: "有重要更新的专区", backfilled: 1 });
+  const guideline = await item("MATERIAL guideline", { hours: 1, genre: "guideline", titleZh: "材料指南更新", lead: "纳入 68 周随访，体重下降 15%" });
+  await attach(["ez_b_key"], shared.map((entry) => entry.id));
+  await attach(["ez_b_key"], [guideline.id], { role: "guideline" });
+  await db.query("UPDATE evimed_frontier.evidence_zones SET overview = $1::jsonb, overview_at = $2 WHERE id = 'ez_b_key'", [written, hoursAgo(8)]);
+  const membership = makeMembership();
+  let rounds = 0;
+  while (rounds < 14 && (await zoneRow("ez_b_key")).overview_at.toISOString() === hoursAgo(8)) { rounds += 1; clock = new Date(clock.getTime() + 1_000); await membership.tick(clock); }
+  assert.ok(rounds <= 14, `reached the key-update zone after ${rounds} passes`);
+  assert.equal(calls.progress.length, 1, "one paragraph written, none for the calm zones");
+  assert.ok(calls.progress[0].includes("[1] 指南共识｜"), "the key update first");
+  assert.equal(new Date((await zoneRow("ez_b_calm_00")).overview_at).toISOString(), hoursAgo(30), "a calm zone was looked at and left as it was");
+});
+
+test("F2: a bulk update of old items does not stall the scan, and the new items behind them are offered", options, async () => {
+  await createZone();
+  const membership = makeMembership();
+  await membership.tick(clock); // backfilled with nothing; matched_through = now
+  clock = new Date(clock.getTime() + 3_600_000);
+  /** @type {Array<{ id: string, publicId: string }>} */
+  const made = [];
+  for (let index = 0; index < 230; index += 1) made.push(await item(`CORE bumped ${String(index).padStart(3, "0")}`, { hours: 140 - index * 0.5, summaryZh: "semaglutide obesity" }));
+  const fresh = await item("CORE fresh", { hours: 0, summaryZh: "tirzepatide in weight loss" });
+  const bump = new Date(clock.getTime() - minutes(1));
+  await setInstants([...made, fresh], [...made.map((_, index) => new Date(NOW.getTime() - (140 - index * 0.5) * 3_600_000)), new Date(clock.getTime() - 30_000)],
+    [...made.map(() => bump), new Date(clock.getTime() - 30_000)]);
+  const tick = await membership.tick(clock);
+  assert.equal(tick.parts.scan.offered, 231, "all of them, the bumped items past the page and the fresh one behind them");
+  assert.equal((await rows()).size, 231);
+  clock = new Date(clock.getTime() + minutes(2));
+  const later = await item("CORE later", { hours: 0, summaryZh: "semaglutide obesity" });
+  await setInstants([later], [new Date(clock.getTime() - minutes(1))], [new Date(clock.getTime() - minutes(1))]);
+  const again = await membership.tick(clock);
+  assert.equal(again.parts.scan.offered, 1, "and the next one is not held behind the bumped items");
+  assert.ok(ZONE_RECALL.scanLimit < 231, "the page really was smaller than the bump");
+});
+
+test("F2: a row the excluded names drop does not make the scan decide the page was not full", options, async () => {
+  const adc = await tag("adc2", "抗体偶联药物");
+  const definition = zoneDefinition({ keywords: [{ label: "ADC", terms: ["ADC", "antibody-drug conjugate"], tagIds: [adc], entityKeys: [] },
+    { label: "乳腺癌", terms: ["乳腺癌", "breast cancer"], tagIds: [], entityKeys: [] }], excludeTerms: ["乳腺癌耐药蛋白", "BCRP"] });
+  await createZone({ id: "ez_adc", title: "ADC 治疗乳腺癌", definition });
+  const membership = makeMembership();
+  await membership.tick(clock);
+  clock = new Date(clock.getTime() + 2 * 3_600_000);
+  const made = [await item("OUT BCRP efflux", { titleZh: "乳腺癌耐药蛋白（BCRP）介导 ADC 药物外排", tagIds: [adc] })];
+  for (let index = 0; index < ZONE_RECALL.scanLimit - 1; index += 1) made.push(await item(`CORE ADC ${index}`, { titleZh: `ADC 药物在乳腺癌中的 3 期研究 ${index}`, tagIds: [adc] }));
+  for (let index = 0; index < 3; index += 1) made.push(await item(`CORE newest ${index}`, { titleZh: `ADC 药物在乳腺癌中的最新研究 ${index}`, tagIds: [adc] }));
+  const base = clock.getTime() - 3_600_000;
+  const at = made.map((_, index) => new Date(base + index * 1_000));
+  await setInstants(made, at, at);
+  const tick = await membership.tick(clock);
+  const stored = await rows("ez_adc");
+  assert.ok(!stored.has("OUT BCRP efflux"), "the excluded name still drops its row");
+  for (let index = 0; index < 3; index += 1) assert.ok(stored.has(`CORE newest ${index}`), `the newest ones behind the full page are offered (${index})`);
+  assert.equal(tick.parts.scan.offered, ZONE_RECALL.scanLimit - 1 + 3);
+});
+
+test("F6: a row's role is read from the columns the modules read the genre by, and rows written before are repaired", options, async () => {
+  await createZone({ id: "ez_mine", userId: "alice", kind: "user", title: "我的专区", state: "draft", backfilled: 1 });
+  const guideline = await item("CORE null genre guideline", { genre: null, summaryZh: "semaglutide obesity", more: { evidenceType: "guideline" } });
+  const paper = await item("CORE null genre paper", { genre: null, summaryZh: "semaglutide obesity" });
+  await item("CORE safety alert", { summaryZh: "semaglutide obesity", more: { safetyAlert: true } });
+  const quiet = await item("OTHER no keywords", { genre: null });
+  const membership = makeMembership();
+  await membership.tick(clock);
+  await membership.tick(new Date(clock.getTime() + 1));
+  const stored = await rows("ez_mine");
+  assert.equal(stored.get("CORE null genre guideline").role, "guideline", "an item with no stored genre is read as the modules read it");
+  assert.equal(stored.get("CORE null genre paper").role, "research");
+  assert.equal(stored.get("CORE safety alert").role, "safety");
+  // An exclusion of an item the zone never held writes the same role.
+  await membership.feedback("ez_mine", quiet.id, "not-in", { userId: "alice", isOwner: true });
+  assert.equal((await rows("ez_mine")).get("OTHER no keywords").role, "research");
+  // Rows written before the fix hold `news`; the next pass of a process reads them again, and their zone's counts follow.
+  await createZone({ id: "ez_old_rows", title: "旧行", backfilled: 1, definition: zoneDefinition({ keywords: [
+    { label: "无匹配甲", terms: ["zzunmatched"], tagIds: [], entityKeys: [] }, { label: "无匹配乙", terms: ["yyunmatched"], tagIds: [], entityKeys: [] }] }) });
+  await attach(["ez_old_rows"], [guideline.id, paper.id], { role: "news" });
+  await db.query(`UPDATE evimed_frontier.evidence_zones SET stats = '{"week":2,"month":2,"all":2,"perWeek":0.5,"roleCounts30":{"news":2},"latest":null,"keyLatest":null,"cards":0}'::jsonb, stats_at = $1 WHERE id = 'ez_old_rows'`, [hoursAgo(1)]);
+  const restarted = makeMembership();
+  await restarted.tick(clock);
+  const repaired = await rows("ez_old_rows");
+  assert.deepEqual([repaired.get("CORE null genre guideline").role, repaired.get("CORE null genre paper").role], ["guideline", "research"]);
+  assert.deepEqual((await zoneRow("ez_old_rows")).stats.roleCounts30, { guideline: 1, research: 1 }, "the counts that read the stored role are counted again");
+  // The writer's material counts the guideline as a key update although its genre column is empty.
+  const material = await restarted.progressMaterial("ez_old_rows", clock);
+  assert.ok(material.newestKeyAt, "a guideline read from its columns is a key update");
+});
+
+test("F3: a reader's 「不属于」 on a platform zone costs the budget at most once per pair and a few times an hour", options, async () => {
+  await createZone({ id: "ez_pub", title: "平台专区" });
+  const items = [];
+  for (let index = 0; index < 5; index += 1) items.push(await item(`CORE item ${index}`, { summaryZh: "semaglutide obesity" }));
+  const membership = makeMembership({ config: { evidenceZoneFeedbackRejudgesPerHour: 3 } });
+  await membership.tick(clock);
+  await membership.tick(new Date(clock.getTime() + 1));
+  judgeRule = () => "core";
+  const base = calls.judge.length;
+  // The same click repeated is read once.
+  for (let round = 0; round < 4; round += 1) await membership.feedback("ez_pub", items[0].id, "not-in", { userId: "bob" });
+  assert.equal(calls.judge.length, base + 1, "one reading for four clicks on one pair");
+  // Three readings an hour in all, whichever pairs; the pairs stay where they were, the word is counted.
+  for (const entry of items.slice(1)) assert.equal((await membership.feedback("ez_pub", entry.id, "not-in", { userId: "bob" })).accepted, true);
+  assert.equal(calls.judge.length, base + 3, "the hour's limit is three");
+  assert.equal([...(await rows("ez_pub")).values()].filter((row) => row.state === "in").length, 5);
+  assert.deepEqual([membership.status().counters.feedback["not-in:repeated"], membership.status().counters.feedback["not-in:limited"], membership.status().counters.feedback["not-in:kept"]], [3, 2, 3]);
+  // Another reader has an hour of their own; an hour later the first has theirs again.
+  await membership.feedback("ez_pub", items[4].id, "not-in", { userId: "carol" });
+  assert.equal(calls.judge.length, base + 4);
+  clock = new Date(clock.getTime() + 61 * 60_000);
+  await membership.feedback("ez_pub", items[4].id, "not-in", { userId: "bob" });
+  assert.equal(calls.judge.length, base + 5, "an hour on, bob's refused word is read");
+  await membership.feedback("ez_pub", items[4].id, "not-in", { userId: "bob" });
+  assert.equal(calls.judge.length, base + 5, "and read once: the pair is remembered for him");
+});
+
+test("F2: the scan's vector legs are paged by the same key, so a zone that takes its nearest items loses none past the page", options, async () => {
+  await createZone({ id: "ez_open", title: "开放主题", definition: zoneDefinition({ keywords: [{ label: "afterglow", terms: ["afterglow"], tagIds: [], entityKeys: [] }] }) });
+  const membership = makeMembership({ embedder });
+  await membership.tick(clock);
+  clock = new Date(clock.getTime() + 2 * 3_600_000);
+  const total = ZONE_RECALL.nearestLimit + 5;
+  const made = [];
+  for (let index = 0; index < total; index += 1) made.push(await item(`NEAR ${String(index).padStart(2, "0")}`, { vector: vectorAt(0.7) }));
+  const at = made.map((_, index) => new Date(clock.getTime() - 3_600_000 + index * 1_000));
+  await setInstants(made, at, at);
+  const tick = await membership.tick(clock);
+  assert.equal(tick.parts.scan.offered, total, "the nearest page was full, so the scan went on past it");
+  assert.equal((await rows("ez_open")).size, total);
+  assert.ok((await rows("ez_open")).get(`NEAR ${total - 1}`), "the newest is there");
+});
+
+test("F1 (class): zones that cannot be read do not hold the backfill and scan windows against the zones behind them", options, async () => {
+  const broken = '{"version":1,"keywords":[]}';
+  // Backfill: two slots a tick, newest definition first. Two zones that cannot be read are newer than the good one.
+  await createZone({ id: "ez_ok", title: "好的专区" });
+  await item("CORE ok", { summaryZh: "semaglutide obesity" });
+  for (const id of ["ez_bad_1", "ez_bad_2"]) await createZone({ id, title: `坏的 ${id}` });
+  await db.query("UPDATE evimed_frontier.evidence_zones SET definition = $1::jsonb, updated_at = clock_timestamp() + interval '1 hour' WHERE id LIKE 'ez_bad_%'", [broken]);
+  const membership = makeMembership();
+  await membership.tick(clock);
+  await membership.tick(new Date(clock.getTime() + 1_000));
+  assert.equal((await zoneRow("ez_ok")).backfilled_version, 1, "the good zone is backfilled on the second pass");
+  assert.equal((await rows("ez_ok")).get("CORE ok")?.state, "in");
+  // Scan: forty zones a pass, the oldest scan first. Forty-one that cannot be read have never been scanned.
+  const bad = Array.from({ length: 41 }, (_, index) => `ez_scan_bad_${String(index).padStart(2, "0")}`);
+  for (const id of bad) await createZone({ id, title: `坏的 ${id}`, backfilled: 1 });
+  await db.query("UPDATE evimed_frontier.evidence_zones SET definition = $1::jsonb WHERE id = ANY($2::text[])", [broken, bad]);
+  await db.query("UPDATE evimed_frontier.evidence_zones SET matched_through = $1 WHERE id = 'ez_ok'", [hoursAgo(1)]);
+  await item("CORE later", { hours: 0.5, summaryZh: "semaglutide obesity" });
+  clock = new Date(clock.getTime() + minutes(10));
+  await membership.tick(clock);
+  await membership.tick(new Date(clock.getTime() + 1_000));
+  assert.equal((await rows("ez_ok")).get("CORE later")?.state, "in", "the zone behind forty-one unreadable ones is scanned on the second pass");
 });
