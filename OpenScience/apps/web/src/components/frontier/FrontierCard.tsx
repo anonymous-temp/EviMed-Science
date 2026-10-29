@@ -13,6 +13,7 @@ import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { openItemConversation } from "./frontierAsk";
 import { FrontierHideStrip } from "./FrontierHideStrip";
+import { newZonePath } from "./zoneLinks";
 import type { FrontierHideStripControls } from "./useFrontierHide";
 import {
   CARD_FLAG_KEYS,
@@ -65,7 +66,7 @@ export interface FrontierCardProps {
 
 /**
  * What can be done with one item, as the card's ⋯ and the reader's ⋯ both list it: 深入研究 (the card's first entry — the reader has a
- * button of its own), 整理为证据卡片, 存入知识库 where the deployment can save, 复制为 Markdown, 不感兴趣, then following or muting its
+ * button of its own), 以此新建专区, 存入知识库 where the deployment can save, 复制为 Markdown, 不感兴趣, then following or muting its
  * source, its event, its drugs and its specialties; and the other institutions' reports (「另有 N 家报道」) with the way to the whole
  * event. One list, so the card and the reader never offer an item two different sets of things.
  */
@@ -98,7 +99,7 @@ export function useItemActions(item: FrontierItem, { reader = false, onHide, onS
   const openEvent = () => { rememberFrontierPosition(); navigate(eventPath(item.event!.id), { state: origin }); };
   const more: MenuEntry[] = [
     ...(reader ? [] : [{ label: "深入研究", onSelect: research }]),
-    { label: "整理为证据卡片", onSelect: () => { rememberFrontierPosition(); navigate(`/app/frontier/zones?fromItem=${encodeURIComponent(item.id)}`); } },
+    { label: "以此新建专区", onSelect: () => { rememberFrontierPosition(); navigate(newZonePath({ fromItemId: item.id })); } },
     ...(onSave ? [{ label: "存入知识库", disabled: saving, onSelect: () => onSave(item) }] : []),
     { label: "复制为 Markdown", onSelect: () => void copy() },
     { label: "不感兴趣", onSelect: () => onHide(item) },

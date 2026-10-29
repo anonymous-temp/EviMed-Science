@@ -1,8 +1,8 @@
-import { FRONTIER_LEAVING, readFrontierPosition, type FrontierReadingPosition } from "@/components/frontier/frontierReadingState";
+import { FRONTIER_LEAVING, readFrontierPosition, rememberFrontierPosition, type FrontierReadingPosition } from "@/components/frontier/frontierReadingState";
 import { WeeklyView, useFrontierWeekly } from "@/components/frontier/WeeklyView";
 import { FrontierLinkedItem } from "@/components/frontier/FrontierLinkedItem";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useSearchParams } from "react-router";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { getWebProjectId } from "@/lib/apiClient";
 import {
   fetchFrontierForYou,
@@ -21,7 +21,6 @@ import {
   starFrontierItem,
   unstarFrontierItem,
   useFrontierFeature,
-  type FrontierFollow,
   type FrontierForYou,
   type FrontierHotWindow,
   type FrontierItem,
@@ -54,7 +53,11 @@ import { useNarrow } from "@/lib/useMediaQuery";
 import type { FrontierPrefs } from "@/lib/frontierPrefs";
 import { FrontierFollows } from "@/components/frontier/FrontierFollows";
 import { Drawer } from "@/components/ui/Drawer";
-import { ZoneDirectoryBody, readZoneScope, useZoneDirectory, zoneDirectoryControls, type ZoneScope } from "@/components/frontier/EvidenceZoneDirectory";
+import { ZoneDirectoryBody, readZoneView, useZoneDirectory, zoneDirectoryControls } from "@/components/frontier/EvidenceZoneDirectory";
+import type { ZoneDirectoryView } from "@/lib/evidenceTopicClient";
+import { ZoneEditorDrawer, type ZoneEditorSeed } from "@/components/frontier/ZoneEditorDrawer";
+import { ZoneLeadLine } from "@/components/frontier/ZoneLeadLine";
+import { readNewZone, zonePath } from "@/components/frontier/zoneLinks";
 import { CongressNowLine, TrackBody, readTrackSegment, trackControls, useFrontierApprovals, useFrontierCongresses, useFrontierGuidelines } from "@/components/frontier/FrontierTrackView";
 
 /** 「有 N 条新的」 asks this often (plan §10.5.2): almost every answer is an empty 304. */
@@ -184,7 +187,8 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const hotWindow: FrontierHotWindow = view === "hot" && isHotWindow(hotWindowParam) ? hotWindowParam : "current";
   const byTime = Boolean(q) && params.get("sort") === "time";
   const day = readDay(params.get("day"));
-  const zoneScope = readZoneScope(params.get("scope"));
+  const zoneView = readZoneView(params.get("scope"));
+  const zoneSpecialty = readKey(params.get("zoneSpecialty"), FRONTIER_SPECIALTIES);
   // 追踪 (c3-track 2026-10-25): its segment and the one filter of that segment, in the address.
   const trackSegment = readTrackSegment(params.get("segment"));
   const trackAgency = /^[a-z-]{2,24}$/.test(params.get("agency") ?? "") ? params.get("agency")! : "";
@@ -523,20 +527,21 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       serveFrontierList(surface, issue.listId, shown.map((item) => ({ id: item.id, slot: issue.slots?.[item.id] ?? null })));
     }
   }, [daily.issue, weekly.issue]);
-  // 证据专区: the directory, read while its view is open; the search box searches the zones there. A reader coming back from a zone
-  // finds as many pages as they had read.
+  // 证据专区: the directory, read while its view is open; the search box searches the zones there.
   const zones = useZoneDirectory({
-    scope: zoneScope,
+    view: zoneView,
+    specialty: zoneSpecialty,
     query: view === "zones" ? q : "",
     enabled: ready && view === "zones",
-    restorePages: view === "zones" && restore.current?.query === params.toString() ? restore.current.pages : 1,
   });
+  // The editor of 我的专区 (「新建专区」), over whichever view is open: the header's action, a search for a group's name, a card's
+  // ⋯ (`?new=1`, below) and 管理关注 open it. A saved zone opens on its own page.
+  const navigate = useNavigate();
+  const [editor, setEditor] = useState<{ seed?: ZoneEditorSeed } | null>(null);
   // 追踪: the open segment's list, read while the view is open.
   const approvals = useFrontierApprovals(ready && view === "track" && trackSegment === "approvals", trackAgency);
   const guidelines = useFrontierGuidelines(ready && view === "track" && trackSegment === "guidelines", trackSpecialty);
   const congresses = useFrontierCongresses(ready && view === "track" && trackSegment === "congresses");
-  const zonePages = useRef(zones.pages);
-  zonePages.current = zones.pages;
   useEffect(() => {
     const changed = () => {
       cache.current.clear();
@@ -565,7 +570,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     const updated = new URLSearchParams(params);
     if (next === "selected") updated.delete("view"); else updated.set("view", next);
     // A view is a fresh look: the search, the day, the time range and the zones' scope belong to the view they were chosen in.
-    for (const name of ["q", "day", "week", "window", "sort", "follow", "item", "scope", "request", "segment", "agency", "guidelineSpecialty"]) updated.delete(name);
+    for (const name of ["q", "day", "week", "window", "sort", "follow", "item", "scope", "zoneSpecialty", "request", "segment", "agency", "guidelineSpecialty"]) updated.delete(name);
     searchOrigin.current = null;
     setParams(updated);
   };
@@ -587,25 +592,33 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     setParams(updated, { replace: true });
   };
 
-  const setZoneScope = (next: ZoneScope) => {
+  const setZoneView = (next: ZoneDirectoryView) => {
+    if (next !== zoneView) trackFrontierFilter("view", listSurface);
     const updated = new URLSearchParams(params);
-    if (next === "public") updated.delete("scope"); else updated.set("scope", next);
+    if (next === "recommended") updated.delete("scope"); else updated.set("scope", next);
+    setParams(updated, { replace: true });
+  };
+  const setZoneSpecialty = (next: string) => {
+    trackFrontierFilter("specialty", listSurface);
+    const updated = new URLSearchParams(params);
+    if (next) updated.set("zoneSpecialty", next); else updated.delete("zoneSpecialty");
     setParams(updated, { replace: true });
   };
 
-  // 「申请选题」 opened by a link (`?view=zones&request=<topic>`, an empty zone's way to ask for its topic): the drawer opens with the
-  // topic typed in, and the address lets go of it, so Back and a reload do not open it again.
-  const requestParam = view === "zones" ? params.get("request") : null;
-  const { requestable, setAsking } = zones;
+  // 「以此新建专区」 from another page (a card's or the reader's ⋯, `?view=zones&new=1&fromItem=…`): the editor opens on that seed and the
+  // address lets go of it, so Back and a reload do not open it again.
+  const paramsKey = params.toString();
+  const newZone = useMemo(() => readNewZone(new URLSearchParams(paramsKey)), [paramsKey]);
   useEffect(() => {
-    if (requestParam === null || !requestable) return;
-    setAsking(requestParam.slice(0, 200));
+    if (!newZone) return;
+    setEditor({ seed: newZone });
     setParams((current) => {
       const updated = new URLSearchParams(current);
-      updated.delete("request");
+      for (const name of ["new", "fromItem", "base", "text", "generate"]) updated.delete(name);
       return updated;
     }, { replace: true });
-  }, [requestParam, requestable, setAsking, setParams]);
+  }, [newZone, setParams]);
+  const openEditor = useCallback((seed?: ZoneEditorSeed) => setEditor({ seed }), []);
 
   const setFilters = (change: Partial<FrontierFilterValue>) => {
     const current: FrontierFilterValue = { channel, lane, specialties, tag, evidence, industryKind, starred, unread, window: windowFilter, byTime };
@@ -659,7 +672,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     searchOrigin.current = null;
     // 与我相关 is the server's ranking, which no filter narrows: a tag chosen there opens 全部 with it.
     const target: PageView = q ? (origin && FEED_VIEWS.has(origin) ? origin : "all") : FEED_VIEWS.has(view) && !forYouOpen ? view : "all";
-    for (const name of ["q", "sort", "day", "week", "item", "scope", "request"]) updated.delete(name);
+    for (const name of ["q", "sort", "day", "week", "item", "scope", "zoneSpecialty", "request"]) updated.delete(name);
     if (target === "selected") updated.delete("view"); else updated.set("view", target);
     if (target !== "all") updated.delete("window");
     if (target !== "following") updated.delete("follow");
@@ -742,7 +755,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
 
   useEffect(() => {
     const remember = () => {
-      const position: FrontierReadingPosition = { query: params.toString(), pages: Math.min(view === "zones" ? zonePages.current : pages.current, 20),
+      const position: FrontierReadingPosition = { query: params.toString(), pages: Math.min(pages.current, 20),
         scroll: pageRoot.current?.querySelector<HTMLElement>(".overflow-y-auto")?.scrollTop ?? 0, expanded };
       const history = window.history.state as { usr?: Record<string, unknown> } | null;
       window.history.replaceState({ ...history, usr: { ...history?.usr, frontierReading: position } }, "");
@@ -785,23 +798,15 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     const updated = new URLSearchParams(params);
     updated.set("view", "following");
     updated.set("follow", followChoiceParam(entry));
-    for (const name of ["q", "sort", "day", "week", "window", "item", "scope", "request"]) updated.delete(name);
+    for (const name of ["q", "sort", "day", "week", "window", "item", "scope", "zoneSpecialty", "request"]) updated.delete(name);
     return `/app/frontier?${updated.toString()}`;
   };
   const showAllFollows = () => setParams((current) => {
     const updated = new URLSearchParams(current); updated.set("follow", "all"); return updated;
   });
-  /** A follow the reader just typed opens: its feed, with the words they typed. */
-  const openFollow = (follow: FrontierFollow) => setParams((current) => {
-    const updated = new URLSearchParams(current);
-    updated.set("view", "following");
-    updated.set("follow", follow.id);
-    for (const name of ["q", "sort", "day", "week", "window", "item", "scope", "request"]) updated.delete(name);
-    return updated;
-  });
   const followList = (onPick?: () => void, onManage?: () => void) => choice && (
     <FollowList state={following} choice={choice} hrefFor={followHref} onManage={onManage ?? (() => setManageFollows(true))} titled={Boolean(onPick)}
-      onAdded={(follow) => { trackFrontierFilter("follow", "follows"); onPick?.(); openFollow(follow); }}
+      onCreateZone={() => { onPick?.(); openEditor(); }}
       onPick={() => { trackFrontierFilter("follow", "follows"); onPick?.(); }} />
   );
   // The onboarding card's answer becomes the first follows; then the view and 与我相关 are read again.
@@ -813,8 +818,12 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   };
   const narrowedLabel = choice && following ? followChoiceLabel(choice, following) : null;
 
+  // Over the results, a lead to the zones the words belong to: a search names one, a chosen tag is in some (ZoneLeadLine).
+  const zoneLead = q && view === "all"
+    ? <ZoneLeadLine kind="search" query={q} onCreate={(text) => openEditor({ text, generate: true })} />
+    : tag && listingView ? <ZoneLeadLine kind="tag" query={tagName} /> : null;
   const feed = (
-    <div data-frontier-list={listSurface} className="contents"><FeedList
+    <>{zoneLead}<div data-frontier-list={listSurface} className="contents"><FeedList
       view={view === "all" || view === "following" ? "all" : "selected"}
       q={q}
       filtered={filtered}
@@ -834,7 +843,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       followSearch={searchFollow}
       // 精选 leaves a title-only safety alert to the strip above it (owner, 2026-10-27); 全部 and 关注 draw every item.
       omit={view === "selected" ? foldedIntoStrip : undefined}
-    /></div>
+    /></div></>
   );
 
   const openWeek = (next: string) => setParams((current) => {
@@ -896,7 +905,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
         specialty: trackSpecialty, onSpecialty: (next) => setTrackFilter("guidelineSpecialty", next), guidelines: guidelines.state }),
     },
     zones: {
-      ...zoneDirectoryControls({ scope: zoneScope, onScope: setZoneScope, query: view === "zones" ? q : "", directory: zones }),
+      ...zoneDirectoryControls({ view: zoneView, onView: setZoneView, specialty: zoneSpecialty, onSpecialty: setZoneSpecialty, directory: zones }),
     },
     onClear: () => { clearFilters(); setDraft(""); },
     onReset: () => setFilters(NO_FILTERS),
@@ -928,7 +937,8 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
         );
       case "zones":
         return (
-          <ZoneDirectoryBody directory={zones} scope={zoneScope} query={q} onScope={setZoneScope} onClearSearch={() => setDraft("")}
+          <ZoneDirectoryBody state={zones} query={q} onCreate={(text) => openEditor(text ? { text } : undefined)}
+            onClearFilters={() => { setDraft(""); if (zoneSpecialty) setZoneSpecialty(""); }}
             from={{ to: `/app/frontier?${params.toString()}`, label: "证据专区" }} />
         );
       case "all":
@@ -956,7 +966,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   return (
     <div ref={pageRoot} className="h-full min-h-0"><PageShell
       title="前沿动态"
-      actionPlan={frontierHeaderActions(view, zones.canCreate ? () => zones.setCreating(!zones.creating) : null)}
+      actionPlan={frontierHeaderActions(view, zones.canCreate ? () => openEditor() : null)}
       toolbar={toolbar}
     >
       {ready && params.get("item") && (
@@ -966,7 +976,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       )}
       {ready ? main : <FrontierSkeleton />}
       {manageFollows && <Drawer title="管理关注" onClose={() => setManageFollows(false)}>
-        <FrontierFollows selected={choice?.kind === "follow" ? choice.id : null} onSelect={(id) => {
+        <FrontierFollows onCreateZone={() => { setManageFollows(false); openEditor(); }} selected={choice?.kind === "follow" ? choice.id : null} onSelect={(id) => {
           trackFrontierFilter("follow", "follows");
           setParams((current) => {
             const updated = new URLSearchParams(current);
@@ -978,6 +988,18 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
           setManageFollows(false);
         }} onChanged={() => { cache.current.clear(); if (listingView) void loadList(true); }} />
       </Drawer>}
+      {editor && (
+        <ZoneEditorDrawer
+          mode="create"
+          seed={editor.seed}
+          onClose={() => setEditor(null)}
+          onSaved={(zone) => {
+            setEditor(null);
+            rememberFrontierPosition();
+            navigate(zonePath(zone), { state: { evidenceFrom: { to: `/app/frontier?${params.toString()}`, label: "证据专区" } } });
+          }}
+        />
+      )}
     </PageShell></div>
   );
 }

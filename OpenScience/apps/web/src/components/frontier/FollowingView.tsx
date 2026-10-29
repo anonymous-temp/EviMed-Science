@@ -11,12 +11,8 @@ import {
   type FrontierFollow,
 } from "@/lib/frontierClient";
 import { fetchFrontierPrefs, type FrontierPrefs } from "@/lib/frontierPrefs";
-import {
-  listEvidenceZones,
-  listFollowedEvidence,
-  type EvidenceCard,
-  type EvidenceZone,
-} from "@/lib/evidenceZoneClient";
+import { listFollowedEvidence, type EvidenceCard } from "@/lib/evidenceZoneClient";
+import { fetchZoneDirectory, type ZoneSummary } from "@/lib/evidenceTopicClient";
 import { toast } from "@/lib/toast";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
@@ -27,7 +23,6 @@ import type { FollowChoice } from "./FrontierControls";
 import { FollowedEvidenceZones } from "./FollowedEvidenceZones";
 import { FrontierOnboarding } from "./FrontierOnboarding";
 import { FrontierSkeleton } from "./FrontierSkeleton";
-import { TypedFollowInput } from "./TypedFollowInput";
 
 /** What the reader follows, read once for the whole 关注 view: the topics of the feed, the evidence zones, and whether they answered. */
 export interface FollowingState {
@@ -37,8 +32,10 @@ export interface FollowingState {
   error: string | null;
   /** The follows that bring items into the feed (not muted), of every kind. */
   topics: FrontierFollow[];
-  /** The followed evidence zones. */
-  zones: EvidenceZone[];
+  /** The reader's own zones and the ones they follow (「我的专区与关注的专区」). */
+  zones: ZoneSummary[];
+  /** Whether this reader may make a zone (the directory says so), for 「新建专区」. */
+  canCreateZone: boolean;
   /** The latest cards of those zones. */
   cards: EvidenceCard[];
   /**
@@ -50,12 +47,12 @@ export interface FollowingState {
 }
 
 /**
- * The follows, the followed zones and the onboarding answer, asked together — the view needs all three to say what there is to
+ * The follows, the reader's own and followed zones and the onboarding answer, asked together — the view needs all three to say what there is to
  * show — and asked again when a follow changes (the card menu, the 管理关注 drawer, 「筛选」's 关注). The recent cards are a courtesy:
  * where they cannot be read the zones still stand. While the view is away its last answer is kept, and shown while the new one is read.
  */
 export function useFollowing(enabled: boolean): FollowingState {
-  const [read, setRead] = useState<Pick<FollowingState, "topics" | "zones" | "cards" | "answered"> | null>(null);
+  const [read, setRead] = useState<Pick<FollowingState, "topics" | "zones" | "canCreateZone" | "cards" | "answered"> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -64,13 +61,13 @@ export function useFollowing(enabled: boolean): FollowingState {
     const load = () => {
       Promise.all([
         listFrontierFollows(),
-        listEvidenceZones("", null, "following"),
+        fetchZoneDirectory("mine"),
         listFollowedEvidence().then((page) => page.items, () => [] as EvidenceCard[]),
         fetchFrontierPrefs().then((prefs) => Boolean(prefs.onboardedAt || prefs.skippedAt), () => true),
       ]).then(
         ([follows, zones, cards, answered]) => {
           if (!active) return;
-          setRead({ topics: follows.filter((follow) => !follow.muted), zones: zones.items, cards, answered });
+          setRead({ topics: follows.filter((follow) => !follow.muted), zones: zones.zones, canCreateZone: zones.canCreate, cards, answered });
           setError(null);
         },
         (caught: unknown) => { if (active) setError(frontierErrorMessage(caught)); },
@@ -85,7 +82,7 @@ export function useFollowing(enabled: boolean): FollowingState {
   }, [enabled, attempt]);
   const retry = useCallback(() => { setError(null); setAttempt((value) => value + 1); }, []);
   return {
-    loading: read === null && error === null, error, topics: read?.topics ?? [], zones: read?.zones ?? [], cards: read?.cards ?? [],
+    loading: read === null && error === null, error, topics: read?.topics ?? [], zones: read?.zones ?? [], canCreateZone: read?.canCreateZone ?? false, cards: read?.cards ?? [],
     answered: read?.answered ?? true, retry,
   };
 }
@@ -152,14 +149,14 @@ export async function followAnswers(answer: FrontierPrefs | undefined, held: rea
  * Every entry is an address (`follow=`), so Back and a shared link land on it; `onPick` hears the choice (on a phone it closes the
  * 「筛选」 sheet the list is the first section of). A column beside the entry on a wide screen.
  */
-export function FollowList({ state, choice, hrefFor, onManage, onPick, onAdded, titled = false }: {
+export function FollowList({ state, choice, hrefFor, onManage, onPick, onCreateZone, titled = false }: {
   state: FollowingState;
   choice: FollowChoice;
   hrefFor: (choice: FollowChoice) => string;
   onManage: () => void;
   onPick?: () => void;
-  /** With it the list ends in 「关注一个药物、试验或问题」, and a follow made there opens (c3-watch, 2026-10-25). */
-  onAdded?: (follow: FrontierFollow) => void;
+  /** With it the list has 「新建专区」, where 「关注一个药物、试验或问题」 used to be: a typed follow is a zone of one's own now (2026-10-29). */
+  onCreateZone?: () => void;
   /** Named on the page (a section of the 「筛选」 sheet among the filters' groups). */
   titled?: boolean;
 }) {
@@ -179,8 +176,13 @@ export function FollowList({ state, choice, hrefFor, onManage, onPick, onAdded, 
         {item({ kind: "foryou" }, "与我相关")}
         {item({ kind: "all" }, "全部关注")}
       </ul>
-      {/* What the reader wants to hear about, in their own words, stays at the top: the list under it grows with every follow. */}
-      {onAdded && <TypedFollowInput held={state.topics} compact onAdded={onAdded} />}
+      {/* What the reader wants to keep reading, in their own words, is a zone of their own: the way to one stays at the top, where the
+        * list under it grows with every follow. */}
+      {onCreateZone && state.canCreateZone && (
+        <Button variant="secondary" size="sm" className="mx-2" onClick={onCreateZone}>
+          <Plus size={16} aria-hidden="true" />新建专区
+        </Button>
+      )}
       {KIND_GROUPS.map(([kind, word]) => {
         const follows = state.topics.filter((follow) => follow.kind === kind);
         if (follows.length === 0) return null;
@@ -192,8 +194,8 @@ export function FollowList({ state, choice, hrefFor, onManage, onPick, onAdded, 
         );
       })}
       {state.zones.length > 0 && (
-        <div role="group" aria-label="证据专区">
-          <p aria-hidden="true" className="px-2 pb-1 text-caption text-text-3">证据专区</p>
+        <div role="group" aria-label="我的专区与关注的专区">
+          <p aria-hidden="true" className="px-2 pb-1 text-caption text-text-3">我的专区与关注的专区</p>
           <ul className="space-y-0.5">{state.zones.map((zone) => item({ kind: "zone", id: zone.id }, zone.title))}</ul>
         </div>
       )}
@@ -237,7 +239,7 @@ export function FollowingView({ state, choice, list, forYou, feed, onAdd, onAnsw
         return forYou;
       case "zone": {
         const zone = state.zones.find((candidate) => candidate.id === choice.id);
-        if (!zone) return <EmptyState icon={SearchX} title="这个专区已不在关注里" action={<Link to="/app/frontier?view=zones&scope=following" className={buttonClasses({ variant: "secondary" })}>看关注的专区</Link>} />;
+        if (!zone) return <EmptyState icon={SearchX} title="这个专区已不在关注里" action={<Link to="/app/frontier?view=zones&scope=mine" className={buttonClasses({ variant: "secondary" })}>看我的专区</Link>} />;
         return <FollowedEvidenceZones zones={[zone]} cards={state.cards.filter((card) => card.zoneId === zone.id)} />;
       }
       case "follow":
@@ -250,7 +252,7 @@ export function FollowingView({ state, choice, list, forYou, feed, onAdd, onAnsw
           return (
             <EmptyState
               icon={BookmarkPlus}
-              title="关注药物、主题、专科或证据专区，它们的新动态会汇总在这里。"
+              title="关注药物、主题、专科，或建一个自己的专区，它们的新动态会汇总在这里。"
               action={(
                 <div className="flex flex-wrap items-center justify-center gap-3">
                   <Button onClick={onAdd}>添加关注</Button>

@@ -414,6 +414,8 @@ export interface FrontierItemDetail extends FrontierItem {
   followups: FrontierFollowups | null;
   /** Up to three questions a reader may put to the assistant about this item (「就此提问」); empty where none were written. */
   ask?: string[];
+  /** Up to three evidence zones this item belongs to (the platform's and the reader's own): 「所属专区」 in the reader's column. */
+  zones?: Array<{ id: string; title: string }>;
 }
 
 export interface FrontierItemsQuery {
@@ -1194,7 +1196,18 @@ export function parseFrontierItemDetail(value: unknown): FrontierItemDetail | nu
       more: followups.more === true,
     } : null,
     ask: parseAskQuestions(raw.ask),
+    zones: parseItemZones(raw.zones),
   };
+}
+
+/** The zones an item belongs to, as the reader's column links them: an id and a name each, at most three. */
+function parseItemZones(value: unknown): Array<{ id: string; title: string }> {
+  return (Array.isArray(value) ? value : []).flatMap((entry) => {
+    const zone = record(entry);
+    const id = text(zone?.id);
+    const title = text(zone?.title)?.trim();
+    return id && title ? [{ id, title }] : [];
+  }).filter((zone, index, all) => all.findIndex((other) => other.id === zone.id) === index).slice(0, 3);
 }
 
 /** The questions the server wrote for an item: at most three short lines; whatever else a server sent is not a question. */

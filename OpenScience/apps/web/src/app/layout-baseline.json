@@ -1,6 +1,6 @@
 {
   "greySentences": {
-    "total": 61,
+    "total": 59,
     "files": {
       "app/extensions/ExtensionDrawer.tsx": 3,
       "app/extensions/SkillImport.tsx": 2,
@@ -13,7 +13,6 @@
       "components/frontier/EvidenceVisibility.tsx": 1,
       "components/frontier/FrontierFeed.tsx": 1,
       "components/frontier/PublishAsEvidenceCard.tsx": 2,
-      "components/frontier/TopicRequests.tsx": 2,
       "components/geo/tabs/GeoSourceDrawer.tsx": 6,
       "components/geo/tabs/ValueSection.tsx": 1,
       "components/settings/MonthlyUsage.tsx": 2,
