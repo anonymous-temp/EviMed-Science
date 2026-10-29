@@ -10,8 +10,10 @@
 //   visibility says, so a row written wrongly still reads as "no such zone", with the same answer a missing id gets.
 // - **The zone page does not decide whether it may be indexed; this module hands the counts the rule needs.** `topicIndexable` is the
 //   one function — fewer than five items in thirty days and no 最新进展 is `noindex` — and the page, the sitemap and the index all ask
-//   it of the same `stats` the membership module refreshes, so a page and its sitemap entry cannot disagree. (A page counts its own
-//   rows for what it shows; the rule reads the stats.)
+//   it of the same `month`, so a page and its sitemap entry cannot disagree. That count is the page's own: the distinct events the page
+//   lists in the window (core and pinned items, `listedMonth` below), never the membership module's `stats.month`, which also counts the
+//   related items the public list leaves out — a page that said 「共 40 条」 over six listed titles, and was indexable on the 40, was the
+//   defect of 2026-10-29.
 // - **`dateModified` is the zone's, not the day's.** The later of the last 最新进展 write and the last key update, else the day the
 //   zone was made: an ordinary item arriving moves neither, because a date that moves with every item is a date a search engine learns
 //   to ignore. The sitemap's `lastmod` is the same value (`topicModified`).
@@ -34,6 +36,9 @@ export const EVIDENCE_PUBLIC_TOPIC_LIMITS = Object.freeze({ days: 30, items: 50,
 
 /** The SQL every public topic read carries. Aliased `z`. */
 const PUBLIC_TOPIC = "z.kind = 'official' AND z.lifecycle <> 'none' AND z.state = 'published' AND z.visibility = 'internet' AND z.definition IS NOT NULL";
+
+/** The items a public list holds: what the judge model called central to the zone, and what an operator pinned. Aliased `zi`. */
+const LISTED = "(zi.state = 'pinned' OR (zi.state = 'in' AND zi.relevance = 'core'))";
 
 /** @param {unknown} value @returns {string | null} */
 const iso = (value) => (value ? new Date(/** @type {any} */ (value)).toISOString() : null);
@@ -77,7 +82,7 @@ function topicZone(row) {
     specialty: specialty && Object.hasOwn(FRONTIER_SPECIALTY_LABELS_ZH, specialty) ? { key: specialty, label: FRONTIER_SPECIALTY_LABELS_ZH[specialty] } : null,
     keywords: list(definition.keywords).map(record).filter((keyword) => text(keyword.label))
       .map((keyword) => ({ label: String(keyword.label), tagIds: list(keyword.tagIds).filter((id) => Number.isSafeInteger(id)).map(Number) })),
-    month: Number.isFinite(Number(stats.month)) ? Number(stats.month) : 0,
+    month: Number.isFinite(Number(row.listed_month)) ? Number(row.listed_month) : 0,
     week: Number.isFinite(Number(stats.week)) ? Number(stats.week) : 0,
     progress: progressText ? { text: progressText, refs: list(overview.refs).map(record).filter((ref) => Number.isSafeInteger(ref.n) && text(ref.itemId))
       .map((ref) => ({ n: Number(ref.n), itemId: String(ref.itemId) })), at: progressAt } : null,
@@ -99,13 +104,24 @@ export function createEvidencePublicTopicReads({ database, now = () => new Date(
     z.overview_at, z.created_at`;
 
   /**
+   * The page's own count of the window: the distinct events its list holds, core and pinned items of the last thirty days (the
+   * conditions of `items`). The indexing rule and the page's 「共 N 条」 read this, not the stats, which count related items too.
+   * @param {string} since a SQL parameter placeholder holding the window's start
+   */
+  const listedMonth = (since) => `(SELECT count(DISTINCT coalesce(i.event_id, -i.id)) FROM evimed_frontier.zone_items zi
+      JOIN evimed_frontier.items i ON i.id = zi.item_id AND i.state = 'published'
+      JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
+      WHERE zi.zone_id = z.id AND ${LISTED} AND i.visible_at >= ${since}::timestamptz)::integer AS listed_month`;
+  const windowStart = () => new Date(now().getTime() - EVIDENCE_PUBLIC_TOPIC_LIMITS.days * 86_400_000).toISOString();
+
+  /**
    * One public topic zone by id or slug, or null: the answer for a missing zone, a reader's zone, a draft and a zone that is not open to
    * the internet is the same.
    * @param {string} ref @returns {Promise<PublicTopicZone | null>}
    */
   async function zone(ref) {
     if (typeof ref !== "string" || !(EVIDENCE_PUBLIC_TOPIC_ID.test(ref) || EVIDENCE_PUBLIC_TOPIC_SLUG.test(ref))) return null;
-    const row = (await database.query(`SELECT ${ZONE_COLUMNS} FROM evimed_frontier.evidence_zones z WHERE (z.id = $1 OR z.slug = $1) AND ${PUBLIC_TOPIC} LIMIT 1`, [ref])).rows?.[0];
+    const row = (await database.query(`SELECT ${ZONE_COLUMNS}, ${listedMonth("$2")} FROM evimed_frontier.evidence_zones z WHERE (z.id = $1 OR z.slug = $1) AND ${PUBLIC_TOPIC} LIMIT 1`, [ref, windowStart()])).rows?.[0];
     if (!row) { counters.misses += 1; return null; }
     counters.zones += 1;
     return topicZone(row);
@@ -126,7 +142,7 @@ export function createEvidencePublicTopicReads({ database, now = () => new Date(
         FROM evimed_frontier.zone_items zi
         JOIN evimed_frontier.items i ON i.id = zi.item_id AND i.state = 'published'
         JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
-        WHERE zi.zone_id = $1 AND (zi.state = 'pinned' OR (zi.state = 'in' AND zi.relevance = 'core')) AND i.visible_at >= $2::timestamptz
+        WHERE zi.zone_id = $1 AND ${LISTED} AND i.visible_at >= $2::timestamptz
         ORDER BY coalesce(i.event_id, -i.id), i.selected DESC, i.score_total DESC NULLS LAST, i.visible_at DESC, i.id DESC) one
       ORDER BY visible_at DESC, id DESC LIMIT $3`, [zoneId, since, limit])).rows ?? [];
     return rows.map((/** @type {any} */ row) => {
@@ -211,7 +227,7 @@ export function createEvidencePublicTopicReads({ database, now = () => new Date(
 
   /** Every public topic zone a sitemap may list, with what the indexing rule needs (the sitemap asks `topicIndexable` of each). */
   async function sitemapEntries() {
-    const rows = (await database.query(`SELECT ${ZONE_COLUMNS} FROM evimed_frontier.evidence_zones z WHERE ${PUBLIC_TOPIC} ORDER BY z.updated_at DESC, z.id LIMIT 1000`)).rows ?? [];
+    const rows = (await database.query(`SELECT ${ZONE_COLUMNS}, ${listedMonth("$1")} FROM evimed_frontier.evidence_zones z WHERE ${PUBLIC_TOPIC} ORDER BY z.updated_at DESC, z.id LIMIT 1000`, [windowStart()])).rows ?? [];
     return rows.map(topicZone).map((entry) => ({ id: entry.id, month: entry.month, hasProgress: Boolean(entry.progress), lastmod: entry.modified }));
   }
 

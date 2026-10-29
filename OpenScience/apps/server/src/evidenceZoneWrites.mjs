@@ -212,6 +212,28 @@ export function createEvidenceZoneWrites({ database, zones, membership = null, d
   /** @param {any} row @param {any} user */
   const ownsUserZone = (row, user) => row.kind === "user" && row.user_id === user.id;
 
+  const operators = new Set((Array.isArray(config.operatorUsers) ? config.operatorUsers : []).map(String));
+
+  /**
+   * The definition of a zone as the reader is shown it, which is all a draft started from that zone may be built on: what the zone's
+   * detail serves them (`evidenceZoneReads` `detail`) — the full stored definition to its owner and to an operator, and to anyone
+   * else only the zone's title, keywords, scope, specialties and group, never its term lists, its include/exclude criteria or its
+   * excluded names. The drafter is asked to keep the rest of the base, so whatever it was handed comes back in the draft.
+   * @param {any} row @param {any} user
+   * @returns {import("@evimed/domain").EvidenceZoneDefinition | null}
+   */
+  function definitionSeenBy(row, user) {
+    const stored = isRecord(row.definition) ? /** @type {any} */ (row.definition) : null;
+    if (!stored) return null;
+    if (ownsUserZone(row, user) || operators.has(String(user?.id ?? ""))) return stored;
+    return /** @type {any} */ ({
+      type: row.zone_type ?? stored.type,
+      keywords: (Array.isArray(stored.keywords) ? stored.keywords : []).map((/** @type {any} */ keyword) => ({ label: String(keyword?.label ?? ""), terms: [] })),
+      perspective: null, scope: String(row.scope_zh ?? stored.scope ?? ""), include: "", exclude: "", excludeTerms: [],
+      specialties: Array.isArray(row.specialties) ? row.specialties : [], group: String(row.group_label ?? ""),
+    });
+  }
+
   /**
    * The `ZoneDetail` of a zone for a reader: the read side's when it is composed, else read from the row (counts from the last stats
    * snapshot; no related zones).
@@ -289,8 +311,7 @@ export function createEvidenceZoneWrites({ database, zones, membership = null, d
     let baseZone = null;
     if (input.baseZoneId != null) {
       const row = await database.transaction((/** @type {any} */ client) => zoneRow(client, user, String(input.baseZoneId)));
-      // A reader sees the definition of their own zones; another reader's is theirs to read as the zone's title and scope.
-      baseZone = { id: row.id, title: row.title, definition: row.definition };
+      baseZone = { id: row.id, title: row.title, definition: definitionSeenBy(row, user) };
     }
     let fromItem = null;
     if (input.fromItemId != null) {

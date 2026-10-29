@@ -259,13 +259,19 @@ test("only the platform's topic zones are public: a reader's zone is not, howeve
   for (const title of ["读者的专区", "草稿专区", "仅平台内"]) assert.equal(index.body.includes(title), false, title);
 });
 
-test("a topic zone with fewer than five items in thirty days and no 最新进展 is noindex and left out of the sitemap; either lifts it; the deployment's switch off says noindex to all", options, async (t) => {
-  await addZone({ id: "ez_thinzone001", title: "条目很少的专区", slug: "thin", stats: { week: 1, month: 3, all: 3, perWeek: 1 } });
+test("a topic zone with fewer than five listed items in thirty days and no 最新进展 is noindex and left out of the sitemap; either lifts it; the deployment's switch off says noindex to all", options, async (t) => {
+  // The rule counts what the page lists (core and pinned items), never the stats' month, which also counts related items: the thin zone's stats say forty.
+  await addZone({ id: "ez_thinzone001", title: "条目很少的专区", slug: "thin", stats: { week: 1, month: 40, all: 40, perWeek: 1 } });
   await addZone({ id: "ez_fivezone001", title: "满五条的专区", slug: "five", stats: { week: 2, month: 5, all: 5, perWeek: 1 } });
   await addZone({ id: "ez_wordszone01", title: "有最新进展的专区", slug: "words", stats: { week: 0, month: 2, all: 2, perWeek: 0 },
     overview: { text: "近期有一项新进展。", refs: [] }, overviewAt: ago(1) });
   await addZone({ id: "ez_quietzone01", title: "安静的专区", slug: "quiet", lifecycle: "quiet", stats: { week: 0, month: 7, all: 20, perWeek: 0 } });
   await addZone({ id: "ez_archivedzo1", title: "归档的专区", slug: "archived", lifecycle: "archived", stats: { week: 0, month: 0, all: 20, perWeek: 0 } });
+  for (let n = 0; n < 4; n += 1) await addItem(`薄专区核心 ${n}`, { zone: "ez_thinzone001", days: 1 + n });
+  for (let n = 0; n < 36; n += 1) await addItem(`薄专区相关 ${n}`, { zone: "ez_thinzone001", days: 1 + (n % 20), relevance: "related" });
+  for (let n = 0; n < 5; n += 1) await addItem(`满五核心 ${n}`, { zone: "ez_fivezone001", days: 1 + n });
+  for (let n = 0; n < 2; n += 1) await addItem(`有进展核心 ${n}`, { zone: "ez_wordszone01", days: 1 + n });
+  for (let n = 0; n < 7; n += 1) await addItem(`安静核心 ${n}`, { zone: "ez_quietzone01", days: 1 + n });
   const on = await serve(t, { evidencePublicIndexable: true });
   const verdict = async (/** @type {string} */ path) => { const answer = await on.text(path); return { status: answer.status, header: answer.headers.get("x-robots-tag"), meta: /<meta name="robots" content="noindex">/.test(answer.body) }; };
   assert.deepEqual(await verdict("/evidence/z/ez_thinzone001"), { status: 200, header: "noindex", meta: true });
@@ -281,6 +287,22 @@ test("a topic zone with fewer than five items in thirty days and no 最新进展
   const off = await serve(t, { evidencePublicIndexable: false });
   assert.deepEqual(await (async () => { const answer = await off.text("/evidence/z/ez_fivezone001"); return { header: answer.headers.get("x-robots-tag"), meta: /name="robots" content="noindex"/.test(answer.body) }; })(), { header: "noindex", meta: true });
   assert.equal((await off.text("/evidence/sitemap.xml")).status, 404);
+});
+
+test("the page's total counts only what it lists: core and pinned events of the window, not the related items it leaves out", options, async (t) => {
+  await addZone({ id: "ez_totalzone01", title: "总数专区", slug: "total", stats: { week: 9, month: 40, all: 40, perWeek: 9 } });
+  for (let n = 0; n < 6; n += 1) await addItem(`核心 ${n}`, { zone: "ez_totalzone01", days: 1 + n });
+  await addItem("置顶的", { zone: "ez_totalzone01", days: 8, state: "pinned" });
+  for (let n = 0; n < 33; n += 1) await addItem(`相关 ${n}`, { zone: "ez_totalzone01", days: 1 + (n % 25), relevance: "related" });
+  await addItem("同一事件的另一条", { zone: "ez_totalzone01", days: 2, event: 77 });
+  await addItem("同一事件的一条", { zone: "ez_totalzone01", days: 3, event: 77 });
+  await addItem("很久以前的核心", { zone: "ez_totalzone01", days: 45 });
+  const { text } = await serve(t, { evidencePublicIndexable: true });
+  const body = (await text("/evidence/z/ez_totalzone01")).body;
+  const listed = (body.match(/<h3>/g) ?? []).length;
+  assert.equal(listed >= 8, true, "six core, the pinned one and the one event");
+  assert.match(body, /<p class="meta">共 8 条。/, "the total is the 8 events listed, not the stats' 40 nor the 41 related and core rows");
+  assert.equal(/共 \d+ 条，这里列出/.test(body), false, "nothing is hidden behind a larger total");
 });
 
 test("the index lists the platform's topic zones by specialty and group, the busiest first and a quiet zone last, archived ones not at all", options, async (t) => {
