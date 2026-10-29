@@ -1043,7 +1043,13 @@ jobs:
           # Without the cache service the build is slower and changes nothing else.
           if [ -n "$ACTIONS_RUNTIME_TOKEN" ]; then
             extra_compose+=(-f ../.github/ci/docker-compose.build-cache.yml)
-            echo "layer cache on; refresh key $EVIMED_BASE_REFRESH"
+            # Only main writes: every branch reads main's cache, a branch's own is read by that branch alone.
+            if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+              extra_compose+=(-f ../.github/ci/docker-compose.build-cache-write.yml)
+              echo "layer cache on (read and write); refresh key $EVIMED_BASE_REFRESH"
+            else
+              echo "layer cache on (read only: $GITHUB_REF writes nothing); refresh key $EVIMED_BASE_REFRESH"
+            fi
           else
             echo "::warning::the Actions cache service is not available; building without the layer cache"
           fi

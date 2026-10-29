@@ -1,0 +1,24 @@
+# CI only, and only on `main`: the writes of the layer cache that
+# docker-compose.build-cache.yml reads (one gha scope per image, the same scope
+# it reads). Every branch can read what `main` wrote; what another branch would
+# write only that branch could read, at ~2 GB a cold branch against the
+# repository's 10 GB, so the workflow adds this file for `refs/heads/main` alone.
+# `mode=min` keeps only the final image's layers; `ignore-error` makes a
+# cache-service failure a slower build, never a failed one.
+services:
+  open-science-web:
+    build:
+      cache_to:
+        - type=gha,scope=evimed-web,mode=min,ignore-error=true
+  dsh-runtime-image:
+    build:
+      cache_to:
+        - type=gha,scope=evimed-runtime,mode=min,ignore-error=true
+  result-replay:
+    build:
+      cache_to:
+        - type=gha,scope=evimed-result-replay,mode=min,ignore-error=true
+  evimed-drug-evidence-adapter:
+    build:
+      cache_to:
+        - type=gha,scope=evimed-drug-evidence-adapter,mode=min,ignore-error=true

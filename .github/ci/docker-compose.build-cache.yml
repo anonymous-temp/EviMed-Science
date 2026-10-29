@@ -19,7 +19,12 @@
 #
 # Which caches a run may read is GitHub's rule, not ours: its own branch's and
 # the default branch's. A release branch therefore reuses what the last `main`
-# build wrote, and nothing a pull request or another branch wrote.
+# build wrote, and nothing a pull request or another branch wrote. So this file
+# only reads; the writes are docker-compose.build-cache-write.yml, which the
+# workflow adds on `main` alone: a branch's cache serves that branch only, one
+# cold branch writes ~2 GB, and the repository holds 10 GB in all (8.3 GB used
+# on 2026-10-29), so writes from every `codex/**` push would evict the pnpm and
+# R-library caches every other job reads.
 #
 # BASE_REFRESH is the refresh key (YYYY-MM plus a generation, set by the
 # docker-hosted job): a new month rebuilds every cached image from upstream,
@@ -34,25 +39,17 @@ services:
         BASE_REFRESH: ${EVIMED_BASE_REFRESH:?Set the CI refresh key}
       cache_from:
         - type=gha,scope=evimed-web
-      cache_to:
-        - type=gha,scope=evimed-web,mode=min,ignore-error=true
   dsh-runtime-image:
     build:
       args:
         BASE_REFRESH: ${EVIMED_BASE_REFRESH:?Set the CI refresh key}
       cache_from:
         - type=gha,scope=evimed-runtime
-      cache_to:
-        - type=gha,scope=evimed-runtime,mode=min,ignore-error=true
   result-replay:
     build:
       cache_from:
         - type=gha,scope=evimed-result-replay
-      cache_to:
-        - type=gha,scope=evimed-result-replay,mode=min,ignore-error=true
   evimed-drug-evidence-adapter:
     build:
       cache_from:
         - type=gha,scope=evimed-drug-evidence-adapter
-      cache_to:
-        - type=gha,scope=evimed-drug-evidence-adapter,mode=min,ignore-error=true

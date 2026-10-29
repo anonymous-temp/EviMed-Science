@@ -1492,6 +1492,10 @@ test("CI builds the images a release loads with a layer cache, refreshed monthly
   const commands = step.split("\n").filter((line) => !line.trim().startsWith("#")).join("\n");
   assert.doesNotMatch(commands, /--no-cache\b/, "no build discards the cache, full releases included");
   assert.match(commands, /extra_compose\+=\(-f \.\.\/\.github\/ci\/docker-compose\.build-cache\.yml\)/);
+  // Only main writes (2026-10-29): a branch's cache is readable by that branch alone, and ~2 GB a cold branch against the
+  // repository's 10 GB would evict the pnpm and R-library caches the other jobs read.
+  assert.match(commands, /if \[ "\$GITHUB_REF" = "refs\/heads\/main" \]; then\n\s*extra_compose\+=\(-f \.\.\/\.github\/ci\/docker-compose\.build-cache-write\.yml\)/);
+  assert.equal((commands.match(/docker-compose\.build-cache-write\.yml/g) ?? []).length, 1, "the write overlay is added in one place, under the main-only condition");
   assert.match(commands, /if \[ -n "\$ACTIONS_RUNTIME_TOKEN" \]; then/, "without the cache service the build goes on without the cache");
   // The cache service's variables reach this step alone, from a first-party action pinned by commit.
   const expose = workflowStep(workflowText, "Expose the Actions cache service to the image build");
@@ -1504,6 +1508,8 @@ test("CI builds the images a release loads with a layer cache, refreshed monthly
   assert.match(workflowText, /echo "EVIMED_BASE_REFRESH=\$\(date -u \+%Y-%m\)\.g\$\{EVIMED_BASE_REFRESH_GENERATION\}" >> "\$GITHUB_ENV"/);
 
   const overlay = YAML.parse(await readFile(path.join(repoRoot, "../.github/ci/docker-compose.build-cache.yml"), "utf8"));
+  const writes = YAML.parse(await readFile(path.join(repoRoot, "../.github/ci/docker-compose.build-cache-write.yml"), "utf8"));
+  assert.deepEqual(Object.keys(writes.services).sort(), Object.keys(overlay.services).sort(), "main writes every scope the builds read");
   const compose = YAML.parse(await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8"));
   const replay = YAML.parse(await readFile(path.join(repoRoot, "deploy/web/docker-compose.result-replay.yml"), "utf8"));
   // Each built service from the file that defines its build (the replay overlay also adds environment to the web service).
@@ -1512,10 +1518,12 @@ test("CI builds the images a release loads with a layer cache, refreshed monthly
   assert.deepEqual(Object.keys(overlay.services).sort(), ["dsh-runtime-image", "evimed-drug-evidence-adapter", "open-science-web", "result-replay"]);
   const scopes = new Set();
   for (const [name, service] of Object.entries(overlay.services)) {
-    const { cache_from: from, cache_to: to, args = {} } = service.build;
+    const { cache_from: from, cache_to: readerWrites, args = {} } = service.build;
     const scope = /^type=gha,scope=([a-z0-9-]+)$/.exec(from?.[0] ?? "")?.[1];
     assert.ok(scope && from.length === 1, `${name} reads one gha scope`);
-    assert.deepEqual(to, [`type=gha,scope=${scope},mode=min,ignore-error=true`], `${name} writes the scope it reads, never failing the build`);
+    assert.equal(readerWrites, undefined, `${name}: the overlay every branch uses only reads`);
+    assert.deepEqual(writes.services[name]?.build, { cache_to: [`type=gha,scope=${scope},mode=min,ignore-error=true`] },
+      `${name}: main writes the scope it reads, never failing the build, and nothing else`);
     assert.ok(!scopes.has(scope), `${name} has a scope of its own`);
     scopes.add(scope);
     // The refresh key reaches exactly the images whose recipe declares it, above the OS-package layer it renews.
