@@ -18,6 +18,10 @@ import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 import { canonicalRsiJson, rsiDigest } from '../../apps/server/src/rsiCampaignBundle.mjs';
 import { chooseFrontierCandidate, evaluateFrontierDays, frontierCampaignConsumerIdentity, frontierObservations } from './frontier_campaign.mjs';
+import { chooseSkillCandidate, skillCampaignConsumerIdentity, skillObservationCosts, skillObservations } from './skill_campaign.mjs';
+
+/** The cost identity of a campaign whose arms ran on production: settled CNY per run from the usage ledger, exported with the runs. */
+export const SKILL_COST_IDENTITY = 'production-usage-ledger-settled-cny';
 
 const fail = (reason) => { throw new Error(reason); };
 const RECEIPT_DAYS = 7;
@@ -40,7 +44,7 @@ export function signEnvelope(payload, key) {
  * @param {{manifest:any, inputs:any, request:any, checkpoint:any, now?:string}} input
  */
 export async function evaluatorReceiptPayload({ manifest, inputs, request, checkpoint, now = new Date().toISOString() }) {
-  if (manifest.surface !== 'frontier-selection') fail('campaign_consumer_not_qualified');
+  if (!['frontier-selection', 'capability-skill'].includes(manifest.surface)) fail('campaign_consumer_not_qualified');
   const binding = rsiDigest({ manifest, inputs });
   if (request.binding !== binding || checkpoint.binding !== binding) fail('campaign_evaluator_binding_changed');
   const registration = inputs.registration, statistics = registration.statistics;
@@ -48,6 +52,7 @@ export async function evaluatorReceiptPayload({ manifest, inputs, request, check
   const confirmation = manifest.data.sources.find((row) => row.role === 'confirmation');
   for (const source of [development, confirmation]) if (rsiDigest(inputs.sources[source.id]) !== source.digest) fail('campaign_source_changed');
   if (request.corpusDigest !== confirmation.digest || request.registrationDigest !== rsiDigest(statistics ?? null)) fail('campaign_evaluator_binding_changed');
+  if (manifest.surface === 'capability-skill') return skillReceiptPayload({ manifest, inputs, request, checkpoint, now, development, confirmation });
   const identity = await frontierCampaignConsumerIdentity();
   if (statistics?.consumer_id !== identity.implementationSha256 || statistics?.corpus_digest !== confirmation.digest) fail('campaign_evaluation_consumer_or_corpus_changed');
   // The freeze followed the registered rule on the development source alone.
@@ -79,6 +84,49 @@ export async function evaluatorReceiptPayload({ manifest, inputs, request, check
     receipt: {
       deterministic_qualification: { type: 'trusted-deterministic-consumer', consumer_id: identity.implementationSha256, corpus_digest: confirmation.digest,
         qualification_id: `replayed-twice:${rsiDigest(runs[0].result).slice(0, 16)}`, externally_verified: true },
+      attestations: { registration_digest: rsiDigest(statistics), confirmation_exposed: false, look: 1, complete_costs: true,
+        cost_identity: statistics.cost_identity, expired_budget: Date.parse(now) >= Date.parse(statistics.expires_at) },
+    },
+    consumer: identity,
+  };
+}
+
+/**
+ * The capability-skill receipt: the development choice and the confirmation recomputed from the recorded runs (twice: the
+ * scoring is deterministic code over the records), and the costs attested from the same records — every run's settled
+ * CNY as production's usage ledger gave it at export. A run without a settled cost leaves the costs incomplete, and an
+ * incomplete cost is never signed as complete.
+ */
+async function skillReceiptPayload({ manifest, inputs, request, checkpoint, now, development, confirmation }) {
+  const registration = inputs.registration, statistics = registration.statistics;
+  const identity = await skillCampaignConsumerIdentity();
+  if (statistics?.consumer_id !== identity.implementationSha256 || statistics?.corpus_digest !== confirmation.digest) fail('campaign_evaluation_consumer_or_corpus_changed');
+  const choice = chooseSkillCandidate(inputs.sources[development.id], registration);
+  const frozen = checkpoint.frozenPolicy;
+  if (!choice.frozen || !frozen || choice.frozen.arm !== frozen.arm || choice.frozen.skillDigest !== frozen.skillDigest || rsiDigest(frozen) !== request.frozenPolicyDigest
+    || rsiDigest({ scores: choice.scores, candidates: choice.candidates }) !== frozen.developmentResultDigest) fail('campaign_evaluator_development_differs');
+  if (!(Date.parse(checkpoint.frozenAt) < Date.parse(request.confirmationOpenedAt))) fail('campaign_evaluator_chronology_invalid');
+  const runs = [0, 1].map(() => {
+    const measured = skillObservations(inputs.sources[confirmation.id], registration, frozen);
+    return { result: { observations: measured.observations, scores: measured.scores ?? null }, reason: measured.reason };
+  });
+  if (runs[0].reason || rsiDigest(runs[0].result) !== rsiDigest(runs[1].result)) fail('campaign_evaluator_nondeterministic');
+  if (rsiDigest(runs[0].result) !== request.confirmationResultDigest) fail('campaign_evaluator_recomputation_differs');
+  if (request.look !== 1) fail('campaign_evaluator_repeated_look');
+  if (statistics.cost_identity !== SKILL_COST_IDENTITY || statistics.deterministicConsumer !== false) fail('campaign_cost_identity_unsupported');
+  const recorded = skillObservationCosts(inputs.sources[confirmation.id], frozen);
+  if (!recorded) fail('campaign_cost_measurement_missing');
+  const observations = runs[0].result.observations;
+  const costs = recorded.map(({ group, arm, form, repeat, cost }) => ({ group, arm, form, repeat, cost }));
+  const expiresAt = new Date(Math.min(Date.parse(now) + RECEIPT_DAYS * 86400000, Date.parse(manifest.deadline))).toISOString();
+  return {
+    type: 'rsi-evaluator-receipt-v1', ...request, issuedAt: now, expiresAt,
+    observationDigest: rsiDigest(observations),
+    costProvenance: { type: 'measured-normalized-cny', receiptId: `production-usage-ledger:${rsiDigest(recorded).slice(0, 16)}`, complete: true,
+      normalization: 'Settled CNY per run: the sum of actual_cost over production evimed_usage.model_requests rows with status settled and the run id, read once at export; the lab never queries production.' },
+    costs,
+    receipt: {
+      deterministic_qualification: null,
       attestations: { registration_digest: rsiDigest(statistics), confirmation_exposed: false, look: 1, complete_costs: true,
         cost_identity: statistics.cost_identity, expired_budget: Date.parse(now) >= Date.parse(statistics.expires_at) },
     },

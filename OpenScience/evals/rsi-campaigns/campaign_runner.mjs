@@ -5,6 +5,7 @@ import { rsiLabConfigurationIssues } from '../../apps/server/src/rsiLabConfigura
 import { ProductDocuments } from '../../apps/server/src/productStore.mjs';
 import {canonicalRsiJson,rsiDigest} from '../../apps/server/src/rsiCampaignBundle.mjs';
 import { chooseFrontierCandidate, evaluateFrontierDays, frontierCampaignConsumerIdentity, frontierDaysIssues, frontierObservations } from './frontier_campaign.mjs';
+import { chooseSkillCandidate, skillArmsIssues, skillCampaignConsumerIdentity, skillObservations, SKILL_BASELINE_ARM } from './skill_campaign.mjs';
 export const digest = rsiDigest;
 const stop = reason => ({status:'not-qualified',reason});
 /** Statistics answers that are a verdict on the evidence; anything else (authority, receipt, process failure) is retried. */
@@ -92,11 +93,49 @@ const consumers = Object.freeze({
    const choice=chooseFrontierCandidate(evaluation,registration);
    return {result:{evaluation,candidates:choice.candidates},frozen:choice.frozen,reason:choice.reason};
   },
+  freeze:(frozen,registration)=>({threshold:frozen.threshold,baselineThreshold:registration.baselineThreshold}),
   confirm(source, registration, frozen) {
    const evaluation=evaluateFrontierDays(source,{...registration,thresholds:[frozen.threshold],labelThresholds:registration.thresholds});
    if(!evaluation.eligible) return {result:{evaluation},reason:'campaign_consumer_failed'};
    const measured=frontierObservations(evaluation,registration,frozen.threshold);
    return {result:{evaluation,observations:measured.observations,volumeRatio:measured.volumeRatio},reason:measured.reason};
+  },
+ },
+ /**
+  * A personal skill measured on recorded production runs (skill_campaign.mjs). The lab computation is deterministic over
+  * the records (a stage re-runs to the same bytes); the measurement was paid for and is stochastic, so the statistics are
+  * a paid paired-t family with repeats, and the evaluator attests the runs' settled costs instead of zero.
+  */
+ 'capability-skill': {
+  deterministic:true,
+  paidMeasurement:true,
+  identity:skillCampaignConsumerIdentity,
+  validate(manifest, inputs, dev, confirm) {
+   const development=inputs.sources[dev.id], confirmation=inputs.sources[confirm.id], registration=inputs.registration;
+   for(const source of [development,confirmation]) if(skillArmsIssues(source).length) return 'campaign_source_invalid';
+   if(!Array.isArray(registration.failureCalculators) || !registration.failureCalculators.length || registration.failureCalculators.some(id=>!Number.isInteger(id)) || !(registration.margin>0 && registration.margin<1)) return 'campaign_registration_invalid';
+   if(registration.selection?.objective!=='failure-slice-gain' || registration.selection?.tieBreak!=='shorter-skill') return 'campaign_selection_registration_missing';
+   if(manifest.data.classification!=='synthetic') {
+    const devRows=new Set(development.rows.map(row=>String(row.id)));
+    if(confirmation.rows.some(row=>devRows.has(String(row.id)))) return 'campaign_confirmation_not_independent';
+   }
+   const candidates=Object.keys(confirmation.arms).filter(arm=>arm!==SKILL_BASELINE_ARM);
+   if(candidates.length!==1 || !Object.hasOwn(development.arms,candidates[0]) || development.arms[candidates[0]].skill.digest!==confirmation.arms[candidates[0]].skill.digest) return 'campaign_confirmation_candidate_mismatch';
+   const statistics=registration.statistics, family=statistics?.families?.[statistics?.groups?.[0]?.family];
+   if(!family || family.repeats!==confirmation.repeats || statistics.deterministicConsumer!==false || statistics.mode!=='paired-t') return 'campaign_statistics_registration_invalid';
+   const slice=new Set(registration.failureCalculators);
+   const expected=confirmation.rows.map(row=>`row-${row.id}:${slice.has(Number(row.calculatorId))}`).sort();
+   if(digest(expected)!==digest(statistics.groups.map(group=>`${group.id}:${group.failure_slice}`).sort())) return 'campaign_source_group_registration_invalid';
+   return null;
+  },
+  develop(source, registration) {
+   const choice=chooseSkillCandidate(source,registration);
+   return {result:{scores:choice.scores,candidates:choice.candidates},frozen:choice.frozen,reason:choice.reason};
+  },
+  freeze:(frozen)=>({arm:frozen.arm,skillDigest:frozen.skillDigest}),
+  confirm(source, registration, frozen) {
+   const measured=skillObservations(source,registration,frozen);
+   return {result:{observations:measured.observations,scores:measured.scores ?? null},reason:measured.reason};
   },
  },
 });
@@ -164,7 +203,7 @@ export async function runCampaign({manifest,inputs,configuration,store,attestLab
     state.stages[stage]={...state.stages[stage],status:'completed',result:run.result,resultDigest:digest(run.result),reason:run.reason ?? null};
     if(run.reason) return finish(stop(run.reason));
     if(stage==='development') {
-     state.frozenPolicy={surface:manifest.surface,threshold:run.frozen.threshold,baselineThreshold:inputs.registration.baselineThreshold,registrationDigest:manifest.registration.digest,developmentResultDigest:state.stages[stage].resultDigest};
+     state.frozenPolicy={surface:manifest.surface,...consumer.freeze(run.frozen,inputs.registration),registrationDigest:manifest.registration.digest,developmentResultDigest:state.stages[stage].resultDigest};
      state.frozenPolicyDigest=digest(state.frozenPolicy);state.frozenAt=now();
     }
     await checkpoint.write(state);
@@ -221,7 +260,9 @@ async function evaluateCampaignEvidence({manifest,inputs,state,request,attestEva
  const retry=reason=>({final:false,reason});
  const verdict=(decision,reason,extra={})=>({final:true,decision,reason,scope:'undetermined',...extra});
  if(!registration) return verdict('not-qualified','campaign_statistics_registration_missing');
- if(manifest.data.classification!=='synthetic' && (registration.mode!=='paired-t' || registration.deterministicConsumer!==true)) return verdict('not-qualified','campaign_statistical_consumer_not_qualified');
+ // A deterministic consumer registers deterministicConsumer: true; a consumer of paid recorded runs registers false and repeats.
+ const paid=consumers[manifest.surface].paidMeasurement===true;
+ if(manifest.data.classification!=='synthetic' && (registration.mode!=='paired-t' || registration.deterministicConsumer!==!paid)) return verdict('not-qualified','campaign_statistical_consumer_not_qualified');
  const confirmation=state.stages.confirmation.result;
  const identity=await consumers[manifest.surface].identity();
  if(registration.consumer_id!==identity.implementationSha256 || registration.corpus_digest!==request.corpusDigest) return verdict('not-qualified','campaign_evaluation_consumer_or_corpus_changed');
@@ -229,9 +270,9 @@ async function evaluateCampaignEvidence({manifest,inputs,state,request,attestEva
  let authority;try{authority=await attestEvaluation(request);}catch{return retry('campaign_evaluator_authority_unavailable');}
  if(!authority || Object.entries(request).some(([key,value])=>digest(authority[key] ?? null)!==digest(value ?? null))) return retry('campaign_evaluator_receipt_binding_changed');
  if(authority.costProvenance?.type!=='measured-normalized-cny' || !authority.costProvenance?.receiptId || authority.costProvenance?.complete!==true || !Array.isArray(authority.costs)) return retry('campaign_cost_provenance_unverified');
- const qualification=authority.receipt?.deterministic_qualification;
+ const qualification=authority.receipt?.deterministic_qualification ?? null;
  const qualificationType=registration.mode==='deterministic'?'trusted-deterministic-finite-corpus':'trusted-deterministic-consumer';
- if(!qualification||qualification.type!==qualificationType||qualification.externally_verified!==true||!qualification.qualification_id||qualification.consumer_id!==registration.consumer_id||qualification.corpus_digest!==registration.corpus_digest) return retry('campaign_statistical_consumer_not_qualified');
+ if((registration.mode==='deterministic' || registration.deterministicConsumer===true) && (!qualification||qualification.type!==qualificationType||qualification.externally_verified!==true||!qualification.qualification_id||qualification.consumer_id!==registration.consumer_id||qualification.corpus_digest!==registration.corpus_digest)) return retry('campaign_statistical_consumer_not_qualified');
  if(authority.observationDigest!==digest(confirmation.observations)) return verdict('not-qualified','campaign_evaluator_recomputation_differs');
  const attestations=authority.receipt?.attestations;
  const observed={registration_digest:digest(registration),confirmation_exposed:false,look:state.confirmationLooks,complete_costs:true,cost_identity:registration.cost_identity,expired_budget:Date.parse(now())>=Date.parse(registration.expires_at)};
@@ -250,7 +291,7 @@ async function evaluateCampaignEvidence({manifest,inputs,state,request,attestEva
  const evaluated=await evaluateStatistics(statisticsInput,{pythonExecutable:statisticsPython,modulePath:statisticsModulePath});
  if(!VERDICTS.includes(evaluated.decision)) return retry(evaluated.reason ?? 'campaign_statistics_failed');
  const scope=manifest.data.classification==='synthetic'?'synthetic-finite-corpus-only':registration.mode==='paired-t'?'registered-population-task-family':'registered-finite-confirmation-corpus';
- return {final:true,...evaluated,statisticsInput,...(authority.expiresAt?{expiresAt:authority.expiresAt}:{}),observationDigest:digest(observations),costProvenance:authority.costProvenance,authorityReceiptDigest:digest(authority),volumeRatio:confirmation.volumeRatio,scope};
+ return {final:true,...evaluated,statisticsInput,...(authority.expiresAt?{expiresAt:authority.expiresAt}:{}),observationDigest:digest(observations),costProvenance:authority.costProvenance,authorityReceiptDigest:digest(authority),...(confirmation.volumeRatio===undefined?{}:{volumeRatio:confirmation.volumeRatio}),scope};
 }
 /** The launcher reads this owner-controlled public trust profile. Signing keys are never accepted. */
 export async function signedEvaluatorReceipt(profile, now=()=>new Date().toISOString()) {
