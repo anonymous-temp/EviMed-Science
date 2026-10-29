@@ -78,5 +78,5 @@ test("its refusals are registered with a Chinese sentence and are never a verdic
     assert.match(/** @type {Record<string, string>} */ (ERROR_CODE_MESSAGES)[code] ?? "", /[一-鿿]/, `${code} has no sentence`);
     assert.equal(errorCodeOutcome(code), "upstream");
   }
-  assert.match(/** @type {any} */ (ERROR_CODE_MESSAGES).evidence_automation_product_zone, /站内通知/, "the answer says to use the notice instead");
+  assert.equal("evidence_automation_product_zone" in /** @type {any} */ (ERROR_CODE_MESSAGES), false, "the AI editor's refusal went with the editor");
 });

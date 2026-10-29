@@ -413,7 +413,7 @@ test("the exported table list is derived from the queries, joins included", () =
       `${table} is not read by any export query`,
     );
   }
-  assert.equal(exported.length, 25, `the export reads ${exported.join(", ")}`);
+  assert.equal(exported.length, 24, `the export reads ${exported.join(", ")}`);
 });
 
 test("every account-scoped table is either exported or declared unexported with a reason", () => {

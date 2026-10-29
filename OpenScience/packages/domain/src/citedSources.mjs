@@ -377,9 +377,9 @@ export function citationUrlDefectsByLine(path, text) {
 // A card is the platform's reading of sources, so a report that cites one has cited the platform to itself:
 // written content becomes evidence for more written content, and the loop looks more certain at each turn
 // (the plan's reason for the rule; ICMJE 2026 says the same of AI-generated material). The rule is a notice,
-// never a refusal: it names the address, says what to cite instead and withholds nothing. A card is found in a
-// run through `frontier_search`, which returns the primary sources it stands on and asks the run to cite those
-// (`evidenceCardSearch.mjs`); this is the net for the run that cites the card anyway.
+// never a refusal: it names the address, says what to cite instead and withholds nothing. (Until 2026-10-29 a card
+// was also found in a run through `frontier_search`, which returned the primary sources it stands on and asked the run to cite those;
+// `frontier_search` shows no card now, so this is the only net, for the run that reads a card page and cites it.)
 //
 // What is recognised is an address shape, not a host: the deployment's public host is not known to a run, is
 // numeric today and will be a domain tomorrow, so a card page is the path `/evidence/c/<id>` (a card) or

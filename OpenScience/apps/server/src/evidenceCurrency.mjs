@@ -118,22 +118,6 @@ export function cardIdentifierKeys(card) {
   return [...new Set([...cited, ...stated])].sort();
 }
 
-/**
- * What a zone is about, as keys: its own words resolved through the vocabulary, joined to the entity keys and the identifier
- * keys of the cards it holds. A resolver that cannot answer leaves the zone with its cards' keys alone.
- * @param {{ database: any, service?: any, zone: { id: string, title?: string, description?: string, background?: string } }} input
- * @returns {Promise<{ entityKeys: string[], identifierKeys: string[] }>}
- */
-export async function zoneMatchKeys({ database, service = null, zone }) {
-  const texts = [zone.title, zone.description, zone.background].filter((text) => typeof text === "string" && text.trim());
-  const own = typeof service?.entityKeysFor === "function" && texts.length
-    ? await service.entityKeysFor({ texts, identifiers: [] }).catch(() => []) : [];
-  const cards = (await database.query(
-    `SELECT c.entity_keys,c.source_keys FROM evimed_frontier.evidence_cards c WHERE c.zone_id=$1 AND c.state='published' ORDER BY c.updated_at DESC LIMIT 200`, [zone.id],
-  )).rows;
-  return splitKeys([...(Array.isArray(own) ? own : []), ...cards.flatMap((row) => [...(row.entity_keys ?? []), ...(row.source_keys ?? [])])]);
-}
-
 const CARD_COLUMNS = `c.id,c.zone_id,c.user_id,c.revision,c.title,c.state,c.source_item_id,c.lineage,c.entity_keys,c.producer,c.originality,
   c.currency,c.pending_item_ids,c.currency_detail,c.last_checked_at,c.withdrawn,c.retired_at,c.no_change_checks,c.no_change_since,
   c.source_keys,c.source_keys_revision,c.created_at,

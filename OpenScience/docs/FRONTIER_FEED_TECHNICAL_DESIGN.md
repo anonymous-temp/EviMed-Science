@@ -168,7 +168,7 @@ flowchart LR
 | 个性化 | 同上 | `frontierProfiles.mjs` | `user_profiles` | 画像抽取、"与我相关"重排 |
 | 日报/周刊/推送 | 同上 | `frontierDaily/Weekly/Notifications.mjs` | `dailies`、`weeklies` | 定时出刊、安全警示推送 |
 | 内部网关与工具 | Node + Python MCP | `frontierGateway.mjs`、`runtime/mcp/evimed-research/frontier_search.py` | — | 给对话运行时里的模型查询动态 |
-| 证据专区 | 同上 | `evidenceZone*.mjs`、`evidenceEditorial.mjs` | `evidence_*`（10 张表） | 在动态之上的、带来源的"证据卡片"层（5.10 节） |
+| 证据专区 | 同上 | `evidenceZone*.mjs` | `evidence_*` | 在动态之上的、带来源的"证据卡片"层（5.10 节） |
 | 网页 | React + TypeScript + Vite | `apps/web/src/**/frontier*` | 浏览器历史状态 | 页面、筛选、卡片、事件页、简报、关注 |
 | 词表与常量 | 纯 ESM 包 | `packages/domain/src/frontierVocabulary.mjs` | — | 栏目、专科、证据类型、标记、热度常量；前后端共用，页面上的"热度怎么算"由同一份常量生成 |
 
@@ -1161,19 +1161,9 @@ composer 的节拍：聚类 30 秒、热榜 10 分钟、综述 2 分钟、日报
 
 **是什么。** 一个读者可以创建、也可以由 AI 维护的"证据卡片"层。**专区**是一个带标题、描述和背景的区域，里面是**证据卡片**（`knowledge` 或 `academic` 两种）。卡片有标题、摘要、正文、局限、出处、保留的来源（每个来源带标题、URL、摘录、保留的文本、哈希、覆盖范围、核对时间和发表状态）、可选的结构化内容，以及一份"编辑回执"。它与动态的关系很松：共享迁移、同一放开范围、同一个 worker 与日预算（有自己的 `evidence` 循环）；卡片可以链接到一条已发布的动态（`source_item_id`）；"整理为证据卡片"从动态卡片的菜单进入。
 
-**权限与评议。** 任何被放开的读者都能建专区，卡片只能建在**自己的**专区里；只有专区所有者能编辑它、它的卡片和它的自动化；他人可以关注、评论、给专区反馈（只有所有者能看到）、对不是自己写的卡片打 1–5 分并附文字、发起一个研究草稿（它只是交给新对话的一段提示，不存库）。未发布的专区和卡片只对所有者可见；发布一张卡片需要非空正文与至少一个来源。乐观并发用 `expectedRevision`，冲突返回 409。**用户编辑带编辑回执的卡片会把 `editorial.status` 置为 `review-pending` 并清掉 AI 评议者；任何新版本（包括 AI 自己写的）都让既有评分显示 `current:false`。**评论和反馈也会作为"读者问题"交给 AI 编辑。编辑回执和保留来源的元数据**只能由内部操作提供**，不对外开放接口。
+**权限与评议。** 任何被放开的读者都能建专区，卡片只能建在**自己的**专区里；只有专区所有者能编辑它和它的卡片；他人可以关注、评论、给专区反馈（只有所有者能看到）、对不是自己写的卡片打 1–5 分并附文字、发起一个研究草稿（它只是交给新对话的一段提示，不存库）。未发布的专区和卡片只对所有者可见；发布一张卡片需要非空正文与至少一个来源。乐观并发用 `expectedRevision`，冲突返回 409。**用户编辑带编辑回执的卡片会把 `editorial.status` 置为 `review-pending` 并清掉 AI 评议者；任何新版本（包括 AI 自己写的）都让既有评分显示 `current:false`。**评论和反馈也会作为"读者问题"交给 AI 编辑。编辑回执和保留来源的元数据**只能由内部操作提供**，不对外开放接口。
 
-**AI 维护流水线**（`evidenceEditorial.mjs`，在 worker 的 `evidence` 循环里）：
-
-1. 每个到期的专区每轮最多排 `max_cards_per_run` 个任务，**交替做"发现"（在已发布动态里找标题或摘要含该专区检索词、来源类型在其设定内的）和"维护"（最久没核对的 AI 卡片重读）**；
-2. 通过网页读取器读来源；PubMed、PMC、DOI、NCT 链接分别通过 Europe PMC 和 ClinicalTrials.gov 的接口解析；
-3. **新发现的来源带撤稿、更正或关注声明时跳过**（只有能通过 Europe PMC 解析的 PubMed/DOI 来源才查得出来），并保留跳过理由；包括"不相关"在内的跳过，7 天后重新考虑；
-4. `evidenceTarget` 判断相关性及是否更新已有卡片；`evidenceCard`（唯一开了思考的调用，`reasoning_effort: low`、16000 tokens、120 秒）**只根据保留的来源**写出中文卡片；
-5. 卡片以作者"EviMed 证据编辑 AI"保存并发布；
-6. 另一次调用 `evidenceReview` 只给出**发现**（模型给来源、数字、安全、局限、覆盖五类；"发表状态"类发现由代码根据来源状态生成），**不打分，不批准或否决**，空数组的意思是"没找到具体缺陷"，不是临床背书；
-7. 任何来源带发表状态通知的，都阻止 `ai-reviewed` 回执，卡片保持 `review-pending` 并附一条发现。
-
-**人工保护。** 卡片内容哈希若已不等于自动化写入时的哈希，就返回 `evidence_revision_conflict`，任务进 `conflict`，不覆盖人写的内容。来源核对每次最多读 8 个来源、轮转，重读失败时，对已有的卡片（且是少数几种可恢复的错误、保留文本的哈希仍匹配）才退回保留文本，并如实标为"保留"而不是"已核对"，**从不悄悄声称是新鲜的**；否则该次尝试失败、稍后再试，总共最多尝试 3 次（供应商中断与预算等待不计入）。账号导出包含其中八张证据表（不含 `evidence_editorial_jobs`、`evidence_zone_meta`）。
+**AI 维护流水线已删除（2026-10-29）。** 平台不再自己写证据卡片：`evidenceEditorial.mjs`（发现、写作、评议三步和它的任务队列、每个专区的自动化设置）、每日选题的证据中心（`evidenceProgramme*.mjs`）和重算卡片（`evidenceRecalculation.mjs`）都已删除，对应的两张表（`evidence_automation`、`evidence_editorial_jobs`）在启动时删掉；`frontier_search` 也不再附带证据卡片。现存的卡片来自它们的出品方（循证 GEO 的产品专区、读者从研究结果发布的卡片），以后还有团队的卡片接口；平台对它们只做两件事：在 worker 的 `evidence-upkeep` 循环里盯着来源变更和新证据、给出品方发站内通知（`evidenceCurrency.mjs`），以及处理读者的质疑。专区本身改为"主题专区"，见 `docs/superpowers/plans/2026-10-29-evidence-zone-topics.md`。
 
 > 状态说明：证据专区是 2026-10-01 加入的新层；它目前处于试点阶段，是否对读者放开取决于部署；占位字段 `experts: []`、`claims: []` 目前固定为空。
 
@@ -1800,7 +1790,7 @@ node evals/frontier-editing/run_eval.mjs --runs 3 --key-file <你的模型密钥
 | `user_prefs` | `state_version, last_seen_at, last_push_day, for_you_seen_at` |
 | `item_vectors`（条件） | `item_id`（PK，级联）、`model_key`、`embedding halfvec(N)` 或 `vector(N)`、`embedded_at`；HNSW 余弦索引 |
 
-证据专区的 10 张表：`evidence_zones`、`evidence_cards`、`evidence_card_revisions`、`evidence_zone_follows`、`evidence_comments`、`evidence_reviews`、`evidence_zone_feedback`、`evidence_zone_meta`、`evidence_automation`、`evidence_editorial_jobs`。
+证据专区的 8 张基础表：`evidence_zones`、`evidence_cards`、`evidence_card_revisions`、`evidence_zone_follows`、`evidence_comments`、`evidence_reviews`、`evidence_zone_feedback`、`evidence_zone_meta`（`evidence_automation`、`evidence_editorial_jobs` 已于 2026-10-29 随 AI 维护流水线删除）。
 
 ---
 

@@ -9,7 +9,7 @@ import { PLATFORM_PUBLISHER_USER_ID, verifyEvidenceCardClaims } from "@evimed/do
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { createEvidenceChangeLog } from "../src/evidenceChangeLog.mjs";
 import { createEvidenceChallenges } from "../src/evidenceChallenges.mjs";
-import { cardIdentifierKeys, createEvidenceUpkeep, createEvidenceUpkeepLoop, zoneMatchKeys } from "../src/evidenceCurrency.mjs";
+import { cardIdentifierKeys, createEvidenceUpkeep, createEvidenceUpkeepLoop } from "../src/evidenceCurrency.mjs";
 import { evidenceHash } from "../src/evidenceCardContent.mjs";
 import { monthlyEvidenceFigures } from "../src/evidenceFigures.mjs";
 import { EvidenceZoneService } from "../src/evidenceZoneService.mjs";

@@ -23,7 +23,7 @@
  *
  * @module evolutionLeadSources
  */
-import { VCR_ENGINE_METHOD_IDS, autopilotEpisodeCapability } from "@evimed/domain";
+import { VCR_ENGINE_METHOD_IDS } from "@evimed/domain";
 import { ENTITY_TEXT_KINDS, keyKind, splitKeys } from "@evimed/domain/entity-keys";
 import { HttpError } from "./security.mjs";
 

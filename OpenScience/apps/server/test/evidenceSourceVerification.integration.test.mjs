@@ -145,7 +145,7 @@ test("only the owner of the card and of its zone may ask, and a withdrawn card i
 
 test("what Europe PMC says of a source as it is read goes to the source-change record, and a record that cannot be written does not undo the read", options, async () => {
   const card = await cardFor(await zoneFor(), [{ title: "Trial", url: "https://doi.org/10.1000/epmc.retracted", excerpt: "7 of 100 adults on the drug had a stroke" }, { title: "Quiet", url: "https://example.org/quiet", excerpt: "x" }], CLAIMS.slice(0, 1));
-  const status = { retracted: true, notices: [] };
+  const status = { kind: "retracted", notices: ["Retraction notice"] };
   const read = async (/** @type {string} */ address) => ({ text: PAGE, coverage: "abstract", receipt: { sha256: "d".repeat(64), truncated: false },
     ...(address.includes("doi.org") ? { publicationStatus: status } : {}) });
   /** @type {any[]} */ const recorded = [];

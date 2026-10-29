@@ -307,19 +307,19 @@ test("a re-sighting joins the topic it is; a topic closes after its hours and st
   const boards = (await database.query("SELECT boards FROM evimed_frontier.topics WHERE id = $1", [topic.id])).rows[0].boards;
   assert.ok(boards.some((/** @type {any} */ board) => board.board === "toutiao" && board.peakRank === 3));
   assert.equal((await database.query("SELECT count(*)::integer AS n FROM evimed_frontier.topics")).rows[0].n, 1);
-  // The reader's pages: the summary carries no names, the card is the programme's settled one.
+  // The reader's pages: the summary carries no names and no card (the programme that settled one is deleted; the column it wrote is left, unread).
   await database.query("INSERT INTO evimed_frontier.evidence_zones (id, user_id, title, state) VALUES ('ez_hot', $1, '热点求证', 'published') ON CONFLICT DO NOTHING", [reader.id]);
   await database.query(`INSERT INTO evimed_frontier.evidence_cards (id, zone_id, user_id, title, subtype, state) VALUES ('ec_hot1', 'ez_hot', $1, '运动会诱发心源性猝死吗？', 'knowledge', 'published')
     ON CONFLICT DO NOTHING`, [reader.id]);
-  await database.query("UPDATE evimed_frontier.topics SET programme_state = 'card', programme_card_id = 'ec_hot1' WHERE id = $1", [topic.id]);
+  await database.query("UPDATE evimed_frontier.topics SET programme_state = 'card', programme_card_id = 'ec_hot1' WHERE id = $1", [topic.id]);  // an older release's settled card: not read
   const service = new FrontierService({ database, vocabulary: frontierVocabularyView(TEST_VOCABULARY), now: () => at(700), topics,
     config: { frontierEnabled: true, frontierAudience: "all", operatorUsers: [], frontierPreviewUsers: [], frontierDailyBudgetCny: 10, frontierTimeZone: "Asia/Shanghai" } });
   const listed = await service.topicList(reader, new URLSearchParams({ status: "active" }));
   assert.equal(listed.topics.length, 1);
   const [summary] = listed.topics;
-  assert.deepEqual(Object.keys(summary).sort(), ["acceptedAt", "card", "domain", "domainLabel", "firstSeenAt", "id", "itemCount", "overview", "peg", "question", "status", "surge", "title"]);
+  assert.deepEqual(Object.keys(summary).sort(), ["acceptedAt", "domain", "domainLabel", "firstSeenAt", "id", "itemCount", "overview", "peg", "question", "status", "surge", "title"]);
   assert.equal(summary.domainLabel, "公众人物");
-  assert.deepEqual(summary.card, { id: "ec_hot1", title: "运动会诱发心源性猝死吗？", href: "/app/frontier/zones/ez_hot/evidence/ec_hot1" });
+  assert.equal("card" in summary, false, "a topic carries no card now, whatever an older release wrote in the programme columns");
   assert.equal(JSON.stringify(listed).includes("张雪峰"), false, "the peg names nobody here, and subject names are never served");
   const page = await service.topic(reader, topic.public_id);
   assert.equal(page.topic.id, topic.public_id);

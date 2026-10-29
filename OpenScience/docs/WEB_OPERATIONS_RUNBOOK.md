@@ -1819,11 +1819,6 @@ change a run's original status, verification, notices, completion time or usage,
   preserved sources is recorded with `origin: "capture-repair"`, its time and verifier version; it is not a historical verdict.
   The matrix row records a successful repair receipt. Its generation depends on the original run/receipt and exact
   matrix/sibling version identities and digests, so retries cannot mint a new generation by advancing the clock.
-- Only for a programme-owned project, apply may include `resettle: true`. A verified repair generation allows one normal
-  settlement of an exhausted `no_evidence_matrix` outcome. Original attempts and outcome history remain recorded; normal
-  claim, source, clinical and supersession checks still decide publication. Replaying the same generation does not enqueue
-  research or settle it again. Every settlement holds a scoped PostgreSQL episode lock and commits the card and outcome in
-  one existing transaction; losing its owner rolls both back, allowing the pending generation to recover safely after restart.
 
 A missing, corrupted, linked or no-longer-authorized snapshot cannot become evidence by repairing bookkeeping. Capture
 repair refuses incomplete preservation. Result reads retain usable files with an unknown/unavailable review. Account

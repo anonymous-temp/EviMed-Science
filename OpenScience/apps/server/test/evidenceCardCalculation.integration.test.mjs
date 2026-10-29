@@ -6,7 +6,6 @@ import { before, after, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { EvidenceZoneService } from "../src/evidenceZoneService.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
-import { createCalculationReceiptReader } from "../src/evidenceCalculationReceipts.mjs";
 import { monthlyEvidenceFigures } from "../src/evidenceFigures.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 import { createEvidencePublicReads } from "../src/evidencePublicQuery.mjs";
