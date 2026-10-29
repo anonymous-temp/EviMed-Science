@@ -9,11 +9,12 @@ const rawZone = (over: Record<string, unknown> = {}) => ({ id: "z1", title: "GLP
 describe("a zone as the directory lists it", () => {
   beforeEach(() => request.mockReset());
 
-  it("keeps the revision and the ownership flag where the server sends them, and has neither where it does not", () => {
-    expect(parseZoneSummary(rawZone({ revision: 4, owned: true }))).toMatchObject({ id: "z1", revision: 4, owned: true });
+  it("keeps the revision, the ownership flag and the follower count where the server sends them, and has none where it does not", () => {
+    expect(parseZoneSummary(rawZone({ revision: 4, owned: true, followers: 12 }))).toMatchObject({ id: "z1", revision: 4, owned: true, followers: 12 });
     const bare = parseZoneSummary(rawZone())!;
     expect("revision" in bare).toBe(false);
     expect("owned" in bare).toBe(false);
+    expect("followers" in bare).toBe(false);
     expect(parseZoneSummary(rawZone({ revision: "4", owned: "yes" }))).not.toHaveProperty("revision");
   });
 

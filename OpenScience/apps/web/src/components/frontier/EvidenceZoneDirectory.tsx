@@ -167,7 +167,10 @@ function zoneMeta(zone: ZoneSummary, view: ZoneDirectoryView, own: boolean): str
     parts.push(day ? `最近更新于 ${day}` : "近期没有更新");
   } else parts.push(`近 7 天 ${zone.counts.week} 条`);
   if (zone.cards > 0) parts.push(`卡片 ${zone.cards}`);
-  if (view === "community" && zone.creator) parts.push(`${zone.creator} 创建`);
+  if (view === "community") {
+    if (zone.creator) parts.push(`${zone.creator} 创建`);
+    if (zone.followers) parts.push(`${zone.followers} 人关注`);
+  }
   return parts.join(" · ");
 }
 
@@ -217,8 +220,11 @@ export function ZoneDirectoryBody({ state, query, from, onCreate, onClearFilters
   state: ZoneDirectoryState;
   query: string;
   from?: EvidenceFrom;
-  /** Opens the editor: with a sentence to start from where the reader searched for a group's name. */
-  onCreate: (text?: string) => void;
+  /**
+   * Opens the editor: with words to start from where the reader searched; `generate` drafts them at once (a search that found no zone), where
+   * the name of a group is only filled in, for the reader to add the qualifier to (「乳腺癌 + …」).
+   */
+  onCreate: (text?: string, generate?: boolean) => void;
   onClearFilters: () => void;
 }) {
   const { view, directory, loading, error, busy, canCreate, filtered } = state;
@@ -250,7 +256,7 @@ export function ZoneDirectoryBody({ state, query, from, onCreate, onClearFilters
       <>
         <EmptyState icon={Layers} title={title} {...(action ? { action } : {})} />
         {filtered && canCreate && query.length >= 2 && (
-          <div className="mt-4 flex justify-center"><Button variant="text" onClick={() => onCreate(query)}>以此新建专区</Button></div>
+          <div className="mt-4 flex justify-center"><Button variant="text" onClick={() => onCreate(query, true)}>以此新建专区</Button></div>
         )}
       </>
     );

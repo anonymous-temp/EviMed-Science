@@ -224,7 +224,8 @@ export function ZoneEditorDrawer({ mode, zone, seed, onClose, onSaved }: ZoneEdi
       busy={saving}
       footer={work ? (
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <Note action={<Switch checked={published} onChange={setPublished} label="公开到平台" showLabel />}>公开后，平台里的其他人也能看到和关注</Note>
+          {/* The switch first, then what it does: reversed on the screen, the sentence still comes first for a screen reader. */}
+          <Note className="flex-row-reverse justify-end" action={<Switch checked={published} onChange={setPublished} label="公开到平台" showLabel />}>公开后，平台里的其他人也能看到和关注</Note>
           <Button variant="primary" loading={saving} disabled={!canSave} onClick={() => void save()}>{editing ? "保存" : "建立"}</Button>
         </div>
       ) : undefined}

@@ -91,7 +91,8 @@ function readDay(value: string | null): string | null {
 /**
  * 「前沿动态」 (plan 2026-09-23 §6): one page with feed, digest, recommendation and follow views —
  * 精选, 全部, 证据专区, 热榜, 与我相关, 关注 and 简报 (the daily and the weekly). 证据专区 is a view
- * like the others since 2026-10-22 (`?view=zones&scope=`; the owner: it opened as a separate page),
+ * like the others since 2026-10-22 (`?view=zones&scope=mine|community&zoneSpecialty=`; the owner: it opened as a separate page; a topic
+ * directory of zones of two or three keywords since 2026-10-29, with 「新建专区」 in a drawer that `?new=1&fromItem=` also opens),
  * and `/app/frontier/zones` hands its links over to it. The views are one row of tabs and the controls of
  * the open view, with the server-side search, sit at that row's right (`frontierToolbar`; plan
  * 2026-10-07 §4) in the shell's sticky band, so they stay at the top of a six-thousand-pixel feed
@@ -102,7 +103,7 @@ function readDay(value: string | null): string | null {
  * Hidden knowledge:
  *
  *  - Everything that describes the reader's position lives in the URL
- *    (`?view=&q=&lane=&kind=&specialty=a,b&tag=&channel=&evidence=&window=&starred=1&unread=1&sort=&day=&scope=`), so a
+ *    (`?view=&q=&lane=&kind=&specialty=a,b&tag=&channel=&evidence=&window=&starred=1&unread=1&sort=&day=&scope=&zoneSpecialty=`), so a
  *    notification's link (`?view=daily&day=…`), Back and a shared address all
  *    land on the same screen. `window` is the 全部 view's time range there and
  *    the 热榜's ranking (`week`, `month`) here; a view change clears it. An older
@@ -937,7 +938,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
         );
       case "zones":
         return (
-          <ZoneDirectoryBody state={zones} query={q} onCreate={(text) => openEditor(text ? { text } : undefined)}
+          <ZoneDirectoryBody state={zones} query={q} onCreate={(text, generate) => openEditor(text ? { text, ...(generate ? { generate } : {}) } : undefined)}
             onClearFilters={() => { setDraft(""); if (zoneSpecialty) setZoneSpecialty(""); }}
             from={{ to: `/app/frontier?${params.toString()}`, label: "证据专区" }} />
         );

@@ -143,10 +143,10 @@ describe("证据专区 opens in place", () => {
 
   it("names the creator in 大家建的 and reads an older link's scope as 我的", async () => {
     mount("/app/frontier?view=zones&scope=community");
-    topics.fetchZoneDirectory.mockImplementation(async () => topicDirectory("community", [topicZone({ id: "z_c", title: "别人建的专区", kind: "user", creator: "李研究" })]));
+    topics.fetchZoneDirectory.mockImplementation(async () => topicDirectory("community", [{ ...topicZone({ id: "z_c", title: "别人建的专区", kind: "user", creator: "李研究" }), followers: 12 }]));
     await userEvent.click(screen.getByRole("button", { name: "推荐" }));
     await userEvent.click(screen.getByRole("button", { name: "大家建的" }));
-    expect((await screen.findByRole("link", { name: "别人建的专区" })).closest("li")).toHaveTextContent("李研究 创建");
+    expect((await screen.findByRole("link", { name: "别人建的专区" })).closest("li")).toHaveTextContent("李研究 创建 · 12 人关注");
     for (const scope of ["owned", "following"]) {
       topics.fetchZoneDirectory.mockClear();
       mount(`/app/frontier?view=zones&scope=${scope}`);
@@ -248,10 +248,18 @@ describe("证据专区 opens in place", () => {
     expect(await screen.findByRole("dialog", { name: "新建专区" })).toBeInTheDocument();
   });
 
-  it("says no match for a search, and clears it from the button", async () => {
-    mount("/app/frontier?view=zones&q=%E4%B8%8D%E5%AD%98%E5%9C%A8");
+  it("says no match for a search, clears it from the button, and drafts the words at once from 「以此新建专区」", async () => {
+    topics.draftZone.mockResolvedValue({ draft: { title: "长新冠", definition: topicDefinition }, readings: [], suggestions: { narrower: [], broader: [] }, preview: topicPreview({ borderline: [] }), similar: [] });
     topics.fetchZoneDirectory.mockImplementation(async (view: "recommended") => topicDirectory(view, []));
-    await userEvent.click(await screen.findByRole("button", { name: "清除搜索" }));
+    mount(`/app/frontier?view=zones&q=${encodeURIComponent("长新冠")}`);
+    expect(await screen.findByText("没有找到匹配的专区")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "以此新建专区" }));
+    expect(await screen.findByRole("textbox", { name: "名称" })).toHaveValue("长新冠");
+    expect(topics.draftZone).toHaveBeenCalledWith({ text: "长新冠", baseZoneId: null, fromItemId: null });
+    await userEvent.click(screen.getByRole("button", { name: "关闭" }));
+    // The empty list's own button (the search box has a 「清除搜索」 of its own, in the band).
+    const clear = screen.getAllByRole("button", { name: "清除搜索" }).find((button) => !button.closest("[data-toolbar]"));
+    await userEvent.click(clear!);
     await waitFor(() => expect(where()).toBe("/app/frontier?view=zones"));
   });
 

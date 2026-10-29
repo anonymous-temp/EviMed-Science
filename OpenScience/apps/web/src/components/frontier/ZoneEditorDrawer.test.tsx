@@ -225,13 +225,13 @@ describe("creating 我的专区", () => {
     expect(client.createZone.mock.calls[1]![0].requestId).toBe(client.createZone.mock.calls[0]![0].requestId);
   });
 
-  it("drafts at once from an item or a zone to copy, and only fills in words that are not to be drafted yet", async () => {
+  it("drafts at once from an item or a zone to copy", async () => {
     mount({ seed: { fromItemId: "item-9" } });
     await screen.findByRole("textbox", { name: "名称" });
     expect(client.draftZone).toHaveBeenCalledWith({ text: "", baseZoneId: null, fromItemId: "item-9" });
   });
 
-  it("fills a searched group's name in without drafting, and drafts it where the reader asked for that", async () => {
+  it("fills a searched group's name in without drafting it", async () => {
     mount({ seed: { text: "乳腺癌" } });
     expect(screen.getByRole("textbox", { name: "想持续看什么？" })).toHaveValue("乳腺癌");
     expect(client.draftZone).not.toHaveBeenCalled();

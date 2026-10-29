@@ -49,6 +49,8 @@ export interface ZoneSummary {
   id: string;
   /** The zone's revision, where the directory sends it: following needs it, and the web reads the zone first where it is absent. */
   revision?: number;
+  /** How many readers follow the zone, where the server says so (大家建的 lists it). */
+  followers?: number;
   /** Whether the reader made this zone, where the server says so (`mine` lists the reader's own zones before the ones they follow). */
   owned?: boolean;
   slug: string | null;
@@ -189,6 +191,7 @@ export function parseZoneSummary(value: unknown): ZoneSummary | null {
     id: text(raw.id),
     ...(typeof raw.revision === "number" ? { revision: raw.revision } : {}),
     ...(typeof raw.owned === "boolean" ? { owned: raw.owned } : {}),
+    ...(typeof raw.followers === "number" && raw.followers >= 0 ? { followers: raw.followers } : {}),
     slug: optionalText(raw.slug),
     title: text(raw.title),
     type: (optionalText(raw.type) as ZoneType | null),
