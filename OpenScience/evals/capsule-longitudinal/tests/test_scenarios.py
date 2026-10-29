@@ -345,6 +345,14 @@ class S7(unittest.TestCase):
         self.assertEqual(sc.status_of(outcome.checks), sc.FAIL)
         self.assertIn("project B's deliverable is in Chinese: the rule did not leak", failing(outcome))
 
+    def test_an_empty_reply_is_no_evidence_of_a_leak(self):
+        # 2026-10-29: the reply of project B was read back empty (its runtime had yielded) and the one-script rule counted it as English.
+        host = FakeHost({"t1": "A review of SGLT2 inhibitors.", "t2": "Next week: organise the references.", "t3": ""})
+        outcome, _ = run(sce.s7_cross_project_leakage, host)
+        self.assertIsNone(outcome.checks[2]["ok"])
+        self.assertIn("no text", outcome.checks[2]["detail"])
+        self.assertEqual(sc.status_of(outcome.checks), sc.INCONCLUSIVE)
+
     def test_a_mixed_reply_without_a_judge_or_with_an_unverifiable_passage_is_undecided(self):
         host = FakeHost({"t1": "A review of SGLT2 inhibitors.", "t2": self.A_AGAIN_MIXED, "t3": "这是一个面向社区居民的高血压科普项目。"})
         without, _ = run(sce.s7_cross_project_leakage, host)

@@ -47,13 +47,26 @@ export async function platformDispatch({ base, headers, caseRecord, replicate, c
   const request = async (route, body, scoped = true) => {
     const response = await fetch(`${base}${route}`, { method: body === undefined ? "GET" : "POST", headers: { ...headers, "Content-Type": "application/json", ...(scoped ? { "X-Open-Science-Project": projectId } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     const value = /** @type {any} */ (await response.json());
-    if (!response.ok) throw new Error(`${route}: ${response.status} ${value.error ?? "request failed"}`);
+    // The status and the control plane's own code ride on the error so a caller can meet one refusal it knows without matching text.
+    if (!response.ok) throw Object.assign(new Error(`${route}: ${response.status} ${value.error ?? "request failed"}`), { status: response.status, responseCode: value.code });
     return value.data?.data ?? value.data ?? value;
   };
   await request("/api/projects", { id: projectId, name: "Published-paper evaluation" }, false);
   await request("/api/evolution/evaluation-policy", { projectId, policy: caseRecord.policy });
   await request("/api/commands/start_runtime", {});
   const session = await request("/api/runtime/sessions", {});
+  // The transcript route does not wake a runtime, and a finished run's runtime may already have stopped (409 `runtime_not_running`;
+  // an account's runtime ceiling yields the idle one to another project's start). That is not an empty transcript: the runtime is
+  // started once and the session read once more. A second refusal is the answer; this never loops.
+  const transcriptOf = async () => {
+    const route = `/api/runtime/sessions/${encodeURIComponent(session.id)}/transcript`;
+    try { return await request(route); } catch (error) {
+      if (/** @type {any} */ (error)?.status !== 409 || /** @type {any} */ (error)?.responseCode !== "runtime_not_running") throw error;
+      await request("/api/commands/start_runtime", {});
+      process.stderr.write(`paper-gold: ${projectId}: transcript: the runtime was gone; start_runtime, reading the session once more\n`);
+      return request(route);
+    }
+  };
   const run = await request("/api/agent-runs/dispatch", { sessionId: session.id, dispatchId: `evolution_paper_${createHash("sha256").update(identity).digest("hex").slice(0, 32)}`, text: caseRecord.input, automated: true, line: caseRecord.capabilityId });
   const deadline = Date.now() + 3600000;
   while (Date.now() < deadline) {
@@ -61,7 +74,7 @@ export async function platformDispatch({ base, headers, caseRecord, replicate, c
     const terminal = listed.find(row => row.id === run.id);
     if (terminal && !["queued", "dispatching", "running"].includes(terminal.status)) {
       if (terminal.status !== "succeeded" && terminal.errorCode === "runtime_spend_limit_reached") throw new PaperGoldAdministrativeDeferral(terminal, projectId);
-      return { projectId, run: terminal, transcript: await request(`/api/runtime/sessions/${encodeURIComponent(session.id)}/transcript`) };
+      return { projectId, run: terminal, transcript: await transcriptOf() };
     }
     await new Promise(resolve => setTimeout(resolve, 5000));
   }

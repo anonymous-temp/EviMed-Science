@@ -61,6 +61,15 @@ class HttpFailure(EvalError):
     def __init__(self, method: str, url: str, status: int, detail: str):
         super().__init__(f"{method} {url} -> HTTP {status}: {detail[:400]}")
         self.status = status
+        self.detail = detail
+
+    def code(self) -> str | None:
+        """The control plane's own error code (the body's top-level `code`), when the body carries one."""
+        try:
+            body = json.loads(self.detail)
+        except ValueError:
+            return None
+        return body.get("code") if isinstance(body, dict) and isinstance(body.get("code"), str) else None
 
 
 def http_json(
@@ -251,10 +260,19 @@ def session_messages(
     Since the DeepSeek Harness migration (2026-09-01) the browser-side runtime
     routes are gone; the control plane serves the transcript itself.
     """
-    transcript = unwrap(
-        http_json(opener, "GET", f"{base}/api/runtime/sessions/{urllib.parse.quote(session_id)}/transcript", headers=headers),
-        "session transcript",
-    )
+    url = f"{base}/api/runtime/sessions/{urllib.parse.quote(session_id)}/transcript"
+    try:
+        payload = http_json(opener, "GET", url, headers=headers)
+    except HttpFailure as error:
+        # The route does not wake a runtime, and the run's runtime may have stopped since it ended (409 `runtime_not_running`).
+        # That is not an empty transcript: the runtime is started once and the session read once more. A second refusal
+        # is the answer; this never loops.
+        if error.status != 409 or error.code() != "runtime_not_running":
+            raise
+        started = start_runtime(base, headers, opener)
+        print(f"[transcript] {session_id}: the runtime was gone; start_runtime -> {started}, reading the session once more")
+        payload = http_json(opener, "GET", url, headers=headers)
+    transcript = unwrap(payload, "session transcript")
     if not isinstance(transcript, dict):
         return []
     messages = transcript.get("messages")
