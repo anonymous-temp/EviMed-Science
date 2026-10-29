@@ -61,6 +61,10 @@ export interface FrontierCardProps {
   onTag?: (tag: FrontierTagRef) => void;
   /** A line under the summary that belongs to where the card is shown (a congress hub's design caveat, c3-track). */
   note?: ReactNode;
+  /** Entries that belong to where the card is shown (a zone's 「不属于这个专区」), joined to the first group of the card's ⋯, before its first rule. */
+  extraActions?: readonly MenuEntry[];
+  /** What the reading page's way back is called, where the page the card stands on has a name of its own (a zone); default 「前沿动态」. */
+  backLabel?: string;
 }
 
 /**
@@ -127,6 +131,13 @@ export function useItemActions(item: FrontierItem, { reader = false, onHide, onS
 /** What sits above the card's stretched link, so a press on it is its own and not the card's. */
 const ABOVE = "relative z-sticky";
 
+/** The page's own entries joined to the first group of the menu (before its first rule); at its end where it has no rule. */
+function withExtraActions(entries: MenuEntry[], extra: readonly MenuEntry[] | undefined): MenuEntry[] {
+  if (!extra || extra.length === 0) return entries;
+  const rule = entries.indexOf("separator");
+  return rule < 0 ? [...entries, ...extra] : [...entries.slice(0, rule), ...extra, ...entries.slice(rule)];
+}
+
 /**
  * One item of the feed (owner, 2026-10-23, after AIHOT's list): the whole card is the way to its addressed reader — the title's link
  * stretches over it, the ground lightens under the pointer and the title turns the accent — and what else it holds sits above that
@@ -143,18 +154,19 @@ const ABOVE = "relative z-sticky";
  *
  * 不感兴趣 hides the card at once and, while the page says so (`hideStrip`), one line stands in its place (`FrontierHideStrip`).
  */
-export function FrontierCard({ item, grouped = false, markSelected = false, onStar, onHide, hideStrip = null, onSave, saving = false, onOpened, onTag, note }: FrontierCardProps) {
+export function FrontierCard({ item, grouped = false, markSelected = false, onStar, onHide, hideStrip = null, onSave, saving = false, onOpened, onTag, note, extraActions, backLabel }: FrontierCardProps) {
   const titleId = useId();
   const origin = useFrontierOrigin();
   const location = useLocation();
-  const articleState = { ...origin, evidenceFrom: { to: `${location.pathname}${location.search}`, label: location.pathname.includes("/events/") ? "事件报道" : "前沿动态" } };
+  const articleState = { ...origin, evidenceFrom: { to: `${location.pathname}${location.search}`, label: backLabel ?? (location.pathname.includes("/events/") ? "事件报道" : "前沿动态") } };
   const eyebrow = cardEyebrow(item);
   const flags = item.flags.filter((flag) => CARD_FLAG_KEYS.has(flag.key));
   const band = scoreBand(item);
   const tags = item.tags.slice(0, CARD_MAX_TAGS);
   const starred = item.state.starred;
   const also = item.alsoReportedCount;
-  const { more, reports } = useItemActions(item, { onHide, onSave, saving, onOpened });
+  const { more: base, reports } = useItemActions(item, { onHide, onSave, saving, onOpened });
+  const more = withExtraActions(base, extraActions);
   // A post is said by its account (「Arena.ai @arena · X」); anything else by its institution.
   const platform = item.platform ? PLATFORM_LABELS[item.platform] : null;
   const who = isSocialItem(item) && item.author

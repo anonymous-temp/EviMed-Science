@@ -6,11 +6,11 @@ const { ESLint } = require("eslint") as { ESLint: new () => { lintText: (code: s
 it("limits the IME submit lint rule to adopted text-submission handlers", async () => {
   const lint = new ESLint();
   const code = 'const onKeyDown = event => { if (event.key === "Enter") submit(); };';
-  const adopted = await lint.lintText(code, { filePath: "src/app/routes/EvidenceZonePage.tsx" });
+  const adopted = await lint.lintText(code, { filePath: "src/app/routes/FrontierZonePage.tsx" });
   expect(adopted[0].messages.some(message => message.message.includes("Text submission must use isSubmitKey"))).toBe(true);
   const button = await lint.lintText(code, { filePath: "src/components/ui/Button.tsx" });
   expect(button[0].messages.some(message => message.message.includes("Text submission must use isSubmitKey"))).toBe(false);
-  const guarded = await lint.lintText('const onKeyDown = event => { if (isSubmitKey(event)) submit(); };', { filePath: "src/app/routes/EvidenceZonePage.tsx" });
+  const guarded = await lint.lintText('const onKeyDown = event => { if (isSubmitKey(event)) submit(); };', { filePath: "src/app/routes/FrontierZonePage.tsx" });
   expect(guarded[0].messages.some(message => message.message.includes("Text submission must use isSubmitKey"))).toBe(false);
 });
 

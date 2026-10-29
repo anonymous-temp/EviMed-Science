@@ -45,7 +45,7 @@ const FrontierCongressPage = lazy(() => import("./routes/FrontierCongressPage").
 const VcrHomePage = lazy(() => import("./virtual-research/VcrHomePage").then((m) => ({ default: m.VcrHomePage })));
 const VcrStudyPage = lazy(() => import("./virtual-research/VcrStudyPage").then((m) => ({ default: m.VcrStudyPage })));
 const EvidenceZonesPage = lazy(() => import("./routes/EvidenceZonesPage").then((m) => ({ default: m.EvidenceZonesPage })));
-const EvidenceZonePage = lazy(() => import("./routes/EvidenceZonePage").then((m) => ({ default: m.EvidenceZonePage })));
+const FrontierZonePage = lazy(() => import("./routes/FrontierZonePage").then((m) => ({ default: m.FrontierZonePage })));
 const EvidenceReadingPage = lazy(() => import("./routes/EvidenceReadingPage").then((m) => ({ default: m.EvidenceReadingPage })));
 const EvidenceAuthorPage = lazy(() => import("./routes/EvidenceAuthorPage").then((m) => ({ default: m.EvidenceAuthorPage })));
 const GeoHomePage = lazy(() => import("./routes/GeoHomePage").then((m) => ({ default: m.GeoHomePage })));
@@ -106,7 +106,8 @@ export const routes: RouteObject[] = [
         { path: "virtual-research", element: <VcrHomePage /> },
         { path: "virtual-research/:studyId/:tab?", element: <VcrStudyPage /> },
         { path: "frontier/zones", element: <EvidenceZonesPage /> },
-        { path: "frontier/zones/:zoneId", element: <EvidenceZonePage /> },
+        { path: "frontier/zones/:zoneId", element: <FrontierZonePage /> },
+        { path: "frontier/zones/s/:slug", element: <FrontierZonePage /> },
         { path: "frontier/zones/:zoneId/evidence/:cardId", element: <EvidenceReadingPage /> },
         { path: "frontier/authors/:authorId", element: <EvidenceAuthorPage /> },
         // GEO conversations, results and preserved answers share one authorized project layout.
