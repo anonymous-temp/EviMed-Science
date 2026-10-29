@@ -520,6 +520,17 @@ function frontierSettings(overrides) {
  *
  * @param {Record<string, any>} overrides
  */
+/**
+ * The evidence card source of the topic zones: \`none\` (the default) or \`external\`. Anything else is refused by name.
+ * @param {unknown} value
+ * @returns {"none" | "external"}
+ */
+function evidenceCardProvider(value) {
+  if (value == null || value === "") return "none";
+  if (value === "none" || value === "external") return value;
+  throw new Error(`OPEN_SCIENCE_EVIDENCE_CARD_PROVIDER must be none or external, got ${JSON.stringify(value)}.`);
+}
+
 function evidenceSettings(overrides) {
   /** @param {string} key @param {string} name @param {unknown} fallback */
   const read = (key, name, fallback) => {
@@ -797,6 +808,17 @@ function memorySharingSettings(overrides, frontierEnabled) {
     // ordinary account on its shelf, the lowest tier of the methods a run is offered. Off, none is published, copied or mounted (copies an account
     // already holds stay on its shelf and are mounted by nothing).
     officialPacksEnabled: overrides.officialPacksEnabled ?? boolEnv("OPEN_SCIENCE_OFFICIAL_PACKS_ENABLED", true),
+    // Topic zones of 证据专区 (owner 2026-10-29): each zone a topic of two or three keywords, its items assigned by the model, its
+    // 最新进展 written daily. Off, the zones keep their pages and the directory, and nothing is assigned or written.
+    evidenceZoneTopicsEnabled: frontierEnabled && (overrides.evidenceZoneTopicsEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_ZONE_TOPICS_ENABLED", true)),
+    // How many 我的专区 one account may keep (owner 2026-10-29: 30, every one written daily).
+    evidenceUserZonesMax: integer("evidenceUserZonesMax", "OPEN_SCIENCE_EVIDENCE_USER_ZONES_MAX", 30, 1, 200),
+    // The planner that makes and keeps the platform's zones (the first 30 when there are none, then a weekly pass).
+    evidenceZonePlannerEnabled: frontierEnabled && (overrides.evidenceZonePlannerEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_ZONE_PLANNER_ENABLED", true)),
+    evidenceZoneSeedCount: integer("evidenceZoneSeedCount", "OPEN_SCIENCE_EVIDENCE_ZONE_SEED_COUNT", 30, 0, 100),
+    // Where a zone's evidence cards come from (owner 2026-10-29: the platform writes none; a team interface will supply them).
+    // `none` shows no cards; `external` reads the interface once it exists.
+    evidenceCardProvider: evidenceCardProvider(overrides.evidenceCardProvider ?? process.env.OPEN_SCIENCE_EVIDENCE_CARD_PROVIDER),
     evidenceZoneSubscriptionEnabled: frontierEnabled && (overrides.evidenceZoneSubscriptionEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED", false)),
     evidenceZoneSubscriptionMaxPerProject: integer("evidenceZoneSubscriptionMaxPerProject", "OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_PER_PROJECT", 5, 1, 20),
     evidenceZoneSubscriptionMaxItems: integer("evidenceZoneSubscriptionMaxItems", "OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_ITEMS", 6, 1, 30),

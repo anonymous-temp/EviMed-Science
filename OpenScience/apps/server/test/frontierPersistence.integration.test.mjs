@@ -84,11 +84,11 @@ test(
     // 24 feed/reader tables (the monthlies of 2026-10-22 among them), seventeen native evidence/editorial tables (the topic
     // requests' related links among them), two exposure attribution tables, the tag tree's four (2026-10-23) and what each
     // reader was served and did (interactions, list_serves; ct-track 2026-10-24), the hot-event topics and their items (c2-base
-    // 2026-10-25), a typed follow's matches and the congress recaps (c3-base 2026-10-25), plus the optional vector table. (The
-    // topics' sightings are frontierTopics.mjs's own migration, not this one.)
+    // 2026-10-25), a typed follow's matches and the congress recaps (c3-base 2026-10-25), the topic zones' items and changes
+    // (2026-10-29), plus the optional vector table. (The topics' sightings are frontierTopics.mjs's own migration, not this one.)
     assert.equal(
       created.tables.length,
-      capabilities.vector ? 54 : 53,
+      capabilities.vector ? 56 : 55,
       created.tables.join(),
     );
     for (const table of [

@@ -7,7 +7,14 @@ import {
   EVIDENCE_CHANGE_TRIGGERS,
   EVIDENCE_ORIGINALITY,
   EVIDENCE_PLATFORM_PRODUCER_NAME,
+  EVIDENCE_ZONE_CHANGE_KINDS,
+  EVIDENCE_ZONE_ITEM_STATES,
+  EVIDENCE_ZONE_ITEM_VIAS,
   EVIDENCE_ZONE_KINDS,
+  EVIDENCE_ZONE_LIFECYCLES,
+  EVIDENCE_ZONE_RELEVANCE,
+  EVIDENCE_ZONE_ROLES,
+  EVIDENCE_ZONE_TYPES,
   EVIDENCE_ZONE_VISIBILITY,
   SOURCE_CURRENCY_LABELS,
 } from "@evimed/domain";
@@ -235,6 +242,79 @@ UPDATE evimed_frontier.evidence_card_revisions r SET snapshot=jsonb_set(r.snapsh
     FROM jsonb_array_elements(r.snapshot->'sources') WITH ORDINALITY AS e(s,ord)))
   WHERE jsonb_typeof(r.snapshot->'sources')='array'
     AND EXISTS(SELECT 1 FROM jsonb_array_elements(r.snapshot->'sources') AS x(s) WHERE COALESCE(x.s->>'url','')='' AND x.s ? 'documentText');
+-- Topic zones (owner 2026-10-29, plan docs/superpowers/plans/2026-10-29-evidence-zone-topics.md v1.2). A zone is a topic of two or
+-- three keywords: its definition (keywords with their alternatives, the scope sentence, criteria for the model, exclusions, seeds), its
+-- type, its directory group, its life, how far the items were scanned, its 最新进展 and a count snapshot for the directory. The model
+-- decides membership; the zone_items table (EVIDENCE_ZONE_TOPICS_SQL, which the frontier migration runs because it references the
+-- frontier's items) keeps every judged pair (in, out, pending) and the overrides no automatic pass rewrites.
+ALTER TABLE evimed_frontier.evidence_zones ADD COLUMN IF NOT EXISTS slug text;
+CREATE UNIQUE INDEX IF NOT EXISTS evidence_zones_slug_idx ON evimed_frontier.evidence_zones(slug) WHERE slug IS NOT NULL;
+ALTER TABLE evimed_frontier.evidence_zones ADD COLUMN IF NOT EXISTS zone_type text CHECK(zone_type IS NULL OR zone_type IN (${sqlList(EVIDENCE_ZONE_TYPES)}));
+ALTER TABLE evimed_frontier.evidence_zones ADD COLUMN IF NOT EXISTS specialties text[] NOT NULL DEFAULT '{}';
+ALTER TABLE evimed_frontier.evidence_zones ADD COLUMN IF NOT EXISTS group_label text NOT NULL DEFAULT '';
+ALTER TABLE evimed_frontier.evidence_zones ADD COLUMN IF NOT EXISTS scope_zh text NOT NULL DEFAULT '';
+ALTER TABLE evimed_frontier.evidence_zones ADD COLUMN IF NOT EXISTS definition jsonb;
+ALTER TABLE evimed_frontier.evidence_zones ADD COLUMN IF NOT EXISTS definition_version integer NOT NULL DEFAULT 0;
+ALTER TABLE evimed_frontier.evidence_zones ADD COLUMN IF NOT EXISTS lifecycle text NOT NULL DEFAULT 'none' CHECK(lifecycle IN (${sqlList(EVIDENCE_ZONE_LIFECYCLES)}));
+ALTER TABLE evimed_frontier.evidence_zones ADD COLUMN IF NOT EXISTS matched_through timestamptz(3);
+ALTER TABLE evimed_frontier.evidence_zones ADD COLUMN IF NOT EXISTS backfilled_version integer NOT NULL DEFAULT 0;
+ALTER TABLE evimed_frontier.evidence_zones ADD COLUMN IF NOT EXISTS overview jsonb;
+ALTER TABLE evimed_frontier.evidence_zones ADD COLUMN IF NOT EXISTS overview_at timestamptz(3);
+ALTER TABLE evimed_frontier.evidence_zones ADD COLUMN IF NOT EXISTS stats jsonb;
+ALTER TABLE evimed_frontier.evidence_zones ADD COLUMN IF NOT EXISTS stats_at timestamptz(3);
+CREATE INDEX IF NOT EXISTS evidence_zones_topic_idx ON evimed_frontier.evidence_zones(kind, lifecycle, state) WHERE lifecycle <> 'none';
+CREATE INDEX IF NOT EXISTS evidence_zones_owner_topic_idx ON evimed_frontier.evidence_zones(user_id) WHERE kind = 'user' AND lifecycle <> 'none';
+-- What happened to a zone, for the operators and for undoing a planner action: who did it (planner, owner:<id>, operator:<id>,
+-- migration) and the detail. No foreign key, so a deleted zone keeps its history.
+CREATE TABLE IF NOT EXISTS evimed_frontier.zone_changes (
+ id bigserial PRIMARY KEY, zone_id text NOT NULL,
+ kind text NOT NULL CHECK(kind IN (${sqlList(EVIDENCE_ZONE_CHANGE_KINDS)})),
+ actor text NOT NULL, detail jsonb NOT NULL DEFAULT '{}' CHECK(jsonb_typeof(detail)='object'),
+ occurred_at timestamptz(3) NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS zone_changes_zone_idx ON evimed_frontier.zone_changes(zone_id, id DESC);
+-- The owner (2026-10-29): the zones that existed before topic zones are deleted and the platform starts again (they were whole
+-- diseases or kinds of card, and the platform no longer writes cards). Once per database: the platform's and readers' zones with no
+-- topic definition go, with their cards (the foreign keys cascade); 循证 GEO's product zones stay. The marker makes it run once, so a
+-- zone made later is never touched.
+ALTER TABLE evimed_frontier.evidence_zone_meta ADD COLUMN IF NOT EXISTS topics_reset_at timestamptz(3);
+WITH reset AS (
+  UPDATE evimed_frontier.evidence_zone_meta SET topics_reset_at=clock_timestamp() WHERE singleton AND topics_reset_at IS NULL RETURNING 1
+), gone AS (
+  DELETE FROM evimed_frontier.evidence_zones z
+   WHERE EXISTS (SELECT 1 FROM reset) AND z.kind IN ('official','user') AND z.lifecycle='none'
+  RETURNING z.id
+), noted AS (
+  INSERT INTO evimed_frontier.zone_changes(zone_id, kind, actor, detail)
+  SELECT id, 'reset', 'migration', '{"reason":"topic zones replace the zones before 2026-10-29"}'::jsonb FROM gone RETURNING 1
+)
+UPDATE evimed_frontier.evidence_zone_meta SET version=version+1 WHERE EXISTS (SELECT 1 FROM noted);
+`;
+
+/**
+ * The topic zones' item table. It references the frontier's \`items\`, so it is created by the frontier migration right after
+ * {@link EVIDENCE_ZONE_SQL} (\`migrateFrontier\`), never by {@link migrateEvidenceZones} alone, which runs on databases that have
+ * no frontier tables.
+ */
+export const EVIDENCE_ZONE_TOPICS_SQL = `
+CREATE TABLE IF NOT EXISTS evimed_frontier.zone_items (
+ zone_id text NOT NULL REFERENCES evimed_frontier.evidence_zones(id) ON DELETE CASCADE,
+ item_id bigint NOT NULL REFERENCES evimed_frontier.items(id) ON DELETE CASCADE,
+ state text NOT NULL CHECK(state IN (${sqlList(EVIDENCE_ZONE_ITEM_STATES)})),
+ relevance text CHECK(relevance IS NULL OR relevance IN (${sqlList(EVIDENCE_ZONE_RELEVANCE)})),
+ via text NOT NULL CHECK(via IN (${sqlList(EVIDENCE_ZONE_ITEM_VIAS)})),
+ role text NOT NULL CHECK(role IN (${sqlList(EVIDENCE_ZONE_ROLES)})),
+ score real,
+ decided_by text NOT NULL DEFAULT 'recall',
+ definition_version integer NOT NULL DEFAULT 0,
+ attempts integer NOT NULL DEFAULT 0,
+ matched_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+ judged_at timestamptz(3),
+ PRIMARY KEY(zone_id, item_id)
+);
+CREATE INDEX IF NOT EXISTS zone_items_list_idx ON evimed_frontier.zone_items(zone_id, state, item_id DESC);
+CREATE INDEX IF NOT EXISTS zone_items_item_idx ON evimed_frontier.zone_items(item_id) WHERE state IN ('in','pinned');
+CREATE INDEX IF NOT EXISTS zone_items_pending_idx ON evimed_frontier.zone_items(matched_at, zone_id) WHERE state = 'pending';
 `;
 const migrations = new WeakMap();
 /** @param {any} database */

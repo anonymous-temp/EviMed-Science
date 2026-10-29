@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { EVIDENCE_ZONE_SQL } from "./evidenceZonePersistence.mjs";
+import { EVIDENCE_ZONE_SQL, EVIDENCE_ZONE_TOPICS_SQL } from "./evidenceZonePersistence.mjs";
 import { FRONTIER_EVENT_READING_SQL } from "./frontierEventReading.mjs";
 import { FRONTIER_INTERACTIONS_SQL } from "./frontierInteractions.mjs";
 import { frontierTagSeedRows, tagKey } from "./frontierTags.mjs";
@@ -1002,6 +1002,7 @@ export async function migrateFrontier(database, { dimension }) {
     await seedFrontierTags(client);
     await backfillTimelineRule(client);
     await client.query(EVIDENCE_ZONE_SQL);
+    await client.query(EVIDENCE_ZONE_TOPICS_SQL);
     const trigramVersion = await ensureExtension(client, "pg_trgm");
     if (trigramVersion) {
       await client.query(`CREATE INDEX IF NOT EXISTS frontier_items_title_trgm_idx

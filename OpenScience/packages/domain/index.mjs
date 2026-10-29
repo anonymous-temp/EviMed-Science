@@ -1516,6 +1516,40 @@ export {
   isFrontierTopicDomain,
 } from './src/frontierTopics.mjs'
 /** @typedef {import('./src/frontierTopics.mjs').FrontierTopicDomain} FrontierTopicDomain */
+// evidenceZoneTopics — 24 exports: the topic zones of 证据专区 (owner 2026-10-29): the zone types, perspectives, lifecycles, an
+// item's roles and states on a zone, the overview's modules with their per-type order and limits, the guidance the model is given
+// for a zone's width (never a rule code enforces), the bounds of a definition and its shape check, and which items are 重要更新.
+export {
+  EVIDENCE_ZONE_CHANGE_KINDS,
+  EVIDENCE_ZONE_CONGRESS_WINDOW,
+  EVIDENCE_ZONE_DEFINITION_VERSION,
+  EVIDENCE_ZONE_GUIDANCE,
+  EVIDENCE_ZONE_ITEM_STATES,
+  EVIDENCE_ZONE_ITEM_VIAS,
+  EVIDENCE_ZONE_LIFECYCLES,
+  EVIDENCE_ZONE_LIMITS,
+  EVIDENCE_ZONE_MODULE_LABELS_ZH,
+  EVIDENCE_ZONE_MODULE_ORDER,
+  EVIDENCE_ZONE_MODULE_RULES,
+  EVIDENCE_ZONE_MODULES,
+  EVIDENCE_ZONE_PERSPECTIVE_LABELS_ZH,
+  EVIDENCE_ZONE_PERSPECTIVES,
+  EVIDENCE_ZONE_RELEVANCE,
+  EVIDENCE_ZONE_ROLE_LABELS_ZH,
+  EVIDENCE_ZONE_ROLES,
+  EVIDENCE_ZONE_TYPE_LABELS_ZH,
+  EVIDENCE_ZONE_TYPES,
+  evidenceZoneBand,
+  evidenceZoneIsKeyUpdate,
+  evidenceZoneModuleOrder,
+  evidenceZoneRole,
+  normalizeEvidenceZoneDefinition,
+} from './src/evidenceZoneTopics.mjs'
+/** @typedef {import('./src/evidenceZoneTopics.mjs').EvidenceZoneType} EvidenceZoneType */
+/** @typedef {import('./src/evidenceZoneTopics.mjs').EvidenceZonePerspective} EvidenceZonePerspective */
+/** @typedef {import('./src/evidenceZoneTopics.mjs').EvidenceZoneRole} EvidenceZoneRole */
+/** @typedef {import('./src/evidenceZoneTopics.mjs').EvidenceZoneModule} EvidenceZoneModule */
+/** @typedef {import('./src/evidenceZoneTopics.mjs').EvidenceZoneDefinition} EvidenceZoneDefinition */
 // projectCard — the slots a project's memory is read in: six general ones for any kind of
 // work, the clinical elements as an extension written only when a study was described,
 // `project.ext.<name>` for the extras of other kinds of work, and the one check on a
