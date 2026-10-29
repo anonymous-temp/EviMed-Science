@@ -350,8 +350,13 @@ export function createEvidenceZonePlanner({ database, editor = null, membership 
     const shown = statisticsForModel(stats);
     let created = 0;
     let dropped = 0;
-    let complete = true;
-    const maxRounds = Math.ceil(seedCount / seedPerCall) + 1;
+    /** @type {Record<string, number>} */
+    const droppedBy = {};
+    let failed = false;
+    let barren = 0;
+    // Ask again while the count is short: a proposal that collects nothing or repeats a zone is dropped, and the model is shown what
+    // stands and asked for what is missing. Two rounds in a row that add nothing end the attempt (the next one comes after an hour).
+    const maxRounds = Math.ceil(seedCount / seedPerCall) * 3;
     for (let round = 0; round < maxRounds; round += 1) {
       const standing = await platformZoneCount();
       const want = Math.min(seedPerCall, seedCount - standing);
@@ -368,17 +373,22 @@ export function createEvidenceZonePlanner({ database, editor = null, membership 
       } catch (error) {
         counters.failures += 1;
         lastError = codeOf(error);
-        complete = false;
+        failed = true;
         break;
       }
       const listed = Array.isArray(answer?.zones) ? answer.zones : null;
-      if (!listed) { counters.failures += 1; lastError = "evidence_zone_seed_unreadable"; complete = false; break; }
+      if (!listed) { counters.failures += 1; lastError = "evidence_zone_seed_unreadable"; failed = true; break; }
       const result = await makeOfficialZones(listed, { room: async (client) => seedCount - (await platformZoneCount(client)), reason: "seed" });
       created += result.made.length;
       dropped += result.dropped.length;
+      for (const entry of result.dropped) droppedBy[entry.reason] = (droppedBy[entry.reason] ?? 0) + 1;
+      barren = result.made.length ? 0 : barren + 1;
+      if (barren >= 2) break;
     }
     counters.seeded += created;
     counters.seedDropped += dropped;
+    // Done when the count is reached; short of it, the next attempt (an hour on, at most MAX_SEED_ATTEMPTS) asks for the rest.
+    const complete = !failed && (await platformZoneCount()) >= seedCount;
     // Zones made this week have no history to review: the week's pass is counted done with the seeding.
     if (complete) {
       await database.transaction(async (/** @type {any} */ client) => {
@@ -386,7 +396,7 @@ export function createEvidenceZonePlanner({ database, editor = null, membership 
         await writeMarker(client, WEEKLY_MARKER, { week: beijingWeek(at).week, at: at.toISOString(), by: "seed" });
       });
     }
-    return { created, dropped, complete };
+    return { created, dropped, droppedBy, complete };
   }
 
   // ───────────────────────────── the weekly pass ─────────────────────────────
