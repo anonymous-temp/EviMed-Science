@@ -365,6 +365,8 @@ import { pageReads } from "./evidencePublicReads.mjs";
 import { createEvidenceProgrammeRoutes } from "./evidenceProgrammeRoutes.mjs";
 import { platformContentCitedMetricFamilies } from "./evidenceCitationMetrics.mjs";
 import { createEvidenceZoneRoutes } from "./evidenceZoneRoutes.mjs";
+import { createEvidenceZoneReads } from "./evidenceZoneReads.mjs";
+import { createEvidenceZoneCards } from "./evidenceZoneCards.mjs";
 import { EvidenceCardFromResult } from "./evidenceCardFromResult.mjs";
 import { EvidenceAuthors } from "./evidenceAuthors.mjs";
 import { createCitationGift } from "./evidenceCitationGift.mjs";
@@ -2562,8 +2564,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const evidenceCommunity = config.evidenceCommunityCardsEnabled && frontier && productDatabase
     ? createEvidenceCommunity({ database: productDatabase, maxCards: config.evidenceCommunityMaxCards, platformPublisherUserId: PLATFORM_PUBLISHER_USER_ID }) : null;
   const evidenceCommunityRoutes = createEvidenceCommunityRoutes({ store, service: frontier?.evidenceZones ?? null, frontier: frontier?.service ?? null, config, community: evidenceCommunity });
+  // The topic zones' read side (ez-api-read): the directory, a zone's detail, overview, 「动态」 and cards; the cards come through the card
+  // port (none until the team's interface exists). The membership module (ez-membership) tells an item's page which zones it stands in.
+  const evidenceZoneCards = createEvidenceZoneCards({ config });
+  const evidenceZoneReads = frontier && productDatabase && config.evidenceZoneTopicsEnabled !== false
+    ? createEvidenceZoneReads({ database: productDatabase, service: frontier.service, zones: frontier.evidenceZones, membership: frontier.zoneMembership ?? null,
+      cards: evidenceZoneCards, config }) : null;
+  if (frontier && evidenceZoneReads && frontier.zoneMembership?.zonesForItem) {
+    frontier.service.zonesForItem = (rowId, userId) => frontier.zoneMembership.zonesForItem(rowId, userId);
+  }
   const evidenceZoneRoutes = createEvidenceZoneRoutes({store,service:frontier?.evidenceZones??null,editorial:frontier?.evidenceEditorial??null,
-    frontier:frontier?.service??null,config,maxJsonBytes:config.maxJsonBytes});
+    frontier:frontier?.service??null,config,maxJsonBytes:config.maxJsonBytes,reads:evidenceZoneReads});
   // What the platform's own evidence offers the frontier (flywheel F09): a public feed the knowledge-source plugin reads like
   // any other publisher's. It reads cards, so it exists only where the evidence tables do; off, its two paths answer by name.
   const evidenceFeed = frontier && config.evidencePublicWebEnabled ? createEvidenceFeed({ database: productDatabase, config }) : null;
@@ -5880,6 +5891,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     cards: frontier ? createEvidenceCardSearch({ judgeService, database: productDatabase, entityVocabulary, sourceChanges }) : null,
     // Hot-event topics ride beside them the same way, as an index (c2-leads 2026-10-25).
     topics: frontier?.service ? ((/** @type {any} */ frontierService) => ({ search: (/** @type {any} */ user, /** @type {any} */ request) => frontierService.searchTopics(user, request) }))(frontier.service) : null,
+    // A search may name a topic zone of 「证据专区」 (by id or slug) and read only its items.
+    zones: evidenceZoneReads ? { resolve: (/** @type {any} */ user, /** @type {string} */ ref) => evidenceZoneReads.resolveZone(user, ref) } : null,
     report: (code) => process.stderr.write(`frontier search: ${code}\n`),
   });
   // `geo_read` / `geo_write` / `social_posts_search`: the GEO project the

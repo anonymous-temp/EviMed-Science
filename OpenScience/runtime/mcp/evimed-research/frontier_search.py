@@ -67,6 +67,8 @@ SPECIALTIES = (
 WINDOWS = ("24h", "3d", "7d", "30d")
 MODES = ("selected", "all")
 GATEWAY_CODE = re.compile(r"^frontier_[a-z0-9_]{1,60}$")
+# A topic zone of 证据专区, by id or slug, as the zone routes spell them.
+ZONE_REF = re.compile(r"^[a-zA-Z0-9_-]{1,100}$")
 # A public item id, as the feed's addresses and `frontier:<id>` spell it.
 ITEM_ID = re.compile(r"^[a-z0-9]{12,32}$")
 TEXT_KINDS = {"body": "full text", "abstract": "abstract", "excerpt": "excerpt of the page", "summary": "source summary"}
@@ -114,6 +116,11 @@ def tool_definitions():
                         "description": "selected: the editors' picks; all: everything collected.",
                     },
                     "limit": {"type": "integer", "minimum": 1, "maximum": MAX_LIMIT, "default": 8},
+                    "zone": {
+                        "type": "string",
+                        "pattern": ZONE_REF.pattern,
+                        "description": "An evidence topic zone's id or slug: restrict the search to that topic's items.",
+                    },
                     "id": {
                         "type": "string",
                         "pattern": ITEM_ID.pattern,
@@ -177,6 +184,11 @@ def _validated(arguments: dict) -> dict:
         if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= MAX_LIMIT:
             raise FrontierSearchError("frontier_search_limit_invalid", "limit must be an integer between 1 and %d." % MAX_LIMIT)
         payload["limit"] = limit
+    zone = arguments.get("zone")
+    if zone is not None:
+        if not isinstance(zone, str) or not ZONE_REF.match(zone):
+            raise FrontierSearchError("frontier_search_zone_invalid", "zone must be the id or slug of an evidence zone.")
+        payload["zone"] = zone
     return payload
 
 
@@ -375,6 +387,8 @@ def _scope(query: dict) -> str:
     for key in ("specialty", "lane"):
         if query.get(key):
             parts.append("%s %s" % (key, query[key]))
+    if query.get("zone"):
+        parts.append("evidence zone %s" % query["zone"])
     parts.append("last %s" % query.get("window", "30d"))
     return ", ".join(parts)
 

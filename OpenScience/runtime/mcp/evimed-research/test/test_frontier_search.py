@@ -147,7 +147,8 @@ class FrontierSearchTests(_GatewayCase):
         schema = definition["inputSchema"]
         self.assertNotIn("required", schema, "no field is required: without q it lists the newest items")
         self.assertFalse(schema["additionalProperties"])
-        self.assertEqual(set(schema["properties"]), {"q", "lane", "specialty", "window", "mode", "limit", "id"})
+        self.assertEqual(set(schema["properties"]), {"q", "lane", "specialty", "window", "mode", "limit", "zone", "id"})
+        self.assertEqual(schema["properties"]["zone"]["pattern"], "^[a-zA-Z0-9_-]{1,100}$")
         self.assertIn("frontier:<id>", description, "a conversation opened from an item is told how its id reads")
         self.assertEqual(schema["properties"]["id"]["pattern"], "^[a-z0-9]{12,32}$")
         self.assertEqual(schema["properties"]["q"]["maxLength"], 200)
@@ -212,6 +213,20 @@ class FrontierSearchTests(_GatewayCase):
         self.assertEqual(result["status"], "success")
         self.assertIn("the editors' picks, lane safety, last 30d", result["summary"])
         self.assertNotIn("search)", result["summary"], "a list is not a search and does not say which legs ran")
+
+    def test_a_zone_goes_to_the_gateway_and_the_summary_names_it(self):
+        _Gateway.answer = (200, gateway_answer([gateway_item()], query={
+            "q": "司美格鲁肽", "lane": None, "specialty": None, "window": "30d", "mode": "selected", "limit": 8, "zone": "glp1-obesity"}))
+        result = frontier_search.search({"q": "司美格鲁肽", "zone": "glp1-obesity"})
+        self.assertEqual(_Gateway.seen[0]["body"], {"q": "司美格鲁肽", "zone": "glp1-obesity"})
+        self.assertIn("evidence zone glp1-obesity", result["summary"])
+
+    def test_a_zone_the_account_cannot_read_is_the_gateways_own_refusal(self):
+        _Gateway.answer = (404, {"code": "frontier_search_zone_not_found", "error": "No such evidence zone is open to this account."})
+        with self.assertRaises(frontier_search.FrontierSearchError) as raised:
+            frontier_search.search({"zone": "someone-elses-private-zone"})
+        self.assertEqual(raised.exception.code, "frontier_search_zone_not_found")
+        self.assertFalse(raised.exception.retryable)
 
     def test_a_selected_search_that_dropped_unselected_matches_says_how_to_see_them(self):
         _Gateway.answer = (200, gateway_answer([], unselectedSkipped=3, searchMode="keyword"))
@@ -295,6 +310,10 @@ class FrontierSearchTests(_GatewayCase):
             ({"limit": 0}, "frontier_search_limit_invalid"),
             ({"limit": 21}, "frontier_search_limit_invalid"),
             ({"limit": True}, "frontier_search_limit_invalid"),
+            ({"zone": ""}, "frontier_search_zone_invalid"),
+            ({"zone": "glp-1 obesity"}, "frontier_search_zone_invalid"),
+            ({"zone": 7}, "frontier_search_zone_invalid"),
+            ({"zone": "x" * 101}, "frontier_search_zone_invalid"),
             ({"id": "short"}, "frontier_search_id_invalid"),
             ({"id": "K7Q2M9X4T1B8"}, "frontier_search_id_invalid"),
             ({"id": 12345678901234}, "frontier_search_id_invalid"),
