@@ -64,6 +64,10 @@ LABEL org.opencontainers.image.description="Hosted Web API and browser applicati
 LABEL org.opencontainers.image.source="https://github.com/ai4s-research/open-science"
 
 WORKDIR /app
+# The monthly refresh key (see deploy/runtime-dsh/Dockerfile): CI reuses this
+# stage's layers from its cache, and `apk add` names no version, so the month
+# CI passes here is what makes the packages renew at least once a month.
+ARG BASE_REFRESH=unset
 RUN sed -ri "s|https?://[^/]+/alpine|${APK_MIRROR}|g" /etc/apk/repositories \
   && apk add --no-cache aws-cli bash coreutils docker-cli tar python3
 ENV NODE_ENV=production

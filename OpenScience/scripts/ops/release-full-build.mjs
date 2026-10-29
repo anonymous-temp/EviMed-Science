@@ -169,7 +169,10 @@ export const WEB_DOCKERFILE = "deploy/web/Dockerfile";
 // COPY and its explanatory comment were added; stages, commands, secrets and build arguments are unchanged.
 // 2026-10-27: reviewed against its parent: two COPY lines and their comment were added to the final stage (pnpm-lock.yaml and
 // packages/domain/package.json, read by the RSI dependency closure); stages, commands, secrets and build arguments are unchanged.
-export const WEB_DOCKERFILE_SHA256 = "sha256:610eaeae6a18da7ea4f38681df04d4b9e2df4d1bca1ee08bb58809b8911937b7";
+// 2026-10-29 (release layer cache): one added instruction — `ARG BASE_REFRESH=unset` above the final stage's apk layer, the monthly refresh key
+// CI passes so a cached image renews its packages (.github/ci/docker-compose.build-cache.yml); the default changes nothing for a build that passes none.
+// No other instruction changed.
+export const WEB_DOCKERFILE_SHA256 = "sha256:2ac24b91703ac8b4e0ef226ea8c7b5fa671524646c6e422548ffdcc6710516cc";
 export const WEB_INPUTS = Object.freeze([
   "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "deps-version.json",
   "apps/web/package.json", "apps/server/package.json", "packages/shared/package.json",

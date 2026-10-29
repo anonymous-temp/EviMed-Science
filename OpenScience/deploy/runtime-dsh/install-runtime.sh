@@ -254,12 +254,12 @@ PY
 # availability label said the image lacked the package.
 #
 # A phase of its own rather than more lines in `python_stack`, for two reasons:
-#   - it sits after `verify-tools` and before the skill trees are copied in, so
-#     a SKILL.md edit (which invalidates the COPY below) never reinstalls
-#     ~470 MB of wheels, and a pin moved here leaves the stack, the browser and
-#     the tool checks above it cached. (The script itself is COPYed at the top
-#     of the Dockerfile, so editing it at all rebuilds every phase once; the
-#     placement pays on the builds after that.)
+#   - it sits after the stack and the browser and before the kernel and the
+#     skill trees, so a kernel pin bump or a SKILL.md edit (each invalidates
+#     what follows it) never reinstalls ~470 MB of wheels, and a pin moved here
+#     leaves the stack and the browser above it cached. The Dockerfile copies
+#     each phase's own cut of this script just before its RUN
+#     (split-install-phases.awk), so editing another phase leaves it cached too.
 #   - the install can be held to the one rule that matters here: it adds, and
 #     moves nothing the stack pinned. The stack is frozen into a constraints
 #     file first, so a library that wanted another numpy, pandas or matplotlib
