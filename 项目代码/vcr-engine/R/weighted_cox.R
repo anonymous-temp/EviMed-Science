@@ -101,6 +101,7 @@ vcr_job_weighted_cox <- function(job, output_dir = NULL, cancel_file = NULL, ...
   tau <- vcr_scalar(sc$tau, NULL)
   if (is.null(tau) || !(tau > 0)) vcr_abort("scenario_field_missing", "scenario.tau", "A weighted Cox comparison states the RMST horizon tau, which its companion difference is read at.")
 
+  time_unit <- .vcr_observed_time_unit(job, tabs, subj)
   outcome <- vcr_outcome_frame(sc, tabs, subj, "time_to_event")
   time <- outcome$time; status <- outcome$status
   if (anyNA(time) || anyNA(status)) vcr_abort("input_shape_invalid", "inputs", "Time and status are complete.")
@@ -181,7 +182,7 @@ vcr_job_weighted_cox <- function(job, output_dir = NULL, cancel_file = NULL, ...
                 diagnostics = list(bootstrapCompleted = boot$replicates, bootstrapRequested = B)))
   }
   z <- stats::qnorm(0.975)
-  unit <- as.character(sc$timeUnit %||% "months")
+  unit <- time_unit$unit
   hr_robust <- vcr_interval("confidence", exp(beta - z * primary$seRobust), exp(beta + z * primary$seRobust))
   base_measures <- list(
     vcr_measure("hazard_ratio_robust", exp(beta), interval = hr_robust, source = est_src),
@@ -238,7 +239,7 @@ vcr_job_weighted_cox <- function(job, output_dir = NULL, cancel_file = NULL, ...
        conclusion = if (length(limited_by)) "limited" else "estimable",
        counts = vcr_counts(realPatients = nrow(subj), effectiveSampleSize = ess, events = sum(status)),
        diagnostics = list(
-         method = weighting, estimand = estimand, endpoint = "time_to_event", tau = tau, timeUnit = unit,
+         method = weighting, estimand = estimand, endpoint = "time_to_event", tau = tau, timeUnit = unit, timeUnitBasis = time_unit[["basis"]],
          model = list(formula = "Surv(time, status) ~ arm", ties = ties, weights = "case weights, estimated inside the job",
                       coding = "arm 1 (the trial) against arm 0 (the control); the hazard ratio is the trial's"),
          eventsByArm = as.list(events_by_arm),

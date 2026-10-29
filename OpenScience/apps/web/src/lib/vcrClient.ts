@@ -389,7 +389,18 @@ export interface VcrDesign {
   } | null;
 }
 
+export interface VcrResearchProgress {
+  populationId: string | null; populationVersion: number | null;
+  definition: "saved" | "none";
+  input: "available" | "missing" | "unknown" | "not_required";
+  calculation: "none" | "queued" | "running" | "awaiting_budget" | "failed" | "canceled" | "available" | "limited" | "not_estimable" | "stale";
+  resultId: string | null; resultStale: boolean;
+  counts: { sourcePatients: number | null; realPatients: number | null; observations: number | null; generatedRecords: number | null; reconstructedPseudoPatients: number | null };
+  profileStatistics: Array<{ column: string; mean: number | null; median: number | null; direction: "mean_above_median" | "mean_below_median" | "equal" }>;
+}
+
 export interface VcrOverview {
+  researchProgress?: VcrResearchProgress | null;
   /** The one sentence at the top of the page. */
   headline: string | null;
   metrics: VcrMetric[];
@@ -592,6 +603,9 @@ export interface VcrCriterion {
 
 /** One bar of the attrition waterfall. */
 export interface VcrAttritionStep {
+  denominator?: number | null;
+  grain?: string | null;
+  indeterminateTreatment?: string | null;
   key: string;
   label: string;
   code?: string | null;
@@ -1624,9 +1638,25 @@ function readAttention(raw: unknown): VcrAttention[] {
   return arr(raw).filter((item) => typeof item.text === "string") as unknown as VcrAttention[];
 }
 
+function readResearchProgress(raw: unknown): VcrResearchProgress | null {
+  if (!raw || typeof raw !== "object") return null;
+  const value = obj(raw), counts = obj(value.counts);
+  const states = ["none", "queued", "running", "awaiting_budget", "failed", "canceled", "available", "limited", "not_estimable", "stale"] as const;
+  const calculation = states.find(state => state === value.calculation) ?? "none";
+  const input = value.input === "available" || value.input === "missing" || value.input === "not_required" ? value.input : "unknown";
+  return { populationId: text(value.populationId), populationVersion: finite(value.populationVersion), definition: value.definition === "saved" ? "saved" : "none", input, calculation, resultId: text(value.resultId), resultStale: value.resultStale === true,
+    counts: { sourcePatients: finite(counts.sourcePatients), realPatients: finite(counts.realPatients), observations: finite(counts.observations), generatedRecords: finite(counts.generatedRecords), reconstructedPseudoPatients: finite(counts.reconstructedPseudoPatients) },
+    profileStatistics: arr(value.profileStatistics).flatMap(row => {
+      const direction = row.direction;
+      return typeof row.column === "string" && (direction === "mean_above_median" || direction === "mean_below_median" || direction === "equal")
+        ? [{ column: row.column, mean: finite(row.mean), median: finite(row.median), direction }] : [];
+    }) };
+}
+
 function readOverview(raw: unknown): VcrOverview {
   const value = obj(raw);
   return {
+    researchProgress: readResearchProgress(value.researchProgress),
     headline: text(value.headline),
     metrics: arr(value.metrics).map(readMetric),
     counts: readVcrCounts(value.counts),

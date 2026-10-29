@@ -107,16 +107,16 @@ vcr_case("S01d", c("AC-27", "AC-08", "AC-07"), function() {
   dc <- vcr_sim_tte(0L, 200L, vcr_dist_exponential_from_median(12), 1, list(kind = "uniform", duration = 12), 30)
   pseudo <- rbind(dt[, c("time", "status", "arm")], dc[, c("time", "status", "arm")])
   inp <- vcr_test_input(pseudo, "res_s01d:reconstructed-ipd", source = "reconstructed")
-  r <- vcr_test_run(vcr_test_job("comparator.rmst", list(tau = 18), list(inp), seed = 9L, job_id = "job_s01d"))
+  r <- vcr_test_run(vcr_test_job("comparator.rmst", list(tau = 18, timeUnit = "months"), list(inp), seed = 9L, job_id = "job_s01d"))
   cv <- r$diagnostics$curves
   ref <- vcr_rmst_difference(pseudo$time, pseudo$status, pseudo$arm, 18)
-  refused <- vcr_test_run(vcr_test_job("comparator.rmst", list(tau = 18), list(vcr_test_input(pseudo, "res_s01d:observed-as-reconstructed", source = "aggregate")),
+  refused <- vcr_test_run(vcr_test_job("comparator.rmst", list(tau = 18, timeUnit = "months"), list(vcr_test_input(pseudo, "res_s01d:observed-as-reconstructed", source = "aggregate")),
                                         seed = 9L, job_id = "job_s01d_r"))
   n <- 400L; x <- rnorm(n); arm <- rep(c(1L, 0L), each = n / 2)
   subj <- data.frame(USUBJID = sprintf("S%03d", seq_len(n)), arm = arm, x = x)
   ev <- data.frame(USUBJID = subj$USUBJID, PARAMCD = "OS", AVAL = stats::rexp(n, log(2) / 12 * exp(0.1 * x)), CNSR = 0L)
   ev$CNSR <- as.integer(ev$AVAL > 30); ev$AVAL <- pmin(ev$AVAL, 30)
-  w <- vcr_test_run(vcr_test_job("comparator.entropy_balance", list(covariates = list("x"), tau = 12, endpoint = list(type = "time_to_event")),
+  w <- vcr_test_run(vcr_test_job("comparator.entropy_balance", list(covariates = list("x"), tau = 12, timeUnit = "months", endpoint = list(type = "time_to_event")),
                                  list(vcr_test_input(subj, "snp_s01d:subject", "subject"), vcr_test_input(ev, "snp_s01d:event", "event")),
                                  seed = 9L, replicates = 2000L, job_id = "job_s01d_w"))
   wc <- w$diagnostics$curves

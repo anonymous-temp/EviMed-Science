@@ -67,7 +67,7 @@ describe("the 虚拟临床研究 chip", () => {
     expect(labels.every(label => view.queryByRole("button", { name: label }))).toBe(true);
     expect(view.container.querySelector("[aria-haspopup]")).toBeNull();
     fireEvent.click(view.getByRole("button", { name: "虚拟试验" }));
-    expect(f.drafts).toEqual([expect.stringContaining("先查找参数证据")]);
+    expect(f.drafts).toEqual(["帮我比较临床试验设计。研究是："]);
     expect(f.sent).toEqual([]);
     act(() => f.kit.hub.deliver("vcr", frameVcrOptions("session-a", study(["read", "write", "manage_study"]))));
     fireEvent.click(view.getByRole("button", { name: "虚拟临床研究，设置" }));

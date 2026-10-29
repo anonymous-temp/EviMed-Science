@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-protocol",
-  "version": "sha256:4c0a1f33c5fa314c0c1566cf48990ecf448c50650bc0d1b5662330619d11f04f",
+  "version": "sha256:be831de40202a8c42fa0642ef39fe6fba2750798dd067454796890c3611b7925",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 34,
@@ -1209,13 +1209,15 @@
     {
       "name": "mcp__evimed__vcr_read",
       "source": "mcp",
-      "description": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists authenticated human-message references (filter beforeSeq/limit); use messageSeq to preserve an earlier case. subject_document reads permitted original material. trial_registry_record reads one registry (filter registryId). matching filter.kind=contract gives write syntax; candidate_trials reads patient trial matches.",
+      "description": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists authenticated human-message references (filter beforeSeq/limit); use messageSeq to preserve an earlier case. subject_document reads permitted original material. trial_registry_record reads one registry (filter registryId). contracts gives write syntax before any task exists; data_intake lists original upload handles; matching filter.kind=contract gives write syntax; candidate_trials reads patient trial matches.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "what": {
             "type": "string",
             "enum": [
+              "contracts",
+              "data_intake",
               "study",
               "definition",
               "criteria",
@@ -1404,13 +1406,14 @@
     {
       "name": "mcp__evimed__vcr_write",
       "source": "mcp",
-      "description": "Save a research object; candidate_trial stores registry-linked eligibility. Never write calculated results. patient_context data={messageSeq} preserves a listed original human case, or {sourceId} an owned human upload; no model-written prose. task_context opens an independent hidden task. Use the VCR workflow skill for object contracts and vcr_simulate action=shape for numerical inputs.",
+      "description": "Save a research object; data_intake imports an owned original upload then maps/freezes it (read contracts first). candidate_trial stores registry-linked eligibility. Never write calculated results. patient_context data={messageSeq} preserves a listed original human case, or {sourceId} an owned human upload; no model-written prose. task_context opens an independent hidden task. Use the VCR workflow skill for object contracts and vcr_simulate action=shape for numerical inputs.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "what": {
             "type": "string",
             "enum": [
+              "data_intake",
               "task_context",
               "patient_context",
               "definition",

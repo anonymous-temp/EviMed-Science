@@ -105,7 +105,7 @@ const RULE_KEYS = Object.freeze({
   present: { keys: ['op', 'column'], required: ['column'] },
 })
 
-const REQUIREMENT_KEYS = Object.freeze({
+export const VCR_REQUIREMENT_NODE_FIELDS = Object.freeze({
   all: { keys: ['op', 'operands'], required: ['operands'] },
   any: { keys: ['op', 'operands'], required: ['operands'] },
   not: { keys: ['op', 'operand'], required: ['operand'] },
@@ -117,6 +117,36 @@ const REQUIREMENT_KEYS = Object.freeze({
   },
   elapsed_since: { keys: ['op', 'variable', 'days', 'comparator', 'deniedSatisfies'], required: ['variable', 'days'] },
   language: { keys: ['op', 'text', 'key'], required: ['text'] },
+})
+
+/** Static discovery reads the same node fields and vocabularies as validation; no patient data is involved. */
+export const VCR_REQUIREMENT_CONTRACT = Object.freeze({
+  nodes: VCR_REQUIREMENT_NODE_FIELDS,
+  ops: VCR_REQUIREMENT_OPS,
+  compare: { comparators: VCR_REQUIREMENT_COMPARATORS, aggregates: VCR_REQUIREMENT_AGGREGATES,
+    value: 'eq/ne: finite number or nonempty string; in/not_in: array of those; ordering/between: finite number',
+    highValue: 'required only for between, finite and not below value', unit: 'optional literal source unit' },
+  elapsed_since: { comparators: VCR_ELAPSED_COMPARATORS, days: 'positive integer; do not use months, anchor, value or comparator=lt',
+    deniedSatisfies: 'optional boolean, whether documented never-exposure satisfies the washout' },
+  window: { fields: ['days', 'months', 'years', 'anchorDate'], exactlyOne: ['days', 'months', 'years'],
+    anchorDate: 'optional ISO clinical date supported by the source; never infer from dataset/upload dates' },
+  applicability: 'Uses exactly the same grammar as requirement. False means not applicable; unknown applicability stays unknown.',
+  missingEvidence: 'No known or unknown operator exists. present/absent and compare use preserved facts; missing evidence is unknown, not false or automatically satisfied.',
+  structure: 'all/any use operands arrays; not uses operand. Scalar values are numbers/strings, not booleans. language uses original protocol text and optional key.',
+  variablePattern: VCR_REQUIREMENT_VARIABLE_PATTERN,
+  limits: VCR_REQUIREMENT_LIMITS,
+  examples: [
+    { op: 'all', operands: [{ op: 'present', variable: 'diagnosis' }, { op: 'compare', variable: 'age', comparator: 'gte', value: 18, unit: 'year' }] },
+    { op: 'any', operands: [{ op: 'present', variable: 'biomarker_a' }, { op: 'present', variable: 'biomarker_b' }] },
+    { op: 'not', operand: { op: 'present', variable: 'pregnancy' } },
+    { op: 'present', variable: 'lab_result', window: { days: 30, anchorDate: '2026-01-10' } },
+    { op: 'absent', variable: 'prior_treatment' },
+    { op: 'compare', variable: 'sex', comparator: 'eq', value: 'female' },
+    { op: 'compare', variable: 'age', comparator: 'between', value: 18, highValue: 65, unit: 'year', aggregate: 'latest' },
+    { op: 'compare', variable: 'stage', comparator: 'in', value: ['III', 'IV'] },
+    { op: 'elapsed_since', variable: 'prior_treatment', days: 180, comparator: 'gte', deniedSatisfies: false },
+    { op: 'language', key: 'source_condition', text: 'Exact protocol condition that cannot be represented by the structured operators.' },
+  ],
 })
 
 // ---------------------------------------------------------------------------
@@ -490,7 +520,7 @@ export function validateRequirement(requirement, { path = '' } = {}) {
   /** @param {any} node @param {string} where @param {number} depth */
   const walk = (node, where, depth) => {
     if (state.stop || !enter(state, where, depth)) return
-    const spec = checkShape(state, node, where, VCR_REQUIREMENT_OPS, REQUIREMENT_KEYS)
+    const spec = checkShape(state, node, where, VCR_REQUIREMENT_OPS, VCR_REQUIREMENT_NODE_FIELDS)
     if (!spec) return
 
     if (node.variable !== undefined && (typeof node.variable !== 'string' || !VARIABLE.test(node.variable))) {

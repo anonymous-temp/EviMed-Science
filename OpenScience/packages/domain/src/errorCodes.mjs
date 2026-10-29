@@ -1597,6 +1597,7 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   // disposable container that does it (vcrRecordExtract.mjs, vcrIntakeController.mjs)
   'vcr_document_needs_text', 'vcr_document_unreadable', 'vcr_document_too_long', 'vcr_document_converter_unavailable',
   'vcr_intake_busy', 'vcr_intake_timeout', 'vcr_intake_failed', 'vcr_intake_input_invalid',
+  'vcr_intake_source_invalid', 'vcr_intake_source_changed', 'vcr_intake_payload_invalid', 'vcr_intake_format_invalid', 'vcr_intake_map_changed',
   // a source held in FHIR, OMOP or ADaM, converted to the module's tables in the same container (vcrImport.mjs)
   'vcr_import_not_this_format', 'vcr_import_nothing_to_import', 'vcr_import_unreadable', 'vcr_import_version_unsupported',
   'vcr_import_converter_unavailable',
@@ -2490,6 +2491,11 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_intake_timeout: '文件转换用时过长，已经停止。请拆小文件，或另存为文字版后再试。',
   vcr_intake_failed: '文件转换没有完成。请另存为 .txt 或可复制文字的 PDF 后再试。',
   vcr_intake_input_invalid: '待转换的文件不完整或已发生变化，请重新上传。',
+  vcr_intake_source_invalid: '请选择当前账户和项目中可核对的上传原件。',
+  vcr_intake_source_changed: '上传原件的版本或内容已经变化，请重新读取原件信息后导入。',
+  vcr_intake_payload_invalid: '数据导入的字段不完整，请按字段说明修改。',
+  vcr_intake_format_invalid: '这个格式暂不能按所选方式导入，请使用支持的表格或 UTF-8 病例文本。',
+  vcr_intake_map_changed: '字段映射已经变化，请读回当前映射后再确认和冻结。',
   vcr_import_not_this_format: '这个文件不是你选的那种标准格式：FHIR 要是 NDJSON 或 Bundle（JSON），OMOP 要是 CSV 表的 .zip，ADaM 要是 SAS 传输文件（.xpt）。请确认格式后再上传。',
   vcr_import_nothing_to_import: '这个文件里没有可导入的内容：没有受支持的资源类型、数据表或数据集。支持的范围见导入面板的说明。',
   vcr_import_unreadable: '这个文件打不开：可能已损坏或加密。请重新导出后再上传。',

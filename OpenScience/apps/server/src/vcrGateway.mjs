@@ -55,6 +55,7 @@
 //   and never the run's: its code goes to `report`, the run hears
 //   `vcr_gateway_unavailable`.
 
+import { VCR_WRITE_FIELDS, vcrContractsRead } from "./vcrWriteContracts.mjs";
 import { matchingSelection } from "./vcrMatchingSnapshot.mjs";
 import { locateSourceText } from "./vcrPatientTrials.mjs";
 import { clinicalFactIssues, clinicalFactPolarity } from "@evimed/domain";
@@ -98,7 +99,7 @@ const answerBudgetMs = 10_000;
 const REGISTRY_MARGIN_MS = 3_000;
 /** The registry client's default deadline (its own default), when the deployment names none: `OPEN_SCIENCE_VCR_REGISTRY_TIMEOUT_MS`. */
 const REGISTRY_DEADLINE_MS = 20_000;
-const readFilterFields = Object.freeze(["id", "parentId", "kind", "limit", "offset", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId", "protocolVersionId", "beforeSeq", "query"]);
+const readFilterFields = Object.freeze(["id", "parentId", "kind", "limit", "offset", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId", "protocolVersionId", "beforeSeq", "query", "cursor"]);
 const WRITE_MAX_ITEMS = 200;
 
 /**
@@ -119,7 +120,7 @@ export const VCR_GATEWAY_ERROR_CODES = Object.freeze([
   "vcr_gateway_timeout", "vcr_gateway_unavailable", "vcr_request_invalid", "vcr_request_too_large",
   "vcr_model_version_changed", "vcr_task_context_deleted", "vcr_invocation_unavailable", "vcr_patient_context_invalid", "vcr_read_what_invalid", "vcr_read_filter_invalid", "vcr_write_what_invalid", "vcr_write_payload_invalid",
   "vcr_curve_provenance_unavailable", "vcr_curve_provenance_invalid", "vcr_curve_source_changed",
-  "source_changed",
+  "source_changed", "vcr_intake_source_invalid", "vcr_intake_source_changed", "vcr_intake_payload_invalid", "vcr_intake_format_invalid", "vcr_intake_map_changed", "vcr_field_map_changed", "vcr_field_map_unconfirmed", "vcr_source_withdrawn",
   "vcr_curve_calibration_invalid", "vcr_curve_digitizer_unavailable", "vcr_intake_busy", "vcr_intake_timeout", "vcr_intake_failed",
   "vcr_simulate_action_invalid", "vcr_simulate_payload_invalid", "vcr_simulate_subject_required", "vcr_simulate_subject_unknown",
   "vcr_job_not_found", "registry_unavailable",
@@ -219,6 +220,12 @@ function readRequest(body) {
   }
   /** @type {Record<string, any>} */
   const filter = {};
+  if (raw.cursor != null) {
+    if (body.what !== 'data_intake' || typeof raw.cursor !== 'string' || !/^[A-Za-z0-9_-]{1,2048}$/.test(raw.cursor)) {
+      throw gatewayError(400, 'vcr_read_filter_invalid', 'cursor is the exact continuation returned by data_intake.');
+    }
+    filter.cursor = raw.cursor;
+  }
   for (const key of ["id", "parentId", "kind", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId", "protocolVersionId"]) {
     if (raw[key] == null) continue;
     if (!ID.test(String(raw[key]))) throw gatewayError(400, "vcr_read_filter_invalid", `filter.${key} is not an id.`);
@@ -754,7 +761,7 @@ function activitiesOf(item) {
  */
 const WRITERS = {
   async definition(item, { store, study }) {
-    if (!item.only(["pico", "estimand", "endpointType", "intendedUse", "fieldSources", "title", "question"])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.definition)) return null;
     // The study's name and its question in one sentence: the first definition names a draft study from them (`VcrStore.saveDefinition`).
     const title = item.str("title", { max: 60 });
     const question = item.str("question", { max: 2000 });
@@ -785,8 +792,7 @@ const WRITERS = {
     const afterFreeze = deps.afterFreeze === true;
     /** @param {{ key: string, version: number }} saved */
     const noteChange = (saved) => { if (!afterFreeze) extra.changed.push(`assumption:${saved.key}@${saved.version}`); };
-    if (!item.only(["key", "name", "endpoint", "unit", "pointValue", "distribution", "sensitivity", "sourceKind", "valueSource",
-      "evidenceIds", "applicability", "note", "parameter", "fromPooling", "expertFrom"])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.assumption)) return null;
     const key = item.str("key", { max: 64, required: true });
     if (key && !VCR_ASSUMPTION_KEY.test(key)) {
       item.bad("key", "key 是小写英文字母开头、只含小写字母、数字和下划线的参数名（最多 64 个字符），例如 control_median_pfs。");
@@ -929,7 +935,7 @@ const WRITERS = {
   },
 
   async precedent(item, { evidence, study }, extra) {
-    if (!item.only(["registry", "registryId", "endpointKeys", "armRoles", "line", "biomarker"])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.precedent)) return null;
     const registry = item.choice("registry", ["clinicaltrials.gov", "chictr", "ctis"], { fallback: "clinicaltrials.gov" });
     const registryId = item.token("registryId", /^[A-Za-z0-9][A-Za-z0-9-]{2,63}$/, "登记号，例如 NCT02296125 或 EU CT 号 2024-513060-26-00", { required: true });
     const endpointKeys = item.obj("endpointKeys", { bytes: 8 * 1024 }) ?? {};
@@ -966,7 +972,7 @@ const WRITERS = {
    */
   async candidate_trial(item, deps, extra) {
     const { evidence, matchStore, patientTrials, study } = deps;
-    if (!item.only(["registry", "registryId", "criteria", "subjectKeys"])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.candidate_trial)) return null;
     const registry = item.choice("registry", ["clinicaltrials.gov", "chictr", "ctis"], { fallback: "clinicaltrials.gov" });
     const registryId = item.token("registryId", /^[A-Za-z0-9][A-Za-z0-9-]{2,63}$/, "登记号，例如 NCT02296125 或 EU CT 号 2024-513060-26-00", { required: true });
     const rows = item.arr("criteria", { max: 200 });
@@ -1036,9 +1042,7 @@ const WRITERS = {
   },
 
   async evidence_item(item, { evidence, study, service }, extra) {
-    if (!item.only(["registry", "registryId", "parameter", "arm", "armRole", "value", "valueText", "unit", "ciLow", "ciHigh", "sampleSize",
-      "events", "valueSource", "quote", "locator", "endpointKey", "enrollmentKind", "historicalBaseline", "line", "biomarker", "outcome", "note",
-      "source", "candidateFrom", "timepoint", "literatureSource", "evidenceKind", "trialIdentity"])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.evidence_item)) return null;
     const literatureSource = item.obj("literatureSource", { bytes: 1024 });
     if (item.row.literatureSource != null && (!literatureSource || Object.keys(literatureSource).some(key => !["sourceId", "generation", "textSha256"].includes(key))
       || typeof literatureSource.sourceId !== "string" || !literatureSource.sourceId || !Number.isSafeInteger(literatureSource.generation)
@@ -1099,7 +1103,7 @@ const WRITERS = {
 
   async pack(item, { knowledge, study, caller }) {
     // One object: { use: <pack id> } binds a catalogue pack; { disease, sources, terms, … } drafts one, marked AI draft.
-    if (!item.only(["use", "schema", "id", "version", "status", "updated", "disease", "sources", "terms", "phenotypes", "endpoints", "criteria", "mappings", "background"])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.pack)) return null;
     if (!knowledge?.writePack) return void item.bad("", "知识包未接入本部署。", "vcr_write_refused");
     const done = await knowledge.writePack(study, item.row, caller?.runtimeRunId ? `run:${caller.runtimeRunId}` : "runtime");
     if (!done.ok) {
@@ -1110,7 +1114,7 @@ const WRITERS = {
   },
 
   async population(item, { store, study, knowledge, caller, dataPlane, matchStore }, extra) {
-    if (!item.only(["kind", "name", "definition", "snapshotId", "allowedUses", "fromLibrary", "fromProtocol"])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.population)) return null;
     // 「从方案出发查覆盖」: the rules are the protocol's own criteria, made into cohort rules on the columns of a frozen snapshot by the
     // platform (`vcrCohortRulesFromCriteria`); the run names the snapshot and nothing else. What the snapshot cannot answer comes back
     // criterion by criterion, with why — the engine's counts are what the page and the next read say about the rest.
@@ -1187,7 +1191,7 @@ const WRITERS = {
   },
 
   async patient_set(item, { store, study }, extra) {
-    if (!item.only(["populationId", "name", "modelId", "modelVersion", "scenario"])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.patient_set)) return null;
     const name = item.str("name", { max: 120 }) ?? "";
     const modelId = item.str("modelId", { max: 160 });
     const modelVersion = item.str("modelVersion", { max: 40 });
@@ -1209,6 +1213,7 @@ const WRITERS = {
       if (candidates.length !== 1) item.bad('modelVersion', '无法唯一确定这个模型版本；请先用 mcp__evimed__vcr_read 读取 models 并选择其中的模型与版本。');
       else selected = candidates[0];
     }
+    if (item.ok && !Object.keys(scenario).length && !populationId && !modelId) item.bad('scenario', 'Select a saved population/model or supply a nonempty scenario; use contracts for syntax discovery.');
     if (!item.ok) return null;
     const saved = await store.savePatientSet({
       studyId: study.id, userId: study.userId, populationId, name, modelId: selected?.id ?? null, modelVersion: selected?.version ?? null, scenario, twinLabel: null,
@@ -1219,7 +1224,7 @@ const WRITERS = {
   },
 
   async comparator(item, { store, study }) {
-    if (!item.only(["route", "estimand", "targetTrial", "configuration"])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.comparator)) return null;
     // The routes this version can compute: the model-prediction comparator is not one of them, at any tier (it is listed as unsupported).
     const route = item.choice("route", vcrRouteOptions(study.dataTier).filter((option) => option.supported).map((option) => option.route), { required: true });
     const estimand = item.choice("estimand", VCR_ESTIMANDS, { fallback: "ATT" });
@@ -1234,7 +1239,7 @@ const WRITERS = {
   },
 
   async trial_scenario(item, { store, study }) {
-    if (!item.only(["label", "design", "endpointType", "configuration", "assumptionIds", "comparatorId"])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.trial_scenario)) return null;
     const label = item.str("label", { max: 120 }) ?? "";
     const design = item.choice("design", VCR_TRIAL_DESIGNS, { required: true });
     const endpointType = item.choice("endpointType", VCR_ENDPOINT_TYPES, { required: true });
@@ -1256,7 +1261,7 @@ const WRITERS = {
   },
 
   async design_grid(item, { store, study }) {
-    if (!item.only(["dimensions", "truthScenarios", "comparisonGoal"])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.design_grid)) return null;
     const dimensions = item.obj("dimensions") ?? {};
     const truthScenarios = item.arr("truthScenarios", { max: 50 }) ?? [];
     const comparisonGoal = item.obj("comparisonGoal", { bytes: 8 * 1024 });
@@ -1274,7 +1279,7 @@ const WRITERS = {
    * refused alone with the field named.
    */
   async soa(item, { store, study }, extra) {
-    if (!item.only(["visit", "day", "windowDays", "note", "procedures", "remove"])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.soa)) return null;
     const visit = item.str("visit", { max: VCR_SOA_LIMITS.visitName, required: true });
     const remove = item.row.remove;
     if (remove != null && typeof remove !== "boolean") item.bad("remove", "remove 写 true：把这次访视从日程里去掉。");
@@ -1309,7 +1314,7 @@ const WRITERS = {
    * own words and what it left. A record is added, never edited; a contact written twice exactly is one contact.
    */
   async regulatory_contact(item, { store, study }, extra) {
-    if (!item.only(["date", "agency", "type", "summary", "outcome", "attachments"])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.regulatory_contact)) return null;
     const checked = checkRegulatoryContact(item.row);
     if ("issues" in checked) {
       for (const found of checked.issues) item.bad(found.field, found.message);
@@ -1321,11 +1326,13 @@ const WRITERS = {
   },
 
   async decision(item, { store, study }) {
-    if (!item.only(["question", "chosen", "alternatives", "rationale"])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.decision)) return null;
     const question = item.str("question", { max: 400, required: true });
     const chosen = item.obj("chosen") ?? {};
     const alternatives = item.arr("alternatives", { max: 20 }) ?? [];
     const rationale = item.str("rationale", { max: 2000 }) ?? "";
+    if (!Object.keys(chosen).length) item.bad('chosen', 'A decision requires a substantive structured choice; read contracts to discover syntax.');
+    if (!rationale.trim()) item.bad('rationale', 'A decision requires its scientific rationale.');
     if (!item.ok) return null;
     const saved = await store.addDecision({
       studyId: study.id, userId: study.userId, question, chosen, alternatives, rationale, decidedBy: "ai_set",
@@ -1339,7 +1346,7 @@ const WRITERS = {
    * read by the platform — a run cannot type the number it is later compared to.
    */
   async forecast(item, { store, study }) {
-    if (!item.only(["kind", "resultId"], { ids: ["resultId"] })) return null;
+    if (!item.only(VCR_WRITE_FIELDS.forecast, { ids: ["resultId"] })) return null;
     const kind = item.str("kind", { max: 60 }) ?? "accrual";
     const resultId = item.token("resultId", ID, "一个已保存结果的 id", { required: true });
     if (!item.ok) return null;
@@ -1354,7 +1361,7 @@ const WRITERS = {
   },
 
   async model(item, { service, study }) {
-    if (!item.only(["name", "version", "endpointType", "risk", "card", "sources"])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.model)) return null;
     const name = item.str("name", { max: 120, required: true });
     const version = item.str("version", { max: 40 }) ?? "1.0.0";
     const endpointType = item.choice("endpointType", VCR_ENDPOINT_TYPES);
@@ -1397,9 +1404,7 @@ const WRITERS = {
    * because a plan with gaps is still the plan — and a model the library does not hold is named, not refused.
    */
   async model_assessment(item, { store, study }) {
-    if (!item.only(["key", "modelName", "modelVersion", "questionOfInterest", "contextOfUse", "influence", "influenceJustification",
-      "consequence", "consequenceJustification", "riskJustification", "impact", "impactJustification", "technicalCriteria",
-      "appropriateness", "evaluation", "outcome"])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.model_assessment)) return null;
     const key = item.str("key", { max: VCR_ASSESSMENT_LIMITS.key, required: true });
     if (key && !VCR_ASSESSMENT_KEY.test(key)) {
       item.bad("key", `key 是小写英文字母开头、只含小写字母、数字和下划线的记录名（最多 ${VCR_ASSESSMENT_LIMITS.key} 个字符），例如 survival_projection。`);
@@ -1429,7 +1434,7 @@ const WRITERS = {
   },
 
   async step(item, { store, study }) {
-    if (!item.only(["step", "requested", "note"])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.step)) return null;
     const step = item.choice("step", VCR_STEPS, { required: true });
     if (item.row.requested != null && typeof item.row.requested !== "boolean") item.bad("requested", "requested 是 true 或 false。");
     const note = item.str("note", { max: 300 });
@@ -1450,7 +1455,7 @@ const WRITERS = {
    * (plan §6.5). A run cannot type the two timestamps or the hash.
    */
   async plan(item, { store, study, seal }) {
-    if (!item.only(["analysis", "sensitivity", "sealedFields"])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.plan)) return null;
     const analysis = item.obj("analysis", { bytes: 16 * 1024 }) ?? {};
     const sensitivity = item.obj("sensitivity", { bytes: 16 * 1024 }) ?? {};
     const sealedFields = (item.arr("sealedFields", { max: 100 }) ?? []).map(String);
@@ -1483,7 +1488,7 @@ const WRITERS = {
    * named, because the person confirming is who fixes them.
    */
   async field_map(item, { dataPlane, study }) {
-    if (!item.only(["sourceId", "columns", "reason"])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.field_map)) return null;
     const sourceId = item.token("sourceId", ID, "数据源的 id（vcr_read what:snapshot_profile 的 filter.sourceId 先读它）", { required: true });
     const columns = item.arr("columns", { max: 500, required: true });
     const reason = item.str("reason", { max: 500 });
@@ -1499,8 +1504,7 @@ const WRITERS = {
   },
 
   async fact(item, { matchStore, documents, study, caller }, extra) {
-    if (!item.only(["subjectKey", "variable", "value", "unit", "polarity", "occurredAt", "recordedAt", "visibleAt", "surface", "dateSurface",
-      "documentId", "start", "end", "quote", "vocabularyVersion", "clinical"])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.fact)) return null;
     const subjectKey = item.token("subjectKey", TOKEN, "受试者的假名编号（vcr_read what:subject_document 给出）", { required: true });
     const vocabularyVersion = item.str('vocabularyVersion', { max: 80 }) ?? VCR_MATCHING_VOCABULARY_VERSION;
     if (vocabularyVersion !== VCR_MATCHING_VOCABULARY_VERSION) item.bad('vocabularyVersion', '这个编码词表版本未接入，不能按当前映射解释。');
@@ -1531,7 +1535,7 @@ const WRITERS = {
     if (!item.ok) return null;
     const verified = await verifySourceSpan({ item, documents, study, subjectKey: String(subjectKey), documentId: String(documentId),
       span: { start: start ?? null, end: end ?? null, quote: String(quote) },
-      fact: { surface, dateSurface, value: typeof value === "number" ? value : undefined, clinical, unit } });
+      fact: { surface, dateSurface, occurredAt, recordedAt, value: typeof value === "number" ? value : undefined, clinical, unit } });
     if (!verified) return null;
     if (clinical) {
       const referenced = [...new Set([clinical.copiedFrom, clinical.correctionOf,
@@ -1586,14 +1590,14 @@ const WRITERS = {
       visibleAt: visibleAt ?? verified.document.visibleAt ?? new Date().toISOString(), surface, dateSurface: dateSurface ?? null,
       source: { documentId, start: verified.span.start, end: verified.span.end, quote: verified.span.quote, vocabularyVersion, projectionHash: verified.document.projectionHash ?? null, sourceHash: verified.document.sourceHash ?? null }, extractedBy: "model",
       provenance: { ...(caller?.provenance ?? { schema: 1, status: 'unknown', runId: caller?.runtimeRunId ?? null }),
-        inputProjectionHash: verified.document.projectionHash ?? null, terminologyVersion: vocabularyVersion, factSchema: 1 },
+        inputProjectionHash: verified.document.projectionHash ?? null, terminologyVersion: vocabularyVersion, factSchema: 2 },
     } });
     extra.results.push({ index: item.index, id: saved.id, subjectKey, ...(warnings.length ? { warnings } : {}) });
     return saved.id;
   },
 
   async language_judgment(item, { matchStore, matching, patientTrials, documents, study, caller }, extra) {
-    if (!item.only(["subjectKey", "criterionKey", "protocolVersionId", "candidateTrialId", "state", "evidence"])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.language_judgment)) return null;
     const subjectKey = item.token("subjectKey", TOKEN, "受试者的假名编号", { required: true });
     const protocolVersionId = item.token("protocolVersionId", ID, "本研究方案版本的 id");
     // The answer is about one trial's criterion: the study's own protocol version, or a candidate trial found for a patient.
@@ -1666,7 +1670,7 @@ const WRITERS = {
    * conversation — still opens a row of the kind it names.
    */
   async report(item, { store, service, study, orchestrator, caller }) {
-    if (!item.only(["kind", "section", "template", "text"])) return null;
+    if (!item.only(VCR_WRITE_FIELDS.report)) return null;
     const template = item.str("template", { max: 200_000 }) ?? item.str("text", { max: 200_000 });
     if (!template?.trim()) return void item.bad("template", "报告文字不能为空。");
     const named = item.choice("kind", VCR_EXPORT_KINDS);
@@ -1861,7 +1865,7 @@ async function loadPoolJob(store, study, jobId, parameter) {
  *
  * @param {{ item: Item, documents: any, study: any, subjectKey: string, documentId: string,
  *   span: { start: number | null, end: number | null, quote: string },
- *   fact: { surface?: string, dateSurface?: string, value?: number, clinical?:any, unit?:string|null }, field?: string }} input
+ *   fact: { surface?: string, dateSurface?: string, occurredAt?:string|null, recordedAt?:string|null, value?: number, clinical?:any, unit?:string|null }, field?: string }} input
  * @returns {Promise<{ document: { id: string, text: string, visibleAt: string | null, projectionHash?:string, sourceHash?:string }, span: { start: number, end: number, quote: string } } | null>}
  */
 /**
@@ -1987,7 +1991,7 @@ async function verifySourceSpan({ item, documents, study, subjectKey, documentId
   const { verifyFactEvidence } = await import("./vcrMatching.mjs");
   const verdict = verifyFactEvidence({
     id: "check", polarity: "affirmed", extractedBy: "model", surface: fact.surface ?? span.quote, value: fact.value, dateSurface: fact.dateSurface,
-    clinical: fact.clinical, unit: fact.unit,
+    clinical: fact.clinical, unit: fact.unit, occurredAt: fact.occurredAt, recordedAt: fact.recordedAt, provenance: { factSchema: 2 },
     source: { documentId, start, end, quote: span.quote },
   }, { documents: new Map([[documentId, { text: document.text }]]) });
   if (!verdict.ok) {
@@ -2050,7 +2054,7 @@ function poolingSummary(result, about) {
 /**
  * @param {any} config @param {any} runtimeManager
  * @param {{ vcr: { service: any, store: any, jobs?: any, orchestrator?: any, evidence?: any, evidenceStore?: any, matchStore?: any,
- *   matching?: any, patientTrials?: any, seal?: any, dataPlaneSeam?: any, documents?: any, knowledge?: any, patientContext?: any } | null,
+ *   matching?: any, patientTrials?: any, seal?: any, dataPlaneSeam?: any, documents?: any, knowledge?: any, patientContext?: any, dataIntake?: any } | null,
  *   report?: (code: string) => void, budgetMs?: number, resolveStudyConversation?: ((study:any,options:any)=>Promise<any>)|null, resolveInvocation?: ((identity:any,header:any,operation:string,body:any)=>Promise<any>)|null, readProducerRun?: ((study:any,runId:string)=>Promise<any>)|null }} dependencies
  */
 export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = () => {}, budgetMs = answerBudgetMs, readProducerRun = null, resolveInvocation = null, resolveStudyConversation = null }) {
@@ -2085,6 +2089,19 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
         throw gatewayError(429, "vcr_gateway_rate_limited", "Too many 虚拟临床研究 calls in a minute.");
       }
       const body = await readJsonBody(req, /** @type {Record<string, number>} */ (requestLimits)[operation]);
+      // Parse before choosing a scope: a malformed syntax probe never creates a scientific task.
+      if (operation === 'read') readRequest(body);
+      if (operation === 'write') {
+        const parsed = writeRequest(body);
+        const rows = parsed.items ?? (parsed.data ? [parsed.data] : []);
+        const emptyProbe = parsed.what === 'patient_set' && rows.length && rows.every(raw => { const row = object(raw); return !row.populationId && !row.modelId && !Object.keys(object(row.scenario)).length; })
+          || parsed.what === 'decision' && rows.length && rows.every(raw => { const row = object(raw); return !Object.keys(object(row.chosen)).length || !String(row.rationale ?? '').trim(); });
+        if (emptyProbe) {
+          sendJson(res, 200, { data: { what: parsed.what, ok: false, ids: [], issues: [{ field: parsed.what === 'patient_set' ? 'scenario' : 'chosen',
+            code: 'vcr_write_value_invalid', message: 'Supply substantive scientific content. Read contracts before writing; syntax discovery creates nothing.' }] } });
+          return;
+        }
+      }
       const nativeHeader = req.headers?.['x-evimed-execution-context'];
       if (nativeHeader && !resolveInvocation) throw gatewayError(403,'vcr_invocation_unavailable','The native invocation cannot be verified.');
       // Transcript paging belongs to the request's bounded proof work.
@@ -2098,6 +2115,11 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
       const programmeDispatch = origin?.programme ? origin.dispatchId : boundedScope?.runId;
       const programmeStudy = programmeDispatch && vcr.store.studyByRuntimeDispatch
         ? await vcr.store.studyByRuntimeDispatch(String(identity.userId),String(identity.projectId),programmeDispatch) : null;
+      // Contracts contain no study data and need no task, transcript mutation, or patient-evidence grant.
+      if (operation === 'read' && body.what === 'contracts') {
+        sendJson(res, 200, { data: vcrContractsRead(body.filter?.kind ?? null) });
+        return;
+      }
       if ((!origin || origin.programme) && !programmeStudy) throw gatewayError(403,'vcr_invocation_unavailable','A current native research call or exact study dispatch is required.');
       let study = programmeStudy ?? await vcr.store.studyByControlProject(String(identity.userId),String(identity.projectId));
       if (origin && !programmeStudy && study && !study.conversationSessionId && resolveStudyConversation) {
@@ -2128,7 +2150,9 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
         // A registry read waits on a registry: its budget is its client's deadline
         // and a margin, so the gateway never gives up before the client does.
         if (request.what === "trial_registry_record") budget = Math.max(budgetMs, registryDeadline + REGISTRY_MARGIN_MS);
-        work = async () => ({ what: request.what, ...(request.what==='patient_context'
+        work = async () => ({ what: request.what, ...(request.what === 'data_intake'
+          ? await vcr.dataIntake?.read(study, request.filter, origin) ?? { available: false, code: 'vcr_gateway_unavailable' }
+          : request.what==='patient_context'
           ? origin && vcr.patientContext?.candidates ? await vcr.patientContext.candidates(origin,request.filter) : {candidates:[],nextBeforeSeq:null}
           : await vcr.service.runtimeRead(study, request.what, request.filter)) });
       } else if (operation === "write") {
@@ -2137,6 +2161,10 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
         // study's own run slot, that is which run is calling — nothing the run sends says so.
         const runtimeRunId = scopedRunId;
         work = async () => {
+          if (request.what === 'data_intake') {
+            if (!origin || !vcr.dataIntake || request.items) throw gatewayError(400, 'vcr_write_payload_invalid', 'Data intake uses one typed data action and a verified conversation.');
+            return { what: request.what, ...await vcr.dataIntake(study, request.data, origin) };
+          }
           if (request.what === 'task_context') return { what: request.what, ok: true, ids: [study.id], issues: [], studyId: study.id,
             scope: study.scope, conversationSessionId: study.conversationSessionId };
           if (request.what === 'patient_context') {

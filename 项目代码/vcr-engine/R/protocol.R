@@ -931,6 +931,7 @@ vcr_validate_job <- function(job) {
       for (key in names(input)) {
         if (!(key %in% allowed_keys)) bad("input_field_unknown", .vcrp_at(at, key), "This input carries a key it may not.")
       }
+      if (!is.null(input[["timeUnit"]]) && !(.vcrp_chr(input[["timeUnit"]]) && input[["timeUnit"]] %in% names(d$timeUnits$daysPerUnit))) bad("input_shape_invalid", .vcrp_at(at, "timeUnit"), "The input timeUnit is a supported canonical unit.")
       has_hash <- !is.null(input[["hash"]])
       if (has_hash && !vcr_pattern_match(.vcrp_pat("sha256"), input[["hash"]])) bad("input_hash_invalid", .vcrp_at(at, "hash"), "An input hash is a lowercase sha256 hex digest.")
       has_source <- !is.null(input[["valueSource"]])
@@ -1025,7 +1026,7 @@ vcr_validate_job <- function(job) {
 }
 
 .vcrp_legacy_design_version <- function(job,spec) {
-  if (job$methodVersion %in% unlist(spec$compatibleVersions)) return(is.null(job$scenario$pairing) && is.null(job$scenario$cohortRules))
+  if (job$methodVersion %in% unlist(spec$compatibleVersions)) return(!startsWith(job[["method"]], "patients.") || (is.null(job$scenario$pairing) && is.null(job$scenario$cohortRules)))
   sc<-.vcrp_get(job,"scenario");base<-.vcrp_get(.vcrp_get(sc,"design"),"kind")
   if(!.vcrp_chr(base))base<-""
   designs<-.vcrp_get(sc,"designs")

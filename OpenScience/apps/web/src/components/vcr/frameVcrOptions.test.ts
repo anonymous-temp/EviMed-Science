@@ -35,9 +35,10 @@ describe("what the chip draws", () => {
   it("is the plan's five starting points and the six starting points of a new study, in order", () => {
     expect(VCR_START_OPTIONS.map((option) => option.label)).toEqual(["自动", "队列", "患者", "对照", "试验"]);
     expect(VCR_STARTERS.map((starter) => starter.label)).toEqual(["患者匹配", "人群与患者", "合成对照", "虚拟试验"]);
-    // The bridge carries a sentence of at most 400 characters and a name of at most 24.
+    expect(VCR_STARTERS.map((starter) => starter.summary)).toEqual(["查找适合患者的试验，核对入排条件。", "建立研究队列，查看个体的模拟结果。", "构建对照人群，比较两组结局。", "比较不同试验方案的样本量、把握度和周期。"]);
+    // Each starter is a short unsent request; the researcher supplies the details.
     for (const starter of VCR_STARTERS) {
-      expect(starter.draft.length).toBeLessThanOrEqual(400);
+      expect(starter.draft.length).toBeLessThanOrEqual(50);
       expect(starter.label.length).toBeLessThanOrEqual(24);
     }
   });

@@ -76,11 +76,12 @@ from immutable_capture import managed_workspace, ImmutableCaptureError
 # `apps/server/test/vcrGateway.test.mjs` reads this file and holds these copies
 # equal to the server's.
 READ_WHATS = (
+    "contracts", "data_intake",
     "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
     "precedents", "matching", "subject_document", "followup_history", "model_source", "generated_records", "results", "report_model", "snapshot_profile", "models", "jobs",
     "trial_registry_record", "patient_context", "pack", "library", "model_assessments", "longitudinal", "candidate_trials", "soa", "regulatory_contacts",
 )
-WRITE_WHATS = ("task_context", "patient_context",
+WRITE_WHATS = ("data_intake", "task_context", "patient_context",
     "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
     "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
     "fact", "language_judgment", "field_map", "pack", "model_assessment", "history", "forecast_design", "trial_benchmark",
@@ -207,6 +208,7 @@ def _detailed_tool_definitions():
                             "registryId": ID,
                             "registry": ID,
                             "snapshotId": ID,
+                            "cursor": {"type": "string", "maxLength": 2048},
                             "sourceId": ID,
                             "subjectKey": ID,
                             "documentId": ID,
@@ -470,8 +472,8 @@ def _detailed_tool_definitions():
 def tool_definitions():
     """Compact root catalogue; the workflow skill and shape action carry detail."""
     descriptions = {
-        "vcr_read": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists authenticated human-message references (filter beforeSeq/limit); use messageSeq to preserve an earlier case. subject_document reads permitted original material. trial_registry_record reads one registry (filter registryId). matching filter.kind=contract gives write syntax; candidate_trials reads patient trial matches.",
-        "vcr_write": "Save a research object; candidate_trial stores registry-linked eligibility. Never write calculated results. patient_context data={messageSeq} preserves a listed original human case, or {sourceId} an owned human upload; no model-written prose. task_context opens an independent hidden task. Use the VCR workflow skill for object contracts and vcr_simulate action=shape for numerical inputs.",
+        "vcr_read": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists authenticated human-message references (filter beforeSeq/limit); use messageSeq to preserve an earlier case. subject_document reads permitted original material. trial_registry_record reads one registry (filter registryId). contracts gives write syntax before any task exists; data_intake lists original upload handles; matching filter.kind=contract gives write syntax; candidate_trials reads patient trial matches.",
+        "vcr_write": "Save a research object; data_intake imports an owned original upload then maps/freezes it (read contracts first). candidate_trial stores registry-linked eligibility. Never write calculated results. patient_context data={messageSeq} preserves a listed original human case, or {sourceId} an owned human upload; no model-written prose. task_context opens an independent hidden task. Use the VCR workflow skill for object contracts and vcr_simulate action=shape for numerical inputs.",
         "vcr_simulate": "Run, read or cancel research calculations. action=shape with kind returns exact fields and examples before start; do not guess keys. Long jobs resume here only when they outlive this turn. Failures, cancellations and partials remain explicit. modelId requires modelVersion. Narrow aggregate methods also use research_calculate without a study.",
     }
     tools = _detailed_tool_definitions()
@@ -662,7 +664,9 @@ def read(arguments: dict) -> dict:
         next_actions.append('A prediction_set contains independently evaluable endpoint component ids. Compare changed inputs/models with mode input_sensitivity/model_version, or updated origins with mode update; update comparisons pair equal calendar target dates. Every record.numberPath resolves to its summary in report_model.longitudinal.byId, independent of list order. Incident risk evaluations report prevalent exclusions separately; local calibration separation does not verify provider training independence.')
     if data.get("more") is True:
         warnings.append("More items exist than this answer holds.")
-        next_actions.append("Call again with filter.offset to read the next page, or narrow the filter.")
+        next_actions.append("Follow data.nextRead exactly, carrying its filter.cursor; do not use offset for intake." if what == "data_intake" else "Call again with filter.offset to read the next page, or narrow the filter.")
+    if what == 'data_intake' and data.get('sourceRead'):
+        next_actions.append('data.sourceRead lists owned knowledge-base upload originals separately; the default upload page lists this root and project-level upload receipts.')
     if data.get("available") is False:
         # A package this deployment has not composed: named, and only the step
         # that needed it is affected.

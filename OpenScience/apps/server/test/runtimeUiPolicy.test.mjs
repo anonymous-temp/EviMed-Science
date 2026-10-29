@@ -42,7 +42,7 @@ async function eventually(predicate) {
   assert.ok(predicate(), "condition did not become true within 500ms");
 }
 
-async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, recordPromptActor = null, recordPromptAttendance = null, agentRuns = null, audit = undefined, managedBrowser = null, balanceGate = null, recordUploadAttempt = null, noteFileRead = null, beforeDataCleanup = null, shared = null } = {}) {
+async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, recordPromptActor = null, recordPromptAttendance = null, agentRuns = null, audit = undefined, managedBrowser = null, balanceGate = null, recordUploadAttempt = null, recordUploadSuccess = null, noteFileRead = null, beforeDataCleanup = null, shared = null } = {}) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "evimed-ui-policy-"));
   const peers = new Set(), clients = new Set();
   let upstream, wss, ui;
@@ -118,7 +118,7 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
     return { project, principal };
   } : null;
   if (shared) { manager.subagentCatalogue = async () => shared.children ?? []; manager.runtimeGeneration = () => 'generation'; }
-  ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, preparePrompt, recordPromptActor, recordPromptAttendance, agentRuns, audit, managedBrowser, balanceGate, recordUploadAttempt, noteFileRead,
+  ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, preparePrompt, recordPromptActor, recordPromptAttendance, agentRuns, audit, managedBrowser, balanceGate, recordUploadAttempt, recordUploadSuccess, noteFileRead,
     resolveDelegatedFrame,
     createDelegatedPolicy: shared ? async identity => new GeoNativeFramePolicy({ ...identity, config, runtimeManager: manager,
       authority: { withFrame: async (actor, claims, operation) => {
@@ -2412,4 +2412,42 @@ test('native HTTP and mux human prompts share the managed continuation proof-to-
   if(transport==='http'){const response=await human;assert.equal(response.status,200);await response.json();assert.equal(forwarded,1);}
   else {assert.equal((await c.next()).type,'item');assert.equal(f.received[0].endpoint,'session/prompt');for(const peer of f.peers)peer.send(JSON.stringify({type:'end',streamId:'human'}));assert.equal((await c.next()).type,'end');}
  });
+});
+
+
+test('only successful authenticated native raw uploads retain original byte receipts', { timeout: 5000 }, async t => {
+  const successes = [];
+  const f = await fixture(t, {}, {}, { recordUploadSuccess: async (project, upload) => { successes.push({ project: project.id, ...upload }); } });
+  let responseStatus = 200;
+  f.manager.proxy = async (req, res, _project, _suffix, options) => {
+    const body = Buffer.from(JSON.stringify(responseStatus === 200 ? { ok: true, value: { receiptId: 'native-success', file: { attachmentId: 'file', name: 'baseline.csv', bytes: bytes.length } } } : { error: 'rejected' }));
+    await options.observeResponse?.({ status: responseStatus, body, contentType: 'application/json' });
+    res.writeHead(responseStatus, { 'content-type': 'application/json' }); res.end(body);
+  };
+  const bytes = Buffer.from('original,patient\n1,62\n');
+  const upload = () => fetch(`${f.base}/api/session/uploadFileBinary?sessionId=s1&name=baseline.csv`, {
+    method: 'POST', headers: { Cookie: f.cookie, Origin: UI_ORIGIN, 'content-type': 'application/octet-stream' }, body: bytes,
+  });
+  assert.equal((await upload()).status, 200);
+  assert.equal(successes.length, 1);
+  assert.equal(successes[0].project, 'default'); assert.equal(successes[0].sessionId, 's1');
+  assert.deepEqual(successes[0].bytes, bytes);
+  responseStatus = 422;
+  assert.equal((await upload()).status, 422); assert.equal(successes.length, 1);
+});
+
+
+test('native Remote file-upload fallback retains only upstream-confirmed original bytes', { timeout: 5000 }, async t => {
+  const successes = [];
+  const f = await fixture(t, {}, {}, { recordUploadSuccess: async (project, upload) => { successes.push({ project: project.id, ...upload }); } });
+  const c = f.connect({ Origin: SHELL_ORIGIN }); assert.equal(await c.opened, 101);
+  const bytes = Buffer.from('id,case\n01,Original patient\n');
+  c.send(open('receipt-upload', 'fileUploads/upload', { agentId: 's1', request: { name: 'cases.csv', data: bytes.toString('base64') } }));
+  assert.equal((await c.next()).value.reached, 'fileUploads/upload');
+  assert.equal(successes.length, 0, 'an arbitrary upstream item is not a successful upload receipt');
+  const request = f.received.find(frame => frame.streamId === 'receipt-upload');
+  for (const peer of f.peers) peer.send(JSON.stringify({ type: 'item', streamId: request.streamId,
+    value: { receiptId: 'native-receipt', file: { attachmentId: 'native-attachment', name: 'cases.csv', bytes: bytes.length } } }));
+  await c.next();
+  assert.equal(successes.length, 1); assert.deepEqual(successes[0].bytes, bytes); assert.equal(successes[0].sessionId, 's1');
 });

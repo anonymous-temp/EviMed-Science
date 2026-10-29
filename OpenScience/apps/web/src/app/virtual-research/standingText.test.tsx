@@ -103,7 +103,7 @@ describe("the list", () => {
   it("is a recipe in its empty state, not a paragraph", async () => {
     installVcrServer(network.productRequest, { "GET /vcr/studies": { studies: [], draftProjectIds: [] } });
     drawStudy("/app/virtual-research");
-    await screen.findByText("研究结果会保留在这里");
+    await screen.findByText("暂无研究");
     expect(blocks()).toEqual([]);
   });
   describe("beside its preview", () => {
@@ -115,11 +115,12 @@ describe("the list", () => {
     });
     afterEach(() => rect.mockRestore());
 
-    it("the pane's recipe stands nothing of its own: the four ways to start are rows", async () => {
+    it("the pane keeps detailed requirements inside a closed disclosure", async () => {
       installVcrServer(network.productRequest);
       drawStudy("/app/virtual-research");
       await screen.findByRole("list", { name: "研究" });
-      expect(blocks()).toEqual([]);
+      expect(screen.getByText("数据要求").closest("details")).not.toHaveAttribute("open");
+      expect(blocks()).toHaveLength(1);
     });
 
     it("a chosen study's preview stands one block of text — the finding the study wrote — and every other sentence is a note, a row or a fact", async () => {

@@ -732,7 +732,9 @@ test("PA-10 the real engine reads the inputs the control plane resolved: a profi
     }
     const { result } = await runEngine(jobOf("profile_snapshot", "profile.snapshot", {}, resolved.inputs, study.id));
     assert.equal(result.status, "succeeded", JSON.stringify(result.issues ?? result.diagnostics?.issues ?? result).slice(0, 400));
-    assert.equal(result.counts.realPatients, COHORT_SIZE, "the first file is the baseline: forty people");
+    assert.equal(result.counts.realPatients, null, "raw files do not declare subject grain or canonical identity");
+    assert.equal(result.diagnostics.tables[0].rows, COHORT_SIZE, "the raw baseline still has forty observations");
+    assert.equal(result.diagnostics.patientCountBasis, "unknown_identity_or_grain");
     const text = JSON.stringify(result);
     for (const value of fingerprints()) assert.ok(!text.includes(`"${value}"`), `${value} is in the engine's profile`);
   });

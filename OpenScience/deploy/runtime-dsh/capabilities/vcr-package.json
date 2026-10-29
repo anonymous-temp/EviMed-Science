@@ -1,6 +1,6 @@
 {
   "id": "vcr-package",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "title": "Virtual Clinical Research Package",
   "description": "Produce an explicitly requested study package, model-analysis document or regulator-facing preparation from saved evidence and computations, without new calculations or invented certainty.",
   "whenToUse": "Virtual Clinical Research (虚拟临床研究): Use only for an explicitly requested package/report/model-analysis document. Narrow conversation tasks do not owe a full study package.",

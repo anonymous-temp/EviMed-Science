@@ -108,6 +108,7 @@ test('a digitized figure becomes a curve record the reconstruction accepts exact
   assert.equal(verified.scenario.provenance.receiptId, undefined);
   assert.equal(verified.detail.curveReceiptId, done.id);
   assert.equal(verified.detail.curveImageHash, stored.image.sha256);
+  assert.equal(verified.detail.curveTimeUnit, "months");
   assert.ok(verified.inputs.some(row => row.kind === 'evidence' && row.id.includes(done.id)));
   // It rechecks: the same request again, from the lineage it produced, still verifies.
   const retry = await f.service.curveVerifier({ studyId: 'study', principal: 'owner', receiptId: done.id, scenario: verified.scenario, inputs: verified.inputs });

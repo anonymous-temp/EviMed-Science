@@ -1,7 +1,7 @@
 # Capability contract; conversation-native VCR reset, 2026-10-26.
 # Module workflows are explicit specialists; ordinary conversation can load their skills and call shared tools.
 id: vcr-analysis
-version: 1.5.0
+version: 1.5.1
 title: Virtual Clinical Research Analysis
 category: Study Design
 description: |

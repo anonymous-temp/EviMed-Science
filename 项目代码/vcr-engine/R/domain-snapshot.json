@@ -24,18 +24,24 @@
       "modelTier": "literature"
     },
     "profile.snapshot": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [],
       "crossChecks": [
         "profile_dataset.py"
       ],
-      "modelTier": null
+      "modelTier": null,
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "cohort.build": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [],
       "crossChecks": [],
-      "modelTier": null
+      "modelTier": null,
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "population.scenario": {
       "version": "1.0.0",
@@ -120,7 +126,7 @@
       "modelTier": "literature"
     },
     "comparator.entropy_balance": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -130,10 +136,13 @@
         "WeightIt",
         "cobalt"
       ],
-      "modelTier": "data"
+      "modelTier": "data",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "comparator.propensity_weight": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -142,17 +151,23 @@
       "crossChecks": [
         "WeightIt"
       ],
-      "modelTier": "data"
+      "modelTier": "data",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "comparator.rmst": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [
         "time_to_event"
       ],
       "crossChecks": [
         "survRM2"
       ],
-      "modelTier": "data"
+      "modelTier": "data",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "comparator.maic": {
       "version": "1.0.0",
@@ -357,7 +372,7 @@
       "modelTier": null
     },
     "comparator.weighted_cox": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [
         "time_to_event"
       ],
@@ -365,10 +380,13 @@
         "survival::coxph on WeightIt weights",
         "independent score test for non-proportional hazards"
       ],
-      "modelTier": "data"
+      "modelTier": "data",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "comparator.maic_time_to_event": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [
         "time_to_event"
       ],
@@ -377,7 +395,10 @@
         "NICE DSU TSD 18",
         "simulated target-population hazard ratio"
       ],
-      "modelTier": "data"
+      "modelTier": "data",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "comparator.aipw": {
       "version": "1.0.0",
@@ -392,7 +413,7 @@
       "modelTier": "data"
     },
     "comparator.covariate_sets": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -403,7 +424,10 @@
         "comparator.propensity_weight",
         "comparator.aipw"
       ],
-      "modelTier": "data"
+      "modelTier": "data",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "comparator.negative_control": {
       "version": "1.0.0",
@@ -535,7 +559,8 @@
     "location",
     "hash",
     "valueSource",
-    "columnSources"
+    "columnSources",
+    "timeUnit"
   ],
   "engineLineageInputKeys": [
     "kind",
@@ -1205,6 +1230,12 @@
           "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
           "maxLength": 64,
           "default": "USUBJID"
+        },
+        "grain": {
+          "t": "string",
+          "values": [
+            "subject"
+          ]
         },
         "compare": {
           "t": "object",
@@ -3688,8 +3719,7 @@
         },
         "timeUnit": {
           "t": "string",
-          "maxLength": 20,
-          "default": "months"
+          "maxLength": 20
         },
         "parameterCode": {
           "t": "string",
@@ -3814,8 +3844,7 @@
         },
         "timeUnit": {
           "t": "string",
-          "maxLength": 20,
-          "default": "months"
+          "maxLength": 20
         },
         "parameterCode": {
           "t": "string",
@@ -3971,8 +4000,7 @@
         },
         "timeUnit": {
           "t": "string",
-          "maxLength": 20,
-          "default": "months"
+          "maxLength": 20
         },
         "parameterCode": {
           "t": "string",
@@ -4137,8 +4165,7 @@
         },
         "timeUnit": {
           "t": "string",
-          "maxLength": 20,
-          "default": "months"
+          "maxLength": 20
         },
         "parameterCode": {
           "t": "string",
@@ -4448,8 +4475,7 @@
         },
         "timeUnit": {
           "t": "string",
-          "maxLength": 20,
-          "default": "months"
+          "maxLength": 20
         },
         "parameterCode": {
           "t": "string",
@@ -4510,8 +4536,7 @@
         },
         "timeUnit": {
           "t": "string",
-          "maxLength": 20,
-          "default": "months"
+          "maxLength": 20
         },
         "parameterCode": {
           "t": "string",

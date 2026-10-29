@@ -98,7 +98,7 @@ vcr_case("N11", c("AC-12", "AC-07"), function() {
   d$USUBJID <- sprintf("S%03d", seq_len(nrow(d)))
   in_subj <- vcr_test_input(d[, c("USUBJID", "arm")], "snp_n11:subject", "subject")
   in_event <- vcr_test_input(data.frame(USUBJID = d$USUBJID, PARAMCD = "OS", AVAL = d$time, CNSR = 1L - d$status), "snp_n11:event", "event")
-  run <- function(tau) vcr_test_run(vcr_test_job("comparator.rmst", list(tau = tau, treatmentColumn = "arm"), list(in_subj, in_event), seed = 1L, job_id = "job_n11"))
+  run <- function(tau) vcr_test_run(vcr_test_job("comparator.rmst", list(tau = tau, treatmentColumn = "arm", timeUnit = "months"), list(in_subj, in_event), seed = 1L, job_id = "job_n11"))
   r <- run(24)
   usable <- vcr_tau_rule(d$time, d$status, d$arm, rule$maxUsableTau)
   r_ok <- run(floor(rule$maxUsableTau))
@@ -129,7 +129,7 @@ vcr_case("N11b", c("AC-12", "AC-08", "AC-30"), function() {
   in_subj <- vcr_test_input(dc[, c("USUBJID", "arm")], "snp_n11b:subject", "subject")
   in_event <- vcr_test_input(data.frame(USUBJID = dc$USUBJID, PARAMCD = "OS", AVAL = dc$time, CNSR = 1L - dc$status), "snp_n11b:event", "event")
   tau <- 15
-  r <- vcr_test_run(vcr_test_job("comparator.rmst", list(tau = tau, treatmentColumn = "arm"), list(in_subj, in_event), seed = 2L, job_id = "job_n11b"))
+  r <- vcr_test_run(vcr_test_job("comparator.rmst", list(tau = tau, treatmentColumn = "arm", timeUnit = "months"), list(in_subj, in_event), seed = 2L, job_id = "job_n11b"))
   ref <- survRM2::rmst2(dc$time, dc$status, dc$arm, tau = tau)
   est <- vcr_get_measure(r, "rmst_difference")
   ref_est <- ref$unadjusted.result[1, "Est."]; ref_lo <- ref$unadjusted.result[1, "lower .95"]; ref_hi <- ref$unadjusted.result[1, "upper .95"]
@@ -252,7 +252,7 @@ vcr_case("N13b", c("AC-08", "AC-12", "AC-11"), function() {
   ev <- data.frame(USUBJID = df$USUBJID, PARAMCD = "OS", AVAL = time, CNSR = 1L - status)
   in_subj <- vcr_test_input(df, "snp_n13b:subject", "subject"); in_event <- vcr_test_input(ev, "snp_n13b:event", "event")
   r <- vcr_test_run(vcr_test_job("comparator.entropy_balance",
-    list(covariates = list("x"), treatmentColumn = "arm", endpoint = list(type = "time_to_event"), tau = tau),
+    list(covariates = list("x"), treatmentColumn = "arm", endpoint = list(type = "time_to_event"), tau = tau, timeUnit = "months"),
     list(in_subj, in_event), seed = 13L, job_id = "job_n13b", cores = VCR_TEST_CORES))
   est <- vcr_get_measure(r, "rmst_difference")
   naive <- vcr_rmst_difference(time, status, arm, tau)

@@ -1,3 +1,4 @@
+import { VcrResearchProgress } from "../VcrResearchProgress";
 import { VcrVersionComparison } from "../VcrVersionComparison";
 import { useState } from "react";
 import { CircleCheck, Download, TriangleAlert } from "lucide-react";
@@ -57,6 +58,16 @@ const RECORDS_ID = "vcr-population-records";
  *  - Under them, what a population carries with it (plan §5.1): the quality report of a synthetic population, which reports and
  *    never judges — values under 保真度 / 可用性 / 泄露风险 and no word like 安全 or 合格. Two versions of a definition are compared
  *    once, in 定义库, by the engine on a registered dataset: the page computes no difference between versions.
+ * Component: PopulationTab; owner: VCR; rules: show the selected population and its actual result.
+ * Anatomy: Progress, population, quality and definitions.
+ * Variants: Generated population, real cohort and empty state.
+ * States: Loading, failed, partial, stale and complete remain distinct.
+ * Hit area: Toolbar actions use shared controls.
+ * Keyboard: Native links, buttons and tables retain keyboard behavior.
+ * Long content: Table and fact cells wrap.
+ * Theme: Shared semantic tokens and charts.
+ * Responsive: Sections stack and tables scroll.
+ * Verification: PopulationTab.test.tsx and VcrDiagrams.progress.test.tsx.
  */
 export function PopulationTab({ studyId, study, onStudyChanged }: { studyId: string; study: VcrStudy; onStudyChanged?: () => void }) {
   const { state, reload } = useVcrLoad(`${studyId}:population`, () => getVcrPopulation(studyId));
@@ -80,6 +91,8 @@ function PopulationView({ studyId, study, data, reload, onStudyChanged }: {
   const frame = useStudyFrame();
   const [comparing, setComparing] = useState(false);
   const failed = study.steps.population?.status === "failed";
+  const progress = study.overview.researchProgress;
+  const currentProgress = progress && (data.selection ? progress.populationId === data.selection.objectId && progress.populationVersion === data.selection.version : progress.populationId === null) ? progress : null;
   const nothing = !data.version && data.criteria.length === 0 && data.attrition.length === 0 && data.profile.length === 0
     && data.generated.length === 0 && !data.outcome && !data.quality && !data.records;
   // A generated population is read as a table of its variables; a real cohort as the rules that selected it and what each did to the count.
@@ -118,12 +131,13 @@ function PopulationView({ studyId, study, data, reload, onStudyChanged }: {
     : null);
 
   const templates = <>{comparison}<VcrDefinitionsSection studyId={studyId} knowledge={data.knowledge} canWrite={mayWrite} canRun={study.abilities.includes("run")} onChanged={changed} /></>;
-  if (nothing) return <div className="flex flex-col gap-6">{failed
+  if (nothing) return <div className="flex flex-col gap-6"><VcrResearchProgress progress={currentProgress} studyId={studyId} showPopulationLink={false} />{failed
     ? <VcrStepFailed studyId={studyId} study={study} step="population" partial={data.partial} />
     : <VcrStepPending studyId={studyId} study={study} step="population" />}{templates}</div>;
 
   return (
     <div className="flex flex-col gap-6">
+      <VcrResearchProgress progress={currentProgress} studyId={studyId} showPopulationLink={false} />
       {failed
         ? <VcrStepFailed studyId={studyId} study={study} step="population" partial={data.partial} />
         : data.partial && <PartialResultNote sentence={data.partial.sentence} resume={{ studyId, study, step: "population" }} />}

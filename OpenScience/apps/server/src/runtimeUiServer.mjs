@@ -275,6 +275,7 @@ function assertNativeModelSelection(config, payload) {
  * `agentRuns` is the run ledger a message steered into a running turn is
  * counted on (`recordSteer`); `audit` reports a count that could not be written.
  * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, balanceGate?:((project:any,payload:any)=>Promise<void>)|null, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, recordPromptActor?:((user:any,project:any,request:any)=>Promise<any>)|null, recordPromptAttendance?:((user:any,project:any,request:any)=>Promise<any>)|null, bindResultRevision?:((user:any,project:any,request:any)=>Promise<any>)|null, bindVcrReference?:((user:any,project:any,request:any)=>Promise<any>)|null, bindGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareSelections?:((user:any,project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
+ *   recordUploadSuccess?: ((project:any,upload:any)=>Promise<any>)|null,
  *   recordUploadAttempt?: ((project: any) => Promise<void>) | null, managedBrowser?: any, authorizeOpenSession?:((user:any,project:any,sessionId:string)=>Promise<void>)|null,
  *   resolveDelegatedFrame?:((user:any,delegation:any,options?:{recheck?:any})=>Promise<{project:any,principal:any}>)|null,
  *   createDelegatedPolicy?:((identity:any)=>Promise<any>)|null,
@@ -284,7 +285,7 @@ function assertNativeModelSelection(config, payload) {
  * @returns {{ server: import('node:http').Server, releaseFrame: (frameId: string, userId: string) => Promise<number>, refreshFrameBinding: (renewed: any) => number, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
  */
 export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, balanceGate = null, authorizePrompt = null, preparePrompt = null, recordPromptActor = null, recordPromptAttendance = null, bindResultRevision = null, bindVcrReference = null, bindGeoPlan = null, prepareGeoPlan = null, prepareSelections = null, authorizeMutation = null,
-  agentRuns = null, managedBrowser = null, authorizeOpenSession = null, recordUploadAttempt = null, noteFileRead = null, resolveDelegatedFrame = null, createDelegatedPolicy = null, audit = async () => {} }) {
+  agentRuns = null, managedBrowser = null, authorizeOpenSession = null, recordUploadAttempt = null, recordUploadSuccess = null, noteFileRead = null, resolveDelegatedFrame = null, createDelegatedPolicy = null, audit = async () => {} }) {
   /** The person's signed attendance receipt, written before the prompt is forwarded and never a reason to refuse it (review F5):
    * a missing receipt makes the turn read as unattended at worst. The writer counts its own failures
    * (`open_science_attendance_receipt_write_failures_total`). @param {any} user @param {any} project @param {any} request */
@@ -894,6 +895,17 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         { args: { request: { sessionId: loopxBody.payload.sessionId } } });
     }
     let nativeInputRequest = null;
+    let originalUpload = null;
+    if (method === RUNTIME_UI_UPLOAD_METHOD && req.method === 'POST' && recordUploadSuccess && !scoped) {
+      const params = new URL(req.url, 'http://runtime.invalid').searchParams;
+      const name = params.get('name'), sessionId = params.get('sessionId');
+      if (sessionId && /^[A-Za-z0-9_-]{1,128}$/.test(sessionId)) {
+        await authorizePromptSession(project, { args: { request: { sessionId } } });
+        const bytes = await nativeBody(config.maxFileBytes);
+        req.__openScienceProxyBody = bytes;
+        originalUpload = { name, sessionId, bytes };
+      }
+    }
     const forward = () => runtimeManager.proxy(req, res, project, frame.suffix, {
       surface: "ui",
       admissionSignal,
@@ -913,6 +925,15 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       // file ceiling rather than the JSON one, and forwarded as bytes.
       ...(method === RUNTIME_UI_UPLOAD_METHOD ? { fileBody: true } : {}),
       ...(req.method === "POST" && [RUNTIME_UI_UPLOAD_METHOD, "fileUploads/upload"].includes(method) && recordUploadAttempt ? { beforeForward: () => recordUploadAttempt(project) } : {}),
+      ...(originalUpload ? { observeResponse: async response => {
+        if (response.status < 200 || response.status >= 300) return;
+        let answer;
+        try { answer = JSON.parse(response.body.toString('utf8')); } catch { return; }
+        const value = answer?.ok === true ? answer.value : null;
+        if (typeof value?.receiptId !== 'string' || !value.receiptId || typeof value.file?.attachmentId !== 'string'
+          || value.file.bytes !== originalUpload.bytes.length || typeof value.file.name !== 'string') return;
+        await recordUploadSuccess(project, { ...originalUpload, name: originalUpload.name ?? value.file.name });
+      } } : {}),
     });
     const forwardPrompt = async () => {
       await authorizePromptSession(project, promptBody?.payload);
@@ -1078,6 +1099,23 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
           }
         };
         await runtimeManager.proxyUpgrade(req, socket, head, project, frame.suffix, { revalidate: recheck, authorize, observe, prepare,
+          ...(!initial.scoped && recordUploadSuccess ? { projectItem: async (endpoint, payload, value) => {
+            // The upstream file-upload service returns {receiptId,file:{attachmentId,name,bytes}} only after storing the bytes.
+            // This Remote fallback carries the original base64 in args.request, under the authenticated agent scope.
+            if (endpoint === 'fileUploads/upload' && typeof value?.receiptId === 'string' && value.receiptId
+              && typeof value.file?.attachmentId === 'string' && typeof value.file.name === 'string') {
+              const sessionId = payload?.args?.agentId, request = payload?.args?.request;
+              if (typeof sessionId === 'string' && typeof request?.data === 'string'
+                && request.data.length <= Math.ceil(config.maxFileBytes / 3) * 4 && /^[A-Za-z0-9+/]*={0,2}$/.test(request.data)) {
+                const bytes = Buffer.from(request.data, 'base64');
+                if (bytes.length === value.file.bytes && bytes.length <= config.maxFileBytes) {
+                  await authorizePromptSession(project, { args: { request: { sessionId } } });
+                  await recordUploadSuccess(project, { name: request.name ?? value.file.name, sessionId, bytes });
+                }
+              }
+            }
+            return { forward: true, value };
+          } } : {}),
           ...(initial.scoped ? {
             withAuthority: operation => initial.scoped.withAuthority(operation),
             ...(initial.scoped.nativeInputs ? {

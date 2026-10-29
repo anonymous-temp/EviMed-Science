@@ -87,6 +87,7 @@ vcr_job_maic_tte <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
   ties <- as.character(sc$ties %||% "efron")
   if (!(ties %in% c("efron", "breslow"))) vcr_abort("scenario_value_invalid", "scenario.ties", "Ties are handled by Efron's or Breslow's approximation.")
 
+  time_unit <- .vcr_observed_time_unit(job, tabs, subj)
   outcome <- vcr_outcome_frame(sc, tabs, subj, "time_to_event")
   t_ipd <- outcome$time; s_ipd <- outcome$status
   if (anyNA(t_ipd) || anyNA(s_ipd)) vcr_abort("input_shape_invalid", "inputs", "Time and status are complete.")
@@ -100,6 +101,15 @@ vcr_job_maic_tte <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
   }
   route <- if (!anchored) "unanchored" else if (!is.null(sc$pseudoIpdInputId)) "anchored_pseudo" else "anchored_published"
   ps <- if (!is.null(sc$pseudoIpdInputId)) .vcr_pseudo_ipd(job, sc, with_arm = anchored) else NULL
+  pseudo_basis <- NULL
+  if (!identical(job$methodVersion, "1.0.0") && !is.null(ps)) {
+    pseudo_unit <- attr(ps$df, "vcrTimeUnit")
+    if (is.null(pseudo_unit) && is.null(sc$timeUnit))
+      vcr_abort("scenario_field_missing", "scenario.timeUnit", "The reconstructed time scale is not recorded; explicitly state the common time unit for both inputs.")
+    if (!is.null(pseudo_unit) && !identical(pseudo_unit, time_unit$unit))
+      vcr_abort("scenario_value_invalid", "scenario.timeUnit", "Observed and reconstructed time units conflict; convert before analysis.")
+    pseudo_basis <- if (is.null(pseudo_unit)) "declared_scenario" else "input_metadata"
+  }
   n_ipd <- nrow(subj); n_ps <- if (is.null(ps)) 0L else nrow(ps$df)
   if (!is.null(ps) && n_ps < 2L) vcr_abort("input_shape_invalid", "scenario.pseudoIpdInputId", "The pseudo-individual table has at least two rows.")
   est_bc_pub <- vcr_scalar(sc$aggregateEstimate, NULL); se_bc_pub <- vcr_scalar(sc$aggregateSe, NULL)
@@ -235,7 +245,7 @@ vcr_job_maic_tte <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
                 effectiveSampleSize = ess, essShare = ess / n_ipd, converged = full$fit$converged)
   list(status = "succeeded", measures = measures, conclusion = if (length(limited_by)) "limited" else "estimable", counts = counts,
        diagnostics = list(
-         anchored = anchored, route = route, targetPopulation = "aggregate_data_trial", endpoint = "time_to_event", timeUnit = as.character(sc$timeUnit %||% "months"),
+         anchored = anchored, route = route, targetPopulation = "aggregate_data_trial", endpoint = "time_to_event", timeUnit = time_unit$unit, timeUnitBasis = time_unit[["basis"]], pseudoTimeUnitBasis = pseudo_basis,
          model = list(formula = "Surv(time, status) ~ arm", ties = ties,
                       coding = if (!anchored) "the study's weighted patients (1) against the comparator's reconstructed patients (0, weight 1)"
                                else "contrasts of the active arm (1) with the common comparator (0): A against C in the study, B against C in the comparator trial; indirect A against B is Bucher's difference of the two log hazard ratios"),

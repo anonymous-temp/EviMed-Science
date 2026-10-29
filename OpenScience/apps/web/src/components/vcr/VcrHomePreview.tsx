@@ -13,13 +13,13 @@ import { FactList, type Fact } from "@/components/ui/FactList";
 import { Note } from "@/components/ui/Note";
 import { RAIL_STATE_WORDS, RailMark, type RailState } from "@/components/ui/ProgressRail";
 import { Section } from "@/components/ui/Section";
-import { stepLabel, tierLabel } from "./vcrText";
+import { stepLabel } from "./vcrText";
 import { vcrTabPath } from "./vcrTabs";
 
 /**
  * What the 虚拟临床研究 home shows of one study beside the list, from what `GET /api/vcr/studies` already carries — a peek, not the
  * study's page (`打开研究` goes there): its name and where it stands, what waits for the reader (each line with its way on), the
- * question and the latest finding the study itself wrote, and the seven steps with where each one is. Nothing is read a second time.
+ * question, latest finding and requested or active work. Nothing is read a second time.
  */
 
 /** How a study stands, for the one filter and the one sort the list has. */
@@ -77,13 +77,25 @@ export function stepMark(step: VcrStep | undefined): { state: RailState; word: s
   }
 }
 
+/**
+ * Component: VcrStudyPreview; owner: VCR; rules: only actual or requested research work.
+ * Anatomy: Study title, actions, findings, attention and optional progress.
+ * Variants: Split preview and narrow detail.
+ * States: Empty, active, failed and finished work.
+ * Hit area: Shared links and icon button.
+ * Keyboard: Native links and Escape to close the split preview.
+ * Long content: Titles and facts wrap.
+ * Theme: Shared semantic tokens.
+ * Responsive: Actions wrap and progress columns adapt.
+ * Verification: VcrHomePage.test.tsx.
+ */
 export function VcrStudyPreview({ study, heading, onClose }: {
   study: VcrStudySummary;
-  /** Beside the list the preview names the study; in the drawer the drawer's title does. */
+  /** Whether the preview names the study. */
   heading: boolean;
   /**
-   * Beside the list the preview has no drawer to close it: with this it has a 关闭 of its own, and Escape does the same — which gives the
-   * pane back to the four ways to start. (In the drawer the drawer closes, and passes nothing.)
+   * Beside the list it has a 关闭 of its own, and Escape does the same — which gives the
+   * pane back to the task selector. On a narrow page the surrounding navigation returns to the list.
    */
   onClose?: () => void;
 }) {
@@ -103,12 +115,11 @@ export function VcrStudyPreview({ study, heading, onClose }: {
     return () => document.removeEventListener("keydown", onKey);
   }, [closable]);
   const needs = study.attention.filter((line) => line.tone === "attention");
-  const marks = VCR_STEP_KEYS.map((key) => ({ key, ...stepMark(study.steps[key]) }));
+  const marks = VCR_STEP_KEYS.filter((key) => { const step = study.steps[key]; return step?.requested === true || (step?.status && step.status !== "none"); }).map((key) => ({ key, ...stepMark(study.steps[key]) }));
   const done = marks.filter((mark) => mark.state === "done").length;
   const facts: Fact[] = [
     ...(study.question ? [{ label: "研究问题", value: study.question }] : []),
     ...(study.conclusion?.text ? [{ label: "最新结论", value: <span data-vcr-latest="">{study.conclusion.text}</span> }] : []),
-    { label: "数据层级", value: tierLabel(study.tier) },
     ...(study.updatedAt ? [{ label: "最近更新", value: study.updatedAt }] : []),
   ];
 
@@ -121,7 +132,7 @@ export function VcrStudyPreview({ study, heading, onClose }: {
             <p className="mt-1 text-caption text-text-3">{studyStatusLine(study)}</p>
           </div>
         )}
-        {/* The preview's own way on is secondary: the page's one solid button is 开始研究对话, in the list's header. */}
+        {/* The preview links directly to the study and its original conversation. */}
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <Link to={vcrTabPath(study.id, "overview")} className={buttonClasses({ variant: "secondary" })}>打开研究</Link>
           {study.originatingSessionId && (
@@ -147,8 +158,8 @@ export function VcrStudyPreview({ study, heading, onClose }: {
 
       <FactList rows={facts} ruled={false} />
 
-      <Section title="进度" count={`${done} / ${VCR_STEP_KEYS.length}`}>
-        <ol aria-label="七步进度" className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
+      {marks.length > 0 && <Section title="进度" count={`${done} / ${marks.length}`}>
+        <ol aria-label="研究进度" className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
           {marks.map((mark) => (
             <li key={mark.key} data-vcr-step={mark.key} className="flex min-w-0 items-start gap-2">
               <span className="mt-0.5"><RailMark state={mark.state} /></span>
@@ -159,7 +170,7 @@ export function VcrStudyPreview({ study, heading, onClose }: {
             </li>
           ))}
         </ol>
-      </Section>
+      </Section>}
     </div>
   );
 }

@@ -106,13 +106,13 @@ vcr_case("N32c", c("AC-04", "AC-27"), function() {
   in_ev <- vcr_test_input(ev, "snp_n32c:events", "event", source = "extracted")   # the times were read from text
   in_ev$columnSources <- list(AVAL = "extracted", CNSR = "observed")
   job <- vcr_test_job("comparator.entropy_balance",
-    list(covariates = list("x"), treatmentColumn = "arm", endpoint = list(type = "time_to_event"), tau = 4, parameterCode = "OS"),
+    list(covariates = list("x"), treatmentColumn = "arm", endpoint = list(type = "time_to_event"), tau = 4, parameterCode = "OS", timeUnit = "months"),
     list(in_subj, in_ev), seed = 9L, job_id = "job_n32c")
   r <- vcr_test_run(job)
   # a reconstructed pseudo-patient table read by the unweighted RMST job
   rec <- data.frame(time = ev$AVAL, status = 1L - ev$CNSR, arm = subj$arm)
   in_rec <- vcr_test_input(rec, "rec_n32c:1", source = "reconstructed")
-  r_rec <- vcr_test_run(vcr_test_job("comparator.rmst", list(tau = 4, treatmentColumn = "arm"), list(in_rec), job_id = "job_n32c_rec"))
+  r_rec <- vcr_test_run(vcr_test_job("comparator.rmst", list(tau = 4, treatmentColumn = "arm", timeUnit = "months"), list(in_rec), job_id = "job_n32c_rec"))
   curve_src <- vapply(r$diagnostics$curves, function(cv) as.character(cv$source), character(1))
   rec_curve_src <- vapply(r_rec$diagnostics$curves, function(cv) as.character(cv$source), character(1))
   ok <- identical(r$status, "succeeded") && identical(.n32_used(r)$weakest, "extracted") &&

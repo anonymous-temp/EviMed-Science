@@ -29,7 +29,7 @@
 
 .n33_job <- function(d, id, scenario = list(), method = "comparator.weighted_cox", seed = 7L, cores = 1L) {
   inputs <- list(vcr_test_input(d$subj, paste0("snp_", id, ":subject"), "subject"), vcr_test_input(d$ev, paste0("snp_", id, ":events"), "event"))
-  sc <- utils::modifyList(list(covariates = list("x1", "x2"), treatmentColumn = "arm", tau = 8), scenario)
+  sc <- utils::modifyList(list(covariates = list("x1", "x2"), treatmentColumn = "arm", tau = 8, timeUnit = "months"), scenario)
   vcr_test_job(method, sc, inputs, seed = seed, job_id = paste0("job_", id), cores = cores)
 }
 
@@ -78,7 +78,7 @@ vcr_case("N33a", c("AC-08", "AC-12", "AC-30"), function() {
   rel <- function(a, b) abs(a - b) / abs(b)
   # the weighting job on the same table: same seed, so the same resamples
   wj <- vcr_test_run(vcr_test_job("comparator.entropy_balance",
-    list(covariates = list("x1", "x2"), treatmentColumn = "arm", endpoint = list(type = "time_to_event"), tau = 8),
+    list(covariates = list("x1", "x2"), treatmentColumn = "arm", endpoint = list(type = "time_to_event"), tau = 8, timeUnit = "months"),
     list(vcr_test_input(d$subj, "snp_n33a_w:subject", "subject"), vcr_test_input(d$ev, "snp_n33a_w:events", "event")), seed = 7L, job_id = "job_n33a_w"))
   shared <- c("rmst_difference", "rmst_treatment", "rmst_control", "survival_difference_at_tau", "effective_sample_size", "worst_standardized_difference")
   same <- vapply(shared, function(nm) {
@@ -179,7 +179,7 @@ vcr_case("N33c", c("AC-07", "AC-08", "AC-12"), function() {
   parity <- vapply(names(malformed), function(nm) {
     dd <- malformed[[nm]](d)
     mine <- vcr_test_run(.n33_job(dd, paste0("n33c_p_", nm)))
-    theirs <- vcr_test_run(vcr_test_job("comparator.entropy_balance", list(covariates = list("x1", "x2"), treatmentColumn = "arm", endpoint = list(type = "time_to_event"), tau = 8),
+    theirs <- vcr_test_run(vcr_test_job("comparator.entropy_balance", list(covariates = list("x1", "x2"), treatmentColumn = "arm", endpoint = list(type = "time_to_event"), tau = 8, timeUnit = "months"),
       list(vcr_test_input(dd$subj, paste0("snp_n33c_w_", nm, ":subject"), "subject"), vcr_test_input(dd$ev, paste0("snp_n33c_w_", nm, ":events"), "event")), job_id = paste0("job_n33c_w_", nm)))
     nzchar(codes(mine)) && identical(codes(mine), codes(theirs)) && identical(mine$status, theirs$status)
   }, logical(1))

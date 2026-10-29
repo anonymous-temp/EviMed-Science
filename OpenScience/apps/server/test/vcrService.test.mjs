@@ -468,3 +468,54 @@ test('home preserves written unsent questions and originating sessions without a
  assert.equal(home.studies[0].originatingSessionId,'native_owned');assert.deepEqual(home.draftProjectIds,[]);
  assert.deepEqual(home.taskInputs.patient,{status:'unknown',sources:[]});
 });
+
+test('current study readiness uses its authorized input seam and preserves missing versus unknown', async () => {
+  const cases = [
+    { value: { cohort: [{ studyId: t0Study.id, snapshotId: 'snapshot', kind: 'baseline' }], partial: false }, expected: 'available' },
+    { value: { cohort: [], partial: false }, expected: 'missing' },
+    { value: { cohort: [], partial: true }, expected: 'unknown' },
+    { value: {}, expected: 'unknown' },
+    { error: new Error('Permission ledger unavailable'), expected: 'unknown' },
+  ];
+  for (const item of cases) {
+    const { store } = studyOnly(t0Study);
+    const requested = [];
+    const service = new VcrService({ store, config: {}, dataPlane: { taskInputs: async (study, user) => {
+      requested.push([study.id, user.id]);
+      if (item.error) throw item.error;
+      return item.value;
+    } } });
+    const view = await service.studyView({ id: 'lead' }, t0Study.id);
+    assert.equal(view.overview.researchProgress.input, item.expected);
+    await service.tab({ id: 'lead' }, t0Study.id, 'population');
+    assert.deepEqual(requested, [[t0Study.id, 'lead'], [t0Study.id, 'lead']]);
+  }
+});
+
+
+test('current study readiness keeps the twenty-four scanned source references and marks incomplete scans', async () => {
+  const { store } = studyOnly(t0Study);
+  store.populations = async () => [{ id: 'population', version: 1, kind: 'real', snapshotId: 's23', counts: {} }];
+  const sources = Array.from({ length: 24 }, (_, index) => ({ studyId: t0Study.id, snapshotId: `s${index}`, kind: 'baseline' }));
+  let partial = false;
+  const service = new VcrService({ store, config: {}, dataPlane: { taskInputs: async () => ({ cohort: sources, partial }) } });
+  assert.equal((await service.studyView({ id: 'lead' }, t0Study.id)).overview.researchProgress.input, 'available');
+  partial = true;
+  store.populations = async () => [{ id: 'population', version: 1, kind: 'real', snapshotId: 'older', counts: {} }];
+  assert.equal((await service.studyView({ id: 'lead' }, t0Study.id)).overview.researchProgress.input, 'unknown');
+});
+
+test('profile readback binds its snapshot through narrow persisted execution inputs', async () => {
+  const { store } = studyOnly(t0Study);
+  const profile = { id: 'profile', version: 1, kind: 'snapshot_profile', executionId: 'execution', subjectId: null,
+    counts: { realPatients: 80 }, diagnostics: { tables: [{ input: 'snapshot:subject', shape: 'subject', rows: 80 }] } };
+  store.populations = async () => [{ id: 'population', version: 1, kind: 'real', snapshotId: 'snapshot', counts: {} }];
+  store.results = async () => [profile]; store.allResults = async () => [profile];
+  store.rows = async sql => sql.includes('FROM evimed_vcr.executions') ? [{ id: 'execution', job_id: 'job', method: 'profile.snapshot', method_version: '1.1.0',
+    inputs: [{ kind: 'analysis_table', id: 'snapshot:subject', location: '/plane/private.csv', hash: 'private-hash' },
+      { kind: 'other', id: 'unrelated', location: '/plane/another.csv' }] }] : [];
+  const view = await new VcrService({ store, config: {} }).studyView({ id: 'lead' }, t0Study.id);
+  assert.equal(view.overview.researchProgress.counts.sourcePatients, 80);
+  assert.equal(JSON.stringify(view).includes('/plane/'), false);
+  assert.equal(JSON.stringify(view).includes('private-hash'), false);
+});

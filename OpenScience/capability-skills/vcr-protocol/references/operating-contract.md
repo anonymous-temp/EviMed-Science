@@ -57,3 +57,11 @@ they do not identify treatment effects or replace randomized controls.
 
 
 Explain research results in ordinary research terms. Internal IDs, field keys, engine endpoints and bookkeeping belong to saved provenance, not the reader-facing explanation. Preserve numerical method, uncertainty and source scope when they affect interpretation.
+
+## Data and result continuity
+
+An uploaded file is not yet a frozen patient table. Discover `mcp__evimed__vcr_read` what `contracts` before writes and `data_intake` for authenticated original upload handles. Reuse the existing import, field-map and snapshot operations before building a real cohort; reuse the exact returned source, mapping hash, snapshot and population IDs. Missing data or permissions are named prerequisites, not empty scientific objects to create as probes. Keep automatic-run metadata and original-source permission separate. A confirmed field mapping can be revised; freeze a new snapshot after revision. Existing frozen snapshots keep their original mapping and bytes. Do not describe every confirmed field or the editable mapping as immutable.
+
+After each requested computation, read back its saved object and exact result. Report definition saved, input ready, computation pending/failed, result available and independent validation separately. A completed reply or CSV does not prove formal cohort computation succeeded. Preserve useful partial files and explain the specific unfinished result with its recovery action. Do not overwrite a real cohort's unknown counts with ad-hoc file counts.
+
+A patient's repeated visits/events are observations, not additional people. Every sequential filter count uses the preceding remaining population as denominator; independent subgroup comparisons retain the original denominator and are labeled as such. Descriptive mean/median ordering alone is not a skewness test. Missingness can indicate a risk of selection bias; it does not by itself establish causal bias. Event time and analysis horizon use explicit or confirmed source units, never a silent months assumption.

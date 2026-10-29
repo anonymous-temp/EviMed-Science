@@ -45,6 +45,7 @@ import {
 
 import { VCR_FIELD_MAP_STATES, VCR_FIELD_ROLES, VCR_SOURCE_FILE_ROLES } from "./vcrPersistence.mjs";
 import { VcrStoreBase, vcrId } from "./vcrStoreBase.mjs";
+import { HttpError } from './security.mjs';
 
 export { VCR_FIELD_MAP_STATES, VCR_FIELD_ROLES, VCR_SOURCE_FILE_ROLES };
 
@@ -783,7 +784,7 @@ export class VcrDataStore extends VcrStoreBase {
    *   rowCount?: number | null, columnCount?: number | null, profile?: Record<string, unknown>,
    *   quality?: Record<string, unknown>, sealedFields?: string[], sealedUntil?: string | Date | null,
    *   fileHashes?: unknown[], fieldMapHash?: string | null, valueSource?: string,
-   *   fieldMaps?: Array<Record<string, any>>, actor?: string }} entry
+   *   fieldMaps?: Array<Record<string, any>>, actor?: string, expectedFieldMapHash?: string }} entry
    */
   async freezeSnapshot(entry) {
     const sourceId = required(entry.sourceId, "sourceId");
@@ -793,6 +794,21 @@ export class VcrDataStore extends VcrStoreBase {
     const userId = required(entry.userId, "userId");
     return this.transaction(async (client) => {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`vcr-snapshot:${sourceId}`]);
+      // Profiling happens before this transaction. Lock the authoritative source row and compare
+      // the exact map that was profiled and requested before writing any immutable snapshot row.
+      const current = (await client.query(`SELECT user_id,study_id,status,field_map_state,field_map_hash
+        FROM ${this.schema}.sources WHERE id=$1 FOR UPDATE`, [sourceId])).rows[0];
+      if (!current || current.user_id !== userId || current.study_id !== (entry.studyId ?? null)) {
+        throw new HttpError(404, 'vcr_source_not_found', 'Source not found.');
+      }
+      if (current.status === 'withdrawn') throw new HttpError(409, 'vcr_source_withdrawn', 'This source was withdrawn before the snapshot was saved.');
+      const expectedFieldMapHash = entry.expectedFieldMapHash ?? entry.fieldMapHash;
+      if (current.field_map_hash != null || expectedFieldMapHash != null) {
+        if (!expectedFieldMapHash || current.field_map_hash !== expectedFieldMapHash || entry.fieldMapHash !== expectedFieldMapHash) {
+          throw new HttpError(409, 'vcr_field_map_changed', 'The field map changed before the snapshot was saved; read and confirm the current map.');
+        }
+        if (current.field_map_state !== 'confirmed') throw new HttpError(409, 'vcr_field_map_unconfirmed', 'The field map is no longer confirmed.');
+      }
       const version = await this.nextVersion(client, "snapshots", "source_id = $1", [sourceId]);
       const result = await client.query(
         `INSERT INTO ${this.schema}.snapshots
