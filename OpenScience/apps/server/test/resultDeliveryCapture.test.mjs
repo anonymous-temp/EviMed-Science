@@ -63,8 +63,7 @@ test("historical capture repair reuses the original matrix, freezes a labeled re
   await f.documents.put("owner", "result-version", matrix.versionId, { ...original.payload, review: null }, { projectId: "p", expectedRevision: original.revision });
   const run = { ...f.run, status: "succeeded", verification: "unverified", finishedAt: "2026-10-02T01:00:00Z" };
   const unchanged = structuredClone(run);
-  let settlements = 0;
-  const service = new ResultCaptureRepairService({ results: f.results, runs: { list: async () => [run] }, programme: { settleCaptureRepair: async () => { settlements += 1; return { state: "no_qualifying_claims" }; } } });
+  const service = new ResultCaptureRepairService({ results: f.results, runs: { list: async () => [run] } });
   const request = { userId: "owner", projectId: "p", runId: "run" };
   const before = f.documents.rows.size;
   const plan = await service.plan(request);
@@ -84,7 +83,6 @@ test("historical capture repair reuses the original matrix, freezes a labeled re
   const replay = await service.apply(input);
   assert.equal(replay.receipt.generation, applied.receipt.generation);
   assert.equal((await f.documents.get("owner", "result-version", matrix.versionId)).revision, revision);
-  assert.equal(settlements, 0, "settlement is explicit");
   await writeFile(path.join(f.project.workspaceDir, f.reportPath), "changed");
   await assert.rejects(service.apply(input), { code: "result_capture_changed" });
 });

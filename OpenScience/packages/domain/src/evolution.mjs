@@ -21,6 +21,7 @@ export const EVOLUTION_GAP_CODES = Object.freeze(['connector', 'extraction', 'me
 export const EVOLUTION_LEAD_SOURCES = Object.freeze(['literature', 'runtime-failure', 'autopilot', 'evaluation', 'dataset',
   // The platform's own modules saying they could not do something (flywheel F20, 2026-10-06): the evidence programme, 循证 GEO and 虚拟临床研究.
   // Every lead of these three is reduced to a closed code and closed entity keys (`evolutionLeadSources.mjs`), never a researcher's words.
+  // `evidence-programme` is retired (the programme was deleted on 2026-10-29): no module files it, the name stays for the leads it filed.
   'evidence-programme', 'communication', 'virtual-study'])
 export const EVOLUTION_ORIGINS = Object.freeze(['literature', 'tool-result', 'platform-inference', 'user-statement'])
 export const EVOLUTION_BUILD_FORMS = Object.freeze(['compose', 'extend', 'wrap', 'rewrite', 'new-capability'])

@@ -509,58 +509,6 @@ export const deleteEvidenceComment = (card: EvidenceCard, commentId: string) =>
     "DELETE",
   );
 
-export interface EvidenceAutomation {
-  enabled: boolean;
-  query: string;
-  sourceTypes: string[];
-  intervalHours: number;
-  maxCardsPerRun: number;
-  nextRunAt: string | null;
-  lastRunAt: string | null;
-  lastError: string | null;
-}
-export interface EvidenceMaintenance {
-  /** Who pays for keeping the zone current: the platform's frontier budget (an official zone) or the owner's own allowance. */
-  billing?: { payer: "platform" | "owner"; official: boolean; purpose: string };
-  automation: EvidenceAutomation;
-  jobs: { pending: number; running: number; failed: number };
-  recent: Array<{
-    id: string;
-    state: string;
-    attempts: number;
-    lastError: string | null;
-    updatedAt: string;
-    cardId?: string | null;
-    sourceCheckStatus?: "partial" | "complete" | null;
-  }>;
-}
-export const fetchEvidenceMaintenance = (zoneId: string) =>
-  productRequest<EvidenceMaintenance>(
-    `/frontier/zones/${id(zoneId)}/automation`,
-  );
-export const saveEvidenceMaintenance = (
-  zone: EvidenceZone,
-  automation: EvidenceAutomation,
-) =>
-  productRequest<EvidenceMaintenance>(
-    `/frontier/zones/${id(zone.id)}/automation`,
-    "PUT",
-    {
-      enabled: automation.enabled,
-      query: automation.query,
-      sourceTypes: automation.sourceTypes,
-      intervalHours: automation.intervalHours,
-      maxCardsPerRun: automation.maxCardsPerRun,
-      expectedRevision: zone.revision,
-    },
-  );
-export const refreshEvidenceZone = (zone: EvidenceZone) =>
-  productRequest<EvidenceMaintenance>(
-    `/frontier/zones/${id(zone.id)}/automation`,
-    "POST",
-    {},
-  );
-
 /** Who may read a published zone is the owner's own choice, apart from publishing it. */
 export async function setEvidenceZoneVisibility(zone: EvidenceZone, visibility: EvidenceZoneVisibility) {
   return (
@@ -672,7 +620,6 @@ export function evidenceErrorMessage(error: unknown): string {
         "创建者不能评议自己的证据，请由其他用户参与评议。",
       evidence_publication_incomplete:
         "发布前请填写证据正文，并添加至少一个有链接或原文引句的来源。",
-      evidence_automation_disabled: "请先启用并保存更新计划，再立即更新。",
     },
   });
 }

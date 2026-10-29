@@ -1875,7 +1875,7 @@ export class FrontierService {
 
   /**
    * The topics a reader is shown: `?status=active` (the default) or `recent` (closed ones too, newest first), `?limit` 1–30.
-   * Each is `frontierTopicSummary` with its overview's references and the evidence programme's card.
+   * Each is `frontierTopicSummary` with its overview's references.
    * @param {{ id: string }} _user @param {URLSearchParams} [params]
    */
   async topicList(_user, params = new URLSearchParams()) {
@@ -1926,7 +1926,7 @@ export class FrontierService {
     return { topics };
   }
 
-  /** A topic row as the reader is served it: its overview's references resolved to the items, its card when settled. @param {any} row */
+  /** A topic row as the reader is served it: its overview's references resolved to the items. @param {any} row */
   async #topicSummary(row) {
     const marks = Array.isArray(row.overview_refs) ? row.overview_refs : [];
     /** @type {Array<{ n: number, itemId: string, title: string, sourceName: string }> | null} */
@@ -1941,15 +1941,7 @@ export class FrontierService {
         return item ? [{ n: Number(mark.n), itemId: String(mark.itemId), title: String(item.title ?? ""), sourceName: String(item.source_name ?? "") }] : [];
       });
     }
-    /** @type {{ id: string, title: string, href: string } | null} */
-    let card = null;
-    if (row.programme_card_id) {
-      const present = (await this.database.query("SELECT to_regclass('evimed_frontier.evidence_cards') IS NOT NULL AS ok")).rows[0]?.ok === true;
-      const found = present ? (await this.database.query(`SELECT id, zone_id, title FROM evimed_frontier.evidence_cards WHERE id = $1 AND state = 'published'`,
-        [String(row.programme_card_id)])).rows[0] : null;
-      if (found) card = { id: found.id, title: found.title, href: `/app/frontier/zones/${encodeURIComponent(found.zone_id)}/evidence/${encodeURIComponent(found.id)}` };
-    }
-    return frontierTopicSummary(row, { refs, card });
+    return frontierTopicSummary(row, { refs });
   }
 
   // ───────────────────────── c3-track 2026-10-25: 追踪 (contract §T) ─────────────────────────

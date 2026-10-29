@@ -116,16 +116,14 @@ import { vcrBackupReadiness } from "./vcrBackupReadiness.mjs";
 import { openVikingBackupReadiness } from "./openVikingBackupReadiness.mjs";
 import { EVIDENCE_PROJECT_ID, EVOLUTION_PROJECT_ID, LEARNING_PROJECT_ID, assertClientProject, ensureEvidenceProject, ensureOpenVikingProject, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
 import { createEvidenceBudget, evidenceBudgetMetricFamilies } from "./evidenceBudget.mjs";
-import { PROGRAMME_DECISION_KIND, createEvidenceProgramme, evidenceProgrammeMetricFamilies } from "./evidenceProgramme.mjs";
 import { createEvolutionPositiveEvidence } from "./evolutionPositiveEvidence.mjs";
 import { PROMOTION_CLASSES, createOfficialPromotion, officialPromotionMetricFamilies, projectFactsReader, promotionJudgeMessages } from "./officialPromotion.mjs";
 import { retireHandbookArm } from "./handbookArmRetirement.mjs";
 import { evidenceEstablishedAuthors } from "./evidenceAuthorStanding.mjs";
 import { callReviewModel } from "./reviewModel.mjs";
 import { accountStanding, guestMarkedRuns } from "./capsuleShareTrust.mjs";
-import { createEvolutionLeadSources, evolutionLeadSourceMetricFamilies, programmeLeadReader } from "./evolutionLeadSources.mjs";
+import { createEvolutionLeadSources, evolutionLeadSourceMetricFamilies } from "./evolutionLeadSources.mjs";
 import { createCalculationReceiptReader } from "./evidenceCalculationReceipts.mjs";
-import { createEvidenceRecalculation, createOfficialZoneMatcher, evidenceRecalculationMetricFamilies } from "./evidenceRecalculation.mjs";
 import { createPredictionRegistry, predictionRegistryMetricFamilies } from "./predictionRegistry.mjs";
 import { evidenceCardMetricFamilies } from "./evidenceCardMetrics.mjs";
 import { assertNotPlatformAccount } from "./platformAccount.mjs";
@@ -159,7 +157,7 @@ import { OfficialPacks, officialPackMetricFamilies } from "./officialPacks.mjs";
 import { OFFICIAL_PACKS_DIR } from "./officialPackSources.mjs";
 import { createMethodAppliedOutcomes } from "./methodAppliedOutcomes.mjs";
 import { persistExecutedToolEdges, persistToolTraces } from "./toolExecutionEdges.mjs";
-import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, conversationTurnRouteReason, deliverableDir, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, geoVisibleQuestionOfReason, isChargeableResearchRun, isConversationTurnRun, isResearcherOwnedWork, isVerificationRun, meetsPasswordMinimum, mountedMethodDigest, runRoleOf, usagePurposeOfRun, VCR_STEP_CAPABILITIES } from "@evimed/domain";
+import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, conversationTurnRouteReason, deliverableDir, deliverableIdOfPath, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, geoVisibleQuestionOfReason, isChargeableResearchRun, isConversationTurnRun, isResearcherOwnedWork, isVerificationRun, meetsPasswordMinimum, mountedMethodDigest, runRoleOf, usagePurposeOfRun, VCR_STEP_CAPABILITIES } from "@evimed/domain";
 import { requestedSourceScope, ResearchSessionStore } from "./researchSessions.mjs";
 import { boundConversationNote, prepareResearchContext } from "./researchContext.mjs";
 import { preservedConversationHistory } from "./conversationHistory.mjs";
@@ -260,7 +258,6 @@ import { capsuleShareMetricFamilies, capsuleStewardshipMetricFamilies } from "./
 import { createReceivedPackOutcomes } from "./capsuleShareOutcomes.mjs";
 import { createGuestInfluence } from "./capsuleShareTrust.mjs";
 import { EvidenceZoneSubscriptions, subscriptionsForAudience } from "./evidenceZoneSubscription.mjs";
-import { reownOperatorImportedZones } from "./evidenceReown.mjs";
 import { createCapsuleRoutes } from "./capsuleRoutes.mjs";
 import { createVcrModelSources } from "./vcrModelSources.mjs";
 import { createVcrEvidenceSources } from "./vcrEvidenceSources.mjs";
@@ -349,9 +346,7 @@ import { createFrontierRoutes, frontierEventsBeacon, frontierRoutePattern } from
 import { FrontierInteractions } from "./frontierInteractions.mjs";
 import { createFrontierReadingMetrics } from "./frontierReadingMetrics.mjs";
 import { createEvidenceSourceReader } from "./evidenceSourceReader.mjs";
-import { EvidenceEditorial } from "./evidenceEditorial.mjs";
 import { EvidenceZoneService } from "./evidenceZoneService.mjs";
-import { createEvidenceCardSearch } from "./evidenceCardSearch.mjs";
 import { createEvidenceFeed, evidenceFeedMetricFamilies } from "./evidenceFeed.mjs";
 import { createEvidenceFlywheelMetrics } from "./evidenceFlywheelMetrics.mjs";
 import { createGeoCardCitationReader } from "./geoCardCitations.mjs";
@@ -360,9 +355,7 @@ import { createEvidenceCommunity, createEvidenceCommunityRoutes, evidenceCommuni
 import { createEvidenceFeedRoutes } from "./evidenceFeedRoutes.mjs";
 import { setEvidencePublicBase } from "./evidencePublicPaths.mjs";
 import { createEvidencePublicRoutes, evidencePublicMetricFamilies } from "./evidencePublicRoutes.mjs";
-import { EVIDENCE_TOPIC_REQUEST_LIST_MAX, createEvidenceTopicRequestRoutes, createEvidenceTopicRequests, topicRequestCounts } from "./evidencePublicRequests.mjs";
-import { pageReads } from "./evidencePublicReads.mjs";
-import { createEvidenceProgrammeRoutes } from "./evidenceProgrammeRoutes.mjs";
+import { createEvidenceTopicRequestRoutes, createEvidenceTopicRequests } from "./evidencePublicRequests.mjs";
 import { platformContentCitedMetricFamilies } from "./evidenceCitationMetrics.mjs";
 import { createEvidenceZoneRoutes } from "./evidenceZoneRoutes.mjs";
 import { EvidenceCardFromResult } from "./evidenceCardFromResult.mjs";
@@ -375,7 +368,7 @@ import { evidencePublishMetricFamilies } from "./evidencePublishMetrics.mjs";
 import { createEvidenceSourceVerification, evidenceSourceVerificationMetricFamilies } from "./evidenceSourceVerification.mjs";
 // Keeping the cards current and answering readers' challenges (flywheel F13, F14): composed after the result impact path they feed.
 import { createEvidenceChangeLog, evidenceChangeLogMetricFamilies } from "./evidenceChangeLog.mjs";
-import { createEvidenceUpkeep, evidenceUpkeepMetricFamilies } from "./evidenceCurrency.mjs";
+import { createEvidenceUpkeep, createEvidenceUpkeepLoop, evidenceUpkeepMetricFamilies } from "./evidenceCurrency.mjs";
 import { createChallengeJudge, createEvidenceChallenges, evidenceChallengeMetricFamilies } from "./evidenceChallenges.mjs";
 import { createEvidenceFigures } from "./evidenceFigures.mjs";
 import { createEvidenceUpkeepRoutes } from "./evidenceUpkeepRoutes.mjs";
@@ -1212,8 +1205,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const row=await evolution.service.get(`evolution-module-policy-${moduleId}`);
     return row?.payload.status==='active'?{revisionId:`${row.id}:${row.revision}`,policy:row.payload.policy}:null;
   },validateRevision:async(moduleId,revisionId)=>moduleId!=='geo'||Boolean(await evolution?.policyBasis.revisionUsable(revisionId))});
-  /** @type {ReturnType<typeof createEvidenceRecalculation> | null} */
-  let evidenceRecalculation = null;
   /** @type {ReturnType<typeof createPredictionRegistry> | null} */
   let predictionRegistry = null;
   /** @type {ReturnType<typeof createEvidenceFlywheelMetrics> | null} */
@@ -2426,7 +2417,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // to the first operator's internal project, which the worker makes before
   // its first batch and hands to the editor then.
   /** @type {{ client: KnowledgePluginClient, ingest: FrontierIngest, editor: any, pipeline: any, service: FrontierService, worker: FrontierWorker,
-   *   evidenceZones: EvidenceZoneService, evidenceEditorial: EvidenceEditorial, evidenceUpkeep?: any, composer: FrontierComposer, actions: FrontierActions, profiles: FrontierProfiles,
+   *   evidenceZones: EvidenceZoneService, evidenceUpkeep?: any, composer: FrontierComposer, actions: FrontierActions, profiles: FrontierProfiles,
    *   weekly: FrontierWeekly, notifications: FrontierNotifications, usage?: ReturnType<typeof createFrontierUsage>, interactions: FrontierInteractions,
    *   reading?: ReturnType<typeof createFrontierReadingMetrics>, topics?: FrontierTopics } | null} */
   let frontier = null;
@@ -2513,12 +2504,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       onCardPublished: async (event) => {
         try { await frontierNotifications.notifyZoneFollowers(event); } catch (error) { process.stderr.write(`frontier zone notice: ${typeof error?.code === "string" ? error.code : error?.name ?? "error"}\n`); }
       }});
-    // An official zone keeps running on the feed's budget; every other zone's upkeep is booked to its owner, in the
-    // owner's own `evimed-evidence` project, and charged through the allowance composed below (`useBilling`).
-    const evidenceEditorial = new EvidenceEditorial({database:productDatabase,service:evidenceZones,editor,budget,
-      isOperator:(/** @type {string} */ userId)=>config.operatorUsers.includes(userId),
-      ensureProject:(/** @type {string} */ userId)=>ensureEvidenceProject(store,userId),
-      readSource:createEvidenceSourceReader({readWeb:(url,options)=>webReader.read(url,options),transport:(request)=>webTransport(request),userAgent:webReadUserAgent(config)}),canRun:()=>!maintenanceService||maintenanceService.claimingAllowed()});
     // Lead triggers (ct-mix 2026-10-24): searches for what the feed is missing, through the gateway's search under the
     // module's purpose and budget, handed to the plugin.
     const leads = new FrontierLeads({ database: productDatabase, plugin: client, config, budget, owner: () => editor.owner, topics,
@@ -2527,7 +2512,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         return webSearchRef.service.search(body, searchContext);
       } } });
     const worker = new FrontierWorker({
-      ingest, pipeline, composer, evidence:evidenceEditorial, tags: tagUpkeep, leads, topics, database: productDatabase,
+      ingest, pipeline, composer, tags: tagUpkeep, leads, topics, database: productDatabase,
       ensureOwner: async () => {
         const owner = await ensureFrontierProject({ store, config });
         editor.owner = owner;
@@ -2538,7 +2523,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
       report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`),
     });
-    frontier = { evidenceZones,evidenceEditorial,client, ingest, editor, pipeline, service, worker, composer, actions, profiles, weekly, notifications: frontierNotifications,
+    frontier = { evidenceZones,client, ingest, editor, pipeline, service, worker, composer, actions, profiles, weekly, notifications: frontierNotifications,
       interactions, topics };
   }
   // The operators' figures for the feed (frontierUsage.mjs): readers, reads, notices, sources, discovery, providers and the model's spend per day.
@@ -2552,8 +2537,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // dwell, the end reached, return on the next day and the seventh, onboarding — for the operator only.
     frontier.reading = createFrontierReadingMetrics({ database: productDatabase, config });
   }
-  // The evidence programme's day (evidenceBudget.mjs): the publisher account's `evidence` spend against its own budget, and its
-  // concurrency. A reading is never taken while the programme's switch is off.
+  // The day's ceiling on judging readers' challenges (evidenceBudget.mjs): counted from the publisher account's `evidence` rows in the usage ledger.
   const evidenceBudget = createEvidenceBudget({ usageLedger, config });
   const frontierRoutes = createFrontierRoutes({ store, service: frontier?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
     audit: (event, status, details) => securityAudit(config, event, status, details) });
@@ -2562,7 +2546,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const evidenceCommunity = config.evidenceCommunityCardsEnabled && frontier && productDatabase
     ? createEvidenceCommunity({ database: productDatabase, maxCards: config.evidenceCommunityMaxCards, platformPublisherUserId: PLATFORM_PUBLISHER_USER_ID }) : null;
   const evidenceCommunityRoutes = createEvidenceCommunityRoutes({ store, service: frontier?.evidenceZones ?? null, frontier: frontier?.service ?? null, config, community: evidenceCommunity });
-  const evidenceZoneRoutes = createEvidenceZoneRoutes({store,service:frontier?.evidenceZones??null,editorial:frontier?.evidenceEditorial??null,
+  const evidenceZoneRoutes = createEvidenceZoneRoutes({store,service:frontier?.evidenceZones??null,
     frontier:frontier?.service??null,config,maxJsonBytes:config.maxJsonBytes});
   // What the platform's own evidence offers the frontier (flywheel F09): a public feed the knowledge-source plugin reads like
   // any other publisher's. It reads cards, so it exists only where the evidence tables do; off, its two paths answer by name.
@@ -3179,8 +3163,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     autoRecheckLimit: config.sourceChangeRecheckLimit,
     report: code => { void securityAudit(config, "result.impact", "failed", { code }).catch(() => {}); } }) : null;
   // Keeping the evidence cards current and answering a reader's challenge (evidenceCurrency.mjs, evidenceChallenges.mjs; flywheel F13, F14). Composed with
-  // the frontier and switched by OPEN_SCIENCE_EVIDENCE_UPKEEP_ENABLED; off, the editor is exactly what it was and its routes answer 404. The editor ticks
-  // the loops (its own tick: no new scheduler), and what a changed source reaches besides cards — the result impact path and the memory labels — is driven
+  // the frontier and switched by OPEN_SCIENCE_EVIDENCE_UPKEEP_ENABLED; off, the routes answer 404 and the worker's `evidence-upkeep` loop does not exist. The
+  // frontier worker ticks the loops (no new scheduler), and what a changed source reaches besides cards — the result impact path and the memory labels — is driven
   // from the same feed, which nothing polled until now. `notifyZoneFollowers` is the frontier-links package's push to a zone's followers; absent, none.
   /** @type {{ changeLog: ReturnType<typeof createEvidenceChangeLog>, upkeep: ReturnType<typeof createEvidenceUpkeep>, challenges: ReturnType<typeof createEvidenceChallenges>, figures: ReturnType<typeof createEvidenceFigures> } | null} */
   let evidenceUpkeep = null;
@@ -3195,8 +3179,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const changeLog = createEvidenceChangeLog({ database: productDatabase });
     const upkeep = createEvidenceUpkeep({
       database: productDatabase, changeLog, sourceChanges, notifications: notificationService, notifyZoneFollowers, resultImpacts, knowledgeChange,
-      levers: { batch: config.evidenceUpkeepBatch, intervalHours: config.evidenceUpkeepIntervalHours, retireAfterChecks: config.evidenceRetireAfterChecks,
-        retireAfterDays: config.evidenceRetireAfterDays, challengesPerDay: config.evidenceChallengesPerDay },
+      levers: { batch: config.evidenceUpkeepBatch, intervalHours: config.evidenceUpkeepIntervalHours, challengesPerDay: config.evidenceChallengesPerDay },
       isOperator: (/** @type {string} */ userId) => config.operatorUsers.includes(userId),
       report: (code) => process.stderr.write(`${code}\n`),
     });
@@ -3207,7 +3190,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // A calculated claim is checked against its receipt: the reader the composition gives the zone service below (read when a challenge is, not now).
       receiptsFor: (card) => zones.receiptsFor(card) });
     zones.onCardSaved = async (event) => { await upkeep.onCardRevision(event); await challenges.onCardRevision(event); };
-    frontier.evidenceEditorial.useUpkeep({ sourceChanges, upkeep, challenges });
+    frontier.worker.upkeep = createEvidenceUpkeepLoop({ upkeep, challenges, report: (code) => process.stderr.write(`${code}\n`) });
     evidenceUpkeep = { changeLog, upkeep, challenges, figures: createEvidenceFigures({ database: productDatabase }) };
     frontier.evidenceUpkeep = evidenceUpkeep;
   }
@@ -3222,35 +3205,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       evolution: { get: (/** @type {string} */ id) => (evolution?.service ? evolution.service.get(id) : Promise.resolve(null)) },
     });
   }
-  // The platform's own evidence programme (evidenceProgramme.mjs, plan §5.1 F01/F02/F04): a daily topic decision, agendas the publisher
-  // account runs in its internal evidence project, and the cards their verified conclusions earn. Composed only with its switch on and
-  // the frontier (which it reads and whose zones it writes) and the autopilot (which runs its agendas) beside it; off, it is nothing.
-  // The agendas' own planner, budget and slot are the programme's through `autopilotService.programme`.
-  const evidenceProgramme = config.evidenceProgrammeEnabled && frontier && autopilotService && productDatabase && productDocuments && productJobs ? createEvidenceProgramme({
-    config, database: productDatabase, documents: productDocuments, jobs: productJobs, autopilot: autopilotService, zones: frontier.evidenceZones,
-    budget: evidenceBudget, entityVocabulary, results: resultProvenance, usageLedger,
-    ensureProject: () => ensureEvidenceProject(store),
-    canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
-    report: code => process.stderr.write(`${code}\n`),
-  }) : null;
-  if (autopilotService && evidenceProgramme) autopilotService.programme = evidenceProgramme;
-  // The selector's "a card went out of date" signal is the upkeep's own list of official cards whose currency is not current (a new study
-  // or a changed source it left for the programme to decide on); with the upkeep off the programme has no such signal and says so.
-  if (evidenceProgramme && evidenceUpkeep) {
-    const upkeep = evidenceUpkeep.upkeep;
-    evidenceProgramme.useSignals({ staleOfficialCards: async () => (await upkeep.staleOfficialCards({ limit: 50 })).map((card) => ({ zoneId: card.zoneId, cardId: card.cardId, reason: card.currency })) });
-  }
-  // Two more of the selector's signals are the public pages' own: how often a zone's pages were read and which topics readers asked for
-  // (evidencePublicReads.mjs, evidencePublicRequests.mjs). Both tables exist only where the pages are on; without them the selector is told
-  // the signal is not recorded rather than that it is zero.
-  if (evidenceProgramme && evidencePublicOn) {
-    evidenceProgramme.useSignals({
-      pageReads: (query) => pageReads(productDatabase, query),
-      topicRequests: () => topicRequestCounts(productDatabase, { limit: EVIDENCE_TOPIC_REQUEST_LIST_MAX }),
-    });
-  }
-  // The operator's page of the programme and the button that runs today's decision now (evidenceProgrammeRoutes.mjs).
-  const evidenceProgrammeRoutes = createEvidenceProgrammeRoutes({ store, programme: evidenceProgramme, config, maxJsonBytes: config.maxJsonBytes });
   // The numerical chain: which calculation a printed number came from, and the platform writing a report's numbers itself.
   const resultLineage = resultProvenance ? new ResultLineageService({ results: resultProvenance, replays: resultReplays, config,
     mirror: (project, full, bytes) => runtimeManager.mirrorWorkspaceUpload(project, full, bytes),
@@ -4215,8 +4169,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     });
     credits = { service, worker };
   }
-  // The zone editor charges an account's own zone's upkeep through the allowance, composed above after it.
-  frontier?.evidenceEditorial.useBilling({ credits: credits?.service ?? null });
   const creditsRoutes = createEvimedCreditsRoutes({
     store, service: credits?.service ?? null, config,
     audit: (event, detail) => securityAudit(config, event, "completed", detail),
@@ -4552,15 +4504,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         }
       }
       const autopilotOwned = await step("autopilot.complete", () => foldAutopilotRun(project, run));
-      // The platform's own evidence programme: a finished episode, or a recorded independent check of one of its claims, is the
-      // moment a card may be earned (evidenceProgramme.mjs `settleEpisode`, which waits for what is not in yet). Nothing for any run
-      // that is not the programme's, and a failure here never touches the run.
-      if (evidenceProgramme?.owns(project.userId, project.id)) {
-        await evidenceProgramme.onRunFinished(project, run, { verifiedEpisodeId }).catch((/** @type {any} */ error) => securityAudit(config, "evidence.programme.settle", "failed", {
-          userId: project.userId, projectId: project.id, runId: run.id,
-          code: typeof error?.code === "string" ? error.code : "evidence_programme_settle_failed",
-        }));
-      }
       // A 虚拟临床研究 run (dispatch id `vcr-…`): its bounded runtime is let go,
       // then the orchestrator folds it into the study's steps — the same order
       // a GEO run takes below. Released whether or not the orchestrator is
@@ -4791,7 +4734,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   });
   const resultCaptureRepairRoutes = createResultCaptureRepairRoutes({ store, runs: agentRuns, config, maxJsonBytes: config.maxJsonBytes,
     refreshAndReconcile: geo && geoPlanContexts ? createGeoArtifactRefresh({ runs: agentRuns, results: resultProvenance, geo, contexts: geoPlanContexts }) : null,
-    service: resultProvenance ? new ResultCaptureRepairService({ results: resultProvenance, runs: agentRuns, programme: evidenceProgramme }) : null });
+    service: resultProvenance ? new ResultCaptureRepairService({ results: resultProvenance, runs: agentRuns }) : null });
   // The co-creation loop (evidence-flywheel plan §5.2, F05–F07): a result published as a card, research continued from a
   // card, the author page. All of it is the frontier's, so with the frontier off none of it is composed, no route
   // answers and no run asks which card it came from. The citation gift is the credits service's own grant entry
@@ -4811,9 +4754,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         bindSession: (project, sessionId) => researchSessions.put(project, sessionId, { mode: "open-domain" }) }),
       // The author page carries the author's recent changes where the change log is composed (the upkeep's); without it the page has none.
       authors: new EvidenceAuthors({ database: productDatabase, platformPublisherUserId: PLATFORM_PUBLISHER_USER_ID, changeLog: evidenceUpkeep?.changeLog ?? null }),
-      // A ✓ means the platform read the source: the owner's request to have it read, through the reader the editor's upkeep uses.
+      // A ✓ means the platform read the source: the owner's request to have it read, through the web read (robots.txt honoured, paced per site).
       verification: createEvidenceSourceVerification({ database: productDatabase, zones: frontier.evidenceZones,
-        readSource: frontier.evidenceEditorial.readSource, perDay: config.evidenceVerifyReadsPerDay,
+        readSource: createEvidenceSourceReader({ readWeb: (url, options) => webReader.read(url, options), transport: (request) => webTransport(request), userAgent: webReadUserAgent(config) }),
+        perDay: config.evidenceVerifyReadsPerDay,
+        sourceChanges,
         report: (code) => process.stderr.write(`evidence source verification: ${code}\n`) }),
     };
   }
@@ -5269,10 +5214,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const registry = await agentRegistry;
       const selected = registry.get(OPEN_DOMAIN_ANSWER_AGENT_ID);
       if (!selected) throw new HttpError(503, "autopilot_capability_unavailable", "Autopilot capability is unavailable.");
-      // A verification of the platform's own claim is the platform's money too (purpose `evidence`), and the programme's budget
-      // does not gate it: its share was held back from the episode's own cap when the episode was made.
-      const programmeOwned = Boolean(evidenceProgramme?.owns(user.id, project.id));
-      if (!programmeOwned) await checkAutopilotBalance(verification, user, selected);
+      await checkAutopilotBalance(verification, user, selected);
       await reclaimUnsentAutopilotRuntime({ service: autopilotService, runtimeManager }, project, verification, previous.unsent);
       if (previous.unsent) await discardVerificationScratch(project, previous.unsent.dispatchId).catch(error => securityAudit(config, "autopilot.verification.scratch", "failed", {
         userId: project.userId, projectId: project.id, runId: previous.unsent.id,
@@ -5314,7 +5256,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           effectiveRuntimeAgent: selected.runtimeAgent,
           // Binding fixes capability identity while preserving this verified
           // control-plane dispatch reason.
-          effectiveRouteReason: programmeOwned ? EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON : VERIFICATION_ROUTE_REASON,
+          effectiveRouteReason: VERIFICATION_ROUTE_REASON,
         }, async (binding, dispatchedRun) => {
           await assertAutopilotDispatchAllowed(verification, user);
           await autopilotService.recordVerificationDispatched(user.id, verification.episodeId, {
@@ -5382,17 +5324,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // task's own spend, then the account's. What is left of the task's caps
         // bounds this run below.
         const allowance = await autopilotService.assertAffordable(user.id, agenda);
-        // The platform's own agenda (the evidence programme's) is held by the programme's day and its one slot as well, and is
-        // nobody's to pay: no wallet is asked, and the run's spend is booked as `evidence` (its route reason).
-        const programmeOwned = Boolean(evidenceProgramme?.owns(user.id, project.id));
-        if (programmeOwned) await evidenceProgramme.assertAdmitted(user.id, agenda, { episodeId: episode.episodeId });
         const registry = await agentRegistry;
         // One table in the domain, held against every capability's declared
         // task types by a test: GEO monitoring used to ride `signal-monitoring`
         // here and ran adverse-event analysis instead.
         const selected = registry.get(autopilotEpisodeCapability(episode.taskType) ?? "");
         if (!selected) throw new HttpError(503, "autopilot_capability_unavailable", "Autopilot capability is unavailable.");
-        if (!programmeOwned) await checkAutopilotBalance(episode, user, selected);
+        await checkAutopilotBalance(episode, user, selected);
         await reclaimUnsentAutopilotRuntime({ service: autopilotService, runtimeManager }, project, episode, previous.unsent);
         // Signed into the bounded runtime and every model request it makes: the
         // account's day and week (the gateway sums everything the account spent,
@@ -5406,8 +5344,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // A project whose runtime is already open for the researcher takes the execution in that runtime — the conversation they
         // are looking at — rather than reserving a bounded one, as a 虚拟临床研究 step and a GEO step do. The two exclusions go
         // with it: an open conversation tab no longer makes 立即运行 wait for the runtime to go idle, and the project's
-        // conversation is no longer refused while an execution runs. Researcher-owned agendas only: the platform's own
-        // programme never has a researcher's runtime to join. A run already in progress in the project keeps the one-run-per-
+        // conversation is no longer refused while an execution runs. A run already in progress in the project keeps the one-run-per-
         // project rule the other two modules hold (they share the workspace's run state), and the worker asks again soon,
         // because what it waits for is a turn, not the runtime's idle timeout.
         //
@@ -5415,13 +5352,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // execution to `runLimit` by the run it attributes each call to (`autopilotEpisodeScope.mjs`), from the figure
         // `markEpisodeDispatched` records below, before the prompt exists. No budget marker is sent here: the gateway refuses
         // one in an interactive runtime, and a marker left in the conversation's history would cap what the researcher says next.
-        const interactive = !programmeOwned && runtimeManager.runtimes.has(runtimeManager.key(project)) && !runtimeManager.boundedRuntimeScope(project);
+        const interactive = runtimeManager.runtimes.has(runtimeManager.key(project)) && !runtimeManager.boundedRuntimeScope(project);
         if (interactive && (await agentRuns.activeRuns(project)).length > 0) {
           noteEpisodePlacement("waiting");
           throw Object.assign(new HttpError(409, "runtime_busy", "The project has a run in progress; the scheduled execution waits for it."),
             { retryAfterMs: AUTOPILOT_INTERACTIVE_RETRY_MS });
         }
-        const sessionId = programmeOwned ? randomId("session_") : await autopilotService.conversation(user.id, agenda.id);
+        const sessionId = await autopilotService.conversation(user.id, agenda.id);
         if (!interactive) await runtimeManager.reserveBoundedRuntimeSession(project, {
           runId: episode.episodeId,
           dailyLimit,
@@ -5437,9 +5374,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // Where the run lives and what it may spend, written with the binding to the episode. Every write of that binding carries it.
         const bindingOf = (/** @type {string} */ runId) => ({ runId, sessionId: session.id, interactive, runLimitCny: runLimit });
         try {
-          await researchSessions.put(project, session.id, programmeOwned
-            ? { mode: "specialist", agentId: selected.id, agentVersion: selected.version }
-            : { mode: "open-domain" });
+          await researchSessions.put(project, session.id, { mode: "open-domain" });
           const run = await agentRuns.dispatch(project, {
             sessionId: session.id,
             dispatchId,
@@ -5452,7 +5387,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             effectiveAgentId: selected.id,
             effectiveAgentVersion: selected.version,
             effectiveRuntimeAgent: selected.runtimeAgent,
-            effectiveRouteReason: programmeOwned ? evidenceProgrammeRouteReason(episode.taskType) : `autopilot:${episode.taskType}`,
+            effectiveRouteReason: `autopilot:${episode.taskType}`,
             ...(runEstimate(selected) ? { estimatedMinutes: runEstimate(selected) } : {}),
           }, async (binding, dispatchedRun, repairText = null) => {
             // Record the attempt before checking the lease: a refusal now has
@@ -5876,9 +5811,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const frontierGatewayHandler = createFrontierGatewayHandler(config, runtimeManager, {
     evaluationIsolation,
     service: frontier?.service ?? null,
-    // Published evidence cards ride beside the items, as an index only (flywheel F12).
-    cards: frontier ? createEvidenceCardSearch({ judgeService, database: productDatabase, entityVocabulary, sourceChanges }) : null,
-    // Hot-event topics ride beside them the same way, as an index (c2-leads 2026-10-25).
+    // Hot-event topics ride beside the items, as an index (c2-leads 2026-10-25).
     topics: frontier?.service ? ((/** @type {any} */ frontierService) => ({ search: (/** @type {any} */ user, /** @type {any} */ request) => frontierService.searchTopics(user, request) }))(frontier.service) : null,
     report: (code) => process.stderr.write(`frontier search: ${code}\n`),
   });
@@ -5987,7 +5920,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     if (config.geoQuestionBankEnabled) {
       geoParts.questionBank = createGeoQuestionBank({ store: geoParts.store, measureDeps, database: productDatabase, config, entityVocabulary,
         report: (code) => process.stderr.write(`geo question bank: ${code}\n`) });
-      if (evidenceProgramme) evidenceProgramme.useSignals({ observedErrors: () => geoParts.questionBank.observedErrors() });
       // The monthly figures page shows the bank's latest month under its three figures (evidencePublicMetrics.mjs).
       evidenceMetricSections.questionBank = (query) => geoParts.questionBank.summary(query);
     }
@@ -6449,26 +6381,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     runtimeManager.platformSkillSupply = evolution.supply;
     if (autopilotService) { autopilotService.evolution = evolution.integration;
       evolution.service.callbacks.recordResumedResearchCompleted=evolution.recordResumedResearchCompleted; }
-    // A research-proof the evolution module records is told to the recalculation-card publisher (flywheel F03): one call, advice and never part
-    // of the loop. Composed only with its own switch, the frontier whose official zones it writes and the glossary that finds the zone.
-    if (config.evidenceRecalculationCardsEnabled && frontier && entityVocabulary && productDatabase) {
-      const recalculation = createEvidenceRecalculation({ config, evolution: evolution.service, zones: frontier.evidenceZones,
-        matchZone: createOfficialZoneMatcher({ database: productDatabase, entityVocabulary }), report: code => process.stderr.write(`${code}\n`) });
-      evidenceRecalculation = recalculation;
-      evolution.service.callbacks.recalculationProof = (/** @type {any} */ proof) => recalculation.onProofRecorded(proof);
-    }
     // Historical prediction records remain readable; serving performs no model extraction.
     if (config.predictionRegistryEnabled && config.evolutionServingOnly === true) {
       predictionRegistry = createPredictionRegistry({ config, evolution: evolution.service, extractPublished: null,
         isOperator: user => config.operatorUsers.includes(user.id), report: code => process.stderr.write(`${code}\n`) });
       evidenceMetricSections.predictionCalibration = () => predictionRegistry.predictionCalibration();
     }
-    // What the platform's own modules could not do goes to the evolution module as leads (evolutionLeadSources.mjs, flywheel F20): the evidence programme is read by
-    // the worker's daily scan; 循证 GEO and 虚拟临床研究 get an `offer` where their modules are composed. Off, nothing is composed and the worker ingests no scan event.
+    // What the platform's own modules could not do goes to the evolution module as leads (evolutionLeadSources.mjs, flywheel F20): 循证 GEO and
+    // 虚拟临床研究 get an `offer` where their modules are composed. Off, nothing is composed and the worker ingests no scan event.
     if (config.evolutionModuleLeadsEnabled) {
       evolutionLeadSources = createEvolutionLeadSources({
         service: evolution.service, perDay: config.evolutionModuleLeadsPerDay, report: code => process.stderr.write(`${code}\n`),
-        programme: evidenceProgramme && productDocuments ? programmeLeadReader({ documents: productDocuments, publisherId: PLATFORM_PUBLISHER_USER_ID, decisionKind: PROGRAMME_DECISION_KIND, entityVocabulary }) : null,
         communication: Boolean(geo), virtualStudy: Boolean(vcr),
       });
       const sources = evolutionLeadSources;
@@ -6604,7 +6527,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           evolution?.worker.status().running,
           rsiOnline?.worker.status().running,
           frontier?.worker.status().running,
-          evidenceProgramme?.worker?.status().running,
           review?.worker.status().running,
           geo?.worker?.status?.().running,
           vcr?.worker?.status?.().running,
@@ -7126,7 +7048,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await researchDbRoutes(req, res)) return;
       if (await autopilotRoutes(req, res)) return;
       if (await evidenceTopicRequestRoutes(req, res)) return;
-      if (await evidenceProgrammeRoutes(req, res)) return;
       if (await evidenceUpkeepRoutes(req, res)) return;
       if (await evidenceCommunityRoutes(req, res)) return;
       if (await evidenceZoneRoutes(req, res)) return;
@@ -7212,8 +7133,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           evolution,
           evaluationIsolation,
           evidenceBudget,
-          evidenceProgramme,
-          evidenceRecalculation,
           predictionRegistry,
           entityVocabulary,
           evidencePublish,
@@ -9248,7 +9167,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       process.stderr.write("managed browser pause: cleanup remains unconfirmed\n");
     });
     for (const worker of [pluginApplyWorker, personalSkillWorker, hostedExtensions?.preparation, hostedExtensions?.worker, memoryIndexWorker, nativeMemoryWorker, sourceWorker, knowledgePagesWorker, sourceSyncWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
-      geo?.worker, vcr?.worker, evolution?.worker, credits?.worker, documentExportWorker, resultReplayWorker, availability.worker, evidenceProgramme?.worker]) {
+      geo?.worker, vcr?.worker, evolution?.worker, credits?.worker, documentExportWorker, resultReplayWorker, availability.worker]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
     }
@@ -9275,7 +9194,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     runtimeCleanupTimer = null;
   };
 
-  let evidenceReownRun = false;
   let capsuleFoldRun = false;
   let officialPublishRun = false;
   let legacyMemoryRetired = false;
@@ -9304,12 +9222,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       rsiOnline?.worker.start();
       im.worker?.start();
       frontier?.worker.start();
-      // The official zones an earlier release left in an operator's name become the platform's, once at start (idempotent; evidenceReown.mjs):
-      // until they do, their AI upkeep is booked to an operator's wallet. Said on stderr; a failure is said too and costs the start nothing.
-      if (frontier && productDatabase && !evidenceReownRun) {
-        evidenceReownRun = true;
-        void reownOperatorImportedZones(productDatabase, { operatorUsers: config.operatorUsers }).catch((/** @type {any} */ error) => process.stderr.write(`evidence re-own failed: ${error?.code ?? error?.name ?? "error"}\n`));
-      }
       // The per-project notes capsules and per-project lists of packs an earlier release made become the person's one capsule, once at start
       // (idempotent; `capsuleOneCapsule.mjs`): the index is told to forget the emptied capsules' copies through the withdrawal ledger. Said on
       // stderr, one line per account; a failure is said too and costs the start nothing.
@@ -9342,8 +9254,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         handbookArmRetired = true;
         void retireHandbookArm({ database: productDatabase, report: (line) => process.stderr.write(`${line}\n`) }).catch(() => {});
       }
-      // The evidence programme is scheduled work: it is armed only where scheduled tasks are on.
-      if (config.autopilotEnabled) evidenceProgramme?.worker?.start();
       review?.worker.start();
       geo?.worker?.start?.();
       vcr?.worker?.start?.();
@@ -9453,7 +9363,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     sourceUnderstandingRuntime,
     autopilotService,
     autopilotWorker,
-    evidenceProgramme,
     usageLedger,
     notificationService,
     feedbackEvents,
@@ -9605,7 +9514,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await rsiOnline?.worker.close();
       await im.worker?.close();
       await frontier?.worker.close();
-      await evidenceProgramme?.worker?.close();
       await review?.worker.close();
       await judgeService.close();
       jevTransport.close();
@@ -10442,7 +10350,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ webVitals = null, judgeService = null, openViking = null, config, store, taskManager, runtimeManager, memorySettings, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memoryIndexProvider = null, runMetrics = null, imMetrics = null, webReader = null, deepseekTools = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null, evolutionLeadSources = null, officialPromotion = null, capsuleService = null, officialPacks = null, researchDb = null }) {
+async function operatorMetricsText({ webVitals = null, judgeService = null, openViking = null, config, store, taskManager, runtimeManager, memorySettings, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memoryIndexProvider = null, runMetrics = null, imMetrics = null, webReader = null, deepseekTools = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceFeed = null, evidencePublic = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null, evolutionLeadSources = null, officialPromotion = null, capsuleService = null, officialPacks = null, researchDb = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, memorySettings, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memoryIndexProvider, frontier, review, geo, vcr, credits, judgeService, capsuleService, openViking, researchDb);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -10998,14 +10906,9 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
   // The readers' events and what each list served (frontierInteractions.mjs), and today's and yesterday's reading figures (frontierReadingMetrics.mjs).
   if (frontier?.interactions) for (const family of frontier.interactions.metricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   if (frontier?.reading) for (const family of await frontier.reading.metricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
-  // The platform's evidence programme (evidenceBudget.mjs): its switches, today's spend against its budget and its slots, and who paid
-  // for the zone upkeep this process ran. No reading is taken while the programme is off.
-  const evidenceReading = evidenceBudget?.enabled ? await evidenceBudget.budget().catch(() => null) : null;
-  // The challenges' own day (their judging ceiling) is read only where the upkeep is composed, programme on or off.
+  // The evidence public pages' switches (evidenceBudget.mjs) and the readers' challenges' own day (their judging ceiling), read only where the upkeep is composed.
   const challengeReading = evidenceBudget && evidenceUpkeep ? await evidenceBudget.challengeBudget().catch(() => null) : null;
-  for (const family of evidenceBudgetMetricFamilies(config, evidenceBudget, evidenceReading, frontier?.evidenceEditorial?.status().counters ?? null, challengeReading)) addMetric(lines, family.name, family.help, family.type, family.series);
-  // What the programme decided and wrote: decisions by who chose, signals read (counts only), actions and cards by outcome, claims left out by why.
-  for (const family of evidenceProgrammeMetricFamilies(evidenceProgramme)) addMetric(lines, family.name, family.help, family.type, family.series);
+  for (const family of evidenceBudgetMetricFamilies(config, evidenceBudget, challengeReading)) addMetric(lines, family.name, family.help, family.type, family.series);
   // Sharing memory inside the platform (capsuleShareMetrics.mjs): shares, imports, trials, declines, take-downs, what the write-side
   // defences refused, zone subscriptions, and what learning did with runs that used a guest capsule.
   if (config.capsuleShareEnabled === true) for (const family of capsuleShareMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
@@ -11017,8 +10920,6 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
   // Memory on the native engine (nativeMemoryMetrics.mjs): what the memory gateway forwarded, withheld and refused, and what
   // the overlay's worker read, replayed and took back.
   if (config.memoryEngineEnabled === true) for (const family of nativeMemoryMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
-  // Recalculation cards (evidenceRecalculation.mjs): the switch, and what became of each proof the evolution module recorded.
-  for (const family of evidenceRecalculationMetricFamilies(evidenceRecalculation, config)) addMetric(lines, family.name, family.help, family.type, family.series);
   // The prediction registry (predictionRegistry.mjs): the switch, registrations, scores and what each published paper that named a registered trial led to.
   for (const family of predictionRegistryMetricFamilies(predictionRegistry, config)) addMetric(lines, family.name, family.help, family.type, family.series);
   // The evidence card's guardrails (evidenceCardMetrics.mjs): cards without a producer (must be 0), writes refused by

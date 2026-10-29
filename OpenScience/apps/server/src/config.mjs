@@ -498,29 +498,6 @@ function frontierSettings(overrides) {
 }
 
 /**
- * The platform's evidence programme and its public pages (evidence-flywheel plan §5.1, §9, B7, 2026-10-05),
- * each checked at load, with the discipline of the frontier's: a lever an operator sets in `.env`, passed
- * value-less by compose (unset is absent, so the default here applies), and a value outside its range
- * stops the process at start with the variable's name rather than turning into a 0 or a NaN.
- *
- * - The programme is the platform researching on the publisher account's own behalf; it spends model
- *   money, so it is off by default. Its day is `OPEN_SCIENCE_EVIDENCE_PROGRAMME_DAILY_BUDGET_CNY`
- *   (30: about four deep syntheses at the 7 yuan measured on 2026-10-04; 0 is no cap, as every spend
- *   limit on this platform reads 0) and it works one thing at a time
- *   (`OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY`, 1) so it can never crowd a researcher's runtime.
- * - The public pages are off by default; `OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE` is a second, separate
- *   lever and also off: until the owner has chosen a domain the pages say `noindex` and no sitemap is
- *   served, so a page reachable by IP address can never become a search result by accident.
- * - `OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH` says where the public pages, their API, the sitemap and the feed are served: `/evidence`
- *   (the plan's address for the eventual domain, the default) or `/evimed-evidence`, for a deployment on a numeric address whose own
- *   `/evidence/` belongs to another product. A closed choice; anything else stops the start by the variable's name.
- * - These are the levers only. What reads them — the programme's selector, the public routes — is the
- *   later work packages'; each must do nothing at all, and answer 404 by its own code, while its switch
- *   is off.
- *
- * @param {Record<string, any>} overrides
- */
-/**
  * The evidence card source of the topic zones: \`none\` (the default) or \`external\`. Anything else is refused by name.
  * @param {unknown} value
  * @returns {"none" | "external"}
@@ -531,6 +508,24 @@ function evidenceCardProvider(value) {
   throw new Error(`OPEN_SCIENCE_EVIDENCE_CARD_PROVIDER must be none or external, got ${JSON.stringify(value)}.`);
 }
 
+/**
+ * The evidence zones' public pages and the prediction registry's switch (evidence-flywheel plan §5.1, §9, B7, 2026-10-05; the platform's
+ * own evidence programme and its recalculation cards were deleted on 2026-10-29, when the platform stopped writing cards),
+ * each checked at load, with the discipline of the frontier's: a lever an operator sets in `.env`, passed
+ * value-less by compose (unset is absent, so the default here applies), and a value outside its range
+ * stops the process at start with the variable's name rather than turning into a 0 or a NaN.
+ *
+ * - The public pages are off by default; `OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE` is a second, separate
+ *   lever and also off: until the owner has chosen a domain the pages say `noindex` and no sitemap is
+ *   served, so a page reachable by IP address can never become a search result by accident.
+ * - `OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH` says where the public pages, their API, the sitemap and the feed are served: `/evidence`
+ *   (the plan's address for the eventual domain, the default) or `/evimed-evidence`, for a deployment on a numeric address whose own
+ *   `/evidence/` belongs to another product. A closed choice; anything else stops the start by the variable's name.
+ * - These are the levers only. What reads them — the public routes — must do nothing at all, and answer 404 by its own code, while
+ *   its switch is off.
+ *
+ * @param {Record<string, any>} overrides
+ */
 function evidenceSettings(overrides) {
   /** @param {string} key @param {string} name @param {unknown} fallback */
   const read = (key, name, fallback) => {
@@ -538,22 +533,12 @@ function evidenceSettings(overrides) {
     const value = process.env[name];
     return value == null || value === "" ? fallback : value;
   };
-  const budgetValue = read("evidenceProgrammeDailyBudgetCny", "OPEN_SCIENCE_EVIDENCE_PROGRAMME_DAILY_BUDGET_CNY", 30);
-  const budget = Number(budgetValue);
-  if (!Number.isFinite(budget) || budget < 0 || budget > 10_000) {
-    throw new Error(`OPEN_SCIENCE_EVIDENCE_PROGRAMME_DAILY_BUDGET_CNY must be a number from 0 to 10000, got ${JSON.stringify(budgetValue)}.`);
-  }
   const publicBasePath = read("evidencePublicBasePath", "OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH", EVIDENCE_PUBLIC_BASE_PATHS[0]);
   if (typeof publicBasePath !== "string" || !EVIDENCE_PUBLIC_BASE_PATHS.includes(publicBasePath)) {
     throw new Error(`OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH must be one of ${EVIDENCE_PUBLIC_BASE_PATHS.join(", ")}, got ${JSON.stringify(publicBasePath)}.`);
   }
-  const concurrencyValue = read("evidenceProgrammeMaxConcurrency", "OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY", 1);
-  const concurrency = Number(concurrencyValue);
-  if (!Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > 4) {
-    throw new Error(`OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY must be a whole number from 1 to 4, got ${JSON.stringify(concurrencyValue)}.`);
-  }
   /**
-   * The programme's own limits (F01/F02, 2026-10-05), each with a floor or ceiling that keeps its rule true.
+   * A whole-number lever with a floor and a ceiling that keep its rule true.
    * @param {string} key @param {string} name @param {number} fallback @param {number} min @param {number} max
    */
   const whole = (key, name, fallback, min, max) => {
@@ -564,30 +549,10 @@ function evidenceSettings(overrides) {
     }
     return number;
   };
-  const episodeValue = read("evidenceProgrammeEpisodeBudgetCny", "OPEN_SCIENCE_EVIDENCE_PROGRAMME_EPISODE_BUDGET_CNY", 10);
-  const episodeBudget = Number(episodeValue);
-  if (!Number.isFinite(episodeBudget) || episodeBudget < 2 || episodeBudget > 1000) {
-    throw new Error(`OPEN_SCIENCE_EVIDENCE_PROGRAMME_EPISODE_BUDGET_CNY must be a number from 2 to 1000, got ${JSON.stringify(episodeValue)}.`);
-  }
   return {
-    evidenceProgrammeEnabled: overrides.evidenceProgrammeEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_PROGRAMME_ENABLED", false),
-    // Recalculation cards (flywheel F03): the evolution module's independent reproduction of a published result, published as a first-hand
-    // card in the matching official zone. Off by default, and it does nothing unless the evolution module is on beside it.
-    evidenceRecalculationCardsEnabled: overrides.evidenceRecalculationCardsEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_RECALCULATION_CARDS_ENABLED", false),
     // The prediction registry (flywheel F25): time-stamped registrations of predictions for trials in progress, scored when the trial's result
     // is published. Off by default; with it off no registration is read or written and no route answers.
     predictionRegistryEnabled: overrides.predictionRegistryEnabled ?? boolEnv("OPEN_SCIENCE_PREDICTION_REGISTRY_ENABLED", false),
-    evidenceProgrammeDailyBudgetCny: budget,
-    evidenceProgrammeMaxConcurrency: concurrency,
-    // What one programme episode, with the independent checks of its claims, may spend: the agenda's per-episode cap.
-    evidenceProgrammeEpisodeBudgetCny: Math.round(episodeBudget * 100) / 100,
-    // How many distinct readers must have an entity in their 「与你相关」 profile before the topic selector sees it at all.
-    // The floor is the privacy rule (plan §13.13): a lever may raise it, never lower it, so one reader is never a signal.
-    evidenceProgrammeMinDemandUsers: whole("evidenceProgrammeMinDemandUsers", "OPEN_SCIENCE_EVIDENCE_PROGRAMME_MIN_DEMAND_USERS", 5, 5, 10_000),
-    // The most original-analysis cards the platform publishes in a rolling week (0 publishes none); the next waits.
-    evidenceProgrammeOriginalPerWeek: whole("evidenceProgrammeOriginalPerWeek", "OPEN_SCIENCE_EVIDENCE_PROGRAMME_ORIGINAL_ANALYSES_PER_WEEK", 2, 0, 14),
-    // An official card whose sources were last checked longer ago than this is stale, a topic signal of its own.
-    evidenceProgrammeStaleCardDays: whole("evidenceProgrammeStaleCardDays", "OPEN_SCIENCE_EVIDENCE_PROGRAMME_STALE_CARD_DAYS", 30, 1, 365),
     evidencePublicWebEnabled: overrides.evidencePublicWebEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_PUBLIC_WEB_ENABLED", false),
     evidencePublicIndexable: overrides.evidencePublicIndexable ?? boolEnv("OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE", false),
     // Where the public pages, their API, the sitemap and the feed are served (see the note above): `/evidence` or `/evimed-evidence`.
@@ -623,7 +588,7 @@ function evidenceCitationGiftSettings(overrides) {
 
 /**
  * Keeping the evidence zones' cards current and answering a reader's challenge (evidence-flywheel plan 2026-10-05 §5.4, F13, F14, §2.5),
- * each lever checked at load with the discipline of the programme's above.
+ * each lever checked at load with the discipline of the public pages' above.
  *
  * - `OPEN_SCIENCE_EVIDENCE_UPKEEP_ENABLED` (off): the watch for new evidence and source changes, the follow-ups and notices it causes, the
  *   public change log, readers' challenges and a producer's retirement of a card. Off, none of it exists: no loop ticks, no table of it is read,
@@ -633,11 +598,9 @@ function evidenceCitationGiftSettings(overrides) {
  *   time between two checks of one card: the watch reads the frontier feed's index and the source-change record, so this is a bound on the
  *   database's work, not on how soon a retraction is noticed (the source-change feed is polled apart from it).
  * - `OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY` (10): the challenges one reader may file in a day; each one on a platform card costs a model call.
- * - `OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS` (6) and `OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS` (180): the exit rule of §2.5 for an AI-kept card —
- *   this many consecutive checks without a matching new study, over at least this many days, and nobody following its zone or writing on it.
  * - `OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY` (5): the most the platform's judging of readers' challenges may spend in a day, across every
  *   reader (`evidenceBudget.mjs`, counted from the usage ledger by the judgements' own run scopes). Beyond it a challenge waits, and the reader is told
- *   so (「已收到，排队复核」); 0 is no ceiling. It is the challenges' own day: judging works with the upkeep on, whether the evidence programme is on or off.
+ *   so (「已收到，排队复核」); 0 is no ceiling. It is the challenges' own day.
  * - `OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY` (60): the sources the platform reads for one account in a rolling day when the account asks it to
  *   verify a card's sources (`evidenceSourceVerification.mjs`). Not part of the upkeep: that request is the frontier's and works with the upkeep off.
  *
@@ -663,8 +626,6 @@ function evidenceUpkeepSettings(overrides) {
     evidenceUpkeepBatch: whole("evidenceUpkeepBatch", "OPEN_SCIENCE_EVIDENCE_UPKEEP_BATCH", 20, 1, 200),
     evidenceUpkeepIntervalHours: whole("evidenceUpkeepIntervalHours", "OPEN_SCIENCE_EVIDENCE_UPKEEP_INTERVAL_HOURS", 24, 1, 720),
     evidenceChallengesPerDay: whole("evidenceChallengesPerDay", "OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY", 10, 1, 100),
-    evidenceRetireAfterChecks: whole("evidenceRetireAfterChecks", "OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS", 6, 2, 1000),
-    evidenceRetireAfterDays: whole("evidenceRetireAfterDays", "OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS", 180, 7, 3650),
     evidenceVerifyReadsPerDay: whole("evidenceVerifyReadsPerDay", "OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY", 60, 1, 1000),
     evidenceChallengeDailyBudgetCny: cny("evidenceChallengeDailyBudgetCny", "OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY", 5, 0, 1000),
   };
@@ -695,7 +656,7 @@ function countSetting(overrides, key, name, fallback) {
  *   document for the eval corpus and an observation on the methods of the run that produced it. Ticked by the learning worker's housekeeping timer, so it
  *   needs the learning loop on; off, no table is read and no timer exists. `OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH` (25, at most 200) is the
  *   change-log entries one pass reads: a bound on the database's work, not on how soon an outcome is noticed.
- * - `OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED` (off): the platform's own modules (the evidence programme, 循证 GEO, 虚拟临床研究) hand 循证进化 what they could
+ * - `OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED` (off): the platform's own modules (循证 GEO, 虚拟临床研究) hand 循证进化 what they could
  *   not do as research leads; needs the evolution module on. `OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY` (5, at most 50) bounds the new leads of these
  *   sources taken in a day, because each lead is a scouting run on the module's own budget.
  * - `OPEN_SCIENCE_OFFICIAL_PROMOTION_ENABLED` (on): a method the learning loop wrote for a person that holds no personal or project fact may join the platform's

@@ -129,8 +129,6 @@ test(
       "evidence_zone_feedback",
       "evidence_zone_meta",
       "evidence_card_revisions",
-      "evidence_automation",
-      "evidence_editorial_jobs",
       "evidence_change_log",
       "evidence_challenges",
       "evidence_upkeep_state",

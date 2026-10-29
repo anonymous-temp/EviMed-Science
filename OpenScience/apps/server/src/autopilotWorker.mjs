@@ -6,13 +6,6 @@ import { wireClause } from "./dshRuntimeAdapter.mjs";
 
 export const AUTOPILOT_RESOURCE_BACKOFF_MS = Object.freeze([300_000, 900_000, 3_600_000, 21_600_000, 86_400_000]);
 
-/**
- * What the platform's evidence programme refuses a dispatch with when its day's budget is spent or its one slot is taken: a wait,
- * like a wait for a runtime, never a failed episode — the episode keeps its place and the attempt is not counted
- * (`evidenceProgramme.mjs`, plan §5.1).
- */
-export const AUTOPILOT_PROGRAMME_WAIT_CODES = Object.freeze(["evidence_programme_budget_spent", "evidence_programme_slot_busy"]);
-
 // The task's own caps are a rolling window: a dispatch refused by them is not
 // one that a retry a minute later finds open, and the next occurrence asks again.
 const TASK_BUDGET_CODES = AUTOPILOT_BUDGET_ERROR_CODES;
@@ -188,9 +181,9 @@ export class AutopilotWorker {
     } catch (error) {
       const code = typeof error?.code === "string" ? error.code : "autopilot_dispatch_failed";
       this.lastError = code;
-      if (job.payload?.action !== "cancel" && !dispatched && !verificationDispatched && (BALANCE_REFUSAL_CODES.includes(code) || ["autopilot_dispatch_pending", "runtime_cleanup_required", "runtime_busy", ...RUNTIME_ROOM_REFUSAL_CODES, ...AUTOPILOT_PROGRAMME_WAIT_CODES].includes(code))) {
+      if (job.payload?.action !== "cancel" && !dispatched && !verificationDispatched && (BALANCE_REFUSAL_CODES.includes(code) || ["autopilot_dispatch_pending", "runtime_cleanup_required", "runtime_busy", ...RUNTIME_ROOM_REFUSAL_CODES].includes(code))) {
         await holdsLease();
-        const unstartedResource = code === "runtime_busy" || RUNTIME_ROOM_REFUSAL_CODES.includes(code) || AUTOPILOT_PROGRAMME_WAIT_CODES.includes(code);
+        const unstartedResource = code === "runtime_busy" || RUNTIME_ROOM_REFUSAL_CODES.includes(code);
         const retry = unstartedResource || job.attempts < Number(job.maxAttempts ?? 3);
         // A dispatcher that knows what it waits for says when to ask again: a researcher's own run in the project ends in minutes, not
         // when the runtime's idle timeout would have freed it. Only a shorter wait is taken from it; never a longer one.
@@ -202,7 +195,7 @@ export class AutopilotWorker {
         // The leased queue write is the durable refusal even if recording its
         // reader-facing episode detail meets a later storage outage.
         await this.jobs.fail(job.userId, job.id, job.leaseToken, { code, message: BALANCE_REFUSAL_CODES.includes(code) ? "Proactive research is waiting for account credits."
-          : AUTOPILOT_PROGRAMME_WAIT_CODES.includes(code) ? "The platform's evidence programme is waiting for budget or its slot." : "The previous dispatch is still settling." },
+          : "The previous dispatch is still settling." },
           { retry, delayMs: retry ? delayMs : 0, ...(unstartedResource ? { refundAttempt: true } : {}) });
         await this.service.recordResourceDeferral(job.userId, job.payload.episodeId, {
           jobId: job.id, code, attempts: job.attempts, retrying: retry, at: at.toISOString(), retryAt: retry ? new Date(at.getTime() + delayMs).toISOString() : null,

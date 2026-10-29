@@ -1,5 +1,6 @@
 // What the platform's own modules could not do, handed to 循证进化 as research leads (evidence-flywheel F20, 2026-10-06): the closed vocabulary of each source, that a
-// tenant's words never cross, the daily bound, the programme scan over its own decision records, the two offers, and that the intake keeps its old reductions.
+// tenant's words never cross, the daily bound, the two offers, and that the intake keeps its old reductions. (The evidence programme, a third source whose daily scan read its
+// decision records, was deleted on 2026-10-29.)
 import assert from "node:assert/strict";
 import test from "node:test";
 import { EVOLUTION_LEAD_SOURCES, VCR_ENGINE_METHOD_IDS } from "@evimed/domain";
@@ -30,10 +31,10 @@ function fixture() {
 }
 const leads = (f) => [...f.rows.values()].filter((row) => row.payload.recordType === "evolution-lead").map((row) => row.payload);
 
-test("the three sources are the domain's lead sources, and a lead from one is a closed code with closed keys", () => {
+test("the two sources are the domain's lead sources, and a lead from one is a closed code with closed keys", () => {
   for (const source of MODULE_LEAD_SOURCES) assert.ok(EVOLUTION_LEAD_SOURCES.includes(source), source);
-  assert.deepEqual(moduleLeadPayload({ source: "evidence-programme", gapCode: "method-implementation", code: "adr-analysis", entityKeys: ["drug:apixaban", "disease:atrial-fibrillation", "org:fda", "doi:10.1000/x", "pmid:123", "reg:NCT00000001", "nonsense"] }),
-    { track: "M", source: "evidence-programme", gapCode: "method-implementation", code: "adr-analysis", entityKeys: ["disease:atrial-fibrillation", "drug:apixaban"] });
+  assert.deepEqual(moduleLeadPayload({ source: "communication", gapCode: "method-missing", code: COMMUNICATION_CODE, entityKeys: ["drug:apixaban", "disease:atrial-fibrillation", "org:fda", "doi:10.1000/x", "pmid:123", "reg:NCT00000001", "nonsense"] }),
+    { track: "M", source: "communication", gapCode: "method-missing", code: COMMUNICATION_CODE, entityKeys: ["disease:atrial-fibrillation", "drug:apixaban"] });
   assert.deepEqual(moduleLeadPayload({ source: "virtual-study", gapCode: "method-missing", code: "vcr-comparator", endpoint: "time_to_event", entityKeys: [] }).endpoint, "time_to_event");
   assert.equal("endpoint" in moduleLeadPayload({ source: "virtual-study", gapCode: "method-missing", code: "vcr-design", endpoint: "a patient called Zhang", entityKeys: [] }), false, "an endpoint outside the engine's three is dropped");
   assert.equal(leadEntityKeys(Array.from({ length: 30 }, (_, index) => `drug:d${String(index).padStart(2, "0")}`)).length, LEAD_ENTITY_KEY_LIMIT);
@@ -42,8 +43,8 @@ test("the three sources are the domain's lead sources, and a lead from one is a 
 
 test("a code outside the source's closed list, the wrong gap code and a source this module does not own are refused by name", () => {
   for (const input of [
-    { source: "evidence-programme", gapCode: "method-implementation", code: "private patient narrative" },
-    { source: "evidence-programme", gapCode: "method-missing", code: "adr-analysis" },
+    { source: "evidence-programme", gapCode: "method-implementation", code: "adr-analysis" },
+    { source: "communication", gapCode: "method-implementation", code: COMMUNICATION_CODE },
     { source: "communication", gapCode: "method-missing", code: "free text from a tenant" },
     { source: "virtual-study", gapCode: "method-missing", code: "comparator.secret_method" },
     { source: "literature", gapCode: "method-missing", code: "adr-analysis" }, { source: "handbook", gapCode: "method-missing", code: COMMUNICATION_CODE }, {},
@@ -64,31 +65,13 @@ test("tenant recurrence retains closed codes and queues from one authorized acco
  await assert.rejects(f.service.addLead({...input,code:'private patient narrative'}),{code:'evolution_lead_invalid'});
 });
 
-test("the programme scan reads its own decisions: an engine episode that ended with no receipt is a lead for that engine's capability with the zone's subject keys; nothing else is", async () => {
+test("the daily scan reads nothing now that the programme's decision records are gone, and counts that it ran", async () => {
   const f = fixture();
-  const decisions = [{
-    actions: [
-      { zone: "af-anticoagulation", taskType: "signal-monitoring", episodeId: "e1" },
-      { zone: "af-anticoagulation", taskType: "evidence-update", episodeId: "e2" },
-      { zone: "cardiorenal-ckd", taskType: "signal-monitoring", episodeId: "e3" },
-      { zone: "no-such-zone", taskType: "signal-monitoring", episodeId: "e4" },
-    ],
-    outcomes: { e1: { outcome: "no_engine_receipt" }, e2: { outcome: "no_engine_receipt" }, e3: { outcome: "published" }, e4: { outcome: "no_engine_receipt" } },
-  }];
-  const asked = [];
-  const sources = createEvolutionLeadSources({ service: f.service, programme: { decisions: async () => decisions, keysForZone: async (zone) => { asked.push(zone); return ["drug:apixaban", "disease:atrial-fibrillation", "org:fda"]; } } });
-  const result = await sources.scan();
-  assert.equal(result.read >= 1, true);
-  const made = leads(f);
-  assert.equal(made.length, 1, "e1 only: e2 ran no engine, e3 published, e4 is a zone the programme does not know");
-  assert.deepEqual([made[0].source, made[0].gapCode, made[0].track, made[0].entityKeys], ["evidence-programme", "method-implementation", "M", ["disease:atrial-fibrillation", "drug:apixaban"]]);
-  assert.match(made[0].code, /^[a-z0-9-]+$/);
-  assert.deepEqual(asked.slice(0, 1), ["af-anticoagulation"]);
-  // Scanned again, the same record is the same lead.
-  await sources.scan();
-  assert.equal(leads(f).length, 1);
-  assert.equal(f.jobs.filter((job) => job.kind === "evolution-scout").length, 1);
-  assert.equal(sources.stats().outcomes.duplicate >= 1, true);
+  const sources = createEvolutionLeadSources({ service: f.service });
+  assert.deepEqual(await sources.scan(), { read: 0, leads: 0 });
+  assert.equal(leads(f).length, 0);
+  assert.equal(sources.stats().scans, 1);
+  assert.equal("programme" in sources, false);
   assert.equal("communication" in sources, false, "a module that is not composed has no adapter");
   assert.equal("virtualStudy" in sources, false);
 });

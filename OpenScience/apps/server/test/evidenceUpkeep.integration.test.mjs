@@ -1,16 +1,16 @@
 // Keeping the evidence cards current (evidence-flywheel plan 2026-10-05 §5.4, F13, F14, §8) against a real PostgreSQL: the watch that finds new
-// evidence by keys and labels a card, who answers by who made the card, the source-change feed that marks every card citing a retracted work,
-// readers' challenges, the append-only public change log, retirement, and the three monthly figures. The model is a double; everything else —
-// the verbatim check, the inbox, the source-change record, the zone service, the editor — is the real one.
+// evidence by keys and labels a card, the producer who is told (the platform rewrites no card and has none of its own to keep), the source-change
+// feed that marks every card citing a retracted work, readers' challenges, the append-only public change log, a producer's retirement of their
+// card, and the three monthly figures. The model is a double; everything else — the verbatim check, the inbox, the source-change record, the
+// zone service — is the real one.
 import assert from "node:assert/strict";
 import { after, before, beforeEach, test } from "node:test";
-import { PLATFORM_PUBLISHER_USER_ID, evidenceUpkeepRoute, verifyEvidenceCardClaims } from "@evimed/domain";
+import { PLATFORM_PUBLISHER_USER_ID, verifyEvidenceCardClaims } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { createEvidenceChangeLog } from "../src/evidenceChangeLog.mjs";
 import { createEvidenceChallenges } from "../src/evidenceChallenges.mjs";
-import { cardIdentifierKeys, createEvidenceUpkeep, staleOfficialCards, zoneMatchKeys } from "../src/evidenceCurrency.mjs";
-import { evidenceContentHash, evidenceHash } from "../src/evidenceCardContent.mjs";
-import { EvidenceEditorial } from "../src/evidenceEditorial.mjs";
+import { cardIdentifierKeys, createEvidenceUpkeep, createEvidenceUpkeepLoop, zoneMatchKeys } from "../src/evidenceCurrency.mjs";
+import { evidenceHash } from "../src/evidenceCardContent.mjs";
 import { monthlyEvidenceFigures } from "../src/evidenceFigures.mjs";
 import { EvidenceZoneService } from "../src/evidenceZoneService.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
@@ -28,7 +28,6 @@ const PUBLISHER = { id: PLATFORM_PUBLISHER_USER_ID };
 const alice = { id: "up_alice" };
 const bob = { id: "up_bob" };
 const carol = { id: "up_carol" };
-const AI = { kind: "ai", name: "Test AI editor", model: "test-model" };
 const SOURCE_TEXT = "In this randomized trial, 7 of 100 adults on the drug had a stroke, against 12 of 100 on usual care. Major bleeding occurred in 3 of 100 on the drug.";
 
 /** @type {any} */ let isolated, db, service, documents, sourceChanges, notifications, changeLog;
@@ -58,23 +57,18 @@ after(async () => {
   await db?.close();
   await isolated?.drop();
 });
-beforeEach(async () => {
-  clock.at = Date.now();
-  // The editor claims the oldest due job of any zone, so one test's jobs must not stand in front of the next test's.
-  if (db) await db.query("DELETE FROM evimed_frontier.evidence_editorial_jobs");
-});
+beforeEach(() => { clock.at = Date.now(); });
 
-/** The loops and the editor over the real service, with the model and the network as doubles. */
-function build({ receiptsFor = null, resultImpacts = null, knowledgeChange = null, judge = null, budget = null, readSource = async () => ({ text: SOURCE_TEXT, receipt: { sha256: evidenceHash(SOURCE_TEXT) } }), editor = null, followers = /** @type {any[]} */ ([]), levers = {}, withUpkeep = true } = {}) {
+/** The loops over the real service, with the model and the network as doubles. */
+function build({ receiptsFor = null, resultImpacts = null, knowledgeChange = null, judge = null, budget = null, followers = /** @type {any[]} */ ([]), levers = {} } = {}) {
   const log = createEvidenceChangeLog({ database: db });
   const upkeep = createEvidenceUpkeep({ database: db, changeLog: log, sourceChanges, notifications, resultImpacts, knowledgeChange, levers: { intervalHours: 24, batch: 200, ...levers }, now,
     notifyZoneFollowers: async (/** @type {any} */ event) => { followers.push(event); } });
   const challenges = createEvidenceChallenges({ database: db, service, changeLog: log, notifications, judge, budget, levers, now, receiptsFor,
     notifyZoneFollowers: async (/** @type {any} */ event) => { followers.push(event); } });
   service.onCardSaved = async (/** @type {any} */ event) => { await upkeep.onCardRevision(event); await challenges.onCardRevision(event); };
-  const worker = new EvidenceEditorial({ database: db, service, editor: editor ?? { available: true, model: "test-model", evidenceTarget: async () => null, evidenceCard: async () => ({}), evidenceReview: async () => ({ findings: [] }) },
-    readSource, budget: async () => ({ state: "ok" }), now, sourceChanges, ...(withUpkeep ? { upkeep, challenges } : {}) });
-  return { changeLog: log, upkeep, challenges, worker, followers };
+  const loop = createEvidenceUpkeepLoop({ upkeep, challenges, now });
+  return { changeLog: log, upkeep, challenges, loop, followers };
 }
 
 /** A published zone: a user's, a product zone's, or the platform's. */
@@ -86,19 +80,17 @@ async function zoneOf(owner, { kind = "user", title = unique("Zone ") } = /** @t
   return (await service.save(owner, { title, ...(kind === "product" ? { kind: "product" } : {}), state: "published" })).zone;
 }
 
-/** A published card with its keys; `ai` makes it the editor's (written and reviewed by the model, so the automation owns it). */
-async function cardOf(zone, owner, { ai = false, entityKeys = /** @type {string[]} */ ([]), url: sourceUrl = unique("https://example.org/src-"), claims = /** @type {any[]} */ ([]), extra = /** @type {any} */ ({}), origin = ai ? "model" : "owner" } = {}) {
+/** A published card with its keys. */
+async function cardOf(zone, owner, { entityKeys = /** @type {string[]} */ ([]), url: sourceUrl = unique("https://example.org/src-"), claims = /** @type {any[]} */ ([]), extra = /** @type {any} */ ({}), origin = "owner" } = {}) {
   const body = {
     title: unique("Card "), subtype: "academic", summary: "Fewer strokes", body: "The trial reports fewer strokes.", limitations: "One trial.",
     // A card with claims has sources the platform read (a ✓ means it did): the account's own write cannot say so, its own writers can.
-    sources: [{ title: "The cited trial", url: sourceUrl, excerpt: SOURCE_TEXT, ...(ai || origin !== "owner" ? { documentText: SOURCE_TEXT, sha256: evidenceHash(SOURCE_TEXT), coverage: "abstract" } : claims.length ? { fetchedSha256: "e".repeat(64) } : {}) }],
+    sources: [{ title: "The cited trial", url: sourceUrl, excerpt: SOURCE_TEXT, ...(origin !== "owner" ? { documentText: SOURCE_TEXT, sha256: evidenceHash(SOURCE_TEXT), coverage: "abstract" } : claims.length ? { fetchedSha256: "e".repeat(64) } : {}) }],
     content: { question: "Does it prevent stroke?", answer: "Fewer strokes.", population: "Adults" },
     state: "published", entityKeys, claims, ...extra,
   };
-  if (!ai && origin === "owner" && !claims.length) return (await service.save(owner, body, zone.id, null, true)).evidence;
-  const saved = (await service.saveEditorial(owner, { ...body, ...(ai ? { editorial: { author: AI, status: "review-pending", sourceCheckedAt: new Date().toISOString(), findings: [] } } : {}) }, zone.id, null, true, origin)).evidence;
-  if (!ai) return saved;
-  return (await service.saveEditorial(owner, { expectedRevision: saved.revision, editorial: { ...saved.editorial, status: "ai-reviewed", reviewer: { ...AI, name: "Reviewer" }, contentHash: evidenceContentHash(saved), findings: [], reviewedAt: new Date().toISOString() } }, zone.id, saved.id, false, origin)).evidence;
+  if (origin === "owner" && !claims.length) return (await service.save(owner, body, zone.id, null, true)).evidence;
+  return (await service.saveEditorial(owner, body, zone.id, null, true, origin)).evidence;
 }
 
 /** A frontier item that arrived after `afterMs` of the clock, with its entity keys. */
@@ -184,121 +176,10 @@ test("one shared entity is not evidence for a card about two: an item must carry
   assert.ok(!(await cardRow(card.id)).pending_item_ids.includes(own.publicId));
 });
 
-test("a zone whose words share nothing with a matching item still finds it by key, and its owner's query only orders what was found", options, async () => {
-  const key = drug();
-  const resolver = async (/** @type {any} */ input) => (input.texts.some((/** @type {string} */ text) => text.includes("anticoagulation")) ? [key] : []);
-  const keyed = new EvidenceZoneService({ database: db, platformPublisherUserId: PLATFORM_PUBLISHER_USER_ID, entityKeysFor: resolver });
-  const zone = (await keyed.save(alice, { title: "Stroke anticoagulation", state: "published" })).zone;
-  const { worker } = build();
-  worker.service = keyed;
-  await db.query("INSERT INTO evimed_frontier.evidence_automation(zone_id,enabled,query,source_types,interval_hours,max_cards_per_run) VALUES($1,true,'warfarin','{journal}',24,1)", [zone.id]);
-  const plain = await itemOf({ title: "Factor Xa inhibitors for stroke prevention", entityKeys: [key], minutesAfter: 5 });
-  assert.equal(await worker.schedule(), 1, "the item shares no substring with the zone's title or query and is found by its entity key");
-  assert.equal((await rows("SELECT source_item_id FROM evimed_frontier.evidence_editorial_jobs WHERE zone_id=$1", [zone.id]))[0].source_item_id, plain.publicId);
-  assert.equal(worker.counters.discoveryByKeys, 1);
-  assert.deepEqual((await zoneMatchKeys({ database: db, service: keyed, zone })).entityKeys, [key]);
-  // Two matches and room for one: the item that also carries the owner's wording comes first although it is older, but it is not the only way in.
-  await db.query("DELETE FROM evimed_frontier.evidence_editorial_jobs WHERE zone_id=$1", [zone.id]);
-  const worded = await itemOf({ title: "Warfarin versus the new drug after valve surgery", entityKeys: [key], minutesAfter: 1 });
-  await db.query("UPDATE evimed_frontier.evidence_automation SET next_run_at=clock_timestamp() WHERE zone_id=$1", [zone.id]);
-  await worker.schedule();
-  assert.equal((await rows("SELECT source_item_id FROM evimed_frontier.evidence_editorial_jobs WHERE zone_id=$1", [zone.id]))[0].source_item_id, worded.publicId);
-  // A zone nothing can say anything about falls back to the query it always had.
-  const bare = (await service.save(alice, { title: "Unlabelled zone", state: "published" })).zone;
-  await db.query("INSERT INTO evimed_frontier.evidence_automation(zone_id,enabled,query,source_types,interval_hours,max_cards_per_run) VALUES($1,true,'valve surgery','{journal}',24,2)", [bare.id]);
-  const plainWorker = build().worker;
-  await plainWorker.schedule();
-  assert.equal((await rows("SELECT count(*)::int AS n FROM evimed_frontier.evidence_editorial_jobs WHERE zone_id=$1", [bare.id]))[0].n, 1);
-  assert.equal(plainWorker.counters.discoveryByQuery, 1);
-});
-
-test("D-05: a zone found by its owner's words is not handed the platform's own echo of a card as a candidate", options, async () => {
-  await insertSource(db, "upkeep-echo");
-  await db.query("UPDATE evimed_frontier.sources SET platform_produced=true WHERE id='upkeep-echo'");
-  const phrase = unique("echoprobe");
-  // A zone nothing can say anything about is found by the query it always had: a substring of the item's words.
-  const zone = (await service.save(alice, { title: unique("Unlabelled zone "), state: "published" })).zone;
-  await db.query("INSERT INTO evimed_frontier.evidence_automation(zone_id,enabled,query,source_types,interval_hours,max_cards_per_run) VALUES($1,true,$2,'{journal}',24,5)", [zone.id, phrase]);
-  const echo = await insertItem(db, { sourceId: "upkeep-echo", title: `EviMed evidence card on ${phrase}`, timelineAt: new Date(clock.at + 5 * 60_000).toISOString() });
-  const world = await itemOf({ title: `A study of ${phrase}` });
-  const worker = build().worker;
-  await worker.schedule();
-  assert.deepEqual((await rows("SELECT source_item_id FROM evimed_frontier.evidence_editorial_jobs WHERE zone_id=$1", [zone.id])).map((row) => row.source_item_id), [world.publicId],
-    "the study from the world is a candidate; the platform's own card, echoed back, is not");
-  assert.equal(worker.counters.discoveryByQuery, 1);
-  void echo;
-});
-
-test("an AI-written card gets a follow-up revision from the editor and is current again, with an entry that says whether its conclusion moved", options, async () => {
-  const followers = /** @type {any[]} */ ([]);
-  let judged = 0;
-  const editor = {
-    available: true, model: "test-model",
-    evidenceTarget: async (/** @type {any} */ input) => { judged += 1; return input.cards[0].id; },
-    evidenceCard: async () => ({ title: "Updated card", summary: "No clear difference", body: "A newer study found no clear difference.", limitations: "Abstract only.",
-      content: { question: "Does it prevent stroke?", answer: "No clear difference.", population: "Adults" } }),
-    evidenceReview: async () => ({ findings: [] }),
-  };
-  const { upkeep, worker } = build({ editor, followers });
-  const zone = await zoneOf(PUBLISHER, { kind: "official" });
-  await db.query("INSERT INTO evimed_frontier.evidence_automation(zone_id,enabled,query,source_types,interval_hours,max_cards_per_run) VALUES($1,true,'x','{journal}',24,2)", [zone.id]);
-  const mine = drug();
-  const card = await cardOf(zone, PUBLISHER, { ai: true, entityKeys: [mine], url: `https://doi.org/10.1000/${unique("brief.")}` });
-  const item = await itemOf({ entityKeys: [mine], title: "A newer trial of the drug" });
-  await db.query("UPDATE evimed_frontier.items SET canonical_url=$2 WHERE id=$1", [item.id, "https://example.org/newer-trial"]);
-  await upkeep.watchTick();
-  assert.equal((await cardRow(card.id)).currency, "new_evidence_pending", "labelled first");
-  const job = (await rows("SELECT * FROM evimed_frontier.evidence_editorial_jobs WHERE card_id=$1", [card.id]))[0];
-  assert.equal(job.state, "pending");
-  assert.equal(job.source_url, "https://example.org/newer-trial", "the editor is asked to read the new study");
-  assert.equal(job.payload.upkeep.kind, "new_evidence");
-  await worker.tick();
-  const after = await cardRow(card.id);
-  assert.ok(after.revision >= card.revision + 2, "a follow-up revision was written and reviewed");
-  assert.equal(after.title, "Updated card");
-  assert.equal(after.currency, "current");
-  assert.deepEqual(after.pending_item_ids, []);
-  assert.equal(after.sources.length, 2, "the new study was taken in as a source");
-  assert.equal(judged, 1, "the editor judged the new item against the card before taking it in");
-  const [entry] = await logOf(card.id);
-  assert.equal(entry.category, "new_evidence_conclusion_changed");
-  assert.equal(entry.trigger, "new_evidence");
-  assert.match(entry.summary, /1 项.*结论有变化/);
-  assert.deepEqual(entry.refs.frontierItemIds, [item.publicId]);
-  assert.deepEqual(followers.map((event) => [event.cardId, event.kind]), [[card.id, "updated"]], "the zone's followers are told through the injected push");
-  assert.equal((await rows("SELECT payload->'upkeep' AS u FROM evimed_frontier.evidence_editorial_jobs WHERE card_id=$1", [card.id]))[0].u, null, "the job is told once");
-});
-
-test("an item the editor judges not to bear on the card is handled, never added as a source, and the card is as current as it was", options, async () => {
-  const editor = { available: true, model: "test-model", evidenceTarget: async () => ({ skip: true, reason: "不是同一个问题" }), evidenceCard: async () => { throw new Error("no rewrite"); }, evidenceReview: async () => ({ findings: [] }) };
-  const { upkeep, worker } = build({ editor });
-  const zone = await zoneOf(PUBLISHER, { kind: "official" });
-  await db.query("INSERT INTO evimed_frontier.evidence_automation(zone_id,enabled,query,source_types,interval_hours,max_cards_per_run) VALUES($1,true,'x','{journal}',24,2)", [zone.id]);
-  const mine = drug();
-  const sourceUrl = `https://doi.org/10.1000/${unique("brief.")}`;
-  const card = await cardOf(zone, PUBLISHER, { ai: true, entityKeys: [mine], url: sourceUrl });
-  const item = await itemOf({ entityKeys: [mine] });
-  await db.query("UPDATE evimed_frontier.items SET canonical_url=$2 WHERE id=$1", [item.id, `https://example.org/${unique("other-question-")}`]);
-  await upkeep.watchTick();
-  await worker.tick();
-  const after = await cardRow(card.id);
-  assert.equal(after.currency, "current");
-  assert.equal(after.sources.length, 1, "a rejected source is not added");
-  assert.equal(after.revision, card.revision, "nothing was rewritten");
-  assert.ok(after.currency_detail.handled.includes(item.publicId));
-  assert.equal((await rows("SELECT source_url FROM evimed_frontier.evidence_editorial_jobs WHERE card_id=$1", [card.id]))[0].source_url, sourceUrl, "the job returned to the card's own source");
-  // The same item is not raised again.
-  await db.query("UPDATE evimed_frontier.evidence_cards SET last_checked_at=NULL WHERE id=$1", [card.id]);
-  await upkeep.watchTick();
-  assert.equal((await cardRow(card.id)).currency, "current");
-});
-
-test("a user's, a company's or a doctor's card is never rewritten: its producer gets one notice per batch of items, and a product zone's automation is refused", options, async () => {
-  const { upkeep, worker } = build();
+test("a card is never rewritten by the platform: its producer gets one notice per batch of items", options, async () => {
+  const { upkeep } = build();
   const mine = drug();
   const zone = await zoneOf(alice);
-  // The owner keeps AI upkeep on in this zone; a card they wrote themselves is still theirs.
-  await db.query("INSERT INTO evimed_frontier.evidence_automation(zone_id,enabled,query,source_types,interval_hours,max_cards_per_run) VALUES($1,true,'x','{journal}',24,2)", [zone.id]);
   const card = await cardOf(zone, alice, { entityKeys: [mine], url: `https://doi.org/10.1000/${unique("own.")}` });
   const first = await itemOf({ entityKeys: [mine], title: "First new study" });
   await upkeep.watchTick();
@@ -308,7 +189,7 @@ test("a user's, a company's or a doctor's card is never rewritten: its producer 
   assert.match(notices[0].body, new RegExp(card.title));
   assert.match(notices[0].body, /First new study/);
   assert.equal((await cardRow(card.id)).revision, card.revision, "the card is not rewritten");
-  assert.equal((await rows("SELECT count(*)::int AS n FROM evimed_frontier.evidence_editorial_jobs WHERE card_id=$1", [card.id]))[0].n, 0, "no editor job exists for it");
+  assert.equal((await rows("SELECT to_regclass('evimed_frontier.evidence_editorial_jobs') IS NULL AS gone"))[0].gone, true, "the editor's job table is gone: the platform has no one to rewrite a card");
   // The same batch announced again (the card's state lost, the check run again) says nothing again; a new item is a new batch.
   await db.query("UPDATE evimed_frontier.evidence_cards SET last_checked_at=NULL,currency='current',pending_item_ids='{}',currency_detail=NULL WHERE id=$1", [card.id]);
   await upkeep.watchTick();
@@ -329,16 +210,9 @@ test("a user's, a company's or a doctor's card is never rewritten: its producer 
   const [edit] = await logOf(card.id);
   assert.equal(edit.trigger, "producer_edit");
   assert.equal(edit.category, "new_evidence_conclusion_unchanged");
-  // Automation on a product zone is refused by name, with the notice named as the way.
-  const product = await zoneOf(carol, { kind: "product" });
-  await assert.rejects(worker.automation(carol, product.id, { enabled: true, query: "apixaban", sourceTypes: ["journal"], intervalHours: 24, maxCardsPerRun: 1, expectedRevision: product.revision }, "PUT"),
-    { code: "evidence_automation_product_zone", status: 409 });
-  assert.equal((await rows("SELECT count(*)::int AS n FROM evimed_frontier.evidence_automation WHERE zone_id=$1", [product.id]))[0].n, 0);
-  const off = await worker.automation(carol, product.id, { enabled: false, query: "apixaban", sourceTypes: ["journal"], intervalHours: 24, maxCardsPerRun: 1, expectedRevision: product.revision }, "PUT");
-  assert.equal(off.automation.enabled, false, "switching it off is always allowed");
 });
 
-test("a card in a product zone is watched and its producer told, though no editor may write there", options, async () => {
+test("a card in a product zone is watched and its producer told", options, async () => {
   const { upkeep } = build();
   const zone = await zoneOf(carol, { kind: "product" });
   const mine = drug();
@@ -353,33 +227,21 @@ test("a card in a product zone is watched and its producer told, though no edito
   assert.equal((await noticesAbout(carol.id, card, /新研究可能影响/)).length, 1);
 });
 
-test("an official synthesis stays pending for the topic programme and is handed to it by staleOfficialCards, an AI brief of the same zone is the editor's", options, async () => {
+test("a card of the platform's own publisher account is labelled by the watch and told to no one: that account cannot sign in", options, async () => {
   const { upkeep } = build();
   const zone = await zoneOf(PUBLISHER, { kind: "official" });
-  await db.query("INSERT INTO evimed_frontier.evidence_automation(zone_id,enabled,query,source_types,interval_hours,max_cards_per_run) VALUES($1,true,'x','{journal}',24,2)", [zone.id]);
-  const [first, second] = [drug(), drug()];
-  // The programme's own work is written by a model too; what makes it the programme's is what it is — a synthesis, stamped with its agenda.
-  const synthesis = await cardOf(zone, PUBLISHER, { ai: true, entityKeys: [first], extra: { originality: "synthesis", lineage: { agendaId: "ag_one" } }, url: `https://doi.org/10.1000/${unique("synthesis.")}` });
-  const brief = await cardOf(zone, PUBLISHER, { ai: true, entityKeys: [second], url: `https://doi.org/10.1000/${unique("brief.")}` });
-  await itemOf({ entityKeys: [first], title: "New trial of the first drug" });
-  await itemOf({ entityKeys: [second], title: "New trial of the second drug" });
-  assert.equal(evidenceUpkeepRoute({ zoneKind: "official", producerKind: "platform", authorKind: "human", originality: "synthesis", lineage: { agendaId: "ag_one" } }), "programme");
+  const mine = drug();
+  const card = await cardOf(zone, PUBLISHER, { entityKeys: [mine], origin: "programme", url: `https://doi.org/10.1000/${unique("official.")}` });
+  await itemOf({ entityKeys: [mine], title: "New trial of the drug" });
+  const before = upkeep.stats();
   await upkeep.watchTick();
-  assert.equal((await cardRow(synthesis.id)).currency, "new_evidence_pending");
-  assert.equal((await rows("SELECT count(*)::int AS n FROM evimed_frontier.evidence_editorial_jobs WHERE card_id=$1", [synthesis.id]))[0].n, 0, "the editor does not rewrite an official synthesis");
-  assert.equal((await rows("SELECT count(*)::int AS n FROM evimed_frontier.evidence_editorial_jobs WHERE card_id=$1", [brief.id]))[0].n, 1, "the brief is queued for the editor");
-  const stale = await upkeep.staleOfficialCards({ limit: 10 });
-  assert.ok(stale.some((entry) => entry.cardId === synthesis.id) && !stale.some((entry) => entry.cardId === brief.id), "only a card the programme is to take up is returned");
-  assert.equal(stale.length, stale.filter((entry) => entry.currency === "new_evidence_pending" || entry.currency === "source_changed").length);
-  const mine = stale.find((entry) => entry.cardId === synthesis.id);
-  assert.deepEqual([mine?.zoneId, mine?.currency, mine?.pendingItemIds.length], [zone.id, "new_evidence_pending", 1]);
-  assert.ok(mine?.lastCheckedAt);
-  assert.equal((await staleOfficialCards(db, { limit: 1 })).length, 1, "the same list, read without the loops, and bounded by its limit");
+  assert.equal((await cardRow(card.id)).currency, "new_evidence_pending", "the card is labelled, so a reader sees it");
+  assert.equal(upkeep.stats().noticesSkipped - before.noticesSkipped, 1, "and the notice that would go to the publisher is skipped, counted");
+  assert.equal((await inbox(PLATFORM_PUBLISHER_USER_ID)).filter((notice) => notice.body.includes(card.title)).length, 0);
 });
 
 test("a retraction recorded in the source-change record marks every card citing it and appends a log entry, with no request to anyone", options, async () => {
-  const readSource = async () => { throw new Error("the retraction feed makes no network call"); };
-  const { upkeep } = build({ readSource });
+  const { upkeep } = build();
   const doi = unique("10.1000/retracted.").toLowerCase();
   const zoneA = await zoneOf(alice);
   const zoneB = await zoneOf(bob);
@@ -409,23 +271,6 @@ test("a retraction recorded in the source-change record marks every card citing 
   assert.equal((await logOf(cardA.id)).filter((entry) => entry.trigger === "source_change").length, 1);
 });
 
-test("the editor writes what Europe PMC says of a source into the one source-change record", options, async () => {
-  const doi = "10.1000/epmc.status";
-  const status = { kind: "retracted", notices: ["Retraction of publication · Retraction in · MED:123456"] };
-  const editor = { available: true, model: "test-model", evidenceTarget: async () => null, evidenceCard: async () => ({}), evidenceReview: async () => ({ findings: [] }) };
-  const { worker } = build({ editor, readSource: async () => ({ text: "", publicationStatus: status, coverage: "abstract" }) });
-  await worker.noteStatus(`https://doi.org/${doi}`, { publicationStatus: status });
-  const fact = await sourceChanges.get(doi);
-  assert.equal(fact.state, "changed");
-  assert.deepEqual(fact.changes.map((change) => [change.kind, change.assertedBy]), [["retraction", ["europepmc"]]]);
-  await worker.noteStatus("https://doi.org/10.1000/epmc.clear", { publicationStatus: null });
-  assert.equal((await sourceChanges.get("10.1000/epmc.clear")).state, "clean", "a clear status is an answered check");
-  await worker.noteStatus("https://doi.org/10.1000/epmc.silent", {});
-  assert.equal((await sourceChanges.get("10.1000/epmc.silent")).state, "unknown", "a missing status records nothing");
-  assert.equal(worker.counters.statusRecorded, 2);
-});
-
-/** A platform card whose first claim's quotation is not in its source, and a second claim whose quotation is. */
 async function platformCardWithClaims() {
   const zone = await zoneOf(PUBLISHER, { kind: "official" });
   return cardOf(zone, PUBLISHER, {
@@ -772,21 +617,20 @@ function challengeLedger(/** @type {{ runId: string, cost: number, purpose?: str
   } };
 }
 
-test("challenges on a platform card are judged with the evidence programme OFF, under their own daily ceiling, and wait queued beyond it", options, async () => {
+test("challenges on a platform card are judged under their own daily ceiling, and wait queued beyond it", options, async () => {
   const { createEvidenceBudget } = await import("../src/evidenceBudget.mjs");
-  const ledger = challengeLedger([{ runId: "run_programme_1", cost: 400 }]);
-  // The programme is off (no switch, no slot); the programme's own money is not the challenges' to count.
-  const budget = createEvidenceBudget({ usageLedger: /** @type {any} */ (ledger), config: { evidenceProgrammeEnabled: false, evidenceChallengeDailyBudgetCny: 5, frontierTimeZone: "Asia/Shanghai" }, now });
-  assert.equal(budget.enabled, false);
+  const ledger = challengeLedger([{ runId: "run_other_1", cost: 400 }]);
+  // Other `evidence` spend of the publisher account is not the challenges' to count: only the `evch_` run scopes are.
+  const budget = createEvidenceBudget({ usageLedger: /** @type {any} */ (ledger), config: { evidenceChallengeDailyBudgetCny: 5, frontierTimeZone: "Asia/Shanghai" }, now });
   const seen = /** @type {string[]} */ ([]);
   const judge = async (/** @type {any} */ input) => { seen.push(input.scope); return { outcome: "uphold", sourceIndex: 1, passage: "Major bleeding occurred in 3 of 100 on the drug", reason: "原文支持。" }; };
   const { challenges } = build({ judge, budget });
   const first = await platformCardWithClaims();
   const filedOne = await challenges.submit(bob, first.id, { claimId: "CLM-1", reason: "引文找不到" });
-  assert.equal(await challenges.recheckTick(), "resolved", "judged although the programme is off");
+  assert.equal(await challenges.recheckTick(), "resolved");
   assert.ok(seen[0].startsWith("evch_"), "booked under the challenges' own run scope");
   assert.equal((await challenges.listFor(bob, first.id)).items[0].waiting, false);
-  // The day's judging has spent its ceiling (the judgements are booked under `evch_` scopes; the programme's 400 yuan above did not count).
+  // The day's judging has spent its ceiling (the judgements are booked under `evch_` scopes; the 400 yuan above did not count).
   ledger.rows.push({ runId: seen[0], cost: 4.98 });
   const second = await platformCardWithClaims();
   const filedTwo = await challenges.submit(carol, second.id, { claimId: "CLM-1", reason: "引文找不到" });
@@ -806,17 +650,15 @@ test("challenges on a platform card are judged with the evidence programme OFF, 
   assert.equal(filedOne.challenge.route, "platform_recheck");
 });
 
-test("with the programme ON its own day also has to have room, and a ledger that cannot be read admits no judgement", options, async () => {
+test("a ledger that cannot be read admits no judgement, and a ceiling of 0 is no ceiling", options, async () => {
   const { createEvidenceBudget } = await import("../src/evidenceBudget.mjs");
-  const ledger = challengeLedger([{ runId: "run_programme_1", cost: 30 }]);
-  const config = { evidenceProgrammeEnabled: true, evidenceProgrammeDailyBudgetCny: 30, evidenceChallengeDailyBudgetCny: 5, frontierTimeZone: "Asia/Shanghai" };
+  const ledger = challengeLedger([]);
+  const config = { evidenceChallengeDailyBudgetCny: 5, frontierTimeZone: "Asia/Shanghai" };
   const budget = createEvidenceBudget({ usageLedger: /** @type {any} */ (ledger), config, now });
-  assert.deepEqual((await budget.reserveChallenge(0.5)).reason, "programme_day", "the challenges' ceiling has room but the programme has spent its day");
-  ledger.rows.length = 0;
   assert.equal((await budget.reserveChallenge(0.5)).granted, true);
   const broken = createEvidenceBudget({ usageLedger: /** @type {any} */ ({ purposeSpend: async () => { throw new Error("database down"); } }), config, now });
   assert.equal((await broken.reserveChallenge(0.5)).reason, "unmeasured");
-  const unbounded = createEvidenceBudget({ usageLedger: /** @type {any} */ (ledger), config: { ...config, evidenceProgrammeEnabled: false, evidenceChallengeDailyBudgetCny: 0 }, now });
+  const unbounded = createEvidenceBudget({ usageLedger: /** @type {any} */ (ledger), config: { ...config, evidenceChallengeDailyBudgetCny: 0 }, now });
   assert.equal((await unbounded.reserveChallenge(1000)).granted, true, "0 is no ceiling");
 });
 
@@ -887,32 +729,18 @@ test("the change log cannot be updated or deleted: the database refuses, and the
   assert.ok(Number(first.items[0].id) > Number(first.items[1].id));
 });
 
-test("an AI-kept card nobody follows is retired after enough quiet checks over enough days, leaves the rotation, and a new matching item re-opens it", options, async () => {
-  const { upkeep, worker } = build({ levers: { retireAfterChecks: 2, retireAfterDays: 7 } });
-  const zone = await zoneOf(PUBLISHER, { kind: "official" });
-  await db.query("INSERT INTO evimed_frontier.evidence_automation(zone_id,enabled,query,source_types,interval_hours,max_cards_per_run) VALUES($1,true,'x','{journal}',24,5)", [zone.id]);
+test("the platform never retires a card for being quiet: only its producer does, and a new matching item re-opens it", options, async () => {
+  const { upkeep } = build({ levers: { intervalHours: 24 } });
+  const zone = await zoneOf(alice);
   const mine = drug();
-  const card = await cardOf(zone, PUBLISHER, { ai: true, entityKeys: [mine], url: `https://doi.org/10.1000/${unique("quiet.")}` });
-  const followed = await zoneOf(PUBLISHER, { kind: "official" });
-  await db.query("INSERT INTO evimed_frontier.evidence_automation(zone_id,enabled,query,source_types,interval_hours,max_cards_per_run) VALUES($1,true,'x','{journal}',24,5)", [followed.id]);
-  const watched = await cardOf(followed, PUBLISHER, { ai: true, entityKeys: [drug()], url: unique("https://example.org/followed-") });
-  await db.query("INSERT INTO evimed_frontier.evidence_zone_follows(user_id,zone_id) VALUES($1,$2)", [bob.id, followed.id]);
+  const card = await cardOf(zone, alice, { entityKeys: [mine], url: `https://doi.org/10.1000/${unique("quiet.")}` });
   const checks = async (/** @type {number} */ days) => { clock.at += days * DAY; await upkeep.watchTick(); return cardRow(card.id); };
-  assert.equal((await checks(0)).no_change_checks, 1);
-  assert.equal((await checks(2)).retired_at, null, "two checks over two days are not enough");
-  const retired = await checks(8);
-  assert.ok(retired.retired_at, "enough checks over enough days with nobody following");
-  assert.equal(retired.currency, "no_longer_updated");
-  assert.ok(retired.last_checked_at, "its last-checked date is kept to be shown");
+  for (const days of [0, 2, 8, 30, 200]) assert.equal((await checks(days)).retired_at, null, `${days} days of quiet checks retire nothing`);
+  assert.equal((await logOf(card.id)).filter((entry) => entry.category === "retired").length, 0);
+  assert.equal(upkeep.stats().retired, 0);
+  await upkeep.setUpkeep(alice, card.id, { action: "retire" });
+  assert.ok((await cardRow(card.id)).retired_at, "the producer's own word retires it");
   assert.equal((await service.detail(bob, zone.id, card.id)).evidence.currencyLabel, "不再更新");
-  const retiredEntry = (await logOf(card.id)).find((entry) => entry.category === "retired");
-  assert.ok(retiredEntry);
-  assert.match(retiredEntry.summary, /不再更新.*最后核对日期/);
-  assert.equal((await cardRow(watched.id)).retired_at, null, "a card whose zone someone follows is not retired");
-  // It leaves the editor's rotation.
-  await db.query("UPDATE evimed_frontier.evidence_automation SET next_run_at=CASE WHEN zone_id=$1 THEN clock_timestamp() ELSE clock_timestamp()+interval '1 day' END", [zone.id]);
-  assert.equal(await worker.schedule(), 0, "the zone's one AI card is retired, and nothing else matches it");
-  assert.equal((await rows("SELECT count(*)::int AS n FROM evimed_frontier.evidence_editorial_jobs WHERE card_id=$1", [card.id]))[0].n, 0);
   // A new matching item re-opens it.
   clock.at += 2 * DAY;
   await itemOf({ entityKeys: [mine], title: "A study after retirement", minutesAfter: 60 });

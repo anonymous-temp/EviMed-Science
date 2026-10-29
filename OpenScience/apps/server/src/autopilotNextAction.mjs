@@ -360,10 +360,9 @@ export class AutopilotPlanner {
    * envelope.
    * Throws a coded error when no usable decision was had; the caller falls back.
    *
-   * The decision is booked under purpose `autopilot`, a researcher's own; the platform's evidence programme asks for `evidence`
-   * (its own agendas are the platform's money, `evidenceProgramme.mjs`).
+   * The decision is booked under purpose `autopilot`, a researcher's own.
    * @param {{userId: string, projectId: string, episodeId: string, context: any, eligible: string[], stopAllowed: boolean,
-   *   pauseAllowed?: boolean, envelopeCny?: number, purpose?: "autopilot" | "evidence" | "evolution"}} input
+   *   pauseAllowed?: boolean, envelopeCny?: number, purpose?: "autopilot" | "evolution"}} input
    */
   async decide({ userId, projectId, episodeId, context, eligible, stopAllowed, pauseAllowed = false, envelopeCny = 0, purpose = "autopilot" }) {
     if (!this.available) throw plannerError("autopilot_planner_unavailable", "The next-action planner is not available.");

@@ -13,9 +13,8 @@
  * - **A reader-facing sentence is made by code from facts, never by a model.** `evidenceChangeSummaryZh` is the only
  *   author of a log entry's text: a model that wrote the public history of a card could be wrong in the one place a
  *   reader goes to check whether it was.
- * - **Who answers is decided by who made the card.** An AI-written card (the platform's brief, or the owner's own upkeep of
- *   their zone) is revised by the editor; a card of a user, a company or a doctor is never rewritten by the platform — its
- *   producer is told; an official synthesis is the platform's topic programme's to redo, not the editor's.
+ * - **Who answers is the card's producer.** The platform writes no card (2026-10-29: its AI editor and its topic programme were
+ *   deleted), and never rewrites anyone's: when something bears on a card its producer is told.
  * - **"Conclusion changed" is a comparison of what the card concludes, not of its prose.** `evidenceConclusionChanged`
  *   compares the answer, the summary, the claims and the comparisons' numbers; a rewritten paragraph that says the same
  *   thing is not a changed conclusion, and a changed hazard ratio is.
@@ -75,38 +74,8 @@ export const EVIDENCE_CHALLENGE_ROUTES = frozen(['platform_recheck', 'producer_n
 /** What a reader may write with a challenge. */
 export const EVIDENCE_CHALLENGE_REASON_LIMITS = Object.freeze({ min: 4, max: 1000 })
 
-/** Who answers when something bears on a card (`evidenceUpkeepRoute`). */
-export const EVIDENCE_UPKEEP_ROUTES = frozen(['editor', 'producer_notice', 'programme'])
-
 /** The `producer.kind` of the platform's own cards; the only cards the platform re-checks itself on a challenge. */
 const PLATFORM_PRODUCER = 'platform'
-/** Lineage keys only the platform's programme and results stamp (`EVIDENCE_PLATFORM_LINEAGE_KEYS`). */
-const PROGRAMME_LINEAGE_KEYS = frozen(['resultVersionId', 'runId', 'agendaId', 'episodeId'])
-
-/**
- * Who answers when new evidence, or a changed source, bears on a card.
- *
- * - `editor` — the card was written by an AI and is kept by one: the platform's brief in an official zone, or a card the
- *   owner's own AI upkeep wrote in their zone. The existing editor flow writes the follow-up revision.
- * - `programme` — an official card the platform's topic programme made (a synthesis, an original analysis, a
- *   recalculation, or anything stamped with a run, agenda or result): the editor does not rewrite it, it stays labelled
- *   until the programme redoes it.
- * - `producer_notice` — everything else: a user's, company's or doctor's card (and an external import). It is never
- *   rewritten; its producer is told once per batch.
- *
- * @param {{ zoneKind?: string | null, producerKind?: string | null, authorKind?: string | null, originality?: string | null, lineage?: Record<string, any> | null }} card
- * @returns {'editor' | 'producer_notice' | 'programme'}
- */
-export function evidenceUpkeepRoute({ zoneKind = null, producerKind = null, authorKind = null, originality = null, lineage = null } = {}) {
-  if (zoneKind === 'product') return 'producer_notice'
-  const stamped = PROGRAMME_LINEAGE_KEYS.some((key) => lineage?.[key] != null)
-  if (zoneKind === 'official') {
-    if (stamped || (originality && originality !== 'brief')) return 'programme'
-    return authorKind === 'ai' ? 'editor' : 'producer_notice'
-  }
-  return authorKind === 'ai' && producerKind !== 'enterprise' && producerKind !== 'doctor' ? 'editor' : 'producer_notice'
-}
-
 /** Whether a challenge on this card is re-checked by the platform: only the platform's own cards are. @param {{ producerKind?: string | null }} card */
 export const evidenceChallengeRoute = ({ producerKind = null } = {}) => (producerKind === PLATFORM_PRODUCER ? 'platform_recheck' : 'producer_notice')
 
@@ -207,7 +176,6 @@ export const evidenceNewEvidenceNoticeTitleZh = ({ count: n }) => `有 ${count(n
  * operation: enabling a rewrite the platform may not make, filing a challenge that cannot be filed.
  */
 export const EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH = Object.freeze({
-  evidence_automation_product_zone: '产品专区的卡片由出品方自己写，AI 不会代写，所以这里不能开启自动更新；有新研究可能影响卡片时，平台会用站内通知告诉出品方。',
   evidence_upkeep_not_enabled: '这个部署没有开启证据卡的持续更新与质疑。',
   evidence_challenge_invalid: '质疑需要指明一条结论，并写明理由（4 到 1000 个字）。',
   evidence_challenge_claim_unknown: '这张卡里没有你要质疑的那条结论，可能已经被修改，请刷新后再试。',

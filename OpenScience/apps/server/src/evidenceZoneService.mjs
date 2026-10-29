@@ -746,15 +746,15 @@ export class EvidenceZoneService {
       return { zone: await this.zoneView(client, user, row), feedback };
     });
   }
-  /** Internal operator import / model worker entry; never mounted as an HTTP route.
+  /** Internal writer entry (the result publisher, 循证 GEO); never mounted as an HTTP route.
    * `origin` is one of `EVIDENCE_WRITE_ORIGINS`: which writer this is decides which zones accept it.
-   * @param {any} user @param {any} body @param {string|null} [zoneId] @param {string|null} [cardId] @param {boolean} [createCard] @param {"owner"|"import"|"model"|"programme"|"result"|"geo"} [origin] @param {{jobId:string,workerId:string}|null} [lease] */
-  async saveEditorial(user, body, zoneId = null, cardId = null, createCard = false, origin = "import", lease = null) {
+   * @param {any} user @param {any} body @param {string|null} [zoneId] @param {string|null} [cardId] @param {boolean} [createCard] @param {"owner"|"import"|"model"|"programme"|"result"|"geo"} [origin] */
+  async saveEditorial(user, body, zoneId = null, cardId = null, createCard = false, origin = "import") {
     if (!EVIDENCE_WRITE_ORIGINS.includes(origin)) throw error(400, "invalid", "Unknown evidence write origin.");
-    const operation = {origin,lease,id:`er_${randomUUID().replaceAll("-","")}`};
+    const operation = {origin,id:`er_${randomUUID().replaceAll("-","")}`};
     return this.save(user,body,zoneId,cardId,createCard,operation);
   }
-  /** @param {any} user @param {any} body @param {string|null} [zoneId] @param {string|null} [cardId] @param {boolean} [createCard] @param {{origin:string,id:string,lease?:{jobId:string,workerId:string}|null}|null} [internalOperation] */
+  /** @param {any} user @param {any} body @param {string|null} [zoneId] @param {string|null} [cardId] @param {boolean} [createCard] @param {{origin:string,id:string}|null} [internalOperation] */
   async save(user, body, zoneId = null, cardId = null, createCard = false, internalOperation = null) {
     const card = createCard || cardId != null;
     if (!internalOperation && (body?.editorial !== undefined || (Array.isArray(body?.sources) && body.sources.some(source => !source || typeof source!=="object" || Array.isArray(source) || Object.keys(source).some(key => !["title","url","excerpt"].includes(key))))))
@@ -797,17 +797,10 @@ export class EvidenceZoneService {
     /** @type {"published"|"revised"|null} */
     let publication = null;
     const saved = await this.database.transaction(async (/** @type {any} */ client) => {
-      if(internalOperation?.lease) {
-        const lease=internalOperation.lease;
-        const held=await client.query(`SELECT j.id FROM evimed_frontier.evidence_editorial_jobs j JOIN evimed_frontier.evidence_automation a ON a.zone_id=j.zone_id
-          WHERE j.id=$1 AND j.lease_owner=$2 AND j.lease_until>clock_timestamp() AND j.state='running' AND a.enabled FOR UPDATE OF j`,[lease.jobId,lease.workerId]);
-        if(!held.rowCount) throw error(409,"lease_lost","This editorial operation no longer owns its lease.");
-      }
       if (card && !zoneId) throw missing();
       const parent = card
         ? await this.zoneRow(client, user, zoneId ?? "", true)
         : null;
-      if(internalOperation?.lease && parent?.state!=="published") throw error(409,"revision_conflict","The zone was withdrawn during the editorial operation.");
       if (parent && parent.user_id !== user.id)
         throw error(
           403,
@@ -822,7 +815,6 @@ export class EvidenceZoneService {
           : null;
       if (!card && existing && existing.user_id === user.id) this.assertWriteOrigin(origin, existing, user);
       if (existing) {
-        if(internalOperation?.lease && card && existing.state!=="published") throw error(409,"revision_conflict","The card was withdrawn during the editorial operation.");
         if (existing.user_id !== user.id)
           throw error(
             403,
@@ -1026,9 +1018,6 @@ export class EvidenceZoneService {
             );
         }
       }
-      if(card && existing && internalOperation?.lease) await client.query(`UPDATE evimed_frontier.evidence_editorial_jobs
-        SET payload=jsonb_set(COALESCE(payload,'{}'::jsonb),'{managedRevision}',to_jsonb($3::integer))
-        WHERE card_id=$1 AND state IN ('pending','completed') AND payload->>'managedRevision'=$2::text`,[id,existing.revision,existing.revision+1]);
       if (card) await client.query(`INSERT INTO evimed_frontier.evidence_card_revisions(card_id,revision,snapshot)
         SELECT id,revision,to_jsonb(c) FROM evimed_frontier.evidence_cards c WHERE id=$1 ON CONFLICT DO NOTHING`, [id]);
       await this.bump(client);

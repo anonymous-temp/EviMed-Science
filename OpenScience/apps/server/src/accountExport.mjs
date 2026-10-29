@@ -50,7 +50,6 @@ export const UNEXPORTED_DOCUMENT_KINDS = Object.freeze({
   "extension-generation": "which prepared package and skill generation a project's runtime was built from and which one is live; the platform derives it from the installations, defaults and skills that are themselves exported, and it is runtime authority an archive must never carry",
   "extension-proof": "qualification the platform measures for itself; an archive carrying one would offer a compatibility claim no import may accept, and no product code writes this kind today",
   "source-change": "what was published about a work after it was published (a retraction, a correction, a new version), one record per source identifier, owned by the platform publisher account and never by a customer; it holds only public bibliographic facts and which tenant asked is never written to it, so there is nothing of the account's in it to carry",
-  "programme-decision": "the platform's own evidence programme's decision of one day (the counts it read, the zones it chose, what became of each episode), owned by the platform publisher account in its internal evidence project and never by a customer; it holds counts and entity keys only, no reader is named in it, and the publisher account cannot be exported at all, so there is nothing of an account's in it to carry",
   "extension-resource": "the platform's own operation records: public-document grants and accepted-actor bindings signed with a deployment secret, and the journals of skill copies and adoptions; the documents and skills they refer to are workspace files and skill records, which are exported",
 });
 
@@ -63,7 +62,6 @@ const queries = [
   ["evidenceZones", "SELECT * FROM evimed_frontier.evidence_zones WHERE user_id=$1 ORDER BY id"],
   ["evidenceCards", "SELECT * FROM evimed_frontier.evidence_cards WHERE user_id=$1 ORDER BY id"],
   ["evidenceCardRevisions", "SELECT r.* FROM evimed_frontier.evidence_card_revisions r JOIN evimed_frontier.evidence_cards c ON c.id=r.card_id WHERE c.user_id=$1 ORDER BY r.card_id,r.revision"],
-  ["evidenceAutomation", "SELECT a.* FROM evimed_frontier.evidence_automation a JOIN evimed_frontier.evidence_zones z ON z.id=a.zone_id WHERE z.user_id=$1 ORDER BY a.zone_id"],
   ["evidenceZoneFollows", "SELECT * FROM evimed_frontier.evidence_zone_follows WHERE user_id=$1 ORDER BY zone_id"],
   ["evidenceComments", "SELECT * FROM evimed_frontier.evidence_comments WHERE user_id=$1 ORDER BY id"],
   ["evidenceReviews", "SELECT * FROM evimed_frontier.evidence_reviews WHERE user_id=$1 ORDER BY card_id"],
@@ -514,7 +512,7 @@ export async function withAccountExportSnapshot(database, user, config, operatio
       inbox: { notifications: tables.notifications, preferences: tables.notificationPreferences[0] ?? null }, usage: tables.usage,
       priceLists: exportedPriceLists(tables.usage), feedbackEvents: tables.feedbackEvents, scriptUses: tables.scriptUses, omissions,
       frontierEventReads: tables.frontierEventReads,
-      evidenceCardRevisions:tables.evidenceCardRevisions,evidenceAutomation:tables.evidenceAutomation,evidenceZones:tables.evidenceZones,evidenceCards:tables.evidenceCards,evidenceZoneFollows:tables.evidenceZoneFollows,
+      evidenceCardRevisions:tables.evidenceCardRevisions,evidenceZones:tables.evidenceZones,evidenceCards:tables.evidenceCards,evidenceZoneFollows:tables.evidenceZoneFollows,
       evidenceComments:tables.evidenceComments,evidenceReviews:tables.evidenceReviews,evidenceZoneFeedback:tables.evidenceZoneFeedback,evidenceChallenges:tables.evidenceChallenges,evidenceTopicRequestVotes:tables.evidenceTopicRequestVotes,
       shareLinks:tables.shareLinks,shareLinkUses:tables.shareLinkUses,shareDeliveriesSent:tables.shareDeliveriesSent,shareDeliveriesReceived:tables.shareDeliveriesReceived,
     };

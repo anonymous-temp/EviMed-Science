@@ -6,8 +6,8 @@
  * ruling: the feed does not report events or write news. A public hot event in any field that raises a general medical
  * question becomes a **topic** — the question as its title, the event as one attributed line (`peg`), the reports and the
  * evidence the searches found, one cited overview written only from them — readable in 热榜 and on its own page, findable by
- * `frontier_search`; the day's strongest topic goes to the evidence programme (`evidenceProgramme*.mjs`, which writes only
- * the `programme_*` columns) for an official card.
+ * `frontier_search`. (Until 2026-10-29 the day's strongest topic went to the platform's evidence programme for an official card; the programme
+ * is deleted and the topics table's `programme_*` columns are left, unread, for a later release to drop.)
  *
  * Hidden knowledge:
  *
@@ -972,11 +972,10 @@ export class FrontierTopics {
 
 /**
  * A topic as the reader is served it (contract §T `FrontierTopicSummary`): never its subject names, its queries or its
- * sightings. `refItems` names, by item row id, the overview's references the reader may open; `card` is the evidence
- * programme's settled card when there is one.
- * @param {any} row @param {{ refs?: Array<{ n: number, itemId: string, title: string, sourceName: string }> | null, card?: { id: string, title: string, href: string } | null }} [extra]
+ * sightings. `refItems` names, by item row id, the overview's references the reader may open.
+ * @param {any} row @param {{ refs?: Array<{ n: number, itemId: string, title: string, sourceName: string }> | null }} [extra]
  */
-export function frontierTopicSummary(row, { refs = null, card = null } = {}) {
+export function frontierTopicSummary(row, { refs = null } = {}) {
   const peg = row.peg_zh ? { text: row.peg_zh, source: { name: String(row.peg_source?.name ?? ""), url: row.peg_source?.url ?? null, date: row.peg_source?.date ?? null } } : null;
   return {
     id: row.public_id,
@@ -991,6 +990,5 @@ export function frontierTopicSummary(row, { refs = null, card = null } = {}) {
     status: row.status,
     itemCount: Number(row.item_count ?? 0),
     overview: row.overview_zh && refs ? { text: row.overview_zh, refs } : null,
-    card,
   };
 }

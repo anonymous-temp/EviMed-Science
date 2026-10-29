@@ -1,10 +1,9 @@
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
-/** @param {{store:any,service:any,editorial?:any,frontier:any,config:any,maxJsonBytes:number}} options */
+/** @param {{store:any,service:any,frontier:any,config:any,maxJsonBytes:number}} options */
 export function createEvidenceZoneRoutes({
   store,
   service,
-  editorial=null,
   frontier,
   config,
   maxJsonBytes,
@@ -71,8 +70,6 @@ export function createEvidenceZoneRoutes({
       if (method === "PATCH")
         return reply(await service.save(user, await body(), zoneId));
     }
-    if(parts.length===3 && parts[2]==="automation" && editorial && ["GET","PUT","POST"].includes(method))
-      return reply(await editorial.automation(user,zoneId,method==="GET"?{}:await body(),method));
     // Who may read a published zone is the owner's own choice, made apart from publishing it.
     if (parts.length === 3 && parts[2] === "visibility" && method === "PUT")
       return reply(await service.setVisibility(user, zoneId, await body()));

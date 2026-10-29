@@ -50,7 +50,7 @@ const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
 /** Rows one retention statement removes at most. */
 const RETENTION_BATCH = 5_000;
-const LOOPS = Object.freeze(["owner", "mirror", "pull", "process", "compose", "evidence", "tags", "leads", "topics", "cleanup"]);
+const LOOPS = Object.freeze(["owner", "mirror", "pull", "process", "compose", "evidence-upkeep", "tags", "leads", "topics", "cleanup"]);
 /** How often the tag tree's upkeep looks whether its daily or weekly part is due (frontierTagUpkeep.mjs). */
 const TAGS_CHECK_MS = 15 * 60_000;
 /** How often the lead triggers look whether a search is due (frontierLeads.mjs `FRONTIER_LEADS_CHECK_MS`). */
@@ -95,11 +95,11 @@ const codeOf = (error) => (typeof /** @type {any} */ (error)?.code === "string" 
 
 export class FrontierWorker {
   /**
-   * @param {{ ingest: any, pipeline?: any, composer?: any, evidence?: any, tags?: any, leads?: any, topics?: any, database: any, ensureOwner?: (() => Promise<{ userId: string, projectId: string }>) | null,
+   * @param {{ ingest: any, pipeline?: any, composer?: any, upkeep?: any, tags?: any, leads?: any, topics?: any, database: any, ensureOwner?: (() => Promise<{ userId: string, projectId: string }>) | null,
    *   pollMs?: number, leaseMs?: number, pluginPollMs?: number, mirrorMs?: number, cleanupMs?: number, concurrency?: number,
    *   canRun?: () => boolean, now?: () => Date, report?: (loop: string, code: string) => void }} dependencies
    */
-  constructor({ ingest, pipeline = null, composer = null, evidence = null, tags = null, leads = null, topics = null, database, ensureOwner = null, pollMs = 5_000, leaseMs = 600_000,
+  constructor({ ingest, pipeline = null, composer = null, upkeep = null, tags = null, leads = null, topics = null, database, ensureOwner = null, pollMs = 5_000, leaseMs = 600_000,
     pluginPollMs = 60_000, mirrorMs = HOUR_MS, cleanupMs = HOUR_MS, concurrency = 2, canRun = () => true,
     now = () => new Date(), report = () => {} }) {
     if (!ingest || !database) throw new TypeError("The frontier worker needs the ingest and the product database.");
@@ -118,7 +118,8 @@ export class FrontierWorker {
     /** @type {Array<{ chain: string, loop: string }>} */
     this.composeLoops = typeof composer?.tickChain === "function" ? (composer.chains ?? []).map((/** @type {string} */ chain) => ({ chain, loop: `compose-${chain}` })) : [];
     const loopNames = [...LOOPS.filter((loop) => loop !== "compose" || !this.composeLoops.length), ...this.composeLoops.map(({ loop }) => loop)];
-    this.evidence = evidence;
+    /** Keeping the published evidence cards current and answering readers' challenges (`evidenceCurrency.mjs` `createEvidenceUpkeepLoop`); null where the upkeep is off. */
+    this.upkeep = upkeep && typeof upkeep.tick === "function" ? upkeep : null;
     /** The tag tree's upkeep (`FrontierTagUpkeep`): its daily and weekly parts, when due; null runs none. */
     this.tags = tags && typeof tags.tick === "function" ? tags : null;
     /** The lead triggers (`FrontierLeads`, ct-mix 2026-10-24): their searches and hand-overs, when due; null runs none. */
@@ -237,7 +238,7 @@ export class FrontierWorker {
       }
       if (!this.composeLoops.length && !this.running.compose) started.push(this.#run("compose", () => this.composer.tick()));
     }
-    if (this.evidence && !this.running.evidence) started.push(this.#run("evidence", () => this.evidence.tick()));
+    if (this.upkeep && !this.running["evidence-upkeep"]) started.push(this.#run("evidence-upkeep", () => this.upkeep.tick()));
     // The tag tree's upkeep spends model money under the owner's project, like processing.
     if (this.tags && (this.owner || !this.ensureOwner) && !this.running.tags && this.#due("tags", TAGS_CHECK_MS)) {
       started.push(this.#run("tags", () => /** @type {any} */ (this.tags).tick()));
@@ -350,7 +351,7 @@ export class FrontierWorker {
       retention: { ...this.retentionTotals },
       // The editorial loops the compose hook drives (frontierComposer.mjs).
       composer: this.composer?.status?.() ?? null,
-      evidence: this.evidence?.status?.() ?? null,
+      upkeep: this.upkeep?.status?.() ?? null,
       leads: this.leads?.status?.() ?? null,
       topics: this.topics?.status?.() ?? null,
       // 追踪 (c3-track 2026-10-25): the approval and guideline records and the congress recaps the pipeline writes.

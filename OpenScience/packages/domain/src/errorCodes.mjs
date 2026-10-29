@@ -1852,17 +1852,13 @@ export const EVIMED_CREDITS_ROUTE_ERROR_CODES = Object.freeze([
 ])
 
 /**
- * Codes the platform publisher account and the upkeep of an evidence zone answer with
- * (evidence-flywheel plan §3.3, B2, B6). `platform_account_protected` is a deletion or an export of
- * the publisher account refused by name; `platform_account_reserved` is a registration or a
- * display name that would pass for it; `evidence_upkeep_no_allowance` is the reason an upkeep job of
- * an account's own zone was set aside — the account has no allowance to pay for it, and the
- * platform never pays in its place — which the owner reads on the zone's update settings.
+ * Codes the platform publisher account answers with (evidence-flywheel plan §3.3, B2).
+ * `platform_account_protected` is a deletion or an export of the publisher account refused by name;
+ * `platform_account_reserved` is a registration or a display name that would pass for it.
  */
 export const EVIDENCE_PLATFORM_ERROR_CODES = Object.freeze([
   'platform_account_protected',
   'platform_account_reserved',
-  'evidence_upkeep_no_allowance',
 ])
 
 /**
@@ -1889,31 +1885,6 @@ export const EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH = Object.freeze({
   evidence_lineage_origin_unreadable: '“研究始于”只能指向一张已发布、而且你有权阅读的卡片。',
   evidence_source_verification_rate_limited: '你今天让平台读取来源的次数已达上限，明天再试；已经读取过的来源不会再占用次数。',
 })
-
-/**
- * Codes the platform's own evidence programme answers with (evidence-flywheel plan §5.1, F01/F02, 2026-10-05).
- * Each touches the one operation it names and never a researcher's conversation:
- *
- * - `evidence_programme_decision_required`: a card the programme would write has no recorded topic decision behind it.
- *   An original analysis may only answer a topic the selector chose (the anti-paper-mill rule), and a card with no
- *   decision to trace its topic to is not written.
- * - `evidence_programme_budget_spent`: the day's programme budget cannot pay for another episode. At scheduling it is a
- *   recorded deferral on the day's decision; at dispatch the episode waits for budget (the autopilot worker's resource
- *   wait) and is not failed.
- * - `evidence_programme_slot_busy`: another programme episode is still working and the programme holds one slot (default),
- *   so this one waits its turn; recorded like the budget's deferral and never a failure.
- * - `evidence_programme_original_weekly_cap`: a third original analysis in a rolling week. Deferred, not dropped.
- * - `evidence_programme_operator_required` and `evidence_programme_not_enabled`: the operator's page of the programme and its
- *   run-today button (2026-10-06), refused to anyone who is not an operator and answered by name where the switch is off.
- */
-export const EVIDENCE_PROGRAMME_ERROR_CODES = Object.freeze([
-  'evidence_programme_decision_required',
-  'evidence_programme_budget_spent',
-  'evidence_programme_slot_busy',
-  'evidence_programme_original_weekly_cap',
-  'evidence_programme_operator_required',
-  'evidence_programme_not_enabled',
-])
 
 /**
  * The public evidence pages' own refusals (flywheel F08, F09): the feed that lets the knowledge-source plugin read
@@ -2050,7 +2021,6 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...VCR_ENGINE_ISSUE_CODES,
   ...EVIMED_CREDITS_ROUTE_ERROR_CODES,
   ...EVIDENCE_PLATFORM_ERROR_CODES,
-  ...EVIDENCE_PROGRAMME_ERROR_CODES,
   ...EVIDENCE_PUBLIC_ERROR_CODES,
   ...CAPSULE_SHARE_ERROR_CODES,
   ...EVIDENCE_FLYWHEEL_ERROR_CODES,
@@ -2635,14 +2605,6 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   // The platform's publishing account and the upkeep of an account's own zone (2026-10-05).
   platform_account_protected: '这是平台出版方账号，不能删除或导出。',
   platform_account_reserved: '这个账号名或显示名留给平台出版方，请换一个。',
-  evidence_upkeep_no_allowance: '额度不足，这个专区的 AI 更新先放着，充值后会自动继续；平台不会替你付这笔费用。',
-  // The platform's own evidence programme (2026-10-05): what an operator reads on a day's topic decision.
-  evidence_programme_decision_required: '这张卡没有对应的选题记录，没有写入：平台只为选题器当天选定的题目发布结论。',
-  evidence_programme_budget_spent: '证据中心今天的预算已经用完，这次研究顺延到预算恢复后再做。',
-  evidence_programme_slot_busy: '证据中心正在做另一项研究，这次排在它后面，不会丢。',
-  evidence_programme_original_weekly_cap: '平台每周最多发布两张原创分析卡，这张顺延到下一周。',
-  evidence_programme_operator_required: '证据中心的运行情况只有运营账号可以查看和手动运行。',
-  evidence_programme_not_enabled: '这个部署没有开启证据中心的每日选题。',
   evidence_public_not_enabled: '这个部署没有开放证据专区的公开页面和订阅源。',
   evidence_feed_cursor_invalid: '订阅源的翻页游标已经失效，请从第一页重新读取。',
   evidence_feed_query_invalid: '订阅源的参数不对：每页条数要在 1 到 200 之间。',
@@ -3224,15 +3186,6 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   // account, never a verdict on work. The upkeep that waits for an allowance is a ceiling.
   platform_account_protected: 'upstream',
   platform_account_reserved: 'upstream',
-  evidence_upkeep_no_allowance: 'capped',
-  // The platform's own programme (2026-10-05): a topic without a decision is a refusal of one card; its budget, its one slot and the
-  // weekly cap on original analyses are ceilings that free by themselves.
-  evidence_programme_decision_required: 'upstream',
-  evidence_programme_budget_spent: 'capped',
-  evidence_programme_slot_busy: 'capped',
-  evidence_programme_original_weekly_cap: 'capped',
-  evidence_programme_operator_required: 'upstream',
-  evidence_programme_not_enabled: 'upstream',
   // The public evidence pages are off in this deployment: about the module, never a verdict on work.
   evidence_public_not_enabled: 'upstream',
   evidence_feed_cursor_invalid: 'upstream',
@@ -3397,11 +3350,11 @@ const ERROR_CODE_AUDIENCE_TABLE = (() => {
     // Usage is recorded late: nothing was refused and there is nothing for the reader to do.
     'usage_metering_unavailable', 'illegal_state_transition',
     // The publisher account's own protections (「EviMed 证据中心」 cannot sign in).
-    'platform_account_protected', 'platform_account_reserved', 'evidence_upkeep_no_allowance',
+    'platform_account_protected', 'platform_account_reserved',
   ])
   // A ceiling the reader can raise or wait out: shown to them, on the run it stopped.
   claim('person', ['runtime_spend_limit_reached'])
-  claim('operator', [...keys(READINESS_ERROR_MESSAGES_ZH), ...keys(EVOLUTION_ERROR_MESSAGES), ...EVIDENCE_PROGRAMME_ERROR_CODES,
+  claim('operator', [...keys(READINESS_ERROR_MESSAGES_ZH), ...keys(EVOLUTION_ERROR_MESSAGES),
     // The connector's credential keys are the deployment's: the person cannot mend a keyring.
     'research_db_keyring_unavailable', 'research_db_keyring_incomplete'])
   claim('run', [

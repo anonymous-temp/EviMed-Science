@@ -14,7 +14,7 @@ export function createResultCaptureRepairRoutes({ store, runs, service, config, 
     if (operator && !(config.operatorUsers ?? []).includes(user.id)) throw new HttpError(403, "result_capture_repair_operator_required", "Capture repairs are available to operators only.");
     const body = await readJson(req, Math.min(maxJsonBytes, 8192));
     const allowed = ordinary ? ["projectId", "expectedTranscriptSha256"]
-      : ["action", "userId", "projectId", "runId", "expectedReceiptSha256", "expectedPlanSha256", "resettle"];
+      : ["action", "userId", "projectId", "runId", "expectedReceiptSha256", "expectedPlanSha256"];
     if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some(key => !allowed.includes(key))) throw new HttpError(400, "invalid_payload", "Invalid capture repair fields.");
     const projectId = safeId(body.projectId, "project id");
     let data;
@@ -29,9 +29,8 @@ export function createResultCaptureRepairRoutes({ store, runs, service, config, 
         ...(body.expectedReceiptSha256 ? { expectedReceiptSha256: body.expectedReceiptSha256 } : {}) };
       if (body.action === "plan") data = await service.plan(request);
       else if (body.action === "apply") {
-        if (!/^[a-f0-9]{64}$/.test(body.expectedReceiptSha256 ?? "") || !/^[a-f0-9]{64}$/.test(body.expectedPlanSha256 ?? "")
-          || (body.resettle !== undefined && typeof body.resettle !== "boolean")) throw new HttpError(400, "result_capture_repair_plan_required", "Apply requires the exact plan and receipt digests.");
-        data = await service.apply({ ...request, expectedReceiptSha256: body.expectedReceiptSha256, expectedPlanSha256: body.expectedPlanSha256, resettle: body.resettle === true });
+        if (!/^[a-f0-9]{64}$/.test(body.expectedReceiptSha256 ?? "") || !/^[a-f0-9]{64}$/.test(body.expectedPlanSha256 ?? "")) throw new HttpError(400, "result_capture_repair_plan_required", "Apply requires the exact plan and receipt digests.");
+        data = await service.apply({ ...request, expectedReceiptSha256: body.expectedReceiptSha256, expectedPlanSha256: body.expectedPlanSha256 });
       } else throw new HttpError(400, "invalid_payload", "Use plan or apply for a capture repair.");
     }
     sendJson(res, 200, { data }, { "Cache-Control": "private, no-store" });

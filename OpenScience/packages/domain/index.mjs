@@ -250,7 +250,6 @@ export {
   EVIDENCE_PLATFORM_ERROR_CODES,
   EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH,
   RESEARCH_DB_ERROR_MESSAGES_ZH,
-  EVIDENCE_PROGRAMME_ERROR_CODES,
   EVIDENCE_PUBLIC_ERROR_CODES,
   GEO_MEDIA_MARKET_ERROR_CODES,
   GEO_ROUTE_ERROR_CODES,
@@ -1161,13 +1160,11 @@ export {
   EVIDENCE_CHALLENGE_WAITING_LABEL_ZH,
   EVIDENCE_UPKEEP_ERROR_CODES,
   EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH,
-  EVIDENCE_UPKEEP_ROUTES,
   evidenceChallengeRoute,
   evidenceChangeSummaryZh,
   evidenceConclusionChanged,
   evidenceConclusionOf,
   evidenceNewEvidenceNoticeTitleZh,
-  evidenceUpkeepRoute,
 } from './src/evidenceUpkeep.mjs'
 // sourceDocuments — 16 exports: where each file of the knowledge base is
 // read (by its name, then by its bytes), why one is kept as an original with
