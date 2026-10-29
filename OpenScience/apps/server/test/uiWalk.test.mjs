@@ -34,7 +34,7 @@ import {
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 /** The pages the walk finds by an id in a list the deployment answers, so that no static route names them. */
-const DISCOVERED_PAGES = ["autopilot-first", "calculation-history", "geo-answer", "frontier-item", "frontier-zone", "frontier-evidence", "frontier-author", "frontier-event", "frontier-topic", "frontier-congress", "evidence-matrix", "files-reader"];
+const DISCOVERED_PAGES = ["autopilot-first", "calculation-history", "geo-answer", "frontier-item", "frontier-zone", "frontier-zone-items", "frontier-evidence", "frontier-author", "frontier-event", "frontier-topic", "frontier-congress", "evidence-matrix", "files-reader"];
 
 /** The address a page of the walk is opened at, with the fake deployment's ids filled in for the pages it discovers. */
 function routeOf(name) {
@@ -1685,6 +1685,9 @@ test("the studies and ids the walk opens are read from the lists, and a missing 
   assert.deepEqual(frontierTargets({ zones, hot: { events: [{ id: "e1" }] } }), { zoneId: "z1", official: "z2", cardId: null, authorId: null, eventId: "e1", topicId: null, congressId: null });
   assert.deepEqual(frontierTargets({ cards: { items: [{ id: "c1" }] }, links: { author: { id: "a1" } } }), { zoneId: null, official: null, cardId: "c1", authorId: "a1", eventId: null, topicId: null, congressId: null });
   assert.deepEqual(frontierTargets({}), { zoneId: null, official: null, cardId: null, authorId: null, eventId: null, topicId: null, congressId: null });
+  // The topic zones' directory leads (2026-10-29): its first zone is the zone page walked; the plain list is the fallback.
+  assert.equal(frontierTargets({ zones, topicZones: { groups: [{ sections: [{ zones: [{ id: "tz1" }] }] }], zones: [] } }).zoneId, "tz1");
+  assert.equal(frontierTargets({ zones, topicZones: { groups: [], zones: [] } }).zoneId, "z1");
   // An official zone made empty at start (「热点求证」, c2 2026-10-25) does not hide the one that holds cards; a topic is walked when one exists.
   const officials = { items: [{ id: "hot", kind: "official", evidenceCount: 0 }, { id: "af", kind: "official", evidenceCount: 4 }] };
   assert.equal(frontierTargets({ zones: officials }).official, "af");

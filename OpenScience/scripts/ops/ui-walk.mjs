@@ -196,7 +196,7 @@ const WALK_TABLES = {
       {"view":"frontier-track-congresses","route":"/app/frontier?view=track&segment=congresses","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","budgetOverride":{"typePairs":5},"budgetNote":"追踪 · 会议 (c3-track): 12/400 meta, 14/400 the dates and place, 16/600 the congresses' names, 18/600 进行中 / 即将召开 / 近期 headings, 24/600 the title — 5 pairs (fixture walk 2026-10-25); a row opens the congress hub, walked as frontier-congress","shapes":3,"rows":false},
       {"view":"frontier-daily-empty","route":"/app/frontier?view=daily&day=2020-01-01","pattern":"/app/frontier","family":"frontier","template":"T1","budget":"frontier","rows":false},
       {"view":"frontier-zone","discovered":true,"pattern":"/app/frontier/zones/:zoneId","family":"frontier-zone","template":"T5","budget":"frontier","budgetOverride":{"typePairs":6},"budgetNote":"a topic zone's overview (ez-web-zone 2026-10-29), measured with the walk's own `measure` on a mocked zone (Chromium, 1440 and 390): 9 kinds of control, 5 colours, 3 borders and 5 type pairs — 12/400 meta, 14/400 rows and scope, 16/400 the 最新进展, 18/600 the modules' headings, 24/600 the title — so only the pairs pass the frontier row (6, as the topic and congress pages). The team's evidence-card blocks, which no account has until that interface exists, add one kind of control (the card's 16/600 title link: 10), one border (the block's frame: 4) and one pair (16/600: 6); raise `controls` and `borders` here when the first card is walked","rows":false},
-      {"view":"frontier-zone-items","discovered":true,"pattern":"/app/frontier/zones/:zoneId","family":"frontier-zone","template":"T1","budgetNote":"the zone's 动态 tab (?tab=items): the feed's own day-grouped cards under the zone's one toolbar row (筛选, the search, the count). Measured on a mocked zone at 1440 and 390: 10 kinds of control at 1440 (the feed's nine and the 筛选 pill), 6 colours, 2 borders, 4 pairs. Not walked yet — the walk's discovery opens a zone's overview only; once it also opens ?tab=items this row takes `budget: frontier` with `budgetOverride: { controls: 10 }` and `rows: true`, and the first card is the row clicked","rows":false},
+      {"view":"frontier-zone-items","discovered":true,"pattern":"/app/frontier/zones/:zoneId","family":"frontier-zone","template":"T1","budget":"frontier","budgetOverride":{"controls":10},"budgetNote":"the zone's 动态 tab (?tab=items): the feed's own day-grouped cards under the zone's one toolbar row (筛选, the search, the count). Measured on a mocked zone at 1440 and 390: 10 kinds of control at 1440 (the feed's nine and the 筛选 pill), 6 colours, 2 borders, 4 pairs. Not walked yet — the walk's discovery opens a zone's overview only; once it also opens ?tab=items this row takes `budget: frontier` with `budgetOverride: { controls: 10 }` and `rows: true`, and the first card is the row clicked","rows":false},
       {"view":"frontier-zone-cards","discovered":true,"pattern":"/app/frontier/zones/:zoneId","family":"frontier-zone","template":"T1","budgetNote":"the zone's 证据卡片 tab (?tab=cards): present only for a zone whose team interface holds cards (none until the interface exists), so a walk of an account without any skips it; takes `budget: frontier` when the walk opens it","rows":false},
       {"view":"frontier-evidence","discovered":true,"pattern":"/app/frontier/zones/:zoneId/evidence/:cardId","family":"frontier-evidence","template":"T5","budget":"frontier","budgetOverride":{"controls":14,"borders":4},"budgetNote":"the reading card: list rows, two chips, search, 显示更多, the contents rail and 回到顶部, the disclosures and the tally button are 12 kinds of control without the shell's own, about 14 with them, and four kinds of border: the shell's rule, the fold's faint row rule, the list's row hairline and the question box's frame (r19-pagesb, measured in a harness; to be set from a live walk)","rows":false},
       {"view":"frontier-author","discovered":true,"pattern":"/app/frontier/authors/:authorId","family":"frontier-author","template":"T1","budget":"frontier","budgetOverride":{"borders":4},"budgetNote":"the shell's rule, the tab row's hairline, the selected tab's underline and a divided list's row hairline: four kinds of border, as the zones' home (r19-pagesb, measured)","rows":false},
@@ -339,7 +339,6 @@ const WALK_TABLES = {
     "定时备份在报告异常，请查看备份任务的日志。",
     "定时备份已经很久没有成功运行，请查看备份任务。",
     "宿主机命令行开着，生产环境必须关闭。",
-    "平台每周最多发布两张原创分析卡，这张顺延到下一周。",
     "开发用的登录入口开着，生产环境必须关闭。",
     "循证 GEO 有一个后台循环停住了，对应的步骤暂停推进；请联系管理员。",
     "循证 GEO 有一个后台循环在反复出错，对应的步骤暂停推进；请联系管理员。",
@@ -393,9 +392,6 @@ const WALK_TABLES = {
     "要求启用网盘接入，但没有配置网盘服务或访问令牌。",
     "计量暂时不可用，本次用量稍后补记。",
     "记不了 OpenViking 模型调用的账：平台账号或它的内部项目读不到；请查看数据库。",
-    "证据中心今天的预算已经用完，这次研究顺延到预算恢复后再做。",
-    "证据中心正在做另一项研究，这次排在它后面，不会丢。",
-    "证据中心的运行情况只有运营账号可以查看和手动运行。",
     "评测因模型额度限制暂缓，现有进度已保留。",
     "评测期间不提供原始文件下载，请改用已解析的来源。",
     "评测的排除规则暂时无法读取，这次请求没有执行，请稍后重试。",
@@ -416,10 +412,8 @@ const WALK_TABLES = {
     "还没有读到 OpenViking 引擎的状态，稍后会自动再查。",
     "这个来源在本次评测中被排除，请换用其他来源。",
     "这个账号名或显示名留给平台出版方，请换一个。",
-    "这个部署没有开启证据中心的每日选题。",
     "这个部署还没有配置备份。",
     "这个项目调用平台工具过于频繁，请稍后重试。",
-    "这张卡没有对应的选题记录，没有写入：平台只为选题器当天选定的题目发布结论。",
     "这是平台出版方账号，不能删除或导出。",
     "这条研究记录已变化，请刷新后重试。",
     "这条裁决正在执行，稍后刷新再答复。",
@@ -429,7 +423,6 @@ const WALK_TABLES = {
     "这项研究工作需要的模型预算超过了单次运行的上限，已记录为资源缺口，其他研究不受影响。",
     "随版本发布的官方编译技能文件和固定的摘要对不上，没有安装；请核对发布内容。",
     "预测登记模块没有启用，其他研究不受影响。",
-    "额度不足，这个专区的 AI 更新先放着，充值后会自动继续；平台不会替你付这笔费用。",
     "额度模块没有就绪（数据库或模块没有接入），请查看日志。",
     "额度的钱包还没有接通，暂时不会扣费；接通后自动恢复。"
   ]
@@ -566,23 +559,27 @@ export function geoAnswerSnapshot(diagnosis) {
 }
 
 /**
- * The ids of the 前沿动态 pages the walk opens, from the lists it reads: the first evidence zone, the first card of the first official
+ * The ids of the 前沿动态 pages the walk opens, from the lists it reads: the first topic zone (else the first evidence zone), the first card of the first official
  * zone that holds one (an official zone made empty at start — 「热点求证」, c2 2026-10-25 — may come first in the list), that card's
  * author, the first event on the hot list and the first hot-event topic. A missing id is a page not walked, with the reason in the
  * notices.
- * @param {{ zones?: any, cards?: any, links?: any, hot?: any, topics?: any }} read the `data` of each GET
+ * @param {{ zones?: any, topicZones?: any, cards?: any, links?: any, hot?: any, topics?: any, congresses?: any }} read the `data` of each GET
  * @returns {{ zoneId: string | null, official: string | null, cardId: string | null, authorId: string | null, eventId: string | null, topicId: string | null }}
  */
-export function frontierTargets({ zones, cards, links, hot, topics, congresses }) {
+export function frontierTargets({ zones, topicZones, cards, links, hot, topics, congresses }) {
   const text = (value) => (typeof value === "string" && value ? value : null);
   const zoneList = Array.isArray(zones?.items) ? zones.items : [];
+  // The topic zones' directory (证据专区, 2026-10-29): the first zone of its first group is the zone page walked; the plain list is the
+  // fallback for a deployment without topic zones.
+  const topicZoneList = [...(Array.isArray(topicZones?.groups) ? topicZones.groups : []).flatMap((group) => (Array.isArray(group?.sections) ? group.sections : [])
+    .flatMap((section) => (Array.isArray(section?.zones) ? section.zones : []))), ...(Array.isArray(topicZones?.zones) ? topicZones.zones : [])];
   const cardList = Array.isArray(cards?.items) ? cards.items : [];
   const events = Array.isArray(hot?.events) ? hot.events : [];
   const topicList = Array.isArray(topics?.topics) ? topics.topics : [];
   const congressList = Array.isArray(congresses?.congresses) ? congresses.congresses : [];
   const officials = zoneList.filter((zone) => zone?.kind === "official");
   return {
-    zoneId: text(zoneList[0]?.id),
+    zoneId: text(topicZoneList[0]?.id) ?? text(zoneList[0]?.id),
     official: text((officials.find((zone) => Number(zone?.evidenceCount) > 0) ?? officials[0])?.id),
     cardId: text(cardList[0]?.id),
     authorId: text(links?.author?.id),
@@ -763,16 +760,22 @@ async function discoverRoutes(context, base, notices, failures, only = []) {
   if (article) routes.push(["frontier-item", article]);
   else skip("frontier-item", "the account has no published frontier article");
   const zones = await readData(context, base, "/api/frontier/zones", failures);
+  const topicZones = await readData(context, base, "/api/frontier/zones?view=recommended", failures);
   const hot = await readData(context, base, "/api/frontier/hot", failures);
   const topics = await readData(context, base, "/api/frontier/topics?status=recent&limit=1", failures);
   const congresses = await readData(context, base, "/api/frontier/track/congresses", failures);
-  const first = frontierTargets({ zones, hot, topics, congresses });
+  const first = frontierTargets({ zones, topicZones, hot, topics, congresses });
   const cards = first.official ? await readData(context, base, `/api/frontier/zones/${encodeURIComponent(first.official)}/evidence`, failures) : null;
   const cardId = frontierTargets({ cards }).cardId;
   const links = cardId ? await readData(context, base, `/api/frontier/evidence/${encodeURIComponent(cardId)}/links`, failures) : null;
   const targets = { ...first, cardId, authorId: frontierTargets({ links }).authorId };
-  if (targets.zoneId) routes.push(["frontier-zone", `/app/frontier/zones/${encodeURIComponent(targets.zoneId)}`]);
-  else skip("frontier-zone", "the evidence zones are not offered to this account or the list is empty");
+  if (targets.zoneId) {
+    routes.push(["frontier-zone", `/app/frontier/zones/${encodeURIComponent(targets.zoneId)}`]);
+    routes.push(["frontier-zone-items", `/app/frontier/zones/${encodeURIComponent(targets.zoneId)}?tab=items`]);
+  } else {
+    skip("frontier-zone", "the evidence zones are not offered to this account or the list is empty");
+    skip("frontier-zone-items", "the evidence zones are not offered to this account or the list is empty");
+  }
   if (targets.official && targets.cardId) routes.push(["frontier-evidence", `/app/frontier/zones/${encodeURIComponent(targets.official)}/evidence/${encodeURIComponent(targets.cardId)}`]);
   else skip("frontier-evidence", "no official zone holds a card");
   if (targets.authorId) routes.push(["frontier-author", `/app/frontier/authors/${encodeURIComponent(targets.authorId)}`]);
