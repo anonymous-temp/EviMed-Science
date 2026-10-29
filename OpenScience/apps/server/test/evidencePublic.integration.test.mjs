@@ -1,18 +1,16 @@
 // The public evidence pages and their read-only API against a real PostgreSQL and over HTTP (flywheel F08, F27): what is public and
 // what is not (and that the two answer alike), the pages' content for each kind of page, the indexing rules, the withdrawn card, the
-// API envelope, the page reads and the topic requests.
+// API envelope and the page reads.
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { after, before, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
-import { withAccountExportSnapshot } from "../src/accountExport.mjs";
 import { authorHandlesFor } from "../src/evidenceAuthorHandles.mjs";
 import { createEvidenceChangeLog } from "../src/evidenceChangeLog.mjs";
 import { EVIDENCE_ZONE_SQL, migrateEvidenceZones } from "../src/evidenceZonePersistence.mjs";
 import { EvidenceZoneService } from "../src/evidenceZoneService.mjs";
 import { createEvidencePublicMetrics } from "../src/evidencePublicMetrics.mjs";
 import { pageReads } from "../src/evidencePublicReads.mjs";
-import { createEvidenceTopicRequests, normalizeTopicTitle, topicRequestCounts } from "../src/evidencePublicRequests.mjs";
 import { createEvidencePublicRoutes, evidencePublicMetricFamilies } from "../src/evidencePublicRoutes.mjs";
 import { sendError } from "../src/security.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
@@ -70,7 +68,6 @@ after(async () => {
 beforeEach(async () => {
   if (!db) return;
   await db.query("TRUNCATE evimed_frontier.evidence_zones CASCADE");
-  await db.query("TRUNCATE evimed_frontier.evidence_topic_requests CASCADE");
   await db.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES('carol','Carol','development') ON CONFLICT DO NOTHING");
 });
 
@@ -95,10 +92,10 @@ const userCard = (user, zone, input, origin = "result") => zones.saveEditorial(u
 /**
  * The router in front of a real HTTP server.
  * @param {import("node:test").TestContext} t
- * @param {{ config?: Record<string, any>, simulations?: any, requests?: any, limiter?: any, now?: () => Date, metrics?: any }} [settings]
+ * @param {{ config?: Record<string, any>, simulations?: any, limiter?: any, now?: () => Date, metrics?: any }} [settings]
  */
-async function serve(t, { config = {}, simulations = null, requests = null, limiter = null, now, metrics } = {}) {
-  const routes = createEvidencePublicRoutes({ config: { evidencePublicWebEnabled: true, publicUrl: PUBLIC_URL, ...config }, database: db, simulations, requests, limiter, ...(now ? { now } : {}), ...(metrics ? { metrics } : {}) });
+async function serve(t, { config = {}, simulations = null, limiter = null, now, metrics } = {}) {
+  const routes = createEvidencePublicRoutes({ config: { evidencePublicWebEnabled: true, publicUrl: PUBLIC_URL, ...config }, database: db, simulations, limiter, ...(now ? { now } : {}), ...(metrics ? { metrics } : {}) });
   const server = createServer((req, res) => {
     routes(req, res).then((handled) => { if (!handled) { res.writeHead(418); res.end("not the pages'"); } }, (error) => sendError(res, error));
   });
@@ -299,7 +296,7 @@ test("the security headers are on every page, the stylesheet is served by path a
   const official = await officialZone();
   const card = await officialCard(official, cardInput("Official card"));
   const { get, text } = await serve(t);
-  for (const path of ["/evidence/", "/evidence/about", `/evidence/z/${official.id}`, `/evidence/c/${card.id}`, "/evidence/requests", "/evidence/metrics", "/evidence/simulations", "/evidence/nope", "/evidence/assets/site.css", `/evidence/api/v1/zones`]) {
+  for (const path of ["/evidence/", "/evidence/about", `/evidence/z/${official.id}`, `/evidence/c/${card.id}`, "/evidence/metrics", "/evidence/simulations", "/evidence/nope", "/evidence/assets/site.css", `/evidence/api/v1/zones`]) {
     const response = await get(path);
     const policy = response.headers.get("content-security-policy");
     assert.ok(policy, `${path} has a policy`);
@@ -331,7 +328,7 @@ test("indexing: with the switch off every page says noindex in its markup and it
   const official = await officialZone();
   const card = await officialCard(official, cardInput("Official card"));
   const { get, text } = await serve(t, { config: { evidencePublicIndexable: false } });
-  for (const path of ["/evidence/", "/evidence/about", "/evidence/metrics", "/evidence/simulations", "/evidence/requests", `/evidence/z/${official.id}`, `/evidence/z/${official.id}/changes`, `/evidence/c/${card.id}`, `/evidence/a/${await handleOf("publisher")}`]) {
+  for (const path of ["/evidence/", "/evidence/about", "/evidence/metrics", "/evidence/simulations", `/evidence/z/${official.id}`, `/evidence/z/${official.id}/changes`, `/evidence/c/${card.id}`, `/evidence/a/${await handleOf("publisher")}`]) {
     const response = await get(path);
     assert.equal(response.status, 200, path);
     assert.equal(response.headers.get("x-robots-tag"), "noindex", path);
@@ -382,7 +379,6 @@ test("indexing: on, a page is indexable unless its author is new (fewer than thr
   assert.equal(withdrawn.headers.get("x-robots-tag"), "noindex");
   assert.match(await withdrawn.text(), /<meta name="robots" content="noindex">/);
   assert.equal((await text("/evidence/sitemap.xml")).body.includes(officialOne.id), false);
-  assert.deepEqual(await robots("/evidence/requests"), { status: 200, header: "noindex", meta: true }, "a list of reader-written titles is never indexed");
   // The markup of an indexable page: lang, title, description, canonical, no structured data.
   const page = (await text(`/evidence/z/${zone.id}`)).body;
   assert.match(page, /<html lang="zh-CN">/);
@@ -658,70 +654,6 @@ test("page reads: one per GET of a card or zone page, none for a program or a HE
   await assert.rejects(pageReads(db, { since: "yesterday" }), TypeError);
 });
 
-test("topic requests: one vote per account, a repeat of the same words is a vote for the same request, the list orders by distinct requesters, and a daily limit stops a flood", options, async (t) => {
-  const official = await officialZone("Official zone");
-  const requests = createEvidenceTopicRequests({ database: db, config: { evidenceTopicRequestsPerDay: 3 } });
-  const first = await requests.file(alice, { title: "  Apixaban   vs rivaroxaban in elderly AF ", zoneId: official.id });
-  assert.equal(first.filed, true);
-  assert.equal(first.request.requesters, 1);
-  assert.equal(first.request.zoneId, official.id);
-  const again = await requests.file(alice, { title: "Apixaban vs rivaroxaban in elderly AF" });
-  assert.equal(again.alreadySeconded, true, "one vote per account");
-  assert.equal(again.request.requesters, 1);
-  const repeated = await requests.file(bob, { title: "APIXABAN vs RIVAROXABAN in elderly AF" });
-  assert.equal(repeated.filed, false, "the same words are the same request");
-  assert.equal(repeated.request.id, first.request.id);
-  assert.equal(repeated.request.requesters, 2);
-  const popular = await requests.file(bob, { title: "SGLT2 inhibitors and CKD progression" });
-  await requests.second(carol, popular.request.id);
-  await requests.second(alice, popular.request.id);
-  assert.equal((await requests.second(alice, popular.request.id)).alreadySeconded, true);
-  const list = await topicRequestCounts(db, { limit: 10 });
-  assert.deepEqual(list.map((item) => [item.title, item.requesters]), [["SGLT2 inhibitors and CKD progression", 3], ["Apixaban vs rivaroxaban in elderly AF", 2]], "most distinct requesters first");
-  // A tie goes to the request filed first.
-  await requests.file(carol, { title: "Colchicine after myocardial infarction" });
-  await requests.second(bob, (await topicRequestCounts(db, { limit: 10 })).find((item) => item.title.startsWith("Colchicine")).id);
-  assert.deepEqual((await topicRequestCounts(db, { limit: 10 })).map((item) => item.requesters), [3, 2, 2]);
-  assert.equal((await topicRequestCounts(db, { limit: 10 }))[1].title, "Apixaban vs rivaroxaban in elderly AF", "equal counts: the earlier request is first");
-  // Invalid input is refused by name and writes nothing.
-  for (const body of [{ title: "abc" }, { title: "x".repeat(201) }, { title: "bad\u0007control" }, { title: 5 }, {}, { title: "A fine title", extra: 1 }, { title: "A fine title", zoneId: "not-a-zone" }, { title: "A fine title", zoneId: "ez_0000000000000000" }, null, []]) {
-    await assert.rejects(requests.file(alice, /** @type {any} */ (body)), { code: "evidence_topic_request_invalid", status: 400 }, JSON.stringify(body));
-  }
-  await assert.rejects(requests.second(alice, "tr_" + "0".repeat(32)), { code: "evidence_topic_request_not_found", status: 404 });
-  await assert.rejects(requests.second(alice, "garbage"), { code: "evidence_topic_request_not_found" });
-  // Alice has voted three times today (first, popular's second ×1; the repeats were free): she has one left, then none.
-  const used = Number((await db.query("SELECT count(*) AS n FROM evimed_frontier.evidence_topic_request_votes WHERE user_id='alice'")).rows[0].n);
-  assert.equal(used, 2);
-  await requests.file(alice, { title: "A third topic from Alice" });
-  const before = Number((await db.query("SELECT count(*) AS n FROM evimed_frontier.evidence_topic_requests")).rows[0].n);
-  await assert.rejects(requests.file(alice, { title: "A fourth topic from Alice" }), { code: "evidence_topic_request_limit", status: 429 });
-  assert.equal(Number((await db.query("SELECT count(*) AS n FROM evimed_frontier.evidence_topic_requests")).rows[0].n), before, "a refused request leaves no row behind");
-  assert.equal((await requests.file(alice, { title: "A third topic from Alice" })).alreadySeconded, true, "repeating a vote already given is never over the limit");
-  const mine = await requests.list({ userId: "alice" });
-  assert.equal(mine.remainingToday, 0);
-  assert.equal(mine.seconded.length, 3);
-  assert.equal(requests.stats().refusedLimit, 1);
-  assert.equal(requests.stats().refusedInvalid, 10, "every invalid body was counted");
-  // Concurrent filing by one account cannot pass the ceiling together.
-  await db.query("DELETE FROM evimed_frontier.evidence_topic_request_votes WHERE user_id='carol'");
-  const burst = await Promise.allSettled([1, 2, 3, 4, 5, 6].map((n) => requests.file(carol, { title: `Concurrent topic number ${n}` })));
-  assert.equal(burst.filter((result) => result.status === "fulfilled").length, 3, "three votes a day, however many arrive at once");
-  // The page: the list in order with the requesters, titles escaped, never indexed, and the page says filing needs an account.
-  const wide = createEvidenceTopicRequests({ database: db, config: { evidenceTopicRequestsPerDay: 50 } });
-  await wide.file(bob, { title: "<script>alert(1)</script> topic" });
-  const { text } = await serve(t, { requests: wide });
-  const page = await text("/evidence/requests");
-  assert.equal(page.status, 200);
-  assert.ok(page.body.includes("&lt;script&gt;alert(1)&lt;/script&gt; topic"));
-  assert.equal(/<script>alert/.test(page.body), false);
-  assert.ok(page.body.indexOf("SGLT2 inhibitors") < page.body.indexOf("Colchicine after"), "the page is in the list's order");
-  assert.ok(page.body.includes("2 人申请"), "the number of distinct requesters is on each row");
-  assert.ok(page.body.includes("申请和附议需要登录"));
-  assert.equal(page.headers.get("x-robots-tag"), "noindex");
-  assert.match(page.body, /指向专区：<a href="\/evidence\/z\/ez_/);
-  assert.equal(normalizeTopicTitle("Ｆｕｌｌｗｉｄｔｈ　topic"), "Fullwidth topic", "NFKC folds width, a format fold");
-});
-
 test("the router limits an address per minute: a page gets 429 with Retry-After and noindex, the API gets the JSON refusal, and each is counted", options, async (t) => {
   const official = await officialZone();
   const { HttpError } = await import("../src/security.mjs");
@@ -747,32 +679,27 @@ test("the router limits an address per minute: a page gets 429 with Retry-After 
   assert.deepEqual(evidencePublicMetricFamilies(null), []);
 });
 
-test("the migration is idempotent on a database that already holds earlier evidence data, and creates the public request tables", options, async () => {
+test("the migration is idempotent on a database that already holds earlier evidence data, and retires the public topic-request tables", options, async () => {
   const zone = await userZone(alice, { title: "Alice's zone" });
   await userCard(alice, zone, cardInput("Card"));
-  await db.query("DROP TABLE evimed_frontier.evidence_topic_request_links; DROP TABLE evimed_frontier.evidence_topic_request_votes; DROP TABLE evimed_frontier.evidence_topic_requests; DROP TABLE evimed_frontier.evidence_page_reads;");
+  await db.query("DROP TABLE evimed_frontier.evidence_page_reads;");
   await db.query(EVIDENCE_ZONE_SQL);
   await db.query(EVIDENCE_ZONE_SQL);
   await migrateEvidenceZones(db);
-  const tables = (await db.query("SELECT table_name FROM information_schema.tables WHERE table_schema='evimed_frontier' AND table_name LIKE 'evidence_%' ORDER BY table_name")).rows.map((row) => row.table_name);
-  for (const table of ["evidence_page_reads", "evidence_topic_requests", "evidence_topic_request_votes", "evidence_topic_request_links"]) assert.ok(tables.includes(table), table);
+  const tablesOf = async () => (await db.query("SELECT table_name FROM information_schema.tables WHERE table_schema='evimed_frontier' AND table_name LIKE 'evidence_%' ORDER BY table_name")).rows.map((row) => row.table_name);
+  assert.ok((await tablesOf()).includes("evidence_page_reads"), "the page-read table is back");
   assert.equal(Number((await db.query("SELECT count(*) AS n FROM evimed_frontier.evidence_cards")).rows[0].n), 1, "the earlier data is untouched");
-  // The topic-request key is the folded title, so two spellings of one title cannot both be rows.
-  await db.query("INSERT INTO evimed_frontier.evidence_topic_requests(id,title,title_key) VALUES('tr_a','One title','one title')");
-  await assert.rejects(db.query("INSERT INTO evimed_frontier.evidence_topic_requests(id,title,title_key) VALUES('tr_b','one TITLE','one title')"), { code: "23505" });
+  // A database from before the retirement still holds the requests, their votes and links: the migration drops all three, and does so again without error.
+  await db.query(`CREATE TABLE evimed_frontier.evidence_topic_requests (id text PRIMARY KEY, title text NOT NULL, title_key text NOT NULL UNIQUE, zone_id text, created_at timestamptz NOT NULL DEFAULT now());
+    CREATE TABLE evimed_frontier.evidence_topic_request_votes (request_id text NOT NULL REFERENCES evimed_frontier.evidence_topic_requests(id) ON DELETE CASCADE, user_id text NOT NULL, PRIMARY KEY(request_id,user_id));
+    CREATE TABLE evimed_frontier.evidence_topic_request_links (left_id text NOT NULL REFERENCES evimed_frontier.evidence_topic_requests(id), right_id text NOT NULL REFERENCES evimed_frontier.evidence_topic_requests(id), PRIMARY KEY(left_id,right_id));
+    INSERT INTO evimed_frontier.evidence_topic_requests(id,title,title_key) VALUES('tr_a','One title','one title'),('tr_b','Other','other');
+    INSERT INTO evimed_frontier.evidence_topic_request_votes(request_id,user_id) VALUES('tr_a','alice');
+    INSERT INTO evimed_frontier.evidence_topic_request_links(left_id,right_id) VALUES('tr_a','tr_b');`);
+  await db.query(EVIDENCE_ZONE_SQL);
+  await db.query(EVIDENCE_ZONE_SQL);
+  const after = await tablesOf();
+  for (const table of ["evidence_topic_requests", "evidence_topic_request_votes", "evidence_topic_request_links"]) assert.equal(after.includes(table), false, `${table} is gone`);
+  assert.equal(Number((await db.query("SELECT count(*) AS n FROM evimed_frontier.evidence_cards")).rows[0].n), 1);
 });
 
-test("an account's export carries the topic requests it filed or seconded, and no one else's", options, async () => {
-  const requests = createEvidenceTopicRequests({ database: db, config: { evidenceTopicRequestsPerDay: 5 } });
-  await requests.file(alice, { title: "Apixaban after a bleed" });
-  const popular = await requests.file(bob, { title: "SGLT2 inhibitors in heart failure" });
-  await requests.second(alice, popular.request.id);
-  const archive = async (user) => {
-    const created = (await db.query("SELECT created_at::text AS value FROM evimed_control.users WHERE id=$1", [user.id])).rows[0].value;
-    return withAccountExportSnapshot(db, { ...user, accountCreatedAt: created }, {}, async (snapshot) => JSON.parse(snapshot.data.toString()));
-  };
-  const mine = await archive(alice);
-  assert.deepEqual(mine.evidenceTopicRequestVotes.map((vote) => vote.title).sort(), ["Apixaban after a bleed", "SGLT2 inhibitors in heart failure"]);
-  assert.deepEqual((await archive(bob)).evidenceTopicRequestVotes.map((vote) => vote.title), ["SGLT2 inhibitors in heart failure"]);
-  assert.deepEqual((await archive(carol)).evidenceTopicRequestVotes, []);
-});

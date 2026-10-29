@@ -1581,7 +1581,7 @@ test("/api/me says whether this account sees the feed, and the routes agree", as
   // `openList` is false here because this composition configures no OpenList
   // (openListReadiness.test.mjs covers the probe that turns it on); `capsuleShare` is true because sharing is on unless turned off
   // (2026-10-23).
-  assert.deepEqual((await me(off)).features, { frontier: false, review: false, knowledgePages: false, capsuleShare: true, zoneSubscription: false, evidenceCommunity: false, geo: false, vcr: false, memoryMap: true, openList: false });
+  assert.deepEqual((await me(off)).features, { frontier: false, review: false, knowledgePages: false, capsuleShare: true, zoneSubscription: false, geo: false, vcr: false, memoryMap: true, openList: false });
   assert.equal(off.app.frontierWorker, null, "a deployment that did not switch it on composes no worker");
   const offStatus = await status(off);
   assert.equal(offStatus.status, 404);
@@ -1605,6 +1605,39 @@ test("/api/me says whether this account sees the feed, and the routes agree", as
   assert.equal((await me(mapOff)).features.memoryMap, false, "the map's own switch hides the tab");
   const memoryOff = await composedApp(t, { memoryEnabled: false });
   assert.equal((await me(memoryOff)).features.memoryMap, false, "the map follows the memory subsystem's switch");
+});
+
+// 证据专区 as topic zones is composed by one switch (OPEN_SCIENCE_EVIDENCE_ZONE_TOPICS_ENABLED): the read side, the write side, the planner that
+// seeds the platform's zones (and spends the feed's budget doing it) and the typed follow's conversion into a zone. Off, none of them exists, so
+// no route writes a zone and nothing is spent; the directory answers empty and says it cannot create.
+test("the topic zones are composed as one unit by their switch: on, the write side, the planner and the typed follow; off, none of them and a directory that cannot create", async (t) => {
+  const on = await frontierComposition(t);
+  assert.ok(on.app.frontier.zoneWrites, "the write side is composed");
+  assert.ok(on.app.frontier.zonePlanner, "the planner is composed");
+  assert.equal(on.app.frontier.worker.zonePlanner, on.app.frontier.zonePlanner, "and the worker runs it");
+  assert.equal(typeof on.app.frontier.service.zoneFromWords, "function", "a typed follow becomes a zone");
+  assert.equal(typeof on.app.frontier.service.zonesForItem, "function", "an item's page names its zones");
+
+  const off = await frontierComposition(t, { evidenceZoneTopicsEnabled: false });
+  assert.equal(off.app.frontier.zoneWrites ?? null, null, "no write side");
+  assert.equal(off.app.frontier.zoneDraft ?? null, null, "no drafter");
+  assert.equal(off.app.frontier.zonePlanner ?? null, null, "no planner to seed zones and spend on them");
+  assert.equal(off.app.frontier.worker.zonePlanner, null, "the worker has none to run");
+  assert.equal(off.app.frontier.service.zoneFromWords, null, "a typed follow is refused by name, never turned into a zone");
+  assert.equal(off.app.frontier.service.zonesForItem, null);
+
+  const headers = { Cookie: "os_session=composition-session", "x-open-science-project": PROJECT_ID, "content-type": "application/json", "x-open-science-csrf": "composition-csrf" };
+  const base = `http://127.0.0.1:${off.app.server.address().port}`;
+  const directory = await fetch(`${base}/api/frontier/zones?view=recommended`, { headers });
+  assert.equal(directory.status, 200);
+  const data = (await directory.json()).data;
+  assert.equal(data.canCreate, false, "the page offers no 新建专区");
+  assert.deepEqual([data.total, data.groups, data.zones], [0, [], []]);
+  const body = JSON.stringify({ title: "A zone", definition: { type: "drug-indication", keywords: [{ label: "GLP-1", terms: [] }], scope: "x", specialties: [], group: "", include: "", exclude: "", excludeTerms: [], perspective: null } });
+  for (const path of ["/api/frontier/zones", "/api/frontier/zones/draft", "/api/frontier/zones/preview"]) {
+    const refused = await fetch(`${base}${path}`, { method: "POST", headers, body });
+    assert.ok(refused.status >= 400 && refused.status < 500, `${path} makes no zone while the topic zones are off (${refused.status})`);
+  }
 });
 
 // The feed's second wave (build spec D): the composer is built with the worker

@@ -1,7 +1,7 @@
 // No account id leaves through a public or cross-account response (flywheel review 2026-10-06). The id of a local account is its login
 // name, so it must never be an address, a field or a word in anything another person can read. The real hosted app, composed as a
 // deployment composes it, against a real PostgreSQL: every public page and API document with no session, the feed and the sitemap, and
-// the in-app routes another signed-in account reads (links, author page, community column, zone and card views, topic requests).
+// the in-app routes another signed-in account reads (links, author page, zone and card views).
 import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -49,7 +49,7 @@ before(async () => {
   const app = createWebApiApp({
     dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local", bootstrapUser: "", bootstrapPassword: "", stateStore: "postgres",
     requireSharedStateStore: true, databaseUrl: isolated.url, operatorMetricsToken: "test-only-metrics-token",
-    frontierEnabled: true, frontierAudience: "all", evidencePublicWebEnabled: true, evidencePublicIndexable: true, evidenceCommunityCardsEnabled: true,
+    frontierEnabled: true, frontierAudience: "all", evidencePublicWebEnabled: true, evidencePublicIndexable: true,
     publicUrl: PUBLIC_URL, evidencePublicRatePerMinute: 10_000,
     evidenceSimulations: { list: async () => ({ items: SIMULATIONS, next: null }), get: async (/** @type {string} */ id) => SIMULATIONS.find((entry) => entry.id === id) ?? null },
     knowledgePluginUrl: "http://plugin.test:8080", knowledgePluginTokenFile: tokenFile, knowledgePluginFetch: memoryPlugin({ sources: [pluginSource("nejm")] }).fetchImpl,
@@ -98,7 +98,7 @@ test("no account id appears in any public page, API document, feed or sitemap, o
     const live = (await zones.save(user, { expectedRevision: zone.revision, state: "published" }, zone.id)).zone;
     return (await zones.setVisibility(user, live.id, { visibility: "internet", expectedRevision: live.revision })).zone;
   };
-  // The official zone whose community column lists the researchers' cards on the same subject.
+  // The platform's own zone, beside the researchers' zones whose cards are read below.
   const made = (await zones.saveEditorial(publisher, { title: "房颤抗凝", description: "d", background: "b", kind: "official" }, null, null, false, "programme")).zone;
   const official = (await zones.saveEditorial(publisher, { expectedRevision: made.revision, state: "published" }, made.id, null, false, "programme")).zone;
   const officialCard = (await zones.saveEditorial(publisher, card("官方卡片"), official.id, null, true, "programme")).evidence;
@@ -121,8 +121,6 @@ test("no account id appears in any public page, API document, feed or sitemap, o
   const ownerHandle = /** @type {string} */ (handles.get(accounts.owner.id));
   const publisherHandle = /** @type {string} */ (handles.get(PLATFORM_PUBLISHER_USER_ID));
   const secondHandle = /** @type {string} */ (handles.get(accounts.second.id));
-  const filed = await fetch(`${context.base}/api/frontier/evidence/topic-requests`, { method: "POST", headers: context.sessions.reader, body: JSON.stringify({ title: "房颤患者的抗凝选择" }) });
-  assert.equal(filed.status, 200);
 
   const forbidden = [accounts.owner.id, accounts.second.id, accounts.reader.id, PLATFORM_PUBLISHER_USER_ID];
   /** @type {string[]} */
@@ -134,7 +132,7 @@ test("no account id appears in any public page, API document, feed or sitemap, o
   };
 
   const publicDocuments = [
-    "/evidence/", "/evidence/about", "/evidence/metrics", "/evidence/simulations", "/evidence/simulations/sim-1", "/evidence/requests", "/evidence/sitemap.xml",
+    "/evidence/", "/evidence/about", "/evidence/metrics", "/evidence/simulations", "/evidence/simulations/sim-1", "/evidence/sitemap.xml",
     "/evidence/feed.json", "/evidence/feed.xml",
     `/evidence/z/${official.id}`, `/evidence/z/${zone.id}`, `/evidence/z/${zone.id}/changes`, `/evidence/z/${zoneTwo.id}`,
     `/evidence/c/${officialCard.id}`, `/evidence/c/${cards[0].id}`, `/evidence/c/${cards[0].id}?view=public`, `/evidence/c/${edited.id}`, `/evidence/c/${follower.id}`,
@@ -150,9 +148,8 @@ test("no account id appears in any public page, API document, feed or sitemap, o
 
   const inApp = [
     `/api/frontier/evidence/${cards[0].id}/links`, `/api/frontier/evidence/${follower.id}/links`, `/api/frontier/authors/${ownerHandle}`, `/api/frontier/authors/${publisherHandle}`,
-    `/api/frontier/zones/${official.id}/community`, "/api/frontier/zones", "/api/frontier/evidence", `/api/frontier/zones/${zone.id}`,
+    "/api/frontier/zones", "/api/frontier/evidence", `/api/frontier/zones/${zone.id}`,
     `/api/frontier/zones/${zone.id}/evidence`, `/api/frontier/zones/${zone.id}/evidence/${cards[0].id}`, `/api/frontier/zones/${zone.id}/evidence/${edited.id}`,
-    "/api/frontier/evidence/topic-requests",
   ];
   for (const pathname of inApp) clean(`in-app ${pathname}`, await signedIn("reader", pathname), [accounts.reader.id]);
   assert.deepEqual(leaks, []);
@@ -162,8 +159,6 @@ test("no account id appears in any public page, API document, feed or sitemap, o
   assert.equal((await anonymous(`/evidence/a/${accounts.owner.id}`)).status, 404);
   assert.equal((await anonymous(`/evidence/api/v1/authors/${accounts.owner.id}`)).status, 404);
   assert.equal((await signedIn("reader", `/api/frontier/authors/${accounts.owner.id}`)).status, 404);
-  const column = JSON.parse((await signedIn("reader", `/api/frontier/zones/${official.id}/community`)).body).data;
-  assert.ok(column.items.length > 0 && column.items.every((/** @type {any} */ item) => /^au_[a-f0-9]{16}$/.test(item.author.id)), "the community column signs a card with the handle");
   assert.equal(JSON.parse((await anonymous(`/evidence/api/v1/cards/${cards[0].id}`)).body).data.card.creator.id, ownerHandle);
   // The owner's own reading of the card keeps the receipt as stored; a stranger's does not carry the account in it.
   const asOwner = JSON.parse((await signedIn("owner", `/api/frontier/zones/${zone.id}/evidence/${edited.id}`)).body).data.evidence;

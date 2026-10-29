@@ -187,32 +187,19 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.evidence_upkeep_state (
 );
 -- The public pages' own tables (flywheel F08, 2026-10-06). Reads: one row per card (or per zone page, card_id '') and day, so "nobody
 -- reads it" and the topic selector's attention signal have a real input; no address, no user agent, no cookie is kept. The day is the
--- platform's own (Asia/Shanghai). Topic requests: the public entry of plan §8 — a request is a title, optionally aimed at a zone, and
--- ranks by the number of distinct accounts that filed or seconded it; title_key is the title's whitespace-and-case-folded form, so the
--- same words filed twice are one request with two requesters rather than two requests.
+-- platform's own (Asia/Shanghai).
 CREATE TABLE IF NOT EXISTS evimed_frontier.evidence_page_reads (
  zone_id text NOT NULL REFERENCES evimed_frontier.evidence_zones(id) ON DELETE CASCADE,
  card_id text NOT NULL DEFAULT '', day date NOT NULL, reads integer NOT NULL DEFAULT 0 CHECK(reads>=0),
  PRIMARY KEY(zone_id,card_id,day)
 );
 CREATE INDEX IF NOT EXISTS evidence_page_reads_day_idx ON evimed_frontier.evidence_page_reads(day);
-CREATE TABLE IF NOT EXISTS evimed_frontier.evidence_topic_requests (
- id text PRIMARY KEY, title text NOT NULL CHECK(char_length(title) BETWEEN 4 AND 200), title_key text NOT NULL UNIQUE,
- zone_id text REFERENCES evimed_frontier.evidence_zones(id) ON DELETE SET NULL,
- created_at timestamptz NOT NULL DEFAULT clock_timestamp()
-);
-CREATE TABLE IF NOT EXISTS evimed_frontier.evidence_topic_request_votes (
- request_id text NOT NULL REFERENCES evimed_frontier.evidence_topic_requests(id) ON DELETE CASCADE,
- user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
- created_at timestamptz NOT NULL DEFAULT clock_timestamp(), PRIMARY KEY(request_id,user_id)
-);
-CREATE INDEX IF NOT EXISTS evidence_topic_request_votes_user_idx ON evimed_frontier.evidence_topic_request_votes(user_id,created_at DESC);
-CREATE TABLE IF NOT EXISTS evimed_frontier.evidence_topic_request_links (
- left_id text NOT NULL REFERENCES evimed_frontier.evidence_topic_requests(id) ON DELETE CASCADE,
- right_id text NOT NULL REFERENCES evimed_frontier.evidence_topic_requests(id) ON DELETE CASCADE,
- relation text NOT NULL DEFAULT 'related' CHECK(relation='related'),
- PRIMARY KEY(left_id,right_id), CHECK(left_id<right_id)
-);
+-- The public topic requests (a title anyone could file or second, ranked by the accounts behind it) were retired with the programme and
+-- the typed follows on 2026-10-29: readers make their own zones now, and nothing reads these tables. Dropped on every start, which is
+-- idempotent; the links and votes go first because they refer to the requests.
+DROP TABLE IF EXISTS evimed_frontier.evidence_topic_request_links;
+DROP TABLE IF EXISTS evimed_frontier.evidence_topic_request_votes;
+DROP TABLE IF EXISTS evimed_frontier.evidence_topic_requests;
 -- A source with no public address keeps none of its text (2026-10-06 review): a researcher's own uploaded document could reach a card as a
 -- source's retained text, and a card is readable by others. The writers no longer store it (EvidenceZoneService); this takes it off the
 -- rows an earlier release wrote, cards and the revision snapshots that copy them, and says the source is no longer full text. Idempotent:
@@ -263,10 +250,15 @@ CREATE INDEX IF NOT EXISTS zone_changes_zone_idx ON evimed_frontier.zone_changes
 -- The owner (2026-10-29): the zones that existed before topic zones are deleted and the platform starts again (they were whole
 -- diseases or kinds of card, and the platform no longer writes cards). Once per database: the platform's and readers' zones with no
 -- topic definition go, with their cards (the foreign keys cascade); 循证 GEO's product zones stay. The marker makes it run once, so a
--- zone made later is never touched.
+-- zone made later is never touched. The marker and the content version move in the one UPDATE of the singleton row: a second
+-- UPDATE of the same row in the same statement (a CTE's, then the outer one) is skipped by PostgreSQL, which once left the version
+-- unmoved after the reset and every version-keyed ETag answering 304 with deleted content. The version moves only when zones go.
 ALTER TABLE evimed_frontier.evidence_zone_meta ADD COLUMN IF NOT EXISTS topics_reset_at timestamptz(3);
 WITH reset AS (
-  UPDATE evimed_frontier.evidence_zone_meta SET topics_reset_at=clock_timestamp() WHERE singleton AND topics_reset_at IS NULL RETURNING 1
+  UPDATE evimed_frontier.evidence_zone_meta
+     SET topics_reset_at=clock_timestamp(),
+         version=version + CASE WHEN EXISTS (SELECT 1 FROM evimed_frontier.evidence_zones o WHERE o.kind IN ('official','user') AND o.lifecycle='none') THEN 1 ELSE 0 END
+   WHERE singleton AND topics_reset_at IS NULL RETURNING 1
 ), gone AS (
   DELETE FROM evimed_frontier.evidence_zones z
    WHERE EXISTS (SELECT 1 FROM reset) AND z.kind IN ('official','user') AND z.lifecycle='none'
@@ -275,7 +267,7 @@ WITH reset AS (
   INSERT INTO evimed_frontier.zone_changes(zone_id, kind, actor, detail)
   SELECT id, 'reset', 'migration', '{"reason":"topic zones replace the zones before 2026-10-29"}'::jsonb FROM gone RETURNING 1
 )
-UPDATE evimed_frontier.evidence_zone_meta SET version=version+1 WHERE EXISTS (SELECT 1 FROM noted);
+SELECT count(*) FROM noted;
 `;
 
 /**

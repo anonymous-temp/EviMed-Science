@@ -263,11 +263,14 @@ export class EvidenceCardFromResult {
     };
   }
 
-  /** The zone the card is written to, which must be the caller's and a user zone. @param {{ id: string }} user @param {string} zoneId */
+  /** The zone the card is written to, which must be the caller's, a user zone and not a topic zone. @param {{ id: string }} user @param {string} zoneId */
   async #ownUserZone(user, zoneId) {
     const { zone } = await this.zones.detail(user, zoneId);
     if (zone.kind !== "user") throw refused("evidence_result_zone_kind_refused");
     if (!zone.canEdit) throw refused("evidence_result_zone_not_owned", 403);
+    // A topic zone (lifecycle other than 'none') shows cards only from the card port, so a card written into it would exist and be seen nowhere.
+    const topic = await this.database.query("SELECT 1 FROM evimed_frontier.evidence_zones WHERE id=$1 AND lifecycle<>'none'", [zone.id]);
+    if (topic.rows.length) throw refused("evidence_result_zone_topic_refused");
     return zone;
   }
 

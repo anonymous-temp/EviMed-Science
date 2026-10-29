@@ -384,7 +384,7 @@ ${changes.length ? html`<ul>${changes.map((/** @type {any} */ entry) => html`<li
 }
 
 // ---------------------------------------------------------------------------
-// About, metrics, simulations, requests
+// About, metrics, simulations
 // ---------------------------------------------------------------------------
 
 export function aboutPage() {
@@ -397,7 +397,7 @@ ${EVIDENCE_ABOUT_SECTIONS.map((section) => html`<section aria-labelledby="${sect
     const items = block.items.map((item) => html`<li>${item}</li>`);
     return block.type === "ol" ? html`<ol>${items}</ol>` : html`<ul>${items}</ul>`;
   })}</section>`)}
-<p class="muted">按月公开的数在${pathLink(evidencePublicPath("/metrics"), "这一页")}，选题申请在${pathLink(evidencePublicPath("/requests"), "这一页")}。</p>`,
+<p class="muted">按月公开的数在${pathLink(evidencePublicPath("/metrics"), "这一页")}。</p>`,
   };
 }
 
@@ -526,18 +526,6 @@ ${Array.isArray(record.assumptions) && record.assumptions.length ? html`<h2>假�
 ${limitations.length ? html`<h2>局限</h2><ul>${limitations.map((/** @type {string} */ item) => html`<li>${item}</li>`)}</ul>` : ""}
 ${receipts.length ? html`<h2>计算回执</h2><p class="muted">这些数字由统计引擎计算，回执编号：${receipts.map((/** @type {any} */ receipt) => String(typeof receipt === "string" ? receipt : receipt?.id ?? "")).filter(Boolean).join("、")}</p>` : ""}
 <p>${pathLink(evidencePublicPath("/simulations"), "返回模拟研究")}</p>`,
-  };
-}
-
-/** @param {{ items: any[] }} model */
-export function requestsPage({ items }) {
-  return {
-    title: `选题申请 · ${EVIDENCE_SITE_NAME}`,
-    description: "任何人都可以申请官方专区的选题，按申请人数排序，谁申请都一样。",
-    body: html`<h1>选题申请</h1>
-<p class="lede">任何人都可以申请官方专区的选题。这里按申请人数排序，谁申请都一样；同一个账号对同一个选题只算一票。</p>
-<p class="muted">申请和附议需要登录 EviMed 账号：${pathLink("/login", "登录或注册")}。</p>
-${items.length ? html`<ol class="list">${items.map((item) => html`<li><h3>${item.title}</h3><p class="meta">${item.requesters} 人申请${item.zoneId ? html` · 指向专区：${pathLink(zonePath(item.zoneId), item.zoneTitle)}` : ""} · ${timeTag(item.createdAt)}</p></li>`)}</ol>` : html`<p class="muted">现在没有人申请选题。</p>`}`,
   };
 }
 

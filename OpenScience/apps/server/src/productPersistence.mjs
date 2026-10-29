@@ -99,6 +99,16 @@ CREATE INDEX IF NOT EXISTS product_documents_project_idx ON evimed_product.docum
   (user_id,project_id,kind) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS product_documents_project_fk_idx ON evimed_product.documents(user_id,project_id);
 CREATE INDEX IF NOT EXISTS product_documents_payload_idx ON evimed_product.documents USING gin(payload jsonb_path_ops) WHERE deleted_at IS NULL;
+DO $programme_retired_documents$
+BEGIN
+  -- The platform's evidence programme (a daily topic decision kept as programme-decision documents and run by evidence-programme jobs) was
+  -- deleted on 2026-10-29 with the platform's own card writing. Its rows go once, in two blocks (this one for the documents, the one after
+  -- the jobs table for the jobs, the agendas and the marker), both before any block that rebuilds a kind CHECK from the current lists, which
+  -- no longer name the two kinds: a row of a kind the narrowed CHECK refuses stops the rebuild and, with it, the migration and the start.
+  IF NOT EXISTS (SELECT 1 FROM evimed_product.schema_migrations WHERE name='2026-10-29-evidence-programme-retired-v1') THEN
+    DELETE FROM evimed_product.documents WHERE kind='programme-decision';
+  END IF;
+END $programme_retired_documents$;
 DO $document_kinds$
 DECLARE constraint_name text;
 BEGIN
@@ -195,12 +205,32 @@ CREATE INDEX IF NOT EXISTS product_jobs_queued_time_idx ON evimed_product.jobs(k
 CREATE INDEX IF NOT EXISTS product_jobs_running_lease_idx ON evimed_product.jobs(kind,lease_expires_at,id) WHERE status='running';
 DO $programme_retired$
 BEGIN
-  -- The platform's evidence programme (a daily topic decision kept as programme-decision documents and run by evidence-programme jobs) was
-  -- deleted on 2026-10-29 with the platform's own card writing. Its rows go once, here and before any block below rebuilds a kind CHECK from the
-  -- current lists, which no longer name the two kinds: a row of a kind the narrowed CHECK refuses would stop the rebuild.
+  -- The rest of the retirement, once: the jobs; the agendas the programme kept under the publisher in the project evimed-evidence (one per
+  -- zone and per hot topic, started and never due), stopped and archived the way AutopilotService#archive does so its stop sweep finds nothing
+  -- left to run; and what was queued under them (episodes waiting to start, their jobs and verification jobs), cancelled. Without this an
+  -- episode queued at the upgrade would run as an ordinary autopilot episode of an account nobody signs into. A running episode finishes into
+  -- its stopped agenda and the sweep settles it. History is kept: every changed document gets its revision row.
   IF NOT EXISTS (SELECT 1 FROM evimed_product.schema_migrations WHERE name='2026-10-29-evidence-programme-retired-v1') THEN
     DELETE FROM evimed_product.jobs WHERE kind='evidence-programme';
-    DELETE FROM evimed_product.documents WHERE kind='programme-decision';
+    WITH stopped AS (
+      UPDATE evimed_product.documents SET revision = revision + 1, updated_at = clock_timestamp(),
+        payload = payload || jsonb_build_object('enabled', false, 'status', 'stopped', 'pauseReason', 'Retired with the evidence programme.',
+          'archivedAt', to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+          'stopSweep', jsonb_build_object('status', 'queued', 'requestedAt', to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
+          'updatedAt', to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
+      WHERE kind='agenda' AND user_id='evimed-evidence-center' AND project_id='evimed-evidence' AND deleted_at IS NULL
+        AND payload ? 'programme' AND payload->>'archivedAt' IS NULL
+      RETURNING user_id, kind, id, revision, payload, deleted_at
+    ) INSERT INTO evimed_product.revisions(user_id,kind,id,revision,payload,deleted_at) SELECT * FROM stopped;
+    WITH canceled AS (
+      UPDATE evimed_product.documents SET revision = revision + 1, updated_at = clock_timestamp(),
+        payload = payload || jsonb_build_object('status', 'canceled', 'updatedAt', to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
+      WHERE kind='episode' AND user_id='evimed-evidence-center' AND project_id='evimed-evidence' AND deleted_at IS NULL
+        AND payload->>'status' IN ('queued', 'retry_pending')
+      RETURNING user_id, kind, id, revision, payload, deleted_at
+    ) INSERT INTO evimed_product.revisions(user_id,kind,id,revision,payload,deleted_at) SELECT * FROM canceled;
+    UPDATE evimed_product.jobs SET status='canceled', finished_at=clock_timestamp(), updated_at=clock_timestamp()
+      WHERE user_id='evimed-evidence-center' AND project_id='evimed-evidence' AND kind IN ('episode','verify') AND status='queued';
     INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-29-evidence-programme-retired-v1') ON CONFLICT DO NOTHING;
   END IF;
 END $programme_retired$;

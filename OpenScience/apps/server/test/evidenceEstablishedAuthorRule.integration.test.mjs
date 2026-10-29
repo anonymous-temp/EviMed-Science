@@ -1,13 +1,13 @@
-// One rule for "an established author" (flywheel review 2026-10-06), against a real PostgreSQL. The feed, the public pages' indexing and the
-// community column each held a copy of it, looking at the newest 150, 50 and 50 cards. They now all ask `evidenceAuthorIsEstablished`: here the
-// same authors — two ✓ cards, three, three typed-excerpt cards the platform never read, and three ✓ cards buried under fifty-five newer cards
-// without one — get the same verdict from every caller, at the boundary of two against three, and each caller's own extra condition is its own.
+// One rule for "an established author" (flywheel review 2026-10-06), against a real PostgreSQL. The feed, the public pages' indexing and
+// (until it was retired on 2026-10-29) the community column each held a copy of it, looking at the newest 150, 50 and 50 cards. They now
+// all ask `evidenceAuthorIsEstablished`: here the same authors — two ✓ cards, three, three typed-excerpt cards the platform never read, and
+// three ✓ cards buried under fifty-five newer cards without one — get the same verdict from every caller, at the boundary of two against
+// three, and each caller's own extra condition is its own.
 import assert from "node:assert/strict";
 import { after, before, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { authorHandlesFor } from "../src/evidenceAuthorHandles.mjs";
 import { evidenceAuthorIsEstablished, evidenceEstablishedAuthors } from "../src/evidenceAuthorStanding.mjs";
-import { createEvidenceCommunity } from "../src/evidenceCommunity.mjs";
 import { createEvidenceFeed } from "../src/evidenceFeed.mjs";
 import { createEvidencePublicReads } from "../src/evidencePublicQuery.mjs";
 import { EvidenceZoneService } from "../src/evidenceZoneService.mjs";
@@ -91,28 +91,13 @@ test("every caller gives the same verdict for the same authors: two against thre
   }
   const inFeed = (await feed.page({ limit: 50 })).page.items.map((/** @type {any} */ item) => item.title).filter((/** @type {string} */ title) => title.endsWith("result card")).sort();
   assert.deepEqual(inFeed, ["buried result card", "three result card"], "the feed");
-
-  // The community column: the same authors' cards on the official zone's subject.
-  const column = await createEvidenceCommunity({ database: db, maxCards: 50, platformPublisherUserId: "publisher" }).forZone(official.id);
-  const listed = [...new Set(column?.items.map((/** @type {any} */ item) => item.author.name))].sort();
-  assert.deepEqual(listed, ["Buried Early", "Three Cards"], "the community column");
 });
 
-test("each caller keeps its own extra condition beside the rule: official zones are exempt on the pages, and the community column may list a corroborated card", options, async () => {
+test("the platform's own zone needs no standing on the pages and the feed: they exempt it by zone kind, not by asking the rule", options, async () => {
   await fixture();
   const reads = createEvidencePublicReads({ database: db });
-  // The platform's own zone needs no standing: the pages and the feed exempt it by zone kind, not by asking the rule.
   assert.equal(await evidenceAuthorIsEstablished(db, "publisher"), false);
-  const twoCards = (await db.query("SELECT id FROM evimed_frontier.evidence_cards WHERE user_id='two' ORDER BY id")).rows.map((/** @type {any} */ row) => row.id);
-  const held = await createEvidenceCommunity({ database: db, maxCards: 50, platformPublisherUserId: "publisher" }).forZone(official.id);
-  assert.equal(held?.items.some((/** @type {any} */ item) => item.author.name === "Two Cards"), false, "two ✓ cards: not established, not listed");
-  const corroborated = createEvidenceCommunity({ database: db, maxCards: 50, platformPublisherUserId: "publisher",
-    corroborated: async (cardRow) => cardRow.id === twoCards[0] });
-  const lifted = await corroborated.forZone(official.id);
-  assert.deepEqual(lifted?.items.filter((/** @type {any} */ item) => item.author.name === "Two Cards").map((/** @type {any} */ item) => item.id), [twoCards[0]],
-    "a card something independent vouches for is listed without its author being established; the author's other card is not");
-  assert.equal(corroborated.stats().heldBackNewAuthors, 4, "the cards still held back are counted: two's other card and the three typed ones");
-  assert.equal(await reads.authorQualifies(/** @type {string} */ ((await authorHandlesFor(db, ["two"])).get("two"))), false, "corroboration is the column's own: the pages' rule is unchanged");
+  assert.equal(await reads.authorQualifies(/** @type {string} */ ((await authorHandlesFor(db, ["two"])).get("two"))), false, "two ✓ cards: not established on the pages");
 });
 
 test("a verdict kept by a caller follows the author's cards: the third ✓ card lifts it at once and a withdrawal takes it away at once", options, async () => {

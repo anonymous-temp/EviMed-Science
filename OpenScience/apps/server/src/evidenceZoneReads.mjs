@@ -95,6 +95,10 @@ const notHidden = (param, alias = "i") => `NOT EXISTS (SELECT 1 FROM evimed_fron
 const ITEM_FROM = `evimed_frontier.zone_items zi
   JOIN evimed_frontier.items i ON i.id = zi.item_id AND i.state = 'published'
   JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled`;
+/** How many archivals deep a successor is followed (a zone merged into one that was merged in its turn). */
+const SUCCESSOR_HOPS = 4;
+/** The instant an item is dated by on the page (`timelineAt`): its publication time, `visible_at` when it has none. */
+const PUBLISHED_AT = "coalesce(i.timeline_at, i.visible_at)";
 /** The unit a count is made in: one per event. */
 const EVENT_KEY = "coalesce(i.event_id, -i.id)";
 const KEYWORDS_SQL = (/** @type {string} */ alias) => `(CASE WHEN jsonb_typeof(${alias}.definition->'keywords') = 'array' THEN ${alias}.definition->'keywords' ELSE '[]'::jsonb END)`;
@@ -307,8 +311,51 @@ export function createEvidenceZoneReads({ database, service, cards = null, confi
   }
 
   /**
+   * The zones that took over from an archived one: the pieces of a split and the survivor of a merge, as the planner recorded them. A
+   * successor that was archived in its turn is replaced by its own (a few hops), and one the reader may not see is left out. Empty for a
+   * zone that is not archived, or was archived by nothing that names a successor.
+   * @param {{ id: string }} user @param {any} row
+   * @returns {Promise<Array<{ id: string, slug: string | null, title: string }>>}
+   */
+  async function successorsOf(user, row) {
+    if (row.lifecycle !== "archived") return [];
+    /** @type {Map<string, { id: string, slug: string | null, title: string }>} */
+    const found = new Map();
+    const seen = new Set([String(row.id)]);
+    let pending = [String(row.id)];
+    for (let hop = 0; hop < SUCCESSOR_HOPS && pending.length; hop += 1) {
+      const changes = await plain(`SELECT DISTINCT ON (zone_id) zone_id, detail FROM evimed_frontier.zone_changes
+        WHERE zone_id = ANY($1::text[]) AND kind IN ('merged', 'split') ORDER BY zone_id, id DESC`, [pending]);
+      const named = [...new Set(changes.flatMap((change) => [].concat(record(change.detail).into ?? []).map(String)))].filter((id) => !seen.has(id));
+      if (!named.length) break;
+      named.forEach((id) => seen.add(id));
+      const targets = await query(user, `SELECT z.id, z.slug, z.title, z.lifecycle FROM evimed_frontier.evidence_zones z
+        WHERE z.id = ANY($2::text[]) AND z.lifecycle <> 'none' AND (z.state = 'published' OR z.user_id = $1)`, [named]);
+      pending = [];
+      for (const target of named) {
+        const zone = targets.find((entry) => entry.id === target);
+        if (!zone) continue;
+        if (zone.lifecycle === "archived") pending.push(zone.id);
+        else found.set(zone.id, { id: String(zone.id), slug: zone.slug ?? null, title: String(zone.title) });
+      }
+    }
+    return [...found.values()];
+  }
+
+  /**
+   * When the zone's newest item (collected and not excluded) came out, as the page dates it, or null for a zone with none: what a quiet
+   * zone's head says it was last updated at.
+   * @param {string} zoneId @returns {Promise<string | null>}
+   */
+  async function lastItemAtOf(zoneId) {
+    const rows = await plain(`SELECT max(${PUBLISHED_AT}) AS at FROM ${ITEM_FROM} WHERE zi.zone_id = $1 AND zi.state IN ('in', 'pinned')`, [zoneId]);
+    return iso(rows[0]?.at ?? null);
+  }
+
+  /**
    * A zone as the page's head needs it: `{ zone, feedback }` for a topic zone, `null` for any other (the route answers those with the
-   * old service). The definition is the owner's (and an operator's) alone.
+   * old service). The definition is the owner's (and an operator's) alone. `successors` are the zones that took over from an archived
+   * zone and `lastItemAt` the date of its newest item; both are always there.
    * @param {{ id: string }} user @param {string} ref
    */
   async function detail(user, ref) {
@@ -316,6 +363,7 @@ export function createEvidenceZoneReads({ database, service, cards = null, confi
     if (!row) return null;
     const owner = row.user_id === user.id;
     const base = summary(row, user);
+    const [successors, lastItemAt] = await Promise.all([successorsOf(user, row), lastItemAtOf(row.id)]);
     const feedback = owner
       ? await plain(`SELECT f.id, f.text, f.created_at AS "createdAt", u.name AS author FROM evimed_frontier.evidence_zone_feedback f
           JOIN evimed_control.users u ON u.id = f.user_id WHERE f.zone_id = $1 ORDER BY f.created_at DESC, f.id`, [row.id])
@@ -328,6 +376,8 @@ export function createEvidenceZoneReads({ database, service, cards = null, confi
         canDelete: owner && row.kind === "user",
         band: evidenceZoneBand(base.perWeek),
         overviewAt: iso(row.overview_at),
+        successors,
+        lastItemAt,
         related: await relatedZones(user, row),
       },
       feedback,
@@ -496,7 +546,9 @@ export function createEvidenceZoneReads({ database, service, cards = null, confi
   }
 
   /**
-   * The last twelve weeks of the zone (Monday weeks in the feed's zone), oldest first, with the week's events.
+   * The last twelve weeks of the zone (Monday weeks in the feed's zone), oldest first, with the week's events. An item is in the week of
+   * its publication time — the instant the list shows it at and the page's week filter cuts it by (`timelineAt`, `visible_at` when an item
+   * has none) — so a bar and the list it opens agree: an item the zone collected today of a paper published last month is last month's.
    * @param {{ id: string }} user @param {string} zoneId @param {Date} at
    */
   async function weekly(user, zoneId, at) {
@@ -504,9 +556,9 @@ export function createEvidenceZoneReads({ database, service, cards = null, confi
     const sinceDay = Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 1, Number(today.slice(8, 10)));
     const monday = frontierShiftDay(today, -((new Date(sinceDay).getUTCDay() + 6) % 7));
     const first = frontierShiftDay(monday, -7 * (WEEKS - 1));
-    const found = new Map((await query(user, `SELECT to_char(date_trunc('week', i.visible_at AT TIME ZONE $3), 'YYYY-MM-DD') AS week, count(DISTINCT ${EVENT_KEY})::integer AS n
+    const found = new Map((await query(user, `SELECT to_char(date_trunc('week', ${PUBLISHED_AT} AT TIME ZONE $3), 'YYYY-MM-DD') AS week, count(DISTINCT ${EVENT_KEY})::integer AS n
       FROM ${ITEM_FROM}
-      WHERE zi.zone_id = $2 AND zi.state IN ('in', 'pinned') AND (i.visible_at AT TIME ZONE $3)::date >= $4::date AND ${notHidden("$1")}
+      WHERE zi.zone_id = $2 AND zi.state IN ('in', 'pinned') AND (${PUBLISHED_AT} AT TIME ZONE $3)::date >= $4::date AND ${notHidden("$1")}
       GROUP BY 1`, [zoneId, timeZone, first])).map((row) => [row.week, Number(row.n)]));
     return Array.from({ length: WEEKS }, (_, index) => {
       const weekStart = frontierShiftDay(first, 7 * index);

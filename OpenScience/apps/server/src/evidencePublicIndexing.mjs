@@ -9,8 +9,6 @@
 //   `noindex` and absent from the sitemap, and the rule lifts by itself the moment the third card counts (`authorQualifies` is a count
 //   at read time; it is asked by the author's public handle, the only name of an author this module holds). Official zones are exempt: the platform is not a new author. This stops borrowing the platform's domain to place
 //   pages without stopping anyone from publishing; (b) the card is withdrawn — its page stays, explaining why, and is never indexed.
-// - **User-written lists stay out of the index.** The topic requests page is made of titles any signed-in account typed; it is
-//   `noindex` always, for the reason (a) exists.
 // - **A sitemap lists what the same rules call indexable, and nothing else.** With the deployment's switch off the sitemap is a 404.
 //   Every entry carries the `lastmod` of the page (an author's page, and the index, the latest of what they list).
 // - **"Indexable" is the absence of `noindex`**, in the markup and in the header, on the same verdict. No page says `index` aloud: there
@@ -50,15 +48,14 @@ function later(left, right) {
  * @param {{ config: Record<string, any>, reads: { authorQualifies: (authorHandle: string | null) => Promise<boolean> } }} options
  */
 export function createEvidencePublicIndexing({ config, reads }) {
-  const counters = { noindexSwitchOff: 0, noindexNewAuthor: 0, noindexWithdrawn: 0, noindexAlways: 0, noindexThin: 0, indexable: 0, sitemapRequests: 0, sitemapUrls: 0 };
+  const counters = { noindexSwitchOff: 0, noindexNewAuthor: 0, noindexWithdrawn: 0, noindexThin: 0, indexable: 0, sitemapRequests: 0, sitemapUrls: 0 };
 
   /**
    * Whether a page may be indexed, and why not.
-   * @param {{ kind: "site" } | { kind: "never" } | { kind: "topic", month: number, hasProgress: boolean } | { kind: "zone", zoneKind: string, ownerHandle: string | null } | { kind: "card", zoneKind: string, authorHandle: string | null, withdrawn: boolean } | { kind: "author", official: boolean, authorHandle: string }} page
-   * @returns {Promise<{ index: boolean, reason: "switch_off" | "new_author" | "withdrawn" | "never" | "thin" | null }>}
+   * @param {{ kind: "site" } | { kind: "topic", month: number, hasProgress: boolean } | { kind: "zone", zoneKind: string, ownerHandle: string | null } | { kind: "card", zoneKind: string, authorHandle: string | null, withdrawn: boolean } | { kind: "author", official: boolean, authorHandle: string }} page
+   * @returns {Promise<{ index: boolean, reason: "switch_off" | "new_author" | "withdrawn" | "thin" | null }>}
    */
   async function decide(page) {
-    if (page.kind === "never") { counters.noindexAlways += 1; return { index: false, reason: "never" }; }
     if (page.kind === "card" && page.withdrawn) { counters.noindexWithdrawn += 1; return { index: false, reason: "withdrawn" }; }
     if (config.evidencePublicIndexable !== true) { counters.noindexSwitchOff += 1; return { index: false, reason: "switch_off" }; }
     if (page.kind === "site") { counters.indexable += 1; return { index: true, reason: null }; }

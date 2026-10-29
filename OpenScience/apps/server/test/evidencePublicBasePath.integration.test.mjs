@@ -83,7 +83,7 @@ test("with the base at /evimed-evidence the composed app serves every page kind,
   const handle = /** @type {string} */ ((await authorHandlesFor(context.app.store.database, [OWNER])).get(OWNER));
 
   const pages = [
-    `${BASE}/`, `${BASE}/about`, `${BASE}/metrics`, `${BASE}/simulations`, `${BASE}/requests`, `${BASE}/z/${open.id}`, `${BASE}/z/${open.id}/changes`,
+    `${BASE}/`, `${BASE}/about`, `${BASE}/metrics`, `${BASE}/simulations`, `${BASE}/z/${open.id}`, `${BASE}/z/${open.id}/changes`,
     `${BASE}/c/${cards[0].id}`, `${BASE}/c/${cards[0].id}?view=public`, `${BASE}/a/${handle}`,
   ];
   for (const pathname of pages) {

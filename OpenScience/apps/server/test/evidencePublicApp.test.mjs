@@ -55,16 +55,6 @@ test("with the pages on but no database there is nothing to read, so the router 
     for (const route of ["/evidence/", "/evidence/about", "/evidence/api/v1/zones"]) assert.equal((await fetch(`${base}${route}`)).status, 404, route);
     const scrape = await (await fetch(`${base}/api/ops/metrics`, { headers: { authorization: "Bearer test-only-metrics-token" } })).text();
     assert.doesNotMatch(scrape, /open_science_evidence_public_requests_total/, "a module that is not composed exports nothing");
-    assert.doesNotMatch(scrape, /open_science_evidence_topic_requests_total/);
   });
 });
 
-test("with the pages off the topic-request routes do not exist either, and a session is not asked for", async () => {
-  await withApp({ evidencePublicWebEnabled: false }, async (base) => {
-    for (const [method, route] of [["GET", "/api/frontier/evidence/topic-requests"], ["POST", "/api/frontier/evidence/topic-requests"], ["POST", `/api/frontier/evidence/topic-requests/tr_${"0".repeat(32)}/second`]]) {
-      const response = await fetch(`${base}${route}`, { method, ...(method === "POST" ? { body: "{}", headers: { "content-type": "application/json" } } : {}) });
-      assert.ok([401, 404].includes(response.status), `${method} ${route}: ${response.status}`);
-      assert.notEqual(response.status, 200);
-    }
-  });
-});

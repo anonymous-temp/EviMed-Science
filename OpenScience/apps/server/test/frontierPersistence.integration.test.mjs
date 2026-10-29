@@ -81,18 +81,17 @@ test(
     const first = open();
     const capabilities = await migrateFrontier(first, { dimension: 1024 });
     const created = await inventory(first);
-    // 24 feed/reader tables (the monthlies of 2026-10-22 among them), fifteen native evidence tables (the topic
-    // requests' related links among them; the editor's automation and job tables were dropped on 2026-10-29), two exposure attribution tables, the tag tree's four (2026-10-23) and what each
+    // 24 feed/reader tables (the monthlies of 2026-10-22 among them), twelve native evidence tables (the editor's
+    // automation and job tables and the public topic requests' three were dropped on 2026-10-29), two exposure attribution tables, the tag tree's four (2026-10-23) and what each
     // reader was served and did (interactions, list_serves; ct-track 2026-10-24), the hot-event topics and their items (c2-base
     // 2026-10-25), a typed follow's matches and the congress recaps (c3-base 2026-10-25), the topic zones' items and changes
     // (2026-10-29) and what a reader's daily notice named of their zones (zone_notice_claims), plus the optional vector table. (The topics' sightings are frontierTopics.mjs's own migration, not this one.)
     assert.equal(
       created.tables.length,
-      capabilities.vector ? 55 : 54,
+      capabilities.vector ? 52 : 51,
       created.tables.join(),
     );
     for (const table of [
-      "evidence_topic_request_links",
       "exposure_snapshots",
       "exposures",
       "interactions",
@@ -143,6 +142,9 @@ test(
       "congress_recaps",
     ]) {
       assert.ok(created.tables.includes(table), `${table} was not created`);
+    }
+    for (const table of ["evidence_topic_requests", "evidence_topic_request_votes", "evidence_topic_request_links"]) {
+      assert.equal(created.tables.includes(table), false, `${table} was retired and must not be created`);
     }
     for (const index of [
       "frontier_items_timeline_idx",

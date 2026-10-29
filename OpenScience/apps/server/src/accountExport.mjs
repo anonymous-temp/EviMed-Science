@@ -67,8 +67,6 @@ const queries = [
   ["evidenceReviews", "SELECT * FROM evimed_frontier.evidence_reviews WHERE user_id=$1 ORDER BY card_id"],
   ["evidenceZoneFeedback", "SELECT * FROM evimed_frontier.evidence_zone_feedback WHERE user_id=$1 ORDER BY id"],
   ["evidenceChallenges", "SELECT * FROM evimed_frontier.evidence_challenges WHERE user_id=$1 ORDER BY id"],
-  // The public topic requests the account filed or seconded (flywheel F08): the title it asked for and when. The request itself belongs to no one.
-  ["evidenceTopicRequestVotes", "SELECT v.request_id,r.title,v.created_at FROM evimed_frontier.evidence_topic_request_votes v JOIN evimed_frontier.evidence_topic_requests r ON r.id=v.request_id WHERE v.user_id=$1 ORDER BY v.created_at,v.request_id"],
   // What the account shared and was shared with (`evimed_share`, flywheel F17): the links it made, the links it opened, the deliveries it sent and
   // the ones it received. Never the credential of a link (`token_hash`, `archive_secret`), never another account's id, and never a pack: a received
   // delivery carries who sent it by display name, the pack's title and its hash, and what became of it. The sender's capsule and snapshot ids are the
@@ -514,7 +512,7 @@ export async function withAccountExportSnapshot(database, user, config, operatio
       priceLists: exportedPriceLists(tables.usage), feedbackEvents: tables.feedbackEvents, scriptUses: tables.scriptUses, omissions,
       frontierEventReads: tables.frontierEventReads,
       evidenceCardRevisions:tables.evidenceCardRevisions,evidenceZones:tables.evidenceZones,evidenceCards:tables.evidenceCards,evidenceZoneFollows:tables.evidenceZoneFollows,
-      evidenceComments:tables.evidenceComments,evidenceReviews:tables.evidenceReviews,evidenceZoneFeedback:tables.evidenceZoneFeedback,evidenceChallenges:tables.evidenceChallenges,evidenceTopicRequestVotes:tables.evidenceTopicRequestVotes,
+      evidenceComments:tables.evidenceComments,evidenceReviews:tables.evidenceReviews,evidenceZoneFeedback:tables.evidenceZoneFeedback,evidenceChallenges:tables.evidenceChallenges,
       shareLinks:tables.shareLinks,shareLinkUses:tables.shareLinkUses,shareDeliveriesSent:tables.shareDeliveriesSent,shareDeliveriesReceived:tables.shareDeliveriesReceived,
     };
     const skillResources = await exportPersonalSkillResources({ artifacts: limits.skillArtifacts, user,

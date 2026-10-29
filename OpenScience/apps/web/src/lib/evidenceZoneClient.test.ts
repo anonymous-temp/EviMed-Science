@@ -139,6 +139,7 @@ describe("the co-creation calls", () => {
     for (const [code, text] of [
       ["evidence_result_not_clinical_package", "不是带证据矩阵的临床证据综述"],
       ["evidence_result_zone_not_owned", "只能发布到你自己的专区"],
+      ["evidence_result_zone_topic_refused", "不能发布到按主题建的专区"],
       ["evidence_result_no_verified_claim", "没有引文已核对的结论"],
       ["evidence_author_not_found", "没有这位作者公开的内容"],
     ]) expect(evidenceErrorMessage(new WebApiError("x", { status: 409, code }))).toContain(text);

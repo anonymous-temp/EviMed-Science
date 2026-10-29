@@ -294,7 +294,6 @@ const operatorLevers = {
   OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_PUBLIC_RATE_PER_MINUTE: ["open-science-web"],
-  OPEN_SCIENCE_EVIDENCE_TOPIC_REQUESTS_PER_DAY: ["open-science-web"],
   // The card-citation gift (F07): off and worth 0 until the owner chooses an amount.
   OPEN_SCIENCE_EVIDENCE_CITATION_GIFT_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_CITATION_GIFT_AMOUNT: ["open-science-web"],
@@ -305,8 +304,6 @@ const operatorLevers = {
   OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY: ["open-science-web"],
   // The flywheel's own figures (2026-10-06): a switch that does not arrive leaves the operator route answering 404 while the operator believes it is on.
   OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED: ["open-science-web"],
-  OPEN_SCIENCE_EVIDENCE_COMMUNITY_CARDS_ENABLED: ["open-science-web"],
-  OPEN_SCIENCE_EVIDENCE_COMMUNITY_MAX_CARDS: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH: ["open-science-web"],
   // The floor of different accounts an operator's own signals and leads need before the platform loop reads them (2026-10-10, D-E12): validated by

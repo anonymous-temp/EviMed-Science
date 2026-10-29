@@ -8,7 +8,7 @@
 //   /evidence/z/<zone>/changes        its change log     /evidence/simulations[/id] 「模拟研究」
 //   /evidence/z/s/<slug>              a topic zone, by   /evidence/z/<zone>/feed.xml   a topic zone's feed (also under /z/s/<slug>)
 //                                     its readable name
-//   /evidence/c/<card>?view=          a card             /evidence/requests         the public topic requests
+//   /evidence/c/<card>?view=          a card
 //   /evidence/a/<handle>              an author (`au_…`) /evidence/sitemap.xml      only while indexing is on
 //   /evidence/api/v1/…                the JSON API       /evidence/assets/site.css  the stylesheet
 //   /robots.txt                       the host's root, the one path answered outside the base (see below)
@@ -48,7 +48,7 @@ import { evidencePublicStylesheet, evidencePublicStylesheetPath } from "./eviden
 import { createEvidencePublicTopicReads, EVIDENCE_PUBLIC_TOPIC_LIMITS } from "./evidencePublicTopicReads.mjs";
 import { topicZoneFeedPath, topicZonePage, topicZonePath, topicZoneRss, topicZoneSlugPath } from "./evidencePublicTopicPages.mjs";
 import {
-  aboutPage, authorPage, cardPage, changesPage, indexPage, metricsPage, notFoundPage, rateLimitedPage, requestsPage, simulationPage, simulationsPage, withdrawnCardPage, zonePage,
+  aboutPage, authorPage, cardPage, changesPage, indexPage, metricsPage, notFoundPage, rateLimitedPage, simulationPage, simulationsPage, withdrawnCardPage, zonePage,
 } from "./evidencePublicPages.mjs";
 
 /** The feed's two documents, below the base: the feed's own router answers them (`evidenceFeedRoutes.mjs`). */
@@ -81,7 +81,6 @@ function matches(header, etag) {
  *   config: Record<string, any>,
  *   database: any,
  *   simulations?: SimulationReader | null,
- *   requests?: { list: (query?: { limit?: number }) => Promise<{ items: any[] }>, stats: () => any } | null,
  *   limiter?: ((req: any) => void) | null,
  *   now?: () => Date,
  *   metrics?: ReturnType<typeof createEvidencePublicMetrics>,
@@ -95,7 +94,7 @@ function matches(header, etag) {
  *   `predictionCalibration` are the readers of the monthly page's two optional sections (the question bank's month, the prediction registry's
  *   calibration), composed only where those modules are; absent, the section is not rendered.
  */
-export function createEvidencePublicRoutes({ config, database, simulations = null, requests = null, limiter = null, now = () => new Date(), metrics, questionBank = null, predictionCalibration = null, receiptsFor = null, report = () => {} }) {
+export function createEvidencePublicRoutes({ config, database, simulations = null, limiter = null, now = () => new Date(), metrics, questionBank = null, predictionCalibration = null, receiptsFor = null, report = () => {} }) {
   const enabled = config.evidencePublicWebEnabled === true && Boolean(database);
   const counters = {
     pages: 0, api: 0, assets: 0, sitemap: 0, robots: 0, feeds: 0, notFound: 0, withdrawn: 0, rateLimited: 0, notModified: 0, errors: 0,
@@ -157,11 +156,6 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
       const questionBankMonth = await figures?.questionBank?.() ?? null;
       const calibration = await figures?.predictionCalibration?.() ?? null;
       return sendPage(res, head, 200, metricsPage({ months, questionBank: questionBankMonth, calibration }), { path: evidencePublicPath("/metrics"), noindex: await noindexFor({ kind: "site" }), active: "metrics" });
-    }
-    if (section === "requests" && parts.length === 1) {
-      const list = requests ? await requests.list({ limit: 50 }) : { items: [] };
-      // Every title is a signed-in account's own words and nobody reviewed them: the page is never indexed (evidencePublicIndexing).
-      return sendPage(res, head, 200, requestsPage({ items: list.items }), { path: evidencePublicPath("/requests"), noindex: await noindexFor({ kind: "never" }), active: "requests" });
     }
     if (section === "simulations" && parts.length <= 2) {
       if (parts.length === 1) {
@@ -383,7 +377,7 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
     {
       /** The counters of the pages, the read counter, the indexing rule and the caches; null where the pages are off. */
       stats: () => (enabled && reads && indexing && figures
-        ? { ...counters, base: evidencePublicBase(), indexing: indexing.stats(), reads: reads.stats(), metrics: figures.stats(), requests: requests?.stats() ?? null }
+        ? { ...counters, base: evidencePublicBase(), indexing: indexing.stats(), reads: reads.stats(), metrics: figures.stats() }
         : null),
     },
   );
@@ -409,9 +403,9 @@ export function evidencePublicMetricFamilies(stats) {
     counter("open_science_evidence_public_page_reads_total", "Reads of a zone or card page that were counted for the selector, and those not counted.", [
       { labels: { outcome: "counted" }, value: stats.readsCounted }, { labels: { outcome: "skipped_bot" }, value: stats.readsSkippedBot }, { labels: { outcome: "failed" }, value: stats.readsFailed },
     ]),
-    counter("open_science_evidence_public_noindex_total", "Public evidence pages answered noindex, by reason (the deployment's switch, a new author, a withdrawn card, a page that is never indexed, a topic zone with too little on it).", [
+    counter("open_science_evidence_public_noindex_total", "Public evidence pages answered noindex, by reason (the deployment's switch, a new author, a withdrawn card, a topic zone with too little on it).", [
       { labels: { reason: "switch_off" }, value: stats.indexing.noindexSwitchOff }, { labels: { reason: "new_author" }, value: stats.indexing.noindexNewAuthor },
-      { labels: { reason: "withdrawn" }, value: stats.indexing.noindexWithdrawn }, { labels: { reason: "never" }, value: stats.indexing.noindexAlways },
+      { labels: { reason: "withdrawn" }, value: stats.indexing.noindexWithdrawn },
       { labels: { reason: "thin" }, value: stats.indexing.noindexThin },
     ]),
     counter("open_science_evidence_public_verifications_total", "Cards whose claims the public pages checked against their sources, and checks answered from the cache.", [
@@ -421,9 +415,5 @@ export function evidencePublicMetricFamilies(stats) {
       { labels: { outcome: "computed" }, value: stats.metrics.computed }, { labels: { outcome: "cache_hit" }, value: stats.metrics.cacheHits }, { labels: { outcome: "failed" }, value: stats.metrics.failures },
       { labels: { outcome: "section_failed" }, value: stats.metrics.sectionFailures ?? 0 },
     ]),
-    ...(stats.requests ? [counter("open_science_evidence_topic_requests_total", "Topic requests: filed, seconded, repeated by the same account, and refused by the daily limit or as invalid.", [
-      { labels: { outcome: "filed" }, value: stats.requests.filed }, { labels: { outcome: "seconded" }, value: stats.requests.seconded }, { labels: { outcome: "already_seconded" }, value: stats.requests.alreadySeconded },
-      { labels: { outcome: "refused_limit" }, value: stats.requests.refusedLimit }, { labels: { outcome: "refused_invalid" }, value: stats.requests.refusedInvalid },
-    ])] : []),
   ];
 }

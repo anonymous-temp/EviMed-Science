@@ -294,6 +294,21 @@ test(
 );
 
 test(
+  "the owned list holds the zones a reader's cards live in: a topic zone is never offered as the home of a card",
+  options,
+  async () => {
+    const cardZone = await createZone(alice, false);
+    await db.query(
+      `INSERT INTO evimed_frontier.evidence_zones(id,user_id,kind,title,state,lifecycle,definition,definition_version,zone_type)
+       VALUES('ez_topicmine1','alice','user','我的主题专区','draft','active','{"type":"drug-indication"}',1,'drug-indication')`,
+    );
+    const owned = await service.list(alice, new URLSearchParams({ scope: "owned" }));
+    assert.deepEqual(owned.items.map((zone) => zone.id), [cardZone.id]);
+    assert.equal(owned.total, 1, "the total agrees with the page");
+  },
+);
+
+test(
   "source search matches preserved content without matching internal JSON field names",
   options,
   async () => {

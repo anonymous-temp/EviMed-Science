@@ -401,8 +401,6 @@ test("the exported table list is derived from the queries, joins included", () =
     "evimed_frontier.evidence_zone_feedback",
     "evimed_frontier.evidence_challenges",
     "evimed_frontier.evidence_card_revisions",
-    "evimed_frontier.evidence_topic_request_votes",
-    "evimed_frontier.evidence_topic_requests",
     "evimed_share.links",
     "evimed_share.link_uses",
     "evimed_share.deliveries",
@@ -413,7 +411,7 @@ test("the exported table list is derived from the queries, joins included", () =
       `${table} is not read by any export query`,
     );
   }
-  assert.equal(exported.length, 24, `the export reads ${exported.join(", ")}`);
+  assert.equal(exported.length, 22, `the export reads ${exported.join(", ")}`);
 });
 
 test("every account-scoped table is either exported or declared unexported with a reason", () => {

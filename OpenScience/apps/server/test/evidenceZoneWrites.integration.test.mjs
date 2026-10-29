@@ -277,6 +277,42 @@ test("drafting reads the zone and the item the reader started from, and the word
   assert.ok(empty.draft.title, "an item alone is enough to start from");
 });
 
+test("drafting from a zone hands the model only what the reader may read of it: the full definition to its owner and an operator, the title, keywords and scope to anyone else", options, async () => {
+  const seen = [];
+  editor = { available: true, async callJson(messages) { seen.push(JSON.parse(messages[1].content)); return { draft: { title: "草稿", type: "drug-indication", keywords: [{ label: "减重", terms: ["肥胖"] }], scope: "范围", specialties: [] } }; } };
+  draft = createEvidenceZoneDraft({ editor, membership: plane, database: db });
+  const drafting = (config = {}) => createEvidenceZoneWrites({ database: db, zones, membership: plane, draft, config });
+  const own = await drafting().create(alice, body({ definition: definitionBody({ include: "只要随机对照试验", exclude: "不要动物实验", excludeTerms: ["小鼠"] }) }));
+  // The platform's zone, published to the internet: its criteria are served to nobody but an operator.
+  await db.query(`INSERT INTO evimed_frontier.evidence_zones(id, user_id, kind, title, state, visibility, slug, zone_type, scope_zh, group_label, specialties, definition, definition_version, lifecycle)
+    VALUES ('ez_platform', 'evimed-evidence-center', 'official', '平台专区', 'published', 'internet', 'platform-zone', 'drug-indication', '平台范围', '肥胖', '{endocrinology}', $1::jsonb, 1, 'active')`,
+  [JSON.stringify({ type: "drug-indication", keywords: [{ label: "平台词", terms: ["隐藏的同义词"], tagIds: [7], entityKeys: [] }], perspective: null, scope: "平台范围", include: "隐藏的纳入标准", exclude: "隐藏的排除标准", excludeTerms: ["隐藏的排除词"], specialties: ["endocrinology"], group: "肥胖" })]);
+
+  await drafting().draft(alice, { text: "", baseZoneId: "ez_platform" });
+  const reader = seen.pop().baseZone;
+  assert.equal(reader.title, "平台专区");
+  assert.deepEqual(reader.definition.keywords, [{ label: "平台词", terms: [] }], "the keywords' labels, as the zone's detail shows them");
+  assert.equal(reader.definition.scope, "平台范围");
+  const asText = JSON.stringify(reader);
+  for (const hidden of ["隐藏的纳入标准", "隐藏的排除标准", "隐藏的排除词", "隐藏的同义词"]) assert.equal(asText.includes(hidden), false, `${hidden} stays on the platform's side`);
+
+  await drafting({ operatorUsers: ["bob"] }).draft(bob, { text: "", baseZoneId: "platform-zone" });
+  assert.equal(JSON.stringify(seen.pop().baseZone).includes("隐藏的纳入标准"), true, "an operator reads the definition, so the draft may be built on it");
+
+  await drafting().draft(alice, { text: "加上心血管结局", baseZoneId: own.zone.id });
+  const mine = seen.pop().baseZone.definition;
+  assert.equal(mine.include, "只要随机对照试验");
+  assert.deepEqual(mine.excludeTerms, ["小鼠"], "the owner's own zone is handed over in full");
+
+  // A published zone of another reader: its title and scope, never its criteria.
+  await drafting().update(alice, own.zone.id, { published: true, expectedRevision: own.zone.revision });
+  await drafting().draft(bob, { text: "", baseZoneId: own.zone.id });
+  const theirs = seen.pop().baseZone;
+  assert.equal(theirs.definition.include, "");
+  assert.deepEqual(theirs.definition.excludeTerms, []);
+  assert.equal(theirs.definition.scope, "成人减重的疗效与安全性");
+});
+
 test("preview takes a definition the reader edited by hand and answers the shape the page reads", options, async () => {
   const { preview } = await writes.preview(alice, { definition: definitionBody() });
   assert.deepEqual(Object.keys(preview).sort(), ["band", "borderline", "count30", "perWeek", "recent"]);

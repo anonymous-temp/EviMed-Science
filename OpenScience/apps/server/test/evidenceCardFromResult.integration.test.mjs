@@ -199,6 +199,10 @@ test("refusals are named: not a clinical package, no verified claim, an unknown 
   // And so is a product zone, even the caller's own: a result is a researcher's voice.
   const product = (await zones.save(alice, { title: "My product", description: "", background: "", kind: "product" })).zone;
   await assert.rejects(service.publish(alice, report.versionId, request({ zoneId: product.id })), refused("evidence_result_zone_kind_refused", 409));
+  // A reader's topic zone (a definition, a lifecycle) is the caller's own user zone and still not a home for a card: it would show none.
+  await db.query(`INSERT INTO evimed_frontier.evidence_zones(id,user_id,kind,title,state,lifecycle,definition,definition_version,zone_type)
+    VALUES('ez_topicmine1','alice','user','我的主题专区','draft','active','{"type":"drug-indication"}',1,'drug-indication')`);
+  await assert.rejects(service.publish(alice, report.versionId, request({ zoneId: "ez_topicmine1" })), refused("evidence_result_zone_topic_refused", 409));
   assert.equal((await db.query("SELECT count(*)::integer AS n FROM evimed_frontier.evidence_cards")).rows[0].n, 0, "no refusal left a card behind");
   assert.equal(counter("open_science_evidence_result_cards_total", "outcome", "refused") > 0, true);
 });

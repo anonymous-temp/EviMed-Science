@@ -1,6 +1,5 @@
 /**
- * Which published cards carry a ✓ (evidence-flywheel plan §5.2, §7, §11; 2026-10-06). The one place the community column of an official zone, the
- * learning loop and the flywheel's own figures ask "is this card verified". Whether an *author* is established is not asked here: that is
+ * Which published cards carry a ✓ (evidence-flywheel plan §5.2, §7, §11; 2026-10-06). The one place the learning loop and the flywheel's own figures ask "is this card verified". Whether an *author* is established is not asked here: that is
  * `evidenceAuthorStanding.mjs`, the only statement of the rule.
  *
  * Hidden knowledge:

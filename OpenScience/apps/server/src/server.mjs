@@ -351,11 +351,9 @@ import { createEvidenceFeed, evidenceFeedMetricFamilies } from "./evidenceFeed.m
 import { createEvidenceFlywheelMetrics } from "./evidenceFlywheelMetrics.mjs";
 import { createGeoCardCitationReader } from "./geoCardCitations.mjs";
 import { createEvidenceOutcomes, evidenceOutcomeMetricFamilies } from "./evidenceIncidents.mjs";
-import { createEvidenceCommunity, createEvidenceCommunityRoutes, evidenceCommunityMetricFamilies } from "./evidenceCommunity.mjs";
 import { createEvidenceFeedRoutes } from "./evidenceFeedRoutes.mjs";
 import { setEvidencePublicBase } from "./evidencePublicPaths.mjs";
 import { createEvidencePublicRoutes, evidencePublicMetricFamilies } from "./evidencePublicRoutes.mjs";
-import { createEvidenceTopicRequestRoutes, createEvidenceTopicRequests } from "./evidencePublicRequests.mjs";
 import { platformContentCitedMetricFamilies } from "./evidenceCitationMetrics.mjs";
 import { createEvidenceZoneRoutes } from "./evidenceZoneRoutes.mjs";
 import { createEvidenceZoneReads } from "./evidenceZoneReads.mjs";
@@ -2547,16 +2545,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const evidenceBudget = createEvidenceBudget({ usageLedger, config });
   const frontierRoutes = createFrontierRoutes({ store, service: frontier?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
     audit: (event, status, details) => securityAudit(config, event, status, details) });
-  // The community column of an official zone (evidenceCommunity.mjs, flywheel F07): other users' public cards on the zone's subjects. Composed with its
-  // switch and the frontier; off, the route answers 404 by name and no table is read.
-  const evidenceCommunity = config.evidenceCommunityCardsEnabled && frontier && productDatabase
-    ? createEvidenceCommunity({ database: productDatabase, maxCards: config.evidenceCommunityMaxCards, platformPublisherUserId: PLATFORM_PUBLISHER_USER_ID }) : null;
-  const evidenceCommunityRoutes = createEvidenceCommunityRoutes({ store, service: frontier?.evidenceZones ?? null, frontier: frontier?.service ?? null, config, community: evidenceCommunity });
   // The topic zones' read side (ez-api-read): the directory, a zone's detail, overview, 「动态」 and cards; the cards come through the card
   // port (none until the team's interface exists). The membership module (ez-membership) tells an item's page which zones it stands in.
   const evidenceZoneCards = createEvidenceZoneCards({ config });
   const zoneMembership = /** @type {any} */ (frontier)?.zoneMembership ?? null;
-  const evidenceZoneReads = frontier && productDatabase && config.evidenceZoneTopicsEnabled !== false
+  // One switch composes the whole of the topic zones: the reads below, the write side and the planner after them. With it off no route
+  // writes a zone, the planner makes none (and spends nothing), the membership stands down (it reads the same switch) and a typed follow is
+  // refused by name; the directory answers empty and says it cannot create.
+  const zoneTopicsOn = Boolean(frontier && productDatabase && config.evidenceZoneTopicsEnabled !== false);
+  const evidenceZoneReads = zoneTopicsOn && frontier && productDatabase
     ? createEvidenceZoneReads({ database: productDatabase, service: frontier.service, zones: frontier.evidenceZones, membership: zoneMembership,
       cards: evidenceZoneCards, config }) : null;
   if (frontier && evidenceZoneReads && zoneMembership?.zonesForItem) {
@@ -2566,7 +2563,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // word on an item, and the planner that keeps the platform's zones. It answers with the read side's zone detail.
   /** @type {ReturnType<typeof createEvidenceZoneWrites> | null} */
   let zoneWrites = null;
-  if (frontier) {
+  if (frontier && zoneTopicsOn) {
     const zoneDraft = createEvidenceZoneDraft({ editor: frontier.editor, tags: frontier.tagStore, membership: zoneMembership, database: productDatabase,
       hydrate: (user, ids) => frontier.service.hydrate(user, ids), summaries: (user, ids) => evidenceZoneReads?.summaries?.(user, ids) ?? Promise.resolve([]),
       budget: frontier.budget, config });
@@ -2586,7 +2583,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // any other publisher's. It reads cards, so it exists only where the evidence tables do; off, its two paths answer by name.
   const evidenceFeed = frontier && config.evidencePublicWebEnabled ? createEvidenceFeed({ database: productDatabase, config }) : null;
   const evidenceFeedRoutes = createEvidenceFeedRoutes({ config, feed: evidenceFeed });
-  // The public evidence pages and their read-only API (flywheel F08, F27) and the topic requests behind their 「选题申请」 page. Composed
+  // The public evidence pages and their read-only API (flywheel F08, F27). Composed
   // only where the feed is (the frontier's zones, a database) and with the same switch; off, the router answers `false` before it does
   // anything and the request is whatever an unknown path is. The per-address limiter is the server's own, keyed apart from the API's.
   const evidencePublicOn = Boolean(frontier && productDatabase && config.evidencePublicWebEnabled);
@@ -2607,10 +2604,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // its module is made, and until then (or without it) the section answers nothing and is not rendered.
   /** @type {{ questionBank: ((query: { month: string }) => Promise<any>) | null, predictionCalibration: (() => Promise<any>) | null }} */
   const evidenceMetricSections = { questionBank: null, predictionCalibration: null };
-  const evidenceTopicRequests = evidencePublicOn ? createEvidenceTopicRequests({ judgeService, judgeContext: user => ensureEvidenceProject(store, user.id), database: productDatabase, config }) : null;
   const evidencePublicRoutes = createEvidencePublicRoutes({
     config: evidencePublicOn ? config : { ...config, evidencePublicWebEnabled: false }, database: evidencePublicOn ? productDatabase : null,
-    simulations: overrides.evidenceSimulations ?? evidenceSimulations, requests: evidenceTopicRequests,
+    simulations: overrides.evidenceSimulations ?? evidenceSimulations,
     questionBank: overrides.evidenceQuestionBank ?? (async (query) => evidenceMetricSections.questionBank?.(query) ?? null),
     predictionCalibration: overrides.evidencePredictionCalibration ?? (async () => evidenceMetricSections.predictionCalibration?.() ?? null),
     // A first-hand card's calculated claims are checked against their engine receipts here as in the app (the zone service reads them).
@@ -2618,7 +2614,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     limiter: (req) => rateLimiter.check(`evidence-public:${clientAddress(req, config)}`, { max: config.evidencePublicRatePerMinute, windowMs: 60_000, code: "evidence_public_rate_limited", label: "evidence page requests" }),
     report: (code) => process.stderr.write(`${code}\n`),
   });
-  const evidenceTopicRequestRoutes = createEvidenceTopicRequestRoutes({ store, requests: evidenceTopicRequests, frontier: frontier?.service ?? null, config, maxJsonBytes: config.maxJsonBytes });
   /**
    * A researcher's new project, as `POST /api/projects` makes it and as a new
    * GEO project makes its own: a name in any language and an id the
@@ -7077,9 +7072,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await library.routes(req, res)) return;
       if (await researchDbRoutes(req, res)) return;
       if (await autopilotRoutes(req, res)) return;
-      if (await evidenceTopicRequestRoutes(req, res)) return;
       if (await evidenceUpkeepRoutes(req, res)) return;
-      if (await evidenceCommunityRoutes(req, res)) return;
       if (await evidenceZoneRoutes(req, res)) return;
       if (await evidencePublishRoutes(req, res)) return;
       if (await frontierRoutes(req, res)) return;
@@ -7170,7 +7163,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           evidenceFeed,
           evidencePublic: evidencePublicRoutes,
           evidenceFlywheel,
-          evidenceCommunity,
           evidenceOutcomes,
           evolutionLeadSources,
           officialPromotion,
@@ -7429,8 +7421,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               // second the frontier's audience too. The panels are drawn only where the server says so.
               capsuleShare: Boolean(capsuleSharing),
               zoneSubscription: Boolean(zoneSubscriptions?.enabled) && Boolean(frontier) && frontierAudienceAllows(config, user),
-              // The community column of an official zone, as its route decides (evidenceCommunity.mjs): its switch and the frontier's audience.
-              evidenceCommunity: Boolean(evidenceCommunity) && frontierAudienceAllows(config, user),
               geo: Boolean(geo) && geoAudienceAllows(config, user),
               vcr: Boolean(vcr) && vcrAudienceAllows(config, user),
               // 「记忆地图」 (the memory page's 地图 tab): with the memory subsystem and its own switch, as the map's routes decide (memoryMap.mjs).
@@ -10385,7 +10375,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ webVitals = null, judgeService = null, openViking = null, config, store, taskManager, runtimeManager, memorySettings, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memoryIndexProvider = null, runMetrics = null, imMetrics = null, webReader = null, deepseekTools = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceFeed = null, evidencePublic = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null, evolutionLeadSources = null, officialPromotion = null, capsuleService = null, officialPacks = null, researchDb = null }) {
+async function operatorMetricsText({ webVitals = null, judgeService = null, openViking = null, config, store, taskManager, runtimeManager, memorySettings, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memoryIndexProvider = null, runMetrics = null, imMetrics = null, webReader = null, deepseekTools = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceFeed = null, evidencePublic = null, predictionRegistry = null, evidenceFlywheel = null, evidenceOutcomes = null, evolutionLeadSources = null, officialPromotion = null, capsuleService = null, officialPacks = null, researchDb = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, memorySettings, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memoryIndexProvider, frontier, review, geo, vcr, credits, judgeService, capsuleService, openViking, researchDb);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -10974,7 +10964,7 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
   for (const family of platformContentCitedMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // The public evidence feed the knowledge-source plugin reads (evidenceFeed.mjs).
   for (const family of evidenceFeedMetricFamilies(evidenceFeed?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
-  // The public evidence pages, their read-only API and the topic requests (evidencePublicRoutes.mjs): nothing is exported where they are off.
+  // The public evidence pages and their read-only API (evidencePublicRoutes.mjs): nothing is exported where they are off.
   for (const family of evidencePublicMetricFamilies(evidencePublic?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   // The evidence flywheel's figures (evidenceFlywheelMetrics.mjs): exported only with the switch on; a figure with no input has no series.
   addMetric(lines, "open_science_evidence_flywheel_enabled", "Whether the evidence flywheel's figures are switched on (OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED).", "gauge", [{ value: config.evidenceFlywheelMetricsEnabled ? 1 : 0 }]);
@@ -10982,7 +10972,6 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
   for (const family of officialPackMetricFamilies(officialPacks?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   for (const family of evolutionLeadSourceMetricFamilies(evolutionLeadSources?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   for (const family of evidenceOutcomeMetricFamilies(evidenceOutcomes?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
-  for (const family of evidenceCommunityMetricFamilies(evidenceCommunity)) addMetric(lines, family.name, family.help, family.type, family.series);
   if (evidenceFlywheel) for (const family of await evidenceFlywheel.metricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // The entity vocabulary the frontier, the zones, agendas, products and studies share: the glossary's size and what
   // the taggings found (entityVocabulary.mjs `entityVocabularyMetricFamilies`).
